@@ -238,6 +238,11 @@ export class Shard {
         clientDir: this.o.clientDir,
         oauth: this.o.oauth,
         oauthRedirect: this.o.oauthRedirect,
+        // The tenant's phones are registered through the control plane, which vouches for the tenant.
+        pushRegistrar: this.o.controlPlane.pushRegister
+          ? (body: unknown) =>
+              this.o.controlPlane.pushRegister?.(id, body) ?? Promise.reject(new Error("no control plane"))
+          : undefined,
         onOwnerEmailChange: (change: OwnerEmailChange) =>
           this.event(id, change.how === "undone" ? "owner_email_undone" : "owner_email_changed", { to: change.to }),
         now: this.o.now,

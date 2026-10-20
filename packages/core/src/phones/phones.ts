@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import { hashApiKey } from "../access/keys";
 import type { Db } from "../db";
 import { randomToken, ulid } from "../ids";
@@ -10,7 +10,9 @@ import {
   cleanDeviceKey,
   encryptPush,
   jwkThumbprint,
+  opaqueKey,
   PROOF_SKEW_MS,
+  pairingMatch,
   pkceS256,
   proofStatement,
   sha256b64u,
@@ -28,6 +30,12 @@ import type { PushRelay, RelayRegistration } from "./relay";
  * the phone for a sign-in link by email; the phone holds the PKCE verifier, so the link is useless to
  * any other app that opens it.
  *
+ * A code on a screen can be seen by someone else (a screen share, a photo, over a shoulder), so a phone
+ * paired with one waits: the owner app shows "Pixel 8 wants to connect · 47", the phone shows the same
+ * two digits and the inbox's address, and only the owner's Confirm on the computer lets the phone in.
+ * Until then its tokens open `GET /v1/phone/me` and nothing else, and five minutes without an answer
+ * remove it. A phone connected by an emailed link needs no confirming: the mailbox was the proof.
+ *
  * A phone acts as the owner in person, through the owner's API only, and only for what the phone
  * app does: the inbox, its items and their answers. Everything else (settings, keys, money floors,
  * downloads) stays the owner app's on a computer, whatever the phone's tokens say.
@@ -43,6 +51,8 @@ export const PHONE_ACCESS_TTL_MS = 10 * 60_000;
 export const PHONE_REFRESH_TTL_MS = 60 * 86_400_000;
 /** A lost answer to a refresh may be asked again this long after it, by the same phone. */
 export const REFRESH_GRACE_MS = 60_000;
+/** A phone paired by QR code waits this long for the owner's Confirm on the computer, then goes. */
+export const CONFIRM_TTL_MS = 5 * 60_000;
 /** Phones one inbox may have at once. */
 export const MAX_PHONES = 20;
 /** Wrong verifiers a sign-in link takes before it stops working. */
@@ -78,7 +88,15 @@ export interface PhonePrincipal {
   readonly deviceId: string;
   readonly userId: string;
   readonly name: string;
+  /** False while a phone paired by QR code waits for the owner's Confirm: it may only ask who it is. */
+  readonly confirmed: boolean;
 }
+
+/** What became of a QR code, as Settings → Phone polls it. */
+export type PairingState =
+  | { readonly state: "waiting" | "expired" }
+  | { readonly state: "confirm"; readonly phone: PhoneView; readonly match: string }
+  | { readonly state: "paired"; readonly phone?: PhoneView };
 
 interface SealedPush {
   readonly device: string;
@@ -125,7 +143,7 @@ const bad = (message: string, path?: string) =>
 export async function resolvePhoneAccess(db: Db, token: string, now: number): Promise<PhonePrincipal | null> {
   if (!token.startsWith(PHONE_ACCESS_PREFIX)) return null;
   const { rows } = await db.client.query({
-    sql: `SELECT d.id, d.user_id, d.name, d.last_seen_at
+    sql: `SELECT d.id, d.user_id, d.name, d.last_seen_at, d.confirmed_at, d.created_at
             FROM phone_tokens t JOIN phone_devices d ON d.id = t.device_id
            WHERE t.token_hash = ? AND t.kind = 'access' AND t.revoked_at IS NULL AND t.expires_at > ?
              AND d.revoked_at IS NULL`,
@@ -134,7 +152,16 @@ export async function resolvePhoneAccess(db: Db, token: string, now: number): Pr
   });
   const r = rows[0];
   if (!r) return null;
-  const [deviceId, userId, name, lastSeen] = r as [string, string, string, number | null];
+  const [deviceId, userId, name, lastSeen, confirmedAt, createdAt] = r as [
+    string,
+    string,
+    string,
+    number | null,
+    number | null,
+    number,
+  ];
+  // A phone the owner never confirmed is gone once its minutes are up.
+  if (confirmedAt === null && now - createdAt > CONFIRM_TTL_MS) return null;
   if (lastSeen === null || now - lastSeen >= TOUCH_EVERY_MS) {
     await db.client.query({
       sql: "UPDATE phone_devices SET last_seen_at = ? WHERE id = ?",
@@ -142,30 +169,36 @@ export async function resolvePhoneAccess(db: Db, token: string, now: number): Pr
       method: "run",
     });
   }
-  return { deviceId, userId, name };
+  return { deviceId, userId, name, confirmed: confirmedAt !== null };
 }
 
 export class PhoneCapabilities {
   private relay: PushRelay | null = null;
+  private hosted = false;
 
   constructor(
     private readonly db: Db,
     private readonly secrets: SecretBox | null,
   ) {}
 
-  /** How push reaches the phones: the host's relay, or none (`INBOX_PUSH_RELAY=off`). */
-  attachRelay(relay: PushRelay | null): void {
+  /**
+   * How push reaches the phones: the host's relay, or none (`INBOX_PUSH_RELAY=off`). `hosted`: the
+   * inbox is one a host runs for the business, whose owner has no server settings to change.
+   */
+  attachRelay(relay: PushRelay | null, opts: { hosted?: boolean } = {}): void {
     this.relay = relay;
+    this.hosted = opts.hosted === true;
   }
 
   /**
    * Whether notifications can work here, and if not why: the relay is off, or there is no
    * `INBOX_SECRET_KEY` to seal what push needs (the relay's secret, the phone's push keys).
    */
-  pushAvailability(): { available: boolean; reason: "no_relay" | "no_secret_key" | null } {
-    if (!this.relay) return { available: false, reason: "no_relay" };
-    if (!this.secrets) return { available: false, reason: "no_secret_key" };
-    return { available: true, reason: null };
+  pushAvailability(): { available: boolean; reason: "no_relay" | "no_secret_key" | null; hosted: boolean } {
+    const hosted = this.hosted;
+    if (!this.relay) return { available: false, reason: "no_relay", hosted };
+    if (!this.secrets) return { available: false, reason: "no_secret_key", hosted };
+    return { available: true, reason: null, hosted };
   }
 
   // ---- the owner app: pairing, the list, removing ----
@@ -179,11 +212,14 @@ export class PhoneCapabilities {
       });
     // An owner who presses "Add a phone" twice gets two codes; one that leaves a page open for an
     // hour does not keep making rows: codes past their minutes go when the next is made.
-    await this.db.client.query({
-      sql: "DELETE FROM phone_pairings WHERE used_at IS NULL AND expires_at < ?",
-      params: [now - 86_400_000],
-      method: "run",
-    });
+    await this.db.client.batch([
+      {
+        sql: "DELETE FROM phone_pairings WHERE used_at IS NULL AND expires_at < ?",
+        params: [now - 86_400_000],
+        method: "run",
+      },
+      ...this.dropUnconfirmed(now),
+    ]);
     const id = ulid(now);
     const secret = `${PAIRING_PREFIX}${randomToken(32)}`;
     await this.db.orm.insert(phonePairings).values({
@@ -197,22 +233,95 @@ export class PhoneCapabilities {
     return { id, secret, expiresAt: now + PAIRING_TTL_MS };
   }
 
-  /** What became of a QR code: still waiting, used by a phone (which), or past its minutes. */
-  async pairingStatus(
-    userId: string,
-    id: string,
-    now: number,
-  ): Promise<{ state: "waiting" | "paired" | "expired"; phone?: PhoneView }> {
+  /**
+   * What became of a QR code: still waiting; used by a phone that waits for the owner's Confirm (which
+   * phone, and the two digits it shows); confirmed; or past its minutes, or refused.
+   */
+  async pairingStatus(userId: string, id: string, now: number): Promise<PairingState> {
+    const row = await this.pairingRow(userId, id);
+    if (row.usedAt === null || !row.deviceId) return { state: row.expiresAt > now ? "waiting" : "expired" };
+    const [device] = await this.db.orm.select().from(phoneDevices).where(eq(phoneDevices.id, row.deviceId));
+    if (!device || device.revokedAt !== null) return { state: "expired" };
+    if (device.confirmedAt !== null) return { state: "paired", phone: viewOf(device) };
+    if (now - device.createdAt > CONFIRM_TTL_MS) {
+      await this.removePhone(device.id, now);
+      return { state: "expired" };
+    }
+    return { state: "confirm", phone: viewOf(device), match: device.pairMatch ?? "" };
+  }
+
+  /**
+   * The owner's Confirm on the computer: the phone that used this code may now open the inbox. Only a
+   * phone still waiting, within its minutes.
+   */
+  async confirmPairing(userId: string, id: string, now: number): Promise<PhoneView> {
+    const row = await this.pairingRow(userId, id);
+    const gone = () =>
+      new WriteError("code_expired", "That phone waited too long, or was removed. Show a new code.", {
+        details: { reason: "not_waiting" },
+      });
+    if (!row.deviceId) throw gone();
+    const r = await this.db.client.query({
+      sql: "UPDATE phone_devices SET confirmed_at = ? WHERE id = ? AND confirmed_at IS NULL AND revoked_at IS NULL AND created_at >= ?",
+      params: [now, row.deviceId, now - CONFIRM_TTL_MS],
+      method: "run",
+    });
+    if (r.changes !== 1) throw gone();
+    const [device] = await this.db.orm.select().from(phoneDevices).where(eq(phoneDevices.id, row.deviceId));
+    if (!device) throw gone();
+    return viewOf(device);
+  }
+
+  /** "Not mine": the phone that used this code is removed before it could do anything. */
+  async refusePairing(userId: string, id: string, now: number): Promise<{ removed: boolean }> {
+    const row = await this.pairingRow(userId, id);
+    if (!row.deviceId) return { removed: false };
+    const [device] = await this.db.orm.select().from(phoneDevices).where(eq(phoneDevices.id, row.deviceId));
+    if (!device || device.revokedAt !== null || device.confirmedAt !== null) return { removed: false };
+    await this.removePhone(device.id, now);
+    return { removed: true };
+  }
+
+  private async pairingRow(userId: string, id: string): Promise<typeof phonePairings.$inferSelect> {
     const [row] = await this.db.orm
       .select()
       .from(phonePairings)
       .where(and(eq(phonePairings.id, id), eq(phonePairings.userId, userId), eq(phonePairings.kind, "qr")));
     if (!row) throw new WriteError("not_found", "No such code.");
-    if (row.usedAt !== null && row.deviceId) {
-      const [device] = await this.db.orm.select().from(phoneDevices).where(eq(phoneDevices.id, row.deviceId));
-      return device ? { state: "paired", phone: viewOf(device) } : { state: "paired" };
-    }
-    return { state: row.expiresAt > now ? "waiting" : "expired" };
+    return row;
+  }
+
+  /** Phones paired by QR code that nobody confirmed in time: removed, with their tokens. */
+  private dropUnconfirmed(now: number): { sql: string; params: (string | number | null)[]; method: "run" }[] {
+    const cutoff = now - CONFIRM_TTL_MS;
+    return [
+      {
+        sql: `UPDATE phone_tokens SET revoked_at = ? WHERE revoked_at IS NULL AND device_id IN
+                (SELECT id FROM phone_devices WHERE confirmed_at IS NULL AND revoked_at IS NULL AND created_at < ?)`,
+        params: [now, cutoff],
+        method: "run",
+      },
+      {
+        sql: "UPDATE phone_devices SET revoked_at = ? WHERE confirmed_at IS NULL AND revoked_at IS NULL AND created_at < ?",
+        params: [now, cutoff],
+        method: "run",
+      },
+    ];
+  }
+
+  /**
+   * The hourly tidy: phones nobody confirmed, and tokens that can no longer be used for anything
+   * (expired, or spent or revoked longer ago than a lost answer may be asked again).
+   */
+  async prune(now: number): Promise<void> {
+    await this.db.client.batch([
+      ...this.dropUnconfirmed(now),
+      {
+        sql: "DELETE FROM phone_tokens WHERE expires_at < ? OR revoked_at < ?",
+        params: [now - REFRESH_GRACE_MS, now - REFRESH_GRACE_MS],
+        method: "run",
+      },
+    ]);
   }
 
   /** The person a phone signs in as. */
@@ -220,16 +329,25 @@ export class PhoneCapabilities {
     return (await this.device(deviceId)).userId;
   }
 
-  async listPhones(): Promise<PhoneView[]> {
-    return (await this.livePhones()).map(viewOf);
-  }
-
-  private async livePhones(): Promise<DeviceRow[]> {
-    return this.db.orm
+  /** The phones connected (confirmed), every owner's or one person's. A phone waiting for Confirm is not one yet. */
+  async listPhones(userId?: string): Promise<PhoneView[]> {
+    const rows = await this.db.orm
       .select()
       .from(phoneDevices)
-      .where(isNull(phoneDevices.revokedAt))
+      .where(
+        and(
+          isNull(phoneDevices.revokedAt),
+          isNotNull(phoneDevices.confirmedAt),
+          ...(userId ? [eq(phoneDevices.userId, userId)] : []),
+        ),
+      )
       .orderBy(phoneDevices.createdAt);
+    return rows.map(viewOf);
+  }
+
+  /** Every phone not removed, waiting ones included: what the limit counts. */
+  private async livePhones(): Promise<DeviceRow[]> {
+    return this.db.orm.select().from(phoneDevices).where(isNull(phoneDevices.revokedAt));
   }
 
   private async device(id: string): Promise<DeviceRow> {
@@ -273,7 +391,11 @@ export class PhoneCapabilities {
    * secret is spent in the same write that makes the phone, so two phones racing with one code get
    * one phone between them.
    */
-  async pair(input: Readonly<Record<string, unknown>>, origin: string, now: number): Promise<PhoneTokens> {
+  async pair(
+    input: Readonly<Record<string, unknown>>,
+    origin: string,
+    now: number,
+  ): Promise<PhoneTokens & { state: "pending"; match: string }> {
     const secret = typeof input.secret === "string" ? input.secret : "";
     if (!secret.startsWith(PAIRING_PREFIX)) throw bad("That is not a code from Settings → Phone.", "secret");
     const key = await this.checkProof(input, "pair", origin, await sha256b64u(secret), now);
@@ -286,7 +408,11 @@ export class PhoneCapabilities {
         "code_expired",
         "That code has expired or was used already. Show a new one in Settings → Phone.",
       );
-    return this.makePhone(row.id, row.userId, key, input, now);
+    await this.db.client.batch(this.dropUnconfirmed(now));
+    const match = await pairingMatch(secret, await jwkThumbprint(key));
+    // Waits for the owner's Confirm on the computer, where the same two digits show.
+    const tokens = await this.makePhone(row.id, row.userId, key, input, now, { match });
+    return { ...tokens, state: "pending", match };
   }
 
   /**
@@ -356,10 +482,20 @@ export class PhoneCapabilities {
         details: { reason: "other_phone" },
       });
     }
-    return this.makePhone(row.id, row.userId, key, input, now);
+    // The owner's mailbox was the proof: nothing to confirm.
+    return this.makePhone(row.id, row.userId, key, input, now, { match: null });
   }
 
-  /** A new access token, and a new refresh token in place of the one presented, signed for by the phone. */
+  /**
+   * A new access token, and a new refresh token in place of the one presented, signed for by the phone.
+   *
+   * The presented token is spent with a compare-and-set, so of two requests at once exactly one wins.
+   * One that arrives after it was spent is a lost answer asked again only when it carries a newer proof
+   * (`at` later than the proof that spent it), which only the phone's key can make: then what the first
+   * answer gave is withdrawn and the phone gets fresh tokens. The same request again, a copy taken from
+   * the wire or a log, is refused and changes nothing. Asked again after a minute, it is not explained:
+   * the phone is removed.
+   */
   async refresh(
     input: { refresh_token: unknown; proof: unknown; at: unknown },
     origin: string,
@@ -373,7 +509,7 @@ export class PhoneCapabilities {
     if (!token.startsWith(PHONE_REFRESH_PREFIX)) throw invalid();
     const hash = await hashApiKey(token);
     const { rows } = await this.db.client.query({
-      sql: `SELECT t.device_id, t.expires_at, t.revoked_at, d.key_jwk
+      sql: `SELECT t.device_id, t.expires_at, d.key_jwk, d.confirmed_at
               FROM phone_tokens t JOIN phone_devices d ON d.id = t.device_id
              WHERE t.token_hash = ? AND t.kind = 'refresh' AND d.revoked_at IS NULL`,
       params: [hash],
@@ -381,8 +517,9 @@ export class PhoneCapabilities {
     });
     const r = rows[0];
     if (!r) throw invalid();
-    const [deviceId, expiresAt, revokedAt, keyJwk] = r as [string, number, number | null, string];
-    if (expiresAt <= now) throw invalid();
+    const [deviceId, expiresAt, keyJwk, confirmedAt] = r as [string, number, string, number | null];
+    // A phone still waiting for the owner's Confirm has nothing to refresh for.
+    if (expiresAt <= now || confirmedAt === null) throw invalid();
     // Without the device key's signature nothing changes, whatever the token: a copy of it is no use.
     await this.checkProof(
       { ...input, device_key: JSON.parse(keyJwk) },
@@ -391,13 +528,30 @@ export class PhoneCapabilities {
       await sha256b64u(token),
       now,
     );
-    if (revokedAt !== null) {
-      // Used before. Right after, from the phone itself, it is a lost answer asked again: what that
-      // answer gave is withdrawn and the phone gets another. Later, it is not explained: out it goes.
+    const at = input.at as number;
+    const spent = await this.db.client.query({
+      sql: "UPDATE phone_tokens SET revoked_at = ?, proof_at = ? WHERE token_hash = ? AND revoked_at IS NULL",
+      params: [now, at, hash],
+      method: "run",
+    });
+    if (spent.changes !== 1) {
+      const { rows: was } = await this.db.client.query({
+        sql: "SELECT revoked_at FROM phone_tokens WHERE token_hash = ?",
+        params: [hash],
+        method: "all",
+      });
+      const revokedAt = Number(was[0]?.[0] ?? 0);
       if (now - revokedAt > REFRESH_GRACE_MS) {
         await this.removePhone(deviceId, now);
         throw invalid();
       }
+      // Only a newer proof asks again; the same one twice is a copy.
+      const again = await this.db.client.query({
+        sql: "UPDATE phone_tokens SET proof_at = ? WHERE token_hash = ? AND (proof_at IS NULL OR proof_at < ?)",
+        params: [at, hash, at],
+        method: "run",
+      });
+      if (again.changes !== 1) throw invalid();
       await this.db.client.query({
         sql: "UPDATE phone_tokens SET revoked_at = ? WHERE device_id = ? AND revoked_at IS NULL",
         params: [now, deviceId],
@@ -406,11 +560,6 @@ export class PhoneCapabilities {
     }
     const tokens = await this.issue(deviceId, now, hash);
     await this.db.client.batch([
-      {
-        sql: "UPDATE phone_tokens SET revoked_at = COALESCE(revoked_at, ?) WHERE token_hash = ?",
-        params: [now, hash],
-        method: "run",
-      },
       ...tokens.statements,
       { sql: "UPDATE phone_devices SET last_seen_at = ? WHERE id = ?", params: [now, deviceId], method: "run" },
     ]);
@@ -442,13 +591,17 @@ export class PhoneCapabilities {
     return key;
   }
 
-  /** Spends a pairing and makes the phone and its first tokens, in one write, or nothing. */
+  /**
+   * Spends a pairing and makes the phone and its first tokens, in one write, or nothing. A phone with a
+   * `match` (paired by QR code) waits for the owner's Confirm; one without (an emailed link) does not.
+   */
   private async makePhone(
     pairingId: string,
     userId: string,
     key: JsonWebKey,
     input: { name?: unknown; platform?: unknown },
     now: number,
+    opts: { match: string | null },
   ): Promise<PhoneTokens> {
     const thumb = await jwkThumbprint(key);
     const [taken] = await this.db.orm
@@ -467,8 +620,8 @@ export class PhoneCapabilities {
         method: "run",
       },
       {
-        sql: `INSERT INTO phone_devices (id, user_id, name, platform, key_jwk, key_thumbprint, notify, push_state, created_at, last_seen_at)
-              SELECT ?, ?, ?, ?, ?, ?, ?, 'off', ?, ? WHERE ${claimed}`,
+        sql: `INSERT INTO phone_devices (id, user_id, name, platform, key_jwk, key_thumbprint, notify, push_state, pair_match, confirmed_at, created_at, last_seen_at)
+              SELECT ?, ?, ?, ?, ?, ?, ?, 'off', ?, ?, ?, ? WHERE ${claimed}`,
         params: [
           deviceId,
           userId,
@@ -477,6 +630,8 @@ export class PhoneCapabilities {
           JSON.stringify(key),
           thumb,
           JSON.stringify(DEFAULT_PREFS),
+          opts.match,
+          opts.match === null ? now : null,
           now,
           now,
           pairingId,
@@ -541,7 +696,7 @@ export class PhoneCapabilities {
   // ---- the phone, signed in: who it is, what it hears about, push ----
 
   async me(deviceId: string): Promise<{
-    phone: PhoneView;
+    phone: PhoneView & { confirmed: boolean };
     notify: NotifyPrefs;
     business: { name: string; timezone: string };
     push_available: boolean;
@@ -549,7 +704,7 @@ export class PhoneCapabilities {
     const row = await this.device(deviceId);
     const [b] = await this.db.orm.select({ name: business.name, timezone: business.timezone }).from(business);
     return {
-      phone: viewOf(row),
+      phone: { ...viewOf(row), confirmed: row.confirmedAt !== null },
       notify: readPrefs(row.notify),
       business: { name: b?.name ?? "", timezone: b?.timezone ?? "UTC" },
       push_available: this.pushAvailability().available,
@@ -592,7 +747,7 @@ export class PhoneCapabilities {
     input: { token: unknown; p256dh: unknown; auth: unknown },
     origin: string,
     now: number,
-  ): Promise<{ push: PushState; error: string | null }> {
+  ): Promise<{ push: PushState; error: string | null; relay_device?: string }> {
     const row = await this.device(deviceId);
     const token = typeof input.token === "string" ? input.token.trim() : "";
     if (!token || token.length > 4096) throw bad("token must be the phone's push token", "token");
@@ -632,7 +787,9 @@ export class PhoneCapabilities {
       params: [reg.device, await this.secrets.seal("phone-push", deviceId, JSON.stringify(sealed)), now, deviceId],
       method: "run",
     });
-    return { push: "on", error: null };
+    // The relay names the device in every message it carries (`d`): the phone keeps it beside this
+    // inbox's keys, to know which of them opens it.
+    return { push: "on", error: null, relay_device: reg.device };
   }
 
   private async setPush(deviceId: string, state: PushState, error: string | null): Promise<void> {
@@ -658,7 +815,14 @@ export class PhoneCapabilities {
   async deliver(
     deviceId: string,
     plaintext: Uint8Array,
-    opts: { urgency: "high" | "normal"; ttlS: number; collapse?: string },
+    opts: {
+      urgency: "high" | "normal";
+      ttlS: number;
+      /** The item it is about: later notifications about it replace one not delivered yet. */
+      item?: string;
+      /** The same on every try of one notification (the job's id): the relay delivers it once. */
+      key?: string;
+    },
     now: number,
   ): Promise<{ sent: boolean; note: string }> {
     const [row] = await this.db.orm.select().from(phoneDevices).where(eq(phoneDevices.id, deviceId));
@@ -667,7 +831,15 @@ export class PhoneCapabilities {
     const reg = await this.registration(row);
     if (!reg) return { sent: false, note: "push keys unreadable" };
     const message = await encryptPush(reg.keys, plaintext);
-    const r = await this.relay.send(reg, message, opts);
+    // Neither the relay nor the push service sees an item's id or a job's: values only this inbox and
+    // this phone can make, stable across retries.
+    const secret = b64uDecode(reg.keys.auth);
+    const r = await this.relay.send(reg, message, {
+      urgency: opts.urgency,
+      ttlS: opts.ttlS,
+      ...(opts.item ? { collapse: await opaqueKey(secret, `collapse:${opts.item}`) } : {}),
+      ...(opts.key ? { id: `n_${await opaqueKey(secret, `notify:${opts.key}`)}` } : {}),
+    });
     if (r.ok) {
       await this.db.client.query({
         sql: "UPDATE phone_devices SET pushed_at = ? WHERE id = ?",
@@ -695,14 +867,21 @@ export class PhoneCapabilities {
         details: { push: row.pushState },
       });
     const [b] = await this.db.orm.select({ name: business.name }).from(business);
-    return this.deliver(deviceId, encodePayload(testPayload(now, b?.name ?? "")), { urgency: "high", ttlS: 600 }, now);
+    return this.deliver(
+      deviceId,
+      encodePayload(testPayload(now, b?.name ?? "")),
+      { urgency: "high", ttlS: 600, key: `test:${now}` },
+      now,
+    );
   }
 
-  /** The phones that hear about anything at all: live, with push on. */
+  /** The phones that hear about anything at all: connected, with push on. */
   async listeners(): Promise<DeviceRow[]> {
     return this.db.orm
       .select()
       .from(phoneDevices)
-      .where(and(isNull(phoneDevices.revokedAt), eq(phoneDevices.pushState, "on")));
+      .where(
+        and(isNull(phoneDevices.revokedAt), isNotNull(phoneDevices.confirmedAt), eq(phoneDevices.pushState, "on")),
+      );
   }
 }

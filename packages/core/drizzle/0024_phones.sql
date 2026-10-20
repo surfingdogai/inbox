@@ -26,8 +26,10 @@ CREATE INDEX IF NOT EXISTS `phone_pairings_user` ON `phone_pairings` (`user_id`,
 -- `phone_devices`: a paired phone, the owner it signs in as, the public half of its device key (the
 -- private half stays in the phone's keystore and signs every token refresh), what it wants to be told
 -- (`notify`, JSON) and how push reaches it: the relay's id for it and, sealed with INBOX_SECRET_KEY,
--- the relay's secret and the phone's push keys (`push_enc`). A removed phone keeps its row,
--- `revoked_at` set; one device key belongs to one live phone at a time.
+-- the relay's secret and the phone's push keys (`push_enc`). A phone paired by QR code waits for the
+-- owner to confirm it on the computer (`confirmed_at` null, `pair_match` the two digits both screens
+-- show) and can do nothing until then. A removed phone keeps its row, `revoked_at` set; one device key
+-- belongs to one live phone at a time.
 CREATE TABLE IF NOT EXISTS `phone_devices` (
 	`id` text PRIMARY KEY NOT NULL,
 	`user_id` text NOT NULL,
@@ -41,6 +43,8 @@ CREATE TABLE IF NOT EXISTS `phone_devices` (
 	`push_enc` text,
 	`push_error` text,
 	`pushed_at` integer,
+	`pair_match` text,
+	`confirmed_at` integer,
 	`created_at` integer NOT NULL,
 	`last_seen_at` integer,
 	`revoked_at` integer
@@ -51,7 +55,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS `phone_devices_key` ON `phone_devices` (`key_t
 CREATE INDEX IF NOT EXISTS `phone_devices_user` ON `phone_devices` (`user_id`, `revoked_at`);
 --> statement-breakpoint
 -- `phone_tokens`: a phone's tokens, hashed: access tokens that last minutes, and the refresh token
--- that rotates on every use (a rotated one used again removes the phone).
+-- that rotates on every use (a rotated one used again removes the phone). `proof_at` is the time in
+-- the proof that spent a refresh token: a lost answer may be asked again only with a newer proof.
 CREATE TABLE IF NOT EXISTS `phone_tokens` (
 	`token_hash` text PRIMARY KEY NOT NULL,
 	`kind` text NOT NULL,
@@ -59,6 +64,7 @@ CREATE TABLE IF NOT EXISTS `phone_tokens` (
 	`expires_at` integer NOT NULL,
 	`rotated_from` text,
 	`revoked_at` integer,
+	`proof_at` integer,
 	`created_at` integer NOT NULL
 );
 --> statement-breakpoint

@@ -259,3 +259,23 @@ export async function sha256b64u(value: string): Promise<string> {
 export async function pkceS256(verifier: string): Promise<string> {
   return sha256b64u(verifier);
 }
+
+/**
+ * The two digits a pairing shows on both screens (ADR-026): from the QR code's secret and the
+ * thumbprint of the device key of the phone that used it. The phone works them out itself; the owner
+ * app shows the inbox's. The same two on both means the phone asking is the one in the owner's hand.
+ */
+export async function pairingMatch(secret: string, thumbprint: string): Promise<string> {
+  const d = new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(`${secret}${thumbprint}`)));
+  const n = (((d[0] ?? 0) << 24) | ((d[1] ?? 0) << 16) | ((d[2] ?? 0) << 8) | (d[3] ?? 0)) >>> 0;
+  return String(n % 100).padStart(2, "0");
+}
+
+/**
+ * A short, stable value only this inbox and this phone can make: 22 base64url characters of
+ * HMAC-SHA256 under the phone's push secret. The relay's collapse key and idempotency id are made
+ * this way, so neither it nor the push service sees an item's id or a job's.
+ */
+export async function opaqueKey(secret: Uint8Array, label: string): Promise<string> {
+  return b64uEncode(await hmac(secret, encoder.encode(label))).slice(0, 22);
+}

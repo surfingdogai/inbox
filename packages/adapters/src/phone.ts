@@ -1,4 +1,6 @@
 import {
+  ANDROID_APP_URL,
+  APP_ID,
   APP_SCHEME,
   type Capabilities,
   type PhoneCapabilities,
@@ -35,8 +37,38 @@ async function body(c: Context): Promise<Record<string, unknown>> {
 
 const noStore = { "Cache-Control": "no-store" } as const;
 
-/** Tells the owner by email that a phone was connected, so one they did not connect is noticed. */
-async function tellOwnerOfPhone(deps: PhoneDoorDeps, userId: string, name: string, origin: string): Promise<void> {
+/** Runs work after the answer is sent: the Worker's waitUntil, or on its own on Node. Never throws. */
+function later(c: Context, work: () => Promise<unknown>): void {
+  const settled = work().catch(() => undefined);
+  try {
+    c.executionCtx.waitUntil(settled);
+  } catch {
+    // No execution context (Node): the promise runs on by itself.
+  }
+}
+
+/** Roughly where a request came from, as the edge names its country; nothing when it does not. */
+function roughly(c: Context): string | null {
+  const code = (c.req.header("cf-ipcountry") ?? "").trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(code) || code === "XX" || code === "T1") return null;
+  try {
+    return new Intl.DisplayNames(["en"], { type: "region" }).of(code) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Tells the owner by email that a phone was connected, so one they did not connect is noticed and
+ * removed at once. The phone's name is the phone's own say, so it is quoted, never taken as fact.
+ */
+async function tellOwnerOfPhone(
+  deps: PhoneDoorDeps,
+  userId: string,
+  phone: { name: string; platform: string },
+  origin: string,
+  how: { confirmed: boolean; from: string | null; at: number },
+): Promise<void> {
   try {
     const { rows } = await deps.db.client.query({
       sql: "SELECT email FROM users WHERE id = ?",
@@ -46,10 +78,25 @@ async function tellOwnerOfPhone(deps: PhoneDoorDeps, userId: string, name: strin
     const to = rows[0]?.[0];
     if (typeof to !== "string") return;
     const business = await deps.businessName();
+    const when = new Date(how.at).toUTCString().replace(" GMT", " UTC");
+    const device = phone.platform === "ios" ? "iPhone" : "Android phone";
+    const lines = [
+      `Not you? Remove it now in Settings → Phone:`,
+      `${origin}/settings/phone`,
+      "",
+      `A phone was connected to ${business || "your inbox"}. It can now open your inbox and answer it.`,
+      "",
+      `Phone: "${phone.name.replace(/"/g, "'")}" (as the phone names itself), an ${device}`,
+      `When: ${when}`,
+      ...(how.from ? [`From: roughly ${how.from}`] : []),
+      how.confirmed
+        ? "How: you confirmed it on your computer, in Settings → Phone."
+        : "How: a sign-in link sent to this address.",
+    ];
     await sendOwnerMail(deps, {
       to,
       subject: `A phone was connected to ${business || "your inbox"}`,
-      text: `${name} can now open your inbox and answer it.\n\nIf this wasn't you, remove it now in Settings → Phone:\n${origin}/settings/phone\n`,
+      text: `${lines.join("\n")}\n`,
       what: "phone-connected email",
     });
   } catch {
@@ -64,16 +111,16 @@ export function phoneRoutes(deps: PhoneDoorDeps): Hono<CallerEnv> {
   const origin = (c: Context) => publicOrigin(c.req.raw, deps.baseUrl);
   app.onError((error, c) => problemResponse(c, error));
 
-  const paired = async (c: Context, tokens: Awaited<ReturnType<PhoneCapabilities["pair"]>>) => {
+  // A QR code's secret, and the phone's proof, for its first tokens. The phone then waits for the
+  // owner's Confirm on the computer, showing the same two digits; its tokens open nothing until then.
+  app.post("/pair", async (c) => {
+    const tokens = await phones.pair(await body(c), origin(c), clock());
     const me = await phones.me(tokens.device_id);
-    await tellOwnerOfPhone(deps, await phones.ownerOf(tokens.device_id), me.phone.name, origin(c));
     return c.json({ ...tokens, inbox: { origin: origin(c), name: me.business.name } }, 201, noStore);
-  };
+  });
 
-  // A QR code's secret, and the phone's proof, for its first tokens.
-  app.post("/pair", async (c) => paired(c, await phones.pair(await body(c), origin(c), clock())));
-
-  // "Email me a sign-in link instead". The same answer whether or not the address is an owner's here.
+  // "Email me a sign-in link instead". The same answer, at once, whether or not the address is an
+  // owner's here: the email goes after the answer, so neither the words nor the time tell.
   app.post("/link", async (c) => {
     const input = await body(c);
     const link = await phones.startLink(
@@ -82,12 +129,14 @@ export function phoneRoutes(deps: PhoneDoorDeps): Hono<CallerEnv> {
     );
     if (link) {
       const at = origin(c);
-      await sendOwnerMail(deps, {
-        to: link.email,
-        subject: "Sign in on your phone",
-        text: `Open this on the phone that asked for it, within 15 minutes:\n${signInLinkUri(at, link.secret)}\n\nIf you didn't ask for it, ignore this email: it works only on the phone that asked.\n`,
-        what: "phone sign-in email",
-      }).catch(() => undefined);
+      later(c, () =>
+        sendOwnerMail(deps, {
+          to: link.email,
+          subject: "Sign in on your phone",
+          text: `Open this on the phone that asked for it, within 15 minutes:\n${signInLinkUri(at, link.secret)}\n\nIf you didn't ask for it, ignore this email: it works only on the phone that asked.\n`,
+          what: "phone sign-in email",
+        }),
+      );
     }
     return c.json(
       { ok: true, message: "If that address signs in here, a link is on its way. Open it on this phone." },
@@ -96,7 +145,20 @@ export function phoneRoutes(deps: PhoneDoorDeps): Hono<CallerEnv> {
     );
   });
 
-  app.post("/link/redeem", async (c) => paired(c, await phones.redeemLink(await body(c), origin(c), clock())));
+  // The emailed link, redeemed by the phone that asked: the mailbox was the proof, nothing to confirm.
+  app.post("/link/redeem", async (c) => {
+    const now = clock();
+    const tokens = await phones.redeemLink(await body(c), origin(c), now);
+    const me = await phones.me(tokens.device_id);
+    const userId = await phones.ownerOf(tokens.device_id);
+    const from = roughly(c);
+    later(c, () => tellOwnerOfPhone(deps, userId, me.phone, origin(c), { confirmed: false, from, at: now }));
+    return c.json(
+      { ...tokens, state: "connected", inbox: { origin: origin(c), name: me.business.name } },
+      201,
+      noStore,
+    );
+  });
 
   // A new access token for the refresh token, signed for by the phone.
   app.post("/token", async (c) => {
@@ -153,7 +215,8 @@ export function phoneRoutes(deps: PhoneDoorDeps): Hono<CallerEnv> {
   app.get("/phones", async (c) => {
     const id = device(c);
     if (typeof id !== "string") return id;
-    return c.json({ phones: await phones.listPhones(), this: id }, 200, noStore);
+    // Only this phone's person's phones: the ones it may remove.
+    return c.json({ phones: await phones.listPhones(await phones.ownerOf(id)), this: id }, 200, noStore);
   });
 
   app.delete("/phones/:id", async (c) => {
@@ -188,7 +251,7 @@ export function ownerPhoneRoutes(deps: PhoneDoorDeps): Hono<CallerEnv> {
     const owner = await inPerson(c);
     if (owner instanceof Response) return owner;
     const push = phones.pushAvailability();
-    return c.json({ phones: await phones.listPhones(), push }, 200, noStore);
+    return c.json({ phones: await phones.listPhones(), push, get_app: ANDROID_APP_URL }, 200, noStore);
   });
 
   app.post("/phones/pairings", async (c) => {
@@ -206,10 +269,29 @@ export function ownerPhoneRoutes(deps: PhoneDoorDeps): Hono<CallerEnv> {
     );
   });
 
+  // What became of the code: waiting, a phone waiting for Confirm (with the two digits it shows), done.
   app.get("/phones/pairings/:id", async (c) => {
     const owner = await inPerson(c);
     if (owner instanceof Response) return owner;
     return c.json(await phones.pairingStatus(owner.id, String(c.req.param("id")), clock()), 200, noStore);
+  });
+
+  // "Confirm": the phone showing the same two digits may now open the inbox.
+  app.post("/phones/pairings/:id/confirm", async (c) => {
+    const owner = await inPerson(c);
+    if (owner instanceof Response) return owner;
+    const now = clock();
+    const phone = await phones.confirmPairing(owner.id, String(c.req.param("id")), now);
+    const at = publicOrigin(c.req.raw, deps.baseUrl);
+    later(c, () => tellOwnerOfPhone(deps, owner.id, phone, at, { confirmed: true, from: null, at: now }));
+    return c.json({ state: "paired", phone }, 200, noStore);
+  });
+
+  // "Not mine": the phone that used the code is removed before it could do anything.
+  app.post("/phones/pairings/:id/refuse", async (c) => {
+    const owner = await inPerson(c);
+    if (owner instanceof Response) return owner;
+    return c.json(await phones.refusePairing(owner.id, String(c.req.param("id")), clock()), 200, noStore);
   });
 
   app.post("/phones/:id/test", async (c) => {
@@ -231,17 +313,26 @@ const esc = (s: string) =>
   s.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch] ?? ch);
 
 /**
- * `/phone`: what a QR code or a sign-in link opens in a browser. A QR code scanned with the phone's
- * own camera lands here and is told to scan it from the app. A sign-in link opened on the phone gets
- * a button that hands it to the app. The secret is in the fragment, read by this page alone, and
- * never sent anywhere: not to this server, not in a Referer.
+ * `/phone`: what a QR code or a sign-in link opens in a browser. On an Android phone it offers "Open in
+ * the app": an `intent://` link pinned to the app's package, so the secret goes to the Surfing Dog
+ * Inbox app and to no other app, and the browser opens the page that says how to get the app when it
+ * is not installed. Anywhere else it says to scan the code from the app. The secret is in the fragment,
+ * read by this page alone, and never sent anywhere: not to this server, not in a Referer.
  */
 export function phonePage(business: string): string {
   const title = business ? esc(business) : "Your inbox";
+  const get = ANDROID_APP_URL ? JSON.stringify(ANDROID_APP_URL) : "null";
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta name="robots" content="noindex"><title>${title}</title>
 <style>:root{color-scheme:light dark}body{margin:0;min-height:100vh;display:grid;place-items:center;font:400 15px/1.5 Manrope,ui-sans-serif,system-ui,sans-serif;background:#f6f5ff;color:#14163c}@media(prefers-color-scheme:dark){body{background:#0d0e26;color:#f2f1ff}}
-main{width:min(380px,90vw);padding:24px 8px}h1{font:600 22px/1.3 "Plus Jakarta Sans",Manrope,system-ui,sans-serif;margin:0 0 10px}p{margin:0 0 14px;opacity:.75}
-a.b{display:none;margin-top:8px;height:48px;border-radius:9999px;background:#14163c;color:#fff;font-weight:600;text-decoration:none;align-items:center;justify-content:center}@media(prefers-color-scheme:dark){a.b{background:#f2f1ff;color:#0d0e26}}</style></head>
-<body><main><h1 id="h">Open this in the app</h1><p id="t">On your phone, open the Surfing Dog Inbox app and scan the code from there.</p><a class="b" id="go" href="#">Open in the app</a></main>
-<script>(function(){var f=new URLSearchParams(location.hash.slice(1));history.replaceState(null,"",location.pathname);var s=f.get("link");if(f.get("v")!=="1"||!s||!/^sdi_pp_[A-Za-z0-9_-]{43}$/.test(s))return;document.getElementById("h").textContent="Sign in on your phone";document.getElementById("t").textContent="Open this on the phone that asked for it.";var a=document.getElementById("go");a.href="${APP_SCHEME}://link?o="+encodeURIComponent(location.origin)+"&s="+s;a.style.display="flex";})();</script></body></html>`;
+main{width:min(380px,90vw);padding:24px 8px}h1{font:600 22px/1.3 "Plus Jakarta Sans",Manrope,system-ui,sans-serif;margin:0 0 10px}p{margin:0 0 14px;opacity:.75}small{display:block;margin-top:14px;opacity:.6;font-size:13px}
+a.b{display:none;margin-top:8px;height:48px;border-radius:9999px;background:#14163c;color:#fff;font-weight:600;text-decoration:none;align-items:center;justify-content:center}a.q{display:none;color:inherit;font-weight:600}@media(prefers-color-scheme:dark){a.b{background:#f2f1ff;color:#0d0e26}}</style></head>
+<body><main><h1 id="h">Open this in the app</h1><p id="t">On your phone, open the Surfing Dog Inbox app and scan the code from there.</p><a class="b" id="go" href="#">Open in the app</a><a class="q" id="get" href="#">Get it for Android</a><small id="s"></small></main>
+<script>(function(){var f=new URLSearchParams(location.hash.slice(1));history.replaceState(null,"",location.pathname);var G=${get};var h=document.getElementById("h"),t=document.getElementById("t"),s=document.getElementById("s"),g=document.getElementById("get");
+function getApp(){if(G){g.href=G;g.style.display="inline";}s.textContent="iPhone soon.";}
+if(f.get("app")==="missing"){h.textContent="The app isn't on this phone yet";t.textContent=G?"Get Surfing Dog Inbox for Android, then scan the code again.":"Surfing Dog Inbox for Android isn't in the Play Store yet.";getApp();return;}
+var k=f.get("pair")?"pair":f.get("link")?"link":null;var x=k&&f.get(k);if(f.get("v")!=="1"||!x||!/^sdi_pp_[A-Za-z0-9_-]{43}$/.test(x))return;
+if(k==="link"){h.textContent="Sign in on your phone";t.textContent="Open this on the phone that asked for it.";}else{h.textContent="Connect this phone";t.textContent="Opens the Surfing Dog Inbox app. Nothing to type.";}
+if(!/Android/i.test(navigator.userAgent)){t.textContent=k==="link"?"Open this link on the phone that asked for it.":"On your phone, open the Surfing Dog Inbox app and scan the code from there.";getApp();return;}
+var back=G||(location.origin+location.pathname+"#v=1&app=missing");var a=document.getElementById("go");
+a.href="intent://"+k+"?o="+encodeURIComponent(location.origin)+"&s="+x+"#Intent;scheme=${APP_SCHEME};package=${APP_ID};S.browser_fallback_url="+encodeURIComponent(back)+";end";a.style.display="flex";})();</script></body></html>`;
 }

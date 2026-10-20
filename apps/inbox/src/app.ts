@@ -60,6 +60,7 @@ import {
   payLane,
   payLinkHandler,
   payNoticeHandler,
+  type RelayRegistrar,
   readSettings,
   relayAddress,
   VERSION,
@@ -163,6 +164,11 @@ export interface AppDeps {
    * address, `off` for none, absent for Surfing Dog's own. It is handed only ciphertext.
    */
   readonly pushRelay?: string | undefined;
+  /**
+   * How a hosted inbox registers its owner's phones with the relay: through its host's control plane,
+   * which vouches for it. Absent, the inbox signs the registration itself with its receipt key.
+   */
+  readonly pushRegistrar?: RelayRegistrar | undefined;
 }
 
 export interface Inbox {
@@ -233,7 +239,17 @@ export function createInbox(deps: AppDeps): Inbox {
   // The owner's phones (ADR-026): notifications go through the relay, encrypted for each phone. A demo
   // reaches no phone.
   const relay = demo ? null : relayAddress(deps.pushRelay);
-  caps.phones.attachRelay(relay ? httpRelay(relay, deps.fetchImpl) : null);
+  caps.phones.attachRelay(
+    relay
+      ? httpRelay(relay, deps.fetchImpl, {
+          registrar: deps.pushRegistrar,
+          // sdi-instance/1 with the receipt key, as the networks are called: the relay reads the key
+          // from this inbox's manifest. Without INBOX_SECRET_KEY there is no key, and no push.
+          signer: async () => (caps.secrets ? caps.receipts.keys.active() : null),
+        })
+      : null,
+    { hosted: deps.pushRegistrar !== undefined },
+  );
   // Throws here, as the inbox is built, on a policy that names something that is not a setting.
   caps.attachPolicy(deps.policy ?? null);
   const runner = createRunner({

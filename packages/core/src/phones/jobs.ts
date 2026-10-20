@@ -1,10 +1,11 @@
 import { eq } from "drizzle-orm";
+import { calendarFit } from "../capabilities/availability";
 import type { Db } from "../db";
 import type { Item } from "../domain/types";
 import type { JobHandler } from "../jobs/runner";
 import { ensureJob } from "../jobs/schedule";
 import { machines } from "../machine/tables";
-import { business, items } from "../schema/tables";
+import { business, items, products, services } from "../schema/tables";
 import { rowToItem } from "../write/views";
 import { buildPushPayload, encodePayload } from "./payload";
 import type { PhoneCapabilities } from "./phones";
@@ -36,7 +37,6 @@ interface OnePayload {
   readonly held: boolean;
 }
 
-/** Whether any phone hears anything here: no phone, no job. */
 /**
  * Whether the owner has something to do on it: a person was asked for, something happened after it
  * arrived (a reply, a change asked for, a draft waiting), or it is as it arrived, nobody having
@@ -46,9 +46,10 @@ export function awaitsOwner(item: Item, event: string): boolean {
   return item.flags.needsHuman === true || event !== "create" || item.state === machines[item.type].initial;
 }
 
+/** Whether any phone hears anything here: no phone, no job. */
 async function anyListener(db: Db): Promise<boolean> {
   const { rows } = await db.client.query({
-    sql: "SELECT 1 FROM phone_devices WHERE revoked_at IS NULL AND push_state = 'on' LIMIT 1",
+    sql: "SELECT 1 FROM phone_devices WHERE revoked_at IS NULL AND confirmed_at IS NOT NULL AND push_state = 'on' LIMIT 1",
     method: "all",
   });
   return rows.length > 0;
@@ -124,6 +125,30 @@ async function displayName(db: Db, partyId: string): Promise<string | null> {
   return typeof name === "string" && name.trim() ? name : null;
 }
 
+/**
+ * The business's own name for what is asked for, from its catalogue: the service booked, or the
+ * service or product a quote is for. Null when the catalogue has none, so a customer's own words for
+ * it never reach a lock screen without details on.
+ */
+async function catalogueName(db: Db, item: Item): Promise<string | null> {
+  const service = async (id: string | undefined) => {
+    if (!id) return null;
+    const [row] = await db.orm.select({ name: services.name }).from(services).where(eq(services.id, id));
+    return row?.name?.trim() || null;
+  };
+  if (item.type === "booking") return service(item.payload.reservationFor.serviceId);
+  if (item.type === "quote_request") {
+    const named = await service(item.payload.itemOffered.serviceId);
+    if (named || !item.payload.itemOffered.productId) return named;
+    const [row] = await db.orm
+      .select({ name: products.name })
+      .from(products)
+      .where(eq(products.id, item.payload.itemOffered.productId));
+    return row?.name?.trim() || null;
+  }
+  return null;
+}
+
 /** One notification to one phone: built now, from the item as it is now, for that phone's settings. */
 export function phonePushOneHandler(phones: PhoneCapabilities): JobHandler {
   return async (job, { db, now }) => {
@@ -154,6 +179,7 @@ export function phonePushOneHandler(phones: PhoneCapabilities): JobHandler {
             ? item.payload.notes
             : undefined;
     const kind = pushKindOf(item, awaits);
+    const fit = await calendarFit(db, item, tz);
     const payload = buildPushPayload({
       item,
       kind,
@@ -161,13 +187,22 @@ export function phonePushOneHandler(phones: PhoneCapabilities): JobHandler {
       details: prefs.details,
       who: prefs.details ? await displayName(db, item.partyId) : null,
       text: prefs.details ? await newestWords(db, item.id, fallback) : null,
+      offered: await catalogueName(db, item),
+      free: fit ? fit.free : null,
       timezone: tz,
       now,
     });
+    // A new booking request's notification lives no longer than until it starts: "Accept 14:00" after
+    // 14:00 is no use. Anything later about a booking (a reply) goes as anything else does.
+    const startsIn =
+      item.type === "booking" && p.event === "create"
+        ? Math.floor((Date.parse(item.payload.startTime) - now) / 1000)
+        : Number.POSITIVE_INFINITY;
+    if (startsIn <= 0) return { note: "already started" };
     const r = await phones.deliver(
       p.deviceId,
       encodePayload(payload),
-      { urgency: kind === "handled" ? "normal" : "high", ttlS: 86_400, collapse: item.id },
+      { urgency: kind === "handled" ? "normal" : "high", ttlS: Math.min(86_400, startsIn), item: item.id, key: job.id },
       now,
     );
     return { note: r.note };

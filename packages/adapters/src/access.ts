@@ -97,6 +97,8 @@ export const ROUTE_SCOPES: Readonly<Record<string, readonly string[]>> = {
   "GET /phones": ["*"],
   "POST /phones/pairings": ["*"],
   "GET /phones/pairings/:id": ["*"],
+  "POST /phones/pairings/:id/confirm": ["*"],
+  "POST /phones/pairings/:id/refuse": ["*"],
   "POST /phones/:id/test": ["*"],
   "DELETE /phones/:id": ["*"],
   // The owner's in person, with a code sent to their email, checked by the route whatever the scopes.

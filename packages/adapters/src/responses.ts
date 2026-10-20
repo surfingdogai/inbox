@@ -47,6 +47,20 @@ export const itemViewSchema = z.looseObject({
   party: partyViewSchema.optional(),
   receipts: z.array(receiptViewSchema).optional(),
   identity: z.looseObject({}).optional().describe("On the status door: who the inbox takes the customer for."),
+  calendar: z
+    .object({
+      free: z.boolean(),
+      clash: z.object({ name: z.string().nullable(), startTime: z.string() }).nullable(),
+    })
+    .nullable()
+    .optional()
+    .describe(
+      "For the owner, on an open booking request: whether its time is free in the business's calendar, and the booking it clashes with when not.",
+    ),
+  by_rules: z
+    .boolean()
+    .optional()
+    .describe("For the owner, in lists: the latest change to it was made by one of the owner's rules."),
 });
 
 /** What the business put to the customer and waits for them to answer (ADR-018 §5). */
@@ -185,6 +199,20 @@ export const customerItemViewSchema = z.looseObject({
     ),
   receipts: z.array(receiptViewSchema).optional(),
   identity: z.looseObject({}).optional().describe("On the status door: who the inbox takes the customer for."),
+  calendar: z
+    .object({
+      free: z.boolean(),
+      clash: z.object({ name: z.string().nullable(), startTime: z.string() }).nullable(),
+    })
+    .nullable()
+    .optional()
+    .describe(
+      "For the owner, on an open booking request: whether its time is free in the business's calendar, and the booking it clashes with when not.",
+    ),
+  by_rules: z
+    .boolean()
+    .optional()
+    .describe("For the owner, in lists: the latest change to it was made by one of the owner's rules."),
 });
 
 export const customerResultSchema = z.object({

@@ -308,14 +308,19 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
     ) {
       return forbidden(c, "Cross-site writes with a session cookie are refused; call from the app or use an API key.");
     }
-    // One of the owner's phones writes only through the owner's door and its own (ADR-026).
-    if (
-      caller.auth?.via === "device" &&
-      !["GET", "HEAD", "OPTIONS"].includes(c.req.method) &&
-      !c.req.path.startsWith("/v1/owner/") &&
-      !c.req.path.startsWith("/v1/phone")
-    ) {
-      return forbidden(c, "A phone answers its inbox through the owner's API.");
+    // One of the owner's phones uses the owner's door and its own, and no other, for reading too (ADR-026).
+    if (caller.auth?.via === "device") {
+      const path = c.req.path;
+      if (!path.startsWith("/v1/owner/") && path !== "/v1/phone" && !path.startsWith("/v1/phone/"))
+        return forbidden(c, "A phone answers its inbox through the owner's API.");
+      // Until the owner confirms it on the computer, it may only ask whether they have.
+      if (caller.auth.pending && !(c.req.method === "GET" && path === "/v1/phone/me"))
+        return problemResponse(
+          c,
+          new WriteError("not_allowed", "Confirm this phone on your computer first, in Settings → Phone.", {
+            details: { reason: "phone_unconfirmed" },
+          }),
+        );
     }
     // An integration key has a soft bucket of its own, on every call, so a loop between this inbox
     // and the system it is pasted into cannot run for ever. The owner's session and AI are not counted.
@@ -630,11 +635,16 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
     return serveMcp(mcpOwner, c.req.raw, body, authInfo(caller));
   });
   app.all("/mcp", async (c) => {
+    // A phone's token on the public door is a phone's token used where it never belongs: refused,
+    // never taken for a stranger (ADR-026).
+    if (/^Bearer\s+sdi_pa_/i.test(c.req.header("authorization") ?? ""))
+      return unauthorized(c, "A phone's token opens the owner's API only.");
     const caller = await callerFromRequest(deps.db, c.req.raw, {
       channel: "mcp_public",
       sandbox: await sandbox(),
       baseUrl: deps.baseUrl,
     });
+    if (caller.auth?.via === "device") return unauthorized(c, "A phone's token opens the owner's API only.");
     if (caller.principal?.keyKind === "integration") {
       const refused = await limited(c, ["integration"], caller.principal.id);
       if (refused) return refused;

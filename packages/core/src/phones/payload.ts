@@ -5,9 +5,10 @@ import type { PushKind } from "./prefs";
 
 /**
  * What a phone is sent about an item (ADR-026), before it is encrypted for that phone. Minimal by
- * default: the kind, the time or the size of it, never who sent it or what they wrote. Only when the
- * owner turned on "Show details" on that phone do a name and the first words ride along, and even
- * then encrypted end to end: the relay and Google's push service carry bytes they cannot read.
+ * default: the kind, the time or the size of it and the business's own name for what is asked for,
+ * never who sent it or anything they wrote. Only when the owner turned on "Show details" on that phone
+ * do a name and the first words ride along, and even then encrypted end to end: the relay and
+ * Google's push service carry bytes they cannot read.
  *
  * The phone shows it as it is; the action, when there is one, only opens the item with that action
  * chosen, and asks for the owner's fingerprint or face first. Nothing is ever done from a
@@ -27,6 +28,8 @@ export interface PushPayload {
   readonly text?: string;
   /** The action the notification offers to open with, and its words ("Accept 14:00"). */
   readonly action?: { readonly event: string; readonly label: string };
+  /** A booking request whose time is free in the business's calendar: said in the expanded notification. */
+  readonly free?: true;
   readonly at: number;
 }
 
@@ -40,6 +43,14 @@ export interface PayloadContext {
   readonly who?: string | null;
   /** The newest words the customer wrote on it, used only with details on. */
   readonly text?: string | null;
+  /**
+   * The business's own name for what is asked for: the service booked, the service or product a quote
+   * is for, from its catalogue. Null when the catalogue has none: the customer's own words for it are
+   * never in a minimal notification.
+   */
+  readonly offered?: string | null;
+  /** For a booking request: whether its time is free in the calendar. Accept is offered only when it is. */
+  readonly free?: boolean | null;
   readonly timezone: string;
   readonly locale?: string;
   readonly now: number;
@@ -74,8 +85,8 @@ const LATER: Readonly<Record<string, string>> = {
   draft_offer: "A draft waits for you",
   held_reply: "A reply waits for you",
   refund_due: "A refund is due",
-  request_change: "A change is asked for",
-  counter: "A different time is asked for",
+  request_change: "They asked for a change",
+  counter: "They asked for another time",
   withdraw: "A customer withdrew",
   cancel: "A customer cancelled",
 };
@@ -85,12 +96,13 @@ function oneLine(s: string, max: number): string {
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
 }
 
-/** The line under the title: what and when, never who. */
-function summary(item: Item, tz: string, locale: string): string {
+/** The line under the title: what and when, never who, and never the customer's words unless details are on. */
+function summary(ctx: PayloadContext, tz: string, locale: string): string {
+  const { item } = ctx;
   switch (item.type) {
     case "booking": {
       const w = when(item.payload.startTime, tz, locale);
-      return `${w.day}, ${w.time} · ${item.payload.reservationFor.name}`;
+      return [`${w.day}, ${w.time}`, ctx.offered].filter(Boolean).join(" · ");
     }
     case "order": {
       const count = item.payload.orderedItem.reduce((n, l) => n + l.quantity, 0);
@@ -101,7 +113,7 @@ function summary(item: Item, tz: string, locale: string): string {
       return [`${count} item${count === 1 ? "" : "s"}`, way].filter(Boolean).join(" · ");
     }
     case "quote_request":
-      return item.payload.itemOffered.name;
+      return ctx.offered || (ctx.details ? item.payload.itemOffered.name : "Quote request");
     case "refund":
       return "About an order";
     default:
@@ -109,10 +121,15 @@ function summary(item: Item, tz: string, locale: string): string {
   }
 }
 
-/** The action a new request may be opened with, from the notification: accepting it as it is. */
-function actionFor(item: Item, kind: PushKind, tz: string, locale: string): PushPayload["action"] | undefined {
+/**
+ * The action a new request may be opened with, from the notification: accepting it as it is. A booking
+ * is offered Accept only when its time is free in the calendar; otherwise the notification only opens it.
+ */
+function actionFor(ctx: PayloadContext, tz: string, locale: string): PushPayload["action"] | undefined {
+  const { item, kind } = ctx;
   if (kind === "handled") return undefined;
   if (item.type === "booking" && (item.state === "requested" || item.state === "needs_info")) {
+    if (ctx.free !== true) return undefined;
     return { event: "confirm", label: `Accept ${when(item.payload.startTime, tz, locale).time}` };
   }
   if (item.type === "order" && (item.state === "received" || item.state === "needs_info")) {
@@ -126,14 +143,15 @@ export function buildPushPayload(ctx: PayloadContext): PushPayload {
   const locale = ctx.locale ?? "en-GB";
   const { item } = ctx;
   const isNew = ctx.event === "create";
-  let title = isNew ? NEW[ctx.kind] : (LATER[ctx.event] ?? "Something changed");
+  let title = isNew ? NEW[ctx.kind] : (LATER[ctx.event] ?? "An update on a request");
   if (isNew && item.type === "order" && ctx.kind !== "handled")
     title = `${title} · ${moneyText(item.payload.totalPrice)}`;
   // A booking's price rides in the body, after its time and service, as the approved design has it.
-  let body = summary(item, ctx.timezone, locale);
+  let body = summary(ctx, ctx.timezone, locale);
   if (isNew && item.type === "booking" && item.payload.totalPrice)
     body = `${body} · ${moneyText(item.payload.totalPrice)}`;
-  const action = isNew ? actionFor(item, ctx.kind, ctx.timezone, locale) : undefined;
+  const action = isNew ? actionFor(ctx, ctx.timezone, locale) : undefined;
+  const free = isNew && item.type === "booking" && ctx.kind !== "handled" && ctx.free === true;
   const payload: PushPayload = {
     v: 1,
     t: "item",
@@ -144,6 +162,7 @@ export function buildPushPayload(ctx: PayloadContext): PushPayload {
     ...(ctx.details && ctx.who ? { who: oneLine(ctx.who, 60) } : {}),
     ...(ctx.details && ctx.text ? { text: oneLine(ctx.text, 160) } : {}),
     ...(action ? { action } : {}),
+    ...(free ? { free: true as const } : {}),
     at: ctx.now,
   };
   return fitPayload(payload);
@@ -156,7 +175,7 @@ export function testPayload(now: number, business: string): PushPayload {
     t: "test",
     kind: "test",
     title: "Notifications work",
-    body: oneLine(`This phone hears from ${business || "your inbox"}.`, 120),
+    body: oneLine(`${business || "Your inbox"} can reach this phone.`, 120),
     at: now,
   };
 }

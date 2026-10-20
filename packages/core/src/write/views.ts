@@ -21,6 +21,19 @@ export interface ItemView {
    * item; absent from lists, which do not pay for the extra query.
    */
   readonly receipts?: readonly ReceiptView[] | undefined;
+  /**
+   * For the owner, on an open booking request: whether its time is free in the business's calendar,
+   * and the booking it clashes with when not (`calendarFit`, ADR-026). Absent everywhere else.
+   */
+  readonly calendar?:
+    | {
+        readonly free: boolean;
+        readonly clash: { readonly name: string | null; readonly startTime: string } | null;
+      }
+    | null
+    | undefined;
+  /** For the owner, in lists: the last thing that happened to it was done by one of their rules. */
+  readonly by_rules?: boolean | undefined;
 }
 
 export interface PartyView {

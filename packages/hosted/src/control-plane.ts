@@ -21,6 +21,12 @@ export interface ControlPlane {
   policy(tenantId: string): Promise<PolicyPayload>;
   /** Tells it something happened. Throws when it was not taken, so the caller can try again. */
   event(e: TenantEvent): Promise<void>;
+  /**
+   * Registers one of a tenant's owner's phones with the push relay (ADR-026): the control plane
+   * vouches for the tenant, which no manifest could. The relay's answer comes back as it is. Absent
+   * where there is no control plane that does it: then the tenant's phones get no notifications.
+   */
+  pushRegister?(tenantId: string, body: unknown): Promise<{ status: number; body: unknown; retryAfterS?: number }>;
 }
 
 export const EVENT_TYPES = [
@@ -106,6 +112,15 @@ export function socketControlPlane(o: {
       const res = await call("POST", "/internal/v1/events", e);
       if (res.status !== 204 && res.status !== 200)
         throw new ControlPlaneError(`events answered ${res.status}`, res.status);
+    },
+    async pushRegister(tenantId, body) {
+      const res = await call("POST", `/internal/v1/tenants/${encodeURIComponent(tenantId)}/push/devices`, body);
+      const wait = Number(res.headers["retry-after"]);
+      return {
+        status: res.status,
+        body: jsonOf(res.body),
+        ...(Number.isFinite(wait) && wait > 0 ? { retryAfterS: wait } : {}),
+      };
     },
   };
 }

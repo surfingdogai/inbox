@@ -27,7 +27,9 @@ export default defineConfig({
       {
         resolve,
         plugins: [cloudflareTest({ wrangler: { configPath: "./wrangler.jsonc" } })],
-        test: { name: "workers", include, exclude: ["**/*.node.test.ts", "**/node_modules/**"] },
+        // A file's first test makes a fresh D1 and runs every migration: on a busy machine that is
+        // seconds, so workerd gets three times the default before a test counts as stuck.
+        test: { name: "workers", include, exclude: ["**/*.node.test.ts", "**/node_modules/**"], testTimeout: 15_000 },
       },
     ],
   },

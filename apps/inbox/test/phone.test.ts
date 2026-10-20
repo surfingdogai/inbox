@@ -10,6 +10,7 @@ import {
   sha256b64u,
   signProof,
   ulid,
+  verifyInstanceRequest,
 } from "@surfingdog/core";
 import { logMailOut } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
@@ -48,16 +49,31 @@ async function makePhone() {
 
 /** What the relay is asked to do, as the inbox's outbound fetch carries it. */
 function relayFetch() {
-  const calls: { method: string; path: string; body: Record<string, unknown> | null; auth: string | null }[] = [];
+  const calls: {
+    method: string;
+    path: string;
+    body: Record<string, unknown> | null;
+    auth: string | null;
+    request: Request;
+    text: string;
+  }[] = [];
   const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
     if (url.origin !== RELAY) return new Response("no", { status: 599 });
-    const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : null;
+    const text = init?.body ? String(init.body) : "";
+    const body = text ? (JSON.parse(text) as Record<string, unknown>) : null;
     const headers = new Headers(init?.headers);
-    calls.push({ method: init?.method ?? "GET", path: url.pathname, body, auth: headers.get("authorization") });
+    calls.push({
+      method: init?.method ?? "GET",
+      path: url.pathname,
+      body,
+      auth: headers.get("authorization"),
+      request: new Request(url, { method: init?.method ?? "GET", headers }),
+      text,
+    });
     if (url.pathname === "/v1/devices" && init?.method === "POST")
       return Response.json({ device: "pd_1", secret: "ps_relay_secret" }, { status: 201 });
-    if (url.pathname.endsWith("/messages")) return Response.json({ id: "m1" }, { status: 202 });
+    if (url.pathname.endsWith("/messages")) return Response.json({ status: "sent" }, { status: 200 });
     return new Response(null, { status: 204 });
   }) as typeof fetch;
   return { calls, fetchImpl };
@@ -99,7 +115,8 @@ const phoneReq = (app: App, token: string | null, method: string, path: string, 
 
 type Phone = Awaited<ReturnType<typeof makePhone>>;
 
-async function pairPhone(app: App, cookie: string, phone: Phone) {
+/** The phone scans; the owner confirms on the computer unless `confirm` is false. */
+async function pairPhone(app: App, cookie: string, phone: Phone, opts: { confirm?: boolean } = {}) {
   const made = await ownerReq(app, cookie, "POST", "/v1/owner/phones/pairings");
   expect(made.status).toBe(201);
   const { id, qr } = (await made.json()) as { id: string; qr: string };
@@ -117,10 +134,21 @@ async function pairPhone(app: App, cookie: string, phone: Phone) {
     platform: "android",
   });
   expect(res.status).toBe(201);
-  return {
-    pairing: id,
-    tokens: (await res.json()) as { access_token: string; refresh_token: string; device_id: string },
+  const tokens = (await res.json()) as {
+    access_token: string;
+    refresh_token: string;
+    device_id: string;
+    state: string;
+    match: string;
   };
+  if (opts.confirm !== false)
+    expect((await ownerReq(app, cookie, "POST", `/v1/owner/phones/pairings/${id}/confirm`)).status).toBe(200);
+  return { pairing: id, tokens };
+}
+
+/** Waits for what the inbox does after answering (an email sent in the background). */
+async function settle(check: () => boolean): Promise<void> {
+  for (let i = 0; i < 50 && !check(); i++) await new Promise((r) => setTimeout(r, 10));
 }
 
 describe("Settings → Phone", () => {
@@ -145,24 +173,62 @@ describe("Settings → Phone", () => {
     expect(body.qr).toMatch(/^https:\/\/inbox\.test\/phone#v=1&pair=sdi_pp_/);
   });
 
-  it("pairs a phone, tells the owner by email, and lists it", async () => {
+  it("lets a phone in only on the owner's Confirm, tells the owner by email, and lists it", async () => {
     const { app, cookie, mail } = await setup();
     const phone = await makePhone();
-    const { pairing, tokens } = await pairPhone(app, cookie, phone);
+    const { pairing, tokens } = await pairPhone(app, cookie, phone, { confirm: false });
     expect(tokens.access_token).toMatch(/^sdi_pa_/);
+    expect(tokens).toMatchObject({ state: "pending", match: expect.stringMatching(/^\d{2}$/) });
+    // Waiting: the phone may ask whether it was confirmed, and nothing else.
+    const me = (await (await phoneReq(app, tokens.access_token, "GET", "/v1/phone/me")).json()) as {
+      phone: { confirmed: boolean };
+    };
+    expect(me.phone.confirmed).toBe(false);
+    for (const [method, path] of [
+      ["GET", "/v1/owner/items"],
+      ["PUT", "/v1/phone/push"],
+      ["GET", "/v1/phone/phones"],
+    ] as const)
+      expect((await phoneReq(app, tokens.access_token, method, path, method === "PUT" ? {} : undefined)).status).toBe(
+        403,
+      );
+    // The computer shows the phone and the two digits it shows.
+    const asking = (await (await ownerReq(app, cookie, "GET", `/v1/owner/phones/pairings/${pairing}`)).json()) as {
+      state: string;
+      match: string;
+      phone: { name: string };
+    };
+    expect(asking).toMatchObject({ state: "confirm", match: tokens.match, phone: { name: "Pixel 8" } });
+    const sentBefore = mail.sent.length;
+    expect((await ownerReq(app, cookie, "POST", `/v1/owner/phones/pairings/${pairing}/confirm`)).status).toBe(200);
     const status = (await (await ownerReq(app, cookie, "GET", `/v1/owner/phones/pairings/${pairing}`)).json()) as {
       state: string;
       phone: { name: string };
     };
     expect(status).toMatchObject({ state: "paired", phone: { name: "Pixel 8" } });
-    expect(mail.sent.at(-1)?.subject).toContain("A phone was connected");
-    expect(mail.sent.at(-1)?.text).toContain(`${ORIGIN}/settings/phone`);
+    expect((await phoneReq(app, tokens.access_token, "GET", "/v1/owner/items")).status).toBe(200);
+    await settle(() => mail.sent.length > sentBefore);
+    const email = mail.sent.at(-1);
+    expect(email?.subject).toContain("A phone was connected");
+    // It leads with what to do when it was not the owner, and quotes the phone's own name for itself.
+    expect(email?.text?.startsWith("Not you? Remove it now")).toBe(true);
+    expect(email?.text).toContain(`${ORIGIN}/settings/phone`);
+    expect(email?.text).toContain('"Pixel 8"');
     const list = (await (await ownerReq(app, cookie, "GET", "/v1/owner/phones")).json()) as {
       phones: { name: string; push: string }[];
       push: { available: boolean };
     };
     expect(list.phones).toMatchObject([{ name: "Pixel 8", push: "off" }]);
     expect(list.push.available).toBe(true);
+  });
+
+  it("removes a phone the owner says is not theirs, before it opens anything", async () => {
+    const { app, cookie } = await setup();
+    const { pairing, tokens } = await pairPhone(app, cookie, await makePhone(), { confirm: false });
+    const refused = await ownerReq(app, cookie, "POST", `/v1/owner/phones/pairings/${pairing}/refuse`);
+    expect(await refused.json()).toEqual({ removed: true });
+    expect((await phoneReq(app, tokens.access_token, "GET", "/v1/phone/me")).status).toBe(401);
+    expect((await ownerReq(app, cookie, "POST", `/v1/owner/phones/pairings/${pairing}/confirm`)).status).toBe(422);
   });
 });
 
@@ -198,6 +264,37 @@ describe("what a phone may do", () => {
     expect(mcp.status).toBe(401);
   });
 
+  it("is nobody on the public doors: no MCP, no customer's item", async () => {
+    const { app, cookie } = await setup();
+    const { tokens } = await pairPhone(app, cookie, await makePhone());
+    const t = tokens.access_token;
+    const mcp = (body: unknown) =>
+      app.request(`${ORIGIN}/mcp`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${t}`,
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          "cf-connecting-ip": clientIp(),
+        },
+        body: JSON.stringify(body),
+      });
+    expect((await mcp({ jsonrpc: "2.0", id: 1, method: "tools/list" })).status).toBe(401);
+    expect(
+      (
+        await mcp({
+          jsonrpc: "2.0",
+          id: 2,
+          method: "tools/call",
+          params: { name: "send_message", arguments: { text: "hi", contact: { email: "a@example.com" } } },
+        })
+      ).status,
+    ).toBe(401);
+    // Reading the customers' own door is refused too, not only writing to it.
+    expect((await phoneReq(app, t, "GET", "/v1/items/01ANYTHING")).status).toBe(403);
+    expect((await phoneReq(app, t, "GET", "/v1/business")).status).toBe(403);
+  });
+
   it("refreshes with a proof from its key, and stops when the owner removes it", async () => {
     const { app, cookie } = await setup();
     const phone = await makePhone();
@@ -226,6 +323,7 @@ describe("a lost phone", () => {
       this: string;
     };
     expect(list.this).toBe(kept.tokens.device_id);
+    // The owner's own phones: the ones this phone may remove.
     expect(list.phones.map((p) => p.id).sort()).toEqual([kept.tokens.device_id, lost.tokens.device_id].sort());
     const removed = await phoneReq(
       app,
@@ -257,6 +355,7 @@ describe("the sign-in link", () => {
       device_key: phone.key,
     });
     expect(stranger.status).toBe(202);
+    await settle(() => false);
     expect(mail.sent.length).toBe(before);
     expect((await ask(OWNER)).status).toBe(422);
     const owner = await phoneReq(app, null, "POST", "/v1/phone/link", {
@@ -271,6 +370,8 @@ describe("the sign-in link", () => {
         .json()
         .catch(() => ({})),
     );
+    // The email goes after the answer: the answer's time tells nothing.
+    await settle(() => mail.sent.length > before);
     const text = mail.sent.at(-1)?.text ?? "";
     const url = /https:\/\/\S+\/phone#\S+/.exec(text)?.[0] ?? "";
     const link = readPhoneLink(url);
@@ -286,6 +387,10 @@ describe("the sign-in link", () => {
       name: "Pixel 8",
     });
     expect(res.status).toBe(201);
+    // A phone the owner's mailbox vouched for needs no Confirm.
+    const connected = (await res.json()) as { access_token: string; state: string };
+    expect(connected.state).toBe("connected");
+    expect((await phoneReq(app, connected.access_token, "GET", "/v1/owner/items")).status).toBe(200);
   });
 
   it("serves a page that keeps the secret out of the server, and item links that open the owner app", async () => {
@@ -294,7 +399,10 @@ describe("the sign-in link", () => {
     expect(page.status).toBe(200);
     const html = await page.text();
     expect(html).toContain('<meta name="referrer" content="no-referrer">');
-    expect(html).toContain("ai.surfingdog.inbox://link?o=");
+    // On an Android phone the code goes to the app itself: an intent pinned to its package.
+    expect(html).toContain("package=ai.surfingdog.inbox");
+    expect(html).toContain("Connect this phone");
+    expect(html).toContain("Opens the Surfing Dog Inbox app. Nothing to type.");
     const item = await app.request(`${ORIGIN}/i/01ABC`);
     expect(item.status).toBe(302);
     expect(item.headers.get("location")).toBe("/items/01ABC");
@@ -310,17 +418,33 @@ describe("notifications", () => {
       token: "fcm-token-abc",
       ...phone.pushKeys,
     });
-    expect(await reg.json()).toEqual({ push: "on", error: null });
+    expect(await reg.json()).toEqual({ push: "on", error: null, relay_device: "pd_1" });
     expect(relay.calls[0]).toMatchObject({
       method: "POST",
       path: "/v1/devices",
       body: { app: "ai.surfingdog.inbox", platform: "android", token: "fcm-token-abc", sender: ORIGIN },
     });
+    // Signed sdi-instance/1 with the inbox's receipt key, as the relay verifies it from the manifest.
+    const first = relay.calls[0];
+    if (!first) return;
+    const jwks = await inbox.caps.receipts.jwks();
+    const verified = await verifyInstanceRequest({
+      method: first.method,
+      url: first.request.url,
+      headers: first.request.headers,
+      body: first.text,
+      authorities: [new URL(RELAY).host],
+      now: Date.now(),
+      keysFor: async (domain) => (domain === "inbox.test" ? (jwks.keys as never) : null),
+    });
+    expect(verified.domain).toBe("inbox.test");
     // A test from the phone itself.
     expect((await phoneReq(app, tokens.access_token, "POST", "/v1/phone/test")).status).toBe(200);
     const test = relay.calls.at(-1);
     expect(test?.path).toBe("/v1/devices/pd_1/messages");
     expect(test?.auth).toBe("Bearer ps_relay_secret");
+    // The relay delivers one notification once, whatever the retries.
+    expect(String(test?.body?.id)).toMatch(/^n_/);
 
     // A booking request comes in through the business's own page.
     const svc = ulid();

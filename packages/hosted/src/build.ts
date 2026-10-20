@@ -1,6 +1,6 @@
 import { serveStatic } from "@hono/node-server/serve-static";
 import type { OAuthClients, OwnerEmailChange } from "@surfingdog/adapters";
-import { type Db, DEFAULT_NETWORK, type HostPolicy, hostPolicyFor } from "@surfingdog/core";
+import { type Db, DEFAULT_NETWORK, type HostPolicy, hostPolicyFor, type RelayRegistrar } from "@surfingdog/core";
 import { createInbox, type Inbox } from "@surfingdog/inbox/app";
 import { isDoor } from "@surfingdog/inbox/doors";
 import { type MailOut, pinnedMailOut } from "@surfingdog/platform";
@@ -55,6 +55,8 @@ export interface BuildDeps {
   readonly oauth?: OAuthClients | undefined;
   /** The one redirect address a platform sends every owner back to, through the router (ADR-022). */
   readonly oauthRedirect?: ((kind: string) => string | undefined) | undefined;
+  /** How the tenant's phones are registered with the push relay: through the control plane (ADR-026). */
+  readonly pushRegistrar?: RelayRegistrar | undefined;
   /** For the internal test as an agent only: the doors open whatever the policy says. Never served. */
   readonly agentsOpen?: boolean | undefined;
   readonly now?: (() => number) | undefined;
@@ -97,6 +99,7 @@ export function buildInbox(d: BuildDeps): Inbox {
     leaving: p.state === "closing",
     oauth: d.oauth,
     oauthRedirect: d.oauthRedirect,
+    pushRegistrar: d.pushRegistrar,
     now: d.now,
   });
   if (d.clientDir) {

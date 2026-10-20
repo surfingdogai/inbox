@@ -1167,6 +1167,10 @@ export const phoneDevices = sqliteTable(
     pushEnc: text("push_enc"),
     pushError: text("push_error"),
     pushedAt: integer("pushed_at"),
+    /** The two digits the pairing showed on both screens; null for a phone connected by an emailed link. */
+    pairMatch: text("pair_match"),
+    /** When the owner confirmed it on the computer (or it redeemed an emailed link); null while it waits. */
+    confirmedAt: integer("confirmed_at"),
     createdAt: createdAt(),
     lastSeenAt: integer("last_seen_at"),
     revokedAt: integer("revoked_at"),
@@ -1187,6 +1191,8 @@ export const phoneTokens = sqliteTable(
     expiresAt: integer("expires_at").notNull(),
     rotatedFrom: text("rotated_from"),
     revokedAt: integer("revoked_at"),
+    /** For a refresh token spent: the time in the proof that spent it. Only a newer proof may ask again. */
+    proofAt: integer("proof_at"),
     createdAt: createdAt(),
   },
   (t) => [index("phone_tokens_device").on(t.deviceId, t.kind)],

@@ -14,6 +14,7 @@ import { runRulesForEvent } from "../rules/engine";
 import type { SecretBox } from "../secrets/box";
 import { LIFECYCLE_SWEEP_KIND, lifecycleSweepHandler } from "./lifecycle";
 import { type NotifyPayload, notifyHandler, OWNER_DIGEST_KIND, ownerDigestHandler } from "./notify";
+import type { JobHandler } from "./runner";
 import { JobRunner } from "./runner";
 import { ensureJob } from "./schedule";
 
@@ -88,7 +89,10 @@ export function createRunner(deps: {
     .register("review_fact", async () => ({ note: "review facts arrive in a later release" }))
     .register(
       LIFECYCLE_SWEEP_KIND,
-      lifecycleSweepHandler({ mailOut: deps.mailOut, secrets: deps.secrets ?? null, baseUrl: deps.baseUrl }),
+      withPhonePrune(
+        deps.phones,
+        lifecycleSweepHandler({ mailOut: deps.mailOut, secrets: deps.secrets ?? null, baseUrl: deps.baseUrl }),
+      ),
     )
     // The contacts backfill (0009): resumable, 200 parties a run, each run queueing the next.
     .register(PARTY_CONTACTS_BACKFILL_KIND, async (job, { db, now }) => {
@@ -125,3 +129,16 @@ export interface IssueReceiptPayload {
 }
 
 export type { NotifyPayload };
+
+/**
+ * Each quarter hour's sweep tidies the phones first (ADR-026): phones nobody confirmed in time go,
+ * and tokens nothing can use any more are deleted. A failure there never stops the sweep.
+ */
+function withPhonePrune(phones: PhoneCapabilities | undefined, sweep: JobHandler): JobHandler {
+  if (!phones) return sweep;
+  return async (job, ctx) => {
+    if (((job.payload as { link?: number } | null)?.link ?? 0) === 0)
+      await phones.prune(ctx.now).catch(() => undefined);
+    return sweep(job, ctx);
+  };
+}

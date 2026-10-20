@@ -9,8 +9,17 @@
  *   as `ai.surfingdog.inbox://link?o=<inbox>&s=<secret>`. Only the phone that asked for it holds the
  *   PKCE verifier and the device key it needs, so another app that catches it gets nothing.
  * - An item: `https://<inbox>/i/<id>`: the owner app on a computer, the app on a phone.
+ * - On an Android phone, the page a QR code opens hands its secret to the app itself, by an
+ *   `intent://pair?o=<inbox>&s=<secret>` link pinned to the app's package (no other app can take it):
+ *   the app reads it as `ai.surfingdog.inbox://pair?o=<inbox>&s=<secret>`.
  */
 export const APP_SCHEME = "ai.surfingdog.inbox";
+/**
+ * Where an owner gets the Android app, once there is a place to get it (a test build page, then the
+ * Play Store). Null until Surfing Dog decides where: then Settings → Phone and the page a QR code
+ * opens offer "Get it for Android".
+ */
+export const ANDROID_APP_URL: string | null = null;
 const SECRET = /^sdi_pp_[A-Za-z0-9_-]{43}$/;
 const ITEM = /^[0-9A-Za-z_-]{1,64}$/;
 
@@ -60,10 +69,11 @@ export function readPhoneLink(text: string, allowLocal = false): PhoneLink | nul
     } catch {
       return null;
     }
-    if (u.host !== "link" && u.pathname.replace(/^\/+/, "") !== "link") return null;
+    const what = u.host || u.pathname.replace(/^\/+/, "");
+    if (what !== "link" && what !== "pair") return null;
     const origin = inboxOrigin(u.searchParams.get("o") ?? "", allowLocal);
     const secret = u.searchParams.get("s") ?? "";
-    return origin && SECRET.test(secret) ? { kind: "link", origin, secret } : null;
+    return origin && SECRET.test(secret) ? { kind: what, origin, secret } : null;
   }
   let u: URL;
   try {

@@ -94,7 +94,7 @@ import { withdrawalOf } from "../write/returns";
 import { appendThreadEntry } from "../write/thread";
 import { type TransitionResult, transitionItem } from "../write/transition";
 import { customerItem, type ItemView, type PartyView, rowToItem, viewFor } from "../write/views";
-import { askedForAPrice, findSlots, quoteNotBookable, type Slot, unknownService } from "./availability";
+import { askedForAPrice, calendarFit, findSlots, quoteNotBookable, type Slot, unknownService } from "./availability";
 import { CustomerDoors, type CustomerItemView } from "./customer";
 import { CustomerData } from "./customers";
 import { doorSwitch, offeredItemTypes } from "./directory";
@@ -610,6 +610,15 @@ export class Capabilities {
     if (!offered.includes("booking")) throw notBookableHere();
   }
 
+  /** The business's time zone: its profile's, else its settings'. */
+  private async timezone(): Promise<string> {
+    const [[row], s] = await Promise.all([
+      this.db.orm.select({ timezone: business.timezone }).from(business).limit(1),
+      readSettings(this.db),
+    ]);
+    return row?.timezone ?? s.business.timezone;
+  }
+
   async getBusinessProfile(): Promise<BusinessProfile> {
     const [[row], s] = await Promise.all([this.db.orm.select().from(business).limit(1), readSettings(this.db)]);
     const elsewhere = s.doorsElsewhere.map((d) => ({ item_type: d.itemType, url: d.url }));
@@ -1032,9 +1041,34 @@ export class Capabilities {
     const partyViews = await this.partyViews(rows.map((r) => r.partyId));
     const listed = rows.map((r) => ({ item: rowToItem(r), legacyPromise: r.legacyPromise }));
     const hidden = await hiddenTransitions(this.db, listed, await readSettings(this.db), nowOf(caller));
-    const views = listed.map(({ item }) =>
-      viewFor(item, permissionKind(caller), partyViews.get(item.partyId), hidden.get(item.id)),
+    // An open booking request says whether its time is free (ADR-026): a few reads each, and only for those.
+    const asking = listed.filter(({ item }) => item.type === "booking" && item.closedAt === null).slice(0, input.limit);
+    const tz = asking.length > 0 ? await this.timezone() : "UTC";
+    const fits = new Map(
+      await Promise.all(asking.map(async ({ item }) => [item.id, await calendarFit(this.db, item, tz)] as const)),
     );
+    // Whose doing the latest change was, when it was one of the owner's rules: "answered by your rules".
+    const ruled = new Set<string>();
+    if (listed.length > 0) {
+      const ids = listed.map(({ item }) => item.id);
+      const { rows: byRules } = await this.db.client.query({
+        sql: `SELECT e.item_id FROM item_events e
+               WHERE e.item_id IN (${ids.map(() => "?").join(",")}) AND e.actor_kind = 'rule'
+                 AND e.seq = (SELECT MAX(seq) FROM item_events WHERE item_id = e.item_id)`,
+        params: ids,
+        method: "all",
+      });
+      for (const r of byRules) ruled.add(String((r as unknown[])[0]));
+    }
+    const views = listed.map(({ item }) => {
+      const view = viewFor(item, permissionKind(caller), partyViews.get(item.partyId), hidden.get(item.id));
+      const calendar = fits.get(item.id);
+      return {
+        ...view,
+        ...(calendar ? { calendar } : {}),
+        ...(ruled.has(item.id) ? { by_rules: true } : {}),
+      };
+    });
     const last = rows[input.limit - 1];
     return {
       items: views.slice(0, input.limit),
@@ -1103,6 +1137,7 @@ export class Capabilities {
       mailForItem(this.db, item.id),
     ]);
     const draft = await draftRow(this.db, item.id);
+    const calendar = await calendarFit(this.db, item, await this.timezone());
     const delivery = new Map<string, EntryDelivery>();
     for (const m of mail) {
       if (m.entryId && m.recipient === "customer") {
@@ -1116,6 +1151,7 @@ export class Capabilities {
     }
     return {
       ...viewFor(item, permissionKind(caller), partyViews.get(row.partyId), hidden.get(item.id)),
+      ...(calendar ? { calendar } : {}),
       receipts,
       customer: await this.people.customerView(row),
       events: events.map((e) => ({

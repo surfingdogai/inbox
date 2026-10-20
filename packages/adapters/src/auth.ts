@@ -42,6 +42,8 @@ export interface ApiKeyInfo {
    * one of the owner's paired phones (ADR-026), held to `PHONE_OPERATIONS` whatever its scopes.
    */
   readonly via: "api_key" | "session" | "oauth" | "device";
+  /** A phone paired by QR code that the owner has not confirmed yet: it may ask who it is, nothing else. */
+  readonly pending?: boolean;
 }
 
 export async function hashKey(key: string): Promise<string> {
@@ -123,7 +125,9 @@ export async function callerFromRequest(
   const sandbox =
     opts.sandbox === true || request.headers.get("x-sandbox") === "1" || url.hostname.startsWith("sandbox.");
   let key = bearer ? await resolveApiKey(db, bearer, now()) : null;
-  if (!key && bearer?.startsWith(PHONE_ACCESS_PREFIX)) {
+  // A phone's token is for the REST doors alone (the owner's API and the phone's own, ADR-026): on
+  // any other channel, the MCP doors among them, it is nobody.
+  if (!key && bearer?.startsWith(PHONE_ACCESS_PREFIX) && opts.channel === "rest") {
     const phone = await resolvePhoneAccess(db, bearer, now());
     if (phone)
       key = {
@@ -134,6 +138,7 @@ export async function callerFromRequest(
         userId: phone.userId,
         partyId: null,
         via: "device",
+        ...(phone.confirmed ? {} : { pending: true }),
       };
   }
   if (!key && bearer && !bearer.startsWith(PHONE_ACCESS_PREFIX)) {

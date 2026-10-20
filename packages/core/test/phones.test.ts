@@ -7,11 +7,14 @@ import { createRunner } from "../src/jobs/index";
 import {
   b64uDecode,
   b64uEncode,
+  CONFIRM_TTL_MS,
   decryptPush,
+  jwkThumbprint,
   PAIRING_TTL_MS,
   PHONE_ACCESS_TTL_MS,
   type PushPayload,
   type PushRelay,
+  pairingMatch,
   pkceS256,
   proofStatement,
   REFRESH_GRACE_MS,
@@ -58,7 +61,14 @@ type Phone = Awaited<ReturnType<typeof makePhone>>;
 
 /** A relay that keeps what it is handed, as the real one does: ciphertext and a device id. */
 function fakeRelay() {
-  const sent: { device: string; payload: Uint8Array; urgency: string; collapse?: string | undefined }[] = [];
+  const sent: {
+    device: string;
+    payload: Uint8Array;
+    urgency: string;
+    ttl: number;
+    collapse?: string | undefined;
+    id?: string | undefined;
+  }[] = [];
   const registered: { device: string; token: string; sender: string }[] = [];
   const removed: string[] = [];
   let gone = new Set<string>();
@@ -78,7 +88,14 @@ function fakeRelay() {
     },
     async send(reg, message, opts) {
       if (gone.has(reg.device)) return { ok: false, gone: true, status: 410 };
-      sent.push({ device: reg.device, payload: message, urgency: opts.urgency, collapse: opts.collapse });
+      sent.push({
+        device: reg.device,
+        payload: message,
+        urgency: opts.urgency,
+        ttl: opts.ttlS,
+        collapse: opts.collapse,
+        id: opts.id,
+      });
       return { ok: true };
     },
   };
@@ -93,8 +110,12 @@ function fakeRelay() {
   };
 }
 
+/** The database of the latest `setup`, for the owner's Confirm the tests' phones need. */
+let current: Db | null = null;
+
 async function setup(opts: { secrets?: boolean } = {}) {
   const db = createDb(await makeClient());
+  current = db;
   await runMigrations(db.client, MIGRATIONS);
   await resetTables(db.client);
   const caps = new Capabilities(db, opts.secrets === false ? null : createSecretBox([KEY]));
@@ -105,9 +126,16 @@ async function setup(opts: { secrets?: boolean } = {}) {
   return { db, caps, relay, userId, phones: caps.phones };
 }
 
-async function pairWith(phones: Capabilities["phones"], phone: Phone, secret: string, now = T0) {
+/** A phone scans a code; the owner confirms it on the computer unless `confirm` is false. */
+async function pairWith(
+  phones: Capabilities["phones"],
+  phone: Phone,
+  secret: string,
+  now = T0,
+  opts: { confirm?: boolean } = {},
+) {
   const at = now;
-  return phones.pair(
+  const tokens = await phones.pair(
     {
       secret,
       device_key: phone.key,
@@ -119,6 +147,16 @@ async function pairWith(phones: Capabilities["phones"], phone: Phone, secret: st
     ORIGIN,
     now,
   );
+  if (opts.confirm !== false) {
+    const { rows } = await (current as Db).client.query({
+      sql: "SELECT id, user_id FROM phone_pairings WHERE device_id = ?",
+      params: [tokens.device_id],
+      method: "all",
+    });
+    const [id, user] = rows[0] as [string, string];
+    await phones.confirmPairing(user, id, now);
+  }
+  return tokens;
 }
 
 async function refreshWith(phones: Capabilities["phones"], phone: Phone, token: string, now: number) {
@@ -155,8 +193,7 @@ describe("pairing by QR code", () => {
     expect(tokens.refresh_token).toMatch(/^sdi_pr_/);
     expect(tokens.expires_in).toBe(PHONE_ACCESS_TTL_MS / 1000);
     const status = await phones.pairingStatus(userId, code.id, T0 + 2000);
-    expect(status.state).toBe("paired");
-    expect(status.phone?.name).toBe("Pixel 8");
+    expect(status).toMatchObject({ state: "paired", phone: { name: "Pixel 8" } });
     // Used once: a second phone (or the same one again) gets nothing.
     await expect(pairWith(phones, await makePhone(), code.secret, T0 + 3000)).rejects.toMatchObject({
       code: "code_expired",
@@ -242,7 +279,78 @@ describe("pairing by QR code", () => {
   });
 });
 
+describe("the owner's Confirm", () => {
+  it("lets a phone in only once the owner confirms the two digits it shows, on the computer", async () => {
+    const { phones, userId } = await setup();
+    const phone = await makePhone();
+    const code = await phones.createPairing(userId, T0);
+    const tokens = await pairWith(phones, phone, code.secret, T0 + 1000, { confirm: false });
+    // The phone works out the same two digits from the code and its own key.
+    const match = await pairingMatch(code.secret, await jwkThumbprint(phone.key as JsonWebKey));
+    expect(tokens).toMatchObject({ state: "pending", match });
+    const status = await phones.pairingStatus(userId, code.id, T0 + 2000);
+    expect(status).toMatchObject({ state: "confirm", match, phone: { name: "Pixel 8" } });
+    // Waiting: it is nobody's phone yet. It may ask who it is, refresh nothing, hear nothing.
+    expect(await phones.resolveAccess(tokens.access_token, T0 + 2000)).toMatchObject({ confirmed: false });
+    expect(await phones.listPhones()).toEqual([]);
+    await expect(refreshWith(phones, phone, tokens.refresh_token, T0 + 3000)).rejects.toMatchObject({
+      code: "not_allowed",
+    });
+    const confirmed = await phones.confirmPairing(userId, code.id, T0 + 4000);
+    expect(confirmed.name).toBe("Pixel 8");
+    expect(await phones.resolveAccess(tokens.access_token, T0 + 5000)).toMatchObject({ confirmed: true });
+    expect((await phones.pairingStatus(userId, code.id, T0 + 5000)).state).toBe("paired");
+    expect((await phones.listPhones()).map((p) => p.id)).toEqual([tokens.device_id]);
+  });
+
+  it("removes the phone on Not mine, or when nobody confirms it within five minutes", async () => {
+    const { phones, userId } = await setup();
+    const one = await phones.createPairing(userId, T0);
+    const a = await pairWith(phones, await makePhone(), one.secret, T0 + 1000, { confirm: false });
+    expect(await phones.refusePairing(userId, one.id, T0 + 2000)).toEqual({ removed: true });
+    expect(await phones.resolveAccess(a.access_token, T0 + 2001)).toBeNull();
+    expect((await phones.pairingStatus(userId, one.id, T0 + 2001)).state).toBe("expired");
+    await expect(phones.confirmPairing(userId, one.id, T0 + 3000)).rejects.toMatchObject({ code: "code_expired" });
+
+    const two = await phones.createPairing(userId, T0 + 10_000);
+    const b = await pairWith(phones, await makePhone(), two.secret, T0 + 11_000, { confirm: false });
+    const late = T0 + 11_000 + CONFIRM_TTL_MS + 1;
+    expect(await phones.resolveAccess(b.access_token, late)).toBeNull();
+    await expect(phones.confirmPairing(userId, two.id, late)).rejects.toMatchObject({ code: "code_expired" });
+    expect((await phones.pairingStatus(userId, two.id, late)).state).toBe("expired");
+  });
+});
+
 describe("tokens bound to the phone", () => {
+  it("refuses the same refresh request twice, and two at once give one answer", async () => {
+    const { phones, userId } = await setup();
+    const phone = await makePhone();
+    const first = await pairWith(phones, phone, (await phones.createPairing(userId, T0)).secret);
+    const at = T0 + 3_600_000;
+    const request = {
+      refresh_token: first.refresh_token,
+      at,
+      proof: await phone.sign(proofStatement("refresh", ORIGIN, await sha256b64u(first.refresh_token), at)),
+    };
+    const real = await phones.refresh(request, ORIGIN, at);
+    // A copy of the request, replayed within the minute: refused, and the phone keeps working.
+    await expect(phones.refresh(request, ORIGIN, at + 5_000)).rejects.toMatchObject({ code: "not_allowed" });
+    expect(await phones.resolveAccess(real.access_token, at + 5_001)).not.toBeNull();
+    const next = await refreshWith(phones, phone, real.refresh_token, at + 6_000);
+    expect(await phones.resolveAccess(next.access_token, at + 6_001)).not.toBeNull();
+
+    // Two identical requests at once: exactly one answer.
+    const at2 = at + 600_000;
+    const twice = {
+      refresh_token: next.refresh_token,
+      at: at2,
+      proof: await phone.sign(proofStatement("refresh", ORIGIN, await sha256b64u(next.refresh_token), at2)),
+    };
+    const both = await Promise.allSettled([phones.refresh(twice, ORIGIN, at2), phones.refresh(twice, ORIGIN, at2)]);
+    expect(both.map((r) => r.status).sort()).toEqual(["fulfilled", "rejected"]);
+    expect(await phones.listPhones()).toHaveLength(1);
+  });
+
   it("rotates the refresh token, and only the phone's key can use it", async () => {
     const { phones, userId } = await setup();
     const phone = await makePhone();
@@ -406,6 +514,7 @@ describe("push, end to end", () => {
     expect(await phones.registerPush(t.device_id, { token: "fcm-token-1", ...phone.pushKeys }, ORIGIN, T0)).toEqual({
       push: "on",
       error: null,
+      relay_device: "pd_1",
     });
     expect(relay.registered).toEqual([{ device: "pd_1", token: "fcm-token-1", sender: ORIGIN }]);
     const runner = createRunner({ mailOut: logMailOut(), phones });
@@ -425,7 +534,12 @@ describe("push, end to end", () => {
     const sent = relay.sent[0];
     if (!sent) return;
     expect(sent.urgency).toBe("high");
-    expect(sent.collapse).toBe(created.view.item.id);
+    // Neither the relay nor the push service sees the item's id or the job's: opaque, stable values.
+    expect(sent.collapse).toMatch(/^[A-Za-z0-9_-]{22}$/);
+    expect(sent.collapse).not.toContain(created.view.item.id);
+    expect(sent.id).toMatch(/^n_[A-Za-z0-9_-]{22}$/);
+    // It lives no longer than until the booking starts.
+    expect(sent.ttl).toBeLessThanOrEqual(86_400);
     const bytes = new TextDecoder("latin1").decode(sent.payload);
     for (const word of ["Maya", "Cut", "booking", "2pm"]) expect(bytes).not.toContain(word);
     const payload = JSON.parse(new TextDecoder().decode(await decryptPush(sent.payload, phone.push))) as PushPayload;
@@ -439,6 +553,8 @@ describe("push, end to end", () => {
     expect(payload.body).toContain("Cut & finish");
     expect(payload.who).toBeUndefined();
     expect(payload.text).toBeUndefined();
+    // The time is free in the calendar: Accept is offered, and said.
+    expect(payload.free).toBe(true);
     expect(payload.action?.event).toBe("confirm");
     // Nowhere in the database is the push token, the relay's secret or the push keys in plain.
     const stored = await dump(db);
@@ -613,6 +729,95 @@ describe("payloads", () => {
   });
 });
 
+describe("what a minimal notification never carries", () => {
+  const base = {
+    version: 1,
+    partyId: "p",
+    locationId: null,
+    channel: "mcp_public",
+    subject: null,
+    flags: { needsHuman: false, sandbox: false, priority: 0 },
+    linkedItemId: null,
+    createdAt: "2026-10-20T10:00:00Z",
+    updatedAt: "2026-10-20T10:00:00Z",
+    closedAt: null,
+  };
+  const planted = "Your inbox is locked, call +351 900 000 000";
+  const quote = {
+    ...base,
+    id: "01Q",
+    type: "quote_request",
+    state: "received",
+    payload: { itemOffered: { name: planted }, description: "Please" },
+  };
+
+  it("keeps a customer's own words for what they ask for off the lock screen", () => {
+    const minimal = buildPushPayload({
+      item: quote as never,
+      kind: "quote",
+      event: "create",
+      details: false,
+      offered: null,
+      timezone: "UTC",
+      now: T0,
+    });
+    expect(JSON.stringify(minimal)).not.toContain("locked");
+    expect(minimal.body).toBe("Quote request");
+    // From the catalogue, the business's own name for it.
+    const named = buildPushPayload({
+      item: { ...quote, payload: { ...quote.payload, itemOffered: { name: planted, serviceId: "s" } } } as never,
+      kind: "quote",
+      event: "create",
+      details: false,
+      offered: "Colour correction",
+      timezone: "UTC",
+      now: T0,
+    });
+    expect(named.body).toBe("Colour correction");
+    // With details on, the owner asked to see what customers wrote.
+    const detailed = buildPushPayload({
+      item: quote as never,
+      kind: "quote",
+      event: "create",
+      details: true,
+      offered: null,
+      timezone: "UTC",
+      now: T0,
+    });
+    expect(detailed.body).toContain("locked");
+  });
+
+  it("offers Accept only for a free time, and names changes plainly", () => {
+    const booking = {
+      ...base,
+      id: "01B",
+      type: "booking",
+      state: "requested",
+      payload: {
+        reservationFor: { serviceId: "s", name: planted },
+        startTime: "2026-10-21T13:00:00Z",
+        endTime: "2026-10-21T13:45:00Z",
+      },
+    };
+    const ctx = {
+      item: booking as never,
+      kind: "booking" as const,
+      event: "create",
+      details: false,
+      timezone: "UTC",
+      now: T0,
+    };
+    const clash = buildPushPayload({ ...ctx, offered: "Cut & finish", free: false });
+    expect(clash.action).toBeUndefined();
+    expect(clash.free).toBeUndefined();
+    expect(JSON.stringify(clash)).not.toContain("locked");
+    expect(buildPushPayload({ ...ctx, offered: "Cut & finish", free: true }).action?.label).toBe("Accept 13:00");
+    expect(buildPushPayload({ ...ctx, event: "counter" }).title).toBe("They asked for another time");
+    expect(buildPushPayload({ ...ctx, event: "request_change" }).title).toBe("They asked for a change");
+    expect(buildPushPayload({ ...ctx, event: "something_new" }).title).toBe("An update on a request");
+  });
+});
+
 describe("the relay's address", () => {
   it("is Surfing Dog's unless the host names another https one, or switches it off", async () => {
     const { relayAddress, DEFAULT_RELAY, httpRelay } = await import("../src/phones/relay");
@@ -637,5 +842,91 @@ describe("the relay's address", () => {
     expect(seen[0]?.url).toBe("https://push.example.org/v1/devices/pd_1/messages");
     expect(new Headers(seen[0]?.init?.headers).get("authorization")).toBe("Bearer ps_x");
     expect(JSON.parse(String(seen[0]?.init?.body))).toEqual({ payload: "AQID", ttl: 60, urgency: "high" });
+  });
+});
+
+describe("the relay's contract", () => {
+  it("signs a registration sdi-instance/1 with the receipt key, as the relay verifies it", async () => {
+    const { httpRelay } = await import("../src/phones/relay");
+    const { verifyInstanceRequest } = await import("../src/protocol/httpsig");
+    const vectors = (await import("../../spec/vectors/signatures.json")).default as unknown as {
+      instance: {
+        origin: string;
+        kid: string;
+        private_jwk: { kty: "OKP"; crv: "Ed25519"; x: string; d: string };
+        manifest_receipt_keys: { keys: unknown[] };
+      };
+    };
+    const seen: Request[] = [];
+    const relay = httpRelay(
+      "https://push.surfingdog.ai",
+      (async (url: string, init?: RequestInit) => {
+        seen.push(new Request(url, init));
+        return Response.json({ device: "pd_9", secret: "pds_9" }, { status: 201 });
+      }) as typeof fetch,
+      { signer: async () => ({ kid: vectors.instance.kid, privateJwk: vectors.instance.private_jwk }) },
+    );
+    const reg = await relay.register({ platform: "android", token: "fcm-token", sender: vectors.instance.origin });
+    expect(reg).toEqual({ device: "pd_9", secret: "pds_9" });
+    const req = seen[0] as Request;
+    const body = await req.clone().text();
+    expect(JSON.parse(body)).toEqual({
+      app: "ai.surfingdog.inbox",
+      platform: "android",
+      token: "fcm-token",
+      sender: vectors.instance.origin,
+    });
+    expect(req.headers.get("sdi-instance")).toBe(vectors.instance.origin);
+    // As the relay checks it: its own authority, a key from the inbox's manifest, every component.
+    const verified = await verifyInstanceRequest({
+      method: req.method,
+      url: req.url,
+      headers: req.headers,
+      body,
+      authorities: ["push.surfingdog.ai"],
+      now: Date.now(),
+      keysFor: async () => vectors.instance.manifest_receipt_keys.keys as never,
+    });
+    expect(verified.authority).toBe("push.surfingdog.ai");
+    const covered = verified.components.map((c) => c.name);
+    for (const c of ["@method", "@authority", "@path", "content-digest", "sdi-instance"]) expect(covered).toContain(c);
+    expect(verified.expires - verified.created).toBeLessThanOrEqual(300);
+    // A relay that refuses says why, and nothing is kept.
+    const refusing = httpRelay(
+      "https://push.surfingdog.ai",
+      (async () =>
+        new Response(JSON.stringify({ code: "bad_signature" }), {
+          status: 401,
+          headers: { "content-type": "application/problem+json" },
+        })) as unknown as typeof fetch,
+      { signer: async () => ({ kid: vectors.instance.kid, privateJwk: vectors.instance.private_jwk }) },
+    );
+    await expect(
+      refusing.register({ platform: "android", token: "t", sender: vectors.instance.origin }),
+    ).rejects.toMatchObject({ status: 401, code: "bad_signature" });
+    // Without a receipt key (no INBOX_SECRET_KEY) nothing is sent at all.
+    const unsigned = httpRelay("https://push.surfingdog.ai", (async () => {
+      throw new Error("sent");
+    }) as unknown as typeof fetch);
+    await expect(
+      unsigned.register({ platform: "android", token: "t", sender: "https://x.example" }),
+    ).rejects.toMatchObject({ code: "no_key" });
+  });
+
+  it("sends the same id on every try of one notification, and takes 409 as delivered", async () => {
+    const { httpRelay } = await import("../src/phones/relay");
+    const bodies: unknown[] = [];
+    const relay = httpRelay("https://push.surfingdog.ai", (async (_url: string, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return new Response(JSON.stringify({ status: "duplicate" }), { status: 409 });
+    }) as unknown as typeof fetch);
+    const r = await relay.send({ device: "pd_1", secret: "s" }, new Uint8Array([1]), {
+      ttlS: 60,
+      urgency: "high",
+      collapse: "c",
+      id: "n_x",
+    });
+    expect(r).toEqual({ ok: true });
+    expect(bodies[0]).toMatchObject({ id: "n_x", collapse: "c" });
   });
 });
