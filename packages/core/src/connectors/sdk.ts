@@ -1142,6 +1142,12 @@ export interface ExternalRoom {
    * told while mapping rooms. Absent: not known.
    */
   readonly unpriced?: boolean | undefined;
+  /**
+   * Charges the system has set for the room besides its nightly price (a cleaning fee, a tax, a security
+   * deposit, an extra every guest pays), which the inbox's quote may not include: the owner is told
+   * while mapping rooms, to check the prices here cover them. Absent: none known.
+   */
+  readonly charges?: readonly ("cleaning" | "tax" | "deposit" | "extra")[] | undefined;
 }
 
 export interface ExternalRate {
@@ -1221,6 +1227,12 @@ export interface OutboundStay {
     | { readonly name: string; readonly email?: string | undefined; readonly phone?: string | undefined }
     | undefined;
   readonly notes?: string | undefined;
+  /**
+   * Once confirmed: what the guest has paid in the inbox and what is left to pay at the property, as
+   * amounts only, so the front desk neither charges twice nor misses a balance. Never a card or a
+   * commission.
+   */
+  readonly amounts?: { readonly paid: PayAmount; readonly atProperty: PayAmount } | undefined;
 }
 
 export type StayWriteStatus = "hold" | "provisional" | "confirmed";
@@ -1254,6 +1266,13 @@ export interface StayWriter {
    * inbox then promises nothing until it can. A system that refuses a full night instead leaves this out.
    */
   oversold?(ctx: RunContext, stay: OutboundStay, link: LinkState): Promise<boolean>;
+  /**
+   * Puts a stay back as it stood a moment ago (`stay`), after a change of ours oversold: its own bookings
+   * by their ids, the nights it held then counted as its own, so another channel's booking made since
+   * does not stop the stay going back to what the guest holds. The inbox reads it back with `oversold`
+   * after, and tells the owner if those nights are now oversold. Absent: `put`, as confirmed.
+   */
+  restore?(ctx: RunContext, stay: OutboundStay, link: LinkState): Promise<LinkState>;
 }
 
 /** A connector that is a property system: rooms, rates and what is free, and stays written first. */
