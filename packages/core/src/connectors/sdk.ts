@@ -868,7 +868,17 @@ export type HookFact =
   /** Read busy times again now. */
   | { readonly kind: "busy" }
   /** The access was withdrawn on the platform (the app uninstalled, the key deleted): connect again. */
-  | { readonly kind: "revoked" };
+  | { readonly kind: "revoked" }
+  /**
+   * A property system says some nights changed (ADR-033 §4.5): they are read again before anything is
+   * believed. Rooms by the system's own ids; all of them when absent. `to` is excluded.
+   */
+  | {
+      readonly kind: "stay_nights";
+      readonly roomIds?: readonly string[] | undefined;
+      readonly from: string;
+      readonly to: string;
+    };
 
 export interface HooksHandler {
   /** The topics the connector asks the platform for, when it makes its webhooks in `connect`. */

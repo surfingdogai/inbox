@@ -81,7 +81,7 @@ export async function offeredItemTypes(
     db.client.query({
       sql: `SELECT 1 FROM room_types r JOIN properties p ON p.id = r.property_id
              WHERE r.active = 1 AND r.offered = 1 AND p.active = 1
-               AND NOT (json_extract(p.registration, '$.required') = 1 AND COALESCE(json_extract(p.registration, '$.number'), '') = '')
+               AND NOT (COALESCE(json_extract(p.registration, '$.required'), 0) = 1 AND COALESCE(json_extract(p.registration, '$.number'), '') = '')
              LIMIT 1`,
       params: [],
       method: "all",
