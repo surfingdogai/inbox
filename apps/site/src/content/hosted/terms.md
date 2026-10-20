@@ -2,7 +2,7 @@
 title: Hosted inbox terms
 description: The terms for an inbox we run for you during the pilot, on your own domain.
 eyebrow: Terms · hosted pilot
-updated: 18 October 2026
+updated: 20 October 2026
 order: 1
 ---
 
@@ -27,7 +27,7 @@ These terms are between Surfing Dog Lda, a company registered in Portugal ("we")
 ## 3. Price
 
 - The hosted inbox is free during the pilot.
-- From the start we count confirmed items: a booking your inbox confirmed or an order it accepted, counted once, when it happens. Test items never count. Ask us, and we tell you your count.
+- From the start we count, each month, the requests customers and their AIs send your inbox and the bookings and orders it confirms. Spam and tests never count. Your account shows both, month by month.
 - We will tell you by email at least 30 days before any charge, with the price. Nothing is charged without your agreement, and if you do not want to continue you can download everything and close before that date.
 
 ## 4. Where your data is, and backups

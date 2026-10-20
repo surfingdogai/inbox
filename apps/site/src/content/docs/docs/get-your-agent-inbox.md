@@ -174,6 +174,6 @@ The Connect screen checks for your record every minute while it is open, and les
 
 **Does anything else change on my website or my email?** No. The record adds one new name, `inbox.yourbusiness.com`, and touches nothing else.
 
-**What does it cost?** Nothing during the pilot. We count confirmed bookings and accepted orders, and tell you at least 30 days before any charge ([terms](/hosted/terms/)).
+**What does it cost?** Nothing during the pilot. We count your inbox's requests and confirmed bookings and orders, and tell you at least 30 days before any charge ([terms](/hosted/terms/)).
 
 **Can I leave?** At any time. Download everything as one file that the open-source inbox opens, with the key your receipts are signed with if you choose, so an inbox you run yourself signs as this one did. Your track record stays with your address, `inbox.yourbusiness.com`, wherever you point it. Then close your inbox, or point `inbox.yourbusiness.com` at an inbox you run yourself ([self-hosted vs hosted](/docs/self-hosted-vs-hosted/)).
