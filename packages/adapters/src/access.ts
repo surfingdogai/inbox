@@ -18,6 +18,8 @@ export const ROUTE_SCOPES: Readonly<Record<string, readonly string[]>> = {
   "POST /items/:id/transitions": ["inbox:write"],
   "GET /items/:id/offers": ["inbox:read"],
   "GET /items/:id/payments": ["inbox:read"],
+  // Money is the owner's in person, checked by the capability whatever the scopes.
+  "POST /items/:id/payments/shop-total": ["inbox:write"],
   "POST /items/:id/offers": ["inbox:write"],
   // Sending is the owner's in person, checked by the capability whatever the scopes.
   "POST /items/:id/offers/draft/send": ["inbox:write"],
@@ -87,6 +89,7 @@ export const ROUTE_SCOPES: Readonly<Record<string, readonly string[]>> = {
   "GET /integrations/:id": [READ_SETUP, "integrations:write"],
   "PATCH /integrations/:id": ["integrations:write"],
   "POST /integrations/:id/sync": ["integrations:write"],
+  "POST /integrations/:id/link": ["integrations:write"],
   "DELETE /integrations/:id": ["integrations:write"],
   "GET /events": ["events:read", "inbox:read"],
   "GET /api-keys": [READ_SETUP, "keys:write"],

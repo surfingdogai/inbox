@@ -1,5 +1,5 @@
-import type { Statement } from "@surfingdog/platform";
-import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
+import { deactivateUnseen, upsertCatalogue } from "../connectors/catalogue";
 import type { Db } from "../db";
 import { type FeedParseResult, type FeedProduct, type FeedSkip, parseFeed } from "../feeds/parse";
 import { ulid } from "../ids";
@@ -184,7 +184,7 @@ export class FeedCapabilities {
     }
     let summary: FeedImportSummary;
     try {
-      summary = await this.apply(connectorId, config.url, parsed, config.deactivateMissing, at);
+      summary = await this.apply(connectorId, config.url, parsed, config.deactivateMissing, config.currency, at);
     } catch (error) {
       // The batches already written stay written: without interactive transactions there is
       // nothing to roll back to. What must not happen is the connector reading as if nothing
@@ -213,149 +213,50 @@ export class FeedCapabilities {
 
   /* --- writing the catalogue ------------------------------------------- */
 
+  /**
+   * The feed's products, written by the one catalogue upsert feeds and shops share (ADR-026 §3): the
+   * same keys, the same SKU rule, a missing price kept from last time and a product with none never
+   * on sale. What the feed no longer carries is deactivated, unless the read was cut short.
+   */
   private async apply(
     connectorId: string,
     url: string,
     parsed: FeedParseResult,
     deactivateMissing: boolean,
+    currency: string,
     now: number,
   ): Promise<FeedImportSummary> {
     const source = feedSource(url);
-    const existing = await this.db.orm
-      .select({
-        id: products.id,
-        externalId: products.externalId,
-        name: products.name,
-        description: products.description,
-        price: products.price,
-        stock: products.stock,
-        active: products.active,
-        sku: products.sku,
-      })
-      .from(products)
-      .where(eq(products.source, source));
-
-    const byExternal = new Map<string, (typeof existing)[number]>();
-    for (const row of existing) if (row.externalId) byExternal.set(row.externalId, row);
-
-    // A sku is unique across the whole catalogue, so one already spoken for by a product this feed
-    // does not own is simply not written. The product still imports; it just carries no sku.
-    const takenSku = new Map<string, string>();
-    const skuRows = await this.db.orm
-      .select({ id: products.id, sku: products.sku })
-      .from(products)
-      .where(isNotNull(products.sku));
-    for (const row of skuRows) if (row.sku) takenSku.set(row.sku, row.id);
-
-    const statements: Statement[] = [];
-    const seen = new Set<string>();
-    let created = 0;
-    let updated = 0;
-    let unchanged = 0;
-
-    for (const product of parsed.products) {
-      seen.add(product.externalId);
-      const current = byExternal.get(product.externalId);
-      const id = current?.id ?? ulid(now);
-      const sku = this.skuFor(product, id, takenSku);
-      const price = product.price ?? current?.price ?? null;
-      const active = product.available === false ? 0 : 1;
-
-      if (!current) {
-        statements.push({
-          // ON CONFLICT, not a plain INSERT: two imports of one connector running at the same
-          // time both read an empty catalogue, and without this both inserted, so sixty products
-          // became a hundred and twenty and both imports reported success. The unique index
-          // added in migration 5 is what this conflicts against; the loser updates.
-          sql: `INSERT INTO products (id, sku, name, description, price, stock, source, external_id, active, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT (source, external_id) WHERE external_id IS NOT NULL
-                DO UPDATE SET name = excluded.name, description = excluded.description,
-                              price = excluded.price, stock = excluded.stock,
-                              active = excluded.active, updated_at = excluded.updated_at`,
-          params: [
-            id,
-            sku,
-            product.name,
-            product.description,
-            JSON.stringify(price ?? { value: 0, currency: "EUR" }),
-            product.stock,
-            source,
-            product.externalId,
-            active,
-            now,
-            now,
-          ],
-          method: "run",
-        });
-        if (sku) takenSku.set(sku, id);
-        created++;
-        continue;
-      }
-
-      if (!changed(current, product, price, active, sku)) {
-        unchanged++;
-        continue;
-      }
-      statements.push({
-        sql: `UPDATE products SET sku = ?, name = ?, description = ?, price = ?, stock = ?, active = ?, updated_at = ? WHERE id = ?`,
-        params: [
-          sku,
-          product.name,
-          product.description,
-          JSON.stringify(price ?? { value: 0, currency: "EUR" }),
-          product.stock,
-          active,
-          now,
-          id,
-        ],
-        method: "run",
-      });
-      if (sku) takenSku.set(sku, id);
-      updated++;
-    }
-
-    // Gone from the feed. Deactivated, never deleted: an order may point at it, and a deleted row
-    // takes that order's history with it. A truncated read is not evidence of absence, so a feed
-    // that hit the row limit deactivates nothing.
-    let deactivated = 0;
-    if (deactivateMissing && !parsed.truncated) {
-      const missing = existing.filter((row) => row.active === 1 && (!row.externalId || !seen.has(row.externalId)));
-      for (const chunk of chunks(
-        missing.map((row) => row.id),
-        50,
-      )) {
-        statements.push({
-          sql: `UPDATE products SET active = 0, updated_at = ? WHERE id IN (${chunk.map(() => "?").join(", ")})`,
-          params: [now, ...chunk],
-          method: "run",
-        });
-      }
-      deactivated = missing.length;
-    }
-
-    // D1 counts every statement in a batch against one invocation's query budget, so the writes go
-    // in slices rather than one batch of five thousand.
-    for (const slice of chunks(statements, 40)) await this.db.batch(slice);
-
+    const written = await upsertCatalogue(this.db, {
+      source,
+      products: parsed.products.map((product: FeedProduct) => ({
+        externalId: product.externalId,
+        name: product.name,
+        description: product.description,
+        sku: product.sku,
+        price: product.price,
+        stock: product.stock,
+        available: product.available,
+      })),
+      now,
+      seenAt: now,
+      currency,
+    });
+    // Gone from the feed. A truncated read is not evidence of absence, so a feed that hit the row limit
+    // deactivates nothing.
+    const deactivated = deactivateMissing && !parsed.truncated ? await deactivateUnseen(this.db, source, now, now) : 0;
     return {
       connector_id: connectorId,
       format: parsed.format,
       read: parsed.products.length,
-      created,
-      updated,
-      unchanged,
+      created: written.created,
+      updated: written.updated,
+      unchanged: written.unchanged,
       deactivated,
       skipped: parsed.skipped,
       truncated: parsed.truncated,
       mapped: parsed.mapped,
     };
-  }
-
-  private skuFor(product: FeedProduct, id: string, taken: Map<string, string>): string | null {
-    if (!product.sku) return null;
-    const owner = taken.get(product.sku);
-    return owner === undefined || owner === id ? product.sku : null;
   }
 
   private view(row: typeof connectors.$inferSelect, productCount: number): FeedConnector {
@@ -456,34 +357,6 @@ function hostOf(url: string): string {
   } catch {
     return "Feed";
   }
-}
-
-function changed(
-  current: {
-    name: string;
-    description: string | null;
-    price: unknown;
-    stock: number | null;
-    active: number;
-    sku: string | null;
-  },
-  product: FeedProduct,
-  price: unknown,
-  active: number,
-  sku: string | null,
-): boolean {
-  return (
-    (current.sku ?? null) !== sku ||
-    current.name !== product.name ||
-    (current.description ?? null) !== product.description ||
-    JSON.stringify(current.price ?? null) !== JSON.stringify(price ?? null) ||
-    (current.stock ?? null) !== product.stock ||
-    current.active !== active
-  );
-}
-
-function* chunks<T>(values: readonly T[], size: number): Generator<T[]> {
-  for (let i = 0; i < values.length; i += size) yield values.slice(i, i + size);
 }
 
 function requireOwner(caller: Caller): void {

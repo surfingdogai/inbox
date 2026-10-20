@@ -169,6 +169,13 @@
       "when": 1791900000000,
       "tag": "0023_pay_links",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1792000000000,
+      "tag": "0024_connectors_base",
+      "breakpoints": true
     }
   ]
 }

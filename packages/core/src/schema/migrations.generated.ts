@@ -360,4 +360,20 @@ export const MIGRATIONS: readonly Migration[] = [
       "-- The links still waiting for their payment, read back from the platform now and then in case a\n-- webhook never came: by connection, state and when each was last asked about.\nCREATE INDEX IF NOT EXISTS `connector_payments_open` ON `connector_payments` (`connector_id`, `state`, `checked_at`);",
     ],
   },
+  {
+    version: 25,
+    name: "0024_connectors_base",
+    statements: [
+      "-- Connectors: the shared base (ADR-026). The columns the shop, booking and calendar-link connectors\n-- share; nothing that exists changes meaning, and an inbox that connects none of them writes nothing\n-- new here.\n--\n-- A connection's own address: `connectors.inbound_token` (since 0003) keeps the SHA-256 of the\n-- unguessable segment of `POST /v1/hooks/<kind>/<token>` and `GET /v1/feeds/<kind>/<token>`, so a\n-- request reaches one connection and the database never holds what opens it; `inbound_enc` keeps the\n-- segment sealed by the secret box, for the connector to name its address with and the owner to see\n-- a link again.\nALTER TABLE `connectors` ADD `inbound_enc` text;",
+      "-- A sign-in that asks something first (a store's address) keeps it for the way back, and a platform\n-- that POSTs the key itself (WooCommerce's authorize endpoint) leaves the connection it made, or what\n-- went wrong, for the owner's browser to find when it returns.\nALTER TABLE `connector_auth` ADD `input` text;",
+      "ALTER TABLE `connector_auth` ADD `connector_id` text;",
+      "ALTER TABLE `connector_auth` ADD `message` text;",
+      "-- When a product's source last sent it in: a complete pass of a feed or a shop takes off sale what it\n-- did not see. Null for a product somebody typed in, which no pass ever touches.\nALTER TABLE `products` ADD `seen_at` integer;",
+      "CREATE INDEX IF NOT EXISTS `products_source_seen` ON `products` (`source`, `seen_at`);",
+      "-- What a shop said an order comes to, with the tax or delivery it adds itself. A link whose shop total\n-- is not what the customer accepted is `held`: made in the shop, never sent, until the owner proposes\n-- the shop's total and the customer accepts it. A held link is live, so the one-live-link index takes\n-- it in: two jobs that meet still make one link per order, never two.\nALTER TABLE `connector_payments` ADD `shop_total` integer;",
+      "ALTER TABLE `connector_payments` ADD `shop_currency` text;",
+      "DROP INDEX IF EXISTS `connector_payments_live`;",
+      "CREATE UNIQUE INDEX IF NOT EXISTS `connector_payments_live` ON `connector_payments` (`item_id`) WHERE `state` IN ('creating', 'open', 'held');",
+    ],
+  },
 ];

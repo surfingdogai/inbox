@@ -39,7 +39,7 @@ Gmail and Outlook addresses are told at once where they connect instead: their c
 
 ## A calendar link
 
-**Calendar link** takes the private link your calendar gives for subscribing to it, the one that ends in `.ics` (Google: Settings → your calendar → *Secret address in iCal format*; Outlook: Settings → Calendar → Shared calendars → *Publish a calendar*). It blocks your busy times and adds nothing to the calendar. The link is a secret: anyone who has it can read the calendar, so it is kept like a password and never shown again. Use it for a calendar that cannot connect here yet.
+**Calendar link** takes the private link your calendar gives for subscribing to it, the one that ends in `.ics` (Google: Settings → your calendar → *Secret address in iCal format*; Outlook: Settings → Calendar → Shared calendars → *Publish a calendar*). It blocks your busy times and adds nothing to the calendar. The link is a secret: anyone who has it can read the calendar, so it is kept like a password and never shown again. Use it for a calendar that cannot connect here yet. **Outlook** is this way, with Outlook's own steps shown as you connect.
 
 ## Cal.com
 

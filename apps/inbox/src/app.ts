@@ -32,9 +32,14 @@ import {
 import {
   buildManifest,
   Capabilities,
+  CONNECTOR_CATALOGUE_KIND,
+  CONNECTOR_HOOK_KIND,
   CONNECTOR_NOTICE_KIND,
   CONNECTOR_PUSH_KIND,
   CONNECTOR_SYNC_KIND,
+  type ConnectorDefinition,
+  connectorCatalogueHandler,
+  connectorHookHandler,
   connectorLane,
   connectorNoticeHandler,
   connectorPushHandler,
@@ -156,6 +161,16 @@ export interface AppDeps {
    * `/oauth/connect/<kind>/callback`.
    */
   readonly oauthRedirect?: ((kind: string) => string | undefined) | undefined;
+  /**
+   * The Google client is still in Google's Testing mode (GOOGLE_OAUTH_TESTING=1): only its test users
+   * can sign in, so Google says "Soon" rather than offering a sign-in that fails (ADR-026 §6).
+   */
+  readonly googleTesting?: boolean | undefined;
+  /**
+   * Connectors of the host's own, offered beside the ones this release ships (ADR-014): anyone can
+   * write one against the connector SDK. One with the kind of a built-in one takes its place.
+   */
+  readonly connectors?: readonly ConnectorDefinition[] | undefined;
 }
 
 export interface Inbox {
@@ -215,11 +230,16 @@ export function createInbox(deps: AppDeps): Inbox {
   // Connected platforms (ADR-022): every call leaves through the host's outbound fetch, and a demo
   // calls none, whoever connected what. An inbox that signs owners in through the host's one relay
   // is a hosted one: Google without a client is "Soon" there, and "set up" on one's own server.
+  const extra = deps.connectors ?? [];
   caps.connectors.attach({
-    definitions: builtInConnectors({
-      oauth: deps.oauth,
-      hosted: Boolean(deps.oauthRedirect?.("google_calendar")),
-    }),
+    definitions: [
+      ...builtInConnectors({
+        oauth: deps.oauth,
+        hosted: Boolean(deps.oauthRedirect?.("google_calendar")),
+        googleTesting: deps.googleTesting,
+      }).filter((d) => !extra.some((e) => e.kind === d.kind)),
+      ...extra,
+    ],
     http: connectorHttp({ fetchImpl: demo ? noNetworkFetch : deps.fetchImpl }),
     redirectUri: deps.oauthRedirect,
   });
@@ -256,6 +276,10 @@ export function createInbox(deps: AppDeps): Inbox {
     .register(CONNECTOR_SYNC_KIND, connectorSyncHandler(caps.connectors), { lane: connectorLane })
     .register(CONNECTOR_PUSH_KIND, connectorPushHandler(caps.connectors), { lane: connectorLane })
     .register(CONNECTOR_NOTICE_KIND, connectorNoticeHandler(caps.connectors, mailOut, { baseUrl: deps.baseUrl }))
+    // What a platform's webhook named, read back with the business's key (ADR-026 §4), and a shop's
+    // catalogue read on its own: in the connection's lane, so neither meets its sync.
+    .register(CONNECTOR_HOOK_KIND, connectorHookHandler(caps.connectors.hooks), { lane: connectorLane })
+    .register(CONNECTOR_CATALOGUE_KIND, connectorCatalogueHandler(caps.connectors), { lane: connectorLane })
     // Pay links (ADR-023): an order's link made, kept or closed after each of its events, one order's
     // jobs one after another, and an email to the owner about a payment that needs them. An inbox with
     // no payment platform connected enqueues none of them.
@@ -279,6 +303,8 @@ export function createInbox(deps: AppDeps): Inbox {
       CONNECTOR_SYNC_KIND,
       CONNECTOR_PUSH_KIND,
       CONNECTOR_NOTICE_KIND,
+      CONNECTOR_HOOK_KIND,
+      CONNECTOR_CATALOGUE_KIND,
       PAY_LINK_KIND,
       PAY_NOTICE_KIND,
       PAY_CLOSE_KIND,

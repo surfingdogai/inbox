@@ -98,29 +98,45 @@ export function outboundDenyFrom(value: string | undefined): { ranges: AddressRa
   return { ranges, bad };
 }
 
+/** The OAuth clients an inbox may hold, by platform, and the environment variables each comes from. */
+const OAUTH_ENV = {
+  google: ["GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"],
+  shopify: ["SHOPIFY_CLIENT_ID", "SHOPIFY_CLIENT_SECRET"],
+  square: ["SQUARE_CLIENT_ID", "SQUARE_CLIENT_SECRET"],
+  calendly: ["CALENDLY_CLIENT_ID", "CALENDLY_CLIENT_SECRET"],
+} as const;
+
+type OAuthEnv = { readonly [K in (typeof OAUTH_ENV)[keyof typeof OAUTH_ENV][number]]?: string | undefined };
+
 /**
- * The OAuth clients this inbox signs owners in to platforms with, from GOOGLE_OAUTH_CLIENT_ID and
- * GOOGLE_OAUTH_CLIENT_SECRET (both, or neither: one alone is said and left out), and
- * GOOGLE_OAUTH_REDIRECT_URI when the host keeps one redirect address for all its inboxes. Without a
- * client, Google Calendar shows as "set up" in Settings → Integrations ("Soon" on a hosted inbox).
+ * The OAuth clients this inbox signs owners in to platforms with, each from its id and secret (both,
+ * or neither: one alone is said and left out): GOOGLE_OAUTH_CLIENT_ID/_SECRET, SHOPIFY_CLIENT_ID/_SECRET,
+ * SQUARE_CLIENT_ID/_SECRET, CALENDLY_CLIENT_ID/_SECRET. Each is a one-click sign-in beside a way that
+ * needs no app of the server's (ADR-026 §5); without it, that way shows as "set up" in Settings →
+ * Integrations ("Soon" on a hosted inbox). GOOGLE_OAUTH_REDIRECT_URI when the host keeps one redirect
+ * address for all its inboxes; GOOGLE_OAUTH_TESTING=1 while Google's client is in Testing mode, so
+ * Google says "Soon" rather than a sign-in that fails for anyone but its test users.
  */
 export function oauthFrom(
-  env: {
-    readonly GOOGLE_OAUTH_CLIENT_ID?: string | undefined;
-    readonly GOOGLE_OAUTH_CLIENT_SECRET?: string | undefined;
+  env: OAuthEnv & {
     readonly GOOGLE_OAUTH_REDIRECT_URI?: string | undefined;
+    readonly GOOGLE_OAUTH_TESTING?: string | undefined;
   },
   log: (line: string) => void = console.error,
 ): {
-  oauth: { google: { clientId: string; clientSecret: string } | null };
+  oauth: { [K in keyof typeof OAUTH_ENV]: { clientId: string; clientSecret: string } | null };
   oauthRedirect: ((kind: string) => string | undefined) | undefined;
+  googleTesting: boolean;
 } {
-  const id = env.GOOGLE_OAUTH_CLIENT_ID?.trim() ?? "";
-  const secret = env.GOOGLE_OAUTH_CLIENT_SECRET?.trim() ?? "";
-  if ((id && !secret) || (!id && secret)) {
-    log("GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET go together; with one alone Google stays off");
-  }
-  const google = id && secret ? { clientId: id, clientSecret: secret } : null;
+  const client = (platform: keyof typeof OAUTH_ENV) => {
+    const [idName, secretName] = OAUTH_ENV[platform];
+    const id = env[idName]?.trim() ?? "";
+    const secret = env[secretName]?.trim() ?? "";
+    if ((id && !secret) || (!id && secret)) {
+      log(`${idName} and ${secretName} go together; with one alone ${platform} sign-in stays off`);
+    }
+    return id && secret ? { clientId: id, clientSecret: secret } : null;
+  };
   const redirect = env.GOOGLE_OAUTH_REDIRECT_URI?.trim() ?? "";
   let fixed: string | undefined;
   if (redirect) {
@@ -133,7 +149,13 @@ export function oauthFrom(
     }
   }
   return {
-    oauth: { google },
+    oauth: {
+      google: client("google"),
+      shopify: client("shopify"),
+      square: client("square"),
+      calendly: client("calendly"),
+    },
     oauthRedirect: fixed ? (kind) => (kind === "google_calendar" ? fixed : undefined) : undefined,
+    googleTesting: /^(1|true|yes|on)$/i.test((env.GOOGLE_OAUTH_TESTING ?? "").trim()),
   };
 }

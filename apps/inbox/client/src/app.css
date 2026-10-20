@@ -2202,6 +2202,37 @@ legend.label-line {
 }
 
 /* Settings → Integrations: the gallery (ADR-022). Small tiles, hairlines, one quiet tag. */
+.int-groups {
+  display: grid;
+  gap: 18px;
+}
+.int-group {
+  animation: int-group-in 0.32s var(--ease-out-soft, ease) both;
+}
+.int-group:nth-child(2) {
+  animation-delay: 0.05s;
+}
+.int-group:nth-child(3) {
+  animation-delay: 0.1s;
+}
+@keyframes int-group-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .int-group {
+    animation: none;
+  }
+}
+.int-group-head {
+  margin: 0 0 2px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--ink-3);
+}
 .int-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

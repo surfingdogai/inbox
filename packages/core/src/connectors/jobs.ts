@@ -32,6 +32,18 @@ export function connectorSyncHandler(connectors: ConnectorCapabilities): JobHand
   };
 }
 
+/**
+ * A shop's catalogue read on its own (ADR-026 §3): after a webhook said products changed, and to go on
+ * with a pass that has more pages. In its connection's lane, so it never meets a sync reading the same.
+ */
+export function connectorCatalogueHandler(connectors: ConnectorCapabilities): JobHandler {
+  return async (job, { now }) => {
+    const id = (job.payload as { connectorId?: unknown } | null)?.connectorId;
+    if (typeof id !== "string") return { note: "no connection id" };
+    return { note: `connection ${id}: ${await connectors.catalogueNow(id, now)}` };
+  };
+}
+
 export function connectorPushHandler(connectors: ConnectorCapabilities): JobHandler {
   return async (job, { now }) => {
     const id = (job.payload as { connectorId?: unknown } | null)?.connectorId;
@@ -53,13 +65,40 @@ export function connectorNoticeHandler(
   opts: { readonly baseUrl?: string | undefined } = {},
 ): JobHandler {
   return async (job, { db, now }) => {
-    const id = (job.payload as { connectorId?: unknown } | null)?.connectorId;
+    const payload = job.payload as { connectorId?: unknown; reason?: unknown } | null;
+    const id = payload?.connectorId;
     if (typeof id !== "string") return { note: "no connection id" };
     const settings = await readSettings(db);
     const publicUrl = opts.baseUrl ?? settings.notifications.appUrl ?? "";
     const facts = await businessFacts(db, settings);
     const sender = senderOf(settings, { transport: mailOut, publicUrl, business: facts.name });
     let logged = await mailByJob(db, job.id);
+    // A shop with more products than one connection takes (ADR-026 §3): said once.
+    if (!logged && payload?.reason === "catalogue_cap") {
+      const shop = await connectors.cappedNotice(id);
+      if (!shop) return { note: `connection ${id}: nothing to tell` };
+      const appUrl = (settings.notifications.appUrl ?? publicUrl).replace(/\/+$/, "");
+      logged = await storeMail(
+        db,
+        {
+          itemId: null,
+          jobKey: job.id,
+          recipient: "owner",
+          template: "owner.catalogue_capped",
+          lang: "en",
+          subject: oneLine(`${shop.title}: the first ${shop.max.toLocaleString("en")} products are in your inbox`),
+          text: [
+            `${shop.title} has more products than one connection brings in, so your inbox has the first ${shop.max.toLocaleString("en")}. Agents are offered only those.`,
+            "",
+            "Products past them are not taken off sale, and nothing in your shop changes.",
+            ...(appUrl ? ["", `Settings → Integrations: ${appUrl}/settings/integrations`] : []),
+          ].join("\n"),
+          ...(sender ? {} : { skip: "no_sender" as const }),
+        },
+        mailDomain(sender?.from.address, publicUrl),
+        now,
+      );
+    }
     if (!logged) {
       const notice = await connectors.failingNotice(id);
       if (!notice) return { note: `connection ${id} works again, or is gone: nothing to tell` };

@@ -21,8 +21,9 @@ export {
   googleEventId,
   idTokenClaims,
 } from "./google";
+export { hmacSha256Base64, verifyBase64Hmac, verifyHexHmac } from "./hook-sign";
 export { basicAuth, CREDENTIAL_FAMILIES, connectorHttp, mayCarryCredentials } from "./http";
-export { icsConnector, icsForm } from "./ics";
+export { ICS_PRESETS, icsConnector, icsForm } from "./ics";
 export { MOLLIE_API, MOLLIE_EVENTS, MOLLIE_METHODS, mollieConnector, mollieForm } from "./mollie";
 export { constantTimeEqual, hmacSha256Hex } from "./pay-sign";
 export {
@@ -35,9 +36,30 @@ export {
   stripeForm,
 } from "./stripe";
 
-/** The OAuth clients an instance may hold, from its environment: each platform's id and secret. */
+/**
+ * The OAuth clients an instance may hold, from its environment: each platform's id and secret
+ * (`GOOGLE_OAUTH_CLIENT_ID`/`_SECRET`, `SHOPIFY_CLIENT_ID`/`_SECRET`, `SQUARE_CLIENT_ID`/`_SECRET`,
+ * `CALENDLY_CLIENT_ID`/`_SECRET`). Each is the app of whoever runs the server, for a one-click sign-in
+ * beside the way that needs none (ADR-026 §5): without it, that way says "set up" on one's own server
+ * and "Soon" on a hosted inbox.
+ */
 export interface OAuthClients {
   readonly google?: OAuthClient | null | undefined;
+  readonly shopify?: OAuthClient | null | undefined;
+  readonly square?: OAuthClient | null | undefined;
+  readonly calendly?: OAuthClient | null | undefined;
+}
+
+/** What the host says of itself to the connectors it offers. */
+export interface ConnectorHostOptions {
+  readonly oauth?: OAuthClients | undefined;
+  /** A hosted inbox, whose OAuth clients are the host's own and on their way: "Soon" rather than "set up". */
+  readonly hosted?: boolean | undefined;
+  /**
+   * The Google client is still in Google's Testing mode (`GOOGLE_OAUTH_TESTING=1`): only its test users
+   * can sign in, so Google says "Soon" rather than a button that fails for everyone else.
+   */
+  readonly googleTesting?: boolean | undefined;
 }
 
 /**
@@ -45,15 +67,16 @@ export interface OAuthClients {
  * private link need nothing of the host; Google needs the instance's OAuth client, and without one
  * says "Soon" on a hosted inbox (ours is on its way) and "set up" on one's own server. Stripe and
  * Mollie take the business's own key and need nothing of the host but its public address (ADR-023).
+ *
+ * A connector added here takes one import, one export line and one entry below (ADR-026 §7), in the
+ * order WooCommerce, Shopify, Square, Calendly, the calendar link to share.
  */
-export function builtInConnectors(
-  opts: { readonly oauth?: OAuthClients | undefined; readonly hosted?: boolean | undefined } = {},
-): ConnectorDefinition[] {
+export function builtInConnectors(opts: ConnectorHostOptions = {}): ConnectorDefinition[] {
   const google = opts.oauth?.google ?? null;
   return [
     calcomConnector(),
-    caldavConnector({ googleReady: Boolean(google?.clientId && google.clientSecret) }),
-    googleCalendarConnector(google, { hosted: opts.hosted }),
+    caldavConnector({ googleReady: Boolean(google?.clientId && google.clientSecret) && !opts.googleTesting }),
+    googleCalendarConnector(google, { hosted: opts.hosted, testing: opts.googleTesting }),
     icsConnector(),
     stripeConnector(),
     mollieConnector(),

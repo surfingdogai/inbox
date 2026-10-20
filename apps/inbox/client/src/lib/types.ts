@@ -332,6 +332,16 @@ export interface ConnectionPatch {
   readonly paused?: boolean;
   /** A payment platform: accepted orders get a link to pay (ADR-023). */
   readonly pay_on?: boolean;
+  /** What the owner chose of the connection's choosers (a till's location), by key (ADR-026). */
+  readonly choices?: Readonly<Record<string, string | null>>;
+}
+
+/** `POST /v1/owner/integrations/authorize`: a sign-in, or an approval on the owner's own store. */
+export interface AuthorizeBody {
+  readonly kind: string;
+  readonly preset?: string | undefined;
+  /** What the way asks first (a store's address). */
+  readonly input?: Readonly<Record<string, string>> | undefined;
 }
 
 /** The lines that lead an agent from the business's own site to this inbox (`GET /v1/owner/discovery`). */

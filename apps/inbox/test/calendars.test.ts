@@ -155,7 +155,7 @@ async function connectIcloud(s: Awaited<ReturnType<typeof setup>>, password = AP
 }
 
 describe("Settings → Integrations", () => {
-  it("shows every card, with Google ready only when the inbox has a client, the payment platforms ready, and the shops saying soon", async () => {
+  it("shows every card, with Google ready only when the inbox has a client, the payment platforms ready, and what is being built saying soon", async () => {
     const withGoogle = await setup();
     const res = await withGoogle.app.request(req("GET", "/v1/owner/integrations", undefined, withGoogle.owner));
     expect(res.status).toBe(200);
@@ -173,15 +173,21 @@ describe("Settings → Integrations", () => {
       can_connect: boolean;
     };
     expect(body.can_connect).toBe(true);
+    // Ready: what this release connects. Soon: only what is being built now, a till that takes bookings
+    // first for an inbox with services. Nothing else is listed.
     expect(body.cards.map((c) => [c.id, c.status])).toEqual([
       ["calendar", "ready"],
       ["calcom", "ready"],
+      ["calendly", "soon"],
+      ["ics_feed", "soon"],
       ["stripe", "ready"],
       ["mollie", "ready"],
-      ["shopify", "soon"],
+      ["square", "soon"],
       ["woocommerce", "soon"],
+      ["shopify", "soon"],
     ]);
     const calendar = body.cards.find((c) => c.id === "calendar");
+    // Outlook is its published calendar link, with Outlook's steps: busy times only, and ready.
     expect(calendar?.ways.map((w) => [w.preset ?? w.kind, w.status])).toEqual([
       ["google_calendar", "ready"],
       ["icloud", "ready"],
@@ -189,7 +195,7 @@ describe("Settings → Integrations", () => {
       ["nextcloud", "ready"],
       ["other", "ready"],
       ["ics", "ready"],
-      ["outlook", "soon"],
+      ["outlook", "ready"],
     ]);
     expect((calendar as { line?: string } | undefined)?.line).toBe("Google, iCloud, Fastmail and more");
     const icloud = calendar?.ways.find((w) => w.preset === "icloud");
@@ -210,7 +216,7 @@ describe("Settings → Integrations", () => {
     expect(google).toMatchObject({ status: "setup", form: [], hint: "Needs a Google client on the server." });
     const calendarLine = plain.cards.find((c) => c.id === "calendar") as { line?: string; ways: { kind: string }[] };
     expect(calendarLine.line).toBe("iCloud, Fastmail, Nextcloud and more");
-    expect(calendarLine.ways.map((w) => w.kind).slice(-2)).toEqual(["google_calendar", "outlook"]);
+    expect(calendarLine.ways.map((w) => w.kind).slice(-1)).toEqual(["google_calendar"]);
 
     const hosted = await setup({ google: false, hosted: true });
     const onHosted = (await (
@@ -352,7 +358,7 @@ describe("an iCloud calendar, end to end", () => {
     // The PATCH synced at once: the work calendar holds nothing here.
     expect(listed.content[0]?.text).toContain(`${view.id} iCloud [active] 0 busy times ahead (read to `);
     expect(listed.content[0]?.text).toContain("), 0 bookings written");
-    expect(listed.content[0]?.text).toContain("Soon: Outlook Calendar, Shopify, WooCommerce.");
+    expect(listed.content[0]?.text).toContain("Soon: Calendly, Calendar link to share, Square, WooCommerce, Shopify.");
     expect(JSON.stringify(listed)).not.toContain(APP_PASSWORD);
     const sync = (await client.callTool({ name: "sync_integration", arguments: { connection_id: view.id } })) as {
       isError?: boolean;

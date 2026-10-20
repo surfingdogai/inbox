@@ -98,11 +98,21 @@ export function idTokenClaims(
 export interface GoogleOptions {
   /** A hosted inbox, whose Google client is ours and on its way: "Soon" rather than "set up". */
   readonly hosted?: boolean | undefined;
+  /**
+   * The client is still in Google's Testing mode (`GOOGLE_OAUTH_TESTING=1`): Google lets only its test
+   * users sign in, so for everyone else the button would end on Google's "access blocked". "Soon" until
+   * Google has verified the app (ADR-026 §6).
+   */
+  readonly testing?: boolean | undefined;
 }
 
 export function googleCalendarConnector(client: OAuthClient | null, opts: GoogleOptions = {}): ConnectorDefinition {
   const ready = () =>
-    client?.clientId && client.clientSecret ? (true as const) : "Google sign-in is not set up on this inbox yet.";
+    !(client?.clientId && client.clientSecret)
+      ? "Google sign-in is not set up on this inbox yet."
+      : opts.testing
+        ? "Google is still checking this inbox's sign-in."
+        : (true as const);
   /**
    * Access tokens refreshed in this process, by refresh token: a run that refreshed once uses the new
    * token for every call after, rather than asking Google again and sealing it again each time.
@@ -215,14 +225,17 @@ export function googleCalendarConnector(client: OAuthClient | null, opts: Google
     group: "calendars",
     capabilities: ["busy_times", "write_bookings"],
     auth: "oauth",
+    consent:
+      "Google will ask to let this inbox see when you are busy and edit your calendar. It only touches the bookings it adds.",
     ready,
-    whenNotReady: opts.hosted
-      ? { status: "soon" }
-      : {
-          status: "setup",
-          hint: "Needs a Google client on the server.",
-          href: "https://surfingdog.ai/docs/calendars/#google-calendar",
-        },
+    whenNotReady:
+      opts.hosted || (opts.testing && client?.clientId)
+        ? { status: "soon" }
+        : {
+            status: "setup",
+            hint: "Needs a Google client on the server.",
+            href: "https://surfingdog.ai/docs/calendars/#google-calendar",
+          },
 
     oauth: {
       authorizeUrl({ redirectUri, state, challenge }) {

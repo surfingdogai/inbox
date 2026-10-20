@@ -197,7 +197,7 @@ export function caldavConnector(opts: CalDavOptions = {}): ConnectorDefinition {
         if (at === "microsoft") {
           throw new ConnectorError(
             "config",
-            "Outlook calendars cannot connect here yet. Until then, use Calendar link.",
+            "Outlook calendars connect by the link Outlook publishes: choose Outlook above.",
             {
               field: "username",
             },

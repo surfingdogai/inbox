@@ -628,7 +628,7 @@ describe("CalDAV: finding the server", () => {
         dav.connect?.({ http, now: NOW, inbox: INBOX }, { username: email, password: "pw" }),
       ).rejects.toMatchObject({
         field: "username",
-        message: "Outlook calendars cannot connect here yet. Until then, use Calendar link.",
+        message: "Outlook calendars connect by the link Outlook publishes: choose Outlook above.",
       });
     }
   });

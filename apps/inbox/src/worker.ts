@@ -31,6 +31,15 @@ type Bindings = Env & {
   GOOGLE_OAUTH_CLIENT_ID?: string;
   GOOGLE_OAUTH_CLIENT_SECRET?: string;
   GOOGLE_OAUTH_REDIRECT_URI?: string;
+  /** `1` while the Google client is in Google's Testing mode: Google says "Soon" (ADR-026 §6). */
+  GOOGLE_OAUTH_TESTING?: string;
+  /** One-click sign-ins beside a shop's or a till's own keys (ADR-026 §5); without them, "set up". */
+  SHOPIFY_CLIENT_ID?: string;
+  SHOPIFY_CLIENT_SECRET?: string;
+  SQUARE_CLIENT_ID?: string;
+  SQUARE_CLIENT_SECRET?: string;
+  CALENDLY_CLIENT_ID?: string;
+  CALENDLY_CLIENT_SECRET?: string;
 };
 
 // One app per isolate; the D1 binding is stable for the isolate's life.

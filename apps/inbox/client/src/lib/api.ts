@@ -2,6 +2,7 @@ import { authHeaders } from "./auth";
 import { attachmentName } from "./download";
 import type {
   AddFeedBody,
+  AuthorizeBody,
   Availability,
   BusinessProfile,
   Closure,
@@ -311,9 +312,17 @@ export const api = {
   // ---- integrations: what comes in, and where events go ----
   integrations: () => call<IntegrationsView>("GET", "/v1/owner/integrations"),
   connect: (body: ConnectBody) => call<ConnectionView>("POST", "/v1/owner/integrations", { body, idempotent: true }),
-  authorizeIntegration: (kind: string) =>
+  authorizeIntegration: (body: AuthorizeBody) =>
     call<{ authorize_url: string }>("POST", "/v1/owner/integrations/authorize", {
-      body: { kind, return_to: "/settings/integrations" },
+      body: { ...body, return_to: "/settings/integrations" },
+    }),
+  /** A new link for a connection that serves one: the old one stops at once (ADR-026). */
+  newConnectionLink: (id: string) =>
+    call<ConnectionView>("POST", `/v1/owner/integrations/${encodeURIComponent(id)}/link`, { idempotent: true }),
+  /** Propose the shop's total to the customer, for an order whose link is held (ADR-026). */
+  proposeShopTotal: (id: string) =>
+    call<TransitionResult>("POST", `/v1/owner/items/${encodeURIComponent(id)}/payments/shop-total`, {
+      idempotent: true,
     }),
   updateConnection: (id: string, body: ConnectionPatch) =>
     call<ConnectionView>("PATCH", `/v1/owner/integrations/${encodeURIComponent(id)}`, { body, idempotent: true }),
