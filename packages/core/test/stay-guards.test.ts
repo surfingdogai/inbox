@@ -233,6 +233,35 @@ describe("stays: money and nights", () => {
     expect(quoted.view.item.state).toBe("quoted");
   });
 
+  it("lets a person quote a price of their own where the rates do not cover the nights; never automation", async () => {
+    clock.now = Date.parse("2026-11-02T06:00:00Z");
+    const k = await kijaniHouse();
+    // A cottage set up a moment ago, with no price yet.
+    const { id: cottage } = await k.caps.stays.upsertRoomType(owner, {
+      name: "Garden cottage",
+      units: 1,
+      capacity: { adults: 2, children: 0, total: 2 },
+    });
+    const made = await k.caps.stays.request(guest(), {
+      check_in: "2026-12-12",
+      check_out: "2026-12-15",
+      rooms: [{ room_type_id: cottage, adults: 2 }],
+      contact: { ...contact, locale: "fr" },
+      consent: true,
+    });
+    const id = made.view.item.id;
+    const none = await k.caps.stays.draftQuote(owner, { item_id: id });
+    expect(none.quote).toBeNull();
+    const price = { value: 2_400_000, currency: "KES" };
+    const drafted = await k.caps.stays.draftQuote(owner, { item_id: id, price });
+    expect(drafted).toMatchObject({ lang: "fr", quote: { total: price, source: "person" } });
+    await expectCode(transitionItem(k.db, ownerAi, { itemId: id, event: "quote", input: { price } }), "not_allowed");
+    const quoted = await transitionItem(k.db, owner, { itemId: id, event: "quote", input: { price } });
+    const q = (quoted.view.item.payload as StayPayload).quote;
+    expect(q?.total).toEqual(price);
+    expect(q?.lines[0]?.nights?.reduce((a, n) => a + n.amount, 0)).toBe(2_400_000);
+  });
+
   it("never lets a guest name a rate plan the property keeps for its own use", async () => {
     clock.now = Date.parse("2026-11-02T13:00:00Z");
     const m = await mapleHollow();
