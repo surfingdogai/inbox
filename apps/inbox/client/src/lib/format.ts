@@ -1,4 +1,5 @@
 import { minorUnitsOf } from "./currencies";
+import { staySnippet } from "./stays";
 import type { Customer, Item, ItemType, ItemView, Money, Party, Receipt } from "./types";
 
 /**
@@ -11,6 +12,7 @@ export const TYPE_WORD: Record<ItemType, string> = {
   booking: "Booking",
   order: "Order",
   refund: "Refund",
+  stay: "Stay",
 };
 
 export const TYPE_PLURAL: Record<ItemType, string> = {
@@ -19,6 +21,7 @@ export const TYPE_PLURAL: Record<ItemType, string> = {
   booking: "Bookings",
   order: "Orders",
   refund: "Refunds",
+  stay: "Stays",
 };
 
 export const TYPE_CLASS: Record<ItemType, string> = {
@@ -27,6 +30,8 @@ export const TYPE_CLASS: Record<ItemType, string> = {
   booking: "booking",
   order: "order",
   refund: "refund",
+  // A stay wears a booking's colours: both are time someone reserved.
+  stay: "booking",
 };
 
 export type Tone = "neutral" | "success" | "warning" | "danger";
@@ -292,6 +297,8 @@ export function snippetFor(item: Item, tz?: string, locale?: string): string {
       const why = p.reason ? truncate(p.reason, 60) : RETURN_KIND[p.kind ?? "policy"];
       return `${formatMoney(p.amount, locale)} · ${why}`;
     }
+    case "stay":
+      return staySnippet(item.payload, locale);
   }
 }
 

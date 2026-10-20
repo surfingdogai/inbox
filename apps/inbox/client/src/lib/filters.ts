@@ -67,8 +67,15 @@ export interface Counts {
 }
 
 export function countsFrom(open: Page<ItemView>, everything: Page<ItemView>): Counts {
-  const byType: Record<ItemType, number> = { message: 0, quote_request: 0, booking: 0, order: 0, refund: 0 };
-  const needsByType: Record<ItemType, number> = { message: 0, quote_request: 0, booking: 0, order: 0, refund: 0 };
+  const byType: Record<ItemType, number> = { message: 0, quote_request: 0, booking: 0, order: 0, refund: 0, stay: 0 };
+  const needsByType: Record<ItemType, number> = {
+    message: 0,
+    quote_request: 0,
+    booking: 0,
+    order: 0,
+    refund: 0,
+    stay: 0,
+  };
   let needs = 0;
   for (const v of open.items) {
     byType[v.item.type] += 1;
