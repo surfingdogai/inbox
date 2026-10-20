@@ -53,16 +53,41 @@ import { z } from "zod";
  *   the calendar's own daily prices under their own names (`price1`…`price16`), and the live total
  *   comes from `/inventory/rooms/offers` only where it is not ambiguous.
  *
+ * - A stay's price is written and read back only with the `bookings-financial` scope (the wiki: it
+ *   "provides access to financial information" on GET and POST /bookings): the code must allow it.
+ * - Whether a lookup by id or by our key is held to "upcoming bookings only" (the OpenAPI file's default
+ *   for GET /bookings) is not said: every such lookup names a wide arrival date, so a past stay is found.
+ * - Which charges besides the nightly price a guest pays (a room's cleaning fee and taxes, a property's
+ *   obligatory extras) are not in the calendar's prices: the owner is told of them while matching rooms.
+ *
  * Every call goes to https://beds24.com/api/v2 and nowhere else; a next-page link is followed only on
  * that host. The token goes in the `token` header; no card detail, deposit or commission is ever sent.
+ * The code asks for read and write on bookings, never `all:` (which also deletes), though an `all:`
+ * scope a code already has covers both.
  */
 
 export const BEDS24_HOST = "beds24.com";
 export const BEDS24_API = `https://${BEDS24_HOST}/api/v2`;
 /** Where the owner makes an invite code (the OpenAPI file's own link). */
 export const BEDS24_CODES_URL = "https://beds24.com/control3.php?pagetype=apiv2";
-/** What the invite code must allow: an `all:` scope covers its `read:` one. */
-export const BEDS24_SCOPES = ["read:inventory", "read:properties", "all:bookings", "read:bookings-personal"] as const;
+/** What the invite code must allow: an `all:` scope a code has covers its `read:` and `write:` ones. */
+export const BEDS24_SCOPES = [
+  "read:bookings",
+  "write:bookings",
+  "read:bookings-personal",
+  "read:bookings-financial",
+  "write:bookings-financial",
+  "read:inventory",
+  "read:properties",
+] as const;
+/** Each scope as the owner chooses it in Beds24. */
+const SCOPE_WORDS: Readonly<Record<string, string>> = {
+  bookings: "Bookings",
+  "bookings-personal": "Bookings personal",
+  "bookings-financial": "Bookings financial",
+  inventory: "Inventory",
+  properties: "Properties",
+};
 /** Beds24 forgets a refresh token unused for 30 days: it is used at least this often. */
 export const BEDS24_REFRESH_EVERY_MS = 7 * 86_400_000;
 /** A token is made again this long before Beds24 says it ends. */
@@ -81,23 +106,32 @@ const BLOCKING = new Set(["confirmed", "request", "new", "black"]);
 /** The flag a stay waiting for its deposit carries in Beds24, and only such a stay. */
 export const BEDS24_WAITING_FLAG = "Deposit due";
 const WAITING_COLOR = "f2c94c";
+/** The code of the one info item this inbox keeps on its own bookings: what is due, or paid. */
+export const BEDS24_INFO_CODE = "INBOX";
+const DEPOSIT_TEXT = "Deposit due: your inbox cancels this stay if it is not paid in time.";
+/** The largest amount Beds24 documents for a booking's price (`maximum: 99999999.99`). */
+const MAX_PRICE = 99_999_999.99;
 /** Words shared with the owner (ready-hotels §12 S2). */
 const BUSY = "Beds24 is busy right now. We'll try again in a few minutes.";
-const EXPIRED = "That code has expired. Make a new one in Beds24.";
+const EXPIRED = "Beds24 didn't take that code. Copy it again, or make a new one: a code lasts 24 hours.";
+const MISSING = "That booking was not found in Beds24: check it there.";
 const GONE = "Beds24 no longer takes this connection. Make a new invite code in Beds24 and connect again.";
 const NOT_ANSWERING = "Beds24 is not answering properly; this inbox tries again in a few minutes.";
 const NOT_FREE = "Those nights are no longer free in Beds24.";
 
+/** What the code must allow, in the words of Beds24's own choices: the same on the form and the docs. */
+export const BEDS24_CHOOSE =
+  "Bookings: Read and Write · Bookings personal: Read · Bookings financial: Read and Write · Inventory: Read · Properties: Read";
+
 export const beds24Form = z.object({
   invite_code: secretField(z.string().trim().min(8).max(500), {
     label: "Invite code",
-    help: "A code's permissions cannot be changed later: for others, make a new code and connect again.",
     link: { href: BEDS24_CODES_URL, text: "Open Beds24's API page" },
     placeholder: "Paste the code from Beds24",
     steps: [
-      "In Beds24, open Settings, then Marketplace, then API.",
-      "Create an invite code with bookings and inventory: read inventory, read properties, all bookings and read bookings personal.",
-      "Paste it here. It works for 24 hours.",
+      "In Beds24, open Settings → Marketplace → API and press Generate invite code.",
+      `Choose ${BEDS24_CHOOSE}. Leave the IP address empty.`,
+      "Paste the code here. It works for 24 hours.",
     ],
   }),
 });
@@ -121,6 +155,31 @@ function nightsOf(from: string, to: string): string[] {
 /** Minor units as Beds24 takes money: a number in the currency's own decimals (¥25,800 → 25800). */
 export function beds24Amount(amount: { readonly value: number; readonly currency: string }): number {
   return Number(decimalAmount(amount));
+}
+
+/**
+ * An amount as a booking's price: refused before anything is written when Beds24 could not hold it as
+ * given — above its documented maximum, or in a currency of three decimals, which its two-decimal
+ * maximum suggests it rounds (a booking it rounded would never read back as written).
+ */
+export function writableAmount(amount: { readonly value: number; readonly currency: string }): number {
+  const e = minorUnits(amount.currency);
+  if (e === null || e === undefined || e > 2) {
+    throw new ConnectorError(
+      "refused",
+      `Stays in ${amount.currency} are not written to Beds24 yet: confirm this one there yourself.`,
+    );
+  }
+  const value = beds24Amount(amount);
+  if (!Number.isFinite(value) || value < 0 || value > MAX_PRICE) {
+    throw new ConnectorError("refused", "That total is more than Beds24 takes for one booking.");
+  }
+  return value;
+}
+
+/** Text that keeps whole characters: trimmed, composed, and cut by character, never through one. */
+function textOf(raw: string, max: number): string {
+  return [...raw.normalize("NFC").trim()].slice(0, max).join("");
 }
 
 /** A Beds24 amount back to minor units of its currency; null when it is not one this inbox can hold. */
@@ -388,6 +447,16 @@ interface B24Room {
   readonly maxPeople?: number;
   readonly maxAdult?: number | null;
   readonly maxChildren?: number | null;
+  readonly cleaningFee?: number | null;
+  readonly taxPercentage?: number | null;
+  readonly taxPerson?: number | null;
+  readonly securityDeposit?: number | null;
+}
+
+interface B24Upsell {
+  readonly enable?: boolean;
+  readonly type?: string;
+  readonly amount?: number;
 }
 
 interface B24Property {
@@ -395,6 +464,13 @@ interface B24Property {
   readonly name?: string;
   readonly currency?: string;
   readonly roomTypes?: readonly B24Room[];
+  readonly upsellItems?: readonly B24Upsell[];
+}
+
+interface B24Info {
+  readonly id?: number;
+  readonly code?: string;
+  readonly text?: string;
 }
 
 export interface B24Booking {
@@ -406,11 +482,15 @@ export interface B24Booking {
   readonly arrival?: string;
   readonly departure?: string;
   readonly price?: number;
+  readonly numAdult?: number;
+  readonly numChild?: number;
   readonly apiReference?: string;
   readonly masterId?: number | null;
   readonly bookingGroup?: { readonly master?: number; readonly ids?: readonly number[] } | null;
   readonly lastName?: string;
   readonly flagText?: string;
+  readonly flagColor?: string;
+  readonly infoItems?: readonly B24Info[];
 }
 
 const intId = (raw: string): number | null => (/^\d{1,12}$/.test(raw) ? Number(raw) : null);
@@ -426,9 +506,17 @@ async function readProperties(ctx: RunContext, query: Query = {}): Promise<B24Pr
   return data.filter((p): p is B24Property => typeof (p as B24Property)?.id === "number");
 }
 
-async function readProperty(ctx: RunContext, propertyId: string): Promise<B24Property> {
+async function readProperty(
+  ctx: RunContext,
+  propertyId: string,
+  opts: { readonly upsells?: boolean } = {},
+): Promise<B24Property> {
   const id = idOrRefuse(propertyId, "property");
-  const [p] = await readProperties(ctx, { id: [id], includeAllRooms: true });
+  const [p] = await readProperties(ctx, {
+    id: [id],
+    includeAllRooms: true,
+    ...(opts.upsells ? { includeUpsellItems: true } : {}),
+  });
   if (!p || p.id !== id)
     throw new ConnectorError("not_found", "Beds24 does not show that property to this connection.");
   return p;
@@ -455,6 +543,12 @@ async function readBookings(ctx: RunContext, query: Query): Promise<B24Booking[]
   const { data } = await collect(ctx, "/bookings", query);
   return data.filter((b): b is B24Booking => typeof (b as B24Booking)?.id === "number");
 }
+
+/**
+ * The earliest arrival a lookup by id or by our key names: Beds24 answers only upcoming bookings by
+ * default, and does not say whether that holds for an id, so a stay already past is still found.
+ */
+const SINCE = "2000-01-01";
 
 interface CalendarEntry {
   readonly from?: string;
@@ -568,6 +662,17 @@ function hasScope(scopes: readonly string[], want: string): boolean {
   return scopes.includes(want) || scopes.includes(`all:${what}`);
 }
 
+/** Missing scopes as the owner chooses them in Beds24: "Bookings financial: Read and Write". */
+export function missingWords(missing: readonly string[]): string {
+  const byWhat = new Map<string, string[]>();
+  for (const s of missing) {
+    const [how, what] = s.split(":");
+    if (!how || !what) continue;
+    byWhat.set(what, [...(byWhat.get(what) ?? []), how === "read" ? "Read" : "Write"]);
+  }
+  return [...byWhat].map(([what, hows]) => `${SCOPE_WORDS[what] ?? what}: ${hows.join(" and ")}`).join(" · ");
+}
+
 /** Exchanges an invite code: GET as the OpenAPI file has it, POST where only that is served. */
 async function exchange(
   ctx: ConnectContext,
@@ -602,10 +707,11 @@ async function forget(ctx: Pick<ConnectContext, "http">, refreshToken: string): 
   }
 }
 
+/** The account in a few words: its one property's name, or how many it has (never the first one's). */
 function accountOf(props: readonly B24Property[]): string {
   const names = props.map((p) => (p.name ?? "").trim()).filter(Boolean);
-  if (names.length === 0) return "Beds24";
-  return names.length === 1 ? (names[0] as string) : `${names[0]} and ${names.length - 1} more`;
+  if (props.length === 0) return "Beds24";
+  return props.length === 1 && names[0] ? names[0] : `${props.length} properties`;
 }
 
 function extraOf(ownerId: string, props: readonly B24Property[]): Record<string, unknown> {
@@ -650,7 +756,7 @@ async function connect(ctx: ConnectContext, input: Readonly<Record<string, strin
     if (missing.length) {
       throw new ConnectorError(
         "config",
-        `That code is missing ${missing.map((s) => s.replace(":", " ").replace("-", " ")).join(", ")}. Make a new code with read inventory, read properties, all bookings and read bookings personal: a code's permissions cannot be changed later.`,
+        `That code is missing ${missingWords(missing)}. Make a new code with ${missing.length === 1 ? "that" : "those"} too.`,
         { field: "invite_code" },
       );
     }
@@ -717,14 +823,31 @@ async function pricedSlots(ctx: RunContext, propertyId: number): Promise<Map<str
   return out;
 }
 
+type Charge = NonNullable<ExternalRoom["charges"]>[number];
+
+/** What Beds24 adds to a room besides its nightly price: its own fees and taxes, the property's obligatory extras. */
+function chargesOf(room: B24Room, upsells: readonly B24Upsell[]): Charge[] {
+  const out = new Set<Charge>();
+  const set = (v: number | null | undefined) => typeof v === "number" && Number.isFinite(v) && v > 0;
+  if (set(room.cleaningFee)) out.add("cleaning");
+  if (set(room.taxPercentage) || set(room.taxPerson)) out.add("tax");
+  if (set(room.securityDeposit)) out.add("deposit");
+  for (const u of upsells) {
+    if (u.enable === false || !set(u.amount) || !u.type?.startsWith("obligatory")) continue;
+    out.add(u.type === "obligatoryCleaning" ? "cleaning" : /Tax$/.test(u.type) ? "tax" : "extra");
+  }
+  return [...out];
+}
+
 async function rooms(ctx: RunContext, propertyId: string): Promise<ExternalRoom[]> {
-  const p = await readProperty(ctx, propertyId);
+  const p = await readProperty(ctx, propertyId, { upsells: true });
   const priced = await pricedSlots(ctx, p.id);
   return (p.roomTypes ?? [])
     .filter((r) => typeof r.id === "number")
     .map((r) => {
       const adults = r.maxAdult ?? r.maxPeople ?? null;
       const children = r.maxChildren ?? 0;
+      const charges = chargesOf(r, p.upsellItems ?? []);
       return {
         id: String(r.id),
         name: (r.name ?? "").trim() || `Room ${r.id}`,
@@ -733,6 +856,7 @@ async function rooms(ctx: RunContext, propertyId: string): Promise<ExternalRoom[
           ? { capacity: { adults, children, total: Math.max(adults, r.maxPeople ?? adults + children) } }
           : {}),
         ...(priced.has(String(r.id)) ? {} : { unpriced: true }),
+        ...(charges.length ? { charges } : {}),
       };
     });
 }
@@ -798,8 +922,54 @@ async function price(
 /** A key a change, a confirmation or a release is written under: the booking keeps the one it was made with. */
 const MODIFY_KEY = /^sd-[0-9A-Za-z]+-(change|confirm|release)-/;
 
-function noteOf(stay: OutboundStay, waiting: boolean): string {
-  return `Written by your inbox · ${stay.reference}${waiting ? " · deposit due: cancelled from your inbox if it is not paid" : ""}`;
+/** Our key for one room of a stay: the first room carries the stay's own, the others `~2`, `~3`… */
+function roomKey(base: string, i: number): string {
+  return i === 0 ? base : `${base}~${i + 1}`;
+}
+
+/** A room's key back to its stay's: `sd-01J…~2` → `sd-01J…`. */
+function baseKey(ref: string): string {
+  return ref.replace(/~\d{1,2}$/, "");
+}
+
+/** Which room of its stay a booking is, by its key: 0 for the stay's own, 1 for `~2`… */
+function roomIndex(ref: string): number {
+  const m = /~(\d{1,2})$/.exec(ref);
+  return m?.[1] ? Number(m[1]) - 1 : 0;
+}
+
+/** Every key a stay's rooms can carry. */
+function roomKeys(base: string): string[] {
+  return Array.from({ length: MAX_ROOMS }, (_, i) => roomKey(base, i));
+}
+
+function amountWords(a: { readonly value: number; readonly currency: string }): string {
+  return `${a.currency} ${decimalAmount(a)}`;
+}
+
+/** What the front desk reads on a stay paid here: amounts only, never a card or a commission. */
+function amountsText(stay: OutboundStay): string | null {
+  const a = stay.amounts;
+  if (!a) return null;
+  return `Paid in your inbox: ${amountWords(a.paid)}. Due at the property: ${amountWords(a.atProperty)}.`;
+}
+
+/** Our own info item on a booking, if it has one. */
+function infoOf(b: B24Booking): B24Info | undefined {
+  return (b.infoItems ?? []).find((x) => x.code === BEDS24_INFO_CODE && typeof x.id === "number");
+}
+
+/**
+ * Our info item for one room of a stay: the deposit due while it waits, what was paid and is left once
+ * confirmed (on its first room); added, changed by its id, or taken off where it no longer applies. The
+ * owner's own notes are never written over.
+ */
+function infoItems(stay: OutboundStay, i: number, waiting: boolean, mine: B24Info | undefined) {
+  const text = waiting ? DEPOSIT_TEXT : i === 0 ? amountsText(stay) : null;
+  if (text) return [{ ...(mine?.id !== undefined ? { id: mine.id } : { code: BEDS24_INFO_CODE }), text }];
+  // A room of a stay now confirmed, whose deposit note is out of date: taken off (an item with its id alone).
+  if (mine?.id !== undefined && mine.text === DEPOSIT_TEXT) return [{ id: mine.id }];
+  return null;
 }
 
 /** What one room of a stay is in Beds24: a booking. Never a card, a deposit or a commission. */
@@ -813,6 +983,7 @@ function bookingBody(
     readonly masterId?: number;
     readonly group?: boolean;
     readonly clearFlag?: boolean;
+    readonly info?: B24Info | undefined;
   },
 ): Record<string, unknown> {
   const r = stay.rooms[i];
@@ -820,6 +991,8 @@ function bookingBody(
   const waiting = status === "provisional";
   const creating = opts.id === undefined;
   const guest = stay.guest;
+  const info = infoItems(stay, i, waiting, opts.info);
+  const name = guest ? textOf(guest.name, 100) : "";
   return {
     ...(creating ? {} : { id: opts.id }),
     roomId: idOrRefuse(r.roomId, "room"),
@@ -830,20 +1003,21 @@ function bookingBody(
     numAdult: r.adults,
     numChild: r.childrenAges.length,
     // Beds24 does not price what an API writes: the inbox's own price for the room, in Beds24's decimals.
-    price: beds24Amount(r.price),
+    price: writableAmount(r.price),
     ...(creating && opts.key ? { apiReference: opts.key } : {}),
     ...(creating && opts.masterId !== undefined ? { masterId: opts.masterId } : {}),
     // The owner's own notes and the guest's words are written once, when it is made, never written over.
-    ...(creating ? { notes: noteOf(stay, waiting) } : {}),
-    ...(creating && stay.notes ? { comments: stay.notes.slice(0, 1000) } : {}),
+    ...(creating ? { notes: `Written by your inbox · ${stay.reference}` } : {}),
+    ...(creating && stay.notes ? { comments: textOf(stay.notes, 1000) } : {}),
+    ...(info ? { infoItems: info } : {}),
     ...(waiting ? { flagText: BEDS24_WAITING_FLAG, flagColor: WAITING_COLOR } : {}),
     ...(!waiting && opts.clearFlag ? { flagText: "", flagColor: "" } : {}),
     // The guest's name whole, as they gave it: a name is not ordered the same way everywhere.
-    ...(guest
+    ...(guest && name
       ? {
-          lastName: guest.name.slice(0, 100),
-          ...(guest.email ? { email: guest.email.slice(0, 100) } : {}),
-          ...(guest.phone ? { phone: guest.phone.slice(0, 100) } : {}),
+          lastName: name,
+          ...(guest.email ? { email: textOf(guest.email, 100) } : {}),
+          ...(guest.phone ? { phone: textOf(guest.phone, 100) } : {}),
         }
       : {}),
     actions: {
@@ -851,6 +1025,23 @@ function bookingBody(
       ...(creating ? { checkAvailability: true } : {}),
       ...(creating && opts.group ? { makeGroup: true } : {}),
     },
+  };
+}
+
+/** A booking as it was read a moment ago: what puts it back after part of a change did not go through. */
+function asItWas(b: B24Booking): Record<string, unknown> {
+  return {
+    id: b.id,
+    ...(typeof b.roomId === "number" ? { roomId: b.roomId } : {}),
+    ...(typeof b.status === "string" ? { status: b.status } : {}),
+    ...(typeof b.arrival === "string" ? { arrival: b.arrival } : {}),
+    ...(typeof b.departure === "string" ? { departure: b.departure } : {}),
+    ...(typeof b.numAdult === "number" ? { numAdult: b.numAdult } : {}),
+    ...(typeof b.numChild === "number" ? { numChild: b.numChild } : {}),
+    ...(typeof b.price === "number" ? { price: b.price } : {}),
+    flagText: b.flagText ?? "",
+    flagColor: b.flagColor ?? "",
+    actions: { allowWebhooks: true },
   };
 }
 
@@ -890,6 +1081,40 @@ async function postBookings(ctx: RunContext, body: Record<string, unknown>[]): P
     throw new ConnectorError("bad_response", "Beds24 answered the booking in a way that could not be read.");
   }
   return results;
+}
+
+/**
+ * Puts back what part of a write did: bookings as they were, or the ones just made, cancelled. When
+ * Beds24 does not take all of it, or its answer cannot be read, nothing is said to be refused: the
+ * write may still stand there (`bad_response`), and the owner is given the bookings to look at.
+ */
+async function undo(ctx: RunContext, body: Record<string, unknown>[]): Promise<void> {
+  if (body.length === 0) return;
+  let done = false;
+  try {
+    done = (await postBookings(ctx, body)).every((r) => r.ok);
+  } catch {
+    done = false;
+  }
+  if (!done) {
+    const ids = body.map((b) => b.id).filter((x) => typeof x === "number");
+    throw new ConnectorError(
+      "bad_response",
+      `Beds24 took part of this and did not take all of it back: check booking${ids.length === 1 ? "" : "s"} ${ids.join(", ")} there.`,
+    );
+  }
+}
+
+/** Whether an error says for certain that nothing it was asked to do was done. */
+function surelyNotDone(error: unknown): boolean {
+  return (
+    error instanceof ConnectorError &&
+    (error.code === "rate_limited" ||
+      error.code === "auth" ||
+      error.code === "refused" ||
+      error.code === "config" ||
+      error.code === "not_found")
+  );
 }
 
 /** Units the calendar says are free on each night of each room, below which the write is refused. */
@@ -941,87 +1166,182 @@ function checkStay(stay: OutboundStay): void {
   }
 }
 
-/** The bookings a link names: its own, then the rest of its group in the order they were written. */
+const byRoom = (a: B24Booking, b: B24Booking) =>
+  roomIndex(a.apiReference ?? "") - roomIndex(b.apiReference ?? "") || a.id - b.id;
+
+/**
+ * The bookings a link names: the stay's own rooms in their order. Found by our key, the stay's rooms
+ * are every booking under it (`key`, `key~2`…), whichever Beds24 still groups and even with the first
+ * one gone; a booking the inbox did not write is its own group's, as Beds24 joins them.
+ */
 async function members(ctx: RunContext, externalId: string): Promise<B24Booking[]> {
   const id = intId(externalId);
   if (id === null) return [];
-  const [first] = (await readBookings(ctx, { id: [id], status: ALL_STATUSES, includeBookingGroup: true })).filter(
-    (b) => b.id === id,
-  );
+  const [first] = (
+    await readBookings(ctx, {
+      id: [id],
+      status: ALL_STATUSES,
+      arrivalFrom: SINCE,
+      includeBookingGroup: true,
+      includeInfoItems: true,
+    })
+  ).filter((b) => b.id === id);
   if (!first) return [];
+  const base = baseKey(first.apiReference ?? "");
+  if (base) {
+    const ours = (
+      await readBookings(ctx, {
+        apiReference: roomKeys(base),
+        status: ALL_STATUSES,
+        arrivalFrom: SINCE,
+        includeInfoItems: true,
+      })
+    ).filter((b) => baseKey(b.apiReference ?? "") === base);
+    if (!ours.some((b) => b.id === id)) ours.push(first);
+    return ours.sort(byRoom);
+  }
   const others = (first.bookingGroup?.ids ?? []).filter((x) => typeof x === "number" && x !== id);
   if (others.length === 0) return [first];
-  const base = first.apiReference ?? "";
-  const rest = (await readBookings(ctx, { id: others, status: ALL_STATUSES }))
-    // Only the rooms this inbox wrote with it: a group the owner joined something to keeps that.
-    .filter((b) => !base || (b.apiReference ?? "").startsWith(`${base}~`))
-    .sort((a, b) => a.id - b.id);
+  const rest = (await readBookings(ctx, { id: others, status: ALL_STATUSES, arrivalFrom: SINCE })).sort(
+    (a, b) => a.id - b.id,
+  );
   return [first, ...rest];
 }
 
-async function findByKey(ctx: RunContext, key: string): Promise<B24Booking | null> {
-  if (!key) return null;
-  const found = await readBookings(ctx, { apiReference: [key], status: ALL_STATUSES });
-  return found.find((b) => b.apiReference === key) ?? null;
+/**
+ * The bookings under a stay's key, its own first then its other rooms' (`~2`…), the live ones before
+ * the cancelled: what `find` answers, so a stay whose first room is missing is still found.
+ */
+async function keyed(ctx: RunContext, key: string): Promise<B24Booking[]> {
+  if (!key) return [];
+  const found = await readBookings(ctx, {
+    apiReference: roomKeys(key),
+    status: ALL_STATUSES,
+    arrivalFrom: SINCE,
+  });
+  return found
+    .filter((b) => baseKey(b.apiReference ?? "") === key)
+    .sort((a, b) => Number(a.status === "cancelled") - Number(b.status === "cancelled") || byRoom(a, b));
 }
 
 async function create(ctx: RunContext, stay: OutboundStay, status: StayWriteStatus): Promise<LinkState> {
-  // Written once under our key, however often it is sent: what is there already is the answer.
-  const already = await findByKey(ctx, stay.key);
+  // Written once under our key, however often it is sent: the live booking under it is the answer.
+  const already = (await keyed(ctx, stay.key)).find((b) => b.apiReference === stay.key && b.status !== "cancelled");
   if (already) return { externalId: String(already.id), etag: null, calendar: null };
   await checkFree(ctx, needOf(stay), () => 0);
   const group = stay.rooms.length > 1;
-  const body = stay.rooms.map((_, i) =>
-    bookingBody(stay, i, status, { key: i === 0 ? stay.key : `${stay.key}~${i + 1}`, group }),
-  );
+  const body = stay.rooms.map((_, i) => bookingBody(stay, i, status, { key: roomKey(stay.key, i), group }));
   const results = await postBookings(ctx, body);
   const made = results.filter((r) => r.ok && r.id !== null).map((r) => r.id as number);
   if (made.length !== results.length) {
-    // Part of a group is no stay: what was made is taken back, by status.
-    if (made.length)
-      await postBookings(
-        ctx,
-        made.map((id) => ({ id, status: "cancelled" })),
-      ).catch(() => []);
-    const why = results.find((r) => !r.ok)?.why || NOT_FREE;
+    // Part of a group is no stay: what was made is taken back, by status; if that fails, it may stand.
+    await undo(
+      ctx,
+      made.map((id) => ({ id, status: "cancelled" })),
+    );
     if (results.some((r) => r.ok && r.id === null)) {
       throw new ConnectorError("bad_response", "Beds24 took the booking without saying its number.");
     }
-    throw new ConnectorError("refused", why);
+    throw new ConnectorError("refused", results.find((r) => !r.ok)?.why || NOT_FREE);
   }
   return { externalId: String(made[0]), etag: null, calendar: null };
 }
 
-async function move(ctx: RunContext, stay: OutboundStay, link: LinkState, status: StayWriteStatus): Promise<LinkState> {
+/**
+ * Moves a stay it wrote to these dates and rooms. The rooms it adds are made first, each refused by
+ * Beds24 itself when its room is gone, so nothing the stay holds has moved yet; then the rooms it keeps
+ * are moved and the ones it drops cancelled, in one write. If Beds24 refuses any of that, every part
+ * that went through is put back as it was read a moment ago, and the rooms just made are cancelled;
+ * what cannot be put back is never called refused. With `restore`, the stay goes back to what it held
+ * a moment ago: those nights are its own, and not checked again.
+ */
+async function move(
+  ctx: RunContext,
+  stay: OutboundStay,
+  link: LinkState,
+  status: StayWriteStatus,
+  opts: { readonly restore?: boolean } = {},
+): Promise<LinkState> {
   const current = await members(ctx, link.externalId ?? "");
-  if (current.length === 0) throw new ConnectorError("not_found", "That booking is no longer in Beds24.");
+  if (current.length === 0) throw new ConnectorError("refused", MISSING);
   const live = current.filter((b) => b.status !== "cancelled");
   if (live.length === 0) throw new ConnectorError("refused", "That booking is cancelled in Beds24.");
-  // The nights this stay holds already count as its own: only what it adds must be free.
-  const ours = (roomId: string, night: string) =>
-    live.filter(
-      (b) =>
-        String(b.roomId) === roomId &&
-        typeof b.arrival === "string" &&
-        typeof b.departure === "string" &&
-        night >= b.arrival &&
-        night < b.departure,
-    ).length;
-  await checkFree(ctx, needOf(stay), ours);
-  const base = current[0]?.apiReference ?? "";
+  if (!opts.restore) {
+    // The nights this stay holds already count as its own: only what it adds must be free.
+    const ours = (roomId: string, night: string) =>
+      live.filter(
+        (b) =>
+          String(b.roomId) === roomId &&
+          typeof b.arrival === "string" &&
+          typeof b.departure === "string" &&
+          night >= b.arrival &&
+          night < b.departure,
+      ).length;
+    await checkFree(ctx, needOf(stay), ours);
+  }
+  const base = baseKey(current[0]?.apiReference ?? "");
   const masterId = live[0]?.id;
-  const body: Record<string, unknown>[] = stay.rooms.map((_, i) => {
-    const m = live[i];
-    if (m) return bookingBody(stay, i, status, { id: m.id, clearFlag: m.flagText === BEDS24_WAITING_FLAG });
-    return bookingBody(stay, i, status, {
-      ...(base ? { key: `${base}~${i + 1}` } : {}),
-      ...(masterId !== undefined ? { masterId } : {}),
-    });
-  });
-  for (const extra of live.slice(stay.rooms.length)) body.push({ id: extra.id, status: "cancelled" });
-  const results = await postBookings(ctx, body);
+  // 1. The rooms it adds, made first.
+  const adding = stay.rooms.map((_, i) => i).filter((i) => !live[i]);
+  const made: number[] = [];
+  if (adding.length) {
+    const results = await postBookings(
+      ctx,
+      adding.map((i) =>
+        bookingBody(stay, i, status, {
+          ...(base ? { key: roomKey(base, i) } : {}),
+          ...(masterId !== undefined ? { masterId } : {}),
+        }),
+      ),
+    );
+    for (const r of results) if (r.ok && r.id !== null) made.push(r.id);
+    if (made.length !== results.length) {
+      await undo(
+        ctx,
+        made.map((id) => ({ id, status: "cancelled" })),
+      );
+      if (results.some((r) => r.ok && r.id === null)) {
+        throw new ConnectorError("bad_response", "Beds24 took the booking without saying its number.");
+      }
+      throw new ConnectorError("refused", results.find((r) => !r.ok)?.why || NOT_FREE);
+    }
+  }
+  // 2. The rooms it keeps, moved, and the ones it drops, cancelled: only once every new room is made.
+  const changes = [
+    ...live.slice(0, stay.rooms.length).map((m, i) => ({
+      before: m,
+      body: bookingBody(stay, i, status, {
+        id: m.id,
+        clearFlag: m.flagText === BEDS24_WAITING_FLAG,
+        info: infoOf(m),
+      }),
+    })),
+    ...live.slice(stay.rooms.length).map((m) => ({ before: m, body: { id: m.id, status: "cancelled" } })),
+  ];
+  let results: PostResult[];
+  try {
+    results = await postBookings(
+      ctx,
+      changes.map((c) => c.body),
+    );
+  } catch (error) {
+    // Asked of nothing: the rooms just made are taken back. No answer: it may have landed, and stands.
+    if (surelyNotDone(error)) {
+      await undo(
+        ctx,
+        made.map((id) => ({ id, status: "cancelled" })),
+      );
+    }
+    throw error;
+  }
   const failed = results.find((r) => !r.ok);
-  if (failed) throw new ConnectorError("refused", failed.why || NOT_FREE);
+  if (failed) {
+    await undo(ctx, [
+      ...changes.filter((_, j) => results[j]?.ok).map((c) => asItWas(c.before)),
+      ...made.map((id) => ({ id, status: "cancelled" })),
+    ]);
+    throw new ConnectorError("refused", failed.why || NOT_FREE);
+  }
   return link;
 }
 
@@ -1029,7 +1349,8 @@ async function move(ctx: RunContext, stay: OutboundStay, link: LinkState, status
  * Whether the stay written (`link`) reads back as written and leaves no night oversold, by Beds24's own
  * count: its calendar's `numAvail` below zero (the OpenAPI file: "may be negative … if a room is
  * overbooked"), or more bookings that take the room on a night than it has units. Throws when it
- * cannot tell, or when the booking is not as it was written: nothing is then promised.
+ * cannot tell, or when the booking is not as it was written: nothing is then promised. The guest's
+ * name is not part of it: a name Beds24 trimmed or escaped sells no room twice.
  */
 async function oversold(ctx: RunContext, stay: OutboundStay, link: LinkState): Promise<boolean> {
   const current = (await members(ctx, link.externalId ?? "")).filter((b) => b.status !== "cancelled");
@@ -1048,9 +1369,6 @@ async function oversold(ctx: RunContext, stay: OutboundStay, link: LinkState): P
   // A stay made under this key must be found again by it: else a write that timed out could be made twice.
   if (!MODIFY_KEY.test(stay.key) && current[0]?.apiReference !== stay.key) {
     throw new Error("the booking does not carry the key it was written with");
-  }
-  if (stay.guest && typeof current[0]?.lastName === "string" && current[0].lastName !== stay.guest.name.slice(0, 100)) {
-    throw new Error("the guest's name does not read back as written");
   }
   const roomIds = [...new Set(stay.rooms.map((r) => r.roomId))];
   const nights = nightsOf(stay.checkIn, stay.checkOut);
@@ -1071,10 +1389,12 @@ async function oversold(ctx: RunContext, stay: OutboundStay, link: LinkState): P
   const propertyId = current[0]?.propertyId;
   if (typeof propertyId !== "number") throw new Error("the booking names no property");
   const prop = await readProperty(ctx, String(propertyId));
+  // Bounds wide by a day each way, which holds whether Beds24 counts "before" and "after" with the day
+  // itself or without: the nights are matched exactly below.
   const overlapping = await readBookings(ctx, {
     roomId: roomIds.map((r) => idOrRefuse(r, "room")),
-    arrivalTo: addDays(stay.checkOut, -1),
-    departureFrom: addDays(stay.checkIn, 1),
+    arrivalTo: stay.checkOut,
+    departureFrom: stay.checkIn,
     status: [...BLOCKING],
   });
   for (const roomId of roomIds) {
@@ -1098,16 +1418,20 @@ async function oversold(ctx: RunContext, stay: OutboundStay, link: LinkState): P
   return false;
 }
 
+/**
+ * Cancels the stay's bookings by status, never deleting: Beds24 keeps them, as cancelled. Done when
+ * they are cancelled already; refused, for the owner to look, when Beds24 does not have them at all.
+ */
 async function cancel(ctx: RunContext, link: LinkState): Promise<void> {
   let current: B24Booking[];
   try {
     current = await members(ctx, link.externalId ?? "");
   } catch (error) {
-    if (error instanceof ConnectorError && error.code === "not_found") return;
+    if (error instanceof ConnectorError && error.code === "not_found") throw new ConnectorError("refused", MISSING);
     throw error;
   }
+  if (current.length === 0) throw new ConnectorError("refused", MISSING);
   const live = current.filter((b) => b.status !== "cancelled");
-  // Gone, or cancelled already: done. Cancelled by status, never deleted: Beds24 keeps it, as cancelled.
   if (live.length === 0) return;
   const results = await postBookings(
     ctx,
@@ -1126,8 +1450,27 @@ async function cancel(ctx: RunContext, link: LinkState): Promise<void> {
  * its room and dates as nights to read again — and is refused when it is not a Beds24 booking webhook
  * for a property this connection sees.
  */
+/** Whether a body carries anything of a card, whatever Beds24 calls it: never taken, never kept. */
+function carriesCard(value: unknown, depth = 0): boolean {
+  if (depth > 6 || value === null || typeof value !== "object") return false;
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    if (/card|cvc|cvv|token/i.test(k)) return true;
+    if (carriesCard(v, depth + 1)) return true;
+  }
+  return false;
+}
+
 async function verify(ctx: RunContext, request: { readonly body: string }): Promise<HookEvent | null> {
-  const body = parseJson(request.body) as {
+  const parsed = parseJson(request.body);
+  // Beds24 can add a card's CVC or token to its webhook (its "additional data"): such a body is refused
+  // whole, before anything of it is kept. The owner chooses additional data "none".
+  if (carriesCard(parsed)) {
+    throw new ConnectorError(
+      "refused",
+      "That webhook carries card details: in Beds24, choose additional data none for it.",
+    );
+  }
+  const body = parsed as {
     timeStamp?: unknown;
     booking?: { id?: unknown; propertyId?: unknown; roomId?: unknown; arrival?: unknown; departure?: unknown };
   } | null;
@@ -1155,7 +1498,12 @@ async function verify(ctx: RunContext, request: { readonly body: string }): Prom
   return { eventId: `booking:${id}:${stamp || "-"}`, topic: "booking", refs };
 }
 
-/** What a webhook names, read back with the account's token: the nights of the booking as Beds24 has it now. */
+/**
+ * What a webhook names, as nights to read again. Where its body named the room and dates, those are
+ * the nights, and Beds24 is not asked anything (each booking read costs credits, and a burst of
+ * webhooks would spend the ones kept for guests booking). Only a webhook that named no nights has its
+ * booking read back with the account's token, for the nights Beds24 holds it on.
+ */
 async function read(ctx: RunContext, event: HookEvent): Promise<readonly HookFact[]> {
   const facts = new Map<string, HookFact>();
   const add = (roomId: string, from: string, to: string) => {
@@ -1163,9 +1511,11 @@ async function read(ctx: RunContext, event: HookEvent): Promise<readonly HookFac
       facts.set(`${roomId}|${from}|${to}`, { kind: "stay_nights", roomIds: [roomId], from, to });
     }
   };
+  const named = event.refs.some((r) => r.startsWith("nights:"));
   for (const ref of event.refs) {
     const m = /^booking:(\d{1,12})$/.exec(ref);
     if (m?.[1]) {
+      if (named) continue;
       for (const b of await members(ctx, m[1])) {
         if (typeof b.roomId === "number" && typeof b.arrival === "string" && typeof b.departure === "string") {
           add(String(b.roomId), b.arrival, b.departure);
@@ -1207,8 +1557,6 @@ export function beds24Connector(): ConnectorDefinition {
     auth: "form",
     form: beds24Form,
     action: "Connect",
-    disconnectNote:
-      "If you added your inbox's address in Beds24 under Settings → Properties → Access → Booking webhook, remove it there.",
     ready: () => true,
     connect,
     refresh,
@@ -1239,10 +1587,15 @@ export function beds24Connector(): ConnectorDefinition {
       },
       cancel,
       async find(ctx, stay) {
-        const b = await findByKey(ctx, stay.key);
+        // The stay's own booking, or one of its other rooms' where the first is missing.
+        const [b] = await keyed(ctx, stay.key);
         return b ? { externalId: String(b.id), etag: null, calendar: null } : null;
       },
       oversold,
+      async restore(ctx, stay, link) {
+        checkStay(stay);
+        return move(ctx, stay, link, "confirmed", { restore: true });
+      },
     },
     hooks: { topics: ["booking"], verify, read },
   };
