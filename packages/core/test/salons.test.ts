@@ -1,0 +1,603 @@
+import { runMigrations } from "@surfingdog/platform";
+import { eq } from "drizzle-orm";
+import { describe, expect, it } from "vitest";
+import { z } from "zod";
+import { Capabilities } from "../src/capabilities/service";
+import { serviceInput } from "../src/capabilities/setup-types";
+import type { ConnectorDefinition, ConnectorHttp, OutboundBooking } from "../src/connectors/sdk";
+import { createDb, type Db } from "../src/db";
+import { customerCopyProblems } from "../src/i18n/customer-words";
+import { ulid } from "../src/ids";
+import { MIGRATIONS } from "../src/schema/migrations.generated";
+import { business, items, parties } from "../src/schema/tables";
+import { createSecretBox } from "../src/secrets/box";
+import { bookingSchedules, cleanPhoto, staffWords, stripJpegMetadata } from "../src/staff/index";
+import { type Caller, transitionItem, WriteError } from "../src/write/index";
+import { confirming, makeClient, resetTables } from "./harness";
+
+/**
+ * Salons, barbers and beauty (ADR-035), against the inbox itself on Node and in workerd: staff who give
+ * services at their own lengths and prices, with their own hours and their own calendars; bookings for
+ * anyone go to whoever is free; add-ons make a booking longer; what must come first is checked against
+ * this business's own bookings, and never shows anyone else's; a deposit on the business's own payment
+ * platform in its own currency's minor unit; and the fee for cancelling said before anything is
+ * cancelled. Fixtures rotate the world: Maple & Fade (Toronto, CAD, en/fr), Ìfẹ́ Beauty Studio (Lagos,
+ * NGN) and a barber in Seoul (KRW, no minor unit).
+ */
+
+// Tuesday 3 November 2026, 07:00 in Toronto (UTC-5 since 1 November).
+const T0 = Date.parse("2026-11-03T12:00:00Z");
+const DAY = 86_400_000;
+const at = (local: string, offset = "-05:00") => `2026-11-03T${local}:00${offset}`;
+const KEY = "salons-core-instance-key-0123456789abcdef";
+
+const owner: Caller = {
+  actor: { kind: "owner", id: "owner_1", channel: "owner_ui" },
+  tier: "verified_principal",
+  sandbox: false,
+  now: () => T0,
+};
+const agent = (partyId?: string): Caller => ({
+  actor: { kind: "customer_agent", id: "agent:test", channel: "rest", ...(partyId ? { partyId } : {}) },
+  tier: "anonymous",
+  sandbox: false,
+  now: () => T0,
+});
+
+const noHttp: ConnectorHttp = {
+  request: () => Promise.reject(new Error("no network in this test")),
+};
+
+async function salon(opts: {
+  readonly name: string;
+  readonly zone: string;
+  readonly currency: string;
+  readonly languages: string[];
+}): Promise<{ db: Db; caps: Capabilities }> {
+  const db = createDb(await makeClient());
+  await runMigrations(db.client, MIGRATIONS);
+  await resetTables(db.client);
+  await db.orm.insert(business).values({
+    id: "self",
+    name: opts.name,
+    timezone: opts.zone,
+    currency: opts.currency,
+    languages: opts.languages,
+    createdAt: T0,
+    updatedAt: T0,
+  });
+  const caps = confirming(new Capabilities(db, createSecretBox([KEY]), "https://inbox.example.com", 0));
+  await caps.updateSettings(owner, {
+    doc: { business: { name: opts.name, timezone: opts.zone, currency: opts.currency }, booking: { minNoticeMin: 60 } },
+  });
+  const day: [string, string][] = [["09:00", "19:00"]];
+  await caps.setup.setWeekly(owner, { weekly: { mon: day, tue: day, wed: day, thu: day, fri: day, sat: day } });
+  return { db, caps };
+}
+
+async function mapleAndFade() {
+  const s = await salon({ name: "Maple & Fade", zone: "America/Toronto", currency: "CAD", languages: ["en", "fr"] });
+  const fade = await s.caps.setup.createService(
+    owner,
+    serviceInput.parse({
+      name: "Skin fade",
+      duration_min: 30,
+      granularity_min: 15,
+      price: { model: "fixed", value: 4500, currency: "CAD" },
+      add_ons: [{ name: "Hot towel", duration_min: 15, price: { value: 1000, currency: "CAD" } }],
+    }),
+  );
+  const beard = await s.caps.setup.createService(
+    owner,
+    serviceInput.parse({
+      name: "Beard trim",
+      duration_min: 15,
+      granularity_min: 15,
+      price: { model: "fixed", value: 2000, currency: "CAD" },
+    }),
+  );
+  const tue = [["12:00", "19:00"]] as [string, string][];
+  const mei = await s.caps.staff.create(owner, {
+    name: "Mei Chen",
+    sort: 0,
+    services: [{ service_id: fade.id, duration_override_min: 45 }],
+    hours: { tue },
+  });
+  const ravi = await s.caps.staff.create(owner, {
+    name: "Ravi Sandhu",
+    sort: 1,
+    services: [{ service_id: fade.id, price_override: 5500 }, { service_id: beard.id }],
+  });
+  return { ...s, fade, beard, mei, ravi };
+}
+
+const booking = (serviceId: string, name: string, start: string, end: string) => ({
+  reservationFor: { serviceId, name },
+  startTime: start,
+  endTime: end,
+});
+
+describe("staff", () => {
+  it("are listed to customers by first name only, with the services each gives", async () => {
+    const { caps, fade, beard, mei, ravi } = await mapleAndFade();
+    expect(await caps.listsStaff()).toBe(true);
+    const listed = await caps.listStaff({});
+    expect(listed.items).toEqual([
+      { id: mei.id, name: "Mei", service_ids: [fade.id] },
+      { id: ravi.id, name: "Ravi", service_ids: [fade.id, beard.id] },
+    ]);
+    expect(JSON.stringify(listed)).not.toMatch(/Chen|Sandhu|12:00|price/);
+    expect((await caps.listStaff({ service_id: beard.id })).items.map((s) => s.name)).toEqual(["Ravi"]);
+    // What must come first and where a service came from are the business's own.
+    const page = await caps.listServices({ limit: 10 });
+    expect(page.items[0]).not.toHaveProperty("requires");
+    expect(page.items[0]).not.toHaveProperty("source");
+  });
+
+  it("each have their own hours and length, and anyone means whoever is free", async () => {
+    const { caps, fade, mei, ravi } = await mapleAndFade();
+    const any = await caps.checkAvailability(
+      { service_id: fade.id, from: at("09:00"), to: at("13:00") },
+      { now: T0, caller: agent() },
+    );
+    const nine = any.slots.find((s) => Date.parse(s.startTime) === Date.parse(at("09:00")));
+    const noon = any.slots.find((s) => Date.parse(s.startTime) === Date.parse(at("12:00")));
+    // At nine only Ravi works (Mei's own hours start at noon); at noon both, Mei for 45 minutes.
+    expect((nine as { staff?: { id: string }[] } | undefined)?.staff?.map((s) => s.id)).toEqual([ravi.id]);
+    expect((noon as { staff?: { id: string; endTime: string }[] } | undefined)?.staff).toEqual([
+      { id: mei.id, name: "Mei", endTime: new Date(Date.parse(at("12:45"))).toISOString() },
+      { id: ravi.id, name: "Ravi", endTime: new Date(Date.parse(at("12:30"))).toISOString() },
+    ]);
+    const onlyMei = await caps.checkAvailability(
+      { service_id: fade.id, from: at("09:00"), to: at("13:00"), staff_id: mei.id },
+      { now: T0, caller: agent() },
+    );
+    expect(Date.parse(onlyMei.slots[0]?.startTime ?? "")).toBe(Date.parse(at("12:00")));
+    // An add-on makes it longer.
+    const towel = (await caps.setup.listServices(owner)).find((s) => s.id === fade.id)?.addOns?.[0];
+    const longer = await caps.checkAvailability(
+      { service_id: fade.id, from: at("12:00"), to: at("13:00"), staff_id: ravi.id, add_ons: [towel?.id ?? ""] },
+      { now: T0, caller: agent() },
+    );
+    expect(longer.slots[0]?.endTime).toBe(new Date(Date.parse(at("12:45"))).toISOString());
+    // Nobody here by that id, or not for this service.
+    await expect(
+      caps.checkAvailability(
+        { service_id: fade.id, from: at("12:00"), to: at("13:00"), staff_id: "nobody" },
+        { now: T0, caller: agent() },
+      ),
+    ).rejects.toMatchObject({ code: "invalid_input", details: { reason: "unknown_staff" } });
+  });
+
+  it("books anyone with the first free, at their own length and price, and says who before it binds", async () => {
+    const { db, caps, fade, mei, ravi } = await mapleAndFade();
+    let summary = "";
+    const first = await caps.createBooking(agent(), {
+      payload: booking(fade.id, "Skin fade", at("12:00"), at("12:30")),
+      contact: { name: "Aiyana", email: "aiyana@example.com" },
+      idempotency_key: "maple-1",
+    });
+    const p1 = first.view.item.payload as Record<string, unknown>;
+    expect(p1.resourceId).toBe(mei.id);
+    expect(p1.staffName).toBe("Mei");
+    // Mei's own length for a skin fade: the end follows it, whatever the request said.
+    expect(Date.parse(String(p1.endTime))).toBe(Date.parse(at("12:45")));
+    expect(p1.totalPrice).toEqual({ value: 4500, currency: "CAD" });
+    await transitionItem(db, owner, { itemId: first.view.item.id, event: "confirm" });
+    // The next for anyone at noon goes to Ravi, at his own price; the summary says so first.
+    try {
+      await new Capabilities(db).createBooking(agent(), {
+        payload: booking(fade.id, "Skin fade", at("12:00"), at("12:30")),
+        contact: { name: "Jean-Luc", email: "jl@example.com", locale: "fr-CA" },
+        idempotency_key: "maple-2",
+      });
+    } catch (error) {
+      expect(error).toBeInstanceOf(WriteError);
+      summary = String((error as WriteError).details?.summary ?? "");
+    }
+    // Who it is with is part of what the customer confirms, in the business's words.
+    expect(summary).toContain("With Ravi.");
+    const second = await caps.createBooking(agent(), {
+      payload: booking(fade.id, "Skin fade", at("12:00"), at("12:30")),
+      contact: { name: "Jean-Luc", email: "jl@example.com", locale: "fr-CA" },
+      idempotency_key: "maple-2",
+    });
+    const p2 = second.view.item.payload as Record<string, unknown>;
+    expect([p2.resourceId, p2.totalPrice]).toEqual([ravi.id, { value: 5500, currency: "CAD" }]);
+    // Sent again a minute later, the same request is answered as it was, not made twice.
+    const again = await caps.createBooking(agent(), {
+      payload: booking(fade.id, "Skin fade", at("12:00"), at("12:30")),
+      contact: { name: "Jean-Luc", email: "jl@example.com", locale: "fr-CA" },
+      idempotency_key: "maple-2",
+    });
+    expect(again.replayed).toBe(true);
+    expect(again.view.item.id).toBe(second.view.item.id);
+    // Asked for by name: Mei, who is not free at noon any more, is still the one asked for; a person answers.
+    const asked = await caps.createBooking(agent(), {
+      payload: booking(fade.id, "Skin fade", at("12:00"), at("12:30")),
+      staff_id: mei.id,
+      contact: { name: "Noor", email: "noor@example.com" },
+      idempotency_key: "maple-3",
+    });
+    expect((asked.view.item.payload as { resourceId?: string }).resourceId).toBe(mei.id);
+    expect(asked.view.item.state).toBe("requested");
+  });
+
+  it("take their own calendar's busy times off their own times only, and only their bookings go to it", async () => {
+    const { db, caps, fade, mei, ravi } = await mapleAndFade();
+    const written: { who: string; booking: OutboundBooking }[] = [];
+    const busyFor: Record<string, { start: number; end: number }[]> = {
+      mei: [{ start: Date.parse(at("12:00")), end: Date.parse(at("13:00")) }],
+      salon: [{ start: Date.parse(at("15:00")), end: Date.parse(at("16:00")) }],
+    };
+    const staffCal: ConnectorDefinition = {
+      kind: "staffcal",
+      title: "Staff calendar",
+      group: "calendars",
+      perResource: true,
+      capabilities: ["busy_times", "write_bookings"],
+      auth: "form",
+      form: z.object({ who: z.string() }),
+      async connect(_ctx, input) {
+        return {
+          account: input.who ?? "",
+          externalId: input.who ?? "",
+          secret: { token: "t" },
+          extra: { who: input.who },
+          calendars: [{ id: "c", name: "Calendar", writable: true }],
+          destinations: [{ id: "c", name: "Calendar", writable: true }],
+          defaults: { busy: ["c"], destination: "c" },
+        };
+      },
+      async busy(ctx) {
+        return busyFor[String(ctx.extra.who)] ?? [];
+      },
+      bookings: {
+        async put(ctx, b) {
+          written.push({ who: String(ctx.extra.who), booking: b });
+          return { externalId: `e-${b.itemId}`, etag: null, calendar: "c" };
+        },
+        async remove() {},
+      },
+    };
+    caps.connectors.attach({ definitions: [staffCal], http: noHttp });
+    const meis = await caps.connectors.connect(owner, { kind: "staffcal", values: { who: "mei" } });
+    const salonCal = await caps.connectors.connect(owner, { kind: "staffcal", values: { who: "salon" } });
+    const tied = await caps.connectors.update(owner, meis.id, { resource_id: mei.id });
+    expect(tied.resource_id).toBe(mei.id);
+    // Only the owner, in person, ties a calendar to someone; never to someone who is not staff.
+    await expect(caps.connectors.update(owner, salonCal.id, { resource_id: fade.id })).rejects.toMatchObject({
+      code: "invalid_input",
+    });
+    // A booking each, confirmed.
+    const forMei = await caps.createBooking(agent(), {
+      payload: booking(fade.id, "Skin fade", at("13:00"), at("13:45")),
+      staff_id: mei.id,
+      contact: { name: "Aiyana" },
+      idempotency_key: "busy-1",
+    });
+    const forRavi = await caps.createBooking(agent(), {
+      payload: booking(fade.id, "Skin fade", at("13:00"), at("13:30")),
+      staff_id: ravi.id,
+      contact: { name: "Tomás" },
+      idempotency_key: "busy-2",
+    });
+    for (const r of [forMei, forRavi]) await transitionItem(db, owner, { itemId: r.view.item.id, event: "confirm" });
+    await caps.connectors.run(meis.id, T0, "sync");
+    await caps.connectors.run(salonCal.id, T0, "sync");
+    const slots = async (staff: string) =>
+      (
+        await caps.checkAvailability(
+          { service_id: fade.id, from: at("12:00"), to: at("17:00"), staff_id: staff },
+          { now: T0, caller: agent() },
+        )
+      ).slots.map((s) => new Date(s.startTime).toISOString().slice(11, 16));
+    const meiFree = await slots(mei.id);
+    const raviFree = await slots(ravi.id);
+    // Mei's own calendar is busy 12:00–13:00 Toronto (17:00–18:00Z): hers only. The salon's own calendar,
+    // tied to nobody, is busy 15:00–16:00 for everyone.
+    expect(meiFree).not.toContain("17:00");
+    expect(raviFree).toContain("17:00");
+    expect(meiFree).not.toContain("20:00");
+    expect(raviFree).not.toContain("20:00");
+    // Mei's calendar was given Mei's booking alone; the salon's, both.
+    expect(written.filter((w) => w.who === "mei").map((w) => w.booking.itemId)).toEqual([forMei.view.item.id]);
+    expect(
+      written
+        .filter((w) => w.who === "salon")
+        .map((w) => w.booking.itemId)
+        .sort(),
+    ).toEqual([forMei.view.item.id, forRavi.view.item.id].sort());
+    // A calendar is never told who the customer is beyond its title.
+    expect(written.every((w) => w.booking.customer === undefined)).toBe(true);
+  });
+
+  it("keep their photo without what the camera wrote into it", () => {
+    const jpeg = Uint8Array.from([
+      0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00,
+      0x00, 0xff, 0xe1, 0x00, 0x0e, 0x45, 0x78, 0x69, 0x66, 0x00, 0x00, 0x47, 0x50, 0x53, 0x2d, 0x34, 0x35, 0xff, 0xfe,
+      0x00, 0x06, 0x68, 0x69, 0x21, 0x21, 0xff, 0xdb, 0x00, 0x04, 0x00, 0x00, 0xff, 0xda, 0x00, 0x04, 0x00, 0x00, 0x11,
+      0x22, 0x33, 0xff, 0xd9,
+    ]);
+    const clean = stripJpegMetadata(jpeg);
+    const text = new TextDecoder("latin1").decode(clean ?? new Uint8Array());
+    expect(text).toContain("JFIF");
+    expect(text).not.toContain("Exif");
+    expect(text).not.toContain("GPS");
+    expect(text).not.toContain("hi!!");
+    const b64 = btoa(String.fromCharCode(...jpeg));
+    const kept = cleanPhoto(`data:image/jpeg;base64,${b64}`);
+    expect("photo" in kept && atob(kept.photo.split(",")[1] ?? "")).not.toContain("GPS");
+    expect(cleanPhoto("data:image/png;base64,iVBORw0KGgo=")).toEqual({ problem: "not_jpeg" });
+    expect(cleanPhoto(`data:image/jpeg;base64,${btoa("not a jpeg at all")}`)).toEqual({ problem: "not_jpeg" });
+  });
+
+  it("are the owner's: the owner's AI may tie them to services, never set their price", async () => {
+    const { caps, fade, ravi } = await mapleAndFade();
+    const ai: Caller = { ...owner, actor: { kind: "owner_ai", id: "ai", channel: "mcp_owner" } };
+    await expect(
+      caps.staff.update(ai, { staff_id: ravi.id, services: [{ service_id: fade.id, price_override: 3000 }] }),
+    ).rejects.toMatchObject({ code: "not_allowed", details: { reason: "owner_money" } });
+    const kept = await caps.staff.update(ai, { staff_id: ravi.id, services: [{ service_id: fade.id }] });
+    expect(kept.services).toEqual([{ serviceId: fade.id, priceOverride: 5500, durationOverrideMin: null }]);
+    await expect(
+      caps.setup.updateService(ai, { service_id: fade.id, deposit: { kind: "percent", value: 20 } }),
+    ).rejects.toMatchObject({ code: "not_allowed" });
+  });
+});
+
+async function ifeBeauty() {
+  const s = await salon({ name: "Ìfẹ́ Beauty Studio", zone: "Africa/Lagos", currency: "NGN", languages: ["en", "yo"] });
+  const patch = await s.caps.setup.createService(
+    owner,
+    serviceInput.parse({
+      name: "Patch test",
+      duration_min: 15,
+      price: { model: "fixed", value: 0, currency: "NGN" },
+    }),
+  );
+  const colour = await s.caps.setup.createService(
+    owner,
+    serviceInput.parse({
+      name: "Gele & colour",
+      duration_min: 90,
+      granularity_min: 30,
+      price: { model: "fixed", value: 3_500_000, currency: "NGN" },
+      requires: { service_id: patch.id, within_days: 180 },
+    }),
+  );
+  return { ...s, patch, colour };
+}
+
+async function party(db: Db, name: string, email: string): Promise<string> {
+  const id = ulid(T0);
+  await db.orm.insert(parties).values({
+    id,
+    kind: "person",
+    displayName: name,
+    contact: { name, email },
+    createdAt: T0,
+    updatedAt: T0,
+  });
+  return id;
+}
+
+async function pastBooking(db: Db, partyId: string, serviceId: string, startMs: number, state = "completed") {
+  await db.orm.insert(items).values({
+    id: ulid(T0),
+    type: "booking",
+    state,
+    version: 1,
+    partyId,
+    channel: "rest",
+    payload: {
+      reservationFor: { serviceId, name: "Patch test" },
+      startTime: new Date(startMs).toISOString(),
+      endTime: new Date(startMs + 15 * 60_000).toISOString(),
+    },
+    flags: {},
+    createdAt: T0,
+    updatedAt: T0,
+  });
+}
+
+async function needsHuman(db: Db, id: string): Promise<boolean> {
+  const [row] = await db.orm.select().from(items).where(eq(items.id, id));
+  return (row?.flags as { needsHuman?: boolean } | undefined)?.needsHuman === true;
+}
+
+// 14:00 in Lagos (UTC+1), a week from T0.
+const lagos = new Date(T0 + 7 * DAY).toISOString().slice(0, 10);
+const inLagos = (hhmm: string) => `${lagos}T${hhmm}:00+01:00`;
+
+describe("what must come first", () => {
+  it("is met by this customer's own patch test here, within the days", async () => {
+    const { db, caps, patch, colour } = await ifeBeauty();
+    const ada = await party(db, "Adaeze Okafor", "adaeze@example.com");
+    await pastBooking(db, ada, patch.id, T0 - 20 * DAY);
+    const r = await caps.createBooking(agent(ada), {
+      payload: booking(colour.id, "Gele & colour", inLagos("14:00"), inLagos("15:30")),
+      idempotency_key: "ife-1",
+    });
+    expect(await needsHuman(db, r.view.item.id)).toBe(false);
+  });
+
+  it("asks a customer the inbox knows, who has not had it, to book it first", async () => {
+    const { db, caps, patch, colour } = await ifeBeauty();
+    const bola = await party(db, "Bọ́lá Adé", "bola@example.com");
+    // One too long ago does not count.
+    await pastBooking(db, bola, patch.id, T0 - 400 * DAY);
+    const error = await caps
+      .createBooking(agent(bola), {
+        payload: booking(colour.id, "Gele & colour", inLagos("14:00"), inLagos("15:30")),
+        idempotency_key: "ife-2",
+      })
+      .catch((e: unknown) => e);
+    expect(error).toMatchObject({ code: "invalid_input", details: { reason: "requires_first", service_id: patch.id } });
+    expect((error as WriteError).message).toContain("Book Patch test first");
+  });
+
+  it("is checked by a person for a customer the inbox cannot know, and nobody's bookings are shown", async () => {
+    const { db, caps, patch, colour } = await ifeBeauty();
+    // Someone else had a patch test; a stranger giving their address learns nothing of it.
+    const ada = await party(db, "Adaeze Okafor", "adaeze@example.com");
+    await pastBooking(db, ada, patch.id, T0 - 20 * DAY);
+    const answers: unknown[] = [];
+    for (const email of ["adaeze@example.com", "nobody@example.com"]) {
+      const r = await caps.createBooking(agent(), {
+        payload: booking(colour.id, "Gele & colour", inLagos("14:00"), inLagos("15:30")),
+        contact: { name: "Someone", email },
+        idempotency_key: `ife-${email}`,
+      });
+      expect(await needsHuman(db, r.view.item.id)).toBe(true);
+      expect(r.view.item.state).toBe("requested");
+      // The same answer either way, its reference aside.
+      answers.push({
+        state: r.view.item.state,
+        human: r.view.human.replace(/Reference \w+\./, ""),
+        payload: Object.keys(r.view.item.payload),
+      });
+      // No rule, no AI confirms it: a person checks first.
+      await expect(
+        transitionItem(
+          db,
+          { ...owner, actor: { kind: "rule", id: "rule", channel: "system" } },
+          { itemId: r.view.item.id, event: "confirm" },
+        ),
+      ).rejects.toMatchObject({ details: { guard: "check_first" } });
+    }
+    expect(answers[0]).toEqual(answers[1]);
+  });
+});
+
+describe("a deposit", () => {
+  it("is asked in won, which has no minor unit, on the business's own platform, once confirmed", async () => {
+    const s = await salon({ name: "Mapo Barber Lab", zone: "Asia/Seoul", currency: "KRW", languages: ["ko", "en"] });
+    const cut = await s.caps.setup.createService(
+      owner,
+      serviceInput.parse({
+        name: "투블럭 컷",
+        duration_min: 40,
+        granularity_min: 20,
+        price: { model: "fixed", value: 35_000, currency: "KRW" },
+        deposit: { kind: "percent", value: 30 },
+      }),
+    );
+    const start = "2026-11-05T11:00:00+09:00";
+    const r = await s.caps.createBooking(agent(), {
+      payload: booking(cut.id, "투블럭 컷", start, "2026-11-05T11:40:00+09:00"),
+      contact: { name: "Ji-woo", email: "jiwoo@example.com", locale: "ko" },
+      idempotency_key: "mapo-1",
+    });
+    const p = r.view.item.payload as { deposit?: { amount: unknown; dueBy?: string; refundable: boolean } };
+    // 30 % of ₩35,000 is ₩10,500: whole won, never hundredths.
+    expect(p.deposit?.amount).toEqual({ value: 10_500, currency: "KRW" });
+    expect(p.deposit?.refundable).toBe(true);
+    // Nothing is asked of a request; once confirmed, the deposit wants its link.
+    expect((await bookingSchedules.wanted(s.db, r.view.item.id, T0))?.links).toEqual([]);
+    await transitionItem(s.db, owner, { itemId: r.view.item.id, event: "confirm" });
+    const wanted = await bookingSchedules.wanted(s.db, r.view.item.id, T0);
+    expect(wanted?.links).toEqual([
+      {
+        scheduleId: "deposit",
+        purpose: "deposit",
+        amount: { value: 10_500, currency: "KRW" },
+        expiresAt: T0 + DAY,
+        title: `투블럭 컷 (${r.view.item.id.slice(-6).toUpperCase()})`,
+      },
+    ]);
+  });
+});
+
+describe("cancelling", () => {
+  async function policySalon() {
+    const s = await mapleAndFade();
+    await s.caps.setup.updateService(owner, {
+      service_id: s.fade.id,
+      policy: {
+        steps: [{ before: { hours: 24 }, fee: { kind: "none" } }],
+        after: { kind: "percent", value: 50 },
+        noShow: { kind: "full" },
+      },
+    });
+    return s;
+  }
+
+  it("says the fee first, and cancels with it only once the customer said yes", async () => {
+    const { db, caps, fade, ravi } = await policySalon();
+    const start = at("16:00");
+    const r = await caps.createBooking(agent(), {
+      payload: booking(fade.id, "Skin fade", start, at("16:30")),
+      staff_id: ravi.id,
+      contact: { name: "Aiyana", email: "aiyana@example.com" },
+      idempotency_key: "cancel-1",
+    });
+    const token = r.accessToken ?? "";
+    expect((r.view.item.payload as { policy?: unknown }).policy).toBeDefined();
+    await transitionItem(db, owner, { itemId: r.view.item.id, event: "confirm" });
+    // Nine hours before: inside the free day, so half of Ravi's CA$55.00.
+    const asked = await caps
+      .cancelItem(agent(), { item_id: r.view.item.id, access_token: token, idempotency_key: "c-1" })
+      .catch((e: unknown) => e);
+    expect(asked).toMatchObject({ code: "confirm_terms", details: { fee: { value: 2750, currency: "CAD" } } });
+    const sha = String((asked as WriteError).details?.fee_sha);
+    expect((asked as WriteError).message).toContain("Cancelling now costs CA$27.50");
+    // Still confirmed: nothing was cancelled.
+    expect(String((await db.orm.select().from(items)).find((i) => i.id === r.view.item.id)?.state)).toBe("confirmed");
+    // A fingerprint for another fee is no yes.
+    await expect(
+      caps.cancelItem(agent(), {
+        item_id: r.view.item.id,
+        access_token: token,
+        fee_sha: "x".repeat(43),
+        idempotency_key: "c-2",
+      }),
+    ).rejects.toMatchObject({ code: "confirm_terms", details: { changed: true } });
+    const done = await caps.cancelItem(agent(), {
+      item_id: r.view.item.id,
+      access_token: token,
+      fee_sha: sha,
+      idempotency_key: "c-3",
+    });
+    expect(done.view.item.state).toBe("cancelled_by_customer");
+  });
+
+  it("is free while the policy says so, with nothing to confirm", async () => {
+    const { db, caps, fade, ravi } = await policySalon();
+    const tomorrow = new Date(T0 + 2 * DAY).toISOString().slice(0, 10);
+    const r = await caps.createBooking(agent(), {
+      payload: booking(fade.id, "Skin fade", `${tomorrow}T16:00:00-05:00`, `${tomorrow}T16:30:00-05:00`),
+      staff_id: ravi.id,
+      contact: { name: "Aiyana" },
+      idempotency_key: "cancel-free",
+    });
+    await transitionItem(db, owner, { itemId: r.view.item.id, event: "confirm" });
+    const done = await caps.cancelItem(agent(), {
+      item_id: r.view.item.id,
+      access_token: r.accessToken ?? "",
+      idempotency_key: "cf-1",
+    });
+    expect(done.view.item.state).toBe("cancelled_by_customer");
+  });
+});
+
+describe("what customers read", () => {
+  it("never names the software, a network, receipts or anyone's records, in any language", () => {
+    for (const lang of ["en", "es", "fr", "de", "it", "pt"]) {
+      const w = staffWords(lang);
+      const lines = [
+        w.withStaff("Mei"),
+        w.addOns("Blow-dry"),
+        w.deposit("CA$20.00", "4 Nov, 18:00"),
+        w.depositNow("₩10,500"),
+        w.first("Colour", "Patch test", 180),
+        w.check("Colour", "Patch test", 180),
+        w.cancelFee("₦5,000"),
+        w.cancelFeeBack("₦5,000", "₦10,000"),
+        w.cancelFree,
+        w.anyone,
+      ];
+      expect(customerCopyProblems(lines, lang), lang).toEqual([]);
+    }
+  });
+});

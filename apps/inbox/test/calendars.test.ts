@@ -185,7 +185,15 @@ describe("Settings → Integrations", () => {
       ["square", "soon"],
       ["woocommerce", "soon"],
       ["shopify", "soon"],
+      // Booking systems (ADR-035): registered, each needing something only the company can arrange.
+      ["phorest", "soon"],
+      ["mindbody", "soon"],
     ]);
+    expect(
+      body.cards
+        .filter((c) => c.id === "phorest" || c.id === "mindbody")
+        .flatMap((c) => (c as unknown as { ways: { status: string }[] }).ways.map((w) => w.status)),
+    ).toEqual(["setup", "setup", "setup"]);
     const calendar = body.cards.find((c) => c.id === "calendar");
     // Outlook is its published calendar link, with Outlook's steps: busy times only, and ready.
     expect(calendar?.ways.map((w) => [w.preset ?? w.kind, w.status])).toEqual([
@@ -359,6 +367,7 @@ describe("an iCloud calendar, end to end", () => {
     expect(listed.content[0]?.text).toContain(`${view.id} iCloud [active] 0 busy times ahead (read to `);
     expect(listed.content[0]?.text).toContain("), 0 bookings written");
     expect(listed.content[0]?.text).toContain("Soon: Calendly, Calendar link to share, Square, WooCommerce, Shopify.");
+    expect(listed.content[0]?.text).toContain("Phorest: Needs setup: ask Phorest for API access for your salon");
     expect(JSON.stringify(listed)).not.toContain(APP_PASSWORD);
     const sync = (await client.callTool({ name: "sync_integration", arguments: { connection_id: view.id } })) as {
       isError?: boolean;
