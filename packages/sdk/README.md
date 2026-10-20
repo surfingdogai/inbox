@@ -297,8 +297,8 @@ these.
 
 ## Changes
 
-**0.4.0, not yet published** (0.2.0 is the latest on npm; 0.3.0 and 0.3.1 were never published,
-so this lists everything since 0.2.0):
+**0.4.0** (20 October 2026; 0.3.0 and 0.3.1 were never published, so this lists everything since
+0.2.0):
 
 - Door reports (13 October 2026): `reportDoor`, `flushDoorReports`, `DoorReporter`, `newIntent`,
   `doorReportBody`, `reportNetwork`; reports go only to a network that issued the person's key or
