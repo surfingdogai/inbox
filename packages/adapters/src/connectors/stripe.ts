@@ -4,6 +4,7 @@ import {
   type ConnectorDefinition,
   ConnectorError,
   type ConnectorHttpResponse,
+  type GuaranteeRequest,
   type InboundRequest,
   type KnownLink,
   minorUnits,
@@ -233,6 +234,15 @@ export function fromStripeAmount(value: number, currency: string): number | null
   const step = 10 ** (stripe - iso);
   return value % step === 0 ? value / step : null;
 }
+
+/**
+ * What a key needs beyond `STRIPE_PERMISSIONS` to hold a card for a booking (ADR-032), asked only when
+ * the owner switches card holds on: a Checkout Session in `mode=setup` that makes a Customer.
+ */
+export const STRIPE_GUARANTEE_PERMISSIONS = {
+  sessions: "Checkout Sessions: Write",
+  customers: "Customers: Write",
+} as const;
 
 /** How old a signed webhook may be: Stripe's own libraries' default. */
 export const STRIPE_TOLERANCE_S = 300;
@@ -600,7 +610,8 @@ async function createLink(ctx: RunContext, req: PayLinkRequest) {
         ["line_items[0][quantity]", 1],
         // Good for one payment: once paid, Stripe deactivates it.
         ["restrictions[completed_sessions][limit]", 1],
-        ["submit_type", "pay"],
+        // A booking's deposit or balance says "Book" on Stripe's button (ADR-032).
+        ["submit_type", req.purpose && req.purpose !== "pay" ? "book" : "pay"],
         ["metadata[sdi_ref]", req.ref],
         ["metadata[sdi_item]", req.itemId],
         ["metadata[sdi_inbox]", ctx.inbox.id],
@@ -621,6 +632,95 @@ async function createLink(ctx: RunContext, req: PayLinkRequest) {
     throw new ConnectorError("bad_response", "Stripe made the link in the other mode than the key's.");
   }
   return { externalId, url };
+}
+
+/**
+ * A card held for a booking (ADR-032): a Checkout Session in `mode=setup` on the business's own account,
+ * which saves the card to a Customer and charges nothing
+ * (https://docs.stripe.com/api/checkout/sessions/create: `currency` is required in setup mode,
+ * `customer_creation` may be set in setup mode, `expires_at` is 30 minutes to 24 hours away;
+ * `submit_type` is for payment and subscription modes only, so none is sent). The business charges a
+ * no-show itself, in its dashboard, under the policy the customer saw.
+ */
+async function createGuarantee(ctx: RunContext, req: GuaranteeRequest) {
+  const key = keyOf(ctx);
+  const expires = Math.floor(req.expiresAt / 1000);
+  const session = await must(
+    ctx,
+    key,
+    "POST",
+    "/v1/checkout/sessions",
+    { doing: "make checkout pages", permission: STRIPE_GUARANTEE_PERMISSIONS.sessions },
+    {
+      idempotency: `sdi-${req.ref}-hold`,
+      body: form([
+        ["mode", "setup"],
+        ["currency", req.currency.toLowerCase()],
+        ["customer_creation", "always"],
+        ["success_url", req.returnUrl],
+        ["cancel_url", req.cancelUrl],
+        ["expires_at", expires],
+        ["client_reference_id", req.ref],
+        ["metadata[sdi_ref]", req.ref],
+        ["metadata[sdi_item]", req.itemId],
+        ["metadata[sdi_inbox]", ctx.inbox.id],
+        ["setup_intent_data[metadata][sdi_ref]", req.ref],
+        ["setup_intent_data[metadata][sdi_item]", req.itemId],
+        ...(STRIPE_LOCALES.has(req.language) ? [["locale", req.language] as const] : []),
+      ]),
+    },
+  );
+  const externalId = typeof session.id === "string" ? session.id : "";
+  const url = typeof session.url === "string" ? session.url : "";
+  if (!externalId.startsWith("cs_") || !url.startsWith("https://")) {
+    throw new ConnectorError("bad_response", "Stripe made the page to save a card but did not say where it is.");
+  }
+  if (session.mode !== undefined && session.mode !== "setup") {
+    throw new ConnectorError("bad_response", "Stripe made a page that would take a payment, not save a card.");
+  }
+  const at = Number(session.expires_at);
+  return { externalId, url, expiresAt: Number.isFinite(at) && at > 0 ? at * 1000 : req.expiresAt };
+}
+
+/** The languages Stripe Checkout is shown in that the inbox's customers may speak (the API's `locale`). */
+const STRIPE_LOCALES: ReadonlySet<string> = new Set(["en", "es", "fr", "de", "it", "pt", "ja", "ko", "nl", "pl"]);
+
+/** Whether the card was saved, read back from the session with the key. */
+async function guaranteeFact(ctx: RunContext, hold: { readonly externalId: string }) {
+  const session = await must(ctx, keyOf(ctx), "GET", `/v1/checkout/sessions/${encodeURIComponent(hold.externalId)}`, {
+    doing: "read checkouts",
+    permission: STRIPE_PERMISSIONS.sessions,
+  });
+  if (session.object !== "checkout.session" || session.mode !== "setup") return null;
+  const livemode = session.livemode === true;
+  const customer = typeof session.customer === "string" ? session.customer : undefined;
+  const status =
+    session.status === "complete" && session.setup_intent ? "saved" : session.status === "expired" ? "expired" : "open";
+  return {
+    status,
+    ...(customer
+      ? {
+          customerId: customer,
+          dashboardUrl: dashboard(livemode ? "live" : "test", `customers/${encodeURIComponent(customer)}`),
+        }
+      : {}),
+    livemode,
+  } as const;
+}
+
+/**
+ * What the key lacks to hold cards, asked with requests that make nothing: a session with no
+ * parameters (refused for what is missing when the key may, 403 when it may not), and an update to a
+ * customer that is not there (404 when the key may, 403 when it may not).
+ */
+async function guaranteePermissions(ctx: RunContext): Promise<string[]> {
+  const key = keyOf(ctx);
+  const missing: string[] = [];
+  const session = await call(ctx, key, "POST", "/v1/checkout/sessions", { body: "" });
+  if (session.res.status === 403) missing.push(STRIPE_GUARANTEE_PERMISSIONS.sessions);
+  const customer = await call(ctx, key, "POST", "/v1/customers/cus_sdi_probe_not_there", { body: "" });
+  if (customer.res.status === 403) missing.push(STRIPE_GUARANTEE_PERMISSIONS.customers);
+  return missing;
 }
 
 async function closeLink(ctx: RunContext, link: { readonly externalId: string }): Promise<void> {
@@ -823,6 +923,9 @@ export function stripeConnector(): ConnectorDefinition {
         return converted.ok ? null : converted.reason;
       },
       createLink,
+      createGuarantee,
+      guaranteeFact,
+      guaranteePermissions,
       closeLink,
       check,
       receive: (ctx, request) => receive(ctx, request),

@@ -376,4 +376,16 @@ export const MIGRATIONS: readonly Migration[] = [
       "CREATE UNIQUE INDEX IF NOT EXISTS `connector_payments_live` ON `connector_payments` (`item_id`) WHERE `state` IN ('creating', 'open', 'held');",
     ],
   },
+  {
+    version: 26,
+    name: "0025_ready_foundation",
+    statements: [
+      "-- Payment schedules (ADR-032). An item may now have a link per entry of its payment schedule — a\n-- deposit and a balance open at once — not only one for an order's whole total. `schedule_id` names\n-- the entry ('' for an order's own link, as every link before this was), `purpose` says what it is for\n-- (`pay` | `deposit` | `balance` | `guarantee` | `difference`), and `expires_at` when it stops taking\n-- payments (a deposit's pay window): the inbox closes it on the platform then. Nothing that exists\n-- changes meaning, and an inbox that takes only orders writes the defaults.\nALTER TABLE `connector_payments` ADD `schedule_id` text DEFAULT '' NOT NULL;",
+      "ALTER TABLE `connector_payments` ADD `purpose` text DEFAULT 'pay' NOT NULL;",
+      "ALTER TABLE `connector_payments` ADD `expires_at` integer;",
+      "-- One live link per item and schedule entry: an order keeps exactly one (its entry is ''), and two jobs\n-- that meet still make one link per entry, never two.\nDROP INDEX IF EXISTS `connector_payments_live`;",
+      "CREATE UNIQUE INDEX IF NOT EXISTS `connector_payments_live` ON `connector_payments` (`item_id`, `schedule_id`) WHERE `state` IN ('creating', 'open', 'held');",
+      "-- Links whose window closes, found by the reconciliation that closes them.\nCREATE INDEX IF NOT EXISTS `connector_payments_expiry` ON `connector_payments` (`state`, `expires_at`) WHERE `expires_at` IS NOT NULL;",
+    ],
+  },
 ];

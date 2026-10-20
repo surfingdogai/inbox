@@ -3,7 +3,7 @@ import { moreLines } from "../customer/describe";
 import { moneyIn, oneLine, shortRef } from "../customer/format";
 import { type CustomerLang, customerLang } from "../customer/lang";
 import type { Db } from "../db";
-import type { Money } from "../domain/types";
+import type { ItemType, Money } from "../domain/types";
 import { randomToken, ulid } from "../ids";
 import { ensureJob } from "../jobs/schedule";
 import { readSettings } from "../settings/schema";
@@ -14,6 +14,7 @@ import { WriteError } from "../write/errors";
 import { transitionItem } from "../write/transition";
 import { SHOP_CHARGES_SKU } from "./catalogue";
 import { PAY_LINK_KIND, PAY_NOTICE_KIND } from "./pay-queue";
+import { type ScheduledItem, scheduleSourceOf, type WantedLink } from "./schedules";
 import {
   ConnectorError,
   type InboundRequest,
@@ -22,6 +23,7 @@ import {
   type PayAmount,
   type PaymentFact,
   type PaymentsHandler,
+  type PayPurpose,
   type RunContext,
 } from "./sdk";
 import { shopOrderOf } from "./shop";
@@ -121,10 +123,14 @@ interface PayRow {
   /** What a shop said it comes to (ADR-026 §2), when it said. */
   readonly shopTotal: number | null;
   readonly shopCurrency: string | null;
+  /** The entry of the item's payment schedule (ADR-032): '' for an order's own link. */
+  readonly scheduleId: string;
+  readonly purpose: PayPurpose;
+  readonly expiresAt: number | null;
 }
 
 const COLUMNS =
-  "id, connector_id, kind, item_id, amount, currency, livemode, state, external_id, url, payment_id, method, paid_amount, paid_currency, dashboard_url, claim_until, claimed_by, attempts, retry_at, checked_at, last_error, note, created_at, paid_at, closed_at, shop_total, shop_currency";
+  "id, connector_id, kind, item_id, amount, currency, livemode, state, external_id, url, payment_id, method, paid_amount, paid_currency, dashboard_url, claim_until, claimed_by, attempts, retry_at, checked_at, last_error, note, created_at, paid_at, closed_at, shop_total, shop_currency, schedule_id, purpose, expires_at";
 
 function rowOf(r: readonly unknown[]): PayRow {
   const s = (v: unknown) => (v === null || v === undefined ? null : String(v));
@@ -157,6 +163,9 @@ function rowOf(r: readonly unknown[]): PayRow {
     closedAt: n(r[24]),
     shopTotal: n(r[25]),
     shopCurrency: s(r[26]),
+    scheduleId: String(r[27] ?? ""),
+    purpose: (s(r[28]) ?? "pay") as PayPurpose,
+    expiresAt: n(r[29]),
   };
 }
 
@@ -419,7 +428,8 @@ export class PaymentLinks {
 
   private async ensureOnce(itemId: string, now: number, depth: number): Promise<string> {
     const order = await this.order(itemId);
-    if (!order) return "not an order";
+    // An item paid on a schedule (a stay's deposit and balance): its source says what wants a link.
+    if (!order) return this.ensureScheduled(itemId, now);
     const rows = await this.rowsFor(itemId);
     const live = rows.find((r) => r.state === "creating" || r.state === "open" || r.state === "held") ?? null;
     const connections = (await this.host.payConnections(now)).filter(
@@ -788,15 +798,17 @@ export class PaymentLinks {
    */
   private async close(row: PayRow, why: string, now: number): Promise<string> {
     if (row.state === "creating" && row.claimUntil !== null && row.claimUntil > now) return "held";
+    // A card-hold page closes on the platform by itself (within a day): nothing to switch off there.
+    const tell = row.externalId !== null && row.purpose !== "guarantee";
     const done = await this.db.client.query({
       sql: `UPDATE connector_payments SET state = 'closed', closed_at = ?, note = ?, claim_until = NULL, claimed_by = NULL,
-                   retry_at = CASE WHEN external_id IS NULL THEN NULL ELSE ? END, updated_at = ?
+                   retry_at = ?, updated_at = ?
              WHERE id = ? AND state IN ('creating', 'open', 'held')`,
-      params: [now, why.slice(0, 200), now, now, row.id],
+      params: [now, why.slice(0, 200), tell ? now : null, now, row.id],
       method: "run",
     });
     if (done.changes !== 1) return "already closed";
-    if (!row.externalId) return `closed: ${why}`;
+    if (!tell) return `closed: ${why}`;
     const told = await this.tellClosed(row, now);
     return `closed: ${why}${told ? "" : "; the platform is told later"}`;
   }
@@ -852,6 +864,559 @@ export class PaymentLinks {
       params: [itemId, url],
       method: "run",
     });
+  }
+
+  /* --- links on a payment schedule (ADR-032) ------------------------------------ */
+
+  /** The item's type, or null when there is no such item. */
+  private async itemType(itemId: string): Promise<ItemType | null> {
+    const { rows } = await this.db.client.query({
+      sql: "SELECT type FROM items WHERE id = ?",
+      params: [itemId],
+      method: "all",
+    });
+    return rows[0] ? (String(rows[0][0]) as ItemType) : null;
+  }
+
+  /**
+   * Makes an item's schedule links match what its source wants now: one live link per entry that wants
+   * one, for its amount and window; any other closed. Orders never come here.
+   */
+  private async ensureScheduled(itemId: string, now: number): Promise<string> {
+    const type = await this.itemType(itemId);
+    const source = type ? scheduleSourceOf(type) : undefined;
+    if (!type || !source) return "not an order";
+    const item = await source.wanted(this.db, itemId, now);
+    const rows = (await this.rowsFor(itemId)).filter((r) => r.scheduleId !== "" && r.purpose !== "guarantee");
+    const live = rows.filter((r) => r.state === "creating" || r.state === "open");
+    const notes: string[] = [];
+    // A link no entry wants as it stands now is closed: paid another way, changed, or the item ended.
+    for (const r of live) {
+      const w = item?.links.find((l) => l.scheduleId === r.scheduleId);
+      const same = w && w.amount.value === r.amount && w.amount.currency === r.currency;
+      if (!same)
+        notes.push(await this.close(r, w ? `the ${r.purpose} changed` : `the ${r.purpose} is no longer due`, now));
+    }
+    if (!item || item.links.length === 0) return notes.join("; ") || "nothing to do";
+    const conn =
+      (await this.host.payConnections(now)).find(
+        (c) => c.status !== "disabled" && c.payOn && !c.disconnecting && c.mode === (item.sandbox ? "test" : "live"),
+      ) ?? null;
+    for (const w of item.links) {
+      if (w.expiresAt !== null && w.expiresAt <= now) continue;
+      if (rows.some((r) => r.scheduleId === w.scheduleId && r.state === "paid")) continue;
+      const open = (await this.rowsFor(itemId)).find(
+        (r) =>
+          r.scheduleId === w.scheduleId &&
+          (r.state === "creating" || r.state === "open") &&
+          r.amount === w.amount.value &&
+          r.currency === w.amount.currency,
+      );
+      if (open?.state === "open") continue;
+      if (!conn) {
+        notes.push(item.sandbox ? "no test-mode payment connection" : "no live payment connection");
+        continue;
+      }
+      if (open?.state === "creating") {
+        const other = open.connectorId === conn.id ? conn : await this.host.payConnection(open.connectorId, now);
+        notes.push(other ? await this.makeScheduled(item, w, open, other, now) : "held");
+        continue;
+      }
+      // A refusal stands until what it was about changes.
+      const last = rows.filter((r) => r.scheduleId === w.scheduleId).at(-1);
+      if (last?.state === "error" && last.amount === w.amount.value && last.currency === w.amount.currency) {
+        notes.push(`no ${w.purpose} link: ${last.lastError ?? "the platform would not make it"}`);
+        continue;
+      }
+      const why = linkCurrencyProblem(conn.payments, w.amount);
+      if (why) {
+        notes.push(await this.refuseScheduled(item, w, conn, why, now));
+        continue;
+      }
+      const id = ulid(now);
+      const token = randomToken(12);
+      const inserted = await this.db.client.query({
+        sql: `INSERT OR IGNORE INTO connector_payments
+                (id, connector_id, kind, item_id, amount, currency, livemode, state, claim_until, claimed_by,
+                 schedule_id, purpose, expires_at, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, 'creating', ?, ?, ?, ?, ?, ?, ?)`,
+        params: [
+          id,
+          conn.id,
+          conn.kind,
+          itemId,
+          w.amount.value,
+          w.amount.currency,
+          conn.mode === "live" ? 1 : 0,
+          now + CLAIM_MS,
+          token,
+          w.scheduleId,
+          w.purpose,
+          w.expiresAt,
+          now,
+          now,
+        ],
+        method: "run",
+      });
+      if (inserted.changes !== 1) {
+        notes.push(`held: another job is making the ${w.purpose} link`);
+        continue;
+      }
+      const row = await this.row(id);
+      notes.push(row ? await this.makeScheduled(item, w, row, conn, now, token) : "held");
+    }
+    return notes.join("; ") || "links open";
+  }
+
+  /** No link for one entry, said once: a row that says why, and one email to the owner. */
+  private async refuseScheduled(
+    item: ScheduledItem,
+    w: WantedLink,
+    conn: PayConnection,
+    why: string,
+    now: number,
+  ): Promise<string> {
+    const id = ulid(now);
+    await this.db.client.query({
+      sql: `INSERT INTO connector_payments
+              (id, connector_id, kind, item_id, amount, currency, livemode, state, last_error, last_error_at, closed_at,
+               schedule_id, purpose, expires_at, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'error', ?, ?, ?, ?, ?, ?, ?, ?)`,
+      params: [
+        id,
+        conn.id,
+        conn.kind,
+        item.id,
+        w.amount.value,
+        w.amount.currency,
+        conn.mode === "live" ? 1 : 0,
+        why,
+        now,
+        now,
+        w.scheduleId,
+        w.purpose,
+        w.expiresAt,
+        now,
+        now,
+      ],
+      method: "run",
+    });
+    await this.linkFailed(id, item.id, why, now);
+    return `no ${w.purpose} link: ${why}`;
+  }
+
+  /** Asks the platform for one entry's link, under the row's claim, as `make` does for an order's. */
+  private async makeScheduled(
+    item: ScheduledItem,
+    w: WantedLink,
+    row: PayRow,
+    conn: PayConnection,
+    now: number,
+    held?: string,
+  ): Promise<string> {
+    let token = held;
+    if (!token) {
+      if (row.retryAt !== null && row.retryAt > now) return `waits until ${new Date(row.retryAt).toISOString()}`;
+      token = randomToken(12);
+      const claimed = await this.db.client.query({
+        sql: `UPDATE connector_payments SET claim_until = ?, claimed_by = ?, updated_at = ?
+               WHERE id = ? AND state = 'creating' AND (claim_until IS NULL OR claim_until < ?)`,
+        params: [now + CLAIM_MS, token, now, row.id, now],
+        method: "run",
+      });
+      if (claimed.changes !== 1) return `held: another job is making the ${w.purpose} link`;
+    }
+    const settings = await readSettings(this.db);
+    const facts = await businessFacts(this.db, settings);
+    const lang: CustomerLang = customerLang(item.locale, facts.languages) === "pt" ? "pt" : "en";
+    const words = PAGE_WORDS[lang];
+    const business = oneLine(facts.name) || null;
+    const hookUrl = conn.ctx.hookUrl ? `${conn.ctx.hookUrl}?ref=${encodeURIComponent(row.id)}` : "";
+    try {
+      if (!conn.ctx.hookUrl) {
+        throw new ConnectorError(
+          "config",
+          "This inbox does not know its own public https address (INBOX_PUBLIC_URL, or the Inbox address in Settings), so the payment platform could not tell it of payments.",
+        );
+      }
+      const link = await conn.payments.createLink(conn.ctx, {
+        ref: row.id,
+        itemId: item.id,
+        amount: { value: row.amount, currency: row.currency },
+        title: oneLine(w.title).slice(0, 250),
+        reference: item.reference,
+        language: lang,
+        thanks: words.thanks(item.reference),
+        inactive: words.inactive(business, item.reference),
+        hookUrl,
+        purpose: w.purpose,
+        scheduleId: w.scheduleId,
+        ...(w.expiresAt !== null ? { expiresAt: w.expiresAt } : {}),
+      });
+      const kept = await this.db.client.query({
+        sql: `UPDATE connector_payments SET state = 'open', external_id = ?, url = ?, claim_until = NULL, claimed_by = NULL,
+                     attempts = attempts + 1, retry_at = NULL, last_error = NULL, last_error_at = NULL, updated_at = ?
+               WHERE id = ? AND claimed_by = ? AND state = 'creating'`,
+        params: [link.externalId, link.url, now, row.id, token],
+        method: "run",
+      });
+      if (kept.changes !== 1) return "lost: another job took over this link";
+      await this.host.worked(conn.id, now);
+      const source = scheduleSourceOf(item.type);
+      await source?.opened?.(this.db, { itemId: item.id, scheduleId: w.scheduleId, url: link.url, now });
+      return `made a ${providerOf(conn.kind)} ${w.purpose} link`;
+    } catch (error) {
+      if (!(error instanceof ConnectorError)) {
+        await this.releaseClaim(
+          row.id,
+          token,
+          `unexpected: ${String((error as Error)?.message ?? error)}`,
+          now + 600_000,
+          now,
+        );
+        throw error;
+      }
+      const attempts = row.attempts + 1;
+      const giveUp = attempts >= MAX_ATTEMPTS || error.code === "config" || error.code === "refused";
+      if (error.code === "auth" || error.code === "config") await this.host.failed(conn.id, error, now);
+      if (giveUp) {
+        const message = error.message.slice(0, 500);
+        await this.db.client.query({
+          sql: `UPDATE connector_payments SET state = 'error', claim_until = NULL, claimed_by = NULL, attempts = ?,
+                       last_error = ?, last_error_at = ?, closed_at = ?, updated_at = ?
+                 WHERE id = ? AND claimed_by = ?`,
+          params: [attempts, message, now, now, now, row.id, token],
+          method: "run",
+        });
+        await this.linkFailed(row.id, item.id, message, now);
+        return `given up: ${error.message}`;
+      }
+      const retryAt = now + (error.retryAfterMs ?? retryDelay(attempts));
+      await this.releaseClaim(row.id, token, error.message, retryAt, now, attempts);
+      await ensureJob(this.db, PAY_LINK_KIND, `paylink:${item.id}:retry:${row.id}:${attempts}`, {
+        now,
+        runAt: retryAt,
+        payload: { itemId: item.id },
+      });
+      return `failed, tried again at ${new Date(retryAt).toISOString()}: ${error.message}`;
+    }
+  }
+
+  /**
+   * What the platform confirmed on a schedule link, applied once: the link marked paid (compare-and-set),
+   * then the item's source records it — or, for a payment the item can no longer take, keeps it for the
+   * owner to refund in their own dashboard, and says so.
+   */
+  private async applyScheduled(
+    conn: PayConnection,
+    row: PayRow,
+    fact: PaymentFact,
+    now: number,
+  ): Promise<{ done: boolean; itemId: string | null }> {
+    const type = await this.itemType(row.itemId);
+    const source = type ? scheduleSourceOf(type) : undefined;
+    if (fact.status === "failed") {
+      const spent = await this.db.client.query({
+        sql: `UPDATE connector_payments SET state = 'failed', payment_id = ?, closed_at = ?, note = ?, updated_at = ?
+               WHERE id = ? AND state IN ('open', 'creating')`,
+        params: [fact.paymentId.slice(0, 200), now, "the payment did not go through", now, row.id],
+        method: "run",
+      });
+      if (spent.changes !== 1) return { done: false, itemId: row.itemId };
+      await this.tellClosed(row, now);
+      await source?.closed?.(this.db, { itemId: row.itemId, scheduleId: row.scheduleId, why: "failed", now });
+      await ensureJob(this.db, PAY_LINK_KIND, `paylink:${row.itemId}:after-failure:${row.id}`, {
+        now,
+        payload: { itemId: row.itemId },
+      });
+      return { done: true, itemId: row.itemId };
+    }
+    const before = row.state;
+    const paid = await this.db.client.query({
+      sql: `UPDATE connector_payments SET state = 'paid', payment_id = ?, method = ?, paid_amount = ?, paid_currency = ?,
+                   dashboard_url = ?, paid_at = ?, claim_until = NULL, claimed_by = NULL, retry_at = NULL, checked_at = ?, updated_at = ?
+             WHERE id = ? AND state <> 'paid'`,
+      params: [
+        fact.paymentId.slice(0, 200),
+        fact.method?.slice(0, 40) ?? null,
+        fact.amount?.value ?? null,
+        fact.amount?.currency ?? null,
+        fact.dashboardUrl?.slice(0, 500) ?? null,
+        fact.paidAt ?? now,
+        now,
+        now,
+        row.id,
+      ],
+      method: "run",
+    });
+    if (paid.changes !== 1) return this.paidAgain(row, fact, now);
+    const amount = fact.amount ?? { value: row.amount, currency: row.currency };
+    if (!source) {
+      await this.notePaidAfter(row, "the item takes no payments here any more", now);
+      return { done: true, itemId: row.itemId };
+    }
+    let outcome: { applied: boolean; note: string };
+    try {
+      outcome = await source.paid(this.db, {
+        itemId: row.itemId,
+        scheduleId: row.scheduleId,
+        purpose: row.purpose,
+        amount,
+        paymentId: fact.paymentId.slice(0, 200),
+        ...(fact.method ? { method: fact.method.slice(0, 40) } : {}),
+        ...(fact.dashboardUrl ? { dashboardUrl: fact.dashboardUrl.slice(0, 500) } : {}),
+        connectorId: conn.id,
+        now,
+      });
+    } catch (error) {
+      // The link says paid and the item does not: put the link back as it was, for the next word.
+      await this.db.client.query({
+        sql: `UPDATE connector_payments SET state = ?, payment_id = NULL, method = NULL, paid_amount = NULL, paid_currency = NULL,
+                     dashboard_url = NULL, paid_at = NULL, last_error = ?, last_error_at = ?, updated_at = ?
+               WHERE id = ? AND state = 'paid'`,
+        params: [before, `not recorded: ${String((error as Error)?.message ?? error)}`.slice(0, 500), now, now, row.id],
+        method: "run",
+      });
+      throw error;
+    }
+    if (!outcome.applied) await this.notePaidAfter(row, outcome.note, now);
+    if (amount.value !== row.amount || amount.currency !== row.currency)
+      await this.notice(row.id, "amount_differs", now);
+    return { done: true, itemId: row.itemId };
+  }
+
+  /** A payment kept on its link for the owner to refund, said on the link and told once. */
+  private async notePaidAfter(row: PayRow, why: string, now: number): Promise<void> {
+    await this.db.client.query({
+      sql: "UPDATE connector_payments SET note = ?, updated_at = ? WHERE id = ?",
+      params: [
+        `paid after ${why}: refund it in ${providerOf(row.kind)} if it is not wanted`.slice(0, 500),
+        now,
+        row.id,
+      ],
+      method: "run",
+    });
+    await this.notice(row.id, "paid_after", now);
+  }
+
+  /**
+   * Schedule links whose window has closed, for one connection: asked once more for a payment made at
+   * the last moment, then closed on the platform, and the item's source told. Answers the calls made.
+   */
+  private async lapse(conn: PayConnection, now: number, budget: number): Promise<number> {
+    const { rows } = await this.db.client.query({
+      sql: `SELECT ${COLUMNS} FROM connector_payments
+             WHERE connector_id = ? AND state = 'open' AND expires_at IS NOT NULL AND expires_at <= ?
+             ORDER BY expires_at LIMIT ?`,
+      params: [conn.id, now, budget],
+      method: "all",
+    });
+    let calls = 0;
+    for (const r of rows.map(rowOf)) {
+      if (calls >= budget) break;
+      calls++;
+      try {
+        const facts = await conn.payments.check(conn.ctx, { ref: r.id, externalId: r.externalId, itemId: r.itemId });
+        for (const fact of facts) if (fact.status !== "pending") await this.apply(conn, fact, now);
+      } catch (error) {
+        if (!(error instanceof ConnectorError)) throw error;
+        // The platform cannot be asked now: the window is the item's, and it closes all the same.
+      }
+      const current = await this.row(r.id);
+      if (current?.state !== "open") continue;
+      await this.close(current, `its window to pay closed`, now);
+      const type = await this.itemType(r.itemId);
+      const source = type ? scheduleSourceOf(type) : undefined;
+      await source?.closed?.(this.db, { itemId: r.itemId, scheduleId: r.scheduleId, why: "expired", now });
+    }
+    return calls;
+  }
+
+  /* --- a card to hold a booking (ADR-032) ------------------------------------------ */
+
+  /**
+   * Whether card holds are on for a connection: the owner switched them on in person, once the key
+   * had what they need (`setGuarantees`).
+   */
+  private async guaranteesOn(connectorId: string): Promise<boolean> {
+    const { rows } = await this.db.client.query({
+      sql: "SELECT json_extract(config_public, '$.guarantees') FROM connectors WHERE id = ?",
+      params: [connectorId],
+      method: "all",
+    });
+    return Number(rows[0]?.[0] ?? 0) === 1;
+  }
+
+  /**
+   * Switches card holds on or off for a connection. On asks the key, then and only then, for what holds
+   * need, and refuses with the platform's own names for what it lacks. The caller is the owner in person.
+   */
+  async setGuarantees(
+    connectorId: string,
+    on: boolean,
+    now: number,
+  ): Promise<{ readonly on: boolean; readonly missing: readonly string[] }> {
+    const conn = await this.host.payConnection(connectorId, now);
+    if (!conn) throw new WriteError("not_found", "no such payment connection");
+    if (on) {
+      if (!conn.payments.createGuarantee || !conn.payments.guaranteePermissions) {
+        throw new WriteError("invalid_input", `${providerOf(conn.kind)} cannot hold a card here.`, {
+          fields: [{ path: "on", problem: "invalid", message: "this platform takes no card holds" }],
+        });
+      }
+      const missing = await conn.payments.guaranteePermissions(conn.ctx);
+      if (missing.length > 0) return { on: false, missing };
+    }
+    await this.db.client.query({
+      sql: "UPDATE connectors SET config_public = json_set(config_public, '$.guarantees', json(?)), updated_at = ? WHERE id = ?",
+      params: [on ? "true" : "false", now, connectorId],
+      method: "run",
+    });
+    return { on, missing: [] };
+  }
+
+  /**
+   * The page where the customer saves a card to hold their booking, made when they open the inbox's own
+   * link: an open one is given again while it lasts, else a new one on the connection of the item's
+   * mode whose card holds are on. Null, with why, when none can be made.
+   */
+  async openGuarantee(
+    request: {
+      readonly itemId: string;
+      readonly sandbox: boolean;
+      readonly currency: string;
+      readonly reference: string;
+      readonly language: string;
+      readonly returnUrl: string;
+      readonly cancelUrl: string;
+      /** How long the platform's page stays open: 30 minutes to 24 hours on Stripe. */
+      readonly ttlMs: number;
+    },
+    now: number,
+  ): Promise<{ readonly url: string; readonly expiresAt: number } | { readonly refused: string }> {
+    const rows = (await this.rowsFor(request.itemId)).filter((r) => r.purpose === "guarantee");
+    if (rows.some((r) => r.state === "paid")) return { refused: "A card already holds this booking." };
+    const open = rows.find((r) => r.state === "open" && r.url && (r.expiresAt ?? 0) > now + 60_000);
+    if (open?.url) return { url: open.url, expiresAt: open.expiresAt ?? now };
+    for (const r of rows.filter((x) => x.state === "open")) await this.close(r, "a new page was made", now);
+    const conns = (await this.host.payConnections(now)).filter(
+      (c) =>
+        c.status !== "disabled" &&
+        !c.disconnecting &&
+        c.mode === (request.sandbox ? "test" : "live") &&
+        c.payments.createGuarantee !== undefined,
+    );
+    let conn: PayConnection | null = null;
+    for (const c of conns) if (await this.guaranteesOn(c.id)) conn = c;
+    if (!conn?.payments.createGuarantee) return { refused: "Card holds are not switched on for this business." };
+    const id = ulid(now);
+    const ttl = Math.min(24 * 3_600_000, Math.max(30 * 60_000, request.ttlMs));
+    try {
+      const made = await conn.payments.createGuarantee(conn.ctx, {
+        ref: id,
+        itemId: request.itemId,
+        currency: request.currency,
+        reference: request.reference,
+        language: request.language,
+        returnUrl: request.returnUrl,
+        cancelUrl: request.cancelUrl,
+        expiresAt: now + ttl,
+      });
+      await this.db.client.query({
+        sql: `INSERT INTO connector_payments
+                (id, connector_id, kind, item_id, amount, currency, livemode, state, external_id, url, attempts,
+                 schedule_id, purpose, expires_at, created_at, updated_at)
+              VALUES (?, ?, ?, ?, 0, ?, ?, 'open', ?, ?, 1, 'guarantee', 'guarantee', ?, ?, ?)`,
+        params: [
+          id,
+          conn.id,
+          conn.kind,
+          request.itemId,
+          request.currency.toUpperCase(),
+          conn.mode === "live" ? 1 : 0,
+          made.externalId,
+          made.url,
+          made.expiresAt,
+          now,
+          now,
+        ],
+        method: "run",
+      });
+      return { url: made.url, expiresAt: made.expiresAt };
+    } catch (error) {
+      if (!(error instanceof ConnectorError)) throw error;
+      if (error.code === "auth" || error.code === "config") await this.host.failed(conn.id, error, now);
+      return { refused: error.message };
+    }
+  }
+
+  /**
+   * Whether the customer saved the card, read back with the key: once it is, the hold is recorded on the
+   * item by its source (a hold of nothing, `purpose: guarantee`). Answers whether it is held now.
+   */
+  async checkGuarantee(itemId: string, now: number): Promise<boolean> {
+    const rows = (await this.rowsFor(itemId)).filter((r) => r.purpose === "guarantee");
+    if (rows.some((r) => r.state === "paid")) return true;
+    for (const r of rows.filter((x) => x.state === "open" && x.externalId)) {
+      const conn = await this.host.payConnection(r.connectorId, now);
+      if (!conn?.payments.guaranteeFact || !r.externalId) continue;
+      let fact: Awaited<ReturnType<NonNullable<PaymentsHandler["guaranteeFact"]>>>;
+      try {
+        fact = await conn.payments.guaranteeFact(conn.ctx, { externalId: r.externalId });
+      } catch (error) {
+        if (error instanceof ConnectorError) continue;
+        throw error;
+      }
+      await this.checked(r.id, now);
+      if (!fact || fact.livemode !== r.livemode) continue;
+      if (fact.status === "expired") {
+        await this.close(r, "the page to save a card closed", now);
+        continue;
+      }
+      if (fact.status !== "saved") continue;
+      const saved = await this.db.client.query({
+        sql: `UPDATE connector_payments SET state = 'paid', payment_id = ?, dashboard_url = ?, paid_at = ?, checked_at = ?, updated_at = ?
+               WHERE id = ? AND state = 'open'`,
+        params: [
+          fact.customerId?.slice(0, 200) ?? r.externalId,
+          fact.dashboardUrl?.slice(0, 500) ?? null,
+          now,
+          now,
+          now,
+          r.id,
+        ],
+        method: "run",
+      });
+      if (saved.changes !== 1) return true;
+      const type = await this.itemType(itemId);
+      const source = type ? scheduleSourceOf(type) : undefined;
+      const outcome = await source?.paid(this.db, {
+        itemId,
+        scheduleId: "guarantee",
+        purpose: "guarantee",
+        amount: { value: 0, currency: r.currency },
+        paymentId: fact.customerId?.slice(0, 200) ?? r.externalId,
+        ...(fact.dashboardUrl ? { dashboardUrl: fact.dashboardUrl.slice(0, 500) } : {}),
+        connectorId: r.connectorId,
+        now,
+      });
+      if (outcome && !outcome.applied) await this.notePaidAfter(r, outcome.note, now);
+      return true;
+    }
+    return false;
+  }
+
+  /** Card-hold pages still open, for one connection, read back as each falls due. Answers the calls made. */
+  private async guarantees(conn: PayConnection, now: number, budget: number): Promise<number> {
+    const { rows } = await this.db.client.query({
+      sql: `SELECT DISTINCT item_id FROM connector_payments
+             WHERE connector_id = ? AND state = 'open' AND purpose = 'guarantee'
+               AND (checked_at IS NULL OR checked_at < ?) LIMIT ?`,
+      params: [conn.id, now - FIRST_DAY_EVERY_MS, budget],
+      method: "all",
+    });
+    for (const r of rows) await this.checkGuarantee(String(r[0]), now);
+    return rows.length;
   }
 
   /* --- what the platform says -------------------------------------------------- */
@@ -983,6 +1548,7 @@ export class PaymentLinks {
     // A test payment never pays a real order, nor a live one a test.
     if (fact.livemode !== row.livemode) return { done: false, itemId: row.itemId };
     if (fact.status === "pending") return { done: false, itemId: row.itemId };
+    if (row.scheduleId !== "") return this.applyScheduled(conn, row, fact, now);
     if (fact.status === "failed") return this.failed(conn, row, fact, now);
     const before = row.state;
     const paid = await this.db.client.query({
@@ -1358,7 +1924,8 @@ export class PaymentLinks {
                        WHEN ? - created_at < ${2 * DAY_MS} THEN ${HOUR_MS}
                        WHEN ? - created_at < ${15 * DAY_MS} THEN ${12 * HOUR_MS}
                        ELSE ${DAY_MS} END AS due
-                FROM connector_payments WHERE connector_id = ? AND state = 'open' AND external_id IS NOT NULL)
+                FROM connector_payments WHERE connector_id = ? AND state = 'open' AND external_id IS NOT NULL
+                 AND purpose <> 'guarantee')
              WHERE due <= ? ORDER BY CASE WHEN created_at > ? THEN 0 ELSE 1 END, due LIMIT ?`,
       params: [now, now, now, conn.id, now, now - 2 * DAY_MS, CHECKS_PER_RUN],
       method: "all",
@@ -1395,6 +1962,11 @@ export class PaymentLinks {
     // A shop's orders (ADR-026 §2): what became of the ones waiting, and of the paid ones until they end.
     if (conn.payments.orderState && calls < CHECKS_PER_RUN) {
       calls += await this.orderStates(conn, now, CHECKS_PER_RUN - calls);
+    }
+    // Schedule links whose pay window closed, and card-hold pages still waiting (ADR-032).
+    if (calls < CHECKS_PER_RUN) calls += await this.lapse(conn, now, CHECKS_PER_RUN - calls);
+    if (calls < CHECKS_PER_RUN && conn.payments.guaranteeFact) {
+      calls += await this.guarantees(conn, now, CHECKS_PER_RUN - calls);
     }
     if (conn.payments.refunded && calls < CHECKS_PER_RUN) {
       refunded = await this.refunds(conn, now, CHECKS_PER_RUN - calls);

@@ -3,7 +3,15 @@
  * Web-standard APIs only; runtimes plug in through @surfingdog/platform.
  */
 
-export type { DatedPolicy, DoorElsewhere, Manifest, Policy, PolicyFee } from "@surfingdog/spec";
+export type {
+  DatedPolicy,
+  DoorElsewhere,
+  Manifest,
+  PaymentSchedule,
+  PaymentTerms,
+  Policy,
+  PolicyFee,
+} from "@surfingdog/spec";
 export {
   CARD_BRANDS,
   currencyCodeProblem,
@@ -20,6 +28,8 @@ export {
   PAYMENTS_VOCABULARY,
   parseDecimal,
   paymentLabel,
+  paymentScheduleSchema,
+  paymentTermsSchema,
   paymentToken,
   publishedPayments,
   readDoorsElsewhere,

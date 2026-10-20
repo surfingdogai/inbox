@@ -80,6 +80,7 @@ export {
 } from "./pay-queue";
 export {
   connectorCaller,
+  linkCurrencyProblem,
   type PayConnection,
   type PayHost,
   PaymentLinks,
@@ -89,6 +90,15 @@ export {
   type PayState,
   providerOf,
 } from "./payments";
+export {
+  registerScheduleSource,
+  type ScheduledItem,
+  type ScheduledOutcome,
+  type ScheduledPayment,
+  type ScheduleSource,
+  scheduleSourceOf,
+  type WantedLink,
+} from "./schedules";
 export * from "./sdk";
 export { shopOrderOf } from "./shop";
 export {

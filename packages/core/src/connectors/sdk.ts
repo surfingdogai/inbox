@@ -488,6 +488,53 @@ export interface PayLinkRequest {
    * fulfil it. Absent for a payment platform, which is told only what to ask for.
    */
   readonly order?: ShopOrder | undefined;
+
+  /**
+   * What the link is for (ADR-032): the whole of an order (`pay`, the default), or one entry of an
+   * item's payment schedule — a deposit, the balance, the difference after a change. A booking's
+   * links say "book" on the platform's button where it has one.
+   */
+  readonly purpose?: PayPurpose | undefined;
+  /** The schedule entry it is for (`deposit`, `balance`), unique per item: one live link each. */
+  readonly scheduleId?: string | undefined;
+  /**
+   * When the link stops taking payments (milliseconds): a deposit's pay window. A platform that can be
+   * told at creation is (Mollie's `expiresAt`); every link is also closed by the inbox once it passes.
+   */
+  readonly expiresAt?: number | undefined;
+}
+
+/** What a pay link is for: an order's total, or one entry of an item's payment schedule. */
+export type PayPurpose = "pay" | "deposit" | "balance" | "guarantee" | "difference";
+
+/**
+ * A card saved to hold a booking (ADR-032), asked for on the business's own payment platform with
+ * nothing charged now: the business charges a no-show or a late cancellation itself, in its own
+ * dashboard, under the policy the customer saw. Made when the customer opens the inbox's own link,
+ * so it never expires unseen.
+ */
+export interface GuaranteeRequest {
+  readonly ref: string;
+  readonly itemId: string;
+  /** The currency the business would charge in. */
+  readonly currency: string;
+  readonly reference: string;
+  readonly language: string;
+  /** Where the platform sends the customer after saving the card, and if they turn back. */
+  readonly returnUrl: string;
+  readonly cancelUrl: string;
+  /** When the platform's page closes (30 minutes to 24 hours from now on Stripe). */
+  readonly expiresAt: number;
+}
+
+/** A card hold as the platform says it stands, read back with the business's key. */
+export interface GuaranteeFact {
+  readonly status: "open" | "saved" | "expired";
+  /** The platform's id for the customer the card was saved to: where the business charges it. */
+  readonly customerId?: string | undefined;
+  /** The customer in the business's own dashboard. */
+  readonly dashboardUrl?: string | undefined;
+  readonly livemode: boolean;
 }
 
 export interface PayLink {
@@ -637,6 +684,22 @@ export interface PaymentsHandler {
   currencyProblem?(amount: PayAmount): string | null;
   /** Makes the link in the business's own account. Safe to call again with the same `ref`. */
   createLink(ctx: RunContext, request: PayLinkRequest): Promise<PayLink>;
+  /**
+   * A page on the platform where the customer saves a card to hold a booking, nothing charged
+   * (ADR-032). Only where the platform can (Stripe Checkout in `mode=setup`), and only once the owner
+   * switched card holds on, which asks the key for what it needs then (`guaranteePermissions`).
+   */
+  createGuarantee?(
+    ctx: RunContext,
+    request: GuaranteeRequest,
+  ): Promise<{ readonly externalId: string; readonly url: string; readonly expiresAt: number }>;
+  /** Whether the card was saved, read back with the key; never what a request body claimed. */
+  guaranteeFact?(ctx: RunContext, hold: { readonly externalId: string }): Promise<GuaranteeFact | null>;
+  /**
+   * What the key lacks to take card holds, in the platform's own names ("Checkout Sessions: Write"),
+   * asked when the owner switches them on and never before: empty when it has everything.
+   */
+  guaranteePermissions?(ctx: RunContext): Promise<readonly string[]>;
   /** Stops the link taking payments: the order changed, was cancelled, or was paid another way. */
   closeLink(ctx: RunContext, link: { readonly externalId: string }): Promise<void>;
   /**

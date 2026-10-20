@@ -240,6 +240,9 @@ async function createLink(ctx: RunContext, req: PayLinkRequest) {
         currency: req.amount.currency.toUpperCase(),
         value: decimalAmount(req.amount, MOLLIE_DECIMALS[req.amount.currency.toUpperCase()] ?? 2),
       },
+      // A link that closes with its window (a deposit's): Mollie stops taking payments on it then
+      // (https://docs.mollie.com/reference/create-payment-link, `expiresAt`); the inbox archives it too.
+      ...(req.expiresAt ? { expiresAt: mollieTime(req.expiresAt) } : {}),
       webhookUrl: req.hookUrl,
       reusable: false,
     },
@@ -250,6 +253,11 @@ async function createLink(ctx: RunContext, req: PayLinkRequest) {
     throw new ConnectorError("bad_response", "Mollie made the payment link but did not say where it is.");
   }
   return { externalId, url };
+}
+
+/** An instant as Mollie writes one: ISO 8601 to the second, with its offset. */
+function mollieTime(ms: number): string {
+  return new Date(ms).toISOString().replace(/\.\d{3}Z$/, "+00:00");
 }
 
 async function closeLink(ctx: RunContext, link: { readonly externalId: string }): Promise<void> {

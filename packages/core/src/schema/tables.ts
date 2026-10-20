@@ -907,6 +907,15 @@ export const connectorPayments = sqliteTable(
      */
     shopTotal: integer("shop_total"),
     shopCurrency: text("shop_currency"),
+    /**
+     * The entry of the item's payment schedule it is for (0025, ADR-032): '' for an order's own link,
+     * else `deposit`, `balance`, `difference-…`. One live link per item and entry.
+     */
+    scheduleId: text("schedule_id").notNull().default(""),
+    /** `pay` | `deposit` | `balance` | `guarantee` | `difference`. */
+    purpose: text("purpose").notNull().default("pay"),
+    /** When it stops taking payments (a deposit's pay window): closed on the platform then. */
+    expiresAt: integer("expires_at"),
   },
   (t) => [
     index("connector_payments_item").on(t.itemId, t.createdAt),
