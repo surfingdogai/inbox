@@ -223,6 +223,8 @@ export function googleCalendarConnector(client: OAuthClient | null, opts: Google
     kind: "google_calendar",
     title: "Google Calendar",
     group: "calendars",
+    // A stylist's own Google Calendar (ADR-035): tied to them, it takes only their times off and holds only their bookings.
+    perResource: true,
     capabilities: ["busy_times", "write_bookings"],
     auth: "oauth",
     consent:
