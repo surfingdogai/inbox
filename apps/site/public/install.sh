@@ -1094,7 +1094,12 @@ cmd_email() {
 # up: start (or bring in line with the files) and wait until it answers. The installer calls it.
 cmd_up() {
   need_install
-  dc up -d --remove-orphans >/dev/null
+  local said
+  # Compose's progress lines are noise here; what it says is shown only when it fails.
+  if ! said=$(dc up -d --remove-orphans 2>&1); then
+    printf '%s\n' "$said" >&2
+    die "Docker Compose could not start it. Above is what it said."
+  fi
   wait_healthy "${1:-180}" || {
     dc logs --no-color --tail 40 inbox >&2 || true
     die "The inbox did not start. Above is what it said; sudo inbox logs shows more."
