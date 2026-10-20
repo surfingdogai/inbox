@@ -1,4 +1,4 @@
-# ADR-026 — The self-host kit: an image, a Compose file, a one-command installer and releases
+# ADR-027 — The self-host kit: an image, a Compose file, a one-command installer and releases
 
 **Status:** accepted, 20 October 2026.
 
