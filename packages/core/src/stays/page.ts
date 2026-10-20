@@ -265,7 +265,7 @@ export async function stayLinkView(
 ): Promise<CustomerPage> {
   const { row, item } = ctx;
   const p = item.payload as StayPayload;
-  const lang = stayLang(row.lang);
+  const lang = stayLang(row.langTag);
   const c = stayCopy(lang);
   const w = WORDS[lang];
   const setup = await readSetup(deps.db, p.propertyId);
@@ -349,10 +349,13 @@ export async function stayLinkView(
         terms.fee.value === 0
           ? [paid.value > 0 ? c.page.cancelFree({ property, paid: money(paid, lang) }) : c.page.cancelNothingBack]
           : [
-              c.page.cancelQuestion({
-                date: q.policy.steps.at(-1)?.until.slice(0, 10) ?? "",
-                fee: money(terms.fee, lang),
-              }),
+              // The last free day as the guest reads a date, when there was one; else what it costs now.
+              q.policy.steps.at(-1)?.until && setup
+                ? c.page.cancelQuestion({
+                    date: whenWords(setup, q.policy.steps.at(-1)?.until ?? "", lang),
+                    fee: money(terms.fee, lang),
+                  })
+                : c.page.cancelNow({ fee: money(terms.fee, lang) }),
               terms.refund.value > 0
                 ? c.page.cancelRefund({ paid: money(paid, lang), property, refund: money(terms.refund, lang) })
                 : c.page.cancelNothingBack,
@@ -408,7 +411,7 @@ async function doneView(
   ).rows;
   const state = String(fresh?.[0] ?? ctx.item.state);
   const p = JSON.parse(String(fresh?.[1] ?? JSON.stringify(ctx.item.payload))) as StayPayload;
-  const lang = stayLang(ctx.row.lang);
+  const lang = stayLang(ctx.row.langTag);
   const c = stayCopy(lang);
   const setup = await readSetup(deps.db, p.propertyId);
   const property = setup?.property.name ?? ctx.business;
@@ -448,7 +451,7 @@ export async function stayLinkAct(
   now: number,
 ): Promise<LinkActResult> {
   const { row, item } = ctx;
-  const lang = stayLang(row.lang);
+  const lang = stayLang(row.langTag);
   const w = WORDS[lang];
   if (row.usedAt !== null) return { redirect: `/c/${ctx.token}` };
   const version = Number(form.v);

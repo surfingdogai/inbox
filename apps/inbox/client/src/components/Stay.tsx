@@ -109,7 +109,6 @@ export function StayQuoteBlock({ quote, tz }: { quote: StayQuoteView; tz: string
       <div className="eyebrow">{quote.source === "person" ? "Your quote" : "Quote from your rates"}</div>
       <QuoteLines quote={quote} />
       <dl className="fields quote-fields">
-        <F label="Total">{sums.total}</F>
         {sums.now && <F label="Now">{sums.now}</F>}
         {sums.later && <F label="Later">{sums.later}</F>}
         {sums.atProperty && <F label="At the property">{sums.atProperty}</F>}

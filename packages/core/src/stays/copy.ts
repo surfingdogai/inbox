@@ -100,6 +100,7 @@ export interface StayCopy {
     readonly addCard: string;
     readonly cardSaved: string;
     readonly cancelQuestion: Line;
+    readonly cancelNow: Line;
     readonly cancelFree: Line;
     readonly cancelNothingBack: string;
     readonly cancelRefund: Line;
@@ -221,6 +222,7 @@ const EN: StayCopy = {
     addCard: "Add a card",
     cardSaved: "Your card holds the booking.",
     cancelQuestion: (v) => `Cancel your stay? It's after ${v.date}, so the fee is ${v.fee}.`,
+    cancelNow: (v) => `Cancel your stay? Cancelling now costs ${v.fee}.`,
     cancelFree: (v) => `Cancelling now is free. ${v.property} refunds your ${v.paid} to how you paid.`,
     cancelNothingBack: "There is nothing to refund.",
     cancelRefund: (v) => `You've paid ${v.paid}, so ${v.property} refunds ${v.refund}.`,
@@ -361,6 +363,7 @@ const ES: StayCopy = {
     addCard: "Añadir una tarjeta",
     cardSaved: "Su tarjeta garantiza la reserva.",
     cancelQuestion: (v) => `¿Cancelar su estancia? Es después del ${v.date}, así que el cargo es ${v.fee}.`,
+    cancelNow: (v) => `¿Cancelar su estancia? Cancelar ahora cuesta ${v.fee}.`,
     cancelFree: (v) => `Cancelar ahora es gratis. ${v.property} le devuelve sus ${v.paid}.`,
     cancelNothingBack: "No hay nada que devolver.",
     cancelRefund: (v) => `Ha pagado ${v.paid}, así que ${v.property} le devuelve ${v.refund}.`,
@@ -502,6 +505,7 @@ const FR: StayCopy = {
     addCard: "Ajouter une carte",
     cardSaved: "Votre carte garantit la réservation.",
     cancelQuestion: (v) => `Annuler votre séjour ? Nous sommes après le ${v.date}, les frais sont donc de ${v.fee}.`,
+    cancelNow: (v) => `Annuler votre séjour ? Annuler maintenant coûte ${v.fee}.`,
     cancelFree: (v) => `Annuler maintenant est gratuit. ${v.property} vous rembourse vos ${v.paid}.`,
     cancelNothingBack: "Il n'y a rien à rembourser.",
     cancelRefund: (v) => `Vous avez payé ${v.paid}, ${v.property} vous rembourse donc ${v.refund}.`,
@@ -642,6 +646,7 @@ const DE: StayCopy = {
     addCard: "Karte hinzufügen",
     cardSaved: "Ihre Karte garantiert die Buchung.",
     cancelQuestion: (v) => `Aufenthalt stornieren? Es ist nach dem ${v.date}, die Gebühr beträgt daher ${v.fee}.`,
+    cancelNow: (v) => `Aufenthalt stornieren? Eine Stornierung kostet jetzt ${v.fee}.`,
     cancelFree: (v) => `Jetzt stornieren ist kostenlos. ${v.property} erstattet Ihre ${v.paid}.`,
     cancelNothingBack: "Es gibt nichts zu erstatten.",
     cancelRefund: (v) => `Sie haben ${v.paid} gezahlt, ${v.property} erstattet daher ${v.refund}.`,
@@ -776,6 +781,7 @@ const IT: StayCopy = {
     addCard: "Aggiungi una carta",
     cardSaved: "La sua carta garantisce la prenotazione.",
     cancelQuestion: (v) => `Cancellare il soggiorno? È dopo il ${v.date}, quindi la penale è di ${v.fee}.`,
+    cancelNow: (v) => `Cancellare il soggiorno? Cancellare ora costa ${v.fee}.`,
     cancelFree: (v) => `Cancellare ora è gratuito. ${v.property} le rimborsa i suoi ${v.paid}.`,
     cancelNothingBack: "Non c'è nulla da rimborsare.",
     cancelRefund: (v) => `Ha pagato ${v.paid}, quindi ${v.property} le rimborsa ${v.refund}.`,
@@ -915,6 +921,7 @@ const PT: StayCopy = {
     addCard: "Adicionar um cartão",
     cardSaved: "O seu cartão garante a reserva.",
     cancelQuestion: (v) => `Cancelar a sua estadia? Já passou ${v.date}, por isso a taxa é ${v.fee}.`,
+    cancelNow: (v) => `Cancelar a sua estadia? Cancelar agora custa ${v.fee}.`,
     cancelFree: (v) => `Cancelar agora é grátis. ${v.property} devolve os seus ${v.paid}.`,
     cancelNothingBack: "Não há nada a devolver.",
     cancelRefund: (v) => `Pagou ${v.paid}, por isso ${v.property} devolve ${v.refund}.`,
