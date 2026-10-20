@@ -1,5 +1,14 @@
 import { spawn } from "node:child_process";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -44,6 +53,43 @@ ID_LIKE=debian
 UBUNTU_CODENAME=noble
 `;
 
+/**
+ * The ordinary tools the scripts use, and nothing else: the PATH they run with is the stand-ins and
+ * these, so a script never reaches this machine's own docker, systemctl or apt-get, even when the
+ * test takes a stand-in away (as "Docker is missing" does).
+ */
+const TOOLS = [
+  "awk",
+  "base64",
+  "basename",
+  "cat",
+  "chmod",
+  "cp",
+  "cut",
+  "date",
+  "df",
+  "dirname",
+  "du",
+  "find",
+  "grep",
+  "head",
+  "install",
+  "ls",
+  "mkdir",
+  "mv",
+  "od",
+  "rm",
+  "sed",
+  "sort",
+  "stty",
+  "tail",
+  "touch",
+  "tr",
+  "wc",
+];
+const where = (tool: string) =>
+  ["/usr/bin", "/bin", "/usr/sbin", "/sbin"].map((d) => path.join(d, tool)).find(existsSync);
+
 const stub = (body: string) => `#!/bin/sh\nprintf '%s %s\\n' "$(basename "$0")" "$*" >>"$STUB_STATE/calls"\n${body}\n`;
 
 export function server(): Server {
@@ -53,7 +99,13 @@ export function server(): Server {
   const bin = path.join(root, "bin");
   const binDir = path.join(root, "usr-local-bin");
   const systemd = path.join(root, "systemd");
-  for (const d of [state, bin, binDir, systemd]) mkdirSync(d, { recursive: true });
+  const sys = path.join(root, "sys");
+  for (const d of [state, bin, binDir, systemd, sys]) mkdirSync(d, { recursive: true });
+  for (const tool of TOOLS) {
+    const real = where(tool);
+    if (!real) throw new Error(`this machine has no ${tool}, which the scripts use`);
+    symlinkSync(real, path.join(sys, tool));
+  }
   const osRelease = path.join(root, "os-release");
   writeFileSync(osRelease, UBUNTU);
 
@@ -101,7 +153,7 @@ esac`,
         const child = spawn(SH, [script, ...args], {
           detached: true,
           env: {
-            PATH: `${bin}:/usr/bin:/bin:/usr/sbin:/sbin`,
+            PATH: `${bin}:${sys}`,
             HOME: root,
             STUB_STATE: state,
             SDI_OS_RELEASE: osRelease,

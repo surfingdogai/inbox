@@ -1010,12 +1010,16 @@ cmd_sign_in() {
   local domain owner block
   domain=$(env_get INBOX_DOMAIN)
   owner=$(env_get INBOX_OWNER_EMAIL)
+  # The email as the inbox wrote it to its log: whole, as `mail to <owner>: Sign in to …` with its
+  # lines indented, when no email service is set (the console stands in for one); or as `sign-in
+  # email for <owner> written here` when there is no address to send from at all.
   block=$(dc logs --no-color --no-log-prefix --since 24h inbox 2>/dev/null | awk '
-    /sign-in email for .* written here, not sent/ { buf = $0; grab = 1; next }
+    /^mail to .*: Sign in to / || /sign-in email for .* written here, not sent/ { buf = $0; grab = 1; next }
     grab { buf = buf "\n" $0; if ($0 ~ /work once, for 15 minutes/) { last = buf; grab = 0 } }
     END { print last }')
   if [ -n "$block" ]; then
-    printf '%s\n' "$block" | sed -n -e 's/^\(Your sign-in code: [0-9]*\)$/\1/p' -e 's#^\(https://.*/auth/verify?token=.*\)$#Or open: \1#p'
+    printf '%s\n' "$block" | sed -n -e 's/^[[:space:]]*\(Your sign-in code: [0-9]*\)$/\1/p' \
+      -e 's#^[[:space:]]*\(https\{0,1\}://[^[:space:]]*/auth/verify?token=[^[:space:]]*\)$#Or open: \1#p'
     note "It works once, for 15 minutes. Each sign-in email is newer than the one before."
   elif [ -n "$(env_get MAIL_FROM)" ]; then
     say "Email is set up, so sign-in emails go to $owner. Look there, and in its spam folder."
