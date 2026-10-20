@@ -139,6 +139,14 @@ export const KINDS: readonly SetupKind[] = [
     doors: { booking: false, quoteRequest: false, message: true },
     connect: ["shops", "payments"],
   },
+  {
+    key: "salon",
+    label: "A salon or barber",
+    line: "Hair, nails, beauty: staff people book by name.",
+    preset: "salon",
+    doors: { booking: true, quoteRequest: false, message: true },
+    connect: ["booking", "calendars"],
+  },
 ];
 
 /** The kind of a key, if it is one. */

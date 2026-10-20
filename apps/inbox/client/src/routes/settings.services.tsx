@@ -6,6 +6,8 @@ import { ProductEditor, ServiceEditor } from "../components/Catalogue";
 import { SourceTag } from "../components/Choosers";
 import { ErrorState, Toast } from "../components/Feedback";
 import { SectionHead } from "../components/Form";
+import { ServiceTerms, termsLine } from "../components/ServiceTerms";
+import { StaffCard } from "../components/Staff";
 import { problemOf } from "../lib/api";
 import { describeService } from "../lib/catalogue";
 import { formatMoney } from "../lib/format";
@@ -56,9 +58,44 @@ function ServicesPage() {
   const hosted = (settings.data?.locked ?? []).includes("email") || profile.data.home !== undefined;
   return (
     <>
-      <ServicesCard currency={currency} />
-      {settings.data && !hosted && <ProductsCard currency={currency} />}
+      <ServicesTabs />
+      {tabOf() === "staff" ? (
+        <StaffCard currency={currency} />
+      ) : (
+        <>
+          <ServicesCard currency={currency} />
+          {settings.data && !hosted && <ProductsCard currency={currency} />}
+        </>
+      )}
     </>
+  );
+}
+
+/** Which tab: services and products, or the staff who give them (ADR-035), kept in the address. */
+function tabOf(): "services" | "staff" {
+  return new URLSearchParams(window.location.search).get("tab") === "staff" ? "staff" : "services";
+}
+
+function ServicesTabs() {
+  const [, rerender] = useState(0);
+  const go = (tab: "services" | "staff") => {
+    const url = new URL(window.location.href);
+    if (tab === "staff") url.searchParams.set("tab", "staff");
+    else url.searchParams.delete("tab");
+    window.history.replaceState(window.history.state, "", url);
+    rerender((n) => n + 1);
+  };
+  const tab = tabOf();
+  return (
+    <fieldset className="seg services-tabs">
+      <legend className="sr-only">Services or staff</legend>
+      <button type="button" aria-pressed={tab === "services"} onClick={() => go("services")}>
+        Services
+      </button>
+      <button type="button" aria-pressed={tab === "staff"} onClick={() => go("staff")}>
+        Staff
+      </button>
+    </fieldset>
   );
 }
 
@@ -272,6 +309,9 @@ function ServiceLine({
   onKeep: () => void;
 }) {
   const archived = s.active !== 1;
+  // Add-ons, the deposit, cancelling, what comes first (ADR-035).
+  const [terms, setTerms] = useState(false);
+  const all = useServices();
   return (
     <div className={clsx("catalogue-row row-glass", archived && "is-archived")}>
       <div className="catalogue-main">
@@ -280,6 +320,7 @@ function ServiceLine({
           {archived && <span className="pill pill-xs">Archived</span>}
         </div>
         <div className="s">{describeService(s, currency)}</div>
+        {termsLine(s, currency) && <div className="s">{termsLine(s, currency)}</div>}
         {s.description && <div className="s">{s.description}</div>}
       </div>
       <div className="rowx">
@@ -310,6 +351,16 @@ function ServiceLine({
             Edit
           </button>
         )}
+        {!archived && (
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => setTerms((t) => !t)}
+            aria-expanded={terms}
+          >
+            Terms
+          </button>
+        )}
         {archived ? (
           <button type="button" className="btn btn-secondary btn-sm" onClick={onRestore} disabled={pending}>
             Put back on offer
@@ -331,6 +382,16 @@ function ServiceLine({
             error={error}
             onSubmit={onSave}
             onCancel={onCancel}
+          />
+        </div>
+      )}
+      {terms && (
+        <div className="wide">
+          <ServiceTerms
+            service={s}
+            services={all.data?.items ?? []}
+            currency={currency}
+            onDone={() => setTerms(false)}
           />
         </div>
       )}
