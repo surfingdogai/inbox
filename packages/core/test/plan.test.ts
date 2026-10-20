@@ -311,6 +311,60 @@ describe("a setup plan", () => {
     expect((await readSettings(db)).doorsElsewhere).toEqual([{ itemType: "order", url: CHECKOUT }]);
   });
 
+  it("sets up a place to stay: its rules, nothing confirming on its own, and the stay door once it has a room", async () => {
+    const { db, caps } = await setup();
+    const aurora: SetupPlanInput = {
+      profile: { name: "Hotel Aurora", timezone: "America/Bogota", currency: "COP", languages: ["es", "en"] },
+      preset: "stays",
+      booking: { confirm: "owner" },
+      doors: ["message", "stay"],
+    };
+    const dry = await caps.applySetupPlan(owner, aurora, { dryRun: true });
+    expect(dry.doors).toEqual({
+      on: ["message"],
+      expected: ["message", "stay"],
+      missing: [
+        { door: "stay", why: "Stays turn on once your place has a room to offer, in the app's Property settings." },
+      ],
+    });
+    const applied = await caps.applySetupPlan(system, aurora);
+    expect(applied.doors).toEqual(dry.doors);
+    const names = (await caps.setup.listRules(owner)).map((r) => r.name);
+    expect(names).toContain("Draft a quote from my rates");
+    expect(names).not.toContain("Send the quote at once when the rooms are kept for direct guests");
+    // A room to offer, set up by the owner: the stay door is on, as the plan now predicts it.
+    await caps.stays.upsertProperty(owner, { name: "Hotel Aurora", kind: "hotel", currency: "COP" });
+    await caps.stays.upsertRoomType(owner, {
+      name: "Habitación doble",
+      units: 4,
+      capacity: { adults: 2, children: 0, total: 2 },
+    });
+    const now = await caps.applySetupPlan(owner, aurora, { dryRun: true });
+    expect(now.doors.on).toEqual(["message", "stay"]);
+    expect((await caps.applySetupPlan(system, aurora)).doors.on).toEqual(now.doors.on);
+    expect((await readSettings(db)).doors.stay).toBeUndefined();
+  });
+
+  it("keeps stays at the property's own booking engine, with its deep link, and only a stay's door takes one", async () => {
+    const { db, caps } = await setup();
+    const ENGINE = "https://engine.example.net/aurora";
+    const DEEP = "https://engine.example.net/aurora?arrive={check_in}&depart={check_out}&adults={adults}";
+    const plan: SetupPlanInput = {
+      profile: { name: "Hotel Aurora" },
+      preset: "stays",
+      doors_elsewhere: [{ door: "stay", url: ENGINE, url_template: DEEP, name: "Aurora" }],
+    };
+    const r = await caps.applySetupPlan(system, plan);
+    expect(r.sentences).toContain("Stays are booked at Aurora.");
+    expect((await readSettings(db)).doorsElsewhere).toEqual([{ itemType: "stay", url: ENGINE, urlTemplate: DEEP }]);
+    expect((await caps.applySetupPlan(system, plan)).changed).toBe(false);
+    await expect(
+      caps.applySetupPlan(system, { doors_elsewhere: [{ door: "booking", url: ENGINE, url_template: DEEP }] }),
+    ).rejects.toMatchObject({ code: "invalid_input" });
+    const back = await caps.applySetupPlan(system, { doors_elsewhere: [] });
+    expect(back.sentences).toContain("Stays come to this inbox again.");
+  });
+
   it("refuses a door kept elsewhere that is not a booking or an order, or not on a public host, and a time zone it does not know", async () => {
     const { caps } = await setup();
     await expect(

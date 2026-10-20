@@ -25,6 +25,16 @@ import { dateLocaliser, readClosures } from "./closures";
 const ITEM_TYPES: readonly ItemType[] = ["message", "quote_request", "booking", "order", "refund", "stay"];
 
 /**
+ * A place to stay takes stays once it has a room to offer, and its registration where its area
+ * requires one (ADR-033): a rental without its number is not bookable. A row when it does; a setup
+ * plan's dry run reads the same.
+ */
+export const STAY_ROOM_OFFERED_SQL = `SELECT 1 FROM room_types r JOIN properties p ON p.id = r.property_id
+  WHERE r.active = 1 AND r.offered = 1 AND p.active = 1
+    AND NOT (COALESCE(json_extract(p.registration, '$.required'), 0) = 1 AND COALESCE(json_extract(p.registration, '$.number'), '') = '')
+  LIMIT 1`;
+
+/**
  * The owner's switches for what agents can do (`settings.doors`). Left out, a door follows what the
  * inbox holds; `false` shuts it; `quoteRequest: true` opens the request for a price with nothing listed.
  */
@@ -76,16 +86,7 @@ export async function offeredItemTypes(
       method: "all",
     }),
     db.client.query({ sql: "SELECT 1 FROM products WHERE active = 1 LIMIT 1", params: [], method: "all" }),
-    // A place to stay takes stays once it has a room to offer, and its registration where its area
-    // requires one (ADR-033): a rental without its number is not bookable.
-    db.client.query({
-      sql: `SELECT 1 FROM room_types r JOIN properties p ON p.id = r.property_id
-             WHERE r.active = 1 AND r.offered = 1 AND p.active = 1
-               AND NOT (COALESCE(json_extract(p.registration, '$.required'), 0) = 1 AND COALESCE(json_extract(p.registration, '$.number'), '') = '')
-             LIMIT 1`,
-      params: [],
-      method: "all",
-    }),
+    db.client.query({ sql: STAY_ROOM_OFFERED_SQL, params: [], method: "all" }),
   ]);
   const base = open.rows.find((r) => r[0] === null || r[0] === undefined);
   const own = new Map(open.rows.filter((r) => r[0] !== null && r[0] !== undefined).map((r) => [String(r[0]), r[1]]));
