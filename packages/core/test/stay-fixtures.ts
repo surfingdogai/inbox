@@ -84,16 +84,18 @@ export async function freshStays(
   return { db, caps };
 }
 
-export interface Built {
+export interface Built<R extends string = string, P extends string = string> {
   readonly db: Db;
   readonly caps: Capabilities;
   readonly property: string;
-  readonly rooms: Readonly<Record<string, string>>;
-  readonly plans: Readonly<Record<string, string>>;
+  readonly rooms: Readonly<Record<R, string>>;
+  readonly plans: Readonly<Record<P, string>>;
 }
 
 /** Ryokan Hoshi, Kyoto: JPY, a Japanese room for two on Flexible with breakfast, the first night as deposit. */
-export async function ryokanHoshi(opts: { mode?: "request" | "allotment" } = {}): Promise<Built> {
+export async function ryokanHoshi(
+  opts: { mode?: "request" | "allotment" } = {},
+): Promise<Built<"japanese", "flexible">> {
   const { db, caps } = await freshStays("Asia/Tokyo", "JPY", "Ryokan Hoshi");
   const { id: property } = await caps.stays.upsertProperty(owner, {
     name: "Ryokan Hoshi",
@@ -129,7 +131,7 @@ export async function ryokanHoshi(opts: { mode?: "request" | "allotment" } = {})
 }
 
 /** Kijani House, Nairobi: KES, pay at the property, request mode. */
-export async function kijaniHouse(): Promise<Built> {
+export async function kijaniHouse(): Promise<Built<"garden", "bnb">> {
   const { db, caps } = await freshStays("Africa/Nairobi", "KES", "Kijani House");
   const { id: property } = await caps.stays.upsertProperty(owner, {
     name: "Kijani House",
@@ -156,7 +158,7 @@ export async function kijaniHouse(): Promise<Built> {
 }
 
 /** Maple Hollow B&B, Nova Scotia: CAD, two Harbour rooms kept for direct guests, closed elsewhere. */
-export async function mapleHollow(): Promise<Built> {
+export async function mapleHollow(): Promise<Built<"harbour", "flexible">> {
   const { db, caps } = await freshStays("America/Halifax", "CAD", "Maple Hollow B&B");
   const { id: property } = await caps.stays.upsertProperty(owner, {
     name: "Maple Hollow B&B",
@@ -194,7 +196,7 @@ export async function mapleHollow(): Promise<Built> {
 }
 
 /** Dar Al Bahr, Kuwait City: KWD, three decimals. */
-export async function darAlBahr(): Promise<Built> {
+export async function darAlBahr(): Promise<Built<"king", "roomOnly">> {
   const { db, caps } = await freshStays("Asia/Kuwait", "KWD", "Dar Al Bahr");
   const { id: property } = await caps.stays.upsertProperty(owner, {
     name: "Dar Al Bahr",
