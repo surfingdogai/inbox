@@ -1,0 +1,22 @@
+# Litestream, optional: the database copied to S3-compatible storage within seconds of each change,
+# so a lost server loses at most the last seconds. Beside the nightly backups, not instead of them.
+#
+#   cd /opt/inbox
+#   cp <this folder>/docker-compose.litestream.yml <this folder>/litestream.yml .
+#   cp <this folder>/litestream.env.example litestream.env && chmod 600 litestream.env   then fill it in
+#   docker compose -f docker-compose.yml -f docker-compose.litestream.yml up -d
+#
+# Full steps, and the restore: https://surfingdog.ai/docs/backups/#litestream
+services:
+  litestream:
+    image: litestream/litestream:0.3.13
+    restart: unless-stopped
+    command: replicate
+    # The inbox's own user: Litestream writes beside the database, in the folder that is the inbox's.
+    user: "10001:10001"
+    env_file: litestream.env
+    volumes:
+      - ./data:/opt/inbox/data
+      - ./litestream.yml:/etc/litestream.yml:ro
+    depends_on:
+      - inbox

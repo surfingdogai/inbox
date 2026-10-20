@@ -1,0 +1,12 @@
+#cloud-config
+# Surfing Dog Inbox on a DigitalOcean Droplet. App Platform cannot run it: it has no disk that lasts
+# between deploys, and the inbox's database is a file. A Droplet can, with the one-command installer.
+#
+# Create a Droplet (Ubuntu 24.04, 1 GB is plenty), and under Advanced options → Add initialization
+# scripts, paste this file with your address and your email in place of the two below. Point the
+# address's A record at the Droplet's IP (a Reserved IP lets you add the record before it exists).
+# The installer runs once, at first boot; the certificate comes as soon as the record points there.
+# What it did: /var/log/inbox-install.log. Steps: https://surfingdog.ai/docs/platforms/#digitalocean
+runcmd:
+  - curl -fsSL https://surfingdog.ai/install.sh -o /root/install.sh
+  - sh /root/install.sh --domain inbox.yourbusiness.com --email you@yourbusiness.com --yes --skip-dns-check >/var/log/inbox-install.log 2>&1

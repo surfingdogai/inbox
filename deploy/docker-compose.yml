@@ -1,0 +1,56 @@
+# Surfing Dog Inbox on one server: the inbox, and Caddy in front of it, which gets the HTTPS
+# certificate on its own and renews it. The settings are in .env beside this file; the data is in
+# ./data, one SQLite file you can copy.
+#
+#   cp .env.example .env            then set INBOX_DOMAIN, INBOX_OWNER_EMAIL and INBOX_SECRET_KEY
+#   mkdir -p data && sudo chown 10001:10001 data
+#   docker compose up -d
+#
+# The installer (surfingdog.ai/install.sh) writes this same file to /opt/inbox and does those steps
+# for you. Only Caddy is reachable from outside, on 80 and 443; the inbox listens inside.
+name: inbox
+
+services:
+  inbox:
+    image: ${INBOX_IMAGE:-ghcr.io/surfingdogai/inbox}:${INBOX_VERSION:-latest}
+    restart: unless-stopped
+    init: true
+    env_file: .env
+    environment:
+      INBOX_PUBLIC_URL: https://${INBOX_DOMAIN:?set INBOX_DOMAIN in .env}
+    volumes:
+      - ./data:/opt/inbox/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+
+  caddy:
+    image: ${CADDY_IMAGE:-caddy:2-alpine}
+    restart: unless-stopped
+    depends_on:
+      - inbox
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      INBOX_DOMAIN: ${INBOX_DOMAIN}
+      INBOX_TLS: ${INBOX_TLS:-acme}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy/data:/data
+      - ./caddy/config:/config
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"

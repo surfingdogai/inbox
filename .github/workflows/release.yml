@@ -1,0 +1,190 @@
+name: release
+# A version tag (v0.1.0, or v0.2.0-rc.1 for a pre-release) makes a release: the image
+# ghcr.io/surfingdogai/inbox for amd64 and arm64, smoke tested on both, and a GitHub Release with the
+# server bundle (the Node build, no Docker needed), the self-host kit, the installer and SHA256SUMS,
+# each with a build provenance attestation. The tag must be the version the code says it is.
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+", "v[0-9]+.[0-9]+.[0-9]+-*"]
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/surfingdogai/inbox
+
+jobs:
+  bundles:
+    name: check · test · server bundle · kit
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: version
+        name: the tag is the version in the code
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          core=$(sed -n 's/^export const VERSION = "\(.*\)";$/\1/p' packages/core/src/version.ts)
+          app=$(node -p 'require("./apps/inbox/package.json").version')
+          [ "$tag" = "$core" ] || { echo "the tag says $tag, packages/core/src/version.ts says $core"; exit 1; }
+          [ "$tag" = "$app" ] || { echo "the tag says $tag, apps/inbox/package.json says $app"; exit 1; }
+          echo "version=$tag" >>"$GITHUB_OUTPUT"
+          case "$tag" in *-*) echo "prerelease=true" ;; *) echo "prerelease=false" ;; esac >>"$GITHUB_OUTPUT"
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm --filter @surfingdog/inbox build
+      - run: pnpm test:node
+      - run: node scripts/build-install.mjs --check
+      - name: the bundles
+        run: |
+          v="${{ steps.version.outputs.version }}"
+          mkdir -p out/inbox out/inbox-selfhost
+          cp apps/inbox/dist/server.mjs apps/inbox/docker/start.mjs LICENSE out/inbox/
+          cp -r apps/inbox/dist/client out/inbox/client
+          echo "$v" >out/inbox/VERSION
+          cat >out/inbox/README.txt <<EOF
+          Surfing Dog Inbox $v, the Node build: one file and the owner app, no install step.
+          Node 22.16+, 24 or 26:  INBOX_DB=./data/inbox.db node server.mjs
+          Every setting, and the systemd unit and Caddy block to copy: https://surfingdog.ai/install.md (path B)
+          EOF
+          cp -r deploy/. out/inbox-selfhost/
+          rm -rf out/inbox-selfhost/test
+          cp apps/site/public/install.sh out/inbox-selfhost/install.sh
+          echo "$v" >out/inbox-selfhost/VERSION
+          tar -C out -czf out/inbox-server.tar.gz inbox
+          tar -C out -czf out/inbox-selfhost.tar.gz inbox-selfhost
+          cp apps/site/public/install.sh out/install.sh
+          (cd out && sha256sum inbox-server.tar.gz inbox-selfhost.tar.gz install.sh >SHA256SUMS && cat SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-files
+          path: |
+            out/inbox-server.tar.gz
+            out/inbox-selfhost.tar.gz
+            out/install.sh
+            out/SHA256SUMS
+
+  image:
+    name: image · amd64 + arm64 · push
+    needs: bundles
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          # 0.2.0 and 0.2 always; latest only for a release that is not a pre-release.
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ needs.bundles.outputs.prerelease == 'false' }}
+            type=raw,value=latest,enable=${{ needs.bundles.outputs.prerelease == 'false' }}
+      - id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ needs.bundles.outputs.version }}
+            REVISION=${{ github.sha }}
+          provenance: mode=max
+          sbom: true
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+  smoke:
+    name: smoke test · ${{ matrix.arch }} · the pushed image
+    needs: [bundles, image]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+      - run: docker pull "$IMAGE@${{ needs.image.outputs.digest }}"
+      - run: docker tag "$IMAGE@${{ needs.image.outputs.digest }}" "$IMAGE:smoke"
+      - run: deploy/test/smoke-image.sh "$IMAGE:smoke"
+      - name: it says the version of its tag
+        run: |
+          docker run -d --name v -p 127.0.0.1:18788:8787 "$IMAGE:smoke"
+          for i in $(seq 1 30); do curl -fsS 127.0.0.1:18788/healthz && break; sleep 2; done
+          curl -fsS 127.0.0.1:18788/healthz | grep -q "\"version\":\"${{ needs.bundles.outputs.version }}\""
+
+  release:
+    name: GitHub Release
+    needs: [bundles, image, smoke]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-files
+          path: out
+      - run: cd out && sha256sum -c SHA256SUMS
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            out/inbox-server.tar.gz
+            out/inbox-selfhost.tar.gz
+            out/install.sh
+      - name: the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.bundles.outputs.version }}
+          PRERELEASE: ${{ needs.bundles.outputs.prerelease }}
+          DIGEST: ${{ needs.image.outputs.digest }}
+        run: |
+          cat >notes.md <<EOF
+          **On a server of your own**, with HTTPS: \`curl -fsSL https://surfingdog.ai/install.sh | sudo sh\`
+          Already installed: \`sudo inbox update $VERSION\` (it rolls back if the new version does not start).
+
+          **The image:** \`$IMAGE:$VERSION\` (amd64, arm64), \`$DIGEST\`
+
+          **The files:** \`inbox-server.tar.gz\` is the Node build (no Docker needed), \`inbox-selfhost.tar.gz\`
+          the Compose file, Caddy's file, the \`inbox\` command and the platform templates, \`install.sh\` the
+          installer. Check them with \`sha256sum -c SHA256SUMS\`, or \`gh attestation verify <file> -R surfingdogai/inbox\`.
+
+          Guide: https://surfingdog.ai/docs/run-it-yourself/
+
+          EOF
+          flags=""
+          [ "$PRERELEASE" = true ] && flags="--prerelease"
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "Surfing Dog Inbox $VERSION" \
+            --notes-file notes.md --generate-notes $flags \
+            out/inbox-server.tar.gz out/inbox-selfhost.tar.gz out/install.sh out/SHA256SUMS

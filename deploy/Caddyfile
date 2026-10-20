@@ -1,0 +1,21 @@
+# Caddy in front of the inbox: HTTPS at INBOX_DOMAIN, with a certificate from Let's Encrypt that it
+# gets and renews on its own. It keeps no access log. INBOX_TLS=internal uses Caddy's own certificate
+# authority instead, for a test or a private network, where no public certificate can be had.
+
+(tls-acme) {
+}
+
+(tls-internal) {
+	tls internal
+}
+
+{$INBOX_DOMAIN} {
+	import tls-{$INBOX_TLS:acme}
+
+	# The inbox limits each caller by the address Caddy connected from (the first X-Forwarded-For,
+	# which Caddy sets itself). A CF-Connecting-IP sent by a caller would let it pass for anyone, so
+	# it is dropped here.
+	reverse_proxy inbox:8787 {
+		header_up -CF-Connecting-IP
+	}
+}

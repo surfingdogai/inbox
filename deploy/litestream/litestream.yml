@@ -1,0 +1,9 @@
+# What Litestream copies, and where: the inbox's database, to the bucket named in litestream.env.
+dbs:
+  - path: /opt/inbox/data/inbox.db
+    replicas:
+      - type: s3
+        bucket: ${LITESTREAM_BUCKET}
+        path: inbox
+        endpoint: ${LITESTREAM_ENDPOINT}
+        region: ${LITESTREAM_REGION}

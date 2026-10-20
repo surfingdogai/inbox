@@ -1,0 +1,41 @@
+# Surfing Dog Inbox on Fly.io: one machine and one volume, as SQLite wants. Never scale it past one
+# machine: a second would have a database of its own. Steps: https://surfingdog.ai/docs/platforms/#flyio
+#
+#   cd deploy/fly
+#   fly launch --copy-config --no-deploy          pick a name; say no to any database it offers
+#   fly secrets set INBOX_OWNER_EMAIL=you@yourbusiness.com INBOX_SECRET_KEY="$(openssl rand -base64 32)"
+#   fly deploy
+#   fly certs add inbox.yourbusiness.com         then add the DNS record it names
+#   fly secrets set INBOX_PUBLIC_URL=https://inbox.yourbusiness.com
+
+app = "your-inbox"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[[mounts]]
+  source = "inbox_data"
+  destination = "/opt/inbox/data"
+  initial_size = "1gb"
+  # Fly keeps a daily snapshot of the volume for this many days.
+  snapshot_retention = 14
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  # The inbox works on its own between requests (rules, reminders, a network's hourly ping), so its
+  # machine stays on.
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "30s"
+    interval = "30s"
+    method = "GET"
+    path = "/healthz"
+    timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

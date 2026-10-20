@@ -1,0 +1,32 @@
+# Surfing Dog Inbox on Coolify (your own Coolify, on your own server). Coolify's proxy gives it its
+# address and the HTTPS certificate, so there is no Caddy here.
+#
+# In Coolify: New resource → Docker Compose Empty, and paste this file; or Public Repository,
+# https://github.com/surfingdogai/inbox, with the Docker Compose location /deploy/coolify/docker-compose.yml.
+# Then set the inbox's domain to yours (inbox.yourbusiness.com), fill in INBOX_OWNER_EMAIL, and deploy.
+# Coolify generates INBOX_SECRET_KEY once and keeps it: copy it somewhere safe, apart from the server.
+# Steps, updates and backups: https://surfingdog.ai/docs/platforms/#coolify
+services:
+  inbox:
+    image: ghcr.io/surfingdogai/inbox:${INBOX_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      # Coolify routes the address it gives the inbox to the container's port 8787.
+      SERVICE_URL_INBOX_8787: ""
+      INBOX_PUBLIC_URL: ${SERVICE_URL_INBOX}
+      INBOX_OWNER_EMAIL: ${INBOX_OWNER_EMAIL:?}
+      INBOX_SECRET_KEY: ${SERVICE_REALBASE64_INBOXKEY}
+      MAIL_FROM: ${MAIL_FROM:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+    volumes:
+      # A named volume starts out owned by the image's own user (10001), which writes to it.
+      - inbox-data:/opt/inbox/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/healthz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  inbox-data:

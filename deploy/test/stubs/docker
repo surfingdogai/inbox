@@ -1,0 +1,131 @@
+#!/bin/sh
+# A stand-in for docker, for the installer's and the `inbox` command's tests: it keeps what a test
+# needs in $STUB_STATE (images, whether the inbox runs, which version is broken) and logs each call.
+#   $STUB_STATE/broken     versions whose inbox never becomes healthy (one per line)
+#   $STUB_STATE/no-pull    when present, every pull fails
+#   $STUB_STATE/logs       what `compose logs` prints
+#   $STUB_STATE/migrates   when present, a version starting writes "migrated-by-<version>" into the database
+set -eu
+printf 'docker %s\n' "$*" >>"$STUB_STATE/calls"
+
+if [ "${1:-}" != compose ]; then
+  case "${1:-}" in
+    info) exit 0 ;;
+    version) echo 27.3.1 ;;
+    image)
+      # image inspect NAME:TAG
+      grep -qxF "$3" "$STUB_STATE/images" 2>/dev/null
+      ;;
+    inspect)
+      case "$*" in
+        *RestartCount*) cat "$STUB_STATE/restarts" 2>/dev/null || echo 0 ;;
+        *State.Running*) [ -f "$STUB_STATE/running" ] && echo true || echo false ;;
+        *) echo '{}' ;;
+      esac
+      ;;
+    run) exit 1 ;; # the DNS probe: never reaches anything here
+    rm | load) exit 0 ;;
+    *) exit 0 ;;
+  esac
+  exit $?
+fi
+
+shift
+DIR=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --project-directory)
+      DIR="$2"
+      shift 2
+      ;;
+    -f)
+      shift 2
+      ;;
+    *) break ;;
+  esac
+done
+sub="${1:-}"
+[ $# -gt 0 ] && shift
+
+version() {
+  if [ -n "${INBOX_VERSION:-}" ]; then
+    echo "$INBOX_VERSION"
+  else
+    sed -n 's/^INBOX_VERSION=//p' "$DIR/.env" | tail -n 1
+  fi
+}
+image_name() {
+  name=$(sed -n 's/^INBOX_IMAGE=//p' "$DIR/.env" | tail -n 1)
+  echo "${name:-ghcr.io/surfingdogai/inbox}:$(version)"
+}
+broken() { grep -qxF "$(version)" "$STUB_STATE/broken" 2>/dev/null; }
+inside() { printf '%s' "$1" | sed "s#^/opt/inbox/data#$DIR/data#"; }
+
+# node /opt/inbox/server.mjs <command> <file>, as the inbox's image would run it.
+server() {
+  case "$1" in
+    backup)
+      out=$(inside "$2")
+      [ -e "$out" ] && {
+        echo "exists already" >&2
+        exit 1
+      }
+      cp "$DIR/data/inbox.db" "$out"
+      echo "{\"file\":\"$2\",\"ok\":true,\"problem\":null,\"migration\":24}"
+      ;;
+    check-db)
+      file=$(inside "$2")
+      if head -c 15 "$file" 2>/dev/null | grep -q 'SQLite format 3'; then
+        migration=$(sed -n 's/^migration=//p' "$file" | tail -n 1)
+        echo "{\"ok\":true,\"problem\":null,\"bytes\":10,\"migration\":${migration:-24},\"items\":3,\"owner\":true}"
+      else
+        echo '{"ok":false,"problem":"it is not an SQLite database","bytes":10,"migration":null,"items":null,"owner":null}'
+        exit 1
+      fi
+      ;;
+    create-owner-key)
+      echo "database: /opt/inbox/data/inbox.db" >&2
+      echo "sdi_own_stub_key_for_$2"
+      ;;
+  esac
+}
+
+case "$sub" in
+  version)
+    case "$*" in *--short*) echo 2.29.7 ;; *) echo "Docker Compose version v2.29.7" ;; esac
+    ;;
+  pull)
+    [ -f "$STUB_STATE/no-pull" ] && exit 1
+    case "$*" in *caddy*) ;; *) image_name >>"$STUB_STATE/images" ;; esac
+    ;;
+  up)
+    touch "$STUB_STATE/running"
+    if broken; then echo 5 >"$STUB_STATE/restarts"; else echo 0 >"$STUB_STATE/restarts"; fi
+    if [ -f "$STUB_STATE/migrates" ] && [ -f "$DIR/data/inbox.db" ]; then
+      printf 'migrated-by-%s\n' "$(version)" >>"$DIR/data/inbox.db"
+    fi
+    ;;
+  stop) rm -f "$STUB_STATE/running" ;;
+  restart) touch "$STUB_STATE/running" ;;
+  ps) [ -f "$STUB_STATE/running" ] && echo c0ffee ;;
+  logs) cat "$STUB_STATE/logs" 2>/dev/null || true ;;
+  exec)
+    [ -f "$STUB_STATE/running" ] || exit 1
+    [ "${1:-}" = -T ] && shift
+    shift # the service
+    if [ "${1:-}" = node ] && [ "${2:-}" = -e ]; then
+      broken && exit 1
+      echo '{"ok":true,"version":"0.1.0","db":"ok"}'
+      exit 0
+    fi
+    shift 2 # node /opt/inbox/server.mjs
+    server "$@"
+    ;;
+  run)
+    while [ $# -gt 0 ] && [ "$1" != inbox ]; do shift; done
+    shift
+    shift 2 # node /opt/inbox/server.mjs
+    server "$@"
+    ;;
+  *) exit 0 ;;
+esac
