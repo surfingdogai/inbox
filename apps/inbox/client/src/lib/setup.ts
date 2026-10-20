@@ -1,4 +1,5 @@
 import { parseMajor } from "./actions";
+import { minorUnitsOf } from "./currencies";
 import type { ProductBody, ServiceBody } from "./types";
 
 /**
@@ -31,7 +32,7 @@ export function offerBodies(
   const priced: { offer: OfferDraft; value: number | undefined }[] = [];
   for (const o of wanted) {
     const typed = o.price.trim();
-    const value = typed ? parseMajor(typed) : undefined;
+    const value = typed ? parseMajor(typed, minorUnitsOf(currency)) : undefined;
     if (typed && value === undefined) return { problem: `${o.name.trim()}: ${PRICE_HINT}` };
     // A product is sold at a price: one without is not saved as free.
     if (sells === "products" && value === undefined)

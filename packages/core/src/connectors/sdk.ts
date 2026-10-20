@@ -1,3 +1,4 @@
+import { minorUnits } from "@surfingdog/spec";
 import { z } from "zod";
 
 /**
@@ -452,7 +453,10 @@ export interface BookingWriter {
 
 /* --- getting paid (ADR-023) ------------------------------------------------ */
 
-/** Money in hundredths (4500 is 45.00), with its ISO 4217 code in capitals: a currency counted in hundredths. */
+/**
+ * Money in minor units of its currency's own ISO 4217 exponent (4500 is 45.00 KES, ¥4,500 JPY), with
+ * its code in capitals (ADR-032).
+ */
 export interface PayAmount {
   readonly value: number;
   readonly currency: string;
@@ -624,6 +628,13 @@ export interface RefundFact {
 }
 
 export interface PaymentsHandler {
+  /**
+   * Why the platform cannot be asked for this amount in its currency, or null when it can (ADR-032):
+   * the adapter converts the inbox's ISO 4217 minor units to the platform's own, from a table with a
+   * test per currency, and names the reason for one it has none for. Absent: only currencies counted
+   * in hundredths are asked for, as before.
+   */
+  currencyProblem?(amount: PayAmount): string | null;
   /** Makes the link in the business's own account. Safe to call again with the same `ref`. */
   createLink(ctx: RunContext, request: PayLinkRequest): Promise<PayLink>;
   /** Stops the link taking payments: the order changed, was cancelled, or was paid another way. */
@@ -962,24 +973,37 @@ export function subtractIntervals(busy: readonly Interval[], spans: readonly Int
 /* --- money ---------------------------------------------------------------- */
 
 /**
- * Every amount in this inbox is kept in hundredths (`util/locale.ts`, `moneyIn`): 4500 EUR is 45.00.
- * A currency counted otherwise (none, like JPY; thousandths, like KWD) is refused before a link is
- * made (`isHundredthsCurrency`), so these never guess another exponent: a guess is a link for a
- * hundred times the order.
+ * Every amount in this inbox is an integer count of its currency's own ISO 4217 minor unit (ADR-032):
+ * 4500 KES is 45.00, 4500 JPY is ¥4,500, 4500 KWD is 4.500. A platform that counts a currency
+ * otherwise (Stripe's ISK, written as hundredths) converts in its own adapter, from a table with a
+ * test per currency, and refuses a currency it has no test for (`PaymentsHandler.currencyProblem`):
+ * a guess is a link for a hundred times the order.
  */
 
-/** Hundredths as a decimal string, the way some platforms want it: 4500 → "45.00". */
-export function decimalAmount(amount: PayAmount): string {
-  const s = String(Math.abs(Math.trunc(amount.value))).padStart(3, "0");
-  return `${amount.value < 0 ? "-" : ""}${s.slice(0, -2)}.${s.slice(-2)}`;
+/**
+ * Minor units as a decimal string in `exponent` places (the currency's ISO exponent when not given),
+ * the way some platforms want it: 4500 EUR → "45.00", 4500 JPY → "4500", 4500 KWD → "4.500".
+ */
+export function decimalAmount(amount: PayAmount, exponent?: number): string {
+  const e = exponent ?? minorUnits(amount.currency) ?? 2;
+  const digits = String(Math.abs(Math.trunc(amount.value)));
+  const sign = amount.value < 0 ? "-" : "";
+  if (e === 0) return `${sign}${digits}`;
+  const s = digits.padStart(e + 1, "0");
+  return `${sign}${s.slice(0, -e)}.${s.slice(-e)}`;
 }
 
-/** A decimal string back to hundredths ("45.00" → 4500, "45.5" → 4550), or null when it is not one. */
-export function minorAmount(value: string): number | null {
+/**
+ * A decimal string back to minor units of `exponent` places (2 when not given): "45.00" → 4500,
+ * "45.5" → 4550, "4500" in 0 places → 4500; null when it is not one, or names a part smaller than the
+ * minor unit that is not zero.
+ */
+export function minorAmount(value: string, exponent = 2): number | null {
   const m = /^(\d{1,15})(?:\.(\d{1,6}))?$/.exec(value.trim());
   if (!m) return null;
   const fraction = m[2] ?? "";
-  // More than hundredths that are not zeros is not an amount this inbox can hold.
-  if (/[1-9]/.test(fraction.slice(2))) return null;
-  return Number(m[1]) * 100 + Number(`${fraction}00`.slice(0, 2));
+  // More places than the minor unit that are not zeros is not an amount this inbox can hold.
+  if (/[1-9]/.test(fraction.slice(exponent))) return null;
+  const whole = Number(m[1]) * 10 ** exponent;
+  return exponent === 0 ? whole : whole + Number(fraction.padEnd(exponent, "0").slice(0, exponent));
 }

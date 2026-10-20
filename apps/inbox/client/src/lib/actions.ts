@@ -1,3 +1,4 @@
+import { minorUnitsOf } from "./currencies";
 import type { Item, Money } from "./types";
 
 /**
@@ -129,13 +130,16 @@ export function isoToLocal(iso: string | undefined): string {
 }
 
 /**
- * An amount as a person types it, in major units, to minor units: `45`, `45,5`, `45,50`, `45.50`,
- * `1 234,50`, `1.234,50` and `1,234.50` all read as they are meant (when both `.` and `,` appear,
- * the last is the decimal mark; one followed by exactly three digits groups thousands). Anything
- * else — a sign, a letter, three decimals, a stray separator — is undefined, never a guess: a price
- * typed with a comma was once saved as free. The one parser every price field uses.
+ * An amount as a person types it, in major units, to minor units of a currency with `exponent`
+ * places (2 unless said; ADR-032): `45`, `45,5`, `45,50`, `45.50`, `1 234,50`, `1.234,50` and
+ * `1,234.50` all read as they are meant (when both `.` and `,` appear, the last is the decimal mark;
+ * one followed by exactly three digits groups thousands, but in a currency of thousandths, like KWD,
+ * where `4.500` is four dinars five hundred fils). In a currency with no minor unit (JPY) `4,500` is
+ * four thousand five hundred and `4.5` is not an amount. Anything else — a sign, a letter, more places
+ * than the currency has, a stray separator — is undefined, never a guess: a price typed with a comma
+ * was once saved as free. The one parser every price field uses.
  */
-export function parseMajor(typed: string): number | undefined {
+export function parseMajor(typed: string, exponent = 2): number | undefined {
   const text = typed.trim().replace(/[\s\u00a0\u202f]/g, (m, i: number, all: string) =>
     // A space only between digit groups: "1 234,50".
     /\d/.test(all[i - 1] ?? "") && /^\d{3}(\D|$)/.test(all.slice(i + 1)) ? "" : m,
@@ -143,13 +147,14 @@ export function parseMajor(typed: string): number | undefined {
   if (!/^\d[\d.,]*$/.test(text)) return undefined;
   const lastDot = text.lastIndexOf(".");
   const lastComma = text.lastIndexOf(",");
+  const places = exponent === 0 ? null : new RegExp(`^\\d{1,${exponent}}$`);
   let whole = text;
   let cents = "";
   if (lastDot !== -1 && lastComma !== -1) {
     const mark = Math.max(lastDot, lastComma);
     whole = text.slice(0, mark);
     cents = text.slice(mark + 1);
-    if (!/^\d{1,2}$/.test(cents)) return undefined;
+    if (!places?.test(cents)) return undefined;
     const group = mark === lastDot ? "," : ".";
     if (whole.includes(mark === lastDot ? "." : ",")) return undefined;
     if (!grouped(whole, group)) return undefined;
@@ -158,7 +163,9 @@ export function parseMajor(typed: string): number | undefined {
     const sep = lastDot !== -1 ? "." : ",";
     const parts = text.split(sep);
     const tail = parts[parts.length - 1] ?? "";
-    if (parts.length === 2 && /^\d{1,2}$/.test(tail)) {
+    // Three places after a lone mark group thousands, but where the currency counts thousandths.
+    const decimal = parts.length === 2 && places?.test(tail) && (tail.length < 3 || exponent >= 3);
+    if (decimal) {
       whole = parts[0] ?? "";
       cents = tail;
     } else if (grouped(text, sep)) {
@@ -168,7 +175,7 @@ export function parseMajor(typed: string): number | undefined {
     }
   }
   if (!/^\d+$/.test(whole)) return undefined;
-  const value = Number(whole) * 100 + Number(cents.padEnd(2, "0") || "0");
+  const value = Number(whole) * 10 ** exponent + Number(cents.padEnd(exponent, "0") || "0");
   return Number.isSafeInteger(value) ? value : undefined;
 }
 
@@ -179,14 +186,20 @@ function grouped(text: string, sep: string): boolean {
   return /^[1-9]\d{0,2}$/.test(parts[0] ?? "") && parts.slice(1).every((p) => /^\d{3}$/.test(p));
 }
 
-/** A typed amount (`parseMajor`) with its currency. */
+/** A typed amount (`parseMajor`) with its currency, read in that currency's own minor unit. */
 export function parseMoney(major: string, currency: string): Money | undefined {
-  const value = parseMajor(major);
+  const value = parseMajor(major, minorUnitsOf(currency));
   return value === undefined ? undefined : { value, currency };
 }
 
+/** Minor units as a person types them back, in the currency's own places: 4500 EUR "45.00", 4500 JPY "4500". */
+export function majorText(minor: number, currency: string): string {
+  const e = minorUnitsOf(currency);
+  return (minor / 10 ** e).toFixed(e);
+}
+
 export function moneyMajor(m: Money | undefined): string {
-  return m ? (m.value / 100).toFixed(2) : "";
+  return m ? majorText(m.value, m.currency) : "";
 }
 
 export interface QuoteLine {

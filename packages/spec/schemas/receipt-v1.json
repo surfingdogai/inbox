@@ -43,7 +43,7 @@
           "type": "integer",
           "minimum": -9007199254740991,
           "maximum": 9007199254740991,
-          "description": "Minor units: 4500 is €45.00."
+          "description": "Minor units of the currency's own ISO 4217 exponent (minorUnits): 4500 is 45.00 KES, ¥4,500 JPY, 4.500 KWD."
         },
         "currency": {
           "type": "string",

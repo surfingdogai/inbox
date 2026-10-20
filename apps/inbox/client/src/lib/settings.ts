@@ -1,4 +1,5 @@
-import { parseMajor } from "./actions";
+import { majorText, parseMajor } from "./actions";
+import { minorUnitsOf } from "./currencies";
 import type { Settings } from "./types";
 
 /**
@@ -16,6 +17,8 @@ import type { Settings } from "./types";
  * for it to be removed sends `null`.
  */
 export interface SettingsForm {
+  /** The business's currency, read only here: the amounts below are typed in its own places (ADR-032). */
+  readonly currency?: string | undefined;
   readonly cancellationWindowMin: string;
   /** Minutes before a start time after which customers can no longer book it online. */
   readonly minNoticeMin: string;
@@ -96,6 +99,7 @@ export interface SettingsForm {
 
 export function toSettingsForm(doc: Settings, redacted: readonly string[] = []): SettingsForm {
   return {
+    currency: doc.business.currency,
     cancellationWindowMin: String(doc.booking.cancellationWindowMin),
     minNoticeMin: String(doc.booking.minNoticeMin),
     holdOnPropose: doc.booking.holdOnPropose,
@@ -116,7 +120,9 @@ export function toSettingsForm(doc: Settings, redacted: readonly string[] = []):
     aiPricesCustom: doc.negotiation.ai.mayPriceCustom,
     aiTimeShiftHours: String(Math.round((doc.negotiation.ai.maxTimeShiftMin / 60) * 100) / 100),
     aiDelayDays: String(doc.negotiation.ai.maxDelayDays),
-    aiRefundMax: doc.negotiation.ai.maxRefundMinor ? (doc.negotiation.ai.maxRefundMinor / 100).toFixed(2) : "",
+    aiRefundMax: doc.negotiation.ai.maxRefundMinor
+      ? majorText(doc.negotiation.ai.maxRefundMinor, doc.business.currency)
+      : "",
     returnDays: String(doc.returns.days),
     returnPostage: doc.returns.postage,
     refundDays: String(doc.returns.refundDays),
@@ -132,7 +138,7 @@ export function toSettingsForm(doc: Settings, redacted: readonly string[] = []):
     lateCancellation: doc.booking.lateCancellation,
     autoCompleteHours: String(doc.booking.autoCompleteHours),
     approvalLimit: doc.orders.maxValueWithoutApprovalMinor
-      ? (doc.orders.maxValueWithoutApprovalMinor / 100).toFixed(2)
+      ? majorText(doc.orders.maxValueWithoutApprovalMinor, doc.business.currency)
       : "",
     payDays: String(doc.orders.payDays),
     dueDays: String(doc.orders.dueDays),
@@ -182,8 +188,9 @@ export function toSettingsDoc(f: SettingsForm): Record<string, unknown> {
     return t !== "" && Number.isFinite(Number(t)) ? Number(t) : t;
   };
   const opt = (s: string): string | null => (s.trim() ? s.trim() : null);
-  const limit = f.approvalLimit.trim() ? parseMajor(f.approvalLimit) : 0;
-  const refundMax = f.aiRefundMax.trim() ? parseMajor(f.aiRefundMax) : 0;
+  const places = minorUnitsOf(f.currency ?? "EUR");
+  const limit = f.approvalLimit.trim() ? parseMajor(f.approvalLimit, places) : 0;
+  const refundMax = f.aiRefundMax.trim() ? parseMajor(f.aiRefundMax, places) : 0;
   const shift = num(f.aiTimeShiftHours);
   return {
     booking: {

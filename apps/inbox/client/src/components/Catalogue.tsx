@@ -1,19 +1,20 @@
 import { ChevronRight } from "lucide-react";
 import { type FormEvent, type ReactNode, useId, useState } from "react";
-import { parseMajor } from "../lib/actions";
+import { majorText, parseMajor } from "../lib/actions";
 import type { ApiProblem } from "../lib/api";
 import { type ServiceDraft, serviceDraft, serviceWrite } from "../lib/catalogue";
+import { minorUnitsOf } from "../lib/currencies";
 import type { ProductBody, ProductRow, ServiceBody, ServiceRow } from "../lib/types";
 import { LengthPicker, MoneyInput, Stepper } from "./Choosers";
 import { Field, FormActions, Switch } from "./Form";
 
-/** A lowest price as typed: minor units, null for none, undefined when it is not a price. */
-function floorOf(typed: string): number | null | undefined {
-  return typed.trim() === "" ? null : parseMajor(typed);
+/** A lowest price as typed: minor units of the currency's own places, null for none, undefined when it is not a price. */
+function floorOf(typed: string, currency: string): number | null | undefined {
+  return typed.trim() === "" ? null : parseMajor(typed, minorUnitsOf(currency));
 }
 
-const majorOf = (minor: number | null | undefined) =>
-  minor === null || minor === undefined ? "" : (minor / 100).toFixed(2);
+const majorOf = (minor: number | null | undefined, currency: string) =>
+  minor === null || minor === undefined ? "" : majorText(minor, currency);
 
 /** Minutes to pick from, with the stored value in its place when it is another. */
 const withMinutes = (steps: readonly number[], keep: string) => {
@@ -97,7 +98,7 @@ export function ServiceEditor({
   onCancel: () => void;
 }) {
   const [f, setF] = useState<ServiceDraft>(() => ({
-    ...serviceDraft(initial, floor),
+    ...serviceDraft(initial, floor, currency),
     ...(prefill && !initial ? { name: prefill.name } : {}),
   }));
   const [local, setLocal] = useState<string | null>(null);
@@ -332,11 +333,11 @@ export function ProductEditor({
     sku: initial?.sku ?? "",
     name: initial?.name ?? "",
     description: initial?.description ?? "",
-    price: initial ? (initial.price.value / 100).toFixed(2) : "",
+    price: initial ? majorText(initial.price.value, initial.price.currency) : "",
     stock: initial?.stock === null || initial?.stock === undefined ? "" : String(initial.stock),
     active: initial ? initial.active === 1 : true,
     negotiable: initial ? initial.negotiable !== 0 : true,
-    floor: majorOf(floor),
+    floor: majorOf(floor, initial?.price.currency ?? currency),
   });
   const [local, setLocal] = useState<string | null>(null);
   const set = <K extends keyof ProductDraft>(key: K, value: ProductDraft[K]) => setF((d) => ({ ...d, [key]: value }));
@@ -344,12 +345,14 @@ export function ProductEditor({
     e.preventDefault();
     if (pending) return;
     if (!f.name.trim()) return setLocal("Give the product a name.");
-    const value = parseMajor(f.price);
-    if (value === undefined) return setLocal("Write the price like 39.20.");
+    const places = minorUnitsOf(initial?.price.currency ?? currency);
+    const value = parseMajor(f.price, places);
+    if (value === undefined)
+      return setLocal(places === 0 ? "Write the price like 3920." : "Write the price like 39.20.");
     const stock = f.stock.trim() === "" ? null : Number(f.stock);
     if (stock !== null && (!Number.isInteger(stock) || stock < 0))
       return setLocal("Stock is a whole number, or empty when not tracked.");
-    const lowest = floorOf(f.floor);
+    const lowest = floorOf(f.floor, initial?.price.currency ?? currency);
     if (lowest === undefined) return setLocal("Write the lowest price like 30, or leave it empty.");
     setLocal(null);
     onSubmit(

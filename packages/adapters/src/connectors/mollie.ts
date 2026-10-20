@@ -8,6 +8,8 @@ import {
   type InboundRequest,
   type KnownLink,
   minorAmount,
+  minorUnits,
+  type PayAmount,
   type PayLinkRequest,
   type PaymentFact,
   type RunContext,
@@ -36,6 +38,58 @@ import { constantTimeEqual, hmacSha256Hex } from "./pay-sign";
  */
 
 export const MOLLIE_API = "https://api.mollie.com";
+/**
+ * The currencies Mollie takes, and the decimals it wants in `amount.value`, as
+ * https://docs.mollie.com/docs/multicurrency lists them (read 20 October 2026): two, but none for
+ * ISK and JPY. For HUF and TWD Mollie rounds PayPal payments up to whole units, so only a whole amount
+ * is asked for in them. A currency not here is refused with the reason; the guest pays another way. A
+ * test pins every row (`test/payments.test.ts`).
+ */
+export const MOLLIE_DECIMALS: Readonly<Record<string, number>> = {
+  AED: 2,
+  AUD: 2,
+  BRL: 2,
+  CAD: 2,
+  CHF: 2,
+  CZK: 2,
+  DKK: 2,
+  EUR: 2,
+  GBP: 2,
+  HKD: 2,
+  HUF: 2,
+  ILS: 2,
+  ISK: 0,
+  JPY: 0,
+  MXN: 2,
+  MYR: 2,
+  NOK: 2,
+  NZD: 2,
+  PHP: 2,
+  PLN: 2,
+  RON: 2,
+  RUB: 2,
+  SEK: 2,
+  SGD: 2,
+  THB: 2,
+  TWD: 2,
+  USD: 2,
+  ZAR: 2,
+};
+const WHOLE_ONLY: ReadonlySet<string> = new Set(["HUF", "TWD"]);
+
+/** Why Mollie cannot be asked for this amount, or null: a currency it takes, in its own decimals, that ISO agrees with. */
+export function mollieCurrencyProblem(amount: PayAmount): string | null {
+  const code = amount.currency.toUpperCase();
+  const decimals = MOLLIE_DECIMALS[code];
+  if (decimals === undefined)
+    return `Mollie does not list ${code} among the currencies it takes, so no link is made in it`;
+  if (minorUnits(code) !== decimals)
+    return `Mollie counts ${code} in ${decimals} decimals and ISO 4217 does not, so no link is made in it`;
+  if (WHOLE_ONLY.has(code) && amount.value % 100 !== 0) {
+    return `Mollie rounds ${code} up to whole units for some payments, so a link is made only for a whole amount`;
+  }
+  return null;
+}
 /** The event a signed webhook added in Mollie's dashboard sends for a link paid. */
 export const MOLLIE_EVENTS: readonly string[] = ["payment-link.paid"];
 const KEY_PAGE = "https://my.mollie.com/dashboard/developers/api-keys";
@@ -181,8 +235,11 @@ async function createLink(ctx: RunContext, req: PayLinkRequest) {
     idempotency: `sdi-${req.ref}`,
     body: {
       description: req.title.slice(0, 255),
-      // Hundredths, as every amount here is: 4500 EUR is "45.00".
-      amount: { currency: req.amount.currency.toUpperCase(), value: decimalAmount(req.amount) },
+      // In Mollie's own decimals for the currency (ADR-032): 4500 EUR is "45.00", 4500 JPY is "4500".
+      amount: {
+        currency: req.amount.currency.toUpperCase(),
+        value: decimalAmount(req.amount, MOLLIE_DECIMALS[req.amount.currency.toUpperCase()] ?? 2),
+      },
       webhookUrl: req.hookUrl,
       reusable: false,
     },
@@ -231,7 +288,8 @@ function factOf(p: Record<string, unknown>, link: KnownLink): PaymentFact | null
   if (!status) return null;
   const amount = p.amount as { value?: unknown; currency?: unknown } | undefined;
   const currency = typeof amount?.currency === "string" ? amount.currency.toUpperCase() : "";
-  const value = typeof amount?.value === "string" && currency ? minorAmount(amount.value) : null;
+  const value =
+    typeof amount?.value === "string" && currency ? minorAmount(amount.value, MOLLIE_DECIMALS[currency] ?? 2) : null;
   const method = typeof p.method === "string" ? MOLLIE_METHODS[p.method] : undefined;
   const paidAt = typeof p.paidAt === "string" ? Date.parse(p.paidAt) : Number.NaN;
   const dashboardUrl = href(p._links, "dashboard");
@@ -287,7 +345,8 @@ async function refunded(ctx: RunContext, payment: { readonly paymentId: string }
   let currency = "";
   for (const r of refunds) {
     const a = r.amount as { value?: unknown; currency?: unknown } | undefined;
-    const value = typeof a?.value === "string" ? minorAmount(a.value) : null;
+    const code = typeof a?.currency === "string" ? a.currency.toUpperCase() : "";
+    const value = typeof a?.value === "string" && code ? minorAmount(a.value, MOLLIE_DECIMALS[code] ?? 2) : null;
     if (value === null || typeof a?.currency !== "string") continue;
     if (currency && currency !== a.currency.toUpperCase()) return null;
     currency = a.currency.toUpperCase();
@@ -377,6 +436,7 @@ export function mollieConnector(): ConnectorDefinition {
     refresh,
     payments: {
       createLink,
+      currencyProblem: mollieCurrencyProblem,
       closeLink,
       check,
       refunded,

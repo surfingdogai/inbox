@@ -13,6 +13,8 @@
  * imports 412 of 415 products needs to know what the other three were.
  */
 
+import { minorUnits } from "@surfingdog/spec";
+
 /** A product as a feed describes it, normalised. `null` means the feed did not say. */
 export interface FeedProduct {
   /** The feed's own id for this product. The key we reconcile on, so it is required. */
@@ -129,25 +131,36 @@ function mapColumns(headers: readonly string[]): { index: Record<string, number>
  */
 const CURRENCY_SYMBOLS: ReadonlyArray<readonly [string, string]> = [
   ["R$", "BRL"],
+  ["KSh", "KES"],
   ["zł", "PLN"],
   ["Kč", "CZK"],
   ["kr", "SEK"],
   ["€", "EUR"],
   ["£", "GBP"],
   ["¥", "JPY"],
+  ["₹", "INR"],
+  ["₩", "KRW"],
+  ["₦", "NGN"],
+  ["₫", "VND"],
+  ["₱", "PHP"],
+  ["₪", "ILS"],
   ["$", "USD"],
 ];
 
 /**
- * ISO 4217: what a small European shop prices in, plus the majors. The check exists because a
- * price cell reads `12.99 EUR incl. VAT` as often as it reads `12.99 EUR`, and matching any
- * three-letter uppercase token stored the product in a currency called VAT. Or RRP. Or NEW.
+ * ISO 4217 codes a price cell is read as, the world over. The check exists because a price cell reads
+ * `12.99 EUR incl. VAT` as often as it reads `12.99 EUR`, and matching any three-letter uppercase token
+ * stored the product in a currency called VAT. Or RRP. Or NEW. Codes that are also English words a
+ * cell carries in capitals (ALL, TOP, CUP, SOS, BAM) are left out: a business that prices in one sets
+ * its currency, and a bare number is read in it.
  */
 const ISO_CURRENCIES = new Set([
   "AED",
   "ARS",
   "AUD",
+  "BDT",
   "BGN",
+  "BHD",
   "BRL",
   "CAD",
   "CHF",
@@ -157,8 +170,10 @@ const ISO_CURRENCIES = new Set([
   "CZK",
   "DKK",
   "EGP",
+  "ETB",
   "EUR",
   "GBP",
+  "GHS",
   "HKD",
   "HRK",
   "HUF",
@@ -166,35 +181,47 @@ const ISO_CURRENCIES = new Set([
   "ILS",
   "INR",
   "ISK",
+  "JOD",
   "JPY",
+  "KES",
   "KRW",
+  "KWD",
+  "KZT",
+  "LKR",
   "MAD",
   "MXN",
   "MYR",
   "NGN",
   "NOK",
+  "NPR",
   "NZD",
+  "OMR",
   "PEN",
   "PHP",
+  "PKR",
   "PLN",
+  "QAR",
   "RON",
   "RSD",
   "RUB",
+  "RWF",
   "SAR",
   "SEK",
   "SGD",
   "THB",
+  "TND",
   "TRY",
   "TWD",
+  "TZS",
   "UAH",
+  "UGX",
   "USD",
   "UYU",
   "VND",
+  "XAF",
+  "XOF",
   "ZAR",
 ]);
-
-/** Currencies whose amounts have no minor unit at all, so 500 JPY is 500 and not 50,000. */
-const ZERO_DECIMAL = new Set(["JPY", "KRW", "VND", "CLP", "ISK", "HUF", "XAF", "XOF", "RWF", "UGX"]);
 
 /**
  * `12.99 EUR`, `EUR 12.99`, `€12,99`, `1.234,56 €`, `£9` and a bare `9.5` all have to land on the
@@ -227,12 +254,16 @@ export function parsePrice(raw: string, defaultCurrency: string): { value: numbe
   }
   if (currency === "") currency = defaultCurrency.toUpperCase();
 
-  const number = readNumber(text);
+  // Every amount is kept in the currency's own minor unit (ADR-032): ¥500 is 500, €5 is 500, KWD 5 is 5000.
+  const exponent = minorUnits(currency);
+  if (exponent === null) return null;
+  const number = readNumber(text, exponent);
   if (!number) return null;
-  const exponent = ZERO_DECIMAL.has(currency) ? 0 : 2;
   // A zero-decimal currency written with a fraction is someone's formatter, not money.
   const value =
-    exponent === 0 ? Number(number.whole) : Number(number.whole) * 100 + Number(`${number.fraction}00`.slice(0, 2));
+    exponent === 0
+      ? Number(number.whole)
+      : Number(number.whole) * 10 ** exponent + Number(number.fraction.padEnd(exponent, "0").slice(0, exponent));
   if (!Number.isFinite(value)) return null;
   return { value: number.negative ? -value : value, currency };
 }
@@ -247,7 +278,7 @@ export function parsePrice(raw: string, defaultCurrency: string): { value: numbe
  * first numeric RUN instead leaves the sentence outside the number, where it belongs. The first
  * run and not the last, because `12.99 EUR incl. 20% VAT` has to be twelve ninety-nine.
  */
-function readNumber(text: string): { whole: string; fraction: string; negative: boolean } | null {
+function readNumber(text: string, exponent: number): { whole: string; fraction: string; negative: boolean } | null {
   const match = text.match(/-?\d[\d.,\u00a0\u202f' ]*/);
   if (!match) return null;
   const negative = match[0].startsWith("-");
@@ -264,8 +295,10 @@ function readNumber(text: string): { whole: string; fraction: string; negative: 
   if (lastSeparator >= 0) {
     const tail = body.slice(lastSeparator + 1);
     // Two digits or fewer after the last separator: it is the decimal point. Three, and it was a
-    // thousands mark, which is why `1.234` reads as 1234 rather than 1.234.
-    if (tail.length > 0 && tail.length <= 2 && /^\d+$/.test(tail)) {
+    // thousands mark, which is why `1.234` reads as 1234 rather than 1.234 — except in a currency
+    // counted in thousandths (KWD, BHD), where three digits after the only separator are its fils.
+    const most = exponent === 3 && body.replace(/[^.,]/g, "").length === 1 ? 3 : 2;
+    if (tail.length > 0 && tail.length <= most && /^\d+$/.test(tail)) {
       whole = body.slice(0, lastSeparator);
       fraction = tail;
     }
@@ -304,7 +337,7 @@ export function parseAvailability(raw: string): boolean | null {
 }
 
 function parseCount(raw: string): number | null {
-  const number = readNumber(raw);
+  const number = readNumber(raw, 2);
   if (!number) return null;
   // `10.00` is ten. Deleting the decimal point rather than truncating made it a thousand, and a
   // shop with ten in stock told every agent it had a thousand.

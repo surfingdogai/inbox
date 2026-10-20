@@ -157,6 +157,8 @@ export interface RuleForm {
   readonly actions: readonly ActionRow[];
   readonly stop: boolean;
   readonly maxRuns: string;
+  /** Places in the business currency's minor unit (ADR-032): amounts are typed and shown in them. */
+  readonly exponent?: number | undefined;
 }
 
 export const EMPTY_CONDITION: ConditionRow = {
@@ -200,16 +202,16 @@ export const EMPTY_RULE: RuleForm = {
 export const isMoneyPath = (path: string): boolean => path.endsWith(".value");
 
 /** What the owner types → what the engine compares. Money in major units, lists comma-separated. */
-export function parseValue(text: string, op: Op, path: string): unknown {
+export function parseValue(text: string, op: Op, path: string, exponent = 2): unknown {
   const t = text.trim();
   const one = (s: string): unknown => {
     const v = s.trim();
     if (v === "true") return true;
     if (v === "false") return false;
     if (v === "null") return null;
-    const minor = isMoneyPath(path) ? parseMajor(v) : undefined;
+    const minor = isMoneyPath(path) ? parseMajor(v, exponent) : undefined;
     if (minor !== undefined) return minor;
-    if (isMoneyPath(path) && /^-\d+(?:[.,]\d{1,2})?$/.test(v)) return -(parseMajor(v.slice(1)) ?? 0);
+    if (isMoneyPath(path) && /^-\d+(?:[.,]\d{1,3})?$/.test(v)) return -(parseMajor(v.slice(1), exponent) ?? 0);
     if (/^-?\d+(?:\.\d+)?$/.test(v)) return Number(v);
     if (v.startsWith('"') && v.endsWith('"') && v.length >= 2) return v.slice(1, -1);
     return v;
@@ -226,9 +228,9 @@ export function parseValue(text: string, op: Op, path: string): unknown {
 }
 
 /** The reverse, for a definition being edited. */
-export function showValue(value: unknown, path: string): string {
+export function showValue(value: unknown, path: string, exponent = 2): string {
   const one = (v: unknown): string => {
-    if (isMoneyPath(path) && typeof v === "number") return (v / 100).toFixed(2);
+    if (isMoneyPath(path) && typeof v === "number") return (v / 10 ** exponent).toFixed(exponent);
     if (typeof v === "string") return v;
     if (v === undefined) return "";
     return JSON.stringify(v);
@@ -239,7 +241,7 @@ export function showValue(value: unknown, path: string): string {
 /** A definition as forms, when its conditions are one level deep; otherwise `simple` is false. */
 export function toForm(
   def: RuleDefinition,
-  meta: { name: string; priority: number; enabled: boolean },
+  meta: { name: string; priority: number; enabled: boolean; exponent?: number | undefined },
 ): { form: RuleForm; simple: boolean } {
   const onEvents = def.on
     .filter((t) => t.startsWith("item.transitioned:"))
@@ -254,7 +256,7 @@ export function toForm(
   } else leaves = [def.if];
   const conditions: ConditionRow[] = [];
   for (const leaf of leaves) {
-    const row = leafToRow(leaf);
+    const row = leafToRow(leaf, meta.exponent ?? 2);
     if (!row) {
       simple = false;
       break;
@@ -274,11 +276,12 @@ export function toForm(
     actions: def.actions.map(actionToRow),
     stop: def.stop,
     maxRuns: String(def.maxRunsPerItem),
+    ...(meta.exponent !== undefined ? { exponent: meta.exponent } : {}),
   };
   return { form, simple };
 }
 
-function leafToRow(c: Condition): ConditionRow | null {
+function leafToRow(c: Condition, exponent = 2): ConditionRow | null {
   let not = false;
   let leaf = c;
   if ("not" in leaf) {
@@ -298,7 +301,7 @@ function leafToRow(c: Condition): ConditionRow | null {
     not,
     path: leaf.path,
     op: leaf.op as Op,
-    value: showValue(leaf.value, leaf.path),
+    value: showValue(leaf.value, leaf.path, exponent),
   };
 }
 
@@ -353,7 +356,7 @@ export function toDefinition(form: RuleForm): Built {
       leaf = row.fn === "text_has_keywords" ? { fn: row.fn, args: { keywords } } : { fn: row.fn };
     } else {
       if (!row.path.trim()) return { ok: false, problem: "Every condition needs a field to look at." };
-      const value = parseValue(row.value, row.op, row.path);
+      const value = parseValue(row.value, row.op, row.path, form.exponent ?? 2);
       if (row.op !== "exists" && row.op !== "empty" && row.value.trim() === "") {
         return { ok: false, problem: `Give a value for "${row.path}" to compare with.` };
       }

@@ -41,9 +41,10 @@ import { shopOrderOf } from "./shop";
  * - **A link for what the order comes to.** None while a change to it waits for an answer; when the
  *   total changes, the link is closed on the platform and a new one sent; when the order ends
  *   without a payment, it is closed.
- * - **Only money this inbox counts right.** Every amount here is in hundredths; an order in a
- *   currency counted otherwise (JPY, KWD) gets no link, and the owner is told, never a link for a
- *   hundred times the order.
+ * - **Only money this inbox counts right.** Every amount is in its currency's own minor unit
+ *   (ADR-032), converted to the platform's by its adapter from a table with a test per currency; an
+ *   order in a currency the platform has no test for (KWD on Stripe) gets no link, and the owner is
+ *   told, never a link for a hundred times the order.
  * - **Nothing the request says is believed.** A webhook is checked by its signature (Stripe) or not
  *   at all (Mollie's per-link one carries only an id), and what it is about is always read back from
  *   the platform with the business's own key before anything is marked paid.
@@ -72,8 +73,21 @@ const MAX_ATTEMPTS = 8;
 const CHECKS_PER_RUN = 10;
 /** A request naming one of our links is read back at most this often: an unsigned nudge cannot make the inbox ask the platform on every POST. */
 const NUDGE_EVERY_MS = 15_000;
-/** Why a link was not made for an order in a currency this inbox does not count in hundredths. */
+/** Why a link was not made, for a platform that says nothing of currencies, in one not counted in hundredths. */
 const NOT_HUNDREDTHS = "This currency is not counted in hundredths here, so no link was made.";
+
+/**
+ * Why no link can be made in this amount's currency on this platform, or null (ADR-032): the
+ * platform's own word (`currencyProblem`, a table with a test per currency), or, for one that says
+ * nothing of currencies, every currency but those counted in hundredths.
+ */
+export function linkCurrencyProblem(payments: PaymentsHandler, amount: Money): string | null {
+  if (payments.currencyProblem) {
+    const why = payments.currencyProblem(amount);
+    return why ? `${why.replace(/[.\s]+$/, "")}.` : null;
+  }
+  return isHundredthsCurrency(amount.currency) ? null : NOT_HUNDREDTHS;
+}
 /** The note on a link closed because its connection was disconnected. */
 const DISCONNECTED = "the payment platform was disconnected";
 export type PayState = "creating" | "open" | "held" | "paid" | "failed" | "closed" | "error";
@@ -471,8 +485,10 @@ export class PaymentLinks {
         return `no link: ${last.lastError ?? "the platform would not make it"}`;
       }
     }
-    // Every amount here is in hundredths: a currency counted otherwise would be a link a hundred times wrong.
-    if (!isHundredthsCurrency(want.currency)) return this.refuse(order, conn, want, NOT_HUNDREDTHS, now);
+    // Every amount is in its currency's own minor unit (ADR-032), and the platform's adapter converts it
+    // from a table with a test per currency: one it has no test for gets no link, said with the reason.
+    const currencyWhy = linkCurrencyProblem(conn.payments, want);
+    if (currencyWhy) return this.refuse(order, conn, want, currencyWhy, now);
     // A new link: the row first, under the one-live-link index, then the platform.
     const id = ulid(now);
     const token = randomToken(12);

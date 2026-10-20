@@ -141,7 +141,12 @@ export const receiptKindSchema = z.enum(["confirmed", "paid", "accepted", "outco
 export type ReceiptKind = z.infer<typeof receiptKindSchema>;
 
 export const moneySchema = z.object({
-  value: z.number().int().describe("Minor units: 4500 is €45.00."),
+  value: z
+    .number()
+    .int()
+    .describe(
+      "Minor units of the currency's own ISO 4217 exponent (minorUnits): 4500 is 45.00 KES, ¥4,500 JPY, 4.500 KWD.",
+    ),
   currency: z.string().length(3),
 });
 

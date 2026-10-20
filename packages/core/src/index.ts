@@ -6,16 +6,23 @@
 export type { DoorElsewhere, Manifest } from "@surfingdog/spec";
 export {
   CARD_BRANDS,
+  currencyCodeProblem,
+  decimalOf,
   discoverySnippets,
+  ISO_4217_FUNDS,
+  ISO_4217_MINOR_UNITS,
   isPaymentToken,
   MANIFEST_PATH,
   manifestSchema,
+  minorUnits,
   PAYMENT_TOKENS,
   PAYMENTS_VOCABULARY,
+  parseDecimal,
   paymentLabel,
   paymentToken,
   publishedPayments,
   readDoorsElsewhere,
+  shareOf,
 } from "@surfingdog/spec";
 export * from "./access/index";
 export * from "./capabilities/index";
@@ -93,8 +100,8 @@ export {
 } from "./settings/policy";
 export * from "./settings/schema";
 export { canonicalNetworkOrigin } from "./util/hosts";
-export { canonicalLanguages, currencyProblem, isHundredthsCurrency } from "./util/locale";
-export { servicePriceText } from "./util/money";
+export { canonicalLanguages, currencyProblem, isHundredthsCurrency, isMoneyCurrency } from "./util/locale";
+export { formatMinor, moneyText, servicePriceText } from "./util/money";
 export { crc32, type ZipFile, zip } from "./util/zip";
 export { USER_AGENT, VERSION } from "./version";
 export * from "./write/index";

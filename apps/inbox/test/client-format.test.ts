@@ -88,6 +88,10 @@ describe("client format", () => {
     expect(formatMoney({ value: 4500, currency: "EUR" }, "en")).toBe("€45.00");
     expect(formatMoney({ value: 7840, currency: "GBP" }, "en")).toBe("£78.40");
     expect(formatMoney(undefined)).toBe("");
+    // Each currency in its own places (ADR-032): never a hundred times wrong.
+    expect(formatMoney({ value: 90_540, currency: "JPY" }, "en")).toMatch(/90,540$/);
+    expect(formatMoney({ value: 42_750, currency: "KWD" }, "en")).toMatch(/42\.750$/);
+    expect(formatMoney({ value: 450_000, currency: "KES" }, "en")).toMatch(/4,500\.00$/);
   });
 
   it("formats a booking window in the business time zone", () => {

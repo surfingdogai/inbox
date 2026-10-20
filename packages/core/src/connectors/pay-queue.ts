@@ -1,6 +1,6 @@
 import type { Statement } from "@surfingdog/platform";
 import type { Db } from "../db";
-import { isHundredthsCurrency } from "../util/locale";
+import { isMoneyCurrency } from "../util/locale";
 import { jobStatement } from "../write/common";
 
 /**
@@ -40,7 +40,7 @@ export async function hasPayLinks(db: Db): Promise<boolean> {
 /**
  * Whether a link is on its way for an order as it stands after an event, by the rules the payments
  * side makes one by (`PaymentLinks.ensure`): a connection of the order's mode makes links, the order
- * comes to something in a currency counted in hundredths, no change to it waits, it names no link of
+ * comes to something in a currency whose minor unit is known (ADR-032), no change to it waits, it names no link of
  * the owner's own, and it was accepted once that connection was there (or has a link of ours). The
  * customer's email waits for it only then.
  */
@@ -58,7 +58,7 @@ export async function linkComing(
   };
   const value = Number(p.totalPrice?.value ?? 0);
   const currency = String(p.totalPrice?.currency ?? "").toUpperCase();
-  if (!Number.isInteger(value) || value <= 0 || !isHundredthsCurrency(currency)) return false;
+  if (!Number.isInteger(value) || value <= 0 || !isMoneyCurrency(currency)) return false;
   if (p.change !== undefined && p.change !== null) return false;
   const url = typeof p.paymentUrl === "string" ? p.paymentUrl : null;
   const { rows } = await db.client.query({

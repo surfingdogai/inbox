@@ -1,13 +1,25 @@
 import type { InboundRequest, KnownLink, PayLinkRequest, RunContext } from "@surfingdog/core";
-import { ConnectorError, decimalAmount, describeForm, minorAmount } from "@surfingdog/core";
+import {
+  ConnectorError,
+  decimalAmount,
+  describeForm,
+  ISO_4217_MINOR_UNITS,
+  minorAmount,
+  minorUnits,
+} from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
 import {
   connectorHttp,
+  fromStripeAmount,
   hmacSha256Hex,
+  MOLLIE_DECIMALS,
   MOLLIE_METHODS,
   mollieConnector,
+  mollieCurrencyProblem,
+  STRIPE_CURRENCIES,
   STRIPE_EVENTS,
   STRIPE_VERSION,
+  stripeAmount,
   stripeConnector,
   stripeForm,
 } from "../src/index";
@@ -140,12 +152,16 @@ async function signedStripe(body: string, opts: { at?: number; secret?: string; 
 /* --- money ------------------------------------------------------------------- */
 
 describe("amounts as platforms write them", () => {
-  it("writes hundredths, as every amount here is kept, and reads them back; never another exponent", () => {
+  it("writes each currency in its own minor unit, as every amount here is kept, and reads it back (ADR-032)", () => {
     expect(decimalAmount({ value: 4500, currency: "EUR" })).toBe("45.00");
     expect(decimalAmount({ value: 5, currency: "EUR" })).toBe("0.05");
     expect(decimalAmount({ value: 123_456, currency: "USD" })).toBe("1234.56");
-    // A currency not counted in hundredths never gets this far (no link is made): no guess either way.
-    expect(decimalAmount({ value: 500, currency: "JPY" })).toBe("5.00");
+    expect(decimalAmount({ value: 500, currency: "JPY" })).toBe("500");
+    expect(decimalAmount({ value: 4_500, currency: "KWD" })).toBe("4.500");
+    expect(decimalAmount({ value: 4_500, currency: "KWD" }, 2)).toBe("45.00");
+    expect(minorAmount("500", 0)).toBe(500);
+    expect(minorAmount("4.5", 3)).toBe(4_500);
+    expect(minorAmount("4.5", 0)).toBeNull();
     expect(minorAmount("45.00")).toBe(4500);
     expect(minorAmount("45.5")).toBe(4550);
     expect(minorAmount("45")).toBe(4500);
@@ -153,6 +169,68 @@ describe("amounts as platforms write them", () => {
     expect(minorAmount("45.001")).toBeNull();
     expect(minorAmount("-1.00")).toBeNull();
     expect(minorAmount("abc")).toBeNull();
+  });
+});
+
+/**
+ * Every currency each platform takes, one test each (ADR-032): the inbox's ISO 4217 minor units go to
+ * the platform in the platform's own count and come back the same, or the currency is refused with
+ * the reason. https://docs.stripe.com/currencies and https://docs.mollie.com/docs/multicurrency.
+ */
+describe("Stripe's currencies, one by one", () => {
+  const zero = new Set("BIF CLP DJF GNF JPY KMF KRW MGA PYG RWF VND VUV XAF XOF XPF".split(" "));
+  for (const [code, rule] of Object.entries(STRIPE_CURRENCIES)) {
+    it(`${code}`, () => {
+      const iso = minorUnits(code);
+      if (typeof rule === "string") {
+        expect(stripeAmount({ value: 500, currency: code })).toEqual({ ok: false, reason: rule });
+        return;
+      }
+      if (iso === null) {
+        // Listed by Stripe but not an ISO 4217 code this inbox prices in (STD, replaced by STN).
+        expect(stripeAmount({ value: 500, currency: code }).ok).toBe(false);
+        return;
+      }
+      expect(rule).toBe(code === "ISK" ? 2 : zero.has(code) ? 0 : 2);
+      // One whole unit of the currency, in the inbox's count and in Stripe's.
+      const one = 10 ** iso;
+      const converted = stripeAmount({ value: 37 * one, currency: code });
+      expect(converted).toEqual({ ok: true, value: 37 * 10 ** rule });
+      expect(fromStripeAmount(37 * 10 ** rule, code)).toBe(37 * one);
+    });
+  }
+
+  it("names the rows the docs single out", () => {
+    // ISK is written as hundredths that are always 00: 5 ISK is 500.
+    expect(stripeAmount({ value: 5, currency: "ISK" })).toEqual({ ok: true, value: 500 });
+    expect(fromStripeAmount(550, "ISK")).toBeNull();
+    // Ariary: ISO counts hundredths, Stripe whole ariary; a fraction is refused, never rounded.
+    expect(stripeAmount({ value: 150_000, currency: "MGA" })).toEqual({ ok: true, value: 1_500 });
+    expect(stripeAmount({ value: 150_050, currency: "MGA" }).ok).toBe(false);
+    expect(stripeAmount({ value: 90_540, currency: "JPY" })).toEqual({ ok: true, value: 90_540 });
+    for (const code of ["KWD", "BHD", "JOD", "OMR", "TND"]) {
+      expect(stripeAmount({ value: 42_750, currency: code })).toMatchObject({ ok: false });
+    }
+  });
+});
+
+describe("Mollie's currencies, one by one", () => {
+  for (const [code, decimals] of Object.entries(MOLLIE_DECIMALS)) {
+    it(`${code}`, () => {
+      expect(decimals).toBe(ISO_4217_MINOR_UNITS[code]);
+      expect(mollieCurrencyProblem({ value: 37 * 10 ** decimals * 100, currency: code })).toBeNull();
+      const written = decimalAmount({ value: 37 * 10 ** decimals, currency: code }, decimals);
+      expect(written).toBe(decimals === 0 ? "37" : "37.00");
+      expect(minorAmount(written, decimals)).toBe(37 * 10 ** decimals);
+    });
+  }
+
+  it("refuses what it does not list, and a fraction of a forint", () => {
+    expect(mollieCurrencyProblem({ value: 450_000, currency: "KES" })).toContain("does not list KES");
+    expect(mollieCurrencyProblem({ value: 42_750, currency: "KWD" })).toContain("does not list KWD");
+    expect(mollieCurrencyProblem({ value: 250_050, currency: "HUF" })).toContain("whole amount");
+    expect(mollieCurrencyProblem({ value: 250_000, currency: "HUF" })).toBeNull();
+    expect(mollieCurrencyProblem({ value: 90_540, currency: "JPY" })).toBeNull();
   });
 });
 

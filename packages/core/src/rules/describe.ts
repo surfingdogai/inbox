@@ -4,12 +4,12 @@ import type { Action, Condition, RuleDefinition } from "./schema";
  * A rule in one plain sentence, for the owner app, the MCP tools and the docs: the same JSON the
  * engine runs, read back as words. Unknown paths fall back to the raw path so nothing is hidden.
  */
-export function summarizeRule(def: RuleDefinition): string {
+export function summarizeRule(def: RuleDefinition, opts: { readonly exponent?: number } = {}): string {
   const triggers = def.on.map(describeTrigger);
   // Three or more read as a list, set off from the conditions that follow.
   const many = triggers.length > 2;
   const when = many ? `${triggers.slice(0, -1).join(", ")} or ${triggers.at(-1)}` : triggers.join(" or ");
-  const cond = describeCondition(def.if, true);
+  const cond = describeCondition(def.if, true, opts.exponent ?? 2);
   const acts = def.actions.map(describeAction).filter(Boolean).join(", then ");
   return `When ${when}${cond ? `${many ? "," : ""} and ${cond}` : ""}: ${acts || "do nothing"}${def.stop ? ". Stop there" : ""}.`;
 }
@@ -72,16 +72,17 @@ export function describeTrigger(trigger: string): string {
   return `an item is ${EVENT_WORDS[event] ?? event.replace(/_/g, " ")}`;
 }
 
-export function describeCondition(c: Condition, top = false): string {
+/** `exponent`: the business currency's minor unit (ADR-032), for the amounts a rule compares with. */
+export function describeCondition(c: Condition, top = false, exponent = 2): string {
   if ("all" in c) {
-    const parts = c.all.map((x) => describeCondition(x)).filter(Boolean);
+    const parts = c.all.map((x) => describeCondition(x, false, exponent)).filter(Boolean);
     return parts.length <= 1 || top ? parts.join(" and ") : `(${parts.join(" and ")})`;
   }
   if ("any" in c) {
-    const parts = c.any.map((x) => describeCondition(x)).filter(Boolean);
+    const parts = c.any.map((x) => describeCondition(x, false, exponent)).filter(Boolean);
     return parts.length <= 1 ? parts.join("") : `(${parts.join(" or ")})`;
   }
-  if ("not" in c) return `not ${describeCondition(c.not)}`;
+  if ("not" in c) return `not ${describeCondition(c.not, false, exponent)}`;
   if ("fn" in c) {
     switch (c.fn) {
       case "slot_is_free":
@@ -111,10 +112,10 @@ export function describeCondition(c: Condition, top = false): string {
       }
     }
   }
-  return describePath(c.path, c.op, c.value);
+  return describePath(c.path, c.op, c.value, exponent);
 }
 
-function describePath(path: string, op: string, value: unknown): string {
+function describePath(path: string, op: string, value: unknown, exponent = 2): string {
   const subject = PATH_WORDS[path] ?? path.replace(/^item\.payload\./, "").replace(/^item\./, "its ");
   if (path === "item.type" && (op === "eq" || op === "neq")) {
     return `it is ${op === "neq" ? "not " : ""}${TYPE_WORDS[String(value)] ?? String(value)}`;
@@ -126,13 +127,13 @@ function describePath(path: string, op: string, value: unknown): string {
     case "neq":
       return `${subject} is not ${show(value)}`;
     case "lt":
-      return `${subject} is under ${show(value, path)}`;
+      return `${subject} is under ${show(value, path, exponent)}`;
     case "lte":
-      return `${subject} is at most ${show(value, path)}`;
+      return `${subject} is at most ${show(value, path, exponent)}`;
     case "gt":
-      return `${subject} is over ${show(value, path)}`;
+      return `${subject} is over ${show(value, path, exponent)}`;
     case "gte":
-      return `${subject} is at least ${show(value, path)}`;
+      return `${subject} is at least ${show(value, path, exponent)}`;
     case "in":
       return `${subject} is one of ${(Array.isArray(value) ? value : [value]).map((v) => show(v)).join(", ")}`;
     case "nin":
@@ -183,9 +184,9 @@ const PATH_WORDS: Record<string, string> = {
   text: "the text",
 };
 
-function show(value: unknown, path?: string): string {
+function show(value: unknown, path?: string, exponent = 2): string {
   if ((path?.endsWith(".value") || path?.endsWith("_paid")) && typeof value === "number")
-    return (value / 100).toFixed(2);
+    return (value / 10 ** exponent).toFixed(exponent);
   if (typeof value === "string") return `"${value}"`;
   if (value === undefined) return "nothing";
   return JSON.stringify(value);

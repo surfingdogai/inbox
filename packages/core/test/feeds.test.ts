@@ -29,7 +29,11 @@ describe("parsePrice", () => {
 
   it("gives a zero-decimal currency no minor units", () => {
     expect(parsePrice("500 JPY", "EUR")).toEqual({ value: 500, currency: "JPY" });
-    expect(parsePrice("2500 HUF", "EUR")).toEqual({ value: 2500, currency: "HUF" });
+    // ISO 4217 counts forints in hundredths: 2500 HUF is 250 000 fillér (ADR-032).
+    expect(parsePrice("2500 HUF", "EUR")).toEqual({ value: 250_000, currency: "HUF" });
+    expect(parsePrice("KSh 4,500", "EUR")).toEqual({ value: 450_000, currency: "KES" });
+    expect(parsePrice("4.500 KWD", "EUR")).toEqual({ value: 4_500, currency: "KWD" });
+    expect(parsePrice("₩12,000", "KRW")).toEqual({ value: 12_000, currency: "KRW" });
   });
 
   it("refuses what is not a price", () => {
