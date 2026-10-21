@@ -28,7 +28,7 @@ import { insertOfferStatement, type OfferRow, offerRows, openOf, pointerOf } fro
 import { paidFor, refundDueOf, SEND_BACK_DAYS } from "../negotiation/refunds";
 import { items, resources, services } from "../schema/tables";
 import { readSettings } from "../settings/schema";
-import { keepTermsInStep } from "../staff/booking";
+import { keepTermsInStep, repickAnyone } from "../staff/booking";
 import { bookingFeeAt } from "../staff/fee";
 import { checkFirstRefusal, heldForCheck } from "../staff/requires";
 import { awaitingSystem, isWrittenFirst, systemFirstRefusal, systemHold } from "../staff/system";
@@ -404,9 +404,11 @@ async function attempt_(
   }
   if (effects.has("apply_change")) applyChange(item.type, payload);
   if (t.change && t.offer === "keep") delete payload.change;
-  // A salon's booking (ADR-035): its deposit and policy dated for wherever it is going, and its time to
-  // pay the deposit opened once it is confirmed.
-  await keepTermsInStep(db, { item, payload, confirms: t.to === "confirmed" && item.state !== "confirmed", now });
+  // A salon's booking (ADR-035): for anyone, with whoever is free when it is confirmed; its deposit and
+  // policy dated for wherever it is going; its time to pay the deposit opened once it is confirmed.
+  const confirms = item.type === "booking" && t.to === "confirmed" && item.state !== "confirmed";
+  if (confirms) await repickAnyone(db, { itemId: item.id, payload, timezone: settings.business.timezone });
+  await keepTermsInStep(db, { item, payload, confirms, now });
   // What automation offers, as it would go to the customer, against the owner's limits (ADR-018 §4):
   // its catalogue lines at this customer's price on the way. Outside them it is a draft for a person,
   // written once the checks every offer passes have passed.

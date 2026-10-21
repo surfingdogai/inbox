@@ -7,6 +7,8 @@ import { type PolicyLang, policyLang } from "../policy/words";
  */
 export interface StaffWords {
   readonly withStaff: (name: string) => string;
+  /** Asked for anyone, with nobody free yet: nobody is named before it binds. */
+  readonly withAnyone: string;
   readonly addOns: (names: string) => string;
   readonly deposit: (amount: string, when: string) => string;
   readonly depositNow: (amount: string) => string;
@@ -33,6 +35,7 @@ const SPAN: Readonly<Record<PolicyLang, (days: number, hours: number) => string>
 const WORDS: Readonly<Record<PolicyLang, StaffWords>> = {
   en: {
     withStaff: (n) => `With ${n}.`,
+    withAnyone: "With whoever is free.",
     addOns: (a) => `Added: ${a}.`,
     deposit: (a, w) => `A deposit of ${a} holds your booking: please pay it by ${w}.`,
     depositNow: (a) => `A deposit of ${a} holds your booking.`,
@@ -45,6 +48,7 @@ const WORDS: Readonly<Record<PolicyLang, StaffWords>> = {
   },
   es: {
     withStaff: (n) => `Con ${n}.`,
+    withAnyone: "Con quien esté libre.",
     addOns: (a) => `Añadido: ${a}.`,
     deposit: (a, w) => `Un depósito de ${a} asegura tu reserva: págalo antes del ${w}.`,
     depositNow: (a) => `Un depósito de ${a} asegura tu reserva.`,
@@ -57,6 +61,7 @@ const WORDS: Readonly<Record<PolicyLang, StaffWords>> = {
   },
   fr: {
     withStaff: (n) => `Avec ${n}.`,
+    withAnyone: "Avec la première personne libre.",
     addOns: (a) => `Ajouté : ${a}.`,
     deposit: (a, w) => `Un acompte de ${a} confirme votre rendez-vous : merci de le régler avant le ${w}.`,
     depositNow: (a) => `Un acompte de ${a} confirme votre rendez-vous.`,
@@ -69,6 +74,7 @@ const WORDS: Readonly<Record<PolicyLang, StaffWords>> = {
   },
   de: {
     withStaff: (n) => `Bei ${n}.`,
+    withAnyone: "Bei der Person, die dann frei ist.",
     addOns: (a) => `Dazu: ${a}.`,
     deposit: (a, w) => `Eine Anzahlung von ${a} sichert den Termin: bitte bis ${w} zahlen.`,
     depositNow: (a) => `Eine Anzahlung von ${a} sichert den Termin.`,
@@ -82,6 +88,7 @@ const WORDS: Readonly<Record<PolicyLang, StaffWords>> = {
   },
   it: {
     withStaff: (n) => `Con ${n}.`,
+    withAnyone: "Con chi è libero.",
     addOns: (a) => `In più: ${a}.`,
     deposit: (a, w) => `Un acconto di ${a} conferma la prenotazione: pagalo entro il ${w}.`,
     depositNow: (a) => `Un acconto di ${a} conferma la prenotazione.`,
@@ -95,6 +102,7 @@ const WORDS: Readonly<Record<PolicyLang, StaffWords>> = {
   // Words that read the same in Portugal and in Brazil.
   pt: {
     withStaff: (n) => `Com ${n}.`,
+    withAnyone: "Com quem estiver livre.",
     addOns: (a) => `Acrescentado: ${a}.`,
     deposit: (a, w) => `Um sinal de ${a} garante a sua reserva: pague-o até ${w}.`,
     depositNow: (a) => `Um sinal de ${a} garante a sua reserva.`,
@@ -117,6 +125,7 @@ export function everyStaffLine(): string[] {
   for (const w of Object.values(WORDS)) {
     out.push(
       w.withStaff("Mei"),
+      w.withAnyone,
       w.addOns("Blow-dry"),
       w.deposit("CA$20.00", "4 Nov, 18:00"),
       w.depositNow("₩10,000"),

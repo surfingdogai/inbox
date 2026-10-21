@@ -223,6 +223,64 @@ describe("staff", () => {
     expect(asked.view.item.state).toBe("requested");
   });
 
+  it("for anyone, skip whoever already has a request then, and pick again when it is confirmed", async () => {
+    const s = await salon({ name: "Hearth & Shear", zone: "America/Toronto", currency: "CAD", languages: ["en"] });
+    const trim = await s.caps.setup.createService(
+      owner,
+      serviceInput.parse({
+        name: "Trim",
+        duration_min: 30,
+        granularity_min: 30,
+        price: { model: "fixed", value: 3000, currency: "CAD" },
+      }),
+    );
+    const ana = await s.caps.staff.create(owner, { name: "Ana", sort: 0, services: [{ service_id: trim.id }] });
+    const bo = await s.caps.staff.create(owner, { name: "Bo", sort: 1, services: [{ service_id: trim.id }] });
+    const any = (idem: string, start = "14:00", end = "14:30") =>
+      s.caps.createBooking(agent(), {
+        payload: booking(trim.id, "Trim", at(start), at(end)),
+        contact: { name: idem },
+        idempotency_key: idem,
+      });
+    const first = await any("any-1");
+    const second = await any("any-2");
+    const who = (r: Awaited<ReturnType<typeof any>>) => (r.view.item.payload as { resourceId?: string }).resourceId;
+    // Ana has a request at two already: the next for anyone goes to Bo.
+    expect([who(first), who(second)]).toEqual([ana.id, bo.id]);
+    // Ana is booked by name and confirmed since: the first for anyone is confirmed with whoever is free.
+    await transitionItem(s.db, owner, { itemId: second.view.item.id, event: "decline" });
+    const named = await s.caps.createBooking(agent(), {
+      payload: booking(trim.id, "Trim", at("14:00"), at("14:30")),
+      staff_id: ana.id,
+      contact: { name: "named" },
+      idempotency_key: "named",
+    });
+    await transitionItem(s.db, owner, { itemId: named.view.item.id, event: "confirm" });
+    const done = await transitionItem(s.db, owner, { itemId: first.view.item.id, event: "confirm" });
+    expect([who(done as never), (done.view.item.payload as { staffName?: string }).staffName]).toEqual([bo.id, "Bo"]);
+    // Nobody free at all: nobody is named before it binds.
+    await transitionItem(s.db, owner, {
+      itemId: (await any("any-3", "15:00", "15:30")).view.item.id,
+      event: "confirm",
+    });
+    await transitionItem(s.db, owner, {
+      itemId: (await any("any-4", "15:00", "15:30")).view.item.id,
+      event: "confirm",
+    });
+    let summary = "";
+    try {
+      await new Capabilities(s.db).createBooking(agent(), {
+        payload: booking(trim.id, "Trim", at("15:00"), at("15:30")),
+        contact: { name: "late" },
+        idempotency_key: "any-5",
+      });
+    } catch (error) {
+      summary = String((error as WriteError).details?.summary ?? "");
+    }
+    expect(summary).toContain("With whoever is free.");
+    expect(summary).not.toMatch(/With (Ana|Bo)\./);
+  });
+
   it("take their own calendar's busy times off their own times only, and only their bookings go to it", async () => {
     const { db, caps, fade, mei, ravi } = await mapleAndFade();
     const written: { who: string; booking: OutboundBooking }[] = [];
@@ -883,6 +941,7 @@ describe("what customers read", () => {
       const w = staffWords(lang);
       const lines = [
         w.withStaff("Mei"),
+        w.withAnyone,
         w.addOns("Blow-dry"),
         w.deposit("CA$20.00", "4 Nov, 18:00"),
         w.depositNow("₩10,500"),

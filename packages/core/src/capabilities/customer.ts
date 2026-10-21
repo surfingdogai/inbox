@@ -2534,6 +2534,7 @@ function salonLine(p: PayloadOf<"booking">, a: Audience): string {
   const w = staffWords(a.lang);
   const parts: string[] = [];
   if (p.staffName) parts.push(w.withStaff(p.staffName));
+  else if (p.anyStaff) parts.push(w.withAnyone);
   if (p.addOns?.length) parts.push(w.addOns(p.addOns.map((x) => x.name).join(", ")));
   if (p.deposit) {
     const amount = moneyIn(p.deposit.amount, a.lang);

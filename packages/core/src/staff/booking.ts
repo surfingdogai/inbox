@@ -1,4 +1,5 @@
-import { type DatedPolicy, type DepositRule, depositFor, type Policy } from "@surfingdog/spec";
+import { type BookedAddOn, type DatedPolicy, type DepositRule, depositFor, type Policy } from "@surfingdog/spec";
+import { slotOffered } from "../capabilities/availability";
 import { hasPayLinks } from "../connectors/pay-queue";
 import type { Db } from "../db";
 import type { Item, Money } from "../domain/types";
@@ -67,13 +68,17 @@ export async function prepareBooking(
   } else {
     let chosen = asked && asked !== ANY ? staff.find((s) => s.id === asked) : undefined;
     if (asked && asked !== ANY && !chosen) throw unknownStaff(asked, service.id);
-    // Anyone: the first free in the owner's order; nobody free, the first, for a person to answer.
-    chosen ??= (await pickStaff(db, { service, staff, start, addOns, timezone: input.timezone })) ?? staff[0];
+    // Anyone: the first free in the owner's order, picked again when it is confirmed; nobody free, nobody
+    // named before it binds: whoever is free then.
+    if (!chosen) {
+      payload.anyStaff = true;
+      chosen = (await pickStaff(db, { service, staff, start, addOns, timezone: input.timezone })) ?? undefined;
+    }
     if (chosen) {
       payload.resourceId = chosen.id;
       payload.staffName = chosen.publicName;
-      payload.endTime = new Date(start + lengthWith(service, chosen.terms, addOns) * 60_000).toISOString();
     }
+    payload.endTime = new Date(start + lengthWith(service, chosen?.terms ?? null, addOns) * 60_000).toISOString();
     if (addOns.length > 0) payload.addOns = addOns;
   }
 
@@ -241,4 +246,57 @@ export async function keepTermsInStep(
     const start = Date.parse(p.startTime);
     p.deposit.dueBy = new Date(Math.min(input.now + DEPOSIT_WINDOW_MS, start)).toISOString();
   }
+}
+
+/**
+ * A booking for anyone, as it is confirmed (ADR-035): with whoever it went to when they are still free,
+ * else with the first free in the owner's order at the same price and length, so what the customer
+ * confirmed stays true. Nobody such: as it was, for the confirm to say the time is taken.
+ */
+export async function repickAnyone(
+  db: Db,
+  input: { readonly itemId: string; readonly payload: Record<string, unknown>; readonly timezone: string },
+): Promise<void> {
+  const p = input.payload as {
+    anyStaff?: boolean;
+    resourceId?: string;
+    staffName?: string;
+    startTime: string;
+    endTime: string;
+    addOns?: BookedAddOn[];
+    reservationFor: { serviceId: string };
+  };
+  if (p.anyStaff !== true) return;
+  const service = await loadService(db, p.reservationFor.serviceId);
+  if (!service) return;
+  const staff = await staffForService(db, service.id);
+  const start = Date.parse(p.startTime);
+  const current = staff.find((s) => s.id === p.resourceId);
+  if (current) {
+    const end = start + lengthWith(service, current.terms, p.addOns ?? []) * 60_000;
+    const free = await slotOffered(db, {
+      serviceId: service.id,
+      start,
+      end,
+      timezone: input.timezone,
+      exceptItemId: input.itemId,
+      resource: { id: current.id, capacity: current.capacity },
+    });
+    if (free) return;
+  }
+  const same = (s: (typeof staff)[number]) =>
+    (s.terms.priceOverride ?? null) === (current?.terms.priceOverride ?? null) &&
+    (s.terms.durationOverrideMin ?? null) === (current?.terms.durationOverrideMin ?? null);
+  const next = await pickStaff(db, {
+    service,
+    staff: staff.filter((s) => s.id !== current?.id && same(s)),
+    start,
+    addOns: p.addOns ?? [],
+    timezone: input.timezone,
+    exceptItemId: input.itemId,
+  });
+  if (!next) return;
+  p.resourceId = next.id;
+  p.staffName = next.publicName;
+  p.endTime = new Date(start + lengthWith(service, next.terms, p.addOns ?? []) * 60_000).toISOString();
 }

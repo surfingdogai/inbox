@@ -138,7 +138,9 @@ export async function findStaffSlots(
 
 /**
  * Who a booking for anyone goes to at a time: the first in the owner's order who gives the service and
- * is free for its whole length with them. Null when nobody is.
+ * is free for its whole length with them, passing over anyone who already has a request then that
+ * nobody answered (two requests for anyone go to two people), and only then anyone free. Null when
+ * nobody is.
  */
 export async function pickStaff(
   db: Db,
@@ -151,9 +153,10 @@ export async function pickStaff(
     readonly exceptItemId?: string | undefined;
   },
 ): Promise<(StaffRow & { readonly terms: StaffService }) | null> {
+  const free: (StaffRow & { readonly terms: StaffService })[] = [];
   for (const s of input.staff) {
     const end = input.start + lengthWith(input.service, s.terms, input.addOns) * 60_000;
-    const free = await slotOffered(db, {
+    const ok = await slotOffered(db, {
       serviceId: input.service.id,
       start: input.start,
       end,
@@ -161,9 +164,24 @@ export async function pickStaff(
       exceptItemId: input.exceptItemId ?? "",
       resource: { id: s.id, capacity: s.capacity },
     });
-    if (free) return s;
+    if (!ok) continue;
+    if (!(await askedOf(db, s.id, input.start, end, input.exceptItemId ?? ""))) return s;
+    free.push(s);
   }
-  return null;
+  return free[0] ?? null;
+}
+
+/** Whether someone already has a request nobody answered that overlaps a time. */
+async function askedOf(db: Db, staffId: string, start: number, end: number, exceptItemId: string): Promise<boolean> {
+  const { rows } = await db.client.query({
+    sql: `SELECT json_extract(payload, '$.startTime'), json_extract(payload, '$.endTime') FROM items
+           WHERE type = 'booking' AND state IN ('requested', 'needs_info') AND id <> ? AND COALESCE(sandbox, 0) = 0
+             AND json_extract(payload, '$.resourceId') = ?
+           LIMIT 200`,
+    params: [exceptItemId, staffId],
+    method: "all",
+  });
+  return rows.some((r) => Date.parse(String(r[0])) < end && Date.parse(String(r[1])) > start);
 }
 
 /**

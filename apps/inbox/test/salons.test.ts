@@ -176,7 +176,7 @@ describe("a salon, end to end", () => {
     const problem = (await first.json()) as { details: { summary: string } };
     expect(problem.details.summary).toContain("With Ji-ho.");
     expect(problem.details.summary).toContain("Added: Scalp massage.");
-    expect(problem.details.summary).toMatch(/A deposit of ₩13,500 keeps it/);
+    expect(problem.details.summary).toMatch(/A deposit of ₩13,500 holds your booking/);
     expect(customerCopyProblems([problem.details.summary])).toEqual([]);
     const res = await confirmed(
       (r) => s.inbox.app.request(r),
