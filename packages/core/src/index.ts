@@ -73,6 +73,7 @@ export {
   isPaymentToken,
   JURISDICTIONS,
   jobSchema,
+  jurisdictionOf,
   KITCHEN_HOLDS,
   kitchenProfileSchema,
   listOrderSlotsInputSchema,

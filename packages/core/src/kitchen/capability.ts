@@ -1,8 +1,12 @@
 import {
+  ALLERGENS_VOCABULARY,
+  allergenLabel,
   DIETARY_TAGS,
   type GetMenuInput,
   type GetMenuOutput,
   isAllergenCode,
+  type Jurisdiction,
+  jurisdictionOf,
   type KitchenProfile,
   type ListOrderSlotsInput,
   type ListOrderSlotsOutput,
@@ -16,7 +20,7 @@ import type { SnapshotMenuItem } from "../connectors/setup-snapshot";
 import type { Db } from "../db";
 import { ulid } from "../ids";
 import { afterEdit, allergenFingerprint, confirmedBy, mayConfirmAllergens } from "../menu/allergens";
-import { type MenuFields, menuFieldsSchema, menuOf, optionGroupsProblem } from "../menu/schema";
+import { type MenuFields, type MenuSettings, menuFieldsSchema, menuOf, optionGroupsProblem } from "../menu/schema";
 import { kitchenProfile, menuView } from "../menu/view";
 import { addDays, dateIn, instantOf } from "../util/zoned";
 import { type Caller, isCustomer, isPerson, nowOf } from "../write/caller";
@@ -99,6 +103,30 @@ export interface OwnerMenuItem {
   /** What a person confirms when they press confirm: the fingerprint of the lists shown. */
   readonly fingerprint: string | null;
   readonly sold_out_today: boolean;
+}
+
+/** Settings → Menu, as the owner's app reads it: every product, the sections, and the words to choose from. */
+export interface OwnerMenu {
+  readonly items: OwnerMenuItem[];
+  readonly sections: MenuSettings["sections"];
+  readonly dayparts: MenuSettings["dayparts"];
+  readonly vocabulary: {
+    /** The list the business declares by, from its country; null: none the vocabulary has. */
+    readonly where: Jurisdiction | null;
+    readonly law: { readonly name: string; readonly law: string; readonly source: string } | null;
+    readonly allergens: readonly {
+      readonly code: string;
+      readonly parent: string | null;
+      readonly label: string;
+      /** Named by the law where the business is. */
+      readonly mandatory: boolean;
+      /** Every jurisdiction whose law names it: where the business's has no list, these come first. */
+      readonly mandatory_in: readonly string[];
+      /** Asked for there, not required (Japan's twenty). */
+      readonly recommended: boolean;
+    }[];
+    readonly dietary: readonly string[];
+  };
 }
 
 export class FoodCapabilities {
@@ -244,7 +272,7 @@ export class FoodCapabilities {
   /* --- the owner's ---------------------------------------------------------------- */
 
   /** Settings → Menu: every product, on the menu or not, with what a person would confirm. */
-  async ownerMenu(caller: Caller): Promise<{ items: OwnerMenuItem[]; sections: unknown; dayparts: unknown }> {
+  async ownerMenu(caller: Caller): Promise<OwnerMenu> {
     ownerSide(caller);
     const ctx = await kitchenContext(this.db);
     const today = dateIn(nowOf(caller), ctx.timezone);
@@ -266,7 +294,25 @@ export class FoodCapabilities {
         sold_out_today: p.soldOutOn === today,
       });
     }
-    return { items, sections: ctx.settings.menu.sections, dayparts: ctx.settings.menu.dayparts };
+    const where = jurisdictionOf(ctx.settings.directory.address.addressCountry);
+    return {
+      items,
+      sections: ctx.settings.menu.sections,
+      dayparts: ctx.settings.menu.dayparts,
+      vocabulary: {
+        where,
+        law: where ? ALLERGENS_VOCABULARY.jurisdictions[where] : null,
+        allergens: ALLERGENS_VOCABULARY.allergens.map((a) => ({
+          code: a.code,
+          parent: a.parent,
+          label: allergenLabel(a.code, "en"),
+          mandatory: where ? a.mandatory_in.includes(where) : false,
+          mandatory_in: a.mandatory_in,
+          recommended: where ? a.recommended_in.includes(where) : false,
+        })),
+        dietary: [...DIETARY_TAGS],
+      },
+    };
   }
 
   /**

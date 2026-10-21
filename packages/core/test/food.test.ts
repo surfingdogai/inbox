@@ -5,6 +5,7 @@ import {
   allergenLabel,
   expandAllergens,
   JURISDICTIONS,
+  jurisdictionOf,
   mandatoryAllergens,
 } from "@surfingdog/spec";
 import { describe, expect, it, vi } from "vitest";
@@ -254,6 +255,23 @@ describe("the allergen vocabulary (vocab/allergens.json)", () => {
     for (const j of JURISDICTIONS) expect(ALLERGENS_VOCABULARY.jurisdictions[j].source).toMatch(/^https:\/\//);
   });
 
+  it("names the list a business declares by from its country: an EU member's is the EU's", async () => {
+    expect(jurisdictionOf("GR")).toBe("EU");
+    expect(jurisdictionOf("gb")).toBe("GB");
+    expect(jurisdictionOf("JP")).toBe("JP");
+    expect(jurisdictionOf("MX")).toBeNull();
+    expect(jurisdictionOf("EU")).toBeNull();
+    expect(jurisdictionOf(undefined)).toBeNull();
+    const t = Date.parse("2026-11-04T10:00:00Z");
+    const s = await shop({ name: "Taverna Kyma", currency: "EUR", timezone: "Europe/Athens", language: "el", t });
+    await s.caps.updateSettings(person(t), { doc: { directory: { address: { addressCountry: "GR" } } } });
+    const m = await s.caps.food.ownerMenu(person(t));
+    expect(m.vocabulary.where).toBe("EU");
+    expect(m.vocabulary.law?.source).toMatch(/^https:\/\/eur-lex\.europa\.eu\//);
+    expect(m.vocabulary.allergens.filter((a) => a.mandatory && a.parent === null)).toHaveLength(14);
+    expect(m.vocabulary.allergens).toHaveLength(ALLERGEN_CODES.length);
+  });
+
   it("reads a part as its whole too, and names each in the customer's language", () => {
     expect(expandAllergens(["walnut", "wheat"])).toEqual(["gluten", "wheat", "tree_nuts", "walnut"]);
     expect(expandAllergens(["shrimp"])).toEqual(["crustaceans", "shrimp"]);
@@ -389,6 +407,7 @@ describe("allergens: confirmed only by a person at the business, as shown", () =
 describe("an order's options, priced from the business's menu", () => {
   it("adds what each choice adds, a half at its half price, and opens a group only with its choice", async () => {
     const s = await volcan();
+    await s.caps.setup.applyPreset(person(VOLCAN_T), { preset: "food", replace: true });
     const p = await dish(s, VOLCAN_T, { name: "Pizza al pastor", price: 18900, currency: "MXN", menu: PIZZA });
     const slot = await firstSlot(s, VOLCAN_T, "2026-11-04");
     const made = await s.caps.createOrder(
@@ -420,6 +439,9 @@ describe("an order's options, priced from the business's menu", () => {
     expect((it0.payload.fulfil as { slot: { end: string } }).slot.end).toBe(
       new Date(Date.parse(slot) + 15 * MIN).toISOString(),
     );
+    // What the options add is the menu's list price, never above it: the kitchen's rule takes it at once.
+    await rules(s.db, made.view.item.id, VOLCAN_T);
+    expect((await itemOf(s.db, made.view.item.id)).state).toBe("accepted");
 
     const missing = await refused(
       s.caps.createOrder(

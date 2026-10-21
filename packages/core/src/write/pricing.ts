@@ -115,10 +115,21 @@ export interface LinePricing {
   readonly reward: Reward | null;
 }
 
-/** For each line, what the catalogue says of its product (by `productId`, else `sku`); null for a line naming none. */
+/**
+ * For each line, what the catalogue says of its product (by `productId`, else `sku`); null for a line
+ * naming none. A menu item's line with options is priced with what they add, from the menu as it is now
+ * (ADR-036): its list, its price for this customer and its floor all carry them, so a pizza with a
+ * larger size is at its list price, never above it.
+ */
 export async function linePricing(
   db: Db,
-  lines: readonly { productId?: string | undefined; sku?: string | undefined }[],
+  lines: readonly {
+    productId?: string | undefined;
+    sku?: string | undefined;
+    options?:
+      | readonly { groupId: string; choiceId: string; portion?: "whole" | "left" | "right" | undefined }[]
+      | undefined;
+  }[],
   pricing?: PricingFor,
 ): Promise<(LinePricing | null)[]> {
   const catalogue = await productsFor(db, lines);
@@ -134,21 +145,24 @@ export async function linePricing(
     "product",
     found.flatMap((p) => (p ? [p.id] : [])),
   );
-  return found.map((p) => {
+  return found.map((p, i) => {
     if (!p) return null;
-    const list: Money = { value: p.price.value, currency: p.price.currency.toUpperCase() };
-    const floor = floors.get(p.id) ?? null;
+    const currency = p.price.currency.toUpperCase();
+    const sent = lines[i]?.options;
+    const menu = sent?.length ? menuOf(p.menu) : null;
+    const delta = menu ? priceOptions(menu, sent, currency, "").unitDelta : 0;
+    const base = floors.get(p.id) ?? null;
     const reward = pricing ? rewardFor(pricing.rewards, pricing.standing, p.id) : null;
-    const value = reward ? rewardPrice(list.value, floor, reward.pct) : list.value;
+    const value = reward ? rewardPrice(p.price.value, base, reward.pct) : p.price.value;
     return {
       productId: p.id,
       sku: p.sku,
       name: p.name,
       negotiable: p.negotiable !== 0,
-      list,
-      customer: { value, currency: list.currency },
-      floor,
-      reward: value < list.value ? reward : null,
+      list: { value: p.price.value + delta, currency },
+      customer: { value: value + delta, currency },
+      floor: base === null ? null : base + delta,
+      reward: value < p.price.value ? reward : null,
     };
   });
 }
@@ -220,7 +234,12 @@ async function priceOrder(db: Db, payload: PayloadOf<"order">, pricing?: Pricing
   const { customerStatedPrice: _sent, personalised: _chosen, ...asked } = payload;
   const lines = asked.orderedItem.map(({ customerStatedPrice: _line, listPrice: _list, ...line }) => line);
   const catalogue = await productsFor(db, lines);
-  const priced = await linePricing(db, lines, pricing);
+  // The base prices: each line's options are priced below, from the menu, on top of them.
+  const priced = await linePricing(
+    db,
+    lines.map(({ options: _o, ...l }) => l),
+    pricing,
+  );
   /** The owner's line for the customer, from the first reward that priced a line. */
   let says: string | undefined;
   /** The currency of the business's prices here: its first catalogue line's. */

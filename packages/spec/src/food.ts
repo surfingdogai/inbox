@@ -92,6 +92,22 @@ export function mandatoryAllergens(where: Jurisdiction): string[] {
   return ALLERGENS_VOCABULARY.allergens.filter((a) => a.mandatory_in.includes(where)).map((a) => a.code);
 }
 
+/** The member states of the European Union, whose businesses declare by Regulation (EU) No 1169/2011. */
+const EU_MEMBERS = new Set(
+  "AT BE BG HR CY CZ DK EE FI FR DE GR HU IE IT LV LT LU MT NL PL PT RO SK SI ES SE".split(" "),
+);
+
+/**
+ * The jurisdiction whose list a business in a country declares by, when the vocabulary has one: an EU
+ * member state's is the EU's. Null elsewhere: every allergen is offered and none is named mandatory.
+ */
+export function jurisdictionOf(country: string | null | undefined): Jurisdiction | null {
+  const c = (country ?? "").trim().toUpperCase();
+  if (!c) return null;
+  if (EU_MEMBERS.has(c)) return "EU";
+  return (JURISDICTIONS as readonly string[]).includes(c) && c !== "EU" ? (c as Jurisdiction) : null;
+}
+
 export const allergenCodeSchema = z
   .string()
   .regex(/^[a-z][a-z0-9_]{1,31}$/)
