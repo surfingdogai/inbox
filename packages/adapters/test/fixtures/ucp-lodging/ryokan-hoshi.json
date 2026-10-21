@@ -357,7 +357,15 @@
         "type": "warning",
         "code": "local_tax",
         "path": "$.payment.terms[0].schedules[1]",
-        "content": "Paid to Ryokan Hoshi at the property, not with the booking: Accommodation tax, ¥400 per guest per night (paid at the property). Accommodation tax: children under 12 are exempt.",
+        "content": "Paid to Ryokan Hoshi at the property, not with the booking: Accommodation tax, ¥400 per guest per night (children under 12 exempt).",
+        "content_type": "plain",
+        "presentation": "disclosure"
+      },
+      {
+        "type": "warning",
+        "code": "dev.ucp.lodging.policy.cancellation",
+        "path": "$",
+        "content": "Free cancellation until Dec 9, 2026, 23:59 Kyoto time. After that: ¥25,800. No-show: the full stay.",
         "content_type": "plain",
         "presentation": "disclosure"
       }
@@ -389,7 +397,6 @@
       }
     ],
     "expires_at": "2026-11-20T10:30:00+09:00",
-    "continue_url": "https://inbox.ryokan-hoshi.example/",
     "payment": {
       "selected_term_id": "stay",
       "terms": [
@@ -409,7 +416,7 @@
               "id": "at_property",
               "type": "at_property",
               "description": {
-                "plain": "At the property: paid to Ryokan Hoshi itself, not with the booking."
+                "plain": "At the property: paid to Ryokan Hoshi directly, not with the booking."
               },
               "amount": 64740
             }

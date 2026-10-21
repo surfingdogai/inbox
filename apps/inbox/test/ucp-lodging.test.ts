@@ -1,6 +1,8 @@
-import { addLocalDays, dateIn } from "@surfingdog/core";
+import { createApiKey } from "@surfingdog/adapters";
+import { addLocalDays, dateIn, pruneIdempotencyKeys } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
 import {
+  CANCELLATION,
   checkUcpBooking,
   type UcpBooking,
   type UcpMessage,
@@ -10,16 +12,20 @@ import { STRIPE_LIVE_KEY } from "../../../packages/adapters/test/fixtures/paymen
 import { BASE, ok, type Setup, setup } from "./stay-harness";
 
 /**
- * UCP Lodging's booking sessions in the whole app (ADR-033 §6.5), switched on as INBOX_UCP_LODGING=on
- * does: nothing answers without the switch; a room kept for direct guests is priced, held once the lead
- * is named, and booked, or handed to the property's own page when a deposit or a card is due; a change
- * lets the old hold go; a cancel lets it go; a property that answers each stay itself is not served; and
- * the guests' ids the platform sends are never kept. Maple Hollow B&B (Nova Scotia, CAD), Kijani House
- * (Nairobi, KES, paid at the property) and Ryokan Hoshi (Kyoto, JPY, on request).
+ * UCP Lodging's booking sessions in the whole app (ADR-035), switched on as INBOX_UCP_LODGING does:
+ * nothing answers without the switch; a room kept for direct guests is priced, held once the lead is
+ * named, and booked, or handed to the property's own page when a deposit or a card is due; the hold
+ * stands while only names and ways to reach the lead are added, and a change of dates is priced before
+ * the old hold goes; a session answers from its own row for as long as its stay lives, and goes when
+ * the guest is erased; Idempotency-Key is kept as UCP says, and a session's id never reaches another
+ * caller; a property that answers each stay itself is not served; and the guests' ids the platform
+ * sends are kept only sealed. Maple Hollow B&B (Nova Scotia, CAD), Kijani House (Nairobi, KES, paid at
+ * the property) and Ryokan Hoshi (Kyoto, JPY, on request).
  */
 
 const SESSIONS = "/v1/ucp/lodging/booking-sessions";
 const AGENT = 'profile="https://platform.example/profile"';
+const DAY = 86_400_000;
 
 type Body = UcpBooking & { ucp: { status?: string }; messages?: UcpMessage[] };
 
@@ -155,6 +161,31 @@ const maple = (s: Setup, extra: Partial<Parameters<typeof place>[1]> = {}) =>
     ...extra,
   });
 
+const mapleSetup = () =>
+  setup({ name: "Maple Hollow B&B", timezone: "America/Halifax", currency: "CAD", ucpLodging: true });
+
+const kijani = (s: Setup) =>
+  place(s, {
+    name: "Kijani House",
+    kind: "guesthouse",
+    currency: "KES",
+    timezone: "Africa/Nairobi",
+    room: "Garden double",
+    capacity: { adults: 2, children: 1, total: 3 },
+    nightly: 650_000,
+    children: { welcome: true, from_age: 5 },
+    fees: [
+      {
+        name: "Tourism levy",
+        kind: "fee",
+        basis: "percent_of_room",
+        rate_bp: 200,
+        collected: "at_property",
+        max_nights: 7,
+      },
+    ],
+  });
+
 const BOOKER = { first_name: "Élise", last_name: "Doucet", email: "elise.doucet@example.org" };
 const GUESTS = [
   { id: "gst_01", first_name: "Élise", last_name: "Doucet" },
@@ -178,8 +209,19 @@ async function everything(s: Setup): Promise<string> {
   return all;
 }
 
+/** The property's stays, as the owner sees them: their states, sorted. */
+async function states(s: Setup): Promise<string[]> {
+  return (
+    await ok<{ items: { item: { state: string } }[] }>(s.owner("GET", "/v1/owner/items?type=stay&open_only=false"))
+  ).items
+    .map((i) => i.item.state)
+    .sort();
+}
+
+const codes = (b: Body) => (b.messages ?? []).map((m) => m.code);
+
 describe("UCP Lodging, switched off", () => {
-  it("answers nothing without INBOX_UCP_LODGING=on, even at a place that confirms at once", async () => {
+  it("answers nothing without INBOX_UCP_LODGING, even at a place that confirms at once", async () => {
     const s = await setup({ name: "Maple Hollow B&B", timezone: "America/Halifax", currency: "CAD" });
     const p = await maple(s);
     expect((await ucp(s, "GET", "/.well-known/ucp")).status).toBe(404);
@@ -192,7 +234,7 @@ describe("UCP Lodging, switched off", () => {
 
 describe("Maple Hollow B&B, Nova Scotia: a room kept for direct guests, the deposit on its own Stripe (CAD)", () => {
   it("prices, holds once the lead is named, and hands the guest to the property's payment page; paid, it is booked", async () => {
-    const s = await setup({ name: "Maple Hollow B&B", timezone: "America/Halifax", currency: "CAD", ucpLodging: true });
+    const s = await mapleSetup();
     const p = await maple(s);
     const profile = await ok<{ ucp: { services: Record<string, { endpoint: string }[]>; payment_handlers: object } }>(
       ucp(s, "GET", "/.well-known/ucp"),
@@ -202,11 +244,12 @@ describe("Maple Hollow B&B, Nova Scotia: a room kept for direct guests, the depo
     const when = dates(s, "America/Halifax", 10, 2);
     const fr = { context: { language: "fr" } };
 
-    // Create: priced at once, nothing held until the lead is named.
+    // Create: priced at once, nothing held until the lead is named; the policy shown, since cancelling can cost.
     const created = await ok<Body>(ucp(s, "POST", SESSIONS, session(p, when, fr)), 201);
     expect(created.status).toBe("incomplete");
-    expect(created.id).toMatch(/^bks_/);
-    expect(created.messages?.map((m) => m.code)).toEqual(["lead_guest_required"]);
+    expect(created.id).toMatch(/^bks_[A-Za-z0-9_-]{43}$/);
+    expect(codes(created)).toEqual(["lead_guest_required", CANCELLATION]);
+    expect(created.continue_url).toBeUndefined();
     expect(created.totals.map((t) => [t.type, t.amount])).toEqual([
       ["subtotal", 37_800],
       ["tax", 5_670],
@@ -215,7 +258,7 @@ describe("Maple Hollow B&B, Nova Scotia: a room kept for direct guests, the depo
     expect(created.payment?.terms[0]?.schedules.map((x) => [x.type, x.amount])).toEqual([["immediate", 43_470]]);
     expect(created.payment?.terms[0]?.schedules[0]?.description.plain).toContain("à régler à la réservation");
     expect(checkUcpBooking(created as never)).toEqual([]);
-    expect(await everything(s)).not.toContain("ucp-lodging:");
+    expect(await states(s)).toEqual([]);
 
     // Update with the lead: held, ready to complete; the guests' ids come back as they were sent.
     const ready = await ok<Body>(
@@ -231,6 +274,7 @@ describe("Maple Hollow B&B, Nova Scotia: a room kept for direct guests, the depo
     expect(ready.guests?.map((g) => g.id)).toEqual(["gst_01", "gst_02"]);
     expect(ready.stays[0]?.guest_assignments).toEqual(ASSIGN);
     expect(ready.expires_at).toBeTruthy();
+    expect(ready.continue_url).toBeUndefined();
     expect(checkUcpBooking(ready as never)).toEqual([]);
     // The same again is the same hold.
     const again = await ok<Body>(
@@ -242,10 +286,10 @@ describe("Maple Hollow B&B, Nova Scotia: a room kept for direct guests, the depo
       ),
     );
     expect(again.status).toBe("ready_for_complete");
-    const stays = await ok<{ items: { item: { id: string; state: string } }[] }>(
+    expect(await states(s)).toEqual(["held"]);
+    const stays = await ok<{ items: { item: { id: string } }[] }>(
       s.owner("GET", "/v1/owner/items?type=stay&open_only=false"),
     );
-    expect(stays.items.map((i) => i.item.state)).toEqual(["held"]);
     const stayId = stays.items[0]?.item.id as string;
 
     // Complete: the deposit is the property's, so the guest goes to its page; a card sent is never read.
@@ -269,9 +313,10 @@ describe("Maple Hollow B&B, Nova Scotia: a room kept for direct guests, the depo
     expect(handed.status).toBe("requires_escalation");
     const [link] = [...s.stripe.links.values()];
     expect(handed.continue_url).toBe(link?.url);
-    expect(handed.messages?.find((m) => m.code === "payment_required")).toMatchObject({
-      severity: "requires_buyer_input",
-    });
+    const due = handed.messages?.find((m) => m.code === "payment_required");
+    expect(due).toMatchObject({ severity: "requires_buyer_input" });
+    // The deadline says whose time it is: the property's.
+    expect(due?.content).toMatch(/, heure de \S+/);
     expect(checkUcpBooking(handed as never)).toEqual([]);
     expect(await everything(s)).not.toContain("tok_never_read_8841");
     expect(s.stripe.calls.join(" ")).not.toContain("tok_never_read");
@@ -282,18 +327,20 @@ describe("Maple Hollow B&B, Nova Scotia: a room kept for direct guests, the depo
     expect(done.status).toBe("completed");
     expect(done.confirmation).toEqual({ id: stayId, label: stayId.slice(-6).toUpperCase() });
     expect(done.continue_url).toBeUndefined();
-    expect(done.booker).toMatchObject({ first_name: "Élise", last_name: "Doucet", email: BOOKER.email });
+    expect(done.booker).toEqual(BOOKER);
+    expect(done.guests?.map((g) => g.id)).toEqual(["gst_01", "gst_02"]);
     expect(checkUcpBooking(done as never)).toEqual([]);
     // Booked is booked: no change, no cancel through the session.
     const update = await ok<Body>(
       ucp(s, "PUT", `${SESSIONS}/${created.id}`, session(p, dates(s, "America/Halifax", 11, 2))),
     );
-    expect(update.messages?.map((m) => m.code)).toContain("not_modifiable");
+    expect(codes(update)).toContain("not_modifiable");
+    expect(update.status).toBe("completed");
     const cancel = await ok<Body>(ucp(s, "POST", `${SESSIONS}/${created.id}/cancel`, {}));
     expect(cancel.status).toBe("completed");
-    expect(cancel.messages?.map((m) => m.code)).toContain("not_cancelable");
+    expect(codes(cancel)).toContain("not_cancelable");
 
-    // The guests' ids were echoed and never kept: the property keeps names and the lead's address.
+    // The guests' ids were echoed and kept only sealed: the property keeps names and the lead's address.
     const kept = await everything(s);
     expect(kept).not.toContain("gst_01");
     expect(kept).not.toContain("gst_02");
@@ -301,7 +348,7 @@ describe("Maple Hollow B&B, Nova Scotia: a room kept for direct guests, the depo
   });
 
   it("asks for a card on the property's own page when the plan holds stays with one", async () => {
-    const s = await setup({ name: "Maple Hollow B&B", timezone: "America/Halifax", currency: "CAD", ucpLodging: true });
+    const s = await mapleSetup();
     const p = await maple(s, { deposit: { kind: "none" }, guarantee: "card" });
     const when = dates(s, "America/Halifax", 20, 3);
     const created = await ok<Body>(ucp(s, "POST", SESSIONS, session(p, when, { booker: BOOKER })), 201);
@@ -309,21 +356,23 @@ describe("Maple Hollow B&B, Nova Scotia: a room kept for direct guests, the depo
     const done = await ok<Body>(ucp(s, "POST", `${SESSIONS}/${created.id}/complete`, { payment: {} }));
     expect(done.status).toBe("requires_escalation");
     expect(done.continue_url).toMatch(new RegExp(`^${BASE}/c/[A-Za-z0-9_-]{22}\\.[A-Za-z0-9_-]{22}$`));
-    expect(done.messages?.find((m) => m.code === "payment_required")?.content).toContain("nothing is charged now");
+    const words = done.messages?.find((m) => m.code === "payment_required")?.content;
+    expect(words).toContain("Nothing is charged now");
+    expect(words).toContain("Halifax time");
     const page = await s.inbox.app.request(new Request(done.continue_url as string));
     expect(page.status).toBe(200);
     expect(await page.text()).toContain("Maple Hollow B&amp;B");
   });
 
-  it("lets the old hold go when the dates change, says the totals moved, and lets go on cancel", async () => {
-    const s = await setup({ name: "Maple Hollow B&B", timezone: "America/Halifax", currency: "CAD", ucpLodging: true });
+  it("prices new dates before the old hold goes, says the totals moved, and keeps a cancel", async () => {
+    const s = await mapleSetup();
     const p = await maple(s);
     const two = dates(s, "America/Halifax", 10, 2);
     const three = { start_date: two.start_date, end_date: addLocalDays(two.start_date, 3) };
     const lead = { booker: BOOKER };
     const created = await ok<Body>(ucp(s, "POST", SESSIONS, session(p, two, lead)), 201);
     expect(created.status).toBe("ready_for_complete");
-    // A night more: the hold for two nights goes, one for three is made, and the price moved.
+    // A night more: the one room kept is this session's, so it is let go and held again for three nights.
     const longer = await ok<Body>(ucp(s, "PUT", `${SESSIONS}/${created.id}`, session(p, three, lead)));
     expect(longer.status).toBe("ready_for_complete");
     expect(longer.stays[0]?.stay_dates).toEqual(three);
@@ -331,28 +380,139 @@ describe("Maple Hollow B&B, Nova Scotia: a room kept for direct guests, the depo
       path: "$.totals",
       presentation: "disclosure",
     });
-    const states = async () =>
-      (
-        await ok<{ items: { item: { state: string } }[] }>(s.owner("GET", "/v1/owner/items?type=stay&open_only=false"))
-      ).items
-        .map((i) => i.item.state)
-        .sort();
-    expect(await states()).toEqual(["expired", "held"]);
-    // The one room kept is held by this session: another session finds it gone.
+    expect(await states(s)).toEqual(["expired", "held"]);
+    // A change that does not fit lets nothing go: the session answers as it stands, with why.
+    const crowd = session(p, two, lead);
+    (crowd.stays[0] as { occupancy: unknown }).occupancy = { adults: 3, total: 3 };
+    const refused = await ok<Body>(ucp(s, "PUT", `${SESSIONS}/${created.id}`, crowd));
+    expect(refused.status).toBe("ready_for_complete");
+    expect(refused.stays[0]?.stay_dates).toEqual(three);
+    expect(codes(refused)).toContain("occupancy_exceeded_capacity");
+    expect(await states(s)).toEqual(["expired", "held"]);
+    // The one room kept is held by this session: another finds none to book at once.
     const other = await ok<Body>(ucp(s, "POST", SESSIONS, session(p, three)));
     expect(other.ucp.status).toBe("error");
     expect(other.messages?.[0]?.code).toBe("inventory_exhausted");
-    // Cancelled: let go, and the other session can have it.
+    // Cancelled: let go, said again on every read, and the other session can have it.
     const cancelled = await ok<Body>(ucp(s, "POST", `${SESSIONS}/${created.id}/cancel`, {}));
     expect(cancelled.status).toBe("canceled");
     expect(cancelled.continue_url).toBeUndefined();
-    expect(await states()).toEqual(["expired", "expired"]);
+    expect((await ok<Body>(ucp(s, "GET", `${SESSIONS}/${created.id}`))).status).toBe("canceled");
+    expect(await states(s)).toEqual(["expired", "expired"]);
     const now = await ok<Body>(ucp(s, "POST", SESSIONS, session(p, three)), 201);
     expect(now.status).toBe("incomplete");
   });
 
+  it("keeps the hold while names and ways to reach the lead are added, and echoes what was sent", async () => {
+    const s = await mapleSetup();
+    const p = await maple(s);
+    const when = dates(s, "America/Halifax", 12, 2);
+    const booker = { first_name: "Mary Ann", last_name: "Otieno", email: "mary.ann@example.org" };
+    const created = await ok<Body>(ucp(s, "POST", SESSIONS, session(p, when, { booker })), 201);
+    expect(created.status).toBe("ready_for_complete");
+    const held = (
+      await ok<{ items: { item: { id: string } }[] }>(s.owner("GET", "/v1/owner/items?type=stay&open_only=false"))
+    ).items[0]?.item.id;
+    // Progressive: a phone, then the guests and who is the primary one, and why they travel.
+    const enriched = session(p, when, {
+      booker: { ...booker, phone_number: "+1 902 555 0144" },
+      guests: [
+        { id: "g-a", first_name: "Joseph", last_name: "Otieno" },
+        { id: "g-b", first_name: "Mary Ann", last_name: "Otieno" },
+      ],
+      assign: [
+        { guest_id: "g-a", role: "primary" },
+        { guest_id: "g-b", role: "accompanying" },
+      ],
+      travel_purpose: "leisure",
+    });
+    const more = await ok<Body>(ucp(s, "PUT", `${SESSIONS}/${created.id}`, enriched));
+    expect(more.status).toBe("ready_for_complete");
+    expect(await states(s)).toEqual(["held"]);
+    // A read gives back what was sent: the booker as written, every guest's id and role, the purpose.
+    const read = await ok<Body>(ucp(s, "GET", `${SESSIONS}/${created.id}`));
+    expect(read.booker).toEqual({ ...booker, phone_number: "+1 902 555 0144" });
+    expect(read.guests?.map((g) => g.id)).toEqual(["g-a", "g-b"]);
+    expect(read.stays[0]?.guest_assignments).toEqual([
+      { guest_id: "g-a", role: "primary" },
+      { guest_id: "g-b", role: "accompanying" },
+    ]);
+    expect(read.travel_purpose).toBe("leisure");
+    // The held stay carries the primary guest's name now, and the companion's.
+    const stay = await ok<{ item: { id: string; payload: { guests?: unknown } } }>(
+      s.owner("GET", `/v1/owner/items/${held}`),
+    );
+    expect(stay.item.payload.guests).toEqual({
+      lead: { name: "Joseph Otieno" },
+      others: [{ name: "Mary Ann Otieno" }],
+    });
+    // A platform that reads and sends the whole session back changes nothing.
+    const { ucp: _envelope, id: _id, status: _status, ...whole } = read as unknown as Record<string, unknown>;
+    const same = await ok<Body>(ucp(s, "PUT", `${SESSIONS}/${created.id}`, whole));
+    expect(same.status).toBe("ready_for_complete");
+    expect(await states(s)).toEqual(["held"]);
+    // Another person to book for, at another address: a hold for them, the first let go.
+    const other = await ok<Body>(
+      ucp(
+        s,
+        "PUT",
+        `${SESSIONS}/${created.id}`,
+        session(p, when, { booker: { first_name: "Kofi", last_name: "Asante", email: "kofi@example.org" } }),
+      ),
+    );
+    expect(other.status).toBe("ready_for_complete");
+    expect(await states(s)).toEqual(["expired", "held"]);
+    expect((await ok<{ item: { state: string } }>(s.owner("GET", `/v1/owner/items/${held}`))).item.state).toBe(
+      "expired",
+    );
+  });
+
+  it("remembers what a session holding nothing was last told, and that it was cancelled", async () => {
+    const s = await mapleSetup();
+    const p = await maple(s);
+    const first = dates(s, "America/Halifax", 10, 2);
+    const later = dates(s, "America/Halifax", 20, 2);
+    const created = await ok<Body>(ucp(s, "POST", SESSIONS, session(p, first)), 201);
+    await ok<Body>(ucp(s, "PUT", `${SESSIONS}/${created.id}`, session(p, later)));
+    const read = await ok<Body>(ucp(s, "GET", `${SESSIONS}/${created.id}`));
+    expect(read.status).toBe("incomplete");
+    expect(read.stays[0]?.stay_dates).toEqual(later);
+    const cancelled = await ok<Body>(ucp(s, "POST", `${SESSIONS}/${created.id}/cancel`, {}));
+    expect(cancelled.status).toBe("canceled");
+    expect((await ok<Body>(ucp(s, "GET", `${SESSIONS}/${created.id}`))).status).toBe("canceled");
+    const after = await ok<Body>(ucp(s, "PUT", `${SESSIONS}/${created.id}`, session(p, later, { booker: BOOKER })));
+    expect(codes(after)).toContain("not_modifiable");
+    expect(await states(s)).toEqual([]);
+  });
+
+  it("reads a hold whose time ran out as over, swept or not, and books nothing on it", async () => {
+    const s = await mapleSetup();
+    const p = await maple(s);
+    const created = await ok<Body>(
+      ucp(s, "POST", SESSIONS, session(p, dates(s, "America/Halifax", 10, 2), { booker: BOOKER })),
+      201,
+    );
+    expect(created.status).toBe("ready_for_complete");
+    s.clock.now = Date.parse(created.expires_at as string) + 1_000;
+    const late = await ok<Body>(ucp(s, "POST", `${SESSIONS}/${created.id}/complete`, {}));
+    expect(late.status).toBe("canceled");
+    expect(late.messages ?? []).toEqual([]);
+    expect(await states(s)).not.toContain("confirmed");
+  });
+
+  it("gives two rooms alike two stays, each with its own id", async () => {
+    const s = await mapleSetup();
+    const p = await maple(s, { kept: 2 });
+    const body = session(p, dates(s, "America/Halifax", 15, 2), { booker: BOOKER });
+    body.stays = [body.stays[0] as (typeof body.stays)[number], body.stays[0] as (typeof body.stays)[number]];
+    const created = await ok<Body>(ucp(s, "POST", SESSIONS, body), 201);
+    expect(created.status).toBe("ready_for_complete");
+    expect(created.stays.map((x) => x.id)).toEqual([`${p.room}__${p.plan}`, `${p.room}__${p.plan}__2`]);
+    expect(checkUcpBooking(created as never)).toEqual([]);
+  });
+
   it("says when the guests do not fit the room, and finds no session it did not make", async () => {
-    const s = await setup({ name: "Maple Hollow B&B", timezone: "America/Halifax", currency: "CAD", ucpLodging: true });
+    const s = await mapleSetup();
     const p = await maple(s);
     const when = dates(s, "America/Halifax", 10, 2);
     const crowd = session(p, when);
@@ -373,31 +533,78 @@ describe("Maple Hollow B&B, Nova Scotia: a room kept for direct guests, the depo
     // The owner's own key is not a guest's platform.
     expect((await s.owner("POST", SESSIONS, session(p, when))).status).toBe(403);
   });
+
+  it("spends what a hold spends: twenty sessions an hour from one address", async () => {
+    const s = await mapleSetup();
+    const p = await maple(s);
+    const when = dates(s, "America/Halifax", 10, 2);
+    for (let i = 0; i < 20; i++) expect((await ucp(s, "POST", SESSIONS, session(p, when))).status).toBe(201);
+    expect((await ucp(s, "POST", SESSIONS, session(p, when))).status).toBe(429);
+  });
+
+  it("keeps Idempotency-Key as UCP says, and gives a session's id back only to the key that made it", async () => {
+    const s = await mapleSetup();
+    const p = await maple(s, { kept: 2 });
+    const platform = (await createApiKey(s.db, { kind: "agent", name: "Platform A" })).key;
+    const as = (key: string, idem: string) => ({ authorization: `Bearer ${key}`, "idempotency-key": idem });
+    const body = session(p, dates(s, "America/Halifax", 10, 2), { booker: BOOKER });
+
+    // The same Create again is the same session, and nothing is held twice.
+    const created = await ucp(s, "POST", SESSIONS, body, as(platform, "c-1"));
+    expect(created.status).toBe(201);
+    const first = (await created.json()) as Body;
+    const replay = await ucp(s, "POST", SESSIONS, body, as(platform, "c-1"));
+    expect(replay.status).toBe(201);
+    expect(replay.headers.get("idempotent-replayed")).toBe("true");
+    expect(((await replay.json()) as Body).id).toBe(first.id);
+    expect(await states(s)).toEqual(["held"]);
+    // Another body under that key is a conflict.
+    const other = await ucp(s, "POST", SESSIONS, session(p, dates(s, "America/Halifax", 30, 2)), as(platform, "c-1"));
+    expect(other.status).toBe(409);
+    expect(await other.json()).toMatchObject({ code: "idempotency_conflict" });
+
+    // Booked, and the Create replayed: its first answer, never a second hold beside the stay.
+    await ok<Body>(ucp(s, "POST", `${SESSIONS}/${first.id}/complete`, {}, { "idempotency-key": "done-1" }));
+    const late = await ucp(s, "POST", SESSIONS, body, as(platform, "c-1"));
+    expect(late.status).toBe(201);
+    expect(((await late.json()) as Body).id).toBe(first.id);
+    expect(await states(s)).toEqual(["awaiting_payment"]);
+    // Complete, Update and Cancel keep their keys too, within the session.
+    const completeAgain = await ucp(s, "POST", `${SESSIONS}/${first.id}/complete`, {}, { "idempotency-key": "done-1" });
+    expect(completeAgain.headers.get("idempotent-replayed")).toBe("true");
+    const mismatch = await ucp(
+      s,
+      "POST",
+      `${SESSIONS}/${first.id}/complete`,
+      { payment: {} },
+      {
+        "idempotency-key": "done-1",
+      },
+    );
+    expect(mismatch.status).toBe(409);
+
+    // Unsigned, from one address: whoever sends the key again gets no session's id, whatever the body.
+    const victim = session(p, dates(s, "America/Halifax", 40, 2), {
+      booker: { first_name: "Wanjiru", last_name: "Kamau", email: "wanjiru@example.org" },
+    });
+    const made = await ucp(s, "POST", SESSIONS, victim, { "idempotency-key": "v-1" });
+    expect(made.status).toBe(201);
+    const theirs = (await made.json()) as Body;
+    for (const tried of [victim, session(p, dates(s, "America/Halifax", 40, 2))]) {
+      const copy = await ucp(s, "POST", SESSIONS, tried, { "idempotency-key": "v-1" });
+      expect(copy.status).toBe(409);
+      expect(JSON.stringify(await copy.json())).not.toContain(theirs.id);
+    }
+    const still = await ok<Body>(ucp(s, "GET", `${SESSIONS}/${theirs.id}`));
+    expect(still.status).toBe("ready_for_complete");
+    expect(still.booker).toMatchObject({ email: "wanjiru@example.org" });
+  });
 });
 
 describe("Kijani House, Nairobi: paid at the property, a levy it collects itself (KES)", () => {
   it("holds when the lead comes with the first request, discloses the levy, and books at once", async () => {
     const s = await setup({ name: "Kijani House", timezone: "Africa/Nairobi", currency: "KES", ucpLodging: true });
-    const p = await place(s, {
-      name: "Kijani House",
-      kind: "guesthouse",
-      currency: "KES",
-      timezone: "Africa/Nairobi",
-      room: "Garden double",
-      capacity: { adults: 2, children: 1, total: 3 },
-      nightly: 650_000,
-      children: { welcome: true, from_age: 5 },
-      fees: [
-        {
-          name: "Tourism levy",
-          kind: "fee",
-          basis: "percent_of_room",
-          rate_bp: 200,
-          collected: "at_property",
-          max_nights: 7,
-        },
-      ],
-    });
+    const p = await kijani(s);
     const when = dates(s, "Africa/Nairobi", 14, 3);
     const body = session(p, when, {
       booker: { first_name: "Wanjiru", last_name: "Kamau", phone_number: "+254700000123" },
@@ -414,14 +621,15 @@ describe("Kijani House, Nairobi: paid at the property, a levy it collects itself
     expect(local).toMatchObject({ presentation: "disclosure", path: "$.payment.terms[0].schedules[0]" });
     const schedule = created.payment?.terms[0]?.schedules[0] as UcpSchedule;
     expect(schedule).toMatchObject({ type: "at_property", amount: 1_989_000 });
-    expect(local?.content).toContain("Tourism levy");
-    expect(local?.content).toContain("for at most 7 nights");
+    expect(local?.content).toBe(
+      "Paid to Kijani House at the property, not with the booking: Tourism levy 2% (at most 7 nights).",
+    );
     expect(created.stays[0]?.accommodation_type.capacity.child_age_ranges).toEqual([
       { ages: { min: 0, max: 4 }, limit: 0 },
       { ages: { min: 5, max: 17 } },
     ]);
     expect(checkUcpBooking(created as never)).toEqual([]);
-    // Nothing is due now: booked, the levy still disclosed until then.
+    // Nothing is due now: booked.
     const done = await ok<Body>(ucp(s, "POST", `${SESSIONS}/${created.id}/complete`, { payment: {} }));
     expect(done.status).toBe("completed");
     expect(done.booker).toMatchObject({ first_name: "Wanjiru", last_name: "Kamau", phone_number: "+254700000123" });
@@ -429,10 +637,70 @@ describe("Kijani House, Nairobi: paid at the property, a levy it collects itself
     const stay = await ok<{ item: { state: string } }>(s.owner("GET", `/v1/owner/items/${done.confirmation?.id}`));
     expect(stay.item.state).toBe("confirmed");
   });
+
+  it("answers for as long as the stay lives, never calls a booked stay cancelled, and goes when the guest is erased", async () => {
+    const s = await setup({ name: "Kijani House", timezone: "Africa/Nairobi", currency: "KES", ucpLodging: true });
+    const p = await kijani(s);
+    const body = session(p, dates(s, "Africa/Nairobi", 60, 2), {
+      booker: { first_name: "Amani", last_name: "Otieno", email: "amani@example.org" },
+    });
+    const created = await ok<Body>(ucp(s, "POST", SESSIONS, body, { "idempotency-key": "k-60" }), 201);
+    const done = await ok<Body>(ucp(s, "POST", `${SESSIONS}/${created.id}/complete`, {}));
+    expect(done.status).toBe("completed");
+    // A month and a day later, the retry records long pruned: still booked, and a cancel says so.
+    s.clock.now += 31 * DAY;
+    await pruneIdempotencyKeys(s.db, s.clock.now);
+    expect((await ok<Body>(ucp(s, "GET", `${SESSIONS}/${created.id}`))).status).toBe("completed");
+    const cancel = await ok<Body>(ucp(s, "POST", `${SESSIONS}/${created.id}/cancel`, {}));
+    expect(cancel.status).toBe("completed");
+    expect(codes(cancel)).toContain("not_cancelable");
+    expect(await states(s)).toEqual(["confirmed"]);
+    // Erased: the session goes whole with them, and its id finds nothing.
+    const party = String(
+      (
+        await s.db.client.query({
+          sql: "SELECT party_id FROM items WHERE id = ?",
+          params: [done.confirmation?.id ?? ""],
+          method: "all",
+        })
+      ).rows[0]?.[0],
+    );
+    const asked = await s.owner("POST", `/v1/owner/customers/${party}/erase`, {});
+    const confirm = ((await asked.json()) as { details: { confirm: string } }).details.confirm;
+    await ok(s.owner("POST", `/v1/owner/customers/${party}/erase`, { confirm }));
+    expect((await ucp(s, "GET", `${SESSIONS}/${created.id}`)).status).toBe(404);
+    const left = await s.db.client.query({ sql: "SELECT COUNT(*) FROM ucp_sessions", method: "all" });
+    expect(Number(left.rows[0]?.[0])).toBe(0);
+  });
+
+  it("sends a platform to the property's own engine with the dates filled in, when that is where it books", async () => {
+    const s = await setup({ name: "Kijani House", timezone: "Africa/Nairobi", currency: "KES", ucpLodging: true });
+    const p = await kijani(s);
+    await ok(
+      s.owner("PUT", "/v1/owner/settings", {
+        doc: {
+          doorsElsewhere: [
+            {
+              itemType: "stay",
+              url: "https://engine.example.net/kijani",
+              urlTemplate: "https://engine.example.net/kijani?in={check_in}&out={check_out}&adults={adults}",
+            },
+          ],
+        },
+      }),
+    );
+    const when = dates(s, "Africa/Nairobi", 14, 3);
+    const refused = await ok<Body>(ucp(s, "POST", SESSIONS, session(p, when)));
+    expect(refused.ucp.status).toBe("error");
+    expect(refused.messages?.[0]?.content).toBe("This property takes bookings on its own website: continue there.");
+    expect(refused.continue_url).toBe(
+      `https://engine.example.net/kijani?in=${when.start_date}&out=${when.end_date}&adults=2`,
+    );
+  });
 });
 
 describe("Ryokan Hoshi, Kyoto: every stay answered by the ryokan itself (JPY)", () => {
-  it("is not served: no profile, and a session is refused with where to go instead", async () => {
+  it("is not served: no profile, and a session is refused in plain words", async () => {
     const s = await setup({ name: "Ryokan Hoshi", timezone: "Asia/Tokyo", currency: "JPY", ucpLodging: true });
     const p = await place(s, {
       name: "Ryokan Hoshi",
@@ -448,8 +716,8 @@ describe("Ryokan Hoshi, Kyoto: every stay answered by the ryokan itself (JPY)", 
     const refused = await ok<Body>(ucp(s, "POST", SESSIONS, session(p, dates(s, "Asia/Tokyo", 30, 3))));
     expect(refused.ucp.status).toBe("error");
     expect(refused.messages?.[0]).toMatchObject({ code: "on_request", severity: "unrecoverable" });
-    expect((refused as unknown as { continue_url: string }).continue_url).toBe(`${BASE}/`);
-    const stays = await ok<{ items: unknown[] }>(s.owner("GET", "/v1/owner/items?type=stay&open_only=false"));
-    expect(stays.items).toEqual([]);
+    expect(refused.messages?.[0]?.content).toMatch(/^Ryokan Hoshi confirms each stay itself, within \d+ hours/);
+    expect(refused.continue_url).toBeUndefined();
+    expect(await states(s)).toEqual([]);
   });
 });

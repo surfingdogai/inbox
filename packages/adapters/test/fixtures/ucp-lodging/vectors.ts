@@ -163,7 +163,6 @@ export function partsOf(v: Vector): BookingParts {
     origin: v.origin,
     messages: (v.messages ?? []) as BookingParts["messages"] & object,
     expiresAt: v.expires_at,
-    continueUrl: v.status === "completed" || v.status === "canceled" ? undefined : `${v.origin}/`,
     booker: v.booker,
     guests: v.guests,
     assignments: v.assignments,

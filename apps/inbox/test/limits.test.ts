@@ -202,6 +202,13 @@ describe("the bucket arithmetic", () => {
     expect(isCreateRoute("POST", "/v1/messages")).toBe(true);
     expect(isCreateRoute("GET", "/v1/bookings")).toBe(false);
     expect(isCreateRoute("POST", "/v1/items/x/cancel")).toBe(false);
+    // UCP Lodging's sessions (ADR-035): a Create, an Update and a Complete can each hold or book a stay.
+    expect(isCreateRoute("POST", "/v1/ucp/lodging/booking-sessions")).toBe(true);
+    expect(isCreateRoute("PUT", "/v1/ucp/lodging/booking-sessions/bks_x")).toBe(true);
+    expect(isCreateRoute("POST", "/v1/ucp/lodging/booking-sessions/bks_x/complete")).toBe(true);
+    expect(isCreateRoute("POST", "/v1/ucp/lodging/booking-sessions/bks_x/cancel")).toBe(false);
+    expect(isCreateRoute("GET", "/v1/ucp/lodging/booking-sessions/bks_x")).toBe(false);
+    expect(isCreateRoute("PUT", "/v1/owner/property")).toBe(false);
     const call = (name: string) => ({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: {} } });
     expect(mcpCreates(call("create_booking"))).toBe(true);
     expect(mcpCreates(call("list_services"))).toBe(false);

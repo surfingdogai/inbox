@@ -72,7 +72,7 @@
       "code": "lead_guest_required",
       "path": "$.booker",
       "severity": "recoverable",
-      "content": "Name the lead guest (first_name, last_name) with an email or a phone_number, as the booker or as a guest assigned the role primary; the rooms are held then."
+      "content": "Name the lead guest (first_name, last_name, and an email or phone_number), as the booker or a guest with role primary, to hold the rooms."
     }
   ],
   "quote": {
@@ -280,13 +280,21 @@
         "code": "lead_guest_required",
         "path": "$.booker",
         "severity": "recoverable",
-        "content": "Name the lead guest (first_name, last_name) with an email or a phone_number, as the booker or as a guest assigned the role primary; the rooms are held then."
+        "content": "Name the lead guest (first_name, last_name, and an email or phone_number), as the booker or a guest with role primary, to hold the rooms."
       },
       {
         "type": "warning",
         "code": "local_tax",
         "path": "$.payment.terms[0].schedules[0]",
-        "content": "Paid to Kijani House at the property, not with the booking: Tourism levy 2% (paid at the property). Tourism levy: for at most 7 nights.",
+        "content": "Paid to Kijani House at the property, not with the booking: Tourism levy 2% (at most 7 nights).",
+        "content_type": "plain",
+        "presentation": "disclosure"
+      },
+      {
+        "type": "warning",
+        "code": "dev.ucp.lodging.policy.cancellation",
+        "path": "$",
+        "content": "Free cancellation until 1 Feb 2027, 23:59 Nairobi time. After that: Ksh 6,500.00. No-show: Ksh 6,500.00.",
         "content_type": "plain",
         "presentation": "disclosure"
       }
@@ -318,7 +326,6 @@
       }
     ],
     "expires_at": "2027-01-20T09:15:00+03:00",
-    "continue_url": "https://inbox.kijani-house.example/",
     "payment": {
       "selected_term_id": "stay",
       "terms": [
@@ -330,7 +337,7 @@
               "id": "at_property",
               "type": "at_property",
               "description": {
-                "plain": "At the property: paid to Kijani House itself, not with the booking."
+                "plain": "At the property: paid to Kijani House directly, not with the booking."
               },
               "amount": 1989000
             }

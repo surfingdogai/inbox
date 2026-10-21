@@ -1,24 +1,32 @@
-import { createSecretBox, customerCopyProblems, STAY_LANGS, WriteError } from "@surfingdog/core";
+import { customerCopyProblems, STAY_LANGS, WriteError } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
+import { flagOn } from "../src/flags";
 import {
   CANCELLATION,
   checkUcpBooking,
   childAgeRanges,
   leadOf,
   messagesOf,
+  newSessionId,
   nodeAt,
-  openSession,
   quoteFromUcp,
   refundabilityOf,
+  sameReach,
+  sameSubject,
   sampleUcpStrings,
-  sealSession,
+  sessionIdHash,
+  signerOf,
+  stayIdsOf,
   subjectOf,
   totalsDigest,
+  UCP_WORDS,
   type UcpBooking,
   type UcpSchedule,
   type UcpSessionRequest,
   ucpBookingOf,
-  ucpLodgingOn,
+  ucpLocalTaxOf,
+  ucpPaymentOf,
+  ucpProfileOf,
   ucpSessionRequest,
   ucpTotalsOf,
 } from "../src/ucp-lodging";
@@ -26,7 +34,7 @@ import docs from "./fixtures/ucp-lodging/ucp-docs-examples.json" with { type: "j
 import { partsOf, setupOf, VECTORS, type Vector } from "./fixtures/ucp-lodging/vectors";
 
 /**
- * UCP Lodging's mapping (ADR-033 §6.5) against its vectors and the draft's own examples, pinned at commit
+ * UCP Lodging's mapping (ADR-035) against its vectors and the draft's own examples, pinned at commit
  * f2626c28b8288976eee5bda77f3a9b1ddc0132b1: a quote becomes a booking session and reads back as the same
  * money; the addends sum to the one total and the selected term's schedules to it too; the local tax
  * disclosure points at the at_property schedule; and the checks catch what UCP forbids.
@@ -156,12 +164,16 @@ describe("the local tax disclosure", () => {
     // Everything the property collects itself is inside what is paid there.
     const there = hoshi.quote.lines.filter((l) => l.collected === "at_property");
     expect(node.amount).toBeGreaterThanOrEqual(sum(there));
-    expect(h?.content).toContain("Accommodation tax, ¥400 per guest per night");
-    expect(h?.content).toContain("children under 12 are exempt");
+    // Said once, each charge with its rate and who is exempt in brackets after it.
+    expect(h?.content).toBe(
+      "Paid to Ryokan Hoshi at the property, not with the booking: Accommodation tax, ¥400 per guest per night (children under 12 exempt).",
+    );
     const k = at(kijani);
     expect(k?.path).toBe("$.payment.terms[0].schedules[0]");
     expect((nodeAt(kijani.booking, k?.path ?? "") as UcpSchedule).type).toBe("at_property");
-    expect(k?.content).toContain("for at most 7 nights");
+    expect(k?.content).toBe(
+      "Paid to Kijani House at the property, not with the booking: Tourism levy 2% (at most 7 nights).",
+    );
     // Nothing collected at the property, no disclosure.
     expect(at(maple)).toBeUndefined();
   });
@@ -170,6 +182,48 @@ describe("the local tax disclosure", () => {
     const tokyo = examples[0]?.booking as unknown as UcpBooking;
     const m = tokyo.messages?.find((x) => x.code === "local_tax");
     expect((nodeAt(tokyo, m?.path ?? "") as UcpSchedule).type).toBe("at_property");
+  });
+
+  it("tells a fee from another whose name begins the same, and gives a fee per stay its amount", () => {
+    const kijani = VECTORS[1] as Vector;
+    const setup = setupOf(kijani);
+    const fees = [
+      { ...(setup.fees[0] as (typeof setup.fees)[number]), id: "fee_city", name: "City tax", maxNights: 3 },
+      {
+        ...(setup.fees[0] as (typeof setup.fees)[number]),
+        id: "fee_sur",
+        name: "City tax surcharge",
+        basis: "per_stay" as const,
+        amount: 50_000,
+        maxNights: null,
+        childExemptUnder: 6,
+      },
+    ];
+    const quote = {
+      ...kijani.quote,
+      lines: [
+        ...kijani.quote.lines.filter((l) => l.collected !== "at_property"),
+        {
+          type: "fee" as const,
+          label: "City tax 2% (paid at the property)",
+          amount: 39_000,
+          collected: "at_property" as const,
+        },
+        {
+          type: "fee" as const,
+          label: "City tax surcharge (paid at the property)",
+          amount: 50_000,
+          collected: "at_property" as const,
+        },
+      ],
+    };
+    const payment = ucpPaymentOf(quote, setup, "en");
+    const m = ucpLocalTaxOf(quote, payment, { ...setup, fees }, "en");
+    // Each charge keeps its own notes: "City tax" never takes the surcharge's, nor the other way.
+    // (The shilling is written "Ksh" by one runtime and "KES" by the other.)
+    expect(m?.content).toMatch(
+      /^Paid to Kijani House at the property, not with the booking: City tax 2% \(at most 3 nights\); City tax surcharge, \S+\s?500\.00 per stay \(children under 6 exempt\)\.$/,
+    );
   });
 
   it("is caught pointing anywhere else", () => {
@@ -211,6 +265,18 @@ describe("what the checks catch", () => {
     ).toContain("lines sum to");
   });
 
+  it("an error may name a member still to be given; a disclosure never points at nothing", () => {
+    const kijani = structuredClone((VECTORS[1] as Vector).booking) as unknown as Record<string, unknown>;
+    expect(kijani.booker).toBeUndefined();
+    expect(checkUcpBooking(kijani)).toEqual([]);
+    const messages = kijani.messages as { type: string; path: string }[];
+    messages.push({ type: "warning", path: "$.booker" } as never);
+    expect(checkUcpBooking(kijani).join(" ")).toContain("points at nothing ($.booker)");
+    messages.pop();
+    messages.push({ type: "error", path: "$.nowhere.booker", severity: "recoverable" } as never);
+    expect(checkUcpBooking(kijani).join(" ")).toContain("points at nothing ($.nowhere.booker)");
+  });
+
   it("an escalation with nowhere to go, a booking with no confirmation, a ready session with no lead", () => {
     expect(
       broken((b) => {
@@ -247,11 +313,24 @@ describe("the policy", () => {
     const strict = { ...v.quote, policy: { ...v.quote.policy, steps: [], after: v.quote.total } };
     const b = ucpBookingOf({ ...partsOf(v), quote: strict });
     expect(b.policies?.[0]?.refundability).toBe("non_refundable");
-    expect(b.messages?.find((m) => m.code === CANCELLATION)).toMatchObject({
-      presentation: "disclosure",
-      path: "$.policies[0]",
-    });
+    const shown = b.messages?.find((m) => m.code === CANCELLATION);
+    expect(shown).toMatchObject({ presentation: "disclosure", path: "$" });
+    expect(shown?.content).toContain("This stay cannot be refunded once it is booked.");
     expect(checkUcpBooking(b as unknown as Record<string, unknown>)).toEqual([]);
+  });
+
+  it("asks the platform to show any policy that can cost something, and none that never does", () => {
+    const v = VECTORS[0] as Vector;
+    // Free until nine days before, then the first night: refundable now, and still shown.
+    const b = ucpBookingOf(partsOf(v));
+    expect(b.policies?.[0]?.refundability).toBe("refundable");
+    expect(b.messages?.find((m) => m.code === CANCELLATION)?.content).toBe(b.policies?.[0]?.description.plain);
+    const zero = { value: 0, currency: v.quote.currency };
+    const free = { ...v.quote, policy: { ...v.quote.policy, steps: [], after: zero, noShow: zero } };
+    expect(ucpBookingOf({ ...partsOf(v), quote: free }).messages?.find((m) => m.code === CANCELLATION)).toBeUndefined();
+    // Booked or over: nothing more to show.
+    const done = ucpBookingOf({ ...partsOf(v), status: "completed", confirmation: { id: "x", label: "X" } });
+    expect(done.messages?.find((m) => m.code === CANCELLATION)).toBeUndefined();
   });
 
   it("is kept as its dated steps, with the zone they were dated in", () => {
@@ -287,6 +366,29 @@ describe("requests", () => {
     expect(subjectOf(ask(), setup)).toEqual({ subject: kijani.subject });
     const byId = ask({ id: "rt_garden__rp_bb", accommodation_type: undefined, rate_plan: undefined } as never);
     expect(subjectOf(byId, setup)).toEqual({ subject: kijani.subject });
+    const second = ask({ id: "rt_garden__rp_bb__2", accommodation_type: undefined, rate_plan: undefined } as never);
+    expect(subjectOf(second, setup)).toEqual({ subject: kijani.subject });
+  });
+
+  it("give two rooms alike two stays, each with an id of its own", () => {
+    const two = [
+      { roomTypeId: "rt_garden", ratePlanId: "rp_bb" },
+      { roomTypeId: "rt_garden", ratePlanId: "rp_bb" },
+      { roomTypeId: "rt_tree", ratePlanId: "rp_bb" },
+      { roomTypeId: "rt_garden", ratePlanId: "rp_bb" },
+    ];
+    expect(stayIdsOf(two)).toEqual([
+      "rt_garden__rp_bb",
+      "rt_garden__rp_bb__2",
+      "rt_tree__rp_bb",
+      "rt_garden__rp_bb__3",
+    ]);
+    const family = ask();
+    const room = family.stays[0] as UcpSessionRequest["stays"][number];
+    const asked = subjectOf({ ...family, stays: [room, { ...room, occupancy: { adults: 2, total: 2 } }] }, setup);
+    if (!("subject" in asked)) throw new Error("not asked");
+    const b = ucpBookingOf({ ...partsOf(kijani), subject: asked.subject });
+    expect(b.stays.map((x) => x.id)).toEqual(["rt_garden__rp_bb", "rt_garden__rp_bb__2"]);
   });
 
   it("say, with UCP's paths, what does not fit the property", () => {
@@ -369,31 +471,16 @@ describe("requests", () => {
 });
 
 describe("session ids", () => {
-  const box = createSecretBox(["ucp-lodging-test-secret-0123456789abcdef"]);
-  if (!box) throw new Error("no box");
-
-  it("open only as they were sealed, and carry nothing in the clear", async () => {
-    const seal = {
-      v: 1 as const,
-      n: "nonce-0123456789abcd",
-      p: "prop_kijani",
-      ci: "2027-02-03",
-      co: "2027-02-06",
-      r: [["rt_garden", "rp_bb", 2, [7]] as const],
-      t: await totalsDigest((VECTORS[1] as Vector).quote),
-      iat: Date.parse("2027-01-20T09:00:00+03:00"),
-    };
-    const id = await sealSession(box, seal);
-    expect(id.startsWith("bks_")).toBe(true);
-    expect(id).not.toContain("prop_kijani");
-    expect(id).not.toContain("rt_garden");
-    expect(await openSession(box, id)).toEqual(seal);
-    const at = id.length - 5;
-    const tampered = `${id.slice(0, at)}${id[at] === "A" ? "B" : "A"}${id.slice(at + 1)}`;
-    expect(await openSession(box, tampered)).toBeNull();
-    expect(await openSession(box, "booking_123")).toBeNull();
-    const other = createSecretBox(["another-instance-secret-0123456789abcdef"]);
-    if (other) expect(await openSession(other, id)).toBeNull();
+  it("are 32 random bytes, kept only as their hash", async () => {
+    const one = newSessionId();
+    const two = newSessionId();
+    expect(one).toMatch(/^bks_[A-Za-z0-9_-]{43}$/);
+    expect(two).not.toBe(one);
+    const hash = await sessionIdHash(one);
+    expect(hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(hash).not.toContain(one.slice(4, 20));
+    expect(await sessionIdHash(one)).toBe(hash);
+    expect(await sessionIdHash(two)).not.toBe(hash);
   });
 
   it("change their fingerprint when the money does, and only then", async () => {
@@ -405,20 +492,104 @@ describe("session ids", () => {
   });
 });
 
+describe("who a stored Create goes back to", () => {
+  const anon = {
+    actor: { kind: "customer_agent" as const, id: "anon:ab12", channel: "rest" as const },
+    tier: "anonymous" as const,
+    sandbox: false,
+  };
+  it("a verified key, a platform's or an agent's own, or an agent's API key; never an address", () => {
+    expect(signerOf(anon)).toBeNull();
+    expect(signerOf({ ...anon, agent: { level: "none" } })).toBeNull();
+    expect(signerOf({ ...anon, agent: { level: "self", thumbprint: "tp-1" } })).toBe("sig:tp-1");
+    expect(signerOf({ ...anon, agent: { level: "vouched", thumbprint: "tp-2", platform: "https://p.example" } })).toBe(
+      "sig:tp-2",
+    );
+    expect(signerOf({ ...anon, actor: { ...anon.actor, id: "key_01" }, tier: "verified_principal" })).toBe(
+      "key:key_01",
+    );
+  });
+});
+
+describe("what keeps a hold", () => {
+  it("the same rooms and dates, in any order of keys", () => {
+    const s = (VECTORS[1] as Vector).subject;
+    expect(
+      sameSubject(
+        s,
+        JSON.parse(
+          JSON.stringify({ rooms: s.rooms, checkOut: s.checkOut, checkIn: s.checkIn, propertyId: s.propertyId }),
+        ),
+      ),
+    ).toBe(true);
+    expect(sameSubject(s, { ...s, checkOut: "2027-02-07" })).toBe(false);
+  });
+
+  it("a lead reached the same way: an email in any case, else a phone however it is written", () => {
+    expect(
+      sameReach({ email: "Elise.Doucet@example.org" }, { email: "elise.doucet@example.org", phone: "+1 902" }),
+    ).toBe(true);
+    expect(sameReach({ email: "a@example.org" }, { email: "b@example.org" })).toBe(false);
+    expect(sameReach({ phone: "+254 700 000 123" }, { phone: "+254700000123" })).toBe(true);
+    expect(sameReach({ email: "a@example.org" }, { phone: "+254700000123" })).toBe(false);
+  });
+});
+
 describe("the switch and the words", () => {
-  it("is on only when it says on", () => {
-    for (const v of ["on", "ON", " on "]) expect(ucpLodgingOn(v)).toBe(true);
-    for (const v of [undefined, "", "1", "true", "yes", "off", "onn"]) expect(ucpLodgingOn(v)).toBe(false);
+  it("reads INBOX_UCP_LODGING as every other switch", () => {
+    for (const v of ["on", "ON", " on ", "1", "true", "yes"]) expect(flagOn(v)).toBe(true);
+    for (const v of [undefined, "", "0", "off", "no", "onn"]) expect(flagOn(v)).toBe(false);
   });
 
   it("speaks to guests in their language with no word of ours", () => {
     for (const lang of STAY_LANGS) expect(customerCopyProblems(sampleUcpStrings(lang), lang)).toEqual([]);
   });
 
+  it("says whose time every deadline is in", () => {
+    for (const lang of STAY_LANGS) {
+      const w = UCP_WORDS[lang];
+      expect(w.payThere("Ryokan Hoshi", "Deposit", "9 Dec, 10:00", "Kyoto"), lang).toContain("Kyoto");
+      expect(w.cardThere("Ryokan Hoshi", "9 Dec, 10:00", "Kyoto"), lang).toContain("Kyoto");
+      expect(w.dueBy("Balance", "9 Dec, 10:00", "Kyoto"), lang).toContain("Kyoto");
+    }
+    expect(UCP_WORDS.en.cardThere("Maple Hollow B&B", "12 Dec, 15:00", "Lunenburg")).toBe(
+      "Maple Hollow B&B asks for a card to guarantee the stay, saved on its own payment page by 12 Dec, 15:00, Lunenburg time. Nothing is charged now.",
+    );
+    // A small place's name may be any gender: the German says "the property's page".
+    expect(UCP_WORDS.de.payThere("Pension Alpenblick", "Anzahlung", "9. Dez., 10:00", "Hallstatt")).not.toMatch(
+      /seiner|ihrer/,
+    );
+  });
+
+  it("names its payment terms as what they extend", () => {
+    const caps = (
+      ucpProfileOf("https://inbox.example").ucp as { capabilities: Record<string, { extends?: string[] }[]> }
+    ).capabilities;
+    expect(caps["dev.ucp.common.payment.terms"]?.[0]?.extends).toEqual(["dev.ucp.lodging.booking"]);
+    expect(caps["dev.ucp.lodging.booking"]?.[0]?.extends).toBeUndefined();
+  });
+
   it("says what the stays doors refused in UCP's codes", () => {
     expect(
       messagesOf(new WriteError("guard_failed", "x", { details: { guard: "holds", reason: "holds" } }))[0],
     ).toMatchObject({ code: "too_many_holds", severity: "recoverable" });
+    expect(
+      messagesOf(
+        new WriteError("guard_failed", "Your platform holds 10 stays here already: book or let one go first.", {
+          details: { guard: "holds", reason: "platform_holds" },
+        }),
+      )[0],
+    ).toMatchObject({
+      code: "too_many_holds",
+      content: "This platform holds 10 stays here already: book or let one go first.",
+    });
+    // A place that books at once whose kept rooms are gone has nothing to book here; only a place that
+    // answers each stay itself is on request.
+    const onRequest = new WriteError("guard_failed", "On request.", {
+      details: { guard: "instant_safe", status: "on_request" },
+    });
+    expect(messagesOf(onRequest, true)[0]?.code).toBe("inventory_exhausted");
+    expect(messagesOf(onRequest, false)[0]?.code).toBe("on_request");
     expect(
       messagesOf(
         new WriteError("guard_failed", "gone", { details: { guard: "instant_safe", status: "unavailable" } }),

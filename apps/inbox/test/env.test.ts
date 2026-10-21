@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { listFrom, oauthFrom, outboundDenyFrom, publicUrlFrom, secretKeyFrom, senderFrom } from "../src/env";
+import {
+  listFrom,
+  oauthFrom,
+  outboundDenyFrom,
+  publicUrlFrom,
+  secretKeyFrom,
+  senderFrom,
+  ucpLodgingFrom,
+} from "../src/env";
 
 /**
  * The Deploy to Cloudflare button asks for every value in .dev.vars.example, so each can arrive
@@ -113,5 +121,16 @@ describe("the host's settings", () => {
       "SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET go together; with one alone shopify sign-in stays off",
     ]);
     expect(oauthFrom({}).googleTesting).toBe(false);
+  });
+
+  it("reads INBOX_UCP_LODGING as every switch, and says once when there is no secret key to seal sessions with", () => {
+    const said: string[] = [];
+    const log = (line: string) => said.push(line);
+    const key = "k".repeat(40);
+    for (const on of ["on", "1", "true", "yes", " ON "]) expect(ucpLodgingFrom(on, key, log)).toBe(true);
+    for (const off of [undefined, "", "0", "off"]) expect(ucpLodgingFrom(off, key, log)).toBe(false);
+    expect(said).toEqual([]);
+    expect(ucpLodgingFrom("on", undefined, log)).toBe(false);
+    expect(said).toEqual(["INBOX_UCP_LODGING is on but INBOX_SECRET_KEY is unset: UCP Lodging stays off."]);
   });
 });
