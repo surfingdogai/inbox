@@ -1,8 +1,10 @@
 import {
+  ariCells,
   type Caller,
   Capabilities,
   ConnectorError,
   type ConnectorHttp,
+  cachedNights,
   createSecretBox,
   describeForm,
   gallery,
@@ -13,7 +15,7 @@ import {
 } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
 import {
-  BEDS24_CHOOSE,
+  BEDS24_CHOICES,
   BEDS24_INFO_CODE,
   BEDS24_REFRESH_EVERY_MS,
   BEDS24_WAITING_FLAG,
@@ -35,8 +37,10 @@ import {
   BEIT_AMMAN,
   CASA_VENTANA,
   calendarExample,
+  HOSTEL_TBILISI,
   INTI_WASI,
   PROPERTIES,
+  propertyAnswer,
   RIAD_ZITOUN,
   RYOKAN_HOSHI,
 } from "../fixtures/property/beds24/properties";
@@ -138,6 +142,7 @@ propertyContract("Beds24, against its local fake", () => {
     propertyId: HOSHI,
     oneUnitRoom: GARDEN,
     rate: "price1",
+    currency: "JPY",
     oversells: false,
     exhaust: () => {
       fake.credits.windowStart = fake.clock.now;
@@ -147,18 +152,30 @@ propertyContract("Beds24, against its local fake", () => {
 });
 
 describe("Beds24: the form and the gallery", () => {
-  it("asks for one invite code, sealed, in three steps named as Beds24 names its choices", () => {
+  it("asks for one invite code, sealed yet shown as typed, in steps that name Beds24's choices one a line", () => {
     const [field, ...rest] = describeForm(beds24Form);
     expect(rest).toEqual([]);
-    expect(field).toMatchObject({ key: "invite_code", label: "Invite code", secret: true, input: "password" });
+    // A code works once, for 24 hours: sealed like a secret, shown so the owner sees it was pasted whole,
+    // and emptied after Beds24 refuses it.
+    expect(field).toMatchObject({ key: "invite_code", label: "Invite code", secret: true, input: "text", once: true });
     expect(field?.steps).toEqual([
       "In Beds24, open Settings → Marketplace → API and press Generate invite code.",
-      "Choose Bookings: Read and Write · Bookings personal: Read · Bookings financial: Read and Write · Inventory: Read · Properties: Read. Leave the IP address empty.",
+      {
+        text: "Choose these, as Beds24 names them:",
+        items: [
+          "Bookings: Read and Write",
+          "Bookings personal: Read and Write",
+          "Bookings financial: Read and Write",
+          "Inventory: Read",
+          "Properties: Read",
+        ],
+      },
+      "Leave the IP address empty. If your properties are linked, tick Allow linked properties.",
       "Paste the code here. It works for 24 hours.",
     ]);
     expect(field?.help).toBeUndefined();
     // Never "all", which would also let a leaked token delete the owner's bookings.
-    expect(BEDS24_CHOOSE).not.toMatch(/All/);
+    expect(BEDS24_CHOICES.join(" ")).not.toMatch(/All/);
   });
 
   it("is the lodging card's Beds24 way, ready, once it is among the built-in connectors", () => {
@@ -167,7 +184,11 @@ describe("Beds24: the form and the gallery", () => {
     // Shown to a place to stay: the property-system card is a place to stay's own.
     const card = gallery(new Map(defs.map((d) => [d.kind, d])), { lean: "stays" }).find((c) => c.group === "lodging");
     const way = card?.ways.find((w) => w.kind === "beds24");
-    expect(way).toMatchObject({ status: "ready", auth: "form" });
+    // New until a first real account confirms what the documentation leaves open, and said so.
+    expect(way).toMatchObject({ status: "ready", auth: "form", fresh: true });
+    expect(way?.note).toBe(
+      "New: built from Beds24's documentation. Your first stays are checked against Beds24 as they are written.",
+    );
     expect(way?.form.map((f) => f.key)).toEqual(["invite_code"]);
     expect(def.stayWriter).toMatchObject({ writeGuard: "check_then_write", hold: "none" });
   });
@@ -227,7 +248,7 @@ describe("Beds24: the invite code and its tokens", () => {
     expect(error.code).toBe("config");
     expect(error.field).toBe("invite_code");
     expect(error.message).toBe(
-      "That code is missing Bookings: Write · Bookings personal: Read · Bookings financial: Read and Write · Inventory: Read. Make a new code with those too.",
+      "That code is missing Bookings: Write · Bookings personal: Read and Write · Bookings financial: Read and Write · Inventory: Read. Make a new code with those too.",
     );
     expect(fake.refreshTokens.size).toBe(0);
   });
@@ -238,6 +259,7 @@ describe("Beds24: the invite code and its tokens", () => {
       "read:bookings",
       "write:bookings",
       "read:bookings-personal",
+      "write:bookings-personal",
       "read:inventory",
       "read:properties",
     ]);
@@ -258,10 +280,40 @@ describe("Beds24: the invite code and its tokens", () => {
     await expect(writer.oversold?.(ctx, stay, link)).rejects.toThrow(/as written/);
   });
 
+  it("refuses a code that only reads Bookings personal: without it, Beds24 would keep no guest's name", async () => {
+    const fake = fakeBeds24({ properties: PROPERTIES });
+    const readOnly = [
+      "read:bookings",
+      "write:bookings",
+      "read:bookings-personal",
+      "read:bookings-financial",
+      "write:bookings-financial",
+      "read:inventory",
+      "read:properties",
+    ];
+    fake.invite(INVITE_CODE, readOnly);
+    const error = await def.connect?.(connectCtx(fake), { invite_code: INVITE_CODE }).catch((e: unknown) => e);
+    expect(error).toMatchObject({
+      code: "config",
+      field: "invite_code",
+      message: "That code is missing Bookings personal: Write. Make a new code with that too.",
+    });
+    expect(fake.refreshTokens.size).toBe(0);
+    // What such a token would do: a confirmed stay written with no guest's name for the front desk.
+    const ctx = run(fake, { refresh_token: fake.grant(readOnly), refresh_used_at: String(fake.clock.now) });
+    const stay = stayOf({
+      key: "sd-01JAHOSHI000000000000NOPER",
+      guest: { name: "Aiko Tanaka", email: "aiko@example.jp" },
+    });
+    const link = await writer.put(ctx, stay, null, "confirmed");
+    const kept = fake.bookings.get(Number(link.externalId));
+    expect([kept?.lastName, kept?.email]).toEqual([undefined, undefined]);
+  });
+
   it("connects with read and write on bookings, and with a code made with All before", async () => {
     for (const scopes of [
       undefined,
-      ["all:bookings", "read:bookings-personal", "all:bookings-financial", "read:inventory", "read:properties"],
+      ["all:bookings", "all:bookings-personal", "all:bookings-financial", "read:inventory", "read:properties"],
     ]) {
       const fake = fakeBeds24({ properties: PROPERTIES });
       fake.invite(INVITE_CODE, scopes);
@@ -377,9 +429,17 @@ describe("Beds24: rooms, prices and what is free", () => {
   });
 
   it("reads a calendar as Beds24 writes one: ranges, closures, no-arrival nights, multipliers and overbooking", async () => {
-    const p = fakePlatform().on("GET", "https://beds24.com/api/v2/inventory/rooms/calendar", () =>
-      json(calendarExample),
-    );
+    const p = fakePlatform()
+      .on("GET", "https://beds24.com/api/v2/properties", () =>
+        json({
+          success: true,
+          type: "property",
+          count: 1,
+          pages: { nextPageExists: false, nextPageLink: null },
+          data: [propertyAnswer(CASA_VENTANA, { rooms: true, offers: true, rules: true })],
+        }),
+      )
+      .on("GET", "https://beds24.com/api/v2/inventory/rooms/calendar", () => json(calendarExample));
     const ctx = {
       ...runContext(p.http, { refresh_token: "r", token: "t", token_expires_at: String(Date.now() + DAY) }),
       extra: { currencies: { "241502": "MXN" } },
@@ -410,10 +470,13 @@ describe("Beds24: rooms, prices and what is free", () => {
     expect(by("2027-03-05")?.prices).toBeUndefined();
     // Overbooked: Beds24's own count, below none.
     expect(by("2027-03-07")?.units).toBe(-1);
-    const asked = p.seen[0]?.url.searchParams;
+    // Each price's rule is read with the calendar, and a price linked to another room's asked for.
+    expect(p.seen[0]?.url.searchParams.get("includePriceRules")).toBe("true");
+    const asked = p.seen.find((r) => r.url.pathname.endsWith("/calendar"))?.url.searchParams;
     expect(asked?.get("startDate")).toBe("2027-03-01");
     expect(asked?.get("endDate")).toBe("2027-03-07");
     expect(asked?.get("includeNumAvail")).toBe("true");
+    expect(asked?.get("includeLinkedPrices")).toBe("true");
   });
 
   it("gives Beds24's own total only where one offer is free, never one worked out here", async () => {
@@ -430,6 +493,121 @@ describe("Beds24: rooms, prices and what is free", () => {
     expect(await stays.price?.(ctx, q)).toEqual({ subtotal: { value: 555_000, currency: "MXN" } });
     // Two offers free, and no documented way to tell which is which: none.
     expect(await stays.price?.(ctx, { ...q, propertyId: HOSHI, roomId: GARDEN })).toBeNull();
+  });
+});
+
+describe("Beds24: which daily prices are quoted", () => {
+  const HOSTEL = String(HOSTEL_TBILISI.id);
+  const DORM = "512051";
+  const TWIN = "512052";
+  const STUDIO = "512053";
+
+  it("quotes from the cache only a price that is the whole room's for a night, whatever the party or stay", async () => {
+    const fake = fakeBeds24({ properties: [HOSTEL_TBILISI] });
+    const ctx = run(fake);
+    const rows = (await stays.ari(ctx, HOSTEL, { from: "2027-06-01", to: "2027-06-03" })) as {
+      roomId: string;
+      prices?: Record<string, number>;
+    }[];
+    const pricesOf = (room: string) => rows.filter((r) => r.roomId === room).map((r) => r.prices);
+    // Per person, a bed in the dormitory: never the room's price for any party.
+    expect(pricesOf(DORM)).toEqual([undefined, undefined]);
+    // The twin's price for two, with 30 for a third, is left out; its whole-room price is kept.
+    expect(pricesOf(TWIN)).toEqual([{ price2: 14_000 }, { price2: 14_000 }]);
+    // A price for a week or more is never a night's price on its own.
+    expect(pricesOf(STUDIO)).toEqual([undefined, undefined]);
+    // The rooms are still free or not as Beds24 says: only the price is left out.
+    expect(rows.filter((r) => r.roomId === DORM).map((r) => (r as { units?: number }).units)).toEqual([1, 1]);
+    expect(await stays.ratePlans(run(fake), HOSTEL)).toEqual([
+      { id: "price2", name: "Daily price 2", roomIds: [TWIN] },
+    ]);
+  });
+
+  it("never quotes three guests the price of one, nor the price for two, through the inbox's own cache", async () => {
+    const fake = fakeBeds24({ properties: [HOSTEL_TBILISI] });
+    const { db } = await freshDb();
+    const caps = new Capabilities(
+      db,
+      createSecretBox(["beds24-test-key-0123456789abcdef0123"]),
+      "https://inbox.example.com",
+      0,
+    );
+    caps.connectors.attach({ definitions: [def], http: fake.platform.http });
+    fake.invite(INVITE_CODE);
+    const owner: Caller = {
+      actor: { kind: "owner", id: "user_1", channel: "owner_ui" },
+      tier: "verified_principal",
+      sandbox: false,
+      now: () => fake.clock.now,
+    };
+    const view = await caps.connectors.connect(owner, { kind: "beds24", values: { invite_code: INVITE_CODE } });
+    const setup = {
+      property: { connectorId: view.id, externalId: HOSTEL, timezone: "Asia/Tbilisi" },
+    } as unknown as PropertySetup;
+    await syncAri(db, caps.connectors, setup, fake.clock.now, { days: 30 });
+    const today = new Date(fake.clock.now).toISOString().slice(0, 10);
+    const nights = [1, 2].map((d) =>
+      new Date(Date.parse(`${today}T00:00:00Z`) + (d + 7) * DAY).toISOString().slice(0, 10),
+    );
+    const cells = await ariCells(db, view.id, [DORM, TWIN, STUDIO], nights);
+    expect(cells.filter((c) => c.roomExtId === DORM)).toHaveLength(2);
+    // Three in the dormitory: no price from the cache at all, so never 38 a night for the three of them.
+    expect(cachedNights(cells, DORM, null, nights)).toBeNull();
+    expect(cachedNights(cells, DORM, "price1", nights)).toBeNull();
+    // Three in the twin: the whole room's 140, never the price for two (110).
+    expect(cachedNights(cells, TWIN, null, nights)).toEqual(nights.map((night) => ({ night, amount: 14_000 })));
+    expect(cachedNights(cells, TWIN, "price1", nights)).toBeNull();
+    expect(cachedNights(cells, STUDIO, null, nights)).toBeNull();
+  });
+
+  it("tells the owner which rooms have prices it cannot quote, and which have none", async () => {
+    const fake = fakeBeds24({ properties: [HOSTEL_TBILISI, INTI_WASI] });
+    const ctx = run(fake);
+    const hostel = await stays.rooms(ctx, HOSTEL);
+    expect(hostel.map((r) => [r.name, r.unpriced])).toEqual([
+      ["Six-bed dormitory", "rules"],
+      ["Twin room", undefined],
+      ["Studio, weekly", "rules"],
+    ]);
+    const inti = await stays.rooms(ctx, String(INTI_WASI.id));
+    expect(inti.find((r) => r.id === "512023")?.unpriced).toBe(true);
+    expect(def.stays?.pricesAt).toBe("Prices → Daily Price Rules");
+  });
+
+  it("reads every property's rooms for the matching sheet in one go, and nothing of prices at the reserve", async () => {
+    const fake = fakeBeds24({ properties: PROPERTIES });
+    const ctx = run(fake);
+    for (const p of PROPERTIES) await stays.rooms(ctx, String(p.id));
+    await stays.ratePlans(ctx, HOSHI);
+    const calls = (path: string) => fake.platform.seen.filter((r) => r.url.pathname === `/api/v2${path}`).length;
+    // Five properties, one read of them and one calendar for all, however many are shown.
+    expect([calls("/properties"), calls("/inventory/rooms/calendar")]).toEqual([1, 1]);
+    const asked = fake.platform.seen.find((r) => r.url.pathname.endsWith("/calendar"))?.url.searchParams;
+    expect(asked?.getAll("propertyId")).toEqual(ALL_IDS);
+
+    // The account close to the credits kept for guests booking: the calendar is not read at all, and
+    // no room is said to have no price on a read that did not happen.
+    const low = fakeBeds24({ properties: PROPERTIES });
+    const lowCtx = run(low);
+    // A token, then the properties: 30 left, which a calendar read would take below the reserve.
+    low.credits.remaining = 32;
+    const rooms = await stays.rooms(lowCtx, String(INTI_WASI.id));
+    expect(rooms.every((r) => r.unpriced === undefined)).toBe(true);
+    expect(low.platform.seen.some((r) => r.url.pathname.endsWith("/calendar"))).toBe(false);
+    expect(low.credits.remaining).toBe(30);
+  });
+
+  it("refuses a stay in another currency than Beds24 keeps the property in, before anything is written", async () => {
+    const fake = fakeBeds24({ properties: PROPERTIES });
+    // Beds24's property moved to another currency since the rooms were matched.
+    const ctx = run(fake, undefined, { currencies: { "241501": "USD" } });
+    await expect(
+      writer.put(ctx, stayOf({ key: "sd-01JAHOSHI000000000000CUR1" }), null, "confirmed"),
+    ).rejects.toMatchObject({
+      code: "refused",
+      message: "Beds24 keeps this property in USD, and this stay is in JPY: make them the same first.",
+    });
+    expect(fake.platform.seen.some((r) => r.method === "POST")).toBe(false);
   });
 });
 
@@ -451,7 +629,7 @@ describe("Beds24: credits", () => {
       fake.clock.now += 12_000;
       const error = (await stays.properties(run(fake, { ...ctx.secret })).catch((e: unknown) => e)) as ConnectorError;
       expect(error.code).toBe("rate_limited");
-      expect(error.message).toBe("Beds24 is busy right now. We'll try again in a few minutes.");
+      expect(error.message).toBe("Beds24 is busy right now. Your inbox tries again in a few minutes.");
       expect(error.retryAfterMs).toBe(288_000);
     }
     const p = fakePlatform().on("GET", "https://beds24.com/api/v2/properties", () => json(usageLimitAnswer, 200));
@@ -466,7 +644,8 @@ describe("Beds24: credits", () => {
     fake.mode.pageSize = 1;
     const ctx = run(fake, undefined, { currencies: { "241501": "JPY" } });
     await stays.properties(ctx);
-    fake.credits.remaining = 31;
+    // The property and its price rules are read first, then the calendar's first page, and no more.
+    fake.credits.remaining = 32;
     const read = await stays.ari(ctx, HOSHI, { from: "2027-03-01", to: "2027-03-05" });
     expect(Array.isArray(read)).toBe(false);
     expect(read).toMatchObject({ until: "2027-03-01" });
@@ -595,7 +774,33 @@ describe("Beds24: stays written first", () => {
     expect(found?.externalId).toBeTruthy();
     expect((await writer.put(ctx, stay, null, "confirmed")).externalId).toBe(found?.externalId);
     expect([...fake.bookings.values()].filter((b) => b.apiReference === stay.key)).toHaveLength(1);
-    expect(await writer.find(ctx, stayOf({ key: "sd-01JAHOSHI000000000000NONE" }))).toBeNull();
+    expect(await writer.find(ctx, stayOf({ key: "sd-01JAHOSHI000000000000NONE", reference: "7HN2XW" }))).toBeNull();
+    clean(fake);
+  });
+
+  it("finds a write whose answer was lost even where Beds24 kept no key, by its room, dates and note", async () => {
+    const fake = fakeBeds24({ properties: PROPERTIES });
+    fake.mode.apiReference = "dropped";
+    const ctx = run(fake);
+    const stay = stayOf({ key: "sd-01JAHOSHI0000000000000LOST", reference: "LQ7M2P" });
+    fake.mode.lostAnswer = true;
+    await expect(writer.put(ctx, stay, null, "confirmed")).rejects.toMatchObject({ code: "unreachable" });
+    fake.mode.lostAnswer = false;
+    const [landed] = [...fake.bookings.values()];
+    expect(landed?.apiReference).toBeUndefined();
+    // Found, so the inbox takes it back instead of leaving a booking nobody was told of.
+    const found = await writer.find(ctx, stay);
+    expect(found?.externalId).toBe(String(landed?.id));
+    const lookup = fake.platform.seen.filter((r) => r.method === "GET" && r.url.pathname.endsWith("/bookings")).at(-1);
+    expect(lookup?.url.searchParams.get("arrival")).toBe(stay.checkIn);
+    expect(lookup?.url.searchParams.get("departure")).toBe(stay.checkOut);
+    expect(lookup?.url.searchParams.getAll("roomId")).toEqual([GARDEN]);
+    // Another stay on the same room and dates, with another reference, is never taken for it.
+    expect(await writer.find(ctx, { ...stay, key: "sd-01JAHOSHI0000000000000OTHR", reference: "Z9K4TA" })).toBeNull();
+    // A change is never found that way: its booking is the link it already has.
+    expect(await writer.find(ctx, { ...stay, key: "sd-01JAHOSHI-change-1" })).toBeNull();
+    await writer.cancel(ctx, found as NonNullable<typeof found>);
+    expect(landed?.status).toBe("cancelled");
     clean(fake);
   });
 
@@ -605,9 +810,9 @@ describe("Beds24: stays written first", () => {
     const ctx = run(fake);
     const stay = stayOf({ key: "sd-01JAHOSHI0000000000000006" });
     const link = await writer.put(ctx, stay, null, "confirmed");
-    // Beds24 kept no key: the write could not be found again after a timeout, so it is never trusted.
+    // Beds24 kept no key: the write is never trusted, and is found by its note to be taken back.
     await expect(writer.oversold?.(ctx, stay, link)).rejects.toThrow(/key/);
-    expect(await writer.find(ctx, stay)).toBeNull();
+    expect((await writer.find(ctx, stay))?.externalId).toBe(link.externalId);
     fake.mode.apiReference = "kept";
     const other = stayOf({ key: "sd-01JAHOSHI0000000000000007", checkIn: "2027-04-20", checkOut: "2027-04-21" });
     const written = await writer.put(ctx, other, null, "confirmed");
@@ -708,15 +913,31 @@ describe("Beds24: stays written first", () => {
   it("does not take a booking back over the guest's name: Beds24 may trim or escape it", async () => {
     const fake = fakeBeds24({ properties: PROPERTIES });
     const ctx = run(fake);
-    // Written composed and cut by character: an emoji at the edge is never split in two.
+    // Written composed and cut to 100 UTF-16 units, by character: an emoji at the edge is never split.
     const name = `Zoë O'Brien-${"🌊".repeat(120)}`;
     const stay = stayOf({ key: "sd-01JAHOSHI0000000000000NAME", guest: { name } });
     const link = await writer.put(ctx, stay, null, "confirmed");
     const written = fake.bookings.get(Number(link.externalId)) as { lastName: string };
-    expect([...written.lastName]).toHaveLength(100);
+    expect(written.lastName).toHaveLength(100);
+    expect([...written.lastName]).toHaveLength(56);
     expect(written.lastName.endsWith("🌊")).toBe(true);
     written.lastName = "Zo&euml; O&#39;Brien";
     expect(await writer.oversold?.(ctx, stay, link)).toBe(false);
+  });
+
+  it("writes a name of 100 characters whole, and leaves out an email or phone too long rather than cut it", async () => {
+    const fake = fakeBeds24({ properties: PROPERTIES });
+    const ctx = run(fake);
+    const name = "山".repeat(100);
+    const email = `${"k".repeat(95)}@example.jp`;
+    const stay = stayOf({
+      key: "sd-01JAHOSHI000000000000CJK1",
+      guest: { name, email, phone: "+81 75 123 4567" },
+    });
+    const link = await writer.put(ctx, stay, null, "confirmed");
+    const kept = fake.bookings.get(Number(link.externalId));
+    expect([kept?.lastName, kept?.email, kept?.phone]).toEqual([name, undefined, "+81 75 123 4567"]);
+    clean(fake);
   });
 
   it("holds nothing in Beds24: no status there is known to keep a room off sale", async () => {
@@ -790,7 +1011,7 @@ describe("Beds24: stays written first", () => {
     });
     await expect(writer.put(run(fake), dorm, null, "confirmed")).rejects.toMatchObject({
       code: "refused",
-      message: expect.stringMatching(/give it a price in Beds24/),
+      message: "Beds24 shows no availability for that room on those nights.",
     });
     expect(fake.platform.seen.some((r) => r.method === "POST")).toBe(false);
   });
@@ -969,23 +1190,57 @@ describe("Beds24: a write that goes through only in part", () => {
 });
 
 describe("Beds24: what is undocumented, either way", () => {
-  it("counts bookings at the stay's edges whether Beds24's date bounds count the day itself or not", async () => {
+  it("counts bookings by unit at the stay's edges, reading no other channel's guest", async () => {
+    const fake = fakeBeds24({ properties: PROPERTIES });
+    // The calendar stops at none: Beds24's count of bookings against units is what tells.
+    fake.mode.clampAvail = true;
+    fake.mode.checkAvailability = "ignore";
+    const ctx = run(fake);
+    const stay = stayOf({ key: "sd-01JAHOSHI0000000000UNIT1" });
+    const link = await writer.put(ctx, stay, null, "confirmed");
+    expect(await writer.oversold?.(ctx, stay, link)).toBe(false);
+    // Another channel's guest arriving on the stay's last night: one unit, two bookings.
+    fake.book({
+      roomId: 512_001,
+      arrival: "2027-04-11",
+      departure: "2027-04-14",
+      channel: "airbnb",
+      lastName: "Okafor",
+    });
+    expect(await writer.oversold?.(ctx, stay, link)).toBe(true);
+    const counted = fake.platform.seen.filter((r) => r.url.pathname.endsWith("/inventory/rooms/unitBookings")).at(-1);
+    // "The last night to be booked (i.e. the day before check-out)".
+    expect([counted?.url.searchParams.get("startDate"), counted?.url.searchParams.get("endDate")]).toEqual([
+      "2027-04-10",
+      "2027-04-11",
+    ]);
+    // Counted with the inventory scope: no list of every booking on those nights, with their guests, is asked for.
+    expect(
+      fake.platform.seen.some((r) => r.url.pathname.endsWith("/bookings") && r.url.searchParams.has("arrivalTo")),
+    ).toBe(false);
+  });
+
+  it("counts bookings at the stay's edges where that count is not served, whether date bounds count the day or not", async () => {
     for (const bounds of ["inclusive", "exclusive"] as const) {
       const fake = fakeBeds24({ properties: PROPERTIES });
-      // The calendar stops at none: Beds24's count of bookings against units is what tells.
       fake.mode.clampAvail = true;
       fake.mode.bounds = bounds;
       fake.mode.checkAvailability = "ignore";
+      fake.mode.unitBookings = "missing";
       const ctx = run(fake);
       const stay = stayOf({ key: `sd-01JAHOSHI0000000000EDGE${bounds === "inclusive" ? "1" : "2"}` });
       const link = await writer.put(ctx, stay, null, "confirmed");
       expect(await writer.oversold?.(ctx, stay, link)).toBe(false);
-      // Another channel's guest arriving on the stay's last night: one unit, two bookings.
       fake.book({ roomId: 512_001, arrival: "2027-04-11", departure: "2027-04-14", channel: "airbnb" });
       expect(fake.numAvail(512_001, "2027-04-11")).toBe(-1);
       expect(await writer.oversold?.(ctx, stay, link)).toBe(true);
       const asked = fake.platform.seen.filter((r) => r.url.searchParams.has("arrivalTo")).at(-1)?.url.searchParams;
-      expect([asked?.get("arrivalTo"), asked?.get("departureFrom")]).toEqual(["2027-04-12", "2027-04-10"]);
+      // From any arrival date: a guest already in the house is counted, not only upcoming arrivals.
+      expect([asked?.get("arrivalFrom"), asked?.get("arrivalTo"), asked?.get("departureFrom")]).toEqual([
+        "2000-01-01",
+        "2027-04-12",
+        "2027-04-10",
+      ]);
     }
   });
 
@@ -1163,12 +1418,22 @@ describe("Beds24: its booking webhook", () => {
       arrival: "2027-04-10",
       departure: "2027-04-12",
     });
-    for (const extra of [{ cvc: "123" }, { cardToken: "tok_x" }]) {
+    // Every documented body names the token fields, empty: taken. One holding a card's token or CVC is not.
+    expect(base.booking).toMatchObject({ stripeToken: null, pcibookingToken: null });
+    for (const extra of [
+      { cvc: "123" },
+      { cardToken: "tok_x" },
+      { stripeToken: "tok_1Q2w3E" },
+      { pcibookingToken: 4242 },
+    ]) {
       expect(await receive(token, { ...base, booking: { ...base.booking, ...extra } })).toMatchObject({
         status: 400,
       });
     }
     expect(await events()).toEqual([]);
+    expect(await receive(token, { ...base, booking: { ...base.booking, stripeToken: "" } })).toMatchObject({
+      status: 200,
+    });
   });
 });
 

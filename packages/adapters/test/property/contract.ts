@@ -32,6 +32,8 @@ export interface ContractSystem {
   readonly exhaust?: (() => void) | undefined;
   /** Whether the system takes a stay on a full night (and shows it below none) instead of refusing it. */
   readonly oversells?: boolean | undefined;
+  /** The property's currency there: the stays written are priced in it (EUR when not said). */
+  readonly currency?: string | undefined;
 }
 
 export function runContext(
@@ -78,7 +80,7 @@ function stay(s: ContractSystem, key: string, checkIn: string, checkOut: string)
         ...(s.rate ? { rateId: s.rate } : {}),
         adults: 2,
         childrenAges: [],
-        price: { value: 30_000, currency: "EUR" },
+        price: { value: 30_000, currency: s.currency ?? "EUR" },
       },
     ],
   };

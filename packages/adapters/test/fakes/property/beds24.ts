@@ -21,10 +21,12 @@ import { type FakePlatform, type FakeRequest, fakePlatform } from "../platform";
  *   by id or by `apiReference` too, unless a date is named;
  * - whether `arrivalTo` ("arrival date before this") and `departureFrom` ("departure date after this")
  *   count the day itself;
- * - whether the calendar's `numAvail` goes below none on an overbooked night, or stops at none.
+ * - whether the calendar's `numAvail` goes below none on an overbooked night, or stops at none;
+ * - whether the count of bookings by unit (`/inventory/rooms/unitBookings`, "Beta") is served.
  *
  * Scopes are held as the wiki gives them: a `read:` or `write:` method on each, `all:` for every
- * method; `bookings-financial` is what shows and takes a booking's price, deposit and tax.
+ * method; `bookings-financial` is what shows and takes a booking's price, deposit and tax, and
+ * `bookings-personal` the guest's name, email and phone.
  *
  * Its own rules, which are not Beds24's documented behaviour and are said here so no test leans on
  * them as such: an offer's total is the sum of the room's daily price with the offer's number; a
@@ -40,6 +42,7 @@ const FULL = [
   "read:bookings",
   "write:bookings",
   "read:bookings-personal",
+  "write:bookings-personal",
   "read:bookings-financial",
   "write:bookings-financial",
   "read:inventory",
@@ -95,6 +98,8 @@ export interface FakeBeds24 {
     clampAvail: boolean;
     /** Bookings Beds24 will not change: each change to one is answered as an error. */
     refuseModify: Set<number>;
+    /** Whether the count of bookings by unit is served ("Beta"), or answered 404. */
+    unitBookings: "served" | "missing";
   };
   credits: { limit: number; remaining: number; windowStart: number };
   /** What each call costs, by method and path. */
@@ -165,6 +170,7 @@ export function fakeBeds24(opts: {
     bounds: "inclusive",
     clampAvail: false,
     refuseModify: new Set(),
+    unitBookings: "served",
   };
   let nextInfo = 70_000;
 
@@ -420,6 +426,7 @@ export function fakeBeds24(opts: {
           rooms: flag(req, "includeAllRooms"),
           offers: flag(req, "includeOffers"),
           upsells: flag(req, "includeUpsellItems"),
+          rules: flag(req, "includePriceRules"),
         }),
       ),
       headers,
@@ -473,6 +480,23 @@ export function fakeBeds24(opts: {
     return paged(req, "calendar", out, headers);
   });
 
+  // Bookings by unit, night by night: this fake assigns none to a unit, so every one is "unassigned".
+  route("GET", "/inventory/rooms/unitBookings", "read:inventory", (req, headers) => {
+    if (mode.unitBookings === "missing") return json(404, failure(404, "Not found"), headers);
+    const start = req.url.searchParams.get("startDate") ?? "";
+    const end = req.url.searchParams.get("endDate") ?? "";
+    const roomIds = list(req, "roomId").map(Number);
+    const out = roomIds.flatMap((roomId) => {
+      const r = roomOf(roomId);
+      if (!r) return [];
+      const days = Object.fromEntries(
+        nights(start, addDays(end, 1)).map((night) => [night, { "1": 0, unassigned: taken(roomId, night) }]),
+      );
+      return [{ roomId, propertyId: r.property.id, name: r.room.name, qty: r.room.qty, unitBookings: days }];
+    });
+    return paged(req, "unitBookings", out, headers);
+  });
+
   route("GET", "/inventory/rooms/offers", "read:inventory", (req, headers) => {
     const arrival = req.url.searchParams.get("arrival") ?? "";
     const departure = req.url.searchParams.get("departure") ?? "";
@@ -502,7 +526,7 @@ export function fakeBeds24(opts: {
 
   /* --- bookings ---------------------------------------------------------------- */
 
-  const view = (b: FakeBooking, o: { group: boolean; info: boolean; financial: boolean }) => ({
+  const view = (b: FakeBooking, o: { group: boolean; info: boolean; financial: boolean; personal: boolean }) => ({
     id: b.id,
     propertyId: b.propertyId,
     roomId: b.roomId,
@@ -518,8 +542,11 @@ export function fakeBeds24(opts: {
     masterId: b.masterId ?? null,
     ...(o.group ? { bookingGroup: b.group ? { master: b.group[0], ids: b.group } : null } : {}),
     ...(o.info ? { infoItems: (b.infoItems ?? []).map((x) => ({ ...x, bookingId: b.id })) } : {}),
-    ...(b.lastName !== undefined ? { lastName: b.lastName } : {}),
-    ...(b.firstName !== undefined ? { firstName: b.firstName } : {}),
+    // The guest's name and contact only to a token with the personal scope.
+    ...(o.personal && b.lastName !== undefined ? { lastName: b.lastName } : {}),
+    ...(o.personal && b.firstName !== undefined ? { firstName: b.firstName } : {}),
+    ...(o.personal && b.email !== undefined ? { email: b.email } : {}),
+    ...(o.personal && b.phone !== undefined ? { phone: b.phone } : {}),
     flagText: b.flagText ?? "",
     flagColor: b.flagColor ?? "",
     notes: b.notes ?? "",
@@ -537,9 +564,11 @@ export function fakeBeds24(opts: {
     const arrivalFrom = req.url.searchParams.get("arrivalFrom");
     const arrivalTo = req.url.searchParams.get("arrivalTo");
     const departureFrom = req.url.searchParams.get("departureFrom");
+    const arrival = req.url.searchParams.get("arrival");
+    const departure = req.url.searchParams.get("departure");
     const today = new Date(clock.now).toISOString().slice(0, 10);
     const exclusive = mode.bounds === "exclusive";
-    const dated = Boolean(arrivalFrom || arrivalTo || departureFrom);
+    const dated = Boolean(arrivalFrom || arrivalTo || departureFrom || arrival || departure);
     const byIdOrKey = ids.length > 0 || refs.length > 0;
     const found = [...bookings.values()].filter((b) => {
       if (ids.length && !ids.includes(b.id)) return false;
@@ -549,6 +578,8 @@ export function fakeBeds24(opts: {
       if (arrivalFrom && (exclusive ? b.arrival <= arrivalFrom : b.arrival < arrivalFrom)) return false;
       if (arrivalTo && (exclusive ? b.arrival >= arrivalTo : b.arrival > arrivalTo)) return false;
       if (departureFrom && (exclusive ? b.departure <= departureFrom : b.departure < departureFrom)) return false;
+      if (arrival && b.arrival !== arrival) return false;
+      if (departure && b.departure !== departure) return false;
       // "By default only upcoming bookings will be returned."
       if (!dated && (!byIdOrKey || mode.upcoming === "always") && b.departure < today) return false;
       return true;
@@ -557,6 +588,7 @@ export function fakeBeds24(opts: {
       group: flag(req, "includeBookingGroup"),
       info: flag(req, "includeInfoItems"),
       financial: holds(scopes, "read:bookings-financial"),
+      personal: holds(scopes, "read:bookings-personal"),
     };
     return paged(
       req,
@@ -586,8 +618,11 @@ export function fakeBeds24(opts: {
 
   route("POST", "/bookings", "write:bookings", (req, headers, scopes) => {
     fake.beforeWrite?.();
-    // A price, deposit or tax is taken only from a token with the financial scope; otherwise left out.
+    // A price, deposit or tax is taken only from a token with the financial scope, and the guest's name,
+    // email and phone only with the personal scope; otherwise each is left out.
     const money = holds(scopes, "write:bookings-financial");
+    const personal = holds(scopes, "write:bookings-personal");
+    const PERSONAL = new Set(["firstName", "lastName", "email", "phone"]);
     let items: Record<string, unknown>[];
     try {
       items = JSON.parse(req.body) as Record<string, unknown>[];
@@ -620,6 +655,7 @@ export function fakeBeds24(opts: {
           "flagColor",
         ] as const) {
           if (k === "price" && !money) continue;
+          if (PERSONAL.has(k) && !personal) continue;
           if (it[k] !== undefined) (b as unknown as Record<string, unknown>)[k] = it[k];
         }
         applyInfo(b, it.infoItems);
@@ -655,9 +691,9 @@ export function fakeBeds24(opts: {
           ? { apiReference: it.apiReference }
           : {}),
         ...(typeof it.masterId === "number" ? { masterId: it.masterId } : {}),
-        ...(typeof it.lastName === "string" ? { lastName: it.lastName } : {}),
-        ...(typeof it.email === "string" ? { email: it.email } : {}),
-        ...(typeof it.phone === "string" ? { phone: it.phone } : {}),
+        ...(personal && typeof it.lastName === "string" ? { lastName: it.lastName } : {}),
+        ...(personal && typeof it.email === "string" ? { email: it.email } : {}),
+        ...(personal && typeof it.phone === "string" ? { phone: it.phone } : {}),
         ...(typeof it.notes === "string" ? { notes: it.notes } : {}),
         ...(typeof it.comments === "string" ? { comments: it.comments } : {}),
         ...(typeof it.flagText === "string" ? { flagText: it.flagText } : {}),

@@ -3,7 +3,9 @@
  * - https://beds24.com/api/v2/apiV2.yaml (saved copy: scratchpad ext-beds24/apiV2.yaml): path
  *   `Webhooks - bookings` ("Alpha - The webhook payload sent to your URL", "Configure under Settings ->
  *   Properties -> Access -> Booking Webhook"; body: timeStamp, booking.id, bookingGroup, masterId,
- *   propertyId, roomId, unitId, roomQty, offerId, status, arrival, departure…), the property's
+ *   propertyId, roomId, unitId, roomQty, offerId, status, arrival, departure… stripeToken and
+ *   pcibookingToken, "format: nullable"; and beside the booking infoItems, invoiceItems, messages and
+ *   retries), the property's
  *   `webhooks` settings (version one / twoNoPersonalData / twoWithPersonalData; additionalData none /
  *   CVC / token / CVCAndToken; customHeader), and the response headers `X-FiveMinCreditLimit`,
  *   `X-FiveMinCreditLimit-ResetsIn` ("The number of seconds until this 5 minute period is over"),
@@ -46,7 +48,21 @@ export function bookingWebhook(b: {
       flagColor: "",
       flagText: "",
       statusCode: 0,
+      channel: "booking",
+      apiReference: "",
+      price: 0,
+      deposit: 0,
+      tax: 0,
+      commission: 0,
+      // Named in every booking webhook, empty unless the owner adds a card's token to it.
+      stripeToken: null,
+      pcibookingToken: null,
+      apiMessage: "",
     },
+    infoItems: [],
+    invoiceItems: [],
+    messages: [],
+    retries: 0,
   };
 }
 
