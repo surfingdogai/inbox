@@ -88,8 +88,16 @@ export interface FieldHints {
   readonly advanced?: boolean | undefined;
   /** A preset that needs a field the schema leaves optional says so here (a Nextcloud address). */
   readonly required?: boolean | undefined;
-  /** Steps on the platform, one per line, shown under the help: the rows of a key page to tick. */
-  readonly steps?: readonly string[] | undefined;
+  /**
+   * Steps on the platform, one per line, shown under the help: the rows of a key page to tick. A step
+   * with `items` is a short list under its line, each as the platform names it ("Bookings: Read and Write").
+   */
+  readonly steps?: readonly FieldStep[] | undefined;
+  /**
+   * A value that works once (an invite code): after the platform refuses it, the field is emptied for a
+   * new one, so the same refusal is never asked for again.
+   */
+  readonly once?: boolean | undefined;
   /** Taken through the API but not drawn in the form: for the few who follow the docs to it. */
   readonly hidden?: boolean | undefined;
   /** A key's placeholder for each mode, for a second connection of the other one ("rk_test_…"). */
@@ -100,6 +108,9 @@ export interface FieldHints {
    */
   readonly prefill?: "website" | undefined;
 }
+
+/** One step on the platform: a line, or a line with a short list under it. */
+export type FieldStep = string | { readonly text: string; readonly items: readonly string[] };
 
 /** Where field hints live: a registry of their own, so nothing else in the schema is touched. */
 export const fieldHints = z.registry<FieldHints>();
@@ -131,7 +142,8 @@ export interface FormField {
   readonly link?: { readonly href: string; readonly text: string } | undefined;
   readonly placeholder?: string | undefined;
   readonly autocomplete?: string | undefined;
-  readonly steps?: readonly string[] | undefined;
+  readonly steps?: readonly FieldStep[] | undefined;
+  readonly once?: boolean | undefined;
   readonly byMode?: { readonly live: string; readonly test: string } | undefined;
   /** What the inbox filled in already (`FieldHints.prefill`), for the owner to keep or change. */
   readonly value?: string | undefined;
@@ -191,6 +203,7 @@ export function describeForm(
       ...(hints.placeholder ? { placeholder: hints.placeholder } : {}),
       ...(hints.autocomplete ? { autocomplete: hints.autocomplete } : {}),
       ...(hints.steps?.length ? { steps: hints.steps } : {}),
+      ...(hints.once ? { once: true } : {}),
       ...(hints.byMode ? { byMode: hints.byMode } : {}),
       ...(hints.prefill && prefill[hints.prefill] ? { value: prefill[hints.prefill] } : {}),
     });
@@ -969,6 +982,12 @@ export interface ConnectorDefinition {
   /** True when this instance can offer it; otherwise why not (an OAuth app with no client set). */
   ready?(): true | string;
   /**
+   * Built from the platform's own documentation and not yet checked against a live account: the gallery
+   * says "new" beside it, and its `note` says what that means for the owner. Removed once a first real
+   * account confirms what the documentation left open.
+   */
+  readonly fresh?: boolean | undefined;
+  /**
    * How the gallery shows it while it is not ready: `soon` (on its way here), or `setup` (it needs
    * something on the server only its operator can give, said in `hint`, explained at `href`).
    */
@@ -1139,13 +1158,16 @@ export interface ExternalRoom {
   /**
    * True when the system holds no price for the room on the nights it was asked about: a system whose
    * availability calls answer nothing for an unpriced room (Beds24) cannot offer it, which the owner is
-   * told while mapping rooms. Absent: not known.
+   * told while mapping rooms. `rules`: it has prices, but each set by the number of guests or the length
+   * or timing of a stay, which the inbox does not work out: guests ask first, and the owner confirms each
+   * one. Absent: not known, or priced.
    */
-  readonly unpriced?: boolean | undefined;
+  readonly unpriced?: boolean | "rules" | undefined;
   /**
    * Charges the system has set for the room besides its nightly price (a cleaning fee, a tax, a security
-   * deposit, an extra every guest pays), which the inbox's quote may not include: the owner is told
-   * while mapping rooms, to check the prices here cover them. Absent: none known.
+   * deposit, an extra every guest pays), which the inbox's quote does not include unless the owner adds
+   * them in Taxes & fees: the owner is told while mapping rooms, and says they are covered before stays
+   * confirm at once. Absent: none known.
    */
   readonly charges?: readonly ("cleaning" | "tax" | "deposit" | "extra")[] | undefined;
 }
@@ -1202,6 +1224,8 @@ export interface StayInventory {
   ): Promise<{ readonly subtotal: PayAmount; readonly nights?: readonly { night: string; amount: number }[] } | null>;
   /** What a call cost, from the answer's headers, where the system counts credits. */
   credits?(res: ConnectorHttpResponse): { readonly remaining: number; readonly resetsInMs: number } | null;
+  /** Where the owner sets the prices the inbox reads, in the system's own words: "Prices → Daily Price Rules". */
+  readonly pricesAt?: string | undefined;
 }
 
 /** A stay as it is written to the property's own system. */

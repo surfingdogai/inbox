@@ -43,6 +43,8 @@ export interface GalleryWay {
   /** Steps on the platform once it is made: where to paste a link. */
   readonly steps?: readonly string[] | undefined;
   readonly note?: string | undefined;
+  /** Built from the platform's documentation, not yet checked against a live account: "new" beside it. */
+  readonly fresh?: true | undefined;
   readonly hint?: string | undefined;
   readonly href?: string | undefined;
   /**
@@ -381,6 +383,7 @@ function wayOf(
     ...(consent ? { consent } : {}),
     ...(def.steps?.length ? { steps: def.steps } : {}),
     ...(note ? { note } : {}),
+    ...(def.fresh && live ? { fresh: true as const } : {}),
     ...(unready?.hint ? { hint: unready.hint } : {}),
     ...(unready?.href ? { href: unready.href } : {}),
     ...(def.hookEvents && live && opts.hookBase
