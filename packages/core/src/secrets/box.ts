@@ -59,7 +59,12 @@ export type MacPurpose =
    * booking's metadata, ADR-022): one per platform account, so the inbox finds its own again after
    * connecting the account again, and nobody who books on the platform can pass for it.
    */
-  | "connector-marker";
+  | "connector-marker"
+  /**
+   * A short-lived link to a file a customer sent with a request (ADR-034 §2): only the business sees
+   * it, through a link that stops working within minutes.
+   */
+  | "attachment-link";
 
 export interface SecretBox {
   /**

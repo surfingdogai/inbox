@@ -50,6 +50,12 @@ export interface HostPolicy {
    * then, so nothing is added on a platform that would fail. Absent is true.
    */
   readonly hooksLive?: boolean | undefined;
+  /**
+   * What the files customers send with their requests may take in all, in bytes (ADR-034 §2): a host
+   * keeps each inbox to its share (500 MB for a hosted inbox, est.). Absent: no limit but the database's
+   * own, which is a self-hosted inbox's to watch.
+   */
+  readonly attachmentsQuotaBytes?: number | undefined;
 }
 
 /** The business's own site as its host knows it (`HostPolicy.home`). */

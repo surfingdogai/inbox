@@ -73,6 +73,10 @@ export const DOWNLOAD_TABLES: Readonly<Record<string, DownloadTable>> = {
   mail_refs: {},
   action_links: { note: "The links in emails to customers, which answer only at the inbox that sent them." },
   blobs: { note: "Where attachments are kept. The files themselves are not in this download." },
+  attachment_chunks: {
+    leftOut: "The files customers sent with their requests: open each from its request in the app.",
+    strip: empty("attachment_chunks"),
+  },
   // The networks this inbox reports to.
   network_status: {},
   network_publications: {},
