@@ -1,6 +1,7 @@
 import type { AreaSummary, AttachmentRef, Settings, WorkProfile } from "@surfingdog/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ownerCall } from "./api";
+import type { Weekly } from "./types";
 
 /**
  * Trades (ADR-034): where the business works, how it takes work, a request's files and its job tool,
@@ -15,7 +16,13 @@ export interface WorkView {
   readonly area: AreaDoc;
   readonly work: WorkDoc;
   readonly public: { readonly area: AreaSummary; readonly work: WorkProfile | null };
-  readonly job_tools: readonly { readonly id: string; readonly kind: string; readonly name: string }[];
+  readonly job_tools: readonly {
+    readonly id: string;
+    readonly kind: string;
+    readonly name: string;
+    /** It can say the business's opening hours, to start from. */
+    readonly starts?: boolean | undefined;
+  }[];
   readonly expiring: readonly { readonly connection_id: string; readonly kind: string; readonly expires_at: string }[];
 }
 
@@ -42,8 +49,15 @@ export interface PushOutcomeView {
 
 const enc = encodeURIComponent;
 
+/** What a job tool says of the business, to start from (`GET /v1/owner/integrations/:id/setup`). */
+export interface ToolSetupView {
+  readonly source: { readonly kind: string; readonly account: string; readonly readAt: number; readonly zone?: string };
+  readonly hours?: Weekly | undefined;
+}
+
 export const tradesApi = {
   work: () => ownerCall<WorkView>("GET", "/v1/owner/work"),
+  setup: (connectionId: string) => ownerCall<ToolSetupView>("GET", `/v1/owner/integrations/${enc(connectionId)}/setup`),
   files: (itemId: string) => ownerCall<{ files: FileView[] }>("GET", `/v1/owner/items/${enc(itemId)}/files`),
   jobTool: (itemId: string) => ownerCall<JobToolView>("GET", `/v1/owner/items/${enc(itemId)}/job-tool`),
   send: (itemId: string) =>

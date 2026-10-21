@@ -7,8 +7,9 @@ import { Field, FormActions, SectionHead, Switch } from "../components/Form";
 import { moneyMajor, parseMoney } from "../lib/actions";
 import { type ApiProblem, problemOf } from "../lib/api";
 import { formatDay } from "../lib/format";
-import { qk, useSaveSettings, useServices, useSettings } from "../lib/queries";
-import { MODE_WORDS, toolName, useWork, type WorkDoc } from "../lib/trades";
+import { describeWeekly } from "../lib/hours";
+import { qk, useAvailability, useSaveSettings, useSaveWeekly, useServices, useSettings } from "../lib/queries";
+import { MODE_WORDS, type ToolSetupView, toolName, tradesApi, useWork, type WorkDoc } from "../lib/trades";
 import type { SettingsDoc } from "../lib/types";
 import "../trades.css";
 
@@ -225,6 +226,11 @@ function WorkForm({ data, onReload }: { data: SettingsDoc; onReload: () => void 
             No job tool yet: <Link to="/settings/integrations">connect ServiceM8, Housecall Pro or Fergus</Link>.
           </p>
         )}
+        {tools
+          .filter((t) => t.starts)
+          .map((t) => (
+            <StartFromTool key={t.id} id={t.id} kind={t.kind} zone={doc.business.timezone} />
+          ))}
         {(work.data?.expiring ?? []).map((x) => (
           <p key={x.connection_id} className="hint work-expiring">
             Your {toolName(x.kind)} token runs out on {formatDay(x.expires_at)}. Make a new one and connect again.
@@ -248,6 +254,79 @@ function WorkForm({ data, onReload }: { data: SettingsDoc; onReload: () => void 
           {save.isPending ? "Saving…" : "Save"}
         </button>
       </FormActions>
+    </div>
+  );
+}
+
+/**
+ * "Start from your tool" (ADR-034 §5): the opening hours a job tool keeps, read when the owner asks,
+ * shown beside the inbox's own, and kept only when they press. Hours from a tool in another time zone
+ * are shown, never kept as they are: Availability is where they are set then.
+ */
+function StartFromTool({ id, kind, zone }: { id: string; kind: string; zone: string }) {
+  const name = toolName(kind);
+  const ours = useAvailability();
+  const keep = useSaveWeekly();
+  const [read, setRead] = useState<ToolSetupView | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const look = async () => {
+    setProblem(null);
+    setBusy(true);
+    try {
+      setRead(await tradesApi.setup(id));
+    } catch (e) {
+      setProblem(problemOf(e).detail);
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!read) {
+    return (
+      <div className="work-start">
+        <button type="button" className="linkish" disabled={busy} onClick={() => void look()}>
+          {busy ? `Reading ${name}…` : `Start from ${name}: its opening hours`}
+        </button>
+        {problem && <p className="hint error">{problem}</p>}
+      </div>
+    );
+  }
+  const theirs = read.hours ?? {};
+  const elsewhere = read.source.zone && read.source.zone !== zone ? read.source.zone : null;
+  const same = ours.data && JSON.stringify(ours.data.weekly) === JSON.stringify(theirs);
+  return (
+    <div className="work-start stack">
+      <p className="hint">
+        {name}: {describeWeekly(theirs)}
+        {ours.data && (
+          <>
+            <br />
+            Yours now: {describeWeekly(ours.data.weekly)}
+          </>
+        )}
+      </p>
+      {elsewhere ? (
+        <p className="hint">
+          {name} keeps its hours in {elsewhere}, and this inbox is in {zone}: set yours in{" "}
+          <Link to="/settings/availability">Availability</Link>.
+        </p>
+      ) : keep.isSuccess || same ? (
+        <p className="hint" role="status">
+          Your opening hours are {name}'s.
+        </p>
+      ) : (
+        <div>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            disabled={keep.isPending || Object.keys(theirs).length === 0}
+            onClick={() => keep.mutate({ weekly: theirs })}
+          >
+            {keep.isPending ? "Keeping…" : "Use these hours"}
+          </button>
+        </div>
+      )}
+      {keep.isError && <p className="hint error">{problemOf(keep.error).detail}</p>}
     </div>
   );
 }

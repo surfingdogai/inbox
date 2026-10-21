@@ -110,6 +110,11 @@ is the connectors base's file to change.
   the connection's own address lets one in and the schedule is read again; Housecall Pro's are checked
   (`Api-Signature`, HMAC-SHA-256 over `Api-Timestamp.body`, hex or base64, five minutes); Jobber's with
   its app's secret. Fergus has none in its reference.
+- **Start from your tool** (`setup_in`): ServiceM8's vendor record keeps the business's opening hours
+  (`opening_time_<day>`, `closing_time_<day>`, minutes from midnight, in its `timezone_name`).
+  Settings → Work reads them when the owner asks (`GET /v1/owner/integrations/:id/setup`), shows them
+  beside the inbox's own, and keeps them only when the owner presses; hours kept in another zone are
+  shown, never copied. The reader is the same `SetupReader` seam a booking system uses (ADR-035).
 - A Fergus token lasts a year: when it was connected is kept, and Settings → Work says when it runs out.
 
 ### 6. Presets

@@ -26,6 +26,7 @@ A tool that only connects through a partner programme (Jobber, and ServiceM8's o
 - **Once.** A request is never in your tool twice: a second press, a retry or a lost answer finds the one already there.
 - **Only what the job needs.** Who to answer, the site and how to find the way, what it is, when suits, the customer's words, and the photos where the tool takes files (ServiceM8, Fergus; a Housecall Pro lead links back to the request instead). Nothing goes to anyone else.
 - **Your schedule, read.** Visits scheduled in your tool are busy times, read every few minutes; a change your tool announces is read at once.
+- **Your hours, to start from.** ServiceM8 keeps your opening hours: Settings → Work → **Start from ServiceM8** shows them beside yours, and **Use these hours** makes them your Inbox's. Nothing changes until you press it, and hours kept in another time zone than your Inbox's are shown, not copied.
 - **Your token, watched.** A Fergus token lasts a year; Settings → Work says when yours runs out, two weeks before.
 
 ## Building one

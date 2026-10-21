@@ -139,6 +139,12 @@
 .work-expiring {
   margin: 0;
 }
+.work-start {
+  gap: 6px;
+}
+.work-start .hint {
+  margin: 0;
+}
 .area .chip .icon-sm {
   margin-right: 4px;
 }
