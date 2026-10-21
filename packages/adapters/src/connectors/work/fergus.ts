@@ -186,7 +186,7 @@ export function fergusConnector(opts: { readonly cleared?: boolean | undefined }
     capabilities: ["requests_out", "busy_times"],
     auth: "form",
     ready: () => (opts.cleared ? true : waiting),
-    whenNotReady: { status: "setup", hint: waiting, href: "https://surfingdog.ai/docs/job-tools/#fergus" },
+    whenNotReady: { status: "setup", hint: waiting, href: "https://surfingdog.ai/docs/job-tools/#which-tools" },
     form: fergusForm,
     note: "Requests you take on arrive as enquiries with their photos; your Fergus calendar blocks those times.",
     action: "Connect Fergus",

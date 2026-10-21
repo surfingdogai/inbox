@@ -23,7 +23,8 @@ export * from "./strip";
  * - `{url, name?}`: an https address on a public host, fetched by the inbox (`fetchFile`).
  *
  * Every file is told apart by its first bytes (JPEG, PNG, WebP or PDF; a HEIC photo is refused with
- * "send it as a JPEG"), has its metadata taken out (`stripMetadata`: where a photo was taken goes),
+ * "send it as a JPEG"), has an image's metadata taken out (`stripMetadata`: where a photo was taken
+ * goes; a PDF is kept as it was sent, photos inside it too),
  * and is kept in the inbox's own database for the business alone. Words here are read by an agent
  * and relayed to its person: they never name the software.
  */
@@ -61,7 +62,7 @@ export const filesInputSchema = z
   .max(ATTACHMENT_LIMITS.perRequest)
   .optional()
   .describe(
-    "Photos or plans of the job: JPEG, PNG, WebP or PDF, at most six of 10 MB each. Inline up to 4 MB each (8 MB a call), else by https address or upload_id. HEIC photos: send them as JPEG.",
+    "Photos or plans of the job: JPEG, PNG, WebP or PDF, at most six of 10 MB each. Inline up to 4 MB each (8 MB a call), else by https address or upload_id. HEIC photos: send them as JPEG. Images are cleaned of where they were taken; a PDF is kept as sent.",
   );
 
 export const FILE_WORDS = {

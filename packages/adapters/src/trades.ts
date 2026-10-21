@@ -36,8 +36,8 @@ export async function takesWork(caps: Capabilities): Promise<boolean> {
 }
 
 export const TRADES_INSTRUCTIONS = [
-  "This business quotes jobs. get_business_profile's work says where it goes, whether it takes emergencies online, and what coming out costs; check_area tells you whether a site is inside where it works (inside, outside, or on_request when it decides).",
-  "request_quote takes the job (payload.job: urgency, whether a visit comes first, the site and how to find the way, up to three windows that suit) and photos or plans (attachments: JPEG, PNG, WebP or PDF, at most six of 10 MB; inline as data_base64 up to 4 MB each and 8 MB a call, else by an https url, or an upload_id from POST /v1/uploads). HEIC photos: send them as JPEG.",
+  "This business quotes jobs. get_business_profile's work says where it goes, whether it takes emergencies online, and its call-out fee; check_area tells you whether a site is inside where it works (inside, outside, or on_request when it decides).",
+  "request_quote takes the job (payload.job: urgency, whether a visit comes first, the site and how to find the way, up to three windows that suit) and photos or plans (attachments: JPEG, PNG, WebP or PDF, at most six of 10 MB; inline as data_base64 up to 4 MB each and 8 MB a call, else by an https url, or an upload_id from POST /v1/uploads). HEIC photos: send them as JPEG. Where a photo was taken is taken out of images; a PDF is kept as it was sent.",
 ].join(" ");
 
 export function registerPublicTradesTools(server: McpServer, caps: Capabilities, _caller: Caller): void {

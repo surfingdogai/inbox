@@ -116,6 +116,7 @@
           "type": "boolean"
         },
         "lines": {
+          "description": "When included is false: the tax on top of the prices, at least one line; part of the total.",
           "maxItems": 5,
           "type": "array",
           "items": {

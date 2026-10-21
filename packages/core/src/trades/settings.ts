@@ -4,7 +4,7 @@ import { moneySchema } from "../domain/types";
 /**
  * Settings → Work (ADR-034 §4): how a trade takes work. Each is a choice, never a typed code:
  *
- * - `callOutFee`: what coming out costs, and whether accepting the quote takes it off;
+ * - `callOutFee`: the call-out fee, and whether accepting the quote takes it off;
  * - `outOfHours`: what a visit outside the opening hours (Settings → Availability) adds, as an amount
  *   or a percentage;
  * - `emergency`: whether agents may ask for an emergency job at all, only while open, or at any hour,
@@ -33,7 +33,7 @@ export const workSettingsSchema = z
       .object({ amount: moneySchema, creditedIfAccepted: z.boolean().default(false) })
       .nullable()
       .default(null)
-      .describe("What coming out costs, and whether accepting the quote takes it off."),
+      .describe("Your call-out fee, and whether accepting the quote takes it off."),
     outOfHours: z
       .object({ surcharge: surchargeSchema })
       .nullable()

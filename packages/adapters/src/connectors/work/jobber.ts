@@ -311,7 +311,7 @@ export function jobberConnector(
     whenNotReady: {
       status: "setup",
       hint: blocked ?? "Needs a Jobber app, reviewed by Jobber, on this server.",
-      href: "https://surfingdog.ai/docs/job-tools/#jobber",
+      href: "https://surfingdog.ai/docs/job-tools/#which-tools",
     },
     consent: "Jobber will ask to let this inbox add clients and requests, and see your visits.",
     note: "Requests you take on arrive as Jobber requests; scheduled visits block those times.",

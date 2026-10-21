@@ -87,13 +87,14 @@ or network:
   (`paymentScheduleSchema`: `immediate`, `deferred` or `at_property`; `scheduleProblem`, the invariant
   that the schedules add up to the total).
 - 0.11 ([ADR-034](../../docs/adr/034-trades.md)): trades and projects. Files on a request
-  (`attachmentRefSchema`: JPEG, PNG, WebP or PDF by their first bytes, at most six of 10 MB,
-  `ATTACHMENT_LIMITS`); where a business works, as it says so in public (`areaSummarySchema`: a radius in
+  (`attachmentRefSchema`: JPEG, PNG, WebP or PDF by their first bytes, at most six of 10 MB, and room of
+  their own for files waiting for a request, `ATTACHMENT_LIMITS`); where a business works, as it says so in public (`areaSummarySchema`: a radius in
   km or postal prefixes, never the place a radius is measured from; `checkAreaInputSchema` and
   `checkAreaOutputSchema` for `check_area`; a site told as a band, `areaCheckSchema`); the job a request
   for a price describes (`jobSchema`: urgency, visit, site, up to three windows, a budget range); a trade's
   quote (`tradeQuoteSchema`: estimate or fixed, stages on the 0.10 payment schedule, call-out and visit
-  fees, tax included or not; a line's `quoteLineKindSchema`); and how a trade takes work
+  fees already taken off the total or paid apart, tax included or not, the total always what the
+  customer pays with its tax; a line's `quoteLineKindSchema`); and how a trade takes work
   (`workProfileSchema`, `get_business_profile`'s `work`). Schemas: `attachment-ref`, `area-summary`,
   `job`, `trade-quote`, `work-profile`, `mcp-check-area-input`, `mcp-check-area-output`.
 

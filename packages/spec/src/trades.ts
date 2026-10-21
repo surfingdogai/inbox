@@ -235,7 +235,7 @@ export const quoteLineKindSchema = z.enum(["labour", "materials", "other"]);
 
 /**
  * How a trade takes work, as its public profile says it (`get_business_profile`'s `work`): where it
- * goes, whether it takes emergencies online and when, what coming out costs, and how visits confirm.
+ * goes, whether it takes emergencies online and when, its call-out fee, and how visits confirm.
  */
 export const workProfileSchema = z.object({
   area: areaSummarySchema,

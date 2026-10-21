@@ -141,7 +141,7 @@ export function housecallproConnector(opts: { readonly cleared?: boolean | undef
     capabilities: ["requests_out", "busy_times"],
     auth: "form",
     ready: () => (opts.cleared ? true : waiting),
-    whenNotReady: { status: "setup", hint: waiting, href: "https://surfingdog.ai/docs/job-tools/#housecall-pro" },
+    whenNotReady: { status: "setup", hint: waiting, href: "https://surfingdog.ai/docs/job-tools/#which-tools" },
     form: housecallproForm,
     note: "Requests you take on arrive as leads in your Job inbox; scheduled jobs block those times. MAX plan.",
     action: "Connect Housecall Pro",

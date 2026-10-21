@@ -386,7 +386,7 @@ export function servicem8Connector(client: OAuthClient | null = null): Connector
         whenNotReady: {
           status: "setup",
           hint: "Needs a ServiceM8 partner app on this server.",
-          href: "https://surfingdog.ai/docs/job-tools/#servicem8",
+          href: "https://surfingdog.ai/docs/job-tools/#which-tools",
         },
         consent: "ServiceM8 will ask to let this inbox add jobs, clients and photos, and see your schedule.",
       },

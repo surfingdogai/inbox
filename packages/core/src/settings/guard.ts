@@ -62,7 +62,7 @@ export const OWNER_ONLY_SETTINGS: readonly Watched[] = [
   // How the business is paid, as it tells every agent (`payments`): a customer's message must never get the owner's
   // AI to declare a way to pay the business does not take.
   { path: ["payments"] },
-  // Where the business works and what coming out costs (ADR-034): what agents are told, the money a
+  // Where the business works and its call-out fee (ADR-034): what agents are told, the money a
   // request may carry, and whether requests go into a job tool on another platform.
   { path: ["area"] },
   { path: ["work"] },
