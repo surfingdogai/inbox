@@ -42,7 +42,7 @@
         },
         "type": {
           "type": "string",
-          "enum": ["message", "quote_request", "booking"]
+          "enum": ["message", "quote_request", "booking", "stay"]
         },
         "state": {
           "type": "string"

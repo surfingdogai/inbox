@@ -84,7 +84,21 @@ export interface RuleContext {
   readonly settings: Record<string, unknown>;
   readonly now: number;
   readonly text: string;
-  readonly facts: { readonly slotIsFree: boolean | null; readonly withinBusinessHours: boolean | null };
+  readonly facts: {
+    readonly slotIsFree: boolean | null;
+    readonly withinBusinessHours: boolean | null;
+    /** A stay's (ADR-033 §7): read once, before any rule runs. */
+    readonly stay?: StayFacts | undefined;
+  };
+}
+
+export interface StayFacts {
+  readonly ratesCover: boolean;
+  readonly nightsFree: boolean;
+  readonly nightsClosed: boolean;
+  readonly icalHint: boolean;
+  readonly freeCancellation: boolean;
+  readonly changeNightsFree: boolean;
 }
 
 export function getPath(root: unknown, path: string): unknown {
@@ -175,6 +189,18 @@ function evaluateFn(fn: string, args: Record<string, unknown>, ctx: RuleContext)
     }
     case "is_sandbox":
       return getPath(ctx, "item.flags.sandbox") === true;
+    case "rates_cover":
+      return ctx.facts.stay?.ratesCover === true;
+    case "nights_free":
+      return ctx.facts.stay?.nightsFree === true;
+    case "nights_closed":
+      return ctx.facts.stay?.nightsClosed === true;
+    case "ical_hint_overlap":
+      return ctx.facts.stay?.icalHint === true;
+    case "free_cancellation":
+      return ctx.facts.stay?.freeCancellation === true;
+    case "change_nights_free":
+      return ctx.facts.stay?.changeNightsFree === true;
     case "text_has_keywords": {
       const keywords = Array.isArray(args.keywords)
         ? (args.keywords as unknown[]).filter((k): k is string => typeof k === "string")

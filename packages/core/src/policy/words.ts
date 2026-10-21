@@ -1,5 +1,6 @@
 import type { DatedPolicy } from "@surfingdog/spec";
 import type { Money } from "../domain/types";
+import { countryOfZone, localeFor, onlyZoneOfCountry } from "../util/geo";
 import { formatMinor } from "../util/money";
 import { knownZone } from "../util/zoned";
 
@@ -19,18 +20,11 @@ export function policyLang(tag: string | null | undefined): PolicyLang {
   return (LANGS as readonly string[]).includes(primary) ? (primary as PolicyLang) : "en";
 }
 
-/** The locale dates and money are written in, for a language with no region given. */
-const LOCALE: Readonly<Record<PolicyLang, string>> = {
-  en: "en-GB",
-  es: "es-ES",
-  fr: "fr-FR",
-  de: "de-DE",
-  it: "it-IT",
-  pt: "pt-PT",
-};
+/** How a time's zone is named: by the business's town, its country (its only zone), or the zone's own name. */
+type Place = { readonly kind: "town" | "country" | "zone"; readonly name: string };
 
 interface Words {
-  readonly when: (date: string, time: string, place: string) => string;
+  readonly when: (date: string, time: string, place: Place) => string;
   readonly free: (when: string) => string;
   readonly paid: (when: string, fee: string) => string;
   readonly after: (fee: string) => string;
@@ -42,7 +36,7 @@ interface Words {
 
 const WORDS: Readonly<Record<PolicyLang, Words>> = {
   en: {
-    when: (d, t, p) => `${d}, ${t} ${p} time`,
+    when: (d, t, p) => (p.kind === "zone" ? `${d}, ${t} ${p.name}` : `${d}, ${t} ${p.name} time`),
     free: (w) => `Free cancellation until ${w}.`,
     paid: (w, f) => `Until ${w}, cancelling costs ${f}.`,
     after: (f) => `After that: ${f}.`,
@@ -52,7 +46,7 @@ const WORDS: Readonly<Record<PolicyLang, Words>> = {
     nothing: "nothing",
   },
   es: {
-    when: (d, t, p) => `${d}, ${t} (hora de ${p})`,
+    when: (d, t, p) => (p.kind === "zone" ? `${d}, ${t} (${p.name})` : `${d}, ${t} (hora de ${p.name})`),
     free: (w) => `Cancelación gratuita hasta el ${w}.`,
     paid: (w, f) => `Hasta el ${w}, cancelar cuesta ${f}.`,
     after: (f) => `Después: ${f}.`,
@@ -62,7 +56,12 @@ const WORDS: Readonly<Record<PolicyLang, Words>> = {
     nothing: "nada",
   },
   fr: {
-    when: (d, t, p) => `${d}, ${t} (heure de ${p})`,
+    when: (d, t, p) =>
+      p.kind === "town"
+        ? `${d}, ${t} (heure de ${p.name})`
+        : p.kind === "country"
+          ? `${d}, ${t} (heure locale, ${p.name})`
+          : `${d}, ${t} (${p.name})`,
     free: (w) => `Annulation gratuite jusqu'au ${w}.`,
     paid: (w, f) => `Jusqu'au ${w}, l'annulation coûte ${f}.`,
     after: (f) => `Ensuite : ${f}.`,
@@ -72,7 +71,7 @@ const WORDS: Readonly<Record<PolicyLang, Words>> = {
     nothing: "rien",
   },
   de: {
-    when: (d, t, p) => `${d}, ${t} Uhr (Ortszeit ${p})`,
+    when: (d, t, p) => (p.kind === "zone" ? `${d}, ${t} Uhr (${p.name})` : `${d}, ${t} Uhr (Ortszeit ${p.name})`),
     free: (w) => `Kostenlose Stornierung bis ${w}.`,
     paid: (w, f) => `Bis ${w} kostet eine Stornierung ${f}.`,
     after: (f) => `Danach: ${f}.`,
@@ -82,7 +81,12 @@ const WORDS: Readonly<Record<PolicyLang, Words>> = {
     nothing: "nichts",
   },
   it: {
-    when: (d, t, p) => `${d}, ${t} (ora di ${p})`,
+    when: (d, t, p) =>
+      p.kind === "town"
+        ? `${d}, ${t} (ora di ${p.name})`
+        : p.kind === "country"
+          ? `${d}, ${t} (ora locale, ${p.name})`
+          : `${d}, ${t} (${p.name})`,
     free: (w) => `Cancellazione gratuita fino al ${w}.`,
     paid: (w, f) => `Fino al ${w}, la cancellazione costa ${f}.`,
     after: (f) => `Dopo: ${f}.`,
@@ -92,7 +96,12 @@ const WORDS: Readonly<Record<PolicyLang, Words>> = {
     nothing: "niente",
   },
   pt: {
-    when: (d, t, p) => `${d}, ${t} (hora de ${p})`,
+    when: (d, t, p) =>
+      p.kind === "town"
+        ? `${d}, ${t} (hora de ${p.name})`
+        : p.kind === "country"
+          ? `${d}, ${t} (hora local, ${p.name})`
+          : `${d}, ${t} (${p.name})`,
     free: (w) => `Cancelamento gratuito até ${w}.`,
     paid: (w, f) => `Até ${w}, cancelar custa ${f}.`,
     after: (f) => `Depois disso: ${f}.`,
@@ -103,12 +112,37 @@ const WORDS: Readonly<Record<PolicyLang, Words>> = {
   },
 };
 
-/** The place a zone is named by when the business gives none: its city, as the IANA name spells it. */
-function placeOf(zone: string): string {
+/**
+ * How a time's zone is named when the business gives no town: its country in the reader's language
+ * where the zone is the country's only one ("Morocco time", "heure locale, Maroc"), else the zone's own
+ * name in that language ("Japan Standard Time", "hora estándar central"). Never the zone's IANA city,
+ * which is another town than the business's, in English.
+ */
+export function placeOf(zone: string, locale: string): Place {
   const z = knownZone(zone);
-  if (z === "UTC" || z === "Etc/UTC") return "UTC";
-  return (z.split("/").pop() ?? z).replaceAll("_", " ");
+  if (z === "UTC" || z === "Etc/UTC") return { kind: "zone", name: "UTC" };
+  const country = countryOfZone(z);
+  if (country && onlyZoneOfCountry(z)) {
+    try {
+      const name = new Intl.DisplayNames([locale], { type: "region" }).of(country);
+      if (name && name !== country) return { kind: "country", name };
+    } catch {
+      // No names for regions here: the zone's own name below.
+    }
+  }
+  try {
+    const name = new Intl.DateTimeFormat(locale, { timeZone: z, timeZoneName: "longGeneric" })
+      .formatToParts(Date.now())
+      .find((p) => p.type === "timeZoneName")?.value;
+    if (name) return { kind: "zone", name: locale.startsWith("de") || locale.startsWith("en") ? name : lower(name) };
+  } catch {
+    // The runtime names no zones: its offset says it.
+  }
+  return { kind: "zone", name: z };
 }
+
+/** A zone's name as it reads mid-sentence in a language that does not capitalise it. */
+const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 
 export interface SentenceOptions {
   /** A language tag: the customer's, else the business's. */
@@ -117,7 +151,7 @@ export interface SentenceOptions {
   readonly total: Money;
   /** What is booked: `stay` says "the full stay", anything else "the full price". */
   readonly what?: "stay" | "price" | undefined;
-  /** The place the business is, for "23:59 Kyoto time": its own town, else the zone's city. */
+  /** The place the business is, for "23:59 Kyoto time": its own town, else its country or its zone's name. */
   readonly place?: string | undefined;
   /** A locale for dates and money when the tag alone does not say it (`pt-BR`, `es-MX`). */
   readonly locale?: string | undefined;
@@ -127,9 +161,11 @@ export interface SentenceOptions {
 export function policySentence(dated: DatedPolicy, opts: SentenceOptions): string {
   const lang = policyLang(opts.lang);
   const w = WORDS[lang];
-  const locale = opts.locale ?? (opts.lang.includes("-") ? opts.lang : LOCALE[lang]);
   const zone = knownZone(dated.zone);
-  const place = opts.place?.trim() || placeOf(zone);
+  // Dates and money as they are written where the business is, in the reader's language.
+  const locale = opts.locale ?? (opts.lang.includes("-") ? opts.lang : localeFor(lang, countryOfZone(zone)));
+  const town = opts.place?.trim();
+  const place: Place = town ? { kind: "town", name: town } : placeOf(zone, locale);
   const money = (m: Money) =>
     m.value === 0
       ? w.nothing

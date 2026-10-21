@@ -64,6 +64,7 @@ import {
 import { z } from "zod";
 import { TOOL_SCOPES } from "./access";
 import { problemFrom } from "./problem";
+import { registerOwnerStayTools, registerPublicStayTools, STAY_INSTRUCTIONS, takesStays } from "./stays";
 import { itemTexts, ownerSentence, withUntrusted } from "./untrusted";
 
 /**
@@ -260,7 +261,13 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
     // The customer's assistant is speaking to the business: the server is the business's (N20).
     const profile = await caps.getBusinessProfile();
     const name = profile.name.trim() || profile.domain || "Inbox";
-    const server = new McpServer({ name, version }, { instructions: PUBLIC_INSTRUCTIONS });
+    // A place to stay (ADR-033) says how its stays are asked for, held and booked, and has the tools.
+    const stays = await takesStays(caps);
+    const server = new McpServer(
+      { name, version },
+      { instructions: stays ? `${PUBLIC_INSTRUCTIONS} ${STAY_INSTRUCTIONS}` : PUBLIC_INSTRUCTIONS },
+    );
+    if (stays) registerPublicStayTools(server, caps, caller);
 
     server.registerTool(
       "get_business_profile",
@@ -513,15 +520,21 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
       {
         title: "Cancel",
         description:
-          "Cancel an item you created. After the business's cancellation window, a confirmed booking is cancelled late where the business records late cancellations (it may count against the customer), and refused where it does not.",
+          "Cancel an item you created. After the business's cancellation window, a confirmed booking is cancelled late where the business records late cancellations (it may count against the customer), and refused where it does not. A confirmed stay answers first with the fee under its policy and what is owed back (confirm): send its fee_sha once your person said yes.",
         inputSchema: cancelItemInput,
         annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: true },
       },
-      (args) =>
-        run(async () => {
+      async (args) => {
+        try {
           const r = await caps.cancelItem(caller, args);
-          return { text: humanOf(r), structured: r };
-        }),
+          return ok(humanOf(r), r);
+        } catch (error) {
+          if (error instanceof WriteError && error.code === "confirm_terms") {
+            return ok(`Nothing is cancelled yet. ${error.message}`, { confirm: error.details });
+          }
+          return failed(error);
+        }
+      },
     );
     server.registerTool(
       "send_message",
@@ -1752,6 +1765,9 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
           return { text: `Key "${r.result.name}" revoked.${again(r.replayed)}`, structured: r.result };
         }),
     );
+    // A place to stay's setup (ADR-033 §6.2): rooms, rates, fees and extras the AI may fill in; how the
+    // property confirms, its policies, deposits, card holds and allotments are the owner's in person.
+    registerOwnerStayTools(server, caps, caller, guarded);
     return server;
   });
 }

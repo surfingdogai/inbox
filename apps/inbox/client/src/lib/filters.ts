@@ -9,6 +9,7 @@ export type Filter = "needs" | "all" | "done" | "unsent" | ItemType;
 export const FILTERS: readonly { readonly key: Filter; readonly label: string; readonly type?: ItemType }[] = [
   { key: "needs", label: "Needs you" },
   { key: "all", label: "All" },
+  { key: "stay", label: "Stays", type: "stay" },
   { key: "booking", label: "Bookings", type: "booking" },
   { key: "order", label: "Orders", type: "order" },
   { key: "quote_request", label: "Quotes", type: "quote_request" },
@@ -67,8 +68,15 @@ export interface Counts {
 }
 
 export function countsFrom(open: Page<ItemView>, everything: Page<ItemView>): Counts {
-  const byType: Record<ItemType, number> = { message: 0, quote_request: 0, booking: 0, order: 0, refund: 0 };
-  const needsByType: Record<ItemType, number> = { message: 0, quote_request: 0, booking: 0, order: 0, refund: 0 };
+  const byType: Record<ItemType, number> = { message: 0, quote_request: 0, booking: 0, order: 0, refund: 0, stay: 0 };
+  const needsByType: Record<ItemType, number> = {
+    message: 0,
+    quote_request: 0,
+    booking: 0,
+    order: 0,
+    refund: 0,
+    stay: 0,
+  };
   let needs = 0;
   for (const v of open.items) {
     byType[v.item.type] += 1;

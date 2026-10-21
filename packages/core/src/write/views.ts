@@ -1,4 +1,5 @@
 import { type Audience, customerLabel, DEFAULT_AUDIENCE, statusSentence } from "../customer/describe";
+import { shortRef } from "../customer/format";
 import { type ActorKind, type Item, type ItemType, itemFlagsSchema, type Money, payloadSchemas } from "../domain/types";
 import { availableTransitions } from "../machine/machine";
 import { machines } from "../machine/tables";
@@ -189,6 +190,7 @@ const TYPE_WORD: Record<ItemType, string> = {
   booking: "Booking",
   order: "Order",
   refund: "Refund",
+  stay: "Stay",
 };
 
 const STATE_WORD: Record<string, string> = {
@@ -231,7 +233,29 @@ export function describeToCustomer(item: Item, audience: Audience = DEFAULT_AUDI
   return statusSentence(item, audience);
 }
 
+/** Where a stay stands, as its owner reads it: "you", never "the business". */
+const STAY_STATE: Readonly<Record<string, string>> = {
+  requested: "a request waiting for your answer",
+  needs_info: "waiting for the guest's details",
+  quoted: "quoted, waiting for the guest's answer",
+  held: "held by a guest's assistant, not booked yet",
+  booking: "being written to your system",
+  awaiting_payment: "agreed, waiting for what is due now",
+  confirmed: "confirmed",
+  checked_in: "under way: the guest is in",
+  completed: "stayed",
+  no_show: "a no-show",
+  cancelled_by_guest: "cancelled by the guest",
+  cancelled_by_property: "cancelled by you",
+  declined: "declined",
+  expired: "lapsed",
+};
+
 export function describe(item: Item): string {
+  if (item.type === "stay") {
+    const what = item.subject ? `Stay "${item.subject}"` : "Stay";
+    return `${what} is ${STAY_STATE[item.state] ?? item.state.replaceAll("_", " ")}. Reference ${shortRef(item.id)}.`;
+  }
   const what = item.subject ? `${TYPE_WORD[item.type]} "${item.subject}"` : TYPE_WORD[item.type];
   const when = item.type === "booking" ? ` for ${formatWhen(item.payload.startTime)}` : "";
   const prices = statedPrices(item);
@@ -296,5 +320,13 @@ export function defaultSubject(type: ItemType, payload: Record<string, unknown>)
     }
     case "refund":
       return "Refund request";
+    case "stay": {
+      const rooms = (payload.rooms as { roomTypeName?: string; adults?: number }[] | undefined) ?? [];
+      const nights = Math.round(
+        (Date.parse(String(payload.checkOut)) - Date.parse(String(payload.checkIn))) / 86_400_000,
+      );
+      const room = rooms[0]?.roomTypeName || "A room";
+      return `${room}, ${String(payload.checkIn)} · ${Number.isFinite(nights) ? nights : "?"} night${nights === 1 ? "" : "s"}`;
+    }
   }
 }

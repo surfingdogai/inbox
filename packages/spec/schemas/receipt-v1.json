@@ -20,7 +20,7 @@
     },
     "typ": {
       "type": "string",
-      "enum": ["message", "quote_request", "booking", "order", "refund"]
+      "enum": ["message", "quote_request", "booking", "order", "refund", "stay"]
     },
     "knd": {
       "type": "string",

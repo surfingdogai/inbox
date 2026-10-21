@@ -63,7 +63,7 @@ function useOwnerEmail(): string | null {
   return email;
 }
 
-export function IntegrationsCard() {
+export function IntegrationsCard({ skip = [] }: { skip?: readonly string[] } = {}) {
   const integrations = useIntegrations();
   const write = useIntegrationWrite();
   const email = useOwnerEmail();
@@ -163,7 +163,8 @@ export function IntegrationsCard() {
       {data && (
         <div className="int-groups">
           {groups.map((g) => {
-            const cards = data.cards.filter((c) => c.group === g.id);
+            // A kind of business leaves out the cards it has no use for (a place to stay books no minutes).
+            const cards = data.cards.filter((c) => c.group === g.id && !skip.includes(c.id));
             if (cards.length === 0) return null;
             const here = card && card.group === g.id ? card : null;
             const keyPanel = here && here.group === "payments" && (byCard.get(here.id) ?? []).length > 0;

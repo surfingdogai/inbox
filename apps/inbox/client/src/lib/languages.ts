@@ -92,11 +92,7 @@ export function matchLanguages(text: string, chosen: readonly string[], limit = 
  * customers' emails are in, which then goes first (added when it was not chosen). Never empty: with
  * nothing chosen, the email language alone.
  */
-export function languagesToSave(
-  chosen: readonly string[],
-  emailLang: "en" | "pt",
-  emailLangChanged: boolean,
-): string[] {
+export function languagesToSave(chosen: readonly string[], emailLang: string, emailLangChanged: boolean): string[] {
   const list = [...chosen];
   if (list.length === 0) return [emailLang];
   if (!emailLangChanged) return list;

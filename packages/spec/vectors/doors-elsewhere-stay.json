@@ -1,0 +1,128 @@
+{
+  "description": "Since spec 0.10 a manifest's doors_elsewhere may name `stay`, with an optional url_template: kept when, filled in, it is an https URL on the same host as the entry's url, and dropped alone otherwise. A reader fills {check_in}, {check_out}, {adults}, {children} and {rooms} and drops any other {…}. `filled` is the kept template filled with `values`. Read by packages/core/test/stay-vectors.test.ts.",
+  "values": {
+    "check_in": "2027-05-14",
+    "check_out": "2027-05-17",
+    "adults": 2,
+    "children": 1,
+    "rooms": 1
+  },
+  "cases": [
+    {
+      "name": "a guesthouse that takes stays on its own booking engine, with a deep link",
+      "manifest": {
+        "item_types": ["message"],
+        "doors_elsewhere": [
+          {
+            "item_type": "stay",
+            "url": "https://book.alpenrose.example/",
+            "url_template": "https://book.alpenrose.example/search?arrive={check_in}&depart={check_out}&adults={adults}&kids={children}"
+          }
+        ]
+      },
+      "kept": [
+        {
+          "item_type": "stay",
+          "url": "https://book.alpenrose.example/",
+          "url_template": "https://book.alpenrose.example/search?arrive={check_in}&depart={check_out}&adults={adults}&kids={children}"
+        }
+      ],
+      "filled": "https://book.alpenrose.example/search?arrive=2027-05-14&depart=2027-05-17&adults=2&kids=1"
+    },
+    {
+      "name": "a template on another host is dropped; the entry stays",
+      "manifest": {
+        "item_types": ["message"],
+        "doors_elsewhere": [
+          {
+            "item_type": "stay",
+            "url": "https://book.alpenrose.example/",
+            "url_template": "https://elsewhere.example/?d={check_in}"
+          }
+        ]
+      },
+      "kept": [
+        {
+          "item_type": "stay",
+          "url": "https://book.alpenrose.example/"
+        }
+      ],
+      "filled": null
+    },
+    {
+      "name": "a template that is not https is dropped",
+      "manifest": {
+        "item_types": ["message"],
+        "doors_elsewhere": [
+          {
+            "item_type": "stay",
+            "url": "https://stay.harbourlight.example/",
+            "url_template": "http://stay.harbourlight.example/?from={check_in}"
+          }
+        ]
+      },
+      "kept": [
+        {
+          "item_type": "stay",
+          "url": "https://stay.harbourlight.example/"
+        }
+      ],
+      "filled": null
+    },
+    {
+      "name": "unknown variables are dropped when filled",
+      "manifest": {
+        "item_types": ["message"],
+        "doors_elsewhere": [
+          {
+            "item_type": "stay",
+            "url": "https://reserve.haveli-rang.example/",
+            "url_template": "https://reserve.haveli-rang.example/b?in={check_in}&out={check_out}&promo={promo}"
+          }
+        ]
+      },
+      "kept": [
+        {
+          "item_type": "stay",
+          "url": "https://reserve.haveli-rang.example/",
+          "url_template": "https://reserve.haveli-rang.example/b?in={check_in}&out={check_out}&promo={promo}"
+        }
+      ],
+      "filled": "https://reserve.haveli-rang.example/b?in=2027-05-14&out=2027-05-17&promo="
+    },
+    {
+      "name": "a template on any other item type is not kept",
+      "manifest": {
+        "item_types": ["message"],
+        "doors_elsewhere": [
+          {
+            "item_type": "booking",
+            "url": "https://book.example/salon",
+            "url_template": "https://book.example/salon?d={check_in}"
+          }
+        ]
+      },
+      "kept": [
+        {
+          "item_type": "booking",
+          "url": "https://book.example/salon"
+        }
+      ],
+      "filled": null
+    },
+    {
+      "name": "a stay the inbox takes itself is not elsewhere",
+      "manifest": {
+        "item_types": ["message", "stay"],
+        "doors_elsewhere": [
+          {
+            "item_type": "stay",
+            "url": "https://book.alpenrose.example/"
+          }
+        ]
+      },
+      "kept": [],
+      "filled": null
+    }
+  ]
+}

@@ -1,0 +1,713 @@
+{
+  "description": "Whether a stay's quote holds together (checkStayTotals in @surfingdog/spec): the lines add up to the total, the schedule does too, what is collected at the property is left for it, one currency throughout, no fee above the total, the policy's steps in order and before arrival, and it can be accepted now and only until before arrival. Amounts are ISO 4217 minor units: JPY has none, KWD three. Read by packages/core/test/stay-vectors.test.ts.",
+  "cases": [
+    {
+      "name": "Ryokan Hoshi, JPY: 3 nights for 2, service charge, accommodation tax paid at the property",
+      "quote": {
+        "currency": "JPY",
+        "lines": [
+          {
+            "type": "subtotal",
+            "label": "Japanese room, 3 nights (includes 10% consumption tax)",
+            "amount": 77400,
+            "collected": "with_booking"
+          },
+          {
+            "type": "extra",
+            "label": "Late check-out",
+            "amount": 3000,
+            "collected": "with_booking"
+          },
+          {
+            "type": "fee",
+            "label": "Service charge 10%",
+            "amount": 7740,
+            "collected": "with_booking"
+          },
+          {
+            "type": "tax",
+            "label": "Accommodation tax, ¥400 per guest per night (paid at the property)",
+            "amount": 2400,
+            "collected": "at_property"
+          }
+        ],
+        "total": {
+          "value": 90540,
+          "currency": "JPY"
+        },
+        "schedule": [
+          {
+            "id": "deposit",
+            "type": "immediate",
+            "amount": {
+              "value": 25800,
+              "currency": "JPY"
+            },
+            "label": "Deposit"
+          },
+          {
+            "id": "at_property",
+            "type": "at_property",
+            "amount": {
+              "value": 64740,
+              "currency": "JPY"
+            },
+            "label": "At the property"
+          }
+        ],
+        "policy": {
+          "steps": [
+            {
+              "until": "2026-12-09T23:59:59+09:00",
+              "fee": {
+                "value": 0,
+                "currency": "JPY"
+              }
+            }
+          ],
+          "after": {
+            "value": 25800,
+            "currency": "JPY"
+          },
+          "noShow": {
+            "value": 90540,
+            "currency": "JPY"
+          },
+          "zone": "Asia/Tokyo"
+        },
+        "validThrough": "2026-11-13T10:00:00+09:00"
+      },
+      "now": "2026-11-12T10:00:00+09:00",
+      "arrival_at": "2026-12-12T15:00:00+09:00",
+      "problems": []
+    },
+    {
+      "name": "Dar Al Bahr, KWD (three decimals): 2 nights, 30% now",
+      "quote": {
+        "currency": "KWD",
+        "lines": [
+          {
+            "type": "subtotal",
+            "label": "Sea view king, 2 nights",
+            "amount": 91500,
+            "collected": "with_booking"
+          },
+          {
+            "type": "fee",
+            "label": "Service 5%",
+            "amount": 4575,
+            "collected": "with_booking"
+          }
+        ],
+        "total": {
+          "value": 96075,
+          "currency": "KWD"
+        },
+        "schedule": [
+          {
+            "id": "deposit",
+            "type": "immediate",
+            "amount": {
+              "value": 28823,
+              "currency": "KWD"
+            },
+            "label": "Deposit"
+          },
+          {
+            "id": "at_property",
+            "type": "at_property",
+            "amount": {
+              "value": 67252,
+              "currency": "KWD"
+            },
+            "label": "At the property"
+          }
+        ],
+        "policy": {
+          "steps": [
+            {
+              "until": "2027-02-18T23:59:59+03:00",
+              "fee": {
+                "value": 0,
+                "currency": "KWD"
+              }
+            }
+          ],
+          "after": {
+            "value": 48038,
+            "currency": "KWD"
+          },
+          "noShow": {
+            "value": 96075,
+            "currency": "KWD"
+          },
+          "zone": "Asia/Kuwait"
+        },
+        "validThrough": "2027-02-01T12:00:00+03:00"
+      },
+      "now": "2027-01-31T12:00:00+03:00",
+      "arrival_at": "2027-02-20T14:00:00+03:00",
+      "problems": []
+    },
+    {
+      "name": "the lines add up to less than the total",
+      "quote": {
+        "currency": "JPY",
+        "lines": [
+          {
+            "type": "subtotal",
+            "label": "Japanese room, 3 nights (includes 10% consumption tax)",
+            "amount": 77400,
+            "collected": "with_booking"
+          },
+          {
+            "type": "extra",
+            "label": "Late check-out",
+            "amount": 600,
+            "collected": "with_booking"
+          },
+          {
+            "type": "fee",
+            "label": "Service charge 10%",
+            "amount": 7740,
+            "collected": "with_booking"
+          },
+          {
+            "type": "tax",
+            "label": "Accommodation tax, ¥400 per guest per night (paid at the property)",
+            "amount": 2400,
+            "collected": "at_property"
+          }
+        ],
+        "total": {
+          "value": 90540,
+          "currency": "JPY"
+        },
+        "schedule": [
+          {
+            "id": "deposit",
+            "type": "immediate",
+            "amount": {
+              "value": 25800,
+              "currency": "JPY"
+            },
+            "label": "Deposit"
+          },
+          {
+            "id": "at_property",
+            "type": "at_property",
+            "amount": {
+              "value": 64740,
+              "currency": "JPY"
+            },
+            "label": "At the property"
+          }
+        ],
+        "policy": {
+          "steps": [
+            {
+              "until": "2026-12-09T23:59:59+09:00",
+              "fee": {
+                "value": 0,
+                "currency": "JPY"
+              }
+            }
+          ],
+          "after": {
+            "value": 25800,
+            "currency": "JPY"
+          },
+          "noShow": {
+            "value": 90540,
+            "currency": "JPY"
+          },
+          "zone": "Asia/Tokyo"
+        },
+        "validThrough": "2026-11-13T10:00:00+09:00"
+      },
+      "now": "2026-11-12T10:00:00+09:00",
+      "arrival_at": "2026-12-12T15:00:00+09:00",
+      "problems": ["the lines add up to 88140, not 90540"]
+    },
+    {
+      "name": "the schedule adds up to less than the total",
+      "quote": {
+        "currency": "JPY",
+        "lines": [
+          {
+            "type": "subtotal",
+            "label": "Japanese room, 3 nights (includes 10% consumption tax)",
+            "amount": 77400,
+            "collected": "with_booking"
+          },
+          {
+            "type": "extra",
+            "label": "Late check-out",
+            "amount": 3000,
+            "collected": "with_booking"
+          },
+          {
+            "type": "fee",
+            "label": "Service charge 10%",
+            "amount": 7740,
+            "collected": "with_booking"
+          },
+          {
+            "type": "tax",
+            "label": "Accommodation tax, ¥400 per guest per night (paid at the property)",
+            "amount": 2400,
+            "collected": "at_property"
+          }
+        ],
+        "total": {
+          "value": 90540,
+          "currency": "JPY"
+        },
+        "schedule": [
+          {
+            "id": "deposit",
+            "type": "immediate",
+            "amount": {
+              "value": 23400,
+              "currency": "JPY"
+            },
+            "label": "Deposit"
+          },
+          {
+            "id": "at_property",
+            "type": "at_property",
+            "amount": {
+              "value": 64740,
+              "currency": "JPY"
+            },
+            "label": "At the property"
+          }
+        ],
+        "policy": {
+          "steps": [
+            {
+              "until": "2026-12-09T23:59:59+09:00",
+              "fee": {
+                "value": 0,
+                "currency": "JPY"
+              }
+            }
+          ],
+          "after": {
+            "value": 25800,
+            "currency": "JPY"
+          },
+          "noShow": {
+            "value": 90540,
+            "currency": "JPY"
+          },
+          "zone": "Asia/Tokyo"
+        },
+        "validThrough": "2026-11-13T10:00:00+09:00"
+      },
+      "now": "2026-11-12T10:00:00+09:00",
+      "arrival_at": "2026-12-12T15:00:00+09:00",
+      "problems": ["the schedule adds up to 88140, not 90540"]
+    },
+    {
+      "name": "what is collected at the property is not left for it in the schedule",
+      "quote": {
+        "currency": "JPY",
+        "lines": [
+          {
+            "type": "subtotal",
+            "label": "Japanese room, 3 nights (includes 10% consumption tax)",
+            "amount": 77400,
+            "collected": "with_booking"
+          },
+          {
+            "type": "extra",
+            "label": "Late check-out",
+            "amount": 3000,
+            "collected": "with_booking"
+          },
+          {
+            "type": "fee",
+            "label": "Service charge 10%",
+            "amount": 7740,
+            "collected": "with_booking"
+          },
+          {
+            "type": "tax",
+            "label": "Accommodation tax, ¥400 per guest per night (paid at the property)",
+            "amount": 2400,
+            "collected": "at_property"
+          }
+        ],
+        "total": {
+          "value": 90540,
+          "currency": "JPY"
+        },
+        "schedule": [
+          {
+            "id": "deposit",
+            "type": "immediate",
+            "amount": {
+              "value": 89540,
+              "currency": "JPY"
+            },
+            "label": "Deposit"
+          },
+          {
+            "id": "at_property",
+            "type": "at_property",
+            "amount": {
+              "value": 1000,
+              "currency": "JPY"
+            },
+            "label": "At the property"
+          }
+        ],
+        "policy": {
+          "steps": [
+            {
+              "until": "2026-12-09T23:59:59+09:00",
+              "fee": {
+                "value": 0,
+                "currency": "JPY"
+              }
+            }
+          ],
+          "after": {
+            "value": 25800,
+            "currency": "JPY"
+          },
+          "noShow": {
+            "value": 90540,
+            "currency": "JPY"
+          },
+          "zone": "Asia/Tokyo"
+        },
+        "validThrough": "2026-11-13T10:00:00+09:00"
+      },
+      "now": "2026-11-12T10:00:00+09:00",
+      "arrival_at": "2026-12-12T15:00:00+09:00",
+      "problems": ["2400 is collected at the property, but the schedule leaves 1000 for it"]
+    },
+    {
+      "name": "a cancellation fee is more than the total",
+      "quote": {
+        "currency": "JPY",
+        "lines": [
+          {
+            "type": "subtotal",
+            "label": "Japanese room, 3 nights (includes 10% consumption tax)",
+            "amount": 77400,
+            "collected": "with_booking"
+          },
+          {
+            "type": "extra",
+            "label": "Late check-out",
+            "amount": 3000,
+            "collected": "with_booking"
+          },
+          {
+            "type": "fee",
+            "label": "Service charge 10%",
+            "amount": 7740,
+            "collected": "with_booking"
+          },
+          {
+            "type": "tax",
+            "label": "Accommodation tax, ¥400 per guest per night (paid at the property)",
+            "amount": 2400,
+            "collected": "at_property"
+          }
+        ],
+        "total": {
+          "value": 90540,
+          "currency": "JPY"
+        },
+        "schedule": [
+          {
+            "id": "deposit",
+            "type": "immediate",
+            "amount": {
+              "value": 25800,
+              "currency": "JPY"
+            },
+            "label": "Deposit"
+          },
+          {
+            "id": "at_property",
+            "type": "at_property",
+            "amount": {
+              "value": 64740,
+              "currency": "JPY"
+            },
+            "label": "At the property"
+          }
+        ],
+        "policy": {
+          "steps": [
+            {
+              "until": "2026-12-09T23:59:59+09:00",
+              "fee": {
+                "value": 0,
+                "currency": "JPY"
+              }
+            }
+          ],
+          "after": {
+            "value": 25800,
+            "currency": "JPY"
+          },
+          "noShow": {
+            "value": 95000,
+            "currency": "JPY"
+          },
+          "zone": "Asia/Tokyo"
+        },
+        "validThrough": "2026-11-13T10:00:00+09:00"
+      },
+      "now": "2026-11-12T10:00:00+09:00",
+      "arrival_at": "2026-12-12T15:00:00+09:00",
+      "problems": ["a cancellation fee of 95000 is more than the total"]
+    },
+    {
+      "name": "a step ends after arrival",
+      "quote": {
+        "currency": "JPY",
+        "lines": [
+          {
+            "type": "subtotal",
+            "label": "Japanese room, 3 nights (includes 10% consumption tax)",
+            "amount": 77400,
+            "collected": "with_booking"
+          },
+          {
+            "type": "extra",
+            "label": "Late check-out",
+            "amount": 3000,
+            "collected": "with_booking"
+          },
+          {
+            "type": "fee",
+            "label": "Service charge 10%",
+            "amount": 7740,
+            "collected": "with_booking"
+          },
+          {
+            "type": "tax",
+            "label": "Accommodation tax, ¥400 per guest per night (paid at the property)",
+            "amount": 2400,
+            "collected": "at_property"
+          }
+        ],
+        "total": {
+          "value": 90540,
+          "currency": "JPY"
+        },
+        "schedule": [
+          {
+            "id": "deposit",
+            "type": "immediate",
+            "amount": {
+              "value": 25800,
+              "currency": "JPY"
+            },
+            "label": "Deposit"
+          },
+          {
+            "id": "at_property",
+            "type": "at_property",
+            "amount": {
+              "value": 64740,
+              "currency": "JPY"
+            },
+            "label": "At the property"
+          }
+        ],
+        "policy": {
+          "steps": [
+            {
+              "until": "2026-12-13T23:59:59+09:00",
+              "fee": {
+                "value": 0,
+                "currency": "JPY"
+              }
+            }
+          ],
+          "after": {
+            "value": 25800,
+            "currency": "JPY"
+          },
+          "noShow": {
+            "value": 90540,
+            "currency": "JPY"
+          },
+          "zone": "Asia/Tokyo"
+        },
+        "validThrough": "2026-11-13T10:00:00+09:00"
+      },
+      "now": "2026-11-12T10:00:00+09:00",
+      "arrival_at": "2026-12-12T15:00:00+09:00",
+      "problems": ["a policy step ends after arrival"]
+    },
+    {
+      "name": "it can be accepted until after arrival",
+      "quote": {
+        "currency": "JPY",
+        "lines": [
+          {
+            "type": "subtotal",
+            "label": "Japanese room, 3 nights (includes 10% consumption tax)",
+            "amount": 77400,
+            "collected": "with_booking"
+          },
+          {
+            "type": "extra",
+            "label": "Late check-out",
+            "amount": 3000,
+            "collected": "with_booking"
+          },
+          {
+            "type": "fee",
+            "label": "Service charge 10%",
+            "amount": 7740,
+            "collected": "with_booking"
+          },
+          {
+            "type": "tax",
+            "label": "Accommodation tax, ¥400 per guest per night (paid at the property)",
+            "amount": 2400,
+            "collected": "at_property"
+          }
+        ],
+        "total": {
+          "value": 90540,
+          "currency": "JPY"
+        },
+        "schedule": [
+          {
+            "id": "deposit",
+            "type": "immediate",
+            "amount": {
+              "value": 25800,
+              "currency": "JPY"
+            },
+            "label": "Deposit"
+          },
+          {
+            "id": "at_property",
+            "type": "at_property",
+            "amount": {
+              "value": 64740,
+              "currency": "JPY"
+            },
+            "label": "At the property"
+          }
+        ],
+        "policy": {
+          "steps": [
+            {
+              "until": "2026-12-09T23:59:59+09:00",
+              "fee": {
+                "value": 0,
+                "currency": "JPY"
+              }
+            }
+          ],
+          "after": {
+            "value": 25800,
+            "currency": "JPY"
+          },
+          "noShow": {
+            "value": 90540,
+            "currency": "JPY"
+          },
+          "zone": "Asia/Tokyo"
+        },
+        "validThrough": "2026-12-12T16:00:00+09:00"
+      },
+      "now": "2026-11-12T10:00:00+09:00",
+      "arrival_at": "2026-12-12T15:00:00+09:00",
+      "problems": ["it can be accepted until after arrival"]
+    },
+    {
+      "name": "a schedule in another currency",
+      "quote": {
+        "currency": "JPY",
+        "lines": [
+          {
+            "type": "subtotal",
+            "label": "Japanese room, 3 nights (includes 10% consumption tax)",
+            "amount": 77400,
+            "collected": "with_booking"
+          },
+          {
+            "type": "extra",
+            "label": "Late check-out",
+            "amount": 3000,
+            "collected": "with_booking"
+          },
+          {
+            "type": "fee",
+            "label": "Service charge 10%",
+            "amount": 7740,
+            "collected": "with_booking"
+          },
+          {
+            "type": "tax",
+            "label": "Accommodation tax, ¥400 per guest per night (paid at the property)",
+            "amount": 2400,
+            "collected": "at_property"
+          }
+        ],
+        "total": {
+          "value": 90540,
+          "currency": "JPY"
+        },
+        "schedule": [
+          {
+            "id": "deposit",
+            "type": "immediate",
+            "amount": {
+              "value": 25800,
+              "currency": "USD"
+            },
+            "label": "Deposit"
+          },
+          {
+            "id": "at_property",
+            "type": "at_property",
+            "amount": {
+              "value": 64740,
+              "currency": "JPY"
+            },
+            "label": "At the property"
+          }
+        ],
+        "policy": {
+          "steps": [
+            {
+              "until": "2026-12-09T23:59:59+09:00",
+              "fee": {
+                "value": 0,
+                "currency": "JPY"
+              }
+            }
+          ],
+          "after": {
+            "value": 25800,
+            "currency": "JPY"
+          },
+          "noShow": {
+            "value": 90540,
+            "currency": "JPY"
+          },
+          "zone": "Asia/Tokyo"
+        },
+        "validThrough": "2026-11-13T10:00:00+09:00"
+      },
+      "now": "2026-11-12T10:00:00+09:00",
+      "arrival_at": "2026-12-12T15:00:00+09:00",
+      "problems": ["schedule deposit is in USD, the quote in JPY"]
+    }
+  ]
+}

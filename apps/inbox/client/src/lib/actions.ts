@@ -30,6 +30,23 @@ export function orderActions<T extends { readonly event: string }>(transitions: 
   return [...transitions.filter((t) => !isDanger(t.event)), ...transitions.filter((t) => isDanger(t.event))];
 }
 
+/**
+ * A stay's actions as its owner needs them (ADR-033 S12): the quote goes from the composer, so its
+ * generic form is never offered; a request is asked about or declined, never cancelled (nothing is
+ * booked yet); a cancellation is offered once something is agreed.
+ */
+export function stayActions<T extends { readonly event: string }>(state: string, transitions: readonly T[]): T[] {
+  const agreed = ["held", "booking", "awaiting_payment", "confirmed", "checked_in"].includes(state);
+  return transitions.filter((t) => {
+    if (t.event === "quote") return false;
+    if (state === "requested" || state === "needs_info") {
+      return t.event === "request_info" || t.event === "decline" || t.event === "answer";
+    }
+    if (t.event === "cancel_by_property" || t.event === "record_cancel" || t.event === "cancel") return agreed;
+    return true;
+  });
+}
+
 /** Buttons in the order the API gives them: the first non-destructive one is primary. */
 export function tonesFor(transitions: readonly { readonly event: string }[]): ButtonTone[] {
   let primaryGiven = false;

@@ -3,7 +3,8 @@ import { BadgeCheck, Bot, Copy, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { problemOf } from "../lib/api";
 import { type Filter, filterLabel, paramsFor, visibleIn, withQuery } from "../lib/filters";
-import { partyName, relativeTime, snippetFor, TYPE_CLASS, TYPE_WORD } from "../lib/format";
+import { partyName, relativeTime, snippetFor, TYPE_CLASS, titleFor } from "../lib/format";
+import { ownerLocale } from "../lib/geo";
 import { useItemPages } from "../lib/queries";
 import type { ItemView } from "../lib/types";
 import { ErrorState, SkeletonRows, Sun } from "./Feedback";
@@ -98,6 +99,7 @@ export function ItemList({
 /** Who · what on up to two lines, then the snippet; time on the right, the state at the end. */
 function Row({ view, selected, tz }: { view: ItemView; selected: boolean; tz: string | undefined }) {
   const { item, party } = view;
+  const locale = ownerLocale(tz);
   return (
     <Link
       to="/items/$id"
@@ -114,9 +116,9 @@ function Row({ view, selected, tz }: { view: ItemView; selected: boolean; tz: st
             {party?.kind === "agent" && <Bot className="icon-xs glyph" role="img" aria-label="Agent" />}
             {party?.verified && <BadgeCheck className="icon-xs glyph verified" role="img" aria-label="Verified" />}
             {" · "}
-            {item.subject?.trim() || TYPE_WORD[item.type]}
+            {titleFor(item, locale)}
           </span>
-          <span className="s"> {snippetFor(item, tz)}</span>
+          <span className="s"> {snippetFor(item, tz, locale)}</span>
         </div>
       </div>
       <div className="m">

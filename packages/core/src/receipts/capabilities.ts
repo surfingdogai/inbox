@@ -263,7 +263,8 @@ export class ReceiptCapabilities {
       nonce,
     };
     // Which networks it goes to: decided before the claims, since a promise's `trm` depends on them.
-    const targets = await this.networksFor(settings, item.id, kind, v2);
+    // A stay's receipts are signed and kept by both sides only, until networks take stays (ADR-033, F3).
+    const targets = item.type === "stay" ? [] : await this.networksFor(settings, item.id, kind, v2);
     let payload: ReceiptPayload | ReceiptPayloadV2;
     if (!v2) {
       const money = amountOf(item, kind);
@@ -913,6 +914,21 @@ function amountOf(item: ItemRow, kind: ReceiptKind): Money | undefined {
   const p = item.payload as Record<string, unknown>;
   if (item.type === "refund") return isMoney(p.amount) ? p.amount : undefined;
   if (item.type === "order" && kind === "paid" && isMoney(p.paidAmount)) return p.paidAmount;
+  // A stay's paid receipt names what was paid of its schedule (a deposit), not the whole stay.
+  if (item.type === "stay" && kind === "paid") {
+    const entries = ((p.payments as { schedules?: unknown[] } | undefined)?.schedules ?? []) as {
+      status?: string;
+      amount?: unknown;
+      paidAmount?: unknown;
+    }[];
+    let paid: Money | undefined;
+    for (const e of entries) {
+      const m = isMoney(e.paidAmount) ? e.paidAmount : e.status === "paid" && isMoney(e.amount) ? e.amount : undefined;
+      if (!m) continue;
+      paid = paid && paid.currency === m.currency ? { value: paid.value + m.value, currency: m.currency } : (paid ?? m);
+    }
+    return paid;
+  }
   if (isMoney(p.totalPrice)) return p.totalPrice;
   return undefined;
 }

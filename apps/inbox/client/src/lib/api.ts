@@ -371,3 +371,6 @@ export const api = {
       idempotent: true,
     }),
 };
+
+/** The one owner call, for screens that keep their own endpoints beside `api` (stays: `lib/property.ts`). */
+export const ownerCall = call;

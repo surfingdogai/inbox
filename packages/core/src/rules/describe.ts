@@ -104,6 +104,18 @@ export function describeCondition(c: Condition, top = false, exponent = 2): stri
         return "the total is within the customer's limit";
       case "is_sandbox":
         return "it is a test";
+      case "rates_cover":
+        return "your rates price every night";
+      case "nights_free":
+        return "the nights are free at once (rooms kept for direct guests, or your system)";
+      case "nights_closed":
+        return "you are full or closed on those nights";
+      case "ical_hint_overlap":
+        return "another calendar shows the nights as taken";
+      case "free_cancellation":
+        return "cancelling is still free";
+      case "change_nights_free":
+        return "the new nights are free";
       case "text_has_keywords": {
         const words = (c.args?.keywords as unknown[] | undefined) ?? [];
         return words.length
@@ -211,5 +223,7 @@ export function describeAction(a: Action): string {
       return `schedule ${a.job}${a.delayMin ? ` in ${a.delayMin} min` : ""}`;
     case "stop":
       return "stop";
+    case "draft":
+      return "draft a quote from your rates for you to send";
   }
 }

@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import clsx from "clsx";
 import { ArrowLeft, BadgeCheck, Bot, Check, Copy, UserRound } from "lucide-react";
 import { useRef, useState } from "react";
-import { orderActions, tonesFor, waitingLine } from "../lib/actions";
+import { orderActions, stayActions, tonesFor, waitingLine } from "../lib/actions";
 import { problemOf } from "../lib/api";
 import {
   channelWord,
@@ -15,6 +15,7 @@ import {
   TYPE_WORD,
   titleFor,
 } from "../lib/format";
+import { ownerLocale } from "../lib/geo";
 import { usePhone } from "../lib/media";
 import { useItem, useItemPayments, useReply, useSettings, useTransition } from "../lib/queries";
 import type { Party, Transition } from "../lib/types";
@@ -96,14 +97,18 @@ export function ItemDetailView({
     item.type === "refund" && paidBy?.payment_id
       ? { provider: paidBy.provider, paymentRef: paidBy.payment_id, amount: item.payload.amount }
       : undefined;
-  const transitions = orderActions(query.data.transitions).map((t) =>
+  const offered = item.type === "stay" ? stayActions(item.state, query.data.transitions) : query.data.transitions;
+  const transitions = orderActions(offered).map((t) =>
     openLink && t.event === "record_payment"
       ? { ...t, label: "Paid another way…" }
       : refundBy && t.event === "refund"
         ? { ...t, label: `Refunded in ${refundBy.provider}` }
         : t,
   );
-  const tones = tonesFor(transitions).map((tone) => (openLink && tone === "primary" ? "secondary" : tone));
+  // A stay's destructive actions are ink, behind their confirm step, never red (the design's own rule).
+  const tones = tonesFor(transitions).map((tone) =>
+    openLink && tone === "primary" ? "secondary" : item.type === "stay" && tone === "danger" ? "secondary" : tone,
+  );
   const money = currencyOf(item) ?? currency ?? "EUR";
   const waiting = waitingLine(item, (iso) => formatDateTime(iso, tz), minNoticeMin);
 
@@ -176,7 +181,7 @@ export function ItemDetailView({
               Sandbox
             </span>
           )}
-          <h2 id="item-title">{titleFor(item)}</h2>
+          <h2 id="item-title">{titleFor(item, ownerLocale(tz))}</h2>
         </div>
         <span className={clsx("rule card-rule", `rule-${TYPE_CLASS[item.type]}`)} aria-hidden="true" />
         <WhoLine party={party} channel={item.channel} />
@@ -247,7 +252,7 @@ export function ItemDetailView({
         error={reply.error ? problemOf(reply.error) : null}
       />
       <Timeline events={events} type={item.type} tz={tz} />
-      {phone && <ActionBar transitions={transitions} tones={tones} onPick={pick} />}
+      {phone && <ActionBar transitions={transitions} tones={tones} onPick={pick} more={item.type === "stay"} />}
       {phone && pending && (
         <Sheet title={pending.label} onClose={() => setPending(null)}>
           {confirm}

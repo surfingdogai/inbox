@@ -648,7 +648,9 @@ a {
     background: var(--row-bg);
     white-space: nowrap;
   }
+  /* Positioned, so the theme's legend for screen readers stays inside the rail's own scroll. */
   .rail .foot {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -1413,6 +1415,36 @@ textarea.json-editor {
   .offer > div:nth-child(2):not(.wide) {
     grid-column: 1 / -1;
     grid-row: 2;
+  }
+}
+/* A kind of room in the wizard: its name across, the remove button at its corner, then its numbers side by side. */
+.room-row {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+}
+.room-row-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+.room-row-remove {
+  align-self: start;
+}
+.room-row-nums {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 12px;
+  align-items: end;
+}
+@media (max-width: 620px) {
+  .room-row-nums {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .room-row-nums > :last-child {
+    grid-column: 1 / -1;
   }
 }
 .wizard-nav {

@@ -6,6 +6,7 @@ import { AccessCapabilities } from "../access/keys";
 import { assertNoLeak, PUBLISHED, stringsIn } from "../access/leaks";
 import { isOwnerOrSystem, mayDirectDataOut, ownerOnlyError } from "../access/outbound";
 import { ConnectorCapabilities } from "../connectors/capability";
+import { registerScheduleSource } from "../connectors/schedules";
 import { effectiveWrittenBy, isAutomated } from "../customer/mail";
 import { isChangeable } from "../customer/offer";
 import type { Db } from "../db";
@@ -24,6 +25,7 @@ import {
   reportableDomain,
   wantsListed,
 } from "../network/index";
+import { registerStayResolver } from "../property/write";
 import { ReceiptCapabilities, type ReceiptStatus, type ReceiptView } from "../receipts/capabilities";
 import { replaceReceiptKey } from "../receipts/keys";
 import {
@@ -70,6 +72,9 @@ import {
   type Settings,
   settingsWriteSchema,
 } from "../settings/schema";
+import { StayCapabilities } from "../stays/capability";
+import { stayLang } from "../stays/copy";
+import { staySchedules } from "../stays/payments";
 import { hashText } from "../util/canonical";
 import {
   type Caller,
@@ -298,6 +303,9 @@ export class Capabilities {
   /** Signed receipts and their acknowledgements (ADR-016). Issued by a job, read by every door. */
   readonly receipts: ReceiptCapabilities;
 
+  /** A place to stay (ADR-033): the property, its rooms and rates, and the stays doors. */
+  readonly stays: StayCapabilities;
+
   /** Keys and scopes (ADR-004): integration keys, and the one scope check every owner door calls. */
   readonly access: AccessCapabilities;
 
@@ -502,11 +510,27 @@ export class Capabilities {
     this.baseUrl = baseUrl;
     this.discoveryFetch = outbound?.discovery ?? outbound?.fetch;
     this.customers = new CustomerData(db);
+    this.stays = new StayCapabilities(db, secrets, {
+      connectors: this.connectors,
+      access: this.access,
+      people: this.people,
+    });
+    // Stays' pay links and the writes to a property's own system are settled by the stays layer.
+    registerScheduleSource("stay", staySchedules);
+    registerStayResolver(this.connectors);
     this.customer = new CustomerDoors(db, {
       access: this.access,
       people: this.people,
       receipts: this.receipts,
       secrets,
+      stays: {
+        terms: (item, lang, now) => this.stays.terms(item, stayLang(lang), now),
+        page: {
+          openCard: (item, lang, returnUrl, now) => this.stays.openCard(item, lang, returnUrl, now),
+          checkCard: (item, now) => this.stays.checkCard(item, now),
+          base: baseUrl,
+        },
+      },
     });
   }
 
@@ -604,7 +628,12 @@ export class Capabilities {
 
   async getBusinessProfile(): Promise<BusinessProfile> {
     const [[row], s] = await Promise.all([this.db.orm.select().from(business).limit(1), readSettings(this.db)]);
-    const elsewhere = s.doorsElsewhere.map((d) => ({ item_type: d.itemType, url: d.url }));
+    const elsewhere = s.doorsElsewhere.map((d) => ({
+      item_type: d.itemType,
+      url: d.url,
+      // A stay's deep link into the property's own booking engine (ADR-033 §6.4).
+      ...(d.urlTemplate ? { url_template: d.urlTemplate } : {}),
+    }));
     const itemTypes = await offeredItemTypes(
       this.db,
       elsewhere.map((d) => d.item_type),
@@ -821,7 +850,14 @@ export class Capabilities {
   }
 
   private async cancelOnce(c: Caller, input: T.CancelItemInput): Promise<TransitionResult> {
-    const note = input.reason ? { input: { note: input.reason }, reason: input.reason } : {};
+    const said = {
+      ...(input.reason ? { note: input.reason } : {}),
+      ...(input.fee_sha ? { fee_sha: input.fee_sha } : {}),
+    };
+    const note = {
+      ...(Object.keys(said).length ? { input: said } : {}),
+      ...(input.reason ? { reason: input.reason } : {}),
+    };
     // A retry of a cancellation that was taken as a withdrawal is answered as that withdrawal.
     if (c.idempotency && (await findIdempotent(this.db, c.idempotency))) {
       try {

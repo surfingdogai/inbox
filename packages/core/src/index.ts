@@ -90,6 +90,7 @@ export {
 } from "./negotiation/rewards";
 export * from "./network/index";
 export * from "./policy/index";
+export * from "./property/index";
 export * from "./protocol/index";
 export * from "./receipts/index";
 export * from "./rules/index";
@@ -112,6 +113,7 @@ export {
   type SettingsPatch,
 } from "./settings/policy";
 export * from "./settings/schema";
+export * from "./stays/index";
 export { canonicalNetworkOrigin } from "./util/hosts";
 export { canonicalLanguages, currencyProblem, isHundredthsCurrency, isMoneyCurrency } from "./util/locale";
 export { formatMinor, moneyText, servicePriceText } from "./util/money";

@@ -4,6 +4,7 @@ import { dateLocaliser, isClosed, readClosures } from "../capabilities/closures"
 import type { Db } from "../db";
 import type { Item, ItemType } from "../domain/types";
 import { identityContext } from "../identity/context";
+import { ulid } from "../ids";
 import {
   availabilityRules,
   business,
@@ -15,6 +16,7 @@ import {
   threadEntries,
 } from "../schema/tables";
 import { readSettings, SECRET_SETTINGS_PATHS, type Settings } from "../settings/schema";
+import { draftTerms, stayFacts } from "../stays/rules";
 import type { Caller } from "../write/caller";
 import { jobStatement } from "../write/common";
 import { WriteError } from "../write/errors";
@@ -180,6 +182,33 @@ export async function runRulesForEvent(
           case "stop":
             stop = true;
             break;
+          case "draft": {
+            // A stay's quote from the rates, kept for a person (ADR-033 R1): never sent by a rule.
+            const terms = await draftTerms(db, current, now);
+            if (!terms) break;
+            await db.batch([
+              {
+                sql: `INSERT INTO offer_drafts (item_id, id, event, input, terms, breaches, item_version, actor_kind, actor_id, actor_name, created_at)
+                      VALUES (?, ?, ?, ?, ?, '[]', ?, 'rule', ?, ?, ?)
+                      ON CONFLICT (item_id) DO UPDATE SET id = excluded.id, event = excluded.event, input = excluded.input,
+                        terms = excluded.terms, breaches = '[]', item_version = excluded.item_version, actor_kind = 'rule',
+                        actor_id = excluded.actor_id, actor_name = excluded.actor_name, created_at = excluded.created_at`,
+                params: [
+                  current.id,
+                  ulid(),
+                  action.event,
+                  JSON.stringify(action.input),
+                  JSON.stringify(terms),
+                  current.version,
+                  rule.id,
+                  rule.name,
+                  now,
+                ],
+                method: "run",
+              },
+            ]);
+            break;
+          }
         }
         report.actions++;
       } catch (error) {
@@ -321,7 +350,11 @@ export async function buildRuleContext(
   // Opening hours are the business's own, in its own time zone: the profile's, which the setup
   // wizard writes and availability offers slots in, as every other reader takes it.
   const [profile] = await db.orm.select({ timezone: business.timezone }).from(business).limit(1);
-  const facts = await bookingFacts(db, item, profile?.timezone ?? settings.business.timezone);
+  const facts = {
+    ...(await bookingFacts(db, item, profile?.timezone ?? settings.business.timezone)),
+    // A stay's (ADR-033 §7): its rates, its nights, its calendars, its change.
+    ...(item.type === "stay" ? { stay: await stayFacts(db, item, now) } : {}),
+  };
   const who = await identityContext(db, item, settings);
   return {
     item: forRules(item),
@@ -377,6 +410,7 @@ function payloadText(item: Item): string[] {
     booking: ["notes"],
     order: ["notes"],
     refund: ["reason"],
+    stay: ["requests"],
   };
   return keys[item.type].map((k) => (typeof p[k] === "string" ? (p[k] as string) : "")).filter(Boolean);
 }

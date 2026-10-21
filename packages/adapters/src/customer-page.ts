@@ -173,7 +173,7 @@ export function renderCustomerPage(
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
 <title>${esc(title)}</title>
-<style>${STYLE}</style>
+<style>${STYLE}</style>${page.jsonLd ? `\n<script type="application/ld+json">${dataJson(page.jsonLd)}</script>` : ""}
 </head>
 <body>
 <main>
@@ -185,6 +185,17 @@ ${body}
     status: page.status,
     headers: { "Content-Type": "text/html; charset=utf-8", ...CUSTOMER_PAGE_HEADERS, ...headers },
   });
+}
+
+/**
+ * JSON for a data block in the page: every `<`, `>` and `&`, and the two line separators, written as
+ * escapes, so no value can close the block or open markup. A data block is never run.
+ */
+function dataJson(value: unknown): string {
+  return JSON.stringify(value).replace(
+    /[<>&\u2028\u2029]/g,
+    (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`,
+  );
 }
 
 function formHtml(form: NonNullable<CustomerPage["form"]>): string {

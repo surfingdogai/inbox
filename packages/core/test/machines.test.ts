@@ -22,8 +22,15 @@ describe("state machines as data", () => {
       it("has no way out of a terminal state, only records that leave it closed", () => {
         for (const s of m.terminal) {
           // A correction or a charge-back on a closed item (ADR-017 §3.1) amends it and leaves it
-          // closed; nothing else leaves a terminal state.
+          // closed; nothing else leaves a terminal state but a stay's late payment, which takes its
+          // nights again where nothing can have sold them since and opens it as confirmed, or writes it
+          // to the property's own system again first (ADR-033 §3).
           for (const t of m.transitions.filter((x) => x.from.includes(s))) {
+            if (t.reopens) {
+              expect(["stay.late_payment", "stay.late_payment_write"]).toContain(`${type}.${t.event}`);
+              expect(m.terminal).not.toContain(t.to);
+              continue;
+            }
             expect(t.amends, `${t.event} from ${s}`).toBe(true);
             expect(m.terminal).toContain(t.to);
             expect(t.effects ?? []).not.toContain("claim_slot");

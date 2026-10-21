@@ -1,4 +1,4 @@
-import { isPaymentToken, MAX_PROFILE_PAYMENTS, readDoorsElsewhere } from "@surfingdog/spec";
+import { fillStayTemplate, isPaymentToken, MAX_PROFILE_PAYMENTS, readDoorsElsewhere } from "@surfingdog/spec";
 import { z } from "zod";
 import type { Db } from "../db";
 import { settings as settingsTable } from "../schema/tables";
@@ -707,16 +707,33 @@ const sections = {
    */
   doorsElsewhere: z
     .array(
-      z.object({
-        itemType: z.enum(["booking", "order"]).describe("booking: at a booking platform. order: in your own checkout."),
-        url: z
-          .url({ protocol: /^https$/ })
-          .max(2048)
-          .refine(isDoorElsewhereUrl, "an https address on a public host, with no user or password in it")
-          .describe("Where customers go for it: an https address."),
-      }),
+      z
+        .object({
+          itemType: z
+            .enum(["booking", "order", "stay"])
+            .describe("booking: at a booking platform. order: in your own checkout. stay: at your own booking engine."),
+          url: z
+            .url({ protocol: /^https$/ })
+            .max(2048)
+            .refine(isDoorElsewhereUrl, "an https address on a public host, with no user or password in it")
+            .describe("Where customers go for it: an https address."),
+          /**
+           * For a stay (ADR-033): the booking engine's deep link, with {check_in}, {check_out}, {adults},
+           * {children} and {rooms} to fill in, on the same host as `url`.
+           */
+          urlTemplate: z
+            .string()
+            .max(2048)
+            .refine(isStayTemplate, "an https deep link on a public host, with {check_in}, {check_out}, {adults}…")
+            .optional()
+            .describe("For stays: your booking engine's link with {check_in}, {check_out} and {adults} to fill in."),
+        })
+        .refine((d) => d.urlTemplate === undefined || d.itemType === "stay", {
+          message: "only a stay's door takes a deep link",
+          path: ["urlTemplate"],
+        }),
     )
-    .max(2)
+    .max(3)
     .refine((all) => new Set(all.map((d) => d.itemType)).size === all.length, "one place for each kind")
     .default([])
     .describe(
@@ -736,6 +753,7 @@ const sections = {
       booking: z.boolean().optional().describe("Agents can see your free times and ask to book."),
       quoteRequest: z.boolean().optional().describe("Agents can ask you for a price."),
       message: z.boolean().optional().describe("Agents can send you a message."),
+      stay: z.boolean().optional().describe("Agents can see your rooms and ask for a stay."),
     })
     .prefault({})
     .describe("What agents can do here. Left out, a door follows what the inbox holds; false shuts it."),
@@ -786,8 +804,32 @@ const sections = {
         .describe("What a setup plan read and left for the owner to add. Never published, never booked."),
     })
     .prefault({}),
+  /**
+   * A place to stay (ADR-033): what is not per property. A request nobody answered lapses after
+   * `requestExpiresHours`; a stay counts as stayed `autoCompleteHours` after check-out unless marked a
+   * no-show; the message before arrival goes `preArrivalDays` before, the private arrival details
+   * `arrivalDetailsHours` before; guests are written to in `languages` (the business's when empty).
+   * They bound what automation does with stays, so only the owner in person changes them (`guard.ts`).
+   */
+  stays: z
+    .object({
+      requestExpiresHours: z.number().int().min(1).max(168).default(48),
+      autoCompleteHours: z.number().int().min(1).max(168).default(24),
+      preArrivalDays: z.number().int().min(0).max(14).default(2),
+      arrivalDetailsHours: z.number().int().min(0).max(72).default(48),
+      languages: z.array(z.string().max(12)).max(6).default([]),
+      /** A thank-you after the stay: off unless the owner switches it on. */
+      thankYou: z.boolean().default(false),
+    })
+    .prefault({}),
   testMode: z.boolean().default(false),
 };
+
+/** A stay's deep link: filled in with sample dates, a door elsewhere's address (`fillStayTemplate`). */
+export function isStayTemplate(template: string): boolean {
+  const filled = fillStayTemplate(template, { check_in: "2027-01-10", check_out: "2027-01-12", adults: 2, rooms: 1 });
+  return filled !== null && isDoorElsewhereUrl(filled);
+}
 
 /**
  * A place a door elsewhere may send customers: what any reader of the manifest keeps

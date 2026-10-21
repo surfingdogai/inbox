@@ -439,7 +439,7 @@ is in here, so it is worth doing properly. Ask the person for each; do not inven
 3. **Opening hours** — and any closures.
 4. **Products** — what can be ordered. If their shop publishes a product feed, connect it instead
    and the catalogue fills itself: Settings → Integrations → Connect a feed.
-5. **Rules** — start from a preset (`appointments`, `trades`, `shop`) and change it with them.
+5. **Rules** — start from a preset (`appointments`, `trades`, `shop`, `stays`) and change it with them.
 
 The inbox offers agents only what it has the means to do: `message` always, `booking` once a service
 has opening hours, `order` once a product is active, and `quote_request` with either. So set up what
@@ -458,6 +458,30 @@ fits the business, and nothing else:
 
 A shop with a checkout already chooses between those two: ask the person, and don't decide for
 them.
+
+### A place to stay
+
+A hotel, a guesthouse, a B&B, a holiday rental: set up at `/settings/property`, or in the setup
+wizard's "A place to stay". The inbox offers `stay` once the place has a room to offer (and, where
+the area requires one, its short-stay registration number).
+
+1. **The place** — its kind, currency, check-in and check-out times.
+2. **Rooms** — each kind once: how many, how many sleep in one, the beds.
+3. **Plans and prices** — a plan's cancellation policy and when it is paid, then a price a night
+   per room, and seasons. Ask the person for every number; never invent a price or a policy.
+4. **Taxes and fees** — a tourist or city tax, a cleaning fee: each one is in the quote's total.
+5. **Rules** — the `stays` preset. With nothing else set up, every request waits for the owner's
+   quote; nothing is confirmed on its own.
+
+A stay is confirmed at once only where the room cannot be sold twice: rooms the owner keeps for
+direct guests after closing them on every other channel (Availability → Nights), or the property's
+own system, connected and written to first. Calendar links from other channels are hints for the
+owner, never a reason to say no. The business is always the one the guest books with and pays:
+deposits and balances go through the business's own payment account.
+
+If the place already takes bookings at its own booking engine, keep them there instead: a stay's
+door kept elsewhere, with the engine's link and its deep link (`{check_in}`, `{check_out}`,
+`{adults}`), sends guests' assistants straight to the dates they asked for.
 
 ---
 

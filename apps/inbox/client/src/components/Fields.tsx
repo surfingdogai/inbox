@@ -11,6 +11,7 @@ import {
   RETURN_KIND,
 } from "../lib/format";
 import type { Item, ItemOf, Money } from "../lib/types";
+import { StayFields, StayQuoteBlock, StayQuoteComposer } from "./Stay";
 
 /**
  * What the payment platform holds of an order (ADR-023): shown once, in its own block, so the fields
@@ -40,6 +41,8 @@ export function Fields({
         <Typed item={item} tz={tz} platform={platform} />
       </dl>
       {item.type === "quote_request" && item.payload.quote && <QuoteBlock quote={item.payload.quote} tz={tz} />}
+      {item.type === "stay" && item.payload.quote && <StayQuoteBlock quote={item.payload.quote} tz={tz} />}
+      {item.type === "stay" && item.state === "requested" && <StayQuoteComposer item={item} />}
     </>
   );
 }
@@ -95,6 +98,8 @@ function Typed({ item, tz, platform }: { item: Item; tz: string | undefined; pla
       );
     case "refund":
       return <RefundFields item={item} tz={tz} />;
+    case "stay":
+      return <StayFields item={item} tz={tz} />;
   }
 }
 

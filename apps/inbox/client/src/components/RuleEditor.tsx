@@ -622,6 +622,7 @@ function ActionEditor({
         <option value="set_flags">Flag it</option>
         <option value="reply">Reply</option>
         <option value="enqueue">Schedule a job</option>
+        <option value="draft">Draft a quote from my rates</option>
         <option value="stop">Stop other rules</option>
       </select>
       <div className="action-fields">

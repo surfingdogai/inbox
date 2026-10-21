@@ -3,6 +3,7 @@ import type { RuleDefinition } from "../schema";
 import { appointments } from "./appointments";
 import { OFFER_A_CODE, OFFER_A_CODE_PT, type Preset, type PresetSpec } from "./common";
 import { shop } from "./shop";
+import { stays } from "./stays";
 import { trades } from "./trades";
 
 export type { Preset, PresetSpec } from "./common";
@@ -12,7 +13,7 @@ export type { Preset, PresetSpec } from "./common";
  * one import and one entry here, and the key schema, the owner app's choice, the plan and the hosted
  * sign-up all follow from this list.
  */
-export const PRESET_REGISTRY = [appointments, trades, shop] as const satisfies readonly PresetSpec[];
+export const PRESET_REGISTRY = [appointments, trades, shop, stays] as const satisfies readonly PresetSpec[];
 
 export type PresetKey = (typeof PRESET_REGISTRY)[number]["key"];
 
@@ -41,7 +42,10 @@ export type PresetConfirm = "owner" | "rules";
 
 /** Whether a rule says yes on its own: it confirms a booking or accepts an order. */
 export function saysYesOnItsOwn(definition: RuleDefinition): boolean {
-  return definition.actions.some((a) => a.action === "transition" && (a.event === "confirm" || a.event === "accept"));
+  // A stay's quote sent from the rates is binding once sent (ADR-033 §7, R2): a yes too.
+  return definition.actions.some(
+    (a) => a.action === "transition" && (a.event === "confirm" || a.event === "accept" || a.event === "quote"),
+  );
 }
 
 /** A vertical's rules, their words in the business's first language (`en` or `pt`). */

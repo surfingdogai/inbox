@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://surfingdog.ai/spec/schemas/profile-lodging.json",
+  "title": "A profile's lodging (spec 0.10)",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": ["hotel", "bnb", "guesthouse", "hostel", "rental", "apartment", "campsite", "ryokan", "other"]
+    },
+    "rooms": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5000
+    },
+    "check_in_from": {
+      "type": "string",
+      "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+    },
+    "check_out_until": {
+      "type": "string",
+      "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+    },
+    "confirmation": {
+      "type": "string",
+      "enum": ["request", "instant_some", "instant"]
+    },
+    "answer_hours": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 168
+    },
+    "registration": {
+      "type": "string",
+      "maxLength": 60
+    }
+  },
+  "required": ["kind", "check_in_from", "check_out_until", "confirmation", "answer_hours"]
+}
