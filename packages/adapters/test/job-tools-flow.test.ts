@@ -145,6 +145,19 @@ describe("requests into the job tool", () => {
     expect(jobs(never.sm8)).toHaveLength(0);
   });
 
+  it("start from the tool's opening hours, read for the owner and kept by nobody but them", async () => {
+    const s = await setup();
+    const snap = await s.caps.connectors.setupSnapshot(owner(), s.conn.id);
+    expect(snap.source).toMatchObject({ kind: "servicem8", zone: "Africa/Nairobi" });
+    expect(snap.hours?.mon).toEqual([["08:00", "17:00"]]);
+    expect(snap.hours?.sun).toBeUndefined();
+    // Reading changes nothing: the inbox's hours are the owner's to keep, through Availability.
+    const before = JSON.stringify(await s.caps.setup.getAvailability(owner()));
+    await s.caps.connectors.setupSnapshot(owner(), s.conn.id);
+    expect(JSON.stringify(await s.caps.setup.getAvailability(owner()))).toBe(before);
+    await expect(s.caps.connectors.setupSnapshot(anon(), s.conn.id)).rejects.toMatchObject({ code: "not_allowed" });
+  });
+
   it("leave the business's job tool alone once it is disconnected", async () => {
     const s = await setup("every");
     await s.caps.connectors.remove(owner(), s.conn.id);

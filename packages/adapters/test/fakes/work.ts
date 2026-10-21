@@ -73,6 +73,17 @@ export function fakeServiceM8(p: FakePlatform, key = "smk-fundiflow-0001"): Sm8S
             name: "Fundi Flow Plumbing",
             currency: "KES",
             timezone_name: "Africa/Nairobi",
+            // getvendors.md: "The minute of the day (from midnight) when the business opens", as strings.
+            ...Object.fromEntries(
+              ["monday", "tuesday", "wednesday", "thursday", "friday"].flatMap((d) => [
+                [`opening_time_${d}`, "480"],
+                [`closing_time_${d}`, "1020"],
+              ]),
+            ),
+            opening_time_saturday: "540",
+            closing_time_saturday: "780",
+            opening_time_sunday: "0",
+            closing_time_sunday: "0",
           },
         ])
       : denied(),

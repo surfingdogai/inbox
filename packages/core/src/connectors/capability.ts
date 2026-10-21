@@ -54,6 +54,7 @@ import {
   type RunContext,
   secretKeys,
 } from "./sdk";
+import type { SetupSnapshot } from "./setup-snapshot";
 import {
   BUSY_HORIZON_MS,
   claimLink,
@@ -1728,6 +1729,32 @@ export class ConnectorCapabilities {
       method: "all",
     });
     return rows[0] ? bookingOf(itemId, rows[0], origin) : null;
+  }
+
+  /**
+   * What a connected tool says about the business, read now to start from (`setup_in`): a job
+   * tool's opening hours (ADR-034), a booking system's services and staff. Nothing is kept here: the
+   * owner keeps what they choose, through the screens that already keep it.
+   */
+  async setupSnapshot(caller: Caller, id: string): Promise<SetupSnapshot> {
+    requireOwnerSide(caller);
+    const row = await this.row(id);
+    const def = this.definitions.get(row.kind);
+    if (!def?.setup || !def.capabilities.includes("setup_in")) {
+      throw new WriteError("invalid_input", `${def?.title ?? row.kind} has nothing to start from.`, {
+        details: { reason: "no_setup", kind: row.kind },
+      });
+    }
+    if (!this.http) throw new WriteError("not_allowed", "This inbox cannot reach other services.");
+    const now = nowOf(caller);
+    try {
+      return await def.setup.read(await this.runContext(row, now));
+    } catch (error) {
+      if (error instanceof ConnectorError) {
+        throw new WriteError("wrong_state", error.message, { details: { reason: error.code, kind: row.kind } });
+      }
+      throw error;
+    }
   }
 
   /* --- rows and contexts ----------------------------------------------------- */

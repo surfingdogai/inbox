@@ -178,6 +178,10 @@ const sendAnswer = z.object({
     }),
   ),
 });
+const setupAnswer = z.looseObject({
+  source: z.looseObject({ kind: z.string(), account: z.string(), readAt: z.number(), zone: z.string().optional() }),
+  hours: z.record(z.string(), z.array(z.tuple([z.string(), z.string()]))).optional(),
+});
 const workAnswer = z.looseObject({ area: z.looseObject({}), work: z.looseObject({}), public: z.looseObject({}) });
 const body = (description: string, schema: z.ZodType) => ({
   200: { description, content: { "application/json": { schema: resolver(schema) } } },
@@ -215,6 +219,21 @@ export function tradesOwnerRoutes(app: Hono<CallerEnv>, caps: Capabilities): voi
       responses: body("What each job tool did", sendAnswer),
     }),
     async (c) => c.json(await caps.trades.sendToJobTool(c.get("caller"), c.req.param("id"))),
+  );
+  app.get(
+    "/integrations/:id/setup",
+    describeRoute({
+      tags: ["integrations"],
+      summary: "What a connected tool says about the business, to start from: a job tool's opening hours",
+      description:
+        "Read now from the tool (`setup_in`); nothing is kept. The owner keeps the hours through PUT /v1/owner/availability.",
+      security: [{ ownerKey: [] }],
+      responses: body("Snapshot", setupAnswer),
+    }),
+    async (c) =>
+      c.json(await caps.connectors.setupSnapshot(c.get("caller"), c.req.param("id")), 200, {
+        "Cache-Control": "no-store",
+      }),
   );
   app.get(
     "/work",

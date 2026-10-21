@@ -218,6 +218,34 @@ describe("ServiceM8", () => {
     expect(writes).toEqual(["write"]);
   });
 
+  it("starts the inbox from the account's opening hours, in the zone it keeps them in", async () => {
+    const p = fakePlatform();
+    const sm8 = fakeServiceM8(p);
+    const run = ctx(p.http, { api_key: sm8.key }, { timezone: "Africa/Nairobi" });
+    expect(def.capabilities).toContain("setup_in");
+    const snap = await def.setup?.read(run);
+    expect(snap).toEqual({
+      source: {
+        kind: "servicem8",
+        account: "6f1c2a3e-4b5d-4e6f-8a9b-0c1d2e3f4a5b",
+        readAt: T0,
+        zone: "Africa/Nairobi",
+      },
+      hours: {
+        mon: [["08:00", "17:00"]],
+        tue: [["08:00", "17:00"]],
+        wed: [["08:00", "17:00"]],
+        thu: [["08:00", "17:00"]],
+        fri: [["08:00", "17:00"]],
+        sat: [["09:00", "13:00"]],
+      },
+    });
+    // Nothing but the account was read, and nothing was written.
+    expect(p.seen.map((r) => `${r.method} ${r.url.pathname}`)).toEqual(["GET /api_1.0/vendor.json"]);
+    sm8.key = "smk-revoked-in-settings";
+    await expect(def.setup?.read(run)).rejects.toMatchObject({ code: "auth" });
+  });
+
   it("says when its key is withdrawn, and waits when it is asked to slow down", async () => {
     const p = fakePlatform();
     const sm8 = fakeServiceM8(p);

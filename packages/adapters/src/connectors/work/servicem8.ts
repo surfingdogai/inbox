@@ -13,6 +13,7 @@ import {
   type OutboundRequest,
   type RequestRef,
   type RunContext,
+  type SetupSnapshot,
   secretField,
 } from "@surfingdog/core";
 import { z } from "zod";
@@ -141,6 +142,49 @@ async function vendorOf(api: Api): Promise<Vendor> {
     uuid: v.uuid,
     name: typeof v.name === "string" && v.name.trim() ? v.name.trim() : "ServiceM8",
     timezone: typeof v.timezone_name === "string" && v.timezone_name ? v.timezone_name : "UTC",
+  };
+}
+
+const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
+const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
+
+/** A minute of the day as ServiceM8 sends it ("480" is 08:00), or null when it is not one. */
+function minuteOf(raw: unknown): number | null {
+  const n = typeof raw === "number" ? raw : typeof raw === "string" && /^\d{1,4}$/.test(raw.trim()) ? Number(raw) : NaN;
+  return Number.isInteger(n) && n >= 0 && n <= 1440 ? n : null;
+}
+
+const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+
+/**
+ * The account's opening hours, to start from (`setup_in`): `opening_time_<day>` and
+ * `closing_time_<day>` of the vendor record, each "the minute of the day (from midnight)", in the
+ * account's `timezone_name` (https://developer.servicem8.com/reference/getvendors.md). A day whose
+ * times are missing, not minutes, or do not close after they open is a closed day.
+ */
+export async function servicem8Setup(
+  ctx: RunContext,
+  secret: Readonly<Record<string, string>>,
+): Promise<SetupSnapshot> {
+  const { res, json } = await apiOf(ctx, secret).get("/vendor.json");
+  if (res.status !== 200 || !Array.isArray(json) || !json[0] || typeof json[0] !== "object") {
+    throw new ConnectorError("bad_response", "ServiceM8 did not send the account's details.");
+  }
+  const v = json[0] as Record<string, unknown>;
+  const hours: Record<string, (readonly [string, string])[]> = {};
+  DAYS.forEach((day, i) => {
+    const open = minuteOf(v[`opening_time_${day}`]);
+    const close = minuteOf(v[`closing_time_${day}`]);
+    if (open !== null && close !== null && close > open) hours[DAY_KEYS[i] as string] = [[hhmm(open), hhmm(close)]];
+  });
+  return {
+    source: {
+      kind: "servicem8",
+      account: typeof v.uuid === "string" ? v.uuid : "",
+      readAt: ctx.now,
+      ...(typeof v.timezone_name === "string" && v.timezone_name ? { zone: v.timezone_name } : {}),
+    },
+    hours,
   };
 }
 
@@ -318,7 +362,7 @@ export function servicem8Connector(client: OAuthClient | null = null): Connector
     kind: "servicem8",
     title: "ServiceM8",
     group: "work",
-    capabilities: ["requests_out", "busy_times"],
+    capabilities: ["requests_out", "busy_times", "setup_in"],
     auth: "form",
     form: servicem8Form,
     note: "Requests you take on become jobs in Quote status, with the photos; scheduled visits block those times.",
@@ -423,6 +467,13 @@ export function servicem8Connector(client: OAuthClient | null = null): Connector
         return find({ ...ctx, secret: await fresh(ctx, client) }, request);
       },
       openUrl: openJob,
+    },
+
+    // Start from ServiceM8 (ADR-034 §5): its opening hours, kept only when the owner keeps them.
+    setup: {
+      async read(ctx) {
+        return servicem8Setup(ctx, await fresh(ctx, client));
+      },
     },
 
     hooks: {

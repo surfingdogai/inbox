@@ -233,7 +233,13 @@ export class TradeCapabilities {
       area: settings.area,
       work: settings.work,
       public: { area: areaSummary(settings.area), work: workProfile(settings) },
-      job_tools: tools.map((t) => ({ id: t.id, kind: t.kind, name: t.name })),
+      job_tools: tools.map((t) => ({
+        id: t.id,
+        kind: t.kind,
+        name: t.name,
+        // The owner can start from what the tool says (its opening hours: "Start from ServiceM8").
+        starts: this.deps.connectors.definition(t.kind)?.capabilities.includes("setup_in") === true,
+      })),
       expiring,
     };
   }

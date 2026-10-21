@@ -1,5 +1,6 @@
 import { minorUnits } from "@surfingdog/spec";
 import { z } from "zod";
+import type { SetupSnapshot } from "./setup-snapshot";
 
 /**
  * The connector SDK (ADR-014, ADR-015, ADR-022).
@@ -993,6 +994,14 @@ export interface RequestsWriter {
   openUrl?(externalId: string): string | null;
 }
 
+/**
+ * What a business's own tool says about it, read once to start from (capability `setup_in`): its
+ * services, staff and hours. The owner keeps what they want; nothing is published until they do.
+ */
+export interface SetupReader {
+  read(ctx: RunContext): Promise<SetupSnapshot>;
+}
+
 export interface ConnectorDefinition {
   readonly kind: string;
   readonly title: string;
@@ -1075,6 +1084,8 @@ export interface ConnectorDefinition {
   readonly feed?: FeedServer | undefined;
   /** Requests the owner takes on, written into their job tool (capability `requests_out`, ADR-034). */
   readonly requests?: RequestsWriter | undefined;
+  /** Services, staff and hours to start from (`setup_in`; a job tool's opening hours, ADR-034). */
+  readonly setup?: SetupReader | undefined;
 }
 
 /** How the owner is told of a connection by name: "iCloud" → "iCloud calendar"; "Google Calendar" stays. */
