@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect } from "react";
+import { KitchenToday } from "../components/KitchenToday";
 import { StatePill } from "../components/Pills";
 import { api, problemOf } from "../lib/api";
 import {
@@ -78,6 +79,8 @@ function TodayPane() {
         <div className="eyebrow">Today</div>
         <h2 className="today-date">{formatDay(new Date(now).toISOString(), tz)}</h2>
       </div>
+
+      {settings.data?.doc.kitchen.enabled && <KitchenToday tz={tz} sandbox={sandbox} />}
 
       <section className="card glass stack">
         <h3 className="sec">Bookings today</h3>

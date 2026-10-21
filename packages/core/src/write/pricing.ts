@@ -1,6 +1,9 @@
 import { eq, inArray } from "drizzle-orm";
 import type { Db } from "../db";
 import type { Item, ItemType, Money, PayloadOf, Personalised } from "../domain/types";
+import { orderExtras } from "../kitchen/order";
+import { priceOptions } from "../menu/options";
+import { menuOf } from "../menu/schema";
 import { floorsFor } from "../negotiation/catalogue";
 import { type Reward, rewardFor, rewardPrice, type Standing } from "../negotiation/rewards";
 import { business, products, services } from "../schema/tables";
@@ -112,11 +115,24 @@ export interface LinePricing {
   readonly reward: Reward | null;
 }
 
-/** For each line, what the catalogue says of its product (by `productId`, else `sku`); null for a line naming none. */
+/**
+ * For each line, what the catalogue says of its product (by `productId`, else `sku`); null for a line
+ * naming none. A menu item's line is priced with what its options add, from the menu as it is now
+ * (ADR-036), the choices a group takes by default included when none were sent: its list, its price for
+ * this customer and its floor all carry them, so a pizza with a larger size is at its list price, never
+ * above it. `options: false` prices the products alone (the order's own pricing adds them itself).
+ */
 export async function linePricing(
   db: Db,
-  lines: readonly { productId?: string | undefined; sku?: string | undefined }[],
+  lines: readonly {
+    productId?: string | undefined;
+    sku?: string | undefined;
+    options?:
+      | readonly { groupId: string; choiceId: string; portion?: "whole" | "left" | "right" | undefined }[]
+      | undefined;
+  }[],
   pricing?: PricingFor,
+  o: { readonly options?: boolean } = {},
 ): Promise<(LinePricing | null)[]> {
   const catalogue = await productsFor(db, lines);
   const found = lines.map((l) =>
@@ -131,21 +147,23 @@ export async function linePricing(
     "product",
     found.flatMap((p) => (p ? [p.id] : [])),
   );
-  return found.map((p) => {
+  return found.map((p, i) => {
     if (!p) return null;
-    const list: Money = { value: p.price.value, currency: p.price.currency.toUpperCase() };
-    const floor = floors.get(p.id) ?? null;
+    const currency = p.price.currency.toUpperCase();
+    const menu = o.options === false ? null : menuOf(p.menu);
+    const delta = menu ? priceOptions(menu, lines[i]?.options, currency, "").unitDelta : 0;
+    const base = floors.get(p.id) ?? null;
     const reward = pricing ? rewardFor(pricing.rewards, pricing.standing, p.id) : null;
-    const value = reward ? rewardPrice(list.value, floor, reward.pct) : list.value;
+    const value = reward ? rewardPrice(p.price.value, base, reward.pct) : p.price.value;
     return {
       productId: p.id,
       sku: p.sku,
       name: p.name,
       negotiable: p.negotiable !== 0,
-      list,
-      customer: { value, currency: list.currency },
-      floor,
-      reward: value < list.value ? reward : null,
+      list: { value: p.price.value + delta, currency },
+      customer: { value: value + delta, currency },
+      floor: base === null ? null : base + delta,
+      reward: value < p.price.value ? reward : null,
     };
   });
 }
@@ -217,13 +235,15 @@ async function priceOrder(db: Db, payload: PayloadOf<"order">, pricing?: Pricing
   const { customerStatedPrice: _sent, personalised: _chosen, ...asked } = payload;
   const lines = asked.orderedItem.map(({ customerStatedPrice: _line, listPrice: _list, ...line }) => line);
   const catalogue = await productsFor(db, lines);
-  const priced = await linePricing(db, lines, pricing);
+  // The base prices: each line's options are priced below, from the menu, on top of them.
+  const priced = await linePricing(db, lines, pricing, { options: false });
   /** The owner's line for the customer, from the first reward that priced a line. */
   let says: string | undefined;
   /** The currency of the business's prices here: its first catalogue line's. */
   let currency: string | undefined;
   let unpriced = false;
   const clash: FieldProblem[] = [];
+  const optionProblems: FieldProblem[] = [];
   const orderedItem: PayloadOf<"order">["orderedItem"] = [];
   lines.forEach((line, i) => {
     const byId = line.productId !== undefined ? catalogue.byId.get(line.productId) : undefined;
@@ -241,22 +261,39 @@ async function priceOrder(db: Db, payload: PayloadOf<"order">, pricing?: Pricing
       orderedItem.push(line);
       return;
     }
-    const list: Money = { value: product.price.value, currency: product.price.currency.toUpperCase() };
+    // A menu item's options are priced from the business's menu (ADR-036): what each adds, per unit,
+    // goes on the list price and on the customer's price alike.
+    const menu = menuOf(product.menu);
+    const opts = menu
+      ? priceOptions(menu, line.options, product.price.currency.toUpperCase(), `payload.orderedItem.${i}`)
+      : null;
+    if (opts) optionProblems.push(...opts.problems);
+    else if (line.options?.length) {
+      optionProblems.push({
+        path: `payload.orderedItem.${i}.options`,
+        problem: "invalid",
+        message: "it has no options",
+      });
+    }
+    const delta = opts?.unitDelta ?? 0;
+    const list: Money = { value: product.price.value + delta, currency: product.price.currency.toUpperCase() };
     const p = priced[i];
     // The customer's price: the list price, or the owner's reward for them (never below the floor).
-    const ours: Money = p && p.productId === product.id ? p.customer : list;
+    const ours: Money = p && p.productId === product.id ? { ...p.customer, value: p.customer.value + delta } : list;
     const rewarded = p?.productId === product.id && p.reward !== null && ours.value < list.value;
     if (rewarded) says ??= p?.reward?.says;
     currency ??= ours.currency;
     const { sku: _sku, ...rest } = line;
     const sku = product.sku !== null && product.sku.length <= 100 ? { sku: product.sku } : {};
+    const { options: _sentOptions, ...kept } = rest;
     const named = {
-      ...rest,
+      ...kept,
       productId: product.id,
       ...sku,
       name: clip(product.name, 200),
       price: ours,
       ...(rewarded ? { listPrice: list } : {}),
+      ...(opts?.options.length ? { options: opts.options } : {}),
     };
     // A line the assistant wrote at the list price is not a price of the customer's: they pay theirs.
     orderedItem.push(
@@ -268,6 +305,11 @@ async function priceOrder(db: Db, payload: PayloadOf<"order">, pricing?: Pricing
   if (clash.length) {
     throw new WriteError("invalid_input", "A line names two different products: send its productId or its sku.", {
       fields: clash,
+    });
+  }
+  if (optionProblems.length) {
+    throw new WriteError("invalid_input", "Choose each item's options as its menu has them (get_menu).", {
+      fields: optionProblems,
     });
   }
   // Nothing here is the catalogue's: every line is for a person to price, as the customer wrote it.
@@ -298,12 +340,31 @@ async function priceOrder(db: Db, payload: PayloadOf<"order">, pricing?: Pricing
   if (problems.length) {
     throw new WriteError("invalid_input", "The order's total is too large: order fewer.", { fields: problems });
   }
+  // An order for a time adds its delivery fee and a tip, as the business prices them (ADR-036).
+  const extras = await orderExtras(db, asked, { value: total, currency });
+  if (extras.problems.length) {
+    throw new WriteError("invalid_input", "The order's delivery or tip is not one we can take.", {
+      fields: extras.problems,
+    });
+  }
+  total += extras.add;
+  if (!Number.isSafeInteger(total)) {
+    throw new WriteError("invalid_input", "The order's total is too large: order fewer.", {
+      fields: [{ path: "payload.orderedItem", problem: "invalid", message: "too large" }],
+    });
+  }
   const ours: Money = { value: total, currency };
   const stated = asked.totalPrice;
-  const personalised = orderPersonalised(orderedItem, says);
+  const lineList = orderPersonalised(orderedItem, says);
+  // The list total beside a reward carries the same fee and tip as the order's own total.
+  const personalised = lineList
+    ? { ...lineList, listPrice: { ...lineList.listPrice, value: lineList.listPrice.value + extras.add } }
+    : undefined;
   return {
     payload: {
       ...asked,
+      ...(extras.fulfil ? { fulfil: extras.fulfil } : {}),
+      ...(extras.tip ? { tip: extras.tip } : {}),
       orderedItem,
       totalPrice: ours,
       ...(sameMoney(stated, ours) || (personalised && sameMoney(stated, personalised.listPrice))
@@ -371,6 +432,8 @@ interface CatalogueProduct {
   readonly name: string;
   readonly price: Money;
   readonly negotiable: number;
+  /** Its menu, when it is on one (ADR-036): what each option adds is priced from it. */
+  readonly menu: unknown;
 }
 
 async function productsFor(db: Db, lines: readonly { productId?: string | undefined; sku?: string | undefined }[]) {
@@ -384,6 +447,7 @@ async function productsFor(db: Db, lines: readonly { productId?: string | undefi
     name: products.name,
     price: products.price,
     negotiable: products.negotiable,
+    menu: products.menu,
   };
   for (let i = 0; i < ids.length; i += CHUNK) {
     const rows = await db.orm

@@ -25,7 +25,16 @@ import { nodeSnapshot, nodeSqliteClient, pinnedFetch } from "@surfingdog/platfor
 import { createInbox } from "./app";
 import { flagOn } from "./demo";
 import { isDoor } from "./doors";
-import { jobToolsFrom, listFrom, oauthFrom, outboundDenyFrom, publicUrlFrom, secretKeyFrom, senderFrom } from "./env";
+import {
+  jobToolsFrom,
+  listFrom,
+  oauthFrom,
+  outboundDenyFrom,
+  posFrom,
+  publicUrlFrom,
+  secretKeyFrom,
+  senderFrom,
+} from "./env";
 import { commandDatabaseRefusal, DEFAULT_HOST, NODE_SERVER_OPTIONS } from "./node-server";
 import { seedDemo, seedShowcase, seedSurfingDog } from "./seed";
 
@@ -238,6 +247,19 @@ const { app, runner, prepare } = createInbox({
   ...jobToolsFrom({
     JOBBER_API_VERSION: process.env.JOBBER_API_VERSION,
     JOB_TOOLS_CLEARED: process.env.JOB_TOOLS_CLEARED,
+  }),
+  ...posFrom({
+    TOAST_CLIENT_ID: process.env.TOAST_CLIENT_ID,
+    TOAST_CLIENT_SECRET: process.env.TOAST_CLIENT_SECRET,
+    TOAST_API_HOST: process.env.TOAST_API_HOST,
+    LIGHTSPEED_CLIENT_ID: process.env.LIGHTSPEED_CLIENT_ID,
+    LIGHTSPEED_CLIENT_SECRET: process.env.LIGHTSPEED_CLIENT_SECRET,
+    CLOVER_CLIENT_ID: process.env.CLOVER_CLIENT_ID,
+    CLOVER_CLIENT_SECRET: process.env.CLOVER_CLIENT_SECRET,
+    DELIVERECT_CLIENT_ID: process.env.DELIVERECT_CLIENT_ID,
+    DELIVERECT_CLIENT_SECRET: process.env.DELIVERECT_CLIENT_SECRET,
+    DELIVERECT_CHANNEL: process.env.DELIVERECT_CHANNEL,
+    DELIVERECT_STAGING: process.env.DELIVERECT_STAGING,
   }),
   // Only for a webhook the owner allowed onto a private address; the ranges above still hold.
   privateFetchImpl: pinnedFetch({ deny: deny.ranges, allowPrivate: true }),

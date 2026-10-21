@@ -1,4 +1,4 @@
-import { workProfileSchema } from "@surfingdog/core";
+import { kitchenProfileSchema, workProfileSchema } from "@surfingdog/core";
 import { z } from "zod";
 
 /**
@@ -443,6 +443,11 @@ export const businessProfileSchema = profileSchema.extend({
     .optional()
     .describe(
       "How a trade takes work (spec 0.11): where it goes (a radius or postal prefixes, never its base), emergencies online, call-out and out-of-hours fees, free estimates.",
+    ),
+  kitchen: kitchenProfileSchema
+    .optional()
+    .describe(
+      "How a kitchen takes orders (spec 0.11): collection, delivery and eating in, its time to prepare, slots, whether orders confirm at once within what it set aside, a pause, tips, delivery zones, tables, and how allergens are answered.",
     ),
 });
 

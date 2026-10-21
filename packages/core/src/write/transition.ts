@@ -19,6 +19,9 @@ import {
   payloadSchemas,
 } from "../domain/types";
 import { ulid } from "../ids";
+import { assertKitchenClears } from "../kitchen/guard";
+import { overCapClaims } from "../kitchen/order";
+import { posCancelStatements, posPushStatements } from "../kitchen/pos";
 import { resolveTransition, type Transition } from "../machine/machine";
 import { outcomeOf } from "../machine/outcomes";
 import { machines, noteInput } from "../machine/tables";
@@ -288,6 +291,10 @@ async function attempt_(
       { details: { guard: "business_priced", draft_for_owner: true } },
     );
   }
+  // An order the kitchen marked for a person (ADR-036: an allergen nobody confirmed, more than was set
+  // aside, made to order, a kitchen that accepts by hand), and a table no covers were set aside for, are a
+  // person's to say yes to: never a rule's, the owner's AI's or another system's key, whatever it holds.
+  if (!isPerson(caller)) await assertKitchenClears(db, item, input.event);
   if (isAutomation(caller)) {
     const open = openOf(rows);
     // What we proposed binds us until the customer answers or it lapses (ADR-018 §1, §2): the owner's
@@ -337,7 +344,8 @@ async function attempt_(
   if (assistant || !holdsMoney(caller)) assertNoMoney(t.event, data, assistant);
   // Changes to an order are made whole: one currency, a total worked out here, a validity to come.
   // Their prices, when automation sets them, are judged against the owner's limits below.
-  if (item.type === "order" && t.event === "propose") proposeOrder(data, now);
+  if (item.type === "order" && t.event === "propose")
+    proposeOrder(data, now, extrasOf(item.payload as PayloadOf<"order">));
   // What we send lasts until the date it gives, else `offerValidHours`; what automation sends lasts
   // at most that long, and says so, so the date the customer reads is the date it holds (ADR-018 §1).
   if ((item.type === "quote_request" && t.event === "quote") || (item.type === "order" && t.event === "propose")) {
@@ -897,7 +905,9 @@ async function attempt_(
           break;
         }
         if (item.type !== "booking") break;
-        const spec = await slotSpecFor(db, payload);
+        // A person at the business seats a table from the whole room, not only the covers set aside
+        // for direct bookings (ADR-036): the places are still taken, so automation sees them as used.
+        const spec = await slotSpecFor(db, payload, { seatsTheRoom: isPerson(caller) });
         const buckets = bucketsFor(spec, String(payload.startTime), String(payload.endTime));
         const taken = await readClaims(db, spec, buckets, item.id);
         const plan = planClaims(spec, buckets, taken);
@@ -1153,6 +1163,13 @@ async function attempt_(
   }
   statements.push(...refundMade);
   if (effects.has("release_slot")) statements.push(releaseStatement(item.id));
+  // An order that ends without being made gives back its slot and the daily places it took (ADR-036);
+  // one that was made keeps them, as it was made that day.
+  if (item.type === "order" && (t.to === "declined" || t.to === "cancelled" || t.to === "expired")) {
+    statements.push(releaseStatement(item.id));
+    // One that went into a till already is cancelled there by a person too (ADR-036).
+    statements.push(...(await posCancelStatements(db, item.id, now)));
+  }
   if (effects.has("release_hold")) statements.push(releaseHoldStatement(item.id));
   if (hold && offerPlan.made) {
     // A time proposed again moves its hold: the old one goes, the new one is held for the new offer.
@@ -1288,6 +1305,19 @@ async function attempt_(
   // A request the owner quotes is one they take on: it goes to their job tool unless they send none (ADR-034 §5).
   if (item.type === "quote_request" && t.event === "quote") {
     statements.push(...(await workPushStatements(db, item.id, "quoted", now)));
+  }
+  // An order the business accepted goes into its till, when one is connected (ADR-036): at once when
+  // it is paid at the handover, once paid when its pay link is on its way, so the till never takes an
+  // order paid by link as one to pay at the door, nor makes one whose link is still open.
+  // A person who accepts an order over a daily cap gives it what was left of the cap (ADR-036).
+  if (item.type === "order" && t.to === "accepted" && item.state !== "accepted") {
+    statements.push(...(await overCapClaims(db, item, now)));
+  }
+  if (item.type === "order" && t.to === "accepted" && item.state !== "accepted" && !linkWait) {
+    statements.push(...(await posPushStatements(db, item.id, now)));
+  }
+  if (item.type === "order" && t.to === "paid" && item.state !== "paid") {
+    statements.push(...(await posPushStatements(db, item.id, now, "paid")));
   }
   if (await hasEventListeners(db)) {
     statements.push(webhookFanoutStatement({ id: eventId, type: `${item.type}.${t.event}`, itemId: item.id }, now));
@@ -1759,7 +1789,18 @@ function lateChange(
  * currency, their total worked out here, a validity still to come. What automation prices is judged
  * against the owner's limits (`write/limits.ts`), not here.
  */
-function proposeOrder(data: Record<string, unknown>, now: number): void {
+/**
+ * What an order for a time adds beyond its lines (ADR-036): its delivery fee and the customer's tip, in
+ * the order's currency. Changes the business suggests keep them: the total is the lines and these.
+ */
+function extrasOf(p: PayloadOf<"order">): number {
+  const currency = p.totalPrice.currency;
+  const fee = p.fulfil?.fee?.currency === currency ? p.fulfil.fee.value : 0;
+  const tip = p.tip?.amount?.currency === currency ? p.tip.amount.value : 0;
+  return fee + tip;
+}
+
+function proposeOrder(data: Record<string, unknown>, now: number, extras = 0): void {
   const lines = data.orderedItem as {
     productId?: string;
     sku?: string;
@@ -1795,7 +1836,7 @@ function proposeOrder(data: Record<string, unknown>, now: number): void {
       },
     );
   }
-  data.totalPrice = { value: total, currency };
+  data.totalPrice = { value: total + extras, currency };
 }
 
 /**
@@ -1992,18 +2033,36 @@ function assertNoMoney(event: string, data: Record<string, unknown>, assistant: 
   }
 }
 
-async function slotSpecFor(db: Db, payload: Record<string, unknown>): Promise<SlotSpec> {
+/**
+ * How many people a person may seat in one sitting of a table service, whatever was set aside for direct
+ * bookings (ADR-036): they know the room; the inbox only counts the places, so automation sees them taken.
+ */
+const ROOM_SEATS = 1000;
+
+async function slotSpecFor(
+  db: Db,
+  payload: Record<string, unknown>,
+  o: { readonly seatsTheRoom?: boolean } = {},
+): Promise<SlotSpec> {
   const reservationFor = payload.reservationFor as { serviceId: string };
-  const [service] = await db.orm
+  const [row] = await db.orm
     .select({
       capacity: services.capacity,
       granularityMin: services.granularityMin,
       bufferBeforeMin: services.bufferBeforeMin,
       bufferAfterMin: services.bufferAfterMin,
+      capacityUnit: services.capacityUnit,
     })
     .from(services)
     .where(eq(services.id, reservationFor.serviceId));
-  if (!service) {
+  // A service whose places are people (a table's covers, ADR-036): a booking takes one per person.
+  const { capacityUnit, ...stored } = row ?? ({} as NonNullable<typeof row>);
+  const units = capacityUnit === "people" ? Math.max(1, Number(payload.partySize ?? 1)) : undefined;
+  const service =
+    capacityUnit === "people" && o.seatsTheRoom
+      ? { ...stored, capacity: Math.max(stored.capacity, ROOM_SEATS) }
+      : stored;
+  if (!row) {
     throw new WriteError("invalid_input", `unknown service ${reservationFor.serviceId}`, {
       fields: [{ path: "payload.reservationFor.serviceId", problem: "invalid", message: "unknown service" }],
     });
@@ -2018,9 +2077,15 @@ async function slotSpecFor(db: Db, payload: Record<string, unknown>): Promise<Sl
       throw new WriteError("invalid_input", `unknown resource ${resourceId}`, {
         fields: [{ path: "payload.resourceId", problem: "invalid", message: "unknown resource" }],
       });
-    return { ...service, capacity: resource.capacity, resourceKey: `resource:${resourceId}` };
+    return {
+      ...service,
+      capacity:
+        capacityUnit === "people" && o.seatsTheRoom ? Math.max(resource.capacity, ROOM_SEATS) : resource.capacity,
+      resourceKey: `resource:${resourceId}`,
+      ...(units ? { units } : {}),
+    };
   }
-  return { ...service, resourceKey: `service:${reservationFor.serviceId}` };
+  return { ...service, resourceKey: `service:${reservationFor.serviceId}`, ...(units ? { units } : {}) };
 }
 
 /** The start a transition books or proposes, when it has one. */

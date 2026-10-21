@@ -97,6 +97,19 @@ or network:
   customer pays with its tax; a line's `quoteLineKindSchema`); and how a trade takes work
   (`workProfileSchema`, `get_business_profile`'s `work`). Schemas: `attachment-ref`, `area-summary`,
   `job`, `trade-quote`, `work-profile`, `mcp-check-area-input`, `mcp-check-area-output`.
+- 0.11 ([ADR-036](../../docs/adr/036-food.md)): restaurants, takeaways, bakeries and cafés. The allergen
+  vocabulary (`vocab/allergens.json`: 46 codes in seven languages, with the lists the EU, the UK, the US,
+  Canada, Australia, New Zealand and Japan name and their sources; `expandAllergens` reads a part as its
+  whole, `jurisdictionOf` gives a country's list) and a dish's allergens with whether the business
+  confirmed them (`allergenInfoSchema`); the menu as `get_menu` gives it (`getMenuOutputSchema`: sections,
+  option groups with what each choice adds and halves, dietary tags, an age limit, dayparts, sold out
+  today); slots to collect or have it delivered (`listOrderSlotsInputSchema`, `listOrderSlotsOutputSchema`,
+  a zone with its fee and minimum); an order line's options, note and brief (`lineOptionSchema`,
+  `lineBriefSchema`); an order's fulfilment, tip and progress inside fulfilling (`fulfilSchema`, `tipSchema`,
+  `orderProgressSchema`); a kitchen in the business profile (`kitchenProfileSchema`); and a table service's
+  rules (`tableRulesSchema`). Schemas: `allergen-info`, `fulfil`, `order-progress`, `kitchen-profile`,
+  `table-rules`, `mcp-get-menu-input`, `mcp-get-menu-output`, `mcp-list-order-slots-input`,
+  `mcp-list-order-slots-output`.
 
 Everything here is published, byte for byte, at https://surfingdog.ai/spec/ (the files under
 `/spec/schemas/`, `/spec/vectors/` and `/spec/vocab/`, the vocabulary's versions at

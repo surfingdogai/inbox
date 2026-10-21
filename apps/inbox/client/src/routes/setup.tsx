@@ -11,6 +11,7 @@ import { WhereYouWork } from "../components/WhereYouWork";
 import { type ApiProblem, problemOf } from "../lib/api";
 import { ensureSignedIn, session } from "../lib/auth";
 import { guessCurrency } from "../lib/currencies";
+import { EMPTY_MENU, foodApi } from "../lib/food";
 import { countryOfZone, emailLangOfCountry } from "../lib/geo";
 import { languageName, languagesToSave } from "../lib/languages";
 import {
@@ -27,6 +28,13 @@ import {
   useSettings,
 } from "../lib/queries";
 import {
+  DISH_PLACEHOLDERS,
+  DISH_SECTIONS,
+  type DishDraft,
+  dishPlan,
+  doorsFor,
+  doorsStepDoc,
+  isKitchen,
   joinNetworkDoc,
   KINDS,
   kindOf,
@@ -38,7 +46,6 @@ import {
   type StepId,
   stepsFor,
   type WizardDoors,
-  wizardDoorsDoc,
   wizardPreset,
 } from "../lib/setup";
 import { type AreaDraft, areaDocOf, areaReady, emptyArea, useWork } from "../lib/trades";
@@ -72,17 +79,6 @@ function rememberSkip(): void {
     // Private window. Asking again next time is the lesser evil.
   }
 }
-
-/**
- * What agents can do, the same three switches as Settings: more than one, as most businesses take
- * bookings and requests for a price and messages. The choice decides the rest of the wizard: whether
- * step three asks for a length, whether it asks for hours, and which rules answer for you.
- */
-const DOORS: readonly { readonly key: keyof WizardDoors; readonly label: string; readonly line: string }[] = [
-  { key: "booking", label: "Agents can book time", line: "A consultation, a class, a table, a treatment." },
-  { key: "quoteRequest", label: "Agents can ask for a price", line: "A job to quote, a visit to arrange." },
-  { key: "message", label: "Agents can send a message", line: "Anything else, for you to answer." },
-];
 
 const DEFAULT_HOURS: Weekly = {
   mon: [["09:00", "17:00"]],
@@ -123,6 +119,10 @@ interface Offer {
   name: string;
   minutes: string;
   price: string;
+}
+
+interface Dish extends DishDraft {
+  readonly id: number;
 }
 
 function SetupWizard() {
@@ -183,6 +183,11 @@ function SetupWizard() {
   const [doors, setDoors] = useState<WizardDoors>({ booking: true, quoteRequest: true, message: true });
   const [offers, setOffers] = useState<Offer[]>([{ id: 1, name: "", minutes: "60", price: "" }]);
   const [nextId, setNextId] = useState(2);
+  // A kitchen's first dishes (ADR-036): on the menu in a section, their allergens for Settings → Menu.
+  const kitchen = isKitchen(kind);
+  const sectionChoices = DISH_SECTIONS[kind?.key ?? ""] ?? ["Menu"];
+  const [dishes, setDishes] = useState<Dish[]>([{ id: 1, name: "", price: "", section: "" }]);
+  const [dishesMade, setDishesMade] = useState(0);
   const [hours, setHours] = useState<Weekly>(DEFAULT_HOURS);
   const [rules, setRules] = useState(true);
   // On unless the owner says no: the business is listed where agents search, and its record starts.
@@ -246,7 +251,27 @@ function SetupWizard() {
         if (doc) await saveSettings.mutateAsync({ doc });
       }
       if (at === "doors") {
-        await saveSettings.mutateAsync({ doc: wizardDoorsDoc(doors) });
+        await saveSettings.mutateAsync({ doc: doorsStepDoc(doors, kind) });
+      }
+      if (at === "offer" && kitchen) {
+        const plan = dishPlan(
+          dishes.map((d) => ({ ...d, section: d.section || (sectionChoices[0] ?? "Menu") })),
+          currency,
+          settings.data?.doc.menu?.sections ?? [],
+        );
+        if ("problem" in plan) {
+          setLocal(plan.problem);
+          return false;
+        }
+        if (plan.products.length) await saveSettings.mutateAsync({ doc: { menu: { sections: plan.sections } } });
+        for (const p of plan.products) {
+          const row = await productWrite.mutateAsync({ body: p.body });
+          await foodApi.setItem(row.id, { ...EMPTY_MENU, section: p.section });
+        }
+        setDishesMade((n) => n + plan.products.length);
+        setDishes([{ id: nextId, name: "", price: "", section: "" }]);
+        setNextId((n) => n + 1);
+        return true;
       }
       if (at === "offer") {
         const planned = offerBodies(offers, "services", currency, asked);
@@ -260,7 +285,7 @@ function SetupWizard() {
           for (const body of planned.bodies) await productWrite.mutateAsync({ body });
         }
       }
-      if (at === "hours" && doors.booking) {
+      if (at === "hours" && (doors.booking || (kitchen && doors.order !== false))) {
         await saveWeekly.mutateAsync({ weekly: hours });
       }
       if (at === "answering") {
@@ -284,8 +309,8 @@ function SetupWizard() {
     at === "kind" ||
     (at === "you" && name.trim().length > 0) ||
     (at === "where" && areaReady(area)) ||
-    (at === "doors" && (doors.booking || doors.quoteRequest || doors.message)) ||
-    (at === "offer" && (!doors.booking || offers.some((o) => o.name.trim()) || existing > 0)) ||
+    (at === "doors" && (doors.booking || doors.quoteRequest || doors.message || doors.order === true)) ||
+    (at === "offer" && (kitchen || !doors.booking || offers.some((o) => o.name.trim()) || existing > 0)) ||
     at === "hours" ||
     at === "answering";
 
@@ -301,7 +326,14 @@ function SetupWizard() {
     );
   }
 
-  if (done) return <Finished onOpen={leave} kind={kind} />;
+  if (done)
+    return (
+      <Finished
+        onOpen={leave}
+        kind={kind}
+        menuEmpty={kitchen && dishesMade === 0 && (products.data?.items.length ?? 0) === 0}
+      />
+    );
 
   return (
     <main className="page page-narrow setup">
@@ -437,22 +469,103 @@ function SetupWizard() {
             <h2 className="sec">What can agents do?</h2>
             <p className="lede small">As many as you like. You can change them any time in Settings.</p>
             <ul className="door-list">
-              {DOORS.map((d) => (
+              {doorsFor(kind).map((d) => (
                 <li key={d.key} className="door-row">
-                  <Switch checked={doors[d.key]} onChange={(on) => setDoors((all) => ({ ...all, [d.key]: on }))}>
+                  <Switch
+                    checked={doors[d.key] === true}
+                    onChange={(on) => setDoors((all) => ({ ...all, [d.key]: on }))}
+                  >
                     {d.label}
                   </Switch>
                   <span className="door-note">{d.line}</span>
                 </li>
               ))}
             </ul>
-            {!doors.booking && !doors.quoteRequest && !doors.message && (
+            {!doors.booking && !doors.quoteRequest && !doors.message && !doors.order && (
               <p className="hint">Agents can't reach you at all.</p>
             )}
           </>
         )}
 
-        {at === "offer" && (
+        {at === "offer" && kitchen && (
+          <>
+            <h2 className="sec">Your first dishes</h2>
+            <p className="lede small">
+              Two or three to start. Agents order only what is on your menu; add the rest and their allergens in
+              Settings → Menu.
+            </p>
+            {existing > 0 && (
+              <p className="hint">
+                This instance already has {existing} {existing === 1 ? "entry" : "entries"}. Dishes you add here are
+                added to them.
+              </p>
+            )}
+            <div className="stack">
+              {dishes.map((d, i) => (
+                <div className="offer row-glass" key={d.id}>
+                  <Field id={`su-d-${d.id}`} label="Name">
+                    <input
+                      id={`su-d-${d.id}`}
+                      className="input"
+                      value={d.name}
+                      placeholder={i === 0 ? (DISH_PLACEHOLDERS[kind?.key ?? ""] ?? "") : ""}
+                      onChange={(e) =>
+                        setDishes((all) => all.map((x) => (x.id === d.id ? { ...x, name: e.target.value } : x)))
+                      }
+                    />
+                  </Field>
+                  <Field id={`su-dp-${d.id}`} label="Price">
+                    <MoneyInput
+                      id={`su-dp-${d.id}`}
+                      currency={currency}
+                      value={d.price}
+                      onChange={(v) => setDishes((all) => all.map((x) => (x.id === d.id ? { ...x, price: v } : x)))}
+                    />
+                  </Field>
+                  <Field id={`su-ds-${d.id}`} label="Section">
+                    <select
+                      id={`su-ds-${d.id}`}
+                      className="input"
+                      value={d.section || (sectionChoices[0] ?? "")}
+                      onChange={(e) =>
+                        setDishes((all) => all.map((x) => (x.id === d.id ? { ...x, section: e.target.value } : x)))
+                      }
+                    >
+                      {sectionChoices.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  {dishes.length > 1 && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      aria-label={`Remove ${d.name || "this row"}`}
+                      onClick={() => setDishes((all) => all.filter((x) => x.id !== d.id))}
+                    >
+                      <Trash2 className="icon" aria-hidden="true" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => {
+                setDishes((all) => [...all, { id: nextId, name: "", price: "", section: "" }]);
+                setNextId((n) => n + 1);
+              }}
+            >
+              <Plus className="icon" aria-hidden="true" />
+              Another dish
+            </button>
+          </>
+        )}
+
+        {at === "offer" && !kitchen && (
           <>
             <h2 className="sec">{doors.booking ? "What can people book?" : "What can people ask you about?"}</h2>
             <p className="lede small">
@@ -530,9 +643,13 @@ function SetupWizard() {
         {at === "hours" && (
           <>
             <h2 className="sec">When are you open?</h2>
-            {doors.booking ? (
+            {doors.booking || (kitchen && doors.order !== false) ? (
               <>
-                <p className="lede small">Agents are offered free times inside these, never when you are closed.</p>
+                <p className="lede small">
+                  {kitchen
+                    ? "Agents are offered times to collect, and tables, inside these, never when you are closed."
+                    : "Agents are offered free times inside these, never when you are closed."}
+                </p>
                 <HoursEditor
                   initial={hours}
                   title="Opening hours"
@@ -619,15 +736,30 @@ const PRESET_WORDS: Readonly<Partial<Record<string, string>>> = {
   appointments: "bookings",
   trades: "requests for a price",
   shop: "orders",
+  food: "a kitchen",
+  bakery: "a bakery",
+  cafe: "a café",
 };
 const PRESET_LINES: Readonly<Partial<Record<string, string>>> = {
   appointments: "Bookings in a free slot are confirmed, and everything else waits for you.",
   trades: "Requests for a price are flagged for you, and anything urgent goes to the top.",
   shop: "Small orders are accepted and asked to pay, and large ones wait for you.",
+  food: "Every order waits for you to accept it; tables in a free sitting are confirmed. In Settings → Kitchen you can let orders inside what you set aside be accepted at once.",
+  bakery: "Every order waits for you to accept it; cakes made to order always do.",
+  cafe: "Every order waits for you to accept it, until you choose otherwise in Settings → Kitchen.",
 };
 
 /** The end. What works now, and — just as important — what does not yet. */
-function Finished({ onOpen, kind }: { onOpen: () => void; kind?: SetupKind | undefined }) {
+function Finished({
+  onOpen,
+  kind,
+  menuEmpty = false,
+}: {
+  onOpen: () => void;
+  kind?: SetupKind | undefined;
+  /** A kitchen with nothing on its menu yet: agents can order nothing until it has dishes. */
+  menuEmpty?: boolean;
+}) {
   const origin = typeof window === "undefined" ? "" : window.location.origin;
   const [connecting, setConnecting] = useState(true);
   return (
@@ -663,6 +795,11 @@ function Finished({ onOpen, kind }: { onOpen: () => void; kind?: SetupKind | und
         )}
         <h3 className="sec">Not set up yet</h3>
         <ul className="checks">
+          {menuEmpty && (
+            <li>
+              <b>Your menu.</b> Settings → Menu: dishes, options and allergens.
+            </li>
+          )}
           <li>
             <b>Email in.</b> So a customer can simply write to you. Settings, then the docs page on email.
           </li>

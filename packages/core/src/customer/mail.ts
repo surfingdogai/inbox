@@ -1,4 +1,6 @@
 import type { Item, Money } from "../domain/types";
+import { fulfilWords } from "../kitchen/order";
+import { kitchenWords } from "../kitchen/words";
 import { type CopyVars, cap, copyFor, type ExceptionWords, vars, withdrawalCopy } from "./copy";
 import { type Audience, personalisedLine, statusSentence, subjectIn, whatOf } from "./describe";
 import { moneyIn, oneLine, shortRef, whenText } from "./format";
@@ -1076,15 +1078,27 @@ function cutoffLines(input: CustomerMailInput, item: Extract<Item, { type: "book
   ];
 }
 
-/** An order's lines, one each, then the total: a line whose price is ours to set says so. */
+/**
+ * An order's lines, one each with the choices made on it and its note, then (an order for a time,
+ * ADR-036) how and when, the delivery fee and the tip, then the total: so the lines add up to it. A line
+ * whose price is ours to set says so.
+ */
 function orderLines(input: CustomerMailInput, item: Extract<Item, { type: "order" }>): string[] {
   const c = copyFor(input.lang);
   const lines = item.payload.orderedItem.map((l) => {
     const open = input.unpriced && !l.productId;
-    return `${l.quantity} × ${l.name} — ${open ? c.email.lineToConfirm : moneyIn(times(l.price, l.quantity), input.lang)}`;
+    const chosen = (l.options ?? [])
+      .map((o) => `${o.portion === "left" || o.portion === "right" ? "½ " : ""}${oneLine(o.name ?? o.choiceId)}`)
+      .join(", ");
+    const note = l.note ? ` “${oneLine(l.note).slice(0, 200)}”` : "";
+    return `${l.quantity} × ${l.name}${chosen ? ` (${chosen})` : ""}${note} — ${open ? c.email.lineToConfirm : moneyIn(times(l.price, l.quantity), input.lang)}`;
   });
+  const kitchen = fulfilWords(item.payload, kitchenWords(input.lang, input.business), input.timezone, input.lang).map(
+    (l) => `${l}.`,
+  );
   return [
     ...lines,
+    ...kitchen,
     input.unpriced
       ? c.email.priceToConfirm
       : c.email.total(vars({ total: moneyIn(item.payload.totalPrice, input.lang) })),

@@ -272,14 +272,24 @@ export function orderLinesText(
     readonly name: string;
     readonly quantity: number;
     readonly price: { value: number; currency: string };
+    /** A menu item's choices (ADR-036), named as the business's menu names them. */
+    readonly options?:
+      | readonly {
+          readonly name?: string | undefined;
+          readonly choiceId: string;
+          readonly portion?: string | undefined;
+        }[]
+      | undefined;
   }[],
   lang: CustomerLang,
 ): string {
   return lines
-    .map(
-      (l) =>
-        `${l.quantity} × ${oneLine(l.name)} — ${moneyIn({ value: l.price.value * l.quantity, currency: l.price.currency }, lang)}`,
-    )
+    .map((l) => {
+      const chosen = (l.options ?? [])
+        .map((o) => `${o.portion === "left" || o.portion === "right" ? "½ " : ""}${oneLine(o.name ?? o.choiceId)}`)
+        .join(", ");
+      return `${l.quantity} × ${oneLine(l.name)}${chosen ? ` (${chosen})` : ""} — ${moneyIn({ value: l.price.value * l.quantity, currency: l.price.currency }, lang)}`;
+    })
     .join("; ");
 }
 

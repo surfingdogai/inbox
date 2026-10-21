@@ -187,6 +187,8 @@ describe("Settings → Integrations", () => {
       ["shopify", "soon"],
       // A trade's job tool (ADR-034): ServiceM8 with the owner's own key.
       ["job_tool", "ready"],
+      // A kitchen's ordering system and till (ADR-036): GloriaFood and Flipdish with the owner's own keys.
+      ["pos", "ready"],
     ]);
     const tools = body.cards.find((c) => c.id === "job_tool");
     // Housecall Pro and Fergus until their API terms are cleared on the server, Jobber and ServiceM8's

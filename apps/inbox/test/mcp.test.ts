@@ -333,6 +333,9 @@ describe("MCP doors", () => {
       "list_api_keys",
       "create_api_key",
       "revoke_api_key",
+      // A kitchen's (ADR-036).
+      "set_order_progress",
+      "set_sold_out",
     ]);
     // Every owner tool names the scopes that let a caller through; one missing is a gap in the
     // log-first record and, once scopes are enforced, a tool only the owner could call.

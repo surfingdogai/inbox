@@ -360,7 +360,6 @@ function ConnectPanel({
   const [picked, setPicked] = useState<string | null>(null);
   const preferred = preferredWay(card, email);
   const way = card.ways.find((w) => keyOf(w) === (picked ?? keyOf(preferred.way))) ?? preferred.way;
-  const setup = card.ways.filter((w) => w.status === "setup");
   const main = card.ways.filter((w) => !w.advanced);
   const others = card.ways.filter((w) => w.advanced && w.status === "ready" && keyOf(w) !== keyOf(way));
   const body = (w: GalleryWay, values: Record<string, string>) => ({
@@ -379,30 +378,29 @@ function ConnectPanel({
               key={keyOf(w)}
               type="button"
               aria-pressed={keyOf(w) === keyOf(way)}
-              disabled={w.status !== "ready"}
-              title={w.status === "ready" ? undefined : (w.hint ?? "Soon")}
+              // One that is not available yet opens to say why: there is nothing to press in it.
+              disabled={w.status === "soon"}
+              title={w.status === "soon" ? (w.hint ?? "Soon") : undefined}
               onClick={() => setPicked(keyOf(w))}
             >
               {w.label}
               {w.status === "soon" && <span className="opt"> · soon</span>}
-              {w.status === "setup" && <span className="opt"> · set up</span>}
+              {w.status === "setup" && <span className="opt"> · not yet</span>}
             </button>
           ))}
         </fieldset>
       )}
       {picked === null && preferred.hint && <p className="hint">{preferred.hint}</p>}
-      {setup.map((w) => (
-        <p key={keyOf(w)} className="hint">
-          {w.label}: {w.hint ?? "needs setting up on the server."}{" "}
-          {w.href && (
-            <a className="int-link" href={w.href} target="_blank" rel="noopener noreferrer">
-              How
-              <ExternalLink className="icon-xs" aria-hidden="true" />
-            </a>
-          )}
-        </p>
-      ))}
-      {way.needs ? (
+      {way.status === "setup" ? (
+        <>
+          <p className="hint">{way.hint ?? "Not available yet."}</p>
+          <div className="rowx">
+            <button type="button" className="btn btn-ghost btn-sm" onClick={onCancel}>
+              Close
+            </button>
+          </div>
+        </>
+      ) : way.needs ? (
         <>
           <p className="hint">{way.needs.text}</p>
           <div className="rowx">

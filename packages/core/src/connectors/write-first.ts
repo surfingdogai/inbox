@@ -18,8 +18,8 @@ import { ConnectorError } from "./sdk";
  * back at once; if ours made it oversold, the inbox cancels its own write and says so.
  */
 
-/** `request`: a request for a price written into a job tool (ADR-034). */
-export type WriteOp = "reserve" | "modify" | "cancel" | "release" | "request";
+/** `request`: a request for a price written into a job tool (ADR-034); `order`: an accepted order into a till (ADR-036). */
+export type WriteOp = "reserve" | "modify" | "cancel" | "release" | "request" | "order";
 export type WriteOutcome = "pending" | "written" | "refused" | "unknown" | "rolled_back";
 
 /** The system's answer to a write: its id for what was written. */

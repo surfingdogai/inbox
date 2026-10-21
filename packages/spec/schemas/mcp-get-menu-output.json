@@ -1,0 +1,553 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MCP get_menu: structuredContent",
+  "type": "object",
+  "properties": {
+    "currency": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 3
+    },
+    "sections": {
+      "maxItems": 50,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "items": {
+            "maxItems": 500,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "price": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991,
+                      "description": "Minor units of the currency's own ISO 4217 exponent (minorUnits): 4500 is 45.00 KES, ¥4,500 JPY, 4.500 KWD."
+                    },
+                    "currency": {
+                      "type": "string",
+                      "minLength": 3,
+                      "maxLength": 3
+                    }
+                  },
+                  "required": ["value", "currency"]
+                },
+                "section": {
+                  "type": "string"
+                },
+                "options": {
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 120
+                      },
+                      "min": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 50
+                      },
+                      "max": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 50
+                      },
+                      "halves": {
+                        "description": "Its choices may go on one half (portion left or right): half-and-half.",
+                        "type": "boolean"
+                      },
+                      "opened_by": {
+                        "type": "object",
+                        "properties": {
+                          "group_id": {
+                            "type": "string"
+                          },
+                          "choice_id": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["group_id", "choice_id"]
+                      },
+                      "choices": {
+                        "minItems": 1,
+                        "maxItems": 60,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 64
+                            },
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 120
+                            },
+                            "price_delta": {
+                              "description": "What choosing it adds to the item's price; absent, nothing.",
+                              "type": "object",
+                              "properties": {
+                                "value": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991,
+                                  "description": "Minor units of the currency's own ISO 4217 exponent (minorUnits): 4500 is 45.00 KES, ¥4,500 JPY, 4.500 KWD."
+                                },
+                                "currency": {
+                                  "type": "string",
+                                  "minLength": 3,
+                                  "maxLength": 3
+                                }
+                              },
+                              "required": ["value", "currency"]
+                            },
+                            "default": {
+                              "type": "boolean"
+                            },
+                            "allergens": {
+                              "description": "What this choice adds to the item's allergens, as sure as the item's own status.",
+                              "type": "object",
+                              "properties": {
+                                "contains": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "pattern": "^[a-z][a-z0-9_]{1,31}$"
+                                  }
+                                },
+                                "may_contain": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "pattern": "^[a-z][a-z0-9_]{1,31}$"
+                                  }
+                                }
+                              },
+                              "required": ["contains", "may_contain"]
+                            },
+                            "opens": {
+                              "description": "The option group this choice opens (one level).",
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 64
+                            }
+                          },
+                          "required": ["id", "name"]
+                        }
+                      }
+                    },
+                    "required": ["id", "name", "min", "max", "choices"]
+                  }
+                },
+                "allergens": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": ["confirmed", "unconfirmed"],
+                      "description": "confirmed: a person at the business checked it. unconfirmed: ask the business before relying on it."
+                    },
+                    "contains": {
+                      "maxItems": 46,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]{1,31}$"
+                      }
+                    },
+                    "may_contain": {
+                      "maxItems": 46,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]{1,31}$"
+                      }
+                    }
+                  },
+                  "required": ["status", "contains", "may_contain"]
+                },
+                "dietary": {
+                  "maxItems": 8,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "tag": {
+                        "type": "string",
+                        "enum": [
+                          "vegan",
+                          "vegetarian",
+                          "gluten_free",
+                          "dairy_free",
+                          "nut_free",
+                          "halal",
+                          "kosher",
+                          "spicy"
+                        ]
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": ["confirmed", "unconfirmed"],
+                        "description": "confirmed: a person at the business checked it. unconfirmed: ask the business before relying on it."
+                      }
+                    },
+                    "required": ["tag"]
+                  }
+                },
+                "age_restricted": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "const": 16
+                    },
+                    {
+                      "type": "number",
+                      "const": 18
+                    },
+                    {
+                      "type": "number",
+                      "const": 19
+                    },
+                    {
+                      "type": "number",
+                      "const": 20
+                    },
+                    {
+                      "type": "number",
+                      "const": 21
+                    }
+                  ]
+                },
+                "dayparts": {
+                  "description": "The dayparts it is served in; absent, whenever the kitchen is.",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "available_now": {
+                  "type": "boolean"
+                },
+                "sold_out_today": {
+                  "type": "boolean"
+                },
+                "notice_min": {
+                  "description": "How long ahead it must be ordered, in minutes.",
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "available_days": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+                  }
+                },
+                "made_to_order": {
+                  "description": "Made for this customer: on request, and no right to withdraw.",
+                  "type": "boolean"
+                },
+                "brief": {
+                  "type": "object",
+                  "properties": {
+                    "servings": {
+                      "type": "object",
+                      "properties": {
+                        "min": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "max": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 500
+                        }
+                      },
+                      "required": ["min", "max"]
+                    },
+                    "flavours": {
+                      "maxItems": 20,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      }
+                    },
+                    "message_max": {
+                      "description": "How many characters the writing on it may have; absent, none.",
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 200
+                    },
+                    "photo": {
+                      "description": "A picture of what it should look like may come with the request.",
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "combo": {
+                  "description": "A deal: so many of each group, chosen from the group's options.",
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "group": {
+                        "type": "string"
+                      },
+                      "quantity": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 20
+                      }
+                    },
+                    "required": ["group", "quantity"]
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "price",
+                "section",
+                "options",
+                "allergens",
+                "dietary",
+                "available_now",
+                "sold_out_today"
+              ]
+            }
+          }
+        },
+        "required": ["id", "name", "items"]
+      }
+    },
+    "dayparts": {
+      "maxItems": 10,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "days": {
+            "minItems": 1,
+            "maxItems": 7,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+            }
+          },
+          "from": {
+            "type": "string",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+          },
+          "to": {
+            "type": "string",
+            "pattern": "^(([01]\\d|2[0-3]):[0-5]\\d|24:00)$"
+          }
+        },
+        "required": ["name", "days", "from", "to"]
+      }
+    },
+    "kitchen": {
+      "type": "object",
+      "properties": {
+        "methods": {
+          "maxItems": 3,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["pickup", "delivery", "dine_in"]
+          }
+        },
+        "prep_min": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1440
+        },
+        "slot_min": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 240
+        },
+        "confirms": {
+          "type": "string",
+          "enum": ["on_request", "within_caps"],
+          "description": "on_request: a person accepts each order. within_caps: orders inside what the kitchen set aside confirm at once."
+        },
+        "paused_until": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+        },
+        "tips": {
+          "type": "object",
+          "properties": {
+            "choices": {
+              "maxItems": 6,
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 50
+              }
+            }
+          },
+          "required": ["choices"]
+        },
+        "delivery": {
+          "type": "object",
+          "properties": {
+            "zones": {
+              "maxItems": 10,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "radius_km": {
+                    "type": "number"
+                  },
+                  "postal": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "country": {
+                          "type": "string",
+                          "pattern": "^[A-Z]{2}$",
+                          "description": "ISO 3166-1 alpha-2, in capitals."
+                        },
+                        "prefix": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 10,
+                          "pattern": "^[A-Z0-9]+$",
+                          "description": "The start of the postal code, in capitals, with no spaces or dashes."
+                        }
+                      },
+                      "required": ["country", "prefix"]
+                    }
+                  },
+                  "fee": {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Minor units of the currency's own ISO 4217 exponent (minorUnits): 4500 is 45.00 KES, ¥4,500 JPY, 4.500 KWD."
+                      },
+                      "currency": {
+                        "type": "string",
+                        "minLength": 3,
+                        "maxLength": 3
+                      }
+                    },
+                    "required": ["value", "currency"]
+                  },
+                  "minimum_order": {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Minor units of the currency's own ISO 4217 exponent (minorUnits): 4500 is 45.00 KES, ¥4,500 JPY, 4.500 KWD."
+                      },
+                      "currency": {
+                        "type": "string",
+                        "minLength": 3,
+                        "maxLength": 3
+                      }
+                    },
+                    "required": ["value", "currency"]
+                  },
+                  "eta_min": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": ["name"]
+              }
+            }
+          },
+          "required": ["zones"]
+        },
+        "tables": {
+          "type": "object",
+          "properties": {
+            "max_party": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "quote_above": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "confirms": {
+              "type": "string",
+              "enum": ["on_request", "set_aside"]
+            }
+          },
+          "required": ["max_party", "confirms"]
+        },
+        "allergens": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "How allergens are answered: a status per dish, and ask the business when it is not confirmed."
+        }
+      },
+      "required": ["methods", "prep_min", "slot_min", "confirms", "allergens"]
+    },
+    "words": {
+      "type": "string",
+      "maxLength": 500,
+      "description": "What to tell your person about allergens and ordering, in the business's words."
+    }
+  },
+  "required": ["currency", "sections", "dayparts", "words"]
+}

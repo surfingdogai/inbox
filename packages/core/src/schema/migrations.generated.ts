@@ -404,4 +404,16 @@ export const MIGRATIONS: readonly Migration[] = [
       "CREATE INDEX IF NOT EXISTS `blobs_unclaimed` ON `blobs` (`kind`, `expires_at`) WHERE `item_id` IS NULL;",
     ],
   },
+  {
+    version: 28,
+    name: "0029_food",
+    statements: [
+      "-- Restaurants, takeaways, bakeries and cafés (ADR-036). A product's menu is JSON beside its catalogue\n-- columns (`menu`): its section and place in it, its option groups, its allergens (what it contains and\n-- may contain, and whether a person at the business confirmed them), its dietary tags, an age limit,\n-- the dayparts it is served in, a deal's groups, the notice it needs, how many the inbox may take a day,\n-- the days it is made, the dates it is not, whether it is made to order, and a custom order's brief.\n-- Null for a product that is not on a menu, which orders as before. `sold_out_on` is the business's\n-- local date a café marked it sold out for, so it comes back on the next day by itself.\nALTER TABLE `products` ADD `menu` text;",
+      "ALTER TABLE `products` ADD `sold_out_on` text;",
+      "-- A table service counts its places in people (`capacity_unit`: `bookings` | `people`): covers per\n-- sitting. `table_rules` holds its largest party, the size above which a request becomes a request for\n-- a price, a deposit per person from a party size, the covers set aside for direct bookings that\n-- confirm at once, and its own cancellation policy. Null for every other service.\nALTER TABLE `services` ADD `capacity_unit` text DEFAULT 'bookings' NOT NULL;",
+      "ALTER TABLE `services` ADD `table_rules` text;",
+      "-- Orders a restaurant took in its own ordering system (GloriaFood), shown to the owner only when they\n-- switch it on: the order's lines, how and when it is fulfilled, its total. Never a customer's name,\n-- address or phone, never an item of this inbox, never a receipt. Kept two days.\nCREATE TABLE IF NOT EXISTS `pos_orders` (\n\t`connector_id` text NOT NULL,\n\t`external_id` text NOT NULL,\n\t`accepted_at` integer NOT NULL,\n\t`view` text NOT NULL,\n\t`created_at` integer NOT NULL,\n\tPRIMARY KEY(`connector_id`, `external_id`)\n);",
+      "CREATE INDEX IF NOT EXISTS `pos_orders_created` ON `pos_orders` (`created_at`);",
+    ],
+  },
 ];

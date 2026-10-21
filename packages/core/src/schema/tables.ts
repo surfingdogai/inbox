@@ -82,6 +82,13 @@ export const services = sqliteTable(
     negotiable: integer("negotiable").notNull().default(1),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
+    /**
+     * What one place of the service is (0029, ADR-036): a booking (`bookings`, as always) or a person
+     * (`people`): a table service's covers per sitting.
+     */
+    capacityUnit: text("capacity_unit").notNull().default("bookings"),
+    /** A table service's rules (0029, ADR-036; `menu/tables.ts`): JSON, null for every other service. */
+    tableRules: text("table_rules", { mode: "json" }),
   },
   (t) => [index("services_active_sort").on(t.active, t.sort)],
 );
@@ -126,6 +133,14 @@ export const products = sqliteTable(
      * sale what it did not see. Null for a product somebody typed in.
      */
     seenAt: integer("seen_at"),
+    /**
+     * Its place on a menu (0029, ADR-036; `menu/schema.ts`): section, options, allergens and whether a
+     * person confirmed them, dietary tags, an age limit, dayparts, notice, a daily cap. JSON, null for a
+     * product that is not on a menu.
+     */
+    menu: text("menu", { mode: "json" }),
+    /** The business's local date (YYYY-MM-DD) it was marked sold out for: back on sale the next day. */
+    soldOutOn: text("sold_out_on"),
   },
   (t) => [
     unique("products_sku").on(t.sku),
@@ -139,6 +154,23 @@ export const products = sqliteTable(
  * owner's alone, apart from the catalogue rows, which the public doors and the owner's AI read whole.
  * `kind` is `product` or `service`; `floor_minor` is per unit (a product) or per booking (a service).
  */
+/**
+ * Orders a restaurant took in its own ordering system (0029, ADR-036): GloriaFood's accepted orders, read
+ * only while the owner switched the view on, kept two days. What is shown: lines, how and when, the
+ * total. Never a customer's details; never an item, never a receipt.
+ */
+export const posOrders = sqliteTable(
+  "pos_orders",
+  {
+    connectorId: text("connector_id").notNull(),
+    externalId: text("external_id").notNull(),
+    acceptedAt: integer("accepted_at").notNull(),
+    view: text("view", { mode: "json" }).notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.connectorId, t.externalId] }), index("pos_orders_created").on(t.createdAt)],
+);
+
 export const priceFloors = sqliteTable(
   "price_floors",
   {

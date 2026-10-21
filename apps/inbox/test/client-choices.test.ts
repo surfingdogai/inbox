@@ -426,7 +426,10 @@ describe("the setup wizard's doors", () => {
       "Appointments",
       "Trades and quotes",
       "Building and renovation",
-      "A shop",
+      "Restaurant or takeaway",
+      "Bakery",
+      "Café",
+      "Shop",
     ]);
     for (const k of KINDS) {
       expect(PRESET_KEYS as readonly string[]).toContain(k.preset);

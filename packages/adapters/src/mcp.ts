@@ -63,6 +63,7 @@ import {
 } from "@surfingdog/core";
 import { z } from "zod";
 import { TOOL_SCOPES } from "./access";
+import { FOOD_INSTRUCTIONS, hasMenuDoors, registerOwnerFoodTools, registerPublicFoodTools } from "./food";
 import { problemFrom } from "./problem";
 import { registerPublicTradesTools, TRADES_INSTRUCTIONS, takesWork } from "./trades";
 import { itemTexts, ownerSentence, withUntrusted } from "./untrusted";
@@ -261,13 +262,22 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
     // The customer's assistant is speaking to the business: the server is the business's (N20).
     const profile = await caps.getBusinessProfile();
     const name = profile.name.trim() || profile.domain || "Inbox";
-    // A trade (ADR-034) says how a job is asked for, with its photos, and where it works.
+    // A trade (ADR-034) says how a job is asked for, with its photos, and where it works; a kitchen
+    // (ADR-036) how its menu reads, allergens included, and how an order for a time is made.
     const work = await takesWork(caps);
+    const menu = await hasMenuDoors(caps);
     const server = new McpServer(
       { name, version },
-      { instructions: work ? `${PUBLIC_INSTRUCTIONS} ${TRADES_INSTRUCTIONS}` : PUBLIC_INSTRUCTIONS },
+      {
+        instructions: [
+          PUBLIC_INSTRUCTIONS,
+          ...(work ? [TRADES_INSTRUCTIONS] : []),
+          ...(menu ? [FOOD_INSTRUCTIONS] : []),
+        ].join(" "),
+      },
     );
     if (work) registerPublicTradesTools(server, caps, caller);
+    if (menu) registerPublicFoodTools(server, caps, caller);
 
     server.registerTool(
       "get_business_profile",
@@ -378,7 +388,8 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
       async (args) => {
         try {
           const r = await caps.createBooking(caller, args);
-          return ok(`${humanOf(r)}${identityText(r.identity, args.contact?.name)}`, r);
+          // A table for more than the business books online is a request for a price (ADR-036).
+          return ok(`${r.note ? `${r.note} ` : ""}${humanOf(r)}${identityText(r.identity, args.contact?.name)}`, r);
         } catch (error) {
           return confirmOrFailed(error);
         }
@@ -1583,7 +1594,9 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
             }
             for (const way of card.ways) {
               const name = card.id === "calendar" ? `${way.label} Calendar` : `${way.label} (${card.title})`;
-              if (way.status === "soon") soon.push(name);
+              // A way soon on its own card too (Square among the tills) is named once, by that card.
+              const named = r.cards.some((c) => c.status === "soon" && c.ways.some((w) => w.kind === way.kind));
+              if (way.status === "soon" && !named) soon.push(name);
               if (way.status === "setup") setup.push(`${name}${way.hint ? `: ${way.hint.replace(/\.$/, "")}` : ""}`);
             }
           }
@@ -1759,6 +1772,8 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
           return { text: `Key "${r.result.name}" revoked.${again(r.replayed)}`, structured: r.result };
         }),
     );
+    // A kitchen's progress and sold out today (ADR-036).
+    registerOwnerFoodTools(server, caps, caller, guarded);
     return server;
   });
 }

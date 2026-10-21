@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://surfingdog.ai/spec/schemas/table-rules.json",
+  "title": "A table service's party sizes, deposit and covers set aside",
+  "type": "object",
+  "properties": {
+    "maxParty": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 200
+    },
+    "quoteAbove": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+    },
+    "deposit": {
+      "type": "object",
+      "properties": {
+        "perPerson": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991,
+              "description": "Minor units of the currency's own ISO 4217 exponent (minorUnits): 4500 is 45.00 KES, ¥4,500 JPY, 4.500 KWD."
+            },
+            "currency": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 3
+            }
+          },
+          "required": ["value", "currency"]
+        },
+        "fromParty": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        }
+      },
+      "required": ["perPerson", "fromParty"]
+    },
+    "setAside": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000
+    }
+  },
+  "required": ["maxParty"]
+}

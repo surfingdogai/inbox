@@ -17,6 +17,8 @@ export {
   type IntegrationsView,
   type PublicConfig,
   type RunReport as ConnectorRunReport,
+  registerSyncStep,
+  type SyncStep,
   safeReturnPath,
   type UpdateConnectionInput,
   updateConnectionInput,
@@ -57,6 +59,7 @@ export {
   isInboundToken,
   MAX_HOOK_BYTES,
   newInboundToken,
+  registerPosOrderApplier,
 } from "./hooks";
 export {
   connectorCatalogueHandler,
@@ -102,7 +105,9 @@ export {
 export * from "./sdk";
 export type {
   SetupSnapshot,
+  SnapshotMenuItem,
   SnapshotMenuSection,
+  SnapshotOptionGroup,
   SnapshotService,
   SnapshotSource,
   SnapshotStaff,
