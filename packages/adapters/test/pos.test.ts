@@ -602,6 +602,8 @@ describe("Lightspeed K-Series (off): a partner's sign-in, menu in, to-go orders 
     const again = await def.orders?.put(run, order);
     expect(first?.externalId).toBe(again?.externalId);
     expect(orders.size).toBe(1);
+    // So one whose answer never came is written once more, never left unsaid.
+    expect(def.orders?.idempotent).toBe(true);
     expect([...orders.values()][0]).toMatchObject({
       businessLocationId: 45454565682155,
       items: [{ quantity: 2, sku: "MOUS-01", modifiers: [] }],
