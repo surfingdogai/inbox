@@ -341,6 +341,90 @@ describe("staff", () => {
     });
   });
 
+  it("never double-book what was confirmed before anyone was tied to the service, nor after they were untied", async () => {
+    const s = await salon({ name: "Hearth & Shear", zone: "America/Toronto", currency: "CAD", languages: ["en"] });
+    const trim = await s.caps.setup.createService(
+      owner,
+      serviceInput.parse({
+        name: "Trim",
+        duration_min: 30,
+        granularity_min: 30,
+        price: { model: "fixed", value: 3000, currency: "CAD" },
+      }),
+    );
+    // Booked for weeks before anyone gave it: held under the service's own places.
+    const before = await s.caps.createBooking(agent(), {
+      payload: booking(trim.id, "Trim", at("14:00"), at("14:30")),
+      contact: { name: "Odette" },
+      idempotency_key: "legacy-1",
+    });
+    await transitionItem(s.db, owner, { itemId: before.view.item.id, event: "confirm" });
+    const ana = await s.caps.staff.create(owner, { name: "Ana Kowalski", services: [{ service_id: trim.id }] });
+    const free = async (staffId?: string) =>
+      (
+        await s.caps.checkAvailability(
+          { service_id: trim.id, from: at("13:00"), to: at("16:00"), ...(staffId ? { staff_id: staffId } : {}) },
+          { now: T0, caller: agent() },
+        )
+      ).slots.map((x) => Date.parse(x.startTime));
+    expect(await free(ana.id)).not.toContain(Date.parse(at("14:00")));
+    expect(await free()).not.toContain(Date.parse(at("14:00")));
+    // Booked with Ana since, then nobody gives it again: her booking still holds its time.
+    const withAna = await s.caps.createBooking(agent(), {
+      payload: booking(trim.id, "Trim", at("15:00"), at("15:30")),
+      staff_id: ana.id,
+      contact: { name: "Priya" },
+      idempotency_key: "legacy-2",
+    });
+    await transitionItem(s.db, owner, { itemId: withAna.view.item.id, event: "confirm" });
+    await s.caps.staff.update(owner, { staff_id: ana.id, services: [] });
+    expect(await free()).not.toContain(Date.parse(at("15:00")));
+    const again = await s.caps.createBooking(agent(), {
+      payload: booking(trim.id, "Trim", at("15:00"), at("15:30")),
+      contact: { name: "Lars" },
+      idempotency_key: "legacy-3",
+    });
+    await expect(transitionItem(s.db, owner, { itemId: again.view.item.id, event: "confirm" })).rejects.toMatchObject({
+      code: "slot_taken",
+    });
+  });
+
+  it("keep a business calendar chosen for a service blocking it once staff give it", async () => {
+    const { caps, fade, mei } = await mapleAndFade();
+    const shared: ConnectorDefinition = {
+      kind: "sharedcal",
+      title: "Shared calendar",
+      group: "calendars",
+      perResource: true,
+      capabilities: ["busy_times"],
+      auth: "form",
+      form: z.object({ who: z.string() }),
+      async connect() {
+        return {
+          account: "front desk",
+          externalId: "desk",
+          secret: { token: "t" },
+          extra: {},
+          calendars: [{ id: "c", name: "Calendar", writable: false }],
+          destinations: [],
+          defaults: { busy: ["c"], destination: null },
+        };
+      },
+      async busy() {
+        return [{ start: Date.parse(at("16:00")), end: Date.parse(at("17:00")) }];
+      },
+    };
+    caps.connectors.attach({ definitions: [shared], http: noHttp });
+    const cal = await caps.connectors.connect(owner, { kind: "sharedcal", values: { who: "desk" } });
+    await caps.connectors.update(owner, cal.id, { services: [fade.id] });
+    await caps.connectors.run(cal.id, T0, "sync");
+    const slots = await caps.checkAvailability(
+      { service_id: fade.id, from: at("15:00"), to: at("18:00"), staff_id: mei.id },
+      { now: T0, caller: agent() },
+    );
+    expect(slots.slots.map((x) => Date.parse(x.startTime))).not.toContain(Date.parse(at("16:00")));
+  });
+
   it("keep their photo without what the camera wrote into it", () => {
     const jpeg = Uint8Array.from([
       0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00,

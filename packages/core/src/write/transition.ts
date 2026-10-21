@@ -2068,9 +2068,14 @@ async function slotSpecFor(db: Db, payload: Record<string, unknown>): Promise<Sl
       throw new WriteError("invalid_input", `unknown resource ${resourceId}`, {
         fields: [{ path: "payload.resourceId", problem: "invalid", message: "unknown resource" }],
       });
-    return { ...service, capacity: resource.capacity, resourceKey: `resource:${resourceId}` };
+    return {
+      ...service,
+      capacity: resource.capacity,
+      resourceKey: `resource:${resourceId}`,
+      serviceId: reservationFor.serviceId,
+    };
   }
-  return { ...service, resourceKey: `service:${reservationFor.serviceId}` };
+  return { ...service, resourceKey: `service:${reservationFor.serviceId}`, serviceId: reservationFor.serviceId };
 }
 
 /** The start a transition books or proposes, when it has one. */
@@ -2862,7 +2867,7 @@ export type { Transition };
  * was read. The calendar is named, so the owner knows where to free the time.
  */
 async function ownerSlotWords(db: Db, spec: SlotSpec, bucket: number): Promise<string> {
-  const busy = await busyDetails(db, bucket, bucket + spec.granularityMin * 60_000, spec.resourceKey);
+  const busy = await busyDetails(db, bucket, bucket + spec.granularityMin * 60_000, spec.resourceKey, spec.serviceId);
   const known = busy.find((b) => !b.beyond);
   if (known) return `that time is busy in your ${calendarName(known.name || "connected")}`;
   const beyond = busy[0];

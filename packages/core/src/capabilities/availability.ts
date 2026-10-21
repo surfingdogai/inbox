@@ -154,8 +154,8 @@ export async function findSlots(
   const closures = await readClosures(db, service.id);
   const localDate = dateLocaliser(input.timezone);
   const spec: SlotSpec = r
-    ? { ...service, capacity: r.capacity, resourceKey: `resource:${r.id}` }
-    : { ...service, resourceKey: `service:${service.id}` };
+    ? { ...service, capacity: r.capacity, resourceKey: `resource:${r.id}`, serviceId: service.id }
+    : { ...service, resourceKey: `service:${service.id}`, serviceId: service.id };
   const step = service.granularityMin * 60_000;
   const durationMin = r?.durationMin ?? input.durationMin ?? service.durationMin;
   const duration = durationMin * 60_000;
@@ -231,8 +231,13 @@ export async function slotOffered(
   )
     return false;
   const spec: SlotSpec = input.resource
-    ? { ...service, capacity: input.resource.capacity, resourceKey: `resource:${input.resource.id}` }
-    : { ...service, resourceKey: `service:${service.id}` };
+    ? {
+        ...service,
+        capacity: input.resource.capacity,
+        resourceKey: `resource:${input.resource.id}`,
+        serviceId: service.id,
+      }
+    : { ...service, resourceKey: `service:${service.id}`, serviceId: service.id };
   let buckets: number[];
   try {
     buckets = bucketsFor(spec, new Date(input.start).toISOString(), new Date(input.end).toISOString());

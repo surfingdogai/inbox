@@ -399,6 +399,7 @@ async function bookingFacts(db: Db, item: Item, timezone: string): Promise<RuleC
     ...service,
     ...(resource ? { capacity: resource.capacity } : {}),
     resourceKey: item.payload.resourceId ? `resource:${item.payload.resourceId}` : `service:${service.id}`,
+    serviceId: service.id,
   };
   let slotIsFree = false;
   try {
