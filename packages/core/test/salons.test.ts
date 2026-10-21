@@ -969,6 +969,16 @@ describe("a deposit the policy keeps", () => {
     expect(summary).toContain("Free cancellation until");
     expect(summary).toContain("After that, the deposit is not refunded.");
     expect(summary).not.toContain("After that: nothing.");
+    // Booked once the free day had passed: said without an "after that" of nothing.
+    const soon = await new Capabilities(db)
+      .createBooking(agent(), {
+        ...input,
+        payload: booking(fade.id, "Skin fade", at("18:00"), at("18:30")),
+        idempotency_key: "keep-soon",
+      })
+      .catch((e: WriteError) => String(e.details?.summary ?? ""));
+    expect(soon).toContain("If you cancel, the deposit is not refunded.");
+    expect(soon).not.toContain("After that");
     const r = await caps.createBooking(agent(), input);
     await transitionItem(db, owner, { itemId: r.view.item.id, event: "confirm" });
     await transitionItem(

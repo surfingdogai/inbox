@@ -36,6 +36,8 @@ interface Words {
   readonly after: (fee: string) => string;
   /** After the free steps, with nothing more to pay: the deposit is what is kept. */
   readonly afterKept: string;
+  /** Booked once the free steps had passed: cancelling keeps the deposit. */
+  readonly onlyKept: string;
   readonly only: (fee: string) => string;
   readonly noShow: (fee: string) => string;
   readonly whole: { readonly stay: string; readonly price: string };
@@ -49,6 +51,7 @@ const WORDS: Readonly<Record<PolicyLang, Words>> = {
     paid: (w, f) => `Until ${w}, cancelling costs ${f}.`,
     after: (f) => `After that: ${f}.`,
     afterKept: "After that, the deposit is not refunded.",
+    onlyKept: "If you cancel, the deposit is not refunded.",
     only: (f) => `Cancelling costs ${f}.`,
     noShow: (f) => `No-show: ${f}.`,
     whole: { stay: "the full stay", price: "the full price" },
@@ -60,6 +63,7 @@ const WORDS: Readonly<Record<PolicyLang, Words>> = {
     paid: (w, f) => `Hasta el ${w}, cancelar cuesta ${f}.`,
     after: (f) => `Después: ${f}.`,
     afterKept: "Después, el depósito no se devuelve.",
+    onlyKept: "Si cancelas, el depósito no se devuelve.",
     only: (f) => `Cancelar cuesta ${f}.`,
     noShow: (f) => `Si no se presenta: ${f}.`,
     whole: { stay: "la estancia completa", price: "el precio completo" },
@@ -71,6 +75,7 @@ const WORDS: Readonly<Record<PolicyLang, Words>> = {
     paid: (w, f) => `Jusqu'au ${w}, l'annulation coûte ${f}.`,
     after: (f) => `Ensuite : ${f}.`,
     afterKept: "Ensuite, l'acompte n'est pas remboursé.",
+    onlyKept: "En cas d'annulation, l'acompte n'est pas remboursé.",
     only: (f) => `L'annulation coûte ${f}.`,
     noShow: (f) => `Non-présentation : ${f}.`,
     whole: { stay: "le séjour complet", price: "le prix total" },
@@ -82,6 +87,7 @@ const WORDS: Readonly<Record<PolicyLang, Words>> = {
     paid: (w, f) => `Bis ${w} kostet eine Stornierung ${f}.`,
     after: (f) => `Danach: ${f}.`,
     afterKept: "Danach wird die Anzahlung nicht erstattet.",
+    onlyKept: "Bei einer Stornierung wird die Anzahlung nicht erstattet.",
     only: (f) => `Eine Stornierung kostet ${f}.`,
     noShow: (f) => `Bei Nichterscheinen: ${f}.`,
     whole: { stay: "der gesamte Aufenthalt", price: "der volle Preis" },
@@ -93,6 +99,7 @@ const WORDS: Readonly<Record<PolicyLang, Words>> = {
     paid: (w, f) => `Fino al ${w}, la cancellazione costa ${f}.`,
     after: (f) => `Dopo: ${f}.`,
     afterKept: "Dopo, l'acconto non viene restituito.",
+    onlyKept: "Se annulli, l'acconto non viene restituito.",
     only: (f) => `La cancellazione costa ${f}.`,
     noShow: (f) => `Mancata presentazione: ${f}.`,
     whole: { stay: "l'intero soggiorno", price: "il prezzo intero" },
@@ -104,6 +111,7 @@ const WORDS: Readonly<Record<PolicyLang, Words>> = {
     paid: (w, f) => `Até ${w}, cancelar custa ${f}.`,
     after: (f) => `Depois disso: ${f}.`,
     afterKept: "Depois disso, o sinal não é devolvido.",
+    onlyKept: "Se cancelar, o sinal não é devolvido.",
     only: (f) => `Cancelar custa ${f}.`,
     noShow: (f) => `Se não comparecer: ${f}.`,
     whole: { stay: "a estadia completa", price: "o preço total" },
@@ -173,7 +181,15 @@ export function policySentence(dated: DatedPolicy, opts: SentenceOptions): strin
   for (const s of dated.steps)
     out.push(s.fee.value === 0 ? w.free(when(s.until)) : w.paid(when(s.until), money(s.fee)));
   const kept = opts.depositKept === true && dated.after.value === 0;
-  out.push(kept ? w.afterKept : dated.steps.length > 0 ? w.after(money(dated.after)) : w.only(money(dated.after)));
+  const last =
+    dated.steps.length > 0
+      ? kept
+        ? w.afterKept
+        : w.after(money(dated.after))
+      : kept
+        ? w.onlyKept
+        : w.only(money(dated.after));
+  out.push(last);
   out.push(w.noShow(money(dated.noShow)));
   return out.join(" ");
 }
