@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
-import { createApiKey, ensureNetworkPing, pingNetworksNow, setOwnerEmail } from "@surfingdog/adapters";
+import { createApiKey, ensureNetworkPing, pingNetworksNow, setOwnerEmail, ucpLodgingOn } from "@surfingdog/adapters";
 import {
   type Caller,
   Capabilities,
@@ -216,6 +216,7 @@ const { app, runner, prepare } = createInbox({
   ownerEmails,
   secretKey: secretKeyFrom(process.env.INBOX_SECRET_KEY),
   demo: demo ? { ownerEmails, from } : undefined,
+  ucpLodging: ucpLodgingOn(process.env.INBOX_UCP_LODGING),
   fetchImpl: pinnedFetch({ deny: deny.ranges }),
   // The platforms' OAuth clients of whoever runs this server (Google's, and a one-click sign-in beside a
   // shop's own keys): "set up" without one.

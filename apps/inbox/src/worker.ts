@@ -1,4 +1,4 @@
-import { ensureNetworkPing, ingestEmail } from "@surfingdog/adapters";
+import { ensureNetworkPing, ingestEmail, ucpLodgingOn } from "@surfingdog/adapters";
 import { createDb, ensureLifecycleSweep, MIGRATIONS } from "@surfingdog/core";
 import {
   cloudflareEmailMailOut,
@@ -21,6 +21,8 @@ type Bindings = Env & {
   INBOX_PUBLIC_URL?: string;
   /** `1` makes this instance a public demo shop (demo.ts). */
   INBOX_DEMO?: string;
+  /** `on` opens UCP Lodging's booking sessions for a place to stay (a draft protocol, off by default). */
+  INBOX_UCP_LODGING?: string;
   /**
    * The address the owner's sign-in link and alerts go out from, on a domain onboarded to Email
    * Sending on this account. The EMAIL binding has no sender of its own.
@@ -63,6 +65,7 @@ function inboxFor(env: Bindings): Inbox {
       secretKey: secretKeyFrom(env.INBOX_SECRET_KEY),
       baseUrl: publicUrlFrom(env.INBOX_PUBLIC_URL),
       demo: flagOn(env.INBOX_DEMO) ? { ownerEmails, from } : undefined,
+      ucpLodging: ucpLodgingOn(env.INBOX_UCP_LODGING),
       ...oauthFrom(env),
       // `/` runs the worker first (the business's own page); a signed-in owner gets their app from the assets.
       appShell: (request) =>
