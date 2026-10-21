@@ -105,6 +105,9 @@ export const DOWNLOAD_TABLES: Readonly<Record<string, DownloadTable>> = {
   connector_writes: {
     note: "Each time this inbox wrote to a system of yours (a property system) before confirming: when, what came of it and the system's id for it. Never what was written.",
   },
+  pos_orders: {
+    note: "Orders taken in your own ordering system, as this inbox showed them to you: two days, no customer details.",
+  },
   connector_auth: {
     leftOut: "Sign-ins with a calendar that were on their way.",
     strip: empty("connector_auth"),
