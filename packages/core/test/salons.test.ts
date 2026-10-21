@@ -547,7 +547,43 @@ describe("what must come first", () => {
       })
       .catch((e: unknown) => e);
     expect(error).toMatchObject({ code: "invalid_input", details: { reason: "requires_first", service_id: patch.id } });
-    expect((error as WriteError).message).toContain("Book Patch test first");
+    expect((error as WriteError).message).toContain("Please book Patch test first");
+  });
+
+  it("is not met by one too close before: a patch test is read two days later", async () => {
+    const { db, caps, patch, colour } = await ifeBeauty();
+    const chi = await party(db, "Chiamaka Eze", "chiamaka@example.com");
+    // Ten minutes before the colour, the same day: too soon to read.
+    await pastBooking(db, chi, patch.id, Date.parse(inLagos("13:45")), "confirmed");
+    const error = await caps
+      .createBooking(agent(chi), {
+        payload: booking(colour.id, "Gele & colour", inLagos("14:00"), inLagos("15:30")),
+        idempotency_key: "ife-close",
+      })
+      .catch((e: unknown) => e);
+    expect(error).toMatchObject({ code: "invalid_input", details: { reason: "requires_first", at_least_hours: 48 } });
+    expect((error as WriteError).message).toContain("48 hours");
+  });
+
+  it("is a person's to check while their patch test is still a request, and no automation moves it on", async () => {
+    const { db, caps, patch, colour } = await ifeBeauty();
+    const tunde = await party(db, "Túndé Bakare", "tunde@example.com");
+    await pastBooking(db, tunde, patch.id, T0 + 3 * DAY, "requested");
+    const r = await caps.createBooking(agent(tunde), {
+      payload: booking(colour.id, "Gele & colour", inLagos("14:00"), inLagos("15:30")),
+      idempotency_key: "ife-asked",
+    });
+    expect(r.view.item.state).toBe("requested");
+    expect(await needsHuman(db, r.view.item.id)).toBe(true);
+    // The owner's AI may not propose another time on it either: the customer's yes would confirm it.
+    const ai: Caller = { ...owner, actor: { kind: "owner_ai", id: "ai", channel: "mcp_owner" } };
+    await expect(
+      transitionItem(db, ai, {
+        itemId: r.view.item.id,
+        event: "propose",
+        input: { startTime: inLagos("16:00"), endTime: inLagos("17:30") },
+      }),
+    ).rejects.toMatchObject({ details: { guard: "check_first" } });
   });
 
   it("is checked by a person for a customer the inbox cannot know, and nobody's bookings are shown", async () => {
@@ -850,8 +886,9 @@ describe("what customers read", () => {
         w.addOns("Blow-dry"),
         w.deposit("CA$20.00", "4 Nov, 18:00"),
         w.depositNow("₩10,500"),
-        w.first("Colour", "Patch test", 180),
-        w.check("Colour", "Patch test", 180),
+        w.first("Colour", "Patch test", 180, 48),
+        w.check("Colour", "Patch test", 180, 48),
+        w.first("Treatment", "Consultation", 30, 0),
         w.cancelFee("₦5,000"),
         w.cancelFeeBack("₦5,000", "₦10,000"),
         w.cancelFree,

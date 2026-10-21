@@ -295,7 +295,11 @@ export class SetupCapabilities {
     }
     if (input.requires !== undefined) {
       const requires = input.requires
-        ? { serviceId: input.requires.service_id, withinDays: input.requires.within_days }
+        ? {
+            serviceId: input.requires.service_id,
+            withinDays: input.requires.within_days,
+            ...(input.requires.at_least_hours !== undefined ? { atLeastHours: input.requires.at_least_hours } : {}),
+          }
         : null;
       if (!isPerson(caller) && !same(requires, stored?.requires))
         throw ownerMoney("requires", "What must come first is the owner's to set.");

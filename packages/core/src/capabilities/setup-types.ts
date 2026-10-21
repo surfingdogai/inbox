@@ -144,11 +144,21 @@ export const serviceInput = z.object({
     .optional()
     .describe("Its own cancellation policy: steps before the start, each with a fee. Only the owner sets it."),
   requires: z
-    .object({ service_id: z.string().min(1).max(64), within_days: z.number().int().min(1).max(730) })
+    .object({
+      service_id: z.string().min(1).max(64),
+      within_days: z.number().int().min(1).max(730),
+      at_least_hours: z
+        .number()
+        .int()
+        .min(0)
+        .max(720)
+        .optional()
+        .describe("How long before at the least (48 by default: a patch test is read two days on)."),
+    })
     .nullable()
     .optional()
     .describe(
-      "Another service that must come first, within so many days before (a patch test). Only the owner sets it.",
+      "Another service that must come first, within so many days before and at least so many hours before (a patch test). Only the owner sets it.",
     ),
 });
 export const updateServiceInput = patchOf(serviceInput).extend({

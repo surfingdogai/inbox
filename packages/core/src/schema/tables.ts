@@ -94,7 +94,12 @@ export const services = sqliteTable(
      * What must come first (0028): another service (a patch test, a consultation) within `withinDays`
      * before this one, checked against this business's own bookings. Never shown to anyone.
      */
-    requires: text("requires", { mode: "json" }).$type<{ serviceId: string; withinDays: number }>(),
+    requires: text("requires", { mode: "json" }).$type<{
+      serviceId: string;
+      withinDays: number;
+      /** At least so many hours before; absent: 48, a patch test's. */
+      atLeastHours?: number;
+    }>(),
     /** The salon's own system's id for it, when it came from there (0028). */
     externalId: text("external_id"),
     source: text("source").notNull().default("builtin"),

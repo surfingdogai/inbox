@@ -5,7 +5,7 @@ import type { Item, Money } from "../domain/types";
 import { datePolicy } from "../policy/index";
 import { WriteError } from "../write/errors";
 import { type PricingFor, servicePricing } from "../write/pricing";
-import { requiresMet } from "./requires";
+import { leadHours, requiresMet } from "./requires";
 import { ANY, addOnsOf, lengthWith, loadService, pickStaff, unknownStaff } from "./slots";
 import { staffForService } from "./store";
 import { staffWords } from "./words";
@@ -109,19 +109,21 @@ export async function prepareBooking(
     if (first) {
       const answer = await requiresMet(db, { partyId: input.partyId, requires: service.requires, start });
       const w = staffWords(input.lang);
+      const days = service.requires.withinDays;
+      const hours = leadHours(service.requires);
       if (answer === "unmet") {
         throw new WriteError(
           "invalid_input",
-          `${w.first(service.name, first.name, service.requires.withinDays)} Nothing was written.`,
+          `${w.first(service.name, first.name, days, hours)} Nothing was written.`,
           {
             fields: [{ path: "payload.reservationFor.serviceId", problem: "invalid", message: `${first.name} first` }],
-            details: { reason: "requires_first", service_id: first.id, within_days: service.requires.withinDays },
+            details: { reason: "requires_first", service_id: first.id, within_days: days, at_least_hours: hours },
           },
         );
       }
       if (answer === "unknown") {
         checkFirst = true;
-        ownerNote = `${service.name} needs ${first.name} within ${service.requires.withinDays} days before. Check this client has had it, then confirm.`;
+        ownerNote = `${service.name} needs ${first.name} ${hours > 0 ? `between ${days} days and ${hours} hours` : `within ${days} days`} before. Check this client has had it, then confirm.`;
       }
     }
   }
