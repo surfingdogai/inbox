@@ -74,13 +74,11 @@ Guests' assistants are then sent to your engine with the dates they asked for fi
 
 ## UCP Lodging (off for now)
 
-[UCP Lodging](https://ucp.dev/draft/specification/lodging/booking/) is a booking protocol some assistants' platforms are starting to speak. It is still a draft, so your inbox ships with it switched off. Whoever runs your server can turn it on with `INBOX_UCP_LODGING=on`; on a hosted inbox it is off.
+[UCP Lodging](https://ucp.dev/draft/specification/lodging/booking/) is a draft booking standard some AI platforms are starting to use. While it is a draft it is off, and hosted inboxes keep it off. On your own server, `INBOX_UCP_LODGING=on` turns it on (it needs `INBOX_SECRET_KEY`).
 
-When it is on, and only for rooms that confirm at once (rooms you keep for direct guests, or your system confirming at once):
+It offers only rooms that confirm at once: rooms you keep for direct guests, or rooms your connected system confirms instantly. If you answer each request yourself, your rooms are not offered there, since the standard needs a firm total up front; assistants still reach you as before.
 
-- A platform asks for your rooms and dates and gets your total, every tax and fee in it, with what is paid now, later and at the property, and your cancellation policy for those nights. A tax or fee you collect yourself is shown to the guest before they book.
-- Once the guest is named with a way to reach them, the room is held for your hold time, as for any assistant. Booking it confirms the stay, or sends the guest to your own payment page when a deposit or a card is due. No card ever reaches the inbox, and nothing is charged by anyone but you.
-- A place that answers each request itself is not offered there: the protocol needs a firm total up front. Guests' assistants still reach you through your inbox's own doors.
+- A platform asks for your rooms and dates and gets your total, every tax and fee in it, with what is paid now, later and at the property, and your cancellation policy for those nights. A tax or fee you collect yourself, and your cancellation terms, are shown to the guest before they book.
+- Once the guest gives a name and an email or phone, the room is held for your hold time. Booking confirms the stay, or sends the guest to your own payment page when a deposit or a card is due. No card reaches your inbox, and only you charge.
 
-The stays these sessions make are ordinary stays: they appear in your inbox, follow your rules, and are yours to cancel or change. The ids a platform gives each guest are never kept; you keep the lead guest's name and contact and the other guests' names, as on every stay.
-
+The stays these sessions make are ordinary stays: they appear in your inbox, follow your rules, and are yours to cancel or change. You keep the lead guest's name and contact and the other guests' names, as on every stay; the ids a platform gives each guest are kept only encrypted, with the session, and go with the stay if you erase the guest.
