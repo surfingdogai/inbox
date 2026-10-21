@@ -7,6 +7,8 @@ import { randomToken, ulid } from "../ids";
 import { ensureJob } from "../jobs/schedule";
 import { requireSecretBox, type SecretBox } from "../secrets/box";
 import { readSettings } from "../settings/schema";
+import { isTrade } from "../trades/job";
+import { jobToolConnections } from "../trades/job-tool";
 import { type Caller, isCustomer, isOwnerAssistant, isPerson, nowOf } from "../write/caller";
 import { jobStatement } from "../write/common";
 import { fromZod, WriteError } from "../write/errors";
@@ -398,7 +400,9 @@ export class ConnectorCapabilities {
   async integrations(caller: Caller): Promise<IntegrationsView> {
     requireOwnerSide(caller);
     const settings = await readSettings(this.db);
-    const lean = leanOf(await this.holdings());
+    // A trade (ADR-034) sees its job tools first: one that set where it works or how it takes work.
+    const trade = isTrade(settings) || (await jobToolConnections(this.db)).length > 0;
+    const lean = leanOf({ ...(await this.holdings()), trade });
     return {
       groups: galleryGroups(lean),
       cards: gallery(this.definitions, {
@@ -1269,6 +1273,26 @@ export class ConnectorCapabilities {
       busy,
       note: `${busy ?? 0} busy${truncated ? " (read only part of the way ahead)" : ""}, ${push.written} written, ${push.removed} removed, ${push.failed} failed${catalogueNote}${payNote}`,
     };
+  }
+
+  /**
+   * A connection's definition and what it runs with, for a caller outside this class that drives one
+   * (a property system's stays, ADR-033; a job tool's requests, ADR-034); null when it is gone, paused,
+   * or cannot run here.
+   */
+  async contextFor(
+    connectorId: string,
+    now: number,
+  ): Promise<{ readonly definition: ConnectorDefinition; readonly ctx: RunContext; readonly status: string } | null> {
+    const row = await this.rowOrNull(connectorId);
+    if (!row || row.status === "disabled") return null;
+    const definition = this.definitions.get(row.kind);
+    if (!definition || !this.http || !this.secrets) return null;
+    try {
+      return { definition, ctx: await this.runContext(row, now), status: row.status };
+    } catch {
+      return null;
+    }
   }
 
   /** Whether the connection is still there (and not paused): a job chain for one that is not ends. */

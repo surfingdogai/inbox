@@ -210,7 +210,7 @@ describe("setup: rules", () => {
       buffer_after_min: 0,
     });
     const presets = caps.setup.listPresets(owner);
-    expect(presets.map((p) => p.key)).toEqual(["appointments", "trades", "shop"]);
+    expect(presets.map((p) => p.key)).toEqual(["appointments", "trades", "shop", "projects"]);
     expect(presets[0]?.rules[0]?.summary).toBe(
       "When a new item arrives, an item is given the details asked for or an item is given another time by the customer, and it is a booking and it is not a test and (the total is under 50.00 or there is no total) and the slot is free and it is inside opening hours: confirm it. Stop there.",
     );
