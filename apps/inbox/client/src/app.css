@@ -2309,7 +2309,8 @@ legend.label-line {
   cursor: default;
   opacity: 0.6;
 }
-.int-tile.is-soon {
+.int-tile.is-soon,
+.int-tile.is-setup {
   cursor: default;
   color: var(--ink-2);
   background: transparent;
@@ -2359,7 +2360,8 @@ legend.label-line {
 .int-tag.is-warn {
   color: color-mix(in srgb, var(--c-warning) 70%, var(--ink));
 }
-/* On a phone the cards still to come are one quiet line, not four tiles to scroll past. */
+/* On a phone the cards still to come are one quiet line of their own, after the last group, not four
+   tiles to scroll past; a group with nothing else in it goes with them, heading and all. */
 .int-soon-line {
   display: none;
   margin: 0;
@@ -2367,8 +2369,12 @@ legend.label-line {
   color: var(--ink-2);
 }
 @media (max-width: 600px) {
-  .int-tile.is-soon {
+  .int-tile.is-soon,
+  .int-group.is-all-soon {
     display: none;
+  }
+  .int-soon-block {
+    margin-top: 14px;
   }
   .int-soon-line {
     display: block;
