@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://surfingdog.ai/spec/schemas/allergen-info.json",
+  "title": "A dish's allergens and whether a person confirmed them",
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["confirmed", "unconfirmed"],
+      "description": "confirmed: a person at the business checked it. unconfirmed: ask the business before relying on it."
+    },
+    "contains": {
+      "maxItems": 46,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]{1,31}$"
+      }
+    },
+    "may_contain": {
+      "maxItems": 46,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]{1,31}$"
+      }
+    }
+  },
+  "required": ["status", "contains", "may_contain"]
+}

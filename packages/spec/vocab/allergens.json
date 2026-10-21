@@ -1,0 +1,712 @@
+{
+  "version": 1,
+  "as_of": "2026-10-21",
+  "description": "The allergens a menu names (spec 0.11, ADR-036): the union of the lists the law makes a food business declare, keyed by code, with labels in English, Spanish, French, German, Italian, Portuguese and Japanese, and the jurisdictions where each must be declared (mandatory_in) or is asked for (recommended_in). A code with a parent is a part of it: a dish that contains walnut contains tree nuts, and one that contains wheat contains cereals with gluten. Allergens are never inferred: a business states them, and only a person at the business confirms them. A code is never removed or renamed.",
+  "languages": ["en", "es", "fr", "de", "it", "pt", "ja"],
+  "jurisdictions": {
+    "EU": {
+      "name": "European Union",
+      "law": "Regulation (EU) No 1169/2011, Annex II (substances or products causing allergies or intolerances)",
+      "source": "https://eur-lex.europa.eu/eli/reg/2011/1169/oj"
+    },
+    "GB": {
+      "name": "United Kingdom",
+      "law": "Regulation 1169/2011 as retained, Annex II, with the Food Information Regulations 2014",
+      "source": "https://www.legislation.gov.uk/eur/2011/1169/annex/II"
+    },
+    "US": {
+      "name": "United States",
+      "law": "The nine major food allergens (FALCPA, with sesame from 1 January 2023 under the FASTER Act)",
+      "source": "https://www.fda.gov/food/nutrition-food-labeling-and-critical-foods/food-allergies"
+    },
+    "CA": {
+      "name": "Canada",
+      "law": "Health Canada's priority food allergens, with gluten sources and added sulphites",
+      "source": "https://www.canada.ca/en/health-canada/services/food-allergies-intolerances/food-allergies.html"
+    },
+    "AU": {
+      "name": "Australia",
+      "law": "Food Standards Code, Standard 1.2.3 (section 1.2.3-4), required names under plain English allergen labelling from 25 February 2024",
+      "source": "https://www.safefood.qld.gov.au/?p=24592"
+    },
+    "NZ": {
+      "name": "New Zealand",
+      "law": "Food Standards Code, Standard 1.2.3 (section 1.2.3-4), required names under plain English allergen labelling from 25 February 2024",
+      "source": "https://www.foodstandards.gov.au/peal"
+    },
+    "JP": {
+      "name": "Japan",
+      "law": "Consumer Affairs Agency: 特定原材料 (nine to be declared) and 特定原材料に準ずるもの (twenty asked for), as of April 2026; possibility statements such as \"may contain\" are not allowed on packaged food",
+      "source": "https://www.caa.go.jp/policies/policy/food_labeling/food_sanitation/allergy/assets/food_labeling_cms204_260401_01.pdf"
+    }
+  },
+  "allergens": [
+    {
+      "code": "gluten",
+      "parent": null,
+      "mandatory_in": ["EU", "GB", "CA", "AU", "NZ"],
+      "recommended_in": [],
+      "labels": {
+        "en": "Cereals containing gluten",
+        "es": "Cereales con gluten",
+        "fr": "Céréales contenant du gluten",
+        "de": "Glutenhaltiges Getreide",
+        "it": "Cereali contenenti glutine",
+        "pt": "Cereais com glúten",
+        "ja": "グルテンを含む穀類"
+      }
+    },
+    {
+      "code": "wheat",
+      "parent": "gluten",
+      "mandatory_in": ["EU", "GB", "US", "CA", "AU", "NZ", "JP"],
+      "recommended_in": [],
+      "labels": {
+        "en": "Wheat",
+        "es": "Trigo",
+        "fr": "Blé",
+        "de": "Weizen",
+        "it": "Grano",
+        "pt": "Trigo",
+        "ja": "小麦"
+      }
+    },
+    {
+      "code": "rye",
+      "parent": "gluten",
+      "mandatory_in": ["EU", "GB", "AU", "NZ"],
+      "recommended_in": [],
+      "labels": {
+        "en": "Rye",
+        "es": "Centeno",
+        "fr": "Seigle",
+        "de": "Roggen",
+        "it": "Segale",
+        "pt": "Centeio",
+        "ja": "ライ麦"
+      }
+    },
+    {
+      "code": "barley",
+      "parent": "gluten",
+      "mandatory_in": ["EU", "GB", "AU", "NZ"],
+      "recommended_in": [],
+      "labels": {
+        "en": "Barley",
+        "es": "Cebada",
+        "fr": "Orge",
+        "de": "Gerste",
+        "it": "Orzo",
+        "pt": "Cevada",
+        "ja": "大麦"
+      }
+    },
+    {
+      "code": "oats",
+      "parent": "gluten",
+      "mandatory_in": ["EU", "GB", "AU", "NZ"],
+      "recommended_in": [],
+      "labels": {
+        "en": "Oats",
+        "es": "Avena",
+        "fr": "Avoine",
+        "de": "Hafer",
+        "it": "Avena",
+        "pt": "Aveia",
+        "ja": "オーツ麦"
+      }
+    },
+    {
+      "code": "triticale",
+      "parent": "gluten",
+      "mandatory_in": ["CA"],
+      "recommended_in": [],
+      "labels": {
+        "en": "Triticale",
+        "es": "Triticale",
+        "fr": "Triticale",
+        "de": "Triticale",
+        "it": "Triticale",
+        "pt": "Triticale",
+        "ja": "ライ小麦"
+      }
+    },
+    {
+      "code": "crustaceans",
+      "parent": null,
+      "mandatory_in": ["EU", "GB", "US", "CA", "AU", "NZ"],
+      "recommended_in": [],
+      "labels": {
+        "en": "Crustaceans",
+        "es": "Crustáceos",
+        "fr": "Crustacés",
+        "de": "Krebstiere",
+        "it": "Crostacei",
+        "pt": "Crustáceos",
+        "ja": "甲殻類"
+      }
+    },
+    {
+      "code": "shrimp",
+      "parent": "crustaceans",
+      "mandatory_in": ["JP"],
+      "recommended_in": [],
+      "labels": {
+        "en": "Shrimp and prawns",
+        "es": "Gambas y camarones",
+        "fr": "Crevettes",
+        "de": "Garnelen",
+        "it": "Gamberi",
+        "pt": "Camarão",
+        "ja": "えび"
+      }
+    },
+    {
+      "code": "crab",
+      "parent": "crustaceans",
+      "mandatory_in": ["JP"],
+      "recommended_in": [],
+      "labels": {
+        "en": "Crab",
+        "es": "Cangrejo",
+        "fr": "Crabe",
+        "de": "Krabbe",
+        "it": "Granchio",
+        "pt": "Caranguejo",
+        "ja": "かに"
+      }
+    },
+    {
+      "code": "molluscs",
+      "parent": null,
+      "mandatory_in": ["EU", "GB", "CA", "AU", "NZ"],
+      "recommended_in": [],
+      "labels": {
+        "en": "Molluscs",
+        "es": "Moluscos",
+        "fr": "Mollusques",
+        "de": "Weichtiere",
+        "it": "Molluschi",
+        "pt": "Moluscos",
+        "ja": "軟体動物"
+      }
+    },
+    {
+      "code": "abalone",
+      "parent": "molluscs",
+      "mandatory_in": [],
+      "recommended_in": ["JP"],
+      "labels": {
+        "en": "Abalone",
+        "es": "Oreja de mar",
+        "fr": "Ormeau",
+        "de": "Abalone",
+        "it": "Abalone",
+        "pt": "Abalone",
+        "ja": "あわび"
+      }
+    },
+    {
+      "code": "squid",
+      "parent": "molluscs",
+      "mandatory_in": [],
+      "recommended_in": ["JP"],
+      "labels": {
+        "en": "Squid",
+        "es": "Calamar",
+        "fr": "Calmar",
+        "de": "Tintenfisch",
+        "it": "Calamaro",
+        "pt": "Lula",
+        "ja": "いか"
+      }
+    },
+    {
+      "code": "eggs",
+      "parent": null,
+      "mandatory_in": ["EU", "GB", "US", "CA", "AU", "NZ", "JP"],
+      "recommended_in": [],
+      "labels": { "en": "Eggs", "es": "Huevos", "fr": "Œufs", "de": "Eier", "it": "Uova", "pt": "Ovos", "ja": "卵" }
+    },
+    {
+      "code": "fish",
+      "parent": null,
+      "mandatory_in": ["EU", "GB", "US", "CA", "AU", "NZ"],
+      "recommended_in": [],
+      "labels": {
+        "en": "Fish",
+        "es": "Pescado",
+        "fr": "Poisson",
+        "de": "Fisch",
+        "it": "Pesce",
+        "pt": "Peixe",
+        "ja": "魚"
+      }
+    },
+    {
+      "code": "salmon",
+      "parent": "fish",
+      "mandatory_in": [],
+      "recommended_in": ["JP"],
+      "labels": {
+        "en": "Salmon",
+        "es": "Salmón",
+        "fr": "Saumon",
+        "de": "Lachs",
+        "it": "Salmone",
+        "pt": "Salmão",
+        "ja": "さけ"
+      }
+    },
+    {
+      "code": "mackerel",
+      "parent": "fish",
+      "mandatory_in": [],
+      "recommended_in": ["JP"],
+      "labels": {
+        "en": "Mackerel",
+        "es": "Caballa",
+        "fr": "Maquereau",
+        "de": "Makrele",
+        "it": "Sgombro",
+        "pt": "Cavala",
+        "ja": "さば"
+      }
+    },
+    {
+      "code": "salmon_roe",
+      "parent": "fish",
+      "mandatory_in": [],
+      "recommended_in": ["JP"],
+      "labels": {
+        "en": "Salmon roe",
+        "es": "Huevas de salmón",
+        "fr": "Œufs de saumon",
+        "de": "Lachsrogen",
+        "it": "Uova di salmone",
+        "pt": "Ovas de salmão",
+        "ja": "いくら"
+      }
+    },
+    {
+      "code": "peanuts",
+      "parent": null,
+      "mandatory_in": ["EU", "GB", "US", "CA", "AU", "NZ", "JP"],
+      "recommended_in": [],
+      "labels": {
+        "en": "Peanuts",
+        "es": "Cacahuetes",
+        "fr": "Arachides",
+        "de": "Erdnüsse",
+        "it": "Arachidi",
+        "pt": "Amendoins",
+        "ja": "落花生"
+      }
+    },
+    {
+      "code": "soy",
+      "parent": null,
+      "mandatory_in": ["EU", "GB", "US", "CA", "AU", "NZ"],
+      "recommended_in": ["JP"],
+      "labels": { "en": "Soy", "es": "Soja", "fr": "Soja", "de": "Soja", "it": "Soia", "pt": "Soja", "ja": "大豆" }
+    },
+    {
+      "code": "milk",
+      "parent": null,
+      "mandatory_in": ["EU", "GB", "US", "CA", "AU", "NZ", "JP"],
+      "recommended_in": [],
+      "labels": { "en": "Milk", "es": "Leche", "fr": "Lait", "de": "Milch", "it": "Latte", "pt": "Leite", "ja": "乳" }
+    },
+    {
+      "code": "tree_nuts",
+      "parent": null,
+      "mandatory_in": ["EU", "GB", "US", "CA"],
+      "recommended_in": [],
+      "labels": {
+        "en": "Tree nuts",
+        "es": "Frutos de cáscara",
+        "fr": "Fruits à coque",
+        "de": "Schalenfrüchte",
+        "it": "Frutta a guscio",
+        "pt": "Frutos de casca rija",
+        "ja": "木の実類"
+      }
+    },
+    {
+      "code": "almond",
+      "parent": "tree_nuts",
+      "mandatory_in": ["EU", "GB", "AU", "NZ"],
+      "recommended_in": ["JP"],
+      "labels": {
+        "en": "Almond",
+        "es": "Almendra",
+        "fr": "Amande",
+        "de": "Mandel",
+        "it": "Mandorla",
+        "pt": "Amêndoa",
+        "ja": "アーモンド"
+      }
+    },
+    {
+      "code": "brazil_nut",
+      "parent": "tree_nuts",
+      "mandatory_in": ["EU", "GB", "AU", "NZ"],
+      "recommended_in": [],
+      "labels": {
+        "en": "Brazil nut",
+        "es": "Nuez de Brasil",
+        "fr": "Noix du Brésil",
+        "de": "Paranuss",
+        "it": "Noce del Brasile",
+        "pt": "Castanha-do-pará",
+        "ja": "ブラジルナッツ"
+      }
+    },
+    {
+      "code": "cashew",
+      "parent": "tree_nuts",
+      "mandatory_in": ["EU", "GB", "AU", "NZ", "JP"],
+      "recommended_in": [],
+      "labels": {
+        "en": "Cashew",
+        "es": "Anacardo",
+        "fr": "Noix de cajou",
+        "de": "Cashewnuss",
+        "it": "Anacardo",
+        "pt": "Caju",
+        "ja": "カシューナッツ"
+      }
+    },
+    {
+      "code": "hazelnut",
+      "parent": "tree_nuts",
+      "mandatory_in": ["EU", "GB", "AU", "NZ"],
+      "recommended_in": [],
+      "labels": {
+        "en": "Hazelnut",
+        "es": "Avellana",
+        "fr": "Noisette",
+        "de": "Haselnuss",
+        "it": "Nocciola",
+        "pt": "Avelã",
+        "ja": "ヘーゼルナッツ"
+      }
+    },
+    {
+      "code": "macadamia",
+      "parent": "tree_nuts",
+      "mandatory_in": ["EU", "GB", "AU", "NZ"],
+      "recommended_in": ["JP"],
+      "labels": {
+        "en": "Macadamia",
+        "es": "Macadamia",
+        "fr": "Noix de macadamia",
+        "de": "Macadamianuss",
+        "it": "Noce di macadamia",
+        "pt": "Macadâmia",
+        "ja": "マカダミアナッツ"
+      }
+    },
+    {
+      "code": "pecan",
+      "parent": "tree_nuts",
+      "mandatory_in": ["EU", "GB", "AU", "NZ"],
+      "recommended_in": [],
+      "labels": {
+        "en": "Pecan",
+        "es": "Pacana",
+        "fr": "Noix de pécan",
+        "de": "Pekannuss",
+        "it": "Noce pecan",
+        "pt": "Noz-pecã",
+        "ja": "ペカンナッツ"
+      }
+    },
+    {
+      "code": "pine_nut",
+      "parent": "tree_nuts",
+      "mandatory_in": ["AU", "NZ"],
+      "recommended_in": [],
+      "labels": {
+        "en": "Pine nut",
+        "es": "Piñón",
+        "fr": "Pignon",
+        "de": "Pinienkern",
+        "it": "Pinolo",
+        "pt": "Pinhão",
+        "ja": "松の実"
+      }
+    },
+    {
+      "code": "pistachio",
+      "parent": "tree_nuts",
+      "mandatory_in": ["EU", "GB", "AU", "NZ"],
+      "recommended_in": ["JP"],
+      "labels": {
+        "en": "Pistachio",
+        "es": "Pistacho",
+        "fr": "Pistache",
+        "de": "Pistazie",
+        "it": "Pistacchio",
+        "pt": "Pistácio",
+        "ja": "ピスタチオ"
+      }
+    },
+    {
+      "code": "walnut",
+      "parent": "tree_nuts",
+      "mandatory_in": ["EU", "GB", "AU", "NZ", "JP"],
+      "recommended_in": [],
+      "labels": {
+        "en": "Walnut",
+        "es": "Nuez",
+        "fr": "Noix",
+        "de": "Walnuss",
+        "it": "Noce",
+        "pt": "Noz",
+        "ja": "くるみ"
+      }
+    },
+    {
+      "code": "celery",
+      "parent": null,
+      "mandatory_in": ["EU", "GB"],
+      "recommended_in": [],
+      "labels": {
+        "en": "Celery",
+        "es": "Apio",
+        "fr": "Céleri",
+        "de": "Sellerie",
+        "it": "Sedano",
+        "pt": "Aipo",
+        "ja": "セロリ"
+      }
+    },
+    {
+      "code": "mustard",
+      "parent": null,
+      "mandatory_in": ["EU", "GB", "CA"],
+      "recommended_in": [],
+      "labels": {
+        "en": "Mustard",
+        "es": "Mostaza",
+        "fr": "Moutarde",
+        "de": "Senf",
+        "it": "Senape",
+        "pt": "Mostarda",
+        "ja": "マスタード"
+      }
+    },
+    {
+      "code": "sesame",
+      "parent": null,
+      "mandatory_in": ["EU", "GB", "US", "CA", "AU", "NZ"],
+      "recommended_in": ["JP"],
+      "labels": {
+        "en": "Sesame",
+        "es": "Sésamo",
+        "fr": "Sésame",
+        "de": "Sesam",
+        "it": "Sesamo",
+        "pt": "Sésamo",
+        "ja": "ごま"
+      }
+    },
+    {
+      "code": "sulphites",
+      "parent": null,
+      "mandatory_in": ["EU", "GB", "CA", "AU", "NZ"],
+      "recommended_in": [],
+      "note": "Added sulphur dioxide and sulphites at 10 mg/kg or 10 mg/litre or more, as SO2.",
+      "labels": {
+        "en": "Sulphites",
+        "es": "Sulfitos",
+        "fr": "Sulfites",
+        "de": "Sulfite",
+        "it": "Solfiti",
+        "pt": "Sulfitos",
+        "ja": "亜硫酸塩"
+      }
+    },
+    {
+      "code": "lupin",
+      "parent": null,
+      "mandatory_in": ["EU", "GB", "AU", "NZ"],
+      "recommended_in": [],
+      "labels": {
+        "en": "Lupin",
+        "es": "Altramuces",
+        "fr": "Lupin",
+        "de": "Lupinen",
+        "it": "Lupini",
+        "pt": "Tremoço",
+        "ja": "ルピナス"
+      }
+    },
+    {
+      "code": "buckwheat",
+      "parent": null,
+      "mandatory_in": ["JP"],
+      "recommended_in": [],
+      "labels": {
+        "en": "Buckwheat",
+        "es": "Alforfón",
+        "fr": "Sarrasin",
+        "de": "Buchweizen",
+        "it": "Grano saraceno",
+        "pt": "Trigo-sarraceno",
+        "ja": "そば"
+      }
+    },
+    {
+      "code": "orange",
+      "parent": null,
+      "mandatory_in": [],
+      "recommended_in": ["JP"],
+      "labels": {
+        "en": "Orange",
+        "es": "Naranja",
+        "fr": "Orange",
+        "de": "Orange",
+        "it": "Arancia",
+        "pt": "Laranja",
+        "ja": "オレンジ"
+      }
+    },
+    {
+      "code": "kiwifruit",
+      "parent": null,
+      "mandatory_in": [],
+      "recommended_in": ["JP"],
+      "labels": {
+        "en": "Kiwifruit",
+        "es": "Kiwi",
+        "fr": "Kiwi",
+        "de": "Kiwi",
+        "it": "Kiwi",
+        "pt": "Kiwi",
+        "ja": "キウイフルーツ"
+      }
+    },
+    {
+      "code": "beef",
+      "parent": null,
+      "mandatory_in": [],
+      "recommended_in": ["JP"],
+      "labels": {
+        "en": "Beef",
+        "es": "Ternera",
+        "fr": "Bœuf",
+        "de": "Rindfleisch",
+        "it": "Manzo",
+        "pt": "Carne de vaca",
+        "ja": "牛肉"
+      }
+    },
+    {
+      "code": "chicken",
+      "parent": null,
+      "mandatory_in": [],
+      "recommended_in": ["JP"],
+      "labels": {
+        "en": "Chicken",
+        "es": "Pollo",
+        "fr": "Poulet",
+        "de": "Huhn",
+        "it": "Pollo",
+        "pt": "Frango",
+        "ja": "鶏肉"
+      }
+    },
+    {
+      "code": "pork",
+      "parent": null,
+      "mandatory_in": [],
+      "recommended_in": ["JP"],
+      "labels": {
+        "en": "Pork",
+        "es": "Cerdo",
+        "fr": "Porc",
+        "de": "Schweinefleisch",
+        "it": "Maiale",
+        "pt": "Porco",
+        "ja": "豚肉"
+      }
+    },
+    {
+      "code": "banana",
+      "parent": null,
+      "mandatory_in": [],
+      "recommended_in": ["JP"],
+      "labels": {
+        "en": "Banana",
+        "es": "Plátano",
+        "fr": "Banane",
+        "de": "Banane",
+        "it": "Banana",
+        "pt": "Banana",
+        "ja": "バナナ"
+      }
+    },
+    {
+      "code": "peach",
+      "parent": null,
+      "mandatory_in": [],
+      "recommended_in": ["JP"],
+      "labels": {
+        "en": "Peach",
+        "es": "Melocotón",
+        "fr": "Pêche",
+        "de": "Pfirsich",
+        "it": "Pesca",
+        "pt": "Pêssego",
+        "ja": "もも"
+      }
+    },
+    {
+      "code": "yam",
+      "parent": null,
+      "mandatory_in": [],
+      "recommended_in": ["JP"],
+      "labels": {
+        "en": "Yam",
+        "es": "Ñame",
+        "fr": "Igname",
+        "de": "Yamswurzel",
+        "it": "Igname",
+        "pt": "Inhame",
+        "ja": "やまいも"
+      }
+    },
+    {
+      "code": "apple",
+      "parent": null,
+      "mandatory_in": [],
+      "recommended_in": ["JP"],
+      "labels": {
+        "en": "Apple",
+        "es": "Manzana",
+        "fr": "Pomme",
+        "de": "Apfel",
+        "it": "Mela",
+        "pt": "Maçã",
+        "ja": "りんご"
+      }
+    },
+    {
+      "code": "gelatin",
+      "parent": null,
+      "mandatory_in": [],
+      "recommended_in": ["JP"],
+      "labels": {
+        "en": "Gelatin",
+        "es": "Gelatina",
+        "fr": "Gélatine",
+        "de": "Gelatine",
+        "it": "Gelatina",
+        "pt": "Gelatina",
+        "ja": "ゼラチン"
+      }
+    }
+  ]
+}

@@ -5,6 +5,7 @@
  */
 export * from "./base";
 export * from "./conformance";
+export * from "./food";
 export * from "./money";
 export * from "./network/index";
 export * from "./payments";
