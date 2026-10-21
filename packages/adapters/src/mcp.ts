@@ -64,6 +64,7 @@ import {
 import { z } from "zod";
 import { TOOL_SCOPES } from "./access";
 import { problemFrom } from "./problem";
+import { registerPublicTradesTools, TRADES_INSTRUCTIONS, takesWork } from "./trades";
 import { itemTexts, ownerSentence, withUntrusted } from "./untrusted";
 
 /**
@@ -260,7 +261,13 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
     // The customer's assistant is speaking to the business: the server is the business's (N20).
     const profile = await caps.getBusinessProfile();
     const name = profile.name.trim() || profile.domain || "Inbox";
-    const server = new McpServer({ name, version }, { instructions: PUBLIC_INSTRUCTIONS });
+    // A trade (ADR-034) says how a job is asked for, with its photos, and where it works.
+    const work = await takesWork(caps);
+    const server = new McpServer(
+      { name, version },
+      { instructions: work ? `${PUBLIC_INSTRUCTIONS} ${TRADES_INSTRUCTIONS}` : PUBLIC_INSTRUCTIONS },
+    );
+    if (work) registerPublicTradesTools(server, caps, caller);
 
     server.registerTool(
       "get_business_profile",

@@ -23,6 +23,7 @@ import {
   EVERYONE,
   isCreateRoute,
   isNegotiateRoute,
+  isUploadRoute,
   isVerifyRoute,
   LIMITS,
   type LimitClass,
@@ -334,11 +335,13 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
         c,
         isCreateRoute(c.req.method, c.req.path)
           ? ["public", "create"]
-          : isVerifyRoute(c.req.method, c.req.path)
-            ? ["public", "verify"]
-            : isNegotiateRoute(c.req.method, c.req.path)
-              ? ["public", "negotiate"]
-              : ["public"],
+          : isUploadRoute(c.req.method, c.req.path)
+            ? ["public", "upload"]
+            : isVerifyRoute(c.req.method, c.req.path)
+              ? ["public", "verify"]
+              : isNegotiateRoute(c.req.method, c.req.path)
+                ? ["public", "negotiate"]
+                : ["public"],
         caller.auth?.id,
       );
       if (refused) return refused;

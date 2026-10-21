@@ -85,6 +85,11 @@ export const LIMITS = {
    * at once and four hundred an hour, so senders that rotate their address are bounded as well.
    */
   email: { capacity: 200, perMs: 400 / 3_600_000 } satisfies Limit,
+  /**
+   * A file uploaded for a request (ADR-034 §2): up to 10 MB each, kept in the business's database for an
+   * hour. Thirty at once and sixty an hour per address: six files on each of ten requests.
+   */
+  upload: { capacity: 30, perMs: 60 / 3_600_000 } satisfies Limit,
 } as const;
 
 export type LimitClass = keyof typeof LIMITS;
@@ -234,6 +239,11 @@ export function isVerifyRoute(method: string, path: string): boolean {
 
 /** Public REST routes that create an item, and so mail the owner. */
 const CREATE_PATHS = /^\/v1\/(bookings|orders|quotes|messages)\/?$/;
+
+/** The public route a request's files are uploaded by first (ADR-034 §2). */
+export function isUploadRoute(method: string, path: string): boolean {
+  return method === "POST" && /^\/v1\/uploads\/?$/.test(path);
+}
 
 export function isCreateRoute(method: string, path: string): boolean {
   return method === "POST" && CREATE_PATHS.test(path);

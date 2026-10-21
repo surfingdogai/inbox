@@ -64,6 +64,7 @@ import { ownerOperation, routeScopes } from "./access";
 import { publicOrigin } from "./origin";
 import { problemResponse, unauthorized } from "./problem";
 import * as R from "./responses";
+import { tradesOwnerRoutes, tradesPublicRoutes } from "./trades";
 
 /**
  * The REST door. Same operations as MCP, described for OpenAPI from the same Zod schemas.
@@ -557,6 +558,8 @@ export function publicRest(caps: Capabilities): Hono<CallerEnv> {
     },
   );
 
+  // Trades (ADR-034): whether a site is inside the area, a request's files uploaded first, the business's links to them.
+  tradesPublicRoutes(app, caps, hook as never);
   return app;
 }
 
@@ -1666,5 +1669,7 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
     },
   );
 
+  // Trades (ADR-034): a request's files and its job tool.
+  tradesOwnerRoutes(app, caps);
   return app;
 }

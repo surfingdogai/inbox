@@ -24,6 +24,12 @@ import type { PolicyPayload } from "./types";
 /** A host policy with the doors for agents open or closed (absent means open, to an inbox that knows the field). */
 export type HostedPolicy = HostPolicy & { readonly agents: "open" | "closed" };
 
+/**
+ * What the files customers send with their requests may take in one hosted inbox (ADR-034 §2; 500 MB,
+ * an estimate, I-Q9). They live in the inbox's own file, so the shard's file cap must leave room for them.
+ */
+export const HOSTED_ATTACHMENTS_QUOTA_BYTES = 500 * 1024 * 1024;
+
 export function hostedPolicy(p: PolicyPayload): HostedPolicy {
   return {
     ...hostPolicyFor({
@@ -79,8 +85,13 @@ export function tenantMailOut(d: BuildDeps): MailOut {
 export function buildInbox(d: BuildDeps): Inbox {
   const p = d.policy;
   const open: HostedPolicy = { ...hostedPolicy(p), ...(d.agentsOpen ? { agents: "open" as const } : {}) };
-  // A platform reaches the inbox's webhook doors only once its doors are open (it is live).
-  const policy: HostedPolicy = { ...open, hooksLive: open.agents === "open" };
+  // A platform reaches the inbox's webhook doors only once its doors are open (it is live). The files
+  // customers send with requests take at most the hosted share (ADR-034 §2).
+  const policy: HostedPolicy = {
+    ...open,
+    hooksLive: open.agents === "open",
+    attachmentsQuotaBytes: HOSTED_ATTACHMENTS_QUOTA_BYTES,
+  };
   const inbox = createInbox({
     db: d.db,
     mailOut: tenantMailOut(d),

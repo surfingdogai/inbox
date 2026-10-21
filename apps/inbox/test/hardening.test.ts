@@ -2,7 +2,7 @@ import { bucketAddress, createApiKey, DEMO_LIMITS, DEMO_SHARED, ingestEmail, LIM
 import { OWNER_ALERTS_PER_HOUR, OWNER_DIGEST_KIND, readSettings } from "@surfingdog/core";
 import { logMailOut } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
-import { createInbox, MAX_BODY, securityTxt } from "../src/app";
+import { createInbox, MAX_BODY, MAX_MCP_FILES_BODY, MAX_UPLOAD_BODY, securityTxt } from "../src/app";
 import { freshDb } from "./harness";
 
 /**
@@ -68,10 +68,25 @@ describe("request bodies", () => {
     const res = await app.request(json("/v1/messages", { body: big }));
     expect(res.status).toBe(413);
     expect(await res.json()).toMatchObject({ code: "too_large", status: 413 });
-    for (const path of ["/mcp", "/v1/owner/settings", "/oauth/register", "/auth/magic-link"]) {
+    for (const path of ["/v1/owner/settings", "/oauth/register", "/auth/magic-link"]) {
       const r = await app.request(json(path, { pad: big }, owner));
       expect(r.status, path).toBe(413);
     }
+    // Where a request's files come (ADR-034 §2): an upload takes one file of 10 MB, a request with its
+    // files inline up to 12 MB; past that, refused before anything reads them.
+    const huge = "x".repeat(MAX_MCP_FILES_BODY + 1);
+    for (const path of ["/mcp", "/v1/quotes", "/v1/bookings", "/v1/orders"]) {
+      const r = await app.request(json(path, { pad: huge }, owner));
+      expect(r.status, path).toBe(413);
+    }
+    const upload = await app.request(
+      new Request(`${INBOX}/v1/uploads`, {
+        method: "POST",
+        headers: { "content-type": "image/jpeg" },
+        body: new Uint8Array(MAX_UPLOAD_BODY + 1),
+      }),
+    );
+    expect(upload.status).toBe(413);
     // Without a declared length, the bytes are counted as they arrive.
     const streamed = new ReadableStream<Uint8Array>({
       start(controller) {
