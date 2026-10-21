@@ -4,6 +4,7 @@ import { caldavConnector } from "./caldav/index";
 import { googleCalendarConnector } from "./google";
 import { icsConnector } from "./ics";
 import { mollieConnector } from "./mollie";
+import { hostawayConnector } from "./property/hostaway";
 import { stripeConnector } from "./stripe";
 
 export { AUTO as CALCOM_AUTO, CALCOM_API, calcomConnector, calcomForm } from "./calcom";
@@ -92,5 +93,6 @@ export function builtInConnectors(opts: ConnectorHostOptions = {}): ConnectorDef
     icsConnector(),
     stripeConnector(),
     mollieConnector(),
+    hostawayConnector(),
   ];
 }

@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import clsx from "clsx";
 import {
   BedDouble,
@@ -33,6 +34,8 @@ import { Field, SectionHead, Switch } from "./Form";
 interface Notice {
   readonly tone: "success" | "danger";
   readonly text: string;
+  /** A property system just connected: the next step, choosing which property it is, one press away. */
+  readonly choose?: boolean;
 }
 
 const ICONS = {
@@ -63,11 +66,17 @@ function useOwnerEmail(): string | null {
   return email;
 }
 
-export function IntegrationsCard({ skip = [] }: { skip?: readonly string[] } = {}) {
+export function IntegrationsCard({
+  skip = [],
+  initialOpen,
+}: {
+  skip?: readonly string[];
+  initialOpen?: string | undefined;
+} = {}) {
   const integrations = useIntegrations();
   const write = useIntegrationWrite();
   const email = useOwnerEmail();
-  const [open, setOpen] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(initialOpen ?? null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const data = integrations.data;
 
@@ -115,7 +124,20 @@ export function IntegrationsCard({ skip = [] }: { skip?: readonly string[] } = {
   return (
     <section className="card glass stack">
       <SectionHead title="Connect" />
-      {notice && <Toast tone={notice.tone} text={notice.text} onDismiss={() => setNotice(null)} />}
+      {notice && (
+        <Toast
+          tone={notice.tone}
+          text={notice.text}
+          action={
+            notice.choose ? (
+              <Link to="/settings/property" className="btn btn-secondary btn-sm">
+                Choose the property
+              </Link>
+            ) : undefined
+          }
+          onDismiss={() => setNotice(null)}
+        />
+      )}
       {integrations.isPending && <div className="skeleton sk-line" />}
       {integrations.isError && (
         <ErrorState
@@ -215,7 +237,11 @@ export function IntegrationsCard({ skip = [] }: { skip?: readonly string[] } = {
                         {
                           onSuccess: () => {
                             setOpen(null);
-                            setNotice({ tone: "success", text: connectedText(here, way) });
+                            setNotice({
+                              tone: "success",
+                              text: connectedText(here, way),
+                              ...(here.group === "lodging" ? { choose: true } : {}),
+                            });
                           },
                         },
                       )
@@ -238,6 +264,7 @@ function connectedText(card: GalleryCard, way: GalleryWay): string {
   if (way.auth === "link") return "Your link is made. Copy it from its line above.";
   if (card.group === "shops") return `${card.title} is connected. Reading your catalogue now.`;
   if (card.group === "payments") return `${card.title} is connected. Orders you accept get a link to pay.`;
+  if (card.group === "lodging") return `Connected. Now choose which ${way.label} property this is.`;
   return "Connected. Reading your calendar now.";
 }
 
@@ -362,7 +389,11 @@ function ConnectPanel({
   const preferred = preferredWay(card, email);
   const way = card.ways.find((w) => keyOf(w) === (picked ?? keyOf(preferred.way))) ?? preferred.way;
   const setup = card.ways.filter((w) => w.status === "setup");
-  const main = card.ways.filter((w) => !w.advanced);
+  // Chips for the ways that can be connected, or set up; the ones on their way on one quiet line, last.
+  const main = card.ways.filter((w) => !w.advanced && w.status !== "soon");
+  const coming = card.ways.filter((w) => !w.advanced && w.status === "soon");
+  // One way alone still has its chip when others are coming, so the form says which system it is for.
+  const chips = main.length > 1 || (main.length === 1 && coming.length > 0);
   const others = card.ways.filter((w) => w.advanced && w.status === "ready" && keyOf(w) !== keyOf(way));
   const body = (w: GalleryWay, values: Record<string, string>) => ({
     kind: w.kind,
@@ -372,7 +403,7 @@ function ConnectPanel({
   if (!way) return null;
   return (
     <div className="confirm row-glass stack int-panel">
-      {main.length > 1 && !way.advanced && (
+      {chips && !way.advanced && (
         <fieldset className="seg">
           <legend className="sr-only">Which {card.title.toLowerCase()}</legend>
           {main.map((w) => (
@@ -385,7 +416,6 @@ function ConnectPanel({
               onClick={() => setPicked(keyOf(w))}
             >
               {w.label}
-              {w.status === "soon" && <span className="opt"> · soon</span>}
               {w.status === "setup" && <span className="opt"> · set up</span>}
             </button>
           ))}
@@ -448,6 +478,9 @@ function ConnectPanel({
           onCancel={onCancel}
           onSubmit={(values) => onConnect(body(way, values), way)}
         />
+      )}
+      {coming.length > 0 && !way.advanced && (
+        <p className="hint int-soon-ways">Soon: {coming.map((w) => w.label).join(" · ")}</p>
       )}
       {(others.length > 0 || way.advanced) && (
         <details className="advanced">
@@ -648,9 +681,41 @@ function WayForm({
   const fieldError = (f: FormField) => error?.field(`values.${f.key}`);
   const shown = new Set(fields.map((f) => `values.${f.key}`));
   const general = error && !(error.fields ?? []).some((f) => shown.has(f.path));
+  // A field with steps on the platform says them before it asks: its help leads into them, then the input.
+  // A step that begins with the field's link's own words ("Open Hostaway → …") is the link.
+  const linkedStep = (f: FormField) =>
+    f.link ? (f.steps ?? []).findIndex((s) => s.startsWith(f.link?.text ?? "")) : -1;
   const input = (f: FormField) => (
     <div key={f.key} className="int-field">
-      <Field id={`int-${f.key}`} label={f.label} hint={f.help} error={fieldError(f)} optional={!f.required}>
+      <Field
+        id={`int-${f.key}`}
+        label={f.label}
+        hint={f.steps?.length ? undefined : f.help}
+        error={fieldError(f)}
+        optional={!f.required}
+      >
+        {f.steps && f.steps.length > 0 && (
+          <>
+            {f.help && <div className="hint">{f.help}</div>}
+            <ol className="int-steps">
+              {f.steps.map((step, i) => (
+                <li key={step}>
+                  {f.link && i === linkedStep(f) ? (
+                    <>
+                      <a className="int-link" href={f.link.href} target="_blank" rel="noopener noreferrer">
+                        {f.link.text}
+                        <ExternalLink className="icon-xs" aria-hidden="true" />
+                      </a>
+                      {step.slice(f.link.text.length)}
+                    </>
+                  ) : (
+                    step
+                  )}
+                </li>
+              ))}
+            </ol>
+          </>
+        )}
         <input
           id={`int-${f.key}`}
           className="input"
@@ -664,14 +729,7 @@ function WayForm({
           required={f.required}
         />
       </Field>
-      {f.steps && f.steps.length > 0 && (
-        <ol className="int-steps">
-          {f.steps.map((step) => (
-            <li key={step}>{step}</li>
-          ))}
-        </ol>
-      )}
-      {f.link && (
+      {f.link && linkedStep(f) < 0 && (
         <a className="int-link" href={f.link.href} target="_blank" rel="noopener noreferrer">
           {f.link.text}
           <ExternalLink className="icon-xs" aria-hidden="true" />
