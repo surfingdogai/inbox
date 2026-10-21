@@ -363,6 +363,8 @@ export interface InboxIdentity {
   readonly name: string;
   readonly timezone: string;
   readonly language: string;
+  /** The business's currency (ISO 4217), for a till whose prices name none (ADR-036). */
+  readonly currency?: string | undefined;
 }
 
 export interface ConnectContext {
@@ -771,6 +773,9 @@ export interface PaymentsHandler {
   orderState?(ctx: RunContext, link: KnownLink): Promise<OrderFact | null>;
 }
 
+/** The names a platform's way back may carry beside the code, handed to `OAuthFlow.exchange` (ADR-036). */
+export const RETURNED_PARAMS = ["merchant_id"] as const;
+
 export interface OAuthClient {
   readonly clientId: string;
   readonly clientSecret: string;
@@ -807,6 +812,11 @@ export interface OAuthFlow {
       readonly verifier: string;
       readonly redirectUri: string;
       readonly input?: Readonly<Record<string, string>> | undefined;
+      /**
+       * What the platform named on the way back beside the code, for one whose token says nothing of
+       * the account it is for (Clover's `merchant_id`, ADR-036). Only names in `RETURNED_PARAMS`.
+       */
+      readonly returned?: Readonly<Record<string, string>> | undefined;
     },
   ): Promise<Connected>;
   /**
@@ -878,6 +888,18 @@ export type HookFact =
   | { readonly kind: "catalogue"; readonly externalIds: readonly string[] | "all" }
   /** Read busy times again now. */
   | { readonly kind: "busy" }
+  /**
+   * Read the connection again now (ADR-036): a till's word that an order moved, an ordering system's
+   * that an order came in. The sync reads it back with the business's key; the body is never kept.
+   */
+  | { readonly kind: "sync" }
+  /**
+   * A channel's signed word that an order it was given moved (ADR-036: Deliverect's order status, its
+   * HMAC checked over the exact bytes): the order's id there, as `OrdersWriter.put` answered it, and
+   * where it stands. Only for a platform that offers no read-back; the order must be one this
+   * connection was written.
+   */
+  | { readonly kind: "pos_order"; readonly externalId: string; readonly state: PosOrderState }
   /** The access was withdrawn on the platform (the app uninstalled, the key deleted): connect again. */
   | { readonly kind: "revoked" };
 
@@ -1016,6 +1038,99 @@ export interface SetupReader {
   read(ctx: RunContext): Promise<SetupSnapshot>;
 }
 
+/* --- points of sale and ordering (ADR-036) ---------------------------------- */
+
+/**
+ * An accepted order as a till or an ordering channel takes it (`orders_out`): what the kitchen needs and
+ * nothing more. Its lines name the till's own ids where the menu came from it (`externalId`), its
+ * prices are the business's own, and the customer is a first name and, for delivery, a phone and the
+ * address. `key` is stable for the order: written under it, found by it after an answer that never came.
+ */
+export interface OutboundOrder {
+  readonly itemId: string;
+  readonly reference: string;
+  readonly key: string;
+  readonly method: "pickup" | "delivery" | "dine_in";
+  /** When it is for; null: as soon as it can be. */
+  readonly slotStart: number | null;
+  readonly lines: readonly {
+    readonly externalId: string | null;
+    readonly name: string;
+    readonly quantity: number;
+    readonly unitPrice: PayAmount;
+    readonly options: readonly {
+      readonly name: string;
+      readonly externalId: string | null;
+      readonly priceDelta: PayAmount | null;
+      readonly portion: "whole" | "left" | "right";
+    }[];
+    readonly note: string | null;
+  }[];
+  readonly total: PayAmount;
+  readonly fee: PayAmount | null;
+  readonly tip: PayAmount | null;
+  /** Paid through the business's own link already, or to be paid at the handover. */
+  readonly paid: boolean;
+  readonly customer: { readonly firstName: string | null; readonly phone: string | null };
+  readonly address: PostalAddress | null;
+  readonly note: string | null;
+}
+
+/** Where an order stands in the till or the channel, as read back with the business's key. */
+export type PosOrderStatus =
+  | "pending"
+  | "accepted"
+  | "rejected"
+  | "preparing"
+  | "ready"
+  | "out_for_delivery"
+  | "completed"
+  | "cancelled";
+
+export interface PosOrderRef {
+  readonly externalId: string;
+  readonly status?: PosOrderStatus | undefined;
+}
+
+export interface PosOrderState {
+  readonly status: PosOrderStatus;
+  /** The till's reason, in its words, when it refused or cancelled. */
+  readonly reason?: string | undefined;
+  /** When it expects the order ready, or at the door. */
+  readonly etaAt?: number | undefined;
+}
+
+export interface OrdersWriter {
+  /** Writes the accepted order into the till or channel. Safe to call again with the same order (its `key`). */
+  put(ctx: RunContext, order: OutboundOrder): Promise<PosOrderRef>;
+  /** The order as this inbox wrote it before, found by its key; null when it is not there. */
+  find(ctx: RunContext, order: OutboundOrder): Promise<PosOrderRef | null>;
+  /** Where it stands now (`status_in`); null when the till says nothing it follows. */
+  status(ctx: RunContext, ref: { readonly externalId: string }): Promise<PosOrderState | null>;
+}
+
+/** An order the business took in its own ordering system, as the owner may see it: no customer details. */
+export interface ElsewhereOrder {
+  readonly externalId: string;
+  readonly acceptedAt: number;
+  readonly method: "pickup" | "delivery" | "dine_in" | "other";
+  readonly fulfilAt: number | null;
+  readonly total: PayAmount | null;
+  readonly lines: readonly { readonly name: string; readonly quantity: number; readonly options: readonly string[] }[];
+}
+
+/** Orders taken in the business's own ordering system (GloriaFood's accepted orders), for the owner's view. */
+export interface ElsewhereOrdersReader {
+  /** The orders accepted since the last read. Each is read once: the system hands it over. */
+  poll(ctx: RunContext): Promise<readonly ElsewhereOrder[]>;
+}
+
+/** Pausing the business's own ordering system with the kitchen's pause (Flipdish), where it can be. */
+export interface PauseWriter {
+  pause(ctx: RunContext, until: number): Promise<void>;
+  resume(ctx: RunContext): Promise<void>;
+}
+
 export interface ConnectorDefinition {
   readonly kind: string;
   readonly title: string;
@@ -1100,6 +1215,12 @@ export interface ConnectorDefinition {
   readonly requests?: RequestsWriter | undefined;
   /** Services, staff and hours to start from (`setup_in`; a job tool's opening hours, ADR-034). */
   readonly setup?: SetupReader | undefined;
+  /** Accepted orders into a till or a channel, and their word back (`orders_out`, `status_in`; ADR-036). */
+  readonly orders?: OrdersWriter | undefined;
+  /** Orders taken in the business's own ordering system, for the owner's view only (ADR-036). */
+  readonly elsewhere?: ElsewhereOrdersReader | undefined;
+  /** Pausing the business's ordering system with the kitchen (ADR-036). */
+  readonly pause?: PauseWriter | undefined;
 }
 
 /** How the owner is told of a connection by name: "iCloud" → "iCloud calendar"; "Google Calendar" stays. */

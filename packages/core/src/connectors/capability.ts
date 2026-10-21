@@ -117,6 +117,27 @@ const PUSH_PAGE = 200;
 const WRITES_PER_RUN = 25;
 /** A sign-in on the platform's page must come back within this. */
 const AUTH_TTL_MS = 10 * 60_000;
+/**
+ * A step a track adds to every sync of a connection (ADR-036): it reads what it follows with the
+ * business's key and answers a few words for the job's note, or nothing. It throws `ConnectorError` as a
+ * sync does, which marks the connection as failing.
+ */
+export type SyncStep = (o: {
+  readonly db: Db;
+  readonly connectorId: string;
+  readonly kind: string;
+  readonly definition: ConnectorDefinition;
+  readonly ctx: RunContext;
+  readonly now: number;
+}) => Promise<string | null>;
+
+const SYNC_STEPS: SyncStep[] = [];
+
+/** Adds a step to every sync, once. */
+export function registerSyncStep(step: SyncStep): void {
+  if (!SYNC_STEPS.includes(step)) SYNC_STEPS.push(step);
+}
+
 /** A full pass of a shop's catalogue this often; what changed since the last read on every sync. */
 const CATALOGUE_FULL_EVERY_MS = 6 * 3_600_000;
 /** Pages of a catalogue one sync reads; a pass that has more goes on at the next. */
@@ -403,7 +424,9 @@ export class ConnectorCapabilities {
     const settings = await readSettings(this.db);
     // A trade (ADR-034) sees its job tools first: one that set where it works or how it takes work.
     const trade = isTrade(settings) || (await jobToolConnections(this.db)).length > 0;
-    const lean = leanOf({ ...(await this.holdings()), trade });
+    // A kitchen (ADR-036) sees its ordering systems and till first.
+    const food = settings.kitchen.enabled || (await this.kitchenHeld());
+    const lean = leanOf({ ...(await this.holdings()), trade, food });
     return {
       groups: galleryGroups(lean),
       cards: gallery(this.definitions, {
@@ -414,6 +437,18 @@ export class ConnectorCapabilities {
       connections: await this.list(caller),
       can_connect: this.secrets !== null,
     };
+  }
+
+  /** Whether something is on a menu here, or an ordering system or till is connected (ADR-036). */
+  private async kitchenHeld(): Promise<boolean> {
+    const { rows } = await this.db.client.query({
+      sql: `SELECT 1 FROM products WHERE menu IS NOT NULL
+            UNION ALL SELECT 1 FROM connectors WHERE kind IN ('gloriafood', 'flipdish', 'toast', 'lightspeed', 'clover', 'deliverect')
+            LIMIT 1`,
+      params: [],
+      method: "all",
+    });
+    return rows.length > 0;
   }
 
   async list(caller: Caller): Promise<ConnectionView[]> {
@@ -615,6 +650,8 @@ export class ConnectorCapabilities {
       if (!checked.success) throw fromZod(checked.error, "input");
       before = checked.data as Record<string, string>;
     }
+    // A way's own fixed values go with the sign-in too (ADR-036: Clover's region, one way each).
+    before = { ...(preset?.values ?? {}), ...before };
     const now = nowOf(caller);
     const fixed = this.fixedRedirect?.(def.kind);
     const cleanOrigin = origin.replace(/\/+$/, "");
@@ -667,6 +704,8 @@ export class ConnectorCapabilities {
     readonly state: string;
     readonly code?: string | undefined;
     readonly error?: string | undefined;
+    /** What else the platform named on the way back (`RETURNED_PARAMS`: Clover's `merchant_id`). */
+    readonly returned?: Readonly<Record<string, string>> | undefined;
     readonly now: number;
   }): Promise<{ readonly returnTo: string; readonly ok: boolean; readonly message: string; readonly id?: string }> {
     const fallback = "/settings/integrations";
@@ -734,6 +773,7 @@ export class ConnectorCapabilities {
         verifier,
         redirectUri: String(row[2]),
         input: started.values,
+        ...(p.returned ? { returned: p.returned } : {}),
       });
       const view = await this.store(
         def,
@@ -1260,6 +1300,12 @@ export class ConnectorCapabilities {
       if (def.payments && def.capabilities.includes("pay_links")) {
         const r = await this.payments.reconcile(this.payConnectionOf(row, def, ctx), now);
         payNote = `, ${r.checked} link${r.checked === 1 ? "" : "s"} checked, ${r.paid} paid${r.refunded ? `, ${r.refunded} refunded` : ""}`;
+      }
+      // What a track reads on every sync (ADR-036): a till's word on the orders written to it, an
+      // ordering system's orders for the owner's view.
+      for (const step of SYNC_STEPS) {
+        const said = await step({ db: this.db, connectorId: row.id, kind: row.kind, definition: def, ctx, now });
+        if (said) payNote += `, ${said}`;
       }
       await this.db.client.query({
         sql: `UPDATE connectors SET status = CASE WHEN status = 'disabled' THEN status ELSE 'active' END,
@@ -2012,7 +2058,19 @@ export class ConnectorCapabilities {
       name: facts.name || "Inbox",
       timezone: facts.timezone || "UTC",
       language: facts.languages[0] ?? "en",
+      currency: await this.businessCurrency(),
     };
+  }
+
+  /** The business's currency, for a till whose prices name none (ADR-036). */
+  private async businessCurrency(): Promise<string> {
+    const { rows } = await this.db.client.query({
+      sql: "SELECT currency FROM business LIMIT 1",
+      params: [],
+      method: "all",
+    });
+    const c = String(rows[0]?.[0] ?? "").toUpperCase();
+    return /^[A-Z]{3}$/.test(c) ? c : ((await readSettings(this.db)).business.currency ?? "EUR");
   }
 
   private async runContext(row: ConnectorRow, now: number): Promise<RunContext> {
