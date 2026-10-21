@@ -199,7 +199,14 @@ export async function runRulesForEvent(
               ? "outside_limits"
               : error.details?.guard
             : undefined;
-        if (guard === "business_priced" || guard === "not_too_soon" || guard === "outside_limits") {
+        // An order or a table the kitchen keeps for a person (ADR-036): the rule asks one, as above.
+        if (
+          guard === "business_priced" ||
+          guard === "not_too_soon" ||
+          guard === "outside_limits" ||
+          guard === "kitchen" ||
+          guard === "tables"
+        ) {
           try {
             current = (
               await setFlags(db, ruleActor, {
@@ -210,7 +217,11 @@ export async function runRulesForEvent(
                     ? `${rule.name}: a person prices this first, because the request holds a price that is not in your catalogue`
                     : guard === "outside_limits"
                       ? `${rule.name}: a person decides this, because it is outside the limits you set for automation`
-                      : `${rule.name}: a person books this, because it starts within your minimum notice or has started`,
+                      : guard === "kitchen"
+                        ? `${rule.name}: a person accepts this order, because the kitchen keeps it for one`
+                        : guard === "tables"
+                          ? `${rule.name}: a person confirms this table, because no covers are set aside`
+                          : `${rule.name}: a person books this, because it starts within your minimum notice or has started`,
                 causation,
               })
             ).item;

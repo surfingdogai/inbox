@@ -37,6 +37,12 @@ export interface OfferLine {
   readonly name: string;
   readonly quantity: number;
   readonly price: Money;
+  /** A menu item's choices (ADR-036): which, by group, and the half they are on. */
+  readonly options?: readonly {
+    readonly groupId: string;
+    readonly choiceId: string;
+    readonly portion?: string | undefined;
+  }[];
 }
 
 export interface OfferTerms {
@@ -64,6 +70,13 @@ export interface OfferTerms {
   readonly callOutFee?: TradeTerms["callOutFee"];
   readonly visitFee?: TradeTerms["visitFee"];
   readonly tax?: TradeTerms["tax"];
+  /** An order for a time (ADR-036): how and when, the zone's fee, the tip. */
+  readonly fulfil?:
+    | { readonly method: string; readonly slot?: string | undefined; readonly fee?: Money | undefined }
+    | undefined;
+  readonly tip?: Money | undefined;
+  /** A table's deposit (ADR-036), part of what the customer confirms. */
+  readonly deposit?: Money | undefined;
 }
 
 export interface OpenOffer {
@@ -279,6 +292,7 @@ export function bookingRequestTerms(payload: PayloadOf<"booking">): OfferTerms {
     endTime: payload.endTime,
     ...(payload.partySize !== undefined ? { partySize: payload.partySize } : {}),
     ...(payload.totalPrice ? { totalPrice: payload.totalPrice } : {}),
+    ...(payload.deposit ? { deposit: payload.deposit.amount } : {}),
   };
 }
 
@@ -308,6 +322,15 @@ function offerLine(l: OrderLine): OfferLine {
     name: l.name,
     quantity: l.quantity,
     price: l.price,
+    ...(l.options?.length
+      ? {
+          options: l.options.map((o) => ({
+            groupId: o.groupId,
+            choiceId: o.choiceId,
+            ...(o.portion ? { portion: o.portion } : {}),
+          })),
+        }
+      : {}),
   };
 }
 
@@ -322,10 +345,15 @@ export function orderOfferTerms(p: NonNullable<PayloadOf<"order">["proposed"]>):
 
 /** The order as the customer asks for it: never the price their request stated, only the business's. */
 export function orderRequestTerms(payload: PayloadOf<"order">): OfferTerms {
+  const f = payload.fulfil;
   return {
     lines: payload.orderedItem.map(offerLine),
     totalPrice: payload.totalPrice,
     ...(payload.delivery ? { delivery: payload.delivery } : {}),
+    ...(f
+      ? { fulfil: { method: f.method, ...(f.slot ? { slot: f.slot.start } : {}), ...(f.fee ? { fee: f.fee } : {}) } }
+      : {}),
+    ...(payload.tip?.amount ? { tip: payload.tip.amount } : {}),
   };
 }
 

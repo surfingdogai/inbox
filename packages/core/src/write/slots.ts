@@ -16,6 +16,11 @@ export interface SlotSpec {
   readonly granularityMin: number;
   readonly bufferBeforeMin: number;
   readonly bufferAfterMin: number;
+  /**
+   * How many places one booking takes in each bucket (ADR-036): 1, or the party's size for a service
+   * that counts its places in people (a table's covers). Absent: 1.
+   */
+  readonly units?: number | undefined;
 }
 
 export const MAX_BUCKETS = 96;
@@ -117,17 +122,13 @@ export function planClaims(
   taken: Map<number, Set<number>>,
 ): { ok: true; claims: [number, number][] } | { ok: false; fullBucket: number } {
   const claims: [number, number][] = [];
+  const units = Math.max(1, spec.units ?? 1);
   for (const b of buckets) {
     const used = taken.get(b) ?? new Set<number>();
-    let ordinal = -1;
-    for (let o = 0; o < spec.capacity; o++) {
-      if (!used.has(o)) {
-        ordinal = o;
-        break;
-      }
-    }
-    if (ordinal < 0) return { ok: false, fullBucket: b };
-    claims.push([b, ordinal]);
+    const mine: number[] = [];
+    for (let o = 0; o < spec.capacity && mine.length < units; o++) if (!used.has(o)) mine.push(o);
+    if (mine.length < units) return { ok: false, fullBucket: b };
+    for (const o of mine) claims.push([b, o]);
   }
   return { ok: true, claims };
 }
