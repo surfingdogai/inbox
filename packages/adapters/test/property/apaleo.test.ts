@@ -1,4 +1,4 @@
-import { ConnectorError, type OutboundStay, type RunContext } from "@surfingdog/core";
+import { ConnectorError, type OutboundStay, type RunContext, StayPutBackError } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
 import { APALEO_HOSTS, APALEO_SCOPES, apaleoConnector, apaleoNight } from "../../src/connectors/property/apaleo";
 import { fakeApaleo } from "../fakes/property/apaleo";
@@ -11,6 +11,7 @@ import {
   CLIENT,
   FLEX_BUNK,
   FLEX_LAKE,
+  healthcheckBody,
   LAKE,
   OWN_CLIENT,
   PROPERTY,
@@ -20,9 +21,11 @@ import { propertyContract, runContext } from "./contract";
 
 /**
  * apaleo (ADR-033 §8.4) against a local apaleo built from its OpenAPI files: the property system
- * contract, the idempotency key replayed, the externalCode found after the key has lapsed, the date line,
- * the token refreshed, the sign-in asking for nothing it should not, never `$force` or a payment, and the
- * webhook's account checked before anything is read back.
+ * contract, the idempotency key replayed (and a booking cancelled since never answered as written), the
+ * externalCode found after the key has lapsed, rooms paired by their own number, a put-back apaleo would
+ * not take said as such, its own total read back, the date line, the token refreshed, the sign-in asking
+ * for nothing it should not, never `$force` or a payment, the subscription made once the connection is
+ * kept and its health check answered, and the webhook's account checked before anything is read back.
  */
 
 function connection(m: ReturnType<typeof fakeApaleo>) {
@@ -62,8 +65,8 @@ function stayOf(key: string, checkIn: string, checkOut: string, extra: Partial<O
   };
 }
 
-function setup() {
-  const m = fakeApaleo();
+function setup(opts: Parameters<typeof fakeApaleo>[0] = {}) {
+  const m = fakeApaleo(opts);
   const def = apaleoConnector(CLIENT);
   let secret = connection(m);
   const saved: Record<string, string>[] = [];
@@ -103,6 +106,15 @@ describe("apaleo: one booking per key", () => {
     ).rejects.toMatchObject({
       code: "refused",
     });
+    expect(m.bookings.size).toBe(1);
+  });
+
+  it("never answers a booking cancelled in apaleo since as written, though the key replays it", async () => {
+    const { m, ctx, writer } = setup();
+    const stay = stayOf("sd-idem-3", "2027-02-25", "2027-02-26");
+    const link = await writer.put(ctx(), stay, null, "confirmed");
+    await writer.cancel(ctx(), link);
+    await expect(writer.put(ctx(), stay, null, "confirmed")).rejects.toMatchObject({ code: "refused" });
     expect(m.bookings.size).toBe(1);
   });
 
@@ -188,6 +200,51 @@ describe("apaleo: what is written, and what never is", () => {
     expect(lake?.departure).toBe("2027-06-03");
     expect(m.free(LAKE.id, "2027-06-03")).toBe(1);
   });
+
+  it("says so when apaleo does not take a room back: apaleo and the inbox now differ", async () => {
+    const { m, ctx, writer } = setup();
+    const two = stayOf("sd-two-2", "2027-06-10", "2027-06-12", {
+      rooms: [
+        { roomId: LAKE.id, rateId: FLEX_LAKE.id, adults: 2, childrenAges: [], price: { value: 0, currency: "NZD" } },
+        { roomId: BUNK.id, rateId: FLEX_BUNK.id, adults: 3, childrenAges: [], price: { value: 0, currency: "NZD" } },
+      ],
+    });
+    const link = await writer.put(ctx(), two, null, "confirmed");
+    m.sell(BUNK.id, "2027-06-12", 3);
+    // The first room moves, the second is refused, and putting the first back is refused too.
+    m.beforeAmend = (n) => (n === 2 ? false : undefined);
+    const error = await writer
+      .put(ctx(), { ...two, checkOut: "2027-06-13" }, link, "confirmed")
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(StayPutBackError);
+  });
+
+  it("pairs each room by its own number: the tenth comes after the second", async () => {
+    const { m, ctx, writer } = setup({ units: { [BUNK.id]: 12 } });
+    const rooms = Array.from({ length: 11 }, (_, i) => ({
+      roomId: BUNK.id,
+      rateId: FLEX_BUNK.id,
+      adults: (i % 4) + 1,
+      childrenAges: [],
+      price: { value: 0, currency: "NZD" },
+    }));
+    const stay = stayOf("sd-eleven", "2027-06-20", "2027-06-21", { rooms });
+    const link = await writer.put(ctx(), stay, null, "confirmed");
+    await writer.put(ctx(), { ...stay, checkOut: "2027-06-22" }, link, "confirmed");
+    for (const r of m.reservations.values()) {
+      const n = Number(r.externalCode.split("-").pop());
+      expect([r.externalCode, r.adults, r.departure]).toEqual([r.externalCode, ((n - 1) % 4) + 1, "2027-06-22"]);
+    }
+  });
+
+  it("reads back apaleo's own total for what it wrote, and notes what the guest agreed", async () => {
+    const { m, ctx, writer } = setup();
+    const link = await writer.put(ctx(), stayOf("sd-total-1", "2027-06-25", "2027-06-27"), null, "confirmed");
+    expect(link.total).toEqual({ value: 49_000, currency: "NZD" });
+    expect([...m.reservations.values()][0]?.comment).toMatch(
+      /^Inbox stay [A-Z0-9-]+ · agreed with the guest: NZD 490\.00$/,
+    );
+  });
 });
 
 describe("apaleo: east of the date line", () => {
@@ -250,7 +307,7 @@ describe("apaleo: signing in", () => {
     expect(url.searchParams.get("scope")?.split(" ")).toContain("offline_access");
   });
 
-  it("exchanges the code with the verifier, keeps a refresh token, and subscribes to reservations", async () => {
+  it("exchanges the code with the verifier and keeps a refresh token; subscribes once the connection is kept", async () => {
     const m = fakeApaleo();
     const def = apaleoConnector(CLIENT);
     const base = runContext(m.platform.http, {});
@@ -271,9 +328,41 @@ describe("apaleo: signing in", () => {
     expect(c?.externalId).toBe(ACCOUNT.code);
     expect(c?.secret.refresh_token).toBe("fake-apaleo-refresh-1");
     expect(m.exchanges[0]).toMatchObject({ code_verifier: "v3rifier", grant_type: "authorization_code" });
+    // Nothing is subscribed while connecting: the connection is not kept yet, so its address answers nothing.
+    expect(m.subscriptions.size).toBe(0);
+    expect(c?.extra).toMatchObject({ accountId: ACCOUNT.code, webhook: "pending" });
+    // Its first sync: apaleo checks the address as it makes the subscription, and the inbox answers it.
+    const kept: RunContext = {
+      ...runContext(m.platform.http, c?.secret ?? {}, m.now()),
+      hookUrl: "https://inbox.whio.example/v1/hooks/apaleo/tok",
+      extra: c?.extra ?? {},
+    };
+    m.deliver = async (_url, body) => {
+      const event = await def.hooks?.verify(kept, { headers: new Headers(), body, query: new URLSearchParams() });
+      return event === null ? 200 : 400;
+    };
+    expect(def.stale?.(kept)).toBe(true);
+    const fresh = await def.refresh?.(kept);
     expect([...m.subscriptions.values()]).toEqual([
       { endpointUrl: "https://inbox.whio.example/v1/hooks/apaleo/tok", topics: ["Reservation"], propertyIds: [] },
     ]);
+    expect(fresh?.extra).toMatchObject({ webhook: "added", subscriptionId: expect.stringMatching(/^sub-/) });
+    expect(def.stale?.({ ...kept, extra: fresh?.extra ?? {} })).toBe(false);
+  });
+
+  it("makes no subscription its address did not answer, and tries again on a later sync", async () => {
+    const m = fakeApaleo();
+    const def = apaleoConnector(CLIENT);
+    const kept: RunContext = {
+      ...runContext(m.platform.http, connection(m), m.now()),
+      hookUrl: "https://inbox.whio.example/v1/hooks/apaleo/tok",
+      extra: { accountId: ACCOUNT.code, webhook: "pending" },
+    };
+    m.deliver = async () => 503;
+    const fresh = await def.refresh?.(kept);
+    expect(m.subscriptions.size).toBe(0);
+    expect(fresh?.extra).toMatchObject({ webhook: "pending", webhook_tries: 1 });
+    expect(def.stale?.({ ...kept, extra: fresh?.extra ?? {} })).toBe(true);
   });
 
   it("refreshes an access token that has run out, and keeps the new one sealed", async () => {
@@ -288,8 +377,12 @@ describe("apaleo: signing in", () => {
   it("is not ready without a connect client; a hotel's own client stays off unless switched on", async () => {
     const off = apaleoConnector(null, { hosted: true });
     expect(off.ready?.()).toMatch(/connect client/);
-    expect(off.whenNotReady?.status).toBe("setup");
-    expect(off.whenNotReady?.hint).toMatch(/partner app/);
+    // Hosted: nothing for an owner to do, so Soon; on one's own server, what its operator sets.
+    expect(off.whenNotReady).toEqual({ status: "soon" });
+    expect(apaleoConnector(null).whenNotReady).toMatchObject({
+      status: "setup",
+      hint: /connect client on this server/,
+    });
     const m = fakeApaleo();
     const base = runContext(m.platform.http, {});
     await expect(
@@ -319,6 +412,9 @@ describe("apaleo: webhooks are hints, checked first", () => {
       ConnectorError,
     );
     expect(await hooks.verify(ctx(), request(webhookBody("", { topic: "System", type: "healthcheck" })))).toBeNull();
+    // apaleo's own health check, as its guide prints it, is answered before the account is looked at.
+    expect(await hooks.verify(ctx(), request(healthcheckBody()))).toBeNull();
+    expect(await hooks.verify({ ...ctx(), extra: {} }, request(healthcheckBody("SOMEONE")))).toBeNull();
     const event = await hooks.verify(ctx(), request(webhookBody(r?.id ?? "")));
     expect(event?.refs).toEqual([r?.id]);
     expect(await hooks.read(ctx(), event as never)).toEqual([

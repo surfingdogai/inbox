@@ -4,11 +4,13 @@ import {
   ATLAS,
   AUTH_CODE,
   CLIENT,
+  DORM,
   OWN_KEY,
   PATIO,
   PRICES,
   PROPERTY,
   RATE_ATLAS,
+  RATE_DORM,
   RATE_PATIO,
   RATE_PROMO,
 } from "../../fixtures/property/cloudbeds";
@@ -21,7 +23,10 @@ import { type FakePlatform, type FakeRequest, fakePlatform, json } from "../plat
  * the key exchange for a code, and webhooks made with a header of the subscriber's. Its documentation
  * describes no refusal of a full night on `postReservation` or `putReservation`, so this fake takes one
  * and its count goes past the rooms; `roomsAvailable` never shows below none, as a system's count may
- * not, so only a count of reservations against rooms can tell. Nothing here is Cloudbeds' code.
+ * not, so only a count of reservations against rooms can tell. `getReservations` pages 100 at a time and
+ * lists each reservation's rooms only with `includeAllRooms`; `getRatePlans` leaves shared rooms (a dorm)
+ * out unless `includeSharedRooms`; `getReservation` lists assigned rooms before unassigned ones, its main
+ * guest in `guestList`, and its total with the property's taxes and fees. Nothing here is Cloudbeds' code.
  */
 
 const API = "https://api.cloudbeds.com/api/v1.3";
@@ -37,6 +42,7 @@ interface Room {
 }
 interface Reservation {
   reservationID: string;
+  guestID: string;
   status: "not_confirmed" | "confirmed" | "canceled" | "checked_in" | "checked_out" | "no_show";
   startDate: string;
   endDate: string;
@@ -45,7 +51,21 @@ interface Reservation {
   guestFirstName: string;
   guestLastName: string;
   guestEmail?: string;
+  guestPhone?: string;
   rooms: Room[];
+  /** Sub-reservations a room has been assigned to, listed first by `getReservation`. */
+  assigned: Set<string>;
+  notes: string[];
+}
+
+/** A tax or fee as `getTaxesAndFees` lists it. */
+export interface FakeTax {
+  type: "tax" | "fee";
+  name: string;
+  amount: number;
+  amountType: string;
+  inclusiveOrExclusive: "inclusive" | "exclusive";
+  availableFor: string[];
 }
 
 export interface FakeCloudbeds {
@@ -62,6 +82,14 @@ export interface FakeCloudbeds {
   exhaust(): void;
   /** Every form a write sent, parsed, by operation. */
   forms(operation: string): URLSearchParams[];
+  /** The property's taxes and fees. */
+  readonly taxes: FakeTax[];
+  /** The next call to each operation named here answers `success: false`. */
+  readonly refuseNext: Set<string>;
+  /** A room assigned to a sub-reservation: `getReservation` lists it first from then on. */
+  assign(reservationID: string, subReservationID: string): void;
+  /** Writes a reservation as another channel would, straight into the property's calendar. */
+  add(r: { status: string; roomTypeID: string; startDate: string; endDate: string; id?: string }): string;
 }
 
 export function fakeCloudbeds(): FakeCloudbeds {
@@ -70,8 +98,10 @@ export function fakeCloudbeds(): FakeCloudbeds {
   const webhooks: Record<string, string>[] = [];
   const keys = new Set([API_KEY, OWN_KEY]);
   const sold = new Map<string, number>();
-  const types = [ATLAS, PATIO];
-  const plans = [RATE_ATLAS, RATE_PATIO, RATE_PROMO];
+  const types = [ATLAS, PATIO, DORM];
+  const plans = [RATE_ATLAS, RATE_PATIO, RATE_DORM, RATE_PROMO];
+  const taxes: FakeTax[] = [];
+  const refuseNext = new Set<string>();
   let limit = Number.POSITIVE_INFINITY;
   let n = 4_100_000;
   const fake: FakeCloudbeds = {
@@ -89,6 +119,39 @@ export function fakeCloudbeds(): FakeCloudbeds {
     },
     forms(op) {
       return platform.seen.filter((r) => r.url.pathname === `/api/v1.3/${op}`).map((r) => new URLSearchParams(r.body));
+    },
+    taxes,
+    refuseNext,
+    assign(id, sub) {
+      reservations.get(id)?.assigned.add(sub);
+    },
+    add(x) {
+      const id = x.id ?? String(++n);
+      reservations.set(id, {
+        reservationID: id,
+        guestID: `g${id}`,
+        status: x.status as Reservation["status"],
+        startDate: x.startDate,
+        endDate: x.endDate,
+        thirdPartyIdentifier: "",
+        dateCreated: "2027-01-01 00:00:00",
+        guestFirstName: "Other",
+        guestLastName: "Channel",
+        rooms: [
+          {
+            subReservationID: `${id}-1`,
+            roomTypeID: x.roomTypeID,
+            startDate: x.startDate,
+            endDate: x.endDate,
+            adults: 2,
+            children: 0,
+            rateID: "",
+          },
+        ],
+        assigned: new Set(),
+        notes: [],
+      });
+      return id;
     },
   };
 
@@ -121,11 +184,14 @@ export function fakeCloudbeds(): FakeCloudbeds {
       if (!keys.has(req.headers.get("x-api-key") ?? "")) return json({ success: false, message: "Unauthorized" }, 401);
       if (limit <= 0) return json({ success: false, message: "Too many requests" }, 429, { "retry-after": "5" });
       limit--;
+      if (refuseNext.delete(name)) return json({ success: false, message: `${name} was not accepted` });
       const form = method === "GET" || method === "DELETE" ? req.url.searchParams : new URLSearchParams(req.body);
       return handler(req, form);
     });
 
-  const view = (r: Reservation) => ({
+  const roomStatus = (r: Reservation) =>
+    r.status === "canceled" ? "cancelled" : r.status === "checked_in" ? "in_house" : "not_checked_in";
+  const view = (r: Reservation, allRooms = false) => ({
     propertyID: PROPERTY.propertyID,
     reservationID: r.reservationID,
     dateCreated: r.dateCreated,
@@ -138,7 +204,33 @@ export function fakeCloudbeds(): FakeCloudbeds {
     children: String(r.rooms.reduce((a, x) => a + x.children, 0)),
     thirdPartyIdentifier: r.thirdPartyIdentifier,
     sourceName: "Website/Booking Engine",
+    ...(allRooms
+      ? {
+          rooms: r.rooms.map((room) => ({
+            roomTypeID: room.roomTypeID,
+            roomTypeName: types.find((t) => t.roomTypeID === room.roomTypeID)?.roomTypeName ?? "",
+            subReservationID: room.subReservationID,
+            adults: String(room.adults),
+            children: String(room.children),
+            roomID: r.assigned.has(room.subReservationID) ? `${room.roomTypeID}-0` : null,
+            roomCheckIn: room.startDate,
+            roomCheckOut: room.endDate,
+            roomStatus: roomStatus(r),
+          })),
+        }
+      : {}),
   });
+  /** What a reservation comes to, as Cloudbeds totals it: its nights, then the exclusive taxes on them. */
+  const grandTotal = (r: Reservation) => {
+    const sub = r.rooms.reduce(
+      (a, room) => a + (PRICES[room.roomTypeID] ?? 0) * daysBetween(room.startDate, room.endDate),
+      0,
+    );
+    const extra = taxes
+      .filter((t) => t.inclusiveOrExclusive === "exclusive" && t.amountType === "percentage")
+      .reduce((a, t) => a + (sub * t.amount) / 100, 0);
+    return { subTotal: sub, taxesFees: extra, grandTotal: Math.round((sub + extra) * 100) / 100 };
+  };
 
   platform.on("POST", "https://hotels.cloudbeds.com/api/v1.3/access_token", (req) => {
     const f = new URLSearchParams(req.body);
@@ -191,7 +283,7 @@ export function fakeCloudbeds(): FakeCloudbeds {
         propertyID: PROPERTY.propertyID,
         roomTypeName: t.roomTypeName,
         roomTypeNameShort: t.roomTypeName.slice(0, 3).toUpperCase(),
-        isPrivate: true,
+        isPrivate: t.isPrivate,
         maxGuests: t.maxGuests,
         adultsIncluded: 2,
         childrenIncluded: 0,
@@ -210,7 +302,7 @@ export function fakeCloudbeds(): FakeCloudbeds {
               roomName: `${t.roomTypeName} ${i + 1}`,
               roomTypeID: t.roomTypeID,
               roomTypeName: t.roomTypeName,
-              isPrivate: true,
+              isPrivate: t.isPrivate,
               isVirtual: false,
               roomBlocked: false,
             })),
@@ -230,9 +322,13 @@ export function fakeCloudbeds(): FakeCloudbeds {
     const ids = q.get("rateIDs")?.split(",");
     const promo = q.get("includePromoCode") !== "false";
     const detailed = q.get("detailedRates") === "true";
+    const shared = q.get("includeSharedRooms") === "true";
     const found = plans.filter(
       (p) =>
-        (!roomType || p.roomTypeID === roomType) && (!ids || ids.includes(p.rateID)) && (promo || !("promoCode" in p)),
+        (!roomType || p.roomTypeID === roomType) &&
+        (!ids || ids.includes(p.rateID)) &&
+        (promo || !("promoCode" in p)) &&
+        (shared || types.find((t) => t.roomTypeID === p.roomTypeID)?.isPrivate !== false),
     );
     return json({
       success: true,
@@ -283,20 +379,41 @@ export function fakeCloudbeds(): FakeCloudbeds {
         (!checkOutFrom || r.endDate >= checkOutFrom),
     );
     const slice = all.slice((page - 1) * size, page * size);
-    return json({ success: true, data: slice.map(view), count: slice.length, total: all.length });
+    const rooms = q.get("includeAllRooms") === "true";
+    return json({ success: true, data: slice.map((r) => view(r, rooms)), count: slice.length, total: all.length });
   });
   op("GET", "getReservation", (_req, q) => {
     const r = reservations.get(q.get("reservationID") ?? "");
     if (!r) return json({ success: false, message: "Reservation not found" });
+    const shape = (room: Room) => ({ ...room, adults: String(room.adults), children: String(room.children) });
+    const totals = grandTotal(r);
     return json({
       success: true,
       data: {
         ...view(r),
-        total: r.rooms.length * 100,
-        balance: 0,
-        assigned: [],
-        unassigned: r.rooms.map((room) => ({ ...room, adults: String(room.adults), children: String(room.children) })),
-        guestList: {},
+        total: totals.grandTotal,
+        balance: totals.grandTotal,
+        balanceDetailed: {
+          suggestedDeposit: "0",
+          subTotal: totals.subTotal,
+          additionalItems: 0,
+          taxesFees: totals.taxesFees,
+          grandTotal: totals.grandTotal,
+          paid: 0,
+        },
+        // Assigned rooms first, as Cloudbeds lists them.
+        assigned: r.rooms.filter((room) => r.assigned.has(room.subReservationID)).map(shape),
+        unassigned: r.rooms.filter((room) => !r.assigned.has(room.subReservationID)).map(shape),
+        guestList: {
+          [r.guestID]: {
+            guestID: r.guestID,
+            guestFirstName: r.guestFirstName,
+            guestLastName: r.guestLastName,
+            guestEmail: r.guestEmail ?? "",
+            guestPhone: r.guestPhone ?? "",
+            isMainGuest: true,
+          },
+        },
       },
     });
   });
@@ -320,6 +437,7 @@ export function fakeCloudbeds(): FakeCloudbeds {
     // Nothing documented refuses a full night: it is taken.
     const r: Reservation = {
       reservationID: id,
+      guestID: `g${id}`,
       status: "confirmed",
       startDate: start,
       endDate: end,
@@ -328,6 +446,9 @@ export function fakeCloudbeds(): FakeCloudbeds {
       guestFirstName: form.get("guestFirstName") ?? "",
       guestLastName: form.get("guestLastName") ?? "",
       ...(form.get("guestEmail") ? { guestEmail: form.get("guestEmail") ?? "" } : {}),
+      ...(form.get("guestPhone") ? { guestPhone: form.get("guestPhone") ?? "" } : {}),
+      assigned: new Set(),
+      notes: [],
       rooms: rooms.map((room, i) => ({
         subReservationID: `${id}-${i + 1}`,
         roomTypeID: room.roomTypeID ?? "",
@@ -372,6 +493,28 @@ export function fakeCloudbeds(): FakeCloudbeds {
     }
     return json({ success: true, data: view(r) });
   });
+  op("POST", "postReservationNote", (_req, form) => {
+    const r = reservations.get(form.get("reservationID") ?? "");
+    if (!r) return json({ success: false, message: "Reservation not found" });
+    r.notes.push(form.get("reservationNote") ?? "");
+    return json({ success: true, reservationNoteID: `note${r.notes.length}` });
+  });
+  op("PUT", "putGuest", (_req, form) => {
+    const r = [...reservations.values()].find((x) => x.guestID === form.get("guestID"));
+    if (!r) return json({ success: false, message: "Guest not found" });
+    if (form.get("guestFirstName")) r.guestFirstName = form.get("guestFirstName") ?? "";
+    if (form.get("guestLastName")) r.guestLastName = form.get("guestLastName") ?? "";
+    if (form.get("guestEmail")) r.guestEmail = form.get("guestEmail") ?? "";
+    if (form.get("guestPhone")) r.guestPhone = form.get("guestPhone") ?? "";
+    return json({ success: true });
+  });
+  op("GET", "getTaxesAndFees", () =>
+    json({
+      success: true,
+      data: taxes.map((t, i) => ({ ...t, [t.type === "tax" ? "taxID" : "feeID"]: `${t.type}${i}`, isDeleted: false })),
+      total: taxes.length,
+    }),
+  );
   op("POST", "postWebhook", (_req, form) => {
     webhooks.push(Object.fromEntries(form));
     return json({ success: true, data: { subscriptionID: `sub${webhooks.length}` } });

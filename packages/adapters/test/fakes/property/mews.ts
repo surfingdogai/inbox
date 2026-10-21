@@ -23,8 +23,10 @@ import { type FakePlatform, fakePlatform, json } from "../platform";
  * `CheckOverbooking` is on, which is the default); 429 with `Retry-After` past 200 requests per access
  * token in a sliding 30 seconds. Reservations live in groups, `Optional` ones are let go by Mews at their
  * `ReleasedUtc`, and a night is a time unit starting at midnight in the enterprise's zone. An update
- * checks nothing, as its documentation promises nothing: it may leave a night below none. Nothing here
- * is Mews's code; the demo environment is never called, by this or anything else.
+ * checks nothing, as its documentation promises nothing: it may leave a night below none. A group's
+ * reservations come back in no promised order (`reverse` turns them round); each night of a
+ * reservation is an order item priced gross. Nothing here is Mews's code; the demo environment is never
+ * called, by this or anything else.
  */
 
 const BASE = "https://api.mews.com/api/connector/v1";
@@ -66,6 +68,10 @@ export interface FakeMews {
   exhaust(): void;
   /** Every request's body as JSON, by operation, for what was sent. */
   bodies(operation: string): Record<string, unknown>[];
+  /** Called before each `reservations/update` is applied, with how many came before; false refuses it. */
+  beforeUpdate: ((before: number) => boolean | undefined) | null;
+  /** A group's reservations listed last first, as Mews may. */
+  reverse: boolean;
 }
 
 function nightsOf(r: Pick<Reservation, "StartUtc" | "EndUtc">): string[] {
@@ -100,6 +106,7 @@ export function fakeMews(opts: { readonly units?: Readonly<Record<string, number
   const calls: number[] = [];
   let offset = 0;
   let seq = 0;
+  let updatesSeen = 0;
   const now = () => Date.now() + offset;
   const id = (prefix: string) => {
     seq++;
@@ -422,7 +429,25 @@ export function fakeMews(opts: { readonly units?: Readonly<Record<string, number
           (Date.parse(r.CreatedUtc) >= Date.parse(String(created.StartUtc)) &&
             Date.parse(r.CreatedUtc) < Date.parse(String(created.EndUtc)))),
     );
-    return page(list.map(view), body, "Reservations");
+    return page((fake.reverse ? [...list].reverse() : list).map(view), body, "Reservations");
+  });
+  operation("orderItems/getAll", (body) => {
+    const ids = Array.isArray(body.ServiceOrderIds) ? (body.ServiceOrderIds as string[]) : [];
+    if (ids.length === 0) return json({ Message: "Invalid filter." }, 400);
+    const items = ids.flatMap((rid) => {
+      const r = reservations.get(rid);
+      if (!r) return [];
+      return nightsOf(r).map((night, i) => ({
+        Id: `${rid}-n${i}`,
+        ServiceOrderId: rid,
+        Type: "SpaceOrder",
+        ConsumedUtc: night,
+        Amount: amount(PRICES[r.RequestedCategoryId] ?? 0),
+        AccountingState: r.State === "Canceled" ? "Canceled" : "Open",
+        CanceledUtc: r.State === "Canceled" ? r.CancelledUtc : null,
+      }));
+    });
+    return page(items, body, "OrderItems");
   });
   operation("serviceOrderNotes/getAll", (body) => {
     const ids = Array.isArray(body.ServiceOrderIds) ? (body.ServiceOrderIds as string[]) : [];
@@ -442,6 +467,9 @@ export function fakeMews(opts: { readonly units?: Readonly<Record<string, number
       const r = reservations.get(String(u.ReservationId));
       if (!r) return json({ Message: "Invalid ReservationId." }, 400);
       if (!LIVE.has(r.State)) return json({ Message: "The reservation cannot be changed." }, 403);
+    }
+    if (fake.beforeUpdate?.(updatesSeen++) === false) {
+      return json({ Message: "The reservation cannot be changed." }, 403);
     }
     // No overbooking check: the documentation promises none for an update.
     for (const u of updates) {
@@ -491,7 +519,7 @@ export function fakeMews(opts: { readonly units?: Readonly<Record<string, number
     return json({});
   });
 
-  return {
+  const fake: FakeMews = {
     platform,
     reservations,
     notes,
@@ -513,5 +541,8 @@ export function fakeMews(opts: { readonly units?: Readonly<Record<string, number
         .filter((r) => r.url.pathname === `/api/connector/v1/${op}`)
         .map((r) => JSON.parse(r.body) as Record<string, unknown>);
     },
+    beforeUpdate: null,
+    reverse: false,
   };
+  return fake;
 }

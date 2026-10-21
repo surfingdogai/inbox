@@ -17,10 +17,12 @@
  * - reservations/add, getAll (2023-06-06), update, confirm, cancel, price, updateCustomer:
  *   https://docs.mews.com/connector-api/operations/reservations
  * - serviceOrderNotes/getAll: https://docs.mews.com/connector-api/operations/serviceordernotes
+ * - orderItems/getAll (`ServiceOrderIds`, each item's `Amount.GrossValue`, `AccountingState`):
+ *   https://docs.mews.com/connector-api/operations/orderitems
  * - customers/add, customers/getAll: https://docs.mews.com/connector-api/operations/customers
  * - time units and offsets: https://docs.mews.com/connector-api/concepts/time-units
- * - general webhooks and their shared secret: https://docs.mews.com/connector-api/events/wh-general,
- *   https://docs.mews.com/connector-api/events/wh-faq
+ * - general webhooks, one address for a whole integration (why the connector polls for now):
+ *   https://docs.mews.com/connector-api/events/wh-general, https://docs.mews.com/connector-api/events/wh-faq
  *
  * The property is made up: Alpenrose Hostel in Innsbruck (EUR, Europe/Vienna, dorm beds and one
  * double). Every id and token here is made up too. The tokens printed in Mews's public documentation are
@@ -31,7 +33,6 @@
 const fake = (...parts: string[]) => parts.join("");
 export const CLIENT_TOKEN = fake("FAKE", "0C11E47A0C11E47A0C11E47A0C11E4", "-", "FAKE0C11E47A0C11E47A0C11E47A0C1");
 export const ACCESS_TOKEN = fake("FAKE", "ACCE55ACCE55ACCE55ACCE55ACCE55", "-", "FAKEACCE55ACCE55ACCE55ACCE55ACC");
-export const WEBHOOK_TOKEN = fake("fake", "-mews-webhook-", "5ecret-0123456789abcdef");
 
 export const ENTERPRISE = {
   Id: "6a0f1c2e-9b3d-4e5f-8a71-2c3d4e5f6a70",
@@ -79,15 +80,3 @@ export const CHILDREN = {
   MinimalAge: 0,
   MaximalAge: 17,
 };
-
-/** A webhook as Mews sends one (https://docs.mews.com/connector-api/events/wh-general#request-body). */
-export function webhookBody(reservationIds: readonly string[], enterpriseId = ENTERPRISE.Id): string {
-  return JSON.stringify({
-    EnterpriseId: enterpriseId,
-    IntegrationId: "9d8e7f6a-5b4c-4d3e-8f21-0a9b8c7d6e5f",
-    Events: [
-      ...reservationIds.map((Id) => ({ Discriminator: "ServiceOrderUpdated", Value: { Id } })),
-      { Discriminator: "CustomerAdded", Value: { Id: "0e1f2a3b-4c5d-4e6f-8a90-b1c2d3e4f5a6" } },
-    ],
-  });
-}

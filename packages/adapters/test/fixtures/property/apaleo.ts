@@ -68,3 +68,18 @@ export function webhookBody(
     timestamp: 1_800_000_000,
   });
 }
+
+/**
+ * The health check apaleo sends as it makes a subscription (the payload guide's sample): lowercase
+ * `system` and `healthcheck`, the account's properties as a list, no `data`.
+ */
+export function healthcheckBody(accountId: string = ACCOUNT.code): string {
+  return JSON.stringify({
+    topic: "system",
+    type: "healthcheck",
+    id: "evt-healthcheck-1",
+    accountId,
+    propertyIds: [PROPERTY.id],
+    timestamp: 1_800_000_000,
+  });
+}

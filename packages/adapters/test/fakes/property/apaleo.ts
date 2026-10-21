@@ -21,7 +21,9 @@ import { type FakePlatform, fakePlatform, json } from "../platform";
  * rates; unit-group availability in time slices; offers; bookings made with an `Idempotency-Key` that
  * answers the same request the same way for 24 hours and refuses the key with other parameters;
  * reservations found by `externalCode` (apaleo's filter matches the start of it); the amend and cancel
- * actions, which refuse a night it cannot sell; JSON Patch on a reservation; webhook subscriptions.
+ * actions, which refuse a night it cannot sell; JSON Patch on a reservation; webhook subscriptions,
+ * each made only once the address answers the health check apaleo sends it (`deliver`), as the
+ * webhook guide says. Reservations carry their own gross total.
  * A reservation's guarantee must be at least its rate plan's. Times come back in UTC, as apaleo may
  * send them. `$force`, payment accounts and authorizations answer 403 and are counted: the inbox must
  * never call them. Nothing here is apaleo's code.
@@ -71,6 +73,13 @@ export interface FakeApaleo {
   free(unitGroup: string, night: string): number;
   /** A valid access token, as a connection would hold one. */
   issue(): string;
+  /**
+   * Where apaleo's health check goes as a subscription is made: the inbox's answer (its status). None,
+   * and nobody answers: no subscription is made.
+   */
+  deliver: ((url: string, body: string) => Promise<number>) | null;
+  /** Called before each amend is applied, with how many came before; false refuses it. */
+  beforeAmend: ((before: number) => boolean | undefined) | null;
 }
 
 /** A local night as apaleo may give it: the start of its time slice (noon there), in UTC. */
@@ -81,7 +90,7 @@ function sliceTo(night: string): string {
   return new Date(instantOf(addLocalDays(night, 1), "10:00", ZONE)).toISOString().replace(".000Z", "Z");
 }
 
-export function fakeApaleo(): FakeApaleo {
+export function fakeApaleo(opts: { readonly units?: Readonly<Record<string, number>> } = {}): FakeApaleo {
   const platform = fakePlatform();
   const plans: Plan[] = [
     { ...FLEX_LAKE, minGuaranteeType: "PM6Hold", channelCodes: ["Direct", "Ibe"] },
@@ -96,7 +105,8 @@ export function fakeApaleo(): FakeApaleo {
       channelCodes: ["BookingCom"],
     },
   ];
-  const groups = [LAKE, BUNK];
+  const groups = [LAKE, BUNK].map((g) => ({ ...g, memberCount: opts.units?.[g.id] ?? g.memberCount }));
+  let amends = 0;
   const reservations = new Map<string, Reservation>();
   const bookings: FakeApaleo["bookings"] = new Map();
   const subscriptions = new Map<string, Record<string, unknown>>();
@@ -149,6 +159,7 @@ export function fakeApaleo(): FakeApaleo {
     guaranteeType: r.guaranteeType,
     ...(r.primaryGuest ? { primaryGuest: r.primaryGuest } : {}),
     ...(r.comment ? { comment: r.comment } : {}),
+    totalGrossAmount: { amount: (PRICES[r.unitGroup] ?? 0) * nightsOf(r).length, currency: "NZD" },
   });
 
   /** Checks a reservation's stay: its rate plan (and its unit group), its guarantee, its nights. */
@@ -437,6 +448,7 @@ export function fakeApaleo(): FakeApaleo {
     const r = reservations.get(req.params.id ?? "");
     if (!r) return json({}, 404);
     if (r.status !== "Confirmed" && r.status !== "InHouse") return unprocessable("The reservation cannot be changed.");
+    if (fake.beforeAmend?.(amends++) === false) return unprocessable("The reservation cannot be changed now.");
     const body = JSON.parse(req.body) as Record<string, unknown>;
     const c = checkStay({ ...body, guaranteeType: r.guaranteeType }, r.id);
     if (typeof c === "string") return unprocessable(c);
@@ -455,9 +467,25 @@ export function fakeApaleo(): FakeApaleo {
     r.status = "Canceled";
     return new Response(null, { status: 204 });
   });
-  authed("POST", "https://webhook.apaleo.com/v1/subscriptions", (req) => {
+  authed("POST", "https://webhook.apaleo.com/v1/subscriptions", async (req) => {
+    const body = JSON.parse(req.body) as Record<string, unknown>;
+    // apaleo checks the address first: a subscription is made only when its health check is answered.
+    const status = fake.deliver
+      ? await fake.deliver(
+          String(body.endpointUrl),
+          JSON.stringify({
+            topic: "system",
+            type: "healthcheck",
+            id: `evt-hc-${n + 1}`,
+            accountId: ACCOUNT.code,
+            propertyIds: [PROPERTY.id],
+            timestamp: now(),
+          }),
+        )
+      : 0;
+    if (status < 200 || status >= 300) return unprocessable("The endpoint did not answer the health check.");
     const id = `sub-${++n}`;
-    subscriptions.set(id, JSON.parse(req.body) as Record<string, unknown>);
+    subscriptions.set(id, body);
     return json({ id }, 201);
   });
   authed("DELETE", "https://webhook.apaleo.com/v1/subscriptions/:id", (req) => {
@@ -465,7 +493,7 @@ export function fakeApaleo(): FakeApaleo {
     return new Response(null, { status: 204 });
   });
 
-  return {
+  const fake: FakeApaleo = {
     platform,
     reservations,
     bookings,
@@ -481,5 +509,8 @@ export function fakeApaleo(): FakeApaleo {
     },
     free: (group, night) => free(group, night),
     issue,
+    deliver: null,
+    beforeAmend: null,
   };
+  return fake;
 }

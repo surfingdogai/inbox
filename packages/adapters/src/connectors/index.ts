@@ -72,8 +72,8 @@ export interface OAuthClients {
  * What a server's operator holds for the property systems that need a partner account (ADR-033 §8.4):
  * Mews's client token, apaleo's connect client, Cloudbeds' partner app; and its switches for a property's
  * own credentials (apaleo's simple client, a key made in Cloudbeds), both off by default. Nothing here is
- * read from the environment yet: each stays "Needs setup", with nothing to press, until a partnership
- * exists and its operator sets it.
+ * read from the environment yet: until a partnership exists and its operator sets it, each is "Soon" on a
+ * hosted inbox and "Needs setup" on one's own server, with nothing to press either way.
  */
 export interface PropertyPartners {
   readonly mews?: MewsPartner | null | undefined;

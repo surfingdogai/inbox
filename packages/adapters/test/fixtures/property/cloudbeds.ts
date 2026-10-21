@@ -15,15 +15,22 @@
  *   https://developers.cloudbeds.com/reference/get_gethoteldetails-2,
  *   https://developers.cloudbeds.com/reference/get_getroomtypes-2,
  *   https://developers.cloudbeds.com/reference/get_getrooms-2,
- *   https://developers.cloudbeds.com/reference/get_getrateplans-2,
- *   https://developers.cloudbeds.com/reference/get_getreservations-2,
- *   https://developers.cloudbeds.com/reference/get_getreservation-2,
+ *   https://developers.cloudbeds.com/reference/get_getrateplans-2 (`includeSharedRooms`; `totalRate` is
+ *   "base rates and additional costs from extra guests"),
+ *   https://developers.cloudbeds.com/reference/get_gettaxesandfees-2 (`inclusiveOrExclusive`, `availableFor`,
+ *   scope `read:taxesAndFees`),
+ *   https://developers.cloudbeds.com/reference/get_getreservations-2 (`includeAllRooms`: each row's `rooms`,
+ *   with `roomCheckIn`, `roomCheckOut`, `roomStatus`; 100 a page at most),
+ *   https://developers.cloudbeds.com/reference/get_getreservation-2 (`assigned`, `unassigned`, `guestList`
+ *   with `isMainGuest`, `balanceDetailed.grandTotal`),
  *   https://developers.cloudbeds.com/reference/post_postreservation-2,
  *   https://developers.cloudbeds.com/reference/put_putreservation-2,
+ *   https://developers.cloudbeds.com/reference/post_postreservationnote-2,
+ *   https://developers.cloudbeds.com/reference/put_putguest-2 (scope `write:guest`),
  *   https://developers.cloudbeds.com/reference/post_postwebhook-2
  *
  * The property is made up: Riad Zellige Rouge in Marrakech (MAD, Africa/Casablanca), a room and two
- * suites around a patio. Every id, key and code is made up.
+ * suites around a patio, and six beds in a shared room on the roof. Every id, key and code is made up.
  */
 
 const fake = (...parts: string[]) => parts.join("");
@@ -44,8 +51,16 @@ export const PROPERTY = {
   propertyEmail: "bonjour@riad-zellige.example",
 };
 
-export const ATLAS = { roomTypeID: "103981", roomTypeName: "Chambre Atlas", maxGuests: 2, rooms: 1 };
-export const PATIO = { roomTypeID: "103982", roomTypeName: "Suite Patio", maxGuests: 4, rooms: 2 };
+export const ATLAS = { roomTypeID: "103981", roomTypeName: "Chambre Atlas", maxGuests: 2, rooms: 1, isPrivate: true };
+export const PATIO = { roomTypeID: "103982", roomTypeName: "Suite Patio", maxGuests: 4, rooms: 2, isPrivate: true };
+/** A shared room: its beds are sold one by one. */
+export const DORM = {
+  roomTypeID: "103983",
+  roomTypeName: "Dortoir Terrasse",
+  maxGuests: 1,
+  rooms: 6,
+  isPrivate: false,
+};
 
 export const RATE_ATLAS = {
   rateID: "R-ATLAS-STD",
@@ -59,6 +74,12 @@ export const RATE_PATIO = {
   ratePlanNamePublic: "Standard",
   roomTypeID: PATIO.roomTypeID,
 };
+export const RATE_DORM = {
+  rateID: "R-DORM-STD",
+  ratePlanID: "RP-STD",
+  ratePlanNamePublic: "Standard",
+  roomTypeID: DORM.roomTypeID,
+};
 /** A promotion with a code: never offered through the inbox. */
 export const RATE_PROMO = {
   rateID: "R-ATLAS-PROMO",
@@ -69,7 +90,11 @@ export const RATE_PROMO = {
 };
 
 /** Nightly rates in MAD, as Cloudbeds gives them: decimal dirhams. */
-export const PRICES: Readonly<Record<string, number>> = { [ATLAS.roomTypeID]: 950, [PATIO.roomTypeID]: 1450.5 };
+export const PRICES: Readonly<Record<string, number>> = {
+  [ATLAS.roomTypeID]: 950,
+  [PATIO.roomTypeID]: 1450.5,
+  [DORM.roomTypeID]: 180,
+};
 
 /** A delivery as Cloudbeds sends one (its events reference): ids, dates and spellings as there. */
 export function webhookBody(

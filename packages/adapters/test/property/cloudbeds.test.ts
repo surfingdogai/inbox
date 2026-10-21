@@ -13,10 +13,12 @@ import {
   ATLAS,
   AUTH_CODE,
   CLIENT,
+  DORM,
   OWN_KEY,
   PATIO,
   PROPERTY,
   RATE_ATLAS,
+  RATE_DORM,
   RATE_PATIO,
   webhookBody,
 } from "../fixtures/property/cloudbeds";
@@ -85,35 +87,17 @@ describe("Cloudbeds: checked before, counted after", () => {
     const { m, ctx, writer } = setup();
     const stay = stayOf("sd-race-1", "2027-03-10", "2027-03-12");
     // The check finds the room free; a booking from another channel lands before ours is written.
-    m.beforeWrite = () =>
-      m.reservations.set("4199999", {
-        reservationID: "4199999",
-        status: "confirmed",
-        startDate: "2027-03-11",
-        endDate: "2027-03-12",
-        thirdPartyIdentifier: "",
-        dateCreated: "2027-01-01 00:00:00",
-        guestFirstName: "Other",
-        guestLastName: "Channel",
-        rooms: [
-          {
-            subReservationID: "4199999-1",
-            roomTypeID: ATLAS.roomTypeID,
-            startDate: "2027-03-11",
-            endDate: "2027-03-12",
-            adults: 2,
-            children: 0,
-            rateID: "",
-          },
-        ],
-      });
+    m.beforeWrite = () => {
+      m.add({ status: "confirmed", roomTypeID: ATLAS.roomTypeID, startDate: "2027-03-11", endDate: "2027-03-12" });
+    };
     const link = await writer.put(ctx(), stay, null, "confirmed");
     // Cloudbeds took ours as well: two bookings for its one room, and its own count shows none left, never below.
     expect(m.taken(ATLAS.roomTypeID, "2027-03-11")).toBe(2);
     // Counting its reservations against its rooms tells: the inbox then takes its own back.
     expect(await writer.oversold?.(ctx(), stay, link)).toBe(true);
+    // Taken back: the other channel's booking alone holds the room.
     await writer.cancel(ctx(), link);
-    expect(await writer.oversold?.(ctx(), stay, link)).toBe(false);
+    expect(m.taken(ATLAS.roomTypeID, "2027-03-11")).toBe(1);
   });
 
   it("refuses a night with no room before anything is written", async () => {
@@ -125,6 +109,177 @@ describe("Cloudbeds: checked before, counted after", () => {
       code: "refused",
     });
     expect(m.forms("postReservation")).toHaveLength(0);
+  });
+
+  it("counts every page: a hundred cancelled reservations first never hide a night sold twice", async () => {
+    const { m, ctx, writer } = setup();
+    // A busy calendar: a hundred cancelled stays on those nights, listed before anything live.
+    for (let i = 0; i < 100; i++) {
+      m.add({ status: "canceled", roomTypeID: ATLAS.roomTypeID, startDate: "2027-03-20", endDate: "2027-03-23" });
+    }
+    const stay = stayOf("sd-pages-1", "2027-03-20", "2027-03-22");
+    m.beforeWrite = () => {
+      m.add({ status: "confirmed", roomTypeID: ATLAS.roomTypeID, startDate: "2027-03-21", endDate: "2027-03-22" });
+    };
+    const link = await writer.put(ctx(), stay, null, "confirmed");
+    expect(m.taken(ATLAS.roomTypeID, "2027-03-21")).toBe(2);
+    const before = m.platform.seen.length;
+    expect(await writer.oversold?.(ctx(), stay, link)).toBe(true);
+    // Every page, each reservation with its rooms: never one reservation at a time.
+    const asked = m.platform.seen.slice(before);
+    const pages = asked.filter((r) => r.url.pathname.endsWith("/getReservations"));
+    expect(pages.map((r) => r.url.searchParams.get("pageNumber"))).toEqual(["1", "2"]);
+    expect(pages.every((r) => r.url.searchParams.get("includeAllRooms") === "true")).toBe(true);
+    expect(asked.some((r) => r.url.pathname.endsWith("/getReservation"))).toBe(false);
+  });
+
+  it("cannot tell before the list shows the reservation just written, and says so", async () => {
+    const { ctx, writer } = setup();
+    const stay = stayOf("sd-lag-1", "2027-03-25", "2027-03-26");
+    // A reservation the list does not show (yet): no word on it is taken as fine.
+    await expect(
+      writer.oversold?.(ctx(), stay, { externalId: "4999999", etag: null, calendar: null }),
+    ).rejects.toBeInstanceOf(ConnectorError);
+  });
+});
+
+describe("Cloudbeds: once written, never refused", () => {
+  it("keeps the reservation it made when Cloudbeds does not take its status after it", async () => {
+    const { m, ctx, writer } = setup();
+    m.refuseNext.add("putReservation");
+    const link = await writer.put(ctx(), stayOf("sd-status-1", "2027-04-20", "2027-04-22"), null, "provisional");
+    // Written: the inbox knows it, and Cloudbeds holds the room as it made it.
+    expect(link.externalId).toBeTruthy();
+    expect(m.reservations.get(link.externalId ?? "")?.status).toBe("confirmed");
+    expect(m.taken(ATLAS.roomTypeID, "2027-04-20")).toBe(1);
+    // Found again by its key: never written twice.
+    expect((await writer.find(ctx(), stayOf("sd-status-1", "2027-04-20", "2027-04-22")))?.externalId).toBe(
+      link.externalId,
+    );
+  });
+
+  it("never answers a stay cancelled in Cloudbeds since as written", async () => {
+    const { m, ctx, writer } = setup();
+    const stay = stayOf("sd-gone-1", "2027-04-25", "2027-04-26");
+    const link = await writer.put(ctx(), stay, null, "confirmed");
+    await writer.cancel(ctx(), link);
+    await expect(writer.put(ctx(), stay, null, "confirmed")).rejects.toMatchObject({ code: "refused" });
+    expect(m.forms("postReservation")).toHaveLength(1);
+  });
+});
+
+describe("Cloudbeds: a stay of two rooms, given back in Cloudbeds' own order", () => {
+  const two = (key: string): OutboundStay =>
+    stayOf(key, "2027-06-10", "2027-06-12", {
+      rooms: [
+        {
+          roomId: ATLAS.roomTypeID,
+          rateId: RATE_ATLAS.rateID,
+          adults: 2,
+          childrenAges: [],
+          price: { value: 190_000, currency: "MAD" },
+        },
+        {
+          roomId: PATIO.roomTypeID,
+          rateId: RATE_PATIO.rateID,
+          adults: 3,
+          childrenAges: [],
+          price: { value: 290_100, currency: "MAD" },
+        },
+      ],
+    });
+
+  it("confirms it as it is when the hotel assigned the second room first: nothing swapped, nothing repriced", async () => {
+    const { m, ctx, writer } = setup();
+    const stay = two("sd-two-1");
+    const link = await writer.put(ctx(), stay, null, "provisional");
+    const r = m.reservations.get(link.externalId ?? "");
+    // The suite is assigned at the desk: Cloudbeds now lists it first.
+    m.assign(link.externalId ?? "", r?.rooms[1]?.subReservationID ?? "");
+    await writer.put(ctx(), { ...stay, guest: { name: "Nadia Amrani", email: "nadia@example.ma" } }, link, "confirmed");
+    const rooms = m.forms("putReservation").filter((f) => f.has("rooms[0][roomTypeID]"));
+    expect(rooms).toEqual([]);
+    expect(r?.rooms.map((x) => [x.roomTypeID, x.adults])).toEqual([
+      [ATLAS.roomTypeID, 2],
+      [PATIO.roomTypeID, 3],
+    ]);
+    expect(r?.status).toBe("confirmed");
+  });
+
+  it("moves each room by its own kind when the dates change", async () => {
+    const { m, ctx, writer } = setup();
+    const stay = two("sd-two-2");
+    const link = await writer.put(ctx(), stay, null, "confirmed");
+    const r = m.reservations.get(link.externalId ?? "");
+    m.assign(link.externalId ?? "", r?.rooms[1]?.subReservationID ?? "");
+    await writer.put(ctx(), { ...stay, checkOut: "2027-06-13" }, link, "confirmed");
+    expect(r?.rooms.map((x) => [x.roomTypeID, x.adults, x.endDate])).toEqual([
+      [ATLAS.roomTypeID, 2, "2027-06-13"],
+      [PATIO.roomTypeID, 3, "2027-06-13"],
+    ]);
+  });
+});
+
+describe("Cloudbeds: the guest, the note and the total", () => {
+  it("names the guest on the reservation once paid, so the desk has them at check-in", async () => {
+    const { m, ctx, writer } = setup();
+    const stay = stayOf("sd-name-1", "2027-07-10", "2027-07-12");
+    const link = await writer.put(ctx(), stay, null, "provisional");
+    const r = m.reservations.get(link.externalId ?? "");
+    expect([r?.guestFirstName, r?.guestLastName]).toEqual(["Guest", stay.reference]);
+    await writer.put(
+      ctx(),
+      { ...stay, guest: { name: "Youssef Alaoui", email: "youssef@example.ma", phone: "+212600000000" } },
+      link,
+      "confirmed",
+    );
+    expect([r?.guestFirstName, r?.guestLastName, r?.guestEmail, r?.guestPhone]).toEqual([
+      "Youssef",
+      "Alaoui",
+      "youssef@example.ma",
+      "+212600000000",
+    ]);
+    expect(m.forms("putGuest")).toHaveLength(1);
+  });
+
+  it("notes the stay's reference and what the guest agreed, and reads back Cloudbeds' own total", async () => {
+    const { m, ctx, writer } = setup();
+    const stay = stayOf("sd-note-1", "2027-07-20", "2027-07-22");
+    const link = await writer.put(ctx(), stay, null, "confirmed");
+    expect(m.reservations.get(link.externalId ?? "")?.notes).toEqual([
+      `Inbox stay ${stay.reference} · agreed with the guest: MAD 1900.00`,
+    ]);
+    expect(link.total).toEqual({ value: 190_000, currency: "MAD" });
+  });
+
+  it("quotes nothing from a rate that leaves out the property's own taxes, and reads the total with them", async () => {
+    const { m, ctx, writer, stays } = setup();
+    m.taxes.push({
+      type: "tax",
+      name: "TVA",
+      amount: 10,
+      amountType: "percentage",
+      inclusiveOrExclusive: "exclusive",
+      availableFor: ["rate"],
+    });
+    const read = await stays.ari(ctx(), PROPERTY.propertyID, { from: "2027-08-01", to: "2027-08-03" });
+    const rows = Array.isArray(read) ? read : read.rows;
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((r) => Object.keys(r.prices ?? {}).length === 0)).toBe(true);
+    expect(
+      await stays.price?.(ctx(), {
+        propertyId: PROPERTY.propertyID,
+        roomId: ATLAS.roomTypeID,
+        rateId: RATE_ATLAS.rateID,
+        checkIn: "2027-08-01",
+        checkOut: "2027-08-03",
+        adults: 2,
+        childrenAges: [],
+      }),
+    ).toBeNull();
+    // The owner priced it at the rate: Cloudbeds' own total, with its tax, says otherwise.
+    const link = await writer.put(ctx(), stayOf("sd-tax-1", "2027-08-01", "2027-08-03"), null, "confirmed");
+    expect(link.total).toEqual({ value: 209_000, currency: "MAD" });
   });
 });
 
@@ -201,14 +356,22 @@ describe("Cloudbeds: what is written, and what never is", () => {
     expect(await stays.properties(ctx())).toEqual([
       { id: PROPERTY.propertyID, name: PROPERTY.propertyName, currency: "MAD", timezone: "Africa/Casablanca" },
     ]);
+    // A hostel's beds in a shared room are rooms too: never read as having nothing free.
     expect((await stays.rooms(ctx(), PROPERTY.propertyID)).map((r) => [r.id, r.units])).toEqual([
       [ATLAS.roomTypeID, 1],
       [PATIO.roomTypeID, 2],
+      [DORM.roomTypeID, 6],
     ]);
     expect((await stays.ratePlans(ctx(), PROPERTY.propertyID)).map((r) => r.id)).toEqual([
       RATE_ATLAS.rateID,
       RATE_PATIO.rateID,
+      RATE_DORM.rateID,
     ]);
+    const dorm = await stays.ari(ctx(), PROPERTY.propertyID, { from: "2027-07-01", to: "2027-07-02" });
+    expect((Array.isArray(dorm) ? dorm : dorm.rows).find((r) => r.roomId === DORM.roomTypeID)).toMatchObject({
+      units: 6,
+      prices: { [RATE_DORM.rateID]: 18_000 },
+    });
     const price = await stays.price?.(ctx(), {
       propertyId: PROPERTY.propertyID,
       roomId: PATIO.roomTypeID,
@@ -223,7 +386,7 @@ describe("Cloudbeds: what is written, and what never is", () => {
 });
 
 describe("Cloudbeds: connecting", () => {
-  it("exchanges the code Cloudbeds sends back for the property's own key, and makes its webhooks with our header", async () => {
+  it("exchanges the code Cloudbeds sends back for the property's own key; its webhooks, once kept, carry our header", async () => {
     const m = fakeCloudbeds();
     const def = cloudbedsConnector(CLIENT);
     const url = new URL(
@@ -249,6 +412,15 @@ describe("Cloudbeds: connecting", () => {
     expect(c?.secret.api_key).toBe(API_KEY);
     expect(c?.secret.hook_secret).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(c?.externalId).toBe(`org:${PROPERTY.organizationID}`);
+    // Nothing is made on Cloudbeds before the connection is kept: its first sync makes the webhooks.
+    expect(m.webhooks).toEqual([]);
+    const kept: RunContext = {
+      ...runContext(m.platform.http, c?.secret ?? {}),
+      hookUrl: "https://inbox.riad.example/v1/hooks/cloudbeds/tok",
+      extra: c?.extra ?? {},
+    };
+    expect(def.stale?.(kept)).toBe(true);
+    const fresh = await def.refresh?.(kept);
     expect(m.webhooks).toHaveLength(CLOUDBEDS_EVENTS.length);
     expect(m.webhooks[0]).toMatchObject({
       object: "reservation",
@@ -257,6 +429,28 @@ describe("Cloudbeds: connecting", () => {
       authHeaderName: CLOUDBEDS_HOOK_HEADER,
       authHeaderValue: c?.secret.hook_secret,
     });
+    expect(fresh?.extra).toMatchObject({
+      webhook: "added",
+      hook_url: "https://inbox.riad.example/v1/hooks/cloudbeds/tok",
+    });
+    // Made: not again, until the inbox's address moves.
+    const after: RunContext = { ...kept, extra: fresh?.extra ?? {} };
+    expect(def.stale?.(after)).toBe(false);
+    expect(def.stale?.({ ...after, hookUrl: "https://inbox.riad-zellige.example/v1/hooks/cloudbeds/tok" })).toBe(true);
+  });
+
+  it("makes no webhook while a hosted inbox cannot be reached yet", async () => {
+    const m = fakeCloudbeds();
+    const def = cloudbedsConnector(CLIENT);
+    const waiting: RunContext = {
+      ...runContext(m.platform.http, { api_key: API_KEY, hook_secret: HOOK_SECRET }),
+      hookUrl: "https://inbox.riad.example/v1/hooks/cloudbeds/tok",
+      hooksLive: false,
+      extra: { propertyIds: [PROPERTY.propertyID], webhook: "pending" },
+    };
+    expect(def.stale?.(waiting)).toBe(false);
+    await def.refresh?.(waiting);
+    expect(m.webhooks).toEqual([]);
   });
 
   it("refuses a code that lapsed, and keeps nothing", async () => {
@@ -275,7 +469,12 @@ describe("Cloudbeds: connecting", () => {
   it("is not ready without a partner app; a property's own key stays off unless switched on", async () => {
     const off = cloudbedsConnector(null, { hosted: true });
     expect(off.ready?.()).toMatch(/partner app/);
-    expect(off.whenNotReady).toMatchObject({ status: "setup" });
+    // Hosted: nothing for an owner to do, so Soon; on one's own server, what its operator sets.
+    expect(off.whenNotReady).toEqual({ status: "soon" });
+    expect(cloudbedsConnector(null).whenNotReady).toMatchObject({
+      status: "setup",
+      hint: /partner app on this server/,
+    });
     const m = fakeCloudbeds();
     const base = runContext(m.platform.http, {});
     await expect(

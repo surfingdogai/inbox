@@ -6,10 +6,12 @@ import { CLIENT as CLOUDBEDS_CLIENT } from "../fixtures/property/cloudbeds";
 import { CLIENT_TOKEN } from "../fixtures/property/mews";
 
 /**
- * The property systems that need a partner account (ADR-033 §8.4): registered in every release, and
- * until their operator holds the partner's credentials each says **Needs setup** on the Property system
- * card, with the reason and where it is explained, and nothing to press. With them, each is a way to
- * connect like any other. A business that is not a place to stay never sees the card.
+ * The property systems that need a partner account (ADR-033 §8.4): registered in every release. Until
+ * their operator holds the partner's credentials, a hosted inbox shows each as **Soon**, with nothing for
+ * its owner to do and no word on why (Google's way, ADR-026 §6); an inbox on its owner's own server says
+ * **Needs setup**, with what its operator sets and where it is explained. Nothing to press either way.
+ * With the credentials, each is a way to connect like any other. A business that is not a place to stay
+ * never sees the card.
  */
 
 const GATED = ["mews", "apaleo", "cloudbeds"] as const;
@@ -19,33 +21,49 @@ function defs(list: ConnectorDefinition[]): Map<string, ConnectorDefinition> {
 }
 
 describe("Mews, apaleo and Cloudbeds without a partner account", () => {
-  for (const hosted of [true, false]) {
-    it(`say Needs setup with nothing to press (${hosted ? "hosted" : "on one's own server"})`, () => {
-      const cards = gallery(defs(builtInConnectors({ hosted })), { lean: "stays" });
-      const card = cards.find((c) => c.id === "property");
-      expect(card).toBeDefined();
-      // Nothing on the card can be pressed: no way of it is ready here.
-      expect(card?.status).toBe("soon");
-      expect(card?.ways.some((w) => w.status === "ready")).toBe(false);
-      for (const kind of GATED) {
-        const way = card?.ways.find((w) => w.kind === kind);
-        expect(way?.status, kind).toBe("setup");
-        expect(way?.form, kind).toEqual([]);
-        expect(way?.before, kind).toBeUndefined();
-        expect(way?.href, kind).toBe(`https://surfingdog.ai/docs/connectors/${kind}/`);
-        expect(way?.hint, kind).toMatch(hosted ? /does not have yet/ : /on this server/);
-        expect(way?.hint, kind).toMatch(/calendar link/);
-        // Never a promise: no "applying", no "soon", no date.
-        expect(way?.hint, kind).not.toMatch(/applying|soon|\d{4}/i);
-      }
-    });
-  }
+  it("say Soon on a hosted inbox, with no hint: there is nothing for its owner to do", () => {
+    const card = gallery(defs(builtInConnectors({ hosted: true })), { lean: "stays" }).find((c) => c.id === "property");
+    expect(card?.status).toBe("soon");
+    expect(card?.ways.some((w) => w.status === "ready")).toBe(false);
+    for (const kind of GATED) {
+      const way = card?.ways.find((w) => w.kind === kind);
+      expect(way?.status, kind).toBe("soon");
+      expect(way?.hint, kind).toBeUndefined();
+      expect(way?.form, kind).toEqual([]);
+    }
+  });
+
+  it("say Needs setup on one's own server, with what its operator sets, and nothing to press", () => {
+    const card = gallery(defs(builtInConnectors({ hosted: false })), { lean: "stays" }).find(
+      (c) => c.id === "property",
+    );
+    expect(card).toBeDefined();
+    // Nothing on the card can be pressed: no way of it is ready here.
+    expect(card?.status).toBe("soon");
+    expect(card?.ways.some((w) => w.status === "ready")).toBe(false);
+    for (const kind of GATED) {
+      const way = card?.ways.find((w) => w.kind === kind);
+      expect(way?.status, kind).toBe("setup");
+      expect(way?.form, kind).toEqual([]);
+      expect(way?.before, kind).toBeUndefined();
+      expect(way?.href, kind).toBe(`https://surfingdog.ai/docs/connectors/${kind}/`);
+      expect(way?.hint, kind).toMatch(/on this server/);
+      // The fallback that is always true: stays come as requests, never a link that may not exist.
+      expect(way?.hint, kind).toMatch(/you confirm each stay yourself/);
+      expect(way?.hint, kind).not.toMatch(/calendar link/);
+      // Never a promise, and never the product in the third person: no "applying", "soon", date or "service".
+      expect(way?.hint, kind).not.toMatch(/applying|soon|service|\d{4}/i);
+    }
+  });
 
   it("are each not ready, with the reason", () => {
     for (const d of builtInConnectors({}).filter((x) => (GATED as readonly string[]).includes(x.kind))) {
       expect(d.ready?.(), d.kind).toMatch(/partner|connect client/);
       expect(d.group).toBe("lodging");
-      expect(d.capabilities).toEqual(["stay_inventory", "write_stays", "stay_events"]);
+      // Mews is read by polling until one route takes its webhooks for every property.
+      expect(d.capabilities).toEqual(
+        d.kind === "mews" ? ["stay_inventory", "write_stays"] : ["stay_inventory", "write_stays", "stay_events"],
+      );
     }
   });
 

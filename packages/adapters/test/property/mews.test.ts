@@ -1,4 +1,4 @@
-import { ConnectorError, instantOf, type OutboundStay } from "@surfingdog/core";
+import { ConnectorError, instantOf, type OutboundStay, StayPutBackError } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
 import {
   durationMs,
@@ -18,18 +18,19 @@ import {
   ENTERPRISE,
   FLEX,
   SERVICE,
-  WEBHOOK_TOKEN,
-  webhookBody,
 } from "../fixtures/property/mews";
 import { propertyContract, runContext } from "./contract";
 
 /**
  * Mews (ADR-033 §8.4) against a local Mews built from its documentation: the property system contract,
- * its own hold (`Optional` with `ReleasedUtc`) and that hold let go, a move that would overbook put back,
- * the guest only once confirmed, the limit's wait, the webhook's secret, and never the demo environment.
+ * its own hold (`Optional` with `ReleasedUtc`) and that hold let go, a move onto a full night refused
+ * before it is written, one another booking raced past put back whole (and said when it cannot be), a
+ * group's rooms paired by kind, never by place, the guest only once confirmed, what the guest agreed in
+ * the note and Mews' own total read back, the limit's wait, read by polling, and never the demo
+ * environment.
  */
 
-const partner = { clientToken: CLIENT_TOKEN, webhookToken: WEBHOOK_TOKEN };
+const partner = { clientToken: CLIENT_TOKEN };
 
 propertyContract("Mews (fake built from its documentation)", () => {
   const m = fakeMews();
@@ -138,8 +139,10 @@ describe("Mews: what is written", () => {
     expect(text).not.toContain("TimeUnitPrices");
     expect(text).not.toContain("TimeUnitAmount");
     expect(text).not.toContain("CreditCardId");
-    // The note carries our key and a tag only this inbox can make, never the marker itself.
-    expect(m.notes[0]?.Text).toMatch(/^Inbox stay [A-Z0-9-]+ · sd-write-1#[0-9a-f]{16}$/);
+    // The note carries what the guest agreed, our key and a tag only this inbox can make, never the marker.
+    expect(m.notes[0]?.Text).toMatch(
+      /^Inbox stay [A-Z0-9-]+ · agreed with the guest: EUR 179\.00 · sd-write-1#[0-9a-f]{16}$/,
+    );
     expect(text).not.toContain(c.marker);
     // A stay starts at 15:00 and ends at 11:00, Innsbruck time.
     const [r] = [...m.reservations.values()];
@@ -164,7 +167,7 @@ describe("Mews: what is written", () => {
     expect(people).toContainEqual({ AgeCategoryId: CHILDREN.Id, Count: 1 });
   });
 
-  it("a move onto a night Mews has no room for is put back, and refused", async () => {
+  it("a move onto a night Mews has no room for is refused before anything is written", async () => {
     const { m, ctx, writer } = setup();
     const c = ctx();
     const mine = stayOf("sd-move-1", "2027-05-01", "2027-05-03");
@@ -176,8 +179,87 @@ describe("Mews: what is written", () => {
       code: "refused",
     });
     expect({ start: r?.StartUtc, end: r?.EndUtc }).toEqual(before);
-    expect(m.free(DOUBLE.Id, "2027-05-03")).toBe(0);
-    expect(m.bodies("reservations/update")).toHaveLength(2);
+    // Never shown oversold to Mews' channels, not even for a moment.
+    expect(m.bodies("reservations/update")).toHaveLength(0);
+  });
+
+  it("a move another booking raced past is put back whole, its rate and its people too, and refused", async () => {
+    const { m, ctx, writer } = setup();
+    const mine = stayOf("sd-race-1", "2027-05-10", "2027-05-12");
+    const link = await writer.put(ctx(), mine, null, "confirmed");
+    const r = [...m.reservations.values()][0];
+    const before = { start: r?.StartUtc, end: r?.EndUtc, rate: r?.RateId, people: r?.PersonCounts };
+    // The night after is free when read, and taken by another channel before the update lands.
+    m.beforeUpdate = (n) => {
+      if (n === 0) m.sell(DOUBLE.Id, "2027-05-12");
+      return undefined;
+    };
+    await expect(
+      writer.put(
+        ctx(),
+        {
+          ...mine,
+          checkOut: "2027-05-13",
+          rooms: [
+            { roomId: DOUBLE.Id, rateId: FLEX.Id, adults: 1, childrenAges: [], price: { value: 0, currency: "EUR" } },
+          ],
+        },
+        link,
+        "confirmed",
+      ),
+    ).rejects.toMatchObject({ code: "refused" });
+    expect({ start: r?.StartUtc, end: r?.EndUtc, rate: r?.RateId, people: r?.PersonCounts }).toEqual(before);
+    const [, back] = m.bodies("reservations/update");
+    expect(JSON.stringify(back)).toContain("PersonCounts");
+    expect(JSON.stringify(back)).toContain("RateId");
+  });
+
+  it("says so when Mews does not take the stay back: Mews and the inbox now differ", async () => {
+    const { m, ctx, writer } = setup();
+    const mine = stayOf("sd-race-2", "2027-05-20", "2027-05-22");
+    const link = await writer.put(ctx(), mine, null, "confirmed");
+    m.beforeUpdate = (n) => {
+      if (n === 0) m.sell(DOUBLE.Id, "2027-05-22");
+      return n === 0 ? undefined : false;
+    };
+    const error = await writer
+      .put(ctx(), { ...mine, checkOut: "2027-05-23" }, link, "confirmed")
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(StayPutBackError);
+    expect(error).toMatchObject({ code: "refused" });
+  });
+
+  it("confirms a stay of two kinds of room as it is, whatever order Mews gives its reservations in", async () => {
+    const { m, ctx, writer } = setup();
+    const stay = stayOf("sd-two-1", "2027-06-10", "2027-06-12", {
+      rooms: [
+        { roomId: DORM.Id, rateId: FLEX.Id, adults: 1, childrenAges: [], price: { value: 6_400, currency: "EUR" } },
+        { roomId: DOUBLE.Id, rateId: FLEX.Id, adults: 2, childrenAges: [], price: { value: 17_900, currency: "EUR" } },
+      ],
+    });
+    const link = await writer.put(ctx(), stay, null, "provisional");
+    m.reverse = true;
+    await writer.put(ctx(), { ...stay, guest: { name: "Jonas Berger", email: "jonas@example.at" } }, link, "confirmed");
+    expect(m.bodies("reservations/update")).toEqual([]);
+    expect([...m.reservations.values()].map((r) => [r.RequestedCategoryId, r.State])).toEqual([
+      [DORM.Id, "Confirmed"],
+      [DOUBLE.Id, "Confirmed"],
+    ]);
+  });
+
+  it("reads back Mews' own total for what it wrote", async () => {
+    const { ctx, writer } = setup();
+    const link = await writer.put(ctx(), stayOf("sd-total-1", "2027-06-20", "2027-06-22"), null, "confirmed");
+    expect(link.total).toEqual({ value: 17_900, currency: "EUR" });
+  });
+
+  it("never answers a stay Mews let go since as written", async () => {
+    const { m, ctx, writer } = setup();
+    const stay = stayOf("sd-lapsed-1", "2027-06-25", "2027-06-26");
+    await writer.put(ctx(), stay, null, "hold");
+    m.advance(MEWS_HOLD_RELEASE_MS + 1_000);
+    await expect(writer.put(ctx(), stay, null, "confirmed")).rejects.toMatchObject({ code: "refused" });
+    expect(m.bodies("reservations/add")).toHaveLength(1);
   });
 
   it("reads the system's own price for a stay", async () => {
@@ -249,8 +331,9 @@ describe("Mews: limits, hosts and secrets", () => {
   it("is not ready without the partner's token, and connects nothing", async () => {
     const off = mewsConnector(null, { hosted: true });
     expect(off.ready?.()).toMatch(/partner token/);
-    expect(off.whenNotReady).toMatchObject({ status: "setup" });
-    expect(off.whenNotReady?.hint).toMatch(/partner account/);
+    // Hosted: nothing for an owner to do, so Soon; on one's own server, what its operator sets.
+    expect(off.whenNotReady).toEqual({ status: "soon" });
+    expect(mewsConnector(null).whenNotReady).toMatchObject({ status: "setup", hint: /partner token on this server/ });
     const m = fakeMews();
     await expect(
       off.connect?.(
@@ -277,50 +360,11 @@ describe("Mews: limits, hosts and secrets", () => {
   });
 });
 
-describe("Mews: webhooks are hints, checked first", () => {
-  async function prepared() {
-    const s = setup();
-    const ctx = { ...s.ctx(), extra: { enterpriseId: ENTERPRISE.Id, timezone: ENTERPRISE.TimeZoneIdentifier } };
-    const link = await s.writer.put(ctx, stayOf("sd-hook-1", "2027-10-02", "2027-10-05"), null, "confirmed");
-    const r = [...s.m.reservations.values()].find((x) => x.GroupId === link.externalId);
-    if (!r || !s.def.hooks) throw new Error("not written");
-    return { ...s, ctx, r, hooks: s.def.hooks };
-  }
-  const request = (body: string, token: string | null) => ({
-    headers: new Headers({ "content-type": "application/json" }),
-    body,
-    query: new URLSearchParams(token === null ? {} : { token }),
-  });
-
-  it("refuses a delivery without Mews's shared secret, or with another", async () => {
-    const { ctx, r, hooks } = await prepared();
-    await expect(hooks.verify(ctx, request(webhookBody([r.Id]), null))).rejects.toMatchObject({ code: "refused" });
-    await expect(hooks.verify(ctx, request(webhookBody([r.Id]), `${WEBHOOK_TOKEN}x`))).rejects.toMatchObject({
-      code: "refused",
-    });
-    // Not configured on this server: nothing is believed.
-    const plain = mewsConnector({ clientToken: CLIENT_TOKEN });
-    await expect(plain.hooks?.verify(ctx, request(webhookBody([r.Id]), WEBHOOK_TOKEN))).rejects.toMatchObject({
-      code: "refused",
-    });
-  });
-
-  it("refuses a delivery about another property", async () => {
-    const { ctx, r, hooks } = await prepared();
-    const other = webhookBody([r.Id], "00000000-0000-4000-8000-000000000000");
-    await expect(hooks.verify(ctx, request(other, WEBHOOK_TOKEN))).rejects.toMatchObject({ code: "refused" });
-  });
-
-  it("names reservations by id only, and reads them back from Mews", async () => {
-    const { ctx, r, hooks } = await prepared();
-    const body = webhookBody([r.Id]);
-    const event = await hooks.verify(ctx, request(body, WEBHOOK_TOKEN));
-    expect(event?.refs).toEqual([r.Id]);
-    // The same delivery again is the same event: kept once.
-    expect((await hooks.verify(ctx, request(body, WEBHOOK_TOKEN)))?.eventId).toBe(event?.eventId);
-    expect(await hooks.read(ctx, event as never)).toEqual([
-      { kind: "stay_nights", roomIds: [DOUBLE.Id], from: "2027-10-02", to: "2027-10-05" },
-    ]);
+describe("Mews: read by polling", () => {
+  it("takes no webhook at a connection's own address: Mews has one address for a whole integration", () => {
+    const def = mewsConnector(partner);
+    expect(def.hooks).toBeUndefined();
+    expect(def.capabilities).not.toContain("stay_events");
   });
 
   it("reads ISO 8601 durations as Mews writes them", () => {

@@ -8,24 +8,26 @@ import {
   type ConnectorHttpResponse,
   dateIn,
   daysBetween,
+  decimalAmount,
   type ExternalProperty,
   type ExternalRate,
   type ExternalRoom,
-  type HookFact,
   instantOf,
   type LinkState,
   minorAmount,
   minorUnits,
   type OutboundStay,
+  type PayAmount,
   type RunContext,
+  StayPutBackError,
   type StayWriteStatus,
   secretField,
   VERSION,
 } from "@surfingdog/core";
-import { sha256Hex } from "@surfingdog/platform";
 import { z } from "zod";
 import { retryAfterMs } from "../http";
-import { constantTimeEqual, hmacSha256Hex } from "../pay-sign";
+import { hmacSha256Hex } from "../pay-sign";
+import { matchRooms } from "./match";
 
 /**
  * Mews (ADR-033 §8.4), through its Connector API: https://docs.mews.com/connector-api/.
@@ -55,19 +57,28 @@ import { constantTimeEqual, hmacSha256Hex } from "../pay-sign";
  * - **Found again by its note.** Mews takes no key of ours, so each reservation carries one line in its
  *   notes — the stay's reference, our key and a tag only this inbox can make — and `find` looks for it
  *   among the reservations the Connector API made in the last days (`serviceOrderNotes/getAll`).
- * - **A move** is `reservations/update`, whose documentation promises no overbooking check: the nights
- *   are read again at once, and a move that left one below none is put back and refused.
+ * - **A move** is `reservations/update`, whose documentation promises no overbooking check: the nights are
+ *   read first, counting what the stay holds already as its own, and a move onto a full night is refused
+ *   before anything is written; the nights are read again after it, and a move another booking raced past
+ *   is put back as it was (its dates, rooms, rate and people) and refused. A put-back Mews would not take
+ *   is said as such (`StayPutBackError`): Mews and the inbox then differ, and the owner is told. Each
+ *   reservation of the group is paired with one of the stay's rooms by its category and its people, never
+ *   by its place in Mews' answer.
+ * - **What the guest agreed** goes in the reservation's note with the stay's reference; Mews prices the
+ *   stay from its own rate, and its total (`orderItems/getAll`, gross) is read back after each write, so
+ *   the owner is told when the two differ.
  * - **Cancelled by status** (`reservations/cancel`, no fee posted, no email), never deleted.
  * - **The guest** goes to Mews only once the stay is confirmed: a customer is added (or found by email)
  *   and set on the reservation. Until then the reservation's customer is a placeholder named by the
  *   stay's reference. No card, no credit card id, no payment is ever sent.
  * - **Limits.** 200 requests per access token in a sliding 30 seconds; a 429 says when to try again
  *   (`Retry-After`), and the inbox waits that long.
- * - **Webhooks** are set up by Mews for the whole integration, with a shared secret in the address
- *   (https://docs.mews.com/connector-api/events/wh-general,
- *   https://docs.mews.com/connector-api/events/wh-faq): the secret is checked in constant time, the
- *   enterprise must be this connection's, and the body is only a hint — each reservation it names is read
- *   back with the property's token.
+ * - **Read by polling, no webhooks yet.** Mews sets up one General Webhooks address for a whole
+ *   integration (https://docs.mews.com/connector-api/events/wh-general,
+ *   https://docs.mews.com/connector-api/events/wh-faq), shared by every property connected to it, while
+ *   each connection here has its own address. Until a route for the whole integration hands each delivery
+ *   to the connection whose enterprise it names, Mews is read on the inbox's usual schedule, and live
+ *   before every stay is written.
  */
 
 export const MEWS_API = "https://api.mews.com";
@@ -79,8 +90,6 @@ export const MEWS_CLIENT = `Surfing Dog Inbox ${VERSION}`;
 export const MEWS_HOLD_RELEASE_MS = 60 * 60_000;
 /** A stay written while its deposit is due: released by Mews if the inbox never confirms it (est.). */
 export const MEWS_PROVISIONAL_RELEASE_MS = 72 * 3_600_000;
-/** The events the integration asks Mews for. */
-export const MEWS_EVENTS: readonly string[] = ["ServiceOrderUpdated"];
 /** How far back `find` looks for a reservation this inbox made: writes are looked for within minutes. */
 const FIND_WINDOW_MS = 3 * 86_400_000;
 const PAGE = 1000;
@@ -95,8 +104,6 @@ const DOCS = "https://surfingdog.ai/docs/connectors/mews/";
 export interface MewsPartner {
   /** The `ClientToken` Mews issues to a certified integration. */
   readonly clientToken: string;
-  /** The shared secret Mews puts in the webhook address (`?token=`), when one was agreed with Mews. */
-  readonly webhookToken?: string | undefined;
 }
 
 export const mewsForm = z.object({
@@ -462,25 +469,64 @@ export function mewsConnector(
     return null;
   }
 
+  /** The reservations of a group that hold their nights. */
+  async function liveOf(ctx: RunContext, group: string): Promise<Json[]> {
+    return (await reservationsOfGroup(ctx, group)).filter((r) => LIVE_STATES.has(str(r.State)));
+  }
+
+  /** What Mews says the group's reservations come to, gross: their order items, cancelled ones left out. */
+  async function totalOf(ctx: RunContext, reservationIds: readonly string[]): Promise<PayAmount | null> {
+    if (reservationIds.length === 0) return null;
+    try {
+      const items = await all(ctx, "orderItems/getAll", { ServiceOrderIds: [...reservationIds] }, "OrderItems");
+      let currency = "";
+      let sum = 0;
+      for (const item of items) {
+        if (str(item.AccountingState) === "Canceled" || item.CanceledUtc) continue;
+        const amount = (item.Amount ?? {}) as Json;
+        const cur = str(amount.Currency).toUpperCase();
+        const value = minor(amount.GrossValue, cur);
+        if (value === null || (currency && cur !== currency)) return null;
+        currency = cur;
+        sum += value;
+      }
+      return currency ? { value: sum, currency } : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** The note on each reservation: the stay's reference, what the guest agreed, and our tag. */
+  function noteOf(stay: OutboundStay, tag: string): string {
+    const first = stay.rooms[0]?.price;
+    const total = stay.rooms.reduce((a, r) => a + r.price.value, 0);
+    const agreed = first
+      ? ` · agreed with the guest: ${first.currency} ${decimalAmount({ value: total, currency: first.currency })}`
+      : "";
+    return `Inbox stay ${stay.reference}${agreed} · ${tag}`;
+  }
+
   const ready = (): true | string => (clientToken ? true : "Mews needs a partner token on this server");
 
   return {
     kind: "mews",
     title: "Mews",
     group: "lodging",
-    capabilities: ["stay_inventory", "write_stays", "stay_events"],
+    // No `stay_events`: read by polling until one route takes Mews' webhooks for every property.
+    capabilities: ["stay_inventory", "write_stays"],
     auth: "form",
     form: mewsForm,
     note: "Rooms, rates and what's free from Mews; each stay written to Mews before it is confirmed.",
     disconnectNote: "In Mews, the property can also switch this integration off in its Marketplace settings.",
     ready,
-    whenNotReady: {
-      status: "setup",
-      hint: opts.hosted
-        ? "Needs a Mews partner account, which this service does not have yet. Until then, use each room's calendar link."
-        : "Needs a Mews partner token on this server. Until then, use each room's calendar link.",
-      href: DOCS,
-    },
+    // Hosted, nothing for an owner to do: Soon. On one's own server, what its operator sets.
+    whenNotReady: opts.hosted
+      ? { status: "soon" }
+      : {
+          status: "setup",
+          hint: "Needs a Mews partner token on this server. Until then, you confirm each stay yourself.",
+          href: DOCS,
+        },
 
     async connect(ctx, input): Promise<Connected> {
       const token = (input.access_token ?? "").trim();
@@ -634,9 +680,20 @@ export function mewsConnector(
         const offsets = await offsetsOf(ctx, stay.propertyId);
         const when = span(stay.checkIn, stay.checkOut, zone, offsets);
         if (link?.externalId) return move(ctx, stay, link, status, when);
-        // Mews takes no key of ours: a stay already written under this key is the one answered.
+        // Mews takes no key of ours: a stay already written under this key is the one answered, while it
+        // holds its nights. One Mews let go or cancelled since holds no room: the stay was not written.
         const found = await find(ctx, stay);
-        if (found) return found;
+        if (found?.externalId) {
+          const live = await liveOf(ctx, found.externalId);
+          if (live.length === 0) {
+            throw new ConnectorError("refused", "Mews holds that stay as cancelled: it was not written again.");
+          }
+          const total = await totalOf(
+            ctx,
+            live.map((r) => str(r.Id)),
+          );
+          return { ...found, start: when.start, end: when.end, ...(total ? { total } : {}) };
+        }
         const people = await ageCategories(ctx, stay.propertyId);
         const customer = await customerFor(ctx, status === "confirmed" ? stay : { ...stay, guest: undefined });
         const tag = await noteTag(ctx, stay);
@@ -656,7 +713,7 @@ export function mewsConnector(
             RequestedCategoryId: room.roomId,
             ...(room.rateId ? { RateId: room.rateId } : {}),
             PersonCounts: people(room.adults, room.childrenAges),
-            Notes: `Inbox stay ${stay.reference} · ${tag}`,
+            Notes: noteOf(stay, tag),
           })),
         });
         const added = (Array.isArray(j.Reservations) ? (j.Reservations as Json[]) : [])
@@ -666,7 +723,18 @@ export function mewsConnector(
         if (!group || added.length !== stay.rooms.length) {
           throw new ConnectorError("bad_response", "Mews did not say which reservations it made.");
         }
-        return { externalId: group, etag: null, calendar: null, start: when.start, end: when.end };
+        const total = await totalOf(
+          ctx,
+          added.map((r) => str(r.Id)),
+        );
+        return {
+          externalId: group,
+          etag: null,
+          calendar: null,
+          start: when.start,
+          end: when.end,
+          ...(total ? { total } : {}),
+        };
       },
 
       async cancel(ctx, link) {
@@ -685,59 +753,6 @@ export function mewsConnector(
       // No `oversold`: Mews refuses a new stay on a night it has no room for (`CheckOverbooking`), and a
       // move, which it does not promise to check, is read again and put back inside `put` itself.
     },
-
-    hooks: {
-      topics: MEWS_EVENTS,
-      async verify(ctx, request) {
-        const expected = partner?.webhookToken ?? "";
-        const given = request.query.get("token") ?? "";
-        if (!expected || !constantTimeEqual(given, expected)) {
-          throw new ConnectorError("refused", "The webhook's secret does not check out.");
-        }
-        let body: Json;
-        try {
-          body = JSON.parse(request.body) as Json;
-        } catch {
-          throw new ConnectorError("refused", "The webhook is not JSON.");
-        }
-        const enterprise = str(ctx.extra.enterpriseId);
-        if (!enterprise || !constantTimeEqual(str(body.EnterpriseId), enterprise)) {
-          throw new ConnectorError("refused", "The webhook is about another property.");
-        }
-        const refs = (Array.isArray(body.Events) ? (body.Events as Json[]) : [])
-          .filter((e) => e.Discriminator === "ServiceOrderUpdated")
-          .map((e) => str((e.Value as Json | undefined)?.Id))
-          .filter((id) => /^[A-Za-z0-9-]{1,100}$/.test(id));
-        if (refs.length === 0) return null;
-        const digest = await sha256Hex(new TextEncoder().encode(request.body));
-        return {
-          eventId: `mews-${digest.slice(0, 40)}`,
-          topic: "ServiceOrderUpdated",
-          refs: [...new Set(refs)].slice(0, 100),
-        };
-      },
-      async read(ctx, event): Promise<HookFact[]> {
-        const zone = await zoneOf(ctx);
-        const found = await all(
-          ctx,
-          "reservations/getAll/2023-06-06",
-          { ReservationIds: event.refs.slice(0, PAGE), States: [...ALL_STATES] },
-          "Reservations",
-        );
-        const out: HookFact[] = [];
-        for (const r of found) {
-          const start = Date.parse(str(r.ScheduledStartUtc ?? r.StartUtc));
-          const end = Date.parse(str(r.ScheduledEndUtc ?? r.EndUtc));
-          if (!Number.isFinite(start) || !Number.isFinite(end)) continue;
-          const from = dateIn(start, zone);
-          const last = dateIn(end, zone);
-          const to = last > from ? last : addLocalDays(from, 1);
-          const room = str(r.RequestedResourceCategoryId ?? r.RequestedCategoryId);
-          out.push({ kind: "stay_nights", ...(room ? { roomIds: [room] } : {}), from, to });
-        }
-        return out;
-      },
-    },
   };
 
   /** A stay written already, moved to these nights and rooms, and confirmed when it is. */
@@ -749,31 +764,48 @@ export function mewsConnector(
     when: { start: number; end: number },
   ): Promise<LinkState> {
     const group = link.externalId ?? "";
-    const current = (await reservationsOfGroup(ctx, group)).filter((r) => LIVE_STATES.has(str(r.State)));
+    const current = await liveOf(ctx, group);
     if (current.length === 0) throw new ConnectorError("not_found", "That stay is not in Mews any more.");
     if (current.length !== stay.rooms.length) {
       throw new ConnectorError("refused", "The stay has another number of rooms in Mews: change it there.");
     }
     const people = await ageCategories(ctx, stay.propertyId);
-    const before = current.map((r) => ({
-      ReservationId: str(r.Id),
-      StartUtc: { Value: str(r.ScheduledStartUtc ?? r.StartUtc) },
-      EndUtc: { Value: str(r.ScheduledEndUtc ?? r.EndUtc) },
-      RequestedCategoryId: { Value: str(r.RequestedResourceCategoryId ?? r.RequestedCategoryId) },
-    }));
-    const changed = current.some(
-      (r, i) =>
-        Date.parse(str(r.ScheduledStartUtc ?? r.StartUtc)) !== when.start ||
-        Date.parse(str(r.ScheduledEndUtc ?? r.EndUtc)) !== when.end ||
-        str(r.RequestedResourceCategoryId ?? r.RequestedCategoryId) !== stay.rooms[i]?.roomId,
+    const category = (r: Json) => str(r.RequestedResourceCategoryId ?? r.RequestedCategoryId);
+    const counts = (list: unknown) =>
+      (Array.isArray(list) ? (list as Json[]) : [])
+        .filter((p) => Number(p.Count) > 0)
+        .map((p) => `${str(p.AgeCategoryId)}:${Number(p.Count)}`)
+        .sort()
+        .join(",");
+    // Each reservation of the group is one of the stay's rooms by its category and its people: Mews gives
+    // a group's reservations in no documented order.
+    const match = matchRooms(
+      current.map((r) => ({ type: category(r), people: counts(r.PersonCounts) })),
+      stay.rooms.map((room) => ({ type: room.roomId, people: counts(people(room.adults, room.childrenAges)) })),
     );
-    if (changed) {
+    const moved = current.some(
+      (r) =>
+        Date.parse(str(r.ScheduledStartUtc ?? r.StartUtc)) !== when.start ||
+        Date.parse(str(r.ScheduledEndUtc ?? r.EndUtc)) !== when.end,
+    );
+    if (moved || !match.same) {
+      // Read first: Mews documents no overbooking check on an update, so a full night is refused here,
+      // before Mews ever shows it oversold to its channels. What the stay holds already counts as its own.
+      await checkFree(ctx, stay, current);
+      const before = current.map((r) => ({
+        ReservationId: str(r.Id),
+        StartUtc: { Value: str(r.ScheduledStartUtc ?? r.StartUtc) },
+        EndUtc: { Value: str(r.ScheduledEndUtc ?? r.EndUtc) },
+        RequestedCategoryId: { Value: category(r) },
+        ...(str(r.RateId) ? { RateId: { Value: str(r.RateId) } } : {}),
+        ...(Array.isArray(r.PersonCounts) ? { PersonCounts: { Value: r.PersonCounts } } : {}),
+      }));
       await run(ctx, "reservations/update", {
         Reprice: true,
         ApplyCancellationFee: false,
         Reason: "Changed from the property's inbox",
         ReservationUpdates: current.map((r, i) => {
-          const room = stay.rooms[i];
+          const room = stay.rooms[match.pairs[i] ?? i];
           return {
             ReservationId: str(r.Id),
             StartUtc: { Value: iso(when.start) },
@@ -784,8 +816,8 @@ export function mewsConnector(
           };
         }),
       });
-      // Mews documents no overbooking check on an update: the nights are read again, and a move that
-      // left one below none is put back as it was, and refused.
+      // Read again: another booking may have raced past the check. A move that left a night below none
+      // is put back as it was, and refused.
       let over: boolean;
       try {
         over = await oversoldNights(ctx, stay);
@@ -793,12 +825,20 @@ export function mewsConnector(
         over = true;
       }
       if (over) {
-        await run(ctx, "reservations/update", {
-          Reprice: true,
-          ApplyCancellationFee: false,
-          Reason: "Put back by the property's inbox",
-          ReservationUpdates: before,
-        });
+        try {
+          await run(ctx, "reservations/update", {
+            Reprice: true,
+            ApplyCancellationFee: false,
+            Reason: "Put back by the property's inbox",
+            ReservationUpdates: before,
+          });
+        } catch (error) {
+          throw new StayPutBackError(
+            `Mews took the new nights, which another booking had taken, and did not take the old ones back${
+              error instanceof Error && error.message ? ` (${error.message.slice(0, 200)})` : ""
+            }.`,
+          );
+        }
         throw new ConnectorError("refused", "Mews has no room for those nights.");
       }
     }
@@ -815,6 +855,44 @@ export function mewsConnector(
         }
       }
     }
-    return { externalId: group, etag: null, calendar: null, start: when.start, end: when.end };
+    const total = await totalOf(
+      ctx,
+      current.map((r) => str(r.Id)),
+    );
+    return {
+      externalId: group,
+      etag: null,
+      calendar: null,
+      start: when.start,
+      end: when.end,
+      ...(total ? { total } : {}),
+    };
+  }
+
+  /** Whether each night of a stay has a unit for each of its rooms, counting what it holds already (`own`). */
+  async function checkFree(ctx: RunContext, stay: OutboundStay, own: readonly Json[]): Promise<void> {
+    const zone = await zoneOf(ctx);
+    const nights = daysBetween(stay.checkIn, stay.checkOut);
+    if (nights < 1) return;
+    const avail = await availability(ctx, stay.propertyId, zone, stay.checkIn, nights);
+    const wanted = new Map<string, number>();
+    for (const room of stay.rooms) wanted.set(room.roomId, (wanted.get(room.roomId) ?? 0) + 1);
+    for (const [room, count] of wanted) {
+      const byNight = avail.get(room);
+      if (!byNight) throw new ConnectorError("refused", "Mews did not say what is free for that room.");
+      for (let i = 0; i < nights; i++) {
+        const night = addLocalDays(stay.checkIn, i);
+        const held = own.filter((r) => {
+          if (str(r.RequestedResourceCategoryId ?? r.RequestedCategoryId) !== room) return false;
+          const from = dateIn(Date.parse(str(r.ScheduledStartUtc ?? r.StartUtc)), zone);
+          const to = dateIn(Date.parse(str(r.ScheduledEndUtc ?? r.EndUtc)), zone);
+          return night >= from && night < to;
+        }).length;
+        const left = byNight.get(night);
+        if (left === undefined || left + held < count) {
+          throw new ConnectorError("refused", "Mews has no room for those nights.");
+        }
+      }
+    }
   }
 }

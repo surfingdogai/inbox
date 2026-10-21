@@ -8,6 +8,7 @@ import {
   type ConnectorHttpResponse,
   dateIn,
   daysBetween,
+  decimalAmount,
   type ExternalProperty,
   type ExternalRate,
   type ExternalRoom,
@@ -18,7 +19,9 @@ import {
   minorUnits,
   type OAuthClient,
   type OutboundStay,
+  type PayAmount,
   type RunContext,
+  StayPutBackError,
   secretField,
 } from "@surfingdog/core";
 import { z } from "zod";
@@ -53,13 +56,20 @@ import { retryAfterMs } from "../http";
  *   sent: apaleo prices the stay from the rate plan. apaleo has no holding state, so a held stay is a
  *   confirmed reservation the inbox cancels when the hold ends.
  * - **Changed** with the amend action, which refuses a night it cannot sell; a stay of several rooms
- *   whose second room is refused has its first put back. **Cancelled** with the cancel action, never
- *   deleted. The guest is set as the primary guest only once the stay is confirmed.
+ *   whose second room is refused has its first put back, and a put-back apaleo would not take is said as
+ *   such (`StayPutBackError`): apaleo and the inbox then differ, and the owner is told. Rooms are paired
+ *   by their own `-N` code, counted as numbers. **Cancelled** with the cancel action, never deleted. The
+ *   guest is set as the primary guest only once the stay is confirmed. The comment carries the stay's
+ *   reference and what the guest agreed; apaleo's own total (`totalGrossAmount`) is read back after each
+ *   write, so the owner is told when the two differ.
  * - **Never** a payment account, a card, an authorization, or a commission: those endpoints and fields
  *   are not called or sent, and the permission to call them is never asked for.
  * - **Webhooks** (https://apaleo.dev/guides/webhook/webhooks-payload.html) carry no signature: the
  *   connection's own address is the secret, the account must be this connection's, and the reservation
- *   named is read back with the hotel's token. A health check is a ping.
+ *   named is read back with the hotel's token. The subscription is made once the connection is kept (its
+ *   first sync, `refresh`), never while connecting: apaleo sends a health check to the address as it
+ *   makes one, and enables it only when that is answered, so the health check is answered before
+ *   anything else is looked at.
  */
 
 export const APALEO_API = "https://api.apaleo.com";
@@ -361,10 +371,46 @@ export function apaleoConnector(client: OAuthClient | null | undefined, opts: Ap
     };
   }
 
+  /** A room's place in its stay, from its own code (`<key>-2`): a number, so `-10` comes after `-2`. */
+  function placeOf(code: string): number {
+    const m = /-(\d{1,2})$/.exec(code);
+    return m ? Number(m[1]) : 0;
+  }
+
   async function reservationsOf(ctx: RunContext, bookingId: string): Promise<Json[]> {
     const q = new URLSearchParams({ bookingId, pageSize: "100" });
     const { json } = await api(ctx, "GET", `/booking/v1/reservations?${q}`);
-    return list(json, "reservations").sort((a, b) => str(a.externalCode).localeCompare(str(b.externalCode)));
+    return list(json, "reservations").sort(
+      (a, b) =>
+        placeOf(str(a.externalCode)) - placeOf(str(b.externalCode)) ||
+        str(a.externalCode).localeCompare(str(b.externalCode)),
+    );
+  }
+
+  const live = (r: Json) => r.status === "Confirmed" || r.status === "InHouse";
+
+  /** What apaleo says the booking's live reservations come to, gross; null when it does not say. */
+  function totalOf(reservations: readonly Json[]): PayAmount | null {
+    let currency = "";
+    let sum = 0;
+    for (const r of reservations) {
+      const t = (r.totalGrossAmount ?? {}) as Json;
+      const cur = str(t.currency).toUpperCase();
+      const value = minor(t.amount, cur);
+      if (value === null || (currency && cur !== currency)) return null;
+      currency = cur;
+      sum += value;
+    }
+    return currency ? { value: sum, currency } : null;
+  }
+
+  /** The booking's comment: the stay's reference, and what the guest agreed. */
+  function commentOf(stay: OutboundStay): string {
+    const first = stay.rooms[0]?.price;
+    const total = stay.rooms.reduce((a, r) => a + r.price.value, 0);
+    return first
+      ? `Inbox stay ${stay.reference} · agreed with the guest: ${first.currency} ${decimalAmount({ value: total, currency: first.currency })}`
+      : `Inbox stay ${stay.reference}`;
   }
 
   async function account(ctx: RunContext): Promise<{ code: string; name: string }> {
@@ -396,32 +442,46 @@ export function apaleoConnector(client: OAuthClient | null | undefined, opts: Ap
     };
   }
 
-  /** Webhooks for reservations, at the connection's own address, once the address can be reached. */
-  async function subscribe(ctx: RunContext): Promise<string | null> {
-    if (!ctx.hookUrl || ctx.hooksLive === false) return null;
+  /** The subscription for reservations, at the connection's own address: its id. */
+  async function subscribe(ctx: RunContext, hookUrl: string): Promise<string> {
+    const { json } = await api(ctx, "POST", `${APALEO_WEBHOOK}/v1/subscriptions`, {
+      endpointUrl: hookUrl,
+      topics: [...APALEO_TOPICS],
+      propertyIds: [],
+    });
+    const id = str(json.id);
+    if (!id) throw new ConnectorError("bad_response", "apaleo did not say which subscription it made.");
+    return id;
+  }
+
+  async function unsubscribe(ctx: RunContext): Promise<void> {
+    const id = str(ctx.extra.subscriptionId);
+    if (!id) return;
     try {
-      const { json } = await api(ctx, "POST", `${APALEO_WEBHOOK}/v1/subscriptions`, {
-        endpointUrl: ctx.hookUrl,
-        topics: [...APALEO_TOPICS],
-        propertyIds: [],
-      });
-      return str(json.id) || null;
+      await api(ctx, "DELETE", `${APALEO_WEBHOOK}/v1/subscriptions/${encodeURIComponent(id)}`);
     } catch {
-      // Polling finds everything anyway; the next connect tries again.
-      return null;
+      // Best effort: the hotel can remove the app in apaleo.
     }
+  }
+
+  /** The subscription is made once the connection is kept (its first sync), and again when its address moved. */
+  const WEBHOOK_TRIES = 5;
+  function webhookDue(ctx: RunContext): boolean {
+    if (!ctx.hookUrl || ctx.hooksLive === false) return false;
+    if (ctx.extra.webhook === "added") return ctx.extra.hook_url !== ctx.hookUrl;
+    return Number(ctx.extra.webhook_tries ?? 0) < WEBHOOK_TRIES;
   }
 
   async function connected(ctx: ConnectContext, secret: Record<string, string>): Promise<Connected> {
     const saved = { secret };
     const run = firstRun(ctx, secret, saved);
     const who = await account(run);
-    const subscription = await subscribe({ ...run, secret: saved.secret });
     return {
       account: who.name,
       externalId: who.code,
       secret: saved.secret,
-      extra: { accountId: who.code, ...(subscription ? { subscriptionId: subscription } : {}) },
+      // The subscription waits for the connection to be kept: apaleo checks the address as it makes one.
+      extra: { accountId: who.code, webhook: "pending" },
       calendars: [],
       destinations: [],
       defaults: { busy: [], destination: null },
@@ -442,13 +502,14 @@ export function apaleoConnector(client: OAuthClient | null | undefined, opts: Ap
     consent:
       "apaleo will ask to let this inbox read your rooms, rates and availability, and make and change reservations.",
     ready,
-    whenNotReady: {
-      status: "setup",
-      hint: opts.hosted
-        ? "Needs an apaleo partner app, which this service does not have yet. Until then, use each room's calendar link."
-        : "Needs an apaleo connect client on this server. Until then, use each room's calendar link.",
-      href: DOCS,
-    },
+    // Hosted, nothing for an owner to do: Soon. On one's own server, what its operator sets.
+    whenNotReady: opts.hosted
+      ? { status: "soon" }
+      : {
+          status: "setup",
+          hint: "Needs an apaleo connect client on this server. Until then, you confirm each stay yourself.",
+          href: DOCS,
+        },
     presets: [
       {
         id: "own_client",
@@ -517,12 +578,31 @@ export function apaleoConnector(client: OAuthClient | null | undefined, opts: Ap
     },
 
     async disconnect(ctx) {
-      const id = str(ctx.extra.subscriptionId);
-      if (!id) return;
+      await unsubscribe(ctx);
+    },
+
+    stale: (ctx) => webhookDue(ctx),
+
+    /**
+     * The access still works and the account is still there; and the subscription, once the connection is
+     * kept and the inbox can be reached (a hosted inbox before it goes live cannot), made at its own
+     * address, or made again when that address moved. Polling finds everything meanwhile.
+     */
+    async refresh(ctx) {
+      const who = await account(ctx);
+      const base = { account: who.name, calendars: [], destinations: [] };
+      if (!webhookDue(ctx) || !ctx.hookUrl) return base;
+      if (ctx.extra.webhook === "added") await unsubscribe(ctx);
       try {
-        await api(ctx, "DELETE", `${APALEO_WEBHOOK}/v1/subscriptions/${encodeURIComponent(id)}`);
-      } catch {
-        // Best effort: the hotel can remove the app in apaleo.
+        const subscriptionId = await subscribe(ctx, ctx.hookUrl);
+        return { ...base, extra: { ...ctx.extra, webhook: "added", hook_url: ctx.hookUrl, subscriptionId } };
+      } catch (error) {
+        if (error instanceof ConnectorError && error.code === "auth") throw error;
+        const { subscriptionId: _gone, ...rest } = ctx.extra;
+        return {
+          ...base,
+          extra: { ...rest, webhook: "pending", webhook_tries: Number(ctx.extra.webhook_tries ?? 0) + 1 },
+        };
       }
     },
     disconnectNote: "In apaleo, the hotel can also remove this app under Apps → Connected apps.",
@@ -668,7 +748,7 @@ export function apaleoConnector(client: OAuthClient | null | undefined, opts: Ap
       async put(ctx, stay, link, status): Promise<LinkState> {
         if (link?.externalId) return move(ctx, stay, link, status);
         const guest = status === "confirmed" ? stay.guest : undefined;
-        const comment = `Inbox stay ${stay.reference}`;
+        const comment = commentOf(stay);
         // The same key with the same body is answered the same for 24 hours: a retry never books twice.
         const { json } = await api(
           ctx,
@@ -693,7 +773,20 @@ export function apaleoConnector(client: OAuthClient | null | undefined, opts: Ap
         if (!id || reservations.length !== stay.rooms.length) {
           throw new ConnectorError("bad_response", "apaleo did not say which reservations it made.");
         }
-        return { externalId: id, etag: null, calendar: null };
+        // The same key answers the same booking for a day, even one cancelled in apaleo since: that one
+        // holds no room, and the stay was not written. A list that does not show the booking yet says
+        // nothing either way: what apaleo answered stands.
+        let made: Json[] = [];
+        try {
+          made = await reservationsOf(ctx, id);
+        } catch {
+          made = [];
+        }
+        if (made.length > 0 && !made.some(live)) {
+          throw new ConnectorError("refused", "apaleo holds that stay as cancelled: it was not written again.");
+        }
+        const total = made.length > 0 ? totalOf(made.filter(live)) : null;
+        return { externalId: id, etag: null, calendar: null, ...(total ? { total } : {}) };
       },
 
       async cancel(ctx, link) {
@@ -732,13 +825,14 @@ export function apaleoConnector(client: OAuthClient | null | undefined, opts: Ap
         } catch {
           throw new ConnectorError("refused", "The webhook is not JSON.");
         }
+        const topic = str(body.topic);
+        // The health check apaleo sends as it makes the subscription (`system`, `healthcheck`): answered
+        // first, so the subscription is enabled. It carries nothing to read.
+        if (topic.toLowerCase() === "system") return null;
         const accountId = str(ctx.extra.accountId);
         if (!accountId || str(body.accountId) !== accountId) {
           throw new ConnectorError("refused", "The webhook is about another account.");
         }
-        const topic = str(body.topic);
-        // The health check apaleo sends when the subscription is made: answered, nothing to read.
-        if (topic.toLowerCase() === "system") return null;
         const entity = str((body.data as Json | undefined)?.entityId ?? body.entityId);
         const id = str(body.id);
         if (topic !== "Reservation" || !/^[A-Za-z0-9_-]{1,100}$/.test(entity) || !id) return null;
@@ -780,9 +874,7 @@ export function apaleoConnector(client: OAuthClient | null | undefined, opts: Ap
   /** A booking written already, moved to these nights and rooms, room by room; the guest set once confirmed. */
   async function move(ctx: RunContext, stay: OutboundStay, link: LinkState, status: string): Promise<LinkState> {
     const booking = link.externalId ?? "";
-    const current = (await reservationsOf(ctx, booking)).filter(
-      (r) => r.status === "Confirmed" || r.status === "InHouse",
-    );
+    const current = (await reservationsOf(ctx, booking)).filter(live);
     if (current.length === 0) throw new ConnectorError("not_found", "That stay is not in apaleo any more.");
     if (current.length !== stay.rooms.length) {
       throw new ConnectorError("refused", "The stay has another number of rooms in apaleo: change it there.");
@@ -819,12 +911,23 @@ export function apaleoConnector(client: OAuthClient | null | undefined, opts: Ap
         });
         done.push({ id: str(r.id), before });
       } catch (error) {
-        // A room refused: the rooms moved before it are put back, so the stay is as it was.
+        // A room refused: the rooms moved before it are put back, so the stay is as it was. One apaleo
+        // would not take back leaves apaleo and the inbox holding the stay differently: said as such.
+        let stuck = 0;
         for (const d of done.reverse()) {
-          await api(ctx, "PUT", `/booking/v1/reservation-actions/${encodeURIComponent(d.id)}/amend`, {
-            ...d.before,
-            requote: true,
-          }).catch(() => undefined);
+          try {
+            await api(ctx, "PUT", `/booking/v1/reservation-actions/${encodeURIComponent(d.id)}/amend`, {
+              ...d.before,
+              requote: true,
+            });
+          } catch {
+            stuck++;
+          }
+        }
+        if (stuck > 0) {
+          throw new StayPutBackError(
+            `apaleo refused one room's new nights and did not take ${stuck === 1 ? "another room" : `${stuck} rooms`} back to the old ones.`,
+          );
         }
         throw error;
       }
@@ -836,6 +939,12 @@ export function apaleoConnector(client: OAuthClient | null | undefined, opts: Ap
         ]);
       }
     }
-    return { externalId: booking, etag: null, calendar: null };
+    let total: PayAmount | null = null;
+    try {
+      total = totalOf((await reservationsOf(ctx, booking)).filter(live));
+    } catch {
+      total = null;
+    }
+    return { externalId: booking, etag: null, calendar: null, ...(total ? { total } : {}) };
   }
 }

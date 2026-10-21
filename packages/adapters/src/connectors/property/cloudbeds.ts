@@ -8,6 +8,7 @@ import {
   type ConnectorHttpResponse,
   dateIn,
   daysBetween,
+  decimalAmount,
   type ExternalProperty,
   type ExternalRate,
   type ExternalRoom,
@@ -17,6 +18,7 @@ import {
   minorUnits,
   type OAuthClient,
   type OutboundStay,
+  type PayAmount,
   type RunContext,
   type StayWriteStatus,
   secretField,
@@ -25,13 +27,15 @@ import { sha256Hex } from "@surfingdog/platform";
 import { z } from "zod";
 import { retryAfterMs } from "../http";
 import { constantTimeEqual } from "../pay-sign";
+import { matchRooms } from "./match";
 
 /**
  * Cloudbeds (ADR-033 §8.4), built from its developer documentation (https://developers.cloudbeds.com/):
  * the partner guides (getting started in 5 steps, API keys for technology partners, the property-level
  * quickstart, the alternative OAuth method, user authorization flows, webhooks) and the API reference of
- * `getHotels`, `getHotelDetails`, `getRoomTypes`, `getRooms`, `getRatePlans`, `getReservations`,
- * `getReservation`, `postReservation`, `putReservation` and `postWebhook` (v1.3).
+ * `getHotels`, `getHotelDetails`, `getRoomTypes`, `getRooms`, `getRatePlans`, `getTaxesAndFees`,
+ * `getReservations`, `getReservation`, `postReservation`, `putReservation`, `postReservationNote`,
+ * `putGuest` and `postWebhook` (v1.3).
  *
  * **Switched off until Cloudbeds approves a partner app.** Cloudbeds asks for an evaluation by its
  * Partnerships team before development and certification, and recommends delivering a property's API key
@@ -42,18 +46,31 @@ import { constantTimeEqual } from "../pay-sign";
  * switch and off until Cloudbeds' partner team answers.
  *
  * What it does:
- * - **Rooms** are a property's room types, counted by their rooms; **rates** are their rate plans without a
- *   promo code. **What is free** and the price of each night come from `getRatePlans` with its per-day
- *   detail (`roomsAvailable`, `rateBase`, the arrival and departure closures, the least and most nights).
+ * - **Rooms** are a property's room types, shared ones (a hostel's dorm beds) too, counted by their rooms;
+ *   **rates** are their rate plans without a promo code. **What is free** and the price of each night
+ *   come from `getRatePlans` with its per-day detail (`roomsAvailable`, `rateBase`, the arrival and
+ *   departure closures, the least and most nights), `includeSharedRooms` on.
+ * - **Prices before tax are no quote.** `getRatePlans` says its rates are "base rates and additional costs
+ *   from extra guests": a property's own taxes and fees come on top. A property with an exclusive tax or
+ *   fee on its rates (`getTaxesAndFees`) has its nights read without prices, so the inbox never quotes a
+ *   guest less than the folio; the owner prices those stays. After each write, the reservation's own
+ *   total (`balanceDetailed.grandTotal`) is read back, and the owner is told when it differs from what the
+ *   guest agreed.
  * - **Written first, checked before and after** (`check_then_write`). Cloudbeds documents no refusal of a
  *   full night on `postReservation`, so the nights are read live just before the write, and refused here
  *   when they are full; after the write, the inbox counts the reservations against the rooms on each night
- *   (`oversold`), and takes its own back if another channel took the last room in between.
+ *   (`oversold`): every page of `getReservations` with each one's rooms (`includeAllRooms`), its own among
+ *   them or it cannot tell, and takes its own back if another channel took the last room in between.
  * - **Our key** goes as the reservation's `thirdPartyIdentifier`, and `find` looks for it among the
- *   reservations made in the last days. Cloudbeds sends no email of its own (`sendEmailConfirmation`
+ *   reservations made in the last days; one found again is the stay written only while it is live. Cloudbeds sends no email of its own (`sendEmailConfirmation`
  *   false). The payment method is `cash` — what the property is paid outside Cloudbeds — never `credit`,
- *   and never a card token or an authorization code.
- * - **Moved** with `putReservation` and its rooms, after the same live check; **cancelled** by status
+ *   and never a card token or an authorization code. A note on the reservation (`postReservationNote`)
+ *   carries the stay's reference and the total the guest agreed.
+ * - **The guest.** A stay written before it is paid holds only its reference as the guest's name; once it
+ *   is confirmed, the guest's name, email and phone are set on the reservation's main guest (`putGuest`),
+ *   so the desk has them at check-in.
+ * - **Moved** with `putReservation` and its rooms, after the same live check, each room the property holds
+ *   paired with the stay's by its type and its people, never by position; **cancelled** by status
  *   (`canceled`), never deleted. No price is sent: Cloudbeds prices it from the rate.
  * - **Webhooks** carry no signature of Cloudbeds' own, but `postWebhook` sends a header of ours with every
  *   delivery (`authHeaderName`, `authHeaderValue`): a secret made for the connection, sealed, compared in
@@ -79,17 +96,21 @@ export const CLOUDBEDS_SCOPES: readonly string[] = [
   "read:hotel",
   "read:room",
   "read:rate",
+  "read:taxesAndFees",
   "read:reservation",
   "write:reservation",
+  "write:guest",
 ];
 /** How far back `find` looks for a reservation this inbox made. */
 const FIND_DAYS = 3;
 /** Nights read in one call. */
 const MAX_NIGHTS = 90;
-/** Overlapping reservations counted at most, after a write; more, and the inbox promises nothing. */
-const MAX_OVERLAP = 60;
+/** Pages of 100 reservations read at most for one count; more, and the inbox promises nothing. */
+const MAX_PAGES = 50;
 const PAGE = 100;
 const LIVE = new Set(["confirmed", "not_confirmed", "checked_in"]);
+/** A room of a live reservation that holds its nights no longer. */
+const ROOM_GONE = new Set(["cancelled", "checked_out"]);
 const DOCS = "https://surfingdog.ai/docs/connectors/cloudbeds/";
 
 export const cloudbedsKeyForm = z.object({
@@ -291,9 +312,23 @@ export function cloudbedsConnector(
         endDate: to,
         detailedRates: "true",
         includePromoCode: "false",
+        includeSharedRooms: "true",
         ...extra,
       }),
     ).filter((r) => !str(r.promoCode));
+  }
+
+  /**
+   * Whether a rate's price is what a guest pays: false when the property adds a tax or a fee of its own on
+   * top of its rates (exclusive), which `getRatePlans` leaves out. Then no price is read at all.
+   */
+  async function pricesAreWhole(ctx: RunContext, propertyId: string): Promise<boolean> {
+    const items = data(await read(ctx, "getTaxesAndFees", { propertyID: propertyId }));
+    return !items.some((t) => {
+      if (t.isDeleted === true) return false;
+      const on = Array.isArray(t.availableFor) ? (t.availableFor as unknown[]).map(str) : ["rate"];
+      return str(t.inclusiveOrExclusive) !== "inclusive" && on.includes("rate");
+    });
   }
 
   /** Rooms free for each room type on each night, the least any of its rates says. */
@@ -350,6 +385,10 @@ export function cloudbedsConnector(
       adults: number;
       children: number;
     }[];
+    /** The reservation's main guest, as Cloudbeds holds them. */
+    readonly guest: { id: string; firstName: string; lastName: string; email: string; phone: string } | null;
+    /** Its own total, taxes and fees in (`balanceDetailed.grandTotal`, else `total`), in Cloudbeds' decimals. */
+    readonly total: number | null;
   }
 
   async function reservation(ctx: RunContext, propertyId: string, id: string): Promise<Booked> {
@@ -369,7 +408,35 @@ export function cloudbedsConnector(
       adults: Number(r.adults ?? 0),
       children: Number(r.children ?? 0),
     }));
-    return { id: str(d.reservationID) || id, status: str(d.status), rooms };
+    const guests = Object.values(
+      d.guestList && typeof d.guestList === "object" ? (d.guestList as Record<string, Json>) : {},
+    );
+    const main = guests.find((g) => g.isMainGuest === true) ?? guests[0];
+    const detailed = (Array.isArray(d.balanceDetailed) ? d.balanceDetailed[0] : d.balanceDetailed) as Json | undefined;
+    const total = Number(detailed?.grandTotal ?? d.total);
+    return {
+      id: str(d.reservationID) || id,
+      status: str(d.status),
+      rooms,
+      guest: main
+        ? {
+            id: str(main.guestID),
+            firstName: str(main.guestFirstName),
+            lastName: str(main.guestLastName),
+            email: str(main.guestEmail),
+            phone: str(main.guestPhone),
+          }
+        : null,
+      total: (detailed?.grandTotal ?? d.total) !== undefined && Number.isFinite(total) && total >= 0 ? total : null,
+    };
+  }
+
+  /** A reservation's own total as the inbox counts money, in the property's currency; null when it gives none. */
+  async function totalOf(ctx: RunContext, booked: Booked, propertyId: string): Promise<PayAmount | null> {
+    if (booked.total === null) return null;
+    const currency = (await properties(ctx)).find((p) => p.id === propertyId)?.currency ?? "";
+    const value = currency ? minor(booked.total, currency) : null;
+    return value === null ? null : { value, currency };
   }
 
   /** Reservations made in the last days, a page at a time: what `find` looks through. */
@@ -392,35 +459,51 @@ export function cloudbedsConnector(
     return out;
   }
 
-  /** The system's own count of bookings against its rooms, night by night: true when one night has more. */
-  async function oversoldNights(ctx: RunContext, stay: OutboundStay): Promise<boolean> {
+  /**
+   * The system's own count of bookings against its rooms, night by night: true when one night has more.
+   * Every page of the reservations on those nights is read, each with its rooms (`includeAllRooms`), so a
+   * page full of cancelled ones never hides a live one; past `MAX_PAGES` it cannot tell, and throws. The
+   * reservation just written (`link`) must be among them: a list that has not caught up yet says nothing.
+   */
+  async function oversoldNights(ctx: RunContext, stay: OutboundStay, link: LinkState): Promise<boolean> {
     const units = await roomCounts(ctx, stay.propertyId);
-    const j = await read(ctx, "getReservations", {
-      propertyID: stay.propertyId,
-      checkInTo: addLocalDays(stay.checkOut, -1),
-      checkOutFrom: addLocalDays(stay.checkIn, 1),
-      pageSize: PAGE,
-    });
-    const overlapping = data(j).filter((r) => LIVE.has(str(r.status)));
-    if (overlapping.length >= MAX_OVERLAP) {
-      throw new ConnectorError("unreachable", "Too many reservations on those nights to count them.");
-    }
     const nights = daysBetween(stay.checkIn, stay.checkOut);
     const types = new Set(stay.rooms.map((r) => r.roomId));
     const count = new Map<string, number>();
-    for (const r of overlapping) {
-      const booked = await reservation(ctx, stay.propertyId, str(r.reservationID));
-      if (!LIVE.has(booked.status)) continue;
-      for (const room of booked.rooms) {
-        if (!types.has(room.roomTypeID)) continue;
-        for (let i = 0; i < nights; i++) {
-          const night = addLocalDays(stay.checkIn, i);
-          if (night >= room.startDate && night < room.endDate) {
-            count.set(`${room.roomTypeID}|${night}`, (count.get(`${room.roomTypeID}|${night}`) ?? 0) + 1);
+    let ours = false;
+    for (let page = 1; ; page++) {
+      if (page > MAX_PAGES) {
+        throw new ConnectorError("unreachable", "Too many reservations on those nights to count them.");
+      }
+      const j = await read(ctx, "getReservations", {
+        propertyID: stay.propertyId,
+        checkInTo: addLocalDays(stay.checkOut, -1),
+        checkOutFrom: addLocalDays(stay.checkIn, 1),
+        includeAllRooms: "true",
+        pageNumber: page,
+        pageSize: PAGE,
+      });
+      const rows = data(j);
+      for (const r of rows) {
+        if (!LIVE.has(str(r.status))) continue;
+        if (!Array.isArray(r.rooms)) {
+          throw new ConnectorError("bad_response", "Cloudbeds did not list a reservation's rooms.");
+        }
+        if (link.externalId && str(r.reservationID) === link.externalId) ours = true;
+        for (const room of r.rooms as Json[]) {
+          const type = str(room.roomTypeID);
+          if (!types.has(type) || ROOM_GONE.has(str(room.roomStatus))) continue;
+          const from = str(room.roomCheckIn) || str(r.startDate);
+          const to = str(room.roomCheckOut) || str(r.endDate);
+          for (let i = 0; i < nights; i++) {
+            const night = addLocalDays(stay.checkIn, i);
+            if (night >= from && night < to) count.set(`${type}|${night}`, (count.get(`${type}|${night}`) ?? 0) + 1);
           }
         }
       }
+      if (rows.length < PAGE) break;
     }
+    if (!ours) throw new ConnectorError("unreachable", "Cloudbeds does not list the reservation just written yet.");
     for (const [key, n] of count) {
       if (n > (units.get(key.split("|")[0] ?? "") ?? 0)) return true;
     }
@@ -435,6 +518,48 @@ export function cloudbedsConnector(
 
   function people(room: OutboundStay["rooms"][number]): { adults: number; children: number } {
     return { adults: room.adults, children: room.childrenAges.length };
+  }
+
+  /** The line the desk reads on the reservation: the stay's reference, and what the guest agreed. */
+  function noteOf(stay: OutboundStay): string {
+    const first = stay.rooms[0]?.price;
+    const total = stay.rooms.reduce((a, r) => a + r.price.value, 0);
+    return first
+      ? `Inbox stay ${stay.reference} · agreed with the guest: ${first.currency} ${decimalAmount({ value: total, currency: first.currency })}`
+      : `Inbox stay ${stay.reference}`;
+  }
+
+  /** The guest's name, email and phone on the reservation's main guest, once the stay is confirmed. */
+  async function nameGuest(ctx: RunContext, stay: OutboundStay, booked: Booked): Promise<void> {
+    const guest = stay.guest;
+    if (!guest || !booked.guest?.id) return;
+    const names = guest.name.trim().split(/\s+/).filter(Boolean);
+    const last = names.length > 1 ? (names.pop() ?? "") : (names[0] ?? "");
+    const first = names.join(" ") || last;
+    const same =
+      booked.guest.firstName === first &&
+      booked.guest.lastName === last &&
+      (!guest.email || booked.guest.email === guest.email) &&
+      (!guest.phone || booked.guest.phone === guest.phone);
+    if (same) return;
+    await write(ctx, "PUT", "putGuest", {
+      propertyID: stay.propertyId,
+      guestID: booked.guest.id,
+      guestFirstName: first,
+      guestLastName: last,
+      ...(guest.email ? { guestEmail: guest.email } : {}),
+      ...(guest.phone ? { guestPhone: guest.phone } : {}),
+    });
+  }
+
+  /** The reservation's own total, read back after a write; nothing when Cloudbeds would not say. */
+  async function totalAfter(ctx: RunContext, stay: OutboundStay, id: string): Promise<{ total?: PayAmount }> {
+    try {
+      const total = await totalOf(ctx, await reservation(ctx, stay.propertyId, id), stay.propertyId);
+      return total ? { total } : {};
+    } catch {
+      return {};
+    }
   }
 
   async function setStatus(
@@ -458,25 +583,40 @@ export function cloudbedsConnector(
     });
   }
 
-  async function subscribe(ctx: RunContext): Promise<string[]> {
-    if (!ctx.hookUrl || ctx.hooksLive === false || !ctx.secret.hook_secret) return [];
+  /** The webhooks for a connection's own address, each with our header: their ids, or none at all. */
+  async function subscribe(ctx: RunContext, hookUrl: string): Promise<string[]> {
     const ids: string[] = [];
     for (const [object, action] of CLOUDBEDS_EVENTS) {
-      try {
-        const j = await write(ctx, "POST", "postWebhook", {
-          object,
-          action,
-          endpointUrl: ctx.hookUrl,
-          authHeaderName: CLOUDBEDS_HOOK_HEADER,
-          authHeaderValue: ctx.secret.hook_secret,
-        });
-        const id = str((j.data as Json | undefined)?.subscriptionID);
-        if (id) ids.push(id);
-      } catch {
-        // Polling finds everything anyway; the next connect tries again.
-      }
+      const j = await write(ctx, "POST", "postWebhook", {
+        object,
+        action,
+        endpointUrl: hookUrl,
+        authHeaderName: CLOUDBEDS_HOOK_HEADER,
+        authHeaderValue: ctx.secret.hook_secret ?? "",
+      });
+      const id = str((j.data as Json | undefined)?.subscriptionID);
+      if (id) ids.push(id);
     }
     return ids;
+  }
+
+  async function unsubscribe(ctx: RunContext): Promise<void> {
+    const ids = Array.isArray(ctx.extra.subscriptions) ? (ctx.extra.subscriptions as unknown[]).map(str) : [];
+    for (const id of ids) {
+      try {
+        await run(ctx, "DELETE", "deleteWebhook", { subscriptionID: id });
+      } catch {
+        // Best effort: the property can remove the app in Cloudbeds.
+      }
+    }
+  }
+
+  /** Webhooks are made once the connection is kept (its first sync), and made again when its address moved. */
+  const WEBHOOK_TRIES = 5;
+  function webhookDue(ctx: RunContext): boolean {
+    if (!ctx.hookUrl || ctx.hooksLive === false || !ctx.secret.hook_secret) return false;
+    if (ctx.extra.webhook === "added") return ctx.extra.hook_url !== ctx.hookUrl;
+    return Number(ctx.extra.webhook_tries ?? 0) < WEBHOOK_TRIES;
   }
 
   async function connected(ctx: ConnectContext, apiKey: string): Promise<Connected> {
@@ -497,15 +637,12 @@ export function cloudbedsConnector(
     const first = list[0];
     if (!first) throw new ConnectorError("bad_response", "Cloudbeds shows no property for this key.");
     const org = str(first.organizationID);
-    const subscriptions = await subscribe(runCtx);
     return {
       account: list.length > 1 ? `${str(first.propertyName)} and ${list.length - 1} more` : str(first.propertyName),
       externalId: org ? `org:${org}` : `property:${str(first.propertyID)}`,
       secret,
-      extra: {
-        propertyIds: list.map((h) => str(h.propertyID)),
-        ...(subscriptions.length > 0 ? { subscriptions } : {}),
-      },
+      // The webhooks wait for the connection to be kept: its first sync makes them (`refresh`).
+      extra: { propertyIds: list.map((h) => str(h.propertyID)), webhook: "pending" },
       calendars: [],
       destinations: [],
       defaults: { busy: [], destination: null },
@@ -524,15 +661,16 @@ export function cloudbedsConnector(
     form: cloudbedsKeyForm,
     note: "Rooms, rates and what's free from Cloudbeds; each stay written to Cloudbeds before it is confirmed.",
     consent:
-      "Cloudbeds will ask to let this inbox read your rooms, rates and reservations, and make and change reservations.",
+      "Cloudbeds will ask to let this inbox read your rooms, rates, taxes and reservations, and make and change reservations and their guests.",
     ready,
-    whenNotReady: {
-      status: "setup",
-      hint: opts.hosted
-        ? "Needs a Cloudbeds partner app, which this service does not have yet. Until then, use each room's calendar link."
-        : "Needs a Cloudbeds partner app on this server. Until then, use each room's calendar link.",
-      href: DOCS,
-    },
+    // Hosted, nothing for an owner to do: Soon. On one's own server, what its operator sets.
+    whenNotReady: opts.hosted
+      ? { status: "soon" }
+      : {
+          status: "setup",
+          hint: "Needs a Cloudbeds partner app on this server. Until then, you confirm each stay yourself.",
+          href: DOCS,
+        },
     presets: [
       {
         id: "property_key",
@@ -603,13 +741,33 @@ export function cloudbedsConnector(
     },
 
     async disconnect(ctx) {
-      const ids = Array.isArray(ctx.extra.subscriptions) ? (ctx.extra.subscriptions as unknown[]).map(str) : [];
-      for (const id of ids) {
-        try {
-          await run(ctx, "DELETE", "deleteWebhook", { subscriptionID: id });
-        } catch {
-          // Best effort: the property can remove the app in Cloudbeds.
-        }
+      await unsubscribe(ctx);
+    },
+
+    stale: (ctx) => webhookDue(ctx),
+
+    /**
+     * The key still works and the property is still there; and the webhooks, once the connection is kept
+     * and the inbox can be reached (a hosted inbox before it goes live cannot), made at its own address,
+     * or made again when that address moved. Polling finds everything meanwhile.
+     */
+    async refresh(ctx) {
+      const list = await hotels(ctx);
+      const first = list[0];
+      if (!first) throw new ConnectorError("config", "Cloudbeds shows no property for this key any more.");
+      const account =
+        list.length > 1 ? `${str(first.propertyName)} and ${list.length - 1} more` : str(first.propertyName);
+      const base = { account, calendars: [], destinations: [] };
+      if (!webhookDue(ctx) || !ctx.hookUrl) return base;
+      if (ctx.extra.webhook === "added") await unsubscribe(ctx);
+      try {
+        const subscriptions = await subscribe(ctx, ctx.hookUrl);
+        return { ...base, extra: { ...ctx.extra, webhook: "added", hook_url: ctx.hookUrl, subscriptions } };
+      } catch (error) {
+        if (error instanceof ConnectorError && error.code === "auth") throw error;
+        const tries = Number(ctx.extra.webhook_tries ?? 0) + 1;
+        const { subscriptions: _gone, ...rest } = ctx.extra;
+        return { ...base, extra: { ...rest, webhook: "pending", webhook_tries: tries } };
       }
     },
 
@@ -651,6 +809,8 @@ export function cloudbedsConnector(
         const count = Math.min(total, MAX_NIGHTS);
         const to = addLocalDays(window.from, count);
         const currency = (await properties(ctx)).find((p) => p.id === propertyId)?.currency ?? "";
+        // A rate before the property's own taxes and fees is no price to quote: the nights come without.
+        const whole = await pricesAreWhole(ctx, propertyId);
         interface Row {
           roomId: string;
           night: string;
@@ -693,7 +853,7 @@ export function cloudbedsConnector(
             if (d.closedToDeparture === true) row.noDeparture++;
             if (typeof d.minLos === "number" && d.minLos > 0) row.minStay = Math.min(row.minStay ?? d.minLos, d.minLos);
             if (typeof d.maxLos === "number" && d.maxLos > 0) row.maxStay = Math.max(row.maxStay ?? d.maxLos, d.maxLos);
-            const amount = minor(d.rateBase, currency);
+            const amount = whole ? minor(d.rateBase, currency) : null;
             if (amount !== null) row.prices[str(r.rateID)] = amount;
           }
         }
@@ -713,6 +873,7 @@ export function cloudbedsConnector(
 
       async price(ctx, q) {
         if (!q.rateId) return null;
+        if (!(await pricesAreWhole(ctx, q.propertyId))) return null;
         const currency = (await properties(ctx)).find((p) => p.id === q.propertyId)?.currency ?? "";
         const found = (
           await rates(ctx, q.propertyId, q.checkIn, q.checkOut, {
@@ -736,25 +897,21 @@ export function cloudbedsConnector(
           if (booked.rooms.length !== stay.rooms.length) {
             throw new ConnectorError("refused", "The stay has another number of rooms in Cloudbeds: change it there.");
           }
-          const changed = booked.rooms.some((r, i) => {
-            const room = stay.rooms[i];
-            return (
-              !room ||
-              r.roomTypeID !== room.roomId ||
-              r.startDate !== stay.checkIn ||
-              r.endDate !== stay.checkOut ||
-              r.adults !== room.adults ||
-              r.children !== room.childrenAges.length
-            );
-          });
-          if (changed) {
+          // Each room Cloudbeds holds is one of the stay's by its type and its people, never by its place
+          // in the list: Cloudbeds lists the assigned rooms first.
+          const match = matchRooms(
+            booked.rooms.map((r) => ({ type: r.roomTypeID, people: `${r.adults}+${r.children}` })),
+            stay.rooms.map((r) => ({ type: r.roomId, people: `${r.adults}+${r.childrenAges.length}` })),
+          );
+          const moved = booked.rooms.some((r) => r.startDate !== stay.checkIn || r.endDate !== stay.checkOut);
+          if (moved || !match.same) {
             // The same live check as a new stay, counting the nights this stay holds already as its own.
             await checkFree(ctx, stay, booked.rooms);
             await write(ctx, "PUT", "putReservation", {
               propertyID: stay.propertyId,
               reservationID: link.externalId,
               rooms: booked.rooms.map((r, i) => {
-                const room = stay.rooms[i] as OutboundStay["rooms"][number];
+                const room = stay.rooms[match.pairs[i] ?? i] as OutboundStay["rooms"][number];
                 return {
                   subReservationID: r.subReservationID,
                   roomTypeID: room.roomId,
@@ -767,11 +924,19 @@ export function cloudbedsConnector(
             });
           }
           await setStatus(ctx, stay, link.externalId, booked.status, status);
-          return link;
+          if (status === "confirmed") await nameGuest(ctx, stay, booked);
+          return { ...link, ...(await totalAfter(ctx, stay, link.externalId)) };
         }
-        // Cloudbeds takes no key of ours: a stay already written under this key is the one answered.
+        // Cloudbeds takes no key of ours: a stay already written under this key is the one answered, while
+        // it is live. One cancelled in Cloudbeds since holds no room: the stay was not written.
         const found = await find(ctx, stay);
-        if (found) return found;
+        if (found?.externalId) {
+          const booked = await reservation(ctx, stay.propertyId, found.externalId);
+          if (!LIVE.has(booked.status)) {
+            throw new ConnectorError("refused", "Cloudbeds holds that stay as cancelled: it was not written again.");
+          }
+          return { ...found, ...(await totalAfter(ctx, stay, found.externalId)) };
+        }
         await checkFree(ctx, stay);
         const guest = status === "confirmed" ? stay.guest : undefined;
         const names = (guest?.name ?? "").trim().split(/\s+/).filter(Boolean);
@@ -798,8 +963,24 @@ export function cloudbedsConnector(
         });
         const id = str(j.reservationID ?? (j.data as Json | undefined)?.reservationID);
         if (!id) throw new ConnectorError("bad_response", "Cloudbeds did not say which reservation it made.");
-        await setStatus(ctx, stay, id, str(j.status), status, true);
-        return { externalId: id, etag: null, calendar: null };
+        // Written: from here on nothing is refused, or the inbox would tell the guest no while Cloudbeds
+        // holds the room. A status or a note Cloudbeds did not take leaves the reservation as it made it,
+        // holding the room; the next write for the stay (paid, or let go) puts the status right.
+        try {
+          await setStatus(ctx, stay, id, str(j.status), status, true);
+        } catch {
+          // As above.
+        }
+        try {
+          await write(ctx, "POST", "postReservationNote", {
+            propertyID: stay.propertyId,
+            reservationID: id,
+            reservationNote: noteOf(stay),
+          });
+        } catch {
+          // A note is for the desk: the stay stands without it.
+        }
+        return { externalId: id, etag: null, calendar: null, ...(await totalAfter(ctx, stay, id)) };
       },
 
       async cancel(ctx, link) {
@@ -821,8 +1002,8 @@ export function cloudbedsConnector(
 
       find,
 
-      async oversold(ctx, stay) {
-        return oversoldNights(ctx, stay);
+      async oversold(ctx, stay, link) {
+        return oversoldNights(ctx, stay, link);
       },
     },
 
