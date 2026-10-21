@@ -43,7 +43,7 @@ export const DOWNLOAD_TABLES: Readonly<Record<string, DownloadTable>> = {
       "UPDATE settings SET doc = json_remove(doc, '$.email.inboundSecret', '$.notifications.appUrl', '$.directory.resume')",
       // What a host's hold would bring back (`resume`) means nothing where no host holds it: the copy's
       // networks are the owner's to switch from the start.
-      `UPDATE settings SET doc = json_set(doc, '$.networks', (SELECT json_group_object(key, json(json_remove(value, '$.resume'))) FROM json_each(doc, '$.networks'))) WHERE json_type(doc, '$.networks') = 'object'`,
+      `UPDATE settings SET doc = json_set(doc, '$.networks', json((SELECT json_group_object(key, json(json_remove(value, '$.resume'))) FROM json_each(doc, '$.networks')))) WHERE json_type(doc, '$.networks') = 'object'`,
     ],
   },
   locations: {},
