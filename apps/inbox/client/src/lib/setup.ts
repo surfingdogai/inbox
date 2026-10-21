@@ -112,6 +112,8 @@ export interface SetupKind {
   readonly doors: WizardDoors;
   /** The integration groups its businesses run their days in, shown first when connecting. */
   readonly connect: readonly ConnectorGroup[];
+  /** Settings the kind starts with, merged when the owner says what agents can do (a kitchen's). */
+  readonly settings?: Readonly<Record<string, unknown>> | undefined;
 }
 
 export const KINDS: readonly SetupKind[] = [
@@ -138,6 +140,33 @@ export const KINDS: readonly SetupKind[] = [
     preset: "projects",
     doors: { booking: false, quoteRequest: true, message: true },
     connect: ["work", "calendars"],
+  },
+  {
+    key: "food",
+    label: "Restaurant or takeaway",
+    line: "Orders to collect or have delivered, and tables.",
+    preset: "food",
+    doors: { booking: true, quoteRequest: true, message: true },
+    connect: ["pos", "payments"],
+    settings: { kitchen: { enabled: true, methods: { pickup: true, delivery: false, dineIn: false } } },
+  },
+  {
+    key: "bakery",
+    label: "A bakery",
+    line: "Bread and cakes ordered ahead, cakes made to order.",
+    preset: "bakery",
+    doors: { booking: false, quoteRequest: true, message: true },
+    connect: ["pos", "payments"],
+    settings: { kitchen: { enabled: true, prepMin: 60, slotMin: 30, daysAhead: 14 } },
+  },
+  {
+    key: "cafe",
+    label: "A café",
+    line: "Coffee and food ordered ahead, ready when they arrive.",
+    preset: "cafe",
+    doors: { booking: false, quoteRequest: false, message: true },
+    connect: ["pos", "payments"],
+    settings: { kitchen: { enabled: true, prepMin: 10, slotMin: 10, daysAhead: 1 } },
   },
   {
     key: "shop",

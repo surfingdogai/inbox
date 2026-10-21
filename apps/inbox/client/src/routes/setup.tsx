@@ -246,7 +246,7 @@ function SetupWizard() {
         if (doc) await saveSettings.mutateAsync({ doc });
       }
       if (at === "doors") {
-        await saveSettings.mutateAsync({ doc: wizardDoorsDoc(doors) });
+        await saveSettings.mutateAsync({ doc: { ...wizardDoorsDoc(doors), ...(kind?.settings ?? {}) } });
       }
       if (at === "offer") {
         const planned = offerBodies(offers, "services", currency, asked);
@@ -619,11 +619,17 @@ const PRESET_WORDS: Readonly<Partial<Record<string, string>>> = {
   appointments: "bookings",
   trades: "requests for a price",
   shop: "orders",
+  food: "a kitchen",
+  bakery: "a bakery",
+  cafe: "a café",
 };
 const PRESET_LINES: Readonly<Partial<Record<string, string>>> = {
   appointments: "Bookings in a free slot are confirmed, and everything else waits for you.",
   trades: "Requests for a price are flagged for you, and anything urgent goes to the top.",
   shop: "Small orders are accepted and asked to pay, and large ones wait for you.",
+  food: "Orders inside what you set aside are accepted, tables in a free sitting are confirmed, and the rest waits for you.",
+  bakery: "Orders inside each day's limit are accepted, and cakes made to order wait for you.",
+  cafe: "Orders ahead inside what you set aside are accepted, and the rest waits for you.",
 };
 
 /** The end. What works now, and — just as important — what does not yet. */

@@ -1,0 +1,262 @@
+/* A kitchen (ADR-036): Settings → Menu and Kitchen, the order's kitchen block, the pause on the home.
+   Thin and quiet: hairlines, small type, one accent for what a person must check (allergens). */
+
+.menu-unconfirmed,
+.kitchen-hold {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.menu-unconfirmed .icon-sm,
+.kitchen-hold.is-allergens .icon-sm {
+  flex: none;
+  margin-top: 2px;
+  color: var(--c-warning-ink);
+}
+.kitchen-hold.is-allergens {
+  color: var(--ink);
+}
+
+.menu-add {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.menu-sections .chips {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.menu-row .rowx {
+  gap: 12px;
+}
+.menu-row .small,
+.option-rules .small {
+  font-size: 12.5px;
+}
+
+.menu-editor {
+  gap: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hairline);
+}
+.menu-editor fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+/* The allergen grid: one row each, two quiet cells; a pressed cell is filled, "may" only outlined. */
+.allergen-grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.allergen-grid th,
+.allergen-grid td {
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--hairline);
+  text-align: left;
+  font-weight: 400;
+}
+.allergen-grid thead th {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  letter-spacing: 0.02em;
+}
+.allergen-grid td {
+  width: 96px;
+}
+.allergen-grid tr.is-part th {
+  padding-left: 18px;
+  color: var(--ink-2);
+}
+.allergen-cell {
+  width: 100%;
+  height: 26px;
+  border: 1px solid var(--hairline);
+  border-radius: 9999px;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.allergen-cell[aria-pressed="true"].is-contains {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--ground);
+}
+.allergen-cell[aria-pressed="true"].is-may {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+.allergen-cell:focus-visible {
+  outline: 2px solid var(--lagoon);
+  outline-offset: 1px;
+}
+.allergen-ask,
+.allergen-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+.allergen-confirm {
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+}
+.allergen-confirm p {
+  margin: 0;
+  font-size: 13px;
+}
+.allergen-ok {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.option-group,
+.zone {
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+}
+.option-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.option-rules {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+.option-rules .label {
+  font-size: 12px;
+}
+.option-choices {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.option-choices li {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.8fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+.option-choices li:has(select) {
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.7fr) minmax(0, 1fr) auto;
+}
+@media (max-width: 600px) {
+  .option-choices li,
+  .option-choices li:has(select) {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .option-choices li .money-input,
+  .option-choices li select {
+    grid-column: 1 / 2;
+  }
+  .allergen-grid td {
+    width: 76px;
+  }
+}
+
+.bring-section .check {
+  font-size: 13px;
+}
+
+/* The order's kitchen block. */
+.kitchen-order {
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--hairline);
+}
+.kitchen-lines {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+.kitchen-lines li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+}
+.kitchen-lines b {
+  font-weight: 600;
+}
+.kitchen-options {
+  color: var(--ink-2);
+}
+.kitchen-note {
+  color: var(--ink);
+  font-style: italic;
+}
+.kitchen-stages {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-2);
+}
+
+/* The home's kitchen: the pause and today's orders. */
+.kitchen-pause {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.kitchen-pause .pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.kitchen-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+.kitchen-line .btn {
+  margin-right: 4px;
+}
+
+/* On a phone, the pause above the conversations. */
+.kitchen-strip {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+}
+.kitchen-strip .sec-head {
+  margin: 0;
+  align-items: center;
+}
+.kitchen-pause-chips {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.kitchen-order .kitchen-stages {
+  margin-bottom: 4px;
+}

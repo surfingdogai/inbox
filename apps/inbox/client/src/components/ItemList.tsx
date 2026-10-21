@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { BadgeCheck, Bot, Copy, Search } from "lucide-react";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { problemOf } from "../lib/api";
 import { type Filter, filterLabel, paramsFor, visibleIn, withQuery } from "../lib/filters";
 import { partyName, relativeTime, snippetFor, TYPE_CLASS, TYPE_WORD } from "../lib/format";
@@ -16,12 +16,15 @@ export function ItemList({
   sandbox,
   selected,
   tz,
+  head,
 }: {
   filter: Filter;
   q: string | undefined;
   sandbox: boolean;
   selected: string | undefined;
   tz: string | undefined;
+  /** Above the search: a kitchen's pause on a phone (ADR-036). */
+  head?: ReactNode;
 }) {
   const pages = useItemPages(paramsFor(filter, q, sandbox));
   const navigate = useNavigate();
@@ -55,6 +58,7 @@ export function ItemList({
           Test mode is on: customers get no emails and nothing reaches a network.
         </p>
       )}
+      {head}
       <div className="search">
         <Search className="icon" aria-hidden="true" />
         <input

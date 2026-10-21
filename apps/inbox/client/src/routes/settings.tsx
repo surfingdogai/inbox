@@ -3,6 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { ThemeButton, ThemeSwitch } from "../components/ThemeSwitch";
 import { ensureSignedIn } from "../lib/auth";
+import { foodKind } from "../lib/food";
 import { useSettings } from "../lib/queries";
 import { useWork } from "../lib/trades";
 
@@ -28,6 +29,8 @@ function SettingsLayout() {
     (doors !== undefined && doors.quoteRequest !== false && doors.booking === false) ||
     path === "/settings/area" ||
     path === "/settings/work";
+  // A kitchen has Menu and Kitchen (ADR-036): it takes orders for a time, or its rules are a kitchen's.
+  const food = foodKind(settings.data?.doc) || path === "/settings/menu" || path === "/settings/kitchen";
   // The tab you are on is always in view, on a phone too, where the row scrolls.
   // biome-ignore lint/correctness/useExhaustiveDependencies: the path is what moves the current tab
   useEffect(() => {
@@ -54,6 +57,16 @@ function SettingsLayout() {
         <Link to="/settings/availability" className="tab">
           Availability
         </Link>
+        {food && (
+          <>
+            <Link to="/settings/menu" className="tab">
+              Menu
+            </Link>
+            <Link to="/settings/kitchen" className="tab">
+              Kitchen
+            </Link>
+          </>
+        )}
         {work && (
           <>
             <Link to="/settings/area" className="tab">
