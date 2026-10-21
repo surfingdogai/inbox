@@ -1,11 +1,12 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import clsx from "clsx";
 import { BadgeCheck, Plus, ShieldAlert, X } from "lucide-react";
 import { useState } from "react";
 import { MoneyInput, Stepper } from "../components/Choosers";
 import { ErrorState, Toast } from "../components/Feedback";
 import { FormActions, SectionHead, Switch } from "../components/Form";
+import { parseMoney } from "../lib/actions";
 import { type ApiProblem, problemOf } from "../lib/api";
 import { minorUnitsOf } from "../lib/currencies";
 import {
@@ -13,7 +14,10 @@ import {
   type AllergenLists,
   allergenLine,
   allergenRows,
+  confirmSentence,
+  conflictOf,
   DIETARY_WORDS,
+  EMPTY_MENU,
   foodApi,
   freshId,
   type GroupDraft,
@@ -32,7 +36,7 @@ import {
   WEEKDAY_WORDS,
 } from "../lib/food";
 import { formatMoney } from "../lib/format";
-import { useIntegrations, useSaveSettings, useSettings } from "../lib/queries";
+import { useIntegrations, useProductWrite, useProfile, useSaveSettings, useSettings } from "../lib/queries";
 import "../food.css";
 import "../trades.css";
 
@@ -87,6 +91,13 @@ function MenuScreen({ data }: { data: OwnerMenu }) {
   const groups = [...sections.map((s) => ({ id: s.id, name: s.name })), ...extra.map((id) => ({ id, name: id }))];
   const unconfirmed = on.filter((i) => i.menu?.allergens.status !== "confirmed").length;
   const label = (code: string) => data.vocabulary.allergens.find((a) => a.code === code)?.label ?? code;
+  const profile = useProfile();
+  // The menu's prices are the business's own: a new dish is priced in its currency.
+  const currency = data.items[0]?.product.price.currency ?? profile.data?.currency ?? "EUR";
+  const made = (id: string, name: string) => {
+    setNotice(`${name} is on the menu. State its allergens, then confirm them.`);
+    setEditing(id);
+  };
 
   return (
     <div className="stack menu-page">
@@ -105,13 +116,23 @@ function MenuScreen({ data }: { data: OwnerMenu }) {
           </p>
         )}
         <Sections data={data} />
+        {on.length === 0 && (
+          <div className="stack menu-empty">
+            <p className="hint">
+              No dishes yet. Add one, or{" "}
+              <Link to="/settings/integrations">bring in your menu from your ordering system</Link>.
+            </p>
+            {sections.length === 0 && <AddDish section="menu" currency={currency} onMade={made} />}
+          </div>
+        )}
       </section>
 
       {groups.map((g) => {
         const rows = on
           .filter((i) => (i.menu?.section ?? "menu") === g.id)
           .sort((a, b) => (a.menu?.sort ?? 0) - (b.menu?.sort ?? 0) || a.product.name.localeCompare(b.product.name));
-        if (rows.length === 0) return null;
+        // A section the owner named shows even empty, to add its first dish in it.
+        if (rows.length === 0 && !known.has(g.id)) return null;
         return (
           <section key={g.id} className="card glass stack" aria-labelledby={`sec-${g.id}`}>
             <h3 className="sec" id={`sec-${g.id}`}>
@@ -133,6 +154,7 @@ function MenuScreen({ data }: { data: OwnerMenu }) {
                 />
               ))}
             </div>
+            <AddDish section={g.id} currency={currency} onMade={made} />
           </section>
         );
       })}
@@ -287,21 +309,13 @@ function MenuRow({
       <div className="catalogue-main">
         <div className="t">
           <b>{item.product.name}</b>
-          {m &&
-            (confirmed ? (
-              <span className="pill pill-xs tint-success">
-                <BadgeCheck className="icon-xs" aria-hidden="true" />
-                Allergens confirmed
-              </span>
-            ) : (
-              <span className="pill pill-xs tint-warning">Allergens not confirmed</span>
-            ))}
-          {item.sold_out_today && <span className="pill pill-xs">Sold out today</span>}
+          {/* A confirmed dish needs no pill; the switch says when it is sold out. */}
+          {m && !confirmed && <span className="pill pill-xs tint-warning">Allergens not confirmed</span>}
         </div>
         <div className="s">{meta}</div>
         {m && <div className="s">{allergenLine(m.allergens, label)}</div>}
       </div>
-      <div className="rowx">
+      <div className="rowx menu-row-controls">
         {m && (
           <Switch
             checked={item.sold_out_today}
@@ -332,23 +346,6 @@ function MenuRow({
   );
 }
 
-const EMPTY: MenuFields = {
-  section: "menu",
-  sort: 0,
-  optionGroups: [],
-  allergens: { contains: [], mayContain: [], status: "unconfirmed" },
-  dietary: [],
-  ageRestricted: null,
-  dayparts: [],
-  combo: false,
-  noticeMin: 0,
-  dailyCap: null,
-  availableDays: [],
-  blackout: [],
-  madeToOrder: false,
-  brief: null,
-};
-
 function MenuEditor({
   item,
   data,
@@ -365,7 +362,7 @@ function MenuEditor({
   const write = useMenuWrite();
   const currency = item.product.price.currency;
   const e = minorUnitsOf(currency);
-  const start = item.menu ?? { ...EMPTY, section: data.sections[0]?.id ?? "menu" };
+  const start = item.menu ?? { ...EMPTY_MENU, section: data.sections[0]?.id ?? "menu" };
   const [section, setSection] = useState(start.section);
   const [lists, setLists] = useState<AllergenLists>({
     contains: start.allergens.contains,
@@ -482,7 +479,7 @@ function MenuEditor({
           </thead>
           <tbody>
             {rows.map((a) => (
-              <tr key={a.code} className={clsx(a.parent && "is-part")}>
+              <tr key={a.code} className={clsx(a.parent && rows.some((r) => r.code === a.parent) && "is-part")}>
                 <th scope="row">{a.label}</th>
                 {(["contains", "mayContain"] as const).map((col) => {
                   const pressed = lists[col].includes(a.code);
@@ -515,7 +512,8 @@ function MenuEditor({
           changed={changed}
           confirming={confirming}
           pending={write.confirm.isPending}
-          line={allergenLine(saved?.allergens ?? lists, label)}
+          lists={saved?.allergens ?? lists}
+          label={label}
           onAsk={() => setConfirming(true)}
           onConfirm={() => void confirm()}
           onCancel={() => setConfirming(false)}
@@ -525,17 +523,28 @@ function MenuEditor({
       <fieldset className="chips-field">
         <legend className="label">Dietary</legend>
         <div className="chips">
-          {data.vocabulary.dietary.map((d) => (
-            <button
-              key={d}
-              type="button"
-              className="chip"
-              aria-pressed={dietary.includes(d)}
-              onClick={() => setDietary(dietary.includes(d) ? dietary.filter((x) => x !== d) : [...dietary, d])}
-            >
-              {DIETARY_WORDS[d] ?? d}
-            </button>
-          ))}
+          {data.vocabulary.dietary.map((d) => {
+            // A tag its own allergens contradict is not offered: "Gluten free" on a dish that contains wheat.
+            const against = conflictOf(data.vocabulary.dietary_conflicts?.[d], lists);
+            const on = dietary.includes(d);
+            return (
+              <button
+                key={d}
+                type="button"
+                className="chip"
+                aria-pressed={on}
+                disabled={against !== null && !on}
+                title={
+                  against
+                    ? `${against.list === "contains" ? "Contains" : "May contain"} ${label(against.code).toLowerCase()}`
+                    : undefined
+                }
+                onClick={() => setDietary(on ? dietary.filter((x) => x !== d) : [...dietary, d])}
+              >
+                {DIETARY_WORDS[d] ?? d}
+              </button>
+            );
+          })}
         </div>
         {dietary.some((d) => FREE_FROM.has(d)) && (
           <p className="hint">A free-from tag is told to agents as unconfirmed until you confirm the allergens.</p>
@@ -642,7 +651,8 @@ function AllergenStatus({
   changed,
   confirming,
   pending,
-  line,
+  lists,
+  label,
   onAsk,
   onConfirm,
   onCancel,
@@ -651,7 +661,8 @@ function AllergenStatus({
   changed: boolean;
   confirming: boolean;
   pending: boolean;
-  line: string;
+  lists: AllergenLists;
+  label: (code: string) => string;
   onAsk: () => void;
   onConfirm: () => void;
   onCancel: () => void;
@@ -686,7 +697,7 @@ function AllergenStatus({
   return (
     <div className="allergen-confirm">
       <p>
-        You checked with the kitchen that {item.product.name}: <b>{line.toLowerCase()}</b>.
+        You checked with the kitchen: <b>{confirmSentence(item.product.name, lists, label)}</b>
       </p>
       <p className="hint">Agents will say this as yours. Only a person here can confirm it.</p>
       <div className="rowx">
@@ -769,9 +780,12 @@ function OptionGroups({
               min={1}
               max={Math.max(1, g.choices.length)}
             />
-            <Switch checked={g.halves} onChange={(v) => set(i, { halves: v })}>
-              <span className="small">Halves</span>
-            </Switch>
+            {g.max >= 2 && (
+              <Switch checked={g.halves} onChange={(v) => set(i, { halves: v })}>
+                <span className="small">Halves</span>
+                <span className="hint"> Half-and-half, like pizza toppings</span>
+              </Switch>
+            )}
           </div>
           <ul className="option-choices">
             {g.choices.map((c, k) => (
@@ -790,24 +804,24 @@ function OptionGroups({
                   id={`adds-${g.id}-${c.id}`}
                   value={c.adds}
                   currency={currency}
-                  placeholder="adds"
+                  placeholder="+0"
                   onChange={(v) => set(i, { choices: g.choices.map((x, j) => (j === k ? { ...x, adds: v } : x)) })}
                 />
                 {groups.length > 1 && (
                   <select
                     className="input"
-                    aria-label="Opens"
+                    aria-label="Then asks"
                     value={c.opens}
                     onChange={(ev) =>
                       set(i, { choices: g.choices.map((x, j) => (j === k ? { ...x, opens: ev.target.value } : x)) })
                     }
                   >
-                    <option value="">Opens nothing</option>
+                    <option value="">Then asks: nothing</option>
                     {groups
                       .filter((o) => o.id !== g.id)
                       .map((o) => (
                         <option key={o.id} value={o.id}>
-                          Opens {o.name || "another group"}
+                          Then asks: {o.name || "another group"}
                         </option>
                       ))}
                   </select>
@@ -852,6 +866,79 @@ function OptionGroups({
         <Plus className="icon-xs" aria-hidden="true" /> An option group
       </button>
     </fieldset>
+  );
+}
+
+/**
+ * A dish added straight to a section: its name and price here, then its editor opens for the rest. It
+ * is a product like any other (Settings → Services → Products lists it too), put on the menu with its
+ * allergens for the owner to state and confirm.
+ */
+function AddDish({
+  section,
+  currency,
+  onMade,
+}: {
+  section: string;
+  currency: string;
+  onMade: (id: string, name: string) => void;
+}) {
+  const write = useProductWrite();
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [price, setPrice] = useState("");
+  const [problem, setProblem] = useState<string | null>(null);
+  if (!open) {
+    return (
+      <button type="button" className="btn btn-ghost btn-sm menu-add-dish" onClick={() => setOpen(true)}>
+        <Plus className="icon-xs" aria-hidden="true" /> A dish
+      </button>
+    );
+  }
+  const add = async () => {
+    setProblem(null);
+    const m = parseMoney(price, currency);
+    if (!name.trim()) return setProblem("Name the dish.");
+    if (!m || m.value <= 0) return setProblem("Write a price like 45,50 or 45.50.");
+    try {
+      const row = await write.mutateAsync({ body: { name: name.trim(), price: m, active: true } });
+      await foodApi.setItem(row.id, { ...EMPTY_MENU, section });
+      await qc.invalidateQueries({ queryKey: ["menu"] });
+      setName("");
+      setPrice("");
+      setOpen(false);
+      onMade(row.id, row.name);
+    } catch (e) {
+      setProblem(problemOf(e).detail);
+    }
+  };
+  return (
+    <div className="stack">
+      <div className="menu-add">
+        <input
+          className="input"
+          aria-label="Dish"
+          placeholder="Dish"
+          value={name}
+          maxLength={200}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <MoneyInput id={`dish-${section}`} value={price} currency={currency} placeholder="Price" onChange={setPrice} />
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          disabled={write.isPending}
+          onClick={() => void add()}
+        >
+          Add
+        </button>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(false)}>
+          Cancel
+        </button>
+      </div>
+      {problem && <p className="hint error">{problem}</p>}
+    </div>
   );
 }
 

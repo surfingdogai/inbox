@@ -10,7 +10,7 @@ import { type ApiProblem, problemOf } from "../lib/api";
 import { foodApi, type KitchenDoc, type TablesDraft, tablesWrite } from "../lib/food";
 import { formatMoney } from "../lib/format";
 import { countryOfZone } from "../lib/geo";
-import { qk, useSaveSettings, useServices, useSettings } from "../lib/queries";
+import { qk, useIntegrations, useSaveSettings, useServices, useSettings } from "../lib/queries";
 import { normalisePrefix } from "../lib/trades";
 import type { Money, ServiceRow, SettingsDoc } from "../lib/types";
 import "../food.css";
@@ -83,6 +83,9 @@ function KitchenForm({ data, onReload }: { data: SettingsDoc; onReload: () => vo
   const [accept, setAccept] = useState(k.accept);
   const [tips, setTips] = useState(k.tips);
   const [pausePos, setPausePos] = useState(k.pausePos);
+  // Only Flipdish can be paused from here (ADR-036): the switch is for those who have it connected.
+  const integrations = useIntegrations();
+  const flipdish = (integrations.data?.connections ?? []).some((c) => c.kind === "flipdish" && c.status !== "disabled");
   const [problem, setProblem] = useState<ApiProblem | null>(null);
   const [saved, setSaved] = useState(false);
   const customPrep = !PREP_CHIPS.some((p) => String(p) === prep);
@@ -152,7 +155,7 @@ function KitchenForm({ data, onReload }: { data: SettingsDoc; onReload: () => vo
           </fieldset>
 
           <fieldset className="chips-field">
-            <legend className="label">The kitchen needs</legend>
+            <legend className="label">Ready at the earliest in</legend>
             <div className="chips">
               {PREP_CHIPS.map((p) => (
                 <button
@@ -195,12 +198,12 @@ function KitchenForm({ data, onReload }: { data: SettingsDoc; onReload: () => vo
             </fieldset>
             <Stepper
               id="kitchen-per-slot"
-              label="Orders a slot takes here"
+              label="Orders per slot"
               value={perSlot}
               onChange={setPerSlot}
               min={1}
               max={200}
-              hint="What you set aside for orders through here, on top of the till."
+              hint="Kept for orders from agents. Walk-ins and your till are separate."
             />
           </div>
 
@@ -261,15 +264,19 @@ function KitchenForm({ data, onReload }: { data: SettingsDoc; onReload: () => vo
               </div>
             )}
           </fieldset>
-
-          <Switch checked={pausePos} onChange={setPausePos}>
-            Pausing here pauses your ordering system too, where it can be
-          </Switch>
         </>
       )}
-      <p className="hint">
-        Busy? Pause orders from the <Link to="/">inbox</Link>.
-      </p>
+      <div className="kitchen-pause">
+        <h3 className="sec">Pause</h3>
+        <p className="hint">
+          Busy? Pause orders from the <Link to="/">inbox</Link>.
+        </p>
+        {enabled && flipdish && (
+          <Switch checked={pausePos} onChange={setPausePos}>
+            Close my Flipdish store too while paused
+          </Switch>
+        )}
+      </div>
       {problem && <Toast tone="danger" text={problem.detail} onDismiss={() => setProblem(null)} />}
       {problem?.code === "version_conflict" && (
         <button type="button" className="btn btn-secondary btn-sm" onClick={onReload}>

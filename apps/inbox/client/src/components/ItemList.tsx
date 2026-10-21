@@ -3,7 +3,7 @@ import { BadgeCheck, Bot, Copy, Search } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { problemOf } from "../lib/api";
 import { type Filter, filterLabel, paramsFor, visibleIn, withQuery } from "../lib/filters";
-import { partyName, relativeTime, snippetFor, TYPE_CLASS, TYPE_WORD } from "../lib/format";
+import { partyName, relativeTime, slotShort, snippetFor, TYPE_CLASS, TYPE_WORD } from "../lib/format";
 import { useItemPages } from "../lib/queries";
 import type { ItemView } from "../lib/types";
 import { ErrorState, SkeletonRows, Sun } from "./Feedback";
@@ -118,6 +118,10 @@ function Row({ view, selected, tz }: { view: ItemView; selected: boolean; tz: st
             {party?.kind === "agent" && <Bot className="icon-xs glyph" role="img" aria-label="Agent" />}
             {party?.verified && <BadgeCheck className="icon-xs glyph verified" role="img" aria-label="Verified" />}
             {" · "}
+            {/* An order for a time says when, with its day unless it is today (ADR-036). */}
+            {item.type === "order" && item.payload.fulfil?.slot && (
+              <span className="row-slot">{slotShort(item.payload.fulfil.slot.start, tz)} · </span>
+            )}
             {item.subject?.trim() || TYPE_WORD[item.type]}
           </span>
           <span className="s"> {snippetFor(item, tz)}</span>

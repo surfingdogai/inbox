@@ -2,7 +2,7 @@ import type { KitchenSettings, MenuFields, OptionGroup, OwnerMenu, OwnerMenuItem
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { parseMoney } from "./actions";
 import { ownerCall } from "./api";
-import { formatClock, formatMoney, localDateKey } from "./format";
+import { formatClock, formatMoney, localDateKey, slotShort, slotWhen } from "./format";
 import type { ItemOf, ItemView, Money } from "./types";
 
 /**
@@ -156,13 +156,39 @@ export function foodKind(
   return doc?.kitchen?.enabled === true || (doc?.menu?.sections?.length ?? 0) > 0;
 }
 
+/** A dish's menu fields as it is first put on the menu: in a section, its allergens for the owner to state. */
+export const EMPTY_MENU: MenuFields = {
+  section: "menu",
+  sort: 0,
+  optionGroups: [],
+  allergens: { contains: [], mayContain: [], status: "unconfirmed" },
+  dietary: [],
+  ageRestricted: null,
+  dayparts: [],
+  combo: false,
+  noticeMin: 0,
+  dailyCap: null,
+  availableDays: [],
+  blackout: [],
+  madeToOrder: false,
+  brief: null,
+};
+
 /* --- words ------------------------------------------------------------------------ */
 
 export type ProgressStage = "preparing" | "ready" | "out_for_delivery";
 
+/** Where an order stands in the kitchen, as a state. */
 export const STAGE_WORDS: Readonly<Record<ProgressStage, string>> = {
   preparing: "Preparing",
   ready: "Ready",
+  out_for_delivery: "Out for delivery",
+};
+
+/** The press that moves it there, as an action. */
+export const STAGE_ACTIONS: Readonly<Record<ProgressStage, string>> = {
+  preparing: "Start preparing",
+  ready: "Mark ready",
   out_for_delivery: "Out for delivery",
 };
 
@@ -280,6 +306,33 @@ export function allergenLine(lists: AllergenLists, label: (code: string) => stri
   return parts.length ? parts.join(" · ") : "No allergens stated";
 }
 
+/** The allergen of the dish's lists a dietary tag cannot sit beside, if one is there. */
+export function conflictOf(
+  rule: { readonly contains: readonly string[]; readonly mayContain: readonly string[] } | undefined,
+  lists: AllergenLists,
+): { code: string; list: "contains" | "mayContain" } | null {
+  if (!rule) return null;
+  for (const list of ["contains", "mayContain"] as const) {
+    const code = lists[list].find((c) => rule[list].includes(c));
+    if (code) return { code, list };
+  }
+  return null;
+}
+
+/**
+ * What a person confirms, in a sentence: "Curry pan contains wheat, milk and soy, and nothing it may
+ * contain." or "…and may contain almond."
+ */
+export function confirmSentence(name: string, lists: AllergenLists, label: (code: string) => string): string {
+  const words = (codes: readonly string[]) => {
+    const n = codes.map((c) => label(c).toLowerCase());
+    return n.length <= 1 ? (n[0] ?? "") : `${n.slice(0, -1).join(", ")} and ${n.at(-1)}`;
+  };
+  const contains = lists.contains.length ? `contains ${words(lists.contains)}` : "contains none of these allergens";
+  const may = lists.mayContain.length ? `may contain ${words(lists.mayContain)}` : "nothing it may contain";
+  return `${name} ${contains}, and ${may}.`;
+}
+
 /** Whether two sets of lists say the same, whatever order they were chosen in. */
 export function sameAllergens(a: AllergenLists, b: AllergenLists): boolean {
   const eq = (x: readonly string[], y: readonly string[]) =>
@@ -380,11 +433,18 @@ export function nextId(prefix: string, taken: readonly string[]): string {
 
 /* --- orders -------------------------------------------------------------------------- */
 
-/** The order's fulfilment in a line: "Collection · 19:30", "Delivery · 19:45 · Centro · MX$35.00". */
-export function fulfilLine(fulfil: OrderItem["payload"]["fulfil"], tz: string | undefined): string | null {
+/**
+ * The order's fulfilment in a line, with its day unless it is today: "Collection · Today, 19:30",
+ * "Collection · Tomorrow, 08:00", "Delivery · Fri 23 Oct, 19:45 · Centro · MX$35.00 delivery".
+ */
+export function fulfilLine(
+  fulfil: OrderItem["payload"]["fulfil"],
+  tz: string | undefined,
+  now: number = Date.now(),
+): string | null {
   if (!fulfil) return null;
   const parts = [METHOD_WORDS[fulfil.method] ?? fulfil.method];
-  if (fulfil.slot) parts.push(formatClock(fulfil.slot.start, tz));
+  if (fulfil.slot) parts.push(slotWhen(fulfil.slot.start, tz, now));
   if (fulfil.zone) parts.push(fulfil.zone.name);
   if (fulfil.fee && fulfil.fee.value > 0) parts.push(`${formatMoney(fulfil.fee)} delivery`);
   return parts.join(" · ");
@@ -429,6 +489,37 @@ export function ordersForToday(views: readonly ItemView[], tz: string | undefine
 }
 
 const slotOf = (v: ItemView) => (v.item.type === "order" ? (v.item.payload.fulfil?.slot?.start ?? "") : "");
+
+/**
+ * When today has no orders left, the next day that has: "Tomorrow · 3 orders, first at 08:00", for a
+ * bakery that takes orders days ahead. Null when no later order is open.
+ */
+export function nextKitchenDay(
+  views: readonly ItemView[],
+  tz: string | undefined,
+  now: number,
+): { readonly line: string; readonly count: number } | null {
+  const today = localDateKey(now, tz);
+  const later = views
+    .filter((v) => {
+      if (v.item.type !== "order" || !KITCHEN_STATES.has(v.item.state)) return false;
+      const start = v.item.payload.fulfil?.slot?.start;
+      return start !== undefined && localDateKey(start, tz) > today;
+    })
+    .sort((a, b) => slotOf(a).localeCompare(slotOf(b)));
+  const first = later[0] ? slotOf(later[0]) : "";
+  if (!first) return null;
+  const day = localDateKey(first, tz);
+  const that = later.filter((v) => localDateKey(slotOf(v), tz) === day);
+  const when = slotShort(first, tz, now);
+  const [dayWords, clock] = when.includes(" ")
+    ? [when.slice(0, when.lastIndexOf(" ")), when.slice(when.lastIndexOf(" ") + 1)]
+    : ["", when];
+  return {
+    line: `${dayWords} · ${that.length} ${that.length === 1 ? "order" : "orders"}, first at ${clock}`,
+    count: that.length,
+  };
+}
 
 /** The pause in the owner's words: "Paused until 21:30", "Paused for today". */
 export function pauseLine(until: string | null, tz: string | undefined, now: number): string | null {

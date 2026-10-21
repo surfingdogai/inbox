@@ -22,8 +22,17 @@
 
 .menu-add {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: center;
+}
+.menu-add .input {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+.menu-add-dish {
+  justify-self: start;
+  align-self: flex-start;
 }
 .menu-sections .chips {
   margin: 0;
@@ -32,6 +41,16 @@
 }
 .menu-row .rowx {
   gap: 12px;
+}
+/* On a phone the switch and Edit go on their own line under the dish, the text keeps the width. */
+@media (max-width: 560px) {
+  .menu-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .menu-row-controls {
+    justify-content: space-between;
+    width: 100%;
+  }
 }
 .menu-row .small,
 .option-rules .small {
@@ -42,6 +61,23 @@
   gap: 14px;
   padding-top: 12px;
   border-top: 1px solid var(--hairline);
+}
+/* A dietary tag the dish's own allergens contradict: there, but not to be chosen. */
+.menu-editor .chip:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+.menu-editor .chip:disabled:hover {
+  background: transparent;
+}
+.kitchen-pause {
+  display: grid;
+  gap: 6px;
+}
+.kitchen-pause .sec,
+.kitchen-pause .hint {
+  margin: 0;
 }
 .menu-editor fieldset {
   margin: 0;
@@ -259,4 +295,10 @@
 }
 .kitchen-order .kitchen-stages {
   margin-bottom: 4px;
+}
+
+/* An order's time on its list row (ADR-036): the kitchen reads when before what. */
+.row-slot {
+  font-weight: 600;
+  color: var(--ink);
 }

@@ -1,13 +1,22 @@
 import clsx from "clsx";
 import { ChefHat, ShieldAlert } from "lucide-react";
 import { problemOf } from "../lib/api";
-import { fulfilLine, HOLD_WORDS, nextStages, type OrderItem, STAGE_WORDS, tipLine, useProgress } from "../lib/food";
+import {
+  fulfilLine,
+  HOLD_WORDS,
+  nextStages,
+  type OrderItem,
+  STAGE_ACTIONS,
+  STAGE_WORDS,
+  tipLine,
+  useProgress,
+} from "../lib/food";
 import { formatClock } from "../lib/format";
 
 /**
  * A kitchen's order (ADR-036): each line's options and note, how and when it is collected or delivered,
  * the tip, why it waits for a person (allergens not confirmed come first), and the kitchen's progress:
- * Preparing, Ready, Out for delivery. Progress lives inside fulfilling; the order's own actions are the
+ * Start preparing, Mark ready, Out for delivery. Progress lives inside fulfilling; the order's own actions are the
  * buttons below as for any order.
  */
 export function OrderBlock({
@@ -110,7 +119,7 @@ export function OrderBlock({
                 )
               }
             >
-              {STAGE_WORDS[s]}
+              {STAGE_ACTIONS[s]}
             </button>
           ))}
         </div>

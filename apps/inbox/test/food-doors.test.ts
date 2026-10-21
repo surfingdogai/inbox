@@ -380,11 +380,17 @@ describe("the kitchen's own tills", () => {
     await s.call("POST", `/v1/owner/items/${item.id}/transitions`, { event: "accept" }, s.owner);
     await s.drain();
     const sent = s.toast.orders.get("ord-1")?.sent as
-      | { checks: { selections: { item: { guid: string }; modifiers: unknown[] }[] }[] }
+      | { checks: { selections: { item: { guid: string }; itemGroup: { guid: string }; modifiers: unknown[] }[] }[] }
       | undefined;
     expect(sent?.checks[0]?.selections[0]?.item.guid).toBe("22222222-0000-4000-8000-000000000001");
+    // The menu group and the option group came in with the menu, and go out with the order.
+    expect(sent?.checks[0]?.selections[0]?.itemGroup.guid).toBe("11111111-0000-4000-8000-000000000001");
     expect(sent?.checks[0]?.selections[0]?.modifiers).toEqual([
-      { item: { guid: "44444444-0000-4000-8000-000000000001", entityType: "MenuItem" }, quantity: 1 },
+      {
+        item: { guid: "44444444-0000-4000-8000-000000000001", entityType: "MenuItem" },
+        optionGroup: { guid: "33333333-0000-4000-8000-000000000001", entityType: "MenuOptionGroup" },
+        quantity: 1,
+      },
     ]);
     s.toast.approve("ord-1", "NOT_APPROVED");
     await s.inbox.caps.connectors.run(conn.id, Date.now(), "sync");

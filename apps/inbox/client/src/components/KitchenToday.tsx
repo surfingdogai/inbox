@@ -6,9 +6,11 @@ import { type ReactNode, useState } from "react";
 import { api, problemOf } from "../lib/api";
 import {
   METHOD_WORDS,
+  nextKitchenDay,
   nextStages,
   ordersForToday,
   pauseLine,
+  STAGE_ACTIONS,
   STAGE_WORDS,
   useKitchenNow,
   usePause,
@@ -20,7 +22,8 @@ import { StatePill } from "./Pills";
 /**
  * The kitchen on the inbox's home (ADR-036): whether orders are coming in, the pause (15, 30, 60
  * minutes or the rest of the day, any person at the business), and today's orders for a time, earliest
- * first, each with the next press for the kitchen: Preparing, Ready, Out for delivery.
+ * first, each with the next press for the kitchen: Start preparing, Mark ready, Out for delivery. With
+ * none left today, the next day that has orders (a bakery takes them days ahead).
  */
 export function KitchenToday({ tz, sandbox }: { tz: string | undefined; sandbox: boolean }) {
   const now = useKitchenNow();
@@ -143,6 +146,7 @@ function Kitchen({
   });
   const at = Date.now();
   const todays = ordersForToday(orders.data?.items ?? [], tz, at);
+  const next = todays.length === 0 ? nextKitchenDay(orders.data?.items ?? [], tz, at) : null;
 
   return (
     <section className="card glass stack kitchen-today" aria-labelledby="kitchen-today">
@@ -151,7 +155,14 @@ function Kitchen({
           Kitchen
         </h3>
       </PauseControl>
-      {orders.isSuccess && todays.length === 0 && <p className="hint">No orders for later today.</p>}
+      {orders.isSuccess && todays.length === 0 && !next && <p className="hint">No orders for later today.</p>}
+      {next && (
+        <p className="hint">
+          <Link to="/" search={{ f: "order" }}>
+            {next.line}
+          </Link>
+        </p>
+      )}
       {todays.length > 0 && (
         <ul className="today-list kitchen-list">
           {todays.map((v) => {
@@ -180,7 +191,7 @@ function Kitchen({
                     disabled={progress.isPending}
                     onClick={() => progress.mutate({ itemId: v.item.id, stage: last })}
                   >
-                    {STAGE_WORDS[last]}
+                    {STAGE_ACTIONS[last]}
                   </button>
                 )}
               </li>

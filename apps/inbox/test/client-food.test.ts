@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 import {
   allergenLine,
   allergenRows,
+  confirmSentence,
+  conflictOf,
   foodKind,
   freshId,
   fulfilLine,
   type GroupDraft,
   groupDrafts,
   groupsWrite,
+  nextKitchenDay,
   nextStages,
   type OptionGroup,
   type OwnerMenu,
@@ -19,7 +22,17 @@ import {
   tipLine,
   toggleAllergen,
 } from "../client/src/lib/food";
-import { KINDS } from "../client/src/lib/setup";
+import { formatDateTime, slotShort, slotWhen } from "../client/src/lib/format";
+import {
+  DISH_SECTIONS,
+  dishPlan,
+  doorsFor,
+  doorsStepDoc,
+  isKitchen,
+  KINDS,
+  kindOf,
+  stepsFor,
+} from "../client/src/lib/setup";
 import type { ItemView } from "../client/src/lib/types";
 
 /**
@@ -50,6 +63,31 @@ const VOCAB: OwnerMenu["vocabulary"]["allergens"] = [
 const label = (code: string) => VOCAB.find((a) => a.code === code)?.label ?? code;
 
 describe("the allergen grid", () => {
+  it("says what a person confirms in a sentence, may-contain included", () => {
+    const name = (c: string) =>
+      ({ wheat: "Wheat", milk: "Milk", eggs: "Eggs", pork: "Pork", soy: "Soy", almond: "Almond" })[c] ?? c;
+    expect(
+      confirmSentence("Curry pan", { contains: ["wheat", "milk", "eggs", "pork", "soy"], mayContain: [] }, name),
+    ).toBe("Curry pan contains wheat, milk, eggs, pork and soy, and nothing it may contain.");
+    expect(confirmSentence("Melon pan", { contains: ["wheat"], mayContain: ["almond"] }, name)).toBe(
+      "Melon pan contains wheat, and may contain almond.",
+    );
+  });
+
+  it("does not offer a dietary tag the dish's own allergens contradict", () => {
+    const glutenFree = { contains: ["gluten", "wheat", "rye"], mayContain: ["gluten", "wheat"] };
+    expect(conflictOf(glutenFree, { contains: ["wheat", "milk"], mayContain: [] })).toEqual({
+      code: "wheat",
+      list: "contains",
+    });
+    expect(conflictOf(glutenFree, { contains: ["milk"], mayContain: ["wheat"] })).toEqual({
+      code: "wheat",
+      list: "mayContain",
+    });
+    expect(conflictOf(glutenFree, { contains: ["milk"], mayContain: [] })).toBeNull();
+    expect(conflictOf(undefined, { contains: ["wheat"], mayContain: [] })).toBeNull();
+  });
+
   it("puts a code in one column only: may contain moves to contains, and back out", () => {
     let lists = { contains: [] as readonly string[], mayContain: [] as readonly string[] };
     lists = toggleAllergen(lists, "sesame", "mayContain");
@@ -233,6 +271,21 @@ describe("the kitchen's day", () => {
     expect(ordersForToday(views, "Asia/Tokyo", now).map((v) => v.item.id)).toEqual(["a", "b"]);
   });
 
+  it("with nothing left today, names the next day that has orders and its first time", () => {
+    // Osaka, 20:00: today is done, and three orders wait for tomorrow morning.
+    const now = Date.parse("2026-11-03T11:00:00Z");
+    const views = [
+      order("x", "accepted", "2026-11-03T23:30:00Z"),
+      order("y", "accepted", "2026-11-03T23:00:00Z"),
+      order("z", "paid", "2026-11-04T02:00:00Z"),
+      order("later", "accepted", "2026-11-05T23:00:00Z"),
+      order("open", "requested", "2026-11-03T22:00:00Z"),
+    ];
+    expect(ordersForToday(views, "Asia/Tokyo", now)).toEqual([]);
+    expect(nextKitchenDay(views, "Asia/Tokyo", now)).toEqual({ line: "Tomorrow · 3 orders, first at 08:00", count: 3 });
+    expect(nextKitchenDay([], "Asia/Tokyo", now)).toBeNull();
+  });
+
   it("offers the next press: Preparing and Ready, then Out for delivery for a delivery only", () => {
     expect(nextStages("requested", undefined, "pickup")).toEqual([]);
     expect(nextStages("accepted", undefined, "pickup")).toEqual(["preparing", "ready"]);
@@ -251,17 +304,29 @@ describe("the kitchen's day", () => {
     expect(pauseLine(null, "America/Mexico_City", now)).toBeNull();
   });
 
-  it("puts how and when in a line, with the zone and its fee", () => {
-    const line = fulfilLine(
-      {
-        method: "delivery",
-        slot: { start: "2026-11-04T10:45:00Z" },
-        zone: { name: "Kalamaria" },
-        fee: { value: 250, currency: "EUR" },
-      },
-      "Europe/Athens",
+  it("puts how and when in a line, with the zone and its fee, and the day unless it is today", () => {
+    const fulfil = {
+      method: "delivery" as const,
+      slot: { start: "2026-11-04T10:45:00Z" },
+      zone: { name: "Kalamaria" },
+      fee: { value: 250, currency: "EUR" },
+    };
+    const morning = Date.parse("2026-11-04T06:00:00Z"); // 08:00 in Thessaloniki
+    expect(fulfilLine(fulfil, "Europe/Athens", morning)).toMatch(
+      /^Delivery · Today, 12:45 · Kalamaria · €2\.50 delivery$/,
     );
-    expect(line).toMatch(/^Delivery · 12:45 · Kalamaria · €2\.50 delivery$/);
+    // A bakery in Osaka, the evening before: the order is for tomorrow, and says so.
+    const osaka = Date.parse("2026-11-03T11:00:00Z"); // 20:00 there
+    expect(fulfilLine({ method: "pickup", slot: { start: "2026-11-03T23:00:00Z" } }, "Asia/Tokyo", osaka)).toBe(
+      "Collection · Tomorrow, 08:00",
+    );
+    // Further ahead, the day and the date (in the runtime's own words for them).
+    expect(slotWhen("2026-11-06T01:00:00Z", "Asia/Tokyo", osaka)).toBe(
+      formatDateTime("2026-11-06T01:00:00Z", "Asia/Tokyo"),
+    );
+    expect(slotWhen("2026-11-06T01:00:00Z", "Asia/Tokyo", osaka)).toMatch(/10:00$/);
+    expect(slotShort("2026-11-03T23:00:00Z", "Asia/Tokyo", osaka)).toBe("Tomorrow 08:00");
+    expect(slotShort("2026-11-03T12:30:00Z", "Asia/Tokyo", osaka)).toBe("21:30");
     expect(tipLine({ percent: 10 })).toBe("10%");
     expect(tipLine(undefined)).toBeNull();
   });
@@ -294,6 +359,53 @@ describe("tables and the kinds a setup offers", () => {
     expect(foodKind({ kitchen: { enabled: false }, menu: { sections: [{}] } })).toBe(true);
     expect(foodKind({ kitchen: { enabled: false }, menu: { sections: [] } })).toBe(false);
     expect(foodKind(undefined)).toBe(false);
+  });
+
+  it("asks a kitchen for its first dishes, priced and in a section, and its orders for a time", () => {
+    for (const key of ["food", "bakery", "cafe"]) {
+      expect(isKitchen(key)).toBe(true);
+      expect(stepsFor(key).find((st) => st.id === "offer")?.label).toBe("Your first dishes");
+      const doors = doorsFor(kindOf(key)).map((d) => d.key);
+      expect(doors[0]).toBe("order");
+      // Only a restaurant books tables.
+      expect(doors.includes("booking")).toBe(key === "food");
+    }
+    expect(isKitchen("appointments")).toBe(false);
+    expect(doorsFor(kindOf("bakery")).find((d) => d.key === "quoteRequest")?.line).toBe(
+      "A cake made to order, a catering order.",
+    );
+    expect(kindOf("cafe")?.doors.quoteRequest).toBe(false);
+    const bakery = kindOf("bakery");
+    expect(
+      doorsStepDoc({ booking: false, quoteRequest: true, message: true, order: false }, bakery).kitchen,
+    ).toMatchObject({
+      enabled: false,
+      daysAhead: 14,
+    });
+    const plan = dishPlan(
+      [
+        { name: "Sourdough loaf", price: "650", section: "Bread" },
+        { name: "", price: "", section: "" },
+        { name: "Melon pan", price: "280", section: "Pastries" },
+      ],
+      "JPY",
+      [{ id: "bread", name: "Bread", sort: 0 }],
+    );
+    expect(plan).toEqual({
+      products: [
+        { body: { name: "Sourdough loaf", price: { value: 650, currency: "JPY" }, active: true }, section: "bread" },
+        { body: { name: "Melon pan", price: { value: 280, currency: "JPY" }, active: true }, section: "pastries" },
+      ],
+      sections: [
+        { id: "bread", name: "Bread", sort: 0 },
+        { id: "pastries", name: "Pastries", sort: 1 },
+      ],
+    });
+    // A dish is never saved free by mistake.
+    expect(dishPlan([{ name: "Flat white", price: "", section: "Coffee" }], "AUD", [])).toEqual({
+      problem: "Flat white needs a price. Write a price like 45,50 or 45.50.",
+    });
+    expect(DISH_SECTIONS.cafe).toContain("Coffee");
   });
 
   it("starts a restaurant, a bakery and a café with their rules and their kitchen on", () => {
