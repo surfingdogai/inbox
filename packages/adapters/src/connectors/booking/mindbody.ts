@@ -48,10 +48,10 @@ export function mindbodyConnector(): ConnectorDefinition {
     capabilities: ["setup_in", "availability_in", "write_bookings"],
     auth: "form",
     form: mindbodyForm,
-    ready: () => (MINDBODY_READY ? true : "Mindbody needs our developer account, and Mindbody's review of it."),
+    ready: () => (MINDBODY_READY ? true : "Not available yet: Mindbody has to approve it first."),
     whenNotReady: {
       status: "setup",
-      hint: "Needs setup: our Mindbody developer account, and Mindbody's review",
+      hint: "Not available yet: Mindbody has to approve it first.",
       href: MINDBODY_DOCS,
     },
   };

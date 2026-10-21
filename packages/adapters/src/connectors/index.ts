@@ -90,6 +90,8 @@ export interface ConnectorHostOptions {
    * be used by a tool like this one (`PHOREST_READY`). Tests switch it on.
    */
   readonly phorestReady?: boolean | undefined;
+  /** How times are sent to Phorest (`PHOREST_TIMES`), for a test against a Phorest that reads local ones. */
+  readonly phorestTimes?: "instant" | "local" | undefined;
 }
 
 /**
@@ -110,7 +112,7 @@ export function builtInConnectors(opts: ConnectorHostOptions = {}): ConnectorDef
     icsConnector(),
     stripeConnector(),
     mollieConnector(),
-    phorestConnector({ ready: opts.phorestReady }),
+    phorestConnector({ ready: opts.phorestReady, times: opts.phorestTimes }),
     mindbodyConnector(),
   ];
 }

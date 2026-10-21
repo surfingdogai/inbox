@@ -39,13 +39,47 @@ export interface FakePhorest {
   holdNext(): { readonly reached: Promise<void>; release(): void };
   /** Any field that looked like card data, in anything the inbox sent. */
   cardFields(): string[];
+  /** Answer free times with their start only, as the reference allows (`endTime` is optional). */
+  startsOnly(): void;
+  /** Answer free times with starts nothing can read. */
+  garbleTimes(): void;
 }
 
 const AUTH = `Basic ${btoa(`${USERNAME}:${PASSWORD}`)}`;
 const base = `${PHOREST_US}/api/business/${BUSINESS}`;
 
-export function fakePhorest(): FakePhorest {
+/**
+ * `times`: how this Phorest reads the times it is sent and writes the times it answers with: as instants
+ * (`…Z`, the default), or as the branch's own wall time with no offset (`local`), should a test branch
+ * show that is what Phorest does.
+ */
+export function fakePhorest(opts: { readonly times?: "instant" | "local" | undefined } = {}): FakePhorest {
   const p = fakePlatform();
+  const local = opts.times === "local";
+  const zone = "America/Toronto";
+  const wall = (iso: string) => {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: zone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(new Date(iso));
+    const g = (t: string) => parts.find((x) => x.type === t)?.value ?? "00";
+    return `${g("year")}-${g("month")}-${g("day")}T${g("hour")}:${g("minute")}:${g("second")}`;
+  };
+  /** A time the inbox sent, as an instant: a local one is read in the branch's zone. */
+  const instant = (sent: string) => {
+    if (!local) return new Date(sent).toISOString();
+    if (/(Z|[+-]\d{2}:\d{2})$/.test(sent)) throw new Error("this Phorest reads local times only");
+    const base = Date.parse(`${sent}Z`);
+    const offset = Date.parse(`${wall(new Date(base).toISOString())}Z`) - base;
+    return new Date(base - offset).toISOString();
+  };
+  let ends: "all" | "none" | "garbled" = "all";
   const clients = new Map<string, { clientId: string; body: Record<string, unknown> }>();
   const bookings: FakePhorest["bookings"] = new Map();
   let refuse = false;
@@ -90,12 +124,22 @@ export function fakePhorest(): FakePhorest {
           clientServiceSelections: { serviceSelections: { serviceId: string; staffId?: string }[] }[];
         };
         const sel = body.clientServiceSelections[0]?.serviceSelections[0];
-        const day = body.startTime.slice(0, 10);
+        const day = instant(body.startTime).slice(0, 10);
         // Two free times the day asked: 17:00Z with either barber, 18:00Z with Mei alone.
+        const shown = (iso: string) => (ends === "garbled" ? "soon" : local ? wall(iso) : iso);
         const slot = (start: string, end: string, staffId: string) => ({
-          startTime: start,
+          startTime: shown(start),
           clientSchedules: [
-            { serviceSchedules: [{ serviceId: sel?.serviceId, staffId, startTime: start, endTime: end }] },
+            {
+              serviceSchedules: [
+                {
+                  serviceId: sel?.serviceId,
+                  staffId,
+                  startTime: shown(start),
+                  ...(ends === "all" ? { endTime: shown(end) } : {}),
+                },
+              ],
+            },
           ],
         });
         const all = [
@@ -164,8 +208,8 @@ export function fakePhorest(): FakePhorest {
           clientId: body.clientId,
           serviceId: s.serviceId,
           staffId: s.staffId,
-          start: s.startTime,
-          end: s.endTime,
+          start: instant(s.startTime),
+          end: instant(s.endTime),
           status: body.bookingStatus ?? "ACTIVE",
         });
         if (lose) {
@@ -255,6 +299,12 @@ export function fakePhorest(): FakePhorest {
       });
       hold = { arrived, gate };
       return { reached, release };
+    },
+    startsOnly: () => {
+      ends = "none";
+    },
+    garbleTimes: () => {
+      ends = "garbled";
     },
     cardFields: () =>
       p.seen.flatMap((r) => (/card|cvc|cvv|pan\b|iban|expiry/i.test(r.body) ? [`${r.method} ${r.url.pathname}`] : [])),

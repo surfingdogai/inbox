@@ -7,7 +7,7 @@ import { currencySchema, weeklySchema } from "../capabilities/setup-types";
 import type { SetupSnapshot } from "../connectors/setup-snapshot";
 import type { Db } from "../db";
 import { ulid } from "../ids";
-import { resources, serviceResources, services } from "../schema/tables";
+import { business, resources, serviceResources, services } from "../schema/tables";
 import { type Caller, isCustomer, isPerson, nowOf } from "../write/caller";
 import { fromZod, WriteError } from "../write/errors";
 import { cleanPhoto } from "./photo";
@@ -224,6 +224,12 @@ export class StaffCapabilities {
       throw new WriteError("invalid_input", "That is not where this was read from.");
     const now = nowOf(caller);
     const source = snapshot.source.kind;
+    // A price kept is in the business's own currency: one in another is not a price here, and the
+    // service comes in unpriced, for a person to price.
+    const [biz] = await this.db.orm.select({ currency: business.currency }).from(business).limit(1);
+    const currency = (input.currency ?? biz?.currency ?? "").toUpperCase();
+    const ours = <T extends { readonly currency: string }>(m: T | null | undefined): T | null =>
+      m && currency && m.currency.toUpperCase() === currency ? m : null;
     const staffIds = new Map<string, string>();
     let staffCount = 0;
     for (const s of snapshot.staff ?? []) {
@@ -256,9 +262,8 @@ export class StaffCapabilities {
     let serviceCount = 0;
     for (const svc of snapshot.services ?? []) {
       if (!input.services.includes(svc.externalId)) continue;
-      const price = svc.price
-        ? { model: "fixed" as const, value: svc.price.value, currency: svc.price.currency }
-        : null;
+      const kept = ours(svc.price);
+      const price = kept ? { model: "fixed" as const, value: kept.value, currency: kept.currency } : null;
       const [existing] = await this.db.orm
         .select({ id: services.id })
         .from(services)
@@ -292,7 +297,7 @@ export class StaffCapabilities {
                 VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT(service_id, resource_id) DO UPDATE SET price_override = excluded.price_override,
                   duration_override_min = excluded.duration_override_min`,
-          params: [id, staffId, own?.price?.value ?? null, own?.durationMin ?? null, now],
+          params: [id, staffId, ours(own?.price)?.value ?? null, own?.durationMin ?? null, now],
           method: "run",
         });
       }

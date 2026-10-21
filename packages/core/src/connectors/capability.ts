@@ -346,6 +346,12 @@ export interface RunReport {
 }
 
 export class ConnectorCapabilities {
+  /** A booking system's free times as last read, by question, for `SYSTEM_TIMES_MS` (ADR-035). */
+  private readonly systemTimes = new Map<
+    string,
+    { read: { readonly slots: readonly SystemSlot[]; readonly kind: string }; until: number; connectorId: string }
+  >();
+
   private readonly definitions = new Map<string, ConnectorDefinition>();
   private http: ConnectorHttp | null = null;
   /** The one redirect address every sign-in uses, when the host keeps one (hosted); else per inbox. */
@@ -1851,6 +1857,11 @@ export class ConnectorCapabilities {
   ): Promise<{ readonly slots: readonly SystemSlot[]; readonly kind: string } | null> {
     const system = await this.bookingSystemFor(q.serviceId);
     if (!system?.def.availability || !system.def.capabilities.includes("availability_in")) return null;
+    // Read once a minute at most for the same question: every assistant asking is not a call on the
+    // salon's own account, which its system limits. A booking written there reads afresh.
+    const key = `${system.row.id}|${q.serviceId}|${q.staffExternalId ?? ""}|${q.from}|${q.to}`;
+    const kept = this.systemTimes.get(key);
+    if (kept && kept.until > now) return kept.read;
     const { rows } = await this.db.client.query({
       sql: "SELECT external_id FROM services WHERE id = ?",
       params: [q.serviceId],
@@ -1866,7 +1877,10 @@ export class ConnectorCapabilities {
         from: q.from,
         to: q.to,
       });
-      return { slots, kind: system.row.kind };
+      const read = { slots, kind: system.row.kind };
+      if (this.systemTimes.size > 500) this.systemTimes.clear();
+      this.systemTimes.set(key, { read, until: now + SYSTEM_TIMES_MS, connectorId: system.row.id });
+      return read;
     } catch (error) {
       if (error instanceof ConnectorError) return null;
       throw error;
@@ -1903,6 +1917,8 @@ export class ConnectorCapabilities {
     if (!booking?.serviceExternalId || !booking.staffExternalId) return null;
     const writer = system.def.bookings;
     if (!writer) return null;
+    // What it says is free changes with what it takes: its times are read afresh after.
+    for (const [k, v] of this.systemTimes) if (v.connectorId === system.row.id) this.systemTimes.delete(k);
     return writeFirst(this.db, {
       connectorId: system.row.id,
       itemId,
@@ -2662,6 +2678,9 @@ export function connectorLane(payload: unknown): string | undefined {
   const id = (payload as { connectorId?: unknown } | null)?.connectorId;
   return typeof id === "string" ? `connector:${id}` : undefined;
 }
+
+/** How long a booking system's free times are kept before it is asked again (ADR-035). */
+const SYSTEM_TIMES_MS = 45_000;
 
 /** A booking not promised yet: what a booking system can be given first (ADR-035). */
 const UNPROMISED: ReadonlySet<string> = new Set(["requested", "needs_info", "proposed"]);

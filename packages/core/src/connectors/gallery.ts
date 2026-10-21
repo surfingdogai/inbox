@@ -235,8 +235,8 @@ export const GALLERY: readonly CardSpec[] = [
     group: "booking",
     industries: ["salons"],
     ways: [
-      { kind: "phorest", preset: "eu", label: "Phorest (Europe)" },
-      { kind: "phorest", preset: "us", label: "Phorest (Americas, Australia)" },
+      { kind: "phorest", preset: "eu", label: "Phorest · Europe" },
+      { kind: "phorest", preset: "us", label: "Phorest · Americas & Australia" },
     ],
   },
   {

@@ -504,7 +504,8 @@ export interface BookingWriter {
 /** A free time a booking system offers, with the member of staff it is with (the system's id). */
 export interface SystemSlot {
   readonly start: number;
-  readonly end: number;
+  /** When the system gives none (only the start is sure): the inbox's own length with that member of staff. */
+  readonly end?: number | undefined;
   readonly staffExternalId: string;
 }
 

@@ -60,6 +60,8 @@ export const STAFF_RAVI = "SE-J0emUgQnya14mOGdQS";
 export const STAFF_HIDDEN = "l7fizkAS1JA8TzMoO4iliA";
 export const USER_MEI = "cO8vpfkhkHYOhfvZuIcwng";
 export const USER_RAVI = "TyfizkAS1JA8TzMoO4iliA";
+export const CATEGORY_SENIOR = "senior-barber-category";
+export const CATEGORY_BARBER = "barber-category";
 
 export const STAFF = {
   _embedded: {
@@ -68,6 +70,7 @@ export const STAFF = {
         staffId: STAFF_MEI,
         branchId: BRANCH,
         userId: USER_MEI,
+        staffCategoryId: CATEGORY_SENIOR,
         staffCategoryName: "Senior Barber",
         firstName: "Mei",
         lastName: "Chen",
@@ -79,6 +82,7 @@ export const STAFF = {
         staffId: STAFF_RAVI,
         branchId: BRANCH,
         userId: USER_RAVI,
+        staffCategoryId: CATEGORY_BARBER,
         staffCategoryName: "Barber",
         firstName: "Ravi",
         lastName: "Sandhu",
@@ -119,6 +123,8 @@ export const SERVICES = {
         disqualifiedStaff: [],
         internetEnabled: true,
         isAddonOnly: false,
+        // Ravi's own price comes before his level's.
+        staffCategories: { prices: [{ id: CATEGORY_BARBER, price: 50 }] },
         userPrices: [{ userRef: USER_RAVI, price: 55 }],
         userDurations: [{ userRef: USER_MEI, duration: 45 }],
       },
@@ -131,6 +137,19 @@ export const SERVICES = {
         price: 32.5,
         disqualifiedStaff: [],
         internetEnabled: true,
+        isAddonOnly: false,
+        // Priced by level: a senior barber's shave costs more.
+        staffCategories: { prices: [{ id: CATEGORY_SENIOR, price: 38 }] },
+        taxRates: ["hst-on"],
+      },
+      {
+        serviceId: "colourCorrection000000",
+        archived: false,
+        duration: 120,
+        name: "Colour correction",
+        price: 140,
+        // Hidden from online booking by the salon: never offered to start from.
+        internetEnabled: false,
         isAddonOnly: false,
       },
       {

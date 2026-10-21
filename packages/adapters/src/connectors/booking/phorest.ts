@@ -5,6 +5,7 @@ import {
   ConnectorError,
   type ConnectorHttpResponse,
   field,
+  instantOf,
   type LinkState,
   minorAmount,
   minorUnits,
@@ -25,11 +26,14 @@ import { basicAuth, retryAfterMs } from "../http";
  *   (https://developer.phorest.com/docs/getting-started.md): a username with the `global/` prefix, a
  *   password, and the business's id. Basic authentication. The salon picks Phorest's EU server or its US
  *   one (United States, Canada and Australia), as Phorest's own reference asks.
- * - **Start from it** (`setup_in`): the branch's services (with each member of staff's own price and
- *   length, `userPrices`, `userDurations`), its staff (who is hidden from online booking is left out)
- *   and a week of their rosters as weekly hours.
+ * - **Start from it** (`setup_in`): the branch's services the salon offers online (`internetEnabled`),
+ *   with each member of staff's own price (their own, `userPrices`, before their level's,
+ *   `staffCategories.prices` by `staffCategoryId`) and length (`userDurations`); its staff (who is
+ *   hidden from online booking is left out) and a week of their rosters as weekly hours. A branch that
+ *   names no currency gives no prices: a person prices those services.
  * - **Its times** (`availability_in`): "List appointment availabilities", for one service, with one
- *   member of staff or anyone.
+ *   member of staff or anyone. Only a schedule's start is sure (its end is optional): the inbox gives
+ *   one with no end its own length with that member of staff.
  * - **Written first** (`write_bookings`): "Create a booking" as ACTIVE, for the salon's own client
  *   (found by the inbox's own id for them, `externalId`, else created); the inbox confirms only once
  *   Phorest answered with its booking. A booking with no answer is looked for among the client's
@@ -43,6 +47,14 @@ import { basicAuth, retryAfterMs } from "../http";
  * be used by a tool like this one: until then the card says "Needs setup".
  */
 export const PHOREST_READY = false;
+
+/**
+ * How times are sent to Phorest: as instants (`…Z`), which is how this reads its reference ("date-time",
+ * ISO 8601), or as the branch's local wall time with no offset. Not confirmed against a test branch yet
+ * (the founder's checklist): `local` is kept working beside it, so the switch is one word.
+ */
+export type PhorestTimes = "instant" | "local";
+export const PHOREST_TIMES: PhorestTimes = "instant";
 
 export const PHOREST_SERVERS = {
   eu: "https://api-gateway-eu.phorest.com/third-party-api-server",
@@ -239,6 +251,8 @@ interface PhorestService {
   readonly isAddonOnly?: boolean;
   readonly internetEnabled?: boolean;
   readonly disqualifiedStaff?: readonly string[];
+  /** A price by staff level: `prices[].id` is a member of staff's `staffCategoryId`. */
+  readonly staffCategories?: { readonly prices?: readonly { readonly id?: string; readonly price?: number }[] };
   readonly userPrices?: readonly { readonly userRef?: string; readonly price?: number }[];
   readonly userDurations?: readonly { readonly userRef?: string; readonly duration?: number }[];
 }
@@ -246,6 +260,7 @@ interface PhorestService {
 interface PhorestStaff {
   readonly staffId?: string;
   readonly userId?: string;
+  readonly staffCategoryId?: string;
   readonly firstName?: string;
   readonly lastName?: string;
   readonly archived?: boolean;
@@ -340,8 +355,27 @@ function iso(ms: number): string {
   return new Date(ms).toISOString();
 }
 
-export function phorestConnector(opts: { readonly ready?: boolean | undefined } = {}): ConnectorDefinition {
+/** A time as Phorest is sent it (`PHOREST_TIMES`): an instant, or the branch's wall time. */
+export function phorestTime(ms: number, zone: string, times: PhorestTimes): string {
+  if (times === "instant") return iso(ms);
+  const local = localOf(ms, zone);
+  return `${local.date}T${local.time}`;
+}
+
+/** A time Phorest answered with: an instant when it has an offset, else the branch's wall time. */
+function readTime(value: unknown, zone: string): number {
+  const text = String(value ?? "");
+  if (!text) return Number.NaN;
+  if (/(Z|[+-]\d{2}:?\d{2})$/.test(text)) return Date.parse(text);
+  const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::(\d{2}))?/.exec(text);
+  return m ? instantOf(m[1] as string, `${m[2]}:${m[3] ?? "00"}`, zone) : Number.NaN;
+}
+
+export function phorestConnector(
+  opts: { readonly ready?: boolean | undefined; readonly times?: PhorestTimes | undefined } = {},
+): ConnectorDefinition {
   const switchedOn = opts.ready ?? PHOREST_READY;
+  const times = opts.times ?? PHOREST_TIMES;
   return {
     kind: "phorest",
     title: "Phorest",
@@ -350,7 +384,8 @@ export function phorestConnector(opts: { readonly ready?: boolean | undefined } 
     auth: "form",
     form: phorestForm,
     presets: [
-      // Named as the connection is: the server is the way's own label (Europe; the Americas and Australia).
+      // The connection is named "Phorest" whichever server it is on: the gallery's ways name the server
+      // ("Phorest · Europe", "Phorest · Americas & Australia").
       { id: "eu", label: "Phorest", values: { region: "eu" } },
       { id: "us", label: "Phorest", values: { region: "us" } },
     ],
@@ -359,7 +394,7 @@ export function phorestConnector(opts: { readonly ready?: boolean | undefined } 
     ready: () => (switchedOn ? true : "Phorest is not switched on here yet."),
     whenNotReady: {
       status: "setup",
-      hint: "Needs setup: ask Phorest for API access for your salon",
+      hint: "Not available yet. When it is, you connect with the API access Phorest gives your salon.",
       href: PHOREST_DOCS,
     },
 
@@ -387,7 +422,8 @@ export function phorestConnector(opts: { readonly ready?: boolean | undefined } 
           id: String(b.branchId),
           name: String(b.name ?? b.branchId).slice(0, 120),
           zone: typeof b.timeZone === "string" ? b.timeZone : ctx.inbox.timezone,
-          currency: typeof b.currencyCode === "string" ? b.currencyCode.toUpperCase() : "EUR",
+          // No currency named: no price is read in a guessed one; a person prices those services.
+          currency: typeof b.currencyCode === "string" ? b.currencyCode.toUpperCase() : "",
         }));
       if (branches.length === 0) {
         throw new ConnectorError("config", "That Phorest business has no branch to book.", { field: "business_id" });
@@ -434,8 +470,9 @@ export function phorestConnector(opts: { readonly ready?: boolean | undefined } 
           if (!(error instanceof ConnectorError) || error.code === "auth") throw error;
           rosters = [];
         }
+        // What the salon hides from online booking is not something to book here either.
         const services = svcs
-          .filter((s) => s.serviceId && !s.archived && !s.isAddonOnly)
+          .filter((s) => s.serviceId && !s.archived && !s.isAddonOnly && s.internetEnabled !== false)
           .map((s) => {
             const id = String(s.serviceId);
             const gives = staff
@@ -444,7 +481,10 @@ export function phorestConnector(opts: { readonly ready?: boolean | undefined } 
               .map((p) => String(p.staffId));
             const overrides = staff
               .map((p) => {
-                const own = s.userPrices?.find((u) => u.userRef === p.userId);
+                // Their own price first, then their level's, as Phorest prices them.
+                const own =
+                  s.userPrices?.find((u) => u.userRef === p.userId) ??
+                  (p.staffCategoryId ? s.staffCategories?.prices?.find((c) => c.id === p.staffCategoryId) : undefined);
                 const length = s.userDurations?.find((u) => u.userRef === p.userId);
                 const price = own ? money(own.price, where.currency) : null;
                 return {
@@ -491,8 +531,8 @@ export function phorestConnector(opts: { readonly ready?: boolean | undefined } 
           `/branch/${encodeURIComponent(where.branchId)}/appointments/availability`,
           {
             body: {
-              startTime: iso(q.from),
-              endTime: iso(q.to),
+              startTime: phorestTime(q.from, where.zone, times),
+              endTime: phorestTime(q.to, where.zone, times),
               isOnlineAvailability: true,
               clientServiceSelections: [
                 {
@@ -508,18 +548,25 @@ export function phorestConnector(opts: { readonly ready?: boolean | undefined } 
         if (res.status !== 200) throw new ConnectorError("bad_response", "Phorest answered with something unexpected.");
         const data = (json as { data?: unknown } | null)?.data;
         const out: SystemSlot[] = [];
+        let given = 0;
         for (const slot of Array.isArray(data) ? data : []) {
           const schedules = (slot as { clientSchedules?: { serviceSchedules?: unknown[] }[] }).clientSchedules ?? [];
           for (const cs of schedules) {
             for (const s of cs.serviceSchedules ?? []) {
+              given++;
               const x = s as { serviceId?: unknown; staffId?: unknown; startTime?: unknown; endTime?: unknown };
-              const start = Date.parse(String(x.startTime ?? ""));
-              const end = Date.parse(String(x.endTime ?? ""));
+              // Only the start is sure: a schedule with no end takes the inbox's own length for it.
+              const start = readTime(x.startTime, where.zone);
+              const end = x.endTime === undefined || x.endTime === null ? undefined : readTime(x.endTime, where.zone);
               if (x.serviceId !== q.serviceExternalId || typeof x.staffId !== "string") continue;
-              if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
-              out.push({ start, end, staffExternalId: x.staffId });
+              if (!Number.isFinite(start) || (end !== undefined && !(end > start))) continue;
+              out.push({ start, ...(end !== undefined ? { end } : {}), staffExternalId: x.staffId });
             }
           }
+        }
+        // Times it gave that none could be read: not "nothing free"; the inbox's own times are offered.
+        if (given > 0 && out.length === 0) {
+          throw new ConnectorError("bad_response", "Phorest gave times this inbox could not read.");
         }
         return out;
       },
@@ -558,8 +605,8 @@ export function phorestConnector(opts: { readonly ready?: boolean | undefined } 
                   {
                     serviceId: booking.serviceExternalId,
                     staffId: booking.staffExternalId,
-                    startTime: iso(booking.start),
-                    endTime: iso(booking.end),
+                    startTime: phorestTime(booking.start, where.zone, times),
+                    endTime: phorestTime(booking.end, where.zone, times),
                   },
                 ],
               },

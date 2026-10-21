@@ -24,6 +24,7 @@ import {
 } from "../src/index";
 import { freshDb } from "./db";
 import { type FakePhorest, fakePhorest } from "./fakes/phorest";
+import { fakePlatform, json } from "./fakes/platform";
 import { BOOKING_ID, BUSINESS, PASSWORD, PHOREST_US, SERVICE_FADE, STAFF_MEI, STAFF_RAVI } from "./fixtures/phorest";
 
 /**
@@ -50,7 +51,7 @@ const agent: Caller = {
   now: () => T0,
 };
 
-async function salon(ph: FakePhorest, ready = true) {
+async function salon(ph: FakePhorest, ready = true, times?: "instant" | "local") {
   const { db } = await freshDb();
   await db.orm.insert(schema.business).values({
     id: "self",
@@ -67,13 +68,16 @@ async function salon(ph: FakePhorest, ready = true) {
   });
   const day: [string, string][] = [["09:00", "19:00"]];
   await caps.setup.setWeekly(owner, { weekly: { mon: day, tue: day, wed: day, thu: day, fri: day, sat: day } });
-  caps.connectors.attach({ definitions: builtInConnectors({ phorestReady: ready }), http: ph.platform.http });
+  caps.connectors.attach({
+    definitions: builtInConnectors({ phorestReady: ready, phorestTimes: times }),
+    http: ph.platform.http,
+  });
   return { db, caps };
 }
 
-async function connected() {
-  const ph = fakePhorest();
-  const s = await salon(ph);
+async function connected(times?: "instant" | "local") {
+  const ph = fakePhorest({ times });
+  const s = await salon(ph, true, times);
   const conn = await s.caps.connectors.connect(owner, {
     kind: "phorest",
     preset: "us",
@@ -83,8 +87,8 @@ async function connected() {
 }
 
 /** Phorest's services and staff kept, as the owner presses "keep" on what it read. */
-async function imported() {
-  const s = await connected();
+async function imported(times?: "instant" | "local") {
+  const s = await connected(times);
   const snapshot = await s.caps.connectors.setupSnapshot(owner, s.conn.id);
   await s.caps.staff.importSetup(owner, snapshot, {
     source: "phorest",
@@ -142,9 +146,10 @@ describe("Phorest, switched off", () => {
     expect(defs.get("phorest")?.ready?.()).not.toBe(true);
     const card = gallery(defs).find((c) => c.id === "phorest");
     expect(card?.group).toBe("booking");
+    const hint = "Not available yet. When it is, you connect with the API access Phorest gives your salon.";
     expect(card?.ways.map((w) => [w.label, w.status, w.hint])).toEqual([
-      ["Phorest (Europe)", "setup", "Needs setup: ask Phorest for API access for your salon"],
-      ["Phorest (Americas, Australia)", "setup", "Needs setup: ask Phorest for API access for your salon"],
+      ["Phorest · Europe", "setup", hint],
+      ["Phorest · Americas & Australia", "setup", hint],
     ]);
     // No form, no button that goes nowhere.
     expect(card?.ways.every((w) => w.form.length === 0)).toBe(true);
@@ -163,12 +168,12 @@ describe("Phorest, switched off", () => {
   it("Mindbody is off altogether, with no way to connect and nothing it would call", () => {
     expect(MINDBODY_READY).toBe(false);
     const mb = mindbodyConnector();
-    expect(mb.ready?.()).toMatch(/developer account/);
+    expect(mb.ready?.()).toMatch(/Mindbody has to approve it first/);
     expect(mb.connect).toBeUndefined();
     expect(mb.bookings).toBeUndefined();
     const card = gallery(new Map([[mb.kind, mb]])).find((c) => c.id === "mindbody");
     expect(card?.ways.map((w) => [w.status, w.hint])).toEqual([
-      ["setup", "Needs setup: our Mindbody developer account, and Mindbody's review"],
+      ["setup", "Not available yet: Mindbody has to approve it first."],
     ]);
   });
 });
@@ -215,12 +220,16 @@ describe("Phorest, connected", () => {
     ]);
     const fade = snapshot.services?.[0];
     expect(fade?.staff).toEqual([STAFF_MEI, STAFF_RAVI]);
+    // Ravi's own price comes before his level's.
     expect(fade?.overrides).toEqual([
       { staff: STAFF_MEI, durationMin: 45 },
       { staff: STAFF_RAVI, price: { value: 5500, currency: "CAD" } },
     ]);
-    // Ravi does not shave with a straight razor; the front desk is hidden from online booking.
+    // Ravi does not shave with a straight razor; the front desk is hidden from online booking; Mei is a
+    // senior barber, whose shave is priced by her level. Colour correction, hidden online, is not offered.
     expect(snapshot.services?.[1]?.staff).toEqual([STAFF_MEI]);
+    expect(snapshot.services?.[1]?.overrides).toEqual([{ staff: STAFF_MEI, price: { value: 3800, currency: "CAD" } }]);
+    expect(snapshot.services?.map((s) => s.name)).not.toContain("Colour correction");
     expect(snapshot.staff?.map((s) => s.name)).toEqual(["Mei Chen", "Ravi Sandhu"]);
     expect(snapshot.staff?.[0]?.hours).toEqual({
       wed: [["12:00", "19:00"]],
@@ -280,6 +289,98 @@ describe("Phorest, connected", () => {
       { now: T0, caller: agent },
     );
     expect(own.slots.length).toBeGreaterThan(0);
+  });
+
+  it("gives a time with only its start the member of staff's own length, and asks Phorest once a minute", async () => {
+    const { caps, fade, mei, ravi, ph } = await imported();
+    ph.startsOnly();
+    const q = { service_id: fade.id, from: "2026-11-04T12:00:00Z", to: "2026-11-04T23:00:00Z" };
+    const r = await caps.checkAvailability(q, { now: T0, caller: agent });
+    const five = r.slots.find((s) => s.startTime === "2026-11-04T17:00:00.000Z") as
+      | { staff?: { id: string; endTime: string }[] }
+      | undefined;
+    expect(five?.staff).toEqual([
+      { id: mei.id, name: "Mei", endTime: "2026-11-04T17:45:00.000Z" },
+      { id: ravi.id, name: "Ravi", endTime: "2026-11-04T17:30:00.000Z" },
+    ]);
+    // The same question again, moments later: answered from what Phorest said.
+    await caps.checkAvailability(q, { now: T0 + 5_000, caller: agent });
+    const asked = ph.platform.requests(
+      "POST",
+      `${PHOREST_US}/api/business/${BUSINESS}/branch/X9QpRsZ3bSvhJAaakg9TXQ/appointments/availability`,
+    );
+    expect(asked.length).toBe(1);
+    // Times nothing can read are not "nothing free": the inbox's own are offered.
+    ph.garbleTimes();
+    const own = await caps.checkAvailability(
+      { service_id: fade.id, from: "2026-11-04T17:00:00Z", to: "2026-11-04T19:00:00Z" },
+      { now: T0, caller: agent },
+    );
+    expect(own.slots.length).toBeGreaterThan(0);
+  });
+
+  it("keeps no price in another currency, or in one the branch never named", async () => {
+    const { caps, snapshot } = await imported();
+    const euros = {
+      ...snapshot,
+      services: snapshot.services?.map((s) => ({ ...s, price: s.price ? { ...s.price, currency: "EUR" } : s.price })),
+    };
+    await caps.staff.importSetup(owner, euros, { source: "phorest", services: [SERVICE_FADE] });
+    const fade = (await caps.setup.listServices(owner)).find((x) => x.externalId === SERVICE_FADE);
+    expect(fade?.price).toBeNull();
+    // A branch that names no currency gives no prices at all.
+    const p = fakePlatform()
+      .on("GET", `${PHOREST_US}/api/business/${BUSINESS}/branch`, () =>
+        json({ _embedded: { branches: [{ branchId: "b1", name: "Queen West", timeZone: "America/Toronto" }] } }),
+      )
+      .on("GET", `${PHOREST_US}/api/business/${BUSINESS}/branch/b1/service`, () =>
+        json({ _embedded: { services: [{ serviceId: "s1", name: "Trim", duration: 30, price: 25 }] } }),
+      )
+      .on("GET", `${PHOREST_US}/api/business/${BUSINESS}/branch/b1/staff`, () => json({ _embedded: { staffs: [] } }));
+    const def = phorestConnector({ ready: true });
+    const inbox = {
+      id: "i",
+      origin: "https://inbox.example.com",
+      host: "inbox.example.com",
+      name: "Maple & Fade",
+      timezone: "America/Toronto",
+      language: "en",
+    };
+    const conn = await def.connect?.(
+      { http: p.http, now: T0, inbox },
+      { region: "us", business_id: BUSINESS, username: "desk@mapleandfade.example", password: PASSWORD },
+    );
+    const read = await def.setup?.read({
+      http: p.http,
+      now: T0,
+      inbox,
+      secret: conn?.secret ?? {},
+      extra: conn?.extra ?? {},
+    } as never);
+    expect(read?.services?.map((s) => [s.name, s.price])).toEqual([["Trim", null]]);
+  });
+
+  it("can send Phorest the branch's own wall times, should a test branch show it reads those", async () => {
+    const { caps, fade, mei, ph } = await imported("local");
+    const r = await book(caps, {
+      payload: { ...at("2026-11-04T17:00:00Z"), reservationFor: { serviceId: fade.id, name: "Skin fade" } },
+      contact: { name: "Aiyana Whitehorse", email: "aiyana@example.com" },
+      staff_id: mei.id,
+      idempotency_key: "ph-local",
+    });
+    expect(r.view.item.state).toBe("confirmed");
+    const sent = JSON.parse(
+      ph.platform.requests("POST", `${PHOREST_US}/api/business/${BUSINESS}/branch/X9QpRsZ3bSvhJAaakg9TXQ/booking`)[0]
+        ?.body ?? "{}",
+    );
+    expect(sent.clientAppointmentSchedules[0].serviceSchedules[0].startTime).toBe("2026-11-04T12:00:00");
+    expect(ph.bookings.get(BOOKING_ID)?.start).toBe("2026-11-04T17:00:00.000Z");
+    // Its free times, in wall time too, read as the same instants.
+    const free = await caps.checkAvailability(
+      { service_id: fade.id, from: "2026-11-05T12:00:00Z", to: "2026-11-05T23:00:00Z" },
+      { now: T0, caller: agent },
+    );
+    expect(free.slots[0]?.startTime).toBe("2026-11-05T17:00:00.000Z");
   });
 
   it("writes the booking to Phorest first, as the salon's own client, and only then confirms it", async () => {

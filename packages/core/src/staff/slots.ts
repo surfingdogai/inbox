@@ -194,7 +194,11 @@ export async function fromSystem(
   db: Db,
   input: {
     readonly service: ServiceRow;
-    readonly slots: readonly { readonly start: number; readonly end: number; readonly staffExternalId: string }[];
+    readonly slots: readonly {
+      readonly start: number;
+      readonly end?: number | undefined;
+      readonly staffExternalId: string;
+    }[];
     readonly source: string;
     readonly now: number;
     readonly minNoticeMin: number;
@@ -209,10 +213,13 @@ export async function fromSystem(
   const merged = new Map<number, { end: number; staff: { id: string; name: string; endTime: string }[] }>();
   for (const slot of input.slots) {
     const s = byExternal.get(slot.staffExternalId);
-    if (!s || slot.start < earliest || !(slot.end > slot.start)) continue;
-    const at = merged.get(slot.start) ?? { end: slot.end, staff: [] };
+    if (!s || slot.start < earliest) continue;
+    // The system gave only its start: their own length for the service here.
+    const end = slot.end ?? slot.start + lengthWith(input.service, s.terms, []) * 60_000;
+    if (!(end > slot.start)) continue;
+    const at = merged.get(slot.start) ?? { end, staff: [] };
     if (!at.staff.some((x) => x.id === s.id))
-      at.staff.push({ id: s.id, name: s.publicName, endTime: new Date(slot.end).toISOString() });
+      at.staff.push({ id: s.id, name: s.publicName, endTime: new Date(end).toISOString() });
     merged.set(slot.start, at);
   }
   const slots = [...merged.entries()]
