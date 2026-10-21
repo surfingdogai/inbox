@@ -54,7 +54,7 @@ export {
 export { multipart, uuidFrom } from "./work/common";
 export { FERGUS_API, FERGUS_SOURCE, FERGUS_TOKEN_DAYS, fergusConnector, fergusForm } from "./work/fergus";
 export { HOUSECALLPRO_API, housecallproConnector, housecallproForm, leadTag } from "./work/housecallpro";
-export { JOBBER_API, JOBBER_API_VERSION, JOBBER_GRAPHQL, jobberConnector } from "./work/jobber";
+export { JOBBER_API, JOBBER_GRAPHQL, JOBBER_TEMPLATE_VERSION, type JobberApp, jobberConnector } from "./work/jobber";
 export {
   SERVICEM8_API,
   SERVICEM8_SCOPES,
@@ -84,9 +84,20 @@ export interface OAuthClients {
   readonly jobber?: OAuthClient | null | undefined;
 }
 
+/**
+ * What whoever runs the server switched on of the job tools (ADR-034 §5): the Jobber API version its
+ * app was checked against (`JOBBER_API_VERSION`), and the tools whose API terms they cleared for this
+ * use (`JOB_TOOLS_CLEARED=housecallpro,fergus`). Absent, those say "set up".
+ */
+export interface JobToolSwitches {
+  readonly jobberApiVersion?: string | undefined;
+  readonly cleared?: readonly string[] | undefined;
+}
+
 /** What the host says of itself to the connectors it offers. */
 export interface ConnectorHostOptions {
   readonly oauth?: OAuthClients | undefined;
+  readonly jobTools?: JobToolSwitches | undefined;
   /** A hosted inbox, whose OAuth clients are the host's own and on their way: "Soon" rather than "set up". */
   readonly hosted?: boolean | undefined;
   /**
@@ -114,11 +125,11 @@ export function builtInConnectors(opts: ConnectorHostOptions = {}): ConnectorDef
     icsConnector(),
     stripeConnector(),
     mollieConnector(),
-    // Job tools (ADR-034): the owner's own key for ServiceM8, Housecall Pro and Fergus; Jobber only
-    // through our reviewed app, "set up" until the server holds it.
+    // Job tools (ADR-034): the owner's own key for ServiceM8; Housecall Pro and Fergus with it too, once
+    // their API terms are cleared here; Jobber only through a reviewed app and a version checked for it.
     servicem8Connector(opts.oauth?.servicem8 ?? null),
-    housecallproConnector(),
-    fergusConnector(),
-    jobberConnector(opts.oauth?.jobber ?? null),
+    housecallproConnector({ cleared: opts.jobTools?.cleared?.includes("housecallpro") }),
+    fergusConnector({ cleared: opts.jobTools?.cleared?.includes("fergus") }),
+    jobberConnector(opts.oauth?.jobber ?? null, { apiVersion: opts.jobTools?.jobberApiVersion }),
   ];
 }

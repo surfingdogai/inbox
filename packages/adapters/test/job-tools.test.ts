@@ -12,15 +12,16 @@ import {
   fergusConnector,
   hmacSha256Hex,
   housecallproConnector,
-  JOBBER_API_VERSION,
+  JOBBER_TEMPLATE_VERSION,
   jobberConnector,
   leadTag,
   servicem8Connector,
 } from "../src/index";
 import { freshDb } from "./db";
-import { fakePlatform } from "./fakes/platform";
+import { fakePlatform, json } from "./fakes/platform";
 import {
   cardDataSent,
+  FERGUS,
   fakeFergus,
   fakeHousecallPro,
   fakeJobber,
@@ -298,6 +299,43 @@ describe("ServiceM8", () => {
     ).toContain("activity_was_scheduled eq 1");
   });
 
+  it("signs in with no webhook yet, answers ServiceM8's challenge, and subscribes on the first sync", async () => {
+    const p = fakePlatform();
+    const sm8 = fakeServiceM8(p, "sm8-access-token-0001");
+    p.on("POST", "https://go.servicem8.com/oauth/access_token", () =>
+      json({ access_token: sm8.key, refresh_token: "sm8-refresh-1", expires_in: 3600 }),
+    );
+    const app = servicem8Connector({ clientId: "app-id", clientSecret: "app-secret" });
+    const hookUrl = "https://fundiflow.example/v1/hooks/servicem8/tok";
+    const c = await app.oauth?.exchange(
+      { http: p.http, now: T0, inbox: INBOX, hookUrl, hooksLive: true },
+      { code: "code-1", verifier: "v", redirectUri: "https://fundiflow.example/oauth/connect/servicem8/callback" },
+    );
+    // While connecting, the address does not answer yet: no subscription is asked for.
+    expect(c?.extra).toMatchObject({ webhook: false });
+    expect(sm8.subscriptions).toHaveLength(0);
+    const saved: Record<string, string>[] = [];
+    const run: RunContext = {
+      ...ctx(p.http, { ...(c?.secret ?? {}) }, { timezone: "Africa/Nairobi" }),
+      hookUrl,
+      hooksLive: true,
+      async saveSecret(next) {
+        saved.push({ ...next });
+      },
+    };
+    // ServiceM8 proves the address before it sends anything: its challenge goes back as it came.
+    expect(await app.hooks?.verify(run, hook("mode=subscribe&challenge=8f2c1d9e-challenge"))).toEqual({
+      challenge: "8f2c1d9e-challenge",
+    });
+    await app.busy?.(run, { start: T0, end: T0 + 86_400_000 });
+    expect(sm8.subscriptions).toHaveLength(1);
+    expect(sm8.subscriptions[0]?.get("callback_url")).toBe(hookUrl);
+    expect(saved[0]?.hooked).toBe("1");
+    // Once subscribed, a sync asks for no other.
+    await app.busy?.({ ...run, secret: saved[0] ?? {} }, { start: T0, end: T0 + 86_400_000 });
+    expect(sm8.subscriptions).toHaveLength(1);
+  });
+
   it("takes a webhook only as a nudge to read the schedule again: its body is never believed", async () => {
     const run = ctx(fakePlatform().http, { api_key: "smk-x" });
     const event = await def.hooks?.verify(
@@ -324,7 +362,13 @@ describe("ServiceM8", () => {
 });
 
 describe("Housecall Pro", () => {
-  const def = housecallproConnector();
+  const def = housecallproConnector({ cleared: true });
+
+  it("says set up until its API terms are cleared on this server", () => {
+    expect(housecallproConnector().ready?.()).toBe("Needs setup: waiting on Housecall Pro's API terms.");
+    expect(housecallproConnector().whenNotReady?.status).toBe("setup");
+    expect(def.ready?.()).toBe(true);
+  });
 
   it("connects with the company's API key and writes a lead with the customer, tagged to be found again", async () => {
     const p = fakePlatform();
@@ -414,7 +458,12 @@ describe("Housecall Pro", () => {
 });
 
 describe("Fergus", () => {
-  const def = fergusConnector();
+  const def = fergusConnector({ cleared: true });
+
+  it("says set up until its API terms are cleared on this server", () => {
+    expect(fergusConnector().ready?.()).toBe("Needs setup: waiting on Fergus's API terms.");
+    expect(def.ready?.()).toBe(true);
+  });
 
   it("connects with a personal access token and keeps when it runs out", async () => {
     const p = fakePlatform();
@@ -440,8 +489,8 @@ describe("Fergus", () => {
       addressCountry: "KE",
     });
     expect(fg.attachments.map((a) => [a.entityType, a.entityId, a.fileName])).toEqual([
-      ["enquiry", "100", "sink.jpg"],
-      ["enquiry", "100", "plan.pdf"],
+      ["enquiry", "100", "1-sink.jpg"],
+      ["enquiry", "100", "2-plan.pdf"],
     ]);
     expect(await def.requests?.find(run, request())).toEqual({ externalId: "100" });
     // A retry finds it, and adds no file twice.
@@ -452,6 +501,50 @@ describe("Fergus", () => {
     await def.requests?.put(run, request({ reference: "Q1R2S3", key: "inb_7f3a:other" }));
     expect(fg.enquiries).toHaveLength(2);
     expect(cardDataSent(p)).toBe(false);
+  });
+
+  it("keeps every photo of a request, though phones name them all alike", async () => {
+    const p = fakePlatform();
+    const fg = fakeFergus(p);
+    const run = ctx(p.http, { token: fg.token });
+    const photo = (id: string) => ({
+      id,
+      name: "image.jpg",
+      contentType: "image/jpeg",
+      size: JPEG.byteLength,
+      read: async () => JPEG,
+    });
+    const files = [photo("att_cccccccccccccccccccc"), photo("att_dddddddddddddddddddd")];
+    await def.requests?.put(run, request({ files }));
+    expect(fg.attachments.map((a) => a.fileName)).toEqual(["1-image.jpg", "2-image.jpg"]);
+    await def.requests?.put(run, request({ files }));
+    expect(fg.attachments).toHaveLength(2);
+  });
+
+  it("finds an enquiry with a long description whose answer never came, and writes it once", async () => {
+    const p = fakePlatform();
+    let fg: ReturnType<typeof fakeFergus> | null = null;
+    let lost = true;
+    // The first enquiry lands, and its answer is lost on the way back.
+    p.on("POST", `${FERGUS}/enquiries`, (req) => {
+      const body = JSON.parse(req.body) as Record<string, unknown>;
+      fg?.enquiries.push({ id: 100 + (fg?.enquiries.length ?? 0), ...body });
+      if (lost) {
+        lost = false;
+        throw new DOMException("The operation timed out.", "TimeoutError");
+      }
+      return new Response(JSON.stringify({ result: "success", data: { id: 99, ...body } }), { status: 201 });
+    });
+    fg = fakeFergus(p);
+    const run = ctx(p.http, { token: fg.token });
+    const long = request({ description: "The pipe under the floor. ".repeat(360) });
+    expect(long.description.length).toBeGreaterThan(9_000);
+    await expect(def.requests?.put(run, long)).rejects.toMatchObject({ code: "unreachable" });
+    // The reference comes first in the enquiry's words, so the cut takes the end of the description.
+    expect(String(fg.enquiries[0]?.description)).toMatch(/^Ref W7Y8Z0-/);
+    expect(await def.requests?.find(run, long)).toEqual({ externalId: "100" });
+    expect(await def.requests?.put(run, long)).toEqual({ externalId: "100" });
+    expect(fg.enquiries).toHaveLength(1);
   });
 
   it("reads its calendar month by month, says a withdrawn token, and waits as asked", async () => {
@@ -476,11 +569,16 @@ describe("Fergus", () => {
   });
 });
 
-describe("Jobber (switched off until our reviewed app is on the server)", () => {
-  it("says set up without its app, and writes a request through it once it is there", async () => {
-    expect(jobberConnector(null).ready?.()).toMatch(/Needs our Jobber app/);
+describe("Jobber (switched off until a reviewed app and its API version are on the server)", () => {
+  const VERSION = "2025-04-16";
+
+  it("says set up without its app, or with only the template's version, and writes a request once on", async () => {
+    expect(jobberConnector(null).ready?.()).toBe("Needs a Jobber app, reviewed by Jobber, on this server.");
     const client = { clientId: "jobber-client", clientSecret: "jobber-secret" };
-    const def = jobberConnector(client);
+    // The app's keys alone (held to start Jobber's review) do not switch it on.
+    expect(jobberConnector(client).ready?.()).toMatch(/API version/);
+    expect(jobberConnector(client, { apiVersion: JOBBER_TEMPLATE_VERSION }).ready?.()).toMatch(/API version/);
+    const def = jobberConnector(client, { apiVersion: VERSION });
     expect(def.ready?.()).toBe(true);
     const p = fakePlatform();
     const jb = fakeJobber(p);
@@ -489,15 +587,19 @@ describe("Jobber (switched off until our reviewed app is on the server)", () => 
     expect(ref?.externalId).toMatch(/^Z2lk/);
     expect(jb.requests[0]?.title).toBe("Leaking kitchen tap (W7Y8Z0)");
     expect(jb.notes[0]).toContain("drips all night");
-    expect(jb.versions.every((v) => v === JOBBER_API_VERSION)).toBe(true);
+    expect(jb.versions.every((v) => v === VERSION)).toBe(true);
     expect((await def.requests?.put(run, request()))?.externalId).toBe(ref?.externalId);
     expect(jb.requests).toHaveLength(1);
+    // The same customer's next request goes to the client they already are.
+    await def.requests?.put(run, request({ reference: "Q1R2S3", key: "inb_7f3a:other", title: "Blocked drain" }));
+    expect(jb.requests).toHaveLength(2);
+    expect(jb.clients).toHaveLength(1);
     jb.token = "revoked";
     await expect(def.busy?.(run, { start: T0, end: T0 + 1 })).rejects.toMatchObject({ code: "auth" });
   });
 
   it("checks Jobber's signature with the app's secret, and hears a disconnect as access withdrawn", async () => {
-    const def = jobberConnector({ clientId: "c", clientSecret: "jobber-secret" });
+    const def = jobberConnector({ clientId: "c", clientSecret: "jobber-secret" }, { apiVersion: VERSION });
     const run = ctx(fakePlatform().http, { access_token: "t" });
     const body = JSON.stringify({
       data: {
@@ -514,6 +616,11 @@ describe("Jobber (switched off until our reviewed app is on the server)", () => 
     const good = await hmacSha256Base64("jobber-secret", body);
     const event = await def.hooks?.verify(run, hook(body, { "x-jobber-hmac-sha256": good }));
     expect(await def.hooks?.read(run, event as never)).toEqual([{ kind: "revoked" }]);
+    // Sent to the app's one address: the account says whose connection it is, once the signature checks out.
+    expect(await def.hooks?.account?.(hook(body, { "x-jobber-hmac-sha256": good }))).toBe("acc");
+    await expect(
+      def.hooks?.account?.(hook(body, { "x-jobber-hmac-sha256": await hmacSha256Base64("other", body) })),
+    ).rejects.toMatchObject({ code: "refused" });
     await expect(
       def.hooks?.verify(run, hook(body, { "x-jobber-hmac-sha256": await hmacSha256Base64("other", body) })),
     ).rejects.toMatchObject({ code: "refused" });

@@ -857,6 +857,11 @@ export interface CatalogueReader {
 /* --- webhooks a platform sends (ADR-026 §4) -------------------------------- */
 
 /** What a platform's signed request named, once its signature checked out: ids and a topic, never the body. */
+/** A platform proving a connection's address before it sends to it: answered with `challenge` as the body. */
+export interface HookChallenge {
+  readonly challenge: string;
+}
+
 export interface HookEvent {
   /** The platform's id for the delivery, so one sent twice is counted once. */
   readonly eventId: string;
@@ -882,9 +887,18 @@ export interface HooksHandler {
   /**
    * Checks the request's signature over the exact bytes received, in constant time (`hook-sign.ts` in
    * adapters), and answers what it names. Throws `ConnectorError("refused")` when the signature does
-   * not check out, so nothing is written; null for a ping (a platform's test delivery). Calls nothing.
+   * not check out, so nothing is written; null for a ping (a platform's test delivery); a
+   * `HookChallenge` when the platform proves the address before it sends anything (ServiceM8's OAuth
+   * subscriptions), which is answered with the challenge as the body and keeps nothing. Calls nothing.
    */
-  verify(ctx: RunContext, request: InboundRequest): Promise<HookEvent | null>;
+  verify(ctx: RunContext, request: InboundRequest): Promise<HookEvent | HookChallenge | null>;
+  /**
+   * For a platform that sends every connection's events to one address of the app's
+   * (`POST /v1/hooks/<kind>/app`: Jobber's webhooks are set per app, not per account): checks the app's
+   * own signature over the exact bytes, and names the account the event is for, the connection's
+   * `externalId`; null for a ping. `verify` then runs on that connection as usual. Calls nothing.
+   */
+  account?(request: InboundRequest): Promise<string | null>;
   /**
    * Reads back from the platform, with the business's own key, what the event names: never what the
    * body said. Runs in a job after the platform was answered, so it may take its time; a

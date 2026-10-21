@@ -98,6 +98,25 @@ export function outboundDenyFrom(value: string | undefined): { ranges: AddressRa
   return { ranges, bad };
 }
 
+/**
+ * What the server switched on of the job tools (ADR-034 §5): JOBBER_API_VERSION, the Jobber API version
+ * the server's Jobber app was checked against (Jobber stays "set up" without one, or with the
+ * template's 2022-03-10); JOB_TOOLS_CLEARED, the tools whose API terms whoever runs the server cleared
+ * for this use (`housecallpro`, `fergus`), each "set up" until named.
+ */
+export function jobToolsFrom(env: {
+  readonly JOBBER_API_VERSION?: string | undefined;
+  readonly JOB_TOOLS_CLEARED?: string | undefined;
+}): { jobTools: { jobberApiVersion?: string; cleared: string[] } } {
+  const version = env.JOBBER_API_VERSION?.trim();
+  return {
+    jobTools: {
+      ...(version ? { jobberApiVersion: version } : {}),
+      cleared: listFrom(env.JOB_TOOLS_CLEARED).map((k) => k.toLowerCase()),
+    },
+  };
+}
+
 /** The OAuth clients an inbox may hold, by platform, and the environment variables each comes from. */
 const OAUTH_ENV = {
   google: ["GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"],

@@ -509,6 +509,23 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
     );
     return c.json(r.body, r.status, { "cache-control": "no-store" });
   });
+  // What a platform sends the app's one address, for every connection (Jobber's webhooks are set per
+  // app): the connector checks the app's signature and names the account, whose connection takes it.
+  // Registered before the connection addresses below, which it would otherwise match.
+  app.post("/v1/hooks/:kind/app", async (c) => {
+    const kind = String(c.req.param("kind"));
+    if (!/^[a-z][a-z0-9_]{1,39}$/.test(kind)) return c.json({ error: "not_found" }, 404);
+    if (Number(c.req.header("content-length") ?? 0) > MAX_HOOK_BYTES) {
+      return c.json({ error: "too_large", detail: "This address takes requests up to 1 MB." }, 413);
+    }
+    const body = await c.req.text();
+    const r = await deps.caps.connectors.receiveAppHook(
+      kind,
+      { headers: c.req.raw.headers, body, query: new URL(c.req.url).searchParams },
+      clock(),
+    );
+    return c.json(r.body, r.status, { "cache-control": "no-store" });
+  });
   // What a platform tells one connection at its own address (ADR-026 §4): the token names the
   // connection, its signature is checked over the exact bytes, and only ids are kept; the platform is
   // answered at once, and what the event names is read back with the business's key by a job.
@@ -525,6 +542,10 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
       { headers: c.req.raw.headers, body, query: new URL(c.req.url).searchParams },
       clock(),
     );
+    // A platform's challenge, answered as it came, as plain text.
+    if (r.text !== undefined) {
+      return c.text(r.text, r.status, { "cache-control": "no-store", "content-type": "text/plain; charset=utf-8" });
+    }
     return c.json(r.body, r.status, { "cache-control": "no-store" });
   });
   // A link a connection serves (ADR-026 §5): a calendar of confirmed bookings another platform imports.

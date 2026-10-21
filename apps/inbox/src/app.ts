@@ -10,6 +10,7 @@ import {
   feedImportHandler,
   hasOwnerSession,
   identityIssueHandler,
+  type JobToolSwitches,
   mountDoors,
   NETWORK_LISTING_KIND,
   NETWORK_PING_KIND,
@@ -173,6 +174,8 @@ export interface AppDeps {
    * can sign in, so Google says "Soon" rather than offering a sign-in that fails (ADR-026 §6).
    */
   readonly googleTesting?: boolean | undefined;
+  /** What the server switched on of the job tools (JOBBER_API_VERSION, JOB_TOOLS_CLEARED; ADR-034 §5). */
+  readonly jobTools?: JobToolSwitches | undefined;
   /**
    * Connectors of the host's own, offered beside the ones this release ships (ADR-014): anyone can
    * write one against the connector SDK. One with the kind of a built-in one takes its place.
@@ -244,6 +247,7 @@ export function createInbox(deps: AppDeps): Inbox {
         oauth: deps.oauth,
         hosted: Boolean(deps.oauthRedirect?.("google_calendar")),
         googleTesting: deps.googleTesting,
+        jobTools: deps.jobTools,
       }).filter((d) => !extra.some((e) => e.kind === d.kind)),
       ...extra,
     ],

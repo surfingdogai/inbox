@@ -831,6 +831,11 @@ export class ConnectorCapabilities {
     return this.hooks.receive(kind, token, request, now);
   }
 
+  /** What a platform sent the app's one address, for the connection of the account it names (Jobber). */
+  receiveAppHook(kind: string, request: InboundRequest, now: number): Promise<HookAnswer> {
+    return this.hooks.receiveApp(kind, request, now);
+  }
+
   /**
    * A link a connection serves (ADR-026 §5): `GET /v1/feeds/<kind>/<token><extension>`. Whoever holds
    * the link reads it, so the token is all it takes, and it shows only what the connector says a link
@@ -2339,6 +2344,14 @@ export class ConnectorCapabilities {
         const { rows } = await this.db.client.query({
           sql: "SELECT id, kind FROM connectors WHERE kind = ? AND inbound_token = ?",
           params: [kind, tokenHash],
+          method: "all",
+        });
+        return rows[0] ? { id: String(rows[0][0]), kind: String(rows[0][1]) } : null;
+      },
+      connectionByAccount: async (kind, externalId) => {
+        const { rows } = await this.db.client.query({
+          sql: "SELECT id, kind FROM connectors WHERE kind = ? AND external_id = ?",
+          params: [kind, externalId],
           method: "all",
         });
         return rows[0] ? { id: String(rows[0][0]), kind: String(rows[0][1]) } : null;

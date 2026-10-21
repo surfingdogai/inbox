@@ -185,15 +185,16 @@ describe("Settings → Integrations", () => {
       ["square", "soon"],
       ["woocommerce", "soon"],
       ["shopify", "soon"],
-      // A trade's job tool (ADR-034): ServiceM8, Housecall Pro and Fergus with the owner's own key.
+      // A trade's job tool (ADR-034): ServiceM8 with the owner's own key.
       ["job_tool", "ready"],
     ]);
     const tools = body.cards.find((c) => c.id === "job_tool");
-    // Jobber and ServiceM8's own sign-in need our partner apps: "set up", never a button that goes nowhere.
+    // Housecall Pro and Fergus until their API terms are cleared on the server, Jobber and ServiceM8's
+    // own sign-in until a partner app is there: "set up", never a button that goes nowhere.
     expect(tools?.ways.map((w) => [w.preset ?? w.kind, w.status])).toEqual([
       ["servicem8", "ready"],
-      ["housecallpro", "ready"],
-      ["fergus", "ready"],
+      ["housecallpro", "setup"],
+      ["fergus", "setup"],
       ["jobber", "setup"],
       ["oauth", "setup"],
     ]);

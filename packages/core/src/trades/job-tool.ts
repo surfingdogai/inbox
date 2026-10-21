@@ -290,7 +290,8 @@ export async function sentTo(
   const { rows } = await db.client.query({
     sql: `SELECT w.connector_id, w.external_id, w.outcome FROM connector_writes w
            WHERE w.item_id = ? AND w.op = 'request'
-             AND w.attempt = (SELECT MAX(attempt) FROM connector_writes v WHERE v.connector_id = w.connector_id AND v.item_id = w.item_id)
+             AND w.attempt = (SELECT MAX(attempt) FROM connector_writes v
+                              WHERE v.connector_id = w.connector_id AND v.item_id = w.item_id AND v.op = 'request')
            ORDER BY w.created_at`,
     params: [itemId],
     method: "all",

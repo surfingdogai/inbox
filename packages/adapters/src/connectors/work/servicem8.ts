@@ -4,6 +4,7 @@ import {
   type ConnectorDefinition,
   ConnectorError,
   type ConnectorHttpResponse,
+  type HookChallenge,
   type HookEvent,
   type Interval,
   instantOf,
@@ -35,7 +36,10 @@ import { addressLine, failOn, fileName, jobTitle, jsonOf, multipart, splitName, 
  * (https://developer.servicem8.com/reference/createjobs.md); a 429 waits.
  *
  * The OAuth way (a one-click sign-in) needs ServiceM8's Development Partner registration and a Public
- * Application (App ID and Secret): it is built, and says "set up" until the server holds them.
+ * Application (App ID and Secret): it is built, and says "set up" until the server holds them. A public
+ * application's webhook subscription is proved by a challenge ServiceM8 posts to the address
+ * (`mode=subscribe&challenge=…`, answered with the challenge), so it is made on the first sync after
+ * the connection is kept, never while connecting, when the address does not answer yet.
  *
  * Docs read 21 Oct 2026: /docs/authentication, /docs/rest-overview, /docs/pagination, /docs/filtering,
  * /docs/webhooks-overview, /docs/attaching-files-to-a-job-diary, /reference/createjobs, getjobs,
@@ -61,6 +65,8 @@ export const SERVICEM8_SCOPES = [
 const ACTIVITY_FIELDS = "start_date,end_date,staff_uuid,active,activity_was_scheduled";
 /** Pages of job activities one read takes (1,000 a page): past them, nothing further is offered. */
 const MAX_PAGES = 10;
+/** How far before the window a visit's start is looked for: one that began then may still be going. */
+const LOOK_BACK_MS = 7 * 86_400_000;
 
 export const servicem8Form = z.object({
   api_key: secretField(z.string().trim().min(10).max(200), {
@@ -231,7 +237,9 @@ async function subscribe(ctx: ConnectContext, secret: Readonly<Record<string, st
 
 async function connected(ctx: ConnectContext, secret: Readonly<Record<string, string>>): Promise<Connected> {
   const vendor = await vendorOf(apiOf(ctx, secret));
-  const hooked = await subscribe(ctx, secret);
+  // An API key's subscription is made now. A sign-in's is proved by a challenge to the connection's
+  // address, which answers only once the connection is kept: it is made on the first sync (`busy`).
+  const hooked = secret.api_key ? await subscribe(ctx, secret) : false;
   return {
     account: vendor.name,
     externalId: vendor.uuid,
@@ -357,7 +365,7 @@ function hookBody(raw: string): { object: string; entries: { uuid: string; time:
 
 export function servicem8Connector(client: OAuthClient | null = null): ConnectorDefinition {
   const oauthReady = () =>
-    client?.clientId && client.clientSecret ? (true as const) : "Needs our ServiceM8 partner account.";
+    client?.clientId && client.clientSecret ? (true as const) : "Needs a ServiceM8 partner app on this server.";
   return {
     kind: "servicem8",
     title: "ServiceM8",
@@ -377,7 +385,7 @@ export function servicem8Connector(client: OAuthClient | null = null): Connector
         ready: oauthReady,
         whenNotReady: {
           status: "setup",
-          hint: "Needs our ServiceM8 partner account.",
+          hint: "Needs a ServiceM8 partner app on this server.",
           href: "https://surfingdog.ai/docs/job-tools/#servicem8",
         },
         consent: "ServiceM8 will ask to let this inbox add jobs, clients and photos, and see your schedule.",
@@ -429,10 +437,16 @@ export function servicem8Connector(client: OAuthClient | null = null): Connector
 
     async busy(ctx, window) {
       const zone = typeof ctx.extra.timezone === "string" ? ctx.extra.timezone : "UTC";
-      const api = apiOf(ctx, await fresh(ctx, client));
+      const secret = await fresh(ctx, client);
+      // A sign-in's webhook, made once the connection is kept, so ServiceM8's challenge finds it.
+      if (secret.access_token && secret.hooked !== "1" && (await subscribe(ctx, secret))) {
+        await ctx.saveSecret({ ...secret, hooked: "1" });
+      }
+      const api = apiOf(ctx, secret);
       // Visits that start before the window ends and end after it starts; ServiceM8 filters on one
-      // field with gt and lt, so the start is bounded and the end checked here.
-      const filter = `start_date gt '${localOf(window.start - 86_400_000, zone)}' and start_date lt '${localOf(window.end, zone)}' and active eq 1 and activity_was_scheduled eq 1`;
+      // field with gt and lt, so the start is bounded (a week back, for a visit still going) and the
+      // end checked here.
+      const filter = `start_date gt '${localOf(window.start - LOOK_BACK_MS, zone)}' and start_date lt '${localOf(window.end, zone)}' and active eq 1 and activity_was_scheduled eq 1`;
       const out: Interval[] = [];
       let cursor = "-1";
       for (let page = 0; page < MAX_PAGES; page++) {
@@ -478,7 +492,13 @@ export function servicem8Connector(client: OAuthClient | null = null): Connector
 
     hooks: {
       topics: ["jobactivity"],
-      async verify(_ctx, request): Promise<HookEvent | null> {
+      async verify(_ctx, request): Promise<HookEvent | HookChallenge | null> {
+        // A public application's subscription is proved first: the challenge goes back as it came.
+        const form = new URLSearchParams(request.body);
+        const challenge = form.get("challenge");
+        if (form.get("mode") === "subscribe" && challenge && /^[\w.~-]{1,200}$/.test(challenge)) {
+          return { challenge };
+        }
         // API-key subscriptions are not signed: the connection's own address is what lets it in, and
         // what it says is never believed. It only asks for the schedule to be read again.
         const body = hookBody(request.body);
@@ -528,6 +548,7 @@ async function fresh(ctx: RunContext, client: OAuthClient | null): Promise<Reado
     access_token: j.access_token,
     refresh_token: typeof j.refresh_token === "string" ? j.refresh_token : ctx.secret.refresh_token,
     access_expires_at: String(ctx.now + Number(j.expires_in ?? 3600) * 1000),
+    ...(ctx.secret.hooked ? { hooked: ctx.secret.hooked } : {}),
   };
   await ctx.saveSecret(next);
   return next;

@@ -127,13 +127,21 @@ async function findLead(ctx: RunContext, r: OutboundRequest): Promise<RequestRef
   return null;
 }
 
-export function housecallproConnector(): ConnectorDefinition {
+/**
+ * `cleared`: whoever runs the server read Housecall Pro's API terms and found the inbox's use within them
+ * (`JOB_TOOLS_CLEARED=housecallpro`). Until then the card says "set up": its terms page did not load
+ * when this was built, and the API needs the business's MAX plan.
+ */
+export function housecallproConnector(opts: { readonly cleared?: boolean | undefined } = {}): ConnectorDefinition {
+  const waiting = "Needs setup: waiting on Housecall Pro's API terms.";
   return {
     kind: "housecallpro",
     title: "Housecall Pro",
     group: "work",
     capabilities: ["requests_out", "busy_times"],
     auth: "form",
+    ready: () => (opts.cleared ? true : waiting),
+    whenNotReady: { status: "setup", hint: waiting, href: "https://surfingdog.ai/docs/job-tools/#housecall-pro" },
     form: housecallproForm,
     note: "Requests you take on arrive as leads in your Job inbox; scheduled jobs block those times. MAX plan.",
     action: "Connect Housecall Pro",
@@ -162,7 +170,8 @@ export function housecallproConnector(): ConnectorDefinition {
     async busy(ctx, window) {
       const key = ctx.secret.api_key ?? "";
       const out: Interval[] = [];
-      const min = new Date(window.start - 86_400_000).toISOString();
+      // A job that began up to a week before the window may still be going.
+      const min = new Date(window.start - 7 * 86_400_000).toISOString();
       const max = new Date(window.end).toISOString();
       for (let page = 1; page <= MAX_PAGES; page++) {
         const q = new URLSearchParams({

@@ -272,11 +272,23 @@ export function fakeJobber(p: FakePlatform, token = "jobber-access-1"): JobberSt
       const term = String(variables.term ?? "");
       return json({ data: { requests: { nodes: state.requests.filter((r) => r.title.includes(term)) } } });
     }
+    if (query.includes("clients(searchTerm")) {
+      const term = String(variables.term ?? "");
+      const nodes = state.clients
+        .filter((c) => JSON.stringify(c).includes(term))
+        .map((c) => ({
+          id: c.id,
+          emails: c.emails ?? [],
+          phones: c.phones ?? [],
+          clientProperties: { nodes: [{ id: `${String(c.id)}P` }] },
+        }));
+      return json({ data: { clients: { nodes } } });
+    }
     if (query.includes("requestSettings"))
       return json({ data: { requestSettings: { forms: { nodes: [{ id: "Z2lkOi8vRm9ybS8x" }] } } } });
     if (query.includes("clientCreate")) {
       const id = `Z2lkOi8vQ2xpZW50LyR${state.clients.length + 1}`;
-      state.clients.push(variables.input as Record<string, unknown>);
+      state.clients.push({ id, ...(variables.input as Record<string, unknown>) });
       return json({
         data: { clientCreate: { client: { id, clientProperties: { nodes: [{ id: `${id}P` }] } }, userErrors: [] } },
       });

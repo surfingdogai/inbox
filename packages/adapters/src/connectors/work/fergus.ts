@@ -136,8 +136,10 @@ async function attach(ctx: RunContext, enquiryId: string, r: OutboundRequest): P
       if (typeof n === "string") have.add(n);
     }
   }
-  for (const f of r.files) {
-    const name = fileName(f.name, f.contentType);
+  for (const [i, f] of r.files.entries()) {
+    // Phones and agents send several photos all called "image.jpg": each goes under a name of its own
+    // on the request, by its place, so none is taken for one already there.
+    const name = `${i + 1}-${fileName(f.name, f.contentType)}`;
     if (have.has(name)) continue;
     const form = multipart([
       { name: "entityType", value: "enquiry" },
@@ -170,13 +172,21 @@ function months(window: Interval): string[] {
   return out;
 }
 
-export function fergusConnector(): ConnectorDefinition {
+/**
+ * `cleared`: whoever runs the server confirmed with Fergus that a business's own token may be used by a
+ * tool it chooses, as Fergus's API terms speak of an approved use case (`JOB_TOOLS_CLEARED=fergus`).
+ * Until then the card says "set up".
+ */
+export function fergusConnector(opts: { readonly cleared?: boolean | undefined } = {}): ConnectorDefinition {
+  const waiting = "Needs setup: waiting on Fergus's API terms.";
   return {
     kind: "fergus",
     title: "Fergus",
     group: "work",
     capabilities: ["requests_out", "busy_times"],
     auth: "form",
+    ready: () => (opts.cleared ? true : waiting),
+    whenNotReady: { status: "setup", hint: waiting, href: "https://surfingdog.ai/docs/job-tools/#fergus" },
     form: fergusForm,
     note: "Requests you take on arrive as enquiries with their photos; your Fergus calendar blocks those times.",
     action: "Connect Fergus",
@@ -245,7 +255,9 @@ export function fergusConnector(): ConnectorDefinition {
             name: (r.customer.name ?? r.title).slice(0, 200),
             ...(r.customer.email ? { email: r.customer.email } : {}),
             ...(r.customer.phone ? { phoneNumber: r.customer.phone } : {}),
-            description: `${r.title}\n\n${r.description}\n\n${ref}`.slice(0, 8_000),
+            // The reference first: a long description is cut at its end, never the reference the
+            // enquiry is found again by.
+            description: `${ref}\n\n${r.title}\n\n${r.description}`.slice(0, 8_000),
             source: FERGUS_SOURCE,
             ...(s?.streetAddress ? { address1: s.streetAddress } : {}),
             ...(s?.addressLocality ? { addressCity: s.addressLocality } : {}),
