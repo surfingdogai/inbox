@@ -27,11 +27,24 @@ import { stayTermsSha, whenWords } from "./terms";
 /** How long an instant offer can be held or booked before it is worked out again. */
 export const OFFER_VALID_MS = 15 * 60_000;
 
-/** The property's own sentence on how it confirms stays (§4.1): the owner's promise, in its words. */
-export function confirmationSentence(setup: PropertySetup, systemName: string | null): string {
+/**
+ * The property's own sentence on how it confirms stays (§4.1): the owner's promise, in its words. The
+ * owner's summary may name their system (`systemName`); what guests read never does: it speaks as the
+ * business, never of the software behind it.
+ */
+export function confirmationSentence(
+  setup: PropertySetup,
+  systemName: string | null,
+  audience: "owner" | "guest" = "owner",
+): string {
   const p = setup.property;
   const hours = `${p.answerHours} hour${p.answerHours === 1 ? "" : "s"}`;
   const priced = setup.rates.length > 0;
+  if (p.mode === "connected" && audience === "guest" && p.connectorId) {
+    return p.instant
+      ? `Free rooms confirm at once. Anything else is on request; I answer within ${hours}.`
+      : `I confirm each stay within ${hours}.`;
+  }
   if (p.mode === "connected" && systemName) {
     return p.instant
       ? `Stays confirm at once from my ${systemName} availability. Anything ${systemName} can't confirm is on request.`
@@ -90,12 +103,7 @@ function policyWords(plan: RatePlanRow, currency: string, locale: string): strin
 }
 
 /** The property as `get_property` shows it: never its private arrival details. */
-export function propertyPublic(
-  setup: PropertySetup,
-  settings: Settings,
-  systemName: string | null,
-  lang: StayLang = "en",
-): PropertyPublic {
+export function propertyPublic(setup: PropertySetup, settings: Settings, lang: StayLang = "en"): PropertyPublic {
   const p = setup.property;
   const rooms = setup.rooms.filter((r) => r.active && r.offered);
   const plans = setup.plans.filter((x) => x.active && x.offered);
@@ -154,7 +162,7 @@ export function propertyPublic(
     },
     how_to_find_us: p.arrivalPublic,
     payments: [...((settings as { payments?: { accepted?: readonly string[] } }).payments?.accepted ?? [])],
-    confirmation: confirmationSentence(setup, systemName),
+    confirmation: confirmationSentence(setup, null, "guest"),
     answers_within_h: p.answerHours,
     registration: p.registration?.number ?? null,
   };

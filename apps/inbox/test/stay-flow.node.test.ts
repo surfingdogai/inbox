@@ -1,4 +1,4 @@
-import { addLocalDays, type Caller, dateIn, transitionItem } from "@surfingdog/core";
+import { addLocalDays, type Caller, dateIn, transitionItem, writesFirst } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
 import { API_KEY, genericPropertySystem } from "../../../packages/adapters/test/fakes/property/generic";
 import { STRIPE_LIVE_KEY } from "../../../packages/adapters/test/fixtures/payments";
@@ -507,6 +507,25 @@ describe("Ryokan Hoshi, Kyoto: a change written to its own system first (JPY)", 
     expect(notes.rows.map((r) => String(r[0])).join("\n")).toMatch(/oversold, so they were put back/);
   });
 
+  it("tells the owner when the dates it put back are oversold too, sold elsewhere meanwhile", async () => {
+    const c = await connected();
+    c.system.sold.set(`R1|${c.checkOut}`, 1);
+    // Another channel sold the stay's own first night as well: put back, the stay is oversold there.
+    c.system.sold.set(`R1|${c.checkIn}`, 1);
+    c.system.mode.guard = "oversell";
+    const after = await c.ask();
+    expect(after.item.payload.checkOut).toBe(c.checkOut);
+    expect(c.booking).toMatchObject({ status: "confirmed", checkIn: c.checkIn, checkOut: c.checkOut });
+    const notes = await c.s.db.client.query({
+      sql: "SELECT body_text FROM thread_entries WHERE item_id = ? AND direction = 'note'",
+      params: [c.id],
+      method: "all",
+    });
+    expect(notes.rows.map((r) => String(r[0])).join("\n")).toMatch(
+      /put back on its own dates\. Another booking took some of those nights meanwhile, so they are oversold now/,
+    );
+  });
+
   it("moves the stay once the system took the new night", async () => {
     const c = await connected();
     const after = await c.ask();
@@ -592,5 +611,113 @@ describe("Ryokan Hoshi, Kyoto: a change written to its own system first (JPY)", 
     await transitionItem(c.s.db, at(c.s, OWNER), { itemId: c.id, event: "no_show" });
     await c.s.drain();
     expect(c.booking).toMatchObject({ status: "confirmed", checkIn: c.checkIn, checkOut: addLocalDays(c.checkIn, 1) });
+  });
+});
+
+describe("Riad Zitoun, Marrakesh: matched to its own system, each stay written there first (MAD)", () => {
+  async function matched() {
+    const system = genericPropertySystem({
+      name: "Riad Zitoun",
+      currency: "MAD",
+      timezone: "Africa/Casablanca",
+      rooms: [
+        { id: "R1", name: "Chambre patio", units: 3, prices: { BB: 98_000 }, charges: ["cleaning", "tax"] },
+        { id: "R2", name: "Suite terrasse", units: 1, prices: { BB: 164_050 } },
+      ],
+    });
+    const s = await setup({ name: "Riad Zitoun", timezone: "Africa/Casablanca", currency: "MAD", property: system });
+    // The owner set the riad up here first, with a room of their own the system does not have.
+    const prop = await ok<{ id: string }>(
+      s.owner("PUT", "/v1/owner/property", {
+        name: "Riad Zitoun",
+        kind: "guesthouse",
+        currency: "MAD",
+        timezone: "Africa/Casablanca",
+      }),
+    );
+    const patio = await ok<{ id: string }>(
+      s.owner("POST", "/v1/owner/property/rooms", {
+        property_id: prop.id,
+        name: "Rooftop room",
+        units: 1,
+        capacity: { adults: 2, children: 0, total: 2 },
+        beds: [],
+        amenities: [],
+        accessible: false,
+        photos: [],
+        offered: true,
+      }),
+    );
+    const conn = await ok<{ id: string }>(
+      s.owner("POST", "/v1/owner/integrations", { kind: "fake_property", values: { api_key: API_KEY } }),
+      201,
+    );
+    const map = (extra: Record<string, unknown> = {}) =>
+      ok<{ property_id: string; rooms: number }>(
+        s.owner("POST", "/v1/owner/property/system", {
+          connector_id: conn.id,
+          external_property_id: "P1",
+          property_id: prop.id,
+          rooms: [
+            { external_id: "R1", room_type_id: "new" },
+            { external_id: "R2", room_type_id: "new" },
+          ],
+          ...extra,
+        }),
+      );
+    const view = () =>
+      ok<{
+        setup: {
+          property: { mode: string; instant: boolean; connectorId: string | null };
+          rooms: { id: string; name: string; offered: boolean; externalId: string | null }[];
+          system: { title: string; prices_at: string | null } | null;
+        };
+      }>(s.owner("GET", "/v1/owner/property"));
+    return { s, prop, patio, conn, map, view };
+  }
+
+  it("writes each stay to the system first from the moment its rooms are matched, confirming at once still off", async () => {
+    const c = await matched();
+    const before = await c.view();
+    expect(before.setup.property.mode).toBe("request");
+    await c.map({ stop_offering: [c.patio.id] });
+    const after = await c.view();
+    expect(after.setup.property).toMatchObject({ mode: "connected", instant: false, connectorId: c.conn.id });
+    expect(writesFirst(after.setup as never)).toBe(true);
+    expect(after.setup.system?.title).toBeTruthy();
+    // The owner's own room, which the system does not have, is no longer offered: no stay of it could go there.
+    expect(after.setup.rooms.find((r) => r.id === c.patio.id)?.offered).toBe(false);
+    expect(after.setup.rooms.filter((r) => r.externalId).map((r) => r.name)).toEqual([
+      "Chambre patio",
+      "Suite terrasse",
+    ]);
+  });
+
+  it("keeps how it confirms as the owner left it when its rooms are matched again", async () => {
+    const c = await matched();
+    const first = await c.map();
+    await ok(c.s.owner("PUT", "/v1/owner/property", { id: first.property_id, mode: "request" }));
+    await c.map();
+    expect((await c.view()).setup.property.mode).toBe("request");
+  });
+
+  it("asks the owner to cover the system's cleaning fee and tax before stays confirm at once", async () => {
+    const c = await matched();
+    const { property_id } = await c.map();
+    const refused = await c.s.owner("PUT", "/v1/owner/property", { id: property_id, instant: true });
+    expect(refused.status).toBe(409);
+    const body = (await refused.json()) as { detail?: string; details?: { reason?: string; rooms?: string[] } };
+    expect(body.details).toMatchObject({ reason: "system_charges", rooms: ["Chambre patio"] });
+    expect(body.detail).toMatch(
+      /adds a cleaning fee and tax to Chambre patio on its other channels\. Add them in Taxes & fees/,
+    );
+    // Their word given: what is left is the usual wait for a first stay written and read back.
+    const locked = await c.s.owner("PUT", "/v1/owner/property", {
+      id: property_id,
+      instant: true,
+      charges_covered: true,
+    });
+    expect(locked.status).toBe(409);
+    expect(((await locked.json()) as { details?: { reason?: string } }).details?.reason).toBe("instant_locked");
   });
 });

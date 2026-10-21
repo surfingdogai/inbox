@@ -187,6 +187,35 @@ describe("write first", () => {
     expect((await journal(db))[0]?.outcome).toBe("rolled_back");
   });
 
+  it("leaves a write whose take-back failed to the resolver, never pending for good", async () => {
+    const db = await setup();
+    const sys = fakeSystem();
+    sys.mode.oversold = true;
+    let fails = 1;
+    const settled: string[] = [];
+    registerWriteResolver("test", {
+      find: async (_db: Db, row: WriteRow) => sys.find(row.idemKey),
+      readBack: async () => sys.readBack(),
+      rollback: async (_db: Db, _row: WriteRow, ref: WrittenRef) => sys.rollback(ref),
+      async settled(_db: Db, _row: WriteRow, outcome) {
+        settled.push(outcome);
+      },
+    });
+    const rollback = async (ref: WrittenRef) => {
+      if (fails-- > 0) throw new ConnectorError("refused", "Those nights are no longer free.");
+      await sys.rollback(ref);
+    };
+    const r = (await writeFirst(db, call(sys, { rollback }))) as { status: string; journalId: string };
+    expect(r.status).toBe("pending");
+    expect((await journal(db))[0]).toMatchObject({ outcome: "unknown", externalId: "B1" });
+    // The claim is free again, and the same write is not tried twice meanwhile.
+    expect((await writeFirst(db, call(sys, { rollback }))).status).toBe("pending");
+    expect(await resolveWrite(db, r.journalId, T0 + 30_000)).toBe("oversold: taken back");
+    expect(sys.held.size).toBe(0);
+    expect(settled).toEqual(["refused"]);
+    expect((await journal(db))[0]?.outcome).toBe("rolled_back");
+  });
+
   it("lets one caller write for an item at a time", async () => {
     const db = await setup();
     const sys = fakeSystem();

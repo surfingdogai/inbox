@@ -258,7 +258,23 @@ export async function writeFirst(db: Db, call: WriteFirstCall): Promise<WriteFir
         return { status: "pending", journalId };
       }
       if (seen === "conflict") {
-        await call.rollback?.(ref);
+        try {
+          await call.rollback?.(ref);
+        } catch {
+          // Ours oversold and could not be taken back yet: the resolver reads it back and tries again,
+          // and nothing is promised meanwhile. Never left pending with nobody to settle it.
+          await settle(db, journalId, "unknown", now, {
+            externalId: ref.externalId,
+            resolveAfter: now + RESOLVE_EVERY_MS,
+            detail: "oversold: taking ours back failed, tried again",
+          });
+          await ensureJob(db, CONNECTOR_WRITE_RESOLVE_KIND, `cwrite:${journalId}`, {
+            now,
+            runAt: now + RESOLVE_EVERY_MS,
+            payload: { journalId },
+          });
+          return { status: "pending", journalId };
+        }
         await settle(db, journalId, "rolled_back", now, {
           externalId: ref.externalId,
           detail: "oversold: our write taken back",

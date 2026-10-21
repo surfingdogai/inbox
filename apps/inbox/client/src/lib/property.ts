@@ -35,7 +35,7 @@ export const propertyApi = {
   today: (date?: string) => ownerCall<TodayView>("GET", "/v1/owner/property/today", { query: { date } }),
   sync: () => ownerCall<{ rows: number }>("POST", "/v1/owner/property/sync", { body: {} }),
   systemProperties: (connectorId: string) =>
-    ownerCall<{ properties: SystemProperty[] }>("GET", `/v1/owner/property/system/${enc(connectorId)}`),
+    ownerCall<SystemProperties>("GET", `/v1/owner/property/system/${enc(connectorId)}`),
   mapSystem: (body: Body) =>
     ownerCall<{ property_id: string; rooms: number }>("POST", "/v1/owner/property/system", {
       body,
@@ -56,7 +56,32 @@ export const propertyApi = {
 export interface SystemProperty {
   readonly id: string;
   readonly name: string;
-  readonly rooms: readonly { id: string; name: string; units: number }[];
+  readonly rooms: readonly {
+    id: string;
+    name: string;
+    units: number;
+    /**
+     * The system holds no price for it (`true`): never offered from here until it has one; or only prices
+     * set by the number of guests or the stay (`rules`): guests ask first, and the owner confirms each.
+     */
+    unpriced?: true | "rules";
+    /** What the system adds to its price: the owner adds the same in Taxes & fees. */
+    charges?: readonly ("cleaning" | "tax" | "deposit" | "extra")[];
+  }[];
+}
+
+/** What a property system shows to match: its properties and rooms, and where its prices are set there. */
+export interface SystemProperties {
+  readonly prices_at: string | null;
+  readonly properties: readonly SystemProperty[];
+}
+
+const CHARGE_WORDS = { cleaning: "a cleaning fee", tax: "tax", deposit: "a security deposit", extra: "an extra" };
+
+/** "a cleaning fee and tax": the charges a system adds to a room, in a few words. */
+export function chargeWords(charges: readonly (keyof typeof CHARGE_WORDS)[]): string {
+  const words = charges.map((c) => CHARGE_WORDS[c]);
+  return words.length > 1 ? `${words.slice(0, -1).join(", ")} and ${words.at(-1)}` : (words[0] ?? "");
 }
 
 export const pk = {
@@ -67,8 +92,8 @@ export const pk = {
 };
 
 /** The property as set up, or null when there is none yet (an inbox that is not a place to stay). */
-export function useProperty() {
-  return useQuery({ queryKey: pk.setup, queryFn: () => propertyApi.setup(), staleTime: 30_000 });
+export function useProperty(enabled = true) {
+  return useQuery({ queryKey: pk.setup, queryFn: () => propertyApi.setup(), staleTime: 30_000, enabled });
 }
 
 export function useNights(from: string | undefined, days: number, enabled = true) {

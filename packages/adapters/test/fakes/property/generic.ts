@@ -52,6 +52,8 @@ export interface FakeRoom {
   readonly capacity?: { adults: number; children: number; total: number };
   /** Rate id → nightly price, minor units. */
   readonly prices: Readonly<Record<string, number>>;
+  /** What the system adds besides the nightly price (a cleaning fee, a tax), as a property system says it. */
+  readonly charges?: readonly ("cleaning" | "tax" | "deposit" | "extra")[];
 }
 
 export interface FakeBooking {
@@ -178,7 +180,13 @@ export function genericPropertySystem(opts: {
     .on("GET", `${BASE}/properties/:id/rooms`, () =>
       answer(
         200,
-        [...rooms.values()].map((r) => ({ id: r.id, name: r.name, units: r.units, capacity: r.capacity })),
+        [...rooms.values()].map((r) => ({
+          id: r.id,
+          name: r.name,
+          units: r.units,
+          capacity: r.capacity,
+          ...(r.charges ? { charges: r.charges } : {}),
+        })),
       ),
     )
     .on("GET", `${BASE}/properties/:id/rates`, () => {

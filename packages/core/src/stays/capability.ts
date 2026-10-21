@@ -100,6 +100,11 @@ export class StayCapabilities {
 
   /** The name of the property's system, for its sentence: "Beds24". */
   private async systemName(setup: PropertySetup): Promise<string | null> {
+    return (await this.systemOf(setup))?.title ?? null;
+  }
+
+  /** The property's system: its name, and where the prices this inbox reads are set there. */
+  private async systemOf(setup: PropertySetup): Promise<{ title: string; prices_at: string | null } | null> {
     const id = setup.property.connectorId;
     if (!id) return null;
     const { rows } = await this.db.client.query({
@@ -108,7 +113,8 @@ export class StayCapabilities {
       method: "all",
     });
     if (!rows[0]) return null;
-    return this.deps.connectors.definition(String(rows[0][0]))?.title ?? String(rows[0][1]);
+    const def = this.deps.connectors.definition(String(rows[0][0]));
+    return { title: def?.title ?? String(rows[0][1]), prices_at: def?.stays?.pricesAt ?? null };
   }
 
   private langOf(caller: Caller, settings: Settings): Promise<StayLang> {
@@ -164,7 +170,7 @@ export class StayCapabilities {
     const input = parse(I.getPropertyInput, raw);
     const settings = await readSettings(this.db);
     const setup = await this.setupFor(input.property_id);
-    return propertyPublic(setup, settings, await this.systemName(setup), await this.langOf(caller, settings));
+    return propertyPublic(setup, settings, await this.langOf(caller, settings));
   }
 
   /** What is free for some dates and guests (`check_stay_availability`). Never stores anything. */
@@ -767,6 +773,7 @@ export class StayCapabilities {
             instant_unlocked: setup.property.connectorId
               ? await Setup.systemProven(this.db, setup.property.connectorId)
               : false,
+            system: await this.systemOf(setup),
           }
         : null,
       calendars: calendars.map((r) => ({
@@ -783,7 +790,37 @@ export class StayCapabilities {
   }
 
   async upsertProperty(caller: Caller, raw: unknown): Promise<{ id: string }> {
-    return { id: await Setup.upsertProperty(this.db, this.secrets, caller, parse(I.upsertPropertyInput, raw)) };
+    const { charges_covered, ...input } = parse(I.upsertPropertyInput, raw);
+    if (input.instant === true && input.id && charges_covered !== true) await this.chargesCovered(caller, input.id);
+    return { id: await Setup.upsertProperty(this.db, this.secrets, caller, input) };
+  }
+
+  /**
+   * Before stays confirm at once from a property's own system: the charges that system adds to the
+   * rooms matched here besides their price (a cleaning fee, a tax, an obligatory extra), which the
+   * inbox's quote leaves out unless they are in Taxes & fees. While the system says it adds some, the
+   * owner says they are covered first (`charges_covered`); until then every stay is theirs to confirm.
+   */
+  private async chargesCovered(caller: Caller, propertyId: string): Promise<void> {
+    const setup = await readSetup(this.db, propertyId);
+    const connectorId = setup?.property.connectorId;
+    const externalId = setup?.property.externalId;
+    if (!setup || !connectorId || !externalId) return;
+    const conn = await this.deps.connectors.contextFor(connectorId, nowOf(caller));
+    if (!conn || !isPropertySystem(conn.definition)) return;
+    const mapped = new Set(setup.rooms.filter((r) => r.active && r.offered && r.externalId).map((r) => r.externalId));
+    const charged = (await conn.definition.stays.rooms(conn.ctx, externalId)).filter(
+      (r) => mapped.has(r.id) && (r.charges ?? []).some((c) => c !== "deposit"),
+    );
+    if (charged.length === 0) return;
+    const kinds = [...new Set(charged.flatMap((r) => (r.charges ?? []).filter((c) => c !== "deposit")))];
+    const words = listWords(kinds.map((k) => CHARGE_WORDS[k]));
+    const title = conn.definition.title;
+    throw new WriteError(
+      "guard_failed",
+      `${title} adds ${words} to ${listWords(charged.map((r) => r.name))} on its other channels. Add ${kinds.length === 1 ? "it" : "them"} in Taxes & fees, so guests are quoted the same total, then switch this on.`,
+      { details: { reason: "system_charges", rooms: charged.map((r) => r.name), charges: kinds } },
+    );
   }
 
   async upsertRoomType(caller: Caller, raw: unknown): Promise<{ id: string }> {
@@ -987,7 +1024,21 @@ export class StayCapabilities {
   async systemProperties(
     caller: Caller,
     raw: unknown,
-  ): Promise<{ properties: { id: string; name: string; rooms: { id: string; name: string; units: number }[] }[] }> {
+  ): Promise<{
+    /** Where the system's prices are set, in its own words ("Prices → Daily Price Rules"); null when not said. */
+    prices_at: string | null;
+    properties: {
+      id: string;
+      name: string;
+      rooms: {
+        id: string;
+        name: string;
+        units: number;
+        unpriced?: true | "rules";
+        charges?: readonly ("cleaning" | "tax" | "deposit" | "extra")[];
+      }[];
+    }[];
+  }> {
     Setup.requireInPerson(caller, "connect the property's system");
     const { connector_id } = parse(z.object({ connector_id: z.string().min(1) }), raw);
     const conn = await this.deps.connectors.contextFor(connector_id, nowOf(caller));
@@ -997,15 +1048,28 @@ export class StayCapabilities {
     const out = [];
     for (const p of props.slice(0, 20)) {
       const rooms = await conn.definition.stays.rooms(conn.ctx, p.id);
-      out.push({ id: p.id, name: p.name, rooms: rooms.map((r) => ({ id: r.id, name: r.name, units: r.units })) });
+      out.push({
+        id: p.id,
+        name: p.name,
+        // A room with no price there is never offered from here; charges besides the price are the owner's to check.
+        rooms: rooms.map((r) => ({
+          id: r.id,
+          name: r.name,
+          units: r.units,
+          ...(r.unpriced === "rules" ? { unpriced: "rules" as const } : r.unpriced ? { unpriced: true as const } : {}),
+          ...(r.charges?.length ? { charges: [...r.charges] } : {}),
+        })),
+      });
     }
-    return { properties: out };
+    return { prices_at: conn.definition.stays.pricesAt ?? null, properties: out };
   }
 
   /**
    * This property is that one in the system, and its rooms these (S2 mapping): room types made for the
-   * ones marked new, named and counted as the system has them; nothing confirms at once until the owner
-   * says so, and only after a first stay was written and read back.
+   * ones marked new, named and counted as the system has them, and the rooms here that are none of the
+   * system's no longer offered (`stop_offering`). From then on each stay is written to the system first
+   * (mode `connected`); nothing confirms at once until the owner says so, and only after a first stay
+   * was written and read back.
    */
   async mapSystem(caller: Caller, raw: unknown): Promise<{ property_id: string; rooms: number }> {
     Setup.requireInPerson(caller, "connect the property's system");
@@ -1038,6 +1102,8 @@ export class StayCapabilities {
         { fields: [{ path: "external_property_id", problem: "invalid", message: "a property in the same time zone" }] },
       );
     }
+    const firstMatch =
+      !existing || existing.property.connectorId !== input.connector_id || existing.property.externalId !== ext.id;
     const propertyId = await Setup.upsertProperty(this.db, this.secrets, caller, {
       ...(existing
         ? { id: existing.property.id }
@@ -1048,6 +1114,9 @@ export class StayCapabilities {
           }),
       connector_id: input.connector_id,
       external_id: ext.id,
+      // Matched for the first time: its stays go into the system first, confirming at once still off
+      // (`instant`). Matched again (its rooms saved), how it confirms stays as the owner left it.
+      ...(firstMatch && existing?.property.mode !== "connected" ? { mode: "connected" as const } : {}),
     });
     const extRooms = await conn.definition.stays.rooms(conn.ctx, ext.id);
     let made = 0;
@@ -1078,6 +1147,16 @@ export class StayCapabilities {
         });
       }
       made++;
+    }
+    // A room here with no match there: never offered from now on, as no stay of it could go into the system.
+    const matched = new Set(input.rooms.filter((m) => m.room_type_id !== "new").map((m) => m.room_type_id));
+    for (const roomTypeId of input.stop_offering ?? []) {
+      if (matched.has(roomTypeId)) continue;
+      await this.db.client.query({
+        sql: "UPDATE room_types SET offered = 0, updated_at = ? WHERE id = ? AND property_id = ?",
+        params: [now, roomTypeId, propertyId],
+        method: "run",
+      });
     }
     return { property_id: propertyId, rooms: made };
   }
@@ -1173,9 +1252,29 @@ export interface TodayRow {
   readonly to_pay: { value: number; currency: string };
 }
 
+/** The charges a system adds besides a room's price, in the owner's words. */
+const CHARGE_WORDS = {
+  cleaning: "a cleaning fee",
+  tax: "tax",
+  deposit: "a security deposit",
+  extra: "an extra",
+} as const;
+
+/** "a, b and c". */
+function listWords(words: readonly string[]): string {
+  return words.length > 1 ? `${words.slice(0, -1).join(", ")} and ${words.at(-1)}` : (words[0] ?? "");
+}
+
 export interface OwnerSetup {
   readonly properties: readonly { id: string; name: string; active: boolean }[];
-  readonly setup: (PropertySetup & { sentence: string; instant_unlocked: boolean }) | null;
+  readonly setup:
+    | (PropertySetup & {
+        sentence: string;
+        instant_unlocked: boolean;
+        /** The property's own system, when one is connected: its name, and where its prices are set there. */
+        system: { readonly title: string; readonly prices_at: string | null } | null;
+      })
+    | null;
   readonly calendars: readonly { id: string; name: string; room_type_id: string | null }[];
   readonly stays: Settings["stays"];
   /** Whether a payment platform takes money before arrival (links) and saves cards to hold a stay. */
