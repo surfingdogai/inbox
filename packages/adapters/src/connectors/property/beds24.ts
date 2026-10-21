@@ -42,23 +42,34 @@ import { z } from "zod";
  * - Nothing documents that a write refuses a full night, except `checkAvailability` on a new booking.
  *   So the nights are read live just before every write, `checkAvailability` is asked for, and every
  *   write is read back: as written (its key, dates, room and price) and not oversold, by Beds24's own
- *   count (its calendar's `numAvail` below zero, or more bookings on a night than the room has units).
+ *   count (its calendar's `numAvail` below zero; or, by its "Beta" count of bookings by unit, more on a
+ *   night than the room has units, or two on one unit; where that is not served, its bookings counted).
  * - The setup call is GET in the OpenAPI file and POST in the wiki's FAQ: GET is asked first, POST
  *   when GET is not served.
  * - The credit headers are spelled `x-five-min-limit-remaining` in the wiki and
  *   `X-FiveMinCreditLimit-Remaining` in the OpenAPI file: both are read.
  * - `GET /properties/rooms` is "Coming soon": rooms are read from `GET /properties` with
  *   `includeAllRooms`.
- * - How an offer is priced from the calendar's sixteen daily prices is not documented: the cache keeps
- *   the calendar's own daily prices under their own names (`price1`…`price16`), and the live total
- *   comes from `/inventory/rooms/offers` only where it is not ambiguous.
- *
- * - A stay's price is written and read back only with the `bookings-financial` scope (the wiki: it
- *   "provides access to financial information" on GET and POST /bookings): the code must allow it.
+ * - Each of a room's sixteen daily prices has its rule, read with `includePriceRules` (schema
+ *   `priceRules`: `priceFor` perPerson / maxCapacity / upToPerson, `extraPerson`, `extraChild`,
+ *   `minimumStay`, `maximumStay`, `offer`, `minDaysUntilCheckin`, `maxDaysUntilCheckin`). The cache
+ *   keeps a daily price, under its own name (`price1`…`price16`), only where its rule makes it the
+ *   price of a night for any party and any stay: for the whole room (maxCapacity, or upToPerson at the
+ *   room's capacity or more), nothing added per extra adult or child, no minimum or maximum stay of its
+ *   own, no window before check-in, and an offer that sells it. A price per person, for fewer guests than
+ *   the room sleeps, or for some stays only, is never quoted from the cache: those rooms are on request.
+ *   What a blank window looks like is not said: none, 0 and Beds24's largest (999) count as no window.
+ *   The live total for a party comes from `/inventory/rooms/offers`, only where one offer is free.
+ * - A stay's price is written and read back only with the `bookings-financial` scope, and the guest's
+ *   name, email and phone only with `bookings-personal` (the wiki: each covers GET and POST /bookings):
+ *   the code must allow both to write.
  * - Whether a lookup by id or by our key is held to "upcoming bookings only" (the OpenAPI file's default
  *   for GET /bookings) is not said: every such lookup names a wide arrival date, so a past stay is found.
+ * - Whether `apiReference` is kept on a new booking (it is in schema `booking`, not in `newBooking`) is
+ *   not said: a booking is also found by the note every booking this inbox makes carries.
  * - Which charges besides the nightly price a guest pays (a room's cleaning fee and taxes, a property's
- *   obligatory extras) are not in the calendar's prices: the owner is told of them while matching rooms.
+ *   obligatory extras) are not in the calendar's prices: the owner is told of them while matching rooms,
+ *   to add them in Taxes & fees, and says they are covered before stays confirm at once.
  *
  * Every call goes to https://beds24.com/api/v2 and nowhere else; a next-page link is followed only on
  * that host. The token goes in the `token` header; no card detail, deposit or commission is ever sent.
@@ -75,6 +86,7 @@ export const BEDS24_SCOPES = [
   "read:bookings",
   "write:bookings",
   "read:bookings-personal",
+  "write:bookings-personal",
   "read:bookings-financial",
   "write:bookings-financial",
   "read:inventory",
@@ -112,25 +124,41 @@ const DEPOSIT_TEXT = "Deposit due: your inbox cancels this stay if it is not pai
 /** The largest amount Beds24 documents for a booking's price (`maximum: 99999999.99`). */
 const MAX_PRICE = 99_999_999.99;
 /** Words shared with the owner (ready-hotels §12 S2). */
-const BUSY = "Beds24 is busy right now. We'll try again in a few minutes.";
+const BUSY = "Beds24 is busy right now. Your inbox tries again in a few minutes.";
 const EXPIRED = "Beds24 didn't take that code. Copy it again, or make a new one: a code lasts 24 hours.";
 const MISSING = "That booking was not found in Beds24: check it there.";
 const GONE = "Beds24 no longer takes this connection. Make a new invite code in Beds24 and connect again.";
 const NOT_ANSWERING = "Beds24 is not answering properly; this inbox tries again in a few minutes.";
 const NOT_FREE = "Those nights are no longer free in Beds24.";
+/** The start of the note on every booking this inbox makes: what finds one whose key Beds24 did not keep. */
+const MARK = "Written by your inbox";
+const NOTE = `${MARK} · `;
 
-/** What the code must allow, in the words of Beds24's own choices: the same on the form and the docs. */
-export const BEDS24_CHOOSE =
-  "Bookings: Read and Write · Bookings personal: Read · Bookings financial: Read and Write · Inventory: Read · Properties: Read";
+/** What the code must allow, one line each in the words of Beds24's own choices: the same on the form and the docs. */
+export const BEDS24_CHOICES = [
+  "Bookings: Read and Write",
+  "Bookings personal: Read and Write",
+  "Bookings financial: Read and Write",
+  "Inventory: Read",
+  "Properties: Read",
+] as const;
+
+/** Where the owner sets the daily prices this inbox reads (the wiki's own words). */
+export const BEDS24_PRICES_AT = "Prices → Daily Price Rules";
 
 export const beds24Form = z.object({
+  // Sealed like any secret, but shown as typed: a code works once and for 24 hours, and the owner should
+  // see that the whole of it was pasted.
   invite_code: secretField(z.string().trim().min(8).max(500), {
     label: "Invite code",
+    input: "text",
+    once: true,
     link: { href: BEDS24_CODES_URL, text: "Open Beds24's API page" },
     placeholder: "Paste the code from Beds24",
     steps: [
       "In Beds24, open Settings → Marketplace → API and press Generate invite code.",
-      `Choose ${BEDS24_CHOOSE}. Leave the IP address empty.`,
+      { text: "Choose these, as Beds24 names them:", items: BEDS24_CHOICES },
+      "Leave the IP address empty. If your properties are linked, tick Allow linked properties.",
       "Paste the code here. It works for 24 hours.",
     ],
   }),
@@ -177,9 +205,24 @@ export function writableAmount(amount: { readonly value: number; readonly curren
   return value;
 }
 
-/** Text that keeps whole characters: trimmed, composed, and cut by character, never through one. */
+/**
+ * Text that keeps whole characters: trimmed, composed, and cut to `max` UTF-16 units (the length a
+ * JSON schema's `maxLength` counts in most validators, and never less than its characters), never
+ * through a character.
+ */
 function textOf(raw: string, max: number): string {
-  return [...raw.normalize("NFC").trim()].slice(0, max).join("");
+  let out = "";
+  for (const ch of raw.normalize("NFC").trim()) {
+    if (out.length + ch.length > max) break;
+    out += ch;
+  }
+  return out;
+}
+
+/** A value kept whole or not at all: an email or a phone cut short would be another one. */
+function wholeOf(raw: string | undefined, max: number): string | null {
+  const v = (raw ?? "").normalize("NFC").trim();
+  return v && v.length <= max ? v : null;
 }
 
 /** A Beds24 amount back to minor units of its currency; null when it is not one this inbox can hold. */
@@ -385,6 +428,15 @@ async function tokenOf(ctx: RunContext): Promise<string> {
   return mintToken(ctx);
 }
 
+/** The account's credits as the last answer of a run said them: what a read kept to the reserve looks at first. */
+const budgets = new WeakMap<object, { readonly remaining: number; readonly cost: number; readonly until: number }>();
+
+/** Whether the run already knows the account is at the reserve: a read kept to it then asks nothing at all. */
+function atReserve(ctx: RunContext): boolean {
+  const b = budgets.get(ctx.secret);
+  return b !== undefined && ctx.now < b.until && b.remaining - Math.max(1, b.cost) < CREDIT_RESERVE;
+}
+
 /** One call with the account's token: made again once when Beds24 no longer takes the one held. */
 async function api(
   ctx: RunContext,
@@ -395,6 +447,13 @@ async function api(
 ): Promise<Answer> {
   let a = await send(ctx, method, url, { token: await tokenOf(ctx) }, body);
   if (refusedToken(a)) a = await send(ctx, method, url, { token: await mintToken(ctx) }, body);
+  if (a.budget) {
+    budgets.set(ctx.secret, {
+      remaining: a.budget.remaining,
+      cost: a.budget.cost,
+      until: ctx.now + a.budget.resetsInMs,
+    });
+  }
   if (refusedToken(a)) throw new ConnectorError("auth", GONE);
   if (a.res.status === 404) throw new ConnectorError("not_found", "Beds24 does not have that.");
   if (a.res.status >= 400) {
@@ -440,6 +499,25 @@ async function collect(
 
 /* --- what Beds24 holds ------------------------------------------------------------ */
 
+/** One of a room's sixteen daily prices, as its rule has it (schema `priceRules`, `includePriceRules`). */
+interface B24PriceRule {
+  readonly id?: number;
+  readonly priceFor?: { readonly type?: string; readonly upToPersonValue?: number | null } | null;
+  readonly extraPerson?: number | null;
+  readonly extraChild?: number | null;
+  readonly minimumStay?: number | null;
+  readonly maximumStay?: number | null;
+  readonly offer?: number | null;
+  readonly minDaysUntilCheckin?: number | null;
+  readonly maxDaysUntilCheckin?: number | null;
+}
+
+/** An offer of a room (schema `offer`, `includeOffers`): `enable` "no" sells nothing. */
+interface B24Offer {
+  readonly offerId?: number;
+  readonly enable?: string;
+}
+
 interface B24Room {
   readonly id: number;
   readonly name?: string;
@@ -451,6 +529,8 @@ interface B24Room {
   readonly taxPercentage?: number | null;
   readonly taxPerson?: number | null;
   readonly securityDeposit?: number | null;
+  readonly priceRules?: readonly B24PriceRule[];
+  readonly offers?: readonly B24Offer[];
 }
 
 interface B24Upsell {
@@ -488,6 +568,7 @@ export interface B24Booking {
   readonly masterId?: number | null;
   readonly bookingGroup?: { readonly master?: number; readonly ids?: readonly number[] } | null;
   readonly lastName?: string;
+  readonly notes?: string;
   readonly flagText?: string;
   readonly flagColor?: string;
   readonly infoItems?: readonly B24Info[];
@@ -506,15 +587,19 @@ async function readProperties(ctx: RunContext, query: Query = {}): Promise<B24Pr
   return data.filter((p): p is B24Property => typeof (p as B24Property)?.id === "number");
 }
 
+/** What a properties read asks besides the rooms: each daily price's rule and the offers that sell them. */
+const RULES: Query = { includePriceRules: true, includeOffers: true };
+
 async function readProperty(
   ctx: RunContext,
   propertyId: string,
-  opts: { readonly upsells?: boolean } = {},
+  opts: { readonly upsells?: boolean; readonly rules?: boolean } = {},
 ): Promise<B24Property> {
   const id = idOrRefuse(propertyId, "property");
   const [p] = await readProperties(ctx, {
     id: [id],
     includeAllRooms: true,
+    ...(opts.rules ? RULES : {}),
     ...(opts.upsells ? { includeUpsellItems: true } : {}),
   });
   if (!p || p.id !== id)
@@ -595,25 +680,65 @@ function calendarNights(rooms: readonly unknown[], from: string, to: string): Ni
 
 const SLOTS = Array.from({ length: 16 }, (_, i) => `price${i + 1}` as const);
 
-/** The calendar's daily prices on a night, in minor units; none on a night with a multiplier. */
-function pricesOf(entry: CalendarEntry, currency: string | null): Record<string, number> | undefined {
-  if (!currency) return undefined;
+const none = (v: number | null | undefined) => v === undefined || v === null || v === 0;
+
+/**
+ * The daily prices of a room that are what a night costs for any party and any stay, by their rules:
+ * the whole room's price (maxCapacity, or upToPerson at what the room sleeps or more), nothing added per
+ * extra adult or child, no minimum stay above one night or maximum below a year, no window before
+ * check-in (none, 0, or Beds24's largest, 999), and an offer that sells it. Every other price is the
+ * room's to work out per party, and is never quoted from the cache.
+ */
+export function quotableSlots(room: B24Room): Set<string> {
+  const out = new Set<string>();
+  const sleeps = typeof room.maxPeople === "number" ? room.maxPeople : 0;
+  const sold = new Set(
+    (room.offers ?? []).filter((o) => typeof o.offerId === "number" && o.enable !== "no").map((o) => o.offerId),
+  );
+  for (const r of room.priceRules ?? []) {
+    if (typeof r.id !== "number" || !Number.isInteger(r.id) || r.id < 1 || r.id > 16) continue;
+    const t = r.priceFor?.type;
+    const upTo = r.priceFor?.upToPersonValue;
+    const whole =
+      t === "maxCapacity" || (t === "upToPerson" && typeof upTo === "number" && sleeps > 0 && upTo >= sleeps);
+    if (!whole || !none(r.extraPerson) || !none(r.extraChild)) continue;
+    if (typeof r.minimumStay === "number" && r.minimumStay > 1) continue;
+    if (typeof r.maximumStay === "number" && r.maximumStay < 365) continue;
+    if (!none(r.minDaysUntilCheckin)) continue;
+    if (!none(r.maxDaysUntilCheckin) && Number(r.maxDaysUntilCheckin) < 999) continue;
+    if (typeof r.offer !== "number" || !sold.has(r.offer)) continue;
+    out.add(`price${r.id}`);
+  }
+  return out;
+}
+
+/**
+ * The calendar's daily prices on a night that the cache may quote, in minor units: only the room's
+ * quotable ones (`quotableSlots`), and none on a night with a multiplier.
+ */
+function pricesOf(
+  entry: CalendarEntry,
+  currency: string | null,
+  slots: ReadonlySet<string> | undefined,
+): Record<string, number> | undefined {
+  if (!currency || !slots || slots.size === 0) return undefined;
   // A multiplier changes what the night sells for; rather than work out a price, none is given.
   if (entry.multiplier !== undefined && entry.multiplier !== null && entry.multiplier !== 1) return undefined;
   const out: Record<string, number> = {};
   for (const slot of SLOTS) {
+    if (!slots.has(slot)) continue;
     const v = fromBeds24Amount(entry[slot], currency);
     if (v !== null && v > 0) out[slot] = v;
   }
   return Object.keys(out).length ? out : undefined;
 }
 
-function rowOf(n: Night, currency: string | null): AriRow | null {
+function rowOf(n: Night, currency: string | null, slots: ReadonlySet<string> | undefined): AriRow | null {
   const e = n.entry;
   if (typeof e.numAvail !== "number" || !Number.isFinite(e.numAvail)) return null;
   // An override the documentation does not explain is left out: a night nobody can read is not offered.
   if (e.override === "exception") return null;
-  const prices = pricesOf(e, currency);
+  const prices = pricesOf(e, currency, slots);
   return {
     roomId: n.roomId,
     night: n.night,
@@ -627,10 +752,10 @@ function rowOf(n: Night, currency: string | null): AriRow | null {
   };
 }
 
-/** The calendar for some rooms or a property, every page, or as far as the reserve allows. */
+/** The calendar for some rooms or properties, every page, or as far as the reserve allows. */
 async function readCalendar(
   ctx: RunContext,
-  where: { readonly propertyId?: number; readonly roomIds?: readonly number[] },
+  where: { readonly propertyIds?: readonly number[]; readonly roomIds?: readonly number[] },
   from: string,
   to: string,
   opts: { readonly prices?: boolean; readonly reserve?: boolean } = {},
@@ -639,7 +764,7 @@ async function readCalendar(
     ctx,
     "/inventory/rooms/calendar",
     {
-      ...(where.propertyId !== undefined ? { propertyId: [where.propertyId] } : {}),
+      ...(where.propertyIds?.length ? { propertyId: where.propertyIds } : {}),
       ...(where.roomIds?.length ? { roomId: where.roomIds } : {}),
       startDate: from,
       // The last night asked about: the night before `to`.
@@ -648,7 +773,9 @@ async function readCalendar(
       includeMinStay: true,
       includeMaxStay: true,
       includeOverride: true,
-      ...(opts.prices ? { includePrices: true, includeMultiplier: true } : {}),
+      // Asked for, so a daily price linked to another room's is read where Beds24 gives it as `priceN`;
+      // its own linked-price fields are not documented, and are not read.
+      ...(opts.prices ? { includePrices: true, includeLinkedPrices: true, includeMultiplier: true } : {}),
     },
     { reserve: opts.reserve },
   );
@@ -805,22 +932,63 @@ function today(ctx: RunContext): string {
   return new Date(ctx.now).toISOString().slice(0, 10);
 }
 
-/** The rooms with a daily price on some night of the next 60, by id: the others answer nothing. */
-async function pricedSlots(ctx: RunContext, propertyId: number): Promise<Map<string, Set<string>>> {
-  const from = today(ctx);
-  const { nights } = await readCalendar(ctx, { propertyId }, from, addDays(from, 60), { prices: true });
-  const out = new Map<string, Set<string>>();
-  for (const n of nights) {
-    for (const slot of SLOTS) {
-      const v = n.entry[slot];
-      if (typeof v === "number" && v > 0) {
-        const set = out.get(n.roomId) ?? new Set<string>();
-        set.add(slot);
-        out.set(n.roomId, set);
+/** How far ahead the room-matching sheet looks for a room's prices. */
+const PRICED_DAYS = 60;
+
+/**
+ * The account as the room-matching sheet reads it, once per run however many of its properties are
+ * shown: every property with its rooms, their price rules, offers and extras, and one calendar for all
+ * of them, kept to the reserve. Per room: the quotable daily prices with a price on some night of the
+ * next 60 days, and whether it has any price at all; null where the calendar read stopped short.
+ */
+interface AccountRead {
+  readonly props: readonly B24Property[];
+  readonly priced: ReadonlyMap<string, { readonly quotable: ReadonlySet<string>; readonly any: boolean }> | null;
+}
+
+const accounts = new WeakMap<object, Promise<AccountRead>>();
+
+function accountRead(ctx: RunContext): Promise<AccountRead> {
+  const known = accounts.get(ctx.secret);
+  if (known) return known;
+  const made = (async (): Promise<AccountRead> => {
+    const props = await readProperties(ctx, { includeAllRooms: true, includeUpsellItems: true, ...RULES });
+    const ids = props.map((p) => p.id);
+    if (ids.length === 0) return { props, priced: new Map() };
+    // Already at the reserve: the calendar is not read at all, and nothing is said of prices.
+    if (atReserve(ctx)) return { props, priced: null };
+    const from = today(ctx);
+    const { nights, complete } = await readCalendar(ctx, { propertyIds: ids }, from, addDays(from, PRICED_DAYS), {
+      prices: true,
+      reserve: true,
+    });
+    if (!complete) return { props, priced: null };
+    const slotsOf = new Map(props.flatMap((p) => (p.roomTypes ?? []).map((r) => [String(r.id), quotableSlots(r)])));
+    const priced = new Map<string, { quotable: Set<string>; any: boolean }>();
+    for (const n of nights) {
+      const at = priced.get(n.roomId) ?? { quotable: new Set<string>(), any: false };
+      for (const slot of SLOTS) {
+        const v = n.entry[slot];
+        if (typeof v !== "number" || v <= 0) continue;
+        at.any = true;
+        if (slotsOf.get(n.roomId)?.has(slot)) at.quotable.add(slot);
       }
+      priced.set(n.roomId, at);
     }
-  }
-  return out;
+    return { props, priced };
+  })();
+  accounts.set(ctx.secret, made);
+  // A read that failed is not kept: the next call in the run asks again.
+  made.catch(() => accounts.delete(ctx.secret));
+  return made;
+}
+
+async function propertyOfAccount(ctx: RunContext, propertyId: string): Promise<{ p: B24Property; read: AccountRead }> {
+  const id = idOrRefuse(propertyId, "property");
+  const read = await accountRead(ctx);
+  const p = read.props.find((x) => x.id === id);
+  if (!p) throw new ConnectorError("not_found", "Beds24 does not show that property to this connection.");
+  return { p, read };
 }
 
 type Charge = NonNullable<ExternalRoom["charges"]>[number];
@@ -839,15 +1007,21 @@ function chargesOf(room: B24Room, upsells: readonly B24Upsell[]): Charge[] {
   return [...out];
 }
 
+/**
+ * A property's rooms: named, counted and sized as Beds24 has them, with what is said while matching —
+ * no price in the next 60 days (`unpriced`), prices only per party or for some stays (`rules`), and
+ * charges besides the price. Where the calendar read stopped at the reserve, nothing is said of prices.
+ */
 async function rooms(ctx: RunContext, propertyId: string): Promise<ExternalRoom[]> {
-  const p = await readProperty(ctx, propertyId, { upsells: true });
-  const priced = await pricedSlots(ctx, p.id);
+  const { p, read } = await propertyOfAccount(ctx, propertyId);
   return (p.roomTypes ?? [])
     .filter((r) => typeof r.id === "number")
     .map((r) => {
       const adults = r.maxAdult ?? r.maxPeople ?? null;
       const children = r.maxChildren ?? 0;
       const charges = chargesOf(r, p.upsellItems ?? []);
+      const priced = read.priced?.get(String(r.id));
+      const unpriced = read.priced === null ? null : !priced?.any ? true : priced.quotable.size === 0 ? "rules" : null;
       return {
         id: String(r.id),
         name: (r.name ?? "").trim() || `Room ${r.id}`,
@@ -855,16 +1029,20 @@ async function rooms(ctx: RunContext, propertyId: string): Promise<ExternalRoom[
         ...(adults
           ? { capacity: { adults, children, total: Math.max(adults, r.maxPeople ?? adults + children) } }
           : {}),
-        ...(priced.has(String(r.id)) ? {} : { unpriced: true }),
+        ...(unpriced !== null ? { unpriced } : {}),
         ...(charges.length ? { charges } : {}),
       };
     });
 }
 
+/** The daily prices the cache quotes for this property's rooms, each with the rooms it prices. */
 async function ratePlans(ctx: RunContext, propertyId: string): Promise<ExternalRate[]> {
-  const priced = await pricedSlots(ctx, idOrRefuse(propertyId, "property"));
+  const { p, read } = await propertyOfAccount(ctx, propertyId);
   const bySlot = new Map<string, string[]>();
-  for (const [room, slots] of priced) {
+  for (const r of p.roomTypes ?? []) {
+    const room = String(r.id);
+    // Where the calendar was not read in full, a rule alone says which prices can be quoted.
+    const slots = read.priced ? (read.priced.get(room)?.quotable ?? new Set<string>()) : quotableSlots(r);
     for (const slot of slots) bySlot.set(slot, [...(bySlot.get(slot) ?? []), room]);
   }
   return SLOTS.filter((s) => bySlot.has(s)).map((s) => ({
@@ -881,12 +1059,17 @@ async function ari(
 ): Promise<AriRow[] | { readonly rows: readonly AriRow[]; readonly until: string }> {
   if (!DATE.test(window.from) || !DATE.test(window.to) || window.to <= window.from) return [];
   const id = idOrRefuse(propertyId, "property");
-  const currency = await currencyOf(ctx, propertyId);
-  const { nights, complete } = await readCalendar(ctx, { propertyId: id }, window.from, window.to, {
+  // The rules are read with every calendar: a price changed from the whole room's to a price per
+  // person in Beds24 is never quoted as the room's once more.
+  const p = await readProperty(ctx, propertyId, { rules: true });
+  const own = p.currency?.toUpperCase();
+  const currency = own && /^[A-Z]{3}$/.test(own) ? own : null;
+  const slots = new Map((p.roomTypes ?? []).map((r) => [String(r.id), quotableSlots(r)]));
+  const { nights, complete } = await readCalendar(ctx, { propertyIds: [id] }, window.from, window.to, {
     prices: true,
     reserve: true,
   });
-  const rows = nights.map((n) => rowOf(n, currency)).filter((r): r is AriRow => r !== null);
+  const rows = nights.map((n) => rowOf(n, currency, slots.get(n.roomId))).filter((r): r is AriRow => r !== null);
   // Stopped to keep credits for holds and bookings: nothing past the start is known to be complete.
   return complete ? rows : { rows, until: window.from };
 }
@@ -911,7 +1094,8 @@ async function price(
     .flatMap((d) => ((d as { offers?: unknown }).offers as unknown[] | undefined) ?? [])
     .map((o) => o as { offerId?: unknown; price?: unknown; unitsAvailable?: unknown })
     .filter((o) => typeof o.price === "number" && o.price > 0 && Number(o.unitsAvailable ?? 0) > 0);
-  // Which offer a daily price belongs to is not documented: a total is given only when one offer is free.
+  // The query names no rate, and two free offers are two prices for the same stay: a total is given only
+  // when one offer is free, so it is never the wrong one of two.
   if (offers.length !== 1) return null;
   const value = fromBeds24Amount(offers[0]?.price, currency);
   return value === null ? null : { subtotal: { value, currency } };
@@ -993,6 +1177,9 @@ function bookingBody(
   const guest = stay.guest;
   const info = infoItems(stay, i, waiting, opts.info);
   const name = guest ? textOf(guest.name, 100) : "";
+  // Kept whole or left out: an address or a number cut short would reach someone else.
+  const email = wholeOf(guest?.email, 100);
+  const phone = wholeOf(guest?.phone, 100);
   return {
     ...(creating ? {} : { id: opts.id }),
     roomId: idOrRefuse(r.roomId, "room"),
@@ -1007,19 +1194,13 @@ function bookingBody(
     ...(creating && opts.key ? { apiReference: opts.key } : {}),
     ...(creating && opts.masterId !== undefined ? { masterId: opts.masterId } : {}),
     // The owner's own notes and the guest's words are written once, when it is made, never written over.
-    ...(creating ? { notes: `Written by your inbox · ${stay.reference}` } : {}),
+    ...(creating ? { notes: `${NOTE}${stay.reference}` } : {}),
     ...(creating && stay.notes ? { comments: textOf(stay.notes, 1000) } : {}),
     ...(info ? { infoItems: info } : {}),
     ...(waiting ? { flagText: BEDS24_WAITING_FLAG, flagColor: WAITING_COLOR } : {}),
     ...(!waiting && opts.clearFlag ? { flagText: "", flagColor: "" } : {}),
     // The guest's name whole, as they gave it: a name is not ordered the same way everywhere.
-    ...(guest && name
-      ? {
-          lastName: name,
-          ...(guest.email ? { email: textOf(guest.email, 100) } : {}),
-          ...(guest.phone ? { phone: textOf(guest.phone, 100) } : {}),
-        }
-      : {}),
+    ...(guest && name ? { lastName: name, ...(email ? { email } : {}), ...(phone ? { phone } : {}) } : {}),
     actions: {
       allowWebhooks: true,
       ...(creating ? { checkAvailability: true } : {}),
@@ -1133,12 +1314,10 @@ async function checkFree(
   for (const [roomId, perNight] of need) {
     for (const [night, units] of perNight) {
       const n = nights.find((x) => x.roomId === roomId && x.night === night);
-      // A room Beds24 says nothing of (one with no price there) is never written to blind.
+      // A room Beds24 says nothing of (its calendar answers nothing for a room with no price) is never
+      // written to blind.
       if (typeof n?.entry.numAvail !== "number") {
-        throw new ConnectorError(
-          "refused",
-          "Beds24 says nothing of that room on those nights: give it a price in Beds24.",
-        );
+        throw new ConnectorError("refused", "Beds24 shows no availability for that room on those nights.");
       }
       const free = n.entry.override === "blackout" ? 0 : n.entry.numAvail;
       if (free + ours(roomId, night) < units) throw new ConnectorError("refused", NOT_FREE);
@@ -1157,12 +1336,24 @@ function needOf(stay: OutboundStay): Map<string, Map<string, number>> {
   return out;
 }
 
-function checkStay(stay: OutboundStay): void {
+async function checkStay(ctx: RunContext, stay: OutboundStay, opts: { readonly money?: boolean } = {}): Promise<void> {
   if (!DATE.test(stay.checkIn) || !DATE.test(stay.checkOut) || stay.checkOut <= stay.checkIn) {
     throw new ConnectorError("config", "That stay has no nights.");
   }
   if (stay.rooms.length === 0 || stay.rooms.length > MAX_ROOMS) {
     throw new ConnectorError("refused", `Beds24 is written up to ${MAX_ROOMS} rooms a stay.`);
+  }
+  if (opts.money === false) return;
+  // Beds24 takes a price as a number in the property's own currency: one in another would be the wrong money.
+  const theirs = await currencyOf(ctx, stay.propertyId);
+  if (!theirs)
+    throw new ConnectorError("refused", "Beds24 does not say this property's currency: confirm this stay there.");
+  const other = stay.rooms.find((r) => r.price.currency.toUpperCase() !== theirs);
+  if (other) {
+    throw new ConnectorError(
+      "refused",
+      `Beds24 keeps this property in ${theirs}, and this stay is in ${other.price.currency}: make them the same first.`,
+    );
   }
 }
 
@@ -1222,6 +1413,32 @@ async function keyed(ctx: RunContext, key: string): Promise<B24Booking[]> {
   return found
     .filter((b) => baseKey(b.apiReference ?? "") === key)
     .sort((a, b) => Number(a.status === "cancelled") - Number(b.status === "cancelled") || byRoom(a, b));
+}
+
+/**
+ * A new stay's booking found without our key: its first room, on its dates, carrying the note every
+ * booking this inbox makes (`Written by your inbox · REF`), live ones first. What finds a write whose
+ * answer was lost when Beds24 did not keep `apiReference`, so it is taken back rather than left standing.
+ */
+async function noted(ctx: RunContext, stay: OutboundStay): Promise<B24Booking | undefined> {
+  const first = stay.rooms[0];
+  const roomId = first ? intId(first.roomId) : null;
+  if (roomId === null || !stay.reference || !DATE.test(stay.checkIn) || !DATE.test(stay.checkOut)) return undefined;
+  const found = await readBookings(ctx, {
+    roomId: [roomId],
+    arrival: stay.checkIn,
+    departure: stay.checkOut,
+    status: ALL_STATUSES,
+  });
+  return found
+    .filter(
+      (b) =>
+        b.roomId === roomId &&
+        typeof b.notes === "string" &&
+        b.notes.includes(MARK) &&
+        b.notes.includes(stay.reference),
+    )
+    .sort((a, b) => Number(a.status === "cancelled") - Number(b.status === "cancelled") || a.id - b.id)[0];
 }
 
 async function create(ctx: RunContext, stay: OutboundStay, status: StayWriteStatus): Promise<LinkState> {
@@ -1385,22 +1602,80 @@ async function oversold(ctx: RunContext, stay: OutboundStay, link: LinkState): P
       if (n.entry.numAvail < 0) return true;
     }
   }
-  // Its count of bookings against its rooms: every booking that takes the room on one of these nights.
+  // Its count of bookings against its rooms, night by night: more than the room has units, or two on one unit.
+  try {
+    return await unitsOversold(ctx, roomIds, stay.checkIn, stay.checkOut);
+  } catch (error) {
+    // That count is "Beta" in the OpenAPI file: where Beds24 does not serve it, its bookings are counted.
+    if (!(error instanceof ConnectorError) || (error.code !== "not_found" && error.code !== "bad_response"))
+      throw error;
+  }
   const propertyId = current[0]?.propertyId;
   if (typeof propertyId !== "number") throw new Error("the booking names no property");
-  const prop = await readProperty(ctx, String(propertyId));
-  // Bounds wide by a day each way, which holds whether Beds24 counts "before" and "after" with the day
-  // itself or without: the nights are matched exactly below.
+  return bookingsOversold(ctx, String(propertyId), roomIds, stay.checkIn, stay.checkOut);
+}
+
+/**
+ * Beds24's own count of bookings by unit, night by night (`GET /inventory/rooms/unitBookings`, with
+ * the inventory scope: no guest's name or contact comes with it): oversold when a night has more
+ * bookings than the room has units, or two on one unit. Throws when a room or a night is not in it.
+ */
+async function unitsOversold(ctx: RunContext, roomIds: readonly string[], from: string, to: string): Promise<boolean> {
+  const { data, complete } = await collect(ctx, "/inventory/rooms/unitBookings", {
+    roomId: roomIds.map((r) => idOrRefuse(r, "room")),
+    startDate: from,
+    // "The last night to be booked (i.e. the day before check-out)".
+    endDate: addDays(to, -1),
+  });
+  if (!complete) throw new Error("Beds24's count of bookings did not come whole");
+  for (const roomId of roomIds) {
+    const room = data.find((d) => String((d as { roomId?: unknown }).roomId) === roomId) as
+      | { qty?: unknown; unitBookings?: Record<string, Record<string, unknown> | undefined> }
+      | undefined;
+    const units = room?.qty;
+    if (!room || typeof units !== "number" || !room.unitBookings) {
+      throw new ConnectorError("bad_response", "Beds24's count of bookings does not name the room.");
+    }
+    for (const night of nightsOf(from, to)) {
+      const day = room.unitBookings[night];
+      if (!day || typeof day !== "object") throw new ConnectorError("bad_response", "Beds24's count misses a night.");
+      let all = 0;
+      for (const [unit, n] of Object.entries(day)) {
+        if (typeof n !== "number" || !Number.isFinite(n) || n < 0) continue;
+        if (unit !== "unassigned" && n > 1) return true;
+        all += n;
+      }
+      if (all > units) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Where that count is not served: every booking that takes the room on one of these nights, counted
+ * against its units. Arriving before the stay's check-out and leaving after its check-in, from any
+ * arrival date (an in-house guest's included); the nights are matched exactly here, whether Beds24's
+ * "before" and "after" count the day itself or not. Only the counts are kept.
+ */
+async function bookingsOversold(
+  ctx: RunContext,
+  propertyId: string,
+  roomIds: readonly string[],
+  from: string,
+  to: string,
+): Promise<boolean> {
+  const prop = await readProperty(ctx, propertyId);
   const overlapping = await readBookings(ctx, {
     roomId: roomIds.map((r) => idOrRefuse(r, "room")),
-    arrivalTo: stay.checkOut,
-    departureFrom: stay.checkIn,
+    arrivalFrom: SINCE,
+    arrivalTo: to,
+    departureFrom: from,
     status: [...BLOCKING],
   });
   for (const roomId of roomIds) {
     const units = prop.roomTypes?.find((r) => String(r.id) === roomId)?.qty;
     if (typeof units !== "number") throw new Error("Beds24 does not say how many units the room has");
-    for (const night of nights) {
+    for (const night of nightsOf(from, to)) {
       const taken = overlapping
         .filter(
           (b) =>
@@ -1450,11 +1725,25 @@ async function cancel(ctx: RunContext, link: LinkState): Promise<void> {
  * its room and dates as nights to read again — and is refused when it is not a Beds24 booking webhook
  * for a property this connection sees.
  */
-/** Whether a body carries anything of a card, whatever Beds24 calls it: never taken, never kept. */
+/** Whether a value says something: a non-empty string, a number, true, or an object or list with content. */
+function filled(value: unknown, depth = 0): boolean {
+  if (value === null || value === undefined || value === false) return false;
+  if (typeof value === "string") return value.trim() !== "";
+  if (typeof value === "number") return Number.isFinite(value);
+  if (typeof value !== "object") return true;
+  if (depth > 6) return true;
+  return Object.values(value as Record<string, unknown>).some((v) => filled(v, depth + 1));
+}
+
+/**
+ * Whether a body carries anything of a card, whatever Beds24 calls it: never taken, never kept. Every
+ * booking webhook names `stripeToken` and `pcibookingToken`, empty unless the owner chose to add one
+ * (null in the OpenAPI file's body): only a key of that kind holding something is a card.
+ */
 function carriesCard(value: unknown, depth = 0): boolean {
   if (depth > 6 || value === null || typeof value !== "object") return false;
   for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-    if (/card|cvc|cvv|token/i.test(k)) return true;
+    if (/card|cvc|cvv|token/i.test(k) && filled(v)) return true;
     if (carriesCard(v, depth + 1)) return true;
   }
   return false;
@@ -1558,6 +1847,9 @@ export function beds24Connector(): ConnectorDefinition {
     form: beds24Form,
     action: "Connect",
     ready: () => true,
+    // Built from Beds24's documentation and never yet run against a real account (D6, `apiReference`).
+    fresh: true,
+    note: "New: built from Beds24's documentation. Your first stays are checked against Beds24 as they are written.",
     connect,
     refresh,
     disconnect,
@@ -1567,6 +1859,7 @@ export function beds24Connector(): ConnectorDefinition {
       ratePlans,
       ari,
       price,
+      pricesAt: BEDS24_PRICES_AT,
       credits(res) {
         const b = beds24Budget(res.headers);
         return b ? { remaining: b.remaining, resetsInMs: b.resetsInMs } : null;
@@ -1582,18 +1875,21 @@ export function beds24Connector(): ConnectorDefinition {
             "Beds24 has no hold known to keep a room off sale: nothing is held there.",
           );
         }
-        checkStay(stay);
+        await checkStay(ctx, stay);
         return link?.externalId ? move(ctx, stay, link, status) : create(ctx, stay, status);
       },
       cancel,
       async find(ctx, stay) {
-        // The stay's own booking, or one of its other rooms' where the first is missing.
+        // The stay's own booking, or one of its other rooms' where the first is missing; else, where
+        // Beds24 did not keep our key, the booking with its first room and dates and our note.
         const [b] = await keyed(ctx, stay.key);
-        return b ? { externalId: String(b.id), etag: null, calendar: null } : null;
+        const found = b ?? (MODIFY_KEY.test(stay.key) ? undefined : await noted(ctx, stay));
+        return found ? { externalId: String(found.id), etag: null, calendar: null } : null;
       },
       oversold,
       async restore(ctx, stay, link) {
-        checkStay(stay);
+        // Put back as it stood, in the money it was written in: a currency changed since is the owner's to fix.
+        await checkStay(ctx, stay, { money: false });
         return move(ctx, stay, link, "confirmed", { restore: true });
       },
     },
