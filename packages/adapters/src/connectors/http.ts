@@ -31,7 +31,8 @@ export function connectorHttp(opts: { readonly fetchImpl?: typeof fetch | undefi
       let url = checked(request.url);
       const origin = url.hostname;
       let method = request.method.toUpperCase();
-      let body = request.body;
+      // A body of bytes (a file in a multipart form) goes as it is (ADR-034).
+      let body: string | Uint8Array | undefined = request.bytes ?? request.body;
       const headers: Record<string, string> = { "user-agent": USER_AGENT, ...(request.headers ?? {}) };
       for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
         let response: Response;
@@ -39,7 +40,7 @@ export function connectorHttp(opts: { readonly fetchImpl?: typeof fetch | undefi
           response = await doFetch(url.toString(), {
             method,
             headers,
-            ...(body !== undefined && method !== "GET" && method !== "HEAD" ? { body } : {}),
+            ...(body !== undefined && method !== "GET" && method !== "HEAD" ? { body: body as BodyInit } : {}),
             redirect: "manual",
             signal: AbortSignal.timeout(request.timeoutMs ?? DEFAULT_TIMEOUT_MS),
           });
