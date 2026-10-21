@@ -22,6 +22,8 @@ const API_PATHS = [
   "/c/",
   "/p/",
   "/demo/",
+  "/phone",
+  "/i/",
 ];
 const API_TARGET = process.env.INBOX_API ?? "http://localhost:8787";
 

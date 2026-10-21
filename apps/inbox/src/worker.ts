@@ -37,6 +37,8 @@ type Bindings = Env & {
   GOOGLE_OAUTH_CLIENT_ID?: string;
   GOOGLE_OAUTH_CLIENT_SECRET?: string;
   GOOGLE_OAUTH_REDIRECT_URI?: string;
+  /** The push relay for the owner's phones (ADR-028): its address, or `off`. Absent, Surfing Dog's. */
+  INBOX_PUSH_RELAY?: string;
 };
 
 // One app per isolate; the D1 binding is stable for the isolate's life.
@@ -61,6 +63,7 @@ function inboxFor(env: Bindings): Inbox {
       baseUrl: publicUrlFrom(env.INBOX_PUBLIC_URL),
       demo: flagOn(env.INBOX_DEMO) ? { ownerEmails, from } : undefined,
       ...oauthFrom(env),
+      pushRelay: env.INBOX_PUSH_RELAY,
       // `/` runs the worker first (the business's own page); a signed-in owner gets their app from the assets.
       appShell: (request) =>
         env.ASSETS.fetch(new Request(new URL("/index.html", request.url), { headers: request.headers })),
@@ -116,7 +119,7 @@ export default {
       envelopeFrom: message.from,
       authenticated: false,
       // What Email Routing found about the sender, read from the message's topmost results and only
-      // once the operator confirmed whose they are: a second signal only (ADR-026 §7).
+      // once the operator confirmed whose they are: a second signal only (ADR-028 §7).
       ...(env.EMAIL_AUTHSERV_ID ? { authResultsFrom: env.EMAIL_AUTHSERV_ID.split(",") } : {}),
     });
     // Too many right now: a temporary failure, which the sending server retries, never a bounce.

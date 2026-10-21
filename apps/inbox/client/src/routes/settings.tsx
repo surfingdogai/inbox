@@ -56,6 +56,9 @@ function SettingsLayout() {
         <Link to="/settings/keys" className="tab">
           Keys
         </Link>
+        <Link to="/settings/phone" className="tab">
+          Phone
+        </Link>
         <Link to="/settings/networks" className="tab">
           Networks
         </Link>

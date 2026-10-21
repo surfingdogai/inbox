@@ -7,6 +7,7 @@ import {
   type HostPolicy,
   type HostSender,
   hostPolicyFor,
+  type RelayRegistrar,
 } from "@surfingdog/core";
 import { createInbox, type Inbox } from "@surfingdog/inbox/app";
 import { isDoor } from "@surfingdog/inbox/doors";
@@ -66,6 +67,8 @@ export interface BuildDeps {
   readonly oauth?: OAuthClients | undefined;
   /** The one redirect address a platform sends every owner back to, through the router (ADR-022). */
   readonly oauthRedirect?: ((kind: string) => string | undefined) | undefined;
+  /** How the tenant's phones are registered with the push relay: through the control plane (ADR-028). */
+  readonly pushRegistrar?: RelayRegistrar | undefined;
   /** For the internal test as an agent only: the doors open whatever the policy says. Never served. */
   readonly agentsOpen?: boolean | undefined;
   readonly now?: (() => number) | undefined;
@@ -89,7 +92,7 @@ export function tenantMailOut(d: BuildDeps): MailOut {
     allowCustomerMail: () => p.mail.customer_mail && p.mail.customer_daily_cap > 0 && !d.ledger.mailPaused(d.tenantId),
     beforeSend: (mail, about) => d.ledger.hold(d.tenantId, mail, about, p.mail.customer_daily_cap),
   };
-  // A conversation's own address (ADR-026 §4) is the only Reply-To a message may name: on the inbox's
+  // A conversation's own address (ADR-028 §4) is the only Reply-To a message may name: on the inbox's
   // own domain, or the business's when its forward carries plus addresses. Never the owner's address.
   const inboundDomain = p.mail.inbound?.split("@")[1]?.toLowerCase();
   const replyDomains = [inboundDomain, p.domain?.toLowerCase()].filter((d): d is string => Boolean(d));
@@ -114,7 +117,7 @@ function slugOf(address: string): string | undefined {
 }
 
 /**
- * Sending from the business's own address, as the inbox's Settings show it and ask for it (ADR-026
+ * Sending from the business's own address, as the inbox's Settings show it and ask for it (ADR-028
  * §3): what the policy says, and the owner's asks told to the control plane as events.
  */
 export function tenantEmailHost(
@@ -171,6 +174,7 @@ export function buildInbox(d: BuildDeps): Inbox {
     leaving: p.state === "closing",
     oauth: d.oauth,
     oauthRedirect: d.oauthRedirect,
+    pushRegistrar: d.pushRegistrar,
     now: d.now,
   });
   inbox.caps.email.attachHost(tenantEmailHost(p, d.onMailSender), Boolean(p.mail.inbound));

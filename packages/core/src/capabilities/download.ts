@@ -134,6 +134,13 @@ export const DOWNLOAD_TABLES: Readonly<Record<string, DownloadTable>> = {
     leftOut: "The AI apps connected here, and what they are checked against. Connect them again.",
     strip: empty("oauth_tokens"),
   },
+  // The owner's phones (ADR-028): they connect to an inbox, not to a copy of it.
+  phone_pairings: { leftOut: "Codes for connecting a phone.", strip: empty("phone_pairings") },
+  phone_devices: {
+    leftOut: "The phones connected here, and how notifications reach them. Connect them again from Settings → Phone.",
+    strip: empty("phone_devices"),
+  },
+  phone_tokens: { leftOut: "What the phones signed in with.", strip: empty("phone_tokens") },
   // Secrets, and what only means something here.
   signing_keys: {
     leftOut:

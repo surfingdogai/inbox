@@ -97,7 +97,7 @@ export interface ShardOptions {
 
 export const DEFAULT_MAX_OPEN = 64;
 export const DEFAULT_MAX_TENANT_BYTES = 200 * 1024 * 1024;
-/** All the attachments one hosted inbox keeps (ADR-026 §7): a quarter of its room, never all of it. */
+/** All the attachments one hosted inbox keeps (ADR-028 §7): a quarter of its room, never all of it. */
 export const HOSTED_ATTACHMENTS_MAX_BYTES = 50 * 1024 * 1024;
 
 const SYSTEM: Caller = {
@@ -243,6 +243,11 @@ export class Shard {
         clientDir: this.o.clientDir,
         oauth: this.o.oauth,
         oauthRedirect: this.o.oauthRedirect,
+        // The tenant's phones are registered through the control plane, which vouches for the tenant.
+        pushRegistrar: this.o.controlPlane.pushRegister
+          ? (body: unknown) =>
+              this.o.controlPlane.pushRegister?.(id, body) ?? Promise.reject(new Error("no control plane"))
+          : undefined,
         onOwnerEmailChange: (change: OwnerEmailChange) =>
           this.event(id, change.how === "undone" ? "owner_email_undone" : "owner_email_changed", { to: change.to }),
         onMailSender: (type, data) => this.event(id, type, data),

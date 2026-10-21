@@ -1,0 +1,4 @@
+/build/*
+!/build/.npmkeep
+# The Firebase config comes from the GOOGLE_SERVICES_JSON secret in CI, or your own file locally.
+google-services.json

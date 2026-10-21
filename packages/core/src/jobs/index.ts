@@ -2,11 +2,20 @@ import type { MailOut } from "@surfingdog/platform";
 import type { InboxOutcomeCode, ReceiptKind } from "@surfingdog/spec";
 import { EMAIL_CHECK_KIND, emailCheckHandler } from "../email/check";
 import { BACKFILL_BATCH, backfillPartyContacts, PARTY_CONTACTS_BACKFILL_KIND } from "../identity/contacts";
+import {
+  PHONE_PUSH_KIND,
+  PHONE_PUSH_ONE_KIND,
+  phonePushFanoutHandler,
+  phonePushOneHandler,
+  withPhonePush,
+} from "../phones/jobs";
+import type { PhoneCapabilities } from "../phones/phones";
 import type { ReceiptCapabilities } from "../receipts/capabilities";
 import { runRulesForEvent } from "../rules/engine";
 import type { SecretBox } from "../secrets/box";
 import { LIFECYCLE_SWEEP_KIND, lifecycleSweepHandler } from "./lifecycle";
 import { type NotifyPayload, notifyHandler, OWNER_DIGEST_KIND, ownerDigestHandler } from "./notify";
+import type { JobHandler } from "./runner";
 import { JobRunner } from "./runner";
 import { ensureJob } from "./schedule";
 
@@ -27,73 +36,86 @@ export function createRunner(deps: {
   receipts?: ReceiptCapabilities | undefined;
   /** Opens a first contact's key for the email that carries it to the customer (ADR-017 §2.1). */
   secrets?: SecretBox | null | undefined;
+  /** The owner's phones (ADR-028): with them, a notification to each phone that wants one. */
+  phones?: PhoneCapabilities | undefined;
 }): JobRunner {
-  return (
-    new JobRunner()
-      .register(
-        "notify",
+  const runner = new JobRunner()
+    // The owner's phones hear of what the owner is emailed about, whether or not the email goes (ADR-028).
+    .register(
+      "notify",
+      withPhonePush(
         notifyHandler(deps.mailOut, {
           ...(deps.baseUrl ? { baseUrl: deps.baseUrl } : {}),
           secrets: deps.secrets ?? null,
         }),
-      )
-      // Owner alerts past the hour's cap, in one email at the end of the hour.
-      .register(OWNER_DIGEST_KIND, ownerDigestHandler(deps.mailOut, deps.baseUrl ? { baseUrl: deps.baseUrl } : {}))
-      // The live "forwarding works" check (ADR-026 §2): an email to the business's own address.
-      .register(EMAIL_CHECK_KIND, emailCheckHandler(deps.mailOut, { baseUrl: deps.baseUrl }))
-      .register("rules", async (job, { db, now }) => {
-        const p = job.payload as { itemId: string; eventId: string; trigger: string };
-        const r = await runRulesForEvent(db, { ...p, now });
-        return {
-          note: `${r.evaluated} evaluated, ${r.matched.length} matched, ${r.actions} actions${r.errors.length ? `; ${r.errors.join(" | ")}` : ""}`,
-        };
-      })
-      .register("issue_receipt", async (job, { db, now }) => {
-        const p = job.payload as IssueReceiptPayload;
-        if (!deps.receipts) return { note: "this runner has no receipt capability; nothing issued" };
-        const r = await deps.receipts.issue(p.itemId, p.kind, now, {
-          outcome: p.outcome,
-          aut: p.aut === 1,
-          eventId: p.eventId,
-          offerId: p.offerId,
-        });
-        // A skip is a decision, not a failure: the reason is recorded here and the job is done.
-        // Retrying would not change the environment it is complaining about.
-        if (r.outcome === "skipped") return { note: r.note };
-        // Waiting for a first contact's answer (ADR-017 §3.2): the same job again in a minute.
-        if (r.outcome === "deferred") {
-          await ensureJob(
-            db,
-            "issue_receipt",
-            `receipt:${p.itemId}:${p.outcome ?? (p.offerId ? `${p.kind}:${p.offerId}` : p.kind)}:wait:${Math.floor(now / 60_000)}`,
-            {
-              now,
-              runAt: now + 60_000,
-              payload: p,
-            },
-          );
-          return { note: r.note };
-        }
-        return { note: `${r.outcome} ${p.outcome ?? p.kind} receipt ${r.receipt.id}` };
-      })
-      .register("review_fact", async () => ({ note: "review facts arrive in a later release" }))
-      .register(
-        LIFECYCLE_SWEEP_KIND,
-        lifecycleSweepHandler({ mailOut: deps.mailOut, secrets: deps.secrets ?? null, baseUrl: deps.baseUrl }),
-      )
-      // The contacts backfill (0009): resumable, 200 parties a run, each run queueing the next.
-      .register(PARTY_CONTACTS_BACKFILL_KIND, async (job, { db, now }) => {
-        const after = String((job.payload as { after?: unknown } | null)?.after ?? "");
-        const r = await backfillPartyContacts(db, after, now);
-        if (r.last && r.done === BACKFILL_BATCH) {
-          await ensureJob(db, PARTY_CONTACTS_BACKFILL_KIND, `${PARTY_CONTACTS_BACKFILL_KIND}:${r.last}`, {
+      ),
+    )
+    // Owner alerts past the hour's cap, in one email at the end of the hour.
+    .register(OWNER_DIGEST_KIND, ownerDigestHandler(deps.mailOut, deps.baseUrl ? { baseUrl: deps.baseUrl } : {}))
+    // The live "forwarding works" check (ADR-026 §2): an email to the business's own address.
+    .register(EMAIL_CHECK_KIND, emailCheckHandler(deps.mailOut, { baseUrl: deps.baseUrl }))
+    .register("rules", async (job, { db, now }) => {
+      const p = job.payload as { itemId: string; eventId: string; trigger: string };
+      const r = await runRulesForEvent(db, { ...p, now });
+      return {
+        note: `${r.evaluated} evaluated, ${r.matched.length} matched, ${r.actions} actions${r.errors.length ? `; ${r.errors.join(" | ")}` : ""}`,
+      };
+    })
+    .register("issue_receipt", async (job, { db, now }) => {
+      const p = job.payload as IssueReceiptPayload;
+      if (!deps.receipts) return { note: "this runner has no receipt capability; nothing issued" };
+      const r = await deps.receipts.issue(p.itemId, p.kind, now, {
+        outcome: p.outcome,
+        aut: p.aut === 1,
+        eventId: p.eventId,
+        offerId: p.offerId,
+      });
+      // A skip is a decision, not a failure: the reason is recorded here and the job is done.
+      // Retrying would not change the environment it is complaining about.
+      if (r.outcome === "skipped") return { note: r.note };
+      // Waiting for a first contact's answer (ADR-017 §3.2): the same job again in a minute.
+      if (r.outcome === "deferred") {
+        await ensureJob(
+          db,
+          "issue_receipt",
+          `receipt:${p.itemId}:${p.outcome ?? (p.offerId ? `${p.kind}:${p.offerId}` : p.kind)}:wait:${Math.floor(now / 60_000)}`,
+          {
             now,
-            payload: { after: r.last },
-          });
-        }
-        return { note: `${r.done} part${r.done === 1 ? "y" : "ies"} after ${after || "the start"}` };
-      })
-  );
+            runAt: now + 60_000,
+            payload: p,
+          },
+        );
+        return { note: r.note };
+      }
+      return { note: `${r.outcome} ${p.outcome ?? p.kind} receipt ${r.receipt.id}` };
+    })
+    .register("review_fact", async () => ({ note: "review facts arrive in a later release" }))
+    .register(
+      LIFECYCLE_SWEEP_KIND,
+      withPhonePrune(
+        deps.phones,
+        lifecycleSweepHandler({ mailOut: deps.mailOut, secrets: deps.secrets ?? null, baseUrl: deps.baseUrl }),
+      ),
+    )
+    // The contacts backfill (0009): resumable, 200 parties a run, each run queueing the next.
+    .register(PARTY_CONTACTS_BACKFILL_KIND, async (job, { db, now }) => {
+      const after = String((job.payload as { after?: unknown } | null)?.after ?? "");
+      const r = await backfillPartyContacts(db, after, now);
+      if (r.last && r.done === BACKFILL_BATCH) {
+        await ensureJob(db, PARTY_CONTACTS_BACKFILL_KIND, `${PARTY_CONTACTS_BACKFILL_KIND}:${r.last}`, {
+          now,
+          payload: { after: r.last },
+        });
+      }
+      return { note: `${r.done} part${r.done === 1 ? "y" : "ies"} after ${after || "the start"}` };
+    });
+  if (deps.phones) {
+    runner
+      .register(PHONE_PUSH_KIND, phonePushFanoutHandler(deps.phones))
+      // One phone's notifications one after another; a slow relay delays only push.
+      .register(PHONE_PUSH_ONE_KIND, phonePushOneHandler(deps.phones), { lane: () => "push" });
+  }
+  return runner;
 }
 
 /**
@@ -110,3 +132,16 @@ export interface IssueReceiptPayload {
 }
 
 export type { NotifyPayload };
+
+/**
+ * Each quarter hour's sweep tidies the phones first (ADR-028): phones nobody confirmed in time go,
+ * and tokens nothing can use any more are deleted. A failure there never stops the sweep.
+ */
+function withPhonePrune(phones: PhoneCapabilities | undefined, sweep: JobHandler): JobHandler {
+  if (!phones) return sweep;
+  return async (job, ctx) => {
+    if (((job.payload as { link?: number } | null)?.link ?? 0) === 0)
+      await phones.prune(ctx.now).catch(() => undefined);
+    return sweep(job, ctx);
+  };
+}

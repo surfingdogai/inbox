@@ -25,6 +25,7 @@ import { createOwnerMcpHandler, createPublicMcpHandler } from "./mcp";
 import { authorizationServerMetadata, type ClientMetadata, oauthRoutes, protectedResourceMetadata } from "./oauth";
 import { publicOrigin, sameOrigin } from "./origin";
 import { type OwnerEmailChange, ownerEmailRoutes } from "./owner-email";
+import { ownerPhoneRoutes, phonePage, phoneRoutes } from "./phone";
 import { forbidden, problemResponse, replayedSignature, tooManyRequests, unauthorized } from "./problem";
 import { type CallerEnv, ownerRest, publicRest } from "./rest";
 import { safeFetchJson } from "./safe-fetch";
@@ -47,6 +48,7 @@ export * from "./network";
 export * from "./oauth";
 export * from "./origin";
 export * from "./owner-email";
+export * from "./phone";
 export * from "./problem";
 export * from "./responses";
 export * from "./rest";
@@ -306,6 +308,20 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
     ) {
       return forbidden(c, "Cross-site writes with a session cookie are refused; call from the app or use an API key.");
     }
+    // One of the owner's phones uses the owner's door and its own, and no other, for reading too (ADR-026).
+    if (caller.auth?.via === "device") {
+      const path = c.req.path;
+      if (!path.startsWith("/v1/owner/") && path !== "/v1/phone" && !path.startsWith("/v1/phone/"))
+        return forbidden(c, "A phone answers its inbox through the owner's API.");
+      // Until the owner confirms it on the computer, it may only ask whether they have.
+      if (caller.auth.pending && !(c.req.method === "GET" && path === "/v1/phone/me"))
+        return problemResponse(
+          c,
+          new WriteError("not_allowed", "Confirm this phone on your computer first, in Settings → Phone.", {
+            details: { reason: "phone_unconfirmed" },
+          }),
+        );
+    }
     // An integration key has a soft bucket of its own, on every call, so a loop between this inbox
     // and the system it is pasted into cannot run for ever. The owner's session and AI are not counted.
     if (caller.principal?.keyKind === "integration") {
@@ -361,6 +377,14 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
   app.use("/auth/*", async (c, next) => {
     if (c.req.method === "POST") {
       const refused = await limited(c, AUTH_LIMITED.has(c.req.path.replace(/\/$/, "")) ? ["auth"] : ["public"]);
+      if (refused) return refused;
+    }
+    await next();
+  });
+  // "Email me a sign-in link": an email to the owner's mailbox, as a sign-in email is.
+  app.use("/v1/phone/link", async (c, next) => {
+    if (c.req.method === "POST") {
+      const refused = await limited(c, ["auth"]);
       if (refused) return refused;
     }
     await next();
@@ -463,7 +487,7 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
         raw,
         envelopeTo: c.req.header("x-envelope-to"),
         envelopeFrom: c.req.header("x-envelope-from"),
-        // What the receiving server found (ADR-026 §7), as the gateway the secret let in says.
+        // What the receiving server found (ADR-028 §7), as the gateway the secret let in says.
         auth: parseMailAuth(c.req.header("x-inbox-email-auth")),
       },
       { now: deps.now },
@@ -508,7 +532,26 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
       leaving: deps.leaving,
     }),
   );
+  // Settings → Phone, for the owner signed in on a computer, after the owner routes' own check.
+  const phoneDeps = { ...ownerMail, caps: deps.caps, baseUrl: deps.baseUrl, now: deps.now };
+  app.route("/v1/owner", ownerPhoneRoutes(phoneDeps));
+  // The phone's own door: pairing, the sign-in link, tokens, and what it hears about (ADR-028).
+  app.route("/v1/phone", phoneRoutes(phoneDeps));
   app.route("/v1", publicRest(deps.caps));
+  // What a QR code or a sign-in link opens in a browser; the secret stays in the fragment.
+  app.get("/phone", (c) =>
+    c.html(phonePage(), 200, {
+      "Cache-Control": "no-store",
+      "Referrer-Policy": "no-referrer",
+    }),
+  );
+  // An item's link (ADR-028): the owner app, on whatever opens it. The phone app opens its own items
+  // from its notifications, by its own scheme.
+  app.get("/i/:id", (c) => {
+    const id = String(c.req.param("id"));
+    if (!/^[0-9A-Za-z_-]{1,64}$/.test(id)) return c.json({ error: "not_found" }, 404);
+    return c.redirect(`/items/${id}`, 302);
+  });
   // The page a link in the business's email opens (ADR-018 §5): a GET shows, a POST acts. Anyone
   // holding the link can open it, so every request takes a token, and a POST one from its own class.
   app.use("/c/*", async (c, next) => {
@@ -575,7 +618,8 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
       sandbox: await sandbox(),
       baseUrl: deps.baseUrl,
     });
-    if (caller.auth?.kind !== "owner") {
+    // A phone is the owner's own hand, not an assistant: it has no business on the owner's MCP.
+    if (caller.auth?.kind !== "owner" || caller.auth.via === "device") {
       return unauthorized(
         c,
         "Connect with OAuth or send an owner API key.",
@@ -597,11 +641,16 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
     return serveMcp(mcpOwner, c.req.raw, body, authInfo(caller));
   });
   app.all("/mcp", async (c) => {
+    // A phone's token on the public door is a phone's token used where it never belongs: refused,
+    // never taken for a stranger (ADR-028).
+    if (/^Bearer\s+sdi_pa_/i.test(c.req.header("authorization") ?? ""))
+      return unauthorized(c, "A phone's token opens the owner's API only.");
     const caller = await callerFromRequest(deps.db, c.req.raw, {
       channel: "mcp_public",
       sandbox: await sandbox(),
       baseUrl: deps.baseUrl,
     });
+    if (caller.auth?.via === "device") return unauthorized(c, "A phone's token opens the owner's API only.");
     if (caller.principal?.keyKind === "integration") {
       const refused = await limited(c, ["integration"], caller.principal.id);
       if (refused) return refused;

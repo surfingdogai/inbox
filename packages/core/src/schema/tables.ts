@@ -1120,6 +1120,84 @@ export const oauthTokens = sqliteTable(
   (t) => [index("oauth_tokens_family").on(t.familyId)],
 );
 
+/**
+ * The owner's phones (ADR-028, migration 0025). A pairing is the one-time secret a QR code in
+ * Settings → Phone carries (`qr`), or that a sign-in link emailed to the owner carries (`link`, with
+ * the PKCE challenge of the phone that asked for it): its hash only, single use, gone in minutes.
+ */
+export const phonePairings = sqliteTable(
+  "phone_pairings",
+  {
+    id: id(),
+    secretHash: text("secret_hash").notNull(),
+    kind: text("kind").notNull().default("qr"),
+    userId: text("user_id").notNull(),
+    codeChallenge: text("code_challenge"),
+    deviceKey: text("device_key"),
+    attempts: integer("attempts").notNull().default(0),
+    expiresAt: integer("expires_at").notNull(),
+    usedAt: integer("used_at"),
+    deviceId: text("device_id"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("phone_pairings_secret").on(t.secretHash),
+    index("phone_pairings_user").on(t.userId, t.createdAt),
+  ],
+);
+
+/**
+ * A paired phone: the owner it signs in as, the public half of its device key (the private half never
+ * leaves the phone's keystore; every token refresh is signed with it), what it wants to be told
+ * (`notify`, JSON), and how push reaches it: the relay's id for it and, sealed, the relay's secret
+ * and the phone's push keys (`push_enc`). Removed, a phone keeps its row with `revoked_at`.
+ */
+export const phoneDevices = sqliteTable(
+  "phone_devices",
+  {
+    id: id(),
+    userId: text("user_id").notNull(),
+    name: text("name").notNull(),
+    platform: text("platform").notNull(),
+    keyJwk: text("key_jwk").notNull(),
+    keyThumbprint: text("key_thumbprint").notNull(),
+    notify: text("notify").notNull().default("{}"),
+    pushState: text("push_state").notNull().default("off"),
+    pushDevice: text("push_device"),
+    pushEnc: text("push_enc"),
+    pushError: text("push_error"),
+    pushedAt: integer("pushed_at"),
+    /** The two digits the pairing showed on both screens; null for a phone connected by an emailed link. */
+    pairMatch: text("pair_match"),
+    /** When the owner confirmed it on the computer (or it redeemed an emailed link); null while it waits. */
+    confirmedAt: integer("confirmed_at"),
+    createdAt: createdAt(),
+    lastSeenAt: integer("last_seen_at"),
+    revokedAt: integer("revoked_at"),
+  },
+  (t) => [
+    uniqueIndex("phone_devices_key").on(t.keyThumbprint).where(sql`${t.revokedAt} IS NULL`),
+    index("phone_devices_user").on(t.userId, t.revokedAt),
+  ],
+);
+
+/** A phone's tokens, hashed: short access tokens and the refresh token that rotates on every use. */
+export const phoneTokens = sqliteTable(
+  "phone_tokens",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    kind: text("kind").notNull(),
+    deviceId: text("device_id").notNull(),
+    expiresAt: integer("expires_at").notNull(),
+    rotatedFrom: text("rotated_from"),
+    revokedAt: integer("revoked_at"),
+    /** For a refresh token spent: the time in the proof that spent it. Only a newer proof may ask again. */
+    proofAt: integer("proof_at"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("phone_tokens_device").on(t.deviceId, t.kind)],
+);
+
 export const jobs = sqliteTable(
   "jobs",
   {

@@ -31,7 +31,9 @@ export type SecretPurpose =
   /** A stored idempotent answer that carries a secret shown once (a signing secret, a key). */
   | "idempotent-response"
   /** A person's key and first pass from a network, held until they reach the customer (ADR-017 §2.1). */
-  | "person-secret";
+  | "person-secret"
+  /** What push to a phone needs (ADR-028): the relay's secret for it, and the phone's push keys. */
+  | "phone-push";
 
 /**
  * What a deterministic key is derived for. Sealing is randomised and must be; these are the few

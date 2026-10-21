@@ -9,8 +9,11 @@ export type TrustTier = "anonymous" | "signed_agent" | "verified_principal" | "r
  * engine, jobs, the command line, tests) carry none and are never narrowed by scopes.
  */
 export interface Principal {
-  /** How the caller proved itself. */
-  readonly via: "session" | "api_key" | "oauth";
+  /**
+   * How the caller proved itself. `device` is one of the owner's paired phones (ADR-028): the owner
+   * in person, through the phone app, for the inbox's items and nothing else.
+   */
+  readonly via: "session" | "api_key" | "oauth" | "device";
   /** The key id, the OAuth client id, or the session id. */
   readonly id: string;
   /** The key's name, the AI app's name, or the signed-in person's address. */
@@ -76,15 +79,15 @@ export function permissionKind(caller: Caller): ActorKind {
 }
 
 /**
- * The owner in person: signed in to the owner app, or holding a full owner key from the command
- * line. Not their AI and not a key they handed to another system. Only this caller may change the
+ * The owner in person: signed in to the owner app, on a phone they paired with it, or holding a full
+ * owner key from the command line. Not their AI and not a key they handed to another system. Only this caller may change the
  * `security` settings, which is what makes "the owner grants it once" mean the owner.
  */
 export function isOwnerInPerson(caller: Caller): boolean {
   if (caller.actor.kind !== "owner") return false;
   const p = caller.principal;
   if (!p) return true;
-  return p.via === "session" || (p.via === "api_key" && p.keyKind !== "integration");
+  return p.via === "session" || p.via === "device" || (p.via === "api_key" && p.keyKind !== "integration");
 }
 
 /**

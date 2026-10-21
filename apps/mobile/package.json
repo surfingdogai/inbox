@@ -1,0 +1,36 @@
+{
+  "name": "@surfingdog/mobile",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "description": "The owner's phone app for a Surfing Dog Inbox: Android first, one Capacitor app with the screens bundled in it.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc -p tsconfig.json",
+    "sync": "vite build && cap sync android",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.5.3",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/core": "8.5.3",
+    "jsqr": "1.4.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.3",
+    "@fontsource-variable/manrope": "^5.3.0",
+    "@fontsource-variable/plus-jakarta-sans": "^5.3.0",
+    "@surfingdog/core": "workspace:*",
+    "@surfingdog/platform": "workspace:*",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "typescript": "catalog:",
+    "uqr": "0.1.3",
+    "vite": "^8.3.0"
+  }
+}

@@ -7,7 +7,9 @@ import {
   hashApiKey,
   mintApiKey,
   OWNER_KEY_PREFIX,
+  PHONE_ACCESS_PREFIX,
   type Principal,
+  resolvePhoneAccess,
   schema,
   type TrustTier,
 } from "@surfingdog/core";
@@ -35,8 +37,13 @@ export interface ApiKeyInfo {
   readonly scopes: readonly string[];
   readonly userId: string | null;
   readonly partyId: string | null;
-  /** How the principal proved itself. Cookie sessions need same-origin checks on writes. */
-  readonly via: "api_key" | "session" | "oauth";
+  /**
+   * How the principal proved itself. Cookie sessions need same-origin checks on writes. A `device` is
+   * one of the owner's paired phones (ADR-028), held to `PHONE_OPERATIONS` whatever its scopes.
+   */
+  readonly via: "api_key" | "session" | "oauth" | "device";
+  /** A phone paired by QR code that the owner has not confirmed yet: it may ask who it is, nothing else. */
+  readonly pending?: boolean;
 }
 
 export async function hashKey(key: string): Promise<string> {
@@ -61,6 +68,9 @@ export async function createApiKey(
     createdBy: input.kind === "owner" ? "cli" : null,
   });
 }
+
+/** What a phone's token holds (ADR-028); `PHONE_OPERATIONS` is what it may do, whatever this says. */
+export const PHONE_SCOPES: readonly string[] = ["inbox:read", "inbox:write"];
 
 /** `last_used_at` is written at most this often per key, so a busy integration is not a write per call. */
 const TOUCH_EVERY_MS = 60_000;
@@ -115,7 +125,23 @@ export async function callerFromRequest(
   const sandbox =
     opts.sandbox === true || request.headers.get("x-sandbox") === "1" || url.hostname.startsWith("sandbox.");
   let key = bearer ? await resolveApiKey(db, bearer, now()) : null;
-  if (!key && bearer) {
+  // A phone's token is for the REST doors alone (the owner's API and the phone's own, ADR-028): on
+  // any other channel, the MCP doors among them, it is nobody.
+  if (!key && bearer?.startsWith(PHONE_ACCESS_PREFIX) && opts.channel === "rest") {
+    const phone = await resolvePhoneAccess(db, bearer, now());
+    if (phone)
+      key = {
+        id: phone.deviceId,
+        kind: "owner",
+        name: phone.name,
+        scopes: PHONE_SCOPES,
+        userId: phone.userId,
+        partyId: null,
+        via: "device",
+        ...(phone.confirmed ? {} : { pending: true }),
+      };
+  }
+  if (!key && bearer && !bearer.startsWith(PHONE_ACCESS_PREFIX)) {
     const grant = await resolveAccessToken(db, bearer, now());
     if (grant)
       key = {

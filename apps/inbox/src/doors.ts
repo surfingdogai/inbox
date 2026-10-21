@@ -16,6 +16,9 @@ export const DOOR_PREFIXES = [
   "/c",
   "/p",
   "/demo",
+  // The phone app (ADR-028): the page a QR code or a sign-in link opens, and an item's own address.
+  "/phone",
+  "/i",
 ] as const;
 
 /** Whether the server answers `path` itself rather than the owner app. */

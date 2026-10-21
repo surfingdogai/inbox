@@ -1,5 +1,6 @@
 import { and, eq, isNull, or } from "drizzle-orm";
 import type { Db } from "../db";
+import type { Item } from "../domain/types";
 import { availabilityRules, services } from "../schema/tables";
 import { WriteError } from "../write/errors";
 import { bucketRange, bucketsFor, planClaims, readClaims, type SlotSpec } from "../write/slots";
@@ -208,6 +209,52 @@ export async function slotOffered(
     return false;
   }
   return planClaims(spec, buckets, await readClaims(db, spec, buckets, input.exceptItemId)).ok;
+}
+
+/**
+ * How a booking request sits in the business's calendar, for the owner deciding on it (ADR-028): free
+ * (the time is one the business would offer, counting every claim and busy time but its own), or not,
+ * and then the booking it clashes with when there is one. Null for anything but an open request.
+ */
+export interface CalendarFit {
+  readonly free: boolean;
+  /** The booking that holds the time, when one does: its customer's name (null when unknown) and start. */
+  readonly clash: { readonly name: string | null; readonly startTime: string } | null;
+}
+
+const ASKS_FOR_A_TIME = new Set(["requested", "needs_info"]);
+
+export async function calendarFit(db: Db, item: Item, timezone: string): Promise<CalendarFit | null> {
+  if (item.type !== "booking" || item.closedAt !== null || !ASKS_FOR_A_TIME.has(item.state)) return null;
+  const start = Date.parse(item.payload.startTime);
+  const end = Date.parse(item.payload.endTime);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+  const serviceId = item.payload.reservationFor.serviceId;
+  const free = await slotOffered(db, { serviceId, start, end, timezone, exceptItemId: item.id });
+  if (free) return { free: true, clash: null };
+  const [service] = await db.orm.select().from(services).where(eq(services.id, serviceId));
+  if (!service) return { free: false, clash: null };
+  let buckets: number[];
+  try {
+    buckets = bucketsFor(
+      { ...service, resourceKey: `service:${service.id}` },
+      item.payload.startTime,
+      item.payload.endTime,
+    );
+  } catch {
+    return { free: false, clash: null };
+  }
+  const { rows } = await db.client.query({
+    sql: `SELECT p.display_name, i.start_at FROM slot_claims c
+            JOIN items i ON i.id = c.item_id JOIN parties p ON p.id = i.party_id
+           WHERE c.resource_key = ? AND c.bucket_start >= ? AND c.bucket_start <= ? AND c.item_id <> ?
+             AND i.closed_at IS NULL
+           ORDER BY c.bucket_start LIMIT 1`,
+    params: [`service:${service.id}`, buckets[0] ?? 0, buckets[buckets.length - 1] ?? 0, item.id],
+    method: "all",
+  });
+  const r = rows[0] as [string | null, string | null] | undefined;
+  return { free: false, clash: r?.[1] ? { name: r[0]?.trim() || null, startTime: r[1] } : null };
 }
 
 export type Localiser = (ms: number) => { day: (typeof DAYS)[number]; minutes: number };

@@ -9,7 +9,13 @@
  *   `/services`, `/availability`, `/rules`, `/networks`, `/integrations`, `/keys`.
  * - Sign-in: `/auth/*`.
  * - The owner's own API, `/v1/owner/*`, with a session cookie and no `Authorization` header: no key,
- *   no AI app's token, only the owner in the browser.
+ *   no AI app's token, only the owner in the browser; or with one of the owner's phones' tokens
+ *   (`sdi_pa_`, ADR-028), which the inbox holds to reading and answering items.
+ * - The owner's phone (ADR-028): its own API, `/v1/phone` and below (pairing with a code from
+ *   Settings → Phone, the emailed sign-in link, refreshing its token: each needs a secret the owner
+ *   holds or the phone's own key), with no `Authorization` header or a phone's token only; the page a
+ *   QR code opens, `GET /phone`, which names nobody; and an item's link, `GET /i/<id>`, which only
+ *   leads to the owner app's own page for it.
  * - Coming back from signing in to a calendar (`GET /oauth/connect/<kind>/callback`), with a session
  *   cookie: the owner's own browser, sent back by the platform.
  * - `GET /`: the app for someone with a session cookie, else a neutral page that names nobody.
@@ -36,6 +42,12 @@ export const OWNER_PAGES = [
 export const OWNER_PAGE_PREFIXES = ["/items/", "/settings/"] as const;
 export const OWNER_AUTH_PREFIX = "/auth/";
 export const OWNER_API_PREFIX = "/v1/owner/";
+/** The owner's phone's own API, its landing page and an item's link (ADR-028). */
+export const PHONE_API = "/v1/phone";
+export const PHONE_PAGE = "/phone";
+export const ITEM_LINK_PREFIX = "/i/";
+/** A phone's access token: the only bearer the owner's doors take here. */
+const PHONE_TOKEN = /^Bearer\s+sdi_pa_[A-Za-z0-9_-]+$/;
 /** Where a platform sends the owner back after they signed in to connect it (ADR-022). */
 export const OWNER_CONNECT_RETURN = /^\/oauth\/connect\/[a-z][a-z0-9_]{0,39}\/callback$/;
 
@@ -82,10 +94,15 @@ export function ownerVerdict(r: OwnerRequest): OwnerVerdict {
   if (isOwnerPage(path)) return reads(method) ? "allow" : "refuse";
   if (path.startsWith(OWNER_AUTH_PREFIX)) return "allow";
   if (OWNER_CONNECT_RETURN.test(path)) return reads(method) && hasSessionCookie(r.cookie) ? "allow" : "refuse";
+  const auth = typeof r.authorization === "string" ? r.authorization.trim() : "";
   if (path.startsWith(OWNER_API_PREFIX)) {
-    const bearer = typeof r.authorization === "string" && r.authorization.trim() !== "";
-    return hasSessionCookie(r.cookie) && !bearer ? "allow" : "refuse";
+    if (PHONE_TOKEN.test(auth)) return "allow";
+    return hasSessionCookie(r.cookie) && auth === "" ? "allow" : "refuse";
   }
+  if (path === PHONE_API || path.startsWith(`${PHONE_API}/`))
+    return auth === "" || PHONE_TOKEN.test(auth) ? "allow" : "refuse";
+  if (path === PHONE_PAGE || (path.startsWith(ITEM_LINK_PREFIX) && path.length > ITEM_LINK_PREFIX.length))
+    return reads(method) ? "allow" : "refuse";
   return "refuse";
 }
 

@@ -285,6 +285,8 @@ const { app, runner, prepare } = createInbox({
   // made beside it, on a disk known to have room for it (the system's temporary directory is often
   // a small tmpfs held in memory).
   snapshot: nodeSnapshot(client, path.dirname(file)),
+  // The owner's phones (ADR-028): the push relay (INBOX_PUSH_RELAY, `off` for none).
+  pushRelay: process.env.INBOX_PUSH_RELAY,
 });
 if (demo) {
   // A demo only starts on an empty database. Over anything else it would mute the instance's mail
