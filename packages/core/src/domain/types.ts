@@ -1,4 +1,4 @@
-import { bookedAddOnSchema, datedPolicySchema } from "@surfingdog/spec";
+import { bookedAddOnSchema, datedPolicySchema, depositRuleSchema, policySchema } from "@surfingdog/spec";
 import { z } from "zod";
 
 /**
@@ -198,6 +198,11 @@ export const bookingPayloadSchema = z.object({
   addOns: z.array(bookedAddOnSchema).max(10).optional(),
   deposit: z.object({ amount: moneySchema, dueBy: isoDateTime.optional(), refundable: z.boolean() }).optional(),
   policy: datedPolicySchema.optional(),
+  /**
+   * The service's own terms the booking was made on: dated again for it whenever it moves, so a moved
+   * booking keeps the same policy at its new time.
+   */
+  terms: z.object({ policy: policySchema.optional(), deposit: depositRuleSchema.optional() }).optional(),
   notes: z.string().max(5_000).optional(),
   /**
    * A payment or deposit recorded for the booking (`record_payment`): it gates nothing, but a booking
@@ -213,6 +218,9 @@ export const bookingPayloadSchema = z.object({
       endTime: isoDateTime,
       totalPrice: moneySchema.optional(),
       personalised: personalisedSchema.optional(),
+      /** Salons (ADR-035): the booking's deposit and policy as they would be at that time. */
+      deposit: z.object({ amount: moneySchema, refundable: z.boolean() }).optional(),
+      policy: datedPolicySchema.optional(),
     })
     .optional(),
   /**
@@ -226,6 +234,9 @@ export const bookingPayloadSchema = z.object({
       startTime: isoDateTime,
       endTime: isoDateTime,
       totalPrice: moneySchema.optional(),
+      /** Salons (ADR-035): the booking's deposit and policy as they would be once it moved. */
+      deposit: z.object({ amount: moneySchema, refundable: z.boolean() }).optional(),
+      policy: datedPolicySchema.optional(),
     })
     .optional(),
   offer: offerPointerSchema.optional(),

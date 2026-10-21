@@ -11,7 +11,7 @@ import { ulid } from "../src/ids";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { business, items, parties } from "../src/schema/tables";
 import { createSecretBox } from "../src/secrets/box";
-import { bookingSchedules, cleanPhoto, staffWords, stripJpegMetadata } from "../src/staff/index";
+import { bookingSchedules, cancelFeeOf, cleanPhoto, staffWords, stripJpegMetadata } from "../src/staff/index";
 import { type Caller, transitionItem, WriteError } from "../src/write/index";
 import { confirming, makeClient, resetTables } from "./harness";
 
@@ -606,21 +606,66 @@ describe("a deposit", () => {
     // 30 % of ₩35,000 is ₩10,500: whole won, never hundredths.
     expect(p.deposit?.amount).toEqual({ value: 10_500, currency: "KRW" });
     expect(p.deposit?.refundable).toBe(true);
-    // Nothing is asked of a request; once confirmed, the deposit wants its link.
+    // Nothing is asked of a request, nor dated: the window opens when it is confirmed.
+    expect(p.deposit?.dueBy).toBeUndefined();
     expect((await bookingSchedules.wanted(s.db, r.view.item.id, T0))?.links).toEqual([]);
-    await transitionItem(s.db, owner, { itemId: r.view.item.id, event: "confirm" });
-    const wanted = await bookingSchedules.wanted(s.db, r.view.item.id, T0);
+    await payments(s.db);
+    // Confirmed a day and a half later: the customer still has a day from then.
+    const later = T0 + 36 * 3_600_000;
+    await transitionItem(s.db, { ...owner, now: () => later }, { itemId: r.view.item.id, event: "confirm" });
+    const wanted = await bookingSchedules.wanted(s.db, r.view.item.id, later);
     expect(wanted?.links).toEqual([
       {
         scheduleId: "deposit",
         purpose: "deposit",
         amount: { value: 10_500, currency: "KRW" },
-        expiresAt: T0 + DAY,
+        expiresAt: Math.min(later + DAY, Date.parse(start)),
         title: `투블럭 컷 (${r.view.item.id.slice(-6).toUpperCase()})`,
       },
     ]);
   });
+
+  it("is never given a time to pay by where no payment platform takes it", async () => {
+    const s = await salon({ name: "Salón Frida", zone: "America/Mexico_City", currency: "MXN", languages: ["es"] });
+    const nails = await s.caps.setup.createService(
+      owner,
+      serviceInput.parse({
+        name: "Uñas acrílicas",
+        duration_min: 60,
+        price: { model: "fixed", value: 65_000, currency: "MXN" },
+        deposit: { kind: "amount", value: 20_000 },
+      }),
+    );
+    let summary = "";
+    const input = {
+      payload: booking(nails.id, "Uñas acrílicas", "2026-11-06T12:00:00-06:00", "2026-11-06T13:00:00-06:00"),
+      contact: { name: "Sofía", email: "sofia@example.com", locale: "es-MX" },
+      idempotency_key: "frida-1",
+    };
+    try {
+      await new Capabilities(s.db).createBooking(agent(), input);
+    } catch (error) {
+      summary = String((error as WriteError).details?.summary ?? "");
+    }
+    // The customer reads that a deposit holds it, never a time to pay that nothing will ask for.
+    expect(summary).toMatch(/deposit|depósito/);
+    expect(summary).not.toMatch(/pay it by|págalo/);
+    const r = await s.caps.createBooking(agent(), input);
+    await transitionItem(s.db, owner, { itemId: r.view.item.id, event: "confirm" });
+    const [row] = await s.db.orm.select().from(items).where(eq(items.id, r.view.item.id));
+    expect((row?.payload as { deposit?: { dueBy?: string } } | undefined)?.deposit?.dueBy).toBeUndefined();
+  });
 });
+
+/** A payment platform connected that makes links (ADR-023), as Stripe or Mollie would be. */
+async function payments(db: Db): Promise<void> {
+  await db.client.query({
+    sql: `INSERT INTO connectors (id, kind, name, status, config_public, created_at, updated_at)
+          VALUES ('pay1', 'stripe', 'Stripe', 'active', ?, ?, ?)`,
+    params: [JSON.stringify({ payOn: true }), T0, T0],
+    method: "run",
+  });
+}
 
 describe("cancelling", () => {
   async function policySalon() {
@@ -673,6 +718,53 @@ describe("cancelling", () => {
       idempotency_key: "c-3",
     });
     expect(done.view.item.state).toBe("cancelled_by_customer");
+  });
+
+  it("is dated again when the booking moves, to another time we proposed or a change both agreed", async () => {
+    const { db, caps, fade, ravi } = await policySalon();
+    const day = (n: number) => new Date(T0 + n * DAY).toISOString().slice(0, 10);
+    const r = await caps.createBooking(agent(), {
+      payload: booking(fade.id, "Skin fade", `${day(3)}T16:00:00-05:00`, `${day(3)}T16:30:00-05:00`),
+      staff_id: ravi.id,
+      contact: { name: "Aiyana", email: "aiyana@example.com" },
+      idempotency_key: "move-1",
+    });
+    const as: Caller = { ...agent(), accessToken: r.accessToken ?? "" };
+    const accept = async () => {
+      const sha = await caps.customer
+        .acceptOffer(as, { item_id: r.view.item.id, idempotency_key: `a-${Math.random()}` })
+        .catch((e: WriteError) => String(e.details?.terms_sha ?? ""));
+      return caps.customer.acceptOffer(as, {
+        item_id: r.view.item.id,
+        terms_sha: String(sha),
+        idempotency_key: `b-${Math.random()}`,
+      });
+    };
+    // Another time we proposed, a week on: the policy is dated for it.
+    await transitionItem(db, owner, {
+      itemId: r.view.item.id,
+      event: "propose",
+      input: { startTime: `${day(10)}T16:00:00-05:00`, endTime: `${day(10)}T16:30:00-05:00` },
+    });
+    await accept();
+    const freeUntil = async () => {
+      const [row] = await db.orm.select().from(items).where(eq(items.id, r.view.item.id));
+      const p = row?.payload as { policy?: { steps: { until: string }[] } } | undefined;
+      return Date.parse(String(p?.policy?.steps[0]?.until));
+    };
+    expect(await freeUntil()).toBe(Date.parse(`${day(9)}T16:00:00-05:00`));
+    // Moved again by a change both agreed, to day 20: cancelling on day 15 is free, as the policy says.
+    await transitionItem(db, owner, {
+      itemId: r.view.item.id,
+      event: "propose_change",
+      input: { startTime: `${day(20)}T16:00:00-05:00` },
+    });
+    await accept();
+    expect(await freeUntil()).toBe(Date.parse(`${day(19)}T16:00:00-05:00`));
+    const [row] = await db.orm.select().from(items).where(eq(items.id, r.view.item.id));
+    const moved = { id: r.view.item.id, payload: row?.payload as never };
+    expect((await cancelFeeOf(moved, T0 + 15 * DAY, "en"))?.fee.value).toBe(0);
+    expect((await cancelFeeOf(moved, T0 + 20 * DAY - 3_600_000, "en"))?.fee.value).toBe(2750);
   });
 
   it("is free while the policy says so, with nothing to confirm", async () => {

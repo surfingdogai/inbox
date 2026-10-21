@@ -28,6 +28,7 @@ import { insertOfferStatement, type OfferRow, offerRows, openOf, pointerOf } fro
 import { paidFor, refundDueOf, SEND_BACK_DAYS } from "../negotiation/refunds";
 import { items, resources, services } from "../schema/tables";
 import { readSettings } from "../settings/schema";
+import { keepTermsInStep } from "../staff/booking";
 import { bookingFeeAt } from "../staff/fee";
 import { checkFirstRefusal, heldForCheck } from "../staff/requires";
 import { awaitingSystem, isWrittenFirst, systemFirstRefusal, systemHold } from "../staff/system";
@@ -403,6 +404,9 @@ async function attempt_(
   }
   if (effects.has("apply_change")) applyChange(item.type, payload);
   if (t.change && t.offer === "keep") delete payload.change;
+  // A salon's booking (ADR-035): its deposit and policy dated for wherever it is going, and its time to
+  // pay the deposit opened once it is confirmed.
+  await keepTermsInStep(db, { item, payload, confirms: t.to === "confirmed" && item.state !== "confirmed", now });
   // What automation offers, as it would go to the customer, against the owner's limits (ADR-018 §4):
   // its catalogue lines at this customer's price on the way. Outside them it is a draft for a person,
   // written once the checks every offer passes have passed.
@@ -2262,8 +2266,14 @@ async function planChange(
       (totalPrice !== undefined && p.totalPrice !== undefined && sameMoney(totalPrice, p.totalPrice));
     if (start === Date.parse(p.startTime) && end === Date.parse(p.endTime) && samePrice) throw unchanged();
     if (by === "customer") {
-      // A time we would offer them: open, on our grid, free for its whole length but for their own booking.
+      // A time we would offer them: open, on our grid, free for its whole length but for their own booking;
+      // with their member of staff (ADR-035), in their hours and their places.
       const facts = await businessFacts(db);
+      const staff = p.resourceId
+        ? (
+            await db.orm.select({ capacity: resources.capacity }).from(resources).where(eq(resources.id, p.resourceId))
+          )[0]
+        : undefined;
       const offered =
         start > now &&
         (await slotOffered(db, {
@@ -2272,6 +2282,7 @@ async function planChange(
           end,
           timezone: facts.timezone,
           exceptItemId: item.id,
+          ...(p.resourceId && staff ? { resource: { id: p.resourceId, capacity: staff.capacity } } : {}),
         }));
       if (!offered && start > now) {
         throw new WriteError(

@@ -1,6 +1,7 @@
 import { type DatedPolicy, type DepositRule, depositFor, type Policy } from "@surfingdog/spec";
+import { hasPayLinks } from "../connectors/pay-queue";
 import type { Db } from "../db";
-import type { Money } from "../domain/types";
+import type { Item, Money } from "../domain/types";
 import { datePolicy } from "../policy/index";
 import { WriteError } from "../write/errors";
 import { type PricingFor, servicePricing } from "../write/pricing";
@@ -93,6 +94,13 @@ export async function prepareBooking(
   });
   if (terms.deposit) payload.deposit = terms.deposit;
   if (terms.policy) payload.policy = terms.policy;
+  // The terms it is made on, to date them again wherever it moves.
+  if (terms.deposit || terms.policy) {
+    payload.terms = {
+      ...(terms.policy && service.policy ? { policy: service.policy } : {}),
+      ...(terms.deposit && service.deposit ? { deposit: service.deposit } : {}),
+    };
+  }
 
   let checkFirst = false;
   let ownerNote: string | undefined;
@@ -121,9 +129,10 @@ export async function prepareBooking(
 }
 
 /**
- * A service's deposit and dated policy for one booking at `total`. The deposit is due within a day,
- * or by the start when that is sooner; it comes back with a free cancellation unless the policy says
- * it is kept. Nothing when the service is not priced: a person prices it, and says what is due.
+ * A service's deposit and dated policy for one booking at `total`. The deposit's time to pay opens once
+ * the booking is confirmed, and only where a payment platform takes it (`keepTermsInStep`): a request
+ * is only told a deposit holds it. It comes back with a free cancellation unless the policy says it is
+ * kept. Nothing when the service is not priced: a person prices it, and says what is due.
  */
 export function termsFor(input: {
   readonly deposit: DepositRule | null | undefined;
@@ -133,21 +142,101 @@ export function termsFor(input: {
   readonly now: number;
   readonly zone: string;
 }): {
-  readonly deposit?: { amount: Money; dueBy: string; refundable: boolean } | undefined;
+  readonly deposit?: { amount: Money; refundable: boolean } | undefined;
   readonly policy?: DatedPolicy | undefined;
 } {
   const total = input.total;
   if (!total || total.value <= 0) return {};
   const amount = input.deposit ? depositFor(input.deposit, total) : null;
-  const deposit = amount
-    ? {
-        amount,
-        dueBy: new Date(Math.min(input.now + DEPOSIT_WINDOW_MS, input.start)).toISOString(),
-        refundable: input.policy?.deposit?.refundable ?? true,
-      }
-    : undefined;
+  const deposit = amount ? { amount, refundable: input.policy?.deposit?.refundable ?? true } : undefined;
   const policy = input.policy
     ? datePolicy(input.policy, { start: { at: input.start }, zone: input.zone, total, bookedAt: input.now })
     : undefined;
   return { ...(deposit ? { deposit } : {}), ...(policy ? { policy } : {}) };
+}
+
+type Deposit = { amount: Money; dueBy?: string | undefined; refundable: boolean };
+type Terms = { policy?: Policy | undefined; deposit?: DepositRule | undefined };
+
+/**
+ * A booking's deposit and policy at a new start and price (ADR-035): the terms it was made on, dated
+ * again against when it was booked, the deposit worked out on the new price and never due after the
+ * start. Nothing for a booking that has neither, or that kept no terms to date.
+ */
+export function termsMoved(
+  p: {
+    readonly terms?: Terms | undefined;
+    readonly deposit?: Deposit | undefined;
+    readonly policy?: DatedPolicy | undefined;
+    readonly totalPrice?: Money | undefined;
+  },
+  at: { readonly start: number; readonly total: Money | undefined; readonly bookedAt: number },
+): { deposit?: Deposit | undefined; policy?: DatedPolicy | undefined } {
+  const total = at.total ?? p.totalPrice;
+  const policy =
+    p.policy && p.terms?.policy && total && total.value > 0
+      ? datePolicy(p.terms.policy, { start: { at: at.start }, zone: p.policy.zone, total, bookedAt: at.bookedAt })
+      : p.policy;
+  let deposit = p.deposit;
+  if (deposit) {
+    const amount = p.terms?.deposit && total ? (depositFor(p.terms.deposit, total) ?? deposit.amount) : deposit.amount;
+    const due = deposit.dueBy ? Math.min(Date.parse(deposit.dueBy), at.start) : null;
+    deposit = {
+      amount,
+      refundable: deposit.refundable,
+      ...(due !== null && Number.isFinite(due) ? { dueBy: new Date(due).toISOString() } : {}),
+    };
+  }
+  return { ...(deposit ? { deposit } : {}), ...(policy ? { policy } : {}) };
+}
+
+/**
+ * A salon's booking kept in step as it moves (ADR-035), on every transition: another time we propose,
+ * and a change one side asks for, carry its deposit and policy dated for that time, so the customer
+ * confirms them as they will apply; wherever it lands (a time accepted, a change made, their own other
+ * time), they are dated for it; and once it is confirmed, the deposit's day to pay opens, where a
+ * payment platform takes it.
+ */
+export async function keepTermsInStep(
+  db: Db,
+  input: {
+    readonly item: Item;
+    readonly payload: Record<string, unknown>;
+    readonly confirms: boolean;
+    readonly now: number;
+  },
+): Promise<void> {
+  if (input.item.type !== "booking") return;
+  const p = input.payload as {
+    startTime: string;
+    totalPrice?: Money;
+    terms?: Terms;
+    deposit?: Deposit;
+    policy?: DatedPolicy;
+    proposed?: { startTime: string; totalPrice?: Money; deposit?: unknown; policy?: unknown };
+    change?: { startTime: string; totalPrice?: Money; deposit?: unknown; policy?: unknown };
+  };
+  if (!p.deposit && !p.policy) return;
+  const bookedAt = Date.parse(input.item.createdAt);
+  for (const offer of [p.proposed, p.change]) {
+    if (!offer) continue;
+    const at = termsMoved(p, { start: Date.parse(offer.startTime), total: offer.totalPrice, bookedAt });
+    if (at.deposit) offer.deposit = { amount: at.deposit.amount, refundable: at.deposit.refundable };
+    if (at.policy) offer.policy = at.policy;
+  }
+  const before = input.item.payload;
+  const moved =
+    p.startTime !== before.startTime ||
+    p.totalPrice?.value !== before.totalPrice?.value ||
+    p.totalPrice?.currency !== before.totalPrice?.currency;
+  if (moved) {
+    const at = termsMoved(p, { start: Date.parse(p.startTime), total: p.totalPrice, bookedAt });
+    if (at.deposit) p.deposit = at.deposit;
+    if (at.policy) p.policy = at.policy;
+  }
+  // Confirmed: a day to pay the deposit from now (the start, when sooner), where a link can ask for it.
+  if (input.confirms && p.deposit && !p.deposit.dueBy && p.deposit.amount.value > 0 && (await hasPayLinks(db))) {
+    const start = Date.parse(p.startTime);
+    p.deposit.dueBy = new Date(Math.min(input.now + DEPOSIT_WINDOW_MS, start)).toISOString();
+  }
 }

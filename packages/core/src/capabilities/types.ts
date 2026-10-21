@@ -122,6 +122,7 @@ export const createBookingInput = z.object({
     addOns: true,
     deposit: true,
     policy: true,
+    terms: true,
   }),
   contact: contactSchema.optional(),
   message: z.string().max(20_000).optional(),

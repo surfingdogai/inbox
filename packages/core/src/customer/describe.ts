@@ -1,4 +1,6 @@
+import type { DatedPolicy } from "@surfingdog/spec";
 import type { Item, ItemType, Money, Personalised } from "../domain/types";
+import { policySentence } from "../policy/words";
 import { cap, copyFor, phraseOf, vars } from "./copy";
 import { moneyIn, oneLine, shortRef, whenText } from "./format";
 import type { CustomerLang } from "./lang";
@@ -303,7 +305,13 @@ function quotedSentence(item: Extract<Item, { type: "quote_request" }>, a: Audie
  */
 export function offerSummary(item: Item, offer: OpenOffer, a: Audience = DEFAULT_AUDIENCE): string {
   const c = copyFor(a.lang);
-  const sentence = `${statusSentence(item, a)}${offer.withdrawable ? ` ${c.withdrawable}` : ""}`;
+  const said = `${statusSentence(item, a)}${offer.withdrawable ? ` ${c.withdrawable}` : ""}`;
+  // A salon's booking at another time keeps its policy, dated for that time (ADR-035): said with it.
+  const policy = offer.terms.policy as DatedPolicy | undefined;
+  const sentence =
+    policy && offer.terms.totalPrice
+      ? `${said} ${policySentence(policy, { lang: a.lang, total: offer.terms.totalPrice })}`
+      : said;
   if (!offer.obligationToPay || !offer.terms.totalPrice) return sentence;
   return `${sentence} ${c.obligation(vars({ total: moneyIn(offer.terms.totalPrice, a.lang) }))}`;
 }

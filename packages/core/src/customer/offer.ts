@@ -232,6 +232,9 @@ export function changeTerms(item: Item): OfferTerms | null {
       endTime: c.endTime,
       ...(item.payload.partySize !== undefined ? { partySize: item.payload.partySize } : {}),
       ...(c.totalPrice ? { totalPrice: c.totalPrice } : {}),
+      // The deposit and policy as they would be once it moved (ADR-035): part of what they confirm.
+      ...(c.deposit ? { deposit: c.deposit } : {}),
+      ...(c.policy ? { policy: c.policy } : {}),
     };
   }
   if (item.type === "order") {
@@ -268,6 +271,9 @@ export function businessTimeTerms(payload: PayloadOf<"booking">): OfferTerms {
     endTime: p.endTime,
     ...(payload.partySize !== undefined ? { partySize: payload.partySize } : {}),
     ...(totalPrice ? { totalPrice } : {}),
+    // The deposit and policy as they would be at that time (ADR-035): part of what they confirm.
+    ...(p.deposit ? { deposit: p.deposit } : {}),
+    ...(p.policy ? { policy: p.policy } : {}),
   };
 }
 
