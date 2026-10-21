@@ -32,6 +32,11 @@ export interface FakePhorest {
   refuseNext(): void;
   /** Take the next booking, then lose its answer on the way back, as a timeout does. */
   loseNextAnswer(): void;
+  /**
+   * Keep the next booking's answer until `release` is called, as a slow Phorest does: `reached` settles
+   * once the booking arrived, so a test can act while the inbox waits for the answer.
+   */
+  holdNext(): { readonly reached: Promise<void>; release(): void };
   /** Any field that looked like card data, in anything the inbox sent. */
   cardFields(): string[];
 }
@@ -45,6 +50,7 @@ export function fakePhorest(): FakePhorest {
   const bookings: FakePhorest["bookings"] = new Map();
   let refuse = false;
   let lose = false;
+  let hold: { arrived: () => void; gate: Promise<void> } | null = null;
   let n = 0;
   const authed =
     (handler: (req: FakeRequest) => Response | Promise<Response>) =>
@@ -132,7 +138,13 @@ export function fakePhorest(): FakePhorest {
     .on(
       "POST",
       `${base}/branch/${BRANCH}/booking`,
-      authed((req) => {
+      authed(async (req) => {
+        if (hold) {
+          const h = hold;
+          hold = null;
+          h.arrived();
+          await h.gate;
+        }
         if (refuse) {
           refuse = false;
           return json(ERROR_400, 400);
@@ -231,6 +243,18 @@ export function fakePhorest(): FakePhorest {
     },
     loseNextAnswer: () => {
       lose = true;
+    },
+    holdNext: () => {
+      let arrived = () => {};
+      let release = () => {};
+      const reached = new Promise<void>((r) => {
+        arrived = r;
+      });
+      const gate = new Promise<void>((r) => {
+        release = r;
+      });
+      hold = { arrived, gate };
+      return { reached, release };
     },
     cardFields: () =>
       p.seen.flatMap((r) => (/card|cvc|cvv|pan\b|iban|expiry/i.test(r.body) ? [`${r.method} ${r.url.pathname}`] : [])),

@@ -1,4 +1,16 @@
-import { type Caller, Capabilities, createSecretBox, gallery, schema, transitionItem } from "@surfingdog/core";
+import {
+  type Caller,
+  Capabilities,
+  CONNECTOR_WRITE_RESOLVE_KIND,
+  createRunner,
+  createSecretBox,
+  gallery,
+  schema,
+  transitionItem,
+  ulid,
+  writeResolveHandler,
+} from "@surfingdog/core";
+import { logMailOut } from "@surfingdog/platform";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
@@ -103,6 +115,17 @@ async function book(caps: Capabilities, input: Parameters<Capabilities["createBo
     const sha = (error as { details?: { terms_sha?: unknown } }).details?.terms_sha;
     if (typeof sha !== "string") throw error;
     return caps.createBooking(agent, { ...input, terms_sha: sha });
+  }
+}
+
+/** As `book`, for a customer's assistant bound to them. */
+async function bookAs(caps: Capabilities, caller: Caller, input: Parameters<Capabilities["createBooking"]>[1]) {
+  try {
+    return await caps.createBooking(caller, input);
+  } catch (error) {
+    const sha = (error as { details?: { terms_sha?: unknown } }).details?.terms_sha;
+    if (typeof sha !== "string") throw error;
+    return caps.createBooking(caller, { ...input, terms_sha: sha });
   }
 }
 
@@ -332,6 +355,190 @@ describe("Phorest, connected", () => {
     expect(looked[0]?.url.searchParams.get("from_date")).toBe("2026-11-04");
   });
 });
+
+/** A client the salon already knows: a party, with a cut here last month, and an assistant bound to them. */
+async function returning(db: Awaited<ReturnType<typeof freshDb>>["db"], serviceId: string) {
+  const partyId = ulid(T0);
+  await db.orm.insert(schema.parties).values({
+    id: partyId,
+    kind: "person",
+    displayName: "Aiyana Whitehorse",
+    contact: { name: "Aiyana Whitehorse", email: "aiyana@example.com" },
+    createdAt: T0,
+    updatedAt: T0,
+  });
+  const start = T0 - 30 * 86_400_000;
+  await db.orm.insert(schema.items).values({
+    id: ulid(T0 - 1),
+    type: "booking",
+    state: "completed",
+    version: 1,
+    partyId,
+    channel: "rest",
+    payload: {
+      reservationFor: { serviceId, name: "Skin fade" },
+      startTime: new Date(start).toISOString(),
+      endTime: new Date(start + 30 * 60_000).toISOString(),
+    },
+    flags: {},
+    createdAt: start,
+    updatedAt: start,
+  });
+  const bound: Caller = { ...agent, actor: { ...agent.actor, partyId } };
+  return bound;
+}
+
+describe("Phorest, nothing else confirms first", () => {
+  /** The salon's rules on, a returning client, and the jobs a running inbox does every second. */
+  async function withRules() {
+    const s = await imported();
+    await s.caps.setup.applyPreset(owner, { preset: "salon", replace: true });
+    const client = await returning(s.db, s.fade.id);
+    const runner = createRunner({ mailOut: logMailOut() }).register(
+      CONNECTOR_WRITE_RESOLVE_KIND,
+      writeResolveHandler(),
+    );
+    const drain = async (now: number) => {
+      for (let i = 0; i < 10; i++) if ((await runner.runDue(s.db, { now, limit: 100 })).claimed === 0) return;
+    };
+    const request = (idem: string, start = "2026-11-04T17:00:00Z") =>
+      bookAs(s.caps, client, {
+        payload: { ...at(start), reservationFor: { serviceId: s.fade.id, name: "Skin fade" } },
+        contact: { name: "Aiyana Whitehorse", email: "aiyana@example.com" },
+        staff_id: s.mei.id,
+        idempotency_key: idem,
+      });
+    return { ...s, client, drain, request };
+  }
+
+  it("no rule confirms a booking Phorest would not take", async () => {
+    const { db, ph, drain, request } = await withRules();
+    ph.refuseNext();
+    const r = await request("rules-1");
+    await drain(T0 + 1_000);
+    expect(await stateOf(db, r.view.item.id)).toEqual({ state: "requested", needsHuman: true });
+    expect(ph.bookings.size).toBe(0);
+  });
+
+  it("no rule confirms one while Phorest's answer is on its way, nor once it was lost", async () => {
+    const { db, caps, ph, drain, request } = await withRules();
+    const slow = ph.holdNext();
+    const pending = request("rules-2");
+    await slow.reached;
+    // The rules job runs while the inbox waits for Phorest: it promises nothing.
+    await drain(T0 + 1_000);
+    expect((await stateOf(db, (await newestBooking(db)) ?? "")).state).toBe("requested");
+    slow.release();
+    const r = await pending;
+    expect(r.view.item.state).toBe("confirmed");
+    // Lost, and not found at once: still a request until the job that looks for it finds it.
+    ph.loseNextAnswer();
+    ph.platform.fail("GET", `${PHOREST_US}/api/business/${BUSINESS}/branch/:b/appointment`, 500);
+    const lost = await request("rules-3", "2026-11-04T18:00:00Z");
+    await drain(T0 + 1_000);
+    expect((await stateOf(db, lost.view.item.id)).state).toBe("requested");
+    await drain(T0 + 60_000);
+    expect((await stateOf(db, lost.view.item.id)).state).toBe("confirmed");
+    // Found by the job, it is kept as Phorest's: the next sync does not book it there a second time.
+    const before = ph.bookings.size;
+    await caps.connectors.run(String((await caps.connectors.list(owner))[0]?.id), T0 + 61_000, "push");
+    expect(ph.bookings.size).toBe(before);
+  });
+
+  it("the owner's confirm writes it to Phorest first, and waits while Phorest has not answered", async () => {
+    const { db, caps, ph, request } = await withRules();
+    ph.refuseNext();
+    const r = await request("owner-1");
+    expect((await stateOf(db, r.view.item.id)).state).toBe("requested");
+    // Phorest takes it now: the owner's confirm made it there first.
+    const done = await caps.transitionItem(owner, { item_id: r.view.item.id, event: "confirm" });
+    expect(done.view.item.state).toBe("confirmed");
+    expect([...ph.bookings.values()].map((b) => b.status)).toEqual(["ACTIVE"]);
+    // Refused again: nothing is confirmed, and the owner reads why.
+    ph.refuseNext();
+    const again = await request("owner-2", "2026-11-04T18:00:00Z");
+    ph.refuseNext();
+    await expect(caps.transitionItem(owner, { item_id: again.view.item.id, event: "confirm" })).rejects.toMatchObject({
+      code: "guard_failed",
+      details: { guard: "system_first" },
+    });
+    expect((await stateOf(db, again.view.item.id)).state).toBe("requested");
+    // The owner's AI never confirms it: it drafts for the owner.
+    const ai: Caller = { ...owner, actor: { kind: "owner_ai", id: "ai", channel: "mcp_owner" } };
+    await expect(caps.transitionItem(ai, { item_id: again.view.item.id, event: "confirm" })).rejects.toMatchObject({
+      details: { guard: "system_first", draft_for_owner: true },
+    });
+  });
+
+  it("a customer's yes to another time goes to a person, whose confirm writes that time to Phorest", async () => {
+    const { db, caps, ph, client, request } = await withRules();
+    ph.refuseNext();
+    const r = await request("other-1");
+    await caps.transitionItem(owner, {
+      item_id: r.view.item.id,
+      event: "propose",
+      input: { startTime: "2026-11-04T18:00:00Z", endTime: "2026-11-04T18:45:00Z" },
+    });
+    const as: Caller = { ...client, ...(r.accessToken ? { accessToken: r.accessToken } : {}) };
+    const sha = await caps.customer
+      .acceptOffer(as, { item_id: r.view.item.id, idempotency_key: "yes-0" })
+      .catch((e: { details?: { terms_sha?: string } }) => e.details?.terms_sha);
+    const yes = await caps.customer.acceptOffer(as, {
+      item_id: r.view.item.id,
+      terms_sha: String(sha),
+      idempotency_key: "yes-1",
+    });
+    // Nothing binds yet: their yes is a person's to confirm, and they are told so plainly.
+    expect(yes).toMatchObject({ waiting_on: "us", appended: true });
+    expect((yes as { passed_on: string }).passed_on).not.toMatch(/as agreed/);
+    expect((await stateOf(db, r.view.item.id)).state).toBe("proposed");
+    expect(ph.bookings.size).toBe(0);
+    const done = await caps.transitionItem(owner, { item_id: r.view.item.id, event: "confirm" });
+    expect(done.view.item.state).toBe("confirmed");
+    expect([...ph.bookings.values()].map((b) => [b.start, b.status])).toEqual([["2026-11-04T18:00:00.000Z", "ACTIVE"]]);
+  });
+
+  it("a booking Phorest took but the inbox cannot confirm is taken back out of Phorest", async () => {
+    const { db, ph, mei, request } = await withRules();
+    const first = await request("back-1");
+    expect(first.view.item.state).toBe("confirmed");
+    // The same time with Mei again: taken here, so it is never written to Phorest at all.
+    const twice = await request("back-2");
+    expect(await stateOf(db, twice.view.item.id)).toEqual({ state: "requested", needsHuman: true });
+    expect(ph.bookings.size).toBe(1);
+    // Taken here while Phorest was answering: Phorest's booking is cancelled there, and the owner told.
+    const slow = ph.holdNext();
+    const late = request("back-3", "2026-11-04T18:00:00Z");
+    await slow.reached;
+    const bucket = Date.parse("2026-11-04T18:00:00Z");
+    await db.client.query({
+      sql: "INSERT INTO slot_claims (resource_key, bucket_start, ordinal, item_id, offer_id) VALUES (?, ?, 0, 'walk-in', '')",
+      params: [`resource:${mei.id}`, bucket],
+      method: "run",
+    });
+    slow.release();
+    const r = await late;
+    expect(await stateOf(db, r.view.item.id)).toEqual({ state: "requested", needsHuman: true });
+    expect([...ph.bookings.values()].map((b) => b.status)).toEqual(["ACTIVE", "CANCELED"]);
+    const { rows } = await db.client.query({
+      sql: "SELECT outcome FROM connector_writes WHERE item_id = ?",
+      params: [r.view.item.id],
+      method: "all",
+    });
+    expect(rows).toEqual([["rolled_back"]]);
+    const notes = await db.orm
+      .select()
+      .from(schema.threadEntries)
+      .where(eq(schema.threadEntries.itemId, r.view.item.id));
+    expect(notes.map((n) => n.bodyText).join(" ")).toContain("taken back out of Phorest");
+  });
+});
+
+/** The one booking still to happen: the request the inbox is waiting on. */
+async function newestBooking(db: Awaited<ReturnType<typeof freshDb>>["db"]): Promise<string | null> {
+  const rows = await db.orm.select().from(schema.items).where(eq(schema.items.type, "booking"));
+  return rows.find((r) => r.state !== "completed")?.id ?? null;
+}
 
 describe("Phorest, the pieces", () => {
   it("reads a roster as weekly hours, its time off cut out, days off left out", () => {

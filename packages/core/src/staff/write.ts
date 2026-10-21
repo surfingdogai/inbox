@@ -9,9 +9,10 @@ import { WriteError } from "../write/errors";
 import { setFlags } from "../write/flags";
 import { heldForPrice } from "../write/pricing";
 import { appendThreadEntry } from "../write/thread";
-import { transitionItem } from "../write/transition";
+import { slotClaimable, transitionItem } from "../write/transition";
 import { rowToItem } from "../write/views";
 import { heldForCheck } from "./requires";
+import { awaitingSystem, systemFirstRefusal, systemHold } from "./system";
 
 /**
  * A salon's booking system written first (ADR-035, ADR-032 §4): a booking for a service the salon's own
@@ -56,6 +57,7 @@ async function waitForPerson(db: Db, itemId: string, note: string, now: number):
 
 async function confirmWritten(
   db: Db,
+  connectors: ConnectorCapabilities,
   connectorId: string,
   itemId: string,
   title: string,
@@ -70,10 +72,14 @@ async function confirmWritten(
     return true;
   } catch (error) {
     if (!(error instanceof WriteError)) throw error;
+    // Never promised here, so not held there either: taken back out of the system when it can be.
+    const back = await connectors.takeBackFirstWrite(connectorId, itemId, now);
     await waitForPerson(
       db,
       itemId,
-      `${title} took this booking, but it could not be confirmed here (${error.message}). Check it in ${title}, then confirm or decline it here.`,
+      back
+        ? `${title} took this booking, but it could not be confirmed here (${error.message}), so it was taken back out of ${title}. Nothing was promised: propose another time, or decline it.`
+        : `${title} took this booking, but it could not be confirmed here (${error.message}). Cancel it in ${title}, or confirm it here once the time is free.`,
       now,
     );
     return false;
@@ -96,6 +102,16 @@ export async function bookFirstInSystem(
   const start = Date.parse((item.payload as { startTime?: string }).startTime ?? "");
   const notice = (await readSettings(db)).booking.minNoticeMin * 60_000;
   if (!Number.isFinite(start) || start - now < notice) return "none";
+  // Taken here already (its places, a calendar's busy time): never written there, a person answers.
+  if ((await systemHold(db, item)) && !(await slotClaimable(db, item))) {
+    await waitForPerson(
+      db,
+      itemId,
+      "That time is taken here, so this booking was not written to your booking system. Nothing was promised: propose another time, or decline it.",
+      now,
+    );
+    return "waits";
+  }
   let result: Awaited<ReturnType<ConnectorCapabilities["writeFirstBooking"]>>;
   try {
     result = await connectors.writeFirstBooking(itemId, now);
@@ -113,7 +129,7 @@ export async function bookFirstInSystem(
   const { title, connectorId } = await systemOf(db, "journalId" in result ? result : { status: result.status }, itemId);
   switch (result.status) {
     case "written":
-      return (await confirmWritten(db, connectorId, itemId, title, now)) ? "confirmed" : "waits";
+      return (await confirmWritten(db, connectors, connectorId, itemId, title, now)) ? "confirmed" : "waits";
     case "refused":
       await waitForPerson(
         db,
@@ -134,6 +150,55 @@ export async function bookFirstInSystem(
       return "pending";
     case "busy":
       return "pending";
+  }
+}
+
+/**
+ * A person confirms a booking the salon's own system holds (ADR-035): it is written there first, and
+ * their confirm stands on the system's answer. Refused, or not answered yet: nothing is confirmed, and
+ * they read why. A booking the system cannot be given (a member of staff it does not list) is theirs to
+ * confirm as always. Answers whether this call wrote it, so a confirm that then fails takes it back.
+ */
+export async function writeFirstForPerson(
+  db: Db,
+  connectors: ConnectorCapabilities,
+  itemId: string,
+  now: number,
+): Promise<{ readonly wrote: string | null }> {
+  const [row] = await db.orm.select().from(items).where(eq(items.id, itemId));
+  if (row?.type !== "booking") return { wrote: null };
+  const hold = await systemHold(db, rowToItem(row));
+  if (!hold || hold.outcome === "written") return { wrote: null };
+  if (awaitingSystem(hold)) throw systemFirstRefusal(hold, { forOwner: true });
+  let result: Awaited<ReturnType<ConnectorCapabilities["writeFirstBooking"]>>;
+  try {
+    result = await connectors.writeFirstBooking(itemId, now);
+  } catch (error) {
+    throw new WriteError(
+      "guard_failed",
+      `This booking could not be written to ${hold.title} (${String((error as Error)?.message ?? error).slice(0, 200)}). Nothing was confirmed.`,
+      { details: { guard: "system_first" } },
+    );
+  }
+  if (!result) return { wrote: null };
+  switch (result.status) {
+    case "written":
+      return { wrote: result.replayed ? null : hold.connectorId };
+    case "refused":
+      throw new WriteError(
+        "guard_failed",
+        `${hold.title} would not take this booking: ${result.reason.slice(0, 300)} Nothing was confirmed: propose another time, or decline it.`,
+        { details: { guard: "system_first", outcome: "refused" } },
+      );
+    case "conflict":
+      throw new WriteError(
+        "guard_failed",
+        `${hold.title} was full at that time, so the booking was taken back there. Nothing was confirmed.`,
+        { details: { guard: "system_first", outcome: "conflict" } },
+      );
+    case "pending":
+    case "busy":
+      throw systemFirstRefusal({ ...hold, outcome: "pending" }, { forOwner: true });
   }
 }
 
@@ -165,7 +230,7 @@ export function bookingWriteResolver(connectors: ConnectorCapabilities): WriteRe
       ).rows;
       const title = String(c?.[0] ?? "Your booking system");
       if (outcome === "written") {
-        await confirmWritten(db, row.connectorId, row.itemId, title, now);
+        await confirmWritten(db, connectors, row.connectorId, row.itemId, title, now);
         return;
       }
       await waitForPerson(

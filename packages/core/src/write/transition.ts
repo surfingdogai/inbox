@@ -30,6 +30,7 @@ import { items, resources, services } from "../schema/tables";
 import { readSettings } from "../settings/schema";
 import { bookingFeeAt } from "../staff/fee";
 import { checkFirstRefusal, heldForCheck } from "../staff/requires";
+import { awaitingSystem, isWrittenFirst, systemFirstRefusal, systemHold } from "../staff/system";
 import { hashJson, hashText } from "../util/canonical";
 import {
   actorMeta,
@@ -283,6 +284,15 @@ async function attempt_(
   if (caller.actor.kind === "rule") await assertBusinessPriced(db, item, input.event);
   // What comes first is a person's to check (ADR-035): no rule, AI or key confirms such a booking.
   if (automation && (await heldForCheck(db, item, input.event))) throw checkFirstRefusal();
+  // A booking the salon's own system holds is promised once that system took it (ADR-035): its answer
+  // confirms it; a person's confirm was written there first by the owner's door; nothing else does,
+  // and nobody while the answer is on its way.
+  if (t.to === "confirmed" && item.state !== "confirmed" && !isWrittenFirst(caller)) {
+    const hold = await systemHold(db, item);
+    if (hold && hold.outcome !== "written" && (!isPerson(caller) || awaitingSystem(hold))) {
+      throw systemFirstRefusal(hold, { forOwner: !isCustomer(caller) });
+    }
+  }
   if (automation && caller.actor.kind !== "rule" && (await heldForPrice(db, item, input.event))) {
     throw new WriteError(
       "guard_failed",
@@ -2011,6 +2021,24 @@ function assertNoMoney(event: string, data: Record<string, unknown>, assistant: 
         details: refusal,
       },
     );
+  }
+}
+
+/**
+ * Whether a booking's time can still be claimed here, as its confirm will judge it: its places (with
+ * its member of staff, ADR-035) and every busy time a connected calendar holds. A booking the salon's
+ * own system holds is checked so before it is written there: what the inbox could not confirm is never
+ * written first.
+ */
+export async function slotClaimable(db: Db, item: Pick<Item, "id" | "payload">): Promise<boolean> {
+  const payload = item.payload as Record<string, unknown>;
+  try {
+    const spec = await slotSpecFor(db, payload);
+    const buckets = bucketsFor(spec, String(payload.startTime), String(payload.endTime));
+    return planClaims(spec, buckets, await readClaims(db, spec, buckets, item.id)).ok;
+  } catch (error) {
+    if (error instanceof WriteError) return false;
+    throw error;
   }
 }
 

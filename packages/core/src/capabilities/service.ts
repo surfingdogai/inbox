@@ -86,6 +86,7 @@ import {
   StaffCapabilities,
   type StaffDay,
   type StaffSlot,
+  writeFirstForPerson,
 } from "../staff/index";
 import { hashText } from "../util/canonical";
 import { formatMinor } from "../util/money";
@@ -96,6 +97,7 @@ import {
   isCustomer,
   isOwnerAssistant,
   isOwnerInPerson,
+  isPerson,
   nowOf,
   permissionKind,
   withIdempotencyKey,
@@ -1346,6 +1348,19 @@ export class Capabilities {
       ...(input.expected_version !== undefined ? { expectedVersion: input.expected_version } : {}),
       ...(writtenBy ? { writtenBy } : {}),
     };
+    // A booking the salon's own system holds is written there first, and confirmed on its answer (ADR-035).
+    if (input.event === "confirm" && isPerson(c)) {
+      const { wrote } = await writeFirstForPerson(this.db, this.connectors, input.item_id, nowOf(c));
+      if (wrote) {
+        try {
+          return await transitionItem(this.db, c, request);
+        } catch (error) {
+          // Not confirmed here after all: not held there either.
+          if (error instanceof WriteError) await this.connectors.takeBackFirstWrite(wrote, input.item_id, nowOf(c));
+          throw error;
+        }
+      }
+    }
     if (input.event !== "record_cancel") return transitionItem(this.db, c, request);
     try {
       return await transitionItem(this.db, c, request);

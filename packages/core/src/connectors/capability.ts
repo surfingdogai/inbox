@@ -1639,6 +1639,11 @@ export class ConnectorCapabilities {
       if (!claim) return "held";
       try {
         let current = stateOf(claim.link);
+        // A booking system took it first (ADR-035): its own id for it, from the journal, whoever settled it.
+        if (!current && this.definitions.get(row.kind)?.group === "booking") {
+          const ref = await this.firstWriteRef(row.id, itemId);
+          if (ref) current = { externalId: ref, etag: null, calendar: null };
+        }
         // No id kept for it: an earlier run may have written it and stopped before it could say so, or
         // a connection to this account that was disconnected since wrote it. A connector whose
         // platform chooses the ids looks for it first.
@@ -1876,8 +1881,11 @@ export class ConnectorCapabilities {
    */
   async writeFirstBooking(itemId: string, now: number): Promise<WriteFirstResult | null> {
     const r = await this.outboundRow(itemId, true);
-    if (!r || String(r[0]) !== "requested" || Number(r[2] ?? 0) === 1) return null;
-    let payload: { reservationFor?: { serviceId?: unknown } } = {};
+    if (!r || !UNPROMISED.has(String(r[0])) || Number(r[2] ?? 0) === 1) return null;
+    let payload: {
+      reservationFor?: { serviceId?: unknown };
+      proposed?: { startTime?: unknown; endTime?: unknown };
+    } = {};
     try {
       payload = (typeof r[1] === "string" ? JSON.parse(r[1]) : r[1]) as typeof payload;
     } catch {
@@ -1888,7 +1896,10 @@ export class ConnectorCapabilities {
     const system = await this.bookingSystemFor(serviceId);
     if (!system) return null;
     const ctx = await this.runContext(system.row, now);
-    const booking = this.withWhom(bookingOf(itemId, r, ctx.inbox.origin), r, system.row);
+    // A time we proposed, confirmed by a person who heard the customer's yes: that time is written.
+    const asked = String(r[0]) === "proposed" && payload.proposed ? { ...payload, ...payload.proposed } : payload;
+    const at = asked === payload ? r : [r[0], JSON.stringify(asked), ...r.slice(2)];
+    const booking = this.withWhom(bookingOf(itemId, at, ctx.inbox.origin), at, system.row);
     if (!booking?.serviceExternalId || !booking.staffExternalId) return null;
     const writer = system.def.bookings;
     if (!writer) return null;
@@ -1912,6 +1923,64 @@ export class ConnectorCapabilities {
         return found?.externalId ? { externalId: found.externalId } : null;
       },
     });
+  }
+
+  /**
+   * Takes back a booking the salon's own system took first that the inbox then could not confirm
+   * (ADR-035): cancelled there, journalled as taken back, so the system holds nothing nobody was
+   * promised. False when it could not be: a person then cancels it there, and is told so.
+   */
+  async takeBackFirstWrite(connectorId: string, itemId: string, now: number): Promise<boolean> {
+    const row = await this.rowOrNull(connectorId);
+    const def = row ? this.definitions.get(row.kind) : undefined;
+    if (!row || !def?.bookings || !this.http) return false;
+    const { rows } = await this.db.client.query({
+      sql: `SELECT id, external_id FROM connector_writes
+             WHERE connector_id = ? AND item_id = ? AND op = 'reserve' AND outcome = 'written'
+             ORDER BY attempt DESC LIMIT 1`,
+      params: [connectorId, itemId],
+      method: "all",
+    });
+    const journalId = rows[0]?.[0];
+    const externalId = rows[0]?.[1];
+    if (journalId === undefined || externalId === null || externalId === undefined) return false;
+    try {
+      await def.bookings.remove(await this.runContext(row, now), {
+        externalId: String(externalId),
+        etag: null,
+        calendar: null,
+      });
+    } catch (error) {
+      if (error instanceof ConnectorError) return false;
+      throw error;
+    }
+    await this.db.batch([
+      {
+        sql: `UPDATE connector_writes SET outcome = 'rolled_back', detail = 'not confirmed here: taken back', updated_at = ?
+               WHERE id = ? AND outcome = 'written'`,
+        params: [now, String(journalId)],
+        method: "run",
+      },
+      {
+        sql: `UPDATE connector_links SET external_id = NULL, state = 'removed', updated_at = ?
+               WHERE connector_id = ? AND item_id = ?`,
+        params: [now, connectorId, itemId],
+        method: "run",
+      },
+    ]);
+    return true;
+  }
+
+  /** What a booking system took first for this booking, by its own id, when it took it and kept it. */
+  private async firstWriteRef(connectorId: string, itemId: string): Promise<string | null> {
+    const { rows } = await this.db.client.query({
+      sql: `SELECT external_id FROM connector_writes
+             WHERE connector_id = ? AND item_id = ? AND op = 'reserve' AND outcome = 'written' AND external_id IS NOT NULL
+             ORDER BY attempt DESC LIMIT 1`,
+      params: [connectorId, itemId],
+      method: "all",
+    });
+    return rows[0]?.[0] === undefined || rows[0]?.[0] === null ? null : String(rows[0][0]);
   }
 
   /** For the resolver: a booking written first whose answer never came, looked for again by the system. */
@@ -2593,6 +2662,9 @@ export function connectorLane(payload: unknown): string | undefined {
   const id = (payload as { connectorId?: unknown } | null)?.connectorId;
   return typeof id === "string" ? `connector:${id}` : undefined;
 }
+
+/** A booking not promised yet: what a booking system can be given first (ADR-035). */
+const UNPROMISED: ReadonlySet<string> = new Set(["requested", "needs_info", "proposed"]);
 
 const ROW_COLUMNS =
   "id, kind, name, external_id, config_enc, config_public, cursor, status, last_error, last_error_at, last_sync_at, busy_at, created_at, busy_gen, busy_until, error_code, failing_since, failures, notified_at, inbound_enc, resource_id";
