@@ -507,6 +507,44 @@ describe("Ryokan Hoshi, Kyoto: a change written to its own system first (JPY)", 
     expect(notes.rows.map((r) => String(r[0])).join("\n")).toMatch(/oversold, so they were put back/);
   });
 
+  it("tells the owner when the old dates could not be put back: the system and the inbox now differ", async () => {
+    const c = await connected();
+    c.system.sold.set(`R1|${c.checkOut}`, 1);
+    c.system.mode.guard = "oversell";
+    // The system takes the new night (oversold), then refuses to take it back.
+    c.system.mode.patchesLeft = 1;
+    const after = await c.ask();
+    expect(after.item.payload.checkOut).toBe(c.checkOut);
+    expect(c.booking?.checkOut).toBe(addLocalDays(c.checkOut, 1));
+    const notes = await c.s.db.client.query({
+      sql: "SELECT body_text FROM thread_entries WHERE item_id = ? AND direction = 'note'",
+      params: [c.id],
+      method: "all",
+    });
+    const text = notes.rows.map((r) => String(r[0])).join("\n");
+    expect(text).toMatch(/could not put the old ones back/);
+    expect(text).not.toMatch(/keeps its dates, here and there/);
+  });
+
+  it("tells the owner, and only the owner, when the system prices the stay otherwise than the guest agreed", async () => {
+    const c = await property();
+    // The system's own rate and its taxes: more than the guest agreed.
+    c.system.mode.total = 56_760;
+    const { id } = await c.accept();
+    await c.s.drain();
+    expect(await c.state(id)).toBe("confirmed");
+    const notes = await c.s.db.client.query({
+      sql: "SELECT body_text FROM thread_entries WHERE item_id = ? AND direction = 'note'",
+      params: [id],
+      method: "all",
+    });
+    expect(notes.rows.map((r) => String(r[0])).join("\n")).toMatch(
+      /Your system has stay \S+ at JP¥56,760; the guest agreed JP¥51,600 here\. Check the stay's folio/,
+    );
+    const guestMail = c.s.mail.sent.filter((m) => m.to.includes("wanjiru@example.org"));
+    expect(guestMail.some((m) => /56,760|folio/.test(`${m.subject}\n${m.text ?? ""}`))).toBe(false);
+  });
+
   it("moves the stay once the system took the new night", async () => {
     const c = await connected();
     const after = await c.ask();

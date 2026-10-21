@@ -5,7 +5,9 @@ import {
   isPropertySystem,
   type LinkState,
   type OutboundStay,
+  type PayAmount,
   type RunContext,
+  StayPutBackError,
   type StayWriter,
 } from "../connectors/sdk";
 import { registerWriteResolver, type WriteRow, type WrittenRef, writeFirst } from "../connectors/write-first";
@@ -16,6 +18,7 @@ import type { JobHandler } from "../jobs/runner";
 import { items, parties } from "../schema/tables";
 import { type PropertySetup, readSetup } from "../stays/store";
 import { STAY_WRITE_KIND, type StayWriteJob } from "../stays/transition";
+import { moneyText } from "../util/money";
 import { addDays } from "../util/zoned";
 import type { Caller } from "../write/caller";
 import { WriteError } from "../write/errors";
@@ -164,6 +167,49 @@ async function tellOwner(db: Db, item: Item, text: string, now: number): Promise
   } catch (error) {
     if (!(error instanceof WriteError && error.code === "version_conflict")) throw error;
   }
+}
+
+/** What the stay written comes to, as the guest agreed it: its rooms' prices together. */
+function agreedTotal(stay: OutboundStay): PayAmount | null {
+  const first = stay.rooms[0]?.price;
+  if (!first || stay.rooms.some((r) => r.price.currency !== first.currency)) return null;
+  return { value: stay.rooms.reduce((a, r) => a + r.price.value, 0), currency: first.currency };
+}
+
+/** The system's own total, as a write's answer carried it (`LinkState.total`); null when it gave none. */
+function systemTotal(detail: Readonly<Record<string, unknown>> | undefined): PayAmount | null {
+  const t = detail?.total as { value?: unknown; currency?: unknown } | undefined;
+  return t && typeof t.value === "number" && Number.isFinite(t.value) && typeof t.currency === "string"
+    ? { value: t.value, currency: t.currency }
+    : null;
+}
+
+/**
+ * When the system prices the stay it took otherwise than the guest agreed (its own rate, its taxes and
+ * fees, another occupancy), the owner is told, on the stay and for them alone: the guest pays what they
+ * agreed, so the desk checks the folio before charging anything more.
+ */
+async function notePriceDifference(
+  db: Db,
+  itemId: string,
+  stay: OutboundStay,
+  detail: Readonly<Record<string, unknown>> | undefined,
+  now: number,
+): Promise<void> {
+  const theirs = systemTotal(detail);
+  const ours = agreedTotal(stay);
+  if (!theirs || !ours || theirs.value === ours.value) return;
+  const item = await loadStay(db, itemId);
+  if (!item) return;
+  const same = theirs.currency.toUpperCase() === ours.currency.toUpperCase();
+  await tellOwner(
+    db,
+    item,
+    `Your system has stay ${shortRef(itemId)} at ${moneyText(theirs)}; the guest agreed ${moneyText(ours)} here.${
+      same ? "" : " They are in different currencies."
+    } Check the stay's folio before charging anything at the desk.`,
+    now,
+  );
 }
 
 async function loadStay(db: Db, itemId: string): Promise<Item | null> {
@@ -372,6 +418,8 @@ export async function runStayWrite(
   // A change taken back is put back as it was: the stay as it stands, never cancelled.
   const previous = purpose === "change" ? await outboundOf(db, setup, item, key, true) : null;
   const { guest: _guest, ...request } = stay;
+  // A change the system took and then could not undo: the system and the inbox now differ.
+  let putBackFailed = false;
   const r = await writeFirst(db, {
     connectorId,
     itemId: item.id,
@@ -381,9 +429,15 @@ export async function runStayWrite(
     request,
     now,
     async write() {
-      const written = await writer.put(conn.ctx, stay, job.op === "modify" ? link : null, job.status);
+      let written: LinkState;
+      try {
+        written = await writer.put(conn.ctx, stay, job.op === "modify" ? link : null, job.status);
+      } catch (error) {
+        if (error instanceof StayPutBackError) putBackFailed = true;
+        throw error;
+      }
       if (!written.externalId) throw new ConnectorError("bad_response", "the system answered without its booking id");
-      return { externalId: written.externalId };
+      return { externalId: written.externalId, ...(written.total ? { detail: { total: written.total } } : {}) };
     },
     async find() {
       // A reserve is found by our key; a modify leaves the booking's own key as it was, so it is not.
@@ -398,7 +452,12 @@ export async function runStayWrite(
       if (job.op === "reserve") {
         await writer.cancel(conn.ctx, { externalId: written.externalId, etag: null, calendar: null });
       } else if (previous && link) {
-        await writer.put(conn.ctx, previous, link, "confirmed");
+        try {
+          await writer.put(conn.ctx, previous, link, "confirmed");
+        } catch (error) {
+          if (!(error instanceof ConnectorError)) throw error;
+          putBackFailed = true;
+        }
       }
     },
   });
@@ -406,7 +465,21 @@ export async function runStayWrite(
     if (r.status === "busy") throw new ConnectorError("unreachable", "another write for this stay is running");
     if (r.status === "pending") return `modify (${purpose}): no answer yet, looked for again shortly`;
     if (purpose === "change") {
-      if (r.status === "written") return settleChange(db, item, connectorId, "written", now, null);
+      if (r.status === "written") {
+        const settled = await settleChange(db, item, connectorId, "written", now, null);
+        if (!r.replayed) await notePriceDifference(db, item.id, stay, r.ref.detail, now);
+        return settled;
+      }
+      if (putBackFailed) {
+        return settleChange(
+          db,
+          item,
+          connectorId,
+          "refused",
+          now,
+          `Your system took the new dates for stay ${ref} but could not put the old ones back, so it now holds the stay otherwise than here. Here the stay keeps its dates: set it right in your system.`,
+        );
+      }
       const why =
         r.status === "conflict"
           ? "Your system took the new dates only to show them oversold, so they were put back."
@@ -424,11 +497,17 @@ export async function runStayWrite(
         now,
       );
     }
+    if (r.status === "written" && !r.replayed && purpose === "confirm") {
+      await notePriceDifference(db, item.id, stay, r.ref.detail, now);
+    }
     return `modify (${purpose}): ${r.status}`;
   }
   switch (r.status) {
-    case "written":
-      return settleStay(db, item, connectorId, "written", r.ref, now);
+    case "written": {
+      const settled = await settleStay(db, item, connectorId, "written", r.ref, now);
+      if (!r.replayed) await notePriceDifference(db, item.id, stay, r.ref.detail, now);
+      return settled;
+    }
     case "refused":
       return settleStay(db, item, connectorId, "refused", null, now, r.reason);
     case "conflict":

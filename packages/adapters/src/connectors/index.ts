@@ -4,6 +4,9 @@ import { caldavConnector } from "./caldav/index";
 import { googleCalendarConnector } from "./google";
 import { icsConnector } from "./ics";
 import { mollieConnector } from "./mollie";
+import { apaleoConnector } from "./property/apaleo";
+import { cloudbedsConnector } from "./property/cloudbeds";
+import { type MewsPartner, mewsConnector } from "./property/mews";
 import { stripeConnector } from "./stripe";
 
 export { AUTO as CALCOM_AUTO, CALCOM_API, calcomConnector, calcomForm } from "./calcom";
@@ -34,6 +37,9 @@ export {
   mollieForm,
 } from "./mollie";
 export { constantTimeEqual, hmacSha256Hex } from "./pay-sign";
+export { APALEO_HOSTS, APALEO_SCOPES, apaleoConnector } from "./property/apaleo";
+export { CLOUDBEDS_HOSTS, cloudbedsConnector } from "./property/cloudbeds";
+export { MEWS_HOSTS, type MewsPartner, mewsConnector } from "./property/mews";
 export {
   fromStripeAmount,
   STRIPE_API,
@@ -62,6 +68,21 @@ export interface OAuthClients {
   readonly calendly?: OAuthClient | null | undefined;
 }
 
+/**
+ * What a server's operator holds for the property systems that need a partner account (ADR-033 §8.4):
+ * Mews's client token, apaleo's connect client, Cloudbeds' partner app; and its switches for a property's
+ * own credentials (apaleo's simple client, a key made in Cloudbeds), both off by default. Nothing here is
+ * read from the environment yet: until a partnership exists and its operator sets it, each is "Soon" on a
+ * hosted inbox and "Needs setup" on one's own server, with nothing to press either way.
+ */
+export interface PropertyPartners {
+  readonly mews?: MewsPartner | null | undefined;
+  readonly apaleo?: OAuthClient | null | undefined;
+  readonly apaleoOwnClient?: boolean | undefined;
+  readonly cloudbeds?: OAuthClient | null | undefined;
+  readonly cloudbedsPropertyKey?: boolean | undefined;
+}
+
 /** What the host says of itself to the connectors it offers. */
 export interface ConnectorHostOptions {
   readonly oauth?: OAuthClients | undefined;
@@ -72,6 +93,8 @@ export interface ConnectorHostOptions {
    * can sign in, so Google says "Soon" rather than a button that fails for everyone else.
    */
   readonly googleTesting?: boolean | undefined;
+  /** Partner credentials for property systems (`PropertyPartners`); none, and they say "Needs setup". */
+  readonly partners?: PropertyPartners | undefined;
 }
 
 /**
@@ -92,5 +115,11 @@ export function builtInConnectors(opts: ConnectorHostOptions = {}): ConnectorDef
     icsConnector(),
     stripeConnector(),
     mollieConnector(),
+    mewsConnector(opts.partners?.mews, { hosted: opts.hosted }),
+    apaleoConnector(opts.partners?.apaleo, { hosted: opts.hosted, ownClient: opts.partners?.apaleoOwnClient }),
+    cloudbedsConnector(opts.partners?.cloudbeds, {
+      hosted: opts.hosted,
+      propertyKey: opts.partners?.cloudbedsPropertyKey,
+    }),
   ];
 }
