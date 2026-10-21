@@ -422,7 +422,12 @@ describe("the setup wizard's doors", () => {
   });
 
   it("start from what the business runs: each kind's rules are a server preset, and its doors follow", () => {
-    expect(KINDS.map((k) => k.label)).toEqual(["Appointments", "Trades and quotes", "A shop"]);
+    expect(KINDS.map((k) => k.label)).toEqual([
+      "Appointments",
+      "Trades and quotes",
+      "Building and renovation",
+      "A shop",
+    ]);
     for (const k of KINDS) {
       expect(PRESET_KEYS as readonly string[]).toContain(k.preset);
       expect(kindOf(k.key)).toBe(k);

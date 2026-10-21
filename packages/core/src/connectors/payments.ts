@@ -439,8 +439,9 @@ export class PaymentLinks {
     const ours = new Set(rows.map((r) => r.url).filter((u): u is string => u !== null));
     // The owner set a link of their own: it is theirs, and ours goes.
     const foreign = order.paymentUrl !== null && !ours.has(order.paymentUrl);
+    // An order paid in a trade's stages (ADR-034 §4) gets no link for the whole: the business asks for each.
     const want =
-      WANTS_LINK.has(order.state) && order.total.value > 0 && !order.legacy && !foreign && !order.paid
+      WANTS_LINK.has(order.state) && order.total.value > 0 && !order.legacy && !foreign && !order.paid && !order.staged
         ? order.total
         : null;
 
@@ -448,9 +449,11 @@ export class PaymentLinks {
       if (live) {
         const why = foreign
           ? "the owner gave the order a payment link of their own"
-          : order.paid
-            ? "the order was paid"
-            : `the order is ${order.state.replaceAll("_", " ")}`;
+          : order.staged
+            ? "the order is paid in stages, each asked for by the business"
+            : order.paid
+              ? "the order was paid"
+              : `the order is ${order.state.replaceAll("_", " ")}`;
         return this.close(live, why, now);
       }
       return "nothing to do";
@@ -2347,6 +2350,7 @@ export class PaymentLinks {
       paymentRef?: unknown;
       orderedItem?: { productId?: unknown }[];
       change?: unknown;
+      schedule?: unknown;
     };
     const contact = parseJson(r[5]) as { locale?: unknown } | null;
     const value = Number(payload.totalPrice?.value ?? 0);
@@ -2365,6 +2369,7 @@ export class PaymentLinks {
       sandbox: Number(r[3] ?? 0) === 1,
       legacy: Number(r[4] ?? 0) === 1,
       changeOpen: payload.change !== undefined && payload.change !== null,
+      staged: Array.isArray(payload.schedule) && payload.schedule.length > 0,
       productIds: lines.map((l) => (typeof l?.productId === "string" && l.productId ? l.productId : null)),
       locale: typeof contact?.locale === "string" ? contact.locale : null,
     };
@@ -2381,6 +2386,8 @@ interface OrderFacts {
   readonly legacy: boolean;
   /** A change to the order waits for an answer: what it comes to is not settled. */
   readonly changeOpen: boolean;
+  /** Paid in a trade's stages (ADR-034 §4): the business asks for each; no link for the whole. */
+  readonly staged: boolean;
   /** Each line's catalogue product, or null for a line named by whoever ordered. */
   readonly productIds: readonly (string | null)[];
   readonly locale: string | null;

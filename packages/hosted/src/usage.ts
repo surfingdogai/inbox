@@ -31,6 +31,20 @@ export function monthRange(month: string): { from: number; to: number } | null {
   return { from: Date.UTC(year, index, 1), to: Date.UTC(year, index + 1, 1) };
 }
 
+/**
+ * What an inbox's database holds now: its pages in use, without the free ones a delete left (SQLite
+ * keeps those in the file to reuse). The cap on writes is held to this, not to the file: files swept or
+ * erased free their room at once, though the file on disk does not shrink.
+ */
+export async function liveBytes(db: Db): Promise<number> {
+  const { rows } = await db.client.query({
+    sql: "SELECT (c.page_count - f.freelist_count) * s.page_size FROM pragma_page_count() c, pragma_freelist_count() f, pragma_page_size() s",
+    params: [],
+    method: "all",
+  });
+  return Number(rows[0]?.[0] ?? 0);
+}
+
 export function fileBytes(path: string): number {
   let total = 0;
   for (const file of [path, `${path}-wal`]) {

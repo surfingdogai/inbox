@@ -1,4 +1,5 @@
 import type { Statement } from "@surfingdog/platform";
+import { attachStatements, isAttachGuard } from "../attachments/store";
 import { audienceFor } from "../customer/audience";
 import { copyFor } from "../customer/copy";
 import type { Db } from "../db";
@@ -18,6 +19,7 @@ import { machines } from "../machine/tables";
 import { insertOfferStatement, pointerOf } from "../negotiation/offers";
 import { secretHash } from "../protocol/credentials";
 import { readSettings } from "../settings/schema";
+import { workPushStatements } from "../trades/job-tool";
 import { hashJson, hashText } from "../util/canonical";
 import { actorMeta, type Caller, isCustomer, isOwnerAssistant, nowOf, permissionKind } from "./caller";
 import {
@@ -66,13 +68,38 @@ export interface CreateInput {
    * of the idempotency hash.
    */
   readonly pricing?: PricingFor | undefined;
+  /**
+   * What the inbox adds to a customer's request itself (ADR-034): the files it kept for it (their refs
+   * in the payload, the files handed to the item in the item's own batch), whether the site is inside
+   * the area, the priority that follows. Never part of the idempotency hash: `hash` stands for what
+   * the customer sent (the files as they sent them), so a retry with the same files is the same request.
+   */
+  readonly inboxAdds?:
+    | {
+        readonly payload: Readonly<Record<string, unknown>>;
+        readonly files: readonly string[];
+        readonly flags?: Partial<ItemFlags> | undefined;
+        readonly hash: unknown;
+      }
+    | undefined;
 }
+
+/** What an agent is told when a file its request named was gone by the time the request was written. */
+const FILE_AGAIN = "A file on the request was no longer there to take: upload it again, or send it with the request.";
 
 /**
  * The payload fields only the business writes: what was paid, when the goods went out and arrived, a
  * change to what was agreed. A customer's request never arrives holding them (ADR-018 §3.4, §7).
  */
-const BUSINESS_FIELDS = ["paymentRef", "paidAmount", "paymentUrl", "fulfilledAt", "deliveredAt", "change"] as const;
+const BUSINESS_FIELDS = [
+  "paymentRef",
+  "paidAmount",
+  "paymentUrl",
+  "fulfilledAt",
+  "deliveredAt",
+  "change",
+  "schedule",
+] as const;
 
 export interface CreateResult {
   readonly view: ItemView;
@@ -100,14 +127,20 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
   const now = nowOf(caller);
   const schema = payloadSchemas[input.type];
   if (!schema) throw new WriteError("invalid_input", `unknown item type ${String(input.type)}`);
-  const parsed = schema.safeParse(input.payload);
+  const adds = input.inboxAdds;
+  const parsed = schema.safeParse(
+    adds ? { ...(input.payload as Record<string, unknown>), ...adds.payload } : input.payload,
+  );
   if (!parsed.success) throw fromZod(parsed.error, "payload");
 
   const idem = caller.idempotency;
   // Who is asking (the agent, the presentations) is not the request: a retry carrying a fresh
-  // signature or a pass presented again is the same request.
-  const { identity: _identity, confirmed: _confirmed, pricing: _pricing, ...hashed } = input;
-  const requestHash = idem ? await hashJson({ op: "create", scope: idem.scope, input: hashed }) : undefined;
+  // signature or a pass presented again is the same request. What the inbox adds is not either: the
+  // files as the customer sent them stand for it.
+  const { identity: _identity, confirmed: _confirmed, pricing: _pricing, inboxAdds: _adds, ...hashed } = input;
+  const requestHash = idem
+    ? await hashJson({ op: "create", scope: idem.scope, input: hashed, ...(adds ? { adds: adds.hash } : {}) })
+    : undefined;
   if (idem) {
     const hit = await findIdempotent(db, idem);
     if (hit) return replay(db, caller, hit, requestHash);
@@ -187,6 +220,7 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
   const id = ulid();
   const flags = itemFlagsSchema.parse({
     ...input.flags,
+    ...adds?.flags,
     sandbox: caller.sandbox || input.flags?.sandbox === true,
     ...(caller.viaNetwork ? { carried: true } : {}),
   });
@@ -235,6 +269,8 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
   const statements: Statement[] = [];
   if (idem && requestHash) statements.push(idempotencyStatement(idem, requestHash, 201, response, id, now));
   statements.push(...party.statements);
+  // The files kept for this request are handed to it in its own batch (ADR-034 §2).
+  if (adds?.files.length) statements.push(...attachStatements(adds.files, id, party.partyId, now));
   statements.push({
     sql: `INSERT INTO items (id, type, state, version, party_id, location_id, channel, subject, linked_item_id, access_token_hash, payload, flags,
             agent_thumbprint, agent_level, agent_directory, customer_match, possible_party_id, created_at, updated_at, closed_at, request_expires_at)
@@ -357,10 +393,21 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
   if (await hasEventListeners(db)) {
     statements.push(webhookFanoutStatement({ id: eventId, type: `${input.type}.create`, itemId: id }, now));
   }
+  // A customer's request for a price goes to the owner's job tool when the owner sends every one (ADR-034 §5).
+  if (input.type === "quote_request" && isCustomer(caller)) {
+    statements.push(...(await workPushStatements(db, id, "created", now)));
+  }
 
   try {
     await db.batch(statements);
   } catch (error) {
+    // A file kept for this request was no longer there to take (its hour ran out, or another request
+    // took it first): nothing was written, and the agent is told to send the file again.
+    if (adds?.files.length && isAttachGuard(error)) {
+      throw new WriteError("invalid_input", FILE_AGAIN, {
+        fields: [{ path: "attachments", problem: "invalid", message: FILE_AGAIN }],
+      });
+    }
     const hit = await diagnoseFailure(db, error, { idem, requestHash });
     return replay(db, caller, hit, requestHash);
   }

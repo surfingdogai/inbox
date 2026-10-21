@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { listFrom, oauthFrom, outboundDenyFrom, publicUrlFrom, secretKeyFrom, senderFrom } from "../src/env";
+import {
+  jobToolsFrom,
+  listFrom,
+  oauthFrom,
+  outboundDenyFrom,
+  publicUrlFrom,
+  secretKeyFrom,
+  senderFrom,
+} from "../src/env";
 
 /**
  * The Deploy to Cloudflare button asks for every value in .dev.vars.example, so each can arrive
@@ -107,11 +115,20 @@ describe("the host's settings", () => {
       shopify: null,
       square: { clientId: "sq-id", clientSecret: "sq-secret" },
       calendly: null,
+      servicem8: null,
+      jobber: null,
     });
     expect(r.googleTesting).toBe(true);
     expect(said).toEqual([
       "SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET go together; with one alone shopify sign-in stays off",
     ]);
     expect(oauthFrom({}).googleTesting).toBe(false);
+  });
+
+  it("switches job tools on only as the server says: Jobber's checked version, the tools whose terms are cleared", () => {
+    expect(jobToolsFrom({})).toEqual({ jobTools: { cleared: [] } });
+    expect(jobToolsFrom({ JOBBER_API_VERSION: " 2025-04-16 ", JOB_TOOLS_CLEARED: "HousecallPro, fergus" })).toEqual({
+      jobTools: { jobberApiVersion: "2025-04-16", cleared: ["housecallpro", "fergus"] },
+    });
   });
 });

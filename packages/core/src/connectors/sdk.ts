@@ -1,5 +1,6 @@
 import { minorUnits } from "@surfingdog/spec";
 import { z } from "zod";
+import type { SetupSnapshot } from "./setup-snapshot";
 
 /**
  * The connector SDK (ADR-014, ADR-015, ADR-022).
@@ -224,6 +225,11 @@ export interface ConnectorHttpRequest {
   readonly url: string;
   readonly headers?: Readonly<Record<string, string>> | undefined;
   readonly body?: string | undefined;
+  /**
+   * A body of bytes, sent as is in place of `body` (ADR-034): a file in a multipart form, which a
+   * string cannot carry. Its `content-type` header is the caller's to give.
+   */
+  readonly bytes?: Uint8Array | undefined;
   /** Larger answers are cut off and refused (default 2 MB). */
   readonly maxBytes?: number | undefined;
   /** Default 15 s. */
@@ -851,6 +857,11 @@ export interface CatalogueReader {
 /* --- webhooks a platform sends (ADR-026 §4) -------------------------------- */
 
 /** What a platform's signed request named, once its signature checked out: ids and a topic, never the body. */
+/** A platform proving a connection's address before it sends to it: answered with `challenge` as the body. */
+export interface HookChallenge {
+  readonly challenge: string;
+}
+
 export interface HookEvent {
   /** The platform's id for the delivery, so one sent twice is counted once. */
   readonly eventId: string;
@@ -876,9 +887,18 @@ export interface HooksHandler {
   /**
    * Checks the request's signature over the exact bytes received, in constant time (`hook-sign.ts` in
    * adapters), and answers what it names. Throws `ConnectorError("refused")` when the signature does
-   * not check out, so nothing is written; null for a ping (a platform's test delivery). Calls nothing.
+   * not check out, so nothing is written; null for a ping (a platform's test delivery); a
+   * `HookChallenge` when the platform proves the address before it sends anything (ServiceM8's OAuth
+   * subscriptions), which is answered with the challenge as the body and keeps nothing. Calls nothing.
    */
-  verify(ctx: RunContext, request: InboundRequest): Promise<HookEvent | null>;
+  verify(ctx: RunContext, request: InboundRequest): Promise<HookEvent | HookChallenge | null>;
+  /**
+   * For a platform that sends every connection's events to one address of the app's
+   * (`POST /v1/hooks/<kind>/app`: Jobber's webhooks are set per app, not per account): checks the app's
+   * own signature over the exact bytes, and names the account the event is for, the connection's
+   * `externalId`; null for a ping. `verify` then runs on that connection as usual. Calls nothing.
+   */
+  account?(request: InboundRequest): Promise<string | null>;
   /**
    * Reads back from the platform, with the business's own key, what the event names: never what the
    * body said. Runs in a job after the platform was answered, so it may take its time; a
@@ -928,6 +948,72 @@ export interface FeedServer {
   /** What the link ends in, as the owner copies it (`.ics`). */
   readonly extension: string;
   serve(ctx: FeedContext, request: FeedRequest): Promise<FeedResponse>;
+}
+
+/* --- job tools (ADR-034) --------------------------------------------------- */
+
+/** A file a request carries, as a job tool is handed it: read only when the tool takes files. */
+export interface OutboundFile {
+  readonly id: string;
+  readonly name: string;
+  readonly contentType: string;
+  readonly size: number;
+  read(): Promise<Uint8Array>;
+}
+
+/**
+ * A request for a price as a job tool takes it (`requests_out`): what the job needs and nothing more
+ * (who to answer, the site, what it is, when suits), in the business's own tool, which is the same
+ * business. `key` is stable for the request: the tool is written to under it, and the request is
+ * found by it after an answer that never came.
+ */
+export interface OutboundRequest {
+  readonly itemId: string;
+  /** The request's six-character reference, as the business's emails give it: written on the job. */
+  readonly reference: string;
+  readonly key: string;
+  /** What it is for: "Leaking kitchen tap". */
+  readonly title: string;
+  /** The customer's words, then the job's details, in the owner's language: untrusted text, kept as text. */
+  readonly description: string;
+  readonly urgency: "emergency" | "within_24h" | "this_week" | "flexible";
+  readonly visit: "needed" | "not_needed" | "unsure";
+  readonly site: PostalAddress | null;
+  /** How to find the way, as the customer wrote it. */
+  readonly siteNotes: string | null;
+  readonly windows: readonly Interval[];
+  readonly customer: {
+    readonly name: string | null;
+    readonly email: string | null;
+    readonly phone: string | null;
+    readonly language: string;
+  };
+  /** The request in the owner app. */
+  readonly url: string;
+  readonly files: readonly OutboundFile[];
+}
+
+/** What a job tool kept: its id for the job (lead, enquiry), and where it opens in the tool. */
+export interface RequestRef {
+  readonly externalId: string;
+  readonly url?: string | undefined;
+}
+
+export interface RequestsWriter {
+  /** Writes the request into the tool. Safe to call again with the same request (its `key`). */
+  put(ctx: RunContext, request: OutboundRequest): Promise<RequestRef>;
+  /** The request as this inbox wrote it before, found by its key; null when it is not there. */
+  find(ctx: RunContext, request: OutboundRequest): Promise<RequestRef | null>;
+  /** Where a job opens in the business's own tool ("Open in ServiceM8"), from its id. */
+  openUrl?(externalId: string): string | null;
+}
+
+/**
+ * What a business's own tool says about it, read once to start from (capability `setup_in`): its
+ * services, staff and hours. The owner keeps what they want; nothing is published until they do.
+ */
+export interface SetupReader {
+  read(ctx: RunContext): Promise<SetupSnapshot>;
 }
 
 export interface ConnectorDefinition {
@@ -1010,6 +1096,10 @@ export interface ConnectorDefinition {
   readonly hooks?: HooksHandler | undefined;
   /** A link the inbox serves for the connection (`auth: "link"`, ADR-026 §5). */
   readonly feed?: FeedServer | undefined;
+  /** Requests the owner takes on, written into their job tool (capability `requests_out`, ADR-034). */
+  readonly requests?: RequestsWriter | undefined;
+  /** Services, staff and hours to start from (`setup_in`; a job tool's opening hours, ADR-034). */
+  readonly setup?: SetupReader | undefined;
 }
 
 /** How the owner is told of a connection by name: "iCloud" → "iCloud calendar"; "Google Calendar" stays. */

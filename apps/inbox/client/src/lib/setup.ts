@@ -132,6 +132,14 @@ export const KINDS: readonly SetupKind[] = [
     connect: ["work", "calendars"],
   },
   {
+    key: "projects",
+    label: "Building and renovation",
+    line: "Larger jobs quoted in stages, often after a visit.",
+    preset: "projects",
+    doors: { booking: false, quoteRequest: true, message: true },
+    connect: ["work", "calendars"],
+  },
+  {
     key: "shop",
     label: "A shop",
     line: "Things people order, to collect or to deliver.",
@@ -188,4 +196,23 @@ export function networkOffer(
  */
 export function joinNetworkDoc(): { networks: Record<string, { enabled: true; issue: false }> } {
   return { networks: { [SETUP_NETWORK]: { enabled: true, issue: false } } };
+}
+
+/** The wizard's steps by id: a kind of business that needs others (a place to stay) names its own. */
+export const STEPS = [
+  { id: "kind", label: "What you run" },
+  { id: "you", label: "You" },
+  { id: "doors", label: "What agents can do" },
+  { id: "offer", label: "What you offer" },
+  { id: "hours", label: "When you are open" },
+  { id: "answering", label: "Answering" },
+] as const;
+export type StepId = (typeof STEPS)[number]["id"] | "where";
+
+/** A trade is asked where it works, after who it is: agents check a site against it before they ask. */
+const WHERE = { id: "where", label: "Where you work" } as const;
+const TRADE_KINDS = new Set(["trades", "projects"]);
+export function stepsFor(kind: string | null | undefined): readonly { id: StepId; label: string }[] {
+  if (!kind || !TRADE_KINDS.has(kind)) return STEPS;
+  return [STEPS[0], STEPS[1], WHERE, ...STEPS.slice(2)];
 }

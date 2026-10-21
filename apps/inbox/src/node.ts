@@ -25,7 +25,7 @@ import { nodeSnapshot, nodeSqliteClient, pinnedFetch } from "@surfingdog/platfor
 import { createInbox } from "./app";
 import { flagOn } from "./demo";
 import { isDoor } from "./doors";
-import { listFrom, oauthFrom, outboundDenyFrom, publicUrlFrom, secretKeyFrom, senderFrom } from "./env";
+import { jobToolsFrom, listFrom, oauthFrom, outboundDenyFrom, publicUrlFrom, secretKeyFrom, senderFrom } from "./env";
 import { commandDatabaseRefusal, DEFAULT_HOST, NODE_SERVER_OPTIONS } from "./node-server";
 import { seedDemo, seedShowcase, seedSurfingDog } from "./seed";
 
@@ -230,6 +230,14 @@ const { app, runner, prepare } = createInbox({
     SQUARE_CLIENT_SECRET: process.env.SQUARE_CLIENT_SECRET,
     CALENDLY_CLIENT_ID: process.env.CALENDLY_CLIENT_ID,
     CALENDLY_CLIENT_SECRET: process.env.CALENDLY_CLIENT_SECRET,
+    SERVICEM8_CLIENT_ID: process.env.SERVICEM8_CLIENT_ID,
+    SERVICEM8_CLIENT_SECRET: process.env.SERVICEM8_CLIENT_SECRET,
+    JOBBER_CLIENT_ID: process.env.JOBBER_CLIENT_ID,
+    JOBBER_CLIENT_SECRET: process.env.JOBBER_CLIENT_SECRET,
+  }),
+  ...jobToolsFrom({
+    JOBBER_API_VERSION: process.env.JOBBER_API_VERSION,
+    JOB_TOOLS_CLEARED: process.env.JOB_TOOLS_CLEARED,
   }),
   // Only for a webhook the owner allowed onto a private address; the ranges above still hold.
   privateFetchImpl: pinnedFetch({ deny: deny.ranges, allowPrivate: true }),

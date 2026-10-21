@@ -539,16 +539,18 @@ export function eraseStatements(parties: readonly string[], now: number): Statem
           WHERE type = 'order' AND party_id IN ${inParties}`,
       ),
       // A line no product of the catalogue named is in their own words (the catalogue names its own):
-      // its name goes, its quantity and price stay; the title made from it goes first.
+      // its name goes, its quantity and price stay; the title made from it goes first. The array built
+      // in a subquery is wrapped in json(): a subquery's result loses its JSON subtype in newer SQLite
+      // (3.54 in Node 26), and json_set would then store it as a string.
       run(
         `UPDATE items SET subject = ? WHERE type = 'order' AND party_id IN ${inParties}
             AND EXISTS (SELECT 1 FROM json_each(items.payload, '$.orderedItem') e WHERE ${OFF_CATALOGUE})`,
         [ERASED, ...part],
       ),
       run(
-        `UPDATE items SET payload = json_set(payload, '$.orderedItem', (
+        `UPDATE items SET payload = json_set(payload, '$.orderedItem', json((
             SELECT json_group_array(CASE WHEN ${OFF_CATALOGUE} THEN json_set(e.value, '$.name', ?) ELSE json(e.value) END)
-              FROM json_each(items.payload, '$.orderedItem') e))
+              FROM json_each(items.payload, '$.orderedItem') e)))
           WHERE type = 'order' AND party_id IN ${inParties}
             AND EXISTS (SELECT 1 FROM json_each(items.payload, '$.orderedItem') e WHERE ${OFF_CATALOGUE})`,
         [ERASED, ...part],
@@ -571,9 +573,9 @@ export function eraseStatements(parties: readonly string[], now: number): Statem
         [ERASED, ...part],
       ),
       run(
-        `UPDATE item_offers SET terms = json_set(terms, '$.lines', (
+        `UPDATE item_offers SET terms = json_set(terms, '$.lines', json((
             SELECT json_group_array(CASE WHEN ${OFF_CATALOGUE} THEN json_set(e.value, '$.name', ?) ELSE json(e.value) END)
-              FROM json_each(item_offers.terms, '$.lines') e))
+              FROM json_each(item_offers.terms, '$.lines') e)))
           WHERE item_id IN ${theirItems}
             AND EXISTS (SELECT 1 FROM json_each(item_offers.terms, '$.lines') e WHERE ${OFF_CATALOGUE})`,
         [ERASED, ...part],
@@ -633,6 +635,13 @@ export function eraseStatements(parties: readonly string[], now: number): Statem
       ),
       // What a job wrote about its work on their items (an error may quote an address).
       run(`UPDATE jobs SET last_error = NULL WHERE json_extract(payload, '$.itemId') IN ${theirItems}`),
+      // The files they sent with their requests (ADR-034 §2): the bytes go now, the rows are marked.
+      run(`DELETE FROM attachment_chunks WHERE key IN (SELECT key FROM blobs WHERE party_id IN ${inParties})`, [
+        ...part,
+      ]),
+      run(`DELETE FROM attachment_chunks WHERE key IN (SELECT key FROM blobs WHERE item_id IN ${theirItems})`, [
+        ...part,
+      ]),
       run(`UPDATE blobs SET deleted_at = COALESCE(deleted_at, ?) WHERE party_id IN ${inParties}`, [now, ...part]),
       run(`UPDATE blobs SET deleted_at = COALESCE(deleted_at, ?) WHERE item_id IN ${theirItems}`, [now, ...part]),
     );

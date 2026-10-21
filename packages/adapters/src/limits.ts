@@ -85,6 +85,17 @@ export const LIMITS = {
    * at once and four hundred an hour, so senders that rotate their address are bounded as well.
    */
   email: { capacity: 200, perMs: 400 / 3_600_000 } satisfies Limit,
+  /**
+   * A file uploaded for a request (ADR-034 §2): up to 10 MB each, kept in the business's database for an
+   * hour. Thirty at once and sixty an hour per address: six files on each of ten requests.
+   */
+  upload: { capacity: 30, perMs: 60 / 3_600_000 } satisfies Limit,
+  /**
+   * Asking whether a site is inside where a trade works (`check_area`, `GET /v1/area`, ADR-034 §3):
+   * twenty at once and sixty an hour per address. A customer's agent asks once or twice; a script
+   * asking round the edge to find where the radius is measured from asks hundreds.
+   */
+  area: { capacity: 20, perMs: 60 / 3_600_000 } satisfies Limit,
 } as const;
 
 export type LimitClass = keyof typeof LIMITS;
@@ -235,6 +246,16 @@ export function isVerifyRoute(method: string, path: string): boolean {
 /** Public REST routes that create an item, and so mail the owner. */
 const CREATE_PATHS = /^\/v1\/(bookings|orders|quotes|messages)\/?$/;
 
+/** The public route that tells whether a site is inside where the business works (ADR-034 §3). */
+export function isAreaRoute(method: string, path: string): boolean {
+  return (method === "GET" || method === "HEAD") && /^\/v1\/area\/?$/.test(path);
+}
+
+/** The public route a request's files are uploaded by first (ADR-034 §2). */
+export function isUploadRoute(method: string, path: string): boolean {
+  return method === "POST" && /^\/v1\/uploads\/?$/.test(path);
+}
+
 export function isCreateRoute(method: string, path: string): boolean {
   return method === "POST" && CREATE_PATHS.test(path);
 }
@@ -295,6 +316,7 @@ export function mcpCosts(body: unknown): Partial<Record<LimitClass, number>> {
     create: count((n) => CREATE_TOOLS.has(n)),
     verify: count((n) => n === "verify_customer"),
     negotiate: count((n) => NEGOTIATE_TOOLS.has(n)),
+    area: count((n) => n === "check_area"),
     public: Math.max(0, messages - 1),
   };
   for (const k of Object.keys(costs) as LimitClass[]) if (!costs[k]) delete costs[k];

@@ -28,6 +28,8 @@ import { insertOfferStatement, type OfferRow, offerRows, openOf, pointerOf } fro
 import { paidFor, refundDueOf, SEND_BACK_DAYS } from "../negotiation/refunds";
 import { items, resources, services } from "../schema/tables";
 import { readSettings } from "../settings/schema";
+import { workPushStatements } from "../trades/job-tool";
+import { type TradeQuoteTerms, taxOnTop, tradeQuoteProblems } from "../trades/quote";
 import { hashJson, hashText } from "../util/canonical";
 import {
   actorMeta,
@@ -1283,6 +1285,10 @@ async function attempt_(
     }),
   );
   if (payFollows && payItem) statements.push(payLinkStatement(payItem, eventId, now));
+  // A request the owner quotes is one they take on: it goes to their job tool unless they send none (ADR-034 §5).
+  if (item.type === "quote_request" && t.event === "quote") {
+    statements.push(...(await workPushStatements(db, item.id, "quoted", now)));
+  }
   if (await hasEventListeners(db)) {
     statements.push(webhookFanoutStatement({ id: eventId, type: `${item.type}.${t.event}`, itemId: item.id }, now));
     if (linkedEvent) statements.push(webhookFanoutStatement(linkedEvent, now));
@@ -2487,14 +2493,20 @@ async function completeQuote(
       }
       sum += l.price.value * l.quantity;
     });
-    if (!problems.some((p) => p.path.endsWith(".currency")) && sum !== q.totalPrice.value) {
+    // Prices before tax (ADR-034 §4): the lines and the tax on top make the total the customer pays.
+    const tax = taxOnTop(q as unknown as TradeQuoteTerms);
+    if (!problems.some((p) => p.path.endsWith(".currency")) && sum + tax !== q.totalPrice.value) {
       problems.push({
         path: "input.totalPrice.value",
         problem: "invalid",
-        message: `the lines add up to ${sum}; send that total, or change the lines`,
+        message: tax
+          ? `the lines and the tax add up to ${sum + tax}; send that total, or change the lines`
+          : `the lines add up to ${sum}; send that total, or change the lines`,
       });
     }
   }
+  // A trade's quote (ADR-034 §4): its stages add up to the total, its fees in the total's currency.
+  problems.push(...tradeQuoteProblems(q as unknown as TradeQuoteTerms, now));
   if (q.creates === "booking") {
     const offered = payload.itemOffered as { serviceId?: string };
     const [service] = offered.serviceId
@@ -2757,6 +2769,8 @@ function orderFromQuote(
     totalPrice: q.totalPrice,
     ...(payload.deliveryAddress ? { shippingAddress: payload.deliveryAddress } : {}),
     ...(q.notes ? { notes: q.notes } : {}),
+    // A trade's stages (ADR-034 §4) go with the order: the business asks for each as it falls due.
+    ...((q as { stages?: unknown[] }).stages?.length ? { schedule: (q as { stages?: unknown[] }).stages } : {}),
   };
 }
 

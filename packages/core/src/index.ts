@@ -3,17 +3,37 @@
  * Web-standard APIs only; runtimes plug in through @surfingdog/platform.
  */
 
+// Trades and projects (spec 0.11, ADR-034).
 export type {
+  AreaCheck,
+  AreaSummary,
+  AttachmentRef,
+  AttachmentType,
+  CheckAreaInput,
+  CheckAreaOutput,
   DatedPolicy,
   DoorElsewhere,
+  Job,
+  JobUrgency,
   Manifest,
   PaymentSchedule,
   PaymentTerms,
   Policy,
   PolicyFee,
+  PostalPrefix,
+  TradeQuote,
+  WorkProfile,
 } from "@surfingdog/spec";
 export {
+  AREA_BANDS_KM,
+  ATTACHMENT_LIMITS,
+  ATTACHMENT_TYPES,
+  areaCheckSchema,
+  areaSummarySchema,
+  attachmentRefSchema,
   CARD_BRANDS,
+  checkAreaInputSchema,
+  checkAreaOutputSchema,
   currencyCodeProblem,
   datedPolicySchema,
   decimalOf,
@@ -21,6 +41,7 @@ export {
   ISO_4217_FUNDS,
   ISO_4217_MINOR_UNITS,
   isPaymentToken,
+  jobSchema,
   MANIFEST_PATH,
   manifestSchema,
   minorUnits,
@@ -31,11 +52,16 @@ export {
   paymentScheduleSchema,
   paymentTermsSchema,
   paymentToken,
+  postalPrefixSchema,
   publishedPayments,
   readDoorsElsewhere,
   shareOf,
+  tradeQuoteSchema,
+  workProfileSchema,
 } from "@surfingdog/spec";
 export * from "./access/index";
+export * from "./area/index";
+export * from "./attachments/index";
 export * from "./capabilities/index";
 export * from "./connectors/index";
 export * from "./customer/index";
@@ -112,6 +138,7 @@ export {
   type SettingsPatch,
 } from "./settings/policy";
 export * from "./settings/schema";
+export * from "./trades/index";
 export { canonicalNetworkOrigin } from "./util/hosts";
 export { canonicalLanguages, currencyProblem, isHundredthsCurrency, isMoneyCurrency } from "./util/locale";
 export { formatMinor, moneyText, servicePriceText } from "./util/money";

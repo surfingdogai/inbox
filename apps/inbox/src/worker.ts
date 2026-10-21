@@ -10,7 +10,7 @@ import {
 import { d1Client } from "@surfingdog/platform/cloudflare";
 import { createInbox, type Inbox } from "./app";
 import { flagOn } from "./demo";
-import { listFrom, oauthFrom, publicUrlFrom, secretKeyFrom, senderFrom } from "./env";
+import { jobToolsFrom, listFrom, oauthFrom, publicUrlFrom, secretKeyFrom, senderFrom } from "./env";
 
 type Bindings = Env & {
   EMAIL?: Parameters<typeof cloudflareEmailMailOut>[0];
@@ -40,6 +40,14 @@ type Bindings = Env & {
   SQUARE_CLIENT_SECRET?: string;
   CALENDLY_CLIENT_ID?: string;
   CALENDLY_CLIENT_SECRET?: string;
+  /** A job tool's sign-in through the server's own app (ADR-034 §5); without them, "set up". */
+  SERVICEM8_CLIENT_ID?: string;
+  SERVICEM8_CLIENT_SECRET?: string;
+  JOBBER_CLIENT_ID?: string;
+  JOBBER_CLIENT_SECRET?: string;
+  /** The Jobber API version the app was checked against, and the job tools whose terms are cleared here. */
+  JOBBER_API_VERSION?: string;
+  JOB_TOOLS_CLEARED?: string;
 };
 
 // One app per isolate; the D1 binding is stable for the isolate's life.
@@ -64,6 +72,7 @@ function inboxFor(env: Bindings): Inbox {
       baseUrl: publicUrlFrom(env.INBOX_PUBLIC_URL),
       demo: flagOn(env.INBOX_DEMO) ? { ownerEmails, from } : undefined,
       ...oauthFrom(env),
+      ...jobToolsFrom(env),
       // `/` runs the worker first (the business's own page); a signed-in owner gets their app from the assets.
       appShell: (request) =>
         env.ASSETS.fetch(new Request(new URL("/index.html", request.url), { headers: request.headers })),

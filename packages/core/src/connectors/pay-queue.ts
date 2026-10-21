@@ -55,11 +55,14 @@ export async function linkComing(
     totalPrice?: { value?: unknown; currency?: unknown };
     paymentUrl?: unknown;
     change?: unknown;
+    schedule?: unknown;
   };
   const value = Number(p.totalPrice?.value ?? 0);
   const currency = String(p.totalPrice?.currency ?? "").toUpperCase();
   if (!Number.isInteger(value) || value <= 0 || !isMoneyCurrency(currency)) return false;
   if (p.change !== undefined && p.change !== null) return false;
+  // Paid in a trade's stages (ADR-034 §4): no link for the whole is coming.
+  if (Array.isArray(p.schedule) && p.schedule.length > 0) return false;
   const url = typeof p.paymentUrl === "string" ? p.paymentUrl : null;
   const { rows } = await db.client.query({
     sql: `SELECT MIN(created_at),
