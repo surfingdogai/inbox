@@ -132,6 +132,14 @@ export const KINDS: readonly SetupKind[] = [
     connect: ["work", "calendars"],
   },
   {
+    key: "projects",
+    label: "Building and renovation",
+    line: "Larger jobs quoted in stages, often after a visit.",
+    preset: "projects",
+    doors: { booking: false, quoteRequest: true, message: true },
+    connect: ["work", "calendars"],
+  },
+  {
     key: "shop",
     label: "A shop",
     line: "Things people order, to collect or to deliver.",

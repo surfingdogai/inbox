@@ -1,0 +1,150 @@
+/* Trades (ADR-034): the job on a request, Settings → Area and Work. Thin, small, quiet: hairlines,
+   one accent (the urgency, only for an emergency), nothing that moves unless it is asked to. */
+
+.job {
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--hairline);
+}
+.job-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.job-pills .pill {
+  font-size: 12px;
+}
+.job-windows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The photo strip: small square thumbnails, a PDF as its name. */
+.job-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.job-thumb {
+  display: block;
+  width: 72px;
+  height: 72px;
+  overflow: hidden;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--row-bg);
+  transition: border-color 0.18s;
+}
+.job-thumb:hover {
+  border-color: var(--ink-3);
+}
+.job-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.job-pdf {
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  height: 100%;
+  padding: 6px;
+  color: var(--ink-2);
+  text-align: center;
+}
+.job-pdf-name {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.job-tool {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+/* A quote in stages. */
+.job-staged {
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+}
+.job-stages {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.job-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 0.9fr) auto;
+  align-items: center;
+  gap: 6px;
+}
+.job-stage:has(input[type="date"]) {
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 0.9fr) minmax(0, 1fr) auto;
+}
+.job-staged-open {
+  justify-self: start;
+  font-size: 13px;
+}
+@media (max-width: 560px) {
+  .job-stage,
+  .job-stage:has(input[type="date"]) {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Settings → Area: a code and its country, added as a chip that can be taken off. */
+.inline-add {
+  display: flex;
+  gap: 6px;
+}
+.inline-add .input {
+  min-width: 0;
+  text-transform: uppercase;
+}
+.chip-removable {
+  gap: 6px;
+  padding-right: 4px;
+  cursor: default;
+}
+.chip-x {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.chip-x:hover {
+  background: var(--row-bg-hover);
+}
+.area-public,
+.work-expiring {
+  margin: 0;
+}
+.area .chip .icon-sm {
+  margin-right: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .job-thumb {
+    transition: none;
+  }
+}

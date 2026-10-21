@@ -3,6 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { ThemeButton, ThemeSwitch } from "../components/ThemeSwitch";
 import { ensureSignedIn } from "../lib/auth";
+import { useSettings } from "../lib/queries";
 
 /** Settings: who the business is, what it offers, when it is open, how it is paid, what runs on its own, who it reports to. */
 export const Route = createFileRoute("/settings")({
@@ -15,6 +16,10 @@ export const Route = createFileRoute("/settings")({
 function SettingsLayout() {
   const tabs = useRef<HTMLElement>(null);
   const path = useRouterState({ select: (s) => s.location.pathname });
+  // A business agents can ask for a price (a trade) has Area and Work; a shop never sees them (ADR-034).
+  const settings = useSettings();
+  const work =
+    settings.data?.doc.doors.quoteRequest !== false || path === "/settings/area" || path === "/settings/work";
   // The tab you are on is always in view, on a phone too, where the row scrolls.
   // biome-ignore lint/correctness/useExhaustiveDependencies: the path is what moves the current tab
   useEffect(() => {
@@ -41,6 +46,16 @@ function SettingsLayout() {
         <Link to="/settings/availability" className="tab">
           Availability
         </Link>
+        {work && (
+          <>
+            <Link to="/settings/area" className="tab">
+              Area
+            </Link>
+            <Link to="/settings/work" className="tab">
+              Work
+            </Link>
+          </>
+        )}
         <Link to="/settings/payments" className="tab">
           Payments
         </Link>

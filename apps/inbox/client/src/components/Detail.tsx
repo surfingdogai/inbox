@@ -28,6 +28,7 @@ import { Emails } from "./Emails";
 import { EventIcon } from "./EventIcon";
 import { DetailSkeleton, ErrorState, Toast } from "./Feedback";
 import { Details, Fields } from "./Fields";
+import { JobBlock } from "./Job";
 import { Payments, RefundAt } from "./Payments";
 import { StatePill, TypePill } from "./Pills";
 import { Receipts } from "./Receipts";
@@ -190,6 +191,7 @@ export function ItemDetailView({
               : undefined
           }
         />
+        {item.type === "quote_request" && <JobBlock item={item} tz={tz} currency={money} />}
         {item.type === "order" && (
           <Payments itemId={item.id} payments={payments} none={pays.data?.none ?? null} tz={tz} />
         )}
