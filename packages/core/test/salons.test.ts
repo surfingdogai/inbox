@@ -1,4 +1,4 @@
-import { runMigrations } from "@surfingdog/platform";
+import { logMailOut, runMigrations } from "@surfingdog/platform";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
@@ -8,6 +8,7 @@ import type { ConnectorDefinition, ConnectorHttp, OutboundBooking } from "../src
 import { createDb, type Db } from "../src/db";
 import { customerCopyProblems } from "../src/i18n/customer-words";
 import { ulid } from "../src/ids";
+import { createRunner } from "../src/jobs/index";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { business, items, parties } from "../src/schema/tables";
 import { createSecretBox } from "../src/secrets/box";
@@ -932,6 +933,81 @@ describe("a deposit the policy keeps", () => {
     expect([early?.fee.value, early?.refund?.value]).toEqual([0, 2000]);
     const late = await cancelFeeOf(paid, Date.parse(`${day}T16:00:00-05:00`) - 12 * 3_600_000, "en");
     expect([late?.fee.value, late?.refund?.value]).toEqual([2000, 0]);
+  });
+});
+
+describe("emails", () => {
+  it("tell the customer who it is with, what was added and the deposit, and the owner when and what to check", async () => {
+    const { db, caps, fade, ravi } = await mapleAndFade();
+    await caps.updateSettings(owner, {
+      doc: {
+        email: { fromAddress: "hello@mapleandfade.example" },
+        notifications: { ownerEmail: "desk@mapleandfade.example" },
+      },
+    });
+    await caps.setup.updateService(owner, {
+      service_id: fade.id,
+      deposit: { kind: "amount", value: 1500 },
+      policy: {
+        steps: [{ before: { hours: 24 }, fee: { kind: "none" } }],
+        after: { kind: "none" },
+        noShow: { kind: "full" },
+        deposit: { refundable: false },
+      },
+    });
+    const towel = (await caps.setup.listServices(owner)).find((s) => s.id === fade.id)?.addOns?.[0];
+    const day = new Date(T0 + 3 * DAY).toISOString().slice(0, 10);
+    const r = await caps.createBooking(agent(), {
+      payload: booking(fade.id, "Skin fade", `${day}T16:00:00-05:00`, `${day}T16:30:00-05:00`),
+      staff_id: ravi.id,
+      add_ons: [towel?.id ?? ""],
+      contact: { name: "Aiyana", email: "aiyana@example.com" },
+      idempotency_key: "mail-1",
+    });
+    const runner = createRunner({ mailOut: logMailOut() });
+    const drain = async () => {
+      for (let i = 0; i < 10; i++)
+        if ((await runner.runDue(db, { now: T0 + 3_600_000, limit: 100 })).claimed === 0) return;
+    };
+    await drain();
+    await transitionItem(db, owner, { itemId: r.view.item.id, event: "confirm" });
+    await drain();
+    const mails = await db.client.query({
+      sql: "SELECT recipient, template, body_text FROM outbound_mail WHERE item_id = ? ORDER BY created_at, id",
+      params: [r.view.item.id],
+      method: "all",
+    });
+    const body = (template: string) => String(mails.rows.find((m) => m[1] === template)?.[2] ?? "");
+    for (const t of ["ack.booking", "booking.confirmed"]) {
+      expect(body(t), t).toContain("With Ravi.");
+      expect(body(t), t).toContain("Added: Hot towel.");
+      expect(body(t), t).toContain("A deposit of CA$15.00 holds your booking.");
+      expect(body(t), t).toContain("After that, the deposit is not refunded.");
+    }
+    const ownerMail = body("owner.create");
+    expect(ownerMail).toContain("With: Ravi");
+    expect(ownerMail).toContain("16:00 (Toronto time)");
+    expect(ownerMail).not.toContain("UTC");
+  });
+
+  it("tell the owner what to check first", async () => {
+    const { db, caps, patch, colour } = await ifeBeauty();
+    await caps.updateSettings(owner, {
+      doc: { email: { fromAddress: "hello@ife.example" }, notifications: { ownerEmail: "desk@ife.example" } },
+    });
+    const r = await caps.createBooking(agent(), {
+      payload: booking(colour.id, "Gele & colour", inLagos("14:00"), inLagos("15:30")),
+      contact: { name: "Someone", email: "someone@example.com" },
+      idempotency_key: "mail-check",
+    });
+    const runner = createRunner({ mailOut: logMailOut() });
+    for (let i = 0; i < 10; i++) if ((await runner.runDue(db, { now: T0 + 60_000, limit: 100 })).claimed === 0) break;
+    const { rows } = await db.client.query({
+      sql: "SELECT body_text FROM outbound_mail WHERE item_id = ? AND recipient = 'owner'",
+      params: [r.view.item.id],
+      method: "all",
+    });
+    expect(String(rows[0]?.[0])).toContain(`Check first: ${patch.name}`);
   });
 });
 

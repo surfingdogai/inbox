@@ -1,6 +1,6 @@
 import type { Item, Money } from "../domain/types";
 import { type CopyVars, cap, copyFor, type ExceptionWords, vars, withdrawalCopy } from "./copy";
-import { type Audience, personalisedLine, statusSentence, subjectIn, whatOf } from "./describe";
+import { type Audience, personalisedLine, salonLines, statusSentence, subjectIn, whatOf } from "./describe";
 import { moneyIn, oneLine, shortRef, whenText } from "./format";
 import type { CustomerLang } from "./lang";
 import type { LinkAction } from "./links";
@@ -489,6 +489,8 @@ function bodyOf(input: CustomerMailInput): Body {
             [
               e.ack.booking(v({ when: when(item.payload.startTime) })),
               ...priceLines(input, item.payload.totalPrice, item.payload),
+              // Who it is with, what was added, the deposit and the policy (ADR-035).
+              ...salonLines(item.payload, input),
               e.ack.bookingNext,
             ],
           ],
@@ -522,7 +524,12 @@ function bodyOf(input: CustomerMailInput): Body {
       }
       switch (item.state) {
         case "confirmed": {
-          const lines = [...priceLines(input, item.payload.totalPrice, item.payload), ...cutoffLines(input, item)];
+          const lines = [
+            ...priceLines(input, item.payload.totalPrice, item.payload),
+            // Who it is with, what was added, the deposit and the policy (ADR-035).
+            ...salonLines(item.payload, input),
+            ...(item.payload.policy ? [] : cutoffLines(input, item)),
+          ];
           if (input.event === "accept")
             return {
               template: "booking.accepted",

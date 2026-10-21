@@ -81,6 +81,7 @@ import {
   findStaffSlots,
   fromSystem,
   hasStaff,
+  localeOf,
   prepareBooking,
   registerBookingResolver,
   StaffCapabilities,
@@ -946,12 +947,14 @@ export class Capabilities {
       try {
         const done = await transitionItem(this.db, c, { itemId: input.item_id, event, ...note });
         if (fee.fee.value > 0 && !done.replayed) {
-          // The fee is the business's to take, from the deposit or by its own link: said to the owner once.
+          // The fee is the business's to take, from the deposit or by its own link: said to the owner once,
+          // its money written as the business writes it.
+          const locale = localeOf((await this.getBusinessProfile()).languages[0] ?? "en");
           await appendThreadEntry(
             this.db,
             systemCaller(nowOf(c)),
             done.view.item,
-            `Cancelled with a fee of ${formatMinor(fee.fee, "en-GB")} under its policy, as the customer saw it and agreed. Take it from the deposit, or ask for it; nothing was charged here.`,
+            `Cancelled with a fee of ${formatMinor(fee.fee, locale)} under its policy, as the customer saw it and agreed. Take it from the deposit, or ask for it; nothing was charged here.`,
             "note",
           );
         }

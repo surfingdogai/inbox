@@ -1,6 +1,7 @@
 import type { DatedPolicy } from "@surfingdog/spec";
-import type { Item, ItemType, Money, Personalised } from "../domain/types";
+import type { Item, ItemType, Money, PayloadOf, Personalised } from "../domain/types";
 import { policySentence } from "../policy/words";
+import { staffWords } from "../staff/words";
 import { cap, copyFor, phraseOf, vars } from "./copy";
 import { moneyIn, oneLine, shortRef, whenText } from "./format";
 import type { CustomerLang } from "./lang";
@@ -432,4 +433,28 @@ export function customerLabel(event: string, type: ItemType, state: string, lang
     default:
       return cap(event.replaceAll("_", " "));
   }
+}
+
+/**
+ * Who a salon's booking is with, what was added, the deposit that holds it and its cancellation policy
+ * (ADR-035), as the customer reads them: before they confirm, and in the emails after. In the business's
+ * words and their language; nothing for a booking that has none of them.
+ */
+export function salonLines(p: PayloadOf<"booking">, a: Pick<Audience, "lang" | "timezone">): string[] {
+  const w = staffWords(a.lang);
+  const parts: string[] = [];
+  if (p.staffName) parts.push(w.withStaff(p.staffName));
+  else if (p.anyStaff) parts.push(w.withAnyone);
+  if (p.addOns?.length) parts.push(w.addOns(p.addOns.map((x) => x.name).join(", ")));
+  if (p.deposit) {
+    const amount = moneyIn(p.deposit.amount, a.lang);
+    parts.push(
+      p.deposit.dueBy ? w.deposit(amount, whenText(p.deposit.dueBy, a.timezone, a.lang)) : w.depositNow(amount),
+    );
+  }
+  if (p.policy && p.totalPrice) {
+    const depositKept = p.deposit !== undefined && !p.deposit.refundable;
+    parts.push(policySentence(p.policy, { lang: a.lang, total: p.totalPrice, depositKept }));
+  }
+  return parts;
 }

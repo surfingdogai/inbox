@@ -231,9 +231,10 @@ export function describeToCustomer(item: Item, audience: Audience = DEFAULT_AUDI
   return statusSentence(item, audience);
 }
 
-export function describe(item: Item): string {
+/** The item for the business, in a line; times in `zone` when given (the owner's email), else in UTC. */
+export function describe(item: Item, zone?: string | undefined): string {
   const what = item.subject ? `${TYPE_WORD[item.type]} "${item.subject}"` : TYPE_WORD[item.type];
-  const when = item.type === "booking" ? ` for ${formatWhen(item.payload.startTime)}` : "";
+  const when = item.type === "booking" ? ` for ${formatWhen(item.payload.startTime, zone)}` : "";
   const prices = statedPrices(item);
   const who = item.channel === "email" || item.channel === "form" ? "The customer" : "The customer's assistant";
   const price = prices ? ` ${who} suggested ${moneyText(prices.stated)}; your price is ${moneyText(prices.ours)}.` : "";
@@ -268,9 +269,25 @@ function statedPrices(item: Item): { stated: Money; ours: Money } | null {
   return stated && ours ? { stated, ours } : null;
 }
 
-function formatWhen(isoTime: string): string {
+function formatWhen(isoTime: string, zone?: string | undefined): string {
   const d = new Date(isoTime);
   if (Number.isNaN(d.getTime())) return isoTime;
+  if (zone && zone !== "UTC" && zone !== "Etc/UTC") {
+    try {
+      const at = new Intl.DateTimeFormat("en-CA", {
+        timeZone: zone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23",
+      }).format(d);
+      return `${at.replace(",", "")} (${(zone.split("/").pop() ?? zone).replaceAll("_", " ")} time)`;
+    } catch {
+      // An unknown zone: in UTC, as before.
+    }
+  }
   return `${d.toISOString().replace("T", " ").slice(0, 16)} UTC`;
 }
 

@@ -1,5 +1,6 @@
 import type { CustomerMailKind, MailOut, OutboundMail } from "@surfingdog/platform";
 import { eq } from "drizzle-orm";
+import { hasPayLinks } from "../connectors/pay-queue";
 import { type BusinessFacts, businessFacts } from "../customer/audience";
 import { oneLine } from "../customer/format";
 import { customerLang } from "../customer/lang";
@@ -13,6 +14,7 @@ import { lawOf } from "../negotiation/holidays";
 import { items, parties } from "../schema/tables";
 import type { SecretBox } from "../secrets/box";
 import { readSettings, type Settings } from "../settings/schema";
+import { ownerSalonLines } from "../staff/notes";
 import { withdrawalOf } from "../write/returns";
 import { describe, rowToItem } from "../write/views";
 import {
@@ -78,7 +80,14 @@ export function notifyHandler(
         p.to === "owner"
           ? await capOwnerAlerts(
               db,
-              ownerMail(item, p, settings, await nameOf(db, item.partyId), job.id, sender !== null),
+              ownerMail(item, p, settings, await nameOf(db, item.partyId), job.id, sender !== null, [
+                ...(p.event === "create"
+                  ? await ownerSalonLines(db, item, {
+                      lang: facts.languages[0] ?? "en",
+                      payLinks: await hasPayLinks(db),
+                    })
+                  : []),
+              ]),
               now,
             )
           : await customerMail(db, item, p, {
@@ -412,6 +421,8 @@ function ownerMail(
   who: string,
   jobKey: string,
   canSend: boolean,
+  /** A salon's booking (ADR-035): when in the business's zone, who, what was added, the deposit, what to check. */
+  salon: readonly string[] = [],
 ): ComposedMail {
   const appUrl = settings.notifications.appUrl ?? "";
   return {
@@ -425,7 +436,9 @@ function ownerMail(
     // in it is refused by a mail service, and the owner would never hear of the request.
     subject: oneLine(ownerSubject(item, p.event, who)),
     text: [
-      describe(item),
+      // In the business's own time: the owner reads 16:00, not 21:00 UTC.
+      describe(item, settings.business.timezone),
+      ...(salon.length ? ["", ...salon] : []),
       "",
       `From: ${who}`,
       ...(appUrl ? [`Open: ${appUrl}/items/${item.id}`] : []),

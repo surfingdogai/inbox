@@ -75,7 +75,9 @@ function base64Url(bytes: Uint8Array): string {
   return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 }
 
-function localeOf(lang: string): string {
+/** The locale money and dates are written in for a language tag: its own region, else the language's usual one. */
+export function localeOf(lang: string): string {
+  if (lang.includes("-")) return lang;
   const primary = lang.toLowerCase().split(/[-_]/)[0] ?? "en";
   return { en: "en-GB", es: "es-ES", fr: "fr-FR", de: "de-DE", it: "it-IT", pt: "pt-PT" }[primary] ?? "en-GB";
 }
