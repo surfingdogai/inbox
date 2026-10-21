@@ -21,7 +21,9 @@ import {
   SMOOBU_DOCS,
   SMOOBU_GUARDS,
   SMOOBU_HOSTS,
+  SMOOBU_NOTICE_LANGUAGES,
   SMOOBU_RATE,
+  SMOOBU_READY,
   sha256Hex,
   smoobuBudget,
   smoobuCanonical,
@@ -31,6 +33,8 @@ import {
   smoobuQuery,
   smoobuRetryAfterMs,
   smoobuTimestamp,
+  smoobuToken,
+  smoobuTokenIn,
   smoobuWebhookUrl,
 } from "../../src/connectors/property/smoobu";
 import { freshDb } from "../db";
@@ -105,7 +109,9 @@ function connection(
   const keys = keyPair(o.n ?? 1);
   const fake = smoobuFake({ user, apiKey: keys.apiKey, apiSecret: keys.apiSecret, apartments });
   fakes.push(fake);
+  // Switched on here: the release holds it off until Smoobu's go-ahead (`SMOOBU_READY`).
   const def = smoobuConnector({
+    ready: true,
     clock: () => fake.clock.now + (o.offsetMs ?? 0),
     ...(o.nonce ? { nonce: o.nonce } : {}),
   });
@@ -169,6 +175,9 @@ function stayOf(
   };
 }
 
+/** The key as it is written in Smoobu's notice: `[#…]`, without the inbox's own prefix. */
+const tokenOf = (stay: OutboundStay) => smoobuToken(stay.key) ?? "";
+
 const writer = (c: Connection) => {
   const w = c.def.stayWriter;
   if (!w) throw new Error("no writer");
@@ -206,13 +215,16 @@ propertyContract("Smoobu, Gîte du Cap-Blanc in Québec City (CAD)", contract(CA
 /* --- connecting -------------------------------------------------------------------- */
 
 describe("Smoobu: connecting with the owner's own HMAC key, behind one switch", () => {
-  it("is registered as a property system, ready, in the lodging group, guarded as check-then-write with no hold", () => {
+  it("is registered as a property system, switched off until Smoobu's go-ahead, guarded as check-then-write with no hold", () => {
     const def = builtInConnectors().find((d) => d.kind === "smoobu");
     expect(def).toBeDefined();
     expect(isPropertySystem(def)).toBe(true);
     expect(def?.group).toBe("lodging");
     expect(def?.capabilities).toEqual(["stay_inventory", "write_stays", "stay_events"]);
-    expect(def?.ready?.()).toBe(true);
+    // Code-complete, and off in this release until the maintainers have spoken with Smoobu.
+    expect(SMOOBU_READY).toBe(false);
+    expect(def?.ready?.()).toBe("Smoobu is not switched on here yet.");
+    expect(smoobuConnector({ ready: true }).ready?.()).toBe(true);
     expect(def?.stayWriter?.oversold).toBeDefined();
     expect(SMOOBU_GUARDS).toEqual({ writeGuard: "check_then_write", hold: "none" });
     const fields = describeForm(def?.form as never);
@@ -234,7 +246,7 @@ describe("Smoobu: connecting with the owner's own HMAC key, behind one switch", 
     const off = card(false);
     expect(off?.status).toBe("setup");
     expect(off?.form).toEqual([]);
-    expect(off?.hint).toMatch(/Smoobu/);
+    expect(off?.hint).toBe("Waiting on Smoobu's go-ahead. It shows here once that is done.");
     expect(off?.href).toBe(SMOOBU_DOCS);
   });
 
@@ -651,6 +663,77 @@ describe("Smoobu: apartments as rooms of one, nights as its rates have them, mon
     c.fake.nightPrice.set("52011|2026-12-02", null);
     expect(await c.def.stays?.price?.(c.ctx(), q)).toBeNull();
   });
+
+  it("prices a quote from two apartments and their rates, never by reading the whole account", async () => {
+    const c = connection(HAVELI_RANG);
+    const q = {
+      propertyId: "52011",
+      roomId: "52012",
+      checkIn: "2026-12-01",
+      checkOut: "2026-12-03",
+      adults: 2,
+      childrenAges: [],
+    };
+    expect((await c.def.stays?.price?.(c.ctx(), q))?.subtotal).toEqual({ value: 2_360_000, currency: "INR" });
+    expect(c.fake.platform.seen.map((r) => `${r.method} ${r.url.pathname}`)).toEqual([
+      "GET /api/apartments/52012",
+      "GET /api/apartments/52011",
+      "GET /api/rates",
+    ]);
+    // A room in another property is no quote here; a property whose first apartment is gone is chosen again.
+    const kijiwe = connection([...HAVELI_RANG, ...KIJIWE_LODGE], HAVELI_USER, { n: 5 });
+    expect(await kijiwe.def.stays?.price?.(kijiwe.ctx(), { ...q, roomId: "61001" })).toBeNull();
+    await expect(kijiwe.def.stays?.price?.(kijiwe.ctx(), { ...q, propertyId: "52999" })).rejects.toMatchObject({
+      code: "not_found",
+    });
+  });
+
+  it("keeps the apartments' details from a refresh for the nightly reads, and reads the list live each time", async () => {
+    const c = connection(HAVELI_RANG);
+    const refreshed = await c.def.refresh?.(c.ctx({ hookUrl: null }));
+    const kept = refreshed?.extra?.apartments as { at: number; list: { id: string; currency: string }[] } | undefined;
+    expect(kept?.at).toBe(c.fake.clock.now);
+    expect(kept?.list.map((a) => [a.id, a.currency])).toEqual([
+      ["52011", "INR"],
+      ["52012", "INR"],
+      ["52013", "INR"],
+    ]);
+    const before = c.fake.platform.seen.length;
+    const ctx = c.ctx({ extra: refreshed?.extra ?? {} });
+    const rows = rowsOf((await c.def.stays?.ari(ctx, "52011", { from: "2026-12-01", to: "2026-12-02" })) ?? []);
+    expect(rows.map((r) => r.roomId)).toEqual(["52011", "52012", "52013"]);
+    expect(c.fake.platform.seen.slice(before).map((r) => `${r.method} ${r.url.pathname}`)).toEqual([
+      "GET /api/apartments",
+      "GET /api/rates",
+      "GET /api/rates",
+      "GET /api/rates",
+    ]);
+    // Twelve hours on, they are read again; the owner's chooser always reads them live.
+    const later = c.fake.platform.seen.length;
+    await c.def.stays?.ari(c.ctx({ extra: refreshed?.extra ?? {}, now: c.fake.clock.now + 13 * 3_600_000 }), "52011", {
+      from: "2026-12-01",
+      to: "2026-12-02",
+    });
+    expect(
+      c.fake.platform.seen.slice(later).filter((r) => /\/api\/apartments\/\d+$/.test(r.url.pathname)),
+    ).toHaveLength(3);
+    const chooser = c.fake.platform.seen.length;
+    await c.def.stays?.rooms(ctx, "52011");
+    expect(
+      c.fake.platform.seen.slice(chooser).filter((r) => /\/api\/apartments\/\d+$/.test(r.url.pathname)),
+    ).toHaveLength(3);
+  });
+
+  it("names apartments with no town after the first and how many more, never by a currency code", async () => {
+    const noTown = [
+      { ...(KIJIWE_LODGE[0] as FakeApartment), city: "" },
+      { ...(KIJIWE_LODGE[1] as FakeApartment), city: "" },
+    ];
+    const c = connection(noTown, KIJIWE_USER);
+    expect((await c.def.stays?.properties(c.ctx()))?.map((p) => p.name)).toEqual([
+      `${KIJIWE_LODGE[0]?.name} and 1 more`,
+    ]);
+  });
 });
 
 /* --- writing ---------------------------------------------------------------------------- */
@@ -674,7 +757,7 @@ describe("Smoobu: stays checked live first, written, read back after, taken back
       adults: 1,
       children: 1,
       price: 378,
-      notice: `Réservation directe, acompte dû · ref HR4K2Q [${stay.key}]`,
+      notice: `Réservation directe, acompte dû · ref HR4K2Q [#${tokenOf(stay)}]`,
     });
     const confirmed = {
       ...stay,
@@ -688,21 +771,25 @@ describe("Smoobu: stays checked live first, written, read back after, taken back
       adults: 1,
       children: 1,
       price: 378,
-      notice: `Réservation directe · ref HR4K2Q [${stay.key}]\nArrivée tardive.`,
+      notice: `Réservation directe · ref HR4K2Q [#${tokenOf(stay)}]\nArrivée tardive.`,
       guestName: "Aarav Mehta Shah",
       guestEmail: "aarav@guest.example",
     });
   });
 
-  it("writes its notice in each of the six languages, holding none of the words a guest never reads", async () => {
-    for (const [i, lang] of ["en", "es", "fr", "de", "it", "pt"].entries()) {
+  it("writes its notice in each of its twelve languages, English for any other, with none of the words a guest never reads", async () => {
+    expect(SMOOBU_NOTICE_LANGUAGES).toEqual(["en", "es", "fr", "de", "it", "pt", "nl", "pl", "sw", "hi", "ja", "ar"]);
+    for (const [i, lang] of [...SMOOBU_NOTICE_LANGUAGES, "ko"].entries()) {
       const c = connection(KIJIWE_LODGE, KIJIWE_USER, { n: 40 + i, language: lang });
       const stay = stayOf(61001, "2027-01-10", "2027-01-12", { currency: "TZS", value: 37_000_000 });
       await writer(c).put(c.ctx(), stay, null, "provisional");
       const notice = String(c.fake.writes[0]?.body.notice ?? "");
-      expect(notice).toContain(`ref HR4K2Q [${stay.key}]`);
+      expect(notice).toContain(`ref HR4K2Q [#${tokenOf(stay)}]`);
+      // Never our prefix: the business's notes carry no software's name.
+      expect(notice).not.toMatch(/sd-/);
+      expect(smoobuTokenIn(notice)).toBe(tokenOf(stay));
       // Smoobu may show a booking's notes to its guest: in the business's words, never the software's.
-      expect(customerWordsIn(notice.replace(/\[sd-[^\]]+\]/, ""), lang)).toEqual([]);
+      expect(customerWordsIn(notice.replace(/\[#[^\]]+\]/, ""), lang)).toEqual([]);
     }
   });
 
@@ -831,7 +918,7 @@ describe("Smoobu: stays checked live first, written, read back after, taken back
       },
     });
     expect(result.status).toBe("conflict");
-    const ours = [...c.fake.reservations.values()].find((r) => r.notice.includes(stay.key));
+    const ours = [...c.fake.reservations.values()].find((r) => r.notice.includes(`[#${tokenOf(stay)}]`));
     expect(ours?.type).toBe("cancellation");
     // The other channel's guest keeps the night; ours is gone from it, kept as cancelled.
     expect(c.fake.reservations.get(ota)?.type).toBe("reservation");
@@ -905,7 +992,7 @@ describe("Smoobu: stays checked live first, written, read back after, taken back
     c.fake.mode.write = "ok";
     const again = await w.put(ctx, stay, null, "confirmed");
     expect(result.status === "written" ? result.ref.externalId : null).toBe(again.externalId);
-    expect([...c.fake.reservations.values()].filter((r) => r.notice.includes(stay.key))).toHaveLength(1);
+    expect([...c.fake.reservations.values()].filter((r) => r.notice.includes(`[#${tokenOf(stay)}]`))).toHaveLength(1);
   });
 
   it("updates a stay on its own nights, leaves a notice the owner rewrote as it is, and never sends dates", async () => {
@@ -980,6 +1067,116 @@ describe("Smoobu: stays checked live first, written, read back after, taken back
       code: "refused",
       message: "Smoobu said: Bookings from this channel are cancelled on the channel.",
     });
+  });
+
+  it("finds a stay's key only on the first line it wrote, never in a guest's requests or notes pasted elsewhere", async () => {
+    expect(smoobuTokenIn("Direct booking · ref HR4K2Q [#01JY]")).toBe("01JY");
+    expect(smoobuTokenIn("Reserva directa, depósito pendiente · ref HR4K2Q [#01JY]\nLlegamos tarde.")).toBe("01JY");
+    expect(smoobuTokenIn("Late check-in. Direct booking · ref HR4K2Q [#01JY]")).toBeNull();
+    expect(smoobuTokenIn("Direct booking · ref HR4K2Q [#01JX]\nDirect booking · ref HR4K2Q [#01JY]")).toBe("01JX");
+    expect(smoobuTokenIn("Direct booking · ref HR4K2Q [sd-01JY]")).toBeNull();
+    expect(smoobuTokenIn(null)).toBeNull();
+
+    const c = connection(HAVELI_RANG);
+    const ctx = c.ctx();
+    // Stay X's guest typed stay Y's key into their requests, in both its old and its new shape.
+    const x = {
+      ...stayOf(52011, "2027-01-10", "2027-01-12", { key: "sd-01JX", guest: true }),
+      notes: "Same group as [sd-01JY] and [#01JY], please put us close.",
+    };
+    const linkX = await writer(c).put(ctx, x, null, "confirmed");
+    const noticeX = c.fake.reservations.get(Number(linkX.externalId))?.notice ?? "";
+    expect(noticeX).toBe(
+      "Direct booking · ref HR4K2Q [#01JX]\nSame group as (sd-01JY) and (#01JY), please put us close.",
+    );
+    // And a booking cancelled on Y's own nights carries Y's key pasted below a line of the owner's.
+    const pasted = c.fake.otaBooking(52011, "2027-01-20", "2027-01-22");
+    pasted.notice = "Moved by phone.\nDirect booking · ref HR4K2Q [#01JY]";
+    pasted.type = "cancellation";
+    const y = stayOf(52011, "2027-01-20", "2027-01-22", { key: "sd-01JY" });
+    expect(await writer(c).find(ctx, y)).toBeNull();
+    const linkY = await writer(c).put(ctx, y, null, "confirmed");
+    expect(linkY.externalId).not.toBe(linkX.externalId);
+    expect(linkY.externalId).not.toBe(String(pasted.id));
+    expect(c.fake.writes.filter((w) => w.method === "POST")).toHaveLength(2);
+    expect(await writer(c).oversold?.(ctx, y, linkY)).toBe(false);
+    expect(c.fake.free(52011, "2027-01-20")).toBe(0);
+    expect((await writer(c).find(ctx, y))?.externalId).toBe(linkY.externalId);
+    // A booking read back for a stay it is not on (other nights) is never that stay's sound write.
+    expect(await writer(c).oversold?.(ctx, y, linkX)).toBe(true);
+  });
+
+  it("counts a long stay that arrived months before, whatever `from` and `to` filter on", async () => {
+    const c = connection(KIJIWE_LODGE, KIJIWE_USER);
+    c.fake.mode.protection = "off";
+    c.fake.mode.range = "arrival";
+    c.fake.mode.namedFilters = false;
+    const ctx = c.ctx();
+    const stay = stayOf(61001, "2027-06-10", "2027-06-12", { currency: "TZS", value: 37_000_000 });
+    // Another channel's 150-night stay, arriving 120 days before ours, lands between the check and the write.
+    c.fake.mode.afterCheck = () => {
+      c.fake.otaBooking(61001, "2027-02-10", "2027-07-10");
+    };
+    const link = await writer(c).put(ctx, stay, null, "confirmed");
+    expect(await writer(c).oversold?.(ctx, stay, link)).toBe(true);
+    const asked = c.fake.platform.requests("GET", "https://login.smoobu.com/api/reservations").at(-1);
+    expect(asked?.url.searchParams.get("from")).toBe("2026-06-09");
+    expect(asked?.url.searchParams.get("departureFrom")).toBe("2027-06-10");
+    expect(asked?.url.searchParams.get("arrivalTo")).toBe("2027-06-12");
+  });
+
+  it("never reads a write back as sound from part of the bookings: more pages than it reads is no answer", async () => {
+    const c = connection(KIJIWE_LODGE, KIJIWE_USER);
+    c.fake.mode.range = "arrival";
+    c.fake.mode.namedFilters = false;
+    const ctx = c.ctx();
+    const stay = stayOf(61001, "2027-06-10", "2027-06-12", { currency: "TZS", value: 37_000_000 });
+    const link = await writer(c).put(ctx, stay, null, "confirmed");
+    // A thousand earlier one-night bookings in the year before fill ten pages; the one that overlaps is last.
+    for (let i = 0; i < 1_000; i++) {
+      const night = new Date(Date.parse("2027-01-01T00:00:00Z") + (i % 150) * 86_400_000).toISOString().slice(0, 10);
+      const next = new Date(Date.parse(`${night}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+      c.fake.otaBooking(61001, night, next);
+    }
+    c.fake.otaBooking(61001, "2027-06-11", "2027-06-12");
+    await expect(writer(c).oversold?.(ctx, stay, link)).rejects.toMatchObject({ code: "bad_response" });
+  });
+
+  it("looks for an earlier write among the bookings made in the last two days, never the apartment's whole history", async () => {
+    const c = connection(HAVELI_RANG);
+    const stay = stayOf(52011, "2027-03-20", "2027-03-22");
+    await writer(c).put(c.ctx(), stay, null, "confirmed");
+    const looks = c.fake.platform.requests("GET", "https://login.smoobu.com/api/reservations");
+    expect(looks.map((r) => [r.url.searchParams.get("from"), r.url.searchParams.get("created_from")])).toEqual([
+      ["2027-03-20", null],
+      [null, "2026-10-31"],
+    ]);
+  });
+
+  it("does not send a create once too little of the write's time is left, and the inbox finds nothing written", async () => {
+    const c = connection(HAVELI_RANG);
+    // Smoobu takes 14 of the write's 18 seconds to answer the check.
+    c.fake.mode.beforeCheck = () => {
+      c.fake.clock.now += 14_000;
+    };
+    const stay = stayOf(52011, "2027-04-05", "2027-04-07");
+    await expect(writer(c).put(c.ctx(), stay, null, "confirmed")).rejects.toMatchObject({ code: "unreachable" });
+    expect(c.fake.writes).toEqual([]);
+    expect(await writer(c).find(c.ctx(), stay)).toBeNull();
+    // With time left, the same stay is written.
+    c.fake.mode.beforeCheck = () => {
+      c.fake.clock.now += 9_000;
+    };
+    expect((await writer(c).put(c.ctx(), stay, null, "confirmed")).externalId).toBeTruthy();
+  });
+
+  it("asks the owner to connect again when the live check says its authentication failed, never that the room is taken", async () => {
+    const c = connection(HAVELI_RANG);
+    c.fake.mode.check = "unverified";
+    await expect(
+      writer(c).put(c.ctx(), stayOf(52011, "2027-04-15", "2027-04-17"), null, "confirmed"),
+    ).rejects.toMatchObject({ code: "auth", field: "api_secret" });
+    expect(c.fake.writes).toEqual([]);
   });
 });
 
@@ -1137,6 +1334,15 @@ describe("Smoobu: one address for every event, a second secret in constant time,
     expect(await hooks.read(c.ctx(), a as never)).toEqual([
       { kind: "stay_nights", roomIds: ["61002"], from: "2027-05-01", to: "2027-05-04" },
     ]);
+    expect(c.fake.platform.seen).toEqual([]);
+  });
+
+  it("reads every apartment again when a rates delivery names more than fifty, never only the first fifty", async () => {
+    const { c, hooks, deliver } = hooked();
+    const data: Record<string, unknown> = {};
+    for (let i = 0; i < 51; i++) data[String(70_000 + i)] = { "2027-05-01": { price: 1, available: 1 } };
+    const event = await hooks.verify(c.ctx(), deliver(deliveryBody("updateRates", KIJIWE_USER.id, data)));
+    expect(event?.refs).toEqual(["all"]);
     expect(c.fake.platform.seen).toEqual([]);
   });
 

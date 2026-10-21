@@ -37,6 +37,14 @@ import { type FakePlatform, type FakeRequest, fakePlatform } from "../platform";
  * used twice, a card field, a payment status, a fee, a commission, a booking's dates in an update, or a
  * delete of anything but a booking or a webhook are kept in `violations`, which every test expects
  * empty. Requests it refused for the key, the secret or the time are kept in `refusals`.
+ *
+ * Its bookings list takes the documented filters it is asked for: `from` and `to` (overlap, or arrival
+ * in the range with `mode.range: "arrival"`, since the documentation does not say which),
+ * `departureFrom`, `arrivalTo` and `created_from` (dropped with `mode.namedFilters: false`, as a Smoobu
+ * that ignores them would), `showCancellation`, `apartmentId` and `includeRelated`.
+ *
+ * Invented here, for fault injection only, and not Smoobu's words: the refusal of a cancellation
+ * (`mode.cancel: "refuse"`), "Bookings from this channel are cancelled on the channel."
  */
 
 export const HOST = "login.smoobu.com";
@@ -96,8 +104,16 @@ export interface SmoobuFake {
     dropQuery: boolean;
     /** Answers a webhook registration as registered by another caller (409). */
     register: "ok" | "conflict";
-    /** A cancellation Smoobu does not take. */
+    /** A cancellation Smoobu does not take (an invented refusal, for fault injection). */
     cancel: "ok" | "refuse";
+    /** What `from` and `to` filter bookings on: overlap with the range, or arrival in it. */
+    range: "overlap" | "arrival";
+    /** Whether `departureFrom`, `arrivalTo` and `created_from` filter the list (false: ignored). */
+    namedFilters: boolean;
+    /** Runs just before the availability check is answered: time passing, for a slow answer. */
+    beforeCheck: (() => void) | null;
+    /** The availability check answering its documented authentication failure with a 200 (`unverified`). */
+    check: "ok" | "unverified";
   };
   /** A booking another channel made, straight into the account. */
   otaBooking(
@@ -202,6 +218,10 @@ export function smoobuFake(opts: {
     dropQuery: false,
     register: "ok",
     cancel: "ok",
+    range: "overlap",
+    namedFilters: true,
+    beforeCheck: null,
+    check: "ok",
   };
   let reservationN = 9_000;
   let hookN = 900;
@@ -333,6 +353,10 @@ export function smoobuFake(opts: {
   });
 
   route("POST", "/booking/checkApartmentAvailability", (_req, body) => {
+    const before = mode.beforeCheck;
+    mode.beforeCheck = null;
+    before?.();
+    if (mode.check === "unverified") return answer(200, VERIFICATION_ERROR);
     const arrival = dateOf(body?.arrivalDate);
     const departure = dateOf(body?.departureDate);
     if (intOf(body?.customerId) !== opts.user.id || !arrival || !departure || departure <= arrival) {
@@ -479,6 +503,10 @@ export function smoobuFake(opts: {
     const related = q.get("includeRelated") === "true";
     const from = q.get("from");
     const to = q.get("to");
+    const named = (k: string) => (mode.namedFilters ? q.get(k) : null);
+    const departureFrom = named("departureFrom");
+    const arrivalTo = named("arrivalTo");
+    const createdFrom = named("created_from");
     const cancelled = q.get("showCancellation") === "true";
     const page = Math.max(1, Number(q.get("page") ?? 1));
     const size = Math.min(100, Math.max(1, Number(q.get("pageSize") ?? 25)));
@@ -490,7 +518,13 @@ export function smoobuFake(opts: {
         if (r.apartmentId === apartmentId) return true;
         return related && (heldBy(r.apartmentId).includes(apartmentId) || heldBy(apartmentId).includes(r.apartmentId));
       })
-      .filter((r) => (!from || r.departure > from) && (!to || r.arrival <= to))
+      .filter((r) =>
+        mode.range === "arrival"
+          ? (!from || r.arrival >= from) && (!to || r.arrival <= to)
+          : (!from || r.departure > from) && (!to || r.arrival <= to),
+      )
+      .filter((r) => (!departureFrom || r.departure >= departureFrom) && (!arrivalTo || r.arrival <= arrivalTo))
+      .filter((r) => !createdFrom || r.createdAt.slice(0, 10) >= createdFrom)
       .sort((a, b) => a.id - b.id);
     const pageOf = all.slice((page - 1) * size, page * size);
     return answer(200, {
