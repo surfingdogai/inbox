@@ -44,6 +44,12 @@ const ERASED_ACTOR = "erased";
 const CUSTOMER_ACTORS = "'customer_human', 'customer_agent'";
 /** An order line (`e`, a `json_each` row) that names no product of the catalogue: the customer named it. */
 const OFF_CATALOGUE = "NOT EXISTS (SELECT 1 FROM products pr WHERE pr.id = json_extract(e.value, '$.productId'))";
+/** The lines at `src` (a list), each one no product of the catalogue named given the erased name. */
+const erasedLines = (src: string) =>
+  `json((SELECT json_group_array(CASE WHEN ${OFF_CATALOGUE} THEN json_set(e.value, '$.name', '${ERASED}') ELSE json(e.value) END)
+      FROM json_each(${src}) e))`;
+/** A side of a `[before, after]` diff kept as it was: a list or an object stays JSON, not text. */
+const SIDE_AS_IS = "CASE WHEN side.type IN ('object', 'array') THEN json(side.value) ELSE side.value END";
 /** What an event's diff may hold of a customer's own words or address (each is `[before, after]`). */
 const DIFF_PERSONAL = [
   "$.payload.text",
@@ -540,15 +546,17 @@ export function eraseStatements(parties: readonly string[], now: number): Statem
       ),
       // A line no product of the catalogue named is in their own words (the catalogue names its own):
       // its name goes, its quantity and price stay; the title made from it goes first.
+      // Each rebuilt list is wrapped in json(): a subquery's result reaches json_set as text, and
+      // would be stored as one string where the list was.
       run(
         `UPDATE items SET subject = ? WHERE type = 'order' AND party_id IN ${inParties}
             AND EXISTS (SELECT 1 FROM json_each(items.payload, '$.orderedItem') e WHERE ${OFF_CATALOGUE})`,
         [ERASED, ...part],
       ),
       run(
-        `UPDATE items SET payload = json_set(payload, '$.orderedItem', (
+        `UPDATE items SET payload = json_set(payload, '$.orderedItem', json((
             SELECT json_group_array(CASE WHEN ${OFF_CATALOGUE} THEN json_set(e.value, '$.name', ?) ELSE json(e.value) END)
-              FROM json_each(items.payload, '$.orderedItem') e))
+              FROM json_each(items.payload, '$.orderedItem') e)))
           WHERE type = 'order' AND party_id IN ${inParties}
             AND EXISTS (SELECT 1 FROM json_each(items.payload, '$.orderedItem') e WHERE ${OFF_CATALOGUE})`,
         [ERASED, ...part],
@@ -571,9 +579,9 @@ export function eraseStatements(parties: readonly string[], now: number): Statem
         [ERASED, ...part],
       ),
       run(
-        `UPDATE item_offers SET terms = json_set(terms, '$.lines', (
+        `UPDATE item_offers SET terms = json_set(terms, '$.lines', json((
             SELECT json_group_array(CASE WHEN ${OFF_CATALOGUE} THEN json_set(e.value, '$.name', ?) ELSE json(e.value) END)
-              FROM json_each(item_offers.terms, '$.lines') e))
+              FROM json_each(item_offers.terms, '$.lines') e)))
           WHERE item_id IN ${theirItems}
             AND EXISTS (SELECT 1 FROM json_each(item_offers.terms, '$.lines') e WHERE ${OFF_CATALOGUE})`,
         [ERASED, ...part],
@@ -607,6 +615,23 @@ export function eraseStatements(parties: readonly string[], now: number): Statem
       run(
         `UPDATE thread_entries SET actor_id = ? WHERE item_id IN ${theirItems} AND actor_id IS NOT NULL AND actor_kind IN (${CUSTOMER_ACTORS})`,
         [ERASED_ACTOR, ...part],
+      ),
+      // A negotiated order's history holds its lines before and after each change, and what was
+      // proposed: the names they typed go there too, the quantities and prices stay.
+      run(
+        `UPDATE item_events SET diff = json_set(diff, '$.payload.orderedItem', json((
+            SELECT json_group_array(CASE WHEN side.type = 'array' THEN ${erasedLines("side.value")} ELSE ${SIDE_AS_IS} END)
+              FROM json_each(diff, '$.payload.orderedItem') side)))
+          WHERE item_id IN ${theirItems} AND json_type(diff, '$.payload.orderedItem') = 'array'`,
+        [...part],
+      ),
+      run(
+        `UPDATE item_events SET diff = json_set(diff, '$.payload.proposed', json((
+            SELECT json_group_array(CASE WHEN side.type = 'object' AND json_type(side.value, '$.orderedItem') = 'array'
+                THEN json_set(side.value, '$.orderedItem', ${erasedLines("side.value, '$.orderedItem'")}) ELSE ${SIDE_AS_IS} END)
+              FROM json_each(diff, '$.payload.proposed') side)))
+          WHERE item_id IN ${theirItems} AND json_type(diff, '$.payload.proposed') = 'array'`,
+        [...part],
       ),
       // The history keeps its sequence, states, actors, times and the changes to times and amounts;
       // the words written with each event, and the before and after of their free text, go.

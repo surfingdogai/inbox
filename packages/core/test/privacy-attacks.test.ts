@@ -10,7 +10,7 @@ import { secretHash } from "../src/protocol/credentials";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { availabilityRules, services } from "../src/schema/tables";
 import { createSecretBox } from "../src/secrets/box";
-import type { Caller } from "../src/write/index";
+import { type Caller, transitionItem } from "../src/write/index";
 import { confirming, makeClient, resetTables } from "./harness";
 
 /**
@@ -398,7 +398,7 @@ describe("erasing a customer who asked for a quote in their own words", () => {
       expect(text.toLowerCase(), `her words in ${table}`).not.toContain("wedding");
     }
     // A line of an order they typed themselves (nothing in the catalogue) is their words too; its
-    // quantity and price stay.
+    // quantity and price stay, as agreed.
     const o = await s.caps.createOrder(customer(T0 + MIN), {
       payload: {
         orderedItem: [
@@ -408,16 +408,35 @@ describe("erasing a customer who asked for a quote in their own words", () => {
       },
       contact: { name: "R.", email: "rita.carvalho@example.com" },
     });
+    // An offer they answered on it names its lines too; the lines stay a list once erased.
+    await transitionItem(s.db, owner(T0 + 2 * MIN), {
+      itemId: o.view.item.id,
+      event: "propose",
+      input: {
+        orderedItem: [
+          { name: "Engraving: Rita Carvalho, wedding day", quantity: 2, price: { value: 1_400, currency: "EUR" } },
+        ],
+      },
+    });
+    await s.caps.customer.makeOffer(
+      { ...customer(T0 + 3 * MIN), accessToken: o.accessToken as string },
+      { item_id: o.view.item.id, terms: { lines: [{ index: 0, quantity: 3 }] } },
+    );
     const party2 = await s.partyOf(o.view.item.id);
     const again = await s.caps.customers.erase(owner(), { party_id: party2 }).catch((e) => e);
     await s.caps.customers.erase(owner(), { party_id: party2, confirm: again.details.confirm });
     for (const [table, text] of Object.entries(await everything(s.db))) {
       expect(text.toLowerCase(), `her words in ${table}`).not.toContain("carvalho");
     }
+    expect(
+      await rows(s.db, "SELECT DISTINCT json_type(terms, '$.lines') FROM item_offers WHERE item_id = ?", [
+        o.view.item.id,
+      ]),
+    ).toEqual([["array"]]);
     const order = await s.caps.getItem(owner(), { item_id: o.view.item.id });
     expect(order.item.payload).toMatchObject({
-      orderedItem: [{ name: "[erased]", quantity: 2, price: { value: 1_500, currency: "EUR" } }],
-      totalPrice: { value: 3_000, currency: "EUR" },
+      orderedItem: [{ name: "[erased]", quantity: 3, price: { value: 1_400, currency: "EUR" } }],
+      totalPrice: { value: 4_200, currency: "EUR" },
     });
     // What kind of request it was, and when for, stay.
     const detail = await s.caps.getItem(owner(), { item_id: q.view.item.id });
