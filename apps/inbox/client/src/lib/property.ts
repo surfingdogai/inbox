@@ -35,7 +35,7 @@ export const propertyApi = {
   today: (date?: string) => ownerCall<TodayView>("GET", "/v1/owner/property/today", { query: { date } }),
   sync: () => ownerCall<{ rows: number }>("POST", "/v1/owner/property/sync", { body: {} }),
   systemProperties: (connectorId: string) =>
-    ownerCall<{ properties: SystemProperty[] }>("GET", `/v1/owner/property/system/${enc(connectorId)}`),
+    ownerCall<SystemProperties>("GET", `/v1/owner/property/system/${enc(connectorId)}`),
   mapSystem: (body: Body) =>
     ownerCall<{ property_id: string; rooms: number }>("POST", "/v1/owner/property/system", {
       body,
@@ -60,11 +60,20 @@ export interface SystemProperty {
     id: string;
     name: string;
     units: number;
-    /** The system holds no price for it: never offered from here until it has one. */
-    unpriced?: boolean;
-    /** What the system adds to its price: the owner checks the prices here cover them. */
+    /**
+     * The system holds no price for it (`true`): never offered from here until it has one; or only prices
+     * set by the number of guests or the stay (`rules`): guests ask first, and the owner confirms each.
+     */
+    unpriced?: true | "rules";
+    /** What the system adds to its price: the owner adds the same in Taxes & fees. */
     charges?: readonly ("cleaning" | "tax" | "deposit" | "extra")[];
   }[];
+}
+
+/** What a property system shows to match: its properties and rooms, and where its prices are set there. */
+export interface SystemProperties {
+  readonly prices_at: string | null;
+  readonly properties: readonly SystemProperty[];
 }
 
 const CHARGE_WORDS = { cleaning: "a cleaning fee", tax: "tax", deposit: "a security deposit", extra: "an extra" };

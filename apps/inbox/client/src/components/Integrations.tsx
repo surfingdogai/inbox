@@ -35,8 +35,6 @@ import { Field, SectionHead, Switch } from "./Form";
 interface Notice {
   readonly tone: "success" | "danger";
   readonly text: string;
-  /** A property system just connected: the next step, choosing which property it is, one press away. */
-  readonly choose?: boolean;
 }
 
 /** A connection that holds a place to stay's rooms: a property system. */
@@ -133,20 +131,7 @@ export function IntegrationsCard({ skip = [] }: { skip?: readonly string[] } = {
   return (
     <section className="card glass stack">
       <SectionHead title="Connect" />
-      {notice && (
-        <Toast
-          tone={notice.tone}
-          text={notice.text}
-          action={
-            notice.choose ? (
-              <Link to="/settings/property" className="btn btn-secondary btn-sm">
-                Choose the property
-              </Link>
-            ) : undefined
-          }
-          onDismiss={() => setNotice(null)}
-        />
-      )}
+      {notice && <Toast tone={notice.tone} text={notice.text} onDismiss={() => setNotice(null)} />}
       {integrations.isPending && <div className="skeleton sk-line" />}
       {integrations.isError && (
         <ErrorState
@@ -250,11 +235,7 @@ export function IntegrationsCard({ skip = [] }: { skip?: readonly string[] } = {
                         {
                           onSuccess: () => {
                             setOpen(null);
-                            setNotice({
-                              tone: "success",
-                              text: connectedText(here, way),
-                              ...(here.group === "lodging" ? { choose: true } : {}),
-                            });
+                            setNotice({ tone: "success", text: connectedText(here, way) });
                           },
                         },
                       )
@@ -290,7 +271,8 @@ function tagOf(
   if (connections.every((c) => c.payments?.disconnecting)) return { text: "Disconnecting", tone: "quiet" };
   if (connections.some((c) => c.status === "error")) return { text: "Failing", tone: "warn" };
   if (connections.every((c) => c.status === "disabled")) return { text: "Paused", tone: "quiet" };
-  if (unmatched) return { text: "Choose the property", tone: "warn" };
+  // One step left, said in few words: the row below has the one button for it.
+  if (unmatched) return { text: "1 step left", tone: "warn" };
   return { text: "Connected", tone: "on" };
 }
 
@@ -432,6 +414,7 @@ function ConnectPanel({
               onClick={() => setPicked(keyOf(w))}
             >
               {w.label}
+              {w.status === "ready" && w.fresh && <span className="opt"> · new</span>}
               {w.status === "soon" && <span className="opt"> · soon</span>}
               {w.status === "setup" && <span className="opt"> · set up</span>}
             </button>
@@ -693,6 +676,14 @@ function WayForm({
   const advanced = fields.filter((f) => f.advanced);
   const missing = main.some((f) => f.required && !(values[f.key] ?? "").trim());
   const fieldError = (f: FormField) => error?.field(`values.${f.key}`);
+  // A value that works once (an invite code) is spent when the platform refuses it: emptied, and the
+  // field ready for a new one, so pressing Connect again never asks for the same refusal.
+  useEffect(() => {
+    const spent = way.form.filter((f) => f.once && error?.field(`values.${f.key}`));
+    if (spent.length === 0) return;
+    setValues((v) => Object.fromEntries(Object.entries(v).filter(([k]) => !spent.some((f) => f.key === k))));
+    document.getElementById(`int-${spent[0]?.key}`)?.focus();
+  }, [error, way.form]);
   const shown = new Set(fields.map((f) => `values.${f.key}`));
   const general = error && !(error.fields ?? []).some((f) => shown.has(f.path));
   const input = (f: FormField) => (
@@ -713,9 +704,20 @@ function WayForm({
       </Field>
       {f.steps && f.steps.length > 0 && (
         <ol className="int-steps">
-          {f.steps.map((step) => (
-            <li key={step}>{step}</li>
-          ))}
+          {f.steps.map((step) =>
+            typeof step === "string" ? (
+              <li key={step}>{step}</li>
+            ) : (
+              <li key={step.text}>
+                {step.text}
+                <ul className="int-choices">
+                  {step.items.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </li>
+            ),
+          )}
         </ol>
       )}
       {f.link && (
@@ -924,7 +926,8 @@ function ConnectionLine({
       <div className="int-conn-main">
         <div className="int-conn-head">
           <span className="int-title">{c.title}</span>
-          <span className="int-account">{c.account}</span>
+          {/* Matched, a property system is the property it is matched to, said on the line below. */}
+          {!(lodging && matched) && <span className="int-account">{c.account}</span>}
           <span className={clsx("pill pill-xs", failing && "is-warn")}>
             {disconnecting
               ? "Disconnecting"

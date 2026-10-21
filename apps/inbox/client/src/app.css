@@ -2536,6 +2536,18 @@ legend.label-line {
 .int-steps li::marker {
   color: var(--ink-3);
 }
+/* The choices of one step, as the platform names them: one a line, quiet bullets. */
+.int-choices {
+  margin: 2px 0 2px;
+  padding: 0 0 0 14px;
+  display: grid;
+  gap: 0;
+  list-style: "· " outside;
+  color: var(--ink);
+}
+.int-choices li::marker {
+  color: var(--ink-3);
+}
 .int-question {
   margin: 0;
   color: var(--ink);

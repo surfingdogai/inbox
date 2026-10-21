@@ -31,7 +31,7 @@ import {
   usePropertyWrite,
   WEEKDAYS,
 } from "../lib/property";
-import { useIntegrations, useOwnerLocale } from "../lib/queries";
+import { useOwnerLocale } from "../lib/queries";
 import { CurrencySelect, MoneyInput, Stepper } from "./Choosers";
 import { Toast } from "./Feedback";
 import { Field, FormActions, SectionHead, Switch } from "./Form";
@@ -547,7 +547,8 @@ export function RatesTab({ setup }: { setup: PropertyView }) {
   const locale = useOwnerLocale();
   const start = usePropertyWrite(propertyApi.plan);
   const connectorId = setup.property.mode === "connected" ? setup.property.connectorId : null;
-  const system = useIntegrations().data?.connections.find((c) => c.id === connectorId)?.title ?? null;
+  const system = connectorId ? (setup.system?.title ?? null) : null;
+  const pricesAt = setup.system?.prices_at ?? null;
   if (rooms.length === 0) return <p className="hint">Add your rooms first, then their prices.</p>;
   if (plans.length === 0) {
     return (
@@ -555,8 +556,8 @@ export function RatesTab({ setup }: { setup: PropertyView }) {
         {connectorId && system ? (
           // Priced by the property's own system: no price to type in again, only the terms to set here.
           <p>
-            Prices come from your {system} calendar, its first daily price: change them in {system}. Here you set the
-            terms, when guests can cancel and any deposit.
+            Prices come from your {system} calendar{pricesAt ? ` (${pricesAt})` : ""}: change them there. Here you set
+            the terms: when guests can cancel, and any deposit.
           </p>
         ) : (
           <p>Set a price a night for each room. Breakfast or non-refundable plans can come later, in Policies.</p>
