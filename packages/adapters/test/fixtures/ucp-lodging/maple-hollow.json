@@ -1,0 +1,333 @@
+{
+  "_about": "A fictional property's quote, and the UCP Lodging booking session the inbox answers for it (ucp-lodging.ts). Every figure is the example property's own; real tax rates are always the property's input.",
+  "_sources": [
+    "https://github.com/Universal-Commerce-Protocol/ucp/blob/f2626c28b8288976eee5bda77f3a9b1ddc0132b1/docs/specification/lodging/booking/index.md",
+    "https://github.com/Universal-Commerce-Protocol/ucp/blob/f2626c28b8288976eee5bda77f3a9b1ddc0132b1/source/schemas/lodging/booking.json",
+    "https://github.com/Universal-Commerce-Protocol/ucp/blob/f2626c28b8288976eee5bda77f3a9b1ddc0132b1/source/schemas/common/payment_terms.json",
+    "https://github.com/Universal-Commerce-Protocol/ucp/blob/f2626c28b8288976eee5bda77f3a9b1ddc0132b1/source/schemas/lodging/policy_cancellation.json"
+  ],
+  "name": "Maple Hollow B&B, Nova Scotia: a first-night deposit, the balance a week before, booked, in French (CAD)",
+  "id": "bks_vector_maple_hollow",
+  "status": "completed",
+  "lang": "fr",
+  "now": "2026-06-01T10:20:00-03:00",
+  "origin": "https://inbox.maple-hollow.example",
+  "property": {
+    "id": "prop_maple",
+    "name": "Maple Hollow B&B",
+    "currency": "CAD",
+    "timezone": "America/Halifax",
+    "locality": "Wolfville",
+    "checkInFrom": "16:00",
+    "checkOutUntil": "11:00",
+    "children": {
+      "welcome": false
+    }
+  },
+  "rooms": [
+    {
+      "id": "rt_harbour",
+      "name": "Harbour room",
+      "description": null,
+      "capacity": {
+        "adults": 2,
+        "children": 0,
+        "total": 2
+      }
+    }
+  ],
+  "plans": [
+    {
+      "id": "rp_flexible",
+      "name": "Flexible"
+    }
+  ],
+  "fees": [
+    {
+      "name": "HST",
+      "kind": "tax",
+      "collected": "with_booking",
+      "childExemptUnder": null,
+      "maxNights": null
+    }
+  ],
+  "subject": {
+    "propertyId": "prop_maple",
+    "checkIn": "2026-07-10",
+    "checkOut": "2026-07-12",
+    "rooms": [
+      {
+        "roomTypeId": "rt_harbour",
+        "ratePlanId": "rp_flexible",
+        "adults": 2,
+        "childrenAges": []
+      }
+    ]
+  },
+  "booker": {
+    "first_name": "Élise",
+    "last_name": "Doucet",
+    "email": "elise.doucet@example.org"
+  },
+  "confirmation": {
+    "id": "01K0QB3V8WZ2N6R4T7Y9C5M1HD",
+    "label": "C5M1HD"
+  },
+  "quote": {
+    "currency": "CAD",
+    "lines": [
+      {
+        "type": "subtotal",
+        "label": "Harbour room, 2 nuits",
+        "amount": 37800,
+        "collected": "with_booking",
+        "nights": [
+          {
+            "night": "2026-07-10",
+            "amount": 18900
+          },
+          {
+            "night": "2026-07-11",
+            "amount": 18900
+          }
+        ]
+      },
+      {
+        "type": "tax",
+        "label": "HST 15%",
+        "amount": 5670,
+        "collected": "with_booking"
+      }
+    ],
+    "total": {
+      "value": 43470,
+      "currency": "CAD"
+    },
+    "ratePlan": {
+      "id": "rp_flexible",
+      "name": "Flexible",
+      "meal": "breakfast",
+      "refundable": true
+    },
+    "policy": {
+      "steps": [
+        {
+          "until": "2026-07-03T23:59:59-03:00",
+          "fee": {
+            "value": 0,
+            "currency": "CAD"
+          }
+        }
+      ],
+      "after": {
+        "value": 18900,
+        "currency": "CAD"
+      },
+      "noShow": {
+        "value": 43470,
+        "currency": "CAD"
+      },
+      "zone": "America/Halifax"
+    },
+    "schedule": [
+      {
+        "id": "deposit",
+        "type": "immediate",
+        "amount": {
+          "value": 18900,
+          "currency": "CAD"
+        },
+        "label": "Acompte"
+      },
+      {
+        "id": "balance",
+        "type": "deferred",
+        "amount": {
+          "value": 24570,
+          "currency": "CAD"
+        },
+        "dueAt": "2026-07-03T10:00:00-03:00",
+        "label": "Solde"
+      }
+    ],
+    "guarantee": "none",
+    "includes": ["Petit-déjeuner pour 2"],
+    "validThrough": "2026-06-01T10:15:00-03:00",
+    "source": "allotment"
+  },
+  "booking": {
+    "ucp": {
+      "version": "2026-08-25",
+      "capabilities": {
+        "dev.ucp.lodging.booking": [
+          {
+            "version": "2026-08-25"
+          }
+        ],
+        "dev.ucp.common.payment.terms": [
+          {
+            "version": "2026-08-25"
+          }
+        ],
+        "dev.ucp.lodging.policy.cancellation": [
+          {
+            "version": "2026-08-25"
+          }
+        ]
+      },
+      "payment_handlers": {}
+    },
+    "id": "bks_vector_maple_hollow",
+    "status": "completed",
+    "property": {
+      "id": "prop_maple",
+      "name": "Maple Hollow B&B",
+      "address": {
+        "address_locality": "Wolfville"
+      }
+    },
+    "stays": [
+      {
+        "id": "rt_harbour__rp_flexible",
+        "accommodation_type": {
+          "id": "rt_harbour",
+          "title": "Harbour room",
+          "capacity": {
+            "adults": 2,
+            "children": 0,
+            "total": 2,
+            "child_age_ranges": [
+              {
+                "ages": {
+                  "min": 0,
+                  "max": 17
+                },
+                "limit": 0
+              }
+            ]
+          }
+        },
+        "rate_plan": {
+          "id": "rp_flexible",
+          "title": "Flexible",
+          "description": "Petit-déjeuner pour 2 · Annulation gratuite jusqu'au 3 juill. 2026, 23 h 59 (heure de Wolfville). Ensuite : 189,00 $. Non-présentation : le séjour complet."
+        },
+        "occupancy": {
+          "adults": 2,
+          "children": 0,
+          "total": 2
+        },
+        "stay_dates": {
+          "start_date": "2026-07-10",
+          "end_date": "2026-07-12"
+        },
+        "totals": [
+          {
+            "type": "subtotal",
+            "amount": 37800
+          },
+          {
+            "type": "total",
+            "amount": 37800
+          }
+        ]
+      }
+    ],
+    "booker": {
+      "first_name": "Élise",
+      "last_name": "Doucet",
+      "email": "elise.doucet@example.org"
+    },
+    "currency": "CAD",
+    "totals": [
+      {
+        "type": "subtotal",
+        "display_text": "Harbour room, 2 nuits",
+        "amount": 37800,
+        "lines": [
+          {
+            "display_text": "Harbour room, 2 nuits",
+            "amount": 37800,
+            "nights": [
+              {
+                "night": "2026-07-10",
+                "amount": 18900
+              },
+              {
+                "night": "2026-07-11",
+                "amount": 18900
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "tax",
+        "display_text": "HST 15%",
+        "amount": 5670
+      },
+      {
+        "type": "total",
+        "amount": 43470
+      }
+    ],
+    "links": [
+      {
+        "type": "privacy_policy",
+        "url": "https://inbox.maple-hollow.example/c/privacy"
+      }
+    ],
+    "policies": [
+      {
+        "type": "dev.ucp.lodging.policy.cancellation",
+        "description": {
+          "plain": "Annulation gratuite jusqu'au 3 juill. 2026, 23 h 59 (heure de Wolfville). Ensuite : 189,00 $. Non-présentation : le séjour complet."
+        },
+        "refundability": "refundable",
+        "dated_steps": {
+          "zone": "America/Halifax",
+          "steps": [
+            {
+              "until": "2026-07-03T23:59:59-03:00",
+              "fee": 0
+            }
+          ],
+          "after": 18900,
+          "no_show": 43470
+        }
+      }
+    ],
+    "payment": {
+      "selected_term_id": "stay",
+      "terms": [
+        {
+          "id": "stay",
+          "title": "Acompte · Solde",
+          "schedules": [
+            {
+              "id": "deposit",
+              "type": "immediate",
+              "description": {
+                "plain": "Acompte : à régler à la réservation."
+              },
+              "amount": 18900
+            },
+            {
+              "id": "balance",
+              "type": "deferred",
+              "description": {
+                "plain": "Solde : à régler avant le 3 juill., 10 h 00, heure de Wolfville."
+              },
+              "amount": 24570,
+              "due_at": "2026-07-03T10:00:00-03:00"
+            }
+          ]
+        }
+      ]
+    },
+    "confirmation": {
+      "id": "01K0QB3V8WZ2N6R4T7Y9C5M1HD",
+      "label": "C5M1HD"
+    }
+  }
+}

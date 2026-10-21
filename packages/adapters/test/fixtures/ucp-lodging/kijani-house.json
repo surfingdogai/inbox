@@ -1,0 +1,342 @@
+{
+  "_about": "A fictional property's quote, and the UCP Lodging booking session the inbox answers for it (ucp-lodging.ts). Every figure is the example property's own; real tax rates are always the property's input.",
+  "_sources": [
+    "https://github.com/Universal-Commerce-Protocol/ucp/blob/f2626c28b8288976eee5bda77f3a9b1ddc0132b1/docs/specification/lodging/booking/index.md",
+    "https://github.com/Universal-Commerce-Protocol/ucp/blob/f2626c28b8288976eee5bda77f3a9b1ddc0132b1/source/schemas/lodging/booking.json",
+    "https://github.com/Universal-Commerce-Protocol/ucp/blob/f2626c28b8288976eee5bda77f3a9b1ddc0132b1/source/schemas/common/payment_terms.json",
+    "https://github.com/Universal-Commerce-Protocol/ucp/blob/f2626c28b8288976eee5bda77f3a9b1ddc0132b1/source/schemas/lodging/policy_cancellation.json"
+  ],
+  "name": "Kijani House, Nairobi: everything paid at the property, a levy it collects itself, waiting for the lead (KES)",
+  "id": "bks_vector_kijani_house",
+  "status": "incomplete",
+  "lang": "en",
+  "now": "2027-01-20T09:00:00+03:00",
+  "origin": "https://inbox.kijani-house.example",
+  "expires_at": "2027-01-20T09:15:00+03:00",
+  "property": {
+    "id": "prop_kijani",
+    "name": "Kijani House",
+    "currency": "KES",
+    "timezone": "Africa/Nairobi",
+    "locality": "Nairobi",
+    "checkInFrom": "14:00",
+    "checkOutUntil": "11:00",
+    "children": {
+      "welcome": true,
+      "fromAge": 5
+    }
+  },
+  "rooms": [
+    {
+      "id": "rt_garden",
+      "name": "Garden double",
+      "description": null,
+      "capacity": {
+        "adults": 2,
+        "children": 1,
+        "total": 3
+      }
+    }
+  ],
+  "plans": [
+    {
+      "id": "rp_bb",
+      "name": "Bed and breakfast"
+    }
+  ],
+  "fees": [
+    {
+      "name": "Tourism levy",
+      "kind": "fee",
+      "collected": "at_property",
+      "childExemptUnder": null,
+      "maxNights": 7
+    }
+  ],
+  "subject": {
+    "propertyId": "prop_kijani",
+    "checkIn": "2027-02-03",
+    "checkOut": "2027-02-06",
+    "rooms": [
+      {
+        "roomTypeId": "rt_garden",
+        "ratePlanId": "rp_bb",
+        "adults": 2,
+        "childrenAges": [7]
+      }
+    ]
+  },
+  "messages": [
+    {
+      "type": "error",
+      "code": "lead_guest_required",
+      "path": "$.booker",
+      "severity": "recoverable",
+      "content": "Name the lead guest (first_name, last_name) with an email or a phone_number, as the booker or as a guest assigned the role primary; the rooms are held then."
+    }
+  ],
+  "quote": {
+    "currency": "KES",
+    "lines": [
+      {
+        "type": "subtotal",
+        "label": "Garden double, 3 nights",
+        "amount": 1950000,
+        "collected": "with_booking",
+        "nights": [
+          {
+            "night": "2027-02-03",
+            "amount": 650000
+          },
+          {
+            "night": "2027-02-04",
+            "amount": 650000
+          },
+          {
+            "night": "2027-02-05",
+            "amount": 650000
+          }
+        ]
+      },
+      {
+        "type": "fee",
+        "label": "Tourism levy 2% (paid at the property)",
+        "amount": 39000,
+        "collected": "at_property"
+      }
+    ],
+    "total": {
+      "value": 1989000,
+      "currency": "KES"
+    },
+    "ratePlan": {
+      "id": "rp_bb",
+      "name": "Bed and breakfast",
+      "meal": "breakfast",
+      "refundable": true
+    },
+    "policy": {
+      "steps": [
+        {
+          "until": "2027-02-01T23:59:59+03:00",
+          "fee": {
+            "value": 0,
+            "currency": "KES"
+          }
+        }
+      ],
+      "after": {
+        "value": 650000,
+        "currency": "KES"
+      },
+      "noShow": {
+        "value": 650000,
+        "currency": "KES"
+      },
+      "zone": "Africa/Nairobi"
+    },
+    "schedule": [
+      {
+        "id": "at_property",
+        "type": "at_property",
+        "amount": {
+          "value": 1989000,
+          "currency": "KES"
+        },
+        "label": "At the property"
+      }
+    ],
+    "guarantee": "none",
+    "includes": ["Breakfast for 3"],
+    "validThrough": "2027-01-20T09:15:00+03:00",
+    "source": "allotment"
+  },
+  "booking": {
+    "ucp": {
+      "version": "2026-08-25",
+      "capabilities": {
+        "dev.ucp.lodging.booking": [
+          {
+            "version": "2026-08-25"
+          }
+        ],
+        "dev.ucp.common.payment.terms": [
+          {
+            "version": "2026-08-25"
+          }
+        ],
+        "dev.ucp.lodging.policy.cancellation": [
+          {
+            "version": "2026-08-25"
+          }
+        ]
+      },
+      "payment_handlers": {}
+    },
+    "id": "bks_vector_kijani_house",
+    "status": "incomplete",
+    "property": {
+      "id": "prop_kijani",
+      "name": "Kijani House",
+      "address": {
+        "address_locality": "Nairobi"
+      }
+    },
+    "stays": [
+      {
+        "id": "rt_garden__rp_bb",
+        "accommodation_type": {
+          "id": "rt_garden",
+          "title": "Garden double",
+          "capacity": {
+            "adults": 2,
+            "children": 1,
+            "total": 3,
+            "child_age_ranges": [
+              {
+                "ages": {
+                  "min": 0,
+                  "max": 4
+                },
+                "limit": 0
+              },
+              {
+                "ages": {
+                  "min": 5,
+                  "max": 17
+                }
+              }
+            ]
+          }
+        },
+        "rate_plan": {
+          "id": "rp_bb",
+          "title": "Bed and breakfast",
+          "description": "Breakfast for 3 · Free cancellation until 1 Feb 2027, 23:59 Nairobi time. After that: Ksh 6,500.00. No-show: Ksh 6,500.00."
+        },
+        "occupancy": {
+          "adults": 2,
+          "children": 1,
+          "child_ages": [7],
+          "total": 3
+        },
+        "stay_dates": {
+          "start_date": "2027-02-03",
+          "end_date": "2027-02-06"
+        },
+        "totals": [
+          {
+            "type": "subtotal",
+            "amount": 1950000
+          },
+          {
+            "type": "total",
+            "amount": 1950000
+          }
+        ]
+      }
+    ],
+    "currency": "KES",
+    "totals": [
+      {
+        "type": "subtotal",
+        "display_text": "Garden double, 3 nights",
+        "amount": 1950000,
+        "lines": [
+          {
+            "display_text": "Garden double, 3 nights",
+            "amount": 1950000,
+            "nights": [
+              {
+                "night": "2027-02-03",
+                "amount": 650000
+              },
+              {
+                "night": "2027-02-04",
+                "amount": 650000
+              },
+              {
+                "night": "2027-02-05",
+                "amount": 650000
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "fee",
+        "display_text": "Tourism levy 2% (paid at the property)",
+        "amount": 39000,
+        "collected": "at_property"
+      },
+      {
+        "type": "total",
+        "amount": 1989000
+      }
+    ],
+    "messages": [
+      {
+        "type": "error",
+        "code": "lead_guest_required",
+        "path": "$.booker",
+        "severity": "recoverable",
+        "content": "Name the lead guest (first_name, last_name) with an email or a phone_number, as the booker or as a guest assigned the role primary; the rooms are held then."
+      },
+      {
+        "type": "warning",
+        "code": "local_tax",
+        "path": "$.payment.terms[0].schedules[0]",
+        "content": "Paid to Kijani House at the property, not with the booking: Tourism levy 2% (paid at the property). Tourism levy: for at most 7 nights.",
+        "content_type": "plain",
+        "presentation": "disclosure"
+      }
+    ],
+    "links": [
+      {
+        "type": "privacy_policy",
+        "url": "https://inbox.kijani-house.example/c/privacy"
+      }
+    ],
+    "policies": [
+      {
+        "type": "dev.ucp.lodging.policy.cancellation",
+        "description": {
+          "plain": "Free cancellation until 1 Feb 2027, 23:59 Nairobi time. After that: Ksh 6,500.00. No-show: Ksh 6,500.00."
+        },
+        "refundability": "refundable",
+        "dated_steps": {
+          "zone": "Africa/Nairobi",
+          "steps": [
+            {
+              "until": "2027-02-01T23:59:59+03:00",
+              "fee": 0
+            }
+          ],
+          "after": 650000,
+          "no_show": 650000
+        }
+      }
+    ],
+    "expires_at": "2027-01-20T09:15:00+03:00",
+    "continue_url": "https://inbox.kijani-house.example/",
+    "payment": {
+      "selected_term_id": "stay",
+      "terms": [
+        {
+          "id": "stay",
+          "title": "At the property",
+          "schedules": [
+            {
+              "id": "at_property",
+              "type": "at_property",
+              "description": {
+                "plain": "At the property: paid to Kijani House itself, not with the booking."
+              },
+              "amount": 1989000
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
