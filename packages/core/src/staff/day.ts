@@ -31,22 +31,42 @@ export interface StaffDay {
 }
 
 const SHOWN = ["requested", "needs_info", "proposed", "confirmed", "completed", "no_show"];
+/** Bookings read at a time, and pages at most: 10,000 bookings across three days' worth of text. */
+const PAGE = 500;
+const PAGES = 20;
 
 export async function dayByStaff(db: Db, date: string, zone: string): Promise<StaffDay> {
   const from = instantOf(date, "00:00", zone);
   const to = instantOf(addDays(date, 1), "00:00", zone);
   const staff = await readStaff(db);
-  // Read wide by text, then by instant in code: start times carry their own offsets.
-  const { rows } = await db.client.query({
-    sql: `SELECT i.id, i.state, i.payload, i.needs_human, p.display_name, p.erased_at
-            FROM items i LEFT JOIN parties p ON p.id = i.party_id
-           WHERE i.type = 'booking' AND i.state IN (${SHOWN.map(() => "?").join(", ")})
-             AND COALESCE(i.sandbox, 0) = 0
-             AND i.start_at >= ? AND i.start_at < ?
-           ORDER BY i.start_at, i.id LIMIT 500`,
-    params: [...SHOWN, new Date(from - 86_400_000).toISOString().slice(0, 10), new Date(to + 86_400_000).toISOString()],
-    method: "all",
-  });
+  // Read wide by text, then by instant in code: start times carry their own offsets. Page by page, so a
+  // busy day of many chairs loses none of its bookings.
+  const rows: (readonly unknown[])[] = [];
+  let after: readonly [string, string] = ["", ""];
+  for (let page = 0; page < PAGES; page++) {
+    const { rows: got } = await db.client.query({
+      sql: `SELECT i.id, i.state, i.payload, i.needs_human, p.display_name, p.erased_at, i.start_at
+              FROM items i LEFT JOIN parties p ON p.id = i.party_id
+             WHERE i.type = 'booking' AND i.state IN (${SHOWN.map(() => "?").join(", ")})
+               AND COALESCE(i.sandbox, 0) = 0
+               AND i.start_at >= ? AND i.start_at < ?
+               AND (i.start_at > ? OR (i.start_at = ? AND i.id > ?))
+             ORDER BY i.start_at, i.id LIMIT ${PAGE}`,
+      params: [
+        ...SHOWN,
+        new Date(from - 86_400_000).toISOString().slice(0, 10),
+        new Date(to + 86_400_000).toISOString(),
+        after[0],
+        after[0],
+        after[1],
+      ],
+      method: "all",
+    });
+    rows.push(...got);
+    const last = got[got.length - 1];
+    if (got.length < PAGE || !last) break;
+    after = [String(last[6]), String(last[0])];
+  }
   const byStaff = new Map<string | null, DayBooking[]>();
   for (const r of rows) {
     let p: { startTime?: string; endTime?: string; resourceId?: string; reservationFor?: { name?: string } } = {};

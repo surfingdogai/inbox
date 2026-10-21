@@ -31,8 +31,9 @@ function toBase64(bytes: Uint8Array): string {
 
 /**
  * The JPEG with its metadata segments taken out: APP1 to APP15 (EXIF and its GPS block, XMP, ICC,
- * Photoshop, a thumbnail) and comments. The JFIF header (APP0), the tables, the frame and the scan stay.
- * Null when it is not a well-formed JPEG.
+ * Photoshop, a thumbnail) and comments. Of APP0, only the JFIF header's own 14 bytes, with no thumbnail:
+ * a JFIF thumbnail, or a JFXX extension's, can be of the picture before it was cropped. The tables, the
+ * frame and the scan stay. Null when it is not a well-formed JPEG.
  */
 export function stripJpegMetadata(bytes: Uint8Array): Uint8Array | null {
   if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return null;
@@ -63,7 +64,10 @@ export function stripJpegMetadata(bytes: Uint8Array): Uint8Array | null {
     const length = ((bytes[i + 2] ?? 0) << 8) | (bytes[i + 3] ?? 0);
     if (length < 2 || i + 2 + length > bytes.length) return null;
     const metadata = (marker >= 0xe1 && marker <= 0xef) || marker === 0xfe;
-    if (!metadata) kept.push(bytes.subarray(i, i + 2 + length));
+    if (marker === 0xe0) {
+      const header = jfifHeader(bytes.subarray(i + 4, i + 2 + length));
+      if (header) kept.push(header);
+    } else if (!metadata) kept.push(bytes.subarray(i, i + 2 + length));
     i += 2 + length;
   }
   const last = kept[kept.length - 1];
@@ -75,6 +79,21 @@ export function stripJpegMetadata(bytes: Uint8Array): Uint8Array | null {
     out.set(k, at);
     at += k.length;
   }
+  return out;
+}
+
+/** "JFIF\0": the identifier of the JFIF header; anything else in APP0 (JFXX, another's) is dropped. */
+const JFIF = [0x4a, 0x46, 0x49, 0x46, 0x00];
+
+/** A JFIF APP0 segment as it is kept: its version, units and density, and no thumbnail. */
+function jfifHeader(body: Uint8Array): Uint8Array | null {
+  if (body.length < 12 || !JFIF.every((b, k) => body[k] === b)) return null;
+  const out = new Uint8Array(18);
+  out.set([0xff, 0xe0, 0x00, 0x10]);
+  out.set(body.subarray(0, 12), 4);
+  // No thumbnail: zero wide, zero high.
+  out[16] = 0;
+  out[17] = 0;
   return out;
 }
 

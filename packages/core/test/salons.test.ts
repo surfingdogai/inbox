@@ -497,6 +497,65 @@ describe("staff", () => {
     expect(text).not.toContain("Exif");
     expect(text).not.toContain("GPS");
     expect(text).not.toContain("hi!!");
+    // A JFIF header carrying a thumbnail of the uncropped picture, and a JFXX one: neither is kept whole.
+    const thumb = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66];
+    const withThumbs = Uint8Array.from([
+      0xff,
+      0xd8,
+      // JFIF, 1×2 thumbnail (6 bytes of RGB).
+      0xff,
+      0xe0,
+      0x00,
+      0x16,
+      0x4a,
+      0x46,
+      0x49,
+      0x46,
+      0x00,
+      0x01,
+      0x02,
+      0x00,
+      0x00,
+      0x48,
+      0x00,
+      0x48,
+      0x01,
+      0x02,
+      ...thumb,
+      // JFXX extension with its own thumbnail.
+      0xff,
+      0xe0,
+      0x00,
+      0x0e,
+      0x4a,
+      0x46,
+      0x58,
+      0x58,
+      0x00,
+      0x13,
+      ...thumb,
+      0xff,
+      0xdb,
+      0x00,
+      0x04,
+      0x00,
+      0x00,
+      0xff,
+      0xda,
+      0x00,
+      0x04,
+      0x00,
+      0x00,
+      0x77,
+      0xff,
+      0xd9,
+    ]);
+    const stripped = stripJpegMetadata(withThumbs) ?? new Uint8Array();
+    const hex = Array.from(stripped, (b) => b.toString(16).padStart(2, "0")).join("");
+    expect(hex).not.toContain("112233445566");
+    expect(hex).not.toContain("4a46585800");
+    // The JFIF header itself stays, with no thumbnail.
+    expect(hex.startsWith("ffd8ffe000104a46494600010200004800480000")).toBe(true);
     const b64 = btoa(String.fromCharCode(...jpeg));
     const kept = cleanPhoto(`data:image/jpeg;base64,${b64}`);
     expect("photo" in kept && atob(kept.photo.split(",")[1] ?? "")).not.toContain("GPS");
@@ -933,6 +992,37 @@ describe("a deposit the policy keeps", () => {
     expect([early?.fee.value, early?.refund?.value]).toEqual([0, 2000]);
     const late = await cancelFeeOf(paid, Date.parse(`${day}T16:00:00-05:00`) - 12 * 3_600_000, "en");
     expect([late?.fee.value, late?.refund?.value]).toEqual([2000, 0]);
+  });
+});
+
+describe("the day by staff", () => {
+  it("holds every booking of a busy day, however many", async () => {
+    const { db, caps, fade, mei } = await mapleAndFade();
+    const partyId = await party(db, "Walk-in", "walkin@example.com");
+    const rows = Array.from({ length: 520 }, (_, n) => {
+      const start = Date.parse(at("09:00")) + (n % 600) * 60_000;
+      return {
+        id: `day${String(n).padStart(6, "0")}`,
+        type: "booking",
+        state: "requested",
+        version: 1,
+        partyId,
+        channel: "rest",
+        payload: {
+          reservationFor: { serviceId: fade.id, name: "Skin fade" },
+          startTime: new Date(start).toISOString(),
+          endTime: new Date(start + 30 * 60_000).toISOString(),
+          resourceId: mei.id,
+        },
+        flags: {},
+        createdAt: T0,
+        updatedAt: T0,
+      };
+    });
+    // A few rows at a time: D1 binds at most 100 values a statement.
+    for (let i = 0; i < rows.length; i += 8) await db.orm.insert(items).values(rows.slice(i, i + 8) as never);
+    const day = await caps.staffDay(owner, "2026-11-03");
+    expect(day.columns.find((c) => c.staff?.id === mei.id)?.bookings.length).toBe(520);
   });
 });
 
