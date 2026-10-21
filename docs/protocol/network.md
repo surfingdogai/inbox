@@ -1665,6 +1665,35 @@ What this version does not do:
 - Receipts for stays carry no outcome codes a network publishes: until a rules version names them, a
   network keeps no record of stays.
 
+**UCP Lodging (off).** An inbox MAY also answer the [UCP Lodging booking draft](https://github.com/Universal-Commerce-Protocol/ucp/blob/f2626c28b8288976eee5bda77f3a9b1ddc0132b1/docs/specification/lodging/booking/index.md)
+(`dev.ucp.lodging.booking`, read at commit `f2626c28`), and it ships switched off: only an inbox whose operator set
+`INBOX_UCP_LODGING=on` serves `/.well-known/ucp` and the REST booking sessions under `/v1/ucp/lodging`, and only for
+rooms it confirms at once (rooms kept for direct guests, or a property system written to first). The mapping:
+
+- `property`, `accommodation_type` and `rate_plan` are the property, its room types and its rate plans; a stay's `id`
+  is `<room type>__<rate plan>`, and every stay of one session has the same dates and rate plan.
+- `totals[]` is the quote's lines: exactly one `subtotal`, whose `lines` are the rooms (with their nights) and the
+  extras (`kind: "extra"`); each fee, tax and discount; exactly one `total`, which the addends sum to. A charge the
+  property collects itself carries `collected: "at_property"`.
+- `payment.terms[0].schedules[]` is the quote's schedule (`immediate`, `deferred`, `at_property`), summing to the
+  total; each says on its own when it is due. There are no payment handlers: the property takes its own payments.
+- `policies[]` is one `dev.ucp.lodging.policy.cancellation`: the policy's sentence, its `refundability` as of now,
+  and `dated_steps` (`zone`, `steps[] {until, fee}`, `after`, `no_show`, in minor units).
+- `messages[]`: `local_tax`, a disclosure whose `path` is the `at_property` schedule, for every charge the property
+  collects; `totals_changed` (a disclosure at `$.totals`); `inventory_exhausted`; `occupancy_exceeded_capacity`;
+  `lead_guest_required` while no lead is named; `payment_required` (`requires_buyer_input`) with a `continue_url`
+  to the property's own page when a deposit or a card is due.
+- Create and Update price the rooms (`quote_stay`); a named, reachable lead holds them (`hold_stay`), and an Update
+  that changes anything lets the hold go and holds again. Complete is `book_stay`; Cancel lets a hold go, withdraws
+  a request, or cancels a stay waiting for its payment. A booked session can no longer change.
+- The session `id` is sealed with the inbox's secret: it carries no name, address or age in the clear. Guests' ids
+  are echoed to the request that sent them and never stored. A session that never held a room keeps no state: its
+  Get prices its first request again, and it lapses after 24 hours.
+
+A property that answers each stay itself is not served: UCP needs one authoritative total in every session. A
+network gives an inbox's UCP profile no weight in this version: it reads an inbox through its manifest (§4.8),
+and its rules still read a UCP profile as one that never books.
+
 ## 5. Persons and passes
 
 ### 5.1 First contact: `POST /v1/persons` (sdi-instance/1)

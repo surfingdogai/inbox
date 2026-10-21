@@ -71,3 +71,16 @@ If your booking engine is where stays should go, keep them there. For now this i
 ```
 
 Guests' assistants are then sent to your engine with the dates they asked for filled in (`{check_in}`, `{check_out}`, `{adults}`, `{children}`, `{rooms}`). Your own AI cannot change this: it sends your guests to another address.
+
+## UCP Lodging (off for now)
+
+[UCP Lodging](https://ucp.dev/draft/specification/lodging/booking/) is a booking protocol some assistants' platforms are starting to speak. It is still a draft, so your inbox ships with it switched off. Whoever runs your server can turn it on with `INBOX_UCP_LODGING=on`; on a hosted inbox it is off.
+
+When it is on, and only for rooms that confirm at once (rooms you keep for direct guests, or your system confirming at once):
+
+- A platform asks for your rooms and dates and gets your total, every tax and fee in it, with what is paid now, later and at the property, and your cancellation policy for those nights. A tax or fee you collect yourself is shown to the guest before they book.
+- Once the guest is named with a way to reach them, the room is held for your hold time, as for any assistant. Booking it confirms the stay, or sends the guest to your own payment page when a deposit or a card is due. No card ever reaches the inbox, and nothing is charged by anyone but you.
+- A place that answers each request itself is not offered there: the protocol needs a firm total up front. Guests' assistants still reach you through your inbox's own doors.
+
+The stays these sessions make are ordinary stays: they appear in your inbox, follow your rules, and are yours to cancel or change. The ids a platform gives each guest are never kept; you keep the lead guest's name and contact and the other guests' names, as on every stay.
+
