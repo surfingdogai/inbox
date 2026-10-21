@@ -54,14 +54,16 @@ export async function openNow(db: Db, timezone: string, now: number): Promise<bo
   }
 }
 
+/** How to reach the business at once: its phone, when it gave one. */
+const callOn = (b: string, phone?: string) => (phone?.trim() ? `Call ${b} on ${phone.trim()}` : `Call ${b} directly`);
+
 export const JOB_WORDS = {
-  outside: (b: string) => `${b} does not take jobs at this site: it is outside the area ${b} works in.`,
-  emergencyOff: (b: string) =>
-    `${b} does not take emergency jobs online. Send it with urgency within_24h, or call ${b} directly.`,
-  emergencyClosed: (b: string) =>
-    `${b} takes emergency jobs online only while open. Send it with urgency within_24h, or call ${b} directly.`,
-  emergencyArea: (b: string) =>
-    `${b} takes emergency jobs online only inside its area, and this site could not be checked as inside it. Send the site's postal code and country (or its point), or send it with urgency within_24h.`,
+  outside: (b: string, _phone?: string) =>
+    `${b} does not take jobs at this site: it is outside the area ${b} works in.`,
+  emergencyOff: (b: string, phone?: string) =>
+    `${b} does not take emergency jobs online. ${callOn(b, phone)}, or send it with urgency within_24h.`,
+  emergencyClosed: (b: string, phone?: string) =>
+    `${b} takes emergency jobs online only while open. ${callOn(b, phone)}, or send it with urgency within_24h.`,
 } as const;
 
 export type JobRefusal = keyof typeof JOB_WORDS;
@@ -69,7 +71,8 @@ export type JobRefusal = keyof typeof JOB_WORDS;
 /**
  * Whether a request is taken, and how: refused (a site outside an area that declines, an emergency the
  * door does not take), or taken with what the inbox adds (the area check, a priority, a person
- * needed). An area that cannot tell is "on request", never a refusal.
+ * needed). An area that cannot tell is "on request", never a refusal: an emergency from a site the
+ * area cannot place (a radius, and only a postal code sent) comes first, for a person to decide.
  */
 export function judgeRequest(o: {
   readonly area: AreaSettings;
@@ -85,7 +88,6 @@ export function judgeRequest(o: {
   if (o.urgency === "emergency") {
     if (o.work.emergency === "off") return { refused: "emergencyOff" };
     if (o.work.emergency === "opening_hours" && !o.open) return { refused: "emergencyClosed" };
-    if (o.area.mode !== "anywhere" && o.check.status !== "inside") return { refused: "emergencyArea" };
     return { refused: null, priority: 3, needsHuman: true };
   }
   const priority = o.urgency === "within_24h" ? 2 : 0;

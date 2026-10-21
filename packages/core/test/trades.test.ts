@@ -204,7 +204,7 @@ describe("a request for a price with its job and photos", () => {
     });
   });
 
-  it("takes an emergency only through the door the business opened: never, while open, or inside the area", async () => {
+  it("takes an emergency only through the door the business opened: never, or while open", async () => {
     const shut = await fundi({ emergency: "off" });
     await expect(shut.caps.requestQuote(anon(), leak({ urgency: "emergency" }))).rejects.toMatchObject({
       message: JOB_WORDS.emergencyOff("Fundi Flow Plumbing"),
@@ -218,14 +218,27 @@ describe("a request for a price with its job and photos", () => {
       message: JOB_WORDS.emergencyClosed("Fundi Flow Plumbing"),
     });
     const always = await fundi({ emergency: "always" });
-    await expect(
-      always.caps.requestQuote(
-        anon(),
-        leak({ urgency: "emergency", site: { address: { postalCode: "00100", addressCountry: "KE" } } }),
-      ),
-    ).rejects.toMatchObject({ message: JOB_WORDS.emergencyArea("Fundi Flow Plumbing") });
     const taken = await always.caps.requestQuote(anon(), leak({ urgency: "emergency" }));
     expect(await flagsOf(always.db, taken.view.item.id)).toMatchObject({ needsHuman: true, priority: 3 });
+    // A refusal gives the business's phone when it has one.
+    await shut.caps.updateSettings(owner(), { doc: { commerce: { legal: { phone: "+254 20 765 4321" } } } });
+    await expect(shut.caps.requestQuote(anon(), leak({ urgency: "emergency" }))).rejects.toMatchObject({
+      message:
+        "Fundi Flow Plumbing does not take emergency jobs online. Call Fundi Flow Plumbing on +254 20 765 4321, or send it with urgency within_24h.",
+    });
+  });
+
+  it("takes an emergency whose site a radius cannot place first, for a person: a postal code is not geocoded", async () => {
+    const s = await fundi({ emergency: "always" });
+    const r = await s.caps.requestQuote(
+      anon(),
+      leak({ urgency: "emergency", site: { address: { postalCode: "00100", addressCountry: "KE" } } }),
+    );
+    expect((r.view.item.payload as { job: { areaCheck: unknown } }).job.areaCheck).toEqual({
+      status: "unknown",
+      by: "radius",
+    });
+    expect(await flagsOf(s.db, r.view.item.id)).toMatchObject({ needsHuman: true, priority: 3 });
   });
 
   it("takes its files' bytes away with the customer when they are erased", async () => {

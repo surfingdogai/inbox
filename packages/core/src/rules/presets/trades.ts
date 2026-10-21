@@ -8,11 +8,15 @@ import { OFFER_A_CODE, type Preset, type PresetSpec } from "./common";
  * Amounts are in minor units of the business's currency.
  */
 
-/** The job's own urgency, as the customer's agent sent it: emergencies first, within a day next. */
+/**
+ * The job's own urgency, as the customer's agent sent it: emergencies first, within a day next. Rules
+ * run highest priority first and each `set_flags` writes its priority over the last, so these come
+ * after every rule that sets a lower one (a known customer's 2): an emergency ends at 3 whoever sent it.
+ */
 export const URGENCY_FIRST: readonly Preset[] = [
   {
     name: "Emergencies go first",
-    priority: 98,
+    priority: 94,
     definition: {
       on: ["item.created"],
       if: {
@@ -28,7 +32,7 @@ export const URGENCY_FIRST: readonly Preset[] = [
   },
   {
     name: "Jobs needed within a day go next",
-    priority: 97,
+    priority: 93,
     definition: {
       on: ["item.created"],
       if: {
@@ -44,7 +48,7 @@ export const URGENCY_FIRST: readonly Preset[] = [
   },
   {
     name: "A site outside your area waits for you",
-    priority: 96,
+    priority: 92,
     definition: {
       on: ["item.created"],
       if: {

@@ -116,7 +116,7 @@ export class TradeCapabilities {
     const verdict = judgeRequest({ area: settings.area, work: settings.work, check, urgency: job?.urgency, open });
     const business = await this.businessName();
     if (verdict.refused) {
-      const message = JOB_WORDS[verdict.refused](business);
+      const message = JOB_WORDS[verdict.refused](business, settings.commerce.legal.phone);
       throw new WriteError(verdict.refused === "outside" ? "not_allowed" : "invalid_input", message, {
         ...(verdict.refused === "outside"
           ? {}
