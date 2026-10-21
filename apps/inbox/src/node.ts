@@ -230,6 +230,10 @@ const { app, runner, prepare } = createInbox({
     SQUARE_CLIENT_SECRET: process.env.SQUARE_CLIENT_SECRET,
     CALENDLY_CLIENT_ID: process.env.CALENDLY_CLIENT_ID,
     CALENDLY_CLIENT_SECRET: process.env.CALENDLY_CLIENT_SECRET,
+    SERVICEM8_CLIENT_ID: process.env.SERVICEM8_CLIENT_ID,
+    SERVICEM8_CLIENT_SECRET: process.env.SERVICEM8_CLIENT_SECRET,
+    JOBBER_CLIENT_ID: process.env.JOBBER_CLIENT_ID,
+    JOBBER_CLIENT_SECRET: process.env.JOBBER_CLIENT_SECRET,
   }),
   // Only for a webhook the owner allowed onto a private address; the ranges above still hold.
   privateFetchImpl: pinnedFetch({ deny: deny.ranges, allowPrivate: true }),

@@ -40,6 +40,11 @@ type Bindings = Env & {
   SQUARE_CLIENT_SECRET?: string;
   CALENDLY_CLIENT_ID?: string;
   CALENDLY_CLIENT_SECRET?: string;
+  /** A job tool's sign-in through the server's own app (ADR-034 §5); without them, "set up". */
+  SERVICEM8_CLIENT_ID?: string;
+  SERVICEM8_CLIENT_SECRET?: string;
+  JOBBER_CLIENT_ID?: string;
+  JOBBER_CLIENT_SECRET?: string;
 };
 
 // One app per isolate; the D1 binding is stable for the isolate's life.
