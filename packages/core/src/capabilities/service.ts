@@ -1,5 +1,5 @@
 import type { MailOut } from "@surfingdog/platform";
-import { type DiscoveryAnswer, type DoorElsewhere, publishedPayments } from "@surfingdog/spec";
+import { type DiscoveryAnswer, type DoorElsewhere, publishedPayments, type WorkProfile } from "@surfingdog/spec";
 import { and, desc, eq, gt, inArray, isNotNull, lt, or, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
 import { AccessCapabilities } from "../access/keys";
@@ -70,6 +70,10 @@ import {
   type Settings,
   settingsWriteSchema,
 } from "../settings/schema";
+import { TradeCapabilities } from "../trades/capability";
+import { workProfile } from "../trades/job";
+import { registerWorkResolver } from "../trades/job-tool";
+import { linkVisit } from "../trades/visit";
 import { hashText } from "../util/canonical";
 import {
   type Caller,
@@ -135,6 +139,8 @@ export interface BusinessProfile {
    * publishes it: tokens of the payments vocabulary, with card for a card brand; absent when none is ticked.
    */
   readonly payments?: readonly string[] | undefined;
+  /** How a trade takes work (ADR-034, spec `workProfileSchema`): absent for a business that set none of it. */
+  readonly work?: WorkProfile | undefined;
 }
 
 /** schema.org `MerchantReturnPolicy`: a finite window, how things come back, who pays, a full refund. */
@@ -327,6 +333,9 @@ export class Capabilities {
    */
   readonly customers: CustomerData;
 
+  /** Trades and projects (ADR-034): files on a request, where the business works, its job tool. */
+  readonly trades: TradeCapabilities;
+
   private readonly baseUrl: string | undefined;
   /** How the discovery check reaches its network (`checkDiscovery`): the host's outbound fetch, or none in a demo. */
   private readonly discoveryFetch: typeof fetch | undefined;
@@ -502,6 +511,13 @@ export class Capabilities {
     this.baseUrl = baseUrl;
     this.discoveryFetch = outbound?.discovery ?? outbound?.fetch;
     this.customers = new CustomerData(db);
+    this.trades = new TradeCapabilities(db, secrets, {
+      connectors: this.connectors,
+      fetchImpl: outbound?.fetch,
+      quotaBytes: () => this.policy?.attachmentsQuotaBytes ?? null,
+    });
+    // A request written into a job tool whose answer never came is looked for by the trades layer.
+    registerWorkResolver(this.connectors);
     this.customer = new CustomerDoors(db, {
       access: this.access,
       people: this.people,
@@ -635,6 +651,8 @@ export class Capabilities {
       ...(s.commerce.legal.legalName.trim() ? { trader: traderOf(s.commerce.legal) } : {}),
       ...(elsewhere.length ? { doors_elsewhere: elsewhere } : {}),
       ...(s.payments.accepted.length ? { payments: publishedPayments(s.payments.accepted) } : {}),
+      // How a trade takes work (ADR-034): where it goes, emergencies, call-out. Never the area's base.
+      ...(itemTypes.includes("quote_request") && workProfile(s) ? { work: workProfile(s) ?? undefined } : {}),
     };
   }
 
@@ -713,9 +731,18 @@ export class Capabilities {
 
   async requestQuote(caller: Caller, input: T.RequestQuoteInput): Promise<CreateResult> {
     await this.refuseShut(caller, "quote_request");
+    const c = withIdempotencyKey(caller, input.idempotency_key);
+    // The site against the area, an emergency against its door, the files checked and kept (ADR-034).
+    const inboxAdds = await this.trades.prepareRequest(c, input.payload, input.attachments);
     return this.people.create(
-      withIdempotencyKey(caller, input.idempotency_key),
-      { type: "quote_request", payload: input.payload, contact: input.contact, message: input.message },
+      c,
+      {
+        type: "quote_request",
+        payload: input.payload,
+        contact: input.contact,
+        message: input.message,
+        ...(inboxAdds ? { inboxAdds } : {}),
+      },
       input,
     );
   }
@@ -735,11 +762,35 @@ export class Capabilities {
     const pricing = await this.customer.pricingFor(c, input);
     // A priced request binds a consumer once they confirmed it: without that, nothing is written (CRD art. 8(2)).
     const confirmed = await this.customer.confirmCreate(c, "booking", input, pricing);
-    return this.people.create(
+    // A site visit names the request for a price it is for, which this customer made (ADR-034 §4).
+    const visitFor = input.visit_for ? await this.visitRequest(c, input.visit_for) : null;
+    const inboxAdds = await this.trades.prepareFiles(c, input.attachments);
+    const made = await this.people.create(
       c,
-      { type: "booking", payload: input.payload, contact: input.contact, message: input.message, confirmed, pricing },
+      {
+        type: "booking",
+        payload: input.payload,
+        contact: input.contact,
+        message: input.message,
+        confirmed,
+        pricing,
+        ...(inboxAdds ? { inboxAdds } : {}),
+      },
       input,
     );
+    if (visitFor && !made.replayed) await linkVisit(this.db, visitFor, made.view.item.id, nowOf(c));
+    return made;
+  }
+
+  /** The request a site visit is for: a request for a price of this customer's own, still open. */
+  private async visitRequest(caller: Caller, visit: { item_id: string; access_token?: string | undefined }) {
+    const row = await this.loadOwned(withToken(caller, visit.access_token), visit.item_id);
+    if (row.type !== "quote_request" || row.closedAt !== null) {
+      throw new WriteError("invalid_input", "A site visit is for an open request for a price you made.", {
+        fields: [{ path: "visit_for.item_id", problem: "invalid", message: "an open request for a price you made" }],
+      });
+    }
+    return row.id;
   }
 
   async createOrder(caller: Caller, input: T.CreateOrderInput): Promise<CreateResult> {
@@ -747,9 +798,18 @@ export class Capabilities {
     const c = withIdempotencyKey(caller, input.idempotency_key);
     const pricing = await this.customer.pricingFor(c, input);
     const confirmed = await this.customer.confirmCreate(c, "order", input, pricing);
+    const inboxAdds = await this.trades.prepareFiles(c, input.attachments);
     return this.people.create(
       c,
-      { type: "order", payload: input.payload, contact: input.contact, message: input.message, confirmed, pricing },
+      {
+        type: "order",
+        payload: input.payload,
+        contact: input.contact,
+        message: input.message,
+        confirmed,
+        pricing,
+        ...(inboxAdds ? { inboxAdds } : {}),
+      },
       input,
     );
   }

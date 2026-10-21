@@ -119,6 +119,8 @@ export async function directoryProfile(
     readonly directory: Settings["directory"];
     /** How it is paid (`settings.payments.accepted`): published as `payments`. */
     readonly payments?: readonly string[] | undefined;
+    /** Attributes of a network's vocabulary the business declares (ADR-034: free estimates, emergencies). */
+    readonly attributes?: Readonly<Record<string, true>> | undefined;
     readonly now: number;
   },
 ): Promise<Profile | undefined> {
@@ -138,6 +140,7 @@ export async function directoryProfile(
   );
   if (Object.keys(address).length) fields.address = address;
   if (d.geo) fields.geo = d.geo;
+  if (input.attributes && Object.keys(input.attributes).length) fields.attributes = { ...input.attributes };
   const hours = await publicHours(db, input.timezone, input.now);
   if (hours) fields.hours = hours;
   const services = await publicServices(db);

@@ -1,4 +1,6 @@
+import { jobSchema } from "@surfingdog/spec";
 import { z } from "zod";
+import { filesInputSchema } from "../attachments/index";
 import {
   bookingPayloadSchema,
   contactSchema,
@@ -64,10 +66,23 @@ export const checkAvailabilityInput = z.object({
   party_size: z.number().int().min(1).max(1000).optional(),
 });
 
+/**
+ * The job a request for a price describes (ADR-034 §4), as the customer's agent sends it: what the
+ * inbox writes itself (whether the site is inside the area, the visit booked) is not theirs to send.
+ */
+export const jobInput = jobSchema
+  .omit({ areaCheck: true, visitBookingId: true })
+  .describe(
+    "The job: urgency (emergency, within_24h, this_week, flexible), whether a visit comes first, the site (address, how to find the way, home or business), up to three windows that suit, and budgetMax for a range.",
+  );
+
 export const requestQuoteInput = z.object({
-  payload: quoteRequestPayloadSchema.omit({ quote: true, offer: true }),
+  payload: quoteRequestPayloadSchema.omit({ quote: true, offer: true, attachments: true }).extend({
+    job: jobInput.optional(),
+  }),
   contact: contactSchema.optional(),
   message: z.string().max(20_000).optional(),
+  attachments: filesInputSchema,
   idempotency_key: idempotencyKey,
   ...carried,
 });
@@ -96,9 +111,19 @@ export const createBookingInput = z.object({
     change: true,
     paymentRef: true,
     paidAmount: true,
+    attachments: true,
   }),
   contact: contactSchema.optional(),
   message: z.string().max(20_000).optional(),
+  attachments: filesInputSchema,
+  /**
+   * A site visit for a request for a price this customer made (ADR-034 §4): the request's id, and its
+   * access token when the request was made without an account. The visit is tied to it once booked.
+   */
+  visit_for: z
+    .object({ item_id: z.string().min(1).max(64), access_token: accessToken })
+    .optional()
+    .describe("Book this as the site visit for a request for a price you made: its item_id (and access_token)."),
   terms_sha: confirmedTerms,
   idempotency_key: idempotencyKey,
   ...carried,
@@ -116,6 +141,8 @@ export const createOrderInput = z.object({
       change: true,
       fulfilledAt: true,
       deliveredAt: true,
+      attachments: true,
+      schedule: true,
     })
     .extend({
       orderedItem: z
@@ -125,6 +152,7 @@ export const createOrderInput = z.object({
     }),
   contact: contactSchema.optional(),
   message: z.string().max(20_000).optional(),
+  attachments: filesInputSchema,
   terms_sha: confirmedTerms,
   idempotency_key: idempotencyKey,
   ...carried,

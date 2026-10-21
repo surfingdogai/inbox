@@ -8,6 +8,7 @@ import {
   returnLinesSchema,
   returnReasonSchema,
 } from "../domain/types";
+import { quoteLineKind, tradeQuoteInput } from "../trades/quote";
 import type { Machine, Transition } from "./machine";
 
 const owners = BUSINESS_ACTORS;
@@ -33,7 +34,15 @@ export const quoteInput = z.object({
   /** Until when it can be accepted; `negotiation.offerValidHours` from now when left out. */
   validThrough: isoDateTime.optional(),
   lines: z
-    .array(z.object({ name: z.string().max(200), quantity: z.number().int().min(1), price: moneySchema }))
+    .array(
+      z.object({
+        name: z.string().max(200),
+        quantity: z.number().int().min(1),
+        price: moneySchema,
+        /** On a trade's quote (ADR-034 §4): labour, materials or other. */
+        kind: quoteLineKind,
+      }),
+    )
     .max(100)
     .default([]),
   notes: z.string().max(2_000).optional(),
@@ -42,6 +51,8 @@ export const quoteInput = z.object({
   startTime: isoDateTime.optional(),
   /** Defaults to the start plus the service's duration. */
   endTime: isoDateTime.optional(),
+  // A trade's quote (ADR-034 §4): estimate or fixed, stages, call-out and visit fees, tax.
+  ...tradeQuoteInput,
 });
 export const paymentInput = z.object({
   paymentRef: z.string().min(1).max(200),
