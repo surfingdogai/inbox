@@ -22,9 +22,11 @@ export function bookingFeeAt(p: BookingPayload, now: number): Money {
   const currency = total?.currency ?? p.deposit?.amount.currency ?? "XXX";
   if (!policy) return { value: 0, currency };
   const paid = p.paidAmount;
-  // A deposit the policy keeps is kept whatever the step, as far as it was paid.
+  // A deposit the policy keeps comes back while cancelling is free, as the customer was told, and is
+  // kept once no free step is still ahead, as far as it was paid.
+  const freeAhead = policy.steps.some((s) => s.fee.value === 0 && Date.parse(s.until) >= now);
   const keep =
-    p.deposit && !p.deposit.refundable && paid && paid.currency === p.deposit.amount.currency
+    !freeAhead && p.deposit && !p.deposit.refundable && paid && paid.currency === p.deposit.amount.currency
       ? { value: Math.min(paid.value, p.deposit.amount.value), currency: paid.currency }
       : undefined;
   const fee = feeAt(policy, now, { total: total ?? undefined, keep });
@@ -62,7 +64,8 @@ export async function cancelFeeOf(
         ? w.cancelFeeBack(money(fee), money(refund))
         : w.cancelFee(money(fee));
   const total = p.totalPrice ?? fee;
-  const sentence = `${head} ${policySentence(p.policy as DatedPolicy, { lang, total })}`;
+  const depositKept = p.deposit !== undefined && !p.deposit.refundable;
+  const sentence = `${head} ${policySentence(p.policy as DatedPolicy, { lang, total, depositKept })}`;
   return { fee, refund, sha, sentence };
 }
 

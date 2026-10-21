@@ -2541,6 +2541,9 @@ function salonLine(p: PayloadOf<"booking">, a: Audience): string {
       p.deposit.dueBy ? w.deposit(amount, whenText(p.deposit.dueBy, a.timezone, a.lang)) : w.depositNow(amount),
     );
   }
-  if (p.policy && p.totalPrice) parts.push(policySentence(p.policy, { lang: a.lang, total: p.totalPrice }));
+  if (p.policy && p.totalPrice) {
+    const depositKept = p.deposit !== undefined && !p.deposit.refundable;
+    parts.push(policySentence(p.policy, { lang: a.lang, total: p.totalPrice, depositKept }));
+  }
   return parts.join(" ");
 }

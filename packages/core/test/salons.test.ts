@@ -786,6 +786,61 @@ describe("cancelling", () => {
   });
 });
 
+describe("a deposit the policy keeps", () => {
+  it("comes back while cancelling is free, and is kept after, as the customer is told", async () => {
+    const { db, caps, fade, ravi } = await mapleAndFade();
+    await caps.setup.updateService(owner, {
+      service_id: fade.id,
+      deposit: { kind: "amount", value: 2000 },
+      policy: {
+        steps: [{ before: { hours: 24 }, fee: { kind: "none" } }],
+        after: { kind: "none" },
+        noShow: { kind: "full" },
+        deposit: { refundable: false },
+      },
+    });
+    const day = new Date(T0 + 3 * DAY).toISOString().slice(0, 10);
+    let summary = "";
+    const input = {
+      payload: booking(fade.id, "Skin fade", `${day}T16:00:00-05:00`, `${day}T16:30:00-05:00`),
+      staff_id: ravi.id,
+      contact: { name: "Aiyana", email: "aiyana@example.com" },
+      idempotency_key: "keep-1",
+    };
+    try {
+      await new Capabilities(db).createBooking(agent(), input);
+    } catch (error) {
+      summary = String((error as WriteError).details?.summary ?? "");
+    }
+    expect(summary).toContain("Free cancellation until");
+    expect(summary).toContain("After that, the deposit is not refunded.");
+    expect(summary).not.toContain("After that: nothing.");
+    const r = await caps.createBooking(agent(), input);
+    await transitionItem(db, owner, { itemId: r.view.item.id, event: "confirm" });
+    await transitionItem(
+      db,
+      {
+        actor: { kind: "connector", id: "connector:pay", channel: "connector" },
+        tier: "verified_principal",
+        sandbox: false,
+        now: () => T0,
+      },
+      {
+        itemId: r.view.item.id,
+        event: "record_payment",
+        input: { paymentRef: "pi_1", amount: { value: 2000, currency: "CAD" } },
+      },
+    );
+    const [row] = await db.orm.select().from(items).where(eq(items.id, r.view.item.id));
+    const paid = { id: r.view.item.id, payload: row?.payload as never };
+    // Two days ahead it is free, the deposit back; inside the day it is kept.
+    const early = await cancelFeeOf(paid, Date.parse(`${day}T16:00:00-05:00`) - 48 * 3_600_000, "en");
+    expect([early?.fee.value, early?.refund?.value]).toEqual([0, 2000]);
+    const late = await cancelFeeOf(paid, Date.parse(`${day}T16:00:00-05:00`) - 12 * 3_600_000, "en");
+    expect([late?.fee.value, late?.refund?.value]).toEqual([2000, 0]);
+  });
+});
+
 describe("what customers read", () => {
   it("never names the software, a network, receipts or anyone's records, in any language", () => {
     for (const lang of ["en", "es", "fr", "de", "it", "pt"]) {

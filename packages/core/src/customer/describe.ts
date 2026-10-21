@@ -310,7 +310,11 @@ export function offerSummary(item: Item, offer: OpenOffer, a: Audience = DEFAULT
   const policy = offer.terms.policy as DatedPolicy | undefined;
   const sentence =
     policy && offer.terms.totalPrice
-      ? `${said} ${policySentence(policy, { lang: a.lang, total: offer.terms.totalPrice })}`
+      ? `${said} ${policySentence(policy, {
+          lang: a.lang,
+          total: offer.terms.totalPrice,
+          depositKept: offer.terms.deposit?.refundable === false,
+        })}`
       : said;
   if (!offer.obligationToPay || !offer.terms.totalPrice) return sentence;
   return `${sentence} ${c.obligation(vars({ total: moneyIn(offer.terms.totalPrice, a.lang) }))}`;
