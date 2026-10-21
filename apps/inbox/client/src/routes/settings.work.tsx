@@ -212,14 +212,16 @@ function WorkForm({ data, onReload }: { data: SettingsDoc; onReload: () => void 
         <SectionHead title="Site visits" />
         {services.isSuccess && visitServices.length === 0 ? (
           <div className="stack">
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              disabled={addService.isPending}
-              onClick={() => void addVisit()}
-            >
-              {addService.isPending ? "Adding…" : "Add a Site visit service"}
-            </button>
+            <div>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                disabled={addService.isPending}
+                onClick={() => void addVisit()}
+              >
+                {addService.isPending ? "Adding…" : "Add a Site visit service"}
+              </button>
+            </div>
             <p className="hint">An hour, free, and you confirm each one. Change it in Services.</p>
             {addService.isError && <p className="hint error">{problemOf(addService.error).detail}</p>}
           </div>
