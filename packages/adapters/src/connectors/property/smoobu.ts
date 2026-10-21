@@ -40,26 +40,33 @@ import { constantTimeEqual } from "../pay-sign";
  * - **Rooms.** Smoobu's apartments are what it rents, one unit each. The apartments that share a
  *   currency, a time zone and a town are one property here, under its first apartment's id (as
  *   Hostaway's listings are), so a pin moved or a town renamed in Smoobu does not lose it. Smoobu says
- *   how many people an apartment sleeps (`maxOccupancy`), not how many may be children, so any of them
- *   but one may be. An apartment with no currency is left out; one with no time zone (documented as
- *   possibly `null`) keeps the property's own.
+ *   how many people an apartment sleeps (`maxOccupancy`), not how many may be children, so all but one
+ *   guest may be. An apartment with no currency is left out; one with no time zone (documented as
+ *   possibly `null`) keeps the property's own. The list is read live every time (one request); each
+ *   apartment's details are read on a refresh and kept for the nightly reads for twelve hours, and
+ *   read live for the owner's chooser, a quote (two apartments, never the account) and every write.
  * - **What is free.** `GET /api/rates`, one apartment at a time (so the canonical query never holds a
  *   key twice), in pieces of 92 nights: a night is free while `available` is above 0, sold as one unit
  *   whatever the count, with its minimum stay and its nightly price as the one rate, `nightly`.
  *   `end_date` is included (the example answers it), so the last night wanted is asked for.
  * - **Writing a stay.** A live `POST /booking/checkApartmentAvailability` (no `/api` prefix) just
- *   before each write, then `POST /api/reservations` on Smoobu's default channel, at the price the
- *   inbox gives, in the apartment's own currency. The documentation shows a create refused when a
- *   reservation exists already, but does not promise it: every write is read back
+ *   before each write, then `POST /api/reservations` on Smoobu's default channel (70, "Homepage"), at
+ *   the price the inbox gives, in the apartment's own currency, all within 18 seconds of the inbox's
+ *   20: with less than five left before the create, it is not sent. The documentation shows a create
+ *   refused when a reservation exists already, but does not promise it: every write is read back
  *   (`check_then_write`), counting the bookings on its nights (blocked periods and grouped apartments
- *   included) against the one unit, and the inbox takes its own write back on a conflict. There is no
- *   idempotency key: our key rides in the reservation's `notice`, and a write is looked for by it
- *   before it is made again.
+ *   included) against the one unit, from a list read whole or not at all, and the inbox takes its own
+ *   write back on a conflict. There is no idempotency key: our key rides at the start of the
+ *   reservation's `notice` (`[#…]`, without our prefix), and a write is looked for by it, on the same
+ *   apartment and nights, before it is made again. The guest's own words follow on the next lines,
+ *   their brackets made round, so nothing they type reads as a key.
  * - **Holds.** Smoobu documents none (`hold: none`): a stay written while its deposit is due is an
  *   ordinary reservation marked so in its notice, which holds its nights until it is paid or cancelled.
  * - **Changes.** `PUT /api/reservations/{id}` takes guests, the price, the guest's details and notes,
  *   never the dates or the apartment: a change of nights is refused here, the stay keeps its nights
- *   in both places, and the owner makes it in Smoobu, where the inbox reads it back.
+ *   in both places, and the owner changes it in both. A booking moved or cancelled in Smoobu frees or
+ *   takes its nights here at the next read, but does not change the stay linked to it (the core has
+ *   no fact for that yet).
  * - **Cancelling.** `DELETE /api/reservations/{id}`, which the documentation says keeps the booking
  *   "in the system as a cancelled booking": a cancellation, never a removal; it is still found by key.
  * - **Webhooks.** Every URL a user registers (`/api/users/webhooks`) receives every event, so this
@@ -72,14 +79,14 @@ import { constantTimeEqual } from "../pay-sign";
  *   delay; a 429 waits until then.
  * - **Hosts.** Only `login.smoobu.com`; nothing an answer names (a guest app link) is ever followed.
  *
- * **Switched on by one constant** (`SMOOBU_READY`). Smoobu's documentation asks "Please contact us
- * before you start coding", and asks providers with solutions for more than one user to get in touch.
- * Each owner makes their own key for their own inbox, so the connection works without that; the
- * founder may hold it at "Needs setup" until he has spoken with Smoobu by setting it to false.
+ * **Switched off by one constant** (`SMOOBU_READY`) until Smoobu's go-ahead. Its documentation asks
+ * "Please contact us before you start coding", and asks providers with solutions for more than one
+ * user to get in touch; a hosted inbox is one. Code-complete and tested against the fake, it shows as
+ * Needs setup with nothing to press until the maintainers have spoken with Smoobu and set it to true.
  */
 
-/** Whether this release offers Smoobu. False: the gallery shows it as Needs setup, with nothing to press. */
-export const SMOOBU_READY = true;
+/** Whether this release offers Smoobu. False until Smoobu's go-ahead: the gallery shows Needs setup, with nothing to press. */
+export const SMOOBU_READY = false;
 
 export const SMOOBU_API = "https://login.smoobu.com";
 /** The only hosts this adapter calls: constants, never from input or from an answer (SSRF). */
@@ -97,27 +104,47 @@ export const SMOOBU_ACTIONS: readonly string[] = [
   "updateRates",
 ];
 /** Where the owner reads about it, and why it may say Needs setup. */
-export const SMOOBU_DOCS = "https://surfingdog.ai/docs/smoobu/";
+export const SMOOBU_DOCS = "https://surfingdog.ai/docs/connectors/smoobu/";
 /** A request signed more than this far from Smoobu's own clock is signed again on its time (it allows five minutes). */
 const SKEW_MS = 4 * 60_000;
-/** A write's own limit, under the inbox's 20 seconds for the whole write, so the two end together. */
+/**
+ * A create's own window, inside the inbox's 20 seconds for the whole write: the look for an earlier
+ * write, the apartment, the live check and the create, one after another.
+ */
+const WRITE_WINDOW_MS = 18_000;
+/** With less than this left of the window, the create is not sent: the inbox looks for it instead, and finds none. */
+const POST_AT_LEAST_MS = 5_000;
+/** One request's own limit inside a write, never past what is left of the window. */
 const WRITE_TIMEOUT_MS = 15_000;
 /** At most this many nights in one rates read: the documentation sets no bound, so the answers stay small. */
 const RATES_CHUNK = 92;
-/** Reservations read back before a write and after it look this far before the stay's first night. */
-const LOOK_BEFORE_DAYS = 90;
+/**
+ * The read-back looks for bookings from this far before the stay's first night: past the longest stay
+ * Smoobu is likely to hold, in case `from` and `to` filter on arrival (the documentation does not say).
+ */
+const LOOK_BEFORE_DAYS = 366;
+/** A write made again is looked for among the apartment's bookings made since this many days ago. */
+const MADE_SINCE_DAYS = 2;
+/** How long the apartments' details read on a refresh stand for the nightly reads. */
+const DETAILS_FOR_MS = 12 * 3_600_000;
 const PAGE_SIZE = 100;
 const MAX_PAGES = 10;
 const MAX_APARTMENTS = 200;
+/** An updateRates delivery naming more apartments than this reads them all again instead. */
+const MAX_HOOK_APARTMENTS = 50;
 const HOOK_DEDUPE_MS = 10 * 60_000;
 const WEBHOOK_RETRY_MS = 6 * 3_600_000;
 /** The longest stay a webhook's dates are taken as a hint for; anything longer is read from the next months. */
 const MAX_HINT_NIGHTS = 400;
-/** Our key in the notice: `[sd-…]`. */
-const MARKER = /\[(sd-[0-9A-Za-z-]{1,120})\]/;
+/** What a stay's key may be written as: letters, digits and dashes. */
+const TOKEN = /^[0-9A-Za-z-]{1,120}$/;
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-/** The notice a stay is written with, in the owner's language: what it is, and whether its deposit is due. */
+/**
+ * The notice a stay is written with, in the owner's language (English for any other): what it is, and
+ * whether its deposit is due. Smoobu may show a booking's notes near its guest's, so they are the
+ * business's words, never the software's.
+ */
 const NOTICE: Readonly<Record<string, readonly [string, string]>> = {
   en: ["Direct booking", "Direct booking, deposit due"],
   es: ["Reserva directa", "Reserva directa, depósito pendiente"],
@@ -125,23 +152,44 @@ const NOTICE: Readonly<Record<string, readonly [string, string]>> = {
   de: ["Direktbuchung", "Direktbuchung, Anzahlung offen"],
   it: ["Prenotazione diretta", "Prenotazione diretta, acconto dovuto"],
   pt: ["Reserva direta", "Reserva direta, sinal por pagar"],
+  nl: ["Directe boeking", "Directe boeking, aanbetaling open"],
+  pl: ["Rezerwacja bezpośrednia", "Rezerwacja bezpośrednia, zaliczka do zapłaty"],
+  sw: ["Uhifadhi wa moja kwa moja", "Uhifadhi wa moja kwa moja, amana inadaiwa"],
+  hi: ["सीधी बुकिंग", "सीधी बुकिंग, अग्रिम राशि बाकी"],
+  ja: ["直接予約", "直接予約、デポジット未払い"],
+  ar: ["حجز مباشر", "حجز مباشر، العربون مستحق"],
 };
-const NOTICE_PREFIXES = Object.values(NOTICE).flat();
+/** The languages its notice is written in. */
+export const SMOOBU_NOTICE_LANGUAGES: readonly string[] = Object.keys(NOTICE);
+const escaped = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/**
+ * The first line this inbox writes, at the very start of a notice: its own words, the guest's
+ * reference, and the stay's key in brackets after a `#`. Matched only there, never anywhere in the
+ * text, so a key a guest typed into their requests, or notes copied from another booking below the
+ * first line, is never taken as ours.
+ */
+const HEAD = new RegExp(
+  `^(?:${Object.values(NOTICE)
+    .flat()
+    .sort((a, b) => b.length - a.length)
+    .map(escaped)
+    .join("|")})(?: · ref [0-9A-Za-z-]{1,40})? \\[#([0-9A-Za-z-]{1,120})\\]`,
+);
 
 export const smoobuForm = z.object({
   api_key: secretField(
     z
       .string()
       .trim()
-      .min(8, "the API key Smoobu showed, in full")
+      .min(8, "Paste the whole API key from Smoobu.")
       .max(200)
-      .regex(/^[A-Za-z0-9._~-]+$/, "the API key Smoobu showed, in full"),
+      .regex(/^[A-Za-z0-9._~-]+$/, "Paste the whole API key from Smoobu."),
     {
       label: "API key",
       link: { href: "https://login.smoobu.com", text: "Open Smoobu" },
       placeholder: "usr_live_…",
       steps: [
-        "In Smoobu, open Settings → Advanced → API Keys.",
+        "Open Smoobu → Settings → Advanced → API Keys.",
         "Press Create API Key and name it Inbox.",
         "Press Generate Secret, then copy the API key and the API secret here. The secret is shown only once.",
       ],
@@ -151,9 +199,9 @@ export const smoobuForm = z.object({
     z
       .string()
       .trim()
-      .min(16, "the API secret Smoobu showed, in full")
+      .min(16, "Paste the whole API secret from Smoobu.")
       .max(400)
-      .regex(/^[\x21-\x7e]+$/, "the API secret Smoobu showed, in full"),
+      .regex(/^[\x21-\x7e]+$/, "Paste the whole API secret from Smoobu."),
     { label: "API secret", help: "Lost it? Generate a new secret in Smoobu." },
   ),
 });
@@ -434,6 +482,44 @@ function anchorOf(as: readonly Apartment[]): Apartment | undefined {
   return first;
 }
 
+/** An apartment as a refresh kept it in the connection's `extra`; null for anything else. */
+function keptApartment(raw: unknown): Apartment | null {
+  const a = obj(raw);
+  const id = a ? idOf(a.id) : null;
+  if (!a || !id) return null;
+  const currency = str(a.currency);
+  const sleeps = num(a.sleeps);
+  const beds: { type: string; count: number }[] = [];
+  for (const b of Array.isArray(a.beds) ? (a.beds as unknown[]).slice(0, BEDS.length) : []) {
+    const type = str(obj(b)?.type);
+    const count = num(obj(b)?.count);
+    if (type && BEDS.some(([, t]) => t === type) && count !== null && count > 0 && Number.isInteger(count))
+      beds.push({ type, count: Math.min(count, 50) });
+  }
+  return {
+    id,
+    name: (str(a.name) ?? `Apartment ${id}`).slice(0, 120),
+    currency: currency && /^[A-Z]{3}$/.test(currency) ? currency : null,
+    timezone: str(a.timezone),
+    city: str(a.city),
+    sleeps: sleeps !== null && sleeps > 0 && Number.isInteger(sleeps) ? Math.min(sleeps, 100) : null,
+    beds,
+  };
+}
+
+/** The apartments' details the last refresh read, by id, while they stand; null when none do. */
+function detailsKept(extra: Readonly<Record<string, unknown>> | undefined, now: number): Map<string, Apartment> | null {
+  const kept = obj(extra?.apartments);
+  const at = num(kept?.at);
+  if (!kept || at === null || now - at > DETAILS_FOR_MS || at - now > 60_000) return null;
+  const out = new Map<string, Apartment>();
+  for (const raw of Array.isArray(kept.list) ? (kept.list as unknown[]).slice(0, MAX_APARTMENTS) : []) {
+    const a = keptApartment(raw);
+    if (a) out.set(a.id, a);
+  }
+  return out;
+}
+
 interface Reservation {
   readonly id: string;
   readonly apartmentId: string | null;
@@ -476,16 +562,38 @@ function holdsOn(r: Reservation, apartmentId: string): boolean {
   return holds(r) && (r.apartmentId === apartmentId || r.related.includes(apartmentId));
 }
 
-function noticeOf(stay: OutboundStay, key: string, provisional: boolean, language: string): string {
-  const words = NOTICE[language.slice(0, 2).toLowerCase()] ?? NOTICE.en ?? ["Direct booking", "Direct booking"];
-  const head = `${provisional ? words[1] : words[0]} · ref ${stay.reference} [${key}]`;
-  // The guest's own words go only with the guest, once the stay is confirmed.
-  return stay.guest && stay.notes ? `${head}\n${stay.notes.slice(0, 2_000)}` : head;
+/**
+ * What a stay's key is written as in Smoobu: without the inbox's own `sd-` prefix, so the business's
+ * notes carry no software's name. Null for a key that is not letters, digits and dashes.
+ */
+export function smoobuToken(key: string): string | null {
+  const token = key.startsWith("sd-") ? key.slice(3) : key;
+  return TOKEN.test(token) ? token : null;
 }
 
-/** Whether a notice is one this inbox wrote (and may write again): its own words and a key. */
-function ownNotice(notice: string | null): boolean {
-  return !!notice && NOTICE_PREFIXES.some((p) => notice.startsWith(p)) && MARKER.test(notice);
+function tokenOfStay(stay: OutboundStay): string {
+  const token = smoobuToken(stay.key);
+  if (!token) throw new ConnectorError("refused", "This stay's key cannot be written to Smoobu.");
+  return token;
+}
+
+/** A guest's own words, below our line: square brackets made round, so nothing they type reads as a key. */
+function guestWords(notes: string): string {
+  return notes.replace(/\[/g, "(").replace(/\]/g, ")").slice(0, 2_000);
+}
+
+/** The notice a stay is written with: our line first, then the guest's own words once it is confirmed. */
+export function smoobuNotice(stay: OutboundStay, token: string, provisional: boolean, language: string): string {
+  const words = NOTICE[language.slice(0, 2).toLowerCase()] ?? NOTICE.en ?? ["Direct booking", "Direct booking"];
+  const ref = stay.reference.replace(/[^0-9A-Za-z-]/g, "").slice(0, 40);
+  const head = `${provisional ? words[1] : words[0]}${ref ? ` · ref ${ref}` : ""} [#${token}]`;
+  // The guest's own words go only with the guest, once the stay is confirmed.
+  return stay.guest && stay.notes ? `${head}\n${guestWords(stay.notes)}` : head;
+}
+
+/** The key on a notice this inbox wrote, from its first line only; null for a notice it did not write. */
+export function smoobuTokenIn(notice: string | null): string | null {
+  return notice ? (HEAD.exec(notice)?.[1] ?? null) : null;
 }
 
 /** A guest's name as Smoobu's create takes it: the last word as the last name. */
@@ -607,7 +715,7 @@ export function smoobuConnector(opts: SmoobuOptions = {}): ConnectorDefinition {
         );
       }
       if (res.status === 429) {
-        throw new ConnectorError("rate_limited", "Smoobu asked us to wait a moment. Trying again shortly.", {
+        throw new ConnectorError("rate_limited", "Smoobu asked to wait a moment. Trying again shortly.", {
           retryAfterMs: smoobuRetryAfterMs(res.headers, clock()),
         });
       }
@@ -619,7 +727,10 @@ export function smoobuConnector(opts: SmoobuOptions = {}): ConnectorDefinition {
         throw new ConnectorError("unreachable", "Smoobu isn't answering right now. Trying again shortly.");
       }
       if (res.status >= 300 && res.status < 400) {
-        throw new ConnectorError("bad_response", "Smoobu answered with a redirect, which is never followed.");
+        throw new ConnectorError(
+          "bad_response",
+          "Smoobu answered in a way your Inbox does not follow. Trying again later.",
+        );
       }
       if (json === undefined && res.status < 300) {
         throw new ConnectorError("bad_response", "Smoobu answered with something unreadable.");
@@ -667,26 +778,54 @@ export function smoobuConnector(opts: SmoobuOptions = {}): ConnectorDefinition {
     return apartmentOf(id, name, await read(c, `/api/apartments/${id}`));
   }
 
-  async function apartments(c: Caller): Promise<Apartment[]> {
-    const out: Apartment[] = [];
-    for (const a of await apartmentList(c)) out.push(await apartment(c, a.id, a.name));
-    return out;
+  /** The apartments read once in a run, by the run they were read for. */
+  const runs = new WeakMap<object, Promise<Apartment[]>>();
+
+  /**
+   * Every apartment, its list read live (one request): its details as the last refresh kept them while
+   * they stand, else read now, one request each. `fresh` reads every one live (the owner's chooser, a
+   * refresh); otherwise one run reads them once.
+   */
+  async function apartments(c: Caller, o: { readonly fresh?: boolean } = {}): Promise<Apartment[]> {
+    if (!o.fresh) {
+      const read = runs.get(c);
+      if (read) return read;
+    }
+    const work = (async () => {
+      const kept = o.fresh ? null : detailsKept(c.extra, c.now);
+      const out: Apartment[] = [];
+      for (const a of await apartmentList(c)) {
+        const known = kept?.get(a.id);
+        out.push(known ? { ...known, name: a.name } : await apartment(c, a.id, a.name));
+      }
+      return out;
+    })();
+    if (!o.fresh) {
+      runs.set(c, work);
+      work.catch(() => runs.delete(c));
+    }
+    return work;
   }
+
+  const propertyGone = () =>
+    new ConnectorError(
+      "not_found",
+      "This property's apartments have changed in Smoobu: choose the property again in Settings → Property.",
+    );
 
   /**
    * The apartments of a property: those that share its first apartment's currency, zone and town now.
    * Its first apartment gone, the property is gone, and the owner is told to choose it again.
    */
-  async function apartmentsOf(c: Caller, propertyId: string): Promise<Apartment[]> {
-    const all = await apartments(c);
+  async function apartmentsOf(
+    c: Caller,
+    propertyId: string,
+    o: { readonly fresh?: boolean } = {},
+  ): Promise<Apartment[]> {
+    const all = await apartments(c, o);
     const first = all.find((a) => a.id === propertyId);
     const key = first ? propertyKey(first) : null;
-    if (!first || !key) {
-      throw new ConnectorError(
-        "not_found",
-        "This property's apartments have changed in Smoobu: choose the property again in Settings → Property.",
-      );
-    }
+    if (!first || !key) throw propertyGone();
     return all.filter((a) => propertyKey(a) === key);
   }
 
@@ -728,7 +867,13 @@ export function smoobuConnector(opts: SmoobuOptions = {}): ConnectorDefinition {
    * among the available ones, with no reason against it. Refused otherwise, in Smoobu's words, so
    * nothing is written onto a night another channel took or a stay Smoobu's rules would not take.
    */
-  async function requireFree(c: Caller, apartmentId: string, stay: OutboundStay, guests: number): Promise<void> {
+  async function requireFree(
+    c: Caller,
+    apartmentId: string,
+    stay: OutboundStay,
+    guests: number,
+    timeoutMs: number,
+  ): Promise<void> {
     const customerId = await userOf(c);
     const a = await call(c, "POST", "/booking/checkApartmentAvailability", {
       body: {
@@ -738,10 +883,19 @@ export function smoobuConnector(opts: SmoobuOptions = {}): ConnectorDefinition {
         customerId: Number(customerId),
         guests,
       },
-      timeoutMs: WRITE_TIMEOUT_MS,
+      timeoutMs,
     });
-    if (!ok(a)) throw new ConnectorError("refused", said(a.json, "Smoobu did not say those nights are free."));
     const j = obj(a.json);
+    // The documented answer when the check's authentication fails, whatever its status: the key, never
+    // the nights, so the guest is not told the room is taken.
+    if (str(j?.detail)?.toLowerCase() === "verification error") {
+      throw new ConnectorError(
+        "auth",
+        "Smoobu did not take this key for checking free nights. Generate a new secret in Smoobu (Settings → Advanced → API Keys) and connect again.",
+        { field: "api_secret" },
+      );
+    }
+    if (!ok(a)) throw new ConnectorError("refused", said(a.json, "Smoobu did not say those nights are free."));
     const available = (Array.isArray(j?.availableApartments) ? (j.availableApartments as unknown[]) : []).map(idOf);
     const why = obj(obj(j?.errorMessages)?.[apartmentId]);
     if (why) {
@@ -763,8 +917,16 @@ export function smoobuConnector(opts: SmoobuOptions = {}): ConnectorDefinition {
     return r;
   }
 
-  /** Bookings matching a query, every page (up to `pages`). */
-  async function reservations(c: Caller, query: Query, pages = MAX_PAGES): Promise<Reservation[]> {
+  /**
+   * Bookings matching a query, every page (up to `pages`). `whole`: a list with pages left past those
+   * read is no answer (a read-back never counts a part of the bookings as all of them).
+   */
+  async function reservations(
+    c: Caller,
+    query: Query,
+    pages = MAX_PAGES,
+    o: { readonly whole?: boolean } = {},
+  ): Promise<Reservation[]> {
     const out: Reservation[] = [];
     for (let page = 1; page <= pages; page++) {
       const j = obj(
@@ -776,7 +938,10 @@ export function smoobuConnector(opts: SmoobuOptions = {}): ConnectorDefinition {
         if (r) out.push(r);
       }
       const count = num(j?.page_count);
-      if (list.length < PAGE_SIZE || (count !== null && page >= count)) break;
+      if (list.length < PAGE_SIZE || (count !== null && page >= count)) return out;
+    }
+    if (o.whole) {
+      throw new ConnectorError("bad_response", "Smoobu has more bookings on those nights than were read at once.");
     }
     return out;
   }
@@ -813,28 +978,41 @@ export function smoobuConnector(opts: SmoobuOptions = {}): ConnectorDefinition {
     return { adults: room.adults, children: room.childrenAges.length, price };
   }
 
-  /** The booking written under a stay's key, whatever it is now: the one to find, never to write again. */
+  /**
+   * The booking written under a stay's key, whatever its status now: the one to find, never to write
+   * again. Ours only when its notice starts with our line and that line's key is this stay's, exactly,
+   * on the stay's own apartment and nights: a key anywhere else in the notes (a guest's requests, notes
+   * copied from another booking) never makes another booking this stay's.
+   */
   async function findReservation(c: Caller, stay: OutboundStay): Promise<Reservation | null> {
     let apartmentId: string;
+    let token: string;
     try {
       apartmentId = apartmentOfStay(stay);
+      token = tokenOfStay(stay);
     } catch {
       return null;
     }
-    const marker = `[${stay.key}]`;
     const base: [string, string][] = [
       ["apartmentId", apartmentId],
       ["showCancellation", "true"],
     ];
-    // Where it was written (its nights), then among the apartment's bookings: one moved in Smoobu since,
-    // or cancelled, is still found by its key.
+    const today = new Date(c.now).toISOString().slice(0, 10);
+    // On its own nights (found whether `from` and `to` filter on overlap or on arrival), then among the
+    // apartment's bookings made in the last two days, never its whole history.
     const looks: [Query, number][] = [
       [[...base, ["from", stay.checkIn], ["to", stay.checkOut]], 3],
-      [base, 5],
+      [[...base, ["created_from", addDays(today, -MADE_SINCE_DAYS)]], 2],
     ];
     for (const [q, pages] of looks) {
       for (const r of await reservations(c, q, pages)) {
-        if (r.notice?.includes(marker) && (r.apartmentId === null || r.apartmentId === apartmentId)) return r;
+        if (
+          smoobuTokenIn(r.notice) === token &&
+          r.apartmentId === apartmentId &&
+          r.arrival === stay.checkIn &&
+          r.departure === stay.checkOut
+        )
+          return r;
       }
     }
     return null;
@@ -921,8 +1099,7 @@ export function smoobuConnector(opts: SmoobuOptions = {}): ConnectorDefinition {
     return { from: addDays(today, -1), to: addDays(today, 61) };
   }
 
-  const ready = (): true | string =>
-    enabled ? true : "Smoobu is held at Needs setup here until this server's operator has spoken with Smoobu.";
+  const ready = (): true | string => (enabled ? true : "Smoobu is not switched on here yet.");
 
   const definition: ConnectorDefinition = {
     kind: "smoobu",
@@ -936,7 +1113,7 @@ export function smoobuConnector(opts: SmoobuOptions = {}): ConnectorDefinition {
     ready,
     whenNotReady: {
       status: "setup",
-      hint: "Smoobu asks to hear from a provider before it connects many accounts. It shows here once that is done.",
+      hint: "Waiting on Smoobu's go-ahead. It shows here once that is done.",
       href: SMOOBU_DOCS,
     },
 
@@ -1001,11 +1178,22 @@ export function smoobuConnector(opts: SmoobuOptions = {}): ConnectorDefinition {
     async refresh(ctx) {
       const extra = await ensureWebhook(ctx);
       const user = await me(ctx);
+      // The apartments' details, read whole, for the nightly reads until the next refresh. Asked to wait
+      // or not answered, the ones kept before stand until they are too old.
+      const details = await apartments(ctx, { fresh: true }).catch((error: unknown) => {
+        if (error instanceof ConnectorError && (error.code === "rate_limited" || error.code === "unreachable"))
+          return null;
+        throw error;
+      });
       return {
         account: user.email ?? `Smoobu account ${user.id}`,
         calendars: [],
         destinations: [],
-        extra: { ...extra, userId: user.id },
+        extra: {
+          ...extra,
+          userId: user.id,
+          ...(details ? { apartments: { at: ctx.now, list: details } } : {}),
+        },
       };
     },
 
@@ -1016,7 +1204,7 @@ export function smoobuConnector(opts: SmoobuOptions = {}): ConnectorDefinition {
     stays: {
       async properties(ctx): Promise<ExternalProperty[]> {
         const groups = new Map<string, Apartment[]>();
-        for (const a of await apartments(ctx)) {
+        for (const a of await apartments(ctx, { fresh: true })) {
           const key = propertyKey(a);
           if (!key) continue;
           groups.set(key, [...(groups.get(key) ?? []), a]);
@@ -1027,13 +1215,14 @@ export function smoobuConnector(opts: SmoobuOptions = {}): ConnectorDefinition {
           const first = anchorOf(as);
           if (!first) continue;
           sizes.set(first.id, as.length);
-          // One apartment goes by its own name; several by their town and how many.
+          // One apartment goes by its own name; several by their town and how many, or with no town, by
+          // the first one's name and how many more: names the owner knows from Smoobu.
           const name =
             as.length === 1
               ? first.name
               : first.city
                 ? `${first.city} · ${as.length} apartments`
-                : `${as.length} apartments (${first.currency ?? ""})`;
+                : `${first.name} and ${as.length - 1} more`;
           out.push({
             id: first.id,
             name,
@@ -1045,7 +1234,7 @@ export function smoobuConnector(opts: SmoobuOptions = {}): ConnectorDefinition {
       },
 
       async rooms(ctx, propertyId): Promise<ExternalRoom[]> {
-        return (await apartmentsOf(ctx, propertyId)).map((a) => ({
+        return (await apartmentsOf(ctx, propertyId, { fresh: true })).map((a) => ({
           id: a.id,
           name: a.name,
           units: 1,
@@ -1088,9 +1277,23 @@ export function smoobuConnector(opts: SmoobuOptions = {}): ConnectorDefinition {
 
       async price(ctx, q: StayPriceQuery) {
         const apartmentId = idOf(q.roomId);
-        if (!apartmentId || q.checkOut <= q.checkIn) return null;
-        const a = (await apartmentsOf(ctx, q.propertyId)).find((x) => x.id === apartmentId);
-        if (!a?.currency) return null;
+        const anchorId = idOf(q.propertyId);
+        if (!apartmentId || !anchorId || q.checkOut <= q.checkIn) return null;
+        // Two apartments read, never the whole account: the room's own, and the property's first, whose
+        // currency, zone and town it must share.
+        const a = await apartment(ctx, apartmentId, "").catch((error: unknown) => {
+          if (error instanceof ConnectorError && error.code === "not_found") return null;
+          throw error;
+        });
+        if (!a) return null;
+        const anchor =
+          anchorId === apartmentId
+            ? a
+            : await apartment(ctx, anchorId, "").catch((error: unknown) => {
+                throw error instanceof ConnectorError && error.code === "not_found" ? propertyGone() : error;
+              });
+        const key = propertyKey(a);
+        if (!a.currency || !key || key !== propertyKey(anchor)) return null;
         // Smoobu's own nightly prices for those nights: never its booking tool's extras or discounts.
         const days = await rates(ctx, apartmentId, q.checkIn, q.checkOut);
         const nights: { night: string; amount: number }[] = [];
@@ -1129,7 +1332,8 @@ export function smoobuConnector(opts: SmoobuOptions = {}): ConnectorDefinition {
         const refs: string[] = [];
         let about = "rates";
         if (action === "updateRates") {
-          for (const [apartmentId, raw] of Object.entries(data).slice(0, 50)) {
+          const named = Object.entries(data);
+          for (const [apartmentId, raw] of named.slice(0, MAX_HOOK_APARTMENTS)) {
             const nights = Object.keys(obj(raw) ?? {})
               .filter((n) => dateOf(n))
               .sort();
@@ -1144,7 +1348,8 @@ export function smoobuConnector(opts: SmoobuOptions = {}): ConnectorDefinition {
               );
             }
           }
-          if (refs.length === 0) refs.push("all");
+          // Naming none, or more than are read one by one: every apartment's next months are read again.
+          if (refs.length === 0 || named.length > MAX_HOOK_APARTMENTS) refs.splice(0, refs.length, "all");
         } else {
           const id = idOf(data.id);
           if (!id) return null;
@@ -1213,6 +1418,11 @@ export function smoobuConnector(opts: SmoobuOptions = {}): ConnectorDefinition {
         const provisional = status !== "confirmed";
         const language = ctx.inbox.language;
         if (!link?.externalId) {
+          const token = tokenOfStay(stay);
+          // One window for the whole create, inside the inbox's own: what is left of it bounds each
+          // request, and too little left before the create means it is not sent at all.
+          const started = clock();
+          const left = () => WRITE_WINDOW_MS - (clock() - started);
           // No idempotency key in Smoobu: a write already made under this key is found, not made twice;
           // one cancelled in Smoobu since is the owner's word, never written over.
           const found = await findReservation(ctx, stay);
@@ -1220,14 +1430,27 @@ export function smoobuConnector(opts: SmoobuOptions = {}): ConnectorDefinition {
           if (found) return { externalId: found.id, etag: null, calendar: apartmentId };
           const place = await apartment(ctx, apartmentId, "");
           const fields = stayFields(stay, place.currency);
-          await requireFree(ctx, apartmentId, stay, Number(fields.adults) + Number(fields.children));
+          await requireFree(
+            ctx,
+            apartmentId,
+            stay,
+            Number(fields.adults) + Number(fields.children),
+            Math.max(1_000, Math.min(WRITE_TIMEOUT_MS, left())),
+          );
+          if (left() < POST_AT_LEAST_MS) {
+            // Nothing sent: the inbox looks for it by its key, finds none, and promises nothing.
+            throw new ConnectorError(
+              "unreachable",
+              "Smoobu was too slow to answer before the booking could be sent, so it was not sent.",
+            );
+          }
           const a = await call(ctx, "POST", "/api/reservations", {
             body: {
               arrivalDate: stay.checkIn,
               departureDate: stay.checkOut,
               apartmentId: Number(apartmentId),
               ...fields,
-              notice: noticeOf(stay, stay.key, provisional, language),
+              notice: smoobuNotice(stay, token, provisional, language),
               ...(stay.guest
                 ? {
                     ...namesOf(stay.guest.name),
@@ -1236,7 +1459,7 @@ export function smoobuConnector(opts: SmoobuOptions = {}): ConnectorDefinition {
                   }
                 : {}),
             },
-            timeoutMs: WRITE_TIMEOUT_MS,
+            timeoutMs: Math.min(WRITE_TIMEOUT_MS, left()),
           });
           if (!ok(a)) throw new ConnectorError("refused", said(a.json, "Smoobu said no."));
           const id = idOf(obj(a.json)?.id);
@@ -1265,12 +1488,13 @@ export function smoobuConnector(opts: SmoobuOptions = {}): ConnectorDefinition {
           );
         }
         const place = await apartment(ctx, apartmentId, "");
-        const marker = current.notice ? MARKER.exec(current.notice)?.[1] : undefined;
+        const written = smoobuTokenIn(current.notice);
         const a = await call(ctx, "PUT", `/api/reservations/${current.id}`, {
           body: {
             ...stayFields(stay, place.currency),
-            // Our own notice says where the stay stands; one the owner wrote is left as it is.
-            ...(marker && ownNotice(current.notice) ? { notice: noticeOf(stay, marker, provisional, language) } : {}),
+            // Our own notice says where the stay stands, under the key it was written with; one the owner
+            // wrote is left as it is.
+            ...(written ? { notice: smoobuNotice(stay, written, provisional, language) } : {}),
             ...(stay.guest
               ? {
                   guestName: stay.guest.name.slice(0, 200),
@@ -1305,7 +1529,7 @@ export function smoobuConnector(opts: SmoobuOptions = {}): ConnectorDefinition {
         return r ? { externalId: r.id, etag: null, calendar: r.apartmentId } : null;
       },
 
-      async oversold(ctx, _stay, link) {
+      async oversold(ctx, stay, link) {
         const id = idOf(link.externalId);
         if (!id) throw new ConnectorError("bad_response", "No booking to read back.");
         const ours = await reservation(ctx, id);
@@ -1315,14 +1539,31 @@ export function smoobuConnector(opts: SmoobuOptions = {}): ConnectorDefinition {
           throw new ConnectorError("bad_response", "Smoobu answered without the booking's apartment or dates.");
         }
         const apartmentId = ours.apartmentId;
-        // Whether `from` and `to` mean overlap or arrival is not said: the window starts well before, and
-        // only bookings that hold one of our nights are counted. Grouped apartments' bookings too.
-        const others = await reservations(ctx, [
-          ["apartmentId", apartmentId],
-          ["from", addDays(ours.arrival, -LOOK_BEFORE_DAYS)],
-          ["to", ours.departure],
-          ["includeRelated", "true"],
-        ]);
+        // Not on the stay's own apartment and nights: the stay is not booked there, whatever else is.
+        if (
+          stay.rooms.length !== 1 ||
+          idOf(stay.rooms[0]?.roomId) !== apartmentId ||
+          ours.arrival !== stay.checkIn ||
+          ours.departure !== stay.checkOut
+        ) {
+          return true;
+        }
+        // Whether `from` and `to` mean overlap or arrival is not said: the window starts a year before,
+        // the documented `departureFrom` and `arrivalTo` narrow it to bookings that overlap, and only those
+        // that hold one of our nights are counted, grouped apartments' too. Read whole, or no answer.
+        const others = await reservations(
+          ctx,
+          [
+            ["apartmentId", apartmentId],
+            ["from", addDays(ours.arrival, -LOOK_BEFORE_DAYS)],
+            ["to", ours.departure],
+            ["departureFrom", ours.arrival],
+            ["arrivalTo", ours.departure],
+            ["includeRelated", "true"],
+          ],
+          MAX_PAGES,
+          { whole: true },
+        );
         if (!others.some((r) => r.id === id)) {
           throw new ConnectorError("bad_response", "Smoobu's bookings do not show it yet.");
         }
