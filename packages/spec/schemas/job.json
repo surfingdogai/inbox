@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://surfingdog.ai/spec/schemas/job.json",
+  "title": "A request for a price's job: urgency, visit, site, windows (spec 0.11)",
+  "type": "object",
+  "properties": {
+    "urgency": {
+      "default": "flexible",
+      "type": "string",
+      "enum": ["emergency", "within_24h", "this_week", "flexible"]
+    },
+    "visit": {
+      "default": "unsure",
+      "type": "string",
+      "enum": ["needed", "not_needed", "unsure"]
+    },
+    "site": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "object",
+          "properties": {
+            "streetAddress": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "addressLocality": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "addressRegion": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "postalCode": {
+              "type": "string",
+              "maxLength": 20
+            },
+            "addressCountry": {
+              "type": "string",
+              "pattern": "^[A-Za-z]{2}$"
+            }
+          }
+        },
+        "geo": {
+          "description": "The site's point, when you have it: a radius is checked against it.",
+          "type": "object",
+          "properties": {
+            "latitude": {
+              "type": "number",
+              "minimum": -90,
+              "maximum": 90
+            },
+            "longitude": {
+              "type": "number",
+              "minimum": -180,
+              "maximum": 180
+            }
+          },
+          "required": ["latitude", "longitude"]
+        },
+        "accessNotes": {
+          "description": "Gate codes are never asked for: only how to find the way.",
+          "type": "string",
+          "maxLength": 500
+        },
+        "propertyType": {
+          "type": "string",
+          "enum": ["home", "business", "other"]
+        }
+      }
+    },
+    "windows": {
+      "minItems": 1,
+      "maxItems": 3,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+          }
+        },
+        "required": ["from", "to"]
+      }
+    },
+    "budgetMax": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991,
+          "description": "Minor units of the currency's own ISO 4217 exponent (minorUnits): 4500 is 45.00 KES, ¥4,500 JPY, 4.500 KWD."
+        },
+        "currency": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 3
+        }
+      },
+      "required": ["value", "currency"]
+    },
+    "areaCheck": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["inside", "outside", "unknown"]
+        },
+        "by": {
+          "type": "string",
+          "enum": ["radius", "postal", "anywhere"]
+        },
+        "within_km": {
+          "description": "For a radius: the smallest band the site falls in, when it is inside 50 km.",
+          "anyOf": [
+            {
+              "type": "number",
+              "const": 5
+            },
+            {
+              "type": "number",
+              "const": 10
+            },
+            {
+              "type": "number",
+              "const": 25
+            },
+            {
+              "type": "number",
+              "const": 50
+            }
+          ]
+        }
+      },
+      "required": ["status", "by"]
+    },
+    "visitBookingId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    }
+  }
+}

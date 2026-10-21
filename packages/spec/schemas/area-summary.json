@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://surfingdog.ai/spec/schemas/area-summary.json",
+  "title": "Where a business works, as it says so in public (spec 0.11)",
+  "type": "object",
+  "properties": {
+    "mode": {
+      "type": "string",
+      "enum": ["radius", "postal", "anywhere"]
+    },
+    "radius_km": {
+      "description": "For radius: how far the business goes.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000
+    },
+    "postal": {
+      "description": "For postal: the prefixes it covers.",
+      "maxItems": 100,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "country": {
+            "type": "string",
+            "pattern": "^[A-Z]{2}$",
+            "description": "ISO 3166-1 alpha-2, in capitals."
+          },
+          "prefix": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 10,
+            "pattern": "^[A-Z0-9]+$",
+            "description": "The start of the postal code, in capitals, with no spaces or dashes."
+          }
+        },
+        "required": ["country", "prefix"]
+      }
+    },
+    "outside": {
+      "type": "string",
+      "enum": ["decline", "on_request"],
+      "description": "A request from outside: declined, or taken for the business to decide."
+    }
+  },
+  "required": ["mode", "outside"]
+}
