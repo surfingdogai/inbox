@@ -35,7 +35,12 @@ export type SecretPurpose =
   /** A person's key and first pass from a network, held until they reach the customer (ADR-017 §2.1). */
   | "person-secret"
   /** A place to stay's private arrival details (door codes, wifi), opened only to send them (ADR-033 §10). */
-  | "arrival-details";
+  | "arrival-details"
+  /**
+   * A UCP Lodging booking session's last request (ADR-035): who is coming and the ids the platform gave
+   * each guest, opened only to answer that session.
+   */
+  | "ucp-session";
 
 /**
  * What a deterministic key is derived for. Sealing is randomised and must be; these are the few

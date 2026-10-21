@@ -505,6 +505,9 @@ export function eraseStatements(parties: readonly string[], now: number): Statem
       run(`DELETE FROM customer_codes WHERE item_id IN ${theirItems}`),
       run(`DELETE FROM action_links WHERE item_id IN ${theirItems}`),
       run(`DELETE FROM idempotency_keys WHERE item_id IN ${theirItems}`),
+      // A UCP Lodging session that held or booked one of their stays (ADR-035): its sealed copy of who
+      // was coming goes whole with them.
+      run(`DELETE FROM ucp_sessions WHERE item_id IN ${theirItems}`),
       run(`DELETE FROM reviews_outbox WHERE item_id IN ${theirItems}`),
       // What they wrote and where they live; the lines, amounts and times stay.
       run(
