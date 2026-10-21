@@ -2,8 +2,8 @@ import { runMigrations } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { FILE_WORDS } from "../src/attachments/index";
 import type { CustomerResult } from "../src/capabilities/customer";
-import type { RequestQuoteInput } from "../src/capabilities/types";
 import { Capabilities } from "../src/capabilities/service";
+import type { RequestQuoteInput } from "../src/capabilities/types";
 import { linkComing } from "../src/connectors/pay-queue";
 import { createDb, type Db } from "../src/db";
 import { customerCopyProblems } from "../src/i18n/customer-words";
@@ -77,30 +77,31 @@ const fundi = (work: Record<string, unknown> = {}, area: Record<string, unknown>
     },
   });
 
-const leak = (job: Record<string, unknown> = {}): RequestQuoteInput => ({
-  payload: {
-    itemOffered: { name: "Leaking kitchen tap" },
-    description: "The tap under the sink drips all night.",
-    job: {
-      urgency: "this_week",
-      visit: "needed",
-      site: {
-        address: {
-          streetAddress: "14 Mpaka Road",
-          addressLocality: "Nairobi",
-          postalCode: "00800",
-          addressCountry: "KE",
+const leak = (job: Record<string, unknown> = {}): RequestQuoteInput =>
+  ({
+    payload: {
+      itemOffered: { name: "Leaking kitchen tap" },
+      description: "The tap under the sink drips all night.",
+      job: {
+        urgency: "this_week",
+        visit: "needed",
+        site: {
+          address: {
+            streetAddress: "14 Mpaka Road",
+            addressLocality: "Nairobi",
+            postalCode: "00800",
+            addressCountry: "KE",
+          },
+          geo: { latitude: -1.2676, longitude: 36.8108 },
+          accessNotes: "Blue gate, ask for the caretaker.",
+          propertyType: "home",
         },
-        geo: { latitude: -1.2676, longitude: 36.8108 },
-        accessNotes: "Blue gate, ask for the caretaker.",
-        propertyType: "home",
+        windows: [{ from: "2026-11-06T06:00:00Z", to: "2026-11-06T10:00:00Z" }],
+        ...job,
       },
-      windows: [{ from: "2026-11-06T06:00:00Z", to: "2026-11-06T10:00:00Z" }],
-      ...job,
     },
-  },
-  contact: { name: "Wanjiru Kamau", email: "wanjiru@example.com" },
-}) as RequestQuoteInput;
+    contact: { name: "Wanjiru Kamau", email: "wanjiru@example.com" },
+  }) as RequestQuoteInput;
 
 async function flagsOf(db: Db, id: string): Promise<{ needsHuman?: boolean; priority?: number }> {
   const { rows } = await db.client.query({ sql: "SELECT flags FROM items WHERE id = ?", params: [id], method: "all" });

@@ -51,6 +51,11 @@ import {
 
 const T0 = Date.parse("2026-11-03T08:00:00Z");
 const box = createSecretBox(["a-test-secret-that-is-long-enough-for-the-box"]);
+/**
+ * For tests that move megabytes through the database, or clear them out of it after the last one:
+ * inside workerd's local D1 each takes seconds, and more on a busy machine.
+ */
+const MEGABYTES = { timeout: 30_000 };
 
 async function setup(): Promise<Db> {
   const db = createDb(await makeClient());
@@ -160,7 +165,7 @@ describe("cleaning a photo", () => {
 });
 
 describe("keeping files", () => {
-  it("keeps a file in pieces and reads it back whole", async () => {
+  it("keeps a file in pieces and reads it back whole", MEGABYTES, async () => {
     const db = await setup();
     const bytes = new Uint8Array(CHUNK_BYTES * 2 + 1234).map((_, i) => i % 251);
     const ref = await putFile(
@@ -176,11 +181,13 @@ describe("keeping files", () => {
     );
     expect(ref.size).toBe(bytes.byteLength);
     const got = await readFile(db, ref.id);
-    expect(got?.bytes).toEqual(bytes);
+    // Compared in a plain loop: a deep equal over a megabyte takes seconds.
+    expect(got?.bytes.byteLength).toBe(bytes.byteLength);
+    expect(got?.bytes.findIndex((b, i) => b !== bytes[i])).toBe(-1);
     expect(await filesBytes(db)).toBe(bytes.byteLength);
   });
 
-  it("keeps an unclaimed file an hour, and the sweep takes it and its bytes after", async () => {
+  it("keeps an unclaimed file an hour, and the sweep takes it and its bytes after", MEGABYTES, async () => {
     const db = await setup();
     const id = "att_bbbbbbbbbbbbbbbbbbbbbbbb";
     await putFile(
@@ -250,7 +257,7 @@ describe("taking a request's files", () => {
     });
   });
 
-  it("takes at most six files, 4 MB each inline and 8 MB in one call", async () => {
+  it("takes at most six files, 4 MB each inline and 8 MB in one call", MEGABYTES, async () => {
     const db = await setup();
     const one = { data_base64: base64(pdf()) };
     await expect(
