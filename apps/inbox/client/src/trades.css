@@ -154,3 +154,23 @@
     transition: none;
   }
 }
+
+/* The tax on top of prices before tax, and the call-out fee, under the total. */
+.job-tax {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px;
+}
+.job-fee {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.job-rest {
+  display: flex;
+  align-items: center;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}

@@ -89,6 +89,12 @@ export const areaSettingsSchema = z
     /** Delivery zones, inside out: the first a site falls in wins. Empty: no delivery. */
     zones: z.array(zoneSchema).max(10).default([]),
   })
+  // Postal codes and none of them would turn away every request with a code: refused. On the mode, so
+  // a stored area that says it is read as anywhere rather than losing the rest of the settings.
+  .refine((a) => a.mode !== "postal" || a.postal.length > 0, {
+    path: ["mode"],
+    message: "Add at least one postal code, or choose Anywhere.",
+  })
   .prefault({});
 export type AreaSettings = z.infer<typeof areaSettingsSchema>;
 

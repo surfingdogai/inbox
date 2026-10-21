@@ -12,6 +12,8 @@ export interface PostalRule {
   readonly prefix: RegExp;
   /** How the owner writes one, for the chooser's placeholder: "0010", "SW1", "6000". */
   readonly example: string;
+  /** A whole code the example covers, as it is written: "SW1A 1AA" under SW1, "04103" under 04. */
+  readonly covers: string;
 }
 
 /** A numeric system of `n` digits: codes of exactly `n`, prefixes of 1 to `n`. */
@@ -19,6 +21,7 @@ const digits = (n: number, example: string): PostalRule => ({
   code: new RegExp(`^[0-9]{${n}}$`),
   prefix: new RegExp(`^[0-9]{1,${n}}$`),
   example,
+  covers: `${example}${"1030000".slice(0, Math.max(0, n - example.length))}`,
 });
 
 /**
@@ -27,7 +30,12 @@ const digits = (n: number, example: string): PostalRule => ({
  * letters, IE's routing keys, AR's CPA).
  */
 export const POSTAL_RULES: Readonly<Record<string, PostalRule>> = {
-  AR: { code: /^([A-Z][0-9]{4}[A-Z]{3}|[0-9]{4})$/, prefix: /^([A-Z][0-9]{0,4}|[0-9]{1,4})$/, example: "C1425" },
+  AR: {
+    code: /^([A-Z][0-9]{4}[A-Z]{3}|[0-9]{4})$/,
+    prefix: /^([A-Z][0-9]{0,4}|[0-9]{1,4})$/,
+    example: "C1425",
+    covers: "C1425DKB",
+  },
   AT: digits(4, "1010"),
   AU: digits(4, "6000"),
   BE: digits(4, "1000"),
@@ -36,6 +44,7 @@ export const POSTAL_RULES: Readonly<Record<string, PostalRule>> = {
     code: /^[A-Z][0-9][A-Z][0-9][A-Z][0-9]$/,
     prefix: /^[A-Z]([0-9]([A-Z]([0-9]([A-Z][0-9]?)?)?)?)?$/,
     example: "M5V",
+    covers: "M5V 3L9",
   },
   CH: digits(4, "8001"),
   CL: digits(7, "75"),
@@ -52,11 +61,17 @@ export const POSTAL_RULES: Readonly<Record<string, PostalRule>> = {
     code: /^[A-Z]{1,2}[0-9][0-9A-Z]?[0-9][A-Z]{2}$/,
     prefix: /^[A-Z]{1,2}([0-9][0-9A-Z]?([0-9]([A-Z]{1,2})?)?)?$/,
     example: "SW1",
+    covers: "SW1A 1AA",
   },
   GR: digits(5, "54"),
   HU: digits(4, "1051"),
   ID: digits(5, "10"),
-  IE: { code: /^[A-Z][0-9][0-9W][0-9A-Z]{4}$/, prefix: /^[A-Z]([0-9]([0-9W])?)?$/, example: "D02" },
+  IE: {
+    code: /^[A-Z][0-9][0-9W][0-9A-Z]{4}$/,
+    prefix: /^[A-Z]([0-9]([0-9W])?)?$/,
+    example: "D02",
+    covers: "D02 X285",
+  },
   IL: digits(7, "61"),
   IN: digits(6, "560"),
   IT: digits(5, "20"),
@@ -67,7 +82,12 @@ export const POSTAL_RULES: Readonly<Record<string, PostalRule>> = {
   MX: digits(5, "06"),
   MY: digits(5, "50"),
   NG: digits(6, "100"),
-  NL: { code: /^[0-9]{4}[A-Z]{2}$/, prefix: /^([0-9]{1,4}|[0-9]{4}[A-Z]{1,2})$/, example: "1012" },
+  NL: {
+    code: /^[0-9]{4}[A-Z]{2}$/,
+    prefix: /^([0-9]{1,4}|[0-9]{4}[A-Z]{1,2})$/,
+    example: "1012",
+    covers: "1012 AB",
+  },
   NO: digits(4, "0150"),
   NZ: digits(4, "6011"),
   PE: digits(5, "15"),
@@ -79,7 +99,7 @@ export const POSTAL_RULES: Readonly<Record<string, PostalRule>> = {
   SG: digits(6, "01"),
   TH: digits(5, "10"),
   TR: digits(5, "34"),
-  US: { code: /^[0-9]{5}([0-9]{4})?$/, prefix: /^[0-9]{1,5}$/, example: "941" },
+  US: { code: /^[0-9]{5}([0-9]{4})?$/, prefix: /^[0-9]{1,5}$/, example: "941", covers: "94110" },
   VN: digits(6, "70"),
   ZA: digits(4, "8001"),
 };
@@ -90,6 +110,13 @@ export function normalisePostal(raw: string): string {
     .toUpperCase()
     .replace(/[\s.\-–—]/g, "")
     .trim();
+}
+
+/** How each country's codes are written, for the owner's chooser: its example start and a code under it. */
+export function postalShapes(): Record<string, { example: string; covers: string }> {
+  return Object.fromEntries(
+    Object.entries(POSTAL_RULES).map(([country, r]) => [country, { example: r.example, covers: r.covers }]),
+  );
 }
 
 /** The countries that take postal prefixes, for the owner's chooser. */

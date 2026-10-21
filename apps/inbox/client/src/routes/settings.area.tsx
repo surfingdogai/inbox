@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { LocateFixed, MapPin, X } from "lucide-react";
 import { useState } from "react";
 import { CountrySelect, Stepper } from "../components/Choosers";
@@ -18,8 +18,8 @@ export const Route = createFileRoute("/settings/area")({
 });
 
 /**
- * Settings → Area (ADR-034 §3): where the business works. A radius from a place it chooses — its
- * premises as Settings → General has them, or where this device is now — or postal codes, or anywhere;
+ * Settings → Area (ADR-034 §3): where the business works. Postal codes, or a distance from a place it
+ * chooses — its premises as Settings → General has them, or where this device is now — or anywhere;
  * and what a request from outside gets. The place a radius is measured from is never shown to anyone:
  * agents are told the radius, or the postal codes, and a request's site as a band.
  */
@@ -73,11 +73,20 @@ function AreaForm({ data, onReload }: { data: SettingsDoc; onReload: () => void 
   const [saved, setSaved] = useState(false);
 
   const custom = !RADIUS_CHIPS.some((r) => String(r) === radius);
-  const add = () => {
+  // How the chosen country's codes are written; none: they cannot be matched there yet.
+  const shape = work.data?.postal?.[country];
+  const matched = !work.data?.postal || shape !== undefined;
+  const [pendingError, setPendingError] = useState<string | null>(null);
+  /** The list with what is typed added: what Add does, and what Save does first. */
+  const withTyped = (): readonly { country: string; prefix: string }[] => {
     const p = normalisePrefix(prefix);
-    if (!p || !country) return;
-    if (!postal.some((x) => x.country === country && x.prefix === p)) setPostal([...postal, { country, prefix: p }]);
+    if (!p || !country || !matched) return postal;
+    return postal.some((x) => x.country === country && x.prefix === p) ? postal : [...postal, { country, prefix: p }];
+  };
+  const add = () => {
+    setPostal(withTyped());
     setPrefix("");
+    setPendingError(null);
   };
   const here = () => {
     if (!("geolocation" in navigator)) {
@@ -107,6 +116,17 @@ function AreaForm({ data, onReload }: { data: SettingsDoc; onReload: () => void 
   const submit = async () => {
     setProblem(null);
     setSaved(false);
+    // A code typed and not added is added, never dropped; postal codes and none of them is not saved.
+    const codes = withTyped();
+    if (codes !== postal) {
+      setPostal(codes);
+      setPrefix("");
+    }
+    if (mode === "postal" && codes.length === 0) {
+      setPendingError("Add at least one postal code, or choose Anywhere.");
+      return;
+    }
+    setPendingError(null);
     try {
       await save.mutateAsync({
         doc: {
@@ -114,7 +134,7 @@ function AreaForm({ data, onReload }: { data: SettingsDoc; onReload: () => void 
             mode,
             radiusKm: Math.max(1, Math.min(1000, Number(radius) || 25)),
             base: mode === "radius" ? base : (area.base ?? null),
-            postal: [...postal],
+            postal: [...codes],
             outside,
           },
         },
@@ -126,7 +146,8 @@ function AreaForm({ data, onReload }: { data: SettingsDoc; onReload: () => void 
       setProblem(problemOf(e));
     }
   };
-  const fieldError = problem?.field("area.postal") ?? problem?.field("postal");
+  const fieldError =
+    pendingError ?? problem?.field("area.postal") ?? problem?.field("postal") ?? problem?.field("area.mode");
 
   return (
     <section className="card glass stack area">
@@ -138,8 +159,8 @@ function AreaForm({ data, onReload }: { data: SettingsDoc; onReload: () => void 
         <legend className="sr-only">How you say where you work</legend>
         {(
           [
-            ["radius", "A distance"],
             ["postal", "Postal codes"],
+            ["radius", "Distance"],
             ["anywhere", "Anywhere"],
           ] as const
         ).map(([m, label]) => (
@@ -154,16 +175,17 @@ function AreaForm({ data, onReload }: { data: SettingsDoc; onReload: () => void 
           <fieldset className="chips-field">
             <legend className="label">From</legend>
             <div className="chips">
-              <button
-                type="button"
-                className="chip"
-                aria-pressed={base?.from === "business"}
-                disabled={!premises}
-                onClick={() => setBase({ from: "business" })}
-              >
-                <MapPin className="icon-sm" aria-hidden="true" />
-                Your premises
-              </button>
+              {premises && (
+                <button
+                  type="button"
+                  className="chip"
+                  aria-pressed={base?.from === "business"}
+                  onClick={() => setBase({ from: "business" })}
+                >
+                  <MapPin className="icon-sm" aria-hidden="true" />
+                  Your premises
+                </button>
+              )}
               <button
                 type="button"
                 className="chip"
@@ -175,10 +197,8 @@ function AreaForm({ data, onReload }: { data: SettingsDoc; onReload: () => void 
                 {locating ? "Finding…" : base?.from === "device" ? (base.label ?? "Where I was") : "Where I am now"}
               </button>
             </div>
-            {!premises && (
-              <p className="hint">
-                Your premises are not on the map yet: <Link to="/settings">Settings → General</Link>.
-              </p>
+            {!premises && !base && (
+              <p className="hint">At your premises now? Press Where I am now. Or use postal codes.</p>
             )}
             {located && <p className="hint error">{located}</p>}
             {!base && (
@@ -220,6 +240,9 @@ function AreaForm({ data, onReload }: { data: SettingsDoc; onReload: () => void 
               suffix="km"
             />
           )}
+          <p className="hint">
+            Checked only when an agent sends the site's location. Otherwise the request comes to you to decide.
+          </p>
         </div>
       )}
 
@@ -242,6 +265,8 @@ function AreaForm({ data, onReload }: { data: SettingsDoc; onReload: () => void 
                   className="input"
                   autoComplete="off"
                   value={prefix}
+                  placeholder={shape?.example ?? ""}
+                  disabled={!matched}
                   aria-invalid={fieldError ? true : undefined}
                   onChange={(e) => setPrefix(e.target.value)}
                   onKeyDown={(e) => {
@@ -255,7 +280,7 @@ function AreaForm({ data, onReload }: { data: SettingsDoc; onReload: () => void 
                   type="button"
                   className="btn btn-secondary btn-sm"
                   onClick={add}
-                  disabled={!prefix.trim() || !country}
+                  disabled={!prefix.trim() || !country || !matched}
                 >
                   Add
                 </button>
@@ -280,8 +305,13 @@ function AreaForm({ data, onReload }: { data: SettingsDoc; onReload: () => void 
                 </li>
               ))}
             </ul>
-          ) : (
-            <p className="hint">The start of a code covers every code under it: 04 covers 04103 and 04315.</p>
+          ) : matched && shape ? (
+            <p className="hint">
+              The start of a code covers every code under it: {shape.example} covers {shape.covers}.
+            </p>
+          ) : null}
+          {!matched && country && (
+            <p className="hint">Postal codes can't be matched in {countryName(country)} yet: use a distance.</p>
           )}
           {fieldError && <p className="hint error">{fieldError}</p>}
         </div>

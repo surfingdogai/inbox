@@ -1,6 +1,6 @@
 import type { AttachmentRef, CheckAreaInput, CheckAreaOutput, Job } from "@surfingdog/spec";
 import { eq } from "drizzle-orm";
-import { answerOf, areaSummary, areaWords, checkSite } from "../area/index";
+import { answerOf, areaSummary, areaWords, checkSite, postalShapes } from "../area/index";
 import {
   checkFileLink,
   type FileInput,
@@ -23,7 +23,7 @@ import { hashText } from "../util/canonical";
 import { type Caller, isCustomer, isPerson, nowOf } from "../write/caller";
 import { findIdempotent } from "../write/common";
 import { WriteError } from "../write/errors";
-import { JOB_WORDS, judgeRequest, openNow, premisesOf, siteOf, workProfile } from "./job";
+import { isTrade, JOB_WORDS, judgeRequest, openNow, premisesOf, siteOf, workProfile } from "./job";
 import { jobToolConnections, type PushOutcome, pushRequest, sentTo } from "./job-tool";
 
 /**
@@ -236,6 +236,9 @@ export class TradeCapabilities {
     return {
       area: settings.area,
       work: settings.work,
+      // A trade: it said where it works or how it takes work, or has a job tool (Settings shows Area and Work).
+      trade: isTrade(settings) || tools.length > 0,
+      postal: postalShapes(),
       public: { area: areaSummary(settings.area), work: workProfile(settings) },
       job_tools: tools.map((t) => ({
         id: t.id,

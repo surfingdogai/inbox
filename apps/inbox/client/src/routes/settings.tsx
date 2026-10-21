@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { ThemeButton, ThemeSwitch } from "../components/ThemeSwitch";
 import { ensureSignedIn } from "../lib/auth";
 import { useSettings } from "../lib/queries";
+import { useWork } from "../lib/trades";
 
 /** Settings: who the business is, what it offers, when it is open, how it is paid, what runs on its own, who it reports to. */
 export const Route = createFileRoute("/settings")({
@@ -16,10 +17,17 @@ export const Route = createFileRoute("/settings")({
 function SettingsLayout() {
   const tabs = useRef<HTMLElement>(null);
   const path = useRouterState({ select: (s) => s.location.pathname });
-  // A business agents can ask for a price (a trade) has Area and Work; a shop never sees them (ADR-034).
+  // A trade has Area and Work (ADR-034): it said where it works or how it takes work, or has a job tool,
+  // or it takes requests for a price and no bookings (what a trade's setup starts with). A salon that
+  // also quotes, or a shop, never sees them; a link straight to either still opens it.
   const settings = useSettings();
+  const trades = useWork();
+  const doors = settings.data?.doc.doors;
   const work =
-    settings.data?.doc.doors.quoteRequest !== false || path === "/settings/area" || path === "/settings/work";
+    trades.data?.trade === true ||
+    (doors !== undefined && doors.quoteRequest !== false && doors.booking === false) ||
+    path === "/settings/area" ||
+    path === "/settings/work";
   // The tab you are on is always in view, on a phone too, where the row scrolls.
   // biome-ignore lint/correctness/useExhaustiveDependencies: the path is what moves the current tab
   useEffect(() => {

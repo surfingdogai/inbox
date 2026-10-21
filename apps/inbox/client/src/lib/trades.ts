@@ -12,9 +12,19 @@ import type { Weekly } from "./types";
 export type AreaDoc = Settings["area"];
 export type WorkDoc = Settings["work"];
 
+/** How a country's postal codes are written, for the chooser: a start ("SW1") and a code it covers. */
+export interface PostalShape {
+  readonly example: string;
+  readonly covers: string;
+}
+
 export interface WorkView {
   readonly area: AreaDoc;
   readonly work: WorkDoc;
+  /** Whether this is a trade: it said where it works or how it takes work, or has a job tool. */
+  readonly trade?: boolean | undefined;
+  /** The countries whose postal codes are matched, each with how its codes are written. */
+  readonly postal?: Readonly<Record<string, PostalShape>> | undefined;
   readonly public: { readonly area: AreaSummary; readonly work: WorkProfile | null };
   readonly job_tools: readonly {
     readonly id: string;
@@ -88,6 +98,9 @@ export function useJobTool(itemId: string, enabled: boolean) {
     queryFn: () => tradesApi.jobTool(itemId),
     enabled,
     staleTime: 15_000,
+    // While a request is on its way into a job tool, look again until it has landed or was refused.
+    refetchInterval: (q) =>
+      q.state.data?.sent.some((s) => s.outcome === "pending" || s.outcome === "unknown") ? 10_000 : false,
   });
 }
 
@@ -134,7 +147,7 @@ export function areaLine(
   if (check.status === "inside")
     return check.within_km ? `Inside your area · ≤ ${check.within_km} km` : "Inside your area";
   if (check.status === "outside") return "Outside your area";
-  return check.by === "radius" ? "Area not checked: no point for the site" : "Area not checked: postal code not read";
+  return check.by === "radius" ? "Area not checked: no location sent" : "Area not checked: postal code not recognised";
 }
 
 /** What the mode sends, in the owner's words. */
@@ -166,5 +179,93 @@ export function areaSentence(a: AreaSummary): string {
 
 /** How a stage is paid, in a few words. */
 export function stageWhen(type: "immediate" | "deferred" | "at_property"): string {
-  return type === "immediate" ? "Now" : type === "at_property" ? "On the day" : "By a date";
+  return type === "immediate" ? "Now" : type === "at_property" ? "On site" : "By a date";
+}
+
+/**
+ * The amounts of a quote in stages, the last being the rest: the total less the stages before it. Null
+ * for the last when the others come to the total or more, so the owner sees what to change.
+ */
+export function balanceOf(total: number, earlier: readonly number[]): number | null {
+  const rest = total - earlier.reduce((n, v) => n + v, 0);
+  return rest > 0 ? rest : null;
+}
+
+/** Whether prices are usually quoted before tax in a country (the US, Canada): the quote starts that way there. */
+export function pricesBeforeTax(country: string | null | undefined): boolean {
+  return country === "US" || country === "CA";
+}
+
+/**
+ * Noon on a day in the business's own time zone, as an instant: when a stage is due, whatever zone the
+ * owner's device is in. A zone the browser does not know is taken as UTC.
+ */
+export function noonIn(day: string, zone: string | undefined): string {
+  const [y, m, d] = day.split("-").map(Number);
+  const guess = Date.UTC(y ?? 1970, (m ?? 1) - 1, d ?? 1, 12, 0, 0);
+  if (!zone) return new Date(guess).toISOString();
+  try {
+    // The zone's offset at that moment: how far its wall clock is from UTC's.
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: zone,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).formatToParts(new Date(guess));
+    const get = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+    const wall = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"));
+    return new Date(guess - (wall - guess)).toISOString();
+  } catch {
+    return new Date(guess).toISOString();
+  }
+}
+
+/** Whether two weeks of opening hours are the same, day by day, whatever order their keys are in. */
+export function sameWeek(
+  a: Readonly<Record<string, readonly (readonly [string, string])[]>>,
+  b: Readonly<Record<string, readonly (readonly [string, string])[]>>,
+): boolean {
+  const days = new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const d of days) {
+    const x = a[d] ?? [];
+    const y = b[d] ?? [];
+    if (x.length !== y.length) return false;
+    if (x.some((r, i) => r[0] !== y[i]?.[0] || r[1] !== y[i]?.[1])) return false;
+  }
+  return true;
+}
+
+/* --- the setup's question: where a trade works ------------------------------------- */
+
+export interface AreaDraft {
+  readonly mode: "postal" | "radius" | null;
+  readonly country: string;
+  readonly postal: readonly { readonly country: string; readonly prefix: string }[];
+  readonly radiusKm: number;
+  readonly base: {
+    readonly from: "device";
+    readonly point: { lat: number; lng: number };
+    readonly label: string;
+  } | null;
+}
+
+export const WIZARD_RADII = [10, 25, 50] as const;
+
+export function emptyArea(country: string): AreaDraft {
+  return { mode: null, country, postal: [], radiusKm: 25, base: null };
+}
+
+/** What the setup saves of it: the area, or nothing when it was skipped or is not complete. */
+export function areaDocOf(d: AreaDraft): { area: Record<string, unknown> } | null {
+  if (d.mode === "postal" && d.postal.length > 0) return { area: { mode: "postal", postal: [...d.postal] } };
+  if (d.mode === "radius" && d.base) return { area: { mode: "radius", radiusKm: d.radiusKm, base: d.base } };
+  return null;
+}
+
+/** Whether the step can be left as it stands: a choice made whole, or none (skipped). */
+export function areaReady(d: AreaDraft): boolean {
+  return d.mode === null || areaDocOf(d) !== null;
 }

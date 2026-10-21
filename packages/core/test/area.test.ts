@@ -13,8 +13,10 @@ import {
   type Point,
   postalMatches,
   postalPrefixProblem,
+  postalShapes,
   roundedPoint,
 } from "../src/area/index";
+import { parseStoredSettings } from "../src/settings/schema";
 
 /**
  * Where a business works (ADR-034 §3), checked in several countries: a radius from a base it chose as
@@ -184,6 +186,15 @@ describe("postal codes", () => {
     expect(areaSettingsSchema.safeParse({ mode: "postal", postal: [{ country: "CL", prefix: "75" }] }).success).toBe(
       true,
     );
+    // Postal codes and none of them is refused; stored, it reads as anywhere and the rest stands.
+    expect(areaSettingsSchema.safeParse({ mode: "postal", postal: [] }).success).toBe(false);
+    const stored = parseStoredSettings({ area: { mode: "postal", postal: [], radiusKm: 40 } });
+    expect(stored.settings.area).toMatchObject({ mode: "anywhere", radiusKm: 40 });
+    expect(stored.ignored).toEqual(["area.mode"]);
+    // How each country's codes are written, for the owner's chooser.
+    expect(postalShapes().GB).toEqual({ example: "SW1", covers: "SW1A 1AA" });
+    expect(postalShapes().DE).toEqual({ example: "04", covers: "04103" });
+    expect(postalShapes().KE).toEqual({ example: "00100", covers: "00100" });
   });
 
   it("publishes the prefixes as written, normalised, with no base", () => {

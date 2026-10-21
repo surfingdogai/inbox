@@ -7,6 +7,7 @@ import { ConnectYourSystem } from "../components/ConnectYourSystem";
 import { ErrorState } from "../components/Feedback";
 import { Field, Switch } from "../components/Form";
 import { HoursEditor } from "../components/Hours";
+import { WhereYouWork } from "../components/WhereYouWork";
 import { type ApiProblem, problemOf } from "../lib/api";
 import { ensureSignedIn, session } from "../lib/auth";
 import { guessCurrency } from "../lib/currencies";
@@ -34,10 +35,13 @@ import {
   ownerEmailDoc,
   SETUP_NETWORK,
   type SetupKind,
+  type StepId,
+  stepsFor,
   type WizardDoors,
   wizardDoorsDoc,
   wizardPreset,
 } from "../lib/setup";
+import { type AreaDraft, areaDocOf, areaReady, emptyArea, useWork } from "../lib/trades";
 import type { Weekly } from "../lib/types";
 
 export const Route = createFileRoute("/setup")({
@@ -79,17 +83,6 @@ const DOORS: readonly { readonly key: keyof WizardDoors; readonly label: string;
   { key: "quoteRequest", label: "Agents can ask for a price", line: "A job to quote, a visit to arrange." },
   { key: "message", label: "Agents can send a message", line: "Anything else, for you to answer." },
 ];
-
-/** The wizard's steps by id: a kind of business that needs others (a place to stay) names its own. */
-const STEPS = [
-  { id: "kind", label: "What you run" },
-  { id: "you", label: "You" },
-  { id: "doors", label: "What agents can do" },
-  { id: "offer", label: "What you offer" },
-  { id: "hours", label: "When you are open" },
-  { id: "answering", label: "Answering" },
-] as const;
-type StepId = (typeof STEPS)[number]["id"];
 
 const DEFAULT_HOURS: Weekly = {
   mon: [["09:00", "17:00"]],
@@ -151,11 +144,14 @@ function SetupWizard() {
   const applyPreset = useApplyPreset();
 
   const [step, setStep] = useState(0);
-  const at: StepId = STEPS[step]?.id ?? "kind";
   // What the business runs (ADR-032): it sets the rules to start from and what agents can do to begin with.
   const [kindKey, setKindKey] = useState<string | null>(null);
   const kind = kindOf(kindKey);
+  const steps = stepsFor(kindKey);
+  const at: StepId = steps[step]?.id ?? "kind";
   const [tz] = useState(guessTimezone);
+  const work = useWork();
+  const [area, setArea] = useState<AreaDraft>(() => emptyArea(countryOfZone(tz) ?? ""));
   const [name, setName] = useState("");
   const [timezone, setTimezone] = useState(tz);
   const [currency, setCurrency] = useState(() => guessCurrency(browserLanguages(), tz));
@@ -244,6 +240,11 @@ function SetupWizard() {
         // A merge: only this one key is sent, everything else in the settings stays as it is.
         if (!ownerEmailHeld) await saveSettings.mutateAsync({ doc: ownerEmailDoc(ownerEmail) });
       }
+      if (at === "where") {
+        // Skipped (no choice made), the inbox says it works anywhere, as before.
+        const doc = areaDocOf(area);
+        if (doc) await saveSettings.mutateAsync({ doc });
+      }
       if (at === "doors") {
         await saveSettings.mutateAsync({ doc: wizardDoorsDoc(doors) });
       }
@@ -276,12 +277,13 @@ function SetupWizard() {
   };
 
   const next = async () => {
-    if (await saveStep()) setStep((s) => Math.min(s + 1, STEPS.length - 1));
+    if (await saveStep()) setStep((s) => Math.min(s + 1, steps.length - 1));
   };
 
   const canAdvance =
     at === "kind" ||
     (at === "you" && name.trim().length > 0) ||
+    (at === "where" && areaReady(area)) ||
     (at === "doors" && (doors.booking || doors.quoteRequest || doors.message)) ||
     (at === "offer" && (!doors.booking || offers.some((o) => o.name.trim()) || existing > 0)) ||
     at === "hours" ||
@@ -311,7 +313,7 @@ function SetupWizard() {
       </div>
 
       <ol className="steps" aria-label="Setup steps">
-        {STEPS.map(({ id, label }, i) => (
+        {steps.map(({ id, label }, i) => (
           <li key={id} className={clsx("stepdot", i === step && "is-now", i < step && "is-done")}>
             <span className="n">{i < step ? <Check className="icon" aria-hidden="true" /> : i + 1}</span>
             <span className="l">{label}</span>
@@ -408,6 +410,25 @@ function SetupWizard() {
                 <option value="pt">{languageName("pt")}</option>
               </select>
             </Field>
+          </>
+        )}
+
+        {at === "where" && (
+          <>
+            <h2 className="sec">Where you work</h2>
+            <p className="lede small">Agents check a site against this before they ask.</p>
+            <WhereYouWork value={area} onChange={setArea} shapes={work.data?.postal} />
+            <button
+              type="button"
+              className="linkish"
+              disabled={busy}
+              onClick={() => {
+                setArea(emptyArea(area.country));
+                setStep((s) => Math.min(s + 1, steps.length - 1));
+              }}
+            >
+              Skip: anywhere
+            </button>
           </>
         )}
 
@@ -584,8 +605,8 @@ function SetupWizard() {
             </button>
           )}
           <button type="button" className="btn btn-primary" onClick={() => void next()} disabled={!canAdvance || busy}>
-            {busy ? "Saving…" : step === STEPS.length - 1 ? "Finish" : "Continue"}
-            {!busy && step < STEPS.length - 1 && <ArrowRight className="icon" aria-hidden="true" />}
+            {busy ? "Saving…" : step === steps.length - 1 ? "Finish" : "Continue"}
+            {!busy && step < steps.length - 1 && <ArrowRight className="icon" aria-hidden="true" />}
           </button>
         </div>
       </section>
