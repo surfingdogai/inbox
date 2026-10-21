@@ -25,7 +25,7 @@ import { nodeSnapshot, nodeSqliteClient, pinnedFetch } from "@surfingdog/platfor
 import { createInbox } from "./app";
 import { flagOn } from "./demo";
 import { isDoor } from "./doors";
-import { listFrom, oauthFrom, outboundDenyFrom, publicUrlFrom, secretKeyFrom, senderFrom } from "./env";
+import { listFrom, oauthFrom, outboundDenyFrom, publicUrlFrom, secretKeyFrom, senderFrom, ucpLodgingFrom } from "./env";
 import { commandDatabaseRefusal, DEFAULT_HOST, NODE_SERVER_OPTIONS } from "./node-server";
 import { seedDemo, seedShowcase, seedSurfingDog } from "./seed";
 
@@ -209,13 +209,15 @@ if (deny.bad.length > 0) {
   );
   process.exit(1);
 }
+const secretKey = secretKeyFrom(process.env.INBOX_SECRET_KEY);
 const { app, runner, prepare } = createInbox({
   db,
   mailOut,
   baseUrl: publicUrl,
   ownerEmails,
-  secretKey: secretKeyFrom(process.env.INBOX_SECRET_KEY),
+  secretKey,
   demo: demo ? { ownerEmails, from } : undefined,
+  ucpLodging: ucpLodgingFrom(process.env.INBOX_UCP_LODGING, secretKey),
   fetchImpl: pinnedFetch({ deny: deny.ranges }),
   // The platforms' OAuth clients of whoever runs this server (Google's, and a one-click sign-in beside a
   // shop's own keys): "set up" without one.

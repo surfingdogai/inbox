@@ -18,6 +18,7 @@ export {
   datedPolicySchema,
   decimalOf,
   discoverySnippets,
+  fillStayTemplate,
   ISO_4217_FUNDS,
   ISO_4217_MINOR_UNITS,
   isPaymentToken,

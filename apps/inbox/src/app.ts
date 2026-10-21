@@ -182,6 +182,11 @@ export interface AppDeps {
    * write one against the connector SDK. One with the kind of a built-in one takes its place.
    */
   readonly connectors?: readonly ConnectorDefinition[] | undefined;
+  /**
+   * UCP Lodging's booking sessions for a place to stay (INBOX_UCP_LODGING=on): the protocol is a draft,
+   * so they are off unless whoever runs the inbox turns them on.
+   */
+  readonly ucpLodging?: boolean | undefined;
 }
 
 export interface Inbox {
@@ -571,6 +576,7 @@ export function createInbox(deps: AppDeps): Inbox {
       return [...(deps.ownerEmails ?? []), ...(fromSettings ? [fromSettings] : [])];
     },
     onOwnerEmailChange: deps.onOwnerEmailChange,
+    ucpLodging: deps.ucpLodging,
   });
 
   // The live view exists only in a demo; anywhere else /demo/* is a 404 like any unknown path.

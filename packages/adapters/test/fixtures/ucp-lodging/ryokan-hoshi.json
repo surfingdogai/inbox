@@ -1,0 +1,428 @@
+{
+  "_about": "A fictional property's quote, and the UCP Lodging booking session the inbox answers for it (ucp-lodging.ts). Every figure is the example property's own; real tax rates are always the property's input.",
+  "_sources": [
+    "https://github.com/Universal-Commerce-Protocol/ucp/blob/f2626c28b8288976eee5bda77f3a9b1ddc0132b1/docs/specification/lodging/booking/index.md",
+    "https://github.com/Universal-Commerce-Protocol/ucp/blob/f2626c28b8288976eee5bda77f3a9b1ddc0132b1/source/schemas/lodging/booking.json",
+    "https://github.com/Universal-Commerce-Protocol/ucp/blob/f2626c28b8288976eee5bda77f3a9b1ddc0132b1/source/schemas/common/payment_terms.json",
+    "https://github.com/Universal-Commerce-Protocol/ucp/blob/f2626c28b8288976eee5bda77f3a9b1ddc0132b1/source/schemas/lodging/policy_cancellation.json"
+  ],
+  "name": "Ryokan Hoshi, Kyoto: a first-night deposit, a tax paid at the property, held for the lead (JPY)",
+  "id": "bks_vector_ryokan_hoshi",
+  "status": "ready_for_complete",
+  "lang": "en",
+  "now": "2026-11-20T10:00:00+09:00",
+  "origin": "https://inbox.ryokan-hoshi.example",
+  "expires_at": "2026-11-20T10:30:00+09:00",
+  "property": {
+    "id": "prop_hoshi",
+    "name": "Ryokan Hoshi",
+    "currency": "JPY",
+    "timezone": "Asia/Tokyo",
+    "locality": "Kyoto",
+    "checkInFrom": "15:00",
+    "checkOutUntil": "10:00",
+    "children": {
+      "welcome": true,
+      "freeUnder": 6
+    }
+  },
+  "rooms": [
+    {
+      "id": "rt_washitsu",
+      "name": "Japanese room",
+      "description": "Tatami, futons and a garden view",
+      "capacity": {
+        "adults": 2,
+        "children": 1,
+        "total": 3
+      }
+    }
+  ],
+  "plans": [
+    {
+      "id": "rp_flex_bb",
+      "name": "Flexible with breakfast"
+    }
+  ],
+  "fees": [
+    {
+      "name": "Service charge",
+      "kind": "fee",
+      "collected": "with_booking",
+      "childExemptUnder": null,
+      "maxNights": null
+    },
+    {
+      "name": "Accommodation tax",
+      "kind": "tax",
+      "collected": "at_property",
+      "childExemptUnder": 12,
+      "maxNights": null
+    }
+  ],
+  "subject": {
+    "propertyId": "prop_hoshi",
+    "checkIn": "2026-12-12",
+    "checkOut": "2026-12-15",
+    "rooms": [
+      {
+        "roomTypeId": "rt_washitsu",
+        "ratePlanId": "rp_flex_bb",
+        "adults": 2,
+        "childrenAges": []
+      }
+    ]
+  },
+  "booker": {
+    "first_name": "Aiko",
+    "last_name": "Tanaka",
+    "email": "aiko.tanaka@example.org"
+  },
+  "guests": [
+    {
+      "id": "gst_01",
+      "first_name": "Aiko",
+      "last_name": "Tanaka"
+    },
+    {
+      "id": "gst_02",
+      "first_name": "Ren",
+      "last_name": "Tanaka"
+    }
+  ],
+  "assignments": [
+    [
+      {
+        "guest_id": "gst_01",
+        "role": "primary"
+      },
+      {
+        "guest_id": "gst_02",
+        "role": "accompanying"
+      }
+    ]
+  ],
+  "quote": {
+    "currency": "JPY",
+    "lines": [
+      {
+        "type": "subtotal",
+        "label": "Japanese room, 3 nights (includes 10% consumption tax)",
+        "amount": 77400,
+        "collected": "with_booking",
+        "nights": [
+          {
+            "night": "2026-12-12",
+            "amount": 25800
+          },
+          {
+            "night": "2026-12-13",
+            "amount": 25800
+          },
+          {
+            "night": "2026-12-14",
+            "amount": 25800
+          }
+        ]
+      },
+      {
+        "type": "extra",
+        "label": "Late check-out",
+        "amount": 3000,
+        "collected": "with_booking"
+      },
+      {
+        "type": "fee",
+        "label": "Service charge 10%",
+        "amount": 7740,
+        "collected": "with_booking"
+      },
+      {
+        "type": "tax",
+        "label": "Accommodation tax, ¥400 per guest per night (paid at the property)",
+        "amount": 2400,
+        "collected": "at_property"
+      }
+    ],
+    "total": {
+      "value": 90540,
+      "currency": "JPY"
+    },
+    "ratePlan": {
+      "id": "rp_flex_bb",
+      "name": "Flexible with breakfast",
+      "meal": "breakfast",
+      "refundable": true
+    },
+    "policy": {
+      "steps": [
+        {
+          "until": "2026-12-09T23:59:59+09:00",
+          "fee": {
+            "value": 0,
+            "currency": "JPY"
+          }
+        }
+      ],
+      "after": {
+        "value": 25800,
+        "currency": "JPY"
+      },
+      "noShow": {
+        "value": 90540,
+        "currency": "JPY"
+      },
+      "zone": "Asia/Tokyo"
+    },
+    "schedule": [
+      {
+        "id": "deposit",
+        "type": "immediate",
+        "amount": {
+          "value": 25800,
+          "currency": "JPY"
+        },
+        "label": "Deposit"
+      },
+      {
+        "id": "at_property",
+        "type": "at_property",
+        "amount": {
+          "value": 64740,
+          "currency": "JPY"
+        },
+        "label": "At the property"
+      }
+    ],
+    "guarantee": "none",
+    "includes": ["Breakfast for 2"],
+    "validThrough": "2026-11-20T10:15:00+09:00",
+    "source": "allotment"
+  },
+  "booking": {
+    "ucp": {
+      "version": "2026-08-25",
+      "capabilities": {
+        "dev.ucp.lodging.booking": [
+          {
+            "version": "2026-08-25"
+          }
+        ],
+        "dev.ucp.common.payment.terms": [
+          {
+            "version": "2026-08-25"
+          }
+        ],
+        "dev.ucp.lodging.policy.cancellation": [
+          {
+            "version": "2026-08-25"
+          }
+        ]
+      },
+      "payment_handlers": {}
+    },
+    "id": "bks_vector_ryokan_hoshi",
+    "status": "ready_for_complete",
+    "property": {
+      "id": "prop_hoshi",
+      "name": "Ryokan Hoshi",
+      "address": {
+        "address_locality": "Kyoto"
+      }
+    },
+    "stays": [
+      {
+        "id": "rt_washitsu__rp_flex_bb",
+        "accommodation_type": {
+          "id": "rt_washitsu",
+          "title": "Japanese room",
+          "description": "Tatami, futons and a garden view",
+          "capacity": {
+            "adults": 2,
+            "children": 1,
+            "total": 3,
+            "child_age_ranges": [
+              {
+                "ages": {
+                  "min": 0,
+                  "max": 17
+                }
+              }
+            ]
+          }
+        },
+        "rate_plan": {
+          "id": "rp_flex_bb",
+          "title": "Flexible with breakfast",
+          "description": "Breakfast for 2 · Free cancellation until Dec 9, 2026, 23:59 Kyoto time. After that: ¥25,800. No-show: the full stay."
+        },
+        "occupancy": {
+          "adults": 2,
+          "children": 0,
+          "total": 2
+        },
+        "stay_dates": {
+          "start_date": "2026-12-12",
+          "end_date": "2026-12-15"
+        },
+        "guest_assignments": [
+          {
+            "guest_id": "gst_01",
+            "role": "primary"
+          },
+          {
+            "guest_id": "gst_02",
+            "role": "accompanying"
+          }
+        ],
+        "totals": [
+          {
+            "type": "subtotal",
+            "amount": 80400
+          },
+          {
+            "type": "total",
+            "amount": 80400
+          }
+        ]
+      }
+    ],
+    "booker": {
+      "first_name": "Aiko",
+      "last_name": "Tanaka",
+      "email": "aiko.tanaka@example.org"
+    },
+    "guests": [
+      {
+        "id": "gst_01",
+        "first_name": "Aiko",
+        "last_name": "Tanaka"
+      },
+      {
+        "id": "gst_02",
+        "first_name": "Ren",
+        "last_name": "Tanaka"
+      }
+    ],
+    "currency": "JPY",
+    "totals": [
+      {
+        "type": "subtotal",
+        "display_text": "Japanese room, 3 nights (includes 10% consumption tax) · Late check-out",
+        "amount": 80400,
+        "lines": [
+          {
+            "display_text": "Japanese room, 3 nights (includes 10% consumption tax)",
+            "amount": 77400,
+            "nights": [
+              {
+                "night": "2026-12-12",
+                "amount": 25800
+              },
+              {
+                "night": "2026-12-13",
+                "amount": 25800
+              },
+              {
+                "night": "2026-12-14",
+                "amount": 25800
+              }
+            ]
+          },
+          {
+            "display_text": "Late check-out",
+            "amount": 3000,
+            "kind": "extra"
+          }
+        ]
+      },
+      {
+        "type": "fee",
+        "display_text": "Service charge 10%",
+        "amount": 7740
+      },
+      {
+        "type": "tax",
+        "display_text": "Accommodation tax, ¥400 per guest per night (paid at the property)",
+        "amount": 2400,
+        "collected": "at_property"
+      },
+      {
+        "type": "total",
+        "amount": 90540
+      }
+    ],
+    "messages": [
+      {
+        "type": "warning",
+        "code": "local_tax",
+        "path": "$.payment.terms[0].schedules[1]",
+        "content": "Paid to Ryokan Hoshi at the property, not with the booking: Accommodation tax, ¥400 per guest per night (children under 12 exempt).",
+        "content_type": "plain",
+        "presentation": "disclosure"
+      },
+      {
+        "type": "warning",
+        "code": "dev.ucp.lodging.policy.cancellation",
+        "path": "$",
+        "content": "Free cancellation until Dec 9, 2026, 23:59 Kyoto time. After that: ¥25,800. No-show: the full stay.",
+        "content_type": "plain",
+        "presentation": "disclosure"
+      }
+    ],
+    "links": [
+      {
+        "type": "privacy_policy",
+        "url": "https://inbox.ryokan-hoshi.example/c/privacy"
+      }
+    ],
+    "policies": [
+      {
+        "type": "dev.ucp.lodging.policy.cancellation",
+        "description": {
+          "plain": "Free cancellation until Dec 9, 2026, 23:59 Kyoto time. After that: ¥25,800. No-show: the full stay."
+        },
+        "refundability": "refundable",
+        "dated_steps": {
+          "zone": "Asia/Tokyo",
+          "steps": [
+            {
+              "until": "2026-12-09T23:59:59+09:00",
+              "fee": 0
+            }
+          ],
+          "after": 25800,
+          "no_show": 90540
+        }
+      }
+    ],
+    "expires_at": "2026-11-20T10:30:00+09:00",
+    "payment": {
+      "selected_term_id": "stay",
+      "terms": [
+        {
+          "id": "stay",
+          "title": "Deposit · At the property",
+          "schedules": [
+            {
+              "id": "deposit",
+              "type": "immediate",
+              "description": {
+                "plain": "Deposit: due when you book."
+              },
+              "amount": 25800
+            },
+            {
+              "id": "at_property",
+              "type": "at_property",
+              "description": {
+                "plain": "At the property: paid to Ryokan Hoshi directly, not with the booking."
+              },
+              "amount": 64740
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

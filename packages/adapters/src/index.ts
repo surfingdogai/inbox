@@ -38,6 +38,7 @@ import { type CallerEnv, ownerRest, publicRest } from "./rest";
 import { safeFetchJson } from "./safe-fetch";
 import { authRoutes } from "./session";
 import { stepUpRoutes } from "./step-up";
+import { mountUcpLodging } from "./ucp-lodging";
 
 export * from "./access";
 export * from "./auth";
@@ -47,6 +48,7 @@ export * from "./customer-page";
 export * from "./download";
 export * from "./email";
 export * from "./feeds/index";
+export * from "./flags";
 export * from "./front-page";
 export * from "./identity";
 export * from "./limits";
@@ -102,6 +104,8 @@ export interface DoorDeps {
   readonly snapshot?: SqliteSnapshot | undefined;
   /** The inbox is closing (a hosted inbox its owner is leaving): the download offers the receipt key first. */
   readonly leaving?: boolean | undefined;
+  /** UCP Lodging's booking sessions (INBOX_UCP_LODGING=on, ucp-lodging.ts): a draft, off unless asked for. */
+  readonly ucpLodging?: boolean | undefined;
 }
 
 /**
@@ -561,6 +565,7 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
     }),
   );
   app.route("/v1", publicRest(deps.caps));
+  if (deps.ucpLodging) mountUcpLodging(app, deps);
   // The page a link in the business's email opens (ADR-018 §5): a GET shows, a POST acts. Anyone
   // holding the link can open it, so every request takes a token, and a POST one from its own class.
   app.use("/c/*", async (c, next) => {
