@@ -11,7 +11,7 @@ Settings → **Property** → **Connect your system**.
 
 **Calendar links, one per room.** Each listing on Airbnb, Booking.com or Vrbo has a calendar link. Add it in Settings → Property → **Calendar links**, choosing which room it is in the same sheet. The nights it shows as taken appear as hints: in the Nights grid, to guests' assistants as *likely taken*, and as a request for you to look. A link lags hours behind, so a hint never confirms or refuses a stay on its own.
 
-**Beds24** (being built, not in a release yet): [connect with an invite code](/docs/connectors/beds24/).
+**Beds24** (new): [connect with an invite code](/docs/connectors/beds24/).
 
 ## Coming
 
