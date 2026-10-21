@@ -1098,6 +1098,10 @@ describe("emails", () => {
       method: "all",
     });
     expect(String(rows[0]?.[0])).toContain(`Check first: ${patch.name}`);
+    // And the booking says it beside its confirm.
+    expect((await caps.getItem(owner, { item_id: r.view.item.id })).check_first).toMatch(
+      /^Patch test, between 180 days/,
+    );
   });
 });
 

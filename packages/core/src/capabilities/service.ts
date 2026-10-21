@@ -77,6 +77,7 @@ import {
   bookFirstInSystem,
   bookingSchedules,
   cancelFeeOf,
+  checkFirstOf,
   dayByStaff,
   findStaffSlots,
   fromSystem,
@@ -248,6 +249,8 @@ export interface EntryDelivery {
 export interface ItemDetail extends ItemView {
   /** Who is asking, as the owner sees it (ADR-017 §8.2): the match, the history, the networks, the agent. */
   readonly customer?: CustomerView | undefined;
+  /** A salon's booking a person checks before confirming (ADR-035): what comes first, and when. */
+  readonly check_first?: string | undefined;
   readonly events: readonly {
     seq: number;
     event: string;
@@ -1273,6 +1276,7 @@ export class Capabilities {
       mailForItem(this.db, item.id),
     ]);
     const draft = await draftRow(this.db, item.id);
+    const check = item.type === "booking" ? await checkFirstOf(this.db, item.id) : null;
     const delivery = new Map<string, EntryDelivery>();
     for (const m of mail) {
       if (m.entryId && m.recipient === "customer") {
@@ -1288,6 +1292,7 @@ export class Capabilities {
       ...viewFor(item, permissionKind(caller), partyViews.get(row.partyId), hidden.get(item.id)),
       receipts,
       customer: await this.people.customerView(row),
+      ...(check ? { check_first: check } : {}),
       events: events.map((e) => ({
         seq: e.seq,
         event: e.event,

@@ -18,7 +18,7 @@ export async function ownerSalonLines(
   if (item.type !== "booking") return [];
   const p = item.payload;
   if (!p.resourceId && !p.anyStaff && !p.addOns?.length && !p.deposit && !p.policy) {
-    if (!(await checkFirst(db, item.id))) return [];
+    if (!(await checkFirstOf(db, item.id))) return [];
   }
   const locale = localeOf(opts.lang);
   const out: string[] = [];
@@ -33,13 +33,13 @@ export async function ownerSalonLines(
         : `Deposit: ${amount}. No payment platform is connected: ask for it yourself.`,
     );
   }
-  const first = await checkFirst(db, item.id);
+  const first = await checkFirstOf(db, item.id);
   if (first) out.push(`Check first: ${first}`);
   return out;
 }
 
 /** What a person must check before this booking is confirmed, when its create said so. */
-async function checkFirst(db: Db, itemId: string): Promise<string | null> {
+export async function checkFirstOf(db: Db, itemId: string): Promise<string | null> {
   const { rows } = await db.client.query({
     sql: `SELECT s.requires, f.name FROM item_events e
             JOIN items i ON i.id = e.item_id

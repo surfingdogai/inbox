@@ -12,6 +12,7 @@ export {
 export { type DayBooking, type DayColumn, dayByStaff, type StaffDay } from "./day";
 export { bookingSchedules, depositLeft } from "./deposits";
 export { bookingFeeAt, type CancelFee, cancelFeeOf, localeOf } from "./fee";
+export { checkFirstOf, ownerSalonLines } from "./notes";
 export { cleanPhoto, PHOTO_MAX_BYTES, photoBytes, stripJpegMetadata } from "./photo";
 export { heldForCheck, type Requires, type RequiresAnswer, requiresMet } from "./requires";
 export { ANY, addOnsOf, findStaffSlots, fromSystem, pickStaff, type StaffSlot } from "./slots";
