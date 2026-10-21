@@ -29,7 +29,7 @@ import { paidFor, refundDueOf, SEND_BACK_DAYS } from "../negotiation/refunds";
 import { items, resources, services } from "../schema/tables";
 import { readSettings } from "../settings/schema";
 import { workPushStatements } from "../trades/job-tool";
-import { type TradeQuoteTerms, tradeQuoteProblems } from "../trades/quote";
+import { type TradeQuoteTerms, taxOnTop, tradeQuoteProblems } from "../trades/quote";
 import { hashJson, hashText } from "../util/canonical";
 import {
   actorMeta,
@@ -2493,11 +2493,15 @@ async function completeQuote(
       }
       sum += l.price.value * l.quantity;
     });
-    if (!problems.some((p) => p.path.endsWith(".currency")) && sum !== q.totalPrice.value) {
+    // Prices before tax (ADR-034 §4): the lines and the tax on top make the total the customer pays.
+    const tax = taxOnTop(q as unknown as TradeQuoteTerms);
+    if (!problems.some((p) => p.path.endsWith(".currency")) && sum + tax !== q.totalPrice.value) {
       problems.push({
         path: "input.totalPrice.value",
         problem: "invalid",
-        message: `the lines add up to ${sum}; send that total, or change the lines`,
+        message: tax
+          ? `the lines and the tax add up to ${sum + tax}; send that total, or change the lines`
+          : `the lines add up to ${sum}; send that total, or change the lines`,
       });
     }
   }

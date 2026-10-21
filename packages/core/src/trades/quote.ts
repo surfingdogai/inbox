@@ -8,8 +8,13 @@ import type { FieldProblem } from "../write/errors";
 /**
  * A trade's quote (ADR-034 §4): an estimate or a fixed price, the stages it is paid in (the payment
  * schedule of ADR-032, adding up to the total: a deposit, a payment at a stage, the balance on
- * completion), what coming out or a visit costs and whether accepting takes it off, and whether the
- * prices include tax. The business sets every amount; nothing here prices anything.
+ * completion), what a call-out or a visit costs and whether it is already taken off the total, and
+ * whether the prices include tax. The business sets every amount; nothing here prices anything.
+ *
+ * **The total is what the customer pays**, tax included, always: it is what they say yes to, what the
+ * order holds and what a pay link asks for. When the prices are before tax (`tax.included: false`),
+ * the tax lines are named, and the lines before tax and the tax lines together make the total. A fee
+ * credited if they accept is already taken off the total; one that is not is paid apart from it.
  */
 
 const fee = z.object({ amount: moneySchema, creditedIfAccepted: z.boolean().default(false) });
@@ -34,8 +39,12 @@ export const tradeQuoteInput = {
     .max(4)
     .optional()
     .describe("How it is paid, adding up to the total: a deposit (immediate), stages (deferred, by due_at), on site."),
-  callOutFee: fee.optional().describe("What coming out costs, and whether accepting takes it off."),
-  visitFee: fee.optional().describe("What a visit to quote costs, and whether accepting takes it off."),
+  callOutFee: fee
+    .optional()
+    .describe("The call-out fee, and whether it is already taken off the total (creditedIfAccepted)."),
+  visitFee: fee
+    .optional()
+    .describe("What a visit to quote costs, and whether it is already taken off the total (creditedIfAccepted)."),
   tax: z
     .object({
       included: z.boolean(),
@@ -45,7 +54,9 @@ export const tradeQuoteInput = {
         .optional(),
     })
     .optional()
-    .describe("Whether the prices include tax; when not, the tax lines on top."),
+    .describe(
+      "Whether the prices include tax. When not, the tax lines (at least one): the lines before tax and the tax lines make totalPrice, which is always what the customer pays.",
+    ),
 };
 
 export const quoteLineKind = z.enum(["labour", "materials", "other"]).optional();
@@ -72,10 +83,17 @@ export interface TradeQuoteTerms {
     | undefined;
 }
 
+/** The tax added on top of prices before tax, in minor units: 0 when the prices include it. */
+export function taxOnTop(q: Pick<TradeQuoteTerms, "tax">): number {
+  if (!q.tax || q.tax.included) return 0;
+  return (q.tax.lines ?? []).reduce((n, l) => n + l.amount.value, 0);
+}
+
 /**
  * What is wrong with a trade's quote, by field: stages that do not add up to the total or are in
  * another currency, a stage paid later with no date, two stages with one id, a fee or a tax line in
- * another currency. Empty when it can be sent.
+ * another currency, prices before tax with no tax named, a fee taken off that is more than the total.
+ * Empty when it can be sent.
  */
 export function tradeQuoteProblems(q: TradeQuoteTerms, now: number, prefix = "input"): FieldProblem[] {
   const out: FieldProblem[] = [];
@@ -111,6 +129,22 @@ export function tradeQuoteProblems(q: TradeQuoteTerms, now: number, prefix = "in
         path: `${prefix}.${key}.amount.currency`,
         problem: "invalid",
         message: `must be ${currency}, the total's`,
+      });
+    }
+  }
+  // Prices before tax name the tax, so the customer sees the total they pay before they say yes.
+  if (q.tax && !q.tax.included) {
+    if (!q.tax.lines?.length) {
+      out.push({
+        path: `${prefix}.tax.lines`,
+        problem: "missing",
+        message: "name the tax added to prices before tax: the total includes it",
+      });
+    } else if (taxOnTop(q) >= q.totalPrice.value) {
+      out.push({
+        path: `${prefix}.tax.lines`,
+        problem: "invalid",
+        message: "the tax is part of the total, so less than it",
       });
     }
   }
@@ -156,28 +190,37 @@ const WORDS = {
     fixed: "This is a fixed price.",
     stages: (list: string) => `It is paid in stages: ${list}.`,
     now: "now",
-    onSite: "on the day",
+    onSite: "on site",
     by: (date: string) => `by ${date}`,
     callOut: (amount: string, credited: boolean) =>
-      credited ? `Coming out costs ${amount}, taken off if you accept.` : `Coming out costs ${amount}.`,
+      credited
+        ? `The call-out fee of ${amount} is already taken off the total.`
+        : `The call-out fee of ${amount} is paid apart from the total.`,
     visit: (amount: string, credited: boolean) =>
-      credited ? `The visit costs ${amount}, taken off if you accept.` : `The visit costs ${amount}.`,
+      credited
+        ? `The visit fee of ${amount} is already taken off the total.`
+        : `The visit fee of ${amount} is paid apart from the total.`,
     taxIn: "Prices include tax.",
-    taxOut: (lines: string) => (lines ? `Tax is added on top: ${lines}.` : "Tax is added on top."),
+    taxOut: (before: string, lines: string, total: string) => `Prices are before tax: ${before} + ${lines} = ${total}.`,
   },
   pt: {
     estimate: "Isto é uma estimativa: o preço final pode mudar com o trabalho.",
     fixed: "Este é um preço fixo.",
     stages: (list: string) => `É pago por fases: ${list}.`,
     now: "agora",
-    onSite: "no dia",
+    onSite: "no local",
     by: (date: string) => `até ${date}`,
     callOut: (amount: string, credited: boolean) =>
-      credited ? `A deslocação custa ${amount}, descontada se aceitar.` : `A deslocação custa ${amount}.`,
+      credited
+        ? `A taxa de deslocação de ${amount} já está descontada do total.`
+        : `A taxa de deslocação de ${amount} paga-se à parte do total.`,
     visit: (amount: string, credited: boolean) =>
-      credited ? `A visita custa ${amount}, descontada se aceitar.` : `A visita custa ${amount}.`,
+      credited
+        ? `A taxa da visita de ${amount} já está descontada do total.`
+        : `A taxa da visita de ${amount} paga-se à parte do total.`,
     taxIn: "Os preços incluem impostos.",
-    taxOut: (lines: string) => (lines ? `Os impostos acrescem: ${lines}.` : "Os impostos acrescem."),
+    taxOut: (before: string, lines: string, total: string) =>
+      `Os preços não incluem impostos: ${before} + ${lines} = ${total}.`,
   },
 } as const;
 
@@ -200,11 +243,15 @@ export function tradeQuoteWords(q: TradeQuoteTerms, lang: CustomerLang, dateText
   }
   if (q.callOutFee) out.push(w.callOut(moneyIn(q.callOutFee.amount, lang), q.callOutFee.creditedIfAccepted));
   if (q.visitFee) out.push(w.visit(moneyIn(q.visitFee.amount, lang), q.visitFee.creditedIfAccepted));
-  if (q.tax) {
+  if (q.tax?.included) out.push(w.taxIn);
+  else if (q.tax?.lines?.length) {
+    const before = { value: q.totalPrice.value - taxOnTop(q), currency: q.totalPrice.currency };
     out.push(
-      q.tax.included
-        ? w.taxIn
-        : w.taxOut((q.tax.lines ?? []).map((l) => `${l.name} ${moneyIn(l.amount, lang)}`).join(", ")),
+      w.taxOut(
+        moneyIn(before, lang),
+        q.tax.lines.map((l) => `${l.name} ${moneyIn(l.amount, lang)}`).join(" + "),
+        moneyIn(q.totalPrice, lang),
+      ),
     );
   }
   return out.join(" ");

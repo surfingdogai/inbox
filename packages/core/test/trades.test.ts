@@ -345,7 +345,7 @@ describe("a quote in stages", () => {
           kind: "fixed",
           stages: [
             { id: "deposit", type: "immediate", amount: { value: 100_000, currency: "EUR" }, label: "Deposit" },
-            { id: "balance", type: "at_property", amount: { value: 300_000, currency: "EUR" }, label: "On completion" },
+            { id: "balance", type: "at_property", amount: { value: 300_000, currency: "EUR" }, label: "Balance" },
           ],
         },
       }),
@@ -374,7 +374,7 @@ describe("a quote in stages", () => {
         kind: "estimate",
         stages: [
           { id: "deposit", type: "immediate", amount: { value: 100_000, currency: "EUR" }, label: "Deposit" },
-          { id: "balance", type: "at_property", amount: { value: 380_000, currency: "EUR" }, label: "On completion" },
+          { id: "balance", type: "at_property", amount: { value: 380_000, currency: "EUR" }, label: "Balance" },
         ],
         callOutFee: { amount: { value: 6_500, currency: "EUR" }, creditedIfAccepted: true },
         tax: { included: true },
@@ -387,7 +387,8 @@ describe("a quote in stages", () => {
     const summary = String((status as { offer?: { human?: string } }).offer?.human ?? "");
     expect(summary).toContain("This is an estimate");
     expect(summary).toContain("It is paid in stages: Deposit");
-    expect(summary).toContain("taken off if you accept");
+    expect(summary).toContain("The call-out fee of €65.00 is already taken off the total.");
+    expect(summary).toContain("Balance €3,800.00 on site");
     expect(summary).toContain("Prices include tax.");
     const accepted = (await s.caps.customer.acceptOffer(anon(T0, { accessToken: token }), {
       item_id: q.view.item.id,
@@ -399,6 +400,67 @@ describe("a quote in stages", () => {
     expect(order.type).toBe("order");
     expect((order.payload as { schedule?: unknown[] }).schedule).toHaveLength(2);
     expect(await linkComing(s.db, { id: order.id, payload: order.payload as never, sandbox: false }, T0)).toBe(false);
+  });
+
+  it("names the tax on prices before tax, and the customer agrees to the total with it, which the order holds", async () => {
+    const s = await setup({ name: "Southern Cross Renovations", currency: "AUD", timezone: "Australia/Perth" });
+    const q = await s.caps.requestQuote(anon(), {
+      payload: { itemOffered: { name: "A new deck" }, description: "Hardwood, about 20 square metres." },
+      contact: { name: "Mia Nguyen", email: "mia@example.com", locale: "en" },
+    } as RequestQuoteInput);
+    const token = q.accessToken as string;
+    // Before tax with no tax named: refused, so nobody says yes to a total that leaves the tax out.
+    await expect(
+      transitionItem(s.db, owner(), {
+        itemId: q.view.item.id,
+        event: "quote",
+        input: { totalPrice: { value: 440_000, currency: "AUD" }, tax: { included: false } },
+      }),
+    ).rejects.toMatchObject({ fields: [expect.objectContaining({ path: "input.tax.lines" })] });
+    // The lines are before tax; with the GST they make the total.
+    await expect(
+      transitionItem(s.db, owner(), {
+        itemId: q.view.item.id,
+        event: "quote",
+        input: {
+          totalPrice: { value: 400_000, currency: "AUD" },
+          lines: [{ name: "Deck", quantity: 1, price: { value: 400_000, currency: "AUD" } }],
+          tax: { included: false, lines: [{ name: "GST", amount: { value: 40_000, currency: "AUD" } }] },
+        },
+      }),
+    ).rejects.toMatchObject({ fields: [expect.objectContaining({ path: "input.totalPrice.value" })] });
+    await transitionItem(s.db, owner(), {
+      itemId: q.view.item.id,
+      event: "quote",
+      input: {
+        totalPrice: { value: 440_000, currency: "AUD" },
+        lines: [{ name: "Deck", quantity: 1, price: { value: 400_000, currency: "AUD" } }],
+        stages: [
+          { id: "deposit", type: "immediate", amount: { value: 100_000, currency: "AUD" }, label: "Deposit" },
+          { id: "balance", type: "at_property", amount: { value: 340_000, currency: "AUD" }, label: "Balance" },
+        ],
+        tax: { included: false, lines: [{ name: "GST", amount: { value: 40_000, currency: "AUD" } }] },
+      },
+    });
+    const status = await s.caps.getItemStatus(anon(T0, { accessToken: token }), {
+      item_id: q.view.item.id,
+      access_token: token,
+    });
+    const offer = (status as { offer?: { human?: string; terms_sha?: string } }).offer;
+    const summary = String(offer?.human ?? "");
+    expect(summary).toMatch(/Prices are before tax: A\$4,000\.00 \+ GST A\$400\.00 = A\$4,400\.00\./);
+    expect(summary).toMatch(/A\$4,400\.00/);
+    expect(summary).not.toMatch(/pay A\$4,000\.00/);
+    const accepted = (await s.caps.customer.acceptOffer(anon(T0, { accessToken: token }), {
+      item_id: q.view.item.id,
+      access_token: token,
+      terms_sha: offer?.terms_sha as string,
+    })) as CustomerResult;
+    const order = accepted.linked?.item;
+    expect((order?.payload as { totalPrice?: unknown } | undefined)?.totalPrice).toEqual({
+      value: 440_000,
+      currency: "AUD",
+    });
   });
 
   it("counts a currency with no minor unit as it is: a roofer in Santiago", () => {
