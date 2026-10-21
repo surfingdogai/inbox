@@ -210,6 +210,12 @@ describe("a request for a price with its job and photos", () => {
       message: JOB_WORDS.emergencyOff("Fundi Flow Plumbing"),
       fields: [{ path: "payload.job.urgency" }],
     });
+    // A refusal gives the business's phone when it has one.
+    await shut.caps.updateSettings(owner(), { doc: { commerce: { legal: { phone: "+254 20 765 4321" } } } });
+    await expect(shut.caps.requestQuote(anon(), leak({ urgency: "emergency" }))).rejects.toMatchObject({
+      message:
+        "Fundi Flow Plumbing does not take emergency jobs online. Call Fundi Flow Plumbing on +254 20 765 4321, or send it with urgency within_24h.",
+    });
     const whileOpen = await fundi({ emergency: "opening_hours" });
     await openWeekdays(whileOpen.db);
     // 06:00 UTC on a Sunday is not open.
@@ -220,12 +226,6 @@ describe("a request for a price with its job and photos", () => {
     const always = await fundi({ emergency: "always" });
     const taken = await always.caps.requestQuote(anon(), leak({ urgency: "emergency" }));
     expect(await flagsOf(always.db, taken.view.item.id)).toMatchObject({ needsHuman: true, priority: 3 });
-    // A refusal gives the business's phone when it has one.
-    await shut.caps.updateSettings(owner(), { doc: { commerce: { legal: { phone: "+254 20 765 4321" } } } });
-    await expect(shut.caps.requestQuote(anon(), leak({ urgency: "emergency" }))).rejects.toMatchObject({
-      message:
-        "Fundi Flow Plumbing does not take emergency jobs online. Call Fundi Flow Plumbing on +254 20 765 4321, or send it with urgency within_24h.",
-    });
   });
 
   it("takes an emergency whose site a radius cannot place first, for a person: a postal code is not geocoded", async () => {
