@@ -42,10 +42,8 @@ export interface DemoOptions {
   readonly from?: { readonly address: string; readonly name?: string | undefined } | undefined;
 }
 
-/** Whether an environment flag is on: `1`, `true`, `yes` or `on`. */
-export function flagOn(value: string | undefined): boolean {
-  return /^(1|true|yes|on)$/i.test((value ?? "").trim());
-}
+/** Whether an environment flag is on: `1`, `true`, `yes` or `on` (one reading for every switch). */
+export { flagOn } from "@surfingdog/adapters";
 
 // ---- mail and network --------------------------------------------------------------------
 

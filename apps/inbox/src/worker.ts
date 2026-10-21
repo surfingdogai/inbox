@@ -1,4 +1,4 @@
-import { ensureNetworkPing, ingestEmail, ucpLodgingOn } from "@surfingdog/adapters";
+import { ensureNetworkPing, ingestEmail } from "@surfingdog/adapters";
 import { createDb, ensureLifecycleSweep, MIGRATIONS } from "@surfingdog/core";
 import {
   cloudflareEmailMailOut,
@@ -10,7 +10,7 @@ import {
 import { d1Client } from "@surfingdog/platform/cloudflare";
 import { createInbox, type Inbox } from "./app";
 import { flagOn } from "./demo";
-import { listFrom, oauthFrom, publicUrlFrom, secretKeyFrom, senderFrom } from "./env";
+import { listFrom, oauthFrom, publicUrlFrom, secretKeyFrom, senderFrom, ucpLodgingFrom } from "./env";
 
 type Bindings = Env & {
   EMAIL?: Parameters<typeof cloudflareEmailMailOut>[0];
@@ -21,7 +21,7 @@ type Bindings = Env & {
   INBOX_PUBLIC_URL?: string;
   /** `1` makes this instance a public demo shop (demo.ts). */
   INBOX_DEMO?: string;
-  /** `on` opens UCP Lodging's booking sessions for a place to stay (a draft protocol, off by default). */
+  /** `on` (or `1`, `true`, `yes`) opens UCP Lodging's booking sessions for a place to stay (a draft, off by default). */
   INBOX_UCP_LODGING?: string;
   /**
    * The address the owner's sign-in link and alerts go out from, on a domain onboarded to Email
@@ -58,14 +58,15 @@ function inboxFor(env: Bindings): Inbox {
         ? cloudflareEmailMailOut(env.EMAIL, from)
         : consoleMailOut(console.log);
     const ownerEmails = listFrom(env.INBOX_OWNER_EMAIL);
+    const secretKey = secretKeyFrom(env.INBOX_SECRET_KEY);
     inbox = createInbox({
       db: createDb(d1Client(env.DB)),
       mailOut,
       ownerEmails,
-      secretKey: secretKeyFrom(env.INBOX_SECRET_KEY),
+      secretKey,
       baseUrl: publicUrlFrom(env.INBOX_PUBLIC_URL),
       demo: flagOn(env.INBOX_DEMO) ? { ownerEmails, from } : undefined,
-      ucpLodging: ucpLodgingOn(env.INBOX_UCP_LODGING),
+      ucpLodging: ucpLodgingFrom(env.INBOX_UCP_LODGING, secretKey),
       ...oauthFrom(env),
       // `/` runs the worker first (the business's own page); a signed-in owner gets their app from the assets.
       appShell: (request) =>

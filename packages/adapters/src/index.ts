@@ -48,6 +48,7 @@ export * from "./customer-page";
 export * from "./download";
 export * from "./email";
 export * from "./feeds/index";
+export * from "./flags";
 export * from "./front-page";
 export * from "./identity";
 export * from "./limits";
@@ -62,7 +63,6 @@ export * from "./rest";
 export * from "./safe-fetch";
 export * from "./session";
 export * from "./step-up";
-export { ucpLodgingOn } from "./ucp-lodging";
 export * from "./untrusted";
 export * from "./webhooks/index";
 
