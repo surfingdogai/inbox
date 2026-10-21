@@ -367,7 +367,9 @@ describe("an iCloud calendar, end to end", () => {
     expect(listed.content[0]?.text).toContain(`${view.id} iCloud [active] 0 busy times ahead (read to `);
     expect(listed.content[0]?.text).toContain("), 0 bookings written");
     expect(listed.content[0]?.text).toContain("Soon: Calendly, Calendar link to share, Square, WooCommerce, Shopify.");
-    expect(listed.content[0]?.text).toContain("Phorest: Needs setup: ask Phorest for API access for your salon");
+    expect(listed.content[0]?.text).toContain(
+      "Phorest: Not available yet. When it is, you connect with the API access Phorest gives your salon",
+    );
     expect(JSON.stringify(listed)).not.toContain(APP_PASSWORD);
     const sync = (await client.callTool({ name: "sync_integration", arguments: { connection_id: view.id } })) as {
       isError?: boolean;
