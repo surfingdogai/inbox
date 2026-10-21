@@ -107,6 +107,8 @@ describe("the host's settings", () => {
       shopify: null,
       square: { clientId: "sq-id", clientSecret: "sq-secret" },
       calendly: null,
+      servicem8: null,
+      jobber: null,
     });
     expect(r.googleTesting).toBe(true);
     expect(said).toEqual([
