@@ -103,6 +103,7 @@ const ASK: Readonly<Record<string, (b: string) => string>> = {
   it: (b) => `Gli allergeni non confermati non sono ancora stati verificati da ${b}: chiedi a ${b} prima di fidarti.`,
   pt: (b) =>
     `Os alergénios por confirmar ainda não foram verificados por ${b}: pergunta a ${b} antes de confiar neles.`,
+  ja: (b) => `「未確認」のアレルゲンは、まだ${b}が確認していません。参考にする前に${b}にお問い合わせください。`,
 };
 
 /** What an agent is told of allergens, in the business's words and language. */

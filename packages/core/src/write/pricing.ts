@@ -117,9 +117,10 @@ export interface LinePricing {
 
 /**
  * For each line, what the catalogue says of its product (by `productId`, else `sku`); null for a line
- * naming none. A menu item's line with options is priced with what they add, from the menu as it is now
- * (ADR-036): its list, its price for this customer and its floor all carry them, so a pizza with a
- * larger size is at its list price, never above it.
+ * naming none. A menu item's line is priced with what its options add, from the menu as it is now
+ * (ADR-036), the choices a group takes by default included when none were sent: its list, its price for
+ * this customer and its floor all carry them, so a pizza with a larger size is at its list price, never
+ * above it. `options: false` prices the products alone (the order's own pricing adds them itself).
  */
 export async function linePricing(
   db: Db,
@@ -131,6 +132,7 @@ export async function linePricing(
       | undefined;
   }[],
   pricing?: PricingFor,
+  o: { readonly options?: boolean } = {},
 ): Promise<(LinePricing | null)[]> {
   const catalogue = await productsFor(db, lines);
   const found = lines.map((l) =>
@@ -148,9 +150,8 @@ export async function linePricing(
   return found.map((p, i) => {
     if (!p) return null;
     const currency = p.price.currency.toUpperCase();
-    const sent = lines[i]?.options;
-    const menu = sent?.length ? menuOf(p.menu) : null;
-    const delta = menu ? priceOptions(menu, sent, currency, "").unitDelta : 0;
+    const menu = o.options === false ? null : menuOf(p.menu);
+    const delta = menu ? priceOptions(menu, lines[i]?.options, currency, "").unitDelta : 0;
     const base = floors.get(p.id) ?? null;
     const reward = pricing ? rewardFor(pricing.rewards, pricing.standing, p.id) : null;
     const value = reward ? rewardPrice(p.price.value, base, reward.pct) : p.price.value;
@@ -235,11 +236,7 @@ async function priceOrder(db: Db, payload: PayloadOf<"order">, pricing?: Pricing
   const lines = asked.orderedItem.map(({ customerStatedPrice: _line, listPrice: _list, ...line }) => line);
   const catalogue = await productsFor(db, lines);
   // The base prices: each line's options are priced below, from the menu, on top of them.
-  const priced = await linePricing(
-    db,
-    lines.map(({ options: _o, ...l }) => l),
-    pricing,
-  );
+  const priced = await linePricing(db, lines, pricing, { options: false });
   /** The owner's line for the customer, from the first reward that priced a line. */
   let says: string | undefined;
   /** The currency of the business's prices here: its first catalogue line's. */

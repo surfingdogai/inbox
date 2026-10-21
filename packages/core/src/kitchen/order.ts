@@ -1,12 +1,15 @@
+import type { Statement } from "@surfingdog/platform";
 import type { Fulfil, KitchenHold, KitchenMark, Tip } from "@surfingdog/spec";
 import { basePoint, matchZone, type Site } from "../area/index";
 import type { Db } from "../db";
 import type { ItemFlags, Money } from "../domain/types";
 import { allergensConfirmed } from "../menu/allergens";
+import { priceOptions } from "../menu/options";
 import type { MenuFields } from "../menu/schema";
-import { dateIn } from "../util/zoned";
+import { addDays, dateIn } from "../util/zoned";
 import type { FieldProblem } from "../write/errors";
 import { WriteError } from "../write/errors";
+import { claimStatements } from "../write/slots";
 import { type KitchenContext, kitchenContext, type MenuProduct, productsById, productsBySku } from "./context";
 import { methodsOf, pausedUntil } from "./settings";
 import { capKey, dayBucket, daySlots, freePlaces, orderSlotKey, slotAt, takenPlaces, weekdayOf } from "./slots";
@@ -44,6 +47,8 @@ interface OrderLike {
     | { readonly postalCode?: string | undefined; readonly addressCountry?: string | undefined }
     | undefined;
 }
+
+type LineOptions = Parameters<typeof priceOptions>[1];
 
 /** Whether an order is the kitchen's to judge: it is for a time, or names something on the menu. */
 export function kitchenOrder(payload: OrderLike, products: ReadonlyMap<string, MenuProduct>): boolean {
@@ -159,13 +164,15 @@ export async function checkOrder(
     );
   }
 
-  // Each item is served then, made that day, not sold out, and not past what it can be ordered as.
+  // Each item is on sale, served then, made that day, not sold out, and not past what it can be ordered as.
   const today = dateIn(now, ctx.timezone);
   lines.forEach((l, i) => {
     const p = productOf(l, products);
     const m = p?.menu;
     if (!p || !m) return;
     const at = `payload.orderedItem.${i}`;
+    // Off sale (the menu keeps it for later): `get_menu` hides it, and an agent that knows its id is told so.
+    if (!p.active) refuse(w.notAvailable(p.name), at, "not_available");
     if (p.soldOutOn === today && date === today) refuse(w.soldOut(p.name), at, "sold_out");
     if (m.availableDays.length > 0 && !m.availableDays.includes(weekdayOf(date)))
       refuse(w.notThatDay(p.name), at, "not_that_day");
@@ -178,7 +185,16 @@ export async function checkOrder(
     if (!zone) refuse(w.noDeliveryThere, "payload.shippingAddress", "outside_zones");
     const minimum = zone.zone.minimumOrder;
     if (minimum) {
-      const subtotal = lines.reduce((sum, l) => sum + (productOf(l, products)?.price.value ?? 0) * l.quantity, 0);
+      // The food as the menu prices it: each item with what its options add, in the minimum's currency.
+      const currency = minimum.currency.toUpperCase();
+      let subtotal = 0;
+      for (const l of lines) {
+        const p = productOf(l, products);
+        if (!p) continue;
+        if (p.price.currency !== currency) refuse(w.noDeliveryThere, "payload.shippingAddress", "minimum_currency");
+        const delta = p.menu ? priceOptions(p.menu, l.options as LineOptions, currency, "").unitDelta : 0;
+        subtotal += (p.price.value + delta) * l.quantity;
+      }
       if (subtotal < minimum.value)
         refuse(w.belowMinimum(zone.zone.name, minimum), "payload.orderedItem", "below_minimum");
     }
@@ -194,7 +210,13 @@ export function servedAt(ctx: KitchenContext, m: MenuFields, at: number): boolea
   const date = dateIn(at, ctx.timezone);
   const wd = weekdayOf(date);
   const minutes = minutesIn(at, ctx.timezone);
-  return parts.some((d) => d.days.includes(wd) && minutes >= toMin(d.from) && minutes < toMin(d.to));
+  return parts.some((d) => {
+    const from = toMin(d.from);
+    const to = toMin(d.to);
+    if (from < to) return d.days.includes(wd) && minutes >= from && minutes < to;
+    // Past midnight (22:00 to 02:00): from its start on its own days, and until its end the morning after.
+    return (d.days.includes(wd) && minutes >= from) || (d.days.includes(weekdayOf(addDays(date, -1))) && minutes < to);
+  });
 }
 
 function toMin(hhmm: string): number {
@@ -286,6 +308,59 @@ export async function prepareOrder(
   // What waits for a person because of the dish or the caps is marked for one, whatever the rules say.
   const forAPerson = mark.hold.some((h) => h !== "owner_accepts");
   return { payload: { kitchen: mark }, claims, flags: forAPerson ? { needsHuman: true } : {} };
+}
+
+/**
+ * A person accepts an order that was over a daily cap (`over_cap`): it takes every place still free
+ * under that cap for its day, as many as it can, so the orders after it wait for a person as well and
+ * automation never sells past what was set aside. Its places go back if it is cancelled or declined.
+ */
+export async function overCapClaims(
+  db: Db,
+  order: {
+    readonly id: string;
+    readonly payload: {
+      readonly orderedItem: readonly { readonly productId?: string | undefined; readonly quantity: number }[];
+      readonly fulfil?: { readonly slot?: { readonly start: string } | undefined } | undefined;
+      readonly kitchen?: { readonly hold: readonly string[] } | undefined;
+    };
+  },
+  now: number,
+): Promise<Statement[]> {
+  if (!order.payload.kitchen?.hold.includes("over_cap")) return [];
+  const ids = order.payload.orderedItem.flatMap((l) => (l.productId ? [l.productId] : []));
+  const products = await productsById(db, ids);
+  const ctx = await kitchenContext(db);
+  const start = order.payload.fulfil?.slot ? Date.parse(order.payload.fulfil.slot.start) : Number.NaN;
+  const bucket = dayBucket(dateIn(Number.isFinite(start) ? start : now, ctx.timezone), ctx.timezone);
+  const units = new Map<string, number>();
+  for (const l of order.payload.orderedItem) {
+    const cap = l.productId ? products.get(l.productId)?.menu?.dailyCap : null;
+    if (l.productId && cap) units.set(l.productId, (units.get(l.productId) ?? 0) + l.quantity);
+  }
+  const out: Statement[] = [];
+  for (const [productId, n] of units) {
+    const key = capKey(productId);
+    const cap = products.get(productId)?.menu?.dailyCap ?? 0;
+    const taken = await takenPlaces(db, key, bucket, bucket);
+    const { rows } = await db.client.query({
+      sql: "SELECT COUNT(*) FROM slot_claims WHERE resource_key = ? AND item_id = ?",
+      params: [key, order.id],
+      method: "all",
+    });
+    if (Number(rows[0]?.[0] ?? 0) > 0) continue;
+    const free: number[] = [];
+    for (let o = 0; o < cap && free.length < n; o++) if (!taken.get(bucket)?.has(o)) free.push(o);
+    if (free.length)
+      out.push(
+        ...claimStatements(
+          key,
+          order.id,
+          free.map((o) => [bucket, o] as [number, number]),
+        ),
+      );
+  }
+  return out;
 }
 
 /**

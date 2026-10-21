@@ -220,7 +220,7 @@ export async function runRulesForEvent(
                       : guard === "kitchen"
                         ? `${rule.name}: a person accepts this order, because the kitchen keeps it for one`
                         : guard === "tables"
-                          ? `${rule.name}: a person confirms this table, because no covers are set aside`
+                          ? `${rule.name}: a person confirms this table, because it is outside the covers set aside for direct bookings`
                           : `${rule.name}: a person books this, because it starts within your minimum notice or has started`,
                 causation,
               })
@@ -399,6 +399,8 @@ async function bookingFacts(db: Db, item: Item, timezone: string): Promise<RuleC
   const spec = {
     ...service,
     resourceKey: item.payload.resourceId ? `resource:${item.payload.resourceId}` : `service:${service.id}`,
+    // A table's places are people (ADR-036): free only when the whole party fits.
+    ...(service.capacityUnit === "people" ? { units: Math.max(1, Number(item.payload.partySize ?? 1)) } : {}),
   };
   let slotIsFree = false;
   try {

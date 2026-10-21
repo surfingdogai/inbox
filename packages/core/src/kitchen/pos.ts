@@ -6,6 +6,7 @@ import { shortRef } from "../customer/format";
 import type { Db } from "../db";
 import type { PayloadOf } from "../domain/types";
 import type { JobHandler } from "../jobs/runner";
+import { ensureJob } from "../jobs/schedule";
 import { menuOf } from "../menu/schema";
 import { readSettings } from "../settings/schema";
 import { jobStatement } from "../write/common";
@@ -16,9 +17,13 @@ import { markForPerson, setOrderProgress } from "./progress";
  *
  * - **Orders into a till or a channel** (`orders_out`: Toast, Lightspeed, Clover, Deliverect): an order
  *   the business accepted here is written into its till, first and once (`writeFirst`, op `order`), under
- *   a key that is the same on every retry, with what the kitchen needs and no card data. Its word back
+ *   a key that is the same on every retry, with what the kitchen needs and no card data: at once when it
+ *   is paid at the handover, once paid when it goes through the business's pay link. Its word back
  *   (`status_in`) is read on every sync: preparing, ready and out for delivery become the order's
- *   progress; a till that refuses or cancels it marks the order for a person, with the till's words.
+ *   progress; a till that refuses or cancels it marks the order for a person, with the till's words. A
+ *   till that never answered is written to once more where it answers a repeat as the same order
+ *   (`OrdersWriter.idempotent`), else a person is told to look in it; an order cancelled here after it
+ *   went in marks the order for a person to cancel it there too.
  * - **Orders taken elsewhere** (GloriaFood's accepted orders): read on every sync, only while the owner
  *   switched the view on, into `pos_orders` for the owner to see, with no customer details, never an
  *   item, never a receipt, kept two days.
@@ -33,6 +38,7 @@ export const POS_KINDS = ["gloriafood", "flipdish", "toast", "lightspeed", "clov
 export const ORDER_KINDS = ["toast", "lightspeed", "clover", "deliverect"] as const;
 
 export const POS_PUSH_KIND = "pos_push";
+export const POS_CANCEL_KIND = "pos_cancel";
 export const POS_WRITE_OWNER = "food";
 /** How long an order taken elsewhere is kept for the owner's view. */
 export const ELSEWHERE_KEEP_MS = 2 * 86_400_000;
@@ -53,10 +59,59 @@ export async function posConnections(
   return rows.map((r) => ({ id: String(r[0]), kind: String(r[1]), name: String(r[2] ?? r[1]) }));
 }
 
-/** The job that writes an accepted order into the till, in the batch that accepted it: none without a till. */
-export async function posPushStatements(db: Db, itemId: string, now: number): Promise<Statement[]> {
+/**
+ * The job that writes an order into the till, in the batch that accepted it or recorded its payment:
+ * none without a till. `when` keeps the two apart, so an order whose pay link made it wait at its accept
+ * is still written once paid; the write itself happens once (`writeFirst`, by the order's key).
+ */
+export async function posPushStatements(
+  db: Db,
+  itemId: string,
+  now: number,
+  when: "accepted" | "paid" = "accepted",
+): Promise<Statement[]> {
   if ((await posConnections(db, ORDER_KINDS)).length === 0) return [];
-  return [jobStatement(POS_PUSH_KIND, { itemId }, now, { dedupeKey: `pos_push:${itemId}` })];
+  const dedupeKey = when === "accepted" ? `pos_push:${itemId}` : `pos_push:${itemId}:paid`;
+  return [jobStatement(POS_PUSH_KIND, { itemId }, now, { dedupeKey })];
+}
+
+/** The writes of an order into tills that may have landed: written, or never answered. */
+async function landedWrites(db: Db, itemId: string): Promise<{ connectorId: string; kind: string }[]> {
+  const { rows } = await db.client.query({
+    sql: `SELECT DISTINCT w.connector_id, c.kind FROM connector_writes w JOIN connectors c ON c.id = w.connector_id
+           WHERE w.item_id = ? AND w.op = 'order' AND w.outcome IN ('written', 'unknown', 'pending')`,
+    params: [itemId],
+    method: "all",
+  });
+  return rows.map((r) => ({ connectorId: String(r[0]), kind: String(r[1]) }));
+}
+
+/**
+ * An order that ends here after it went into a till (cancelled, declined, lapsed unpaid): a job that
+ * marks it for a person, to cancel it in the till too, so the kitchen does not make it. In the batch that
+ * ends it; none when no write of it may have landed.
+ */
+export async function posCancelStatements(db: Db, itemId: string, now: number): Promise<Statement[]> {
+  if ((await landedWrites(db, itemId)).length === 0) return [];
+  return [jobStatement(POS_CANCEL_KIND, { itemId }, now, { dedupeKey: `pos_cancel:${itemId}` })];
+}
+
+export function posCancelHandler(): JobHandler {
+  return async (job, { db, now }) => {
+    const itemId = (job.payload as { itemId?: unknown } | null)?.itemId;
+    if (typeof itemId !== "string") return { note: "no item" };
+    const tills = await landedWrites(db, itemId);
+    for (const t of tills) {
+      const title = TITLES[t.kind] ?? "your till";
+      await markForPerson(
+        db,
+        itemId,
+        `This order was cancelled here: cancel it in ${title} too, so the kitchen does not make it.`,
+        now,
+      );
+    }
+    return { note: tills.map((t) => `${t.kind}: told a person`).join("; ") || "in no till" };
+  };
 }
 
 interface OrderRow {
@@ -132,16 +187,17 @@ export async function outboundOrder(
       const e = l.productId ? ext.get(l.productId) : undefined;
       return {
         externalId: e?.externalId ?? null,
+        groupExternalId: e?.externalId ? (e.menu?.externalGroupId ?? null) : null,
         name: l.name,
         quantity: l.quantity,
         unitPrice: l.price,
         options: (l.options ?? []).map((o) => {
-          const choice = e?.menu?.optionGroups
-            .find((g) => g.id === o.groupId)
-            ?.choices.find((c) => c.id === o.choiceId);
+          const group = e?.menu?.optionGroups.find((g) => g.id === o.groupId);
+          const choice = group?.choices.find((c) => c.id === o.choiceId);
           return {
             name: o.name ?? o.choiceId,
             externalId: e?.externalId ? (choice?.externalId ?? null) : null,
+            groupExternalId: e?.externalId ? (group?.externalId ?? null) : null,
             priceDelta: o.priceDelta ?? null,
             portion: o.portion ?? "whole",
           };
@@ -175,6 +231,8 @@ export async function pushOrder(
 ): Promise<PosPushOutcome[]> {
   const row = await orderRow(db, itemId);
   if (!row || row.state === "declined" || row.state === "cancelled" || row.state === "expired") return [];
+  // A pay link is out: the order goes in once paid (its own job then), never as one to pay at the door.
+  if (row.state === "awaiting_payment" || row.state === "payment_failed") return [];
   const out: PosPushOutcome[] = [];
   for (const conn of await posConnections(db, ORDER_KINDS)) {
     const skip = (note: string): PosPushOutcome => ({ connectorId: conn.id, kind: conn.kind, status: "skipped", note });
@@ -215,6 +273,13 @@ export async function pushOrder(
       await markForPerson(db, itemId, `${run.definition.title} did not take this order: ${r.reason}`, now);
     } else if (r.status === "pending") {
       out.push({ connectorId: conn.id, kind: conn.kind, status: "pending", note: "no answer yet: looked for again" });
+      // The kitchen may not have it: a person knows now, not only once the looking is over.
+      await markForPerson(
+        db,
+        itemId,
+        `${run.definition.title} has not answered about this order yet. This inbox looks for it there for five minutes; check ${run.definition.title} if it does not show.`,
+        now,
+      );
     } else if (r.status === "busy") {
       out.push({ connectorId: conn.id, kind: conn.kind, status: "busy", note: "being written now" });
     } else {
@@ -237,7 +302,11 @@ export function posPushHandler(connectors: ConnectorCapabilities): JobHandler {
   };
 }
 
-/** Settles an order write whose answer never came: looked for again by its key in the till. */
+/**
+ * Settles an order write whose answer never came: looked for again by its key in the till. Never found,
+ * it is written once more where the till answers a repeat of the same key as the same order; otherwise,
+ * or when that was the second time, a person is told to look in the till. Nothing is ever left unsaid.
+ */
 export function registerFoodResolver(connectors: ConnectorCapabilities): void {
   registerWriteResolver(POS_WRITE_OWNER, {
     async find(db: Db, row: WriteRow, now: number) {
@@ -249,7 +318,30 @@ export function registerFoodResolver(connectors: ConnectorCapabilities): void {
       const found = await writer.find(run.ctx, await outboundOrder(db, item, run.ctx, kind));
       return found ? toWritten(found) : null;
     },
-    async settled() {},
+    async settled(db: Db, row: WriteRow, outcome: "written" | "refused", _ref: WrittenRef | null, now: number) {
+      if (outcome !== "refused") return;
+      const run = await connectors.contextFor(row.connectorId, now);
+      const kind = (await posConnections(db)).find((c) => c.id === row.connectorId)?.kind ?? "";
+      const title = run?.definition.title ?? TITLES[kind] ?? "The till";
+      const idempotent = run?.definition.orders?.idempotent === true;
+      const { rows } = await db.client.query({
+        sql: "SELECT COUNT(*) FROM connector_writes WHERE connector_id = ? AND item_id = ? AND op = 'order'",
+        params: [row.connectorId, row.itemId],
+        method: "all",
+      });
+      if (idempotent && Number(rows[0]?.[0] ?? 0) < 2) {
+        await ensureJob(db, POS_PUSH_KIND, `pos_push:${row.itemId}:again`, { now, payload: { itemId: row.itemId } });
+        return;
+      }
+      await markForPerson(
+        db,
+        row.itemId,
+        idempotent
+          ? `${title} did not answer about this order, twice: check it in ${title}.`
+          : `${title} did not answer about this order: check it in ${title}. It was not sent again, so it is never made twice.`,
+        now,
+      );
+    },
   });
 }
 
@@ -281,11 +373,12 @@ export async function applyPosState(
     detail = {};
   }
   if (detail.status === state.status) return false;
-  await db.client.query({
+  // Kept as applied only with what it did: a refusal and the person it marks are one batch.
+  const applied: Statement = {
     sql: "UPDATE connector_writes SET detail = ?, updated_at = ? WHERE id = ?",
     params: [JSON.stringify({ ...detail, status: state.status }), now, String(r[0])],
     method: "run",
-  });
+  };
   const itemId = String(r[1]);
   const title = TITLES[String(r[3])] ?? "The till";
   if (state.status === "rejected" || state.status === "cancelled") {
@@ -295,8 +388,11 @@ export async function applyPosState(
       itemId,
       `${title} ${state.status === "rejected" ? "did not take" : "cancelled"} this order${why}`,
       now,
+      [applied],
     );
-  } else if (state.status === "preparing" || state.status === "ready" || state.status === "out_for_delivery") {
+    return true;
+  }
+  if (state.status === "preparing" || state.status === "ready" || state.status === "out_for_delivery") {
     const system = {
       actor: { kind: "connector" as const, id: connectorId, channel: "connector" as const },
       tier: "verified_principal" as const,
@@ -313,6 +409,7 @@ export async function applyPosState(
       // An order that moved on here first (fulfilled by hand) keeps what the business said.
     }
   }
+  await db.client.query(applied);
   return true;
 }
 
@@ -331,12 +428,18 @@ export const posStatusStep: SyncStep = async ({ db, connectorId, definition, ctx
     sql: `SELECT w.id, w.item_id, w.external_id, w.detail FROM connector_writes w JOIN items i ON i.id = w.item_id
            WHERE w.connector_id = ? AND w.op = 'order' AND w.outcome = 'written' AND w.external_id IS NOT NULL
              AND i.state IN ('accepted', 'awaiting_payment', 'payment_failed', 'paid', 'fulfilling')
-           ORDER BY w.updated_at LIMIT 20`,
+           ORDER BY w.updated_at, w.id LIMIT 20`,
     params: [connectorId],
     method: "all",
   });
   let moved = 0;
   for (const r of rows) {
+    // Read now: to the back of the line, so the next sync asks about the others first.
+    await db.client.query({
+      sql: "UPDATE connector_writes SET updated_at = ? WHERE id = ?",
+      params: [now, String(r[0])],
+      method: "run",
+    });
     const state = await writer.status(ctx, { externalId: String(r[2]) });
     if (state && (await applyPosState(db, connectorId, String(r[2]), state, now))) moved++;
   }

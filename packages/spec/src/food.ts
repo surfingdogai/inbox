@@ -148,6 +148,62 @@ export type DietaryTag = (typeof DIETARY_TAGS)[number];
 /** The tags that say something about allergens: only as sure as the item's allergen status. */
 export const ALLERGEN_CLAIMS: ReadonlySet<DietaryTag> = new Set(["gluten_free", "dairy_free", "nut_free"]);
 
+/** A code and every one that is a part of it: gluten with wheat, rye, barley, oats and triticale. */
+const family = (root: string): string[] =>
+  ALLERGENS_VOCABULARY.allergens.filter((a) => a.code === root || a.parent === root).map((a) => a.code);
+
+const ANIMAL = [
+  ...family("fish"),
+  ...family("crustaceans"),
+  ...family("molluscs"),
+  "gelatin",
+  "beef",
+  "chicken",
+  "pork",
+];
+
+/**
+ * The allergens a dietary tag cannot sit beside on one dish (ADR-036), in what it contains and in what
+ * it may contain: a gluten-free dish that contains wheat, or may; a vegan dish that contains milk. A menu
+ * write holding both is refused, so an agent is never told a coeliac may eat it. What a dish may contain
+ * from a shared kitchen does not make it less vegan or vegetarian, so those are held to what it contains.
+ */
+export const DIETARY_CONFLICTS: Readonly<
+  Partial<Record<DietaryTag, { readonly contains: readonly string[]; readonly mayContain: readonly string[] }>>
+> = {
+  gluten_free: { contains: family("gluten"), mayContain: family("gluten") },
+  dairy_free: { contains: ["milk"], mayContain: ["milk"] },
+  nut_free: { contains: ["peanuts", ...family("tree_nuts")], mayContain: ["peanuts", ...family("tree_nuts")] },
+  vegan: { contains: ["milk", "eggs", ...ANIMAL], mayContain: [] },
+  vegetarian: { contains: ANIMAL, mayContain: [] },
+};
+
+export interface DietaryConflict {
+  readonly tag: DietaryTag;
+  readonly code: string;
+  readonly list: "contains" | "mayContain";
+}
+
+/** Every dietary tag of a dish that its own allergen lists contradict, with the allergen that does. */
+export function dietaryConflicts(
+  dietary: readonly string[],
+  lists: { readonly contains: readonly string[]; readonly mayContain: readonly string[] },
+): DietaryConflict[] {
+  const out: DietaryConflict[] = [];
+  for (const tag of dietary) {
+    const rule = DIETARY_CONFLICTS[tag as DietaryTag];
+    if (!rule) continue;
+    for (const list of ["contains", "mayContain"] as const) {
+      const code = lists[list].find((c) => rule[list].includes(c));
+      if (code) {
+        out.push({ tag: tag as DietaryTag, code, list });
+        break;
+      }
+    }
+  }
+  return out;
+}
+
 /** The age a buyer must be, as the business sets it; it checks ID at the handover itself. */
 export const AGE_LIMITS = [16, 18, 19, 20, 21] as const;
 

@@ -20,7 +20,8 @@ import {
 } from "../domain/types";
 import { ulid } from "../ids";
 import { assertKitchenClears } from "../kitchen/guard";
-import { posPushStatements } from "../kitchen/pos";
+import { overCapClaims } from "../kitchen/order";
+import { posCancelStatements, posPushStatements } from "../kitchen/pos";
 import { resolveTransition, type Transition } from "../machine/machine";
 import { outcomeOf } from "../machine/outcomes";
 import { machines, noteInput } from "../machine/tables";
@@ -904,7 +905,9 @@ async function attempt_(
           break;
         }
         if (item.type !== "booking") break;
-        const spec = await slotSpecFor(db, payload);
+        // A person at the business seats a table from the whole room, not only the covers set aside
+        // for direct bookings (ADR-036): the places are still taken, so automation sees them as used.
+        const spec = await slotSpecFor(db, payload, { seatsTheRoom: isPerson(caller) });
         const buckets = bucketsFor(spec, String(payload.startTime), String(payload.endTime));
         const taken = await readClaims(db, spec, buckets, item.id);
         const plan = planClaims(spec, buckets, taken);
@@ -1164,6 +1167,8 @@ async function attempt_(
   // one that was made keeps them, as it was made that day.
   if (item.type === "order" && (t.to === "declined" || t.to === "cancelled" || t.to === "expired")) {
     statements.push(releaseStatement(item.id));
+    // One that went into a till already is cancelled there by a person too (ADR-036).
+    statements.push(...(await posCancelStatements(db, item.id, now)));
   }
   if (effects.has("release_hold")) statements.push(releaseHoldStatement(item.id));
   if (hold && offerPlan.made) {
@@ -1301,9 +1306,18 @@ async function attempt_(
   if (item.type === "quote_request" && t.event === "quote") {
     statements.push(...(await workPushStatements(db, item.id, "quoted", now)));
   }
-  // An order the business accepted goes into its till, when one is connected (ADR-036).
+  // An order the business accepted goes into its till, when one is connected (ADR-036): at once when
+  // it is paid at the handover, once paid when its pay link is on its way, so the till never takes an
+  // order paid by link as one to pay at the door, nor makes one whose link is still open.
+  // A person who accepts an order over a daily cap gives it what was left of the cap (ADR-036).
   if (item.type === "order" && t.to === "accepted" && item.state !== "accepted") {
+    statements.push(...(await overCapClaims(db, item, now)));
+  }
+  if (item.type === "order" && t.to === "accepted" && item.state !== "accepted" && !linkWait) {
     statements.push(...(await posPushStatements(db, item.id, now)));
+  }
+  if (item.type === "order" && t.to === "paid" && item.state !== "paid") {
+    statements.push(...(await posPushStatements(db, item.id, now, "paid")));
   }
   if (await hasEventListeners(db)) {
     statements.push(webhookFanoutStatement({ id: eventId, type: `${item.type}.${t.event}`, itemId: item.id }, now));
@@ -2019,7 +2033,17 @@ function assertNoMoney(event: string, data: Record<string, unknown>, assistant: 
   }
 }
 
-async function slotSpecFor(db: Db, payload: Record<string, unknown>): Promise<SlotSpec> {
+/**
+ * How many people a person may seat in one sitting of a table service, whatever was set aside for direct
+ * bookings (ADR-036): they know the room; the inbox only counts the places, so automation sees them taken.
+ */
+const ROOM_SEATS = 1000;
+
+async function slotSpecFor(
+  db: Db,
+  payload: Record<string, unknown>,
+  o: { readonly seatsTheRoom?: boolean } = {},
+): Promise<SlotSpec> {
   const reservationFor = payload.reservationFor as { serviceId: string };
   const [row] = await db.orm
     .select({
@@ -2032,8 +2056,12 @@ async function slotSpecFor(db: Db, payload: Record<string, unknown>): Promise<Sl
     .from(services)
     .where(eq(services.id, reservationFor.serviceId));
   // A service whose places are people (a table's covers, ADR-036): a booking takes one per person.
-  const { capacityUnit, ...service } = row ?? ({} as NonNullable<typeof row>);
+  const { capacityUnit, ...stored } = row ?? ({} as NonNullable<typeof row>);
   const units = capacityUnit === "people" ? Math.max(1, Number(payload.partySize ?? 1)) : undefined;
+  const service =
+    capacityUnit === "people" && o.seatsTheRoom
+      ? { ...stored, capacity: Math.max(stored.capacity, ROOM_SEATS) }
+      : stored;
   if (!row) {
     throw new WriteError("invalid_input", `unknown service ${reservationFor.serviceId}`, {
       fields: [{ path: "payload.reservationFor.serviceId", problem: "invalid", message: "unknown service" }],
@@ -2051,7 +2079,8 @@ async function slotSpecFor(db: Db, payload: Record<string, unknown>): Promise<Sl
       });
     return {
       ...service,
-      capacity: resource.capacity,
+      capacity:
+        capacityUnit === "people" && o.seatsTheRoom ? Math.max(resource.capacity, ROOM_SEATS) : resource.capacity,
       resourceKey: `resource:${resourceId}`,
       ...(units ? { units } : {}),
     };

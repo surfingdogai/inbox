@@ -15,8 +15,9 @@ import { kitchenMoney, kitchenWords } from "./words";
  *   quote. Between the two, the customer is asked to get in touch.
  * - `deposit`: an amount per person from a party size, held as the booking's deposit (the same field a
  *   salon's deposit uses, ADR-035), with the policy dated for the booking.
- * - `setAside`: the covers a sitting keeps for direct bookings. They confirm at once, up to them (the
- *   service's capacity is set to them); without any set aside, a person confirms every table.
+ * - `setAside`: the covers a sitting keeps for direct bookings. A party that fits in what is left of them
+ *   confirms at once (the service's capacity is set to them, and nothing more); a larger party, and every
+ *   table when none are set aside, is confirmed by a person, who seats it from the whole room.
  * - `policy`: the table's cancellation policy, read back to the customer before they are bound.
  */
 
@@ -123,6 +124,8 @@ const DEPOSIT_WORDS: Readonly<Record<string, (amount: string, refundable: boolea
     `Un acconto di ${a} tiene il tavolo${r ? ", restituito con una cancellazione gratuita" : ", trattenuto se si cancella"}.`,
   pt: (a, r) =>
     `Um depósito de ${a} segura a mesa${r ? ", devolvido com um cancelamento gratuito" : ", que fica retido se cancelar"}.`,
+  ja: (a, r) =>
+    `${a}のデポジットでお席をお取りします${r ? "。無料でキャンセルできる期間内のキャンセルなら返金されます" : "。キャンセルの場合は返金されません"}。`,
 };
 
 /** What a table booking says of its deposit and policy before the customer is bound. */

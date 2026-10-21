@@ -108,9 +108,28 @@ export async function setOrderProgress(
 
 /**
  * An order a person must look at again (ADR-036): a till refused or cancelled what the inbox wrote to
- * it. A note in the order's thread, in the till's words, and the order marked for a person. One batch.
+ * it, or never answered. A note in the order's thread, in the till's words, and the order marked for a
+ * person, with whatever the caller records of it (`also`): one batch. Another write that took the
+ * order's version first is read again, and the mark made once more on top of it.
  */
-export async function markForPerson(db: Db, itemId: string, note: string, now: number): Promise<void> {
+export async function markForPerson(
+  db: Db,
+  itemId: string,
+  note: string,
+  now: number,
+  also: readonly Statement[] = [],
+): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await markOnce(db, itemId, note, now, also);
+      return;
+    } catch (error) {
+      if (attempt >= 2 || error instanceof WriteError) throw error;
+    }
+  }
+}
+
+async function markOnce(db: Db, itemId: string, note: string, now: number, also: readonly Statement[]) {
   const item = await load(db, itemId);
   const flags = { ...item.flags, needsHuman: true };
   const seq = item.version + 1;
@@ -149,5 +168,6 @@ export async function markForPerson(db: Db, itemId: string, note: string, now: n
     jobStatement("notify", { to: "owner", itemId: item.id, event: "flags", eventId }, now, {
       dedupeKey: `notify:pos:${item.id}:${Math.floor(now / 3_600_000)}`,
     }),
+    ...also,
   ]);
 }

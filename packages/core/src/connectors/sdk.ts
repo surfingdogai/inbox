@@ -1055,12 +1055,17 @@ export interface OutboundOrder {
   readonly slotStart: number | null;
   readonly lines: readonly {
     readonly externalId: string | null;
+    /** The till's id for the group the item sits in there, where its orders name it (a Toast menu group). */
+    readonly groupExternalId: string | null;
     readonly name: string;
     readonly quantity: number;
+    /** What one costs, its options included (each option's `priceDelta` is a part of it). */
     readonly unitPrice: PayAmount;
     readonly options: readonly {
       readonly name: string;
       readonly externalId: string | null;
+      /** The till's id for the option's group (a Toast modifier group). */
+      readonly groupExternalId: string | null;
       readonly priceDelta: PayAmount | null;
       readonly portion: "whole" | "left" | "right";
     }[];
@@ -1101,6 +1106,12 @@ export interface PosOrderState {
 }
 
 export interface OrdersWriter {
+  /**
+   * The till answers a second write under the same key as the same order (a 409, a duplicate it
+   * names): an order whose answer never came, and could not be found, is written once more. Absent: it
+   * is never written again, and a person is told to look in the till.
+   */
+  readonly idempotent?: boolean | undefined;
   /** Writes the accepted order into the till or channel. Safe to call again with the same order (its `key`). */
   put(ctx: RunContext, order: OutboundOrder): Promise<PosOrderRef>;
   /** The order as this inbox wrote it before, found by its key; null when it is not there. */

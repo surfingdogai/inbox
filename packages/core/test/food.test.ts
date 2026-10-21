@@ -8,12 +8,21 @@ import {
   jurisdictionOf,
   mandatoryAllergens,
 } from "@surfingdog/spec";
+import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { Capabilities } from "../src/capabilities/service";
 import type { CreateOrderInput } from "../src/capabilities/types";
+import type { ConnectorCapabilities } from "../src/connectors/capability";
+import { ConnectorError, type OrdersWriter, type PosOrderRef, type RunContext } from "../src/connectors/sdk";
+import { resolveWrite } from "../src/connectors/write-first";
+import { renderCustomerMail } from "../src/customer/mail";
 import { createDb, type Db } from "../src/db";
 import { customerCopyProblems } from "../src/i18n/customer-words";
 import { ulid } from "../src/ids";
+import { menuFromSnapshot, mergeImported } from "../src/kitchen/capability";
+import { kitchenContext } from "../src/kitchen/context";
+import { servedAt } from "../src/kitchen/order";
+import { applyPosState, posCancelHandler, posStatusStep, pushOrder, registerFoodResolver } from "../src/kitchen/pos";
 import { tableWords } from "../src/kitchen/tables";
 import { kitchenWords } from "../src/kitchen/words";
 import { allergenWords } from "../src/menu/allergens";
@@ -21,9 +30,13 @@ import type { MenuFields } from "../src/menu/schema";
 import { menuFieldsSchema } from "../src/menu/schema";
 import { runRulesForEvent } from "../src/rules/engine";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
+import { items } from "../src/schema/tables";
 import { createSecretBox } from "../src/secrets/box";
+import { readSettings } from "../src/settings/schema";
 import { WriteError } from "../src/write/errors";
 import { type Caller, transitionItem } from "../src/write/index";
+import { withdrawalOf } from "../src/write/returns";
+import { rowToItem } from "../src/write/views";
 import { confirming, makeClient, resetTables } from "./harness";
 
 /**
@@ -996,9 +1009,581 @@ describe("tables by covers", () => {
   });
 });
 
+describe("tables: instant only inside the covers set aside", () => {
+  it("a party larger than the covers set aside goes to a person, who seats it from the room", async () => {
+    const s = await kyma(6);
+    await s.caps.setup.applyPreset(person(KYMA_T), { preset: "food", replace: true });
+    const { rows } = await s.db.client.query({
+      sql: "SELECT capacity, withdrawal FROM services WHERE id = ?",
+      params: [s.table.id],
+      method: "all",
+    });
+    // The covers set aside, and nothing more; a table is for a set date (dated leisure).
+    expect(rows[0]).toEqual([6, "dated_leisure"]);
+    const evening = "2026-11-05T17:00:00Z";
+    const eight = await s.caps.createBooking(customer(KYMA_T), tableFor(s.table.id, 8, evening));
+    await rules(s.db, eight.view.item.id, KYMA_T);
+    const held = await itemOf(s.db, eight.view.item.id);
+    expect(held.state).toBe("requested");
+    expect(held.flags.needsHuman).toBe(true);
+    const e = await refused(transitionItem(s.db, assistant(KYMA_T), { itemId: eight.view.item.id, event: "confirm" }));
+    expect([e.details?.guard, e.details?.reason]).toEqual(["tables", "over_set_aside"]);
+    await transitionItem(s.db, person(KYMA_T), { itemId: eight.view.item.id, event: "confirm" });
+    expect((await itemOf(s.db, eight.view.item.id)).state).toBe("confirmed");
+    // The eight took the six set aside: a party of two at the same sitting is a person's too.
+    const two = await s.caps.createBooking(customer(KYMA_T), tableFor(s.table.id, 2, evening));
+    await rules(s.db, two.view.item.id, KYMA_T);
+    expect((await itemOf(s.db, two.view.item.id)).state).toBe("requested");
+    // Another sitting: four fit in the six, and the rule confirms them.
+    const four = await s.caps.createBooking(customer(KYMA_T), tableFor(s.table.id, 4, "2026-11-05T19:00:00Z"));
+    await rules(s.db, four.view.item.id, KYMA_T);
+    expect((await itemOf(s.db, four.view.item.id)).state).toBe("confirmed");
+  });
+
+  it("with no covers set aside, a person confirms as many tables in a sitting as the room holds", async () => {
+    const s = await kyma(undefined);
+    const evening = "2026-11-05T17:00:00Z";
+    for (const _ of [1, 2, 3]) {
+      const b = await s.caps.createBooking(customer(KYMA_T), tableFor(s.table.id, 6, evening));
+      await transitionItem(s.db, person(KYMA_T), { itemId: b.view.item.id, event: "confirm" });
+      expect((await itemOf(s.db, b.view.item.id)).state).toBe("confirmed");
+    }
+  });
+});
+
+describe("what an order is checked for, before it is taken", () => {
+  it("an item off sale is refused even by its id, though get_menu hides it", async () => {
+    const s = await volcan();
+    const pizza = await dish(s, VOLCAN_T, { name: "Pizza al pastor", price: 18900, currency: "MXN", menu: PIZZA });
+    await s.db.client.query({
+      sql: "UPDATE products SET active = 0 WHERE id = ?",
+      params: [pizza.product.id],
+      method: "run",
+    });
+    const slot = await firstSlot(s, VOLCAN_T, "2026-11-04");
+    const e = await refused(
+      s.caps.createOrder(
+        customer(VOLCAN_T),
+        order([line(pizza.product.id, "Pizza", 1, MXN(1))], { method: "pickup", slot: { start: slot } }),
+      ),
+    );
+    expect(e.details?.reason).toBe("not_available");
+    expect(e.message).toBe("Pizza al pastor is not on sale now.");
+  });
+
+  it("the zone's minimum counts what the options add", async () => {
+    const s = await crunch();
+    const chicken = await dish(s, BUSAN_T, {
+      name: "양념 치킨",
+      price: 10000,
+      currency: "KRW",
+      menu: {
+        section: "chicken",
+        optionGroups: [
+          { id: "size", name: "크기", min: 0, max: 1, choices: [{ id: "big", name: "큰", priceDelta: 6000 }] },
+        ],
+      },
+    });
+    const slot = await firstSlot(s, BUSAN_T, "2026-11-04");
+    const to = { shippingAddress: { streetAddress: "Haeundae-ro 1", postalCode: "48058", addressCountry: "KR" } };
+    const small = await refused(
+      s.caps.createOrder(
+        customer(BUSAN_T),
+        order([line(chicken.product.id, "치킨", 1, KRW(1))], { method: "delivery", slot: { start: slot } }, to),
+      ),
+    );
+    expect(small.details?.reason).toBe("below_minimum");
+    const big = await s.caps.createOrder(
+      customer(BUSAN_T),
+      order(
+        [line(chicken.product.id, "치킨", 1, KRW(1), { options: [{ groupId: "size", choiceId: "big" }] })],
+        { method: "delivery", slot: { start: slot } },
+        to,
+      ),
+    );
+    expect((await itemOf(s.db, big.view.item.id)).payload.totalPrice).toEqual(KRW(16000 + 3000));
+  });
+
+  it("a daypart past midnight serves its late hours, on its days and the morning after", async () => {
+    const s = await volcan();
+    await s.caps.updateSettings(person(VOLCAN_T), {
+      doc: { menu: { dayparts: [{ name: "Noche", days: ["fri"], from: "22:00", to: "02:00" }] } },
+    });
+    const ctx = await kitchenContext(s.db);
+    const m = menu({ section: "noche", dayparts: ["Noche"] });
+    // Friday 6 November 2026, Mexico City (UTC-6).
+    expect(servedAt(ctx, m, Date.parse("2026-11-07T05:00:00Z"))).toBe(true); // Fri 23:00
+    expect(servedAt(ctx, m, Date.parse("2026-11-07T07:30:00Z"))).toBe(true); // Sat 01:30
+    expect(servedAt(ctx, m, Date.parse("2026-11-07T08:30:00Z"))).toBe(false); // Sat 02:30
+    expect(servedAt(ctx, m, Date.parse("2026-11-06T18:00:00Z"))).toBe(false); // Fri 12:00
+    expect(servedAt(ctx, m, Date.parse("2026-11-08T05:00:00Z"))).toBe(false); // Sat 23:00
+  });
+});
+
+describe("a person who accepts an order over a daily cap gives it what was left", () => {
+  it("so automation never sells past what was set aside", async () => {
+    const s = await shop({
+      name: "Hokuto Bakery",
+      currency: "JPY",
+      timezone: "Asia/Tokyo",
+      language: "ja",
+      t: HOKUTO_T,
+      hours: ["08:00", "19:00"],
+    });
+    const melon = await dish(s, HOKUTO_T, {
+      name: "メロンパン",
+      price: 280,
+      currency: "JPY",
+      menu: { section: "pan", dailyCap: 10 },
+    });
+    const slot = await firstSlot(s, HOKUTO_T, "2026-11-04");
+    const ask = (n: number) =>
+      s.caps.createOrder(
+        customer(HOKUTO_T),
+        order([line(melon.product.id, "メロンパン", n, JPY(280))], { method: "pickup", slot: { start: slot } }),
+      );
+    await ask(7);
+    const five = await ask(5);
+    expect((await itemOf(s.db, five.view.item.id)).payload.kitchen).toEqual({ instant: false, hold: ["over_cap"] });
+    await transitionItem(s.db, person(HOKUTO_T), { itemId: five.view.item.id, event: "accept" });
+    expect(await claims(s.db, "menu-cap:")).toBe(10);
+    const three = await ask(3);
+    expect((await itemOf(s.db, three.view.item.id)).payload.kitchen).toEqual({ instant: false, hold: ["over_cap"] });
+    await transitionItem(s.db, person(HOKUTO_T), {
+      itemId: five.view.item.id,
+      event: "record_cancel",
+      input: { note: "電話でキャンセル" },
+    });
+    expect(await claims(s.db, "menu-cap:")).toBe(7);
+  });
+});
+
+describe("the menu's own word: allergens, dietary tags and withdrawal", () => {
+  it("refuses a dietary tag the dish's own allergens contradict", async () => {
+    const s = await shop({
+      name: "Hokuto Bakery",
+      currency: "JPY",
+      timezone: "Asia/Tokyo",
+      language: "ja",
+      t: HOKUTO_T,
+    });
+    const row = await s.caps.setup.createProduct(person(HOKUTO_T), {
+      name: "Melon pan",
+      price: JPY(280),
+      active: true,
+    });
+    const e = await refused(
+      s.caps.food.setMenuItem(person(HOKUTO_T), {
+        product_id: row.id,
+        menu: menu({
+          section: "pan",
+          dietary: ["gluten_free", "vegan", "nut_free"],
+          allergens: { contains: ["wheat", "milk", "eggs"], mayContain: ["almond"], status: "unconfirmed" },
+        }),
+      }),
+    );
+    expect(e.status).toBe(422);
+    expect(e.fields?.map((f) => [f.path, f.message])).toEqual([
+      ["menu.dietary", "Gluten free, but it contains wheat: take one off."],
+      ["menu.dietary", "Vegan, but it contains milk: take one off."],
+      ["menu.dietary", "Nut free, but it may contain almond: take one off."],
+    ]);
+  });
+
+  it("a dish on the menu is the perishable exception: the confirm step and the email say so, not 14 days", async () => {
+    const s = await shop({
+      name: "Monsoon Café",
+      currency: "INR",
+      timezone: "Asia/Kolkata",
+      language: "en",
+      t: BLR_T,
+      hours: ["07:00", "20:00"],
+    });
+    const dosa = await dish(s, BLR_T, { name: "Benne dosa", price: 12000, currency: "INR", menu: { section: "food" } });
+    const { rows } = await s.db.client.query({
+      sql: "SELECT withdrawal FROM products WHERE id = ?",
+      params: [dosa.product.id],
+      method: "all",
+    });
+    expect(rows[0]?.[0]).toBe("perishable");
+    const slot = await firstSlot(s, BLR_T, "2026-11-04");
+    const input = order([line(dosa.product.id, "Dosa", 1, INR(12000))], { method: "pickup", slot: { start: slot } });
+    const bare = new Capabilities(
+      s.db,
+      createSecretBox(["food-test-instance-key-0123456789abcdef"]),
+      "https://kitchen.example",
+    );
+    const ask = await refused(bare.createOrder(customer(BLR_T), input));
+    const summary = String(ask.details?.summary);
+    expect(summary).toContain("This cannot be returned: it does not keep.");
+    expect(summary).not.toContain("withdraw within");
+    const made = await s.caps.createOrder(customer(BLR_T), input);
+    await transitionItem(s.db, person(BLR_T), { itemId: made.view.item.id, event: "accept" });
+    const [row] = await s.db.orm.select().from(items).where(eq(items.id, made.view.item.id));
+    const item = rowToItem(row as NonNullable<typeof row>);
+    const settings = await readSettings(s.db);
+    const right = await withdrawalOf(s.db, item, settings, BLR_T);
+    expect([right.available, right.exception]).toEqual([false, "perishable"]);
+    const mail = renderCustomerMail({
+      item,
+      event: "accept",
+      lang: "en",
+      timezone: "Asia/Kolkata",
+      business: "Monsoon Café",
+      withdrawal: {
+        available: false,
+        until: null,
+        kind: "goods",
+        exception: right.exception && right.exception !== "standard" ? right.exception : null,
+        law: "eu",
+        days: 14,
+      },
+      now: BLR_T,
+    });
+    expect(mail.text).toContain("This cannot be returned: it does not keep.");
+    expect(mail.text).not.toContain("withdraw within");
+  });
+
+  it("an order's emails list each line with its choices, how and when, the fee and the tip, adding up to the total", async () => {
+    const s = await crunch();
+    const chicken = await dish(s, BUSAN_T, {
+      name: "양념 치킨",
+      price: 18000,
+      currency: "KRW",
+      menu: {
+        section: "chicken",
+        optionGroups: [
+          { id: "sauce", name: "소스", min: 0, max: 1, choices: [{ id: "hot", name: "매운맛", priceDelta: 1000 }] },
+        ],
+      },
+    });
+    const slots = await s.caps.food.listOrderSlots(
+      { date: "2026-11-04", method: "delivery", postal_code: "48058", country: "KR" },
+      BUSAN_T,
+      "en",
+    );
+    const made = await s.caps.createOrder(
+      customer(BUSAN_T),
+      order(
+        [
+          line(chicken.product.id, "치킨", 2, KRW(1), {
+            options: [{ groupId: "sauce", choiceId: "hot" }],
+            note: "no radish",
+          }),
+        ],
+        { method: "delivery", slot: { start: slots.slots[0]?.start } },
+        {
+          shippingAddress: { streetAddress: "Haeundae-ro 1", postalCode: "48058", addressCountry: "KR" },
+          tip: { percent: 10 },
+        },
+      ),
+    );
+    const [row] = await s.db.orm.select().from(items).where(eq(items.id, made.view.item.id));
+    const item = rowToItem(row as NonNullable<typeof row>);
+    const mail = renderCustomerMail({
+      item,
+      event: "create",
+      lang: "en",
+      timezone: "Asia/Seoul",
+      business: "Seoul Crunch Chicken",
+      now: BUSAN_T,
+    });
+    expect(mail.text).toContain("2 × 양념 치킨 (매운맛) “no radish” —");
+    expect(mail.text).toMatch(/Delivery: [A-Z][a-z]+day/);
+    expect(mail.text).toContain("Delivery (Haeundae): ₩3,000.");
+    expect(mail.text).toContain("Tip: ₩3,800.");
+    // The lines, the fee and the tip add up to the total the email gives.
+    expect(19000 * 2 + 3000 + 3800).toBe((item.payload as { totalPrice: { value: number } }).totalPrice.value);
+  });
+
+  it("a confirm writes only over what the person was shown: a change saved a moment before wins", async () => {
+    const s = await volcan();
+    const pizza = await dish(
+      s,
+      VOLCAN_T,
+      { name: "Pizza al pastor", price: 18900, currency: "MXN", menu: PIZZA },
+      false,
+    );
+    const query = s.db.client.query.bind(s.db.client);
+    // Another person adds peanuts between the confirm's read and its write.
+    s.db.client.query = (async (q: Parameters<typeof query>[0]) => {
+      if (/AND menu = \?/.test(q.sql)) {
+        s.db.client.query = query;
+        await s.caps.food.setMenuItem(person(VOLCAN_T, "staff"), {
+          product_id: pizza.product.id,
+          menu: menu({
+            ...PIZZA,
+            allergens: { contains: ["wheat", "milk", "peanuts"], mayContain: ["sesame"], status: "unconfirmed" },
+          }),
+        });
+      }
+      return query(q);
+    }) as typeof s.db.client.query;
+    const e = await refused(
+      s.caps.food.confirmAllergens(person(VOLCAN_T), {
+        product_id: pizza.product.id,
+        fingerprint: pizza.fingerprint as string,
+      }),
+    );
+    s.db.client.query = query;
+    expect(e.details?.guard).toBe("allergens_changed");
+    const now = (await s.caps.food.ownerMenu(person(VOLCAN_T))).items.find((i) => i.product.id === pizza.product.id);
+    expect(now?.menu?.allergens).toMatchObject({ contains: ["wheat", "milk", "peanuts"], status: "unconfirmed" });
+  });
+
+  it("a dish brought in again keeps everything the owner set here", () => {
+    const before = menu({
+      section: "pasteles",
+      dailyCap: 6,
+      madeToOrder: true,
+      noticeMin: 2880,
+      availableDays: ["fri", "sat"],
+      dayparts: ["Tarde"],
+      sort: 3,
+      brief: { messageMax: 30 },
+      allergens: { contains: ["wheat", "eggs"], mayContain: [], status: "confirmed", confirmedBy: "owner" },
+      optionGroups: [
+        {
+          id: "g1",
+          name: "Tamaño",
+          min: 1,
+          max: 1,
+          externalId: "TG-1",
+          choices: [
+            { id: "c1", name: "Grande", externalId: "TC-1", allergens: { contains: ["milk"], mayContain: [] } },
+          ],
+        },
+      ],
+    });
+    const item = {
+      externalId: "T-CAKE",
+      name: "Pastel de tres leches",
+      price: MXN(52000),
+      optionGroups: [
+        {
+          externalId: "TG-1",
+          name: "Tamaño",
+          min: 1,
+          max: 1,
+          choices: [{ externalId: "TC-1", name: "Grande", priceDelta: 8000 }],
+        },
+      ],
+    };
+    const next = mergeImported(before, menuFromSnapshot(item, "pasteles"), item, person(VOLCAN_T), "toast");
+    expect(next).toMatchObject({ section: "pasteles", dailyCap: 6, madeToOrder: true, noticeMin: 2880, sort: 3 });
+    expect(next.availableDays).toEqual(["fri", "sat"]);
+    expect(next.allergens.status).toBe("confirmed");
+    expect(next.optionGroups[0]?.choices[0]).toMatchObject({ priceDelta: 8000, allergens: { contains: ["milk"] } });
+    const changed = mergeImported(
+      before,
+      menuFromSnapshot({ ...item, allergens: { contains: ["wheat"], status: "unconfirmed" } }, "pasteles"),
+      { ...item, allergens: { contains: ["wheat"], status: "unconfirmed" } },
+      person(VOLCAN_T),
+      "toast",
+    );
+    expect(changed.allergens).toMatchObject({ contains: ["wheat"], status: "unconfirmed", source: "toast" });
+  });
+});
+
+/* --- the kitchen's own till ------------------------------------------------------------------ */
+
+/** A till as the inbox sees it through its connectors: one connection, the writer given. */
+async function till(s: Shop, kind: string, title: string, writer: OrdersWriter) {
+  const id = `conn_${kind}`;
+  await s.db.client.query({
+    sql: "INSERT INTO connectors (id, kind, name, status, config_public, created_at, updated_at) VALUES (?, ?, ?, 'active', '{}', ?, ?)",
+    params: [id, kind, title, VOLCAN_T, VOLCAN_T],
+    method: "run",
+  });
+  const definition = {
+    kind,
+    title,
+    group: "pos",
+    capabilities: ["orders_out", "status_in"],
+    auth: "form",
+    orders: writer,
+  };
+  const ctx = {
+    inbox: { id: "inb_volcan" },
+    marker: "m",
+    secret: {},
+    extra: {},
+    now: VOLCAN_T,
+  } as unknown as RunContext;
+  const connectors = {
+    async contextFor() {
+      return { definition, ctx, status: "active" };
+    },
+  } as unknown as ConnectorCapabilities;
+  registerFoodResolver(connectors);
+  return { id, connectors, definition, ctx };
+}
+
+async function notes(db: Db, itemId: string): Promise<string[]> {
+  const { rows } = await db.client.query({
+    sql: "SELECT body_text FROM thread_entries WHERE item_id = ? AND direction = 'note' ORDER BY created_at, id",
+    params: [itemId],
+    method: "all",
+  });
+  return rows.map((r) => String(r[0]));
+}
+
+async function acceptedOrder(s: Shop) {
+  const pizza = await dish(s, VOLCAN_T, { name: "Pizza al pastor", price: 18900, currency: "MXN", menu: PIZZA });
+  const slot = await firstSlot(s, VOLCAN_T, "2026-11-04");
+  const made = await s.caps.createOrder(
+    customer(VOLCAN_T),
+    order([line(pizza.product.id, "Pizza", 1, MXN(1))], { method: "pickup", slot: { start: slot } }),
+  );
+  await transitionItem(s.db, person(VOLCAN_T), { itemId: made.view.item.id, event: "accept" });
+  return made.view.item.id;
+}
+
+const silent = (idempotent: boolean): OrdersWriter => ({
+  ...(idempotent ? { idempotent: true } : {}),
+  async put(): Promise<PosOrderRef> {
+    throw new ConnectorError("unreachable", "no answer");
+  },
+  async find() {
+    return null;
+  },
+  async status() {
+    return null;
+  },
+});
+
+async function journal(db: Db, itemId: string): Promise<{ id: string; outcome: string }[]> {
+  const { rows } = await db.client.query({
+    sql: "SELECT id, outcome FROM connector_writes WHERE item_id = ? ORDER BY attempt",
+    params: [itemId],
+    method: "all",
+  });
+  return rows.map((r) => ({ id: String(r[0]), outcome: String(r[1]) }));
+}
+
+describe("a till that never answers: written once more where it can be, else a person looks", () => {
+  it("one that answers a repeat as the same order is written again, then a person is told", async () => {
+    const s = await volcan();
+    const t = await till(s, "toast", "Toast", silent(true));
+    const itemId = await acceptedOrder(s);
+    const first = await pushOrder(s.db, t.connectors, itemId, VOLCAN_T);
+    expect(first.map((o) => o.status)).toEqual(["pending"]);
+    expect((await notes(s.db, itemId)).at(-1)).toMatch(/^Toast has not answered about this order yet/);
+    const [w1] = await journal(s.db, itemId);
+    expect(await resolveWrite(s.db, String(w1?.id), VOLCAN_T + 6 * MIN)).toBe("never found: not written");
+    const { rows } = await s.db.client.query({
+      sql: "SELECT dedupe_key FROM jobs WHERE kind = 'pos_push' ORDER BY created_at",
+      params: [],
+      method: "all",
+    });
+    expect(rows.map((r) => r[0])).toContain(`pos_push:${itemId}:again`);
+    await pushOrder(s.db, t.connectors, itemId, VOLCAN_T + 7 * MIN);
+    const second = (await journal(s.db, itemId))[1];
+    await resolveWrite(s.db, String(second?.id), VOLCAN_T + 13 * MIN);
+    expect((await notes(s.db, itemId)).at(-1)).toBe("Toast did not answer about this order, twice: check it in Toast.");
+    expect((await itemOf(s.db, itemId)).flags.needsHuman).toBe(true);
+  });
+
+  it("one that may take it twice is never written again: a person checks it there", async () => {
+    const s = await volcan();
+    const t = await till(s, "clover", "Clover", silent(false));
+    const itemId = await acceptedOrder(s);
+    await pushOrder(s.db, t.connectors, itemId, VOLCAN_T);
+    const [w1] = await journal(s.db, itemId);
+    await resolveWrite(s.db, String(w1?.id), VOLCAN_T + 6 * MIN);
+    expect((await notes(s.db, itemId)).at(-1)).toBe(
+      "Clover did not answer about this order: check it in Clover. It was not sent again, so it is never made twice.",
+    );
+    const { rows } = await s.db.client.query({
+      sql: "SELECT COUNT(*) FROM jobs WHERE dedupe_key = ?",
+      params: [`pos_push:${itemId}:again`],
+      method: "all",
+    });
+    expect(Number(rows[0]?.[0])).toBe(0);
+  });
+
+  it("an order cancelled here after it went in is marked for a person to cancel it there too", async () => {
+    const s = await volcan();
+    const t = await till(s, "toast", "Toast", {
+      ...silent(true),
+      async put() {
+        return { externalId: "ord-1", status: "pending" };
+      },
+    });
+    const itemId = await acceptedOrder(s);
+    expect((await pushOrder(s.db, t.connectors, itemId, VOLCAN_T)).map((o) => o.status)).toEqual(["written"]);
+    await transitionItem(s.db, person(VOLCAN_T), {
+      itemId,
+      event: "record_cancel",
+      input: { note: "Llamó para cancelar" },
+    });
+    const { rows } = await s.db.client.query({
+      sql: "SELECT id, kind, payload FROM jobs WHERE kind = 'pos_cancel'",
+      params: [],
+      method: "all",
+    });
+    expect(rows).toHaveLength(1);
+    await posCancelHandler()(
+      { id: String(rows[0]?.[0]), kind: "pos_cancel", payload: { itemId } } as never,
+      {
+        db: s.db,
+        now: VOLCAN_T + MIN,
+      } as never,
+    );
+    expect((await notes(s.db, itemId)).at(-1)).toBe(
+      "This order was cancelled here: cancel it in Toast too, so the kitchen does not make it.",
+    );
+  });
+
+  it("an order waiting on its pay link is not sent as one to pay at the door", async () => {
+    const s = await volcan();
+    const t = await till(s, "deliverect", "Deliverect", silent(true));
+    const itemId = await acceptedOrder(s);
+    await s.db.client.query({
+      sql: "UPDATE items SET state = 'awaiting_payment' WHERE id = ?",
+      params: [itemId],
+      method: "run",
+    });
+    expect(await pushOrder(s.db, t.connectors, itemId, VOLCAN_T)).toEqual([]);
+    expect(await journal(s.db, itemId)).toEqual([]);
+  });
+
+  it("a till's refusal marks the order for a person once, with what it said; every open order is asked about in turn", async () => {
+    const s = await volcan();
+    const asked: string[] = [];
+    const t = await till(s, "toast", "Toast", {
+      ...silent(true),
+      async status(_ctx, ref) {
+        asked.push(ref.externalId);
+        return null;
+      },
+    });
+    const itemId = await acceptedOrder(s);
+    for (let n = 1; n <= 25; n++) {
+      await s.db.client.query({
+        sql: `INSERT INTO connector_writes (id, connector_id, item_id, op, owner, attempt, idem_key, request_sha, outcome, external_id, created_at, updated_at)
+              VALUES (?, ?, ?, 'order', 'food', ?, ?, 'sha', 'written', ?, ?, ?)`,
+        params: [ulid(), t.id, itemId, n, `k${n}`, `ord-${n}`, VOLCAN_T, VOLCAN_T + n],
+        method: "run",
+      });
+    }
+    const step = (now: number) =>
+      posStatusStep({ db: s.db, connectorId: t.id, kind: "toast", definition: t.definition as never, ctx: t.ctx, now });
+    await step(VOLCAN_T + MIN);
+    expect(asked).toHaveLength(20);
+    await step(VOLCAN_T + 2 * MIN);
+    expect(asked.slice(20, 25).sort()).toEqual(["ord-21", "ord-22", "ord-23", "ord-24", "ord-25"]);
+    expect(await applyPosState(s.db, t.id, "ord-3", { status: "rejected", reason: "sin masa" }, VOLCAN_T)).toBe(true);
+    expect(await applyPosState(s.db, t.id, "ord-3", { status: "rejected", reason: "sin masa" }, VOLCAN_T)).toBe(false);
+    expect((await notes(s.db, itemId)).filter((n) => n.startsWith("Toast did not take"))).toEqual([
+      "Toast did not take this order: sin masa",
+    ]);
+  });
+});
+
 describe("what customers read, in the business's words (the copy lint)", () => {
-  it("names no software, network, receipt, pass, key or inbox, in any of the six languages", () => {
-    for (const lang of ["en", "es", "fr", "de", "it", "pt"]) {
+  it("names no software, network, receipt, pass, key or inbox, in any of the seven languages", () => {
+    for (const lang of ["en", "es", "fr", "de", "it", "pt", "ja"]) {
       const w = kitchenWords(lang, "Taverna Kyma");
       const at = Date.parse("2026-11-05T17:00:00Z");
       const strings = [
@@ -1012,6 +1597,7 @@ describe("what customers read, in the business's words (the copy lint)", () => {
         w.tooFar(7),
         w.slotFull([at], "Europe/Athens"),
         w.soldOut("Μουσακάς"),
+        w.notAvailable("Μουσακάς"),
         w.notThatDay("Μουσακάς"),
         w.notServedThen("Μουσακάς"),
         w.noDeliveryThere,

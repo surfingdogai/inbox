@@ -64,12 +64,14 @@ import {
   PAY_CLOSE_KIND,
   PAY_LINK_KIND,
   PAY_NOTICE_KIND,
+  POS_CANCEL_KIND,
   POS_PUSH_KIND,
   parseSecretKeys,
   payCloseHandler,
   payLane,
   payLinkHandler,
   payNoticeHandler,
+  posCancelHandler,
   posPushHandler,
   readSettings,
   VERSION,
@@ -310,9 +312,11 @@ export function createInbox(deps: AppDeps): Inbox {
     // and the sweep that removes files no request took within the hour. An inbox with neither enqueues none.
     .register(WORK_PUSH_KIND, workPushHandler(caps.connectors), { lane: payLane })
     .register(ATTACHMENT_SWEEP_KIND, attachmentSweepHandler())
-    // A kitchen (ADR-036): an order the business accepted, written into its till, one order at a time.
-    // An inbox with no till connected enqueues none.
-    .register(POS_PUSH_KIND, posPushHandler(caps.connectors), { lane: payLane });
+    // A kitchen (ADR-036): an order the business accepted, written into its till, one order at a time;
+    // and one cancelled here after it went in, marked for a person to cancel it there too. An inbox with
+    // no till connected enqueues neither.
+    .register(POS_PUSH_KIND, posPushHandler(caps.connectors), { lane: payLane })
+    .register(POS_CANCEL_KIND, posCancelHandler());
   if (demo) {
     for (const kind of [
       NETWORK_PING_ONE_KIND,

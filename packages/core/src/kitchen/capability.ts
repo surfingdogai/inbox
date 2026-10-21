@@ -1,7 +1,9 @@
 import {
   ALLERGENS_VOCABULARY,
   allergenLabel,
+  DIETARY_CONFLICTS,
   DIETARY_TAGS,
+  dietaryConflicts,
   type GetMenuInput,
   type GetMenuOutput,
   isAllergenCode,
@@ -126,8 +128,15 @@ export interface OwnerMenu {
       readonly recommended: boolean;
     }[];
     readonly dietary: readonly string[];
+    /** The allergens each dietary tag cannot sit beside, by the list they are in (spec `DIETARY_CONFLICTS`). */
+    readonly dietary_conflicts: Readonly<
+      Record<string, { readonly contains: readonly string[]; readonly mayContain: readonly string[] }>
+    >;
   };
 }
+
+/** A table service's capacity when no covers are set aside: every table is a person's to confirm. */
+const TABLES_ON_REQUEST = 1000;
 
 export class FoodCapabilities {
   constructor(
@@ -311,6 +320,7 @@ export class FoodCapabilities {
           recommended: where ? a.recommended_in.includes(where) : false,
         })),
         dietary: [...DIETARY_TAGS],
+        dietary_conflicts: DIETARY_CONFLICTS as OwnerMenu["vocabulary"]["dietary_conflicts"],
       },
     };
   }
@@ -338,12 +348,26 @@ export class FoodCapabilities {
         fields: [{ path: "menu.optionGroups", problem: "invalid", message: problem }],
       });
     }
+    // A dietary tag its own allergens contradict is never kept: agents would tell a coeliac it is safe.
+    const conflicts = dietaryConflicts(input.menu.dietary, input.menu.allergens);
+    if (conflicts.length) {
+      const fields = conflicts.map((c) => ({
+        path: "menu.dietary",
+        problem: "invalid" as const,
+        message: `${DIETARY_WORDS[c.tag] ?? c.tag}, but it ${c.list === "contains" ? "contains" : "may contain"} ${allergenLabel(c.code, "en").toLowerCase()}: take one off.`,
+      }));
+      throw new WriteError("invalid_input", fields.map((f) => f.message).join(" "), { fields });
+    }
     const menu: MenuFields = { ...input.menu, allergens: afterEdit(before.menu, input.menu, caller) };
-    // Made to order is the `personalised` exception to withdrawal (ADR-018 §7): it follows, both ways.
+    // Withdrawal (ADR-018 §7; 2011/83/EU art. 16(c), (d)): a dish made to order is the `personalised`
+    // exception, and any other dish on the menu the `perishable` one, as prepared food does not keep.
+    // Only what the inbox set follows the menu; an exception the owner chose stays theirs.
     const withdrawal = menu.madeToOrder
-      ? "personalised"
-      : before.withdrawal === "personalised" && before.menu?.madeToOrder
-        ? "standard"
+      ? before.withdrawal === "standard" || before.withdrawal === "perishable"
+        ? "personalised"
+        : null
+      : before.withdrawal === "standard" || (before.withdrawal === "personalised" && before.menu?.madeToOrder)
+        ? "perishable"
         : null;
     await this.db.client.query({
       sql: `UPDATE products SET menu = ?, ${withdrawal ? "withdrawal = ?, " : ""}updated_at = ? WHERE id = ?`,
@@ -364,22 +388,28 @@ export class FoodCapabilities {
     }
     const now = nowOf(caller);
     const p = await this.product(input.product_id);
-    if (!p.menu) throw new WriteError("invalid_input", "This product is not on the menu.");
-    if ((await allergenFingerprint(p.menu)) !== input.fingerprint) {
-      throw new WriteError(
-        "guard_failed",
-        "The allergens changed since you looked: check them again before you confirm.",
-        {
-          details: { guard: "allergens_changed" },
-        },
-      );
-    }
-    const menu: MenuFields = { ...p.menu, allergens: confirmedBy(p.menu, caller, now) };
-    await this.db.client.query({
-      sql: "UPDATE products SET menu = ?, updated_at = ? WHERE id = ?",
-      params: [JSON.stringify(menu), now, p.id],
+    // The menu exactly as stored: the confirm writes only over these bytes, so a change another person
+    // saved a moment ago is never written back as confirmed.
+    const { rows } = await this.db.client.query({
+      sql: "SELECT menu FROM products WHERE id = ?",
+      params: [p.id],
+      method: "all",
+    });
+    const stored = typeof rows[0]?.[0] === "string" ? (rows[0][0] as string) : null;
+    const read = menuOf(stored);
+    const changed = () =>
+      new WriteError("guard_failed", "The allergens changed since you looked: check them again before you confirm.", {
+        details: { guard: "allergens_changed" },
+      });
+    if (!read || stored === null) throw new WriteError("invalid_input", "This product is not on the menu.");
+    if ((await allergenFingerprint(read)) !== input.fingerprint) throw changed();
+    const menu: MenuFields = { ...read, allergens: confirmedBy(read, caller, now) };
+    const done = await this.db.client.query({
+      sql: "UPDATE products SET menu = ?, updated_at = ? WHERE id = ? AND menu = ?",
+      params: [JSON.stringify(menu), now, p.id, stored],
       method: "run",
     });
+    if (done.changes !== 1) throw changed();
     return this.item(p.id, now);
   }
 
@@ -409,18 +439,26 @@ export class FoodCapabilities {
     if (!rows[0]) throw new WriteError("not_found", "no such service");
     if (input.tables === null) {
       await this.db.client.query({
-        sql: "UPDATE services SET capacity_unit = 'bookings', table_rules = NULL, updated_at = ? WHERE id = ?",
-        params: [now, input.service_id],
+        // Counting bookings again: one at a time where the inbox kept no limit of its own for tables.
+        sql: `UPDATE services SET capacity_unit = 'bookings', table_rules = NULL,
+                     capacity = CASE WHEN capacity >= ? THEN 1 ELSE capacity END, updated_at = ? WHERE id = ?`,
+        params: [TABLES_ON_REQUEST, now, input.service_id],
         method: "run",
       });
       return { service_id: input.service_id, tables: null };
     }
     const t = input.tables;
-    // The covers set aside are the places the inbox sells a sitting: the service's capacity, in people.
-    const capacity = Math.max(t.setAside ?? t.maxParty, t.maxParty);
+    // The covers set aside are the places the inbox sells a sitting, and nothing more: the service's
+    // capacity, in people. A larger party, or any party when none are set aside, is a person's to seat
+    // (`kitchen/guard.ts`), and a person's confirm is never held to this number. Without covers set aside
+    // the inbox counts no limit of its own: the person who confirms each table knows the room.
+    const capacity = t.setAside ?? TABLES_ON_REQUEST;
+    // A table is for a set date: the dated-leisure exception to withdrawal (2011/83/EU art. 16(l)).
     await this.db.client.query({
-      sql: "UPDATE services SET capacity_unit = 'people', table_rules = ?, capacity = ?, updated_at = ? WHERE id = ?",
-      params: [JSON.stringify(t), Math.min(1000, capacity), now, input.service_id],
+      sql: `UPDATE services SET capacity_unit = 'people', table_rules = ?, capacity = ?,
+                   withdrawal = CASE WHEN withdrawal = 'standard' THEN 'dated_leisure' ELSE withdrawal END,
+                   updated_at = ? WHERE id = ?`,
+      params: [JSON.stringify(t), Math.min(TABLES_ON_REQUEST, capacity), now, input.service_id],
       method: "run",
     });
     return { service_id: input.service_id, tables: t };
@@ -512,7 +550,7 @@ export class FoodCapabilities {
         if (rows[0]) {
           const id = String(rows[0][0]);
           const before = menuOf(rows[0][1]);
-          const next: MenuFields = { ...menu, allergens: afterEdit(before, menu, caller, kind) };
+          const next = mergeImported(before, menu, item, caller, kind);
           await this.db.client.query({
             sql: `UPDATE products SET name = ?, description = ?, ${price ? "price = ?, " : ""}menu = ?, updated_at = ? WHERE id = ?`,
             params: [
@@ -585,6 +623,52 @@ export class FoodCapabilities {
   }
 }
 
+const DIETARY_WORDS: Readonly<Record<string, string>> = {
+  vegan: "Vegan",
+  vegetarian: "Vegetarian",
+  gluten_free: "Gluten free",
+  dairy_free: "Dairy free",
+  nut_free: "Nut free",
+};
+
+/**
+ * A dish brought in again from the tool it came from: the tool's name, price and option groups (with its
+ * ids) are taken, and every field the owner set here is kept (its section, sort, caps, notice, days,
+ * dayparts, age limit, what it is made to order with). Its allergens stay as they are when the tool sends
+ * none, and become unconfirmed only when the tool's lists differ from them.
+ */
+export function mergeImported(
+  before: MenuFields | null,
+  fromTool: MenuFields,
+  item: SnapshotMenuItem,
+  caller: Caller,
+  kind: string,
+): MenuFields {
+  if (!before) return { ...fromTool, allergens: afterEdit(null, fromTool, caller, kind) };
+  const sent = item.allergens !== undefined;
+  const lists = sent ? fromTool.allergens : before.allergens;
+  // A choice the owner gave allergens to keeps them, matched by the tool's id.
+  const groups = fromTool.optionGroups.map((g) => {
+    const was = before.optionGroups.find((x) => x.externalId !== undefined && x.externalId === g.externalId);
+    return {
+      ...g,
+      choices: g.choices.map((c) => {
+        const prior = was?.choices.find((x) => x.externalId !== undefined && x.externalId === c.externalId);
+        return prior?.allergens ? { ...c, allergens: prior.allergens } : c;
+      }),
+    };
+  });
+  const dietary = item.dietary !== undefined ? fromTool.dietary : before.dietary;
+  const next: MenuFields = {
+    ...before,
+    optionGroups: groups,
+    dietary,
+    ...(fromTool.externalGroupId ? { externalGroupId: fromTool.externalGroupId } : {}),
+    allergens: { ...before.allergens, contains: lists.contains, mayContain: lists.mayContain },
+  };
+  return { ...next, allergens: afterEdit(before, next, caller, kind) };
+}
+
 /** A section's id from its name: lower-case letters, digits and dashes. */
 export function slug(name: string): string {
   const s = name
@@ -622,6 +706,7 @@ export function menuFromSnapshot(item: SnapshotMenuItem, section: string): MenuF
   const valid = groups.filter((g) => g.choices.length > 0);
   return menuFieldsSchema.parse({
     section,
+    ...(item.groupExternalId ? { externalGroupId: item.groupExternalId.slice(0, 100) } : {}),
     optionGroups: valid,
     allergens: {
       contains: (item.allergens?.contains ?? []).filter(isAllergenCode),

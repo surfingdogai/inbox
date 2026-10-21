@@ -2,11 +2,11 @@ import { formatMinor } from "../util/money";
 
 /**
  * What a kitchen tells a customer's agent (ADR-036), in the business's name and voice, in English,
- * Spanish, French, German, Italian or Portuguese: why an order cannot be taken as it is, and what to do
- * instead. Never the software's name, a network or a receipt (the copy lint holds these to it).
+ * Spanish, French, German, Italian, Portuguese or Japanese: why an order cannot be taken as it is, and
+ * what to do instead. Never the software's name, a network or a receipt (the copy lint holds these to it).
  */
 
-export type KitchenLang = "en" | "es" | "fr" | "de" | "it" | "pt";
+export type KitchenLang = "en" | "es" | "fr" | "de" | "it" | "pt" | "ja";
 type Method = "pickup" | "delivery" | "dine_in";
 
 const LOCALES: Record<KitchenLang, string> = {
@@ -16,6 +16,7 @@ const LOCALES: Record<KitchenLang, string> = {
   de: "de-DE",
   it: "it-IT",
   pt: "pt-PT",
+  ja: "ja-JP",
 };
 
 export function kitchenLang(tag: string | null | undefined): KitchenLang {
@@ -71,6 +72,8 @@ export interface Words {
   tooFar(days: number): string;
   slotFull(next: readonly number[], zone: string): string;
   soldOut(name: string): string;
+  /** Off sale: the business took it off for now. */
+  notAvailable(name: string): string;
   notThatDay(name: string): string;
   notServedThen(name: string): string;
   readonly noDeliveryThere: string;
@@ -94,6 +97,7 @@ const METHOD: Record<KitchenLang, Record<Method, string>> = {
   de: { pickup: "Abholung", delivery: "Lieferung", dine_in: "vor Ort essen" },
   it: { pickup: "ritiro", delivery: "consegna", dine_in: "al tavolo" },
   pt: { pickup: "levantamento", delivery: "entrega", dine_in: "comer cá" },
+  ja: { pickup: "お持ち帰り", delivery: "配達", dine_in: "店内でのお食事" },
 };
 
 /** The words of one business in one language. */
@@ -121,6 +125,7 @@ export function kitchenWords(tag: string | null | undefined, business: string): 
             ? `Esa franja está completa. Quedan: ${times(n, z)}.`
             : "Esa franja está completa y no quedan más ese día.",
         soldOut: (n) => `${n} está agotado hoy.`,
+        notAvailable: (n) => `${n} no está a la venta ahora.`,
         notThatDay: (n) => `${n} no se hace ese día.`,
         notServedThen: (n) => `${n} no se sirve a esa hora.`,
         noDeliveryThere: `${b} no entrega en esa dirección: elige recogida, o otra dirección.`,
@@ -154,6 +159,7 @@ export function kitchenWords(tag: string | null | undefined, business: string): 
             ? `Ce créneau est complet. Il reste : ${times(n, z)}.`
             : "Ce créneau est complet, et il n'en reste plus ce jour-là.",
         soldOut: (n) => `${n} est épuisé aujourd'hui.`,
+        notAvailable: (n) => `${n} n'est pas en vente en ce moment.`,
         notThatDay: (n) => `${n} n'est pas préparé ce jour-là.`,
         notServedThen: (n) => `${n} n'est pas servi à cette heure.`,
         noDeliveryThere: `${b} ne livre pas à cette adresse : choisissez à emporter, ou une autre adresse.`,
@@ -187,6 +193,7 @@ export function kitchenWords(tag: string | null | undefined, business: string): 
             ? `Dieses Zeitfenster ist voll. Frei sind noch: ${times(n, z)}.`
             : "Dieses Zeitfenster ist voll, und an diesem Tag ist keines mehr frei.",
         soldOut: (n) => `${n} ist heute ausverkauft.`,
+        notAvailable: (n) => `${n} gibt es gerade nicht.`,
         notThatDay: (n) => `${n} gibt es an diesem Tag nicht.`,
         notServedThen: (n) => `${n} gibt es zu dieser Zeit nicht.`,
         noDeliveryThere: `${b} liefert nicht an diese Adresse: wähle Abholung oder eine andere Adresse.`,
@@ -218,6 +225,7 @@ export function kitchenWords(tag: string | null | undefined, business: string): 
             ? `Quella fascia è piena. Restano: ${times(n, z)}.`
             : "Quella fascia è piena e non ne restano altre quel giorno.",
         soldOut: (n) => `${n} è esaurito oggi.`,
+        notAvailable: (n) => `${n} non è in vendita ora.`,
         notThatDay: (n) => `${n} non si prepara quel giorno.`,
         notServedThen: (n) => `${n} non si serve a quell'ora.`,
         noDeliveryThere: `${b} non consegna a quell'indirizzo: scegli il ritiro, o un altro indirizzo.`,
@@ -249,6 +257,7 @@ export function kitchenWords(tag: string | null | undefined, business: string): 
             ? `Esse horário está cheio. Restam: ${times(n, z)}.`
             : "Esse horário está cheio e não restam outros nesse dia.",
         soldOut: (n) => `${n} esgotou hoje.`,
+        notAvailable: (n) => `${n} não está à venda agora.`,
         notThatDay: (n) => `${n} não se faz nesse dia.`,
         notServedThen: (n) => `${n} não se serve a essa hora.`,
         noDeliveryThere: `${b} não entrega nessa morada: escolhe levantamento, ou outra morada.`,
@@ -263,6 +272,43 @@ export function kitchenWords(tag: string | null | undefined, business: string): 
         tableQuote: (s) => `Para ${s} pessoas, ${b} prepara uma proposta: fica como pedido de orçamento.`,
         tableTooLarge: (x) => `${b} reserva mesas online até ${x} pessoas: para mais, contacta diretamente.`,
       };
+    case "ja": {
+      const j = business.trim() || "当店";
+      return {
+        notForATime: `${j}では時間指定のご注文を受け付けていません。時間を指定せずにご注文ください。`,
+        chooseMethod: (x) =>
+          x.length
+            ? `${j}のご注文方法は${m(x)}です。fulfil.method で選んでください。`
+            : `${j}は現在ご注文を受け付けていません。`,
+        noTips: `${j}ではオンラインでのチップを受け付けていません。`,
+        chooseSlot: "list_order_slots から時間枠を選んでください（fulfil.slot.start）。",
+        paused: (u, z) => `${j}は${clock(u, z, lang)}までご注文を受け付けていません。`,
+        notASlot: "その時間はキッチンの時間枠ではありません。list_order_slots から選んでください。",
+        tooSoon: (e, z, n) =>
+          `${n ? "このご注文は事前のご注文が必要です" : "準備に時間がかかります"}。最も早い時間枠は${dayAndClock(e, z, lang)}です。`,
+        tooFar: (d) => `${j}では${d}日先までのご注文を受け付けています。`,
+        slotFull: (n, z) =>
+          n.length
+            ? `その時間枠はいっぱいです。空いている時間：${times(n, z)}。`
+            : "その時間枠はいっぱいで、その日はほかに空きがありません。",
+        soldOut: (n) => `${n}は本日売り切れです。`,
+        notAvailable: (n) => `${n}は現在お取り扱いしていません。`,
+        notThatDay: (n) => `${n}はその日には作っていません。`,
+        notServedThen: (n) => `${n}はその時間には提供していません。`,
+        noDeliveryThere: `${j}はその住所には配達していません。お持ち帰りか、別の住所を選んでください。`,
+        belowMinimum: (z, min) => `${z}への配達の最低注文金額は${money(min)}です。`,
+        fulfilLine: (x, at, z) => `${METHOD[lang][x]}${at !== null ? `：${dayAndClock(at, z, lang)}` : ""}`,
+        feeLine: (z, f) => `配達料${z ? `（${z}）` : ""}：${f}`,
+        tipLine: (t) => `チップ：${t}`,
+        slotsOpen: (n, f, z) => `空いている時間枠は${n}件、最初は${dayAndClock(f, z, lang)}です。`,
+        closedThatDay: `${j}はその日はご注文を受け付けていません。`,
+        noDelivery: `${j}は配達を行っていません。`,
+        addressUnknown: `${j}ではその住所の場所がわかりません。郵便番号と国、または地点を送ってください。わからない場合は${j}が判断します。`,
+        tableQuote: (s) => `${s}名様のご予約は、${j}からご提案をお送りします。お見積りのご依頼として承ります。`,
+        tableTooLarge: (x) =>
+          `${j}のオンラインでの席のご予約は${x}名様までです。それ以上の場合は直接お問い合わせください。`,
+      };
+    }
     default:
       return {
         notForATime: `${b} does not take orders for a time: order without one.`,
@@ -278,6 +324,7 @@ export function kitchenWords(tag: string | null | undefined, business: string): 
         slotFull: (n, z) =>
           n.length ? `That slot is full. Still free: ${times(n, z)}.` : "That slot is full, and none is left that day.",
         soldOut: (n) => `${n} is sold out today.`,
+        notAvailable: (n) => `${n} is not on sale now.`,
         notThatDay: (n) => `${n} is not made that day.`,
         notServedThen: (n) => `${n} is not served at that time.`,
         noDeliveryThere: `${b} does not deliver to that address: choose collection, or another address.`,

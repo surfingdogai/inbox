@@ -5,7 +5,8 @@ import { WriteError } from "../write/errors";
 /**
  * What only a person at the business says yes to (ADR-036): an order the kitchen marked as not instant
  * (an allergen nobody confirmed, more than was set aside, made to order, a kitchen that accepts each
- * order by hand), and a table booking at a service that keeps no covers aside for direct bookings.
+ * order by hand), and a table booking at a service that keeps no covers aside for direct bookings, or
+ * for a party larger than the covers it keeps.
  * Automation drafts for the owner instead: it never accepts or confirms them.
  */
 export async function assertKitchenClears(db: Db, item: Item, event: string): Promise<void> {
@@ -35,7 +36,17 @@ export async function assertKitchenClears(db: Db, item: Item, event: string): Pr
         throw new WriteError(
           "guard_failed",
           "No covers are set aside for direct bookings, so a person confirms each table. Tell the owner in a note (reply with internal: true) what you would do.",
-          { details: { guard: "tables", draft_for_owner: true } },
+          { details: { guard: "tables", reason: "none_set_aside", draft_for_owner: true } },
+        );
+      }
+      // Only a party that fits in the covers set aside is confirmed without a person: a larger one is
+      // seated from the rest of the room, which only a person at the business knows.
+      const party = Math.max(1, Number(item.payload.partySize ?? 1));
+      if (party > rules.setAside) {
+        throw new WriteError(
+          "guard_failed",
+          `This table is for ${party}, more than the ${rules.setAside} covers set aside for direct bookings, so a person confirms it. Tell the owner in a note (reply with internal: true) what you would do.`,
+          { details: { guard: "tables", reason: "over_set_aside", draft_for_owner: true } },
         );
       }
     }

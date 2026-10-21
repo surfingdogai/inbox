@@ -87,6 +87,8 @@ const localDate = z.iso.date();
 /** What a product holds once it is on a menu. */
 export const menuFieldsSchema = z.object({
   section: id.default("menu").describe("The section it is in, by the section's id."),
+  /** The till's own id for the group it sits in there (a Toast menu group), when the menu came from there. */
+  externalGroupId: z.string().min(1).max(100).optional(),
   sort: z.number().int().min(0).max(10_000).default(0),
   optionGroups: z.array(optionGroupSchema).max(20).default([]),
   allergens: storedAllergensSchema.prefault({}),

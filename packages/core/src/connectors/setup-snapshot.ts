@@ -51,6 +51,8 @@ export interface SnapshotMenuSection {
 /** One item of a tool's menu, as read from it (ADR-036): what the owner may keep, one press each. */
 export interface SnapshotMenuItem {
   readonly externalId: string;
+  /** The tool's own id for the group the item sits in, where its orders must name it (a Toast menu group). */
+  readonly groupExternalId?: string | undefined;
   readonly name: string;
   readonly description?: string | null | undefined;
   readonly price?: { readonly value: number; readonly currency: string } | null | undefined;

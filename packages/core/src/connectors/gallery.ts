@@ -94,6 +94,8 @@ interface WaySpec {
   readonly preset: string | null;
   readonly label: string;
   readonly advanced?: true;
+  /** Being built now, on a card that is not: "Soon" until its connector is registered (Square among the tills). */
+  readonly building?: true;
 }
 
 interface CardSpec {
@@ -260,6 +262,8 @@ export const GALLERY: readonly CardSpec[] = [
       { kind: "lightspeed", preset: null, label: "Lightspeed Restaurant" },
       { kind: "clover", preset: null, label: "Clover" },
       { kind: "deliverect", preset: null, label: "Deliverect" },
+      // A café on Square looks for it here too: the same way as under Shops and tills.
+      { kind: "square", preset: null, label: "Square", building: true },
     ],
   },
 ];
@@ -325,7 +329,10 @@ export function gallery(
       const way = wayOf(card, w, definitions.get(w.kind), opts);
       if (way) ways.push(way);
     }
-    if (ways.length === 0) continue;
+    // A card not being built itself shows once one of its own ways is registered: a way only being
+    // built (Square among the tills) never makes a card appear on its own.
+    if (ways.length === 0 || (!card.building && !card.ways.some((w) => definitions.has(w.kind) && !w.building)))
+      continue;
     const needs = ways.every((w) => w.needs !== undefined);
     // Ready first, the rest after in the order given, the advanced ones last: what can be pressed comes first.
     const rank = (w: GalleryWay) => (w.advanced ? 2 : w.status === "ready" ? 0 : 1);
@@ -371,7 +378,7 @@ function wayOf(
   // Not in this release (its connector, or the preset the way names): "Soon" while it is being built,
   // and not shown otherwise.
   if (!def || (w.preset && !preset)) {
-    if (!card.building) return null;
+    if (!card.building && !w.building) return null;
     return {
       kind: w.kind,
       preset: w.preset,
