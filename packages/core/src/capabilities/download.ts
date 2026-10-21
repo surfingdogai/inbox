@@ -96,7 +96,10 @@ export const DOWNLOAD_TABLES: Readonly<Record<string, DownloadTable>> = {
   connector_busy: { note: "The times connected calendars said were busy, as last read." },
   connector_links: { note: "Which bookings were added to a connected calendar, and the calendar's id for each." },
   connector_payments: {
-    note: "The links orders were given to pay in your Stripe or Mollie account, and what the platform said about each. The money is in your account there.",
+    note: "The links orders and deposits were given to pay in your Stripe or Mollie account, and what the platform said about each. The money is in your account there.",
+  },
+  connector_writes: {
+    note: "Each time this inbox wrote to a system of yours (a property system) before confirming: when, what came of it and the system's id for it. Never what was written.",
   },
   connector_auth: {
     leftOut: "Sign-ins with a calendar that were on their way.",

@@ -1,3 +1,4 @@
+import { minorUnits } from "@surfingdog/spec";
 import { z } from "zod";
 
 /**
@@ -37,9 +38,31 @@ export type ConnectorCapability =
    * checkout (ADR-026 §2): the connector is the payment platform for its orders, so it rides on
    * `pay_links`, and its `createLink` is given the order (`PayLinkRequest.order`).
    */
-  | "shop_orders";
+  | "shop_orders"
+  /**
+   * The names every industry track codes against (ADR-032), each defined with its track: a property
+   * system's rooms, rates and availability read into the inbox (`stay_inventory`), stays written to it
+   * before they are confirmed (`write_stays`), and its word that one changed, as a hint to read again
+   * (`stay_events`); a job tool that takes the requests an owner accepts (`requests_out`); services,
+   * staff, hours or a menu brought in to start from (`setup_in`); a booking system's free times
+   * (`availability_in`); orders sent to a till or a kitchen (`orders_out`); and its word on where one
+   * stands (`status_in`).
+   */
+  | "stay_inventory"
+  | "write_stays"
+  | "stay_events"
+  | "requests_out"
+  | "setup_in"
+  | "availability_in"
+  | "orders_out"
+  | "status_in";
 
-export type ConnectorGroup = "calendars" | "payments" | "shops";
+/**
+ * Where a card sits in Settings → Integrations: calendars, payments, shops; and, for the industry
+ * tracks (ADR-032), property systems (`lodging`), job tools (`work`), points of sale and ordering
+ * (`pos`) and booking systems (`booking`).
+ */
+export type ConnectorGroup = "calendars" | "payments" | "shops" | "lodging" | "work" | "pos" | "booking";
 
 /**
  * How the owner connects (ADR-026 §5): `form`, they fill in `form` (a key, an app password); `oauth`,
@@ -406,6 +429,11 @@ export interface Interval {
 export interface BusyRead {
   readonly intervals: readonly Interval[];
   readonly until: number;
+  /**
+   * Whose busy times these are, for a connection tied to one resource (a member of staff's own
+   * calendar, ADR-032): the inbox's resource id. Absent: the whole business's.
+   */
+  readonly resourceId?: string | undefined;
 }
 
 /** A confirmed booking as a connector writes it: times, and words the owner wants to see in a calendar. */
@@ -422,6 +450,8 @@ export interface OutboundBooking {
   readonly serviceName: string;
   readonly customerName: string | null;
   readonly durationMin: number;
+  /** The resource it is with (a member of staff), for a system that books per person (ADR-032). */
+  readonly resourceId?: string | undefined;
 }
 
 /** What a connector keeps about one booking it wrote. */
@@ -452,7 +482,10 @@ export interface BookingWriter {
 
 /* --- getting paid (ADR-023) ------------------------------------------------ */
 
-/** Money in hundredths (4500 is 45.00), with its ISO 4217 code in capitals: a currency counted in hundredths. */
+/**
+ * Money in minor units of its currency's own ISO 4217 exponent (4500 is 45.00 KES, ¥4,500 JPY), with
+ * its code in capitals (ADR-032).
+ */
 export interface PayAmount {
   readonly value: number;
   readonly currency: string;
@@ -484,6 +517,53 @@ export interface PayLinkRequest {
    * fulfil it. Absent for a payment platform, which is told only what to ask for.
    */
   readonly order?: ShopOrder | undefined;
+
+  /**
+   * What the link is for (ADR-032): the whole of an order (`pay`, the default), or one entry of an
+   * item's payment schedule — a deposit, the balance, the difference after a change. A booking's
+   * links say "book" on the platform's button where it has one.
+   */
+  readonly purpose?: PayPurpose | undefined;
+  /** The schedule entry it is for (`deposit`, `balance`), unique per item: one live link each. */
+  readonly scheduleId?: string | undefined;
+  /**
+   * When the link stops taking payments (milliseconds): a deposit's pay window. A platform that can be
+   * told at creation is (Mollie's `expiresAt`); every link is also closed by the inbox once it passes.
+   */
+  readonly expiresAt?: number | undefined;
+}
+
+/** What a pay link is for: an order's total, or one entry of an item's payment schedule. */
+export type PayPurpose = "pay" | "deposit" | "balance" | "guarantee" | "difference";
+
+/**
+ * A card saved to hold a booking (ADR-032), asked for on the business's own payment platform with
+ * nothing charged now: the business charges a no-show or a late cancellation itself, in its own
+ * dashboard, under the policy the customer saw. Made when the customer opens the inbox's own link,
+ * so it never expires unseen.
+ */
+export interface GuaranteeRequest {
+  readonly ref: string;
+  readonly itemId: string;
+  /** The currency the business would charge in. */
+  readonly currency: string;
+  readonly reference: string;
+  readonly language: string;
+  /** Where the platform sends the customer after saving the card, and if they turn back. */
+  readonly returnUrl: string;
+  readonly cancelUrl: string;
+  /** When the platform's page closes (30 minutes to 24 hours from now on Stripe). */
+  readonly expiresAt: number;
+}
+
+/** A card hold as the platform says it stands, read back with the business's key. */
+export interface GuaranteeFact {
+  readonly status: "open" | "saved" | "expired";
+  /** The platform's id for the customer the card was saved to: where the business charges it. */
+  readonly customerId?: string | undefined;
+  /** The customer in the business's own dashboard. */
+  readonly dashboardUrl?: string | undefined;
+  readonly livemode: boolean;
 }
 
 export interface PayLink {
@@ -624,8 +704,31 @@ export interface RefundFact {
 }
 
 export interface PaymentsHandler {
+  /**
+   * Why the platform cannot be asked for this amount in its currency, or null when it can (ADR-032):
+   * the adapter converts the inbox's ISO 4217 minor units to the platform's own, from a table with a
+   * test per currency, and names the reason for one it has none for. Absent: only currencies counted
+   * in hundredths are asked for, as before.
+   */
+  currencyProblem?(amount: PayAmount): string | null;
   /** Makes the link in the business's own account. Safe to call again with the same `ref`. */
   createLink(ctx: RunContext, request: PayLinkRequest): Promise<PayLink>;
+  /**
+   * A page on the platform where the customer saves a card to hold a booking, nothing charged
+   * (ADR-032). Only where the platform can (Stripe Checkout in `mode=setup`), and only once the owner
+   * switched card holds on, which asks the key for what it needs then (`guaranteePermissions`).
+   */
+  createGuarantee?(
+    ctx: RunContext,
+    request: GuaranteeRequest,
+  ): Promise<{ readonly externalId: string; readonly url: string; readonly expiresAt: number }>;
+  /** Whether the card was saved, read back with the key; never what a request body claimed. */
+  guaranteeFact?(ctx: RunContext, hold: { readonly externalId: string }): Promise<GuaranteeFact | null>;
+  /**
+   * What the key lacks to take card holds, in the platform's own names ("Checkout Sessions: Write"),
+   * asked when the owner switches them on and never before: empty when it has everything.
+   */
+  guaranteePermissions?(ctx: RunContext): Promise<readonly string[]>;
   /** Stops the link taking payments: the order changed, was cancelled, or was paid another way. */
   closeLink(ctx: RunContext, link: { readonly externalId: string }): Promise<void>;
   /**
@@ -962,24 +1065,37 @@ export function subtractIntervals(busy: readonly Interval[], spans: readonly Int
 /* --- money ---------------------------------------------------------------- */
 
 /**
- * Every amount in this inbox is kept in hundredths (`util/locale.ts`, `moneyIn`): 4500 EUR is 45.00.
- * A currency counted otherwise (none, like JPY; thousandths, like KWD) is refused before a link is
- * made (`isHundredthsCurrency`), so these never guess another exponent: a guess is a link for a
- * hundred times the order.
+ * Every amount in this inbox is an integer count of its currency's own ISO 4217 minor unit (ADR-032):
+ * 4500 KES is 45.00, 4500 JPY is ¥4,500, 4500 KWD is 4.500. A platform that counts a currency
+ * otherwise (Stripe's ISK, written as hundredths) converts in its own adapter, from a table with a
+ * test per currency, and refuses a currency it has no test for (`PaymentsHandler.currencyProblem`):
+ * a guess is a link for a hundred times the order.
  */
 
-/** Hundredths as a decimal string, the way some platforms want it: 4500 → "45.00". */
-export function decimalAmount(amount: PayAmount): string {
-  const s = String(Math.abs(Math.trunc(amount.value))).padStart(3, "0");
-  return `${amount.value < 0 ? "-" : ""}${s.slice(0, -2)}.${s.slice(-2)}`;
+/**
+ * Minor units as a decimal string in `exponent` places (the currency's ISO exponent when not given),
+ * the way some platforms want it: 4500 EUR → "45.00", 4500 JPY → "4500", 4500 KWD → "4.500".
+ */
+export function decimalAmount(amount: PayAmount, exponent?: number): string {
+  const e = exponent ?? minorUnits(amount.currency) ?? 2;
+  const digits = String(Math.abs(Math.trunc(amount.value)));
+  const sign = amount.value < 0 ? "-" : "";
+  if (e === 0) return `${sign}${digits}`;
+  const s = digits.padStart(e + 1, "0");
+  return `${sign}${s.slice(0, -e)}.${s.slice(-e)}`;
 }
 
-/** A decimal string back to hundredths ("45.00" → 4500, "45.5" → 4550), or null when it is not one. */
-export function minorAmount(value: string): number | null {
+/**
+ * A decimal string back to minor units of `exponent` places (2 when not given): "45.00" → 4500,
+ * "45.5" → 4550, "4500" in 0 places → 4500; null when it is not one, or names a part smaller than the
+ * minor unit that is not zero.
+ */
+export function minorAmount(value: string, exponent = 2): number | null {
   const m = /^(\d{1,15})(?:\.(\d{1,6}))?$/.exec(value.trim());
   if (!m) return null;
   const fraction = m[2] ?? "";
-  // More than hundredths that are not zeros is not an amount this inbox can hold.
-  if (/[1-9]/.test(fraction.slice(2))) return null;
-  return Number(m[1]) * 100 + Number(`${fraction}00`.slice(0, 2));
+  // More places than the minor unit that are not zeros is not an amount this inbox can hold.
+  if (/[1-9]/.test(fraction.slice(exponent))) return null;
+  const whole = Number(m[1]) * 10 ** exponent;
+  return exponent === 0 ? whole : whole + Number(fraction.padEnd(exponent, "0").slice(0, exponent));
 }

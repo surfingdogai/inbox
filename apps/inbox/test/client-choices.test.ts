@@ -1,6 +1,7 @@
-import { isHundredthsCurrency } from "@surfingdog/core";
+import { ISO_4217_MINOR_UNITS, isMoneyCurrency, PRESET_KEYS } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
 import { describeService, lengthWords, serviceDraft, serviceWrite } from "../client/src/lib/catalogue";
+import { cardState, cardsFor } from "../client/src/lib/connect";
 import { countryName, countryOptions, ISO_3166_1 } from "../client/src/lib/countries";
 import {
   COMMON_CURRENCIES,
@@ -9,7 +10,7 @@ import {
   currencyNote,
   guessCurrency,
   knownCurrencies,
-  NOT_HUNDREDTHS,
+  MINOR_UNITS,
   offeredCurrency,
 } from "../client/src/lib/currencies";
 import { doorSwitchDoc, doorViews, needsWords, waitWords } from "../client/src/lib/doors";
@@ -32,9 +33,9 @@ import {
   withValue,
 } from "../client/src/lib/hours";
 import { ISO_639_1, languagesToSave, matchLanguages } from "../client/src/lib/languages";
-import { offerBodies, wizardDoorsDoc, wizardPreset } from "../client/src/lib/setup";
+import { KINDS, kindOf, offerBodies, wizardDoorsDoc, wizardPreset } from "../client/src/lib/setup";
 import { clearSources, sourceNote } from "../client/src/lib/sources";
-import type { ServiceRow, Settings } from "../client/src/lib/types";
+import type { GalleryCard, ServiceRow, Settings } from "../client/src/lib/types";
 import { matchZones, placeOf, zoneChoices, zoneName } from "../client/src/lib/zones";
 
 // What the owner picks in Settings instead of typing it: hours from the clock (open all the time
@@ -181,15 +182,25 @@ describe("lengths of time", () => {
 });
 
 describe("currencies", () => {
-  it("offer exactly what the server takes: counted in hundredths", () => {
-    for (const code of new Set([...knownCurrencies(), ...NOT_HUNDREDTHS, ...COMMON_CURRENCIES])) {
-      expect(offeredCurrency(code), code).toBe(isHundredthsCurrency(code));
+  it("offer exactly what the server takes, each in its own minor unit (ADR-032)", () => {
+    for (const code of new Set([
+      ...knownCurrencies(),
+      ...Object.keys(ISO_4217_MINOR_UNITS),
+      ...COMMON_CURRENCIES,
+      "XAU",
+      "XXX",
+      "ABC",
+    ])) {
+      expect(offeredCurrency(code), code).toBe(isMoneyCurrency(code));
     }
+    // The owner app's table is the server's, row for row.
+    expect(MINOR_UNITS).toEqual(ISO_4217_MINOR_UNITS);
     const { common, all } = currencyGroups();
     expect(common.slice(0, 3)).toEqual(["EUR", "USD", "GBP"]);
-    expect(all).not.toContain("JPY");
+    expect(all).toContain("JPY");
+    expect(all).toContain("KWD");
+    expect(all).not.toContain("CLF");
     expect(all).not.toContain("EUR");
-    expect(currencyGroups("JPY").all).toContain("JPY");
   });
 
   it("read with their symbol and name", () => {
@@ -214,8 +225,8 @@ describe("currencies", () => {
     expect(guessCurrency(["en-GB"], "Europe/Lisbon")).toBe("EUR");
     expect(guessCurrency(["pt-PT"], "America/New_York")).toBe("USD");
     expect(guessCurrency(["en-GB"], "Europe/Sofia")).toBe("EUR");
-    // A zone whose money is not counted in hundredths falls back to the browser's region.
-    expect(guessCurrency(["en-GB"], "Asia/Tokyo")).toBe("GBP");
+    // Every currency is counted in its own minor unit now: a business in Tokyo prices in yen.
+    expect(guessCurrency(["en-GB"], "Asia/Tokyo")).toBe("JPY");
     expect(guessCurrency(["en-GB"], "UTC")).toBe("GBP");
     expect(guessCurrency(["pt-PT"])).toBe("EUR");
     expect(guessCurrency(["en-GB"])).toBe("GBP");
@@ -408,6 +419,48 @@ describe("the setup wizard's doors", () => {
     expect(wizardPreset(all)).toBe("appointments");
     expect(wizardPreset({ booking: false, quoteRequest: true, message: true })).toBe("trades");
     expect(wizardPreset({ booking: false, quoteRequest: false, message: true })).toBeNull();
+  });
+
+  it("start from what the business runs: each kind's rules are a server preset, and its doors follow", () => {
+    expect(KINDS.map((k) => k.label)).toEqual(["Appointments", "Trades and quotes", "A shop"]);
+    for (const k of KINDS) {
+      expect(PRESET_KEYS as readonly string[]).toContain(k.preset);
+      expect(kindOf(k.key)).toBe(k);
+      // The kind's rules win over the doors' guess.
+      expect(wizardPreset({ booking: true, quoteRequest: true, message: true }, k)).toBe(k.preset);
+      expect(k.connect.length).toBeGreaterThan(0);
+    }
+    expect(kindOf("trades")?.doors).toEqual({ booking: false, quoteRequest: true, message: true });
+    expect(kindOf("spaceport")).toBeUndefined();
+  });
+
+  it("show the systems a kind runs its days in first, and say plainly which need setup", () => {
+    const way = (status: "ready" | "soon" | "setup", hint?: string) =>
+      ({
+        kind: "x",
+        preset: null,
+        label: "x",
+        status,
+        auth: "form",
+        form: [],
+        action: "Connect",
+        ...(hint ? { hint } : {}),
+      }) as const;
+    const card = (id: string, group: GalleryCard["group"], status: "ready" | "soon", ways: GalleryCard["ways"]) =>
+      ({ id, title: id, line: `${id} line`, group, industries: [], status, ways }) as GalleryCard;
+    const cards = [
+      card("stripe", "payments", "ready", [way("ready")]),
+      card("calendar", "calendars", "ready", [way("ready")]),
+      card("gated", "lodging", "soon", [way("setup", "Needs a partner key on this server.")]),
+      card("later", "lodging", "soon", [way("soon")]),
+    ];
+    expect(cardsFor(cards, ["lodging", "calendars"]).map((c) => c.id)).toEqual(["gated", "later", "calendar"]);
+    expect(cardState(cards[0] as GalleryCard)).toEqual({ tag: null, hint: null });
+    expect(cardState(cards[2] as GalleryCard)).toEqual({
+      tag: "Needs setup",
+      hint: "Needs a partner key on this server.",
+    });
+    expect(cardState(cards[3] as GalleryCard)).toEqual({ tag: "Soon", hint: null });
   });
 
   it("make what is offered asked about for a price when agents cannot book", () => {

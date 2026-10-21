@@ -80,6 +80,7 @@ export {
 } from "./pay-queue";
 export {
   connectorCaller,
+  linkCurrencyProblem,
   type PayConnection,
   type PayHost,
   PaymentLinks,
@@ -89,7 +90,23 @@ export {
   type PayState,
   providerOf,
 } from "./payments";
+export {
+  registerScheduleSource,
+  type ScheduledItem,
+  type ScheduledOutcome,
+  type ScheduledPayment,
+  type ScheduleSource,
+  scheduleSourceOf,
+  type WantedLink,
+} from "./schedules";
 export * from "./sdk";
+export type {
+  SetupSnapshot,
+  SnapshotMenuSection,
+  SnapshotService,
+  SnapshotSource,
+  SnapshotStaff,
+} from "./setup-snapshot";
 export { shopOrderOf } from "./shop";
 export {
   BUSY_HORIZON_MS,
@@ -104,3 +121,19 @@ export {
   readLink,
   writeBusy,
 } from "./store";
+export {
+  CONNECTOR_WRITE_RESOLVE_KIND,
+  dueWrites,
+  RESOLVE_WITHIN_MS,
+  registerWriteResolver,
+  resolveWrite,
+  type WriteFirstCall,
+  type WriteFirstResult,
+  type WriteOp,
+  type WriteOutcome,
+  type WriteResolver,
+  type WriteRow,
+  type WrittenRef,
+  writeFirst,
+  writeResolveHandler,
+} from "./write-first";

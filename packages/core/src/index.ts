@@ -3,19 +3,37 @@
  * Web-standard APIs only; runtimes plug in through @surfingdog/platform.
  */
 
-export type { DoorElsewhere, Manifest } from "@surfingdog/spec";
+export type {
+  DatedPolicy,
+  DoorElsewhere,
+  Manifest,
+  PaymentSchedule,
+  PaymentTerms,
+  Policy,
+  PolicyFee,
+} from "@surfingdog/spec";
 export {
   CARD_BRANDS,
+  currencyCodeProblem,
+  datedPolicySchema,
+  decimalOf,
   discoverySnippets,
+  ISO_4217_FUNDS,
+  ISO_4217_MINOR_UNITS,
   isPaymentToken,
   MANIFEST_PATH,
   manifestSchema,
+  minorUnits,
   PAYMENT_TOKENS,
   PAYMENTS_VOCABULARY,
+  parseDecimal,
   paymentLabel,
+  paymentScheduleSchema,
+  paymentTermsSchema,
   paymentToken,
   publishedPayments,
   readDoorsElsewhere,
+  shareOf,
 } from "@surfingdog/spec";
 export * from "./access/index";
 export * from "./capabilities/index";
@@ -24,6 +42,7 @@ export * from "./customer/index";
 export { createDb, type Db, type Orm, schema } from "./db";
 export * from "./domain/types";
 export * from "./feeds/parse";
+export { CUSTOMER_FORBIDDEN_WORDS, customerCopyProblems, customerWordsIn } from "./i18n/customer-words";
 export * from "./identity/index";
 export { isUlid, randomToken, ulid } from "./ids";
 export * from "./jobs/index";
@@ -70,6 +89,7 @@ export {
   type Standing,
 } from "./negotiation/rewards";
 export * from "./network/index";
+export * from "./policy/index";
 export * from "./protocol/index";
 export * from "./receipts/index";
 export * from "./rules/index";
@@ -93,8 +113,17 @@ export {
 } from "./settings/policy";
 export * from "./settings/schema";
 export { canonicalNetworkOrigin } from "./util/hosts";
-export { canonicalLanguages, currencyProblem, isHundredthsCurrency } from "./util/locale";
-export { servicePriceText } from "./util/money";
+export { canonicalLanguages, currencyProblem, isHundredthsCurrency, isMoneyCurrency } from "./util/locale";
+export { formatMinor, moneyText, servicePriceText } from "./util/money";
 export { crc32, type ZipFile, zip } from "./util/zip";
+export {
+  addDays as addLocalDays,
+  dateIn,
+  daysBetween,
+  instantOf,
+  isLocalDate,
+  isoIn,
+  isoWeekday,
+} from "./util/zoned";
 export { USER_AGENT, VERSION } from "./version";
 export * from "./write/index";

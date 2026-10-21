@@ -2,7 +2,7 @@ import clsx from "clsx";
 import { Minus, Plus, X } from "lucide-react";
 import { type KeyboardEvent, useEffect, useId, useMemo, useRef, useState } from "react";
 import { countryName, countryOptions } from "../lib/countries";
-import { currencyGroups, currencyLabel, currencySymbol, symbolAfter } from "../lib/currencies";
+import { currencyGroups, currencyLabel, currencySymbol, minorUnitsOf, symbolAfter } from "../lib/currencies";
 import {
   bestUnit,
   type DurationPreset,
@@ -244,7 +244,7 @@ export function MoneyInput({
       <input
         id={id}
         className="input"
-        inputMode="decimal"
+        inputMode={minorUnitsOf(currency) === 0 ? "numeric" : "decimal"}
         autoComplete="off"
         placeholder={placeholder}
         aria-invalid={invalid || undefined}

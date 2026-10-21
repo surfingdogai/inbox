@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { isoDateTime, withdrawalFlagSchema } from "../domain/types";
+import { presetKeySchema } from "../rules/presets/index";
 import { ruleDefinitionSchema } from "../rules/schema";
 import { canonicalLanguages, currencyProblem } from "../util/locale";
 
@@ -38,7 +39,7 @@ export const weeklySchema = z
     'Opening windows per weekday, e.g. {"mon": [["09:00","13:00"],["14:00","18:00"]]}; ["00:00","24:00"] is open all day. Missing days are closed.',
   );
 
-/** A currency a price here can be in (`util/locale.ts`): an ISO 4217 code counted in hundredths. */
+/** A currency a price here can be in (`util/locale.ts`): an ISO 4217 currency, amounts in its own minor unit (ADR-032). */
 export const currencySchema = z
   .string()
   .trim()
@@ -76,8 +77,10 @@ export const profileInput = z.object({
     .regex(/^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$/i, "a hostname like shop.example.com")
     .nullable()
     .optional(),
-  timezone: z.string().min(1).max(64).optional().describe("IANA name, e.g. Europe/Lisbon"),
-  currency: currencySchema.optional().describe("ISO 4217, counted in hundredths: EUR, USD, GBP, …"),
+  timezone: z.string().min(1).max(64).optional().describe("IANA name, e.g. Asia/Tokyo"),
+  currency: currencySchema
+    .optional()
+    .describe("ISO 4217: KES, JPY, CAD, …; every amount is in its own minor unit (¥4500 is 4500, KSh 45 is 4500)."),
   languages: languagesSchema.optional().describe("BCP 47 tags, e.g. en, pt-BR."),
 });
 
@@ -181,7 +184,8 @@ export const updateRuleInput = patchOf(ruleInput).extend({
   expected_version: z.number().int().min(1).optional(),
 });
 export const ruleIdInput = z.object({ rule_id: z.string().min(1) });
-export const presetKeySchema = z.enum(["appointments", "trades", "shop"]);
+/** A preset key (`rules/presets`): one per kind of business, derived from the registry. */
+export { presetKeySchema };
 export const presetConfirmSchema = z
   .enum(["owner", "rules"])
   .describe(

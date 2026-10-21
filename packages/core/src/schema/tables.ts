@@ -907,11 +907,52 @@ export const connectorPayments = sqliteTable(
      */
     shopTotal: integer("shop_total"),
     shopCurrency: text("shop_currency"),
+    /**
+     * The entry of the item's payment schedule it is for (0025, ADR-032): '' for an order's own link,
+     * else `deposit`, `balance`, `difference-…`. One live link per item and entry.
+     */
+    scheduleId: text("schedule_id").notNull().default(""),
+    /** `pay` | `deposit` | `balance` | `guarantee` | `difference`. */
+    purpose: text("purpose").notNull().default("pay"),
+    /** When it stops taking payments (a deposit's pay window): closed on the platform then. */
+    expiresAt: integer("expires_at"),
   },
   (t) => [
     index("connector_payments_item").on(t.itemId, t.createdAt),
     unique("connector_payments_external").on(t.connectorId, t.externalId),
     index("connector_payments_open").on(t.connectorId, t.state, t.checkedAt),
+  ],
+);
+
+/**
+ * Every attempt at writing to a business's own system before anything is promised (0025, ADR-032):
+ * what was tried, under which key, and what came of it. Never the request itself: it may name the guest.
+ */
+export const connectorWrites = sqliteTable(
+  "connector_writes",
+  {
+    id: id(),
+    connectorId: text("connector_id").notNull(),
+    itemId: text("item_id").notNull(),
+    /** `reserve` | `modify` | `cancel` | `release`. */
+    op: text("op").notNull(),
+    /** Who settles one left unknown: `stays`, `bookings`. */
+    owner: text("owner").notNull(),
+    attempt: integer("attempt").notNull(),
+    /** Sent as the system's idempotency key, and the marker the write is found by. */
+    idemKey: text("idem_key").notNull(),
+    requestSha: text("request_sha").notNull(),
+    /** `pending` | `written` | `refused` | `unknown` | `rolled_back`. */
+    outcome: text("outcome").notNull().default("pending"),
+    externalId: text("external_id"),
+    detail: text("detail"),
+    resolveAfter: integer("resolve_after"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    unique("connector_writes_attempt").on(t.connectorId, t.itemId, t.attempt),
+    index("connector_writes_key").on(t.connectorId, t.itemId, t.op, t.idemKey),
   ],
 );
 

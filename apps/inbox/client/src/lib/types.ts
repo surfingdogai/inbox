@@ -7,6 +7,8 @@ import type {
   Condition,
   ConnectedAppView,
   ConnectionView,
+  ConnectorGroup,
+  PresetKey as CorePresetKey,
   CreatedKey,
   CustomerSummary,
   DeliveryView,
@@ -53,6 +55,7 @@ export type {
   Condition,
   ConnectedAppView,
   ConnectionView,
+  ConnectorGroup,
   CreatedKey,
   CustomerSummary,
   DeliveryView,
@@ -258,7 +261,8 @@ export interface RuleBody {
   readonly expected_version?: number | undefined;
 }
 
-export type PresetKey = "appointments" | "trades" | "shop";
+/** A preset key: the server's registry of kinds of business (`rules/presets`), so a new kind needs no line here. */
+export type PresetKey = CorePresetKey;
 export interface Preset {
   readonly key: PresetKey;
   readonly name: string;

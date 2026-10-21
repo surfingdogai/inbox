@@ -3,6 +3,7 @@ import clsx from "clsx";
 import { Plus, X } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { type ApiProblem, api, problemOf } from "../lib/api";
+import { minorUnitsOf } from "../lib/currencies";
 import { summarizeRule } from "../lib/describe";
 import { stateWord, TYPE_WORD, titleFor } from "../lib/format";
 import {
@@ -50,9 +51,15 @@ export function RuleEditor({
   onSave: (body: RuleBody) => void;
   onClose: () => void;
 }) {
+  const exponent = minorUnitsOf(currency);
   const start = initial
-    ? toForm(initial.definition, { name: initial.name, priority: initial.priority, enabled: initial.enabled })
-    : { form: EMPTY_RULE, simple: true };
+    ? toForm(initial.definition, {
+        name: initial.name,
+        priority: initial.priority,
+        enabled: initial.enabled,
+        exponent,
+      })
+    : { form: { ...EMPTY_RULE, exponent }, simple: true };
   const [form, setForm] = useState<RuleForm>(start.form);
   const [json, setJson] = useState<string | null>(start.simple ? null : JSON.stringify(initial?.definition, null, 2));
   const [jsonNote, setJsonNote] = useState<string | null>(
@@ -68,7 +75,7 @@ export function RuleEditor({
 
   const set = <K extends keyof RuleForm>(key: K, value: RuleForm[K]) => setForm((f) => ({ ...f, [key]: value }));
   const built: Built = json !== null ? parseJson(json) : toDefinition(form);
-  const summary = built.ok ? summarizeRule(built.definition) : null;
+  const summary = built.ok ? summarizeRule(built.definition, { exponent }) : null;
 
   const recent = useQuery({
     queryKey: ["items", "recent-for-rules"],
@@ -111,6 +118,7 @@ export function RuleEditor({
       name: form.name,
       priority: form.priority ? Number(form.priority) : 0,
       enabled: form.enabled,
+      exponent,
     });
     if (!next.simple) {
       setJsonNote("This rule has nested conditions the form cannot show; keep editing it as JSON.");

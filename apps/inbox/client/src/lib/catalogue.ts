@@ -1,4 +1,5 @@
-import { parseMajor } from "./actions";
+import { majorText, parseMajor } from "./actions";
+import { minorUnitsOf } from "./currencies";
 import { formatMoney } from "./format";
 import type { PriceModel, ServiceBody, ServicePrice, ServiceRow } from "./types";
 
@@ -61,10 +62,16 @@ export interface ServiceDraft {
   readonly floor: string;
 }
 
-const majorOf = (minor: number | null | undefined) =>
-  minor === null || minor === undefined ? "" : (minor / 100).toFixed(2);
+const majorOf = (minor: number | null | undefined, currency: string) =>
+  minor === null || minor === undefined ? "" : majorText(minor, currency);
 
-export function serviceDraft(s: ServiceRow | undefined, floor: number | null | undefined): ServiceDraft {
+/** `currency`: the business's, for a service with no price of its own yet (ADR-032: amounts in its own places). */
+export function serviceDraft(
+  s: ServiceRow | undefined,
+  floor: number | null | undefined,
+  currency = "EUR",
+): ServiceDraft {
+  const money = s?.price?.currency ?? currency;
   return {
     name: s?.name ?? "",
     description: s?.description ?? "",
@@ -75,12 +82,12 @@ export function serviceDraft(s: ServiceRow | undefined, floor: number | null | u
     capacity: String(s?.capacity ?? 1),
     granularity: String(s?.granularityMin ?? 15),
     model: s?.price?.model === "from" ? "from" : "fixed",
-    price: s?.price?.value !== undefined && s.price.model !== "quote" ? (s.price.value / 100).toFixed(2) : "",
+    price: s?.price?.value !== undefined && s.price.model !== "quote" ? majorText(s.price.value, money) : "",
     per: s?.price?.per === "person" ? "person" : "booking",
     sort: String(s?.sort ?? 0),
     active: s ? s.active === 1 : true,
     negotiable: s ? s.negotiable !== 0 : true,
-    floor: majorOf(floor),
+    floor: majorOf(floor, money),
   };
 }
 
@@ -105,13 +112,14 @@ export function serviceWrite(
     return { problem: "Pick a length, or type the minutes (5 to 1440)." };
   }
   const typed = d.price.trim();
-  const value = typed ? parseMajor(typed) : undefined;
+  const places = minorUnitsOf(opts.currency);
+  const value = typed ? parseMajor(typed, places) : undefined;
   if (d.taken === "book" && typed && value === undefined) {
     return { problem: "Write the price like 45 or 45.50, or leave it empty for on request." };
   }
   const priced = d.taken === "book" && value !== undefined;
   const floorTyped = d.floor.trim();
-  const lowest = !priced || d.model !== "fixed" || floorTyped === "" ? null : parseMajor(floorTyped);
+  const lowest = !priced || d.model !== "fixed" || floorTyped === "" ? null : parseMajor(floorTyped, places);
   if (lowest === undefined) return { problem: "Write the lowest price like 40 or 40.50, or leave it empty." };
   const price: ServicePrice | null =
     d.taken === "ask"

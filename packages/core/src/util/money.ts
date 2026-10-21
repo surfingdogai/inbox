@@ -1,10 +1,28 @@
-/** An amount in minor units as a business writes it to a person: `€100.00`, `£9.50`. */
-export function moneyText(m: { readonly value: number; readonly currency: string }): string {
+import { decimalOf, minorUnits } from "@surfingdog/spec";
+
+/**
+ * An amount in minor units as a business writes it, in the currency's own exponent (ADR-032):
+ * `KSh 4,500.00`, `¥4,500`, `KWD 4.500`, in the given locale's way. A currency whose exponent is not
+ * known is written as its minor units and code, never guessed into a decimal.
+ */
+export function formatMinor(m: { readonly value: number; readonly currency: string }, locale: string): string {
+  const e = minorUnits(m.currency);
+  if (e === null) return `${m.value} ${m.currency}`;
   try {
-    return new Intl.NumberFormat("en-GB", { style: "currency", currency: m.currency }).format(m.value / 100);
+    return new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency: m.currency,
+      minimumFractionDigits: e,
+      maximumFractionDigits: e,
+    }).format(m.value / 10 ** e);
   } catch {
-    return `${(m.value / 100).toFixed(2)} ${m.currency}`;
+    return `${decimalOf(m.value, m.currency) ?? m.value} ${m.currency}`;
   }
+}
+
+/** An amount in minor units as a business writes it to a person: `€100.00`, `¥4,500`, `KWD 4.500`. */
+export function moneyText(m: { readonly value: number; readonly currency: string }): string {
+  return formatMinor(m, "en-GB");
 }
 
 /**

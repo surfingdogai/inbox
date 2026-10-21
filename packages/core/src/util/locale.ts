@@ -4,84 +4,34 @@
  * AI are held to the same answer.
  */
 
+import { currencyCodeProblem, minorUnits } from "@surfingdog/spec";
+
 /**
- * ISO 4217 currencies whose minor unit is not a hundredth: none (JPY, KRW, ISK, …), a thousandth
- * (BHD, KWD, JOD, …) or a ten-thousandth (CLF, UYW), and the funds and metals with no minor unit at
- * all. Every amount in this inbox is kept in hundredths (`moneyText`, the owner app's `formatMoney`):
- * a price in one of these would be shown a hundred or ten times wrong, so none is taken until money
- * knows other exponents.
+ * Every amount in this inbox is an integer count of its currency's own ISO 4217 minor unit
+ * (ADR-032): 4500 is 45.00 KES, ¥4,500 JPY, 4.500 KWD. The exponent comes from one table
+ * (`minorUnits` in `@surfingdog/spec`), which the owner app's money formatting, the feeds' prices and
+ * every pay-link platform's conversion read, so a currency is never counted a hundred times wrong.
  */
-const NOT_HUNDREDTHS: ReadonlySet<string> = new Set([
-  // No minor unit.
-  "BIF",
-  "CLP",
-  "DJF",
-  "GNF",
-  "ISK",
-  "JPY",
-  "KMF",
-  "KRW",
-  "PYG",
-  "RWF",
-  "UGX",
-  "UYI",
-  "VND",
-  "VUV",
-  "XAF",
-  "XOF",
-  "XPF",
-  // Thousandths.
-  "BHD",
-  "IQD",
-  "JOD",
-  "KWD",
-  "LYD",
-  "OMR",
-  "TND",
-  // Ten-thousandths.
-  "CLF",
-  "UYW",
-  // Funds, metals, testing and "no currency": not money a business prices in.
-  "XAG",
-  "XAU",
-  "XBA",
-  "XBB",
-  "XBC",
-  "XBD",
-  "XDR",
-  "XPD",
-  "XPT",
-  "XSU",
-  "XTS",
-  "XUA",
-  "XXX",
-]);
-
-/** The currencies this runtime knows, when it can say; null when it cannot (then any three letters do). */
-function knownCurrencies(): ReadonlySet<string> | null {
-  try {
-    return typeof Intl.supportedValuesOf === "function" ? new Set(Intl.supportedValuesOf("currency")) : null;
-  } catch {
-    return null;
-  }
-}
-const KNOWN = knownCurrencies();
 
 /**
- * Whether `code` is a currency a price here can be in: three capital letters, an ISO 4217 code the
- * runtime knows (when it can say), counted in hundredths.
+ * Whether `code` is a currency a price here can be in: three capital letters, an ISO 4217 currency
+ * whose exponent is known, not a fund code.
+ */
+export function isMoneyCurrency(code: string): boolean {
+  return currencyCodeProblem(code) === null;
+}
+
+/**
+ * Whether `code` is a currency counted in hundredths. Kept for the few places that still need to
+ * know (a platform that writes amounts as hundredths); everything else asks `minorUnits`.
  */
 export function isHundredthsCurrency(code: string): boolean {
-  if (!/^[A-Z]{3}$/.test(code) || NOT_HUNDREDTHS.has(code)) return false;
-  return KNOWN === null || KNOWN.has(code);
+  return isMoneyCurrency(code) && minorUnits(code) === 2;
 }
 
 /** Why a currency is refused, for the field that named it. */
 export function currencyProblem(code: string): string | null {
-  if (!/^[A-Z]{3}$/.test(code)) return "a three-letter ISO 4217 code, like EUR";
-  if (NOT_HUNDREDTHS.has(code)) return `${code} is not counted in hundredths, which prices here are; pick another`;
-  if (KNOWN !== null && !KNOWN.has(code)) return `${code} is not an ISO 4217 currency`;
-  return null;
+  return currencyCodeProblem(code);
 }
 
 /**

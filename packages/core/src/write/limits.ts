@@ -495,6 +495,20 @@ export function withBreach(breaches: readonly Breach[], extra: Breach): Breach[]
  * with, one on a request the business did not price. A yes in words is a yes, and taking their price
  * is an acceptance, judged as one.
  */
+/** The first currency an item's payload names (its total's, else any amount's): what its amounts are counted in. */
+function currencyHeld(value: unknown, depth = 0): string | undefined {
+  if (depth > 4 || typeof value !== "object" || value === null) return undefined;
+  const o = value as Record<string, unknown>;
+  if (typeof o.value === "number" && typeof o.currency === "string") return o.currency;
+  const total = o.totalPrice as { currency?: unknown } | undefined;
+  if (typeof total?.currency === "string") return total.currency;
+  for (const v of Object.values(o)) {
+    const found = currencyHeld(v, depth + 1);
+    if (found) return found;
+  }
+  return undefined;
+}
+
 export async function namesOtherMoney(
   db: Db,
   item: Item,
@@ -503,7 +517,8 @@ export async function namesOtherMoney(
   offered?: unknown,
 ): Promise<boolean> {
   if (discountIn(text) || speltAmountIn(text)) return true;
-  const named = amountsIn(text);
+  // Read in the item's own currency where a sign may mean several ($ is cents in one, pesos in another).
+  const named = amountsIn(text, 20, currencyHeld(item.payload));
   if (named.length === 0) return false;
   const ours = new Set<number>();
   for (const r of rows) if (r.by === "business" || r.status === "accepted") amountsHeld(r.terms, ours);
