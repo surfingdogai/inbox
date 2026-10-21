@@ -44,7 +44,10 @@ export async function prepareBooking(
     readonly pricing?: PricingFor | undefined;
   },
 ): Promise<PreparedBooking> {
-  const payload: Record<string, unknown> = { ...input.payload };
+  // Who it is with is the inbox's to choose, from `staff_id` (or anyone): whatever claim key a request
+  // carries is never the customer's to pick.
+  const { resourceId: _picked, staffName: _named, anyStaff: _any, ...rest } = input.payload;
+  const payload: Record<string, unknown> = { ...rest };
   const reservationFor = payload.reservationFor as { serviceId?: unknown } | undefined;
   const serviceId = typeof reservationFor?.serviceId === "string" ? reservationFor.serviceId : null;
   const start = Date.parse(String(payload.startTime ?? ""));
@@ -53,9 +56,7 @@ export async function prepareBooking(
   if (!service) return { payload, checkFirst: false };
   const addOns = addOnsOf(service, input.addOnIds);
   const staff = await staffForService(db, service.id);
-  const asked =
-    input.staffId ??
-    (typeof payload.resourceId === "string" && staff.length > 0 ? (payload.resourceId as string) : undefined);
+  const asked = input.staffId;
   if (staff.length === 0) {
     if (asked && asked !== ANY) throw unknownStaff(asked, service.id);
     if (addOns.length > 0) {

@@ -312,6 +312,35 @@ describe("staff", () => {
     expect(written.every((w) => w.booking.customer === undefined)).toBe(true);
   });
 
+  it("are never picked by a customer for a service nobody gives: its own places decide", async () => {
+    const { db, caps, mei } = await mapleAndFade();
+    const kids = await caps.setup.createService(
+      owner,
+      serviceInput.parse({
+        name: "Kids cut",
+        duration_min: 30,
+        granularity_min: 15,
+        price: { model: "fixed", value: 2500, currency: "CAD" },
+      }),
+    );
+    const first = await caps.createBooking(agent(), {
+      payload: booking(kids.id, "Kids cut", at("13:00"), at("13:30")),
+      contact: { name: "Tomás" },
+      idempotency_key: "kids-1",
+    });
+    await transitionItem(db, owner, { itemId: first.view.item.id, event: "confirm" });
+    // Mei's id, from list_staff, on a service she does not give: it is not the customer's to choose.
+    const second = await caps.createBooking(agent(), {
+      payload: { ...booking(kids.id, "Kids cut", at("13:00"), at("13:30")), resourceId: mei.id } as never,
+      contact: { name: "Wren" },
+      idempotency_key: "kids-2",
+    });
+    expect((second.view.item.payload as { resourceId?: string }).resourceId).toBeUndefined();
+    await expect(transitionItem(db, owner, { itemId: second.view.item.id, event: "confirm" })).rejects.toMatchObject({
+      code: "slot_taken",
+    });
+  });
+
   it("keep their photo without what the camera wrote into it", () => {
     const jpeg = Uint8Array.from([
       0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00,

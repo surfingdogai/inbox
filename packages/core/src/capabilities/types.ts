@@ -115,7 +115,10 @@ export const createBookingInput = z.object({
     change: true,
     paymentRef: true,
     paidAmount: true,
+    // Who it is with is the inbox's to set, from staff_id (ADR-035): never a claim key a customer picks.
+    resourceId: true,
     staffName: true,
+    anyStaff: true,
     addOns: true,
     deposit: true,
     policy: true,

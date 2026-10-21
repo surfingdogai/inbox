@@ -193,6 +193,8 @@ export const bookingPayloadSchema = z.object({
    * customer confirmed them.
    */
   staffName: z.string().min(1).max(60).optional(),
+  /** Asked for anyone free (ADR-035): whoever is free is picked again when it is confirmed. */
+  anyStaff: z.boolean().optional(),
   addOns: z.array(bookedAddOnSchema).max(10).optional(),
   deposit: z.object({ amount: moneySchema, dueBy: isoDateTime.optional(), refundable: z.boolean() }).optional(),
   policy: datedPolicySchema.optional(),
