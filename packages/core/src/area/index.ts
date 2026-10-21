@@ -14,9 +14,15 @@ export * from "./postal";
 /**
  * Where a business works (ADR-034 §3): a radius, postal prefixes, or anywhere, and what happens to a
  * request from outside. The radius is measured from a base the owner chooses as a place, never as
- * numbers typed in: the business's own premises (Settings → Business, on the map), or where the
- * owner's device is when they set it ("Use where I am"). The base is never published, never shown to a
+ * numbers typed in: the business's own premises (Settings → General, on the map), or where the
+ * owner's device is when they set it ("Where I am now"). The base is never published, never shown to a
  * customer, and never told as a distance: a request's site is told as a band (within 10 km).
+ *
+ * A device's point is often the tradesperson's home. Anyone may ask whether a site is inside, again
+ * and again, so every check measures from the middle of the cell of a grid of about 5 km that the point
+ * falls in (`blurredBase`), never from the point, and gives it no band nearer than 10 km: asking round
+ * the edge finds that cell at best. The radius edge from a device is therefore approximate, by up to
+ * about 4 km. Premises the business publishes are measured as they are.
  *
  * Nothing is geocoded. A postal code is matched as text against the prefixes; a radius needs a point
  * for the site, which the customer's agent sends when it has one. When the area cannot be decided —
@@ -103,17 +109,39 @@ export function distanceKm(a: Point, b: Point): number {
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-/** The smallest band a distance falls in, when it is within 50 km. */
-export function bandOf(km: number): AreaCheck["within_km"] {
-  for (const b of AREA_BANDS_KM) if (km <= b) return b;
+/** The smallest band a distance falls in, when it is within 50 km, and no nearer than `nearest`. */
+export function bandOf(km: number, nearest = 0): AreaCheck["within_km"] {
+  for (const b of AREA_BANDS_KM) if (km <= b && b >= nearest) return b;
   return undefined;
 }
 
-/** The base's point: the premises' as Settings → Business keeps it, or the device's. Null without one. */
+/** A grid cell's side, in degrees of latitude: about 5.6 km. */
+const CELL_DEG = 0.05;
+/** The nearest band told when the base is a device's point. */
+const DEVICE_NEAREST_BAND = 10;
+
+/**
+ * The middle of the cell of a grid of about 5 km a device's point falls in: what every check measures
+ * from, so the point itself is never what an answer depends on. A cell's width in longitude grows
+ * towards the poles, so cells stay about as wide as they are tall.
+ */
+export function blurredBase(p: Point): Point {
+  const row = Math.floor((p.lat + 90) / CELL_DEG);
+  const lat = Math.min(90, -90 + (row + 0.5) * CELL_DEG);
+  const width = CELL_DEG / Math.max(0.1, Math.cos((lat * Math.PI) / 180));
+  const col = Math.floor((p.lng + 180) / width);
+  const lng = Math.min(180, -180 + (col + 0.5) * width);
+  return { lat: Math.round(lat * 10_000) / 10_000, lng: Math.round(lng * 10_000) / 10_000 };
+}
+
+/**
+ * The base's point as checks measure from it: the premises' as Settings → General keeps it, or the
+ * middle of the grid cell a device's point falls in. Null without one.
+ */
 export function basePoint(area: AreaSettings, premises: Point | null): Point | null {
   if (!area.base) return null;
   if (area.base.from === "business") return premises;
-  return area.base.point;
+  return blurredBase(area.base.point);
 }
 
 function postalInside(prefixes: readonly { country: string; prefix: string }[], site: Site): boolean | null {
@@ -137,7 +165,7 @@ export function checkSite(area: AreaSettings, premises: Point | null, site: Site
   if (!base || !site.point) return { status: "unknown", by: "radius" };
   const km = distanceKm(base, site.point);
   if (km > area.radiusKm) return { status: "outside", by: "radius" };
-  const band = bandOf(km);
+  const band = bandOf(km, area.base?.from === "device" ? DEVICE_NEAREST_BAND : 0);
   return { status: "inside", by: "radius", ...(band ? { within_km: band } : {}) };
 }
 

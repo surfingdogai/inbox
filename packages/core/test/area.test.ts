@@ -5,6 +5,7 @@ import {
   areaSummary,
   areaWords,
   bandOf,
+  blurredBase,
   checkSite,
   distanceKm,
   isPostalCode,
@@ -37,10 +38,12 @@ describe("a radius", () => {
     expect(distanceKm(NAIROBI_CBD, WESTLANDS)).toBeGreaterThan(1.5);
     expect(distanceKm(NAIROBI_CBD, WESTLANDS)).toBeLessThan(3);
     const fundi = area({ mode: "radius", radiusKm: 25, base: { from: "device", point: NAIROBI_CBD } });
-    expect(checkSite(fundi, null, { point: WESTLANDS })).toEqual({ status: "inside", by: "radius", within_km: 5 });
+    // From a device's point, no band nearer than 10 km.
+    expect(checkSite(fundi, null, { point: WESTLANDS })).toEqual({ status: "inside", by: "radius", within_km: 10 });
     expect(checkSite(fundi, null, { point: KAREN })).toEqual({ status: "inside", by: "radius", within_km: 25 });
     expect(checkSite(fundi, null, { point: THIKA })).toEqual({ status: "outside", by: "radius" });
     expect(bandOf(4.99)).toBe(5);
+    expect(bandOf(4.99, 10)).toBe(10);
     expect(bandOf(50)).toBe(50);
     expect(bandOf(51)).toBeUndefined();
     // A radius beyond 50 km: the nearest bands still, and past 50 km inside with no band.
@@ -86,6 +89,44 @@ describe("a radius", () => {
       "Fundi Flow Plumbing works within 25 km: this site is within 25 km.",
     );
     expect(roundedPoint({ lat: -1.286389, lng: 36.817223 })).toEqual({ lat: -1.286, lng: 36.817 });
+  });
+});
+
+describe("a base that is a device's point", () => {
+  it("is measured from the middle of its grid cell, so asking round the edge never finds the point", () => {
+    const home: Point = { lat: -31.9505, lng: 115.8605 }; // Perth
+    const cell = blurredBase(home);
+    // The cell's middle is within about 4 km of the point, and the same for every point in the cell.
+    expect(distanceKm(cell, home)).toBeLessThan(4.2);
+    expect(blurredBase({ lat: (home.lat + cell.lat) / 2, lng: (home.lng + cell.lng) / 2 })).toEqual(cell);
+    expect(blurredBase(cell)).toEqual(cell);
+    // Cells stay about 5 km wide far from the equator too: Tromsø, and Ushuaia.
+    for (const far of [
+      { lat: 69.6492, lng: 18.9553 },
+      { lat: -54.8019, lng: -68.303 },
+    ]) {
+      expect(distanceKm(blurredBase(far), far)).toBeLessThan(4.2);
+    }
+    // Probe a line of sites across the edge of a 25 km radius: where inside turns to outside says
+    // where the cell's middle is, never the point.
+    const southern = area({ mode: "radius", radiusKm: 25, base: { from: "device", point: home } });
+    let edge = 0;
+    for (let km = 20; km <= 30; km += 0.05) {
+      const site = { lat: home.lat, lng: home.lng + km / (111.32 * Math.cos((home.lat * Math.PI) / 180)) };
+      if (checkSite(southern, null, { point: site }).status === "outside") {
+        edge = km;
+        break;
+      }
+    }
+    expect(edge).toBeGreaterThan(0);
+    expect(Math.abs(edge - 25)).toBeGreaterThan(0.2);
+    // The premises the business publishes are measured as they are.
+    const premises = area({ mode: "radius", radiusKm: 25, base: { from: "business" } });
+    expect(checkSite(premises, NAIROBI_CBD, { point: WESTLANDS })).toEqual({
+      status: "inside",
+      by: "radius",
+      within_km: 5,
+    });
   });
 });
 

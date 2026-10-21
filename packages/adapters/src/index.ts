@@ -21,6 +21,7 @@ import {
   clientAddress,
   consume,
   EVERYONE,
+  isAreaRoute,
   isCreateRoute,
   isNegotiateRoute,
   isUploadRoute,
@@ -320,6 +321,12 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
     // and the system it is pasted into cannot run for ever. The owner's session and AI are not counted.
     if (caller.principal?.keyKind === "integration") {
       const refused = await limited(c, ["integration"], caller.principal.id);
+      if (refused) return refused;
+    }
+    // Whether a site is inside the area is a read, but one a script could ask round the edge with to
+    // find where a radius is measured from: it has a bucket of its own (ADR-034 §3).
+    if (caller.auth?.kind !== "owner" && isAreaRoute(c.req.method, c.req.path)) {
+      const refused = await limited(c, ["area"], caller.auth?.id);
       if (refused) return refused;
     }
     // Writes from anyone but the verified owner are limited. The inbound mail webhook is not: it is
@@ -682,7 +689,7 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
       if (refused) return refused;
     }
     if (counted) {
-      const classes = (["public", "create", "verify", "negotiate"] as const).filter((cls) => costs[cls]);
+      const classes = (["public", "create", "verify", "negotiate", "area"] as const).filter((cls) => costs[cls]);
       const refused = classes.length ? await limited(c, classes, caller.auth?.id, costs) : null;
       if (refused) return refused;
     }

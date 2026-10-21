@@ -131,7 +131,7 @@ describe("a request for a price with its job and photos", () => {
       job?: { areaCheck?: unknown; urgency?: string };
       attachments?: { id: string; name: string }[];
     };
-    expect(payload.job?.areaCheck).toEqual({ status: "inside", by: "radius", within_km: 5 });
+    expect(payload.job?.areaCheck).toEqual({ status: "inside", by: "radius", within_km: 10 });
     expect(payload.attachments?.map((a) => a.name)).toEqual(["sink.jpg", "plan.pdf"]);
     expect(await count(s.db, "SELECT COUNT(*) FROM blobs WHERE item_id = ?", [item.id])).toBe(2);
     // Nothing the customer sent says where the photo was taken any more.

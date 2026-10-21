@@ -84,6 +84,19 @@ describe("check_area", () => {
     expect(none.status).toBe(422);
   });
 
+  it("is asked at most twenty times at once from one address, so nobody can ask round the edge", async () => {
+    const s = await setup(perth);
+    const ask = () =>
+      s.app.request(`${BASE}/v1/area?postal_code=6050&country=AU`, { headers: { "cf-connecting-ip": "203.0.113.50" } });
+    for (let i = 0; i < 20; i++) expect((await ask()).status).toBe(200);
+    expect((await ask()).status).toBe(429);
+    // Another address is not held back by it.
+    const other = await s.app.request(`${BASE}/v1/area?postal_code=6050&country=AU`, {
+      headers: { "cf-connecting-ip": "198.51.100.61" },
+    });
+    expect(other.status).toBe(200);
+  });
+
   it("is not offered where the business says nothing of where it works", async () => {
     const s = await setup({});
     const names = (await (await mcp(s.app)).listTools()).tools.map((t) => t.name);
