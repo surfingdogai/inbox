@@ -110,6 +110,7 @@ export function failOn(tool: string, res: ConnectorHttpResponse, field: string):
 /** An item as a snapshot carries it, with only the fields that hold something. */
 export function snapshotItem(i: {
   externalId: string;
+  groupExternalId?: string | undefined;
   name: string;
   description?: string | null | undefined;
   price: { value: number; currency: string } | null;
@@ -119,6 +120,7 @@ export function snapshotItem(i: {
 }): SnapshotMenuItem {
   return {
     externalId: i.externalId,
+    ...(i.groupExternalId ? { groupExternalId: i.groupExternalId } : {}),
     name: i.name,
     ...(i.description ? { description: i.description } : {}),
     price: i.price,
@@ -182,4 +184,45 @@ export function tokensOf(secret: Readonly<Record<string, string>>): Tokens | nul
 
 export function tokenSecret(t: Tokens): Record<string, string> {
   return { accessToken: t.accessToken, refreshToken: t.refreshToken, expiresAt: String(t.expiresAt) };
+}
+
+/** Refreshes in flight, and the ones just made, by the refresh token they spent. */
+const refreshing = new Map<string, Promise<Tokens>>();
+const refreshed = new Map<string, { readonly tokens: Tokens; readonly until: number }>();
+
+/**
+ * One refresh per refresh token: a sync and an order written in the same minute share it, and a run that
+ * started with the token another just spent is given what that one got. A provider may let each refresh
+ * token be used once (Clover's expiring tokens); spending it twice would end the connection.
+ */
+export function refreshOnce(refreshToken: string, now: number, run: () => Promise<Tokens>): Promise<Tokens> {
+  const done = refreshed.get(refreshToken);
+  if (done && done.until > now && done.tokens.expiresAt - 60_000 > now) return Promise.resolve(done.tokens);
+  const inFlight = refreshing.get(refreshToken);
+  if (inFlight) return inFlight;
+  const next = run()
+    .then((t) => {
+      for (const [k, v] of refreshed) if (v.until <= now) refreshed.delete(k);
+      refreshed.set(refreshToken, { tokens: t, until: now + 10 * 60_000 });
+      return t;
+    })
+    .finally(() => refreshing.delete(refreshToken));
+  refreshing.set(refreshToken, next);
+  return next;
+}
+
+/** A line's choices must each be one the till knows: never left out while the price still holds them. */
+export function refuseUnknownChoices(tool: string, o: OutboundOrderLike): void {
+  for (const l of o.lines) {
+    const choice = l.options.find((x) => !x.externalId);
+    if (choice) {
+      throw new ConnectorError("refused", `${choice.name} has no id in your ${tool} menu: bring the menu in again.`);
+    }
+  }
+}
+
+interface OutboundOrderLike {
+  readonly lines: readonly {
+    readonly options: readonly { readonly name: string; readonly externalId: string | null }[];
+  }[];
 }

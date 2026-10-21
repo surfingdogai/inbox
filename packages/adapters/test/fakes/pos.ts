@@ -152,6 +152,9 @@ export function fakeToast(p: FakePlatform) {
   p.on("POST", `${TOAST_HOST}/orders/v2/orders`, (r) => {
     if (!atRestaurant(r)) return unauthorised();
     const b = JSON.parse(r.body) as Record<string, unknown>;
+    // Toast refuses an externalId it holds already.
+    if ([...state.orders.values()].some((o) => o.externalId === b.externalId))
+      return json({ status: 409, message: "An order with this externalId already exists" }, 409);
     const guid = `ord-${state.orders.size + 1}`;
     const order = {
       guid,

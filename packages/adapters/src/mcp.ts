@@ -1594,7 +1594,9 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
             }
             for (const way of card.ways) {
               const name = card.id === "calendar" ? `${way.label} Calendar` : `${way.label} (${card.title})`;
-              if (way.status === "soon") soon.push(name);
+              // A way soon on its own card too (Square among the tills) is named once, by that card.
+              const named = r.cards.some((c) => c.status === "soon" && c.ways.some((w) => w.kind === way.kind));
+              if (way.status === "soon" && !named) soon.push(name);
               if (way.status === "setup") setup.push(`${name}${way.hint ? `: ${way.hint.replace(/\.$/, "")}` : ""}`);
             }
           }

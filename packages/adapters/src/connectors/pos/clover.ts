@@ -12,6 +12,8 @@ import {
   failOn,
   jsonOf,
   type PartnerClient,
+  refreshOnce,
+  refuseUnknownChoices,
   short,
   snapshotItem,
   type Tokens,
@@ -175,7 +177,10 @@ export function cloverSnapshot(
   };
 }
 
-/** An accepted order as an atomic order: one line per unit, each with its modifiers. */
+/** The most units one order made here holds in Clover, one line each: a larger one is put in by hand. */
+export const CLOVER_MAX_UNITS = 200;
+
+/** An accepted order as an atomic order: one line per unit, each with its modifiers. Nothing is cut. */
 export function cloverOrderBody(o: OutboundOrder): Record<string, unknown> {
   const missing = o.lines.find((l) => !l.externalId);
   if (missing)
@@ -183,11 +188,19 @@ export function cloverOrderBody(o: OutboundOrder): Record<string, unknown> {
       "refused",
       `${missing.name} is not an item of the Clover inventory this inbox brought in.`,
     );
+  refuseUnknownChoices("Clover", o);
+  const units = o.lines.reduce((n, l) => n + l.quantity, 0);
+  if (units > CLOVER_MAX_UNITS) {
+    throw new ConnectorError(
+      "refused",
+      `This order has ${units} items; Clover takes up to ${CLOVER_MAX_UNITS} in one order made here. Put it into Clover by hand.`,
+    );
+  }
   const lineItems = o.lines.flatMap((l) =>
-    Array.from({ length: Math.min(50, l.quantity) }, () => ({
+    Array.from({ length: l.quantity }, () => ({
       item: { id: l.externalId },
       ...(l.note ? { note: l.note.slice(0, 140) } : {}),
-      modifications: l.options.filter((x) => x.externalId).map((x) => ({ modifier: { id: x.externalId } })),
+      modifications: l.options.map((x) => ({ modifier: { id: x.externalId } })),
     })),
   );
   return {
@@ -209,10 +222,9 @@ export function cloverConnector(client: PartnerClient | null): ConnectorDefiniti
     const t = tokensOf(ctx.secret);
     if (!t || !merchant) throw new ConnectorError("auth", "Connect Clover again.");
     if (t.expiresAt - 60_000 > ctx.now) return { token: t.accessToken, region, merchant };
-    const next = await tokens(ctx, region, "/oauth/v2/refresh", {
-      client_id: c.clientId,
-      refresh_token: t.refreshToken,
-    });
+    const next = await refreshOnce(t.refreshToken, ctx.now, () =>
+      tokens(ctx, region, "/oauth/v2/refresh", { client_id: c.clientId, refresh_token: t.refreshToken }),
+    );
     await ctx.saveSecret(tokenSecret(next));
     return { token: next.accessToken, region, merchant };
   };
@@ -224,7 +236,11 @@ export function cloverConnector(client: PartnerClient | null): ConnectorDefiniti
     auth: "oauth",
     presets,
     ready: () => (ready ? true : CLOVER_NOT_READY),
-    whenNotReady: { status: "setup", hint: CLOVER_NOT_READY, href: "https://surfingdog.ai/docs/ordering/#which-tills" },
+    whenNotReady: {
+      status: "setup",
+      hint: "Not available yet: Clover lets only apps it approved connect. Use GloriaFood or Flipdish meanwhile.",
+      href: "https://surfingdog.ai/docs/ordering/#which-tills",
+    },
     note: "Your Clover inventory comes in to start from, and orders you accept here go into Clover.",
     consent: "Clover will ask to let this inbox read your inventory and make orders.",
     oauth: {

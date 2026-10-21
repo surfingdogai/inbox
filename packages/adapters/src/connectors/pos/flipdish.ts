@@ -19,8 +19,9 @@ import { clientToken, failOn, jsonOf, minorOf, short, snapshotItem } from "./com
  * What it does: the store's menu, read to start from item by item (`GET /api/v1.0/menus/{menuId}`), its
  * collection hours (the store's `PickupHours`, in its own `IanaTimeZone`), and pausing: when the owner
  * chose so, pausing the kitchen here closes the store for collection and delivery in Flipdish until then
- * (`POST /api/v1.0/stores/{storeId}/businesshoursoverrides`, Type `Closed`), and resuming deletes the
- * closures that hold now. Ordering stays on the restaurant's own Flipdish page, its door elsewhere: no
+ * (`POST /api/v1.0/stores/{storeId}/businesshoursoverrides`, Type `Closed`), and resuming deletes those
+ * closures, the ones this inbox made, kept sealed by their ids: a closure the owner set in Flipdish
+ * (a holiday, a short-staffed evening) stays. Ordering stays on the restaurant's own Flipdish page, its door elsewhere: no
  * order is written into Flipdish (no third-party order-injection is documented, unknown).
  *
  * Sources, read 21 Oct 2026: https://developers.flipdish.com/docs/oauth-and-webhooks-integrator-guide,
@@ -186,21 +187,49 @@ export function flipdishSnapshot(store: FlipdishStore, menu: FlipdishMenu, now: 
   };
 }
 
+const PAGE = 50;
+const PAGES = 20;
+
+/** The stores this app reaches, page by page (50 a page), up to a thousand. */
 async function stores(ctx: Pick<ConnectContext, "http">, bearer: string): Promise<FlipdishStore[]> {
-  const { res, json } = await call(ctx, bearer, "GET", "/api/v1.0/stores?page=1&limit=50");
-  if (res.status !== 200 || !Array.isArray(json?.Data)) {
-    throw new ConnectorError("bad_response", "Flipdish did not list the stores this app can reach.");
+  const all: FlipdishStore[] = [];
+  for (let page = 1; page <= PAGES; page++) {
+    const { res, json } = await call(ctx, bearer, "GET", `/api/v1.0/stores?page=${page}&limit=${PAGE}`);
+    if (res.status !== 200 || !Array.isArray(json?.Data)) {
+      throw new ConnectorError("bad_response", "Flipdish did not list the stores this app can reach.");
+    }
+    const data = json.Data as FlipdishStore[];
+    all.push(...data);
+    const total = Number((json as { TotalRecordCount?: unknown }).TotalRecordCount);
+    if (data.length < PAGE || (Number.isFinite(total) && all.length >= total)) break;
   }
-  return json.Data as FlipdishStore[];
+  return all;
 }
 
+/**
+ * The store the owner chose, and only that one: pausing never closes, nor resuming opens, another. One
+ * that is not on the app any more is said so, never stood in for by the first.
+ */
 async function storeOf(ctx: RunContext, bearer: string): Promise<FlipdishStore> {
   const chosen = ctx.choices?.store ?? null;
   const all = await stores(ctx, bearer);
-  const store = all.find((s) => String(s.StoreId) === chosen) ?? all[0];
-  if (!store) throw new ConnectorError("not_found", "This Flipdish app reaches no store. Add one to it in Flipdish.");
+  if (all.length === 0)
+    throw new ConnectorError("not_found", "This Flipdish app reaches no store. Add one to it in Flipdish.");
+  const store =
+    chosen === null ? (all.length === 1 ? all[0] : undefined) : all.find((s) => String(s.StoreId) === chosen);
+  if (!store) {
+    throw new ConnectorError(
+      "not_found",
+      "The Flipdish store you chose is not on this app any more: choose the store again in Settings → Integrations.",
+    );
+  }
   return store;
 }
+
+/** The closures this inbox made while paused, by their ids, kept sealed with the app's key. */
+const OVERRIDES = "pauseOverrides";
+const overridesOf = (ctx: RunContext): string[] =>
+  (ctx.secret[OVERRIDES] ?? "").split(",").filter((x) => /^\d+$/.test(x));
 
 export function flipdishConnector(): ConnectorDefinition {
   return {
@@ -266,48 +295,53 @@ export function flipdishConnector(): ConnectorDefinition {
       async pause(ctx: RunContext, until: number) {
         const bearer = await token(ctx, ctx.secret.clientId ?? "", ctx.secret.clientSecret ?? "");
         const store = await storeOf(ctx, bearer);
-        for (const DeliveryType of ["Pickup", "Delivery"]) {
-          const { res } = await call(
-            ctx,
-            bearer,
-            "POST",
-            `/api/v1.0/stores/${String(store.StoreId)}/businesshoursoverrides`,
-            {
-              DeliveryType,
-              StartTime: new Date(ctx.now).toISOString(),
-              EndTime: new Date(until).toISOString(),
-              Type: "Closed",
-            },
-          );
-          if (res.status !== 200)
-            throw new ConnectorError("refused", `Flipdish did not close the store for ${DeliveryType.toLowerCase()}.`);
+        const made = overridesOf(ctx);
+        try {
+          for (const DeliveryType of ["Pickup", "Delivery"]) {
+            const { res, json } = await call(
+              ctx,
+              bearer,
+              "POST",
+              `/api/v1.0/stores/${String(store.StoreId)}/businesshoursoverrides`,
+              {
+                DeliveryType,
+                StartTime: new Date(ctx.now).toISOString(),
+                EndTime: new Date(until).toISOString(),
+                Type: "Closed",
+              },
+            );
+            if (res.status !== 200)
+              throw new ConnectorError(
+                "refused",
+                `Flipdish did not close the store for ${DeliveryType.toLowerCase()}.`,
+              );
+            const id = (json?.Data as { BusinessHoursOverrideId?: unknown } | undefined)?.BusinessHoursOverrideId;
+            if (id !== undefined && /^\d+$/.test(String(id))) made.push(String(id));
+          }
+        } finally {
+          // Whatever was closed is kept, so resuming opens exactly that.
+          await ctx.saveSecret({ ...ctx.secret, [OVERRIDES]: made.slice(-40).join(",") });
         }
       },
       async resume(ctx: RunContext) {
+        const made = overridesOf(ctx);
+        if (made.length === 0) return;
         const bearer = await token(ctx, ctx.secret.clientId ?? "", ctx.secret.clientSecret ?? "");
         const store = await storeOf(ctx, bearer);
-        const after = new Date(ctx.now - 86_400_000).toISOString();
-        const { res, json } = await call(
-          ctx,
-          bearer,
-          "GET",
-          `/api/v1.0/stores/${String(store.StoreId)}/businesshoursoverrides?after=${encodeURIComponent(after)}&page=1&limit=50`,
-        );
-        if (res.status !== 200) throw new ConnectorError("bad_response", "Flipdish did not list the store's closures.");
-        const list = Array.isArray(json?.Data) ? (json.Data as Record<string, unknown>[]) : [];
-        for (const o of list) {
-          const start = typeof o.StartTime === "string" ? Date.parse(o.StartTime) : Number.NaN;
-          const end = typeof o.EndTime === "string" ? Date.parse(o.EndTime) : Number.NaN;
-          // Only the closures that hold now: one the owner set for another day stays.
-          if (o.Type !== "Closed" || !(start <= ctx.now && end > ctx.now) || o.BusinessHoursOverrideId === undefined)
-            continue;
-          await call(
+        // Only the closures this inbox made: one the owner set in Flipdish stays, whenever it holds.
+        const left: string[] = [];
+        for (const id of made) {
+          const { res } = await call(
             ctx,
             bearer,
             "DELETE",
-            `/api/v1.0/stores/${String(store.StoreId)}/businesshoursoverrides/${String(o.BusinessHoursOverrideId)}`,
+            `/api/v1.0/stores/${String(store.StoreId)}/businesshoursoverrides/${id}`,
           );
+          if (res.status !== 200 && res.status !== 204 && res.status !== 404) left.push(id);
         }
+        const { [OVERRIDES]: _gone, ...rest } = ctx.secret;
+        await ctx.saveSecret(left.length ? { ...rest, [OVERRIDES]: left.join(",") } : rest);
+        if (left.length) throw new ConnectorError("refused", "Flipdish did not open the store again: open it there.");
       },
     },
   };

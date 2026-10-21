@@ -13,6 +13,8 @@ import {
   jsonOf,
   minorOf,
   type PartnerClient,
+  refreshOnce,
+  refuseUnknownChoices,
   short,
   snapshotItem,
   type Tokens,
@@ -71,12 +73,14 @@ async function fresh(ctx: RunContext, client: PartnerClient): Promise<string> {
   const t = tokensOf(ctx.secret);
   if (!t) throw new ConnectorError("auth", "Connect Lightspeed again.");
   if (t.expiresAt - 60_000 > ctx.now) return t.accessToken;
-  const next = await tokenCall(ctx, {
-    grant_type: "refresh_token",
-    refresh_token: t.refreshToken,
-    client_id: client.clientId,
-    client_secret: client.clientSecret,
-  });
+  const next = await refreshOnce(t.refreshToken, ctx.now, () =>
+    tokenCall(ctx, {
+      grant_type: "refresh_token",
+      refresh_token: t.refreshToken,
+      client_id: client.clientId,
+      client_secret: client.clientSecret,
+    }),
+  );
   await ctx.saveSecret(tokenSecret(next));
   return next.accessToken;
 }
@@ -164,6 +168,7 @@ export function lightspeedOrderBody(o: OutboundOrder, location: string, referenc
   const missing = o.lines.find((l) => !l.externalId);
   if (missing)
     throw new ConnectorError("refused", `${missing.name} is not an item of the Lightspeed menu this inbox brought in.`);
+  refuseUnknownChoices("Lightspeed", o);
   return {
     businessLocationId: Number(location),
     thirdPartyReference: reference,
@@ -180,7 +185,7 @@ export function lightspeedOrderBody(o: OutboundOrder, location: string, referenc
     items: o.lines.map((l) => ({
       quantity: l.quantity,
       sku: l.externalId,
-      modifiers: l.options.filter((x) => x.externalId).map((x) => ({ modifierId: x.externalId })),
+      modifiers: l.options.map((x) => ({ modifierId: x.externalId })),
     })),
     ...(o.address
       ? {
@@ -208,7 +213,7 @@ export function lightspeedConnector(client: PartnerClient | null): ConnectorDefi
     ready: () => (ready ? true : LIGHTSPEED_NOT_READY),
     whenNotReady: {
       status: "setup",
-      hint: LIGHTSPEED_NOT_READY,
+      hint: "Not available yet: Lightspeed lets only approved partners connect. Use GloriaFood or Flipdish meanwhile.",
       href: "https://surfingdog.ai/docs/ordering/#which-tills",
     },
     note: "Your Lightspeed menu comes in to start from, and orders you accept here go into Lightspeed.",
@@ -296,6 +301,8 @@ export function lightspeedConnector(client: PartnerClient | null): ConnectorDefi
     },
 
     orders: {
+      // Lightspeed answers 409 to a thirdPartyReference it has seen: a second write is the same order.
+      idempotent: true,
       async put(ctx, order) {
         const token = await fresh(ctx, c);
         const reference = await uuidFrom(ctx.marker, order.key);
@@ -317,8 +324,8 @@ export function lightspeedConnector(client: PartnerClient | null): ConnectorDefi
         }
         throw new ConnectorError("bad_response", `Lightspeed answered ${res.status} to the order.`);
       },
-      // No read-back by the inbox's reference: a write whose answer never came is written again, and a
-      // reference Lightspeed has seen is answered 409, written.
+      // No read-back by the inbox's reference: a write whose answer never came is written once more
+      // (`idempotent`), and a reference Lightspeed has seen is answered 409, written.
       async find() {
         return null;
       },

@@ -74,6 +74,7 @@ function outbound(over: Partial<OutboundOrder> = {}): OutboundOrder {
     lines: [
       {
         externalId: "22222222-0000-4000-8000-000000000001",
+        groupExternalId: "11111111-0000-4000-8000-000000000001",
         name: "Pizza diavola",
         quantity: 2,
         unitPrice: { value: 23400, currency: "MXN" },
@@ -81,6 +82,7 @@ function outbound(over: Partial<OutboundOrder> = {}): OutboundOrder {
           {
             name: "Orilla rellena",
             externalId: "44444444-0000-4000-8000-000000000001",
+            groupExternalId: "33333333-0000-4000-8000-000000000001",
             priceDelta: { value: 3500, currency: "MXN" },
             portion: "whole",
           },
@@ -269,23 +271,36 @@ describe("Flipdish (on): an app the owner makes in their own account", () => {
     expect(snap?.menu?.[0]?.items[0]?.allergens).toBeUndefined();
   });
 
-  it("closes the store for collection and delivery while paused, and opens only the closures that hold now", async () => {
+  it("closes the store for collection and delivery while paused, and opens only the closures it made", async () => {
     const p = fakePlatform();
     const fd = fakeFlipdish(p);
     const def = flipdishConnector();
-    const c = ctx(
-      p.http,
-      { clientId: FLIPDISH_CLIENT_ID, clientSecret: FLIPDISH_SECRET },
-      { choices: { store: "18452" } },
+    let secret: Record<string, string> = { clientId: FLIPDISH_CLIENT_ID, clientSecret: FLIPDISH_SECRET };
+    const run = () =>
+      ctx(p.http, secret, {
+        choices: { store: "18452" },
+        async saveSecret(next) {
+          secret = { ...next };
+        },
+      });
+    fd.overrides.push(
+      {
+        BusinessHoursOverrideId: 1,
+        DeliveryType: "Pickup",
+        StartTime: "2026-12-24T06:00:00Z",
+        EndTime: "2026-12-26T06:00:00Z",
+        Type: "Closed",
+      },
+      // The owner's own closure for this evening, set in Flipdish: it holds now, and it stays.
+      {
+        BusinessHoursOverrideId: 2,
+        DeliveryType: "Delivery",
+        StartTime: new Date(T0 - 60 * 60_000).toISOString(),
+        EndTime: new Date(T0 + 4 * 60 * 60_000).toISOString(),
+        Type: "Closed",
+      },
     );
-    fd.overrides.push({
-      BusinessHoursOverrideId: 1,
-      DeliveryType: "Pickup",
-      StartTime: "2026-12-24T06:00:00Z",
-      EndTime: "2026-12-26T06:00:00Z",
-      Type: "Closed",
-    });
-    await def.pause?.pause(c, T0 + 30 * 60_000);
+    await def.pause?.pause(run(), T0 + 30 * 60_000);
     expect(
       fd.overrides
         .filter((o) => o.StartTime === new Date(T0).toISOString())
@@ -294,8 +309,24 @@ describe("Flipdish (on): an app the owner makes in their own account", () => {
       ["Pickup", "Closed", new Date(T0 + 30 * 60_000).toISOString()],
       ["Delivery", "Closed", new Date(T0 + 30 * 60_000).toISOString()],
     ]);
-    await def.pause?.resume(c);
-    expect(fd.overrides.map((o) => o.BusinessHoursOverrideId)).toEqual([1]);
+    expect(secret.pauseOverrides).toBe("700,701");
+    await def.pause?.resume(run());
+    expect(fd.overrides.map((o) => o.BusinessHoursOverrideId)).toEqual([1, 2]);
+    expect(secret.pauseOverrides).toBeUndefined();
+    expect(secret.clientSecret).toBe(FLIPDISH_SECRET);
+  });
+
+  it("never pauses another store than the one chosen: one gone from the app is said so", async () => {
+    const p = fakePlatform();
+    const fd = fakeFlipdish(p);
+    const c = ctx(
+      p.http,
+      { clientId: FLIPDISH_CLIENT_ID, clientSecret: FLIPDISH_SECRET },
+      { choices: { store: "99999" } },
+    );
+    const e = await refusal(flipdishConnector().pause?.pause(c, T0 + 30 * 60_000) as Promise<unknown>);
+    expect(e.code).toBe("not_found");
+    expect(fd.overrides).toEqual([]);
   });
 
   it("a client Flipdish does not take is the secret's to fix", async () => {
@@ -342,8 +373,17 @@ describe("Toast (off): menus in, accepted orders out, its approval back", () => 
     const snap = await def.setup?.read(run(p.http));
     expect(snap?.menu?.[0]?.items[0]).toMatchObject({
       externalId: "22222222-0000-4000-8000-000000000001",
+      groupExternalId: "11111111-0000-4000-8000-000000000001",
       price: { value: 19900, currency: "MXN" },
-      optionGroups: [{ name: "Orilla", min: 0, max: 1, choices: [{ name: "Orilla rellena", priceDelta: 3500 }] }],
+      optionGroups: [
+        {
+          externalId: "33333333-0000-4000-8000-000000000001",
+          name: "Orilla",
+          min: 0,
+          max: 1,
+          choices: [{ name: "Orilla rellena", priceDelta: 3500 }],
+        },
+      ],
     });
   });
 
@@ -355,14 +395,26 @@ describe("Toast (off): menus in, accepted orders out, its approval back", () => 
     const sent = toast.orders.get("ord-1")?.sent as Record<string, unknown>;
     expect(sent.diningOption).toEqual({ guid: "d0000000-0000-4000-8000-00000000take", entityType: "DiningOption" });
     expect(String(sent.externalId)).toMatch(/^SURFINGDOG:[0-9a-f-]{36}$/);
+    // As the Orders OpenAPI asks of a POST: the item's menu group, each modifier's option group; and no
+    // customer, since Toast takes one only with a last name, an email and a phone the inbox never hands on.
     expect((sent.checks as { selections: unknown[] }[])[0]?.selections).toEqual([
       {
         item: { guid: "22222222-0000-4000-8000-000000000001", entityType: "MenuItem" },
+        itemGroup: { guid: "11111111-0000-4000-8000-000000000001", entityType: "MenuGroup" },
         quantity: 2,
-        modifiers: [{ item: { guid: "44444444-0000-4000-8000-000000000001", entityType: "MenuItem" }, quantity: 1 }],
+        modifiers: [
+          {
+            item: { guid: "44444444-0000-4000-8000-000000000001", entityType: "MenuItem" },
+            optionGroup: { guid: "33333333-0000-4000-8000-000000000001", entityType: "MenuOptionGroup" },
+            quantity: 1,
+          },
+        ],
         specialRequest: "bien cocida",
       },
     ]);
+    expect((sent.checks as Record<string, unknown>[])[0]?.customer).toBeUndefined();
+    // One login for the whole run, its token kept sealed for the next: Toast limits logins.
+    expect(p.requests("POST", `${TOAST_HOST}/authentication/v1/authentication/login`).length).toBeLessThanOrEqual(1);
     expect(await def.orders?.status(run(p.http), { externalId: "ord-1" })).toEqual({ status: "pending" });
     toast.approve("ord-1", "APPROVED");
     expect(await def.orders?.status(run(p.http), { externalId: "ord-1" })).toEqual({ status: "accepted" });
@@ -371,6 +423,75 @@ describe("Toast (off): menus in, accepted orders out, its approval back", () => 
     // Found again by the inbox's own externalId, after an answer that never came.
     expect(await def.orders?.find(run(p.http), outbound())).toMatchObject({ externalId: "ord-1" });
     expect(cardDataSent(p)).toBe(false);
+  });
+
+  it("a delivery carries its address as Toast asks, a choice with no Toast id is refused, and a repeat is the same order", async () => {
+    const p = fakePlatform();
+    const toast = fakeToast(p);
+    const delivery = outbound({
+      method: "delivery",
+      address: {
+        streetAddress: "Calle Colima 160",
+        addressLocality: "Ciudad de México",
+        addressRegion: "MX-CMX",
+        postalCode: "06700",
+        addressCountry: "MX",
+      },
+    });
+    const ref = await def.orders?.put(run(p.http), delivery);
+    const sent = toast.orders.get(String(ref?.externalId))?.sent as Record<string, unknown>;
+    expect(sent.deliveryInfo).toEqual({
+      address1: "Calle Colima 160",
+      city: "Ciudad de México",
+      state: "CMX",
+      zipCode: "06700",
+    });
+    const noRegion = await refusal(
+      def.orders?.put(
+        run(p.http),
+        outbound({ method: "delivery", address: { streetAddress: "Calle 1", postalCode: "06700" } }),
+      ) as Promise<unknown>,
+    );
+    expect(noRegion.message).toMatch(/state/);
+    const line = outbound().lines[0] as OutboundOrder["lines"][number];
+    const unknown = await refusal(
+      def.orders?.put(
+        run(p.http),
+        outbound({
+          lines: [{ ...line, options: [{ ...(line.options[0] as (typeof line.options)[number]), externalId: null }] }],
+        }),
+      ) as Promise<unknown>,
+    );
+    expect([unknown.code, unknown.message]).toEqual([
+      "refused",
+      "Orilla rellena has no id in your Toast menu: bring the menu in again.",
+    ]);
+    // Toast refuses an externalId it has seen: that answer is the order already there, never a refusal.
+    expect(await def.orders?.put(run(p.http), delivery)).toMatchObject({ externalId: ref?.externalId });
+    expect(toast.orders.size).toBe(1);
+    expect(def.orders?.idempotent).toBe(true);
+  });
+
+  it("logs in again once when Toast stops taking the token it gave", async () => {
+    const p = fakePlatform();
+    const toast = fakeToast(p);
+    const saved: Record<string, string>[] = [];
+    const c = ctx(
+      p.http,
+      { accessToken: "toast-jwt-old", expiresAt: String(T0 + 3_600_000) },
+      {
+        extra: { restaurant: TOAST_RESTAURANT },
+        choices: { restaurant: TOAST_RESTAURANT },
+        async saveSecret(next) {
+          saved.push({ ...next });
+        },
+      },
+    );
+    toast.token = "toast-jwt-2";
+    const fresh = toastConnector({ ...TOAST_PARTNER, clientId: `${TOAST_PARTNER.clientId}` });
+    const snap = await fresh.setup?.read(c);
+    expect(snap?.menu?.length).toBeGreaterThan(0);
+    expect(saved.at(-1)?.accessToken).toBe("toast-jwt-2");
   });
 
   it("refuses a line that is not from the Toast menu, before anything is posted", async () => {
@@ -620,12 +741,53 @@ describe("Clover (off): a region's sign-in, inventory in, atomic orders out", ()
         {
           ...outbound().lines[0],
           externalId: "N2WWSQBTAADZC",
-          options: [{ name: "Tofu", externalId: "S47VGYX913K4T", priceDelta: null, portion: "whole" }],
+          options: [
+            {
+              name: "Tofu",
+              externalId: "S47VGYX913K4T",
+              groupExternalId: "QZ587JT76N80Y",
+              priceDelta: null,
+              portion: "whole",
+            },
+          ],
         } as OutboundOrder["lines"][number],
       ],
     });
     const ref = await def.orders?.put(run, order);
     expect(ref).toEqual({ externalId: "ORD1", status: "accepted" });
+    // Never cut: an order of more than Clover takes here is refused whole, for a person to put in by hand.
+    const catering = outbound({ lines: [{ ...(order.lines[0] as OutboundOrder["lines"][number]), quantity: 201 }] });
+    const big = await refusal(def.orders?.put(run, catering) as Promise<unknown>);
+    expect([big.code, big.message]).toEqual([
+      "refused",
+      "This order has 201 items; Clover takes up to 200 in one order made here. Put it into Clover by hand.",
+    ]);
+    const sixty = await def.orders?.put(
+      run,
+      outbound({ lines: [{ ...(order.lines[0] as OutboundOrder["lines"][number]), quantity: 60 }] }),
+    );
+    expect(
+      (orders.get(String(sixty?.externalId))?.body as { orderCart: { lineItems: unknown[] } } | undefined)?.orderCart
+        .lineItems,
+    ).toHaveLength(60);
+    // A choice the till does not know is refused, never left off while the price still holds it.
+    const unknown = await refusal(
+      def.orders?.put(
+        run,
+        outbound({
+          lines: [
+            {
+              ...(order.lines[0] as OutboundOrder["lines"][number]),
+              options: [
+                { name: "Extra feta", externalId: null, groupExternalId: null, priceDelta: null, portion: "whole" },
+              ],
+            },
+          ],
+        }),
+      ) as Promise<unknown>,
+    );
+    expect(unknown.message).toBe("Extra feta has no id in your Clover menu: bring the menu in again.");
+    expect(def.orders?.idempotent).toBeUndefined();
     const body = orders.get("ORD1")?.body as { orderCart: { lineItems: unknown[] } };
     expect(body.orderCart.lineItems).toHaveLength(2);
     expect(body.orderCart.lineItems[0]).toEqual({
@@ -660,6 +822,7 @@ describe("Deliverect (off): one channel to many tills, its signed word back", ()
       lines: [
         {
           externalId: "PLU-CHK-1",
+          groupExternalId: null,
           name: "후라이드 치킨",
           quantity: 2,
           unitPrice: { value: 17500, currency: "KRW" },
@@ -686,6 +849,93 @@ describe("Deliverect (off): one channel to many tills, its signed word back", ()
     expect(await def.orders?.put(run, won)).toEqual(ref);
     expect(dlv.orders.size).toBe(1);
     expect(cardDataSent(p)).toBe(false);
+    expect(def.orders?.idempotent).toBe(true);
+  });
+
+  it("counts each option once: the item at its price without them, every option at its own; collection names no courier", async () => {
+    const p = fakePlatform();
+    const dlv = fakeDeliverect(p);
+    const run = ctx(p.http, {}, { extra: { channelLinkId: DELIVERECT_LINK } });
+    const pie = outbound({
+      lines: [
+        {
+          ...(outbound().lines[0] as OutboundOrder["lines"][number]),
+          externalId: "PLU-DIAV",
+          options: [
+            {
+              name: "Orilla rellena",
+              externalId: "PLU-ORI",
+              groupExternalId: null,
+              priceDelta: { value: 3500, currency: "MXN" },
+              portion: "whole",
+            },
+          ],
+        },
+      ],
+    });
+    const ref = await def.orders?.put(run, pie);
+    const sent = dlv.orders.get(ref?.externalId ?? "") as {
+      items: { price: number; quantity: number; subItems: { price: number }[] }[];
+      payment: { amount: number };
+      courier?: unknown;
+    };
+    expect(sent.items[0]).toMatchObject({
+      plu: "PLU-DIAV",
+      price: 19900,
+      subItems: [{ plu: "PLU-ORI", price: 3500, quantity: 1 }],
+    });
+    // What the till adds up is what the customer is asked: (19,900 + 3,500) × 2.
+    const counted = sent.items.reduce(
+      (n, i) => n + (i.price + i.subItems.reduce((m, x) => m + x.price, 0)) * i.quantity,
+      0,
+    );
+    expect(counted).toBe(sent.payment.amount);
+    expect(sent.courier).toBeUndefined();
+    const unknown = await refusal(
+      def.orders?.put(
+        run,
+        outbound({
+          lines: [
+            {
+              ...(pie.lines[0] as OutboundOrder["lines"][number]),
+              options: [
+                { name: "Jalapeño", externalId: null, groupExternalId: null, priceDelta: null, portion: "whole" },
+              ],
+            },
+          ],
+        }),
+      ) as Promise<unknown>,
+    );
+    expect(unknown.code).toBe("refused");
+  });
+
+  it("in production takes no word without the webhook secret: a channel link id is not one", async () => {
+    const live = deliverectConnector({ ...DELIVERECT_PARTNER, staging: false });
+    const p = fakePlatform();
+    fakeDeliverect(p, "https://api.deliverect.com");
+    const missing = await refusal(
+      live.connect?.({ ...connectCtx(p.http), hookUrl: null }, { channelLinkId: DELIVERECT_LINK }) as Promise<unknown>,
+    );
+    expect([missing.code, missing.field]).toEqual(["config", "hmacSecret"]);
+    const forged = await deliverectStatus("ch-order-3", 110, DELIVERECT_LINK);
+    const run = ctx(p.http, {}, { extra: { channelLinkId: DELIVERECT_LINK } });
+    expect(
+      (
+        await refusal(
+          live.hooks?.verify(run, {
+            headers: forged.headers,
+            body: forged.body,
+            query: new URLSearchParams(),
+          }) as Promise<unknown>,
+        )
+      ).code,
+    ).toBe("refused");
+    const done = await deliverectStatus("ch-order-3", 95, "dlv-hmac-secret");
+    const ok = ctx(p.http, { hmacSecret: "dlv-hmac-secret" }, { extra: { channelLinkId: DELIVERECT_LINK } });
+    const e = await live.hooks?.verify(ok, { headers: done.headers, body: done.body, query: new URLSearchParams() });
+    expect(await live.hooks?.read(ok, e as never)).toEqual([
+      { kind: "pos_order", externalId: "ch-order-3", state: { status: "completed" } },
+    ]);
   });
 
   it("believes a status only with Deliverect's signature over the exact bytes; denied, preparing and ready read as such", async () => {

@@ -10,7 +10,7 @@ import {
 import { z } from "zod";
 import { verifyHexHmac } from "../hook-sign";
 import { uuidFrom } from "../work/common";
-import { clientToken, failOn, jsonOf, type PartnerClient, short } from "./common";
+import { clientToken, failOn, jsonOf, type PartnerClient, refuseUnknownChoices, short } from "./common";
 
 /**
  * Deliverect (ADR-036), built and switched off: one channel integration reaches every till Deliverect
@@ -59,10 +59,9 @@ export const deliverectForm = z.object({
   ),
   hmacSecret: field(z.string().trim().min(8).max(200).optional(), {
     label: "Webhook secret",
-    help: "The secret Deliverect signs its updates with, from the channel's integration settings.",
+    help: "The secret Deliverect signs its updates with, from the channel's integration settings. Needed: without it, no word from your till is believed.",
     input: "password",
     secret: true,
-    advanced: true,
   }),
 });
 
@@ -71,14 +70,11 @@ const ORDER_TYPE = { pickup: 1, delivery: 2, dine_in: 3 } as const;
 
 const utc = (ms: number) => `${new Date(ms).toISOString().slice(0, 19)}Z`;
 
-export function deliverectOrderBody(
-  o: OutboundOrder,
-  channelOrderId: string,
-  channel: string,
-): Record<string, unknown> {
+export function deliverectOrderBody(o: OutboundOrder, channelOrderId: string): Record<string, unknown> {
   const digits = minorUnits(o.total.currency) ?? 2;
   const missing = o.lines.find((l) => !l.externalId);
   if (missing) throw new ConnectorError("refused", `${missing.name} has no PLU from your till's menu.`);
+  refuseUnknownChoices("till's", o);
   const when = o.slotStart;
   return {
     channelOrderId,
@@ -87,19 +83,29 @@ export function deliverectOrderBody(
     deliveryIsAsap: when === null,
     ...(when !== null ? (o.method === "delivery" ? { deliveryTime: utc(when) } : { pickupTime: utc(when) }) : {}),
     decimalDigits: digits,
-    courier: o.method === "delivery" ? "restaurant" : channel,
+    // The restaurant's own couriers deliver. For collection and eating in nobody delivers, so none is
+    // named (which value Deliverect wants there is for its staging to confirm: docs/partners/food.md).
+    ...(o.method === "delivery" ? { courier: "restaurant" } : {}),
     orderIsAlreadyPaid: o.paid,
     payment: { amount: o.total.value, type: o.paid ? 0 : 1 },
-    items: o.lines.map((l) => ({
-      plu: l.externalId,
-      name: l.name.slice(0, 120),
-      price: l.unitPrice.value,
-      quantity: l.quantity,
-      ...(l.note ? { remark: l.note.slice(0, 140) } : {}),
-      subItems: l.options
-        .filter((x) => x.externalId)
-        .map((x) => ({ plu: x.externalId, name: x.name.slice(0, 120), price: x.priceDelta?.value ?? 0, quantity: 1 })),
-    })),
+    // The unit price holds its options; Deliverect adds each sub-item's own price to its item's, so the
+    // item goes at its price without them and every option at its own, counted once.
+    items: o.lines.map((l) => {
+      const options = l.options.reduce((sum, x) => sum + (x.priceDelta?.value ?? 0), 0);
+      return {
+        plu: l.externalId,
+        name: l.name.slice(0, 120),
+        price: Math.max(0, l.unitPrice.value - options),
+        quantity: l.quantity,
+        ...(l.note ? { remark: l.note.slice(0, 140) } : {}),
+        subItems: l.options.map((x) => ({
+          plu: x.externalId,
+          name: x.name.slice(0, 120),
+          price: x.priceDelta?.value ?? 0,
+          quantity: 1,
+        })),
+      };
+    }),
     ...(o.note ? { note: o.note.slice(0, 500) } : {}),
     ...(o.fee ? { deliveryCost: o.fee.value } : {}),
     ...(o.tip ? { tip: o.tip.value } : {}),
@@ -121,7 +127,8 @@ export function deliverectOrderBody(
 /**
  * A Deliverect order status as where the order stands (its order statuses page): 10 new, 20 accepted,
  * 30 a duplicate (ignored), 35 denied by the restaurant, 40 printed, 50 preparing, 60 prepared, 70 ready
- * for pickup, 80 in delivery, 90 finalized, 95 auto-finalized, 100 and 110 cancelled, 120 and above failed.
+ * for pickup, 80 in delivery, 90 finalized and 95 auto-finalized (both done), 100 and 110 cancelled, 120
+ * and above failed.
  */
 export function deliverectState(status: number, reason?: string): PosOrderState | null {
   const why = reason ? { reason } : {};
@@ -130,7 +137,6 @@ export function deliverectState(status: number, reason?: string): PosOrderState 
       return { status: "pending" };
     case 20:
     case 40:
-    case 95:
       return { status: "accepted" };
     case 30:
       return null;
@@ -144,6 +150,7 @@ export function deliverectState(status: number, reason?: string): PosOrderState 
     case 80:
       return { status: "out_for_delivery" };
     case 90:
+    case 95:
       return { status: "completed" };
     case 100:
     case 110:
@@ -167,7 +174,7 @@ export function deliverectConnector(partner: DeliverectPartner | null): Connecto
     ready: () => (ready ? true : DELIVERECT_NOT_READY),
     whenNotReady: {
       status: "setup",
-      hint: DELIVERECT_NOT_READY,
+      hint: "Not available yet: Deliverect lets only channels it certified connect. Use GloriaFood or Flipdish meanwhile.",
       href: "https://surfingdog.ai/docs/ordering/#which-tills",
     },
     note: "Orders you accept here go to your till through Deliverect, and its word comes back.",
@@ -177,6 +184,17 @@ export function deliverectConnector(partner: DeliverectPartner | null): Connecto
       if (!ready) throw new ConnectorError("config", DELIVERECT_NOT_READY);
       const link = (input.channelLinkId ?? "").trim();
       if (!link) throw new ConnectorError("config", "Paste the channel link id.", { field: "channelLinkId" });
+      // Certified, Deliverect signs with the secret made in Integration settings; only its staging signs
+      // with the channel link, a temporary secret for before certification.
+      if (!p.staging && !input.hmacSecret?.trim()) {
+        throw new ConnectorError(
+          "config",
+          "Paste the webhook secret from the channel's integration settings in Deliverect.",
+          {
+            field: "hmacSecret",
+          },
+        );
+      }
       // The client is checked once now: a channel that cannot get a token cannot take orders later.
       await clientToken(ctx, {
         tool: "Deliverect",
@@ -198,6 +216,8 @@ export function deliverectConnector(partner: DeliverectPartner | null): Connecto
     },
 
     orders: {
+      // Deliverect refuses a channelOrderId it has seen within 48 hours: that answer is the order there.
+      idempotent: true,
       async put(ctx, order) {
         const token = await clientToken(ctx, {
           tool: "Deliverect",
@@ -210,7 +230,7 @@ export function deliverectConnector(partner: DeliverectPartner | null): Connecto
           method: "POST",
           url: `${base()}/${encodeURIComponent(p.channel)}/order/${encodeURIComponent(link)}`,
           headers: { authorization: `Bearer ${token}`, "content-type": "application/json", accept: "application/json" },
-          body: JSON.stringify(deliverectOrderBody(order, channelOrderId, p.channel)),
+          body: JSON.stringify(deliverectOrderBody(order, channelOrderId)),
         });
         failOn("Deliverect", res, "channelLinkId");
         if (res.status === 201 || res.status === 200) return { externalId: channelOrderId, status: "pending" };
@@ -238,8 +258,9 @@ export function deliverectConnector(partner: DeliverectPartner | null): Connecto
     hooks: {
       topics: ["order_status"],
       async verify(ctx, request): Promise<HookEvent | null> {
-        // Before certification Deliverect signs with the channel link itself; after, with the secret.
-        const secret = ctx.secret.hmacSecret || String(ctx.extra.channelLinkId ?? "");
+        // Before certification (staging) Deliverect signs with the channel link itself; in production only
+        // with the secret, and with none nothing is believed: a channel link id is no secret.
+        const secret = ctx.secret.hmacSecret || (p.staging ? String(ctx.extra.channelLinkId ?? "") : "");
         const ok = secret
           ? await verifyHexHmac(secret, request.body, request.headers.get("x-server-authorization-hmac-sha256"))
           : false;
