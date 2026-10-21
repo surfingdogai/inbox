@@ -24,6 +24,7 @@ import {
   networkReceiptHandler,
   type OAuthClients,
   type OwnerEmailChange,
+  type PosPartners,
   publicOrigin,
   WEBHOOK_DELIVERY_KIND,
   WEBHOOK_FANOUT_KIND,
@@ -63,11 +64,13 @@ import {
   PAY_CLOSE_KIND,
   PAY_LINK_KIND,
   PAY_NOTICE_KIND,
+  POS_PUSH_KIND,
   parseSecretKeys,
   payCloseHandler,
   payLane,
   payLinkHandler,
   payNoticeHandler,
+  posPushHandler,
   readSettings,
   VERSION,
   WORK_PUSH_KIND,
@@ -176,6 +179,8 @@ export interface AppDeps {
   readonly googleTesting?: boolean | undefined;
   /** What the server switched on of the job tools (JOBBER_API_VERSION, JOB_TOOLS_CLEARED; ADR-034 §5). */
   readonly jobTools?: JobToolSwitches | undefined;
+  /** The food tills' partner apps the server holds (TOAST_*, LIGHTSPEED_*, CLOVER_*, DELIVERECT_*; ADR-036). */
+  readonly pos?: PosPartners | undefined;
   /**
    * Connectors of the host's own, offered beside the ones this release ships (ADR-014): anyone can
    * write one against the connector SDK. One with the kind of a built-in one takes its place.
@@ -248,6 +253,7 @@ export function createInbox(deps: AppDeps): Inbox {
         hosted: Boolean(deps.oauthRedirect?.("google_calendar")),
         googleTesting: deps.googleTesting,
         jobTools: deps.jobTools,
+        pos: deps.pos,
       }).filter((d) => !extra.some((e) => e.kind === d.kind)),
       ...extra,
     ],
@@ -303,7 +309,10 @@ export function createInbox(deps: AppDeps): Inbox {
     // Trades (ADR-034): a request the owner takes on, written into their job tool, one request at a time;
     // and the sweep that removes files no request took within the hour. An inbox with neither enqueues none.
     .register(WORK_PUSH_KIND, workPushHandler(caps.connectors), { lane: payLane })
-    .register(ATTACHMENT_SWEEP_KIND, attachmentSweepHandler());
+    .register(ATTACHMENT_SWEEP_KIND, attachmentSweepHandler())
+    // A kitchen (ADR-036): an order the business accepted, written into its till, one order at a time.
+    // An inbox with no till connected enqueues none.
+    .register(POS_PUSH_KIND, posPushHandler(caps.connectors), { lane: payLane });
   if (demo) {
     for (const kind of [
       NETWORK_PING_ONE_KIND,
@@ -328,6 +337,7 @@ export function createInbox(deps: AppDeps): Inbox {
       PAY_CLOSE_KIND,
       CONNECTOR_WRITE_RESOLVE_KIND,
       WORK_PUSH_KIND,
+      POS_PUSH_KIND,
     ])
       runner.register(kind, noWebhookHandler);
     runner.register(

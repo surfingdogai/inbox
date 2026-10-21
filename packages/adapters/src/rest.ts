@@ -61,6 +61,7 @@ import { type Context, Hono } from "hono";
 import { type DescribeRouteOptions, describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
 import { ownerOperation, routeScopes } from "./access";
+import { foodOwnerRoutes, foodPublicRoutes } from "./food";
 import { publicOrigin } from "./origin";
 import { problemResponse, unauthorized } from "./problem";
 import * as R from "./responses";
@@ -560,6 +561,8 @@ export function publicRest(caps: Capabilities): Hono<CallerEnv> {
 
   // Trades (ADR-034): whether a site is inside the area, a request's files uploaded first, the business's links to them.
   tradesPublicRoutes(app, caps, hook as never);
+  // A kitchen (ADR-036): the menu, and the slots an order can have.
+  foodPublicRoutes(app, caps, hook as never);
   return app;
 }
 
@@ -1671,5 +1674,7 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
 
   // Trades (ADR-034): a request's files and its job tool.
   tradesOwnerRoutes(app, caps);
+  // A kitchen (ADR-036): the menu, allergens, sold out, tables, pause, progress, orders taken elsewhere.
+  foodOwnerRoutes(app, caps);
   return app;
 }
