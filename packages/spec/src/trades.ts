@@ -29,6 +29,10 @@ export type AttachmentType = (typeof ATTACHMENT_TYPES)[number];
  * How many files and how large (est.; ADR-034 §2): at most six on a request, each up to 10 MB; over
  * MCP up to 4 MB each sent inline and 8 MB in one call (larger ones by address, or uploaded first);
  * an upload is kept for an hour for a request to name.
+ *
+ * Files no request has taken yet have an allowance of their own, apart from the files requests took:
+ * 60 MB in one inbox, and 30 MB from one sender's address. Anyone may upload, so without it one address
+ * could fill an inbox with uploads it never names and turn away real customers' photos for the hour.
  */
 export const ATTACHMENT_LIMITS = {
   perRequest: 6,
@@ -36,6 +40,8 @@ export const ATTACHMENT_LIMITS = {
   inlineBytes: 4 * 1024 * 1024,
   inlinePerCall: 8 * 1024 * 1024,
   uploadTtlMs: 60 * 60_000,
+  waitingBytes: 60 * 1024 * 1024,
+  waitingPerSender: 30 * 1024 * 1024,
 } as const;
 
 /** A file as an item names it. Written by the inbox once it checked and cleaned the file. */
@@ -191,7 +197,7 @@ export type Job = z.infer<typeof jobSchema>;
 
 /* --- the quote --------------------------------------------------------------- */
 
-/** A fee for coming out or for a visit, and whether accepting the quote takes it off. */
+/** A call-out or visit fee, and whether it is already taken off the quote's total (else it is paid apart). */
 export const tradeFeeSchema = z.object({
   amount: moneySchema,
   creditedIfAccepted: z.boolean().default(false),
@@ -199,8 +205,10 @@ export const tradeFeeSchema = z.object({
 
 /**
  * What a trade's quote adds to a quote: an estimate or a fixed price; stages it is paid in (each a
- * payment schedule, adding up to the total; at most four); fees for coming out or visiting; and
- * whether its prices include tax, with the tax lines when they do not.
+ * payment schedule, adding up to the total; at most four); call-out and visit fees, each already taken
+ * off the total or paid apart from it; and whether its prices include tax, with the tax lines when they
+ * do not. The quote's total is always what the customer pays, tax included: with prices before tax,
+ * its lines and the tax lines together make it.
  */
 export const tradeQuoteSchema = z.object({
   kind: z.enum(["estimate", "fixed"]).default("fixed"),
@@ -213,7 +221,8 @@ export const tradeQuoteSchema = z.object({
       lines: z
         .array(z.object({ name: z.string().min(1).max(80), amount: moneySchema }))
         .max(5)
-        .optional(),
+        .optional()
+        .describe("When included is false: the tax on top of the prices, at least one line; part of the total."),
     })
     .optional(),
 });

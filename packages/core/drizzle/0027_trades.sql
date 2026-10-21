@@ -15,6 +15,10 @@ ALTER TABLE `blobs` ADD `name` text;
 --> statement-breakpoint
 ALTER TABLE `blobs` ADD `expires_at` integer;
 --> statement-breakpoint
+-- Who sent a file no request has taken yet (the bucket address the rate limits use), to hold each
+-- sender to its share of the files waiting; cleared when a request takes the file.
+ALTER TABLE `blobs` ADD `sent_by` text;
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS `blobs_item` ON `blobs` (`item_id`) WHERE `item_id` IS NOT NULL;
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS `blobs_unclaimed` ON `blobs` (`kind`, `expires_at`) WHERE `item_id` IS NULL;

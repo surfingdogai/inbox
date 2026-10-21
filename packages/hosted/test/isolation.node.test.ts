@@ -16,6 +16,7 @@ import { Ledger } from "../src/ledger";
 import { CachedResolver } from "../src/resolver";
 import { createRouter } from "../src/router";
 import { closeServer, listenSocket, socketRequest } from "../src/sockets";
+import { fileBytes, liveBytes } from "../src/usage";
 import { PARENT, type Runtime, startRuntime } from "./harness";
 
 /**
@@ -279,6 +280,66 @@ describe("limits", () => {
       expect(cookie).toContain("__Host-sdi_session=");
     } finally {
       await small.close();
+    }
+  });
+
+  it("uploads nobody names cannot shut an inbox for good: the cap counts what it holds, and the sweep frees it", async () => {
+    // A fresh inbox holds a few MB; the cap leaves room for one large upload, not two.
+    const capped = await startRuntime({ maxTenantBytes: 14 * 1024 * 1024 });
+    try {
+      const t = await capped.createTenant();
+      await capped.setState(t, "live", { ownResolves: true });
+      const host = t.ownHost ?? "";
+      // A PDF of 9 MB, kept as it was sent (only images are cleaned).
+      const pdf = `%PDF-1.4\n${"0".repeat(9 * 1024 * 1024)}\n%%EOF\n`;
+      const upload = () =>
+        capped.http(host, "POST", "/v1/uploads", {
+          headers: { "content-type": "application/pdf", "x-file-name": "plan.pdf" },
+          body: pdf,
+        });
+      const message = () =>
+        capped.http(host, "POST", "/v1/messages", {
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ body: "Hello" }),
+        });
+      expect((await upload()).status).toBe(201);
+      expect((await upload()).status).toBe(201);
+      // Past the cap now: no write goes in, a customer's message neither.
+      expect((await message()).status).toBe(507);
+      // An hour on, the sweep takes the uploads nobody named. The file on disk keeps its size, but the
+      // inbox holds less than its cap again, and takes the message.
+      const path = capped.shardOf(t).dbPath(t.tenantId);
+      const before = fileBytes(path);
+      capped.later(61 * 60_000);
+      const shard = capped.shardOf(t);
+      shard.due.set(t.tenantId, Date.now() - 1);
+      await shard.tick();
+      expect(fileBytes(path)).toBeGreaterThan(14 * 1024 * 1024);
+      expect(fileBytes(path)).toBeGreaterThanOrEqual(before - 1024 * 1024);
+      expect((await message()).status).toBe(201);
+    } finally {
+      await capped.close();
+    }
+  });
+});
+
+describe("liveBytes", () => {
+  it("counts the pages in use, not the free pages a delete leaves in the file", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "sdh-live-"));
+    try {
+      const client = nodeSqliteClient(join(dir, "inbox.db"));
+      const db = createDb(client);
+      await db.client.query({ sql: "CREATE TABLE t (b BLOB)", params: [], method: "run" });
+      await db.client.query({ sql: "INSERT INTO t VALUES (zeroblob(4194304))", params: [], method: "run" });
+      const full = await liveBytes(db);
+      expect(full).toBeGreaterThan(4 * 1024 * 1024);
+      await db.client.query({ sql: "DELETE FROM t", params: [], method: "run" });
+      client.raw.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+      expect(fileBytes(join(dir, "inbox.db"))).toBeGreaterThan(4 * 1024 * 1024);
+      expect(await liveBytes(db)).toBeLessThan(1024 * 1024);
+      client.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });

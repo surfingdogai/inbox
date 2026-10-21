@@ -1222,6 +1222,8 @@ export const blobs = sqliteTable("blobs", {
   name: text("name"),
   /** Until when a file nobody's request took yet is kept (0027): an hour after it came. */
   expiresAt: integer("expires_at"),
+  /** Who sent a file nobody's request took yet (0027): the rate limits' address; cleared when one takes it. */
+  sentBy: text("sent_by"),
 });
 
 /** A file's bytes, in pieces of 512 KB (0027, ADR-034 §2): what `blobs` names, kept in the database itself. */

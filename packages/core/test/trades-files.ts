@@ -138,6 +138,9 @@ export const heic = () => concat(be32(24), ascii("ftypheic"), be32(0), ascii("mi
 export const avif = () => concat(be32(20), ascii("ftypavif"), be32(0), ascii("mif1"));
 /** A small PDF. */
 export const pdf = () => ascii("%PDF-1.7\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n");
+/** A PDF of about `size` bytes: zeros in its body, its %%EOF at the end. */
+export const pdfOf = (size: number) =>
+  concat(ascii("%PDF-1.7\n"), new Uint8Array(Math.max(0, size - 16)), ascii("\n%%EOF\n"));
 
 export function base64(bytes: Uint8Array): string {
   let s = "";

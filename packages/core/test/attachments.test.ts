@@ -2,6 +2,7 @@ import { runMigrations } from "@surfingdog/platform";
 import { ATTACHMENT_LIMITS } from "@surfingdog/spec";
 import { describe, expect, it } from "vitest";
 import {
+  attachStatements,
   CHUNK_BYTES,
   checkFileLink,
   FILE_LINK_TTL_MS,
@@ -10,7 +11,8 @@ import {
   fetchFile,
   fileHeaders,
   fileLink,
-  filesBytes,
+  fileUse,
+  isAttachGuard,
   isUnclaimed,
   putFile,
   readFile,
@@ -37,6 +39,7 @@ import {
   heic,
   metaWebp,
   pdf,
+  pdfOf,
   phoneJpeg,
   SECRET_PLACE,
   textPng,
@@ -77,6 +80,9 @@ describe("what a file is", () => {
     expect(sniff(avif())).toBe("heic");
     expect(sniff(ascii("<svg xmlns='http://www.w3.org/2000/svg'><script>1</script></svg>"))).toBe("unknown");
     expect(sniff(ascii("GIF89a"))).toBe("unknown");
+    // A page with a PDF header further in is not a PDF, nor is a header with no end.
+    expect(sniff(concat(ascii(`<html><script>alert(1)</script>${" ".repeat(40)}`), pdf()))).toBe("unknown");
+    expect(sniff(ascii("%PDF-1.7\n1 0 obj << >> endobj\n"))).toBe("unknown");
     expect(sniff(new Uint8Array(0))).toBe("unknown");
   });
 });
@@ -184,7 +190,7 @@ describe("keeping files", () => {
     // Compared in a plain loop: a deep equal over a megabyte takes seconds.
     expect(got?.bytes.byteLength).toBe(bytes.byteLength);
     expect(got?.bytes.findIndex((b, i) => b !== bytes[i])).toBe(-1);
-    expect(await filesBytes(db)).toBe(bytes.byteLength);
+    expect(await fileUse(db, T0)).toEqual({ kept: bytes.byteLength, waiting: bytes.byteLength, waitingFrom: 0 });
   });
 
   it("keeps an unclaimed file an hour, and the sweep takes it and its bytes after", MEGABYTES, async () => {
@@ -268,11 +274,11 @@ describe("taking a request's files", () => {
     ).rejects.toMatchObject({
       message: FILE_WORDS.tooMany,
     });
-    const big = concat(pdf(), new Uint8Array(ATTACHMENT_LIMITS.inlineBytes));
+    const big = pdfOf(ATTACHMENT_LIMITS.inlineBytes + 32);
     await expect(takeFiles(intake(db), [{ data_base64: base64(big) }])).rejects.toMatchObject({
       message: FILE_WORDS.inlineTooLarge,
     });
-    const three = concat(pdf(), new Uint8Array(3 * 1024 * 1024));
+    const three = pdfOf(3 * 1024 * 1024);
     await expect(
       takeFiles(intake(db), [
         { data_base64: base64(three) },
@@ -300,6 +306,51 @@ describe("taking a request's files", () => {
     await expect(
       takeFiles(intake(db, { now: T0 + ATTACHMENT_LIMITS.uploadTtlMs + 1 }), [{ upload_id: late.upload_id }]),
     ).rejects.toMatchObject({ message: FILE_WORDS.upload });
+  });
+
+  it("holds what waits for a request to its own allowance, each sender to a share of it", MEGABYTES, async () => {
+    const db = await setup();
+    const nine = pdfOf(9 * 1024 * 1024);
+    const from = (sentBy: string) => intake(db, { sentBy });
+    // One sender: three uploads of 9 MB, and the fourth is past its 30 MB.
+    for (let i = 0; i < 3; i++) await uploadFile(from("ip:203.0.113.9"), nine, "plan.pdf");
+    await expect(uploadFile(from("ip:203.0.113.9"), nine, "plan.pdf")).rejects.toMatchObject({
+      code: "not_allowed",
+      details: { reason: "files_waiting" },
+    });
+    // Others still may, up to what the inbox keeps waiting at all (60 MB).
+    for (let i = 0; i < 3; i++) await uploadFile(from("ip:198.51.100.20"), nine, "plan.pdf");
+    await expect(uploadFile(from("ip:192.0.2.44"), nine, "plan.pdf")).rejects.toMatchObject({
+      details: { reason: "files_waiting" },
+    });
+    // A request's own photos sent with it are taken all the same once the waiting ones' hour is over.
+    const later = T0 + ATTACHMENT_LIMITS.uploadTtlMs + 1;
+    expect((await fileUse(db, later)).waiting).toBe(0);
+    const [ref] = await takeFiles(intake(db, { now: later }), [{ data_base64: base64(pdf()) }]);
+    expect(ref?.content_type).toBe("application/pdf");
+  });
+
+  it("hands files to an item only in a batch that fails when one of them was not there to take", async () => {
+    const db = await setup();
+    const up = await uploadFile(intake(db), pdf(), "plan.pdf");
+    const id = up.attachment.id;
+    // Taken by another request first: the batch naming it again fails, whole.
+    await db.batch(attachStatements([id], "item_a", null, T0));
+    const second = db.batch(attachStatements([id], "item_b", null, T0));
+    const failure = await second.then(
+      () => null,
+      (error: unknown) => error,
+    );
+    expect(isAttachGuard(failure)).toBe(true);
+    // Its hour over before the batch: the same.
+    const late = await uploadFile(intake(db), pdf(), "late.pdf");
+    const lateFailure = await db
+      .batch(attachStatements([late.attachment.id], "item_c", null, T0 + ATTACHMENT_LIMITS.uploadTtlMs + 1))
+      .then(
+        () => null,
+        (error: unknown) => error,
+      );
+    expect(isAttachGuard(lateFailure)).toBe(true);
   });
 
   it("keeps the business to its quota, and takes no file where none could be shown", async () => {

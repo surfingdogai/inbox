@@ -12,6 +12,9 @@ const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] as const;
 /** ISO base media brands of HEIF images (HEIC, and AVIF which shares the container). */
 const HEIF_BRANDS = new Set(["heic", "heix", "heim", "heis", "hevc", "hevx", "mif1", "msf1", "avif", "avis"]);
 
+/** Bytes a PDF's header may come after. */
+const PDF_LEAD = 16;
+
 function ascii(bytes: Uint8Array, at: number, length: number): string {
   let s = "";
   for (let i = at; i < at + length && i < bytes.length; i++) s += String.fromCharCode(bytes[i] ?? 0);
@@ -22,11 +25,13 @@ export function sniff(bytes: Uint8Array): Sniffed {
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
   if (bytes.length >= 8 && PNG_SIGNATURE.every((b, i) => bytes[i] === b)) return "image/png";
   if (bytes.length >= 12 && ascii(bytes, 0, 4) === "RIFF" && ascii(bytes, 8, 4) === "WEBP") return "image/webp";
-  // A PDF may start with a few bytes of junk before its header; the header must be in the first kilobyte.
-  if (bytes.length >= 5) {
-    const head = ascii(bytes, 0, Math.min(1024, bytes.length));
-    const at = head.indexOf("%PDF-");
-    if (at >= 0 && at < 1024) return "application/pdf";
+  // A PDF starts with its header, after at most a few bytes (a byte-order mark, a stray newline), and
+  // ends with %%EOF in its last kilobyte. Nothing longer may come first: a page of HTML with a PDF
+  // header further in would be a file that is both.
+  if (bytes.length >= 10) {
+    const at = ascii(bytes, 0, PDF_LEAD + 5).indexOf("%PDF-");
+    const tail = ascii(bytes, Math.max(0, bytes.length - 1024), 1024);
+    if (at >= 0 && at <= PDF_LEAD && tail.includes("%%EOF")) return "application/pdf";
   }
   if (bytes.length >= 12 && ascii(bytes, 4, 4) === "ftyp") {
     const major = ascii(bytes, 8, 4);

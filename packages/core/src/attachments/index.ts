@@ -6,7 +6,7 @@ import { randomToken } from "../ids";
 import { type FieldProblem, WriteError } from "../write/errors";
 import { FileFetchError, fetchFile } from "./fetch";
 import { cleanName, sniff } from "./sniff";
-import { fileRow, filesBytes, isUnclaimed, putFile } from "./store";
+import { fileRow, fileUse, isUnclaimed, putFile } from "./store";
 import { StripError, stripMetadata } from "./strip";
 
 export * from "./fetch";
@@ -75,6 +75,8 @@ export const FILE_WORDS = {
   broken: "The file could not be read as what its first bytes say it is.",
   base64: "data_base64 is not base64.",
   quota: "The business has no room for more files just now: describe the job in words, or send fewer files.",
+  waiting:
+    "Too many files are waiting for a request just now: name the ones already uploaded in a request first, or try again within the hour.",
   noFiles: "The business does not take files here: describe the job in words.",
   empty: "The file is empty.",
 } as const;
@@ -97,8 +99,13 @@ export interface FileIntake {
   readonly db: Db;
   /** The host's outbound fetch for `{url}` files (`pinnedFetch` on Node). */
   readonly fetchImpl?: typeof fetch | undefined;
-  /** What the inbox may keep in files at most, in bytes; null for no limit (a self-hosted inbox's own). */
+  /**
+   * What the inbox may keep in files at most, in bytes, requests' files and waiting ones together; null
+   * for no limit but `ATTACHMENT_LIMITS`' allowance for waiting files (a self-hosted inbox's own).
+   */
   readonly quotaBytes: number | null;
+  /** Who is sending (the rate limits' address), to hold each sender to its share of the waiting files. */
+  readonly sentBy?: string | undefined;
   /** False where files cannot be kept or shown (no `INBOX_SECRET_KEY` to make the links): none are taken. */
   readonly enabled: boolean;
   readonly now: number;
@@ -133,18 +140,26 @@ export function prepareFile(bytes: Uint8Array, name: string | undefined, index: 
   return { name: cleanName(name, kind, index), type: kind, bytes: clean };
 }
 
-/** Keeps a prepared file, under the quota. */
+/**
+ * Keeps a prepared file, under the allowances: what waits for a request (every inbox's, and each
+ * sender's share of it), and the host's quota for all files, those a request has not taken yet too.
+ */
 async function keep(intake: FileIntake, prepared: Prepared, path: string): Promise<AttachmentRef> {
-  if (intake.quotaBytes !== null) {
-    // Every file kept counts, those a request has not taken yet too.
-    const used = await filesBytes(intake.db);
-    if (used + prepared.bytes.byteLength > intake.quotaBytes) {
-      throw new WriteError("not_allowed", FILE_WORDS.quota, {
-        fields: [{ path, problem: "invalid", message: FILE_WORDS.quota }],
-        details: { reason: "files_quota" },
-      });
-    }
+  const size = prepared.bytes.byteLength;
+  const use = await fileUse(intake.db, intake.now, intake.sentBy);
+  const refuse = (message: string, reason: string): never => {
+    throw new WriteError("not_allowed", message, {
+      fields: [{ path, problem: "invalid", message }],
+      details: { reason },
+    });
+  };
+  if (
+    use.waiting + size > ATTACHMENT_LIMITS.waitingBytes ||
+    (intake.sentBy !== undefined && use.waitingFrom + size > ATTACHMENT_LIMITS.waitingPerSender)
+  ) {
+    refuse(FILE_WORDS.waiting, "files_waiting");
   }
+  if (intake.quotaBytes !== null && use.kept + size > intake.quotaBytes) refuse(FILE_WORDS.quota, "files_quota");
   return putFile(
     intake.db,
     {
@@ -153,6 +168,7 @@ async function keep(intake: FileIntake, prepared: Prepared, path: string): Promi
       contentType: prepared.type,
       bytes: prepared.bytes,
       sha256: await sha256Hex(prepared.bytes),
+      sentBy: intake.sentBy,
     },
     intake.now,
   );

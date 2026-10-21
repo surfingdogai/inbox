@@ -1,5 +1,5 @@
 import type { Statement } from "@surfingdog/platform";
-import { attachStatements } from "../attachments/store";
+import { attachStatements, isAttachGuard } from "../attachments/store";
 import { audienceFor } from "../customer/audience";
 import { copyFor } from "../customer/copy";
 import type { Db } from "../db";
@@ -83,6 +83,9 @@ export interface CreateInput {
       }
     | undefined;
 }
+
+/** What an agent is told when a file its request named was gone by the time the request was written. */
+const FILE_AGAIN = "A file on the request was no longer there to take: upload it again, or send it with the request.";
 
 /**
  * The payload fields only the business writes: what was paid, when the goods went out and arrived, a
@@ -398,6 +401,13 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
   try {
     await db.batch(statements);
   } catch (error) {
+    // A file kept for this request was no longer there to take (its hour ran out, or another request
+    // took it first): nothing was written, and the agent is told to send the file again.
+    if (adds?.files.length && isAttachGuard(error)) {
+      throw new WriteError("invalid_input", FILE_AGAIN, {
+        fields: [{ path: "attachments", problem: "invalid", message: FILE_AGAIN }],
+      });
+    }
     const hit = await diagnoseFailure(db, error, { idem, requestHash });
     return replay(db, caller, hit, requestHash);
   }

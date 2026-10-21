@@ -48,19 +48,20 @@ export class TradeCapabilities {
       readonly connectors: ConnectorCapabilities;
       /** The host's outbound fetch, for files an agent names by address. */
       readonly fetchImpl?: typeof fetch | undefined;
-      /** What files may take at most, in bytes, as the host says (500 MB hosted); null: no limit. */
+      /** What files may take at most, in bytes, as the host says (100 MB hosted); null: no limit. */
       readonly quotaBytes: () => number | null;
     },
   ) {}
 
   /** How files are taken here now: not at all without `INBOX_SECRET_KEY` (no link could show them). */
-  intake(now: number): FileIntake {
+  intake(now: number, sentBy?: string | undefined): FileIntake {
     return {
       db: this.db,
       fetchImpl: this.deps.fetchImpl,
       quotaBytes: this.deps.quotaBytes(),
       enabled: this.secrets !== null,
       now,
+      ...(sentBy ? { sentBy } : {}),
     };
   }
 
@@ -154,9 +155,12 @@ export class TradeCapabilities {
     return { payload: { attachments: refs }, files: refs.map((r) => r.id), hash };
   }
 
-  /** `POST /v1/uploads`: one file, kept an hour for a request to name. */
-  async upload(caller: Caller, bytes: Uint8Array, name: string | undefined) {
-    return uploadFile(this.intake(nowOf(caller)), bytes, name);
+  /**
+   * `POST /v1/uploads`: one file, kept an hour for a request to name. `sentBy` is the address the door
+   * counts the sender by, so one sender cannot take every waiting file's room.
+   */
+  async upload(caller: Caller, bytes: Uint8Array, name: string | undefined, sentBy?: string | undefined) {
+    return uploadFile(this.intake(nowOf(caller), sentBy), bytes, name);
   }
 
   /** An item's files with a link each that works for ten minutes, for the business only. */

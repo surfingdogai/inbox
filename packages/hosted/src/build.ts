@@ -25,10 +25,12 @@ import type { PolicyPayload } from "./types";
 export type HostedPolicy = HostPolicy & { readonly agents: "open" | "closed" };
 
 /**
- * What the files customers send with their requests may take in one hosted inbox (ADR-034 §2; 500 MB,
- * an estimate, I-Q9). They live in the inbox's own file, so the shard's file cap must leave room for them.
+ * What the files customers send with their requests may take in one hosted inbox (ADR-034 §2; 100 MB,
+ * an estimate, I-Q9), those waiting for a request included. They live in the inbox's own database, so
+ * this stays well under the shard's cap on what an inbox holds (200 MB): files alone never fill an
+ * inbox to where it takes no bookings. More room for files means a store of their own.
  */
-export const HOSTED_ATTACHMENTS_QUOTA_BYTES = 500 * 1024 * 1024;
+export const HOSTED_ATTACHMENTS_QUOTA_BYTES = 100 * 1024 * 1024;
 
 export function hostedPolicy(p: PolicyPayload): HostedPolicy {
   return {

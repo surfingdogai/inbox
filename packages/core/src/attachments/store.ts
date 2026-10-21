@@ -38,6 +38,8 @@ export interface CleanFile {
   readonly contentType: AttachmentType;
   readonly bytes: Uint8Array;
   readonly sha256: string;
+  /** Who sent it (the rate limits' address), while no request has taken it; absent when not known. */
+  readonly sentBy?: string | undefined;
 }
 
 /** Keeps a file's bytes and its row, unattached, for an hour. The row is written last: no row, no file. */
@@ -55,8 +57,8 @@ export async function putFile(db: Db, file: CleanFile, now: number): Promise<Att
   for (let i = 0; i < pieces.length; i += CHUNKS_PER_BATCH) await db.batch(pieces.slice(i, i + CHUNKS_PER_BATCH));
   await db.batch([
     {
-      sql: `INSERT INTO blobs (key, size, content_type, sha256, kind, item_id, party_id, name, expires_at, created_at)
-            VALUES (?, ?, ?, ?, 'attachment', NULL, NULL, ?, ?, ?)`,
+      sql: `INSERT INTO blobs (key, size, content_type, sha256, kind, item_id, party_id, name, expires_at, sent_by, created_at)
+            VALUES (?, ?, ?, ?, 'attachment', NULL, NULL, ?, ?, ?, ?)`,
       params: [
         id,
         bytes.byteLength,
@@ -64,6 +66,7 @@ export async function putFile(db: Db, file: CleanFile, now: number): Promise<Att
         file.sha256,
         file.name,
         now + ATTACHMENT_LIMITS.uploadTtlMs,
+        file.sentBy ?? null,
         now,
       ],
       method: "run",
@@ -122,7 +125,9 @@ export async function itemFiles(db: Db, itemId: string): Promise<StoredFile[]> {
 
 /**
  * Hands files to an item, in the batch that writes the item: only files nobody took yet and still
- * within their hour. Answers the statements; the caller checks afterwards that each was taken.
+ * within their hour. The last statement is the guard: when any of them was not taken (its hour ran out
+ * since, or another request took it first), it fails, and with it the whole batch, so no item names a
+ * file the business will never see (`isAttachGuard` tells that failure apart).
  */
 export function attachStatements(
   ids: readonly string[],
@@ -130,12 +135,28 @@ export function attachStatements(
   partyId: string | null,
   now: number,
 ): Statement[] {
-  return ids.map((id) => ({
-    sql: `UPDATE blobs SET item_id = ?, party_id = ?, expires_at = NULL
+  if (ids.length === 0) return [];
+  const taken: Statement[] = ids.map((id) => ({
+    sql: `UPDATE blobs SET item_id = ?, party_id = ?, expires_at = NULL, sent_by = NULL
            WHERE key = ? AND kind = 'attachment' AND item_id IS NULL AND deleted_at IS NULL AND expires_at > ?`,
     params: [itemId, partyId, id, now],
     method: "run" as const,
   }));
+  // A NULL into a NOT NULL column, written only when fewer files than named are now the item's.
+  taken.push({
+    sql: `INSERT INTO attachment_chunks (key, seq, data, created_at)
+           SELECT NULL, 0, x'', 0 WHERE (SELECT count(*) FROM blobs WHERE kind = 'attachment' AND item_id = ?
+             AND deleted_at IS NULL AND key IN (${ids.map(() => "?").join(", ")})) < ?`,
+    params: [itemId, ...ids, new Set(ids).size],
+    method: "run",
+  });
+  return taken;
+}
+
+/** Whether a batch failed on `attachStatements`' guard: a file it named was not there to take. */
+export function isAttachGuard(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /NOT NULL constraint failed: attachment_chunks\.key/i.test(message);
 }
 
 /** Whether a file can still be named by a request: kept, nobody's yet, within its hour. */
@@ -176,14 +197,28 @@ function toBytes(v: unknown): Uint8Array | null {
   return null;
 }
 
-/** Bytes the inbox's files take now, to hold a quota to. */
-export async function filesBytes(db: Db): Promise<number> {
+/** What the inbox's files take now, to hold its allowances to (`ATTACHMENT_LIMITS`, the host's quota). */
+export interface FileUse {
+  /** Every file kept: those requests took, and those still waiting within their hour. */
+  readonly kept: number;
+  /** Files no request has taken yet, within their hour. */
+  readonly waiting: number;
+  /** Of those, the ones one sender sent. */
+  readonly waitingFrom: number;
+}
+
+/** Bytes the inbox's files take now. A file whose hour ran out counts for nothing: it is swept. */
+export async function fileUse(db: Db, now: number, sentBy?: string | undefined): Promise<FileUse> {
   const { rows } = await db.client.query({
-    sql: "SELECT COALESCE(SUM(size), 0) FROM blobs WHERE kind = 'attachment' AND deleted_at IS NULL",
-    params: [],
+    sql: `SELECT COALESCE(SUM(size), 0),
+                 COALESCE(SUM(CASE WHEN item_id IS NULL THEN size ELSE 0 END), 0),
+                 COALESCE(SUM(CASE WHEN item_id IS NULL AND sent_by = ? THEN size ELSE 0 END), 0)
+            FROM blobs WHERE kind = 'attachment' AND deleted_at IS NULL AND (item_id IS NOT NULL OR expires_at > ?)`,
+    params: [sentBy ?? null, now],
     method: "all",
   });
-  return Number(rows[0]?.[0] ?? 0);
+  const r = rows[0] ?? [];
+  return { kept: Number(r[0] ?? 0), waiting: Number(r[1] ?? 0), waitingFrom: Number(r[2] ?? 0) };
 }
 
 /**

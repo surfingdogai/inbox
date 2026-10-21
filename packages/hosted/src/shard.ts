@@ -30,7 +30,7 @@ import { lockedPage, neutralPage, notFound, unavailablePage, wantsHtml } from ".
 import { validatePlan } from "./plan";
 import { archiveSandbox, probeDoors } from "./probe";
 import { normalizePolicy, type PolicyPayload, policyPayloadSchema } from "./types";
-import { fileBytes, hasFirst, monthRange, usageOf } from "./usage";
+import { fileBytes, hasFirst, liveBytes, monthRange, usageOf } from "./usage";
 import type { Watchdog } from "./watchdog";
 
 /**
@@ -85,7 +85,7 @@ export interface ShardOptions {
   readonly oauthRedirect?: BuildDeps["oauthRedirect"];
   /** Inboxes kept open at once (default 64). */
   readonly maxOpen?: number | undefined;
-  /** An inbox's file, past which it takes no new writes (default 200 MB). */
+  /** What an inbox's database holds (its pages in use), past which it takes no new writes (default 200 MB). */
   readonly maxTenantBytes?: number | undefined;
   readonly watchdog?: Watchdog | undefined;
   readonly now?: (() => number) | undefined;
@@ -370,7 +370,7 @@ export class Shard {
       if (
         writes &&
         !readOnlyAllows(method, path) &&
-        fileBytes(this.dbPath(id)) > (this.o.maxTenantBytes ?? DEFAULT_MAX_TENANT_BYTES)
+        (await liveBytes(entry.db)) > (this.o.maxTenantBytes ?? DEFAULT_MAX_TENANT_BYTES)
       ) {
         return Response.json(
           {

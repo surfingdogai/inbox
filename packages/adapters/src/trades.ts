@@ -3,6 +3,7 @@ import { ATTACHMENT_LIMITS, type Caller, type Capabilities, checkAreaInputSchema
 import type { Context, Hono } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { z } from "zod";
+import { clientAddress } from "./limits";
 import { problemFrom, problemResponse } from "./problem";
 import type { CallerEnv } from "./rest";
 
@@ -114,7 +115,12 @@ export function tradesPublicRoutes(app: Hono<CallerEnv>, caps: Capabilities, hoo
       if (!bytes) return tooLarge(c);
       const name = c.req.header("x-file-name") ?? c.req.query("name") ?? undefined;
       try {
-        const r = await caps.trades.upload(c.get("caller"), bytes, name ? decodeName(name) : undefined);
+        const r = await caps.trades.upload(
+          c.get("caller"),
+          bytes,
+          name ? decodeName(name) : undefined,
+          `ip:${clientAddress(c.req.raw)}`,
+        );
         return c.json(r, 201);
       } catch (error) {
         return problemResponse(c, error);
