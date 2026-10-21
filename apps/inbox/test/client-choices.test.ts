@@ -426,6 +426,9 @@ describe("the setup wizard's doors", () => {
       "Appointments",
       "Trades and quotes",
       "Building and renovation",
+      "Restaurant or takeaway",
+      "A bakery",
+      "A café",
       "A shop",
     ]);
     for (const k of KINDS) {
