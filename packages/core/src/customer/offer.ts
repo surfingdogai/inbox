@@ -288,7 +288,10 @@ export function bookingRequestTerms(payload: PayloadOf<"booking">): OfferTerms {
     endTime: payload.endTime,
     ...(payload.partySize !== undefined ? { partySize: payload.partySize } : {}),
     ...(payload.totalPrice ? { totalPrice: payload.totalPrice } : {}),
-    ...(payload.resourceId && payload.staffName ? { staff: { id: payload.resourceId, name: payload.staffName } } : {}),
+    // Asked for anyone, it goes to whoever is free once it is confirmed: nobody is part of what they confirm.
+    ...(payload.resourceId && payload.staffName && !payload.anyStaff
+      ? { staff: { id: payload.resourceId, name: payload.staffName } }
+      : {}),
     ...(payload.addOns?.length
       ? {
           addOns: payload.addOns.map((a) => ({

@@ -7,7 +7,7 @@ import { type PolicyLang, policyLang } from "../policy/words";
  */
 export interface StaffWords {
   readonly withStaff: (name: string) => string;
-  /** Asked for anyone, with nobody free yet: nobody is named before it binds. */
+  /** Asked for anyone: nobody is named before it binds, since it goes to whoever is free then. */
   readonly withAnyone: string;
   readonly addOns: (names: string) => string;
   readonly deposit: (amount: string, when: string) => string;

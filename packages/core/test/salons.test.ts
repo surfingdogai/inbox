@@ -170,9 +170,10 @@ describe("staff", () => {
     ).rejects.toMatchObject({ code: "invalid_input", details: { reason: "unknown_staff" } });
   });
 
-  it("books anyone with the first free, at their own length and price, and says who before it binds", async () => {
+  it("books anyone with the first free, at their own length and price, and names nobody before it binds", async () => {
     const { db, caps, fade, mei, ravi } = await mapleAndFade();
     let summary = "";
+    let terms: unknown;
     const first = await caps.createBooking(agent(), {
       payload: booking(fade.id, "Skin fade", at("12:00"), at("12:30")),
       contact: { name: "Aiyana", email: "aiyana@example.com" },
@@ -185,7 +186,8 @@ describe("staff", () => {
     expect(Date.parse(String(p1.endTime))).toBe(Date.parse(at("12:45")));
     expect(p1.totalPrice).toEqual({ value: 4500, currency: "CAD" });
     await transitionItem(db, owner, { itemId: first.view.item.id, event: "confirm" });
-    // The next for anyone at noon goes to Ravi, at his own price; the summary says so first.
+    // The next for anyone at noon goes to Ravi, at his own price: the customer confirms that price, and
+    // whoever is free, since it may go to anyone free on the same terms once it is confirmed.
     try {
       await new Capabilities(db).createBooking(agent(), {
         payload: booking(fade.id, "Skin fade", at("12:00"), at("12:30")),
@@ -195,9 +197,12 @@ describe("staff", () => {
     } catch (error) {
       expect(error).toBeInstanceOf(WriteError);
       summary = String((error as WriteError).details?.summary ?? "");
+      terms = (error as WriteError).details?.terms;
     }
-    // Who it is with is part of what the customer confirms, in the business's words.
-    expect(summary).toContain("With Ravi.");
+    expect(summary).toContain("With whoever is free.");
+    expect(summary).not.toContain("Ravi");
+    expect(summary).toContain("CA$55.00");
+    expect(terms).not.toHaveProperty("staff");
     const second = await caps.createBooking(agent(), {
       payload: booking(fade.id, "Skin fade", at("12:00"), at("12:30")),
       contact: { name: "Jean-Luc", email: "jl@example.com", locale: "fr-CA" },
@@ -1129,6 +1134,24 @@ describe("emails", () => {
     expect(ownerMail).toContain("With: Ravi");
     expect(ownerMail).toContain("16:00 (Toronto time)");
     expect(ownerMail).not.toContain("UTC");
+    // For anyone: nobody named in the request, and whoever it went to once it is confirmed.
+    const anyone = await caps.createBooking(agent(), {
+      payload: booking(fade.id, "Skin fade", `${day}T17:00:00-05:00`, `${day}T17:30:00-05:00`),
+      contact: { name: "Kwame", email: "kwame@example.com" },
+      idempotency_key: "mail-any",
+    });
+    await drain();
+    await transitionItem(db, owner, { itemId: anyone.view.item.id, event: "confirm" });
+    await drain();
+    const sent = await db.client.query({
+      sql: "SELECT template, body_text FROM outbound_mail WHERE item_id = ? ORDER BY created_at, id",
+      params: [anyone.view.item.id],
+      method: "all",
+    });
+    const of = (template: string) => String(sent.rows.find((m) => m[0] === template)?.[1] ?? "");
+    expect(of("ack.booking")).toContain("With whoever is free.");
+    expect(of("ack.booking")).not.toContain("Ravi");
+    expect(of("booking.confirmed")).toContain("With Ravi.");
   });
 
   it("tell the owner what to check first", async () => {

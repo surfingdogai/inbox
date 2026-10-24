@@ -527,7 +527,7 @@ function bodyOf(input: CustomerMailInput): Body {
           const lines = [
             ...priceLines(input, item.payload.totalPrice, item.payload),
             // Who it is with, what was added, the deposit and the policy (ADR-035).
-            ...salonLines(item.payload, input),
+            ...salonLines(item.payload, input, { promised: true }),
             ...(item.payload.policy ? [] : cutoffLines(input, item)),
           ];
           if (input.event === "accept")
