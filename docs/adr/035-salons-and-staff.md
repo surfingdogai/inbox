@@ -43,9 +43,18 @@ salon's own credentials can be used with.
 - `check_availability` and `create_booking` take `staff_id` (`any` by default) and `add_ons`. Each
   member of staff's free times are their own hours, their own places (`resource:<id>` claims, at their
   own capacity), their own length, the add-ons added; asked for anyone, each time lists who is free.
-- A booking for anyone goes to the first free in the owner's order; nobody free, to the first, for a
-  person to answer, as any request for a taken time is. A booking always carries who it is with and
-  their first name, and its end follows their length, whatever the request said.
+- A booking for anyone goes to the first free in the owner's order, passing over anyone who already has
+  a request at that time, so two requests go to two people. It keeps that it was for anyone
+  (`payload.anyStaff`) and is confirmed with whoever is free then, at the same price and length. Nobody
+  free: nobody is named before it binds ("with whoever is free"), and a person answers it, as any request
+  for a taken time. A booking always carries who it is with and their first name, and its end follows
+  their length, whatever the request said.
+- Who a booking is with is never a customer's to set: `payload.resourceId` is dropped from every
+  request, and the inbox sets it from `staff_id` or from whoever is free.
+- A service's places were held under its own key (`service:<id>`) before anyone was tied to it, and
+  under each member of staff's since. Each read sees the other: staff are busy wherever the service's own
+  key holds a booking, and a service nobody gives any more counts what its staff still hold. A business
+  calendar chosen for a service blocks the staff who give it.
 - An add-on (`services.add_ons`: a name, the minutes it adds, an optional price) makes the booking
   longer and, priced, dearer; a booking keeps the add-ons as they were (`payload.addOns`).
 
@@ -60,27 +69,37 @@ salon's own credentials can be used with.
 
 ### 4. What must come first
 
-- `services.requires` names another service (a patch test, a consultation) and the days within which it
-  must have come before. It is checked only against this business's own bookings (completed or
-  confirmed, before the start and within the days), and only for a customer the inbox already knows for
+- `services.requires` names another service (a patch test, a consultation), the days within which it
+  must have come before, and how long before at least (`at_least_hours`, 48 by default: a patch test is
+  read two days on). It is checked only against this business's own bookings (completed or confirmed,
+  between those two bounds before the start), and only for a customer the inbox already knows for
   sure (their access token, an agent key bound to them). A name or an address someone types proves
   nothing, so it is never looked up.
 - Known and not met: the customer is asked, in the business's voice, to book the first service first.
-  Not known: the booking is taken and waits for a person (`checkFirst` on its create; no rule, AI or key
-  confirms it), with a note to the owner of what to check. The answer to a stranger is the same whatever
+  Known, with that first service still a request nobody confirmed: a person checks. Not known: the
+  booking is taken and waits for a person (`checkFirst` on its create; no rule, AI or key confirms it,
+  and the owner's AI proposes no other time for it, which the customer's yes would confirm), with what to
+  check beside its confirm and in the owner's email. The answer to a stranger is the same whatever
   anyone's bookings hold, and `requires` itself is never in `list_services`.
 
 ### 5. Deposits and a policy per service
 
 - `services.deposit` is a share of the price or an amount (`depositRuleSchema`); a booking carries the
-  deposit it asks (`payload.deposit`: amount, due by, refundable), worked out with `depositFor` in the
-  currency's own minor unit (₩10,500 is 10500), due within a day or by the start when that is sooner.
-  Once the booking is confirmed, the deposit's link is made on the business's own payment platform
-  through the ADR-032 schedule source for bookings; paid, it is recorded on the booking, read back with
-  the business's key; not paid in time, the link closes and the owner decides. Nothing is ever charged
-  or refunded by us.
-- `services.policy` is a `policySchema` of its own; a booking carries it dated in the business's zone at
-  the moment it was asked (`payload.policy`). Without one, the business-wide cancellation window stands.
+  deposit it asks (`payload.deposit`: amount, refundable, and once it is confirmed, due by), worked out
+  with `depositFor` in the currency's own minor unit (₩10,500 is 10500). A request is only told a deposit
+  holds it. Its time to pay opens when it is confirmed, a day or until the start when that is sooner, and
+  only where a payment platform takes it: the link is made on the business's own platform through the
+  ADR-032 schedule source for bookings; paid, it is recorded on the booking, read back with the
+  business's key; not paid in time, the link closes and the owner decides. Without a payment platform
+  the owner app offers no deposit, and a deposit set before says the owner asks for it themselves.
+  Nothing is ever charged or refunded by us.
+- `services.policy` is a `policySchema` of its own; a booking carries it dated in the business's zone
+  (`payload.policy`), and keeps the terms it was made on (`payload.terms`). Wherever it moves (another
+  time proposed, a change either side asks for), its deposit and policy are dated again for that time,
+  against when it was booked, and the customer confirms them as they will apply. Without a policy, the
+  business-wide cancellation window stands.
+- A deposit the policy keeps (`deposit.refundable: false`) comes back while cancelling is free, and is
+  kept once no free step is ahead, as the policy sentence says.
 - Who it is with, the add-ons, the deposit and the policy are part of what a customer confirms (the
   confirm step's terms and summary). A confirmed booking with a policy answers a customer's cancel with
   the fee and what comes back (`409 confirm_terms`, `fee_sha`); it is cancelled, as a late cancellation
@@ -99,23 +118,33 @@ salon's own credentials can be used with.
   `writeFirst` (ADR-032 §4), under the item's own key, before anything is promised; once the system took
   it, the inbox confirms it as automation named after the connection. Refused, it is a request for a
   person; no answer, it is looked for by the system's own means, and the resolver (owner `bookings`)
-  settles it within minutes. Nothing is written first that the inbox could not confirm on its own anyway:
-  a price a person sets, what a person checks first, a time inside the minimum notice.
+  settles it within minutes, keeping what it found as the booking's link so no sync writes it twice.
+  Nothing is written first that the inbox could not confirm on its own anyway: a price a person sets,
+  what a person checks first, a time inside the minimum notice, a time its own places or calendars hold.
+  Taken there but then not confirmable here, it is cancelled there again (`rolled_back`) and the owner
+  told.
+- **Only the system's answer confirms such a booking** (the `system_first` guard in `transitionItem`): no
+  rule, no owner's AI and no key, and nobody while the answer is on its way. A person's confirm is written
+  there first and stands on the answer; a customer's yes to another time we proposed goes to a person.
 - Cancelled here, it is cancelled there (`BookingWriter.remove`); a move is made in the salon's system.
-- Its free times are offered when it can say them; when it cannot (a rate limit, an outage), the inbox's
-  own are, and the write still decides.
+- Its free times are offered when it can say them, asked of it once a minute at most for the same
+  question; when it cannot (a rate limit, an outage, times it gives that cannot be read), the inbox's own
+  are, and the write still decides.
 
 ### 7. Phorest and Mindbody
 
 - **Phorest** is code-complete from its public reference: the salon's own credentials (which Phorest
   issues when the salon asks), Europe or the Americas and Australia as a way each, the branch chosen,
-  services with each member's own price and length, staff (those hidden from online booking left out),
+  the services it offers online with each member's own price (else their level's, `staffCategories`) and
+  length, unpriced where the branch names no currency or another than the business's, staff (those
+  hidden from online booking left out),
   a week of rosters as weekly hours, its free times, bookings written as ACTIVE for the salon's own
   client (found by the inbox's own id for them, else created), looked for among the client's
   appointments that day when an answer was lost, cancelled there. Phorest has no webhooks and no
   payments through its API, so neither is used. **Off** (`PHOREST_READY`) until the company confirms that
-  a salon's own API access may be used by a tool like this one: the card says "Needs setup: ask Phorest
-  for API access for your salon".
+  a salon's own API access may be used by a tool like this one: the card says it is not available yet.
+  Times are sent as instants (`PHOREST_TIMES`), one word from the branch's own wall time, until a test
+  branch shows which Phorest reads.
 - **Mindbody** needs our developer account and Mindbody's review, and a site owner's activation; its
   reference is drawn only in the browser. It is registered **off**, with no way to connect and nothing it
   would call, until the company has the account.

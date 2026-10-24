@@ -25,8 +25,8 @@ A salon's own booking system, written to first: each booking is confirmed here o
 
 | Card | Status |
 | --- | --- |
-| **Phorest** | Needs setup: ask Phorest for API access for your salon ([Phorest](/docs/connectors/phorest/)) |
-| **Mindbody** | Needs setup: our developer account, and Mindbody's review ([Mindbody](/docs/connectors/mindbody/)) |
+| **Phorest** | Not available yet: you will connect with the API access Phorest gives your salon ([Phorest](/docs/connectors/phorest/)) |
+| **Mindbody** | Not available yet: Mindbody has to approve it first ([Mindbody](/docs/connectors/mindbody/)) |
 
 ## Being built
 

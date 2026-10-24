@@ -466,8 +466,9 @@ salon or barber". The inbox offers `list_staff`, and `staff_id` on `check_availa
 `create_booking`, once someone on the staff gives a service on offer.
 
 1. **Services** — as above, then each one's terms: add-ons (the minutes and price each adds), a
-   deposit (a share or an amount), a cancellation policy, and what must come first (a patch test
-   within so many days). Ask the person for every number; never invent a price, a deposit or a policy.
+   deposit (a share or an amount, once a payment platform is connected), a cancellation policy, and
+   what must come first (a patch test within so many days, and at least 48 hours before). Ask the
+   person for every number; never invent a price, a deposit or a policy.
 2. **Staff** — each person's name, the first name customers see, the services they give, their own
    price or length for any, and their own hours. Their own calendar, once connected in Integrations,
    is chosen under their name.
@@ -475,7 +476,7 @@ salon or barber". The inbox offers `list_staff`, and `staff_id` on `check_availa
    new client's first visit goes to the owner.
 
 A salon that runs its days in Phorest starts from it once Phorest is switched on here (today it says
-"Needs setup"); each booking is then written to Phorest first. Salons on another system keep sending
+"Not available yet"); each booking is then written to Phorest first. Salons on another system keep sending
 agents to their own booking page: a booking door kept elsewhere. Deposits are paid through the
 business's own payment account; the inbox never charges anyone.
 
