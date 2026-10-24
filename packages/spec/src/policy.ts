@@ -40,7 +40,10 @@ export const policySchema = z.object({
   after: policyFeeSchema,
   /** What not coming costs. */
   noShow: policyFeeSchema,
-  /** Whether a deposit is given back with a free cancellation; when not, it is kept whatever the step. */
+  /**
+   * Whether a deposit is given back with a cancellation, less any fee; when not, it is kept once no free
+   * step is ahead. Either way it comes back while cancelling is free.
+   */
   deposit: z.object({ refundable: z.boolean() }).optional(),
 });
 export type Policy = z.infer<typeof policySchema>;
