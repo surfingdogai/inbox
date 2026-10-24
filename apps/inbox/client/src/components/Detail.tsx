@@ -193,7 +193,7 @@ export function ItemDetailView({
               : undefined
           }
         />
-        <BookingSalon item={item} tz={tz} />
+        <BookingSalon item={item} tz={tz} checkFirst={query.data.check_first} />
         {(item.type === "order" || (item.type === "booking" && "deposit" in item.payload && item.payload.deposit)) && (
           <Payments itemId={item.id} payments={payments} none={pays.data?.none ?? null} tz={tz} />
         )}

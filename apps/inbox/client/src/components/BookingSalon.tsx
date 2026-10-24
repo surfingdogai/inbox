@@ -1,37 +1,57 @@
 import type { DatedPolicy } from "@surfingdog/core";
 import { formatClock, formatDay, formatMoney } from "../lib/format";
+import { useIntegrations } from "../lib/queries";
 import { datedSteps, useStaff } from "../lib/staff";
 import type { Item, Money } from "../lib/types";
 import "./staff.css";
 
 /**
- * A booking with someone (ADR-035), on its detail: who it is with, what was added, the deposit (how
- * much, by when, and what was paid of it) and the cancellation policy as the customer confirmed it,
- * each step dated in the business's zone. Nothing for a booking with none of them.
+ * A booking with someone (ADR-035), on its detail, beside its confirm: who it is with, what was added,
+ * the deposit (how much, by when, what was paid of it, and that the owner asks for it themselves where
+ * no payment platform takes it), the cancellation policy as the customer confirmed it, each step dated
+ * in the business's zone, and what to check first when a person must. Nothing for a booking with none.
  */
-export function BookingSalon({ item, tz }: { item: Item; tz: string | undefined }) {
+export function BookingSalon({
+  item,
+  tz,
+  checkFirst,
+}: {
+  item: Item;
+  tz: string | undefined;
+  checkFirst?: string | undefined;
+}) {
   const staff = useStaff();
+  const integrations = useIntegrations();
+  const payments = (integrations.data?.connections ?? []).some((c) => c.pay_on === true);
   if (item.type !== "booking") return null;
   const p = item.payload as typeof item.payload & {
     resourceId?: string;
     staffName?: string;
+    anyStaff?: boolean;
     addOns?: { id: string; name: string; durationMin: number; price?: Money }[];
     deposit?: { amount: Money; dueBy?: string; refundable: boolean };
     policy?: DatedPolicy;
   };
-  if (!p.staffName && !p.addOns?.length && !p.deposit && !p.policy) return null;
+  if (!p.staffName && !p.anyStaff && !p.addOns?.length && !p.deposit && !p.policy && !checkFirst) return null;
   const person = staff.data?.items.find((s) => s.id === p.resourceId);
   const when = (iso: string) => `${formatDay(iso, tz)} ${formatClock(iso, tz)}`;
   const paid =
     p.paidAmount && p.deposit && p.paidAmount.currency === p.deposit.amount.currency ? p.paidAmount.value : 0;
   return (
     <section className="booking-salon" aria-label="Who, deposit and policy">
-      {p.staffName && (
+      {checkFirst && (
+        <div className="bs-row">
+          <span className="k">Check first</span>
+          <span>{checkFirst}</span>
+        </div>
+      )}
+      {(p.staffName || p.anyStaff) && (
         <div className="bs-row">
           <span className="k">With</span>
           <span>
-            <b>{p.staffName}</b>
+            {p.staffName ? <b>{p.staffName}</b> : "Whoever is free"}
             {person && person.name !== p.staffName && <span className="hint"> · {person.name}</span>}
+            {p.anyStaff && p.staffName && <span className="hint"> · asked for anyone</span>}
           </span>
         </div>
       )}
@@ -54,17 +74,23 @@ export function BookingSalon({ item, tz }: { item: Item; tz: string | undefined 
               ? " · paid"
               : paid > 0
                 ? ` · ${formatMoney({ value: paid, currency: p.deposit.amount.currency })} paid`
-                : p.deposit.dueBy
-                  ? ` · due by ${when(p.deposit.dueBy)}`
-                  : ""}
-            {!p.deposit.refundable && <span className="hint"> · kept if cancelled</span>}
+                : !payments
+                  ? " · no payment platform: ask for it yourself"
+                  : p.deposit.dueBy
+                    ? ` · due by ${when(p.deposit.dueBy)}`
+                    : " · asked once you confirm"}
+            {!p.deposit.refundable && <span className="hint"> · kept once cancelling is no longer free</span>}
           </span>
         </div>
       )}
       {p.policy && (
         <div className="bs-row">
           <span className="k">Cancelling</span>
-          <span>{datedSteps(p.policy, (m) => formatMoney(m), when).join(" · ")}</span>
+          <span>
+            {datedSteps(p.policy, (m) => formatMoney(m), when, {
+              depositKept: p.deposit !== undefined && !p.deposit.refundable,
+            }).join(" · ")}
+          </span>
         </div>
       )}
     </section>
