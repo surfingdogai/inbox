@@ -8,7 +8,7 @@ import { WriteError } from "../write/errors";
 import { type PricingFor, servicePricing } from "../write/pricing";
 import { leadHours, requiresMet } from "./requires";
 import { ANY, addOnsOf, lengthWith, loadService, pickStaff, unknownStaff } from "./slots";
-import { staffForService } from "./store";
+import { sameTerms, staffForService, termsOf } from "./store";
 import { staffWords } from "./words";
 
 /**
@@ -251,21 +251,14 @@ export async function keepTermsInStep(
 /**
  * A booking for anyone, as it is confirmed (ADR-035): with whoever it went to when they are still free,
  * else with the first free in the owner's order at the same price and length, so what the customer
- * confirmed stays true. Nobody such: as it was, for the confirm to say the time is taken.
+ * confirmed stays true. Nobody such: as it was, for the confirm to say the time is taken; with nobody,
+ * when the one it went to has left.
  */
 export async function repickAnyone(
   db: Db,
   input: { readonly itemId: string; readonly payload: Record<string, unknown>; readonly timezone: string },
 ): Promise<void> {
-  const p = input.payload as {
-    anyStaff?: boolean;
-    resourceId?: string;
-    staffName?: string;
-    startTime: string;
-    endTime: string;
-    addOns?: BookedAddOn[];
-    reservationFor: { serviceId: string };
-  };
+  const p = input.payload as AnyonePayload;
   if (p.anyStaff !== true) return;
   const service = await loadService(db, p.reservationFor.serviceId);
   if (!service) return;
@@ -284,19 +277,89 @@ export async function repickAnyone(
     });
     if (free) return;
   }
-  const same = (s: (typeof staff)[number]) =>
-    (s.terms.priceOverride ?? null) === (current?.terms.priceOverride ?? null) &&
-    (s.terms.durationOverrideMin ?? null) === (current?.terms.durationOverrideMin ?? null);
   const next = await pickStaff(db, {
     service,
-    staff: staff.filter((s) => s.id !== current?.id && same(s)),
+    staff: await sameAs(db, service.id, staff, current, p.resourceId),
     start,
     addOns: p.addOns ?? [],
     timezone: input.timezone,
     exceptItemId: input.itemId,
   });
-  if (!next) return;
+  if (!next) {
+    // It went to someone who no longer gives it here, and nobody else can: it is with nobody, so the
+    // confirm says the time is taken (`nobodyToTake`), never confirms it with them.
+    if (p.resourceId && !current && staff.length > 0) {
+      delete p.resourceId;
+      delete p.staffName;
+    }
+    return;
+  }
   p.resourceId = next.id;
   p.staffName = next.publicName;
   p.endTime = new Date(start + lengthWith(service, next.terms, p.addOns ?? []) * 60_000).toISOString();
+}
+
+type AnyonePayload = {
+  anyStaff?: boolean;
+  resourceId?: string;
+  staffName?: string;
+  startTime: string;
+  endTime: string;
+  addOns?: BookedAddOn[];
+  reservationFor: { serviceId: string };
+};
+
+/**
+ * Who else may take a booking for anyone (ADR-035): those who give the service on the terms it was
+ * made on — the price and the length of whoever it went to (as the owner set them, when that person
+ * has left), or the service's own when it went to nobody — so what the customer confirms stays true.
+ */
+async function sameAs(
+  db: Db,
+  serviceId: string,
+  staff: Awaited<ReturnType<typeof staffForService>>,
+  current: Awaited<ReturnType<typeof staffForService>>[number] | undefined,
+  resourceId: string | undefined,
+): Promise<Awaited<ReturnType<typeof staffForService>>> {
+  const was = current?.terms ?? (resourceId ? await termsOf(db, serviceId, resourceId) : null);
+  return staff.filter((s) => s.id !== current?.id && sameTerms(s.terms, was));
+}
+
+/**
+ * Who a time for a booking for anyone would go to (ADR-035), as a time we propose for it, or the
+ * customer's own other time, is judged: whoever it is with when they are free then, else the first free
+ * in the owner's order on the same terms (`sameAs`). One person, so a time we hold for it holds one
+ * place, not every stylist's. Undefined for a booking that is not for anyone on a service staff give;
+ * null when nobody such is free. Who it is with is still picked when it is confirmed (`repickAnyone`).
+ */
+export async function anyoneAt(
+  db: Db,
+  input: {
+    readonly itemId: string;
+    readonly payload: Record<string, unknown>;
+    readonly start: number;
+    readonly end: number;
+    readonly timezone: string;
+  },
+): Promise<{ readonly id: string; readonly capacity: number } | null | undefined> {
+  const p = input.payload as AnyonePayload;
+  if (p.anyStaff !== true) return undefined;
+  const service = await loadService(db, p.reservationFor.serviceId);
+  if (!service) return undefined;
+  const staff = await staffForService(db, service.id);
+  if (staff.length === 0) return undefined;
+  const at = { start: input.start, end: input.end, timezone: input.timezone, exceptItemId: input.itemId };
+  const current = staff.find((s) => s.id === p.resourceId);
+  if (
+    current &&
+    (await slotOffered(db, { serviceId: service.id, ...at, resource: { id: current.id, capacity: current.capacity } }))
+  ) {
+    return current;
+  }
+  return pickStaff(db, {
+    service,
+    staff: await sameAs(db, service.id, staff, current, p.resourceId),
+    addOns: p.addOns ?? [],
+    ...at,
+  });
 }

@@ -28,10 +28,10 @@ import { insertOfferStatement, type OfferRow, offerRows, openOf, pointerOf } fro
 import { paidFor, refundDueOf, SEND_BACK_DAYS } from "../negotiation/refunds";
 import { items, resources, services } from "../schema/tables";
 import { readSettings } from "../settings/schema";
-import { keepTermsInStep, repickAnyone } from "../staff/booking";
+import { anyoneAt, keepTermsInStep, repickAnyone } from "../staff/booking";
 import { bookingFeeAt } from "../staff/fee";
 import { checkFirstRefusal, heldForCheck } from "../staff/requires";
-import { nobodyFree } from "../staff/store";
+import { nobodyFree, nobodyToTake } from "../staff/store";
 import { awaitingSystem, isWrittenFirst, systemFirstRefusal, systemHold } from "../staff/system";
 import { hashJson, hashText } from "../util/canonical";
 import {
@@ -396,7 +396,7 @@ async function attempt_(
     delete payload.proposed;
   }
   if (effects.has("apply_counter") && item.type === "booking") {
-    await applyCounter(db, payload, data, audience, now);
+    await applyCounter(db, item.id, payload, data, audience, now);
   }
   // A change to the promise: what one side asks for becomes the payload's `change`; accepted, it
   // becomes the promise; not made, it goes and the promise stays as it was.
@@ -467,10 +467,10 @@ async function attempt_(
   // than one booking can hold. Otherwise their yes would be refused, in words that are not ours.
   if (item.type === "booking" && t.event === "propose") {
     const p = payload.proposed as { startTime: string; endTime: string };
-    const spec = await slotSpecFor(db, payload);
+    const base = await slotSpecFor(db, payload);
     let buckets: number[];
     try {
-      buckets = bucketsFor(spec, p.startTime, p.endTime);
+      buckets = bucketsFor(base, p.startTime, p.endTime);
     } catch (error) {
       if (!(error instanceof WriteError) || error.code !== "invalid_input") throw error;
       const message = /after/.test(error.message) ? "must be after startTime" : error.message;
@@ -478,6 +478,7 @@ async function attempt_(
         fields: [{ path: "input.endTime", problem: "invalid", message }],
       });
     }
+    const spec = await offerSpecFor(db, item.id, payload, base, p, settings.business.timezone);
     // …and one that is free as we propose it (ADR-018 N7): nothing is held, so it may still go before
     // they answer, but never before we ask.
     const plan = planClaims(spec, buckets, await readClaims(db, spec, buckets, item.id));
@@ -936,14 +937,14 @@ async function attempt_(
           break;
         }
         if (item.type !== "booking") break;
-        // For anyone, and nobody who gives it is free (ADR-035 §2): the time is taken, for a person.
-        if (await nobodyFree(db, payload)) {
+        // For anyone, and nobody who gives it is free (ADR-035 §2), or with someone who no longer gives
+        // it here: the time is taken, for a person.
+        const nobody = await nobodyToTake(db, payload);
+        if (nobody) {
           throw new WriteError(
             "slot_taken",
-            audience
-              ? copyFor(audience.lang).problems.slotTaken
-              : "nobody who gives this service is free then: propose another time, or decline it",
-            { details: { guard, staff: "nobody_free" } },
+            audience ? copyFor(audience.lang).problems.slotTaken : NOBODY_WORDS[nobody],
+            { details: { guard, staff: nobody } },
           );
         }
         const spec = await slotSpecFor(db, payload);
@@ -2062,6 +2063,48 @@ export async function slotClaimable(db: Db, item: Pick<Item, "id" | "payload">):
   }
 }
 
+/** What the owner reads when nobody here can take a booking's time (`nobodyToTake`). */
+const NOBODY_WORDS = {
+  nobody_free: "nobody who gives this service is free then: propose another time, or decline it",
+  not_here:
+    "the person this was asked with no longer works here or no longer gives this service: decline it, or ask the customer to book with someone else",
+} as const;
+
+/**
+ * Where a time we propose for a booking is judged, and held while the customer answers (ADR-035): with
+ * its member of staff; for anyone, with whoever would take it then (`anyoneAt`), so it is free when
+ * someone who gives it is, and one proposal holds one place, never every stylist's under the
+ * service's own key; with someone who no longer gives it here, nowhere.
+ */
+async function offerSpecFor(
+  db: Db,
+  itemId: string,
+  payload: Record<string, unknown>,
+  base: SlotSpec,
+  at: { readonly startTime: string; readonly endTime: string },
+  timezone: string,
+): Promise<SlotSpec> {
+  const who = await anyoneAt(db, {
+    itemId,
+    payload,
+    start: Date.parse(at.startTime),
+    end: Date.parse(at.endTime),
+    timezone,
+  });
+  if (who === null) {
+    throw new WriteError("slot_taken", NOBODY_WORDS.nobody_free, {
+      details: { guard: "slot_available", staff: "nobody_free" },
+    });
+  }
+  if (who) return { ...base, capacity: who.capacity, resourceKey: `resource:${who.id}` };
+  if ((await nobodyToTake(db, payload)) === "not_here") {
+    throw new WriteError("slot_taken", NOBODY_WORDS.not_here, {
+      details: { guard: "slot_available", staff: "not_here" },
+    });
+  }
+  return base;
+}
+
 async function slotSpecFor(db: Db, payload: Record<string, unknown>): Promise<SlotSpec> {
   const reservationFor = payload.reservationFor as { serviceId: string };
   const [service] = await db.orm
@@ -2129,6 +2172,7 @@ async function bookedStart(
  */
 async function applyCounter(
   db: Db,
+  itemId: string,
   payload: Record<string, unknown>,
   data: Record<string, unknown>,
   audience: Audience | undefined,
@@ -2158,7 +2202,12 @@ async function applyCounter(
   const facts = await businessFacts(db);
   // The time we proposed, answered with a price of their own: ours to give, whatever holds it now.
   let offered = proposed !== undefined && start === Date.parse(proposed.startTime);
-  if (start > now && !offered) {
+  // For anyone (ADR-035): free when someone who would take it is, on the same terms, not only when
+  // nobody at all is busy then.
+  const anyone =
+    start > now && !offered ? await anyoneAt(db, { itemId, payload, start, end, timezone: facts.timezone }) : undefined;
+  if (anyone !== undefined) offered = anyone !== null;
+  if (start > now && !offered && anyone === undefined) {
     try {
       const r = await findSlots(db, {
         serviceId,
@@ -2179,17 +2228,17 @@ async function applyCounter(
     } catch {
       offered = false;
     }
-    if (!offered) {
-      throw new WriteError(
-        "slot_taken",
-        audience
-          ? copyFor(audience.lang).problems.timeNotFree(
-              vars({ when: whenText(new Date(start).toISOString(), audience.timezone, audience.lang) }),
-            )
-          : "that time is not free",
-        { details: { guard: "slot_free", startTime: new Date(start).toISOString() } },
-      );
-    }
+  }
+  if (start > now && !offered) {
+    throw new WriteError(
+      "slot_taken",
+      audience
+        ? copyFor(audience.lang).problems.timeNotFree(
+            vars({ when: whenText(new Date(start).toISOString(), audience.timezone, audience.lang) }),
+          )
+        : "that time is not free",
+      { details: { guard: "slot_free", startTime: new Date(start).toISOString() } },
+    );
   }
   payload.startTime = new Date(start).toISOString();
   payload.endTime = new Date(end).toISOString();

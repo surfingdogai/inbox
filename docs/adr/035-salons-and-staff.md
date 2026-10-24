@@ -52,9 +52,15 @@ salon's own credentials can be used with.
   (`payload.anyStaff`) and is confirmed with whoever is free then, at the same price and length, so the
   customer confirms that price and "with whoever is free": nobody is named, nor part of the confirmed
   terms, before it binds, and the confirmation names whoever it went to. Nobody free: a person answers
-  it, as any request for a taken time; no rule, owner's AI or person confirms it with nobody. A booking
-  always carries who it is with and their first name, and its end follows their length, whatever the
-  request said. One the salon's own system holds keeps the person written there (§6).
+  it, as any request for a taken time; no rule, owner's AI or person confirms it with nobody. Another time
+  proposed for it, or the customer's own other time, is free when someone who gives it on the same terms
+  is free then (as `check_availability` lists it), and a time held while the customer answers holds that
+  one person's place, never every stylist's. A booking always carries who it is with and their first name,
+  and its end follows their length, whatever the request said. One the salon's own system holds keeps the
+  person written there (§6).
+- Someone who leaves is archived, and their bookings stay as they are; nobody confirms a request with
+  them, a rule least of all. One asked of them by name is marked for a person; one for anyone goes to
+  whoever else is free on the same terms, else is a taken time.
 - Who a booking is with is never a customer's to set: `payload.resourceId` is dropped from every
   request, and the inbox sets it from `staff_id` or from whoever is free.
 - A service's places were held under its own key (`service:<id>`) before anyone was tied to it, and

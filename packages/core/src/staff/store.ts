@@ -158,15 +158,54 @@ export async function isStaffed(db: Db, serviceId: string): Promise<boolean> {
   return (await staffForService(db, serviceId)).length > 0;
 }
 
+/** Someone's own terms for a service as the owner set them, whether or not they still work here. */
+export async function termsOf(db: Db, serviceId: string, resourceId: string): Promise<StaffService | null> {
+  const [l] = await db.orm
+    .select()
+    .from(serviceResources)
+    .where(and(eq(serviceResources.serviceId, serviceId), eq(serviceResources.resourceId, resourceId)));
+  return l ? { serviceId, priceOverride: l.priceOverride, durationOverrideMin: l.durationOverrideMin } : null;
+}
+
+/** Whether two members of staff give a service on the same terms: the same price and the same length. */
+export function sameTerms(a: StaffService | null | undefined, b: StaffService | null | undefined): boolean {
+  return (
+    (a?.priceOverride ?? null) === (b?.priceOverride ?? null) &&
+    (a?.durationOverrideMin ?? null) === (b?.durationOverrideMin ?? null)
+  );
+}
+
 /**
- * A booking for anyone that went to nobody, for a service staff give (ADR-035 §2): nobody who gives it
- * was free, so its time is taken. A person answers it; it is never claimed under the service's own key,
- * where the staff's other bookings would not be seen.
+ * Why nobody here can take a booking's time (ADR-035 §2), else null:
+ *
+ * - `nobody_free`: for anyone, it went to nobody, for a service staff give. Nobody who gives it was free,
+ *   so its time is taken; a person answers it. It is never claimed under the service's own key, where
+ *   the staff's other bookings would not be seen.
+ * - `not_here`: it is with a member of staff who no longer works here (archived), or no longer gives the
+ *   service. Nobody confirms it with them, a rule least of all.
  */
-export async function nobodyFree(db: Db, payload: Record<string, unknown>): Promise<boolean> {
-  if (payload.anyStaff !== true || typeof payload.resourceId === "string") return false;
+export async function nobodyToTake(
+  db: Db,
+  payload: Record<string, unknown>,
+): Promise<"nobody_free" | "not_here" | null> {
   const serviceId = (payload.reservationFor as { serviceId?: unknown } | undefined)?.serviceId;
-  return typeof serviceId === "string" && (await isStaffed(db, serviceId));
+  if (typeof serviceId !== "string") return null;
+  const resourceId = payload.resourceId;
+  if (typeof resourceId !== "string") {
+    return payload.anyStaff === true && (await isStaffed(db, serviceId)) ? "nobody_free" : null;
+  }
+  const [r] = await db.orm
+    .select({ kind: resources.kind, active: resources.active })
+    .from(resources)
+    .where(eq(resources.id, resourceId));
+  if (r?.kind !== "staff") return null;
+  if (r.active !== 1) return "not_here";
+  return (await termsOf(db, serviceId, resourceId)) ? null : "not_here";
+}
+
+/** Whether nobody here can take a booking's time (`nobodyToTake`): its time is taken, for a person. */
+export async function nobodyFree(db: Db, payload: Record<string, unknown>): Promise<boolean> {
+  return (await nobodyToTake(db, payload)) !== null;
 }
 
 /** Whether the business lists any staff now: the tools that name them are offered only then. */

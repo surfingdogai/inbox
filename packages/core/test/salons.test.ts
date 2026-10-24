@@ -375,6 +375,167 @@ describe("staff", () => {
     expect((done.view.item.payload as { resourceId?: string }).resourceId).toBe(bo.id);
   });
 
+  /** Two barbers in Bogotá (UTC-5 all year, as Toronto is in November), both giving a cut, and named bookings. */
+  async function twoBarbers() {
+    const s = await salon({
+      name: "Barbería La Candelaria",
+      zone: "America/Bogota",
+      currency: "COP",
+      languages: ["es"],
+    });
+    const cut = await s.caps.setup.createService(
+      owner,
+      serviceInput.parse({
+        name: "Corte",
+        duration_min: 30,
+        granularity_min: 30,
+        price: { model: "fixed", value: 3_500_000, currency: "COP" },
+      }),
+    );
+    const ana = await s.caps.staff.create(owner, { name: "Ana Ruiz", sort: 0, services: [{ service_id: cut.id }] });
+    const bo = await s.caps.staff.create(owner, { name: "Bo Kim", sort: 1, services: [{ service_id: cut.id }] });
+    const named = async (staffId: string, start: string, end: string, idem: string) => {
+      const r = await s.caps.createBooking(agent(), {
+        payload: booking(cut.id, "Corte", at(start), at(end)),
+        staff_id: staffId,
+        contact: { name: idem },
+        idempotency_key: idem,
+      });
+      return r;
+    };
+    const confirmed = async (staffId: string, start: string, end: string, idem: string) => {
+      const r = await named(staffId, start, end, idem);
+      await transitionItem(s.db, owner, { itemId: r.view.item.id, event: "confirm" });
+      return r;
+    };
+    /** At two both are busy: a request for anyone then goes to nobody. */
+    const late = async () => {
+      await confirmed(ana.id, "14:00", "14:30", "ana-14");
+      await confirmed(bo.id, "14:00", "14:30", "bo-14");
+      const r = await s.caps.createBooking(agent(), {
+        payload: booking(cut.id, "Corte", at("14:00"), at("14:30")),
+        contact: { name: "Valentina" },
+        idempotency_key: "any-14",
+      });
+      expect(await stored(s.db, r.view.item.id)).toMatchObject({ anyStaff: true });
+      expect(await stored(s.db, r.view.item.id)).not.toHaveProperty("resourceId");
+      return r;
+    };
+    return { ...s, cut, ana, bo, named, confirmed, late };
+  }
+
+  it("for anyone with nobody free, can be offered a time one of them is free, and the customer's own other time too", async () => {
+    const s = await twoBarbers();
+    const any = await s.late();
+    // At three Ana is busy and Bo is not; at four Bo is busy and Ana is not.
+    await s.confirmed(s.ana.id, "15:00", "15:30", "ana-15");
+    await s.confirmed(s.bo.id, "16:00", "16:30", "bo-16");
+    const free = await s.caps.checkAvailability(
+      { service_id: s.cut.id, from: at("15:00"), to: at("15:30") },
+      { now: T0, caller: agent() },
+    );
+    expect(free.slots).toMatchObject([{ startTime: new Date(at("15:00")).toISOString(), staff: [{ id: s.bo.id }] }]);
+    // Proposed at three: free with Bo, as the free times say it is, whoever else is busy then.
+    const proposed = await transitionItem(s.db, owner, {
+      itemId: any.view.item.id,
+      event: "propose",
+      input: { startTime: at("15:00"), endTime: at("15:30") },
+    });
+    expect(proposed.view.item.state).toBe("proposed");
+    // Their own other time, four, is free with Ana: taken back to us as theirs.
+    const theirs: Caller = { ...agent(), accessToken: any.accessToken ?? "" };
+    const countered = await transitionItem(s.db, theirs, {
+      itemId: any.view.item.id,
+      event: "counter",
+      input: { startTime: at("16:00") },
+    });
+    expect(countered.view.item.state).toBe("requested");
+    // Confirmed with whoever is free then.
+    const done = await transitionItem(s.db, owner, { itemId: any.view.item.id, event: "confirm" });
+    expect(done.view.item.state).toBe("confirmed");
+    expect(await stored(s.db, any.view.item.id)).toMatchObject({ resourceId: s.ana.id, staffName: "Ana" });
+    // A time nobody who gives it is free is still refused, as nobody's.
+    const other = await s.caps.createBooking(agent(), {
+      payload: booking(s.cut.id, "Corte", at("14:00"), at("14:30")),
+      contact: { name: "Mateo" },
+      idempotency_key: "any-14-b",
+    });
+    await expect(
+      transitionItem(s.db, owner, {
+        itemId: other.view.item.id,
+        event: "propose",
+        input: { startTime: at("14:00"), endTime: at("14:30") },
+      }),
+    ).rejects.toMatchObject({ code: "slot_taken", details: { staff: "nobody_free" } });
+  });
+
+  it("for anyone, a time held while the customer answers holds one barber, never every one who gives it", async () => {
+    const s = await twoBarbers();
+    await s.caps.updateSettings(owner, { doc: { booking: { holdOnPropose: true } } });
+    const any = await s.late();
+    await transitionItem(s.db, owner, {
+      itemId: any.view.item.id,
+      event: "propose",
+      input: { startTime: at("17:00"), endTime: at("17:30") },
+    });
+    const { rows } = await s.db.client.query({
+      sql: "SELECT DISTINCT resource_key FROM slot_claims WHERE item_id = ?",
+      params: [any.view.item.id],
+      method: "all",
+    });
+    expect(rows.map((r) => r[0])).toEqual([`resource:${s.ana.id}`]);
+    // Ana is held for it; Bo is not, and is booked by name then.
+    const ana = await s.named(s.ana.id, "17:00", "17:30", "ana-17");
+    await expect(transitionItem(s.db, owner, { itemId: ana.view.item.id, event: "confirm" })).rejects.toMatchObject({
+      code: "slot_taken",
+    });
+    const bo = await s.named(s.bo.id, "17:00", "17:30", "bo-17");
+    const done = await transitionItem(s.db, owner, { itemId: bo.view.item.id, event: "confirm" });
+    expect(done.view.item.state).toBe("confirmed");
+  });
+
+  it("are never confirmed with someone who has left: asked by name, a person answers; for anyone, someone else", async () => {
+    const s = await twoBarbers();
+    // Asked of Bo by name at three, and for anyone at ten, which went to Bo: Ana works afternoons only.
+    await s.caps.staff.update(owner, { staff_id: s.ana.id, hours: { tue: [["12:00", "19:00"]] } });
+    const byName = await s.named(s.bo.id, "15:00", "15:30", "bo-name");
+    const any = await s.caps.createBooking(agent(), {
+      payload: booking(s.cut.id, "Corte", at("10:00"), at("10:30")),
+      contact: { name: "Camila" },
+      idempotency_key: "any-10",
+    });
+    expect(await stored(s.db, any.view.item.id)).toMatchObject({ resourceId: s.bo.id });
+    await s.caps.staff.archive(owner, s.bo.id);
+    // By name: no rule reads the time as free, nobody confirms it, and a person is asked to answer it.
+    const test = await s.caps.setup.testRule(owner, {
+      item_id: byName.view.item.id,
+      definition: {
+        on: ["item.created"],
+        if: { all: [{ fn: "slot_is_free" }] },
+        actions: [{ action: "transition", event: "confirm" }],
+        stop: false,
+        maxRunsPerItem: 1,
+      },
+    });
+    expect(test.facts).toMatchObject({ slotIsFree: false });
+    await expect(transitionItem(s.db, owner, { itemId: byName.view.item.id, event: "confirm" })).rejects.toMatchObject({
+      code: "slot_taken",
+      details: { staff: "not_here" },
+    });
+    const [flagged] = await s.db.orm.select().from(items).where(eq(items.id, byName.view.item.id));
+    expect((flagged?.flags as { needsHuman?: boolean } | undefined)?.needsHuman).toBe(true);
+    // For anyone, at ten nobody else works: taken, never with Bo.
+    await expect(transitionItem(s.db, owner, { itemId: any.view.item.id, event: "confirm" })).rejects.toMatchObject({
+      code: "slot_taken",
+      details: { staff: "nobody_free" },
+    });
+    expect(await stored(s.db, any.view.item.id)).toMatchObject({ resourceId: s.bo.id });
+    // Ana works at ten after all: it is confirmed with her.
+    await s.caps.staff.update(owner, { staff_id: s.ana.id, hours: null });
+    const done = await transitionItem(s.db, owner, { itemId: any.view.item.id, event: "confirm" });
+    expect(await stored(s.db, done.view.item.id)).toMatchObject({ resourceId: s.ana.id, staffName: "Ana" });
+  });
+
   it("take their own calendar's busy times off their own times only, and only their bookings go to it", async () => {
     const { db, caps, fade, mei, ravi } = await mapleAndFade();
     const written: { who: string; booking: OutboundBooking }[] = [];

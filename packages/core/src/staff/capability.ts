@@ -1,5 +1,5 @@
 import type { StaffMember } from "@surfingdog/spec";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { assertNoLeak, PUBLISHED } from "../access/leaks";
 import type { Weekly } from "../capabilities/availability";
@@ -7,9 +7,12 @@ import { currencySchema, weeklySchema } from "../capabilities/setup-types";
 import type { SetupSnapshot } from "../connectors/setup-snapshot";
 import type { Db } from "../db";
 import { ulid } from "../ids";
-import { business, resources, serviceResources, services } from "../schema/tables";
+import { business, items, resources, serviceResources, services } from "../schema/tables";
 import { type Caller, isCustomer, isPerson, nowOf } from "../write/caller";
 import { fromZod, WriteError } from "../write/errors";
+import { setFlags } from "../write/flags";
+import { appendThreadEntry } from "../write/thread";
+import { rowToItem } from "../write/views";
 import { cleanPhoto } from "./photo";
 import { knownServices, type StaffView, staffById, staffViews } from "./store";
 
@@ -170,7 +173,45 @@ export class StaffCapabilities {
     await this.db.orm.update(resources).set(sets).where(eq(resources.id, input.staff_id));
     if (input.services) await this.setServices(caller, input.staff_id, input.services, now);
     if (input.hours !== undefined) await this.setHours(input.staff_id, input.hours as Weekly | null, now);
+    if (stored.active && input.active === false) await this.askedOfOneWhoLeft(stored.name, input.staff_id, now);
     return this.view(input.staff_id);
+  }
+
+  /**
+   * Requests still open that a customer asked of someone by name who has now left: nobody confirms them
+   * with that person (`nobodyToTake`), a rule least of all, so a person is asked to answer each, once.
+   * Those for anyone go to whoever else is free when they are confirmed.
+   */
+  private async askedOfOneWhoLeft(name: string, staffId: string, now: number): Promise<void> {
+    const rows = await this.db.orm
+      .select()
+      .from(items)
+      .where(
+        and(
+          eq(items.type, "booking"),
+          inArray(items.state, ["requested", "needs_info", "proposed"]),
+          sql`json_extract(${items.payload}, '$.resourceId') = ${staffId}`,
+          sql`COALESCE(json_extract(${items.payload}, '$.anyStaff'), 0) <> 1`,
+        ),
+      )
+      .limit(200);
+    const system: Caller = {
+      actor: { kind: "system", id: "staff_archived", channel: "system" },
+      tier: "verified_principal",
+      sandbox: false,
+      now: () => now,
+    };
+    for (const row of rows) {
+      const item = rowToItem(row);
+      await appendThreadEntry(
+        this.db,
+        system,
+        item,
+        `${name} no longer works here, and this was asked with them. Decline it, or ask the customer to book with someone else.`,
+        "note",
+      );
+      await setFlags(this.db, system, { itemId: item.id, flags: { needsHuman: true } });
+    }
   }
 
   /** Someone who no longer works here: off every public list, their bookings kept as they are. */
