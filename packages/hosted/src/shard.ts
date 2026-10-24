@@ -32,6 +32,7 @@ import { Lru } from "./lru";
 import { lockedPage, neutralPage, notFound, unavailablePage, wantsHtml } from "./pages";
 import { validatePlan } from "./plan";
 import { archiveSandbox, probeDoors } from "./probe";
+import type { HostedModel } from "./spam";
 import { normalizePolicy, type PolicyPayload, policyPayloadSchema } from "./types";
 import { fileBytes, hasFirst, liveBytes, monthRange, usageOf } from "./usage";
 import type { Watchdog } from "./watchdog";
@@ -94,6 +95,8 @@ export interface ShardOptions {
   readonly watchdog?: Watchdog | undefined;
   readonly now?: (() => number) | undefined;
   readonly log?: ((line: string) => void) | undefined;
+  /** Our model for the spam filter's AI check, from the shard's environment (ADR-029 §7.2). */
+  readonly spamModel?: HostedModel | null | undefined;
 }
 
 export const DEFAULT_MAX_OPEN = 64;
@@ -253,6 +256,7 @@ export class Shard {
         onOwnerEmailChange: (change: OwnerEmailChange) =>
           this.event(id, change.how === "undone" ? "owner_email_undone" : "owner_email_changed", { to: change.to }),
         onMailSender: (type, data) => this.event(id, type, data),
+        spamModel: this.o.spamModel ?? null,
         now: this.o.now,
       });
       // Migrated and set as the policy says before anything is served or run.
@@ -902,7 +906,7 @@ export class Shard {
     return await this.withEntry(id, async (entry) => ({
       status: 200,
       body: {
-        ...(await usageOf(entry.db, range)),
+        ...(await usageOf(entry.db, range, this.now())),
         mail_sent: this.o.ledger.mailSent(id, m),
         db_bytes: fileBytes(this.dbPath(id)),
       },

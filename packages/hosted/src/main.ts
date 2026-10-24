@@ -23,6 +23,7 @@ import { serveRouter, serveShard } from "./server";
 import { Shard } from "./shard";
 import { signHeaders } from "./sign";
 import { jsonOf, socketRequest } from "./sockets";
+import { hostedModelFrom } from "./spam";
 import { startWatchdog } from "./watchdog";
 
 /**
@@ -95,6 +96,8 @@ async function runShard(c: HostedConfig, index: number): Promise<void> {
     ledger,
     transport: transportFrom(process.env),
     fetchImpl: pinnedFetch({ deny: [...c.deny] }),
+    // The spam filter's AI check: our model, its key in this process's environment only.
+    spamModel: hostedModelFrom(process.env, pinnedFetch({ deny: [...c.deny] })),
     clientDir: c.clientDir,
     oauth: { google: c.google },
     googleTesting: c.googleTesting,

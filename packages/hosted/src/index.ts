@@ -28,6 +28,7 @@ export * from "./server";
 export * from "./shard";
 export * from "./sign";
 export * from "./sockets";
+export * from "./spam";
 export * from "./types";
 export * from "./usage";
 export * from "./watchdog";

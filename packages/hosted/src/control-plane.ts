@@ -44,6 +44,10 @@ export const EVENT_TYPES = [
   "mail_sender_check",
   // SES stopped sending from the business's own address (`data.reason`): its mail went from ours.
   "mail_sender_failed",
+  // The spam filter's AI check for this inbox reached its cap (`data.cap`: day or month), or the
+  // runtime's own daily budget stopped every inbox's checks (ADR-029 §15.3).
+  "spam_cap_reached",
+  "spam_breaker",
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 

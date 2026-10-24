@@ -1,5 +1,5 @@
 import { existsSync, statSync } from "node:fs";
-import { type Db, PROMISE_STATES } from "@surfingdog/core";
+import { type Db, PROMISE_STATES, type SpamUsage, spamUsage } from "@surfingdog/core";
 
 /**
  * What an inbox did in a month, as counts: what it is counted by and what the control plane
@@ -14,7 +14,11 @@ import { type Db, PROMISE_STATES } from "@surfingdog/core";
  * - `confirmed_items`: bookings and orders that first reached a promise in the month (a booking
  *   confirmed, an order accepted);
  * - `mail_sent`: emails the ledger let go in the month;
- * - `db_bytes`: the inbox's file now, its write-ahead log included.
+ * - `db_bytes`: the inbox's file now, its write-ahead log included;
+ * - `spam`: the spam filter's month (ADR-029 §15.3): each filter's days on (what a hosted inbox is
+ *   charged by once billing is on: per inbox × filters switched on), its AI checks and their tokens
+ *   (what it costs to run), and what it put aside, held, labelled, let in and brought back. A request
+ *   held or put aside is not in `items` until a person or its sender lets it in.
  */
 export interface Usage {
   readonly confirmed_items: number;
@@ -22,6 +26,7 @@ export interface Usage {
   readonly agent_items: number;
   readonly mail_sent: number;
   readonly db_bytes: number;
+  readonly spam: SpamUsage;
 }
 
 export const AGENT_CHANNELS = ["rest", "mcp_public", "a2a", "ucp", "acp", "arp"] as const;
@@ -29,8 +34,9 @@ export const AGENT_CHANNELS = ["rest", "mcp_public", "a2a", "ucp", "acp", "arp"]
 /** The doors a request comes through from outside: the agents' doors and the people's. */
 export const REQUEST_CHANNELS = [...AGENT_CHANNELS, "email", "form", "action_link"] as const;
 
-/** A request as `items` counts it: real, sent through a customer's door, and not spam. */
-const REQUEST = `COALESCE(sandbox, 0) = 0 AND state <> 'spam' AND channel IN (${REQUEST_CHANNELS.map(() => "?").join(", ")})`;
+/** A request as `items` counts it: real, sent through a customer's door, and not spam, held or being screened. */
+const REQUEST = `COALESCE(sandbox, 0) = 0 AND state <> 'spam' AND COALESCE(screen, '') NOT IN ('pending', 'held', 'aside')
+  AND channel IN (${REQUEST_CHANNELS.map(() => "?").join(", ")})`;
 
 /** `YYYY-MM` as the first millisecond of the month and of the next, in UTC; null for anything else. */
 export function monthRange(month: string): { from: number; to: number } | null {
@@ -70,6 +76,7 @@ const PROMISED_PARAMS = [...PROMISE_STATES.booking, ...PROMISE_STATES.order];
 export async function usageOf(
   db: Db,
   range: { from: number; to: number },
+  now: number = Date.now(),
 ): Promise<Omit<Usage, "mail_sent" | "db_bytes">> {
   const one = async (sql: string, params: unknown[]): Promise<number> => {
     const { rows } = await db.client.query({ sql, params: params as never, method: "all" });
@@ -93,7 +100,7 @@ export async function usageOf(
      ) WHERE first >= ? AND first < ?`,
     [...PROMISED_PARAMS, range.from, range.to],
   );
-  return { confirmed_items: confirmed, items, agent_items: agentItems };
+  return { confirmed_items: confirmed, items, agent_items: agentItems, spam: await spamUsage(db, range, now) };
 }
 
 /** Whether the inbox holds any real item that reached a promise, or any real item an agent made. */

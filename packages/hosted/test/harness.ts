@@ -11,6 +11,7 @@ import { type Listening, serveRouter, serveShard } from "../src/server";
 import { Shard } from "../src/shard";
 import { signHeaders } from "../src/sign";
 import { jsonOf, socketRequest } from "../src/sockets";
+import type { HostedModel } from "../src/spam";
 import { levelOf, type PolicyPayload, type TenantState } from "../src/types";
 
 /**
@@ -66,6 +67,8 @@ export interface FakeTenant {
   noInbound?: boolean;
   /** Sending from the business's own address, as the control plane says it stands (ADR-026 §3). */
   own?: PolicyPayload["mail"]["own"];
+  /** The policy's `spam` block (ADR-029 §15.3), when the test names one. */
+  spam?: PolicyPayload["spam"];
 }
 
 let slugs = 0;
@@ -105,6 +108,7 @@ export function policyOf(t: FakeTenant): PolicyPayload {
     read_only: t.state === "closing" || t.state === "closed",
     suspended_reason: t.state === "suspended" ? "a test" : null,
     ...(t.joinNetworks ? { join_networks: t.joinNetworks } : {}),
+    ...(t.spam ? { spam: t.spam } : {}),
   };
 }
 
@@ -218,7 +222,17 @@ export interface Runtime {
 }
 
 export async function startRuntime(
-  o: { shards?: number; maxOpen?: number; maxTenantBytes?: number; client?: boolean; oauthRelayHost?: string } = {},
+  o: {
+    shards?: number;
+    maxOpen?: number;
+    maxTenantBytes?: number;
+    client?: boolean;
+    oauthRelayHost?: string;
+    /** Our model for the spam filter's AI check (ADR-029 §7.2); none by default. */
+    spamModel?: HostedModel | null;
+    /** Where the shards' log lines go; nowhere by default. */
+    log?: (line: string) => void;
+  } = {},
 ): Promise<Runtime> {
   const n = o.shards ?? 2;
   const dir = mkdtempSync(join(tmpdir(), "sdh-"));
@@ -274,7 +288,8 @@ export async function startRuntime(
       maxOpen: o.maxOpen,
       maxTenantBytes: o.maxTenantBytes,
       now,
-      log: () => {},
+      log: o.log ?? (() => {}),
+      spamModel: o.spamModel ?? null,
     });
     await shard.start();
     shards.push(shard);

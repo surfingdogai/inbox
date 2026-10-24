@@ -156,6 +156,28 @@ export const policyPayloadSchema = z.looseObject({
    * except by the admin call `POST /admin/v1/tenants/{id}/networks/join`.
    */
   join_networks: z.array(httpsOrigin).max(8).optional(),
+  /**
+   * The spam filter (ADR-029 §15.3): whether our AI may read for this inbox's filters (false until it
+   * is decided), which filters it may switch on, the caps on its AI checks, how Settings names who
+   * reads (null: in general words), and billing — off while hosted inboxes are free. Absent: every
+   * filter looks for known phrases only, and no AI is asked.
+   */
+  spam: z
+    .looseObject({
+      ai: z.boolean(),
+      filters: z.array(z.enum(["pitches", "scams", "junk"])).max(3),
+      day_cap: z.number().int().min(0).max(10_000),
+      month_cap: z.number().int().min(0).max(100_000),
+      reader: z.string().max(80).nullable(),
+      billing: z.enum(["off", "shadow", "on"]),
+      price: z
+        .looseObject({
+          currency: z.enum(["eur", "usd"]),
+          per_filter_month_minor: z.number().int().min(0),
+        })
+        .nullable(),
+    })
+    .optional(),
 });
 export type PolicyPayload = z.infer<typeof policyPayloadSchema>;
 

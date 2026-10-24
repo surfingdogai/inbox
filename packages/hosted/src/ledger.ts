@@ -38,6 +38,8 @@ CREATE INDEX IF NOT EXISTS blames_tenant ON blames (tenant_id, at);
 CREATE TABLE IF NOT EXISTS maintenance (tenant_id TEXT PRIMARY KEY, reason TEXT NOT NULL, since INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, type TEXT NOT NULL, at TEXT NOT NULL, data TEXT NOT NULL, tries INTEGER NOT NULL DEFAULT 0, next_at INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS events_due ON events (next_at);
+CREATE TABLE IF NOT EXISTS judge_day (day TEXT NOT NULL, tenant_id TEXT NOT NULL, n INTEGER NOT NULL, tokens_in INTEGER NOT NULL DEFAULT 0, tokens_out INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, tenant_id));
+CREATE TABLE IF NOT EXISTS judge_total_day (day TEXT PRIMARY KEY, tokens INTEGER NOT NULL);
 `;
 
 export const LEDGER_TABLES = [
@@ -50,6 +52,8 @@ export const LEDGER_TABLES = [
   "blames",
   "maintenance",
   "events",
+  "judge_day",
+  "judge_total_day",
 ] as const;
 
 const dayOf = (now: number) => new Date(now).toISOString().slice(0, 10);
@@ -188,6 +192,87 @@ export class Ledger {
         .run(monthOf(now), tenantId);
       return null;
     });
+  }
+
+  /**
+   * Whether this inbox may make one more AI check for the spam filter now (ADR-029 §15.3), and if so,
+   * counted before the call: within its day's and its month's caps, and the runtime's own token budget
+   * for the day across every inbox here. What a copied tenant file says it spent changes nothing here.
+   * `tenant` and `breaker` say which cap refused it, told to the control plane once a day each.
+   */
+  reserveJudge(
+    tenantId: string,
+    caps: { readonly day: number; readonly month: number; readonly dailyTokens: number },
+  ): "ok" | "tenant" | "breaker" {
+    const now = this.now();
+    const day = dayOf(now);
+    const month = monthOf(now);
+    return this.tx(() => {
+      const total = this.db.prepare("SELECT tokens FROM judge_total_day WHERE day = ?").get(day) as
+        | { tokens: number }
+        | undefined;
+      if ((total?.tokens ?? 0) >= caps.dailyTokens) {
+        this.tellOnce(tenantId, "spam_breaker", day, { day });
+        return "breaker";
+      }
+      const today = this.db.prepare("SELECT n FROM judge_day WHERE day = ? AND tenant_id = ?").get(day, tenantId) as
+        | { n: number }
+        | undefined;
+      const thisMonth = this.db
+        .prepare("SELECT COALESCE(SUM(n), 0) AS n FROM judge_day WHERE day LIKE ? AND tenant_id = ?")
+        .get(`${month}-%`, tenantId) as { n: number };
+      if ((today?.n ?? 0) >= caps.day || thisMonth.n >= caps.month) {
+        this.tellOnce(tenantId, "spam_cap_reached", day, { cap: (today?.n ?? 0) >= caps.day ? "day" : "month" });
+        return "tenant";
+      }
+      this.db
+        .prepare(
+          "INSERT INTO judge_day (day, tenant_id, n) VALUES (?, ?, 1) ON CONFLICT (day, tenant_id) DO UPDATE SET n = n + 1",
+        )
+        .run(day, tenantId);
+      return "ok";
+    });
+  }
+
+  /** The tokens one AI check used, for the inbox and for the runtime's own day. */
+  recordJudge(tenantId: string, tokensIn: number, tokensOut: number): void {
+    const day = dayOf(this.now());
+    this.tx(() => {
+      this.db
+        .prepare(
+          "UPDATE judge_day SET tokens_in = tokens_in + ?, tokens_out = tokens_out + ? WHERE day = ? AND tenant_id = ?",
+        )
+        .run(tokensIn, tokensOut, day, tenantId);
+      this.db
+        .prepare(
+          "INSERT INTO judge_total_day (day, tokens) VALUES (?, ?) ON CONFLICT (day) DO UPDATE SET tokens = tokens + excluded.tokens",
+        )
+        .run(day, tokensIn + tokensOut);
+    });
+  }
+
+  /** The AI checks one inbox made in a month, and their tokens, as the ledger counted them. */
+  judged(
+    tenantId: string,
+    month: string,
+  ): { readonly n: number; readonly tokens_in: number; readonly tokens_out: number } {
+    const r = this.db
+      .prepare(
+        "SELECT COALESCE(SUM(n), 0) AS n, COALESCE(SUM(tokens_in), 0) AS tin, COALESCE(SUM(tokens_out), 0) AS tout FROM judge_day WHERE day LIKE ? AND tenant_id = ?",
+      )
+      .get(`${month}-%`, tenantId) as { n: number; tin: number; tout: number };
+    return { n: r.n, tokens_in: r.tin, tokens_out: r.tout };
+  }
+
+  /** One event to the control plane per kind, inbox and day. */
+  private tellOnce(tenantId: string, type: string, day: string, data: Record<string, unknown>): void {
+    const seen = this.db
+      .prepare("SELECT 1 FROM events WHERE tenant_id = ? AND type = ? AND at LIKE ?")
+      .get(tenantId, type, `${day}%`);
+    if (seen) return;
+    this.db
+      .prepare("INSERT INTO events (tenant_id, type, at, data, tries, next_at) VALUES (?, ?, ?, ?, 0, ?)")
+      .run(tenantId, type, new Date(this.now()).toISOString(), JSON.stringify(data), this.now());
   }
 
   suppress(address: string, reason: string): void {

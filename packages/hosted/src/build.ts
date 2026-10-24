@@ -15,6 +15,7 @@ import { type MailOut, pinnedMailOut } from "@surfingdog/platform";
 import { type NodeSqliteClient, nodeSnapshot } from "@surfingdog/platform/node";
 import type { SenderFallback } from "./config";
 import type { Ledger } from "./ledger";
+import { type HostedModel, spamHostPolicy, tenantJudge } from "./spam";
 import type { PolicyPayload } from "./types";
 
 /**
@@ -81,6 +82,8 @@ export interface BuildDeps {
   readonly pushRegistrar?: RelayRegistrar | undefined;
   /** For the internal test as an agent only: the doors open whatever the policy says. Never served. */
   readonly agentsOpen?: boolean | undefined;
+  /** Our model for the spam filter's AI check (ADR-029 §7.2), from the shard's environment; null for none. */
+  readonly spamModel?: HostedModel | null | undefined;
   readonly now?: (() => number) | undefined;
 }
 
@@ -195,6 +198,16 @@ export function buildInbox(d: BuildDeps): Inbox {
     googleTesting: d.googleTesting,
     pushRegistrar: d.pushRegistrar,
     now: d.now,
+    // The spam filter: our model, behind the ledger's caps, only where the policy lets our AI read.
+    spam: {
+      host: spamHostPolicy(p),
+      judge: tenantJudge({
+        model: d.spamModel ?? null,
+        ledger: d.ledger,
+        tenantId: d.tenantId,
+        policy: spamHostPolicy(p),
+      }),
+    },
   });
   inbox.caps.email.attachHost(tenantEmailHost(p, d.onMailSender), Boolean(p.mail.inbound));
   if (d.clientDir) {
