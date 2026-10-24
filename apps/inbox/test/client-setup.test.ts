@@ -245,6 +245,16 @@ describe("the setup wizard's staff", () => {
       { name: "김지우", sort: 3, public_name: "지우", services: [] },
       { name: "Amara Nwosu", sort: 4, services: [] },
     ]);
+    // Kept already, then its name to show emptied: back to the default, not the old name.
+    expect(
+      staffBodies([
+        { name: "Nguyễn Thu Hà", shown: "", services: [], saved: "01STAFF" },
+        { name: "María José Ruiz", shown: "María José", services: [], saved: "01STAFF2" },
+      ]),
+    ).toEqual([
+      { name: "Nguyễn Thu Hà", sort: 0, public_name: null, services: [] },
+      { name: "María José Ruiz", sort: 1, public_name: "María José", services: [] },
+    ]);
   });
 
   it("gives everyone not yet picked for every service offered, as the list of them arrives", () => {

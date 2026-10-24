@@ -31,7 +31,9 @@ const staffServiceSchema = z.object({
     .min(0)
     .nullable()
     .optional()
-    .describe("Minor units, for the whole booking; null: the service's price."),
+    .describe(
+      "Minor units, as the service's own price is: for the whole booking, or for each person on a service priced per person; null: the service's price.",
+    ),
   duration_override_min: z.number().int().min(5).max(1440).nullable().optional(),
 });
 
@@ -43,7 +45,9 @@ export const staffInput = z.object({
     .min(1)
     .max(60)
     .optional()
-    .describe("What customers see: a first name. Default: the first word of name."),
+    .describe(
+      "What customers see, kept as written: a first name, or the name they work under. Default: the first word of name.",
+    ),
   photo: z
     .string()
     .max(60_000)

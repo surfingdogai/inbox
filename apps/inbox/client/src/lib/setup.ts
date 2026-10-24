@@ -172,7 +172,8 @@ export function wizardSteps(kind: SetupKind | undefined): readonly WizardStep[] 
 
 /**
  * The people a salon named at setup, as the staff they are saved as (ADR-035): each named one, in the
- * order added, with the services they give, and the name clients see when the owner changed it.
+ * order added, with the services they give, and the name clients see when the owner changed it. One
+ * kept already whose name to show was emptied goes back to the default (`null`; a new one leaves it out).
  * Prices, lengths, photos and hours are Settings' to add.
  */
 export function staffBodies(
@@ -180,14 +181,15 @@ export function staffBodies(
     readonly name: string;
     readonly services: readonly string[];
     readonly shown?: string | undefined;
+    readonly saved?: string | undefined;
   }[],
-): { name: string; sort: number; public_name?: string; services: { service_id: string }[] }[] {
+): { name: string; sort: number; public_name?: string | null; services: { service_id: string }[] }[] {
   return people
     .filter((p) => p.name.trim())
     .map((p, i) => ({
       name: p.name.trim(),
       sort: i,
-      ...(p.shown?.trim() ? { public_name: p.shown.trim() } : {}),
+      ...(p.shown?.trim() ? { public_name: p.shown.trim() } : p.saved ? { public_name: null } : {}),
       services: p.services.map((id) => ({ service_id: id })),
     }));
 }

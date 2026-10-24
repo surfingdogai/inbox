@@ -21,20 +21,22 @@ salon's own credentials can be used with.
 
 - `resources` gains `kind` (`staff` | `table` | `room` | `vehicle` | `equipment`), `public_name`, a
   small `photo`, `sort`, and `external_id`/`source` for those a salon's system sent in.
-- **Customers see a first name only**: `public_name`, else the first word of the name the owner knows
-  them by (where names are written family name first, or without spaces, the owner says the name
-  customers see: the setup wizard and Settings show it beside each name). Never a surname, hours or
-  anything else. `list_staff` (MCP and `GET /v1/staff`) gives the name, a photo and
-  the services each gives, and is offered only once the business lists staff.
+- **Customers see a first name only**: `public_name`, kept as the owner wrote it (a given name of two
+  words, "Thu Hà" or "María José", stays whole), else the first word of the name the owner knows them
+  by (where names are written family name first, or without spaces, the owner says the name customers
+  see: the setup wizard and Settings show it beside each name). Never a surname, hours or anything
+  else. `list_staff` (MCP and `GET /v1/staff`) gives the name, a photo and the services each gives, and
+  is offered only once the business lists staff.
 - **A photo** is a JPEG of at most 32 KB the owner app draws at 320 pixels at most, kept as a data URL.
   The inbox reads it again before keeping it: it must be a well-formed JPEG, and every segment that can
   carry metadata (EXIF and its GPS block, XMP, ICC, comments, thumbnails) is taken out. It is served at
   its own address with `nosniff` and a sandbox CSP, and not once the person is off the list. (Blob
   storage for attachments arrives with the trades track; a staff photo moves there then.)
 - `service_resources` ties a member of staff to each service they give, with their own price (minor
-  units, for the whole booking) and length when they are not the service's. Their price is money: the
-  owner's in person, never the owner's AI's, which may not untie them from a service that carries it
-  either (tied again, they would be at the service's price).
+  units, as the service's own price is: for the whole booking, or for each person on a service priced
+  per person) and length when they are not the service's. Their price is money: the owner's in person,
+  never the owner's AI's, which may not untie them from a service that carries it either (tied again,
+  they would be at the service's price).
 - **Their own hours** are an `availability_rules` row with their `resource_id`; without one they work the
   business's (or the service's) hours. Such rows are never read as the business's hours, closures or
   published hours.

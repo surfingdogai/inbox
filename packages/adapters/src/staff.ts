@@ -155,7 +155,7 @@ export function staffOwnerRoutes(
       tags: ["setup"],
       summary: "Add a member of staff",
       description:
-        "Customers see only public_name (a first name) and the photo. A member of staff's own price for a service is the owner's in person: the owner's AI is refused (403).",
+        "Customers see only public_name (kept as written; default: the first word of name) and the photo. A member of staff's own price for a service is the owner's in person: the owner's AI is refused (403).",
       responses: json("Member of staff", 201),
       write: true,
     }),

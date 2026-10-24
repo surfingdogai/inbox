@@ -20,6 +20,7 @@ export {
   firstName,
   hasStaff,
   isStaffed,
+  publicNameOf,
   readStaff,
   type StaffRow,
   type StaffService,

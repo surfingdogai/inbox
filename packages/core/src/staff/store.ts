@@ -12,7 +12,10 @@ import { availabilityRules, connectors, resources, serviceResources, services } 
 
 export interface StaffService {
   readonly serviceId: string;
-  /** Minor units, for the whole booking; null: the service's own price. */
+  /**
+   * Minor units, as the service's own price is: for the whole booking, or for each person on a service
+   * priced per person; null: the service's own price.
+   */
   readonly priceOverride: number | null;
   /** Null: the service's own length. */
   readonly durationOverrideMin: number | null;
@@ -42,12 +45,21 @@ export interface StaffView extends StaffRow {
 }
 
 /**
- * The name customers see: the first word of the name the owner chose to show, else of their own name,
- * at most 60 characters. "Mei Chen" is "Mei"; "Ọláolúwa" stays itself.
+ * The first word of a name, at most 60 characters: what customers see of someone by default. "Mei Chen"
+ * is "Mei"; "Ọláolúwa" stays itself.
  */
 export function firstName(name: string): string {
   const word = name.trim().split(/\s+/u)[0] ?? "";
   return Array.from(word).slice(0, 60).join("") || "Staff";
+}
+
+/**
+ * The name customers see: the one the owner chose to show, as they wrote it (a given name of two words,
+ * "Thu Hà" or "María José", stays whole), else the first word of their own name.
+ */
+export function publicNameOf(name: string, chosen: string | null | undefined): string {
+  const shown = chosen?.trim();
+  return shown ? Array.from(shown).slice(0, 60).join("") : firstName(name);
 }
 
 type ResourceRow = typeof resources.$inferSelect;
@@ -56,7 +68,7 @@ function rowOf(r: ResourceRow): StaffRow {
   return {
     id: r.id,
     name: r.name,
-    publicName: firstName(r.publicName?.trim() || r.name),
+    publicName: publicNameOf(r.name, r.publicName),
     kind: r.kind,
     photo: r.photo,
     active: r.active === 1,

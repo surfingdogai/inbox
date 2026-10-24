@@ -143,6 +143,18 @@ describe("staff", () => {
     expect(page.items[0]).not.toHaveProperty("source");
   });
 
+  it("are shown by the name the owner chose, whole, else the first word of their own", async () => {
+    const s = await salon({ name: "Ìfẹ́ Beauty Studio", zone: "Africa/Lagos", currency: "NGN", languages: ["en"] });
+    const thu = await s.caps.staff.create(owner, { name: "Nguyễn Thu Hà", public_name: "Thu Hà" });
+    const maria = await s.caps.staff.create(owner, { name: "María José Ruiz" });
+    expect([thu.publicName, maria.publicName]).toEqual(["Thu Hà", "María"]);
+    const named = await s.caps.staff.update(owner, { staff_id: maria.id, public_name: "María José" });
+    expect(named.publicName).toBe("María José");
+    // Emptied: the first word again.
+    const plain = await s.caps.staff.update(owner, { staff_id: thu.id, public_name: null });
+    expect(plain.publicName).toBe("Nguyễn");
+  });
+
   it("each have their own hours and length, and anyone means whoever is free", async () => {
     const { caps, fade, mei, ravi } = await mapleAndFade();
     const any = await caps.checkAvailability(
@@ -665,6 +677,30 @@ describe("staff", () => {
     expect("photo" in kept && atob(kept.photo.split(",")[1] ?? "")).not.toContain("GPS");
     expect(cleanPhoto("data:image/png;base64,iVBORw0KGgo=")).toEqual({ problem: "not_jpeg" });
     expect(cleanPhoto(`data:image/jpeg;base64,${btoa("not a jpeg at all")}`)).toEqual({ problem: "not_jpeg" });
+  });
+
+  it("charge their own price as the service's is: each person, on a service priced per person", async () => {
+    const s = await salon({ name: "Glow Room", zone: "America/Toronto", currency: "CAD", languages: ["en"] });
+    const bridal = await s.caps.setup.createService(
+      owner,
+      serviceInput.parse({
+        name: "Bridal makeup",
+        duration_min: 60,
+        granularity_min: 30,
+        price: { model: "fixed", value: 8000, currency: "CAD", per: "person" },
+      }),
+    );
+    const lena = await s.caps.staff.create(owner, {
+      name: "Lena",
+      services: [{ service_id: bridal.id, price_override: 20000 }],
+    });
+    const r = await s.caps.createBooking(agent(), {
+      payload: { ...booking(bridal.id, "Bridal makeup", at("14:00"), at("15:00")), partySize: 3 },
+      staff_id: lena.id,
+      contact: { name: "Ananya" },
+      idempotency_key: "bridal-3",
+    });
+    expect((await stored(s.db, r.view.item.id)).totalPrice).toEqual({ value: 60000, currency: "CAD" });
   });
 
   it("are the owner's: the owner's AI may tie them to services, never set their price", async () => {

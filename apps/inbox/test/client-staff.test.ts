@@ -6,6 +6,7 @@ import {
   POLICY_PRESETS,
   policyKey,
   policyWords,
+  shownName,
 } from "../client/src/lib/staff";
 
 /**
@@ -104,5 +105,14 @@ describe("a booking's dated policy", () => {
     expect(datedSteps({ ...dated, steps: [] }, money, when, { depositKept: true })[0]).toBe(
       "Cancelling keeps the deposit",
     );
+  });
+});
+
+describe("the name customers see", () => {
+  it("is the one the owner chose, whole, else the first word of the name", () => {
+    expect(shownName("Nguyễn Thu Hà", "Thu Hà")).toBe("Thu Hà");
+    expect(shownName("María José Ruiz", " María José ")).toBe("María José");
+    expect(shownName("Mei Chen")).toBe("Mei");
+    expect(shownName("Mei Chen", " ")).toBe("Mei");
   });
 });

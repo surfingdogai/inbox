@@ -87,10 +87,11 @@ export function initials(name: string): string {
   return `${first}${last}`.toUpperCase();
 }
 
-/** The name customers see: the first word, as the inbox reads it (core `firstName`). */
+/** The name customers see, as the inbox reads it (core `publicNameOf`): the one chosen, whole, else the first word. */
 export function shownName(name: string, publicName?: string | null): string {
-  const word = (publicName?.trim() || name).trim().split(/\s+/u)[0] ?? "";
-  return word || "Staff";
+  const chosen = publicName?.trim();
+  if (chosen) return chosen;
+  return name.trim().split(/\s+/u)[0] || "Staff";
 }
 
 /**
