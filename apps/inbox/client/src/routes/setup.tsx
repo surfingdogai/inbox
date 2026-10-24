@@ -42,7 +42,7 @@ import {
   wizardPreset,
   wizardSteps,
 } from "../lib/setup";
-import { useStaff, useStaffWrite } from "../lib/staff";
+import { shownName, useStaff, useStaffWrite } from "../lib/staff";
 import type { Weekly } from "../lib/types";
 
 export const Route = createFileRoute("/setup")({
@@ -136,6 +136,8 @@ interface Offer {
 interface Person {
   readonly id: number;
   name: string;
+  /** The name clients see, when the owner changed it from the first word of `name`. */
+  shown?: string;
   services: readonly string[];
   picked?: boolean;
   saved?: string;
@@ -354,9 +356,15 @@ function SetupWizard() {
         </button>
       </div>
 
-      <ol className="steps" aria-label="Setup steps">
+      {/* Seven steps do not fit with their labels: the dots, and the current one's label. */}
+      <ol className={clsx("steps", steps.length > 6 && "steps-compact")} aria-label="Setup steps">
         {steps.map(({ id, label }, i) => (
-          <li key={id} className={clsx("stepdot", i === step && "is-now", i < step && "is-done")}>
+          <li
+            key={id}
+            className={clsx("stepdot", i === step && "is-now", i < step && "is-done")}
+            title={label}
+            aria-current={i === step ? "step" : undefined}
+          >
             <span className="n">{i < step ? <Check className="icon" aria-hidden="true" /> : i + 1}</span>
             <span className="l">{label}</span>
           </li>
@@ -560,23 +568,41 @@ function SetupWizard() {
           <>
             <h2 className="sec">Who works here?</h2>
             <p className="lede small">
-              The people clients book by name, and what each gives. Clients see a first name. Their own prices, hours
-              and photos are in Settings, under Staff.
+              The people clients book by name, and what each gives. Clients see the first word of a name unless you
+              change it. Their own prices, hours and photos are in Settings, under Staff.
             </p>
             <div className="stack">
               {people.map((p) => (
                 <div className="offer person row-glass" key={p.id}>
-                  <Field id={`su-s-${p.id}`} label="Name">
-                    <input
-                      id={`su-s-${p.id}`}
-                      className="input"
-                      value={p.name}
-                      placeholder="Mei Chen"
-                      onChange={(e) =>
-                        setPeople((all) => all.map((x) => (x.id === p.id ? { ...x, name: e.target.value } : x)))
-                      }
-                    />
-                  </Field>
+                  <div className="grid2">
+                    <Field id={`su-s-${p.id}`} label="Name">
+                      <input
+                        id={`su-s-${p.id}`}
+                        className="input"
+                        value={p.name}
+                        placeholder="Mei Chen"
+                        onChange={(e) =>
+                          setPeople((all) => all.map((x) => (x.id === p.id ? { ...x, name: e.target.value } : x)))
+                        }
+                      />
+                    </Field>
+                    <Field
+                      id={`su-sn-${p.id}`}
+                      label="Clients see"
+                      hint={p.name.trim() && !p.shown?.trim() ? `Default: ${shownName(p.name)}.` : undefined}
+                    >
+                      <input
+                        id={`su-sn-${p.id}`}
+                        className="input"
+                        value={p.shown ?? ""}
+                        maxLength={60}
+                        placeholder={p.name.trim() ? shownName(p.name) : ""}
+                        onChange={(e) =>
+                          setPeople((all) => all.map((x) => (x.id === p.id ? { ...x, shown: e.target.value } : x)))
+                        }
+                      />
+                    </Field>
+                  </div>
                   {people.length > 1 && !p.saved && (
                     <button
                       type="button"

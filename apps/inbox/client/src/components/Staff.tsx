@@ -377,7 +377,11 @@ function StaffEditor({
           </button>
         )}
         <div className="grid2 staff-names">
-          <Field id={`${id}-name`} label="Their name" hint="Only you see it.">
+          <Field
+            id={`${id}-name`}
+            label="Their name"
+            hint="Customers see its first word, unless you set what they see."
+          >
             <input
               id={`${id}-name`}
               className="input"
@@ -387,13 +391,17 @@ function StaffEditor({
               onChange={(e) => setName(e.target.value)}
             />
           </Field>
-          <Field id={`${id}-shown`} label="Customers see" hint={`Default: ${shownName(name || "Mei")}.`}>
+          <Field
+            id={`${id}-shown`}
+            label="Customers see"
+            hint={name.trim() && !shown.trim() ? `Default: ${shownName(name)}.` : undefined}
+          >
             <input
               id={`${id}-shown`}
               className="input"
               value={shown}
               maxLength={60}
-              placeholder={shownName(name || "Mei")}
+              placeholder={name.trim() ? shownName(name) : ""}
               onChange={(e) => setShown(e.target.value)}
             />
           </Field>
@@ -483,6 +491,7 @@ function StaffEditor({
       </Switch>
       {ownHours && (
         <HoursEditor
+          person
           initial={hours}
           unset={!initial?.hours}
           title="When they work"

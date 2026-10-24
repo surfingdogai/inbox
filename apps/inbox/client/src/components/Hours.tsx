@@ -80,6 +80,7 @@ export function HoursEditor({
   hint,
   unset,
   note,
+  person = false,
   pending,
   error,
   onSave,
@@ -87,6 +88,8 @@ export function HoursEditor({
 }: {
   initial: Weekly;
   title: string;
+  /** One member of staff's hours: their days on or off, never "open all the time" or a 24-hour day. */
+  person?: boolean | undefined;
   hint?: ReactNode;
   /** Nothing saved yet: the grid starts empty, and says so. */
   unset?: boolean | undefined;
@@ -140,7 +143,7 @@ export function HoursEditor({
       </div>
       <fieldset className="chips presets">
         <legend className="sr-only">Quick starts</legend>
-        {HOURS_PRESETS.map((p) => (
+        {HOURS_PRESETS.filter((p) => !person || p.key !== "always").map((p) => (
           <button
             key={p.key}
             type="button"
@@ -174,7 +177,7 @@ export function HoursEditor({
                   <span className="hours-label">{label}</span>
                 </Switch>
                 <div className="hours-windows">
-                  {!open && <span className="hint hours-closed">Closed</span>}
+                  {!open && <span className="hint hours-closed">{person ? "Off" : "Closed"}</span>}
                   {open && allDay && <span className="hours-summary">Open 24 hours</span>}
                   {open &&
                     !allDay &&
@@ -241,15 +244,17 @@ export function HoursEditor({
                 </div>
                 {open && (
                   <span className="hours-end">
-                    <button
-                      type="button"
-                      className="chip chip-toggle"
-                      aria-pressed={allDay}
-                      aria-label={`${label}: open 24 hours`}
-                      onClick={() => setDay(key, [row(allDay ? DEFAULT_WINDOW : ALL_DAY)])}
-                    >
-                      24 h
-                    </button>
+                    {!person && (
+                      <button
+                        type="button"
+                        className="chip chip-toggle"
+                        aria-pressed={allDay}
+                        aria-label={`${label}: open 24 hours`}
+                        onClick={() => setDay(key, [row(allDay ? DEFAULT_WINDOW : ALL_DAY)])}
+                      >
+                        24 h
+                      </button>
+                    )}
                     {key === firstOpen && (
                       <button
                         type="button"

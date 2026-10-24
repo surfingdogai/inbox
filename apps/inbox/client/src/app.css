@@ -118,6 +118,8 @@ a {
   max-width: 900px;
   margin: 0 auto;
   display: grid;
+  /* One column no wider than the page: a long row inside never widens the page past the screen. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   align-content: start;
 }
@@ -1369,6 +1371,16 @@ textarea.json-editor {
 .stepdot.is-done .n {
   border-color: transparent;
   background: color-mix(in oklab, var(--good, var(--ink)) 18%, transparent);
+}
+/* Seven steps (a salon's): the dots, and the current step's label beside its dot. */
+.steps-compact .stepdot {
+  flex: 0 0 auto;
+}
+.steps-compact .stepdot:not(.is-now) .l {
+  display: none;
+}
+.steps-compact .stepdot.is-now {
+  flex: 0 1 auto;
 }
 @media (max-width: 620px) {
   .stepdot .l {

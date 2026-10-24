@@ -142,7 +142,7 @@ export const KINDS: readonly SetupKind[] = [
   {
     key: "salon",
     label: "A salon or barber",
-    line: "Hair, nails, beauty: staff people book by name.",
+    line: "Hair, nails, beauty: clients book a stylist by name.",
     preset: "salon",
     doors: { booking: true, quoteRequest: false, message: true },
     connect: ["booking", "calendars"],
@@ -172,14 +172,24 @@ export function wizardSteps(kind: SetupKind | undefined): readonly WizardStep[] 
 
 /**
  * The people a salon named at setup, as the staff they are saved as (ADR-035): each named one, in the
- * order added, with the services they give. Prices, lengths, photos and hours are Settings' to add.
+ * order added, with the services they give, and the name clients see when the owner changed it.
+ * Prices, lengths, photos and hours are Settings' to add.
  */
 export function staffBodies(
-  people: readonly { readonly name: string; readonly services: readonly string[] }[],
-): { name: string; sort: number; services: { service_id: string }[] }[] {
+  people: readonly {
+    readonly name: string;
+    readonly services: readonly string[];
+    readonly shown?: string | undefined;
+  }[],
+): { name: string; sort: number; public_name?: string; services: { service_id: string }[] }[] {
   return people
     .filter((p) => p.name.trim())
-    .map((p, i) => ({ name: p.name.trim(), sort: i, services: p.services.map((id) => ({ service_id: id })) }));
+    .map((p, i) => ({
+      name: p.name.trim(),
+      sort: i,
+      ...(p.shown?.trim() ? { public_name: p.shown.trim() } : {}),
+      services: p.services.map((id) => ({ service_id: id })),
+    }));
 }
 
 /**

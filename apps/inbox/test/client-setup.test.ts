@@ -233,10 +233,17 @@ describe("the setup wizard's staff", () => {
         { name: " Ọláolúwa Bello ", services: ["svc-cut", "svc-colour"] },
         { name: " ", services: ["svc-cut"] },
         { name: "Kenji", services: [] },
+        // Family name first, or written without a space: the owner says what clients see.
+        { name: "Nguyễn Thu Hà", shown: " Hà ", services: [] },
+        { name: "김지우", shown: "지우", services: [] },
+        { name: "Amara Nwosu", shown: " ", services: [] },
       ]),
     ).toEqual([
       { name: "Ọláolúwa Bello", sort: 0, services: [{ service_id: "svc-cut" }, { service_id: "svc-colour" }] },
       { name: "Kenji", sort: 1, services: [] },
+      { name: "Nguyễn Thu Hà", sort: 2, public_name: "Hà", services: [] },
+      { name: "김지우", sort: 3, public_name: "지우", services: [] },
+      { name: "Amara Nwosu", sort: 4, services: [] },
     ]);
   });
 
