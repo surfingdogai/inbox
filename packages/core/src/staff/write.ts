@@ -172,8 +172,9 @@ export async function writeFirstForPerson(
   if (!hold || hold.outcome === "written") return { wrote: null };
   if (awaitingSystem(hold)) throw systemFirstRefusal(hold, { forOwner: true });
   // Taken here already: refused as the confirm would refuse it, and nothing is written there, so the
-  // salon's diary never shows a booking that was cancelled the moment it was made.
-  if (!(await slotClaimable(db, item))) {
+  // salon's diary never shows a booking that was cancelled the moment it was made. A time we proposed is
+  // the one confirmed and written (`writeFirstBooking`), so that time is the one checked.
+  if (!(await slotClaimable(db, { id: item.id, payload: timeToWrite(item) as typeof item.payload }))) {
     throw new WriteError(
       "slot_taken",
       `that time is fully booked here, so nothing was written to ${hold.title}. Propose another time, or decline it.`,
@@ -210,6 +211,15 @@ export async function writeFirstForPerson(
     case "busy":
       throw systemFirstRefusal({ ...hold, outcome: "pending" }, { forOwner: true });
   }
+}
+
+/** The booking as it will be confirmed: at the time we proposed, when the customer was offered one. */
+function timeToWrite(item: { readonly state: string; readonly payload: unknown }): Record<string, unknown> {
+  const payload = item.payload as Record<string, unknown>;
+  const proposed = payload.proposed as { startTime?: unknown; endTime?: unknown } | undefined;
+  if (item.state !== "proposed" || typeof proposed?.startTime !== "string" || typeof proposed.endTime !== "string")
+    return payload;
+  return { ...payload, startTime: proposed.startTime, endTime: proposed.endTime };
 }
 
 async function systemOf(

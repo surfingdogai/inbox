@@ -612,6 +612,28 @@ describe("Phorest, nothing else confirms first", () => {
     expect([...ph.bookings.values()].map((b) => [b.start, b.status])).toEqual([["2026-11-04T18:00:00.000Z", "ACTIVE"]]);
   });
 
+  it("the owner's confirm writes the time they proposed, when the time first asked for is taken here", async () => {
+    const { db, caps, ph, mei, request } = await withRules();
+    // 17:00 is taken here for Mei: never written to Phorest, and a person answers.
+    await db.client.query({
+      sql: "INSERT INTO slot_claims (resource_key, bucket_start, ordinal, item_id, offer_id) VALUES (?, ?, 0, 'walk-in', '')",
+      params: [`resource:${mei.id}`, Date.parse("2026-11-04T17:00:00Z")],
+      method: "run",
+    });
+    const r = await request("prop-1");
+    expect(await stateOf(db, r.view.item.id)).toEqual({ state: "requested", needsHuman: true });
+    // The owner proposes 18:00, which is free, and the customer says yes by phone: 18:00 is checked and
+    // written, never the time first asked for.
+    await caps.transitionItem(owner, {
+      item_id: r.view.item.id,
+      event: "propose",
+      input: { startTime: "2026-11-04T18:00:00Z", endTime: "2026-11-04T18:45:00Z" },
+    });
+    const done = await caps.transitionItem(owner, { item_id: r.view.item.id, event: "confirm" });
+    expect(done.view.item.state).toBe("confirmed");
+    expect([...ph.bookings.values()].map((b) => [b.start, b.status])).toEqual([["2026-11-04T18:00:00.000Z", "ACTIVE"]]);
+  });
+
   it("never gives an anyone booking Phorest holds to someone else here: the time taken is refused", async () => {
     const { db, caps, ph, fade, mei } = await withRules();
     // Mei and Ravi on the same terms, so the inbox could have given it to either.
