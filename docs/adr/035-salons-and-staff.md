@@ -61,8 +61,13 @@ salon's own credentials can be used with.
   asked on; free only with someone on other terms, the owner is told so when they confirm it ("nobody at
   the price and length it was asked at is free then; Ravi is, at their own"), never that nobody is free,
   and proposes that time to them with that person's terms. A booking always carries who it is with and
-  their first name, and its end follows their length, whatever the request said. One the salon's own
-  system holds with someone keeps that person (§6): another time is offered only when they are free.
+  their first name, and its end follows their length, whatever the request said: a time proposed with
+  someone ends at least where their own length does, whatever end was typed, and one the owner's AI
+  proposes at another length than the catalogue's for that person is a draft for the owner. One the
+  salon's own system holds with someone keeps that person (§6): another time is offered, and the
+  customer's own other time taken, only when they are free. While a proposed time waits for the
+  customer, the owner's screens (the booking's "With", the day by staff) show it where it would be: at
+  that time, "proposed with" whoever it goes with.
 - Someone who leaves is archived, and their bookings stay as they are; nobody confirms a request with
   them, a rule least of all. One asked of them by name is marked for a person; one for anyone goes to
   whoever else is free on the same terms, else is a taken time.
@@ -137,9 +142,15 @@ salon's own credentials can be used with.
   request nobody confirmed costs nothing to cancel, however it is recorded.
 - When the customer asked is the owner's to say, or their message's: a person may type it; the owner's AI
   names the customer's message on the booking (`entryId`), or it is now. A time it types is refused: it
-  would waive a fee or keep a deposit on words nobody can check.
+  would waive a fee or keep a deposit on words nobody can check. The message it names is the latest the
+  customer sent us, on anything: an older one (a question about parking, weeks before) would date what
+  they say now by words about something else, and is refused, for withdrawals as for cancels. The
+  owner's note names the message it rests on and when it came, and, where it costs less than it would
+  dated now, says so and marks the booking for a person to check it.
 - What was paid is read one way everywhere: a payment recorded with a reference and no amount is the
-  deposit while one is still to pay (taken at the desk), and the whole price once it is paid. The fee, a
+  deposit while one is still to pay (taken at the desk), and the whole price once it is paid. Told again
+  under the same reference with its amount, that amount is taken in its place (beside what was paid
+  before it); told again as it was, it is the same payment, counted once. The fee, a
   kept deposit, the quote the customer confirms, the refund it opens, the deposit still to ask for and the
   booking screen all agree, and the owner's payment form starts from the deposit still to pay and says
   what a blank amount counts as.
@@ -171,7 +182,9 @@ salon's own credentials can be used with.
 - **Only the system's answer confirms such a booking** (the `system_first` guard in `transitionItem`): no
   rule, no owner's AI and no key, and nobody while the answer is on its way. A person's confirm is written
   there first and stands on the answer, once the time is checked here (a time taken here is refused and
-  nothing is written); a customer's yes to another time we proposed goes to a person.
+  nothing is written); a customer's yes to another time we proposed goes to a person, and the confirm
+  writes that time with whoever it was proposed with. A booking with someone the system lists that could
+  not be given to it is never confirmed here.
 - Cancelled here, it is cancelled there (`BookingWriter.remove`); a move is made in the salon's system.
 - Its free times are offered when it can say them, asked of it once a minute at most for the same
   question; when it cannot (a rate limit, an outage, times it gives that cannot be read), the inbox's own

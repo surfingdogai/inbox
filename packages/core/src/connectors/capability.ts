@@ -1738,24 +1738,31 @@ export class ConnectorCapabilities {
     return booking ? { booking, past } : null;
   }
 
-  /** The booking's last words, to find it on a platform after it was cancelled here. */
+  /**
+   * The booking's last words, to find it on a platform after it was cancelled here; and, for one a
+   * person confirms at a time we proposed whose write was never answered, as it was written (`asWritten`).
+   */
   private async outboundForFind(itemId: string, origin: string, row?: ConnectorRow): Promise<OutboundBooking | null> {
     const r = await this.outboundRow(itemId, false);
-    return r ? this.withWhom(bookingOf(itemId, r, origin), r, row) : null;
+    if (!r) return null;
+    const at = asWritten(r);
+    return at ? this.withWhom(bookingOf(itemId, at, origin), at, row) : null;
   }
 
   /**
    * A booking's row as connectors are given it: the item, its customer, its service, and (ADR-035) the
-   * member of staff it is with, with the ids a booking system sent them in under.
+   * member of staff it is with, with the ids a booking system sent them in under; and the one a time we
+   * proposed is held for (`asWritten`).
    */
   private async outboundRow(itemId: string, onlyBookings: boolean): Promise<readonly unknown[] | null> {
     const { rows } = await this.db.client.query({
       sql: `SELECT i.state, i.payload, i.sandbox, p.display_name, p.erased_at, s.name, s.duration_min,
                    json_extract(i.payload, '$.resourceId'), s.external_id, s.source, r.external_id, r.source,
-                   p.contact, i.party_id
+                   p.contact, i.party_id, pr.external_id, pr.source
               FROM items i LEFT JOIN parties p ON p.id = i.party_id
               LEFT JOIN services s ON s.id = json_extract(i.payload, '$.reservationFor.serviceId')
               LEFT JOIN resources r ON r.id = json_extract(i.payload, '$.resourceId')
+              LEFT JOIN resources pr ON pr.id = json_extract(i.payload, '$.proposed.resourceId')
              WHERE i.id = ?${onlyBookings ? " AND i.type = 'booking'" : ""}`,
       params: [itemId],
       method: "all",
@@ -1896,10 +1903,7 @@ export class ConnectorCapabilities {
   async writeFirstBooking(itemId: string, now: number): Promise<WriteFirstResult | null> {
     const r = await this.outboundRow(itemId, true);
     if (!r || !UNPROMISED.has(String(r[0])) || Number(r[2] ?? 0) === 1) return null;
-    let payload: {
-      reservationFor?: { serviceId?: unknown };
-      proposed?: { startTime?: unknown; endTime?: unknown };
-    } = {};
+    let payload: { reservationFor?: { serviceId?: unknown } } = {};
     try {
       payload = (typeof r[1] === "string" ? JSON.parse(r[1]) : r[1]) as typeof payload;
     } catch {
@@ -1910,9 +1914,8 @@ export class ConnectorCapabilities {
     const system = await this.bookingSystemFor(serviceId);
     if (!system) return null;
     const ctx = await this.runContext(system.row, now);
-    // A time we proposed, confirmed by a person who heard the customer's yes: that time is written.
-    const asked = String(r[0]) === "proposed" && payload.proposed ? { ...payload, ...payload.proposed } : payload;
-    const at = asked === payload ? r : [r[0], JSON.stringify(asked), ...r.slice(2)];
+    const at = asWritten(r);
+    if (!at) return null;
     const booking = this.withWhom(bookingOf(itemId, at, ctx.inbox.origin), at, system.row);
     if (!booking?.serviceExternalId || !booking.staffExternalId) return null;
     const writer = system.def.bookings;
@@ -2849,6 +2852,31 @@ async function settle(connected: Connected, kept: boolean): Promise<void> {
   } catch {
     // Best effort: what is left behind is listed, and removed, the next time it connects.
   }
+}
+
+/**
+ * A booking's row as a person's confirm writes it (ADR-035): a time we proposed, confirmed by a person who
+ * heard the customer's yes, at that time and with whoever the proposal holds it for (`placeProposal`), as
+ * the confirm then makes it; any other booking as it stands. Null when its words cannot be read.
+ */
+function asWritten(r: readonly unknown[]): readonly unknown[] | null {
+  if (String(r[0]) !== "proposed") return r;
+  let payload: { proposed?: { startTime?: unknown; endTime?: unknown; resourceId?: unknown } } = {};
+  try {
+    payload = (typeof r[1] === "string" ? JSON.parse(r[1]) : r[1]) as typeof payload;
+  } catch {
+    return null;
+  }
+  const proposed = payload?.proposed;
+  if (!proposed) return r;
+  const out = [...r];
+  out[1] = JSON.stringify({ ...payload, ...proposed });
+  if (typeof proposed.resourceId === "string") {
+    out[7] = proposed.resourceId;
+    out[10] = r[14] ?? null;
+    out[11] = r[15] ?? null;
+  }
+  return out;
 }
 
 function bookingOf(itemId: string, r: readonly unknown[], origin: string): OutboundBooking | null {

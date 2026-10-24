@@ -733,6 +733,122 @@ describe("Phorest, nothing else confirms first", () => {
     ]);
   });
 
+  it("takes the customer's own other time for an anyone booking Phorest holds only when the person it is with is free", async () => {
+    const { db, caps, ph, fade, mei } = await withRules();
+    await db.client.query({
+      sql: "UPDATE service_resources SET price_override = NULL, duration_override_min = NULL WHERE service_id = ?",
+      params: [fade.id],
+      method: "run",
+    });
+    ph.refuseNext();
+    const r = await book(caps, {
+      payload: { ...at("2026-11-04T17:00:00Z"), reservationFor: { serviceId: fade.id, name: "Skin fade" } },
+      contact: { name: "Aiyana Whitehorse", email: "aiyana@example.com" },
+      idempotency_key: "held-counter",
+    });
+    const [asked] = await db.orm.select().from(schema.items).where(eq(schema.items.id, r.view.item.id));
+    expect((asked?.payload as { resourceId?: string } | undefined)?.resourceId).toBe(mei.id);
+    await caps.transitionItem(owner, {
+      item_id: r.view.item.id,
+      event: "propose",
+      input: { startTime: "2026-11-04T16:00:00Z", endTime: "2026-11-04T16:30:00Z" },
+    });
+    // Mei taken here at 18:00, Ravi free: Phorest has this booking with Mei, so 18:00 is not theirs to take.
+    await db.client.query({
+      sql: "INSERT INTO slot_claims (resource_key, bucket_start, ordinal, item_id, offer_id) VALUES (?, ?, 0, 'walk-in', '')",
+      params: [`resource:${mei.id}`, Date.parse("2026-11-04T18:00:00Z")],
+      method: "run",
+    });
+    const theirs: Caller = { ...agent, accessToken: r.accessToken ?? "" };
+    await expect(
+      transitionItem(db, theirs, {
+        itemId: r.view.item.id,
+        event: "counter",
+        input: { startTime: "2026-11-04T18:00:00Z" },
+      }),
+    ).rejects.toMatchObject({ code: "slot_taken" });
+    expect((await stateOf(db, r.view.item.id)).state).toBe("proposed");
+    // At 18:30 Mei is free, and their own time is taken, still with her.
+    const countered = await transitionItem(db, theirs, {
+      itemId: r.view.item.id,
+      event: "counter",
+      input: { startTime: "2026-11-04T18:30:00Z" },
+    });
+    expect(countered.view.item.state).toBe("requested");
+    const [moved] = await db.orm.select().from(schema.items).where(eq(schema.items.id, r.view.item.id));
+    expect((moved?.payload as { resourceId?: string } | undefined)?.resourceId).toBe(mei.id);
+  });
+
+  it("writes a time proposed for an anyone booking that went to nobody with whoever it was proposed with", async () => {
+    const { db, caps, ph, fade, mei, ravi } = await withRules();
+    const walkIn = (rid: string, iso: string, id: string) =>
+      db.client.query({
+        sql: "INSERT INTO slot_claims (resource_key, bucket_start, ordinal, item_id, offer_id) VALUES (?, ?, 0, ?, '')",
+        params: [`resource:${rid}`, Date.parse(iso), id],
+        method: "run",
+      });
+    // Both busy from 17:00 for an hour: a request for anyone then goes to nobody, and nothing is written.
+    for (const m of ["17:00", "17:15", "17:30", "17:45"]) {
+      await walkIn(mei.id, `2026-11-04T${m}:00Z`, "w-mei");
+      await walkIn(ravi.id, `2026-11-04T${m}:00Z`, "w-ravi");
+    }
+    const anyone = (idem: string) =>
+      book(caps, {
+        payload: { ...at("2026-11-04T17:00:00Z"), reservationFor: { serviceId: fade.id, name: "Skin fade" } },
+        contact: { name: "Aiyana Whitehorse", email: "aiyana@example.com" },
+        idempotency_key: idem,
+      });
+    const posted = () =>
+      ph.platform.requests("POST", `${PHOREST_US}/api/business/${BUSINESS}/branch/X9QpRsZ3bSvhJAaakg9TXQ/booking`)
+        .length;
+    const r = await anyone("nobody-1");
+    expect((await stateOf(db, r.view.item.id)).state).toBe("requested");
+    expect(ph.bookings.size).toBe(0);
+    // 19:00 goes with Mei, for her own length; the customer's yes by phone is written to Phorest with her.
+    await caps.transitionItem(owner, {
+      item_id: r.view.item.id,
+      event: "propose",
+      input: { startTime: "2026-11-04T19:00:00Z", endTime: "2026-11-04T19:30:00Z" },
+    });
+    const done = await caps.transitionItem(owner, { item_id: r.view.item.id, event: "confirm" });
+    expect(done.view.item.state).toBe("confirmed");
+    expect(
+      [...ph.bookings.values()].filter((b) => b.status === "ACTIVE").map((b) => [b.staffId, b.start, b.end]),
+    ).toEqual([[STAFF_MEI, "2026-11-04T19:00:00.000Z", "2026-11-04T19:45:00.000Z"]]);
+
+    // Where Phorest has Mei taken at that time, nothing is confirmed, and the proposal stands.
+    const again = await anyone("nobody-2");
+    await caps.transitionItem(owner, {
+      item_id: again.view.item.id,
+      event: "propose",
+      input: { startTime: "2026-11-04T20:00:00Z", endTime: "2026-11-04T20:30:00Z" },
+    });
+    const sent = posted();
+    ph.refuseNext();
+    await expect(caps.transitionItem(owner, { item_id: again.view.item.id, event: "confirm" })).rejects.toMatchObject({
+      code: "guard_failed",
+      details: { guard: "system_first", outcome: "refused" },
+    });
+    expect(posted()).toBe(sent + 1);
+    expect((await stateOf(db, again.view.item.id)).state).toBe("proposed");
+    expect([...ph.bookings.values()].filter((b) => b.status === "ACTIVE")).toHaveLength(1);
+
+    // And should Phorest be given nothing for someone it lists, the confirm waits, never confirms it here.
+    const unwritten = caps.connectors.writeFirstBooking;
+    caps.connectors.writeFirstBooking = async () => null;
+    try {
+      await expect(caps.transitionItem(owner, { item_id: again.view.item.id, event: "confirm" })).rejects.toMatchObject(
+        {
+          code: "guard_failed",
+          details: { guard: "system_first", outcome: "not_written" },
+        },
+      );
+    } finally {
+      caps.connectors.writeFirstBooking = unwritten;
+    }
+    expect((await stateOf(db, again.view.item.id)).state).toBe("proposed");
+  });
+
   it("the owner's confirm writes nothing to Phorest for a time already taken here", async () => {
     const { db, caps, ph, mei, request } = await withRules();
     ph.refuseNext();

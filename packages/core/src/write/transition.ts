@@ -28,7 +28,7 @@ import { insertOfferStatement, type OfferRow, offerRows, openOf, pointerOf } fro
 import { paidFor, refundDueOf, SEND_BACK_DAYS } from "../negotiation/refunds";
 import { items, resources, services } from "../schema/tables";
 import { readSettings } from "../settings/schema";
-import { anyoneAt, keepTermsInStep, repickAnyone, termsWith } from "../staff/booking";
+import { anyoneAt, keepTermsInStep, ownEnd, repickAnyone, termsWith } from "../staff/booking";
 import { bookingFeeAt } from "../staff/fee";
 import { checkFirstRefusal, heldForCheck } from "../staff/requires";
 import { nobodyFree, nobodyToTake } from "../staff/store";
@@ -374,7 +374,7 @@ async function attempt_(
     : undefined;
   const payload = structuredClone(item.payload) as Record<string, unknown>;
   applyInput(item.type, t.event, payload, data);
-  applyReturnInput(item, t.event, payload, data, settings, now);
+  applyReturnInput(item, t.event, payload, data, settings, now, await untoldPayment(db, item, t.event, data));
   const effects = new Set(t.effects ?? []);
   if (effects.has("apply_offer") && item.type === "order") applyOrderOffer(payload);
   if (effects.has("apply_counter") && item.type === "order") applyOrderCounter(payload, data);
@@ -1448,6 +1448,37 @@ function applyInput(
 }
 
 /**
+ * A booking's payment recorded last with no amount, told again under its reference with one (ADR-035):
+ * what had been paid before it, so what it came to is taken in place of what it was taken as (the
+ * deposit, else the whole price). Null for anything else, a retry among them.
+ */
+async function untoldPayment(
+  db: Db,
+  item: Item,
+  event: string,
+  data: Record<string, unknown>,
+): Promise<{ readonly before: Money | null } | null> {
+  if (item.type !== "booking" || event !== "record_payment" || data.amount === undefined) return null;
+  if (item.payload.paymentRef === undefined || item.payload.paymentRef !== data.paymentRef) return null;
+  const { rows } = await db.client.query({
+    sql: `SELECT json_extract(meta, '$.input.paymentRef'), json_extract(meta, '$.input.amount'),
+                 json_extract(diff, '$.payload.paidAmount')
+            FROM item_events WHERE item_id = ? AND event = 'record_payment' ORDER BY seq DESC LIMIT 1`,
+    params: [item.id],
+    method: "all",
+  });
+  const r = rows[0];
+  // Told with its amount, or a retry that changed nothing: what was paid stands.
+  if (!r || r[0] !== data.paymentRef || (r[1] !== null && r[1] !== undefined) || typeof r[2] !== "string") return null;
+  try {
+    const [was] = JSON.parse(r[2]) as [Money | null, Money | null];
+    return { before: was && typeof was.value === "number" ? was : null };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * What a transition writes about money and goods beyond its input's own fields (ADR-018 §3.4, §7):
  * a booking's payment, when an order was sent and reached the customer, and a return's way through —
  * agreed with or without goods to send back, the goods back, disputed, refunded — with the date the
@@ -1460,6 +1491,7 @@ function applyReturnInput(
   data: Record<string, unknown>,
   settings: Awaited<ReturnType<typeof readSettings>>,
   now: number,
+  untold: { readonly before: Money | null } | null = null,
 ): void {
   const iso = (ms: number) => new Date(ms).toISOString();
   /** A time the business gives for something that happened: not in the future, nor before the item was made. */
@@ -1485,6 +1517,16 @@ function applyReturnInput(
     const before = item.payload.paidAmount;
     const told = item.payload.paymentRef;
     const amount = data.amount as Money | undefined;
+    // The payment recorded last with no amount, told now what it came to: that, in place of what it was
+    // taken as, beside what was paid before it.
+    if (amount && untold) {
+      const was = untold.before;
+      payload.paidAmount =
+        was && was.currency.toUpperCase() === amount.currency.toUpperCase()
+          ? { value: was.value + amount.value, currency: was.currency }
+          : amount;
+      return;
+    }
     // The payment recorded last, told again (a provider's retry): nothing more was paid.
     if (told === data.paymentRef && (before !== undefined || amount === undefined)) return;
     payload.paymentRef = data.paymentRef;
@@ -1568,20 +1610,7 @@ async function noticeOf(
   now: number,
 ): Promise<number> {
   if (t.event !== "record_withdrawal" && t.event !== "open_return") return now;
-  if (typeof data.entryId === "string") {
-    const { rows } = await db.client.query({
-      sql: "SELECT created_at FROM thread_entries WHERE id = ? AND item_id = ? AND direction = 'in'",
-      params: [data.entryId, item.id],
-      method: "all",
-    });
-    const at = rows[0]?.[0];
-    if (at === null || at === undefined) {
-      throw new WriteError("invalid_input", "input.entryId must name a message the customer sent about this item", {
-        fields: [{ path: "input.entryId", problem: "invalid", message: "a message from the customer on this item" }],
-      });
-    }
-    return Number(at);
-  }
+  if (typeof data.entryId === "string") return (await customerSaidAt(db, item, data.entryId, caller)).at;
   if (!isPerson(caller)) {
     // A return the owner's AI opens without naming the message is dated now, as it always was.
     if (t.event === "open_return") return now;
@@ -1607,34 +1636,69 @@ async function noticeOf(
 }
 
 /**
+ * The customer's message an item's record is dated by (`entryId`; ADR-017 §3.1, ADR-035 §5): one they
+ * sent on the item, and when it came. The owner's AI, or another system, names the latest they sent us
+ * on anything: an older one would date what they say now by words about something else (a question
+ * about parking, weeks before), turning a late cancel free or a withdrawal in time. A person may name
+ * any of theirs, as they may type when it was.
+ */
+export async function customerSaidAt(
+  db: Db,
+  item: Pick<Item, "id" | "partyId">,
+  entryId: string,
+  caller: Caller,
+): Promise<{ readonly at: number; readonly text: string }> {
+  const { rows } = await db.client.query({
+    sql: "SELECT created_at, body_text FROM thread_entries WHERE id = ? AND item_id = ? AND direction = 'in'",
+    params: [entryId, item.id],
+    method: "all",
+  });
+  const at = rows[0]?.[0];
+  if (at === null || at === undefined) {
+    throw new WriteError("invalid_input", "input.entryId must name a message the customer sent about this item", {
+      fields: [{ path: "input.entryId", problem: "invalid", message: "a message from the customer on this item" }],
+    });
+  }
+  if (!isPerson(caller)) {
+    const { rows: later } = await db.client.query({
+      sql: `SELECT 1 FROM thread_entries WHERE direction = 'in' AND created_at > ?
+               AND item_id IN (SELECT id FROM items WHERE party_id = ? UNION SELECT ?) LIMIT 1`,
+      params: [Number(at), item.partyId, item.id],
+      method: "all",
+    });
+    if (later.length > 0) {
+      throw new WriteError(
+        "invalid_input",
+        "input.entryId must name the latest message the customer sent us: an older one would date what they say now by words they wrote about something else. Name their latest, or leave entryId out to record it as of now; if it rests on an earlier message, tell the owner in a note (reply with internal: true) what you would do.",
+        {
+          fields: [{ path: "input.entryId", problem: "invalid", message: "the customer's latest message" }],
+          details: { reason: "not_latest", draft_for_owner: true },
+        },
+      );
+    }
+  }
+  return { at: Number(at), text: String(rows[0]?.[1] ?? "") };
+}
+
+/**
  * When the customer asked to cancel, for a cancel the business records (ADR-017 §3.1): the arrival of
- * their message on the item when `entryId` names it; else, typed by a person, when they say it was (now
- * when left out). The owner's AI, or another system, names the message or it is now: a time it types
- * would waive a fee, or keep a deposit, on words nobody can check (ADR-035 §5), as a withdrawal is
- * guarded (`noticeOf`). A time typed to the minute may fall just before the booking was made: that is
- * when it was made.
+ * their message on the item when `entryId` names it (their latest, when the owner's AI or another system
+ * names it: `customerSaidAt`); else, typed by a person, when they say it was (now when left out). The
+ * owner's AI, or another system, names the message or it is now: a time it types would waive a fee, or
+ * keep a deposit, on words nobody can check (ADR-035 §5), as a withdrawal is guarded (`noticeOf`). A
+ * time typed to the minute may fall just before the booking was made: that is when it was made.
  */
 export async function cancelAskedAt(
   db: Db,
-  item: Pick<Item, "id" | "createdAt">,
+  item: Pick<Item, "id" | "createdAt" | "partyId">,
   data: Record<string, unknown>,
   caller: Caller,
   now: number,
 ): Promise<number> {
   const created = Date.parse(item.createdAt);
   if (typeof data.entryId === "string") {
-    const { rows } = await db.client.query({
-      sql: "SELECT created_at FROM thread_entries WHERE id = ? AND item_id = ? AND direction = 'in'",
-      params: [data.entryId, item.id],
-      method: "all",
-    });
-    const at = rows[0]?.[0];
-    if (at === null || at === undefined) {
-      throw new WriteError("invalid_input", "input.entryId must name a message the customer sent about this item", {
-        fields: [{ path: "input.entryId", problem: "invalid", message: "a message from the customer on this item" }],
-      });
-    }
-    return Math.min(Math.max(Number(at), created), now);
+    const { at } = await customerSaidAt(db, item, data.entryId, caller);
+    return Math.min(Math.max(at, created), now);
   }
   if (typeof data.askedAt !== "string") return now;
   if (!isPerson(caller)) {
@@ -1791,12 +1855,9 @@ async function withdrawalInstead(
   const said = (input.input ?? {}) as { askedAt?: unknown; entryId?: unknown };
   let when = now;
   if (typeof said.entryId === "string") {
-    const { rows } = await db.client.query({
-      sql: "SELECT created_at FROM thread_entries WHERE id = ? AND item_id = ? AND direction = 'in'",
-      params: [said.entryId, item.id],
-      method: "all",
-    });
-    if (rows[0]?.[0] !== null && rows[0]?.[0] !== undefined) when = Number(rows[0][0]);
+    // A message it cannot be dated by is refused by the cancel itself (`cancelAskedAt`), in its words.
+    const told = await customerSaidAt(db, item, said.entryId, caller).catch(() => null);
+    if (told) when = told.at;
   } else if (typeof said.askedAt === "string" && isPerson(caller)) {
     // A time only a person types (`cancelAskedAt`): the owner's AI names the customer's message.
     const at = Date.parse(said.askedAt);
@@ -2201,6 +2262,9 @@ async function placeProposal(
         details: { guard: "slot_available", staff: "not_here" },
       });
     }
+    // With their member of staff, for that person's own length at least, whatever end was typed.
+    const own = await ownEnd(db, payload, start);
+    if (own !== null && own > end) p.endTime = new Date(own).toISOString();
     return undefined;
   }
   if (who.id !== payload.resourceId) {
@@ -2214,7 +2278,7 @@ async function placeProposal(
       p.totalPrice = theirs.total;
       if (theirs.personalised) p.personalised = theirs.personalised;
     }
-  }
+  } else if (who.end > end) p.endTime = new Date(who.end).toISOString();
   return { ...(await slotSpecFor(db, payload)), capacity: who.capacity, resourceKey: `resource:${who.id}` };
 }
 

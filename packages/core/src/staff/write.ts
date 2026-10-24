@@ -174,7 +174,8 @@ export async function writeFirstForPerson(
   // Taken here already: refused as the confirm would refuse it, and nothing is written there, so the
   // salon's diary never shows a booking that was cancelled the moment it was made. A time we proposed is
   // the one confirmed and written (`writeFirstBooking`), so that time is the one checked.
-  if (!(await slotClaimable(db, { id: item.id, payload: timeToWrite(item) as typeof item.payload }))) {
+  const written = timeToWrite(item);
+  if (!(await slotClaimable(db, { id: item.id, payload: written as typeof item.payload }))) {
     throw new WriteError(
       "slot_taken",
       `that time is fully booked here, so nothing was written to ${hold.title}. Propose another time, or decline it.`,
@@ -191,7 +192,18 @@ export async function writeFirstForPerson(
       { details: { guard: "system_first" } },
     );
   }
-  if (!result) return { wrote: null };
+  if (!result) {
+    // With someone the system lists, it can always be given it: nothing written there is never a
+    // confirm here, for its diary would not hold what the customer is told. A test booking never is.
+    if (!item.flags.sandbox && (await listedBy(db, hold.connectorId, written.resourceId))) {
+      throw new WriteError(
+        "guard_failed",
+        `This booking could not be written to ${hold.title}, so nothing was confirmed. Try again in a minute, or propose another time.`,
+        { details: { guard: "system_first", outcome: "not_written" } },
+      );
+    }
+    return { wrote: null };
+  }
   switch (result.status) {
     case "written":
       return { wrote: result.replayed ? null : hold.connectorId };
@@ -231,6 +243,18 @@ function timeToWrite(item: { readonly state: string; readonly payload: unknown }
     ...(typeof proposed.resourceId === "string" ? { resourceId: proposed.resourceId } : {}),
     ...(typeof proposed.staffName === "string" ? { staffName: proposed.staffName } : {}),
   };
+}
+
+/** Whether the salon's own system lists this member of staff, under its own id for them. */
+async function listedBy(db: Db, connectorId: string, resourceId: unknown): Promise<boolean> {
+  if (typeof resourceId !== "string") return false;
+  const { rows } = await db.client.query({
+    sql: `SELECT 1 FROM resources r JOIN connectors c ON c.kind = r.source
+           WHERE r.id = ? AND c.id = ? AND r.external_id IS NOT NULL LIMIT 1`,
+    params: [resourceId, connectorId],
+    method: "all",
+  });
+  return rows.length > 0;
 }
 
 async function systemOf(

@@ -35,6 +35,10 @@ const SHOWN = ["requested", "needs_info", "proposed", "confirmed", "completed", 
 const PAGE = 500;
 const PAGES = 20;
 
+/**
+ * A booking with a time we proposed waiting for the customer (ADR-035) is placed where that time would
+ * be: at its time, with whoever it goes with, as the owner's confirm of the customer's yes would book it.
+ */
 export async function dayByStaff(db: Db, date: string, zone: string): Promise<StaffDay> {
   const from = instantOf(date, "00:00", zone);
   const to = instantOf(addDays(date, 1), "00:00", zone);
@@ -49,11 +53,15 @@ export async function dayByStaff(db: Db, date: string, zone: string): Promise<St
               FROM items i LEFT JOIN parties p ON p.id = i.party_id
              WHERE i.type = 'booking' AND i.state IN (${SHOWN.map(() => "?").join(", ")})
                AND COALESCE(i.sandbox, 0) = 0
-               AND i.start_at >= ? AND i.start_at < ?
+               AND ((i.start_at >= ? AND i.start_at < ?)
+                 OR (i.state = 'proposed' AND json_extract(i.payload, '$.proposed.startTime') >= ?
+                     AND json_extract(i.payload, '$.proposed.startTime') < ?))
                AND (i.start_at > ? OR (i.start_at = ? AND i.id > ?))
              ORDER BY i.start_at, i.id LIMIT ${PAGE}`,
       params: [
         ...SHOWN,
+        new Date(from - 86_400_000).toISOString().slice(0, 10),
+        new Date(to + 86_400_000).toISOString(),
         new Date(from - 86_400_000).toISOString().slice(0, 10),
         new Date(to + 86_400_000).toISOString(),
         after[0],
@@ -69,11 +77,20 @@ export async function dayByStaff(db: Db, date: string, zone: string): Promise<St
   }
   const byStaff = new Map<string | null, DayBooking[]>();
   for (const r of rows) {
-    let p: { startTime?: string; endTime?: string; resourceId?: string; reservationFor?: { name?: string } } = {};
+    type Placed = { startTime?: string; endTime?: string; resourceId?: string | undefined };
+    let p: Placed & { reservationFor?: { name?: string }; proposed?: Placed } = {};
     try {
       p = (typeof r[2] === "string" ? JSON.parse(r[2]) : r[2]) as typeof p;
     } catch {
       continue;
+    }
+    if (String(r[1]) === "proposed" && p.proposed?.startTime && p.proposed.endTime) {
+      p = {
+        ...p,
+        startTime: p.proposed.startTime,
+        endTime: p.proposed.endTime,
+        resourceId: p.proposed.resourceId ?? p.resourceId,
+      };
     }
     const start = Date.parse(p.startTime ?? "");
     if (!Number.isFinite(start) || start < from || start >= to) continue;

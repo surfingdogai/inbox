@@ -116,7 +116,7 @@ import { heldReplyStatements, namesOtherMoney } from "../write/limits";
 import { isAutomation } from "../write/offers";
 import { withdrawalOf } from "../write/returns";
 import { appendThreadEntry } from "../write/thread";
-import { cancelAskedAt, type TransitionResult, transitionItem } from "../write/transition";
+import { cancelAskedAt, customerSaidAt, type TransitionResult, transitionItem } from "../write/transition";
 import { customerItem, type ItemView, type PartyView, rowToItem, viewFor } from "../write/views";
 import { askedForAPrice, quoteNotBookable, type Slot, unknownService } from "./availability";
 import { CustomerDoors, type CustomerItemView } from "./customer";
@@ -1007,7 +1007,7 @@ export class Capabilities {
     c: Caller,
     done: TransitionResult,
     fee: Money | null,
-    opts: { readonly recorded?: boolean } = {},
+    opts: Partial<Omit<RecordedCancel, "fee">> & { readonly recorded?: boolean } = {},
   ): Promise<void> {
     const item = done.view.item;
     if (done.replayed || item.type !== "booking" || item.state !== "cancelled_by_customer") return;
@@ -1019,7 +1019,11 @@ export class Capabilities {
     if (!p.policy && !p.deposit) return;
     const paid = paidFor(p);
     const charged = fee !== null && fee.value > 0;
-    if (!paid && !charged) return;
+    // Dated by a message the owner's AI named, for less than it would cost now: said, so a person checks
+    // what it rests on.
+    const less =
+      !isPerson(c) && opts.message !== undefined && opts.feeNow !== undefined && opts.feeNow.value > (fee?.value ?? 0);
+    if (!paid && !charged && !less) return;
     const business = await this.getBusinessProfile();
     // An English note for the owner, its money and its day written as English writes them, in the
     // business's zone: never a sentence of one language around the numbers of another.
@@ -1030,12 +1034,21 @@ export class Capabilities {
     const how = (await this.paidThroughPlatform(item.id))
       ? "Refund it through your payment platform"
       : "Pay it back to them yourself";
-    // The customer's own door showed them the fee and they said yes; one the owner records was said by
-    // phone or at the desk, and the inbox showed them nothing.
+    // The customer's own door showed them the fee and they said yes; one the owner records was said in
+    // the customer's message it is dated by, which the note names, else by phone or at the desk, and the
+    // inbox showed them nothing.
+    const message = opts.message;
+    const said = message
+      ? `in their message of ${momentIn(message.at, business.timezone, locale)} (“${excerpt(message.text)}”)`
+      : null;
     const head = !charged
-      ? "Cancelled by the customer."
+      ? said
+        ? `Cancelled by the customer ${said}.`
+        : "Cancelled by the customer."
       : opts.recorded
-        ? `Cancelled late by phone or at the desk, with a fee of ${money(fee)} under its policy.`
+        ? said
+          ? `Cancelled late by the customer ${said}, with a fee of ${money(fee)} under its policy.`
+          : `Cancelled late by phone or at the desk, with a fee of ${money(fee)} under its policy.`
         : `Cancelled with a fee of ${money(fee)} under its policy, as the customer saw it and agreed.`;
     let tail: string;
     if (owed) {
@@ -1043,15 +1056,27 @@ export class Capabilities {
         ? `It comes out of what they paid: ${money(owed.amount)} is owed back to them${by}. ${how}; nothing was charged or refunded here.`
         : `It was free under its terms, so all they paid, ${money(owed.amount)}, is owed back to them${by}. ${how}; nothing was refunded here.`;
     } else if (charged) {
-      tail = paid
-        ? "It comes out of what they paid, which covers it, or ask for the rest; nothing was charged here."
-        : "Take it from the deposit, or ask for it; nothing was charged here.";
+      const same = paid !== null && paid.currency.toUpperCase() === fee.currency.toUpperCase();
+      tail = !paid
+        ? "Take it from the deposit, or ask for it; nothing was charged here."
+        : same && paid.value < fee.value
+          ? `They paid ${money(paid)}, which goes towards it: ask them for the rest, ${money({ value: fee.value - paid.value, currency: fee.currency })}; nothing was charged here.`
+          : same
+            ? `It comes out of what they paid, ${money(paid)}, which covers it; nothing was charged here.`
+            : "It comes out of what they paid, or ask them for the rest; nothing was charged here.";
+    } else if (!paid) {
+      tail = "Nothing was paid, and its terms owe nothing for it.";
     } else {
       // Paid, and its terms do not say what comes back (late, with a deposit and no policy): a person decides.
       tail = `They paid ${money(paid as Money)}, and its terms do not say what of it comes back now. Decide what does, and ${how.charAt(0).toLowerCase()}${how.slice(1)}; nothing was refunded here.`;
       await setFlags(this.db, systemCaller(nowOf(c)), { itemId: item.id, flags: { needsHuman: true } });
     }
-    await appendThreadEntry(this.db, systemCaller(nowOf(c)), item, `${head} ${tail}`, "note");
+    const check =
+      less && opts.feeNow
+        ? ` It is dated by that message: dated now, the fee would be ${money(opts.feeNow)}. Check that message asked to cancel.`
+        : "";
+    if (check) await setFlags(this.db, systemCaller(nowOf(c)), { itemId: item.id, flags: { needsHuman: true } });
+    await appendThreadEntry(this.db, systemCaller(nowOf(c)), item, `${head} ${tail}${check}`, "note");
   }
 
   /**
@@ -1454,7 +1479,8 @@ export class Capabilities {
     }
     // The customer's cancel by phone or at the desk, as their own door says it (ADR-035): the fee under
     // its policy when they asked, and what of what they paid is owed back, beside its refund.
-    await this.moneyBackNote(c, done, await recordedFee(this.db, c, done, input, nowOf(c)), { recorded: true });
+    const recorded = await recordedCancel(this.db, c, done, input, nowOf(c));
+    await this.moneyBackNote(c, done, recorded.fee, { recorded: true, ...recorded });
     return done;
   }
 
@@ -2095,31 +2121,73 @@ export class Capabilities {
 /** Owner-facing notes are English: their money and days are written as English writes them. */
 const OWNER_LOCALE = "en-GB";
 
+/** A cancel the business recorded (ADR-035), as the owner's note says it. */
+interface RecordedCancel {
+  /** What it costs under the booking's own policy, when the customer asked; null for one without. */
+  readonly fee: Money | null;
+  /** The customer's message it is dated by, when one was named (`entryId`). */
+  readonly message?: { readonly at: number; readonly text: string } | undefined;
+  /** What it would cost dated now, when a message dated it. */
+  readonly feeNow?: Money | undefined;
+}
+
 /**
- * The fee a recorded cancellation of a confirmed booking with its own policy costs (ADR-035), judged when
- * the customer asked, as the write judged it (`cancelAskedAt`); null for one without, and for a request
- * nobody had confirmed: nothing was promised, so nothing is owed, as on the customer's own door.
+ * A recorded cancellation of a confirmed booking with its own policy (ADR-035): its fee, judged when the
+ * customer asked, as the write judged it (`cancelAskedAt`), and the message it is dated by, beside what it
+ * would cost dated now. No fee for one without a policy, and for a request nobody had confirmed: nothing
+ * was promised, so nothing is owed, as on the customer's own door.
  */
-async function recordedFee(
+async function recordedCancel(
   db: Db,
   caller: Caller,
   done: TransitionResult,
   input: T.TransitionItemInput,
   now: number,
-): Promise<Money | null> {
+): Promise<RecordedCancel> {
   const item = done.view.item;
-  if (done.replayed || item.type !== "booking" || !item.payload.policy) return null;
+  if (done.replayed || item.type !== "booking") return { fee: null };
+  const said = (input.input ?? {}) as Record<string, unknown>;
+  const message =
+    typeof said.entryId === "string"
+      ? await customerSaidAt(db, item, said.entryId, caller).catch(() => undefined)
+      : undefined;
+  if (!item.payload.policy) return { fee: null, message };
   const { rows } = await db.client.query({
     sql: `SELECT from_state FROM item_events WHERE item_id = ? AND event IN ('record_cancel', 'record_cancel_late')
            ORDER BY seq DESC LIMIT 1`,
     params: [item.id],
     method: "all",
   });
-  if (rows[0]?.[0] !== "confirmed") return null;
-  const askedAt = await cancelAskedAt(db, item, (input.input ?? {}) as Record<string, unknown>, caller, now).catch(
-    () => now,
-  );
-  return bookingFeeAt(item.payload, askedAt);
+  if (rows[0]?.[0] !== "confirmed") return { fee: null };
+  const askedAt = await cancelAskedAt(db, item, said, caller, now).catch(() => now);
+  return {
+    fee: bookingFeeAt(item.payload, askedAt),
+    ...(message ? { message, feeNow: bookingFeeAt(item.payload, now) } : {}),
+  };
+}
+
+/** A moment as the owner reads it, in the business's zone: "Wed, 2 Dec 2026, 07:30". */
+function momentIn(ms: number, timezone: string, locale: string): string {
+  const d = new Date(ms);
+  const opts = {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  } as const;
+  try {
+    return new Intl.DateTimeFormat(locale, { ...opts, timeZone: timezone }).format(d);
+  } catch {
+    return new Intl.DateTimeFormat(locale, { ...opts, timeZone: "UTC" }).format(d);
+  }
+}
+
+/** The first words of a message, on one line, as a note quotes it. */
+function excerpt(text: string): string {
+  const line = text.replace(/\s+/g, " ").trim();
+  return line.length > 80 ? `${line.slice(0, 79).trimEnd()}…` : line;
 }
 
 /** A day as the owner reads it, in the business's zone: "Wed, 2 Dec 2026". */

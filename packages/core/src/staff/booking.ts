@@ -266,7 +266,12 @@ export async function repickAnyone(
   const start = Date.parse(p.startTime);
   const current = staff.find((s) => s.id === p.resourceId);
   if (current) {
-    const end = start + lengthWith(service, current.terms, p.addOns ?? []) * 60_000;
+    // Still with them: for their own length at least, whatever end it was asked or proposed with.
+    const asked = Date.parse(p.endTime);
+    const end = Math.max(
+      Number.isFinite(asked) ? asked : 0,
+      start + lengthWith(service, current.terms, p.addOns ?? []) * 60_000,
+    );
     const free = await slotOffered(db, {
       serviceId: service.id,
       start,
@@ -275,7 +280,10 @@ export async function repickAnyone(
       exceptItemId: input.itemId,
       resource: { id: current.id, capacity: current.capacity },
     });
-    if (free) return;
+    if (free) {
+      if (end !== asked) p.endTime = new Date(end).toISOString();
+      return;
+    }
   }
   const next = await pickStaff(db, {
     service,
@@ -297,6 +305,20 @@ export async function repickAnyone(
   p.resourceId = next.id;
   p.staffName = next.publicName;
   p.endTime = new Date(start + lengthWith(service, next.terms, p.addOns ?? []) * 60_000).toISOString();
+}
+
+/**
+ * Until when at least a booking with its member of staff is booked from `start` (ADR-035 §2): their own
+ * length for the service, its add-ons added, whatever end was typed. Null for one with nobody, or a
+ * service that is gone.
+ */
+export async function ownEnd(db: Db, payload: Record<string, unknown>, start: number): Promise<number | null> {
+  const p = payload as Partial<AnyonePayload>;
+  const serviceId = p.reservationFor?.serviceId;
+  if (typeof p.resourceId !== "string" || typeof serviceId !== "string") return null;
+  const service = await loadService(db, serviceId);
+  if (!service) return null;
+  return start + lengthWith(service, await termsOf(db, serviceId, p.resourceId), p.addOns ?? []) * 60_000;
 }
 
 type AnyonePayload = {
@@ -340,6 +362,8 @@ export interface AnyoneTake {
    * customer to confirm before it binds (`termsWith`).
    */
   readonly sameTerms: boolean;
+  /** Until when they were judged free: the end asked for, or their own length when that is longer. */
+  readonly end: number;
 }
 
 /**
@@ -367,26 +391,35 @@ export async function anyoneAt(
   if (!service) return undefined;
   const staff = await staffForService(db, service.id);
   if (staff.length === 0) return undefined;
+  const addOns = p.addOns ?? [];
+  // Whoever it goes with is booked for their own length at least, whatever the end asked (ADR-035 §2).
+  const until = (s: StaffRow & { readonly terms: StaffService }) =>
+    Math.max(input.end, input.start + lengthWith(service, s.terms, addOns) * 60_000);
   const at = { start: input.start, end: input.end, timezone: input.timezone, exceptItemId: input.itemId };
-  const take = (s: StaffRow & { readonly terms: StaffService }, sameTerms: boolean): AnyoneTake => ({
+  const take = (s: StaffRow & { readonly terms: StaffService }, sameTerms: boolean, end: number): AnyoneTake => ({
     id: s.id,
     capacity: s.capacity,
     name: s.name,
     publicName: s.publicName,
     terms: s.terms,
     sameTerms,
+    end,
   });
   const current = staff.find((s) => s.id === p.resourceId);
   if (
     current &&
-    (await slotOffered(db, { serviceId: service.id, ...at, resource: { id: current.id, capacity: current.capacity } }))
+    (await slotOffered(db, {
+      serviceId: service.id,
+      ...at,
+      end: until(current),
+      resource: { id: current.id, capacity: current.capacity },
+    }))
   ) {
-    return take(current, true);
+    return take(current, true, until(current));
   }
-  const addOns = p.addOns ?? [];
   const same = await sameAs(db, service.id, staff, current, p.resourceId);
   const next = await pickStaff(db, { service, staff: same, addOns, ...at });
-  if (next) return take(next, true);
+  if (next) return take(next, true, until(next));
   const rest = staff.filter((s) => s.id !== current?.id && !same.some((x) => x.id === s.id));
   const other = await pickStaff(db, {
     service,
@@ -396,7 +429,7 @@ export async function anyoneAt(
     timezone: input.timezone,
     exceptItemId: input.itemId,
   });
-  return other ? take(other, false) : null;
+  return other ? take(other, false, input.start + lengthWith(service, other.terms, addOns) * 60_000) : null;
 }
 
 /**

@@ -133,8 +133,9 @@ export async function judgeOffer(o: {
       const sp = await servicePricing(db, b.reservationFor.serviceId, b.partySize, pricing, withWhom);
       const length = Date.parse(offered.endTime) - Date.parse(offered.startTime);
       const agreedLength = Date.parse(b.endTime) - Date.parse(b.startTime);
-      // Longer than the service (or than what was agreed) is a price the list does not cover.
-      if (!sp || length > sp.durationMin * 60_000 || (change && length > agreedLength)) custom = true;
+      // Longer than the service (or than what was agreed) is a price the list does not cover; shorter
+      // than it is a time nobody is booked for in full (ADR-035 §2): a person sets either.
+      if (!sp || length !== sp.durationMin * 60_000 || (change && length > agreedLength)) custom = true;
       // Named by automation, or kept: what the booking holds (what was agreed, for a change).
       const named = change ? data.totalPrice !== undefined : offered.totalPrice !== undefined;
       // What automation names at our list price is the customer's own price, when they earned one.

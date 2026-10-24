@@ -151,13 +151,16 @@ export async function pickStaff(
     readonly addOns: readonly BookedAddOn[];
     readonly timezone: string;
     readonly exceptItemId?: string | undefined;
-    /** Until when, for a time already set (one we propose): else each one's own length from the start. */
+    /**
+     * Until when at least, for a time already set (one we propose): else each one's own length from the
+     * start. Never shorter than their own length (ADR-035 §2): whatever was typed, they are booked for it.
+     */
     readonly end?: number | undefined;
   },
 ): Promise<(StaffRow & { readonly terms: StaffService }) | null> {
   const free: (StaffRow & { readonly terms: StaffService })[] = [];
   for (const s of input.staff) {
-    const end = input.end ?? input.start + lengthWith(input.service, s.terms, input.addOns) * 60_000;
+    const end = Math.max(input.end ?? 0, input.start + lengthWith(input.service, s.terms, input.addOns) * 60_000);
     const ok = await slotOffered(db, {
       serviceId: input.service.id,
       start: input.start,
