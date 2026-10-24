@@ -5,10 +5,12 @@ import { z } from "zod";
 import { Capabilities } from "../src/capabilities/service";
 import { serviceInput } from "../src/capabilities/setup-types";
 import type { ConnectorDefinition, ConnectorHttp, OutboundBooking } from "../src/connectors/sdk";
+import { withdrawalCopy } from "../src/customer/copy";
 import { createDb, type Db } from "../src/db";
 import { customerCopyProblems } from "../src/i18n/customer-words";
 import { ulid } from "../src/ids";
 import { createRunner } from "../src/jobs/index";
+import { policySentence } from "../src/policy/words";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { business, items, parties } from "../src/schema/tables";
 import { createSecretBox } from "../src/secrets/box";
@@ -1049,6 +1051,149 @@ describe("a deposit the policy keeps", () => {
     const late = await cancelFeeOf(paid, Date.parse(`${day}T16:00:00-05:00`) - 12 * 3_600_000, "en");
     expect([late?.fee.value, late?.refund?.value]).toEqual([2000, 0]);
   });
+
+  /** The keep preset with a CA$20 deposit, a booking `days` ahead confirmed now and its deposit paid. */
+  async function keptAndPaid(days: number, idem: string) {
+    const s = await mapleAndFade();
+    await s.caps.setup.updateService(owner, {
+      service_id: s.fade.id,
+      deposit: { kind: "amount", value: 2000 },
+      policy: {
+        steps: [{ before: { hours: 24 }, fee: { kind: "none" } }],
+        after: { kind: "none" },
+        noShow: { kind: "full" },
+        deposit: { refundable: false },
+      },
+    });
+    const day = new Date(T0 + days * DAY).toISOString().slice(0, 10);
+    const input = {
+      payload: booking(s.fade.id, "Skin fade", `${day}T16:00:00-05:00`, `${day}T16:30:00-05:00`),
+      staff_id: s.ravi.id,
+      contact: { name: "Aiyana", email: "aiyana@example.com" },
+      idempotency_key: idem,
+    };
+    const summary = await new Capabilities(s.db)
+      .createBooking(agent(), input)
+      .catch((e: WriteError) => String(e.details?.summary ?? ""));
+    const r = await s.caps.createBooking(agent(), input);
+    await transitionItem(s.db, owner, { itemId: r.view.item.id, event: "confirm" });
+    await transitionItem(
+      s.db,
+      {
+        actor: { kind: "connector", id: "connector:pay", channel: "connector" },
+        tier: "verified_principal",
+        sandbox: false,
+        now: () => T0,
+      },
+      {
+        itemId: r.view.item.id,
+        event: "record_payment",
+        input: { paymentRef: `pi_${idem}`, amount: { value: 2000, currency: "CAD" } },
+      },
+    );
+    const start = Date.parse(`${day}T16:00:00-05:00`);
+    const refunds = async () =>
+      (await s.db.orm.select().from(items))
+        .filter((i) => i.type === "refund")
+        .map((i) => (i.payload as { amount?: unknown; kind?: unknown }) ?? {})
+        .map((x) => [x.amount, x.kind]);
+    return { ...s, r, start, summary, refunds };
+  }
+
+  it("gives way to the right of withdrawal: paid and cancelled in that time, it all comes back, as the customer was told", async () => {
+    const { db, caps, r, start, summary, refunds } = await keptAndPaid(3, "keep-w");
+    // The customer read both, and which one wins.
+    expect(summary).toContain("After that, the deposit is not refunded.");
+    expect(summary).toContain(
+      "If you withdraw in that time, before it starts, all you paid comes back, a deposit too, whatever the cancellation terms say.",
+    );
+    // Twelve hours before, three days after booking: their withdrawal, with nothing to confirm first.
+    const late: Caller = { ...agent(), now: () => start - 12 * 3_600_000 };
+    const done = await caps.cancelItem(late, {
+      item_id: r.view.item.id,
+      access_token: r.accessToken ?? "",
+      idempotency_key: "keep-w-c",
+    });
+    expect(done.view.item.state).toBe("cancelled_by_customer");
+    const { rows } = await db.client.query({
+      sql: "SELECT event FROM item_events WHERE item_id = ? ORDER BY seq",
+      params: [r.view.item.id],
+      method: "all",
+    });
+    expect(rows.map((x) => x[0])).toContain("withdraw");
+    expect(await refunds()).toEqual([[{ value: 2000, currency: "CAD" }, "withdrawal"]]);
+  });
+
+  it("is kept once the right of withdrawal has run out and cancelling is no longer free", async () => {
+    const { caps, r, start, refunds } = await keptAndPaid(20, "keep-k");
+    const late: Caller = { ...agent(), now: () => start - 12 * 3_600_000 };
+    const asked = await caps
+      .cancelItem(late, { item_id: r.view.item.id, access_token: r.accessToken ?? "", idempotency_key: "keep-k-1" })
+      .catch((e: unknown) => e);
+    expect(asked).toMatchObject({
+      code: "confirm_terms",
+      details: { fee: { value: 2000, currency: "CAD" }, refund_owed: { value: 0, currency: "CAD" } },
+    });
+    const done = await caps.cancelItem(late, {
+      item_id: r.view.item.id,
+      access_token: r.accessToken ?? "",
+      fee_sha: String((asked as WriteError).details?.fee_sha),
+      idempotency_key: "keep-k-2",
+    });
+    expect(done.view.item.state).toBe("cancelled_by_customer");
+    expect(await refunds()).toEqual([]);
+  });
+
+  it("is said with every fee after the free time, when it may be more than that fee", async () => {
+    const { db, caps, fade, ravi } = await mapleAndFade();
+    await caps.setup.updateService(owner, {
+      service_id: fade.id,
+      deposit: { kind: "percent", value: 50 },
+      policy: {
+        steps: [
+          { before: { hours: 48 }, fee: { kind: "none" } },
+          { before: { hours: 24 }, fee: { kind: "percent", value: 20 } },
+        ],
+        after: { kind: "percent", value: 20 },
+        noShow: { kind: "full" },
+        deposit: { refundable: false },
+      },
+    });
+    const day = new Date(T0 + 4 * DAY).toISOString().slice(0, 10);
+    const input = {
+      payload: booking(fade.id, "Skin fade", `${day}T16:00:00-05:00`, `${day}T16:30:00-05:00`),
+      staff_id: ravi.id,
+      contact: { name: "Aiyana", email: "aiyana@example.com" },
+      idempotency_key: "keep-steps",
+    };
+    const summary = await new Capabilities(db)
+      .createBooking(agent(), input)
+      .catch((e: WriteError) => String(e.details?.summary ?? ""));
+    expect(summary).toContain("cancelling costs CA$11.00, or the deposit paid if that is more.");
+    expect(summary).toContain("After that: CA$11.00, or the deposit paid if that is more.");
+    const r = await caps.createBooking(agent(), input);
+    await transitionItem(db, owner, { itemId: r.view.item.id, event: "confirm" });
+    await transitionItem(
+      db,
+      {
+        actor: { kind: "connector", id: "connector:pay", channel: "connector" },
+        tier: "verified_principal",
+        sandbox: false,
+        now: () => T0,
+      },
+      {
+        itemId: r.view.item.id,
+        event: "record_payment",
+        input: { paymentRef: "pi_steps", amount: { value: 2750, currency: "CAD" } },
+      },
+    );
+    const [row] = await db.orm.select().from(items).where(eq(items.id, r.view.item.id));
+    const paid = { id: r.view.item.id, payload: row?.payload as never };
+    // A day and a half before: the step's CA$11.00 is less than the deposit paid, which is what is kept.
+    const quote = await cancelFeeOf(paid, Date.parse(`${day}T16:00:00-05:00`) - 36 * 3_600_000, "en");
+    expect(quote?.fee.value).toBe(2750);
+    expect(quote?.sentence).toContain("CA$11.00, or the deposit paid if that is more.");
+  });
 });
 
 describe("the day by staff", () => {
@@ -1196,8 +1341,30 @@ describe("what customers read", () => {
         w.cancelFeeBack("₦5,000", "₦10,000"),
         w.cancelFree,
         w.anyone,
+        // A deposit the policy keeps beside a fee, and the right of withdrawal over both.
+        policySentence(
+          {
+            zone: "America/Toronto",
+            steps: [
+              { until: "2026-11-05T21:00:00.000Z", fee: { value: 0, currency: "CAD" } },
+              { until: "2026-11-06T21:00:00.000Z", fee: { value: 1100, currency: "CAD" } },
+            ],
+            after: { value: 1100, currency: "CAD" },
+            noShow: { value: 5500, currency: "CAD" },
+          },
+          {
+            lang,
+            total: { value: 5500, currency: "CAD" },
+            depositKept: true,
+            deposit: { value: 2750, currency: "CAD" },
+          },
+        ),
       ];
       expect(customerCopyProblems(lines, lang), lang).toEqual([]);
     }
+    for (const lang of ["en", "pt"] as const) {
+      expect(customerCopyProblems([withdrawalCopy(lang, "eu").paidBack], lang), lang).toEqual([]);
+    }
+    expect(customerCopyProblems([withdrawalCopy("en", "uk").paidBack], "en")).toEqual([]);
   });
 });

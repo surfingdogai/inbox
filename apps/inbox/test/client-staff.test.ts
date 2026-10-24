@@ -39,6 +39,22 @@ describe("a service's terms", () => {
     expect(policyWords(keep)).not.toContain("then free");
   });
 
+  it("say a deposit the policy keeps beside every fee after the free time, since the more is charged", () => {
+    expect(
+      policyWords({
+        steps: [
+          { before: { hours: 48 }, fee: { kind: "none" } },
+          { before: { hours: 24 }, fee: { kind: "percent", value: 20 } },
+        ],
+        after: { kind: "full" },
+        noShow: { kind: "full" },
+        deposit: { refundable: false },
+      }),
+    ).toBe(
+      "free until 48 h before · 20% (or the deposit, if more) until 24 h before · then full price · no-show: full price",
+    );
+  });
+
   it("name their fees in their labels, for any business", () => {
     expect(POLICY_PRESETS.map((p) => p.label)).toEqual([
       "Your usual policy",
@@ -68,6 +84,20 @@ describe("a booking's dated policy", () => {
       "no-show MXN 800.00",
     ]);
     expect(datedSteps(dated, money, when)).toContain("then free");
+  });
+
+  it("says the deposit beside a smaller fee after the free time, and leaves it off a larger one", () => {
+    const steps = {
+      ...dated,
+      steps: [...dated.steps, { until: "2026-11-04T12:00:00-06:00", fee: { value: 20_000, currency: "MXN" } }],
+      after: { value: 80_000, currency: "MXN" },
+    };
+    expect(datedSteps(steps, money, when, { depositKept: true, deposit: { value: 40_000, currency: "MXN" } })).toEqual([
+      "Free until 2026-11-03 12:00",
+      "MXN 200.00 (or the deposit, if more) until 2026-11-04 12:00",
+      "then MXN 800.00",
+      "no-show MXN 800.00",
+    ]);
   });
 
   it("says it as kept for a booking made after the free time", () => {

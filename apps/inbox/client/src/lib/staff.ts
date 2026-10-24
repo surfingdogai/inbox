@@ -178,9 +178,13 @@ export function percentText(value: number): string {
   }
 }
 
+/** Said after a fee where a deposit the policy keeps may be more than it, as the inbox charges it. */
+const OR_KEPT = " (or the deposit, if more)";
+
 /**
  * A policy in a few words, for the service line and under its choice: "free until 24 h before · then
- * 50% · no-show: full price". A deposit the policy keeps is said as kept once cancelling is not free.
+ * 50% · no-show: full price". A deposit the policy keeps is said as kept once cancelling is not free,
+ * and beside every fee from then on, since the more of the two is charged.
  */
 export function policyWords(p: Policy | null | undefined): string {
   if (!p) return "";
@@ -196,13 +200,19 @@ export function policyWords(p: Policy | null | undefined): string {
             : "a fixed fee";
   const before = (s: Policy["steps"][number]) =>
     s.before.hours !== undefined ? `${s.before.hours} h` : `${s.before.days} days`;
-  const steps = p.steps.map((s) =>
-    s.fee.kind === "none" ? `free until ${before(s)} before` : `${fee(s.fee)} until ${before(s)} before`,
+  const keeps = p.deposit?.refundable === false;
+  const lastFree = p.steps.reduce((at, s, i) => (s.fee.kind === "none" ? i : at), -1);
+  const charged = (f: Policy["after"], i: number) =>
+    `${fee(f)}${keeps && i > lastFree && f.kind !== "full" ? OR_KEPT : ""}`;
+  const steps = p.steps.map((s, i) =>
+    s.fee.kind === "none" ? `free until ${before(s)} before` : `${charged(s.fee, i)} until ${before(s)} before`,
   );
-  const kept = p.deposit?.refundable === false && p.after.kind === "none";
-  return [...steps, kept ? "then the deposit is kept" : `then ${fee(p.after)}`, `no-show: ${fee(p.noShow)}`].join(
-    " · ",
-  );
+  const kept = keeps && p.after.kind === "none";
+  return [
+    ...steps,
+    kept ? "then the deposit is kept" : `then ${charged(p.after, p.steps.length)}`,
+    `no-show: ${fee(p.noShow)}`,
+  ].join(" · ");
 }
 
 export const DEPOSIT_PRESETS: readonly {
@@ -225,19 +235,34 @@ export function depositKey(rule: DepositRule | null | undefined): string {
 
 /**
  * A booking's dated policy, for the owner: each step's last moment in the business's zone, and its fee.
- * A deposit the policy keeps is said as kept once cancelling is no longer free, as the customer read it.
+ * A deposit the policy keeps is said as kept once cancelling is no longer free, as the customer read it,
+ * and beside a smaller fee from then on.
  */
 export function datedSteps(
   dated: DatedPolicy,
   money: (m: Money) => string,
   when: (iso: string) => string,
-  opts: { readonly depositKept?: boolean } = {},
+  opts: { readonly depositKept?: boolean; readonly deposit?: Money | undefined } = {},
 ): string[] {
-  const out = dated.steps.map((s) =>
-    s.fee.value === 0 ? `Free until ${when(s.until)}` : `${money(s.fee)} until ${when(s.until)}`,
+  const lastFree = dated.steps.reduce((at, s, i) => (s.fee.value === 0 ? i : at), -1);
+  const deposit = opts.deposit;
+  const charged = (m: Money, i: number) =>
+    `${money(m)}${
+      opts.depositKept === true &&
+      i > lastFree &&
+      !(deposit && deposit.currency === m.currency && m.value >= deposit.value)
+        ? OR_KEPT
+        : ""
+    }`;
+  const out = dated.steps.map((s, i) =>
+    s.fee.value === 0 ? `Free until ${when(s.until)}` : `${charged(s.fee, i)} until ${when(s.until)}`,
   );
   const kept = opts.depositKept === true && dated.after.value === 0;
-  const after = kept ? "the deposit is kept" : dated.after.value === 0 ? "free" : money(dated.after);
+  const after = kept
+    ? "the deposit is kept"
+    : dated.after.value === 0
+      ? "free"
+      : charged(dated.after, dated.steps.length);
   // Booked after every step had passed: only what cancelling costs now.
   out.push(
     dated.steps.length > 0

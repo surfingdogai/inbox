@@ -79,7 +79,12 @@ export function BookingSalon({
                   : p.deposit.dueBy
                     ? ` · due by ${when(p.deposit.dueBy)}`
                     : " · asked once you confirm"}
-            {!p.deposit.refundable && <span className="hint"> · kept once cancelling is no longer free</span>}
+            {!p.deposit.refundable && (
+              <span className="hint">
+                {" "}
+                · kept once cancelling is no longer free, unless the customer may still withdraw
+              </span>
+            )}
           </span>
         </div>
       )}
@@ -89,6 +94,7 @@ export function BookingSalon({
           <span>
             {datedSteps(p.policy, (m) => formatMoney(m), when, {
               depositKept: p.deposit !== undefined && !p.deposit.refundable,
+              deposit: p.deposit?.amount,
             }).join(" · ")}
           </span>
         </div>

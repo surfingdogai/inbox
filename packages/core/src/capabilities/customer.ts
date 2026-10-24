@@ -428,11 +428,18 @@ export class CustomerDoors {
     const flags = await withdrawalFlagsOf(this.db, type, payload);
     const excepted = flags.find((f) => f !== "standard") as keyof typeof words.except | undefined;
     const start = type === "booking" ? Date.parse((payload as PayloadOf<"booking">).startTime) : Number.NaN;
+    // A salon's deposit or own cancellation terms (ADR-035) give way to the right of withdrawal while it
+    // runs: a paid booking cancelled then is withdrawn from, and all that was paid comes back.
+    const terms = type === "booking" && (payload.deposit !== undefined || payload.policy !== undefined);
     const withdrawal = excepted
       ? words.except[excepted]
       : type === "order"
         ? words.lineGoods(vars({ days }))
-        : `${words.lineService(vars({ days }))}${start - now < settings.returns.days * 86_400_000 ? ` ${words.startsEarly}` : ""}`;
+        : [
+            words.lineService(vars({ days })),
+            ...(terms ? [words.paidBack] : []),
+            ...(start - now < settings.returns.days * 86_400_000 ? [words.startsEarly] : []),
+          ].join(" ");
     return [
       main,
       type === "booking" ? salonLine(payload as PayloadOf<"booking">, a) : "",

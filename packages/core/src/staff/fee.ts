@@ -65,7 +65,7 @@ export async function cancelFeeOf(
         : w.cancelFee(money(fee));
   const total = p.totalPrice ?? fee;
   const depositKept = p.deposit !== undefined && !p.deposit.refundable;
-  const sentence = `${head} ${policySentence(p.policy as DatedPolicy, { lang, total, depositKept })}`;
+  const sentence = `${head} ${policySentence(p.policy as DatedPolicy, { lang, total, depositKept, deposit: p.deposit?.amount })}`;
   return { fee, refund, sha, sentence };
 }
 

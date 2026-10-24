@@ -315,6 +315,7 @@ export function offerSummary(item: Item, offer: OpenOffer, a: Audience = DEFAULT
           lang: a.lang,
           total: offer.terms.totalPrice,
           depositKept: offer.terms.deposit?.refundable === false,
+          deposit: offer.terms.deposit?.amount,
         })}`
       : said;
   if (!offer.obligationToPay || !offer.terms.totalPrice) return sentence;
@@ -459,7 +460,9 @@ export function salonLines(
   }
   if (p.policy && p.totalPrice) {
     const depositKept = p.deposit !== undefined && !p.deposit.refundable;
-    parts.push(policySentence(p.policy, { lang: a.lang, total: p.totalPrice, depositKept }));
+    parts.push(
+      policySentence(p.policy, { lang: a.lang, total: p.totalPrice, depositKept, deposit: p.deposit?.amount }),
+    );
   }
   return parts;
 }

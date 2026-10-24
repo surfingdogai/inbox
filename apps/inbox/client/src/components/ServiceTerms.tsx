@@ -247,7 +247,8 @@ export function ServiceTerms({
           return words ? <p className="terms-words">{words[0]?.toUpperCase() + words.slice(1)}.</p> : null;
         })()}
         <p className="hint">
-          Customers see it, dated, before they confirm. Some places limit cancellation fees: check yours.
+          Customers see it, dated, before they confirm. One who paid can still withdraw in the 14 days after booking,
+          before it starts, and gets it all back, a deposit too. Some places limit cancellation fees: check yours.
         </p>
       </fieldset>
 

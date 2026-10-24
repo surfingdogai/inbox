@@ -276,6 +276,9 @@ function withdrawalBlocks(input: CustomerMailInput, template: string): (readonly
   const when = (iso: string) => whenText(iso, input.timezone, input.lang);
   const days = String(w.days);
   const link = input.links?.get("withdraw");
+  // A salon's deposit or own cancellation terms (ADR-035) give way to the right while it runs.
+  const p = input.item.type === "booking" ? (input.item.payload as { deposit?: unknown; policy?: unknown }) : {};
+  const terms = p.deposit !== undefined || p.policy !== undefined;
   const out: (readonly string[])[] = [
     [
       w.until
@@ -283,6 +286,7 @@ function withdrawalBlocks(input: CustomerMailInput, template: string): (readonly
         : w.kind === "goods"
           ? words.lineGoods(vars({ days }))
           : words.lineService(vars({ days })),
+      ...(terms ? [words.paidBack] : []),
       ...(link ? [`${words.label}: ${link}`] : []),
     ],
   ];
