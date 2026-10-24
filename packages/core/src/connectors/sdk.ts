@@ -1013,10 +1013,17 @@ export interface ConnectorDefinition {
   ready?(): true | string;
   /**
    * How the gallery shows it while it is not ready: `soon` (on its way here), or `setup` (it needs
-   * something on the server only its operator can give, said in `hint`, explained at `href`).
+   * something on the server only its operator can give, said in `hint`, explained at `href`). `tag` is
+   * the few words on its tile then, when "Needs setup" would not say it: "Not available yet" for what
+   * waits on another company, with nothing for the owner or the operator to do.
    */
   readonly whenNotReady?:
-    | { readonly status: "soon" | "setup"; readonly hint?: string | undefined; readonly href?: string | undefined }
+    | {
+        readonly status: "soon" | "setup";
+        readonly hint?: string | undefined;
+        readonly href?: string | undefined;
+        readonly tag?: string | undefined;
+      }
     | undefined;
   /** Checks what the owner gave against the platform, and reads what they can choose. Called on save. */
   connect?(ctx: ConnectContext, input: Readonly<Record<string, string>>): Promise<Connected>;

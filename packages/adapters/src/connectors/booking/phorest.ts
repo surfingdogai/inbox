@@ -396,6 +396,7 @@ export function phorestConnector(
       status: "setup",
       hint: "Not available yet. When it is, you connect with the API access Phorest gives your salon.",
       href: PHOREST_DOCS,
+      tag: "Not available yet",
     },
 
     async connect(ctx, input): Promise<Connected> {

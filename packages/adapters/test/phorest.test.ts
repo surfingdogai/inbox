@@ -147,9 +147,9 @@ describe("Phorest, switched off", () => {
     const card = gallery(defs).find((c) => c.id === "phorest");
     expect(card?.group).toBe("booking");
     const hint = "Not available yet. When it is, you connect with the API access Phorest gives your salon.";
-    expect(card?.ways.map((w) => [w.label, w.status, w.hint])).toEqual([
-      ["Phorest · Europe", "setup", hint],
-      ["Phorest · Americas & Australia", "setup", hint],
+    expect(card?.ways.map((w) => [w.label, w.status, w.hint, w.tag])).toEqual([
+      ["Phorest · Europe", "setup", hint, "Not available yet"],
+      ["Phorest · Americas & Australia", "setup", hint, "Not available yet"],
     ]);
     // No form, no button that goes nowhere.
     expect(card?.ways.every((w) => w.form.length === 0)).toBe(true);
@@ -172,8 +172,8 @@ describe("Phorest, switched off", () => {
     expect(mb.connect).toBeUndefined();
     expect(mb.bookings).toBeUndefined();
     const card = gallery(new Map([[mb.kind, mb]])).find((c) => c.id === "mindbody");
-    expect(card?.ways.map((w) => [w.status, w.hint])).toEqual([
-      ["setup", "Not available yet: Mindbody has to approve it first."],
+    expect(card?.ways.map((w) => [w.status, w.hint, w.tag])).toEqual([
+      ["setup", "Not available yet: Mindbody has to approve it first.", "Not available yet"],
     ]);
   });
 });

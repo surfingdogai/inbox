@@ -45,6 +45,8 @@ export interface GalleryWay {
   readonly note?: string | undefined;
   readonly hint?: string | undefined;
   readonly href?: string | undefined;
+  /** The few words on its tile while it is not ready, when not "Needs setup": "Not available yet". */
+  readonly tag?: string | undefined;
   /**
    * For a payment platform: where it sends what it says (this inbox's own address) and which events,
    * for an owner whose key cannot add the webhook itself and adds it by hand. Absent when this inbox
@@ -380,6 +382,7 @@ function wayOf(
     ...(note ? { note } : {}),
     ...(unready?.hint ? { hint: unready.hint } : {}),
     ...(unready?.href ? { href: unready.href } : {}),
+    ...(unready?.tag ? { tag: unready.tag } : {}),
     ...(def.hookEvents && live && opts.hookBase
       ? { hook: { url: `${opts.hookBase}${w.kind}`, events: def.hookEvents } }
       : {}),

@@ -282,7 +282,7 @@ function Tile({
       {soon ? (
         <span className="int-tag">Soon</span>
       ) : setup ? (
-        <span className="int-tag">Needs setup</span>
+        <span className="int-tag">{setupTag(card)}</span>
       ) : tag ? (
         <span className={clsx("int-tag", tag.tone === "on" && "is-on", tag.tone === "warn" && "is-warn")}>
           {tag.text}
@@ -1502,4 +1502,9 @@ function NewLink({
 /** Every way of the card needs something only the server or the company can give: nothing to connect yet. */
 function needsSetup(card: GalleryCard): boolean {
   return card.ways.length > 0 && card.ways.every((w) => w.status === "setup");
+}
+
+/** Such a card's tag, as its panel says it: "Not available yet" when it waits on another company. */
+function setupTag(card: GalleryCard): string {
+  return card.ways.find((w) => w.tag)?.tag ?? "Needs setup";
 }

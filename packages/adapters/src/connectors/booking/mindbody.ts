@@ -53,6 +53,7 @@ export function mindbodyConnector(): ConnectorDefinition {
       status: "setup",
       hint: "Not available yet: Mindbody has to approve it first.",
       href: MINDBODY_DOCS,
+      tag: "Not available yet",
     },
   };
 }
