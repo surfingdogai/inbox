@@ -109,8 +109,14 @@ salon's own credentials can be used with.
 - The right of withdrawal wins where it runs (ADR-018 §7): a paid booking the customer cancels in its
   period, before the start, is withdrawn from, and all that was paid comes back, the deposit too. What
   the customer confirms, and the confirmation after payment, say so beside the cancellation terms, and
-  the owner reads it under the policy. Once the period is over (or for a service excepted from it, or a
-  business that sells only to businesses), the policy and a kept deposit apply as written.
+  the owner reads it under the policy. The right runs only once something is paid (ADR-018's reading):
+  before that, cancelling is under the booking's terms, and what the customer confirms says that too.
+  Once the period is over (or for a service excepted from it, or a business that sells only to
+  businesses), the policy and a kept deposit apply as written.
+- A customer's cancel of a paid booking with a deposit or a policy, outside that period, opens its refund
+  (`cancellation`, approved, due by the refund days) of what the policy does not keep: all of it while
+  cancelling is free. The owner reads the fee and what is owed back beside the booking. Cancelled late
+  with a deposit and no policy, nothing says what is kept: a person decides, and the booking says so.
 - Who it is with, the add-ons, the deposit and the policy are part of what a customer confirms (the
   confirm step's terms and summary). A confirmed booking with a policy answers a customer's cancel with
   the fee and what comes back (`409 confirm_terms`, `fee_sha`); it is cancelled, as a late cancellation

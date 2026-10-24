@@ -210,10 +210,12 @@ export interface WithdrawalCopy {
   /** A service that starts within the period: the customer asks for it to start then. */
   readonly startsEarly: string;
   /**
-   * A booking with a deposit or its own cancellation terms (ADR-035): withdrawing in the period, before
-   * it starts, gives back all that was paid, whatever those terms say.
+   * A booking with a deposit or its own cancellation terms (ADR-035): once paid, withdrawing in the
+   * period, before it starts, gives back all that was paid, whatever those terms say.
    */
   readonly paidBack: string;
+  /** The same booking before anything is paid: the right runs only once paid, so its terms apply. */
+  readonly unpaidTerms: string;
   /** Until when, once the period has begun. */
   readonly until: Say;
   /** Why this one cannot be withdrawn from. */
@@ -966,7 +968,8 @@ const EN: Copy = {
     startsEarly:
       "It starts within that time: by confirming, you ask us to start then. If you withdraw after it has started, you pay for what we have done; once it is fully done, you can no longer withdraw.",
     paidBack:
-      "If you withdraw in that time, before it starts, all you paid comes back, a deposit too, whatever the cancellation terms say.",
+      "Once you have paid, if you withdraw in that time, before it starts, all you paid comes back, a deposit too, whatever the cancellation terms say.",
+    unpaidTerms: "Before you pay anything, the cancellation terms apply.",
     until: (v) => `You can withdraw until ${v.deadline}, without giving a reason.`,
     except: {
       personalised: "This cannot be returned: it is made to your order.",
@@ -1093,7 +1096,7 @@ export const WITHDRAWAL_UK: WithdrawalCopy = {
   startsEarly:
     "It starts within that time: by confirming, you ask us to start then. If you cancel after it has started, you pay for what we have done; once it is fully done, you can no longer cancel.",
   paidBack:
-    "If you cancel in that time, before it starts, all you paid comes back, a deposit too, whatever the cancellation terms say.",
+    "Once you have paid, if you cancel in that time, before it starts, all you paid comes back, a deposit too, whatever the cancellation terms say.",
   until: (v) => `You can cancel until ${v.deadline}, without giving a reason.`,
   except: {
     ...EN.withdrawal.except,
@@ -1572,7 +1575,8 @@ const PT: Copy = {
     startsEarly:
       "Começa dentro desse prazo: ao confirmar, pede-nos para começar nessa data. Se se retratar depois de começar, paga o que já tivermos feito; depois de concluído, já não se pode retratar.",
     paidBack:
-      "Se se retratar nesse prazo, antes de começar, recebe de volta tudo o que pagou, incluindo o sinal, digam o que disserem as condições de cancelamento.",
+      "Depois de pagar, se se retratar nesse prazo, antes de começar, recebe de volta tudo o que pagou, incluindo o sinal, digam o que disserem as condições de cancelamento.",
+    unpaidTerms: "Antes de pagar o que quer que seja, aplicam-se as condições de cancelamento.",
     until: (v) => `Pode retratar-se até ${v.deadline}, sem indicar motivo.`,
     except: {
       personalised: "Não pode ser devolvido: é feito por medida para si.",

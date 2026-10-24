@@ -1074,6 +1074,35 @@ describe("cancelling", () => {
     expect((await cancelFeeOf(moved, T0 + 20 * DAY - 3_600_000, "en"))?.fee.value).toBe(2750);
   });
 
+  it("costs what its terms say before anything is paid, as the customer was told when they booked", async () => {
+    const { db, caps, fade, ravi } = await policySalon();
+    const day = new Date(T0 + 3 * DAY).toISOString().slice(0, 10);
+    const input = {
+      payload: booking(fade.id, "Skin fade", `${day}T16:00:00-05:00`, `${day}T16:30:00-05:00`),
+      staff_id: ravi.id,
+      contact: { name: "Aiyana", email: "aiyana@example.com" },
+      idempotency_key: "unpaid-1",
+    };
+    const summary = await new Capabilities(db)
+      .createBooking(agent(), input)
+      .catch((e: WriteError) => String(e.details?.summary ?? ""));
+    // The right of withdrawal wins only once paid; until then the cancellation terms apply, and it says so.
+    const words = withdrawalCopy("en", "eu");
+    expect(summary).toContain(words.paidBack);
+    expect(summary).toContain(words.unpaidTerms);
+    expect(summary).toContain("Once you have paid");
+    const r = await caps.createBooking(agent(), input);
+    await transitionItem(db, owner, { itemId: r.view.item.id, event: "confirm" });
+    // Twelve hours before, three days after booking, nothing paid: the terms' fee, as they read.
+    const start = Date.parse(`${day}T16:00:00-05:00`);
+    const late: Caller = { ...agent(), now: () => start - 12 * 3_600_000 };
+    const asked = await caps
+      .cancelItem(late, { item_id: r.view.item.id, access_token: r.accessToken ?? "", idempotency_key: "unpaid-c" })
+      .catch((e: unknown) => e);
+    expect(asked).toMatchObject({ code: "confirm_terms", details: { fee: { value: 2750, currency: "CAD" } } });
+    expect((asked as WriteError).details).not.toHaveProperty("refund_owed");
+  });
+
   it("is free while the policy says so, with nothing to confirm", async () => {
     const { db, caps, fade, ravi } = await policySalon();
     const tomorrow = new Date(T0 + 2 * DAY).toISOString().slice(0, 10);
@@ -1209,9 +1238,7 @@ describe("a deposit the policy keeps", () => {
     const { db, caps, r, start, summary, refunds } = await keptAndPaid(3, "keep-w");
     // The customer read both, and which one wins.
     expect(summary).toContain("After that, the deposit is not refunded.");
-    expect(summary).toContain(
-      "If you withdraw in that time, before it starts, all you paid comes back, a deposit too, whatever the cancellation terms say.",
-    );
+    expect(summary).toContain(withdrawalCopy("en", "eu").paidBack);
     // Twelve hours before, three days after booking: their withdrawal, with nothing to confirm first.
     const late: Caller = { ...agent(), now: () => start - 12 * 3_600_000 };
     const done = await caps.cancelItem(late, {
@@ -1301,6 +1328,134 @@ describe("a deposit the policy keeps", () => {
   });
 });
 
+describe("a paid deposit, once the right of withdrawal has run out", () => {
+  /** A CA$20 deposit that comes back, a booking twenty days ahead confirmed now, its deposit paid. */
+  async function paidDeposit(idem: string, policy = true) {
+    const s = await mapleAndFade();
+    await s.caps.setup.updateService(owner, {
+      service_id: s.fade.id,
+      deposit: { kind: "amount", value: 2000 },
+      ...(policy
+        ? {
+            policy: {
+              steps: [{ before: { hours: 24 }, fee: { kind: "none" as const } }],
+              after: { kind: "percent" as const, value: 10 },
+              noShow: { kind: "full" as const },
+            },
+          }
+        : {}),
+    });
+    const day = new Date(T0 + 20 * DAY).toISOString().slice(0, 10);
+    const r = await s.caps.createBooking(agent(), {
+      payload: booking(s.fade.id, "Skin fade", `${day}T16:00:00-05:00`, `${day}T16:30:00-05:00`),
+      staff_id: s.ravi.id,
+      contact: { name: "Aiyana", email: "aiyana@example.com" },
+      idempotency_key: idem,
+    });
+    await transitionItem(s.db, owner, { itemId: r.view.item.id, event: "confirm" });
+    await transitionItem(
+      s.db,
+      {
+        actor: { kind: "connector", id: "connector:pay", channel: "connector" },
+        tier: "verified_principal",
+        sandbox: false,
+        now: () => T0,
+      },
+      {
+        itemId: r.view.item.id,
+        event: "record_payment",
+        input: { paymentRef: `pi_${idem}`, amount: { value: 2000, currency: "CAD" } },
+      },
+    );
+    const start = Date.parse(`${day}T16:00:00-05:00`);
+    const after = async () => {
+      const all = await s.db.orm.select().from(items);
+      const refunds = all
+        .filter((i) => i.type === "refund")
+        .map((i) => ({ state: i.state, ...(i.payload as { amount?: unknown; kind?: unknown; refundDue?: string }) }));
+      const notes = await s.db.client.query({
+        sql: "SELECT body_text FROM thread_entries WHERE item_id = ? AND actor_kind = 'system' ORDER BY rowid",
+        params: [r.view.item.id],
+        method: "all",
+      });
+      const row = all.find((i) => i.id === r.view.item.id);
+      return {
+        state: row?.state,
+        needsHuman: (row?.flags as { needsHuman?: boolean } | undefined)?.needsHuman === true,
+        refunds,
+        notes: notes.rows.map((n) => String(n[0])).join(" "),
+      };
+    };
+    return { ...s, r, start, after };
+  }
+
+  it("comes back whole on a free cancel: a refund is opened for it, and the owner told", async () => {
+    const { caps, r, start, after } = await paidDeposit("dep-free");
+    const early: Caller = { ...agent(), now: () => start - 5 * DAY };
+    const done = await caps.cancelItem(early, {
+      item_id: r.view.item.id,
+      access_token: r.accessToken ?? "",
+      idempotency_key: "dep-free-c",
+    });
+    expect(done.view.item.state).toBe("cancelled_by_customer");
+    const then = await after();
+    expect(then.refunds).toMatchObject([
+      { state: "approved", kind: "cancellation", amount: { value: 2000, currency: "CAD" } },
+    ]);
+    expect(Date.parse(String(then.refunds[0]?.refundDue))).toBeGreaterThan(start - 5 * DAY);
+    expect(then.notes).toContain("all they paid, CA$20.00, is owed back to them by");
+    expect(then.needsHuman).toBe(false);
+  });
+
+  it("comes back less the fee on a late cancel, as the customer was told", async () => {
+    const { caps, r, start, after } = await paidDeposit("dep-late");
+    const late: Caller = { ...agent(), now: () => start - 10 * 3_600_000 };
+    const asked = await caps
+      .cancelItem(late, { item_id: r.view.item.id, access_token: r.accessToken ?? "", idempotency_key: "dep-late-1" })
+      .catch((e: unknown) => e);
+    expect(asked).toMatchObject({
+      code: "confirm_terms",
+      details: { fee: { value: 550, currency: "CAD" }, refund_owed: { value: 1450, currency: "CAD" } },
+    });
+    expect((asked as WriteError).message).toContain("CA$14.50 comes back to you");
+    await caps.cancelItem(late, {
+      item_id: r.view.item.id,
+      access_token: r.accessToken ?? "",
+      fee_sha: String((asked as WriteError).details?.fee_sha),
+      idempotency_key: "dep-late-2",
+    });
+    const then = await after();
+    expect(then.state).toBe("cancelled_by_customer");
+    expect(then.refunds).toMatchObject([
+      { state: "approved", kind: "cancellation", amount: { value: 1450, currency: "CAD" } },
+    ]);
+    expect(then.notes).toContain("Cancelled with a fee of CA$5.50 under its policy");
+    expect(then.notes).toContain("CA$14.50 is owed back to them by");
+  });
+
+  it("is a person's to settle when it is cancelled late and nothing says what is kept", async () => {
+    const { db, caps, r, start, after } = await paidDeposit("dep-none", false);
+    await caps.updateSettings(owner, { doc: { booking: { lateCancellation: "record" } } });
+    const late: Caller = { ...agent(), now: () => start - 10 * 3_600_000 };
+    const done = await caps.cancelItem(late, {
+      item_id: r.view.item.id,
+      access_token: r.accessToken ?? "",
+      idempotency_key: "dep-none-c",
+    });
+    expect(done.view.item.state).toBe("cancelled_by_customer");
+    const { rows } = await db.client.query({
+      sql: "SELECT event FROM item_events WHERE item_id = ? ORDER BY seq",
+      params: [r.view.item.id],
+      method: "all",
+    });
+    expect(rows.map((x) => x[0])).toContain("cancel_late");
+    const then = await after();
+    expect(then.refunds).toEqual([]);
+    expect(then.needsHuman).toBe(true);
+    expect(then.notes).toContain("They paid CA$20.00");
+  });
+});
+
 describe("the day by staff", () => {
   it("holds every booking of a busy day, however many", async () => {
     const { db, caps, fade, mei } = await mapleAndFade();
@@ -1380,6 +1535,29 @@ describe("emails", () => {
       expect(body(t), t).toContain("A deposit of CA$15.00 holds your booking.");
       expect(body(t), t).toContain("After that, the deposit is not refunded.");
     }
+    // Paid: its confirmation says the right of withdrawal wins over those terms while it runs.
+    await transitionItem(
+      db,
+      {
+        actor: { kind: "connector", id: "connector:pay", channel: "connector" },
+        tier: "verified_principal",
+        sandbox: false,
+        now: () => T0 + 3_600_000,
+      },
+      {
+        itemId: r.view.item.id,
+        event: "record_payment",
+        input: { paymentRef: "pi_mail", amount: { value: 1500, currency: "CAD" } },
+      },
+    );
+    await drain();
+    const paidMails = await db.client.query({
+      sql: "SELECT template, body_text FROM outbound_mail WHERE item_id = ? ORDER BY created_at, id",
+      params: [r.view.item.id],
+      method: "all",
+    });
+    const paidBody = paidMails.rows.map((m) => `${m[0]}: ${m[1]}`).join("\n");
+    expect(paidBody).toContain(withdrawalCopy("en", "eu").paidBack);
     const ownerMail = body("owner.create");
     expect(ownerMail).toContain("With: Ravi");
     expect(ownerMail).toContain("16:00 (Toronto time)");

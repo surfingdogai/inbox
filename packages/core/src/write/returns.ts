@@ -19,8 +19,10 @@ import {
   SEND_BACK_DAYS,
 } from "../negotiation/refunds";
 import { ORDER_SENT, type WithdrawalRight, withdrawalRight } from "../negotiation/withdrawal";
+import { refundOwed } from "../policy/index";
 import { items, products, services } from "../schema/tables";
 import type { Settings } from "../settings/schema";
+import { bookingFeeAt } from "../staff/fee";
 import { actorMeta, type Caller } from "./caller";
 import { eventStatement, jobStatement, webhookFanoutStatement } from "./common";
 import { WriteError } from "./errors";
@@ -35,6 +37,20 @@ const DAY = 86_400_000;
 
 /** The events of an order or a booking that end in a refund of what was paid, or a return. */
 const WITHDRAWALS: ReadonlySet<string> = new Set(["withdraw", "record_withdrawal"]);
+/** The customer's own cancel of a confirmed booking, free or late. */
+const CUSTOMER_CANCELS: ReadonlySet<string> = new Set(["cancel", "cancel_late"]);
+
+/**
+ * What comes back of what was paid when the customer cancels a booking made on a salon's own terms
+ * (ADR-035): all of it while cancelling is free, else what is left after the policy's fee. Null for a
+ * booking without such terms (cancelled as it always was), and for a late cancel with a deposit and no
+ * policy, where nothing says what is kept: a person decides.
+ */
+export function owedOnCancel(payload: PayloadOf<"booking">, paid: Money, event: string, now: number): Money | null {
+  if (payload.policy) return refundOwed(paid, bookingFeeAt(payload, now));
+  if (!payload.deposit) return null;
+  return event === "cancel" ? paid : null;
+}
 
 /**
  * Whether the customer may withdraw from a booking or an order at `at`, and until when: a consumer
@@ -285,6 +301,26 @@ export async function refundFor(o: {
           noticeAt: notice,
           goodsBack: false,
           refundDue: iso(refundDue),
+        },
+      };
+    }
+    // The customer cancelled a paid booking with a salon's own terms (ADR-035), outside the right of
+    // withdrawal: what the policy does not keep is owed back by the refund days, and nothing has to
+    // come back. Free, it all is. Owed in another currency than the fee, a person decides.
+    if (CUSTOMER_CANCELS.has(t.event)) {
+      const owed = owedOnCancel(item.payload, paid, t.event, now);
+      if (!owed || owed.value <= 0) return null;
+      return {
+        kind: "cancellation",
+        state: "approved",
+        acknowledge: false,
+        payload: {
+          orderItemId,
+          amount: owed,
+          kind: "cancellation",
+          noticeAt: notice,
+          goodsBack: false,
+          refundDue: iso(now + settings.returns.refundDays * DAY),
         },
       };
     }

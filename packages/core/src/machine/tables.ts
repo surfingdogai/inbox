@@ -545,6 +545,7 @@ export const bookingMachine: Machine<BookingState> = {
       effects: ["release_slot", "notify_owner", "notify_customer", "close"],
     },
     {
+      // A deposit or payment made under a salon's own terms (ADR-035): what they do not keep is owed back.
       event: "cancel",
       label: "Cancel booking",
       from: ["confirmed"],
@@ -552,7 +553,7 @@ export const bookingMachine: Machine<BookingState> = {
       by: customers,
       guards: ["customer_owns_item", "within_cancellation_window"],
       input: noteInput,
-      effects: ["release_slot", "issue_receipt:outcome", "notify_owner", "notify_customer", "close"],
+      effects: ["release_slot", "issue_receipt:outcome", "link_refund", "notify_owner", "notify_customer", "close"],
     },
     {
       // Fired by `cancel_item` once the window has closed, when the owner records late cancellations.
@@ -563,7 +564,7 @@ export const bookingMachine: Machine<BookingState> = {
       by: customers,
       guards: ["customer_owns_item", "outside_cancellation_window"],
       input: noteInput,
-      effects: ["release_slot", "issue_receipt:outcome", "notify_owner", "notify_customer", "close"],
+      effects: ["release_slot", "issue_receipt:outcome", "link_refund", "notify_owner", "notify_customer", "close"],
       unlisted: true,
     },
     {

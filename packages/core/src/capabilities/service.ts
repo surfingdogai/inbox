@@ -17,6 +17,7 @@ import type { IdentityAnswer } from "../identity/types";
 import { mailForItem, senderOf } from "../jobs/mail-log";
 import { type DraftView, draftIsStale, draftRow, draftView, dropDraftStatement } from "../negotiation/drafts";
 import { type OfferView, offerRows, offerView } from "../negotiation/offers";
+import { paidFor } from "../negotiation/refunds";
 import { rewardProblems } from "../negotiation/rewards";
 import {
   listingJobStatement,
@@ -108,6 +109,7 @@ import { findIdempotent } from "../write/common";
 import { hiddenTransitions } from "../write/corrections";
 import type { CreateResult } from "../write/create";
 import { type FieldProblem, fromZod, WriteError } from "../write/errors";
+import { setFlags } from "../write/flags";
 import { type OnceOptions, type OnceResult, once } from "../write/idempotency";
 import { heldReplyStatements, namesOtherMoney } from "../write/limits";
 import { isAutomation } from "../write/offers";
@@ -949,18 +951,7 @@ export class Capabilities {
       const event = fee.fee.value > 0 ? "cancel_late" : "cancel";
       try {
         const done = await transitionItem(this.db, c, { itemId: input.item_id, event, ...note });
-        if (fee.fee.value > 0 && !done.replayed) {
-          // The fee is the business's to take, from the deposit or by its own link: said to the owner once,
-          // its money written as the business writes it.
-          const locale = localeOf((await this.getBusinessProfile()).languages[0] ?? "en");
-          await appendThreadEntry(
-            this.db,
-            systemCaller(nowOf(c)),
-            done.view.item,
-            `Cancelled with a fee of ${formatMinor(fee.fee, locale)} under its policy, as the customer saw it and agreed. Take it from the deposit, or ask for it; nothing was charged here.`,
-            "note",
-          );
-        }
+        await this.moneyBackNote(c, done, fee.fee);
         return done;
       } catch (error) {
         // Cancelling turned dear while the request was on its way: said again, at its new fee.
@@ -984,8 +975,9 @@ export class Capabilities {
     if (isCustomer(c) && (await this.withdrawalRuns(c, input.item_id))) {
       return transitionItem(this.db, c, { itemId: input.item_id, event: "withdraw", ...note });
     }
+    let done: TransitionResult;
     try {
-      return await transitionItem(this.db, c, { itemId: input.item_id, event: "cancel", ...note });
+      done = await transitionItem(this.db, c, { itemId: input.item_id, event: "cancel", ...note });
     } catch (error) {
       if (!(error instanceof WriteError)) throw error;
       const closed =
@@ -996,8 +988,49 @@ export class Capabilities {
       // `cancel_late`, so that is the request to replay.
       const retried = error.code === "idempotency_mismatch" && c.idempotency !== undefined;
       if (!closed && !retried) throw error;
-      return transitionItem(this.db, c, { itemId: input.item_id, event: "cancel_late", ...note });
+      done = await transitionItem(this.db, c, { itemId: input.item_id, event: "cancel_late", ...note });
     }
+    if (isCustomer(c)) await this.moneyBackNote(c, done, null);
+    return done;
+  }
+
+  /**
+   * What the owner reads once a customer cancelled a booking made on a salon's own terms (ADR-035): the
+   * fee the customer agreed to, and what of what they paid is owed back and by when (its refund is open
+   * beside the booking), or, where nothing says what is kept, that a person decides. Said once; nothing
+   * is charged or refunded here.
+   */
+  private async moneyBackNote(c: Caller, done: TransitionResult, fee: Money | null): Promise<void> {
+    const item = done.view.item;
+    if (done.replayed || item.type !== "booking" || item.state !== "cancelled_by_customer") return;
+    const p = item.payload;
+    if (!p.policy && !p.deposit) return;
+    const paid = paidFor(p);
+    const charged = fee !== null && fee.value > 0;
+    if (!paid && !charged) return;
+    const locale = localeOf((await this.getBusinessProfile()).languages[0] ?? "en");
+    const money = (m: Money) => formatMinor(m, locale);
+    const refund = done.linked?.item.type === "refund" ? done.linked.item : null;
+    const owed = refund ? (refund.payload as { amount: Money; refundDue?: string }) : null;
+    const by = owed?.refundDue ? ` by ${owed.refundDue.slice(0, 10)}` : "";
+    const head = charged
+      ? `Cancelled with a fee of ${money(fee)} under its policy, as the customer saw it and agreed.`
+      : "Cancelled by the customer.";
+    let tail: string;
+    if (owed) {
+      tail = charged
+        ? `It comes out of what they paid: ${money(owed.amount)} is owed back to them${by}. Refund it through your payment platform; nothing was charged or refunded here.`
+        : `It was free under its terms, so all they paid, ${money(owed.amount)}, is owed back to them${by}. Refund it through your payment platform; nothing was refunded here.`;
+    } else if (charged) {
+      tail = paid
+        ? "It comes out of what they paid, which covers it, or ask for the rest; nothing was charged here."
+        : "Take it from the deposit, or ask for it; nothing was charged here.";
+    } else {
+      // Paid, and its terms do not say what comes back (late, with a deposit and no policy): a person decides.
+      tail = `They paid ${money(paid as Money)}, and its terms do not say what of it comes back now. Decide what does, and refund it through your payment platform; nothing was refunded here.`;
+      await setFlags(this.db, systemCaller(nowOf(c)), { itemId: item.id, flags: { needsHuman: true } });
+    }
+    await appendThreadEntry(this.db, systemCaller(nowOf(c)), item, `${head} ${tail}`, "note");
   }
 
   /**
