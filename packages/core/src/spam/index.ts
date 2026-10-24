@@ -8,6 +8,19 @@ export {
 } from "./capability";
 export { CHIPS, chipOf, kindSentence, reasons, sentenceOf, WARN_CHIPS, warnSentence } from "./copy";
 export { answerSignals, type DecideInput, type Decision, decide } from "./decide";
+export {
+  firstLine,
+  heldDigestMail,
+  heldWhat,
+  heldWhenWords,
+  nextLocal,
+  SPAM_HELD_DIGEST_KIND,
+  SPAM_WEEKLY_KIND,
+  scheduleSpamEmails,
+  spamHeldDigestHandler,
+  spamWeeklyHandler,
+  weeklyMail,
+} from "./emails";
 export { filterDays, filterStates } from "./filters";
 export { BUDGETS, checkBudgets, handleRef, handlesOf } from "./handles";
 export {

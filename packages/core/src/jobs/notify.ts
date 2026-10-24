@@ -624,7 +624,7 @@ const HOUR = 3_600_000;
  * An owner alert as it will be stored: itself while the hour has room, else held back for the
  * hour's digest, which it queues (once per clock hour, at the end of it).
  */
-async function capOwnerAlerts(db: Db, mail: ComposedMail, now: number): Promise<ComposedMail> {
+export async function capOwnerAlerts(db: Db, mail: ComposedMail, now: number): Promise<ComposedMail> {
   if (mail.skip) return mail;
   const since = now - HOUR;
   const { rows } = await db.client.query({

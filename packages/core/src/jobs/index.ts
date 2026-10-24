@@ -13,6 +13,13 @@ import type { PhoneCapabilities } from "../phones/phones";
 import type { ReceiptCapabilities } from "../receipts/capabilities";
 import { runRulesForEvent } from "../rules/engine";
 import type { SecretBox } from "../secrets/box";
+import {
+  SPAM_HELD_DIGEST_KIND,
+  SPAM_WEEKLY_KIND,
+  scheduleSpamEmails,
+  spamHeldDigestHandler,
+  spamWeeklyHandler,
+} from "../spam/emails";
 import { gateOf, holdsBack, SPAM_SCREEN_KIND, stillScreening } from "../spam/screen";
 import { SCREEN_DEADLINE_MS } from "../spam/types";
 import { LIFECYCLE_SWEEP_KIND, lifecycleSweepHandler } from "./lifecycle";
@@ -141,7 +148,10 @@ export function createRunner(deps: {
       .register(SPAM_DAILY_KIND, async (_job, { now }) => {
         const r = await spam.daily(now);
         return { note: `${r.removed} put-aside item${r.removed === 1 ? "" : "s"} past their time removed` };
-      });
+      })
+      // The owner's two emails from the filter (ADR-029 §11.6): only when there is something to say.
+      .register(SPAM_HELD_DIGEST_KIND, spamHeldDigestHandler(deps.mailOut, { baseUrl: deps.baseUrl }))
+      .register(SPAM_WEEKLY_KIND, spamWeeklyHandler(deps.mailOut, { baseUrl: deps.baseUrl }));
   }
   if (deps.phones) {
     runner
@@ -189,6 +199,8 @@ function withSpamDaily(spam: SpamJobs | undefined, sweep: JobHandler): JobHandle
   return async (job, ctx) => {
     const day = new Date(ctx.now).toISOString().slice(0, 10);
     await ensureJob(ctx.db, SPAM_DAILY_KIND, `${SPAM_DAILY_KIND}:${day}`, { now: ctx.now }).catch(() => undefined);
+    // The morning digest and the Monday summary, each due at its hour in the business's time.
+    await scheduleSpamEmails(ctx.db, ctx.now).catch(() => undefined);
     return sweep(job, ctx);
   };
 }
