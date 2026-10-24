@@ -53,11 +53,16 @@ salon's own credentials can be used with.
   customer confirms that price and "with whoever is free": nobody is named, nor part of the confirmed
   terms, before it binds, and the confirmation names whoever it went to. Nobody free: a person answers
   it, as any request for a taken time; no rule, owner's AI or person confirms it with nobody. Another time
-  proposed for it, or the customer's own other time, is free when someone who gives it on the same terms
-  is free then (as `check_availability` lists it), and a time held while the customer answers holds that
-  one person's place, never every stylist's. A booking always carries who it is with and their first name,
-  and its end follows their length, whatever the request said. One the salon's own system holds keeps the
-  person written there (§6).
+  proposed for it, or the customer's own other time, is free when someone who gives it is free then (as
+  `check_availability` lists it), and a time held while the customer answers holds that one person's
+  place, never every stylist's. A time we propose goes with that person: on other terms than the booking
+  was made on (their own price or length), it carries their length and, unless we name one, their price,
+  which the customer confirms when they accept it. The customer's own other time keeps the terms they
+  asked on; free only with someone on other terms, the owner is told so when they confirm it ("nobody at
+  the price and length it was asked at is free then; Ravi is, at their own"), never that nobody is free,
+  and proposes that time to them with that person's terms. A booking always carries who it is with and
+  their first name, and its end follows their length, whatever the request said. One the salon's own
+  system holds with someone keeps that person (§6): another time is offered only when they are free.
 - Someone who leaves is archived, and their bookings stay as they are; nobody confirms a request with
   them, a rule least of all. One asked of them by name is marked for a person; one for anyone goes to
   whoever else is free on the same terms, else is a taken time.
@@ -125,12 +130,19 @@ salon's own credentials can be used with.
   (`cancellation`, approved, due by the refund days) of what the policy does not keep: all of it while
   cancelling is free. The same holds when the owner records the customer's cancel (by phone, at the
   desk): judged by the booking's own policy when the customer asked, not the business-wide window. The
-  owner reads the fee and what is owed back, by a day in their own zone, beside the booking, and whether
-  it goes back through their payment platform or by their own hand. Cancelled late with a deposit and no
-  policy, nothing says what is kept: a person decides, and the booking says so.
+  owner reads the fee and what is owed back, in English money and a day in the business's zone, beside
+  the booking, and whether it goes back through their payment platform or by their own hand. Cancelled
+  late with a deposit and no policy (late by the business-wide window when they asked, whether or not the
+  owner records late cancels), nothing says what is kept: a person decides, and the booking says so. A
+  request nobody confirmed costs nothing to cancel, however it is recorded.
+- When the customer asked is the owner's to say, or their message's: a person may type it; the owner's AI
+  names the customer's message on the booking (`entryId`), or it is now. A time it types is refused: it
+  would waive a fee or keep a deposit on words nobody can check.
 - What was paid is read one way everywhere: a payment recorded with a reference and no amount is the
-  whole price. The fee, a kept deposit, the quote the customer confirms, the refund it opens and the
-  deposit still to ask for all agree.
+  deposit while one is still to pay (taken at the desk), and the whole price once it is paid. The fee, a
+  kept deposit, the quote the customer confirms, the refund it opens, the deposit still to ask for and the
+  booking screen all agree, and the owner's payment form starts from the deposit still to pay and says
+  what a blank amount counts as.
 - Who it is with, the add-ons, the deposit and the policy are part of what a customer confirms (the
   confirm step's terms and summary). A confirmed booking with a policy answers a customer's cancel with
   the fee and what comes back (`409 confirm_terms`, `fee_sha`) to the customer who holds it, and to nobody

@@ -154,10 +154,15 @@ export const customerOrderChangeInput = z.object({
   reasonCode: reasonCodeSchema.optional(),
 });
 
-/** The owner records a customer's own cancellation: what they said, and when they asked (default now). */
+/**
+ * The owner records a customer's own cancellation: what they said, and when they asked (default now) —
+ * the arrival of their message when `entryId` names it, which is how the owner's AI dates it.
+ */
 export const recordCancelInput = z.object({
   note: z.string().trim().min(1, "say what the customer said").max(2_000),
   askedAt: isoDateTime.optional(),
+  /** The customer's message in which they asked to cancel (a thread entry of this item): its arrival dates it. */
+  entryId: z.string().min(1).max(64).optional(),
 });
 
 /**

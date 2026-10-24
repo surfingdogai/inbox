@@ -184,6 +184,12 @@ export function customerItem(item: Item): Item {
   if (item.type === "booking" && payload.anyStaff === true && !BOUND.has(item.state)) {
     const { resourceId: _who, staffName: _named, ...unnamed } = payload;
     payload = unnamed;
+    // Nor whoever a time we proposed was held for: its length and price are what they confirm.
+    const proposed = payload.proposed as Record<string, unknown> | undefined;
+    if (proposed && ("resourceId" in proposed || "staffName" in proposed)) {
+      const { resourceId: _held, staffName: _heldName, ...time } = proposed;
+      payload = { ...payload, proposed: time };
+    }
   }
   return { ...rest, payload, state: item.state === "spam" ? "closed" : item.state } as unknown as Item;
 }

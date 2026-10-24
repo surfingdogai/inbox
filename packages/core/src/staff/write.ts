@@ -213,13 +213,24 @@ export async function writeFirstForPerson(
   }
 }
 
-/** The booking as it will be confirmed: at the time we proposed, when the customer was offered one. */
+/**
+ * The booking as it will be confirmed: at the time we proposed, when the customer was offered one, with
+ * whoever that time was held for (ADR-035), as the write to the system takes it.
+ */
 function timeToWrite(item: { readonly state: string; readonly payload: unknown }): Record<string, unknown> {
   const payload = item.payload as Record<string, unknown>;
-  const proposed = payload.proposed as { startTime?: unknown; endTime?: unknown } | undefined;
+  const proposed = payload.proposed as
+    | { startTime?: unknown; endTime?: unknown; resourceId?: unknown; staffName?: unknown }
+    | undefined;
   if (item.state !== "proposed" || typeof proposed?.startTime !== "string" || typeof proposed.endTime !== "string")
     return payload;
-  return { ...payload, startTime: proposed.startTime, endTime: proposed.endTime };
+  return {
+    ...payload,
+    startTime: proposed.startTime,
+    endTime: proposed.endTime,
+    ...(typeof proposed.resourceId === "string" ? { resourceId: proposed.resourceId } : {}),
+    ...(typeof proposed.staffName === "string" ? { staffName: proposed.staffName } : {}),
+  };
 }
 
 async function systemOf(

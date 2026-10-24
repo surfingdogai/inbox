@@ -85,7 +85,6 @@ import {
   findStaffSlots,
   fromSystem,
   hasStaff,
-  localeOf,
   prepareBooking,
   registerBookingResolver,
   StaffCapabilities,
@@ -117,7 +116,7 @@ import { heldReplyStatements, namesOtherMoney } from "../write/limits";
 import { isAutomation } from "../write/offers";
 import { withdrawalOf } from "../write/returns";
 import { appendThreadEntry } from "../write/thread";
-import { type TransitionResult, transitionItem } from "../write/transition";
+import { cancelAskedAt, type TransitionResult, transitionItem } from "../write/transition";
 import { customerItem, type ItemView, type PartyView, rowToItem, viewFor } from "../write/views";
 import { askedForAPrice, quoteNotBookable, type Slot, unknownService } from "./availability";
 import { CustomerDoors, type CustomerItemView } from "./customer";
@@ -1004,7 +1003,12 @@ export class Capabilities {
    * beside the booking), or, where nothing says what is kept, that a person decides. Said once; nothing
    * is charged or refunded here.
    */
-  private async moneyBackNote(c: Caller, done: TransitionResult, fee: Money | null): Promise<void> {
+  private async moneyBackNote(
+    c: Caller,
+    done: TransitionResult,
+    fee: Money | null,
+    opts: { readonly recorded?: boolean } = {},
+  ): Promise<void> {
     const item = done.view.item;
     if (done.replayed || item.type !== "booking" || item.state !== "cancelled_by_customer") return;
     const refund = done.linked?.item.type === "refund" ? done.linked.item : null;
@@ -1017,16 +1021,22 @@ export class Capabilities {
     const charged = fee !== null && fee.value > 0;
     if (!paid && !charged) return;
     const business = await this.getBusinessProfile();
-    const locale = localeOf(business.languages[0] ?? "en");
+    // An English note for the owner, its money and its day written as English writes them, in the
+    // business's zone: never a sentence of one language around the numbers of another.
+    const locale = OWNER_LOCALE;
     const money = (m: Money) => formatMinor(m, locale);
     const by = owed?.refundDue ? ` by ${dayIn(owed.refundDue, business.timezone, locale)}` : "";
     // Back the way it came: through the payment platform that took it, else by the owner's own hand.
     const how = (await this.paidThroughPlatform(item.id))
       ? "Refund it through your payment platform"
       : "Pay it back to them yourself";
-    const head = charged
-      ? `Cancelled with a fee of ${money(fee)} under its policy, as the customer saw it and agreed.`
-      : "Cancelled by the customer.";
+    // The customer's own door showed them the fee and they said yes; one the owner records was said by
+    // phone or at the desk, and the inbox showed them nothing.
+    const head = !charged
+      ? "Cancelled by the customer."
+      : opts.recorded
+        ? `Cancelled late by phone or at the desk, with a fee of ${money(fee)} under its policy.`
+        : `Cancelled with a fee of ${money(fee)} under its policy, as the customer saw it and agreed.`;
     let tail: string;
     if (owed) {
       tail = charged
@@ -1444,7 +1454,7 @@ export class Capabilities {
     }
     // The customer's cancel by phone or at the desk, as their own door says it (ADR-035): the fee under
     // its policy when they asked, and what of what they paid is owed back, beside its refund.
-    await this.moneyBackNote(c, done, recordedFee(done, input, nowOf(c)));
+    await this.moneyBackNote(c, done, await recordedFee(this.db, c, done, input, nowOf(c)), { recorded: true });
     return done;
   }
 
@@ -2082,16 +2092,33 @@ export class Capabilities {
   }
 }
 
+/** Owner-facing notes are English: their money and days are written as English writes them. */
+const OWNER_LOCALE = "en-GB";
+
 /**
- * The fee a recorded cancellation of a booking with its own policy costs (ADR-035), judged when the
- * customer asked, as the write judged it; null for one without.
+ * The fee a recorded cancellation of a confirmed booking with its own policy costs (ADR-035), judged when
+ * the customer asked, as the write judged it (`cancelAskedAt`); null for one without, and for a request
+ * nobody had confirmed: nothing was promised, so nothing is owed, as on the customer's own door.
  */
-function recordedFee(done: TransitionResult, input: T.TransitionItemInput, now: number): Money | null {
+async function recordedFee(
+  db: Db,
+  caller: Caller,
+  done: TransitionResult,
+  input: T.TransitionItemInput,
+  now: number,
+): Promise<Money | null> {
   const item = done.view.item;
   if (done.replayed || item.type !== "booking" || !item.payload.policy) return null;
-  const said = (input.input ?? {}) as { askedAt?: unknown };
-  const typed = typeof said.askedAt === "string" ? Date.parse(said.askedAt) : Number.NaN;
-  const askedAt = Number.isFinite(typed) ? Math.min(Math.max(typed, Date.parse(item.createdAt)), now) : now;
+  const { rows } = await db.client.query({
+    sql: `SELECT from_state FROM item_events WHERE item_id = ? AND event IN ('record_cancel', 'record_cancel_late')
+           ORDER BY seq DESC LIMIT 1`,
+    params: [item.id],
+    method: "all",
+  });
+  if (rows[0]?.[0] !== "confirmed") return null;
+  const askedAt = await cancelAskedAt(db, item, (input.input ?? {}) as Record<string, unknown>, caller, now).catch(
+    () => now,
+  );
   return bookingFeeAt(item.payload, askedAt);
 }
 

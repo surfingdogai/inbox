@@ -48,8 +48,9 @@ function systemCaller(now: number): Caller {
 
 /**
  * What is still to pay of the deposit: its amount less what was paid, in its currency, read as the
- * fee and the refund read it (`paidFor`): a payment the owner recorded with no amount is the whole
- * price, so nothing more is asked for. A reference with no amount and no price to read covers it too.
+ * fee and the refund read it (`paidFor`): a payment the owner recorded with no amount pays the deposit
+ * still to pay, and once it is paid, the whole price, so nothing more is asked for. A reference with no
+ * amount and no price to read covers it too.
  */
 export function depositLeft(p: BookingPayload): number {
   if (!p.deposit) return 0;

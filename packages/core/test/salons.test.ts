@@ -16,6 +16,7 @@ import { business, items, parties } from "../src/schema/tables";
 import { createSecretBox } from "../src/secrets/box";
 import { bookingSchedules, cancelFeeOf, cleanPhoto, staffWords, stripJpegMetadata } from "../src/staff/index";
 import { type Caller, transitionItem, WriteError } from "../src/write/index";
+import { customerItem, rowToItem } from "../src/write/views";
 import { confirming, makeClient, resetTables } from "./harness";
 
 /**
@@ -492,6 +493,191 @@ describe("staff", () => {
     const bo = await s.named(s.bo.id, "17:00", "17:30", "bo-17");
     const done = await transitionItem(s.db, owner, { itemId: bo.view.item.id, event: "confirm" });
     expect(done.view.item.state).toBe("confirmed");
+  });
+
+  it("for anyone with nobody free, where each gives it on their own terms, is offered a time with theirs for the customer to confirm", async () => {
+    const s = await mapleAndFade();
+    const confirmedWith = async (staffId: string, from: string, to: string, idem: string) => {
+      const r = await s.caps.createBooking(agent(), {
+        payload: booking(s.fade.id, "Skin fade", at(from), at(to)),
+        staff_id: staffId,
+        contact: { name: idem },
+        idempotency_key: idem,
+      });
+      await transitionItem(s.db, owner, { itemId: r.view.item.id, event: "confirm" });
+      return r;
+    };
+    // Both busy at two (Mei for 45 minutes, Ravi at CA$55.00): a request for anyone then goes to nobody,
+    // at the service's own CA$45.00 and half an hour, on which neither gives it.
+    await confirmedWith(s.mei.id, "14:00", "14:45", "mei-14");
+    const ravi14 = await confirmedWith(s.ravi.id, "14:00", "14:30", "ravi-14");
+    const any = await s.caps.createBooking(agent(), {
+      payload: booking(s.fade.id, "Skin fade", at("14:00"), at("14:30")),
+      contact: { name: "Valentina", email: "valentina@example.com" },
+      idempotency_key: "any-14",
+    });
+    expect(await stored(s.db, any.view.item.id)).not.toHaveProperty("resourceId");
+    expect(any.view.item.payload).toMatchObject({ totalPrice: { value: 4500, currency: "CAD" } });
+    // At four Mei is busy too: only Ravi is free then, as the free times say.
+    await confirmedWith(s.mei.id, "16:00", "16:45", "mei-16");
+    const free = await s.caps.checkAvailability(
+      { service_id: s.fade.id, from: at("16:00"), to: at("16:30") },
+      { now: T0, caller: agent() },
+    );
+    expect(free.slots).toMatchObject([{ startTime: new Date(at("16:00")).toISOString(), staff: [{ id: s.ravi.id }] }]);
+    // Proposed at four, the time goes with Ravi and his price, held for him.
+    const proposed = await transitionItem(s.db, owner, {
+      itemId: any.view.item.id,
+      event: "propose",
+      input: { startTime: at("16:00"), endTime: at("16:30") },
+    });
+    expect(proposed.view.item.state).toBe("proposed");
+    expect(await stored(s.db, any.view.item.id)).toMatchObject({
+      proposed: { totalPrice: { value: 5500, currency: "CAD" }, resourceId: s.ravi.id, staffName: "Ravi" },
+    });
+    // The customer reads the time and its price, never who, and confirms them.
+    const [row] = await s.db.orm.select().from(items).where(eq(items.id, any.view.item.id));
+    expect(JSON.stringify(customerItem(rowToItem(row as never)).payload)).not.toContain(s.ravi.id);
+    const as: Caller = { ...agent(), accessToken: any.accessToken ?? "" };
+    const asked = await s.caps.customer
+      .acceptOffer(as, { item_id: any.view.item.id, idempotency_key: "acc-1" })
+      .catch((e: WriteError) => e);
+    expect(asked).toMatchObject({
+      code: "confirm_terms",
+      details: { offer: { terms: { totalPrice: { value: 5500, currency: "CAD" } } } },
+    });
+    expect(JSON.stringify((asked as WriteError).details)).not.toContain("Ravi");
+    await s.caps.customer.acceptOffer(as, {
+      item_id: any.view.item.id,
+      terms_sha: String((asked as WriteError).details?.terms_sha),
+      idempotency_key: "acc-2",
+    });
+    expect(await stored(s.db, any.view.item.id)).toMatchObject({
+      resourceId: s.ravi.id,
+      staffName: "Ravi",
+      startTime: at("16:00"),
+      endTime: new Date(at("16:30")).toISOString(),
+      totalPrice: { value: 5500, currency: "CAD" },
+    });
+    // Another at two, once Ravi's two o'clock is off: free only with him, on his own terms. The owner is
+    // told so, never that nobody is free, and proposing that very time carries his.
+    const again = await s.caps.createBooking(agent(), {
+      payload: booking(s.fade.id, "Skin fade", at("14:00"), at("14:30")),
+      contact: { name: "Mateo", email: "mateo@example.com" },
+      idempotency_key: "any-14-b",
+    });
+    await transitionItem(s.db, owner, { itemId: ravi14.view.item.id, event: "cancel_by_business" });
+    const refused = await transitionItem(s.db, owner, { itemId: again.view.item.id, event: "confirm" }).catch(
+      (e: unknown) => e,
+    );
+    expect(refused).toMatchObject({ code: "slot_taken", details: { staff: "other_terms" } });
+    expect((refused as WriteError).message).toContain("Ravi Sandhu is, at their own (CA$55.00, 30 min)");
+    expect((refused as WriteError).message).not.toContain("nobody who gives this service is free");
+    const same = await transitionItem(s.db, owner, {
+      itemId: again.view.item.id,
+      event: "propose",
+      input: { startTime: at("14:00"), endTime: at("14:30") },
+    });
+    expect(same.view.item.payload).toMatchObject({ proposed: { totalPrice: { value: 5500, currency: "CAD" } } });
+  });
+
+  it("for anyone, take the customer's own other time when only someone on other terms is free, for us to propose with theirs", async () => {
+    const s = await salon({
+      name: "Adùn Braiding Studio",
+      zone: "Africa/Lagos",
+      currency: "NGN",
+      languages: ["en", "yo"],
+    });
+    const lagosAt = (hhmm: string) => at(hhmm, "+01:00");
+    const braids = await s.caps.setup.createService(
+      owner,
+      serviceInput.parse({
+        name: "Knotless braids",
+        duration_min: 60,
+        granularity_min: 30,
+        price: { model: "fixed", value: 3_000_000, currency: "NGN" },
+      }),
+    );
+    const adaeze = await s.caps.staff.create(owner, {
+      name: "Adaeze Okafor",
+      sort: 0,
+      services: [{ service_id: braids.id }],
+    });
+    const tunde = await s.caps.staff.create(owner, {
+      name: "Tunde Bello",
+      sort: 1,
+      services: [{ service_id: braids.id, duration_override_min: 90 }],
+    });
+    const confirmedWith = async (staffId: string, from: string, to: string, idem: string) => {
+      const r = await s.caps.createBooking(agent(), {
+        payload: booking(braids.id, "Knotless braids", lagosAt(from), lagosAt(to)),
+        staff_id: staffId,
+        contact: { name: idem },
+        idempotency_key: idem,
+      });
+      await transitionItem(s.db, owner, { itemId: r.view.item.id, event: "confirm" });
+    };
+    await confirmedWith(adaeze.id, "14:00", "15:00", "a-14");
+    await confirmedWith(tunde.id, "14:00", "15:30", "t-14");
+    await confirmedWith(adaeze.id, "17:00", "18:00", "a-17");
+    const any = await s.caps.createBooking(agent(), {
+      payload: booking(braids.id, "Knotless braids", lagosAt("14:00"), lagosAt("15:00")),
+      contact: { name: "Chiamaka", email: "chiamaka@example.com" },
+      idempotency_key: "any-14",
+    });
+    await transitionItem(s.db, owner, {
+      itemId: any.view.item.id,
+      event: "propose",
+      input: { startTime: lagosAt("16:00"), endTime: lagosAt("17:00") },
+    });
+    // At five only Tunde is free, for his hour and a half, as the free times say: their time is taken.
+    const free = await s.caps.checkAvailability(
+      { service_id: braids.id, from: lagosAt("17:00"), to: lagosAt("18:30") },
+      { now: T0, caller: agent() },
+    );
+    expect(free.slots[0]).toMatchObject({
+      startTime: new Date(lagosAt("17:00")).toISOString(),
+      staff: [{ id: tunde.id }],
+    });
+    const theirs: Caller = { ...agent(), accessToken: any.accessToken ?? "" };
+    const countered = await transitionItem(s.db, theirs, {
+      itemId: any.view.item.id,
+      event: "counter",
+      input: { startTime: lagosAt("17:00") },
+    });
+    expect(countered.view.item.state).toBe("requested");
+    // On the terms they asked on, an hour: never confirmed with Tunde as it is, and the owner told why.
+    expect(await stored(s.db, any.view.item.id)).toMatchObject({ endTime: new Date(lagosAt("18:00")).toISOString() });
+    const refused = await transitionItem(s.db, owner, { itemId: any.view.item.id, event: "confirm" }).catch(
+      (e: unknown) => e,
+    );
+    expect(refused).toMatchObject({ code: "slot_taken", details: { staff: "other_terms" } });
+    expect((refused as WriteError).message).toContain("Tunde Bello is, at their own (NGN");
+    expect((refused as WriteError).message).toContain("90 min");
+    // Proposed at five, it carries his hour and a half, which the customer confirms when they accept.
+    const proposed = await transitionItem(s.db, owner, {
+      itemId: any.view.item.id,
+      event: "propose",
+      input: { startTime: lagosAt("17:00"), endTime: lagosAt("18:00") },
+    });
+    expect(proposed.view.item.payload).toMatchObject({
+      proposed: {
+        endTime: new Date(lagosAt("18:30")).toISOString(),
+        totalPrice: { value: 3_000_000, currency: "NGN" },
+      },
+    });
+    const asked = await s.caps.customer
+      .acceptOffer(theirs, { item_id: any.view.item.id, idempotency_key: "acc-1" })
+      .catch((e: WriteError) => e);
+    await s.caps.customer.acceptOffer(theirs, {
+      item_id: any.view.item.id,
+      terms_sha: String((asked as WriteError).details?.terms_sha),
+      idempotency_key: "acc-2",
+    });
+    expect(await stored(s.db, any.view.item.id)).toMatchObject({
+      resourceId: tunde.id,
+      endTime: new Date(lagosAt("18:30")).toISOString(),
+    });
   });
 
   it("are never confirmed with someone who has left: asked by name, a person answers; for anyone, someone else", async () => {
@@ -1324,6 +1510,42 @@ describe("cancelling", () => {
     });
     expect(done.view.item.state).toBe("cancelled_by_customer");
   });
+
+  it("costs nothing on a request nobody confirmed, by their own door or by phone", async () => {
+    const { db, caps, fade, ravi } = await policySalon();
+    const notes = async (id: string) =>
+      (
+        await db.client.query({
+          sql: "SELECT body_text FROM thread_entries WHERE item_id = ? AND actor_kind = 'system'",
+          params: [id],
+          method: "all",
+        })
+      ).rows.map((n) => String(n[0]));
+    // Nine hours before: half of Ravi's CA$55.00 once it is confirmed, but these are still requests.
+    const asked = async (idem: string) =>
+      caps.createBooking(agent(), {
+        payload: booking(fade.id, "Skin fade", at("16:00"), at("16:30")),
+        staff_id: ravi.id,
+        contact: { name: "Aiyana", email: "aiyana@example.com" },
+        idempotency_key: idem,
+      });
+    const byPhone = await asked("req-phone");
+    expect((byPhone.view.item.payload as { policy?: unknown }).policy).toBeDefined();
+    const recorded = await caps.transitionItem(owner, {
+      item_id: byPhone.view.item.id,
+      event: "record_cancel",
+      input: { note: "phoned: never mind" },
+    });
+    expect(recorded.view.item.state).toBe("cancelled_by_customer");
+    expect(await notes(byPhone.view.item.id)).toEqual([]);
+    const own = await asked("req-own");
+    await caps.cancelItem(agent(), {
+      item_id: own.view.item.id,
+      access_token: own.accessToken ?? "",
+      idempotency_key: "req-own-c",
+    });
+    expect(await notes(own.view.item.id)).toEqual([]);
+  });
 });
 
 describe("a deposit the policy keeps", () => {
@@ -1706,7 +1928,14 @@ describe("a paid deposit, once the right of withdrawal has run out", () => {
     expect(rows.map((x) => x[0])).toContain("record_cancel");
     expect(rows.map((x) => x[0])).not.toContain("record_cancel_late");
     const then = await s.after();
-    expect(then.refunds).toMatchObject([{ amount: { value: 2000, currency: "CAD" }, noticeAt: asked }]);
+    // Owed back by the refund days from when they asked, not from when it was written down.
+    expect(then.refunds).toMatchObject([
+      {
+        amount: { value: 2000, currency: "CAD" },
+        noticeAt: asked,
+        refundDue: new Date(Date.parse(asked) + 14 * DAY).toISOString(),
+      },
+    ]);
     // Paid through the platform that takes payments here: refunded there.
     expect(then.notes).toContain("Refund it through your payment platform; nothing was refunded here.");
   });
@@ -1720,7 +1949,9 @@ describe("a paid deposit, once the right of withdrawal has run out", () => {
     expect(then.refunds).toMatchObject([
       { state: "approved", kind: "cancellation", amount: { value: 1450, currency: "CAD" } },
     ]);
-    expect(then.notes).toContain("Cancelled with a fee of CA$5.50 under its policy");
+    // Said by phone: the inbox showed them no fee, so it never says they saw one.
+    expect(then.notes).toContain("Cancelled late by phone or at the desk, with a fee of CA$5.50 under its policy.");
+    expect(then.notes).not.toContain("as the customer saw it");
     expect(then.notes).toContain("CA$14.50 is owed back to them by");
   });
 
@@ -1744,6 +1975,198 @@ describe("a paid deposit, once the right of withdrawal has run out", () => {
     expect(then.refunds).toEqual([]);
     expect(then.needsHuman).toBe(true);
     expect(then.notes).toContain("They paid CA$20.00");
+  });
+
+  it("is said to the owner with English money and days, whatever the business's first language", async () => {
+    const s = await salon({
+      name: "Estudio Xóchitl",
+      zone: "America/Mexico_City",
+      currency: "MXN",
+      languages: ["es", "en"],
+    });
+    const balayage = await s.caps.setup.createService(
+      owner,
+      serviceInput.parse({
+        name: "Balayage",
+        duration_min: 120,
+        granularity_min: 30,
+        price: { model: "fixed", value: 570_000, currency: "MXN" },
+      }),
+    );
+    await s.caps.setup.updateService(owner, { service_id: balayage.id, deposit: { kind: "amount", value: 114_000 } });
+    const lupita = await s.caps.staff.create(owner, {
+      name: "María Guadalupe Hernández",
+      sort: 0,
+      services: [{ service_id: balayage.id }],
+    });
+    const day = new Date(T0 + 20 * DAY).toISOString().slice(0, 10);
+    const start = `${day}T11:00:00-06:00`;
+    const r = await s.caps.createBooking(agent(), {
+      payload: booking(balayage.id, "Balayage", start, `${day}T13:00:00-06:00`),
+      staff_id: lupita.id,
+      contact: { name: "Renata", email: "renata@example.com" },
+      idempotency_key: "mx-1",
+    });
+    await transitionItem(s.db, owner, { itemId: r.view.item.id, event: "confirm" });
+    await transitionItem(
+      s.db,
+      {
+        actor: { kind: "connector", id: "connector:pay", channel: "connector" },
+        tier: "verified_principal",
+        sandbox: false,
+        now: () => T0,
+      },
+      {
+        itemId: r.view.item.id,
+        event: "record_payment",
+        input: { paymentRef: "pi_mx", amount: { value: 114_000, currency: "MXN" } },
+      },
+    );
+    const asked = Date.parse(start) - 5 * DAY;
+    await s.caps.transitionItem(
+      { ...owner, now: () => asked },
+      { item_id: r.view.item.id, event: "record_cancel", input: { note: "llamó para cancelar" } },
+    );
+    const { rows } = await s.db.client.query({
+      sql: "SELECT body_text FROM thread_entries WHERE item_id = ? AND actor_kind = 'system'",
+      params: [r.view.item.id],
+      method: "all",
+    });
+    const note = rows.map((n) => String(n[0])).join(" ");
+    const by = new Intl.DateTimeFormat("en-GB", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      timeZone: "America/Mexico_City",
+    }).format(new Date(asked + 14 * DAY));
+    expect(note).toContain(`all they paid, MX$1,140.00, is owed back to them by ${by}.`);
+    expect(note).not.toContain("1140,00");
+  });
+
+  it("is a person's to settle when the owner records a late cancel by phone where late cancels are refused", async () => {
+    const { db, caps, r, start, after } = await paidDeposit("dep-refuse", false);
+    await caps.updateSettings(owner, { doc: { booking: { lateCancellation: "refuse" } } });
+    // Their own door refuses it two hours before: it is late.
+    const own = await caps
+      .cancelItem(
+        { ...agent(), now: () => start - 2 * 3_600_000 },
+        {
+          item_id: r.view.item.id,
+          access_token: r.accessToken ?? "",
+          idempotency_key: "dep-refuse-own",
+        },
+      )
+      .catch((e: unknown) => e);
+    expect(own).toMatchObject({ code: "guard_failed" });
+    // Recorded by phone then, it is still late: nothing is opened as owed, and a person decides.
+    const done = await caps.transitionItem(
+      { ...owner, now: () => start - 2 * 3_600_000 },
+      { item_id: r.view.item.id, event: "record_cancel", input: { note: "phoned, running late" } },
+    );
+    expect(done.view.item.state).toBe("cancelled_by_customer");
+    expect(done.linked).toBeUndefined();
+    const then = await after();
+    expect(then.refunds).toEqual([]);
+    expect(then.needsHuman).toBe(true);
+    expect(then.notes).toContain("They paid CA$20.00, and its terms do not say what of it comes back now.");
+    expect(then.notes).not.toContain("It was free under its terms");
+    const { rows } = await db.client.query({
+      sql: "SELECT event FROM item_events WHERE item_id = ? ORDER BY seq",
+      params: [r.view.item.id],
+      method: "all",
+    });
+    expect(rows.map((x) => x[0])).toContain("record_cancel");
+  });
+
+  it("is dated by the customer's own message when the owner's AI records their cancel, never by a time it types", async () => {
+    // A deposit the policy keeps once cancelling is no longer free: 24 hours before.
+    const keep = {
+      steps: [{ before: { hours: 24 }, fee: { kind: "none" as const } }],
+      after: { kind: "none" as const },
+      noShow: { kind: "full" as const },
+      deposit: { refundable: false },
+    };
+    const ai = (now: number): Caller => ({
+      ...owner,
+      actor: { kind: "owner_ai", id: "owner_ai:test", channel: "mcp_owner" },
+      now: () => now,
+    });
+    const s = await paidDeposit("ai-typed");
+    await s.caps.setup.updateService(owner, { service_id: s.fade.id, policy: keep });
+    // Booked again on these terms: Ravi's CA$55.00, its CA$20.00 deposit paid and kept once it is late.
+    const fresh = async (idem: string) => {
+      const day = new Date(T0 + 20 * DAY).toISOString().slice(0, 10);
+      const b = await s.caps.createBooking(agent(), {
+        payload: booking(s.fade.id, "Skin fade", `${day}T17:00:00-05:00`, `${day}T17:30:00-05:00`),
+        staff_id: s.ravi.id,
+        contact: { name: `Min-jun ${idem}`, email: `${idem}@example.com` },
+        idempotency_key: idem,
+      });
+      await transitionItem(s.db, owner, { itemId: b.view.item.id, event: "confirm" });
+      await transitionItem(
+        s.db,
+        {
+          actor: { kind: "connector", id: "connector:pay", channel: "connector" },
+          tier: "verified_principal",
+          sandbox: false,
+          now: () => T0,
+        },
+        {
+          itemId: b.view.item.id,
+          event: "record_payment",
+          input: { paymentRef: `pi_${idem}`, amount: { value: 2000, currency: "CAD" } },
+        },
+      );
+      return { b, start: Date.parse(`${day}T17:00:00-05:00`) };
+    };
+    const refundsOf = async (id: string) =>
+      (await s.db.orm.select().from(items))
+        .filter((i) => i.type === "refund" && (i.payload as { orderItemId?: string }).orderItemId === id)
+        .map((i) => (i.payload as { amount: unknown }).amount);
+    // Ten hours before, the owner's AI says they phoned last week: a time it types is not taken.
+    const typed = await fresh("ai-typed-1");
+    const backdated = await s.caps
+      .transitionItem(ai(typed.start - 10 * 3_600_000), {
+        item_id: typed.b.view.item.id,
+        event: "record_cancel",
+        input: {
+          note: "Customer says they phoned last week to cancel",
+          askedAt: new Date(typed.start - 5 * DAY).toISOString(),
+        },
+      })
+      .catch((e: unknown) => e);
+    expect(backdated).toMatchObject({ code: "invalid_input", fields: [{ path: "input.askedAt" }] });
+    expect(await refundsOf(typed.b.view.item.id)).toEqual([]);
+    // Without one it is dated now: late, so the deposit is kept and nothing is owed back.
+    await s.caps.transitionItem(ai(typed.start - 10 * 3_600_000), {
+      item_id: typed.b.view.item.id,
+      event: "record_cancel",
+      input: { note: "Customer wrote to cancel" },
+    });
+    expect(await refundsOf(typed.b.view.item.id)).toEqual([]);
+    // Their own message five days before dates it: free then, so all of the deposit comes back.
+    const wrote = await fresh("ai-typed-2");
+    await s.caps.sendMessage(
+      { ...agent(), now: () => wrote.start - 5 * DAY },
+      { item_id: wrote.b.view.item.id, access_token: wrote.b.accessToken ?? "", body: "Please cancel my fade." },
+    );
+    const [entry] = await s.db.client
+      .query({
+        sql: "SELECT id FROM thread_entries WHERE item_id = ? AND direction = 'in' ORDER BY rowid DESC LIMIT 1",
+        params: [wrote.b.view.item.id],
+        method: "all",
+      })
+      .then((q) => q.rows);
+    const dated = await s.caps.transitionItem(ai(wrote.start - 10 * 3_600_000), {
+      item_id: wrote.b.view.item.id,
+      event: "record_cancel",
+      input: { note: "Customer wrote to cancel", entryId: String(entry?.[0]) },
+    });
+    expect(dated.linked?.item.payload).toMatchObject({
+      amount: { value: 2000, currency: "CAD" },
+      noticeAt: new Date(wrote.start - 5 * DAY).toISOString(),
+    });
   });
 });
 
@@ -1781,7 +2204,57 @@ describe("a payment recorded with a reference and no amount", () => {
     },
   };
 
-  it("is the whole price paid: the deposit a policy keeps is kept, and the rest is what comes back", async () => {
+  it("is the deposit while one is still to pay, on a free cancel and a late one, as the booking screen says", async () => {
+    const terms = {
+      service_id: "",
+      deposit: { kind: "amount" as const, value: 2000 },
+      policy: {
+        steps: [{ before: { hours: 24 }, fee: { kind: "none" as const } }],
+        after: { kind: "percent" as const, value: 50 },
+        noShow: { kind: "full" as const },
+      },
+    };
+    // The CA$20.00 deposit taken at the desk, with no amount said: paid, and no more than that.
+    const free = await paidAtDesk("desk-free", terms);
+    expect(await stored(free.db, free.r.view.item.id)).toMatchObject({ paidAmount: { value: 2000, currency: "CAD" } });
+    // A payment platform takes payments here, but the owner took this one: they give it back by hand.
+    await payments(free.db);
+    const early: Caller = { ...agent(), now: () => free.start - 5 * DAY };
+    const done = await free.caps.cancelItem(early, {
+      item_id: free.r.view.item.id,
+      access_token: free.r.accessToken ?? "",
+      idempotency_key: "desk-free-c",
+    });
+    expect(done.linked?.item.payload).toMatchObject({ amount: { value: 2000, currency: "CAD" } });
+    expect(await free.refunds()).toMatchObject([{ amount: { value: 2000, currency: "CAD" } }]);
+    const [note] = (
+      await free.db.client.query({
+        sql: "SELECT body_text FROM thread_entries WHERE item_id = ? AND actor_kind = 'system'",
+        params: [free.r.view.item.id],
+        method: "all",
+      })
+    ).rows.map((n) => String(n[0]));
+    expect(note).toContain("all they paid, CA$20.00, is owed back to them");
+    expect(note).toContain("Pay it back to them yourself");
+    expect(note).not.toContain("payment platform");
+    // Late, half the CA$55.00 is more than the CA$20.00 paid: it is all kept, and nothing is said to come back.
+    const late = await paidAtDesk("desk-late", terms);
+    const when: Caller = { ...agent(), now: () => late.start - 10 * 3_600_000 };
+    const asked = await late.caps
+      .cancelItem(when, {
+        item_id: late.r.view.item.id,
+        access_token: late.r.accessToken ?? "",
+        idempotency_key: "dl-1",
+      })
+      .catch((e: unknown) => e);
+    expect(asked).toMatchObject({
+      code: "confirm_terms",
+      details: { fee: { value: 2750, currency: "CAD" }, refund_owed: { value: 0, currency: "CAD" } },
+    });
+    expect((asked as WriteError).message).not.toContain("comes back to you");
+  });
+
+  it("is the rest of the price once the deposit is paid: the deposit a policy keeps is kept, and the rest comes back", async () => {
     const s = await paidAtDesk("keep", {
       service_id: "",
       deposit: { kind: "percent", value: 20 },
@@ -1792,6 +2265,14 @@ describe("a payment recorded with a reference and no amount", () => {
         deposit: { refundable: false },
       },
     });
+    // The CA$11.00 deposit at the desk first, then the rest, again with no amount said.
+    expect(await stored(s.db, s.r.view.item.id)).toMatchObject({ paidAmount: { value: 1100, currency: "CAD" } });
+    await transitionItem(s.db, owner, {
+      itemId: s.r.view.item.id,
+      event: "record_payment",
+      input: { paymentRef: "desk-keep-rest" },
+    });
+    expect(await stored(s.db, s.r.view.item.id)).not.toHaveProperty("paidAmount");
     const late: Caller = { ...agent(), now: () => s.start - 10 * 3_600_000 };
     const asked = await s.caps
       .cancelItem(late, { item_id: s.r.view.item.id, access_token: s.r.accessToken ?? "", idempotency_key: "keep-1" })

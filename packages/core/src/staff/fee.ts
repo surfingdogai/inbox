@@ -22,7 +22,8 @@ export function bookingFeeAt(p: BookingPayload, now: number): Money {
   const policy = p.policy as DatedPolicy | undefined;
   const currency = total?.currency ?? p.deposit?.amount.currency ?? "XXX";
   if (!policy) return { value: 0, currency };
-  // What was paid, read as the refund reads it: a payment recorded with no amount is the whole price.
+  // What was paid, read as the refund reads it (`paidFor`): a payment recorded with no amount is the
+  // deposit while one was still to pay, else the whole price.
   const paid = paidFor(p);
   // A deposit the policy keeps comes back while cancelling is free, as the customer was told, and is
   // kept once no free step is still ahead, as far as it was paid.

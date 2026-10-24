@@ -28,12 +28,13 @@ import { insertOfferStatement, type OfferRow, offerRows, openOf, pointerOf } fro
 import { paidFor, refundDueOf, SEND_BACK_DAYS } from "../negotiation/refunds";
 import { items, resources, services } from "../schema/tables";
 import { readSettings } from "../settings/schema";
-import { anyoneAt, keepTermsInStep, repickAnyone } from "../staff/booking";
+import { anyoneAt, keepTermsInStep, repickAnyone, termsWith } from "../staff/booking";
 import { bookingFeeAt } from "../staff/fee";
 import { checkFirstRefusal, heldForCheck } from "../staff/requires";
 import { nobodyFree, nobodyToTake } from "../staff/store";
 import { awaitingSystem, isWrittenFirst, systemFirstRefusal, systemHold } from "../staff/system";
 import { hashJson, hashText } from "../util/canonical";
+import { formatMinor } from "../util/money";
 import {
   actorMeta,
   type Caller,
@@ -215,7 +216,7 @@ async function attempt_(
     lateTake(item, row.requestExpiresAt, input, caller, now) ?? lateChange(item, openOf(rows), input, caller, now);
   // A paid contract's cancellation the business records, asked while the customer could withdraw: their
   // withdrawal (ADR-018 §7, §8), never late and never a refund left to our say.
-  const instead = late ? null : await withdrawalInstead(db, item, input, settings, now);
+  const instead = late ? null : await withdrawalInstead(db, item, input, settings, caller, now);
   const eventName = late?.event ?? instead ?? input.event;
   const eventInput = late ? late.input : input.input;
 
@@ -386,6 +387,12 @@ async function attempt_(
       });
     payload.startTime = proposed.startTime;
     payload.endTime = proposed.endTime;
+    // For anyone (ADR-035): with whoever the time was held for, on the terms it carried.
+    const withWhom = proposed as { resourceId?: unknown; staffName?: unknown };
+    if (typeof withWhom.resourceId === "string") {
+      payload.resourceId = withWhom.resourceId;
+      if (typeof withWhom.staffName === "string") payload.staffName = withWhom.staffName;
+    }
     if (proposed.totalPrice) {
       payload.totalPrice = proposed.totalPrice;
       // The notice goes with a price we chose for them, and no further than it.
@@ -396,7 +403,7 @@ async function attempt_(
     delete payload.proposed;
   }
   if (effects.has("apply_counter") && item.type === "booking") {
-    await applyCounter(db, item.id, payload, data, audience, now);
+    await applyCounter(db, item, payload, data, audience, now);
   }
   // A change to the promise: what one side asks for becomes the payload's `change`; accepted, it
   // becomes the promise; not made, it goes and the promise stays as it was.
@@ -405,6 +412,10 @@ async function attempt_(
   }
   if (effects.has("apply_change")) applyChange(item.type, payload);
   if (t.change && t.offer === "keep") delete payload.change;
+  // A time we propose for a booking (ADR-035): where it is held, and, for anyone, who it goes with and on
+  // whose terms, before its deposit and policy are dated for it.
+  const placed =
+    item.type === "booking" && t.event === "propose" ? await placeProposal(db, item, payload, settings) : undefined;
   // A salon's booking (ADR-035): for anyone, with whoever is free when it is confirmed; its deposit and
   // policy dated for wherever it is going; its time to pay the deposit opened once it is confirmed. One
   // the salon's own system holds keeps the person that system was given: picked again here, its diary
@@ -478,7 +489,7 @@ async function attempt_(
         fields: [{ path: "input.endTime", problem: "invalid", message }],
       });
     }
-    const spec = await offerSpecFor(db, item.id, payload, base, p, settings.business.timezone);
+    const spec = placed ?? base;
     // …and one that is free as we propose it (ADR-018 N7): nothing is held, so it may still go before
     // they answer, but never before we ask.
     const plan = planClaims(spec, buckets, await readClaims(db, spec, buckets, item.id));
@@ -705,23 +716,9 @@ async function attempt_(
       case "asked_within_window":
       case "asked_outside_window": {
         if (item.type !== "booking") break;
-        // A time typed to the minute may fall just before the booking was made: that is when it was made.
-        const created = Date.parse(item.createdAt);
-        const typed = typeof data.askedAt === "string" ? Date.parse(data.askedAt) : now;
-        if (typed > now + 60_000 || typed < created - 60_000) {
-          throw new WriteError(
-            "invalid_input",
-            "when the customer asked must be after the booking was made and not in the future",
-            {
-              fields: [
-                { path: "input.askedAt", problem: "invalid", message: "between the booking's creation and now" },
-              ],
-            },
-          );
-        }
-        const askedAt = Math.max(typed, created);
+        const askedAt = await cancelAskedAt(db, item, data, caller, now);
         // What it owes back is judged when they asked, as the fee is.
-        noticeAt = Math.min(askedAt, now);
+        noticeAt = askedAt;
         // With its own policy (ADR-035), by that policy, as their own door judges it: free while
         // cancelling cost nothing under it, late once it cost a fee, whatever the business-wide window.
         if (item.state === "confirmed" && item.payload.policy) {
@@ -955,13 +952,15 @@ async function attempt_(
         }
         if (item.type !== "booking") break;
         // For anyone, and nobody who gives it is free (ADR-035 §2), or with someone who no longer gives
-        // it here: the time is taken, for a person.
+        // it here: the time is taken, for a person. Free only with someone on other terms, the owner is
+        // told so, and to propose the time, never that nobody is free.
         const nobody = await nobodyToTake(db, payload);
         if (nobody) {
+          const other = !audience && nobody === "nobody_free" ? await otherTermsWords(db, item, payload) : null;
           throw new WriteError(
             "slot_taken",
-            audience ? copyFor(audience.lang).problems.slotTaken : NOBODY_WORDS[nobody],
-            { details: { guard, staff: nobody } },
+            audience ? copyFor(audience.lang).problems.slotTaken : (other ?? NOBODY_WORDS[nobody]),
+            { details: { guard, staff: other ? "other_terms" : nobody } },
           );
         }
         const spec = await slotSpecFor(db, payload);
@@ -969,11 +968,19 @@ async function attempt_(
         const taken = await readClaims(db, spec, buckets, item.id);
         const plan = planClaims(spec, buckets, taken);
         if (!plan.ok) {
+          const other = audience ? null : await otherTermsWords(db, item, payload);
           throw new WriteError(
             "slot_taken",
-            audience ? copyFor(audience.lang).problems.slotTaken : await ownerSlotWords(db, spec, plan.fullBucket),
+            audience
+              ? copyFor(audience.lang).problems.slotTaken
+              : (other ?? (await ownerSlotWords(db, spec, plan.fullBucket))),
             {
-              details: { guard, bucket: plan.fullBucket, capacity: spec.capacity },
+              details: {
+                guard,
+                bucket: plan.fullBucket,
+                capacity: spec.capacity,
+                ...(other ? { staff: "other_terms" } : {}),
+              },
             },
           );
         }
@@ -1472,17 +1479,28 @@ function applyReturnInput(
   };
   if (item.type === "booking" && event === "record_payment") {
     // A booking may be paid in parts (a deposit, then the rest): what was paid is their sum, all of it
-    // owed back on withdrawal. The same payment told twice counts once; one that names no amount is
-    // the whole price (`paidFor`).
+    // owed back on withdrawal. The same payment told twice counts once. One that names no amount is
+    // the deposit while one is still to pay (ADR-035: the salon takes it at the desk), else the whole
+    // price (`paidFor`): never a price the customer did not pay, read back as owed to them.
     const before = item.payload.paidAmount;
     const told = item.payload.paymentRef;
     const amount = data.amount as Money | undefined;
     // The payment recorded last, told again (a provider's retry): nothing more was paid.
     if (told === data.paymentRef && (before !== undefined || amount === undefined)) return;
     payload.paymentRef = data.paymentRef;
+    const deposit = item.payload.deposit?.amount;
+    const depositDue =
+      amount === undefined &&
+      deposit !== undefined &&
+      deposit.value > 0 &&
+      (told === undefined ||
+        (before !== undefined &&
+          before.currency.toUpperCase() === deposit.currency.toUpperCase() &&
+          before.value < deposit.value));
     if (amount && told !== undefined && before && before.currency.toUpperCase() === amount.currency.toUpperCase()) {
       payload.paidAmount = { value: before.value + amount.value, currency: before.currency };
     } else if (amount) payload.paidAmount = amount;
+    else if (depositDue) payload.paidAmount = { value: deposit.value, currency: deposit.currency };
     else if (told !== undefined) delete payload.paidAmount;
     return;
   }
@@ -1586,6 +1604,57 @@ async function noticeOf(
     );
   }
   return Math.min(Math.max(at, created), now);
+}
+
+/**
+ * When the customer asked to cancel, for a cancel the business records (ADR-017 §3.1): the arrival of
+ * their message on the item when `entryId` names it; else, typed by a person, when they say it was (now
+ * when left out). The owner's AI, or another system, names the message or it is now: a time it types
+ * would waive a fee, or keep a deposit, on words nobody can check (ADR-035 §5), as a withdrawal is
+ * guarded (`noticeOf`). A time typed to the minute may fall just before the booking was made: that is
+ * when it was made.
+ */
+export async function cancelAskedAt(
+  db: Db,
+  item: Pick<Item, "id" | "createdAt">,
+  data: Record<string, unknown>,
+  caller: Caller,
+  now: number,
+): Promise<number> {
+  const created = Date.parse(item.createdAt);
+  if (typeof data.entryId === "string") {
+    const { rows } = await db.client.query({
+      sql: "SELECT created_at FROM thread_entries WHERE id = ? AND item_id = ? AND direction = 'in'",
+      params: [data.entryId, item.id],
+      method: "all",
+    });
+    const at = rows[0]?.[0];
+    if (at === null || at === undefined) {
+      throw new WriteError("invalid_input", "input.entryId must name a message the customer sent about this item", {
+        fields: [{ path: "input.entryId", problem: "invalid", message: "a message from the customer on this item" }],
+      });
+    }
+    return Math.min(Math.max(Number(at), created), now);
+  }
+  if (typeof data.askedAt !== "string") return now;
+  if (!isPerson(caller)) {
+    throw new WriteError(
+      "invalid_input",
+      "Name the customer's message in which they asked to cancel (input.entryId, from get_item's thread), or leave the time out for now: a time you type is not taken. If they asked by phone or at the desk, the owner records when.",
+      { fields: [{ path: "input.askedAt", problem: "invalid", message: "name the customer's message instead" }] },
+    );
+  }
+  const typed = Date.parse(data.askedAt);
+  if (!Number.isFinite(typed) || typed > now + 60_000 || typed < created - 60_000) {
+    throw new WriteError(
+      "invalid_input",
+      "when the customer asked must be after the booking was made and not in the future",
+      {
+        fields: [{ path: "input.askedAt", problem: "invalid", message: "between the booking's creation and now" }],
+      },
+    );
+  }
+  return Math.min(Math.max(typed, created), now);
 }
 
 /**
@@ -1710,6 +1779,7 @@ async function withdrawalInstead(
   item: Item,
   input: TransitionInput,
   settings: Awaited<ReturnType<typeof readSettings>>,
+  caller: Caller,
   now: number,
 ): Promise<"record_withdrawal" | null> {
   if (input.event !== "record_cancel" && input.event !== "record_cancel_late") return null;
@@ -1727,7 +1797,8 @@ async function withdrawalInstead(
       method: "all",
     });
     if (rows[0]?.[0] !== null && rows[0]?.[0] !== undefined) when = Number(rows[0][0]);
-  } else if (typeof said.askedAt === "string") {
+  } else if (typeof said.askedAt === "string" && isPerson(caller)) {
+    // A time only a person types (`cancelAskedAt`): the owner's AI names the customer's message.
     const at = Date.parse(said.askedAt);
     if (Number.isFinite(at) && at <= now) when = at;
   }
@@ -2088,38 +2159,83 @@ const NOBODY_WORDS = {
 } as const;
 
 /**
- * Where a time we propose for a booking is judged, and held while the customer answers (ADR-035): with
- * its member of staff; for anyone, with whoever would take it then (`anyoneAt`), so it is free when
- * someone who gives it is, and one proposal holds one place, never every stylist's under the
- * service's own key; with someone who no longer gives it here, nowhere.
+ * Where a time we propose for a booking is judged, and held while the customer answers (ADR-035), and
+ * what it carries: with its member of staff; for anyone, with whoever would take it then (`anyoneAt`),
+ * so it is free when someone who gives it is, and one proposal holds one place, never every stylist's
+ * under the service's own key. Someone else goes with the time; on other terms than it was made on,
+ * with their own length and, unless we named a price, their own price, which the customer confirms
+ * when they accept it. One the salon's own system holds with someone stays with them, as its confirm
+ * does: that system's diary has them. With someone who no longer gives it here, nowhere. Undefined:
+ * judged as the booking stands (`slotSpecFor`).
  */
-async function offerSpecFor(
+async function placeProposal(
   db: Db,
-  itemId: string,
+  item: Item,
   payload: Record<string, unknown>,
-  base: SlotSpec,
-  at: { readonly startTime: string; readonly endTime: string },
-  timezone: string,
-): Promise<SlotSpec> {
-  const who = await anyoneAt(db, {
-    itemId,
-    payload,
-    start: Date.parse(at.startTime),
-    end: Date.parse(at.endTime),
-    timezone,
-  });
+  settings: Awaited<ReturnType<typeof readSettings>>,
+): Promise<SlotSpec | undefined> {
+  const p = payload.proposed as {
+    startTime: string;
+    endTime: string;
+    totalPrice?: Money;
+    personalised?: unknown;
+    resourceId?: string;
+    staffName?: string;
+  };
+  const start = Date.parse(p.startTime);
+  const end = Date.parse(p.endTime);
+  // A time that is not one is refused as the owner wrote it, in its own words.
+  if (!(end > start)) return undefined;
+  const held = typeof payload.resourceId === "string" && (await systemHold(db, item)) !== null;
+  const who = held
+    ? undefined
+    : await anyoneAt(db, { itemId: item.id, payload, start, end, timezone: settings.business.timezone });
   if (who === null) {
     throw new WriteError("slot_taken", NOBODY_WORDS.nobody_free, {
       details: { guard: "slot_available", staff: "nobody_free" },
     });
   }
-  if (who) return { ...base, capacity: who.capacity, resourceKey: `resource:${who.id}` };
-  if ((await nobodyToTake(db, payload)) === "not_here") {
-    throw new WriteError("slot_taken", NOBODY_WORDS.not_here, {
-      details: { guard: "slot_available", staff: "not_here" },
-    });
+  if (who === undefined) {
+    if ((await nobodyToTake(db, payload)) === "not_here") {
+      throw new WriteError("slot_taken", NOBODY_WORDS.not_here, {
+        details: { guard: "slot_available", staff: "not_here" },
+      });
+    }
+    return undefined;
   }
-  return base;
+  if (who.id !== payload.resourceId) {
+    p.resourceId = who.id;
+    p.staffName = who.publicName;
+  }
+  if (!who.sameTerms) {
+    const theirs = await termsWith(db, { payload, who, start, pricing: await pricingForItem(db, item, settings) });
+    p.endTime = theirs.endTime;
+    if (p.totalPrice === undefined && theirs.total) {
+      p.totalPrice = theirs.total;
+      if (theirs.personalised) p.personalised = theirs.personalised;
+    }
+  }
+  return { ...(await slotSpecFor(db, payload)), capacity: who.capacity, resourceKey: `resource:${who.id}` };
+}
+
+/**
+ * Why a booking for anyone cannot be confirmed as it stands, when it is not that nobody is free (ADR-035):
+ * nobody on the price and length it was asked at is, but someone on their own is. What the owner reads,
+ * and what to do: propose the time, which then carries their price and length for the customer to
+ * confirm. Null otherwise, and for one the salon's own system holds with someone.
+ */
+async function otherTermsWords(db: Db, item: Item, payload: Record<string, unknown>): Promise<string | null> {
+  if (payload.anyStaff !== true) return null;
+  if (typeof payload.resourceId === "string" && (await systemHold(db, item)) !== null) return null;
+  const facts = await businessFacts(db);
+  const start = Date.parse(String(payload.startTime));
+  const end = Date.parse(String(payload.endTime));
+  if (!(end > start)) return null;
+  const who = await anyoneAt(db, { itemId: item.id, payload, start, end, timezone: facts.timezone });
+  if (!who || who.sameTerms) return null;
+  const theirs = await termsWith(db, { payload, who, start });
+  const price = theirs.total ? `${formatMinor(theirs.total, "en-GB")}, ` : "";
+  return `nobody at the price and length it was asked at is free then; ${who.name} is, at their own (${price}${theirs.minutes} min): propose this time to the customer, which then carries their price and length for them to accept, or decline it`;
 }
 
 async function slotSpecFor(db: Db, payload: Record<string, unknown>): Promise<SlotSpec> {
@@ -2185,11 +2301,12 @@ async function bookedStart(
 /**
  * The customer's other time (`counter`): the service's own length from the start they chose, which
  * must be a time we would offer them — open, not closed, free. What we proposed is gone, and the
- * price stays the catalogue's.
+ * price stays the catalogue's. For anyone (ADR-035), free when someone who gives it is free then; its
+ * terms stay as they were, and the business answers it.
  */
 async function applyCounter(
   db: Db,
-  itemId: string,
+  item: Item,
   payload: Record<string, unknown>,
   data: Record<string, unknown>,
   audience: Audience | undefined,
@@ -2219,10 +2336,15 @@ async function applyCounter(
   const facts = await businessFacts(db);
   // The time we proposed, answered with a price of their own: ours to give, whatever holds it now.
   let offered = proposed !== undefined && start === Date.parse(proposed.startTime);
-  // For anyone (ADR-035): free when someone who would take it is, on the same terms, not only when
-  // nobody at all is busy then.
+  // For anyone (ADR-035): free when someone who gives it is free then, as the free times list them, not
+  // only when nobody at all is busy. Their request stays on the terms it was made on: free only with
+  // someone on other terms, the owner proposes it to them with that person's, for them to confirm. One
+  // the salon's own system holds with someone is judged with them, as its confirm is.
+  const held = resourceId !== undefined && (await systemHold(db, item)) !== null;
   const anyone =
-    start > now && !offered ? await anyoneAt(db, { itemId, payload, start, end, timezone: facts.timezone }) : undefined;
+    start > now && !offered && !held
+      ? await anyoneAt(db, { itemId: item.id, payload, start, end, timezone: facts.timezone })
+      : undefined;
   if (anyone !== undefined) offered = anyone !== null;
   if (start > now && !offered && anyone === undefined) {
     try {

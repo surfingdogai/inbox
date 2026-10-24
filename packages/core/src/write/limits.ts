@@ -125,10 +125,12 @@ export async function judgeOffer(o: {
   if (item.type === "booking" && (t.event === "propose" || t.event === "propose_change")) {
     const b = item.payload;
     const offered = (change ? payload.change : payload.proposed) as
-      | { startTime: string; endTime: string; totalPrice?: Money; personalised?: Personalised }
+      | { startTime: string; endTime: string; totalPrice?: Money; personalised?: Personalised; resourceId?: string }
       | undefined;
     if (offered) {
-      const sp = await servicePricing(db, b.reservationFor.serviceId, b.partySize, pricing, bookedWith(b));
+      // For anyone (ADR-035), priced as the catalogue prices it with whoever the time goes with.
+      const withWhom = bookedWith({ ...b, resourceId: offered.resourceId ?? b.resourceId });
+      const sp = await servicePricing(db, b.reservationFor.serviceId, b.partySize, pricing, withWhom);
       const length = Date.parse(offered.endTime) - Date.parse(offered.startTime);
       const agreedLength = Date.parse(b.endTime) - Date.parse(b.startTime);
       // Longer than the service (or than what was agreed) is a price the list does not cover.

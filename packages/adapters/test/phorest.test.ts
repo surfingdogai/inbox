@@ -689,6 +689,50 @@ describe("Phorest, nothing else confirms first", () => {
     expect([...ph.bookings.values()].map((b) => [b.staffId, b.status])).toEqual([[STAFF_MEI, "CANCELED"]]);
   });
 
+  it("offers an anyone booking Phorest holds only a time the person it is with is free", async () => {
+    const { db, caps, ph, fade, mei } = await withRules();
+    // Mei and Ravi on the same terms, so the inbox could judge a time with either.
+    await db.client.query({
+      sql: "UPDATE service_resources SET price_override = NULL, duration_override_min = NULL WHERE service_id = ?",
+      params: [fade.id],
+      method: "run",
+    });
+    ph.refuseNext();
+    const r = await book(caps, {
+      payload: { ...at("2026-11-04T17:00:00Z"), reservationFor: { serviceId: fade.id, name: "Skin fade" } },
+      contact: { name: "Aiyana Whitehorse", email: "aiyana@example.com" },
+      idempotency_key: "held-any",
+    });
+    const [asked] = await db.orm.select().from(schema.items).where(eq(schema.items.id, r.view.item.id));
+    expect((asked?.payload as { resourceId?: string } | undefined)?.resourceId).toBe(mei.id);
+    // Mei is taken here at 18:00 and Ravi is free: Phorest has this booking with Mei, so 18:00 is not
+    // offered at all, rather than offered and then refused when the customer says yes.
+    await db.client.query({
+      sql: "INSERT INTO slot_claims (resource_key, bucket_start, ordinal, item_id, offer_id) VALUES (?, ?, 0, 'walk-in', '')",
+      params: [`resource:${mei.id}`, Date.parse("2026-11-04T18:00:00Z")],
+      method: "run",
+    });
+    await expect(
+      caps.transitionItem(owner, {
+        item_id: r.view.item.id,
+        event: "propose",
+        input: { startTime: "2026-11-04T18:00:00Z", endTime: "2026-11-04T18:45:00Z" },
+      }),
+    ).rejects.toMatchObject({ code: "slot_taken" });
+    expect((await stateOf(db, r.view.item.id)).state).toBe("requested");
+    // A time Mei is free is offered, and the customer's yes by phone is written to Phorest with her.
+    await caps.transitionItem(owner, {
+      item_id: r.view.item.id,
+      event: "propose",
+      input: { startTime: "2026-11-04T16:00:00Z", endTime: "2026-11-04T16:45:00Z" },
+    });
+    const done = await caps.transitionItem(owner, { item_id: r.view.item.id, event: "confirm" });
+    expect(done.view.item.state).toBe("confirmed");
+    expect([...ph.bookings.values()].filter((b) => b.status === "ACTIVE").map((b) => [b.staffId, b.start])).toEqual([
+      [STAFF_MEI, "2026-11-04T16:00:00.000Z"],
+    ]);
+  });
+
   it("the owner's confirm writes nothing to Phorest for a time already taken here", async () => {
     const { db, caps, ph, mei, request } = await withRules();
     ph.refuseNext();

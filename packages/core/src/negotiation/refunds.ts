@@ -121,7 +121,11 @@ export function linesLeft(
   return rest.length ? rest : null;
 }
 
-/** What was paid for an order or a booking: the payment recorded, else its total when it is paid. */
+/**
+ * What was paid for an order or a booking: the payment recorded, else its total when it is paid. A
+ * booking's payment named with no amount while its deposit was still to pay is recorded as that deposit
+ * (`record_payment`), so it is read as the deposit here.
+ */
 export function paidFor(p: {
   readonly paidAmount?: Money | undefined;
   readonly totalPrice?: Money | undefined;

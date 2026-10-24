@@ -221,6 +221,12 @@ export const bookingPayloadSchema = z.object({
       /** Salons (ADR-035): the booking's deposit and policy as they would be at that time. */
       deposit: z.object({ amount: moneySchema, refundable: z.boolean() }).optional(),
       policy: datedPolicySchema.optional(),
+      /**
+       * For anyone (ADR-035), written only by the inbox: who the time is held for, when it is someone else
+       * than the booking is with. Accepted, it is with them; customers never read it before it binds.
+       */
+      resourceId: z.string().optional(),
+      staffName: z.string().min(1).max(60).optional(),
     })
     .optional(),
   /**
