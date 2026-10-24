@@ -1119,6 +1119,13 @@ describe("a deposit", () => {
         title: `투블럭 컷 (${r.view.item.id.slice(-6).toUpperCase()})`,
       },
     ]);
+    // Paid at the desk and recorded with a reference, no amount: the whole price, so it is asked for no more.
+    await transitionItem(
+      s.db,
+      { ...owner, now: () => later },
+      { itemId: r.view.item.id, event: "record_payment", input: { paymentRef: "desk-3" } },
+    );
+    expect((await bookingSchedules.wanted(s.db, r.view.item.id, later))?.links).toEqual([]);
   });
 
   it("is never given a time to pay by where no payment platform takes it", async () => {
@@ -1630,6 +1637,93 @@ describe("a paid deposit, once the right of withdrawal has run out", () => {
     expect(then.notes).toContain("CA$14.50 is owed back to them by");
   });
 
+  it("comes back whole on a free cancel with a deposit and no policy", async () => {
+    const { caps, r, start, after } = await paidDeposit("np-free", false);
+    const early: Caller = { ...agent(), now: () => start - 5 * DAY };
+    await caps.cancelItem(early, {
+      item_id: r.view.item.id,
+      access_token: r.accessToken ?? "",
+      idempotency_key: "np-c",
+    });
+    const then = await after();
+    expect(then.refunds).toMatchObject([
+      { state: "approved", kind: "cancellation", amount: { value: 2000, currency: "CAD" } },
+    ]);
+    expect(then.notes).toContain("all they paid, CA$20.00, is owed back to them");
+  });
+
+  it("comes back as on the customer's own door when the owner records their cancel by phone, dated in the salon's zone", async () => {
+    const { caps, r, start, after } = await paidDeposit("rec-free");
+    // Asked at half past nine in the evening in Toronto: already the next day in UTC.
+    const evening: Caller = { ...owner, now: () => start - 5 * DAY + 5.5 * 3_600_000 };
+    const done = await caps.transitionItem(evening, {
+      item_id: r.view.item.id,
+      event: "record_cancel",
+      input: { note: "phoned" },
+    });
+    expect(done.view.item.state).toBe("cancelled_by_customer");
+    const then = await after();
+    expect(then.refunds).toMatchObject([
+      { state: "approved", kind: "cancellation", amount: { value: 2000, currency: "CAD" } },
+    ]);
+    const due = String(then.refunds[0]?.refundDue);
+    const local = new Intl.DateTimeFormat("en-GB", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      timeZone: "America/Toronto",
+    }).format(new Date(due));
+    expect(then.notes).toContain(`all they paid, CA$20.00, is owed back to them by ${local}.`);
+    expect(then.notes).not.toContain(due.slice(0, 10));
+    // Paid in, and no payment platform takes payments here: given back by hand.
+    expect(then.notes).toContain("Pay it back to them yourself; nothing was refunded here.");
+    expect(then.needsHuman).toBe(false);
+  });
+
+  it("is judged by the booking's own policy when the owner records a cancel, not the business-wide window", async () => {
+    const s = await paidDeposit("rec-policy");
+    await payments(s.db);
+    // Late by the business-wide two days, free by the booking's own 24 hours: free, all of it back.
+    await s.caps.updateSettings(owner, {
+      doc: { booking: { cancellationWindowMin: 2880, lateCancellation: "record" } },
+    });
+    const asked = new Date(s.start - 30 * 3_600_000).toISOString();
+    // Written down an hour after they asked.
+    await s.caps.transitionItem(
+      { ...owner, now: () => s.start - 29 * 3_600_000 },
+      {
+        item_id: s.r.view.item.id,
+        event: "record_cancel",
+        input: { note: "at the desk", askedAt: asked },
+      },
+    );
+    const { rows } = await s.db.client.query({
+      sql: "SELECT event FROM item_events WHERE item_id = ? ORDER BY seq",
+      params: [s.r.view.item.id],
+      method: "all",
+    });
+    expect(rows.map((x) => x[0])).toContain("record_cancel");
+    expect(rows.map((x) => x[0])).not.toContain("record_cancel_late");
+    const then = await s.after();
+    expect(then.refunds).toMatchObject([{ amount: { value: 2000, currency: "CAD" }, noticeAt: asked }]);
+    // Paid through the platform that takes payments here: refunded there.
+    expect(then.notes).toContain("Refund it through your payment platform; nothing was refunded here.");
+  });
+
+  it("keeps the policy's fee when the owner records a late cancel by phone, and owes back the rest", async () => {
+    const { caps, r, start, after } = await paidDeposit("rec-late");
+    const late: Caller = { ...owner, now: () => start - 10 * 3_600_000 };
+    await caps.transitionItem(late, { item_id: r.view.item.id, event: "record_cancel", input: { note: "phoned" } });
+    const then = await after();
+    expect(then.state).toBe("cancelled_by_customer");
+    expect(then.refunds).toMatchObject([
+      { state: "approved", kind: "cancellation", amount: { value: 1450, currency: "CAD" } },
+    ]);
+    expect(then.notes).toContain("Cancelled with a fee of CA$5.50 under its policy");
+    expect(then.notes).toContain("CA$14.50 is owed back to them by");
+  });
+
   it("is a person's to settle when it is cancelled late and nothing says what is kept", async () => {
     const { db, caps, r, start, after } = await paidDeposit("dep-none", false);
     await caps.updateSettings(owner, { doc: { booking: { lateCancellation: "record" } } });
@@ -1650,6 +1744,137 @@ describe("a paid deposit, once the right of withdrawal has run out", () => {
     expect(then.refunds).toEqual([]);
     expect(then.needsHuman).toBe(true);
     expect(then.notes).toContain("They paid CA$20.00");
+  });
+});
+
+describe("a payment recorded with a reference and no amount", () => {
+  /** Ravi's skin fade (CA$55.00) twenty days ahead, confirmed, paid at the desk with no amount said. */
+  async function paidAtDesk(idem: string, terms: Parameters<Capabilities["setup"]["updateService"]>[1]) {
+    const s = await mapleAndFade();
+    await s.caps.setup.updateService(owner, { ...terms, service_id: s.fade.id });
+    const day = new Date(T0 + 20 * DAY).toISOString().slice(0, 10);
+    const r = await s.caps.createBooking(agent(), {
+      payload: booking(s.fade.id, "Skin fade", `${day}T16:00:00-05:00`, `${day}T16:30:00-05:00`),
+      staff_id: s.ravi.id,
+      contact: { name: "Aiyana", email: "aiyana@example.com" },
+      idempotency_key: idem,
+    });
+    await transitionItem(s.db, owner, { itemId: r.view.item.id, event: "confirm" });
+    await transitionItem(s.db, owner, {
+      itemId: r.view.item.id,
+      event: "record_payment",
+      input: { paymentRef: `desk-${idem}` },
+    });
+    const start = Date.parse(`${day}T16:00:00-05:00`);
+    const refunds = async () =>
+      (await s.db.orm.select().from(items))
+        .filter((i) => i.type === "refund")
+        .map((i) => i.payload as { amount: unknown });
+    return { ...s, r, start, refunds };
+  }
+  const fee10 = {
+    service_id: "",
+    policy: {
+      steps: [{ before: { hours: 24 }, fee: { kind: "none" as const } }],
+      after: { kind: "percent" as const, value: 10 },
+      noShow: { kind: "full" as const },
+    },
+  };
+
+  it("is the whole price paid: the deposit a policy keeps is kept, and the rest is what comes back", async () => {
+    const s = await paidAtDesk("keep", {
+      service_id: "",
+      deposit: { kind: "percent", value: 20 },
+      policy: {
+        steps: [{ before: { hours: 24 }, fee: { kind: "none" } }],
+        after: { kind: "none" },
+        noShow: { kind: "full" },
+        deposit: { refundable: false },
+      },
+    });
+    const late: Caller = { ...agent(), now: () => s.start - 10 * 3_600_000 };
+    const asked = await s.caps
+      .cancelItem(late, { item_id: s.r.view.item.id, access_token: s.r.accessToken ?? "", idempotency_key: "keep-1" })
+      .catch((e: unknown) => e);
+    // The CA$11.00 deposit is kept, never taken as free; CA$44.00 of the CA$55.00 comes back.
+    expect(asked).toMatchObject({
+      code: "confirm_terms",
+      details: { fee: { value: 1100, currency: "CAD" }, refund_owed: { value: 4400, currency: "CAD" } },
+    });
+    await s.caps.cancelItem(late, {
+      item_id: s.r.view.item.id,
+      access_token: s.r.accessToken ?? "",
+      fee_sha: String((asked as WriteError).details?.fee_sha),
+      idempotency_key: "keep-2",
+    });
+    expect(await s.refunds()).toMatchObject([{ amount: { value: 4400, currency: "CAD" }, kind: "cancellation" }]);
+  });
+
+  it("is what the customer is told comes back, and what is opened", async () => {
+    const s = await paidAtDesk("fee", fee10);
+    const late: Caller = { ...agent(), now: () => s.start - 10 * 3_600_000 };
+    const asked = await s.caps
+      .cancelItem(late, { item_id: s.r.view.item.id, access_token: s.r.accessToken ?? "", idempotency_key: "fee-1" })
+      .catch((e: unknown) => e);
+    expect(asked).toMatchObject({
+      code: "confirm_terms",
+      details: { fee: { value: 550, currency: "CAD" }, refund_owed: { value: 4950, currency: "CAD" } },
+    });
+    expect((asked as WriteError).message).toContain("CA$49.50 comes back to you");
+    await s.caps.cancelItem(late, {
+      item_id: s.r.view.item.id,
+      access_token: s.r.accessToken ?? "",
+      fee_sha: String((asked as WriteError).details?.fee_sha),
+      idempotency_key: "fee-2",
+    });
+    expect(await s.refunds()).toMatchObject([{ amount: { value: 4950, currency: "CAD" } }]);
+  });
+});
+
+describe("another customer's booking", () => {
+  it("says nothing of its fee, its terms or what was paid to anyone who does not hold it", async () => {
+    const s = await mapleAndFade();
+    await s.caps.setup.updateService(owner, {
+      service_id: s.fade.id,
+      deposit: { kind: "amount", value: 2000 },
+      policy: {
+        steps: [{ before: { hours: 24 }, fee: { kind: "none" } }],
+        after: { kind: "percent", value: 10 },
+        noShow: { kind: "full" },
+      },
+    });
+    const day = new Date(T0 + 20 * DAY).toISOString().slice(0, 10);
+    const make = async (name: string, at16: string, idem: string) => {
+      const r = await s.caps.createBooking(agent(), {
+        payload: booking(s.fade.id, "Skin fade", `${day}T${at16}:00-05:00`, `${day}T${at16.slice(0, 3)}30:00-05:00`),
+        staff_id: s.ravi.id,
+        contact: { name, email: `${idem}@example.com` },
+        idempotency_key: idem,
+      });
+      await transitionItem(s.db, owner, { itemId: r.view.item.id, event: "confirm" });
+      return r;
+    };
+    const victim = await make("Aiyana", "16:00", "victim");
+    const other = await make("Mateus", "17:00", "other");
+    await transitionItem(s.db, owner, {
+      itemId: victim.view.item.id,
+      event: "record_payment",
+      input: { paymentRef: "desk-v", amount: { value: 2000, currency: "CAD" } },
+    });
+    const late: Caller = { ...agent(), now: () => Date.parse(`${day}T16:00:00-05:00`) - 10 * 3_600_000 };
+    for (const token of [undefined, other.accessToken ?? ""]) {
+      const tried = await s.caps
+        .cancelItem(late, {
+          item_id: victim.view.item.id,
+          ...(token ? { access_token: token } : {}),
+          idempotency_key: `peek-${token ? "t" : "n"}`,
+        })
+        .catch((e: unknown) => e);
+      expect(tried).toMatchObject({ code: "not_allowed" });
+      expect(JSON.stringify((tried as WriteError).details ?? {})).not.toMatch(/fee|policy|refund/);
+    }
+    const [row] = await s.db.orm.select().from(items).where(eq(items.id, victim.view.item.id));
+    expect(row?.state).toBe("confirmed");
   });
 });
 

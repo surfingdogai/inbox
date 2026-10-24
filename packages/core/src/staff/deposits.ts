@@ -3,6 +3,7 @@ import type { ScheduledItem, ScheduledOutcome, ScheduleSource, WantedLink } from
 import { shortRef } from "../customer/format";
 import type { Db } from "../db";
 import type { Item, PayloadOf } from "../domain/types";
+import { paidFor } from "../negotiation/refunds";
 import { items, parties } from "../schema/tables";
 import type { Caller } from "../write/caller";
 import { WriteError } from "../write/errors";
@@ -45,11 +46,17 @@ function systemCaller(now: number): Caller {
   };
 }
 
-/** What is still to pay of the deposit: its amount less what was paid, in its currency. */
+/**
+ * What is still to pay of the deposit: its amount less what was paid, in its currency, read as the
+ * fee and the refund read it (`paidFor`): a payment the owner recorded with no amount is the whole
+ * price, so nothing more is asked for. A reference with no amount and no price to read covers it too.
+ */
 export function depositLeft(p: BookingPayload): number {
   if (!p.deposit) return 0;
-  const paid = p.paidAmount && p.paidAmount.currency === p.deposit.amount.currency ? p.paidAmount.value : 0;
-  return Math.max(0, p.deposit.amount.value - paid);
+  const paid = paidFor(p);
+  if (!paid && p.paymentRef) return 0;
+  const value = paid && paid.currency === p.deposit.amount.currency ? paid.value : 0;
+  return Math.max(0, p.deposit.amount.value - value);
 }
 
 export const bookingSchedules: ScheduleSource = {

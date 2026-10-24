@@ -6,6 +6,7 @@ import { AccessCapabilities } from "../access/keys";
 import { assertNoLeak, PUBLISHED, stringsIn } from "../access/leaks";
 import { isOwnerOrSystem, mayDirectDataOut, ownerOnlyError } from "../access/outbound";
 import { ConnectorCapabilities } from "../connectors/capability";
+import { hasPayLinks } from "../connectors/pay-queue";
 import { registerScheduleSource, scheduleSourceOf } from "../connectors/schedules";
 import { audienceFor } from "../customer/audience";
 import { effectiveWrittenBy, isAutomated } from "../customer/mail";
@@ -76,6 +77,7 @@ import {
 } from "../settings/schema";
 import {
   bookFirstInSystem,
+  bookingFeeAt,
   bookingSchedules,
   cancelFeeOf,
   checkFirstOf,
@@ -945,6 +947,8 @@ export class Capabilities {
 
   private async cancelOnce(c: Caller, input: T.CancelItemInput): Promise<TransitionResult> {
     const note = input.reason ? { input: { note: input.reason }, reason: input.reason } : {};
+    // Only their own: nothing of another's booking — its fee, its terms, what was paid — is said first.
+    if (isCustomer(c)) await this.loadOwned(c, input.item_id);
     // A confirmed booking with its own policy (ADR-035): the fee is said before anything is cancelled.
     const fee = isCustomer(c) ? await this.cancelFeeFor(c, input) : null;
     if (fee) {
@@ -1003,34 +1007,56 @@ export class Capabilities {
   private async moneyBackNote(c: Caller, done: TransitionResult, fee: Money | null): Promise<void> {
     const item = done.view.item;
     if (done.replayed || item.type !== "booking" || item.state !== "cancelled_by_customer") return;
+    const refund = done.linked?.item.type === "refund" ? done.linked.item : null;
+    const owed = refund ? (refund.payload as { amount: Money; refundDue?: string; kind?: string }) : null;
+    // Taken as their withdrawal: its own refund and its own words, none of these.
+    if (owed?.kind === "withdrawal") return;
     const p = item.payload;
     if (!p.policy && !p.deposit) return;
     const paid = paidFor(p);
     const charged = fee !== null && fee.value > 0;
     if (!paid && !charged) return;
-    const locale = localeOf((await this.getBusinessProfile()).languages[0] ?? "en");
+    const business = await this.getBusinessProfile();
+    const locale = localeOf(business.languages[0] ?? "en");
     const money = (m: Money) => formatMinor(m, locale);
-    const refund = done.linked?.item.type === "refund" ? done.linked.item : null;
-    const owed = refund ? (refund.payload as { amount: Money; refundDue?: string }) : null;
-    const by = owed?.refundDue ? ` by ${owed.refundDue.slice(0, 10)}` : "";
+    const by = owed?.refundDue ? ` by ${dayIn(owed.refundDue, business.timezone, locale)}` : "";
+    // Back the way it came: through the payment platform that took it, else by the owner's own hand.
+    const how = (await this.paidThroughPlatform(item.id))
+      ? "Refund it through your payment platform"
+      : "Pay it back to them yourself";
     const head = charged
       ? `Cancelled with a fee of ${money(fee)} under its policy, as the customer saw it and agreed.`
       : "Cancelled by the customer.";
     let tail: string;
     if (owed) {
       tail = charged
-        ? `It comes out of what they paid: ${money(owed.amount)} is owed back to them${by}. Refund it through your payment platform; nothing was charged or refunded here.`
-        : `It was free under its terms, so all they paid, ${money(owed.amount)}, is owed back to them${by}. Refund it through your payment platform; nothing was refunded here.`;
+        ? `It comes out of what they paid: ${money(owed.amount)} is owed back to them${by}. ${how}; nothing was charged or refunded here.`
+        : `It was free under its terms, so all they paid, ${money(owed.amount)}, is owed back to them${by}. ${how}; nothing was refunded here.`;
     } else if (charged) {
       tail = paid
         ? "It comes out of what they paid, which covers it, or ask for the rest; nothing was charged here."
         : "Take it from the deposit, or ask for it; nothing was charged here.";
     } else {
       // Paid, and its terms do not say what comes back (late, with a deposit and no policy): a person decides.
-      tail = `They paid ${money(paid as Money)}, and its terms do not say what of it comes back now. Decide what does, and refund it through your payment platform; nothing was refunded here.`;
+      tail = `They paid ${money(paid as Money)}, and its terms do not say what of it comes back now. Decide what does, and ${how.charAt(0).toLowerCase()}${how.slice(1)}; nothing was refunded here.`;
       await setFlags(this.db, systemCaller(nowOf(c)), { itemId: item.id, flags: { needsHuman: true } });
     }
     await appendThreadEntry(this.db, systemCaller(nowOf(c)), item, `${head} ${tail}`, "note");
+  }
+
+  /**
+   * Whether a booking's payment came in through a payment platform: recorded by its connection, while
+   * one still takes payments. One the owner recorded (cash at the desk, a card machine) is theirs to
+   * give back by hand.
+   */
+  private async paidThroughPlatform(itemId: string): Promise<boolean> {
+    if (!(await hasPayLinks(this.db))) return false;
+    const { rows } = await this.db.client.query({
+      sql: `SELECT actor_kind FROM item_events WHERE item_id = ? AND event = 'record_payment' ORDER BY seq DESC LIMIT 1`,
+      params: [itemId],
+      method: "all",
+    });
+    return rows.length === 0 || rows[0]?.[0] === "connector";
   }
 
   /**
@@ -1403,8 +1429,9 @@ export class Capabilities {
       }
     }
     if (input.event !== "record_cancel") return transitionItem(this.db, c, request);
+    let done: TransitionResult;
     try {
-      return await transitionItem(this.db, c, request);
+      done = await transitionItem(this.db, c, request);
     } catch (error) {
       if (!(error instanceof WriteError)) throw error;
       const late =
@@ -1413,8 +1440,12 @@ export class Capabilities {
       // A retried request whose first try was the late one: its key is stored for `record_cancel_late`.
       const retried = error.code === "idempotency_mismatch" && c.idempotency !== undefined;
       if (!late && !retried) throw error;
-      return transitionItem(this.db, c, { ...request, event: "record_cancel_late" });
+      done = await transitionItem(this.db, c, { ...request, event: "record_cancel_late" });
     }
+    // The customer's cancel by phone or at the desk, as their own door says it (ADR-035): the fee under
+    // its policy when they asked, and what of what they paid is owed back, beside its refund.
+    await this.moneyBackNote(c, done, recordedFee(done, input, nowOf(c)));
+    return done;
   }
 
   /**
@@ -2048,6 +2079,31 @@ export class Capabilities {
     messageId?: string | undefined,
   ): Promise<void> {
     return appendThreadEntry(this.db, caller, item, body, direction, messageId);
+  }
+}
+
+/**
+ * The fee a recorded cancellation of a booking with its own policy costs (ADR-035), judged when the
+ * customer asked, as the write judged it; null for one without.
+ */
+function recordedFee(done: TransitionResult, input: T.TransitionItemInput, now: number): Money | null {
+  const item = done.view.item;
+  if (done.replayed || item.type !== "booking" || !item.payload.policy) return null;
+  const said = (input.input ?? {}) as { askedAt?: unknown };
+  const typed = typeof said.askedAt === "string" ? Date.parse(said.askedAt) : Number.NaN;
+  const askedAt = Number.isFinite(typed) ? Math.min(Math.max(typed, Date.parse(item.createdAt)), now) : now;
+  return bookingFeeAt(item.payload, askedAt);
+}
+
+/** A day as the owner reads it, in the business's zone: "Wed, 2 Dec 2026". */
+function dayIn(iso: string, timezone: string, locale: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
+  const opts = { weekday: "short", day: "numeric", month: "short", year: "numeric" } as const;
+  try {
+    return new Intl.DateTimeFormat(locale, { ...opts, timeZone: timezone }).format(d);
+  } catch {
+    return new Intl.DateTimeFormat(locale, { ...opts, timeZone: "UTC" }).format(d);
   }
 }
 

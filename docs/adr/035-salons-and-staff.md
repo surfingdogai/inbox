@@ -123,12 +123,19 @@ salon's own credentials can be used with.
   businesses), the policy and a kept deposit apply as written.
 - A customer's cancel of a paid booking with a deposit or a policy, outside that period, opens its refund
   (`cancellation`, approved, due by the refund days) of what the policy does not keep: all of it while
-  cancelling is free. The owner reads the fee and what is owed back beside the booking. Cancelled late
-  with a deposit and no policy, nothing says what is kept: a person decides, and the booking says so.
+  cancelling is free. The same holds when the owner records the customer's cancel (by phone, at the
+  desk): judged by the booking's own policy when the customer asked, not the business-wide window. The
+  owner reads the fee and what is owed back, by a day in their own zone, beside the booking, and whether
+  it goes back through their payment platform or by their own hand. Cancelled late with a deposit and no
+  policy, nothing says what is kept: a person decides, and the booking says so.
+- What was paid is read one way everywhere: a payment recorded with a reference and no amount is the
+  whole price. The fee, a kept deposit, the quote the customer confirms, the refund it opens and the
+  deposit still to ask for all agree.
 - Who it is with, the add-ons, the deposit and the policy are part of what a customer confirms (the
   confirm step's terms and summary). A confirmed booking with a policy answers a customer's cancel with
-  the fee and what comes back (`409 confirm_terms`, `fee_sha`); it is cancelled, as a late cancellation
-  when it costs something, only once they send that fingerprint back. The fee is the business's to take,
+  the fee and what comes back (`409 confirm_terms`, `fee_sha`) to the customer who holds it, and to nobody
+  else; it is cancelled, as a late cancellation when it costs something, only once they send that
+  fingerprint back. The fee is the business's to take,
   from the deposit or through its own link.
 - The owner's AI may name add-ons and tie staff to services; deposits, policies, what comes first and
   every price are the owner's in person. It cannot drop a priced add-on, or send it again without its id.

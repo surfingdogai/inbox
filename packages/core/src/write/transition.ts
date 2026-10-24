@@ -720,6 +720,23 @@ async function attempt_(
           );
         }
         const askedAt = Math.max(typed, created);
+        // What it owes back is judged when they asked, as the fee is.
+        noticeAt = Math.min(askedAt, now);
+        // With its own policy (ADR-035), by that policy, as their own door judges it: free while
+        // cancelling cost nothing under it, late once it cost a fee, whatever the business-wide window.
+        if (item.state === "confirmed" && item.payload.policy) {
+          const fee = bookingFeeAt(item.payload, askedAt);
+          if (guard === "asked_within_window" ? fee.value > 0 : fee.value === 0) {
+            throw new WriteError(
+              "guard_failed",
+              guard === "asked_within_window"
+                ? "when the customer asked, cancelling cost a fee under this booking's policy: record it as a late cancellation"
+                : "when the customer asked, cancelling was free under this booking's policy: record it as a cancellation",
+              { details: { guard, fee, lateCancellation: "record" } },
+            );
+          }
+          break;
+        }
         const windowMs = settings.booking.cancellationWindowMin * 60_000;
         const inWindow = Date.parse(item.payload.startTime) - askedAt >= windowMs;
         const records = settings.booking.lateCancellation === "record";

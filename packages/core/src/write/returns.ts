@@ -37,19 +37,24 @@ const DAY = 86_400_000;
 
 /** The events of an order or a booking that end in a refund of what was paid, or a return. */
 const WITHDRAWALS: ReadonlySet<string> = new Set(["withdraw", "record_withdrawal"]);
-/** The customer's own cancel of a confirmed booking, free or late. */
-const CUSTOMER_CANCELS: ReadonlySet<string> = new Set(["cancel", "cancel_late"]);
+/**
+ * The customer's cancel of a confirmed booking, free or late: through their own door, or by phone or at
+ * the desk as the business records it, judged when they asked.
+ */
+const CUSTOMER_CANCELS: ReadonlySet<string> = new Set(["cancel", "cancel_late", "record_cancel", "record_cancel_late"]);
+/** Of those, the free ones. */
+const FREE_CANCELS: ReadonlySet<string> = new Set(["cancel", "record_cancel"]);
 
 /**
  * What comes back of what was paid when the customer cancels a booking made on a salon's own terms
- * (ADR-035): all of it while cancelling is free, else what is left after the policy's fee. Null for a
- * booking without such terms (cancelled as it always was), and for a late cancel with a deposit and no
- * policy, where nothing says what is kept: a person decides.
+ * (ADR-035): all of it while cancelling is free, else what is left after the policy's fee, judged at
+ * `at` (when they asked). Null for a booking without such terms (cancelled as it always was), and for a
+ * late cancel with a deposit and no policy, where nothing says what is kept: a person decides.
  */
-export function owedOnCancel(payload: PayloadOf<"booking">, paid: Money, event: string, now: number): Money | null {
-  if (payload.policy) return refundOwed(paid, bookingFeeAt(payload, now));
+export function owedOnCancel(payload: PayloadOf<"booking">, paid: Money, event: string, at: number): Money | null {
+  if (payload.policy) return refundOwed(paid, bookingFeeAt(payload, at));
   if (!payload.deposit) return null;
-  return event === "cancel" ? paid : null;
+  return FREE_CANCELS.has(event) ? paid : null;
 }
 
 /**
@@ -305,10 +310,10 @@ export async function refundFor(o: {
       };
     }
     // The customer cancelled a paid booking with a salon's own terms (ADR-035), outside the right of
-    // withdrawal: what the policy does not keep is owed back by the refund days, and nothing has to
-    // come back. Free, it all is. Owed in another currency than the fee, a person decides.
+    // withdrawal: what the policy does not keep is owed back by the refund days from when they asked,
+    // and nothing has to come back. Free, it all is. Owed in another currency than the fee, a person decides.
     if (CUSTOMER_CANCELS.has(t.event)) {
-      const owed = owedOnCancel(item.payload, paid, t.event, now);
+      const owed = owedOnCancel(item.payload, paid, t.event, o.noticeAt);
       if (!owed || owed.value <= 0) return null;
       return {
         kind: "cancellation",
@@ -320,7 +325,7 @@ export async function refundFor(o: {
           kind: "cancellation",
           noticeAt: notice,
           goodsBack: false,
-          refundDue: iso(now + settings.returns.refundDays * DAY),
+          refundDue: iso(o.noticeAt + settings.returns.refundDays * DAY),
         },
       };
     }

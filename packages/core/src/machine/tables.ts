@@ -610,7 +610,8 @@ export const bookingMachine: Machine<BookingState> = {
       internalNote: true,
       guards: ["asked_within_window"],
       input: recordCancelInput,
-      effects: ["release_slot", "issue_receipt:outcome", "notify_customer", "close"],
+      // What of a paid deposit comes back, as the customer's own cancel opens it (ADR-035).
+      effects: ["release_slot", "issue_receipt:outcome", "link_refund", "notify_customer", "close"],
     },
     {
       // Fired by the owner door once `record_cancel` found the window closed when the customer asked,
@@ -623,7 +624,7 @@ export const bookingMachine: Machine<BookingState> = {
       internalNote: true,
       guards: ["asked_outside_window"],
       input: recordCancelInput,
-      effects: ["release_slot", "issue_receipt:outcome", "notify_customer", "close"],
+      effects: ["release_slot", "issue_receipt:outcome", "link_refund", "notify_customer", "close"],
       unlisted: true,
     },
     // A payment or deposit for the booking: it gates nothing, but makes the booking a paid contract

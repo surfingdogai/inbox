@@ -1,5 +1,6 @@
 import type { DatedPolicy } from "@surfingdog/spec";
 import type { Money, PayloadOf } from "../domain/types";
+import { paidFor } from "../negotiation/refunds";
 import { feeAt, policySentence, refundOwed } from "../policy/index";
 import { canonicalJson } from "../util/canonical";
 import { formatMinor } from "../util/money";
@@ -21,7 +22,8 @@ export function bookingFeeAt(p: BookingPayload, now: number): Money {
   const policy = p.policy as DatedPolicy | undefined;
   const currency = total?.currency ?? p.deposit?.amount.currency ?? "XXX";
   if (!policy) return { value: 0, currency };
-  const paid = p.paidAmount;
+  // What was paid, read as the refund reads it: a payment recorded with no amount is the whole price.
+  const paid = paidFor(p);
   // A deposit the policy keeps comes back while cancelling is free, as the customer was told, and is
   // kept once no free step is still ahead, as far as it was paid.
   const freeAhead = policy.steps.some((s) => s.fee.value === 0 && Date.parse(s.until) >= now);
@@ -35,7 +37,7 @@ export function bookingFeeAt(p: BookingPayload, now: number): Money {
 
 export interface CancelFee {
   readonly fee: Money;
-  /** What is owed back of what was paid; null when nothing was paid. */
+  /** What is owed back of what was paid (`paidFor`, as the refund it opens reads it); null when nothing was. */
   readonly refund: Money | null;
   /** The fingerprint the customer sends back once they said yes: the item, the fee and what comes back. */
   readonly sha: string;
@@ -51,7 +53,8 @@ export async function cancelFeeOf(
   const p = item.payload;
   if (!p.policy) return null;
   const fee = bookingFeeAt(p, now);
-  const refund = p.paidAmount ? refundOwed(p.paidAmount, fee) : null;
+  const paid = paidFor(p);
+  const refund = paid ? refundOwed(paid, fee) : null;
   const bytes = new TextEncoder().encode(canonicalJson({ kind: "cancel", item: item.id, fee, refund }));
   const sha = base64Url(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes as BufferSource)));
   const w = staffWords(lang);
