@@ -285,6 +285,30 @@ export function depositKey(rule: DepositRule | null | undefined): string {
 }
 
 /**
+ * What of a booking's deposit is paid, and what is still to pay, in its currency, as the inbox reads a
+ * payment (ADR-035): one recorded with no amount while the deposit was still to pay is that deposit, and
+ * once the deposit is paid, the whole price. Paid in another currency, a person reads it. Null for a
+ * booking with no deposit.
+ */
+export function depositPaid(p: {
+  readonly deposit?: { readonly amount: Money } | undefined;
+  readonly paidAmount?: Money | undefined;
+  readonly paymentRef?: string | undefined;
+}): { readonly paid: number; readonly left: Money } | null {
+  if (!p.deposit) return null;
+  const d = p.deposit.amount;
+  const paid =
+    p.paidAmount && p.paidAmount.value > 0
+      ? p.paidAmount.currency === d.currency
+        ? p.paidAmount.value
+        : 0
+      : p.paymentRef
+        ? d.value
+        : 0;
+  return { paid, left: { value: Math.max(0, d.value - paid), currency: d.currency } };
+}
+
+/**
  * A booking's dated policy, for the owner: each step's last moment in the business's zone, and its fee.
  * A deposit the policy keeps is said as kept once cancelling is no longer free, as the customer read it,
  * and beside a smaller fee from then on.

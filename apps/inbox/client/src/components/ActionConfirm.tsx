@@ -16,6 +16,7 @@ import {
 import type { ApiProblem } from "../lib/api";
 import { formatDateTime, formatMoney } from "../lib/format";
 import { useSettings } from "../lib/queries";
+import { depositPaid } from "../lib/staff";
 import type { Item, Money, Transition } from "../lib/types";
 
 /**
@@ -103,7 +104,13 @@ export function ActionConfirm({
   const [method, setMethod] = useState<"post" | "drop_off" | "collection">("post");
   const [address, setAddress] = useState("");
   const [ref, setRef] = useState("");
-  const [amount, setAmount] = useState("");
+  // A booking's deposit still to pay (ADR-035): what the owner most likely took at the desk, said first.
+  const depositLeft = transition.event === "record_payment" && booking ? depositPaid(booking)?.left : undefined;
+  const depositDue =
+    depositLeft && depositLeft.value > 0 && depositLeft.currency.toUpperCase() === currency.toUpperCase()
+      ? depositLeft
+      : undefined;
+  const [amount, setAmount] = useState(() => (depositDue ? moneyMajor(depositDue) : ""));
   const [url, setUrl] = useState("");
 
   const build = (): { ok: true; input: Record<string, unknown> | undefined } | { ok: false; problem: string } => {
@@ -736,6 +743,13 @@ export function ActionConfirm({
               onChange={(e) => setAmount(e.target.value)}
             />
           </div>
+          {transition.event === "record_payment" && (
+            <div className="hint wide">
+              {depositDue
+                ? `The deposit still to pay. Left blank, it counts as that deposit, ${formatMoney(depositDue)}.`
+                : "Left blank, it counts as the whole price paid."}
+            </div>
+          )}
         </div>
       )}
 

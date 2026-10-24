@@ -4,6 +4,7 @@ import {
   DEPOSIT_PRESETS,
   datedSteps,
   depositKey,
+  depositPaid,
   ownLengths,
   POLICY_PRESETS,
   policyKey,
@@ -153,5 +154,24 @@ describe("someone's own length for a service", () => {
     expect(ownLengths(300).map((l) => l.value)).toEqual([null, 270, 330, 360]);
     // Never nothing: half an hour less of half an hour is left out.
     expect(ownLengths(30).map((l) => l.value)).toEqual([null, 60, 90]);
+  });
+});
+
+describe("a booking's deposit, as the owner reads it", () => {
+  it("is paid by a payment recorded with no amount, and no more than it, as the inbox reads it", () => {
+    const deposit = { amount: { value: 1_000_000, currency: "NGN" } };
+    // Nothing paid yet: all of it is still to pay, and the payment form starts from it.
+    expect(depositPaid({ deposit })).toEqual({ paid: 0, left: { value: 1_000_000, currency: "NGN" } });
+    // Taken at the desk with no amount said: the inbox recorded it as the deposit.
+    expect(depositPaid({ deposit, paymentRef: "cash", paidAmount: { value: 1_000_000, currency: "NGN" } })).toEqual({
+      paid: 1_000_000,
+      left: { value: 0, currency: "NGN" },
+    });
+    // Part of it paid; then the rest of the price, with no amount, which covers it.
+    expect(depositPaid({ deposit, paymentRef: "pi_1", paidAmount: { value: 400_000, currency: "NGN" } })?.left).toEqual(
+      { value: 600_000, currency: "NGN" },
+    );
+    expect(depositPaid({ deposit, paymentRef: "cash-rest" })?.left.value).toBe(0);
+    expect(depositPaid({ paymentRef: "cash" })).toBeNull();
   });
 });

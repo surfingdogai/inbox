@@ -4,15 +4,23 @@
   align-items: center;
   gap: 10px;
 }
+/* Their lines beside the photo take the room that is left, and no more, so a long name can be cut short. */
+.staff-main > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.staff-main .t {
+  min-width: 0;
+}
 /* Their own name beside what customers see: on the same line, cut short rather than wrapped onto its own. */
-.staff-names {
+.staff-line-names {
   display: inline-flex;
   align-items: baseline;
   gap: 6px;
   min-width: 0;
   max-width: 100%;
 }
-.staff-names b {
+.staff-line-names b {
   flex: none;
 }
 .staff-fullname {
@@ -215,12 +223,14 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* The service on a tall block: wrapped onto the lines it has room for, the last ended with an ellipsis. */
+/* The service on a tall block: wrapped onto the lines it has room for, the last ended with an ellipsis; a
+   word too long for a narrow lane is broken where its language hyphenates it, never mid-letter. */
 .staffday-line.is-wrap {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   white-space: normal;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  hyphens: auto;
 }
 .staffday-block:hover {
   transform: translateX(1px);

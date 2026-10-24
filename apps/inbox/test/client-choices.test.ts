@@ -1,7 +1,7 @@
 import { ISO_4217_MINOR_UNITS, isMoneyCurrency, PRESET_KEYS } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
 import { describeService, lengthWords, serviceDraft, serviceWrite } from "../client/src/lib/catalogue";
-import { cardState, cardsFor } from "../client/src/lib/connect";
+import { cardState, cardsFor, waitingLine } from "../client/src/lib/connect";
 import { countryName, countryOptions, ISO_3166_1 } from "../client/src/lib/countries";
 import {
   COMMON_CURRENCIES,
@@ -465,11 +465,15 @@ describe("the setup wizard's doors", () => {
       hint: "Needs a partner key on this server.",
     });
     expect(cardState(cards[3] as GalleryCard)).toEqual({ tag: "Soon", hint: null });
-    // One that waits on its company says so, as Settings → Integrations does: nothing for the owner to set up.
+    // One that waits on its company says so, as Settings → Integrations does: nothing for the owner to set
+    // up, and the tag said once, its hint going on from it.
     expect(cardState(cards[4] as GalleryCard)).toEqual({
       tag: "Not available yet",
-      hint: "Not available yet: it has to approve it first.",
+      hint: "It has to approve it first.",
     });
+    // On a phone, where those tiles are not shown, one line names each by what it waits for.
+    expect(waitingLine(cards)).toBe("Needs setup: gated · Soon: later · Not available yet: waits");
+    expect(waitingLine(cards.slice(0, 2))).toBeNull();
   });
 
   it("make what is offered asked about for a price when agents cannot book", () => {

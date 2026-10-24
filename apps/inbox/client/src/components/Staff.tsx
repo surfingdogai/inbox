@@ -182,7 +182,7 @@ function StaffLine({
         <Avatar name={s.name} photo={s.photo} />
         <div>
           <div className="t">
-            <span className="staff-names">
+            <span className="staff-line-names">
               <b>{s.publicName}</b>
               {s.name !== s.publicName && (
                 <span className="hint staff-fullname" title={s.name}>

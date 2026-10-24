@@ -1,7 +1,7 @@
 import type { DatedPolicy } from "@surfingdog/core";
 import { formatClock, formatDay, formatMoney } from "../lib/format";
 import { useIntegrations } from "../lib/queries";
-import { datedSteps, useStaff } from "../lib/staff";
+import { datedSteps, depositPaid, useStaff } from "../lib/staff";
 import type { Item, Money } from "../lib/types";
 import "./staff.css";
 
@@ -35,15 +35,8 @@ export function BookingSalon({
   if (!p.staffName && !p.anyStaff && !p.addOns?.length && !p.deposit && !p.policy && !checkFirst) return null;
   const person = staff.data?.items.find((s) => s.id === p.resourceId);
   const when = (iso: string) => `${formatDay(iso, tz)} ${formatClock(iso, tz)}`;
-  // A payment recorded with no amount is the whole price, as the inbox reads it: the deposit is covered.
-  const paid =
-    p.paidAmount && p.paidAmount.value > 0
-      ? p.deposit && p.paidAmount.currency === p.deposit.amount.currency
-        ? p.paidAmount.value
-        : 0
-      : p.paymentRef && p.deposit
-        ? p.deposit.amount.value
-        : 0;
+  // What was paid of the deposit, as the inbox reads it (`depositPaid`), as the cancel's note reads it.
+  const paid = depositPaid(p)?.paid ?? 0;
   return (
     <section className="booking-salon" aria-label="Who, deposit and policy">
       {checkFirst && (

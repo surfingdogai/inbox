@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { BedDouble, CalendarCheck, CalendarDays, CreditCard, ShoppingBag, Store, Wrench } from "lucide-react";
 import type { ReactNode } from "react";
 import { problemOf } from "../lib/api";
-import { cardState, cardsFor } from "../lib/connect";
+import { cardState, cardsFor, waitingLine } from "../lib/connect";
 import { useIntegrations } from "../lib/queries";
 import type { ConnectorGroup, GalleryCard } from "../lib/types";
 
@@ -39,6 +39,8 @@ export function ConnectYourSystem({
 }) {
   const integrations = useIntegrations();
   const cards = cardsFor(integrations.data?.cards ?? [], groups);
+  // On a phone the tiles with nothing to press are not shown: this line names them instead.
+  const waiting = waitingLine(cards);
   return (
     <div className="stack connect-system">
       <h2 className="sec">{title}</h2>
@@ -79,6 +81,7 @@ export function ConnectYourSystem({
           })}
         </div>
       )}
+      {waiting && <p className="int-soon-line">{waiting}</p>}
       {children}
       <button type="button" className="linkish connect-skip" onClick={onSkip}>
         I don't use one
