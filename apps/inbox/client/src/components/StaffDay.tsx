@@ -77,7 +77,9 @@ export function StaffDayCard({
       </div>
       {day.isError && <p className="hint error">{problemOf(day.error).detail}</p>}
       {day.isPending && <div className="skeleton sk-line" />}
-      {day.isSuccess && compact && all.length === 0 && <p className="hint">Nothing booked that day.</p>}
+      {day.isSuccess && compact && all.length === 0 && (
+        <p className="hint">{offset === 0 ? "Nothing booked today." : "Nothing booked that day."}</p>
+      )}
       {day.isSuccess && !(compact && all.length === 0) && (
         <div
           className="staffday-grid"
@@ -98,15 +100,18 @@ export function StaffDayCard({
             const off = works !== null && works.length === 0;
             return (
               <div key={c.staff?.id ?? "nobody"} className="staffday-col">
-                <div className="staffday-head">
+                {/* One height for every head, so each column's hours line up with the ruler's. */}
+                <div className="staffday-head" title={c.staff?.name ?? "Not given to anyone yet"}>
                   <span className="staff-avatar is-initials" aria-hidden="true">
                     {(c.staff?.name ?? "?").slice(0, 1)}
                   </span>
-                  {c.staff?.name ?? "Not given to anyone yet"}
-                  <span className="hint">
-                    · {c.bookings.length} booking{c.bookings.length === 1 ? "" : "s"}
+                  <span className="staffday-who">
+                    <span className="staffday-name">{c.staff?.name ?? "Not given to anyone yet"}</span>
+                    <span className="staffday-count">
+                      {c.bookings.length} booking{c.bookings.length === 1 ? "" : "s"}
+                      {off && <span className="pill pill-xs">Off</span>}
+                    </span>
                   </span>
-                  {off && <span className="pill pill-xs">Off</span>}
                 </div>
                 <div className="staffday-track" style={{ height: px(to), ["--hour" as string]: `${hourPx}px` }}>
                   {works &&

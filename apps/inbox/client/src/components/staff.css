@@ -86,13 +86,43 @@
 .staffday-col {
   min-width: 140px;
 }
+/* Every head one height, the ruler's too: the name on one line, the count and "Off" under it. */
 .staffday-head {
   display: flex;
   align-items: center;
   gap: 6px;
+  box-sizing: border-box;
+  height: 40px;
+  min-width: 0;
+  overflow: hidden;
   font-size: 12.5px;
   font-weight: 600;
   padding: 0 2px 6px;
+}
+.staffday-who {
+  display: grid;
+  min-width: 0;
+  line-height: 1.25;
+}
+.staffday-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.staffday-count {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  white-space: nowrap;
+  color: var(--ink-3);
+  font-size: 11.5px;
+  font-weight: 400;
+}
+.staffday-count .pill {
+  height: 15px;
+  padding: 0 6px;
+  font-size: 10.5px;
 }
 .staffday-head .staff-avatar {
   width: 22px;
@@ -117,9 +147,6 @@
   right: 0;
   background: color-mix(in srgb, var(--ink-2) 7%, transparent);
   pointer-events: none;
-}
-.staffday-head .pill {
-  margin-left: auto;
 }
 .staffday-block {
   position: absolute;
