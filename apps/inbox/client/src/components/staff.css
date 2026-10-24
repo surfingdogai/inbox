@@ -110,6 +110,17 @@
     var(--hairline) var(--hour)
   );
 }
+/* Outside someone's own hours: a faint wash, under their bookings. */
+.staffday-off {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: color-mix(in srgb, var(--ink-2) 7%, transparent);
+  pointer-events: none;
+}
+.staffday-head .pill {
+  margin-left: auto;
+}
 .staffday-block {
   position: absolute;
   left: 4px;
@@ -172,4 +183,19 @@
 
 .services-tabs {
   width: fit-content;
+}
+
+/* The day by staff above the list: a phone's alone, where the home pane is not shown. */
+.list-day {
+  display: none;
+}
+@media (max-width: 899px) {
+  .list-day {
+    display: block;
+    margin-bottom: 12px;
+  }
+  /* A business with no staff: nothing there, and no gap for it. */
+  .list-day:empty {
+    display: none;
+  }
 }

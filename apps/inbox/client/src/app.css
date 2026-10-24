@@ -633,6 +633,8 @@ a {
     border-bottom: 1px solid var(--hairline);
     overflow-x: auto;
     scrollbar-width: none;
+    /* What is placed out of sight in it (a switch's hidden legend) scrolls with it, never the page. */
+    position: relative;
   }
   .rail::-webkit-scrollbar {
     display: none;

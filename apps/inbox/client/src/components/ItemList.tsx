@@ -8,6 +8,7 @@ import { useItemPages } from "../lib/queries";
 import type { ItemView } from "../lib/types";
 import { ErrorState, SkeletonRows, Sun } from "./Feedback";
 import { StatePill } from "./Pills";
+import { StaffDayCard } from "./StaffDay";
 
 /** The item list: rows for the current filter, a search box, and "load more" over the API's cursor. */
 export function ItemList({
@@ -66,6 +67,12 @@ export function ItemList({
           onChange={(e) => setDraft(e.target.value)}
         />
       </div>
+      {/* On a phone the home's day by staff (ADR-035) sits above the list: a salon runs its day from it. */}
+      {filter === "all" && !q && (
+        <div className="list-day">
+          <StaffDayCard tz={tz} compact />
+        </div>
+      )}
       <div className="rows">
         {pages.isPending && <SkeletonRows n={4} />}
         {pages.isError && (

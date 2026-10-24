@@ -3,29 +3,51 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { problemOf } from "../lib/api";
 import { formatClock } from "../lib/format";
+import { useAvailability } from "../lib/queries";
 import { minutesIn, todayIn, useStaff, useStaffDay } from "../lib/staff";
+import type { Weekly } from "../lib/types";
 import "./staff.css";
 
 /**
  * The day by staff (ADR-035), on the inbox home of a salon: a thin column for each person in the
  * owner's order, their bookings placed by the hour, a request dashed until it is confirmed, and a
- * column for bookings with nobody yet. Shown only once the business lists staff.
+ * column for bookings with nobody yet. The day runs the business's hours that day (and any booking
+ * outside them); each column is shaded outside that person's own hours, and says "Off" for someone not
+ * working that day. Shown only once the business lists staff.
  */
-export function StaffDayCard({ tz }: { tz: string | undefined }) {
+export function StaffDayCard({
+  tz,
+  compact = false,
+}: {
+  tz: string | undefined;
+  /** Above the list on a phone: a day with nothing booked is one line, not an empty grid. */
+  compact?: boolean;
+}) {
   const zone = tz ?? "UTC";
   const staff = useStaff();
   const listed = (staff.data?.items ?? []).some((s) => s.active);
   const [offset, setOffset] = useState(0);
   const date = todayIn(zone, Date.now() + offset * 86_400_000);
   const day = useStaffDay(date, listed);
+  const availability = useAvailability();
   if (!listed) return null;
   const columns = day.data?.columns ?? [];
   const all = columns.flatMap((c) => c.bookings);
-  // From an hour before the first booking (or nine) to an hour after the last (or six).
-  const first = all.length ? Math.min(...all.map((b) => minutesIn(b.start, zone))) : 9 * 60;
-  const last = all.length ? Math.max(...all.map((b) => minutesIn(b.end, zone))) : 18 * 60;
-  const from = Math.max(0, Math.floor(Math.min(first, 9 * 60) / 60) * 60);
-  const to = Math.min(24 * 60, Math.ceil(Math.max(last, 18 * 60) / 60) * 60);
+  const weekday = DAYS[new Date(`${date}T12:00:00Z`).getUTCDay()] ?? "mon";
+  const open = windowsOf(availability.data?.weekly, weekday);
+  // The business's hours that day, and any booking outside them; nine to six when it set none.
+  const opens = open.length ? Math.min(...open.map((w) => w[0])) : 9 * 60;
+  const closes = open.length ? Math.max(...open.map((w) => w[1])) : 18 * 60;
+  const first = Math.min(opens, ...all.map((b) => minutesIn(b.start, zone)));
+  const last = Math.max(closes, ...all.map((b) => minutesIn(b.end, zone)));
+  const from = Math.max(0, Math.floor(first / 60) * 60);
+  const to = Math.min(24 * 60, Math.ceil(last / 60) * 60);
+  const people = new Map((staff.data?.items ?? []).map((s) => [s.id, s]));
+  // Their own hours that day, else the business's.
+  const hoursOf = (id: string | undefined) => {
+    const own = id ? people.get(id)?.hours : null;
+    return own ? windowsOf(own, weekday) : open;
+  };
   const hourPx = 44;
   const px = (min: number) => ((min - from) / 60) * hourPx;
   const hours = Array.from({ length: (to - from) / 60 }, (_, i) => from + i * 60);
@@ -55,7 +77,8 @@ export function StaffDayCard({ tz }: { tz: string | undefined }) {
       </div>
       {day.isError && <p className="hint error">{problemOf(day.error).detail}</p>}
       {day.isPending && <div className="skeleton sk-line" />}
-      {day.isSuccess && (
+      {day.isSuccess && compact && all.length === 0 && <p className="hint">Nothing booked that day.</p>}
+      {day.isSuccess && !(compact && all.length === 0) && (
         <div
           className="staffday-grid"
           style={{ gridTemplateColumns: `36px repeat(${columns.length}, minmax(140px, 1fr))` }}
@@ -70,49 +93,89 @@ export function StaffDayCard({ tz }: { tz: string | undefined }) {
               ))}
             </div>
           </div>
-          {columns.map((c) => (
-            <div key={c.staff?.id ?? "nobody"} className="staffday-col">
-              <div className="staffday-head">
-                <span className="staff-avatar is-initials" aria-hidden="true">
-                  {(c.staff?.name ?? "?").slice(0, 1)}
-                </span>
-                {c.staff?.name ?? "With nobody yet"}
-                <span className="hint">· {c.bookings.length}</span>
+          {columns.map((c) => {
+            const works = c.staff ? hoursOf(c.staff.id) : null;
+            const off = works !== null && works.length === 0;
+            return (
+              <div key={c.staff?.id ?? "nobody"} className="staffday-col">
+                <div className="staffday-head">
+                  <span className="staff-avatar is-initials" aria-hidden="true">
+                    {(c.staff?.name ?? "?").slice(0, 1)}
+                  </span>
+                  {c.staff?.name ?? "Not given to anyone yet"}
+                  <span className="hint">
+                    · {c.bookings.length} booking{c.bookings.length === 1 ? "" : "s"}
+                  </span>
+                  {off && <span className="pill pill-xs">Off</span>}
+                </div>
+                <div className="staffday-track" style={{ height: px(to), ["--hour" as string]: `${hourPx}px` }}>
+                  {works &&
+                    outside(works, from, to).map(([a, b]) => (
+                      <div
+                        key={a}
+                        className="staffday-off"
+                        style={{ top: px(a), height: px(b) - px(a) }}
+                        aria-hidden="true"
+                      />
+                    ))}
+                  {c.bookings.map((b, i) => {
+                    const top = px(minutesIn(b.start, zone));
+                    const lane = lanes(c.bookings, zone)[i] ?? { at: 0, of: 1 };
+                    const height = Math.max(18, px(minutesIn(b.end, zone)) - top - 2);
+                    const request = b.state !== "confirmed" && b.state !== "completed";
+                    return (
+                      <Link
+                        key={b.id}
+                        to="/items/$id"
+                        params={{ id: b.id }}
+                        search={(prev) => prev}
+                        className={`staffday-block${request ? " is-request" : ""}${b.needsHuman ? " is-needs" : ""}`}
+                        style={{
+                          top,
+                          height,
+                          left: `calc(${(lane.at / lane.of) * 100}% + 4px)`,
+                          width: `calc(${100 / lane.of}% - 6px)`,
+                          right: "auto",
+                        }}
+                        title={`${formatClock(b.start, zone)} ${b.service}${b.customer ? ` · ${b.customer}` : ""}`}
+                      >
+                        <b>{formatClock(b.start, zone)}</b> {b.service}
+                        {b.customer && <div className="hint">{b.customer}</div>}
+                      </Link>
+                    );
+                  })}
+                </div>
               </div>
-              <div className="staffday-track" style={{ height: px(to), ["--hour" as string]: `${hourPx}px` }}>
-                {c.bookings.map((b, i) => {
-                  const top = px(minutesIn(b.start, zone));
-                  const lane = lanes(c.bookings, zone)[i] ?? { at: 0, of: 1 };
-                  const height = Math.max(18, px(minutesIn(b.end, zone)) - top - 2);
-                  const request = b.state !== "confirmed" && b.state !== "completed";
-                  return (
-                    <Link
-                      key={b.id}
-                      to="/items/$id"
-                      params={{ id: b.id }}
-                      search={(prev) => prev}
-                      className={`staffday-block${request ? " is-request" : ""}${b.needsHuman ? " is-needs" : ""}`}
-                      style={{
-                        top,
-                        height,
-                        left: `calc(${(lane.at / lane.of) * 100}% + 4px)`,
-                        width: `calc(${100 / lane.of}% - 6px)`,
-                        right: "auto",
-                      }}
-                      title={`${formatClock(b.start, zone)} ${b.service}${b.customer ? ` · ${b.customer}` : ""}`}
-                    >
-                      <b>{formatClock(b.start, zone)}</b> {b.service}
-                      {b.customer && <div className="hint">{b.customer}</div>}
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </section>
   );
+}
+
+const DAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
+
+/** A day's windows as minutes since midnight. */
+function windowsOf(weekly: Weekly | null | undefined, day: string): [number, number][] {
+  const list = ((weekly ?? {}) as Record<string, readonly (readonly [string, string])[] | undefined>)[day] ?? [];
+  const min = (t: string) => {
+    const [h, m] = t.split(":").map(Number);
+    return (h ?? 0) * 60 + (m ?? 0);
+  };
+  return list.map(([a, b]) => [min(a), min(b)] as [number, number]).filter(([a, b]) => b > a);
+}
+
+/** The stretches of [from, to) outside someone's windows: shaded on their column. */
+function outside(windows: readonly [number, number][], from: number, to: number): [number, number][] {
+  const out: [number, number][] = [];
+  let at = from;
+  for (const [a, b] of [...windows].sort((x, y) => x[0] - y[0])) {
+    if (a > at) out.push([at, Math.min(a, to)]);
+    at = Math.max(at, b);
+  }
+  if (at < to) out.push([at, to]);
+  return out.filter(([a, b]) => b > a);
 }
 
 /**
