@@ -31,6 +31,7 @@ import { readSettings } from "../settings/schema";
 import { keepTermsInStep, repickAnyone } from "../staff/booking";
 import { bookingFeeAt } from "../staff/fee";
 import { checkFirstRefusal, heldForCheck } from "../staff/requires";
+import { nobodyFree } from "../staff/store";
 import { awaitingSystem, isWrittenFirst, systemFirstRefusal, systemHold } from "../staff/system";
 import { hashJson, hashText } from "../util/canonical";
 import {
@@ -935,6 +936,16 @@ async function attempt_(
           break;
         }
         if (item.type !== "booking") break;
+        // For anyone, and nobody who gives it is free (ADR-035 §2): the time is taken, for a person.
+        if (await nobodyFree(db, payload)) {
+          throw new WriteError(
+            "slot_taken",
+            audience
+              ? copyFor(audience.lang).problems.slotTaken
+              : "nobody who gives this service is free then: propose another time, or decline it",
+            { details: { guard, staff: "nobody_free" } },
+          );
+        }
         const spec = await slotSpecFor(db, payload);
         const buckets = bucketsFor(spec, String(payload.startTime), String(payload.endTime));
         const taken = await readClaims(db, spec, buckets, item.id);
@@ -2040,6 +2051,7 @@ function assertNoMoney(event: string, data: Record<string, unknown>, assistant: 
  */
 export async function slotClaimable(db: Db, item: Pick<Item, "id" | "payload">): Promise<boolean> {
   const payload = item.payload as Record<string, unknown>;
+  if (await nobodyFree(db, payload)) return false;
   try {
     const spec = await slotSpecFor(db, payload);
     const buckets = bucketsFor(spec, String(payload.startTime), String(payload.endTime));

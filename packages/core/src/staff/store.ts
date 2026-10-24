@@ -146,6 +146,17 @@ export async function isStaffed(db: Db, serviceId: string): Promise<boolean> {
   return (await staffForService(db, serviceId)).length > 0;
 }
 
+/**
+ * A booking for anyone that went to nobody, for a service staff give (ADR-035 §2): nobody who gives it
+ * was free, so its time is taken. A person answers it; it is never claimed under the service's own key,
+ * where the staff's other bookings would not be seen.
+ */
+export async function nobodyFree(db: Db, payload: Record<string, unknown>): Promise<boolean> {
+  if (payload.anyStaff !== true || typeof payload.resourceId === "string") return false;
+  const serviceId = (payload.reservationFor as { serviceId?: unknown } | undefined)?.serviceId;
+  return typeof serviceId === "string" && (await isStaffed(db, serviceId));
+}
+
 /** Whether the business lists any staff now: the tools that name them are offered only then. */
 export async function hasStaff(db: Db): Promise<boolean> {
   const { rows } = await db.client.query({

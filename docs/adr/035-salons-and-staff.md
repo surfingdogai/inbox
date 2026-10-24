@@ -50,14 +50,15 @@ salon's own credentials can be used with.
   (`payload.anyStaff`) and is confirmed with whoever is free then, at the same price and length, so the
   customer confirms that price and "with whoever is free": nobody is named, nor part of the confirmed
   terms, before it binds, and the confirmation names whoever it went to. Nobody free: a person answers
-  it, as any request for a taken time. A booking always carries who it is with and their first name,
-  and its end follows their length, whatever the request said. One the salon's own system holds keeps
-  the person written there (§6).
+  it, as any request for a taken time; no rule, owner's AI or person confirms it with nobody. A booking
+  always carries who it is with and their first name, and its end follows their length, whatever the
+  request said. One the salon's own system holds keeps the person written there (§6).
 - Who a booking is with is never a customer's to set: `payload.resourceId` is dropped from every
   request, and the inbox sets it from `staff_id` or from whoever is free.
 - A service's places were held under its own key (`service:<id>`) before anyone was tied to it, and
-  under each member of staff's since. Each read sees the other: staff are busy wherever the service's own
-  key holds a booking, and a service nobody gives any more counts what its staff still hold. A business
+  under each member of staff's since. Each read sees the other: staff are busy wherever the own key of
+  any service they give holds a booking, and a service nobody gives any more counts what its staff still
+  hold. A business
   calendar chosen for a service blocks the staff who give it.
 - An add-on (`services.add_ons`: a name, the minutes it adds, an optional price) makes the booking
   longer and, priced, dearer; a booking keeps the add-ons as they were (`payload.addOns`).

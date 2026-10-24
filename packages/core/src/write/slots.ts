@@ -19,9 +19,9 @@ export interface SlotSpec {
   /**
    * The service booked (ADR-035). Its places are held under two keys over time: its own
    * (`service:<id>`) before anyone gave it, and each member of staff's (`resource:<id>`) since. With
-   * it, each read sees the other: a member of staff is busy wherever the service's own key holds a
-   * booking (nobody knows with whom), and the service's own places count every booking of it a member
-   * of staff holds. A business calendar chosen for this service applies to its staff too.
+   * it, each read sees the other: a member of staff is busy wherever the own key of a service they give
+   * holds a booking (nobody knows with whom), and the service's own places count every booking of it a
+   * member of staff holds. A business calendar chosen for this service applies to its staff too.
    */
   readonly serviceId?: string | undefined;
 }
@@ -143,11 +143,15 @@ async function otherKeys(
   const lo = buckets[0] ?? 0;
   const hi = buckets[buckets.length - 1] ?? 0;
   if (spec.resourceKey.startsWith("resource:")) {
-    // Booked before anyone gave it: whoever it is with, nobody here is free then.
+    // Booked before anyone gave it: whoever it is with, nobody here is free then. The person is one across
+    // the services they give, so a booking held under any of those services' own keys takes them.
+    const resourceId = spec.resourceKey.slice("resource:".length);
     const { rows } = await db.client.query({
       sql: `SELECT DISTINCT bucket_start FROM slot_claims
-             WHERE resource_key = ? AND bucket_start >= ? AND bucket_start <= ? AND item_id <> ?`,
-      params: [`service:${serviceId}`, lo, hi, exceptItemId],
+             WHERE (resource_key = ? OR resource_key IN
+                     (SELECT 'service:' || service_id FROM service_resources WHERE resource_id = ?))
+               AND bucket_start >= ? AND bucket_start <= ? AND item_id <> ?`,
+      params: [`service:${serviceId}`, resourceId, lo, hi, exceptItemId],
       method: "all",
     });
     for (const r of rows) fill(taken, Number(r[0]), spec.capacity);

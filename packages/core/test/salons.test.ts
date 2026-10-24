@@ -120,6 +120,12 @@ const booking = (serviceId: string, name: string, start: string, end: string) =>
   endTime: end,
 });
 
+/** A booking as the inbox keeps it: who a request for anyone went to is the business's to read. */
+async function stored(db: Db, id: string): Promise<Record<string, unknown>> {
+  const [row] = await db.orm.select().from(items).where(eq(items.id, id));
+  return (row?.payload ?? {}) as Record<string, unknown>;
+}
+
 describe("staff", () => {
   it("are listed to customers by first name only, with the services each gives", async () => {
     const { caps, fade, beard, mei, ravi } = await mapleAndFade();
@@ -181,7 +187,10 @@ describe("staff", () => {
       contact: { name: "Aiyana", email: "aiyana@example.com" },
       idempotency_key: "maple-1",
     });
-    const p1 = first.view.item.payload as Record<string, unknown>;
+    // The customer's view names nobody while it is a request: whoever it went to may change at confirm.
+    expect(first.view.item.payload).not.toHaveProperty("resourceId");
+    expect(first.view.item.payload).not.toHaveProperty("staffName");
+    const p1 = await stored(db, first.view.item.id);
     expect(p1.resourceId).toBe(mei.id);
     expect(p1.staffName).toBe("Mei");
     // Mei's own length for a skin fade: the end follows it, whatever the request said.
@@ -210,7 +219,7 @@ describe("staff", () => {
       contact: { name: "Jean-Luc", email: "jl@example.com", locale: "fr-CA" },
       idempotency_key: "maple-2",
     });
-    const p2 = second.view.item.payload as Record<string, unknown>;
+    const p2 = await stored(db, second.view.item.id);
     expect([p2.resourceId, p2.totalPrice]).toEqual([ravi.id, { value: 5500, currency: "CAD" }]);
     // Sent again a minute later, the same request is answered as it was, not made twice.
     const again = await caps.createBooking(agent(), {
@@ -252,9 +261,9 @@ describe("staff", () => {
       });
     const first = await any("any-1");
     const second = await any("any-2");
-    const who = (r: Awaited<ReturnType<typeof any>>) => (r.view.item.payload as { resourceId?: string }).resourceId;
+    const who = async (r: { view: { item: { id: string } } }) => (await stored(s.db, r.view.item.id)).resourceId;
     // Ana has a request at two already: the next for anyone goes to Bo.
-    expect([who(first), who(second)]).toEqual([ana.id, bo.id]);
+    expect([await who(first), await who(second)]).toEqual([ana.id, bo.id]);
     // Ana is booked by name and confirmed since: the first for anyone is confirmed with whoever is free.
     await transitionItem(s.db, owner, { itemId: second.view.item.id, event: "decline" });
     const named = await s.caps.createBooking(agent(), {
@@ -265,7 +274,7 @@ describe("staff", () => {
     });
     await transitionItem(s.db, owner, { itemId: named.view.item.id, event: "confirm" });
     const done = await transitionItem(s.db, owner, { itemId: first.view.item.id, event: "confirm" });
-    expect([who(done as never), (done.view.item.payload as { staffName?: string }).staffName]).toEqual([bo.id, "Bo"]);
+    expect([await who(done), (done.view.item.payload as { staffName?: string }).staffName]).toEqual([bo.id, "Bo"]);
     // Nobody free at all: nobody is named before it binds.
     await transitionItem(s.db, owner, {
       itemId: (await any("any-3", "15:00", "15:30")).view.item.id,
@@ -287,6 +296,71 @@ describe("staff", () => {
     }
     expect(summary).toContain("With whoever is free.");
     expect(summary).not.toMatch(/With (Ana|Bo)\./);
+  });
+
+  it("for anyone, with nobody who gives it free, is a person's to answer: never confirmed with nobody", async () => {
+    const s = await salon({ name: "Hearth & Shear", zone: "America/Toronto", currency: "CAD", languages: ["en"] });
+    const service = (name: string, value: number) =>
+      s.caps.setup.createService(
+        owner,
+        serviceInput.parse({
+          name,
+          duration_min: 30,
+          granularity_min: 30,
+          price: { model: "fixed", value, currency: "CAD" },
+        }),
+      );
+    const trim = await service("Trim", 3000);
+    const colour = await service("Colour", 9000);
+    const both = [{ service_id: trim.id }, { service_id: colour.id }];
+    const ana = await s.caps.staff.create(owner, { name: "Ana", sort: 0, services: both });
+    const bo = await s.caps.staff.create(owner, { name: "Bo", sort: 1, services: both });
+    // Both busy at two with a colour: nobody gives a trim then.
+    for (const staff of [ana, bo]) {
+      const r = await s.caps.createBooking(agent(), {
+        payload: booking(colour.id, "Colour", at("14:00"), at("14:30")),
+        staff_id: staff.id,
+        contact: { name: `colour-${staff.name}` },
+        idempotency_key: `colour-${staff.id}`,
+      });
+      await transitionItem(s.db, owner, { itemId: r.view.item.id, event: "confirm" });
+    }
+    const late = await s.caps.createBooking(agent(), {
+      payload: booking(trim.id, "Trim", at("14:00"), at("14:30")),
+      contact: { name: "late" },
+      idempotency_key: "trim-late",
+    });
+    expect(await stored(s.db, late.view.item.id)).not.toHaveProperty("resourceId");
+    // Rules read the time as taken, and nobody confirms it: not the owner, nor the owner's AI.
+    const test = await s.caps.setup.testRule(owner, {
+      item_id: late.view.item.id,
+      definition: {
+        on: ["item.created"],
+        if: { all: [{ fn: "slot_is_free" }] },
+        actions: [{ action: "transition", event: "confirm" }],
+        stop: false,
+        maxRunsPerItem: 1,
+      },
+    });
+    expect(test.facts).toMatchObject({ slotIsFree: false });
+    const ai: Caller = { ...owner, actor: { kind: "owner_ai", id: "owner_ai:test", channel: "mcp_owner" } };
+    for (const who of [owner, ai]) {
+      await expect(transitionItem(s.db, who, { itemId: late.view.item.id, event: "confirm" })).rejects.toMatchObject({
+        code: "slot_taken",
+      });
+    }
+    const { rows } = await s.db.client.query({
+      sql: "SELECT COUNT(*) FROM slot_claims WHERE item_id = ?",
+      params: [late.view.item.id],
+      method: "all",
+    });
+    expect(Number(rows[0]?.[0])).toBe(0);
+    // Bo is free again: it is confirmed with him.
+    const bos = await s.db.orm.select().from(items).where(eq(items.type, "booking"));
+    const boColour = bos.find((b) => (b.payload as { resourceId?: string }).resourceId === bo.id);
+    await transitionItem(s.db, owner, { itemId: String(boColour?.id), event: "cancel_by_business" });
+    const done = await transitionItem(s.db, owner, { itemId: late.view.item.id, event: "confirm" });
+    expect((done.view.item.payload as { resourceId?: string }).resourceId).toBe(bo.id);
   });
 
   it("take their own calendar's busy times off their own times only, and only their bookings go to it", async () => {
@@ -418,6 +492,15 @@ describe("staff", () => {
         price: { model: "fixed", value: 3000, currency: "CAD" },
       }),
     );
+    const colour = await s.caps.setup.createService(
+      owner,
+      serviceInput.parse({
+        name: "Colour",
+        duration_min: 30,
+        granularity_min: 30,
+        price: { model: "fixed", value: 9000, currency: "CAD" },
+      }),
+    );
     // Booked for weeks before anyone gave it: held under the service's own places.
     const before = await s.caps.createBooking(agent(), {
       payload: booking(trim.id, "Trim", at("14:00"), at("14:30")),
@@ -425,16 +508,30 @@ describe("staff", () => {
       idempotency_key: "legacy-1",
     });
     await transitionItem(s.db, owner, { itemId: before.view.item.id, event: "confirm" });
-    const ana = await s.caps.staff.create(owner, { name: "Ana Kowalski", services: [{ service_id: trim.id }] });
-    const free = async (staffId?: string) =>
+    const ana = await s.caps.staff.create(owner, {
+      name: "Ana Kowalski",
+      services: [{ service_id: trim.id }, { service_id: colour.id }],
+    });
+    const free = async (staffId?: string, serviceId = trim.id) =>
       (
         await s.caps.checkAvailability(
-          { service_id: trim.id, from: at("13:00"), to: at("16:00"), ...(staffId ? { staff_id: staffId } : {}) },
+          { service_id: serviceId, from: at("13:00"), to: at("16:00"), ...(staffId ? { staff_id: staffId } : {}) },
           { now: T0, caller: agent() },
         )
       ).slots.map((x) => Date.parse(x.startTime));
     expect(await free(ana.id)).not.toContain(Date.parse(at("14:00")));
     expect(await free()).not.toContain(Date.parse(at("14:00")));
+    // She is one person across what she gives: the trim takes her for a colour too.
+    expect(await free(ana.id, colour.id)).not.toContain(Date.parse(at("14:00")));
+    const colourWithAna = await s.caps.createBooking(agent(), {
+      payload: booking(colour.id, "Colour", at("14:00"), at("14:30")),
+      staff_id: ana.id,
+      contact: { name: "Mirela" },
+      idempotency_key: "legacy-colour",
+    });
+    await expect(
+      transitionItem(s.db, owner, { itemId: colourWithAna.view.item.id, event: "confirm" }),
+    ).rejects.toMatchObject({ code: "slot_taken" });
     // Booked with Ana since, then nobody gives it again: her booking still holds its time.
     const withAna = await s.caps.createBooking(agent(), {
       payload: booking(trim.id, "Trim", at("15:00"), at("15:30")),
@@ -932,13 +1029,18 @@ describe("cancelling", () => {
       idempotency_key: "move-1",
     });
     const as: Caller = { ...agent(), accessToken: r.accessToken ?? "" };
+    /** When cancelling stops being free under the terms the customer confirms for what is offered. */
+    let offeredFreeUntil = Number.NaN;
     const accept = async () => {
-      const sha = await caps.customer
+      const asked = await caps.customer
         .acceptOffer(as, { item_id: r.view.item.id, idempotency_key: `a-${Math.random()}` })
-        .catch((e: WriteError) => String(e.details?.terms_sha ?? ""));
+        .catch((e: WriteError) => e.details as { terms_sha?: string; offer?: { terms?: Record<string, unknown> } });
+      const policy = (asked as { offer?: { terms?: { policy?: { steps: { until: string }[] } } } }).offer?.terms
+        ?.policy;
+      offeredFreeUntil = Date.parse(String(policy?.steps[0]?.until));
       return caps.customer.acceptOffer(as, {
         item_id: r.view.item.id,
-        terms_sha: String(sha),
+        terms_sha: String((asked as { terms_sha?: string }).terms_sha),
         idempotency_key: `b-${Math.random()}`,
       });
     };
@@ -949,6 +1051,8 @@ describe("cancelling", () => {
       input: { startTime: `${day(10)}T16:00:00-05:00`, endTime: `${day(10)}T16:30:00-05:00` },
     });
     await accept();
+    // What the customer confirmed for that time already carried the policy dated for it.
+    expect(offeredFreeUntil).toBe(Date.parse(`${day(9)}T16:00:00-05:00`));
     const freeUntil = async () => {
       const [row] = await db.orm.select().from(items).where(eq(items.id, r.view.item.id));
       const p = row?.payload as { policy?: { steps: { until: string }[] } } | undefined;
@@ -962,6 +1066,7 @@ describe("cancelling", () => {
       input: { startTime: `${day(20)}T16:00:00-05:00` },
     });
     await accept();
+    expect(offeredFreeUntil).toBe(Date.parse(`${day(19)}T16:00:00-05:00`));
     expect(await freeUntil()).toBe(Date.parse(`${day(19)}T16:00:00-05:00`));
     const [row] = await db.orm.select().from(items).where(eq(items.id, r.view.item.id));
     const moved = { id: r.view.item.id, payload: row?.payload as never };

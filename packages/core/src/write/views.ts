@@ -174,14 +174,22 @@ export function customerItem(item: Item): Item {
   const { flags: _flags, ...rest } = item;
   // Nor how far a negotiation has gone: the round is the business's to count (ADR-018 §4).
   const offer = (item.payload as { offer?: Record<string, unknown> }).offer;
-  const payload = offer
+  let payload: Record<string, unknown> = offer
     ? (() => {
         const { round: _round, ...pointer } = offer;
         return { ...item.payload, offer: pointer };
       })()
     : item.payload;
+  // A booking for anyone names nobody before it binds (ADR-035 §2): whoever it went to may change.
+  if (item.type === "booking" && payload.anyStaff === true && !BOUND.has(item.state)) {
+    const { resourceId: _who, staffName: _named, ...unnamed } = payload;
+    payload = unnamed;
+  }
   return { ...rest, payload, state: item.state === "spam" ? "closed" : item.state } as unknown as Item;
 }
+
+/** The states a booking reached once it bound both sides: who it is with is part of it then. */
+const BOUND: ReadonlySet<string> = new Set(["confirmed", "completed", "no_show"]);
 
 const TYPE_WORD: Record<ItemType, string> = {
   message: "Message",

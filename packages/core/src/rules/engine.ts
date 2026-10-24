@@ -16,6 +16,7 @@ import {
   threadEntries,
 } from "../schema/tables";
 import { readSettings, SECRET_SETTINGS_PATHS, type Settings } from "../settings/schema";
+import { nobodyFree } from "../staff/store";
 import type { Caller } from "../write/caller";
 import { jobStatement } from "../write/common";
 import { WriteError } from "../write/errors";
@@ -402,12 +403,15 @@ async function bookingFacts(db: Db, item: Item, timezone: string): Promise<RuleC
     serviceId: service.id,
   };
   let slotIsFree = false;
-  try {
-    const buckets = bucketsFor(spec, item.payload.startTime, item.payload.endTime);
-    const taken = await readClaims(db, spec, buckets, item.id);
-    slotIsFree = planClaims(spec, buckets, taken).ok;
-  } catch {
-    slotIsFree = false;
+  // For anyone, and nobody who gives it is free (ADR-035 §2): taken, for a person to answer.
+  if (!(await nobodyFree(db, item.payload as unknown as Record<string, unknown>))) {
+    try {
+      const buckets = bucketsFor(spec, item.payload.startTime, item.payload.endTime);
+      const taken = await readClaims(db, spec, buckets, item.id);
+      slotIsFree = planClaims(spec, buckets, taken).ok;
+    } catch {
+      slotIsFree = false;
+    }
   }
   const rows = await db.orm.select().from(availabilityRules).where(eq(availabilityRules.kind, "open"));
   // Hours nobody set are no hours: a booking is never within them.
