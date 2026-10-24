@@ -10,6 +10,8 @@ import {
   orderActions,
   parseMajor,
   parseMoney,
+  proposedPrice,
+  proposePriceStart,
   sumLines,
   tonesFor,
   waitingLine,
@@ -222,6 +224,24 @@ describe("client actions", () => {
         "EUR",
       ),
     ).toEqual({ value: 4430, currency: "EUR" });
+  });
+
+  it("sends a proposal's price only when the owner typed one, so a time for anyone carries the price of whoever is free", () => {
+    // A barber in Seoul: the request was asked at ₩28,000; Dohyun, free then, charges his own ₩38,000.
+    const asked = { totalPrice: { value: 28_000, currency: "KRW" } };
+    expect(proposePriceStart({ ...asked, anyStaff: true })).toBe("");
+    expect(proposePriceStart(asked)).toBe("28000");
+    // A change to what was agreed keeps its price unless one is named: it starts from it.
+    expect(proposePriceStart({ ...asked, anyStaff: true }, "propose_change")).toBe("28000");
+    // Untouched, nothing is sent: the server gives it the price of whoever the time goes with.
+    expect(proposedPrice("", "", "KRW")).toBeUndefined();
+    expect(proposedPrice("28000", "28000", "KRW")).toBeUndefined();
+    expect(proposedPrice(" 28000 ", "28000", "KRW")).toBeUndefined();
+    // Typed or changed, it is the owner's price, whatever it is.
+    expect(proposedPrice("28000", "", "KRW")).toEqual({ value: 28_000, currency: "KRW" });
+    expect(proposedPrice("25000", "28000", "KRW")).toEqual({ value: 25_000, currency: "KRW" });
+    expect(proposedPrice("45,50", "", "CAD")).toEqual({ value: 4550, currency: "CAD" });
+    expect(proposedPrice("free", "", "CAD")).toBeNull();
   });
 
   it("round-trips datetime-local values through ISO", () => {

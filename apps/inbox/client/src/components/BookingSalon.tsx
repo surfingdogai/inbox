@@ -1,7 +1,7 @@
 import type { DatedPolicy } from "@surfingdog/core";
 import { formatClock, formatDay, formatMoney } from "../lib/format";
 import { useIntegrations } from "../lib/queries";
-import { datedSteps, depositPaid, useStaff } from "../lib/staff";
+import { datedSteps, depositPaid, useStaff, withWhom } from "../lib/staff";
 import type { Item, Money } from "../lib/types";
 import "./staff.css";
 
@@ -33,7 +33,9 @@ export function BookingSalon({
     policy?: DatedPolicy;
   };
   if (!p.staffName && !p.anyStaff && !p.addOns?.length && !p.deposit && !p.policy && !checkFirst) return null;
-  const person = staff.data?.items.find((s) => s.id === p.resourceId);
+  // A time proposed with someone else: who it goes with if the customer says yes, said as proposed.
+  const who = withWhom(item.state, p);
+  const person = staff.data?.items.find((s) => s.id === who.resourceId);
   const when = (iso: string) => `${formatDay(iso, tz)} ${formatClock(iso, tz)}`;
   // What was paid of the deposit, as the inbox reads it (`depositPaid`), as the cancel's note reads it.
   const paid = depositPaid(p)?.paid ?? 0;
@@ -45,13 +47,14 @@ export function BookingSalon({
           <span>{checkFirst}</span>
         </div>
       )}
-      {(p.staffName || p.anyStaff) && (
+      {(who.staffName || p.anyStaff) && (
         <div className="bs-row">
           <span className="k">With</span>
           <span>
-            {p.staffName ? <b>{p.staffName}</b> : "Whoever is free"}
-            {person && person.name !== p.staffName && <span className="hint"> · {person.name}</span>}
-            {p.anyStaff && p.staffName && <span className="hint"> · asked for anyone</span>}
+            {who.proposed && "Proposed with "}
+            {who.staffName ? <b>{who.staffName}</b> : "Whoever is free"}
+            {person && person.name !== who.staffName && <span className="hint"> · {person.name}</span>}
+            {p.anyStaff && who.staffName && <span className="hint"> · asked for anyone</span>}
           </span>
         </div>
       )}

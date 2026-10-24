@@ -309,6 +309,32 @@ export function depositPaid(p: {
 }
 
 /**
+ * Who a booking is with, as the owner reads it (ADR-035): while a time we proposed waits for the
+ * customer, whoever that time goes with, said as proposed; else whoever it is with. Never shown to a
+ * customer before it binds.
+ */
+export function withWhom(
+  state: string,
+  p: {
+    readonly resourceId?: string | undefined;
+    readonly staffName?: string | undefined;
+    readonly proposed?:
+      | { readonly resourceId?: string | undefined; readonly staffName?: string | undefined }
+      | undefined;
+  },
+): { readonly resourceId?: string; readonly staffName?: string; readonly proposed: boolean } {
+  const offered = state === "proposed" ? p.proposed : undefined;
+  if (offered?.staffName && offered.resourceId && offered.resourceId !== p.resourceId) {
+    return { resourceId: offered.resourceId, staffName: offered.staffName, proposed: true };
+  }
+  return {
+    ...(p.resourceId ? { resourceId: p.resourceId } : {}),
+    ...(p.staffName ? { staffName: p.staffName } : {}),
+    proposed: false,
+  };
+}
+
+/**
  * A booking's dated policy, for the owner: each step's last moment in the business's zone, and its fee.
  * A deposit the policy keeps is said as kept once cancelling is no longer free, as the customer read it,
  * and beside a smaller fee from then on.

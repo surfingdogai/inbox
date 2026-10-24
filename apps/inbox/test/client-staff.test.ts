@@ -10,6 +10,7 @@ import {
   policyKey,
   policyWords,
   shownName,
+  withWhom,
 } from "../client/src/lib/staff";
 
 /**
@@ -173,5 +174,27 @@ describe("a booking's deposit, as the owner reads it", () => {
     );
     expect(depositPaid({ deposit, paymentRef: "cash-rest" })?.left.value).toBe(0);
     expect(depositPaid({ paymentRef: "cash" })).toBeNull();
+  });
+});
+
+describe("who a booking is with, as the owner reads it", () => {
+  it("is whoever a time we proposed goes with while the customer answers, said as proposed", () => {
+    const asked = { resourceId: "minjun", staffName: "Minjun" };
+    const proposed = { ...asked, proposed: { resourceId: "dohyun", staffName: "Dohyun" } };
+    expect(withWhom("proposed", proposed)).toEqual({ resourceId: "dohyun", staffName: "Dohyun", proposed: true });
+    // Accepted, the booking is with them, and nothing is said as proposed.
+    expect(withWhom("confirmed", { resourceId: "dohyun", staffName: "Dohyun" })).toEqual({
+      resourceId: "dohyun",
+      staffName: "Dohyun",
+      proposed: false,
+    });
+    // A time that stays with the person it is with, or one proposed for a booking with nobody yet.
+    expect(withWhom("proposed", { ...asked, proposed: {} })).toEqual({ ...asked, proposed: false });
+    expect(withWhom("requested", proposed)).toEqual({ ...asked, proposed: false });
+    expect(withWhom("proposed", { proposed: { resourceId: "dohyun", staffName: "Dohyun" } })).toEqual({
+      resourceId: "dohyun",
+      staffName: "Dohyun",
+      proposed: true,
+    });
   });
 });

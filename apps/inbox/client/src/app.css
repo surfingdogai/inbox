@@ -1523,6 +1523,19 @@ fieldset.chips,
     border-color 0.18s,
     color 0.18s;
 }
+/* In a row of choices, a long name wraps inside its card: a chip never pushes the page sideways. */
+.chips .chip {
+  box-sizing: border-box;
+  max-width: 100%;
+  height: auto;
+  min-height: 30px;
+  padding-block: 5px;
+  border-radius: 15px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: start;
+  line-height: 1.35;
+}
 .chip:hover {
   background: var(--row-bg-hover);
   color: var(--ink);
@@ -2209,6 +2222,11 @@ legend.label-line {
     min-height: 40px;
     height: auto;
     padding: 0 14px;
+  }
+  .chips .chip {
+    min-height: 40px;
+    padding-block: 8px;
+    border-radius: 20px;
   }
   .chip-other .input,
   .input.unit-select {
