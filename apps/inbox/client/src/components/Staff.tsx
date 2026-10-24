@@ -1,9 +1,11 @@
-import { CalendarDays, ImagePlus, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, CalendarDays, ImagePlus, Plus, Trash2 } from "lucide-react";
 import { type FormEvent, useId, useState } from "react";
 import { majorText, parseMajor } from "../lib/actions";
 import { problemOf } from "../lib/api";
+import { lengthWords } from "../lib/catalogue";
 import { minorUnitsOf } from "../lib/currencies";
 import { formatMoney } from "../lib/format";
+import { checkDraft, toDraft } from "../lib/hours";
 import { useIntegrations, useServices } from "../lib/queries";
 import {
   initials,
@@ -24,10 +26,11 @@ import { HoursEditor } from "./Hours";
 import "./staff.css";
 
 /**
- * Settings → Services → Staff (ADR-035): who works here, in the owner's order. Each person: the name the
- * owner knows them by, the first name customers see, a photo, the services they give (one press each)
- * with their own price and length for any, their own hours, and their own calendar. Prices are the
- * owner's; customers only ever see a first name and a photo.
+ * Settings → Staff (ADR-035): who works here, in the owner's order (moved up and down, as services are:
+ * a booking for anyone goes to the first free). Each person: the name the owner knows them by, the first
+ * name customers see, a photo, the services they give (one press each) with their own price and length
+ * for any, their own hours, and their own calendar. Prices are the owner's; customers only ever see a
+ * first name and a photo.
  */
 export function StaffCard({ currency }: { currency: string }) {
   const staff = useStaff();
@@ -40,6 +43,16 @@ export function StaffCard({ currency }: { currency: string }) {
   const done = (text: string) => {
     setEditing(null);
     setNotice(text);
+  };
+  // Moving someone up or down rewrites the order as it now reads: anyone free goes to the first.
+  const move = async (index: number, by: -1 | 1) => {
+    const order = [...rows];
+    const [it] = order.splice(index, 1);
+    if (!it) return;
+    order.splice(index + by, 0, it);
+    for (const [i, r] of order.entries()) {
+      if (r.sort !== i) await write.mutateAsync({ id: r.id, body: { sort: i } });
+    }
   };
   return (
     <section className="card glass stack">
@@ -86,10 +99,12 @@ export function StaffCard({ currency }: { currency: string }) {
         />
       )}
       <div className="stack">
-        {rows.map((s) => (
+        {rows.map((s, i) => (
           <StaffLine
             key={s.id}
             person={s}
+            onUp={i > 0 ? () => void move(i, -1) : undefined}
+            onDown={i < rows.length - 1 ? () => void move(i, 1) : undefined}
             services={offered}
             currency={currency}
             editing={editing === s.id}
@@ -139,6 +154,8 @@ function StaffLine({
   onSave,
   onArchive,
   onRestore,
+  onUp,
+  onDown,
 }: {
   person: StaffView;
   services: readonly ServiceRow[];
@@ -151,6 +168,8 @@ function StaffLine({
   onSave: (body: StaffBody) => void;
   onArchive: () => void;
   onRestore: () => void;
+  onUp: (() => void) | undefined;
+  onDown: (() => void) | undefined;
 }) {
   const gives = s.services
     .map((x) => services.find((v) => v.id === x.serviceId)?.name)
@@ -176,6 +195,28 @@ function StaffLine({
         </div>
       </div>
       <div className="rowx">
+        {s.active && (onUp || onDown) && (
+          <span className="order-btns">
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm btn-icon"
+              aria-label={`Move ${s.publicName} up`}
+              disabled={!onUp || pending}
+              onClick={onUp}
+            >
+              <ArrowUp className="icon-sm" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm btn-icon"
+              aria-label={`Move ${s.publicName} down`}
+              disabled={!onDown || pending}
+              onClick={onDown}
+            >
+              <ArrowDown className="icon-sm" aria-hidden="true" />
+            </button>
+          </span>
+        )}
         {s.active ? (
           <>
             <button type="button" className="btn btn-secondary btn-sm" onClick={onEdit} aria-expanded={editing}>
@@ -216,8 +257,9 @@ interface Gives {
   readonly length: string;
 }
 
-const LENGTHS = [
-  { value: null, label: "Its own" },
+/** Their length for a service: its usual one first, named. */
+const lengthsFor = (usual: number) => [
+  { value: null, label: `Usual (${lengthWords(usual)})` },
   { value: 30, label: "30 min" },
   { value: 45, label: "45 min" },
   { value: 60, label: "1 h" },
@@ -268,8 +310,22 @@ function StaffEditor({
   );
   const [ownHours, setOwnHours] = useState(initial?.hours !== null && initial?.hours !== undefined);
   const [hours, setHours] = useState<Weekly>(initial?.hours ?? {});
+  const [hoursProblem, setHoursProblem] = useState<string | null>(null);
+  // A service's own price or length for them opens only when asked for, or when they have one.
+  const [ownTerms, setOwnTerms] = useState<ReadonlySet<string>>(
+    () =>
+      new Set(
+        (initial?.services ?? [])
+          .filter((x) => x.priceOverride !== null || x.durationOverrideMin !== null)
+          .map((x) => x.serviceId),
+      ),
+  );
   const submit = (e: FormEvent) => {
     e.preventDefault();
+    // Their hours are checked as the business's are: no window that ends before it starts, or overlaps.
+    const problem = ownHours ? checkDraft(toDraft(hours)) : null;
+    setHoursProblem(problem);
+    if (problem) return;
     const list: StaffServiceBody[] = [];
     for (const svc of services) {
       const g = gives[svc.id];
@@ -350,7 +406,7 @@ function StaffEditor({
       )}
 
       <fieldset className="chips-field">
-        <legend className="label">Gives</legend>
+        <legend className="label">Services</legend>
         {services.length === 0 ? (
           <p className="hint">Add a service first.</p>
         ) : (
@@ -379,6 +435,17 @@ function StaffEditor({
         .map((svc) => {
           const g = gives[svc.id] as Gives;
           const fixed = svc.price?.model === "fixed";
+          if (!ownTerms.has(svc.id)) {
+            return (
+              <div key={svc.id} className="staff-terms-closed">
+                <b className="staff-terms-name">{svc.name}</b>
+                <span className="hint"> · its usual price and length · </span>
+                <button type="button" className="linkish" onClick={() => setOwnTerms((x) => new Set([...x, svc.id]))}>
+                  Own price or length
+                </button>
+              </div>
+            );
+          }
           return (
             <div key={svc.id} className="staff-terms row-glass">
               <b className="staff-terms-name">{svc.name}</b>
@@ -402,7 +469,7 @@ function StaffEditor({
                 legend="Their length"
                 value={g.length}
                 unit="min"
-                presets={LENGTHS}
+                presets={lengthsFor(svc.durationMin)}
                 min={5}
                 max={1440}
                 onChange={(length) => setGives((x) => ({ ...x, [svc.id]: { ...g, length } }))}
@@ -425,6 +492,11 @@ function StaffEditor({
         />
       )}
       {initial && <TheirCalendar person={initial} />}
+      {hoursProblem && (
+        <p className="hint error" role="alert">
+          {hoursProblem}
+        </p>
+      )}
       {error && (
         <p className="hint error" role="alert">
           {error.detail}
@@ -470,7 +542,7 @@ function TheirCalendar({ person }: { person: StaffView }) {
               checked={!mine}
               onChange={() => mine && tie.mutate({ connectionId: mine.id, resourceId: null })}
             />
-            <span>The salon's</span>
+            <span>Shared</span>
           </label>
           {free.map((c) => (
             <label key={c.id} className="chip">
@@ -488,6 +560,9 @@ function TheirCalendar({ person }: { person: StaffView }) {
           ))}
         </div>
       )}
+      {/* Chosen, it is saved at once: said beside the choice, as Cancel below does not undo it. */}
+      {tie.isPending && <p className="hint">Saving…</p>}
+      {tie.isSuccess && !tie.isPending && <p className="hint">Saved.</p>}
       {tie.error && (
         <p className="hint error" role="alert">
           {problemOf(tie.error).detail}

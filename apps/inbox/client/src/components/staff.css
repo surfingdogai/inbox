@@ -52,6 +52,18 @@
     grid-template-columns: 1fr;
   }
 }
+/* A service they give at its usual price and length: one line, its own terms a press away. */
+.staff-terms-closed {
+  font-size: 13px;
+  padding: 2px 2px;
+}
+/* Their hours on a phone: a window's two times wrap rather than cut off. */
+.staff-editor .hours-window {
+  flex-wrap: wrap;
+}
+.staff-editor .hours-window select {
+  min-width: 7.5em;
+}
 /* What the chosen policy charges, said in full under its chips. */
 .terms-words {
   font-size: 12.5px;

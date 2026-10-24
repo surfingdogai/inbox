@@ -127,8 +127,10 @@ export function HoursEditor({
     setLocal(problem);
     if (!problem) onSave(toWeekly(draft));
   };
+  // Inside another form (a member of staff's), it is part of that form: never a form of its own.
+  const Tag = onSave ? "form" : "div";
   return (
-    <form className="stack hours-grid" onSubmit={submit}>
+    <Tag className="stack hours-grid" {...(onSave ? { onSubmit: submit } : {})}>
       <div>
         <div className="sec-line">
           <h3 className="sec">{title}</h3>
@@ -277,7 +279,7 @@ export function HoursEditor({
           </button>
         </FormActions>
       )}
-    </form>
+    </Tag>
   );
 }
 
