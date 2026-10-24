@@ -167,9 +167,19 @@ export async function writeFirstForPerson(
 ): Promise<{ readonly wrote: string | null }> {
   const [row] = await db.orm.select().from(items).where(eq(items.id, itemId));
   if (row?.type !== "booking") return { wrote: null };
-  const hold = await systemHold(db, rowToItem(row));
+  const item = rowToItem(row);
+  const hold = await systemHold(db, item);
   if (!hold || hold.outcome === "written") return { wrote: null };
   if (awaitingSystem(hold)) throw systemFirstRefusal(hold, { forOwner: true });
+  // Taken here already: refused as the confirm would refuse it, and nothing is written there, so the
+  // salon's diary never shows a booking that was cancelled the moment it was made.
+  if (!(await slotClaimable(db, item))) {
+    throw new WriteError(
+      "slot_taken",
+      `that time is fully booked here, so nothing was written to ${hold.title}. Propose another time, or decline it.`,
+      { details: { guard: "slot_available", system: hold.connectorId } },
+    );
+  }
   let result: Awaited<ReturnType<ConnectorCapabilities["writeFirstBooking"]>>;
   try {
     result = await connectors.writeFirstBooking(itemId, now);

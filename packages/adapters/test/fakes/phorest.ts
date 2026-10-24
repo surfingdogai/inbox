@@ -43,6 +43,8 @@ export interface FakePhorest {
   startsOnly(): void;
   /** Answer free times with starts nothing can read. */
   garbleTimes(): void;
+  /** From now on, find no appointments when asked for a client's: only an id kept here can reach one. */
+  hideAppointments(): void;
 }
 
 const AUTH = `Basic ${btoa(`${USERNAME}:${PASSWORD}`)}`;
@@ -84,6 +86,7 @@ export function fakePhorest(opts: { readonly times?: "instant" | "local" | undef
   const bookings: FakePhorest["bookings"] = new Map();
   let refuse = false;
   let lose = false;
+  let hidden = false;
   let hold: { arrived: () => void; gate: Promise<void> } | null = null;
   let n = 0;
   const authed =
@@ -253,7 +256,8 @@ export function fakePhorest(opts: { readonly times?: "instant" | "local" | undef
         };
         const appointments = [...bookings.entries()]
           .filter(
-            ([, b]) => b.clientId === q.get("client_id") && (!q.get("staff_id") || b.staffId === q.get("staff_id")),
+            ([, b]) =>
+              !hidden && b.clientId === q.get("client_id") && (!q.get("staff_id") || b.staffId === q.get("staff_id")),
           )
           .map(([bookingId, b]) => ({
             appointmentId: `appt-${bookingId}`,
@@ -305,6 +309,9 @@ export function fakePhorest(opts: { readonly times?: "instant" | "local" | undef
     },
     garbleTimes: () => {
       ends = "garbled";
+    },
+    hideAppointments: () => {
+      hidden = true;
     },
     cardFields: () =>
       p.seen.flatMap((r) => (/card|cvc|cvv|pan\b|iban|expiry/i.test(r.body) ? [`${r.method} ${r.url.pathname}`] : [])),

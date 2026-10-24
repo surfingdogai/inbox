@@ -288,10 +288,10 @@ async function attempt_(
   // A booking the salon's own system holds is promised once that system took it (ADR-035): its answer
   // confirms it; a person's confirm was written there first by the owner's door; nothing else does,
   // and nobody while the answer is on its way.
-  if (t.to === "confirmed" && item.state !== "confirmed" && !isWrittenFirst(caller)) {
-    const hold = await systemHold(db, item);
-    if (hold && hold.outcome !== "written" && (!isPerson(caller) || awaitingSystem(hold))) {
-      throw systemFirstRefusal(hold, { forOwner: !isCustomer(caller) });
+  const held = t.to === "confirmed" && item.state !== "confirmed" ? await systemHold(db, item) : null;
+  if (held && !isWrittenFirst(caller)) {
+    if (held.outcome !== "written" && (!isPerson(caller) || awaitingSystem(held))) {
+      throw systemFirstRefusal(held, { forOwner: !isCustomer(caller) });
     }
   }
   if (automation && caller.actor.kind !== "rule" && (await heldForPrice(db, item, input.event))) {
@@ -405,9 +405,11 @@ async function attempt_(
   if (effects.has("apply_change")) applyChange(item.type, payload);
   if (t.change && t.offer === "keep") delete payload.change;
   // A salon's booking (ADR-035): for anyone, with whoever is free when it is confirmed; its deposit and
-  // policy dated for wherever it is going; its time to pay the deposit opened once it is confirmed.
+  // policy dated for wherever it is going; its time to pay the deposit opened once it is confirmed. One
+  // the salon's own system holds keeps the person that system was given: picked again here, its diary
+  // would hold someone else, and the time taken is refused, for the system's booking to be taken back.
   const confirms = item.type === "booking" && t.to === "confirmed" && item.state !== "confirmed";
-  if (confirms) await repickAnyone(db, { itemId: item.id, payload, timezone: settings.business.timezone });
+  if (confirms && !held) await repickAnyone(db, { itemId: item.id, payload, timezone: settings.business.timezone });
   await keepTermsInStep(db, { item, payload, confirms, now });
   // What automation offers, as it would go to the customer, against the owner's limits (ADR-018 §4):
   // its catalogue lines at this customer's price on the way. Outside them it is a draft for a person,

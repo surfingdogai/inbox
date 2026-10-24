@@ -540,10 +540,23 @@ describe("Phorest, nothing else confirms first", () => {
     expect((await stateOf(db, lost.view.item.id)).state).toBe("requested");
     await drain(T0 + 60_000);
     expect((await stateOf(db, lost.view.item.id)).state).toBe("confirmed");
-    // Found by the job, it is kept as Phorest's: the next sync does not book it there a second time.
+    // Found by the job, it is kept as Phorest's: the next sync does not book it there a second time, even
+    // once Phorest's search would no longer find it. Only the id the inbox kept can reach it.
     const before = ph.bookings.size;
+    const posted = () =>
+      ph.platform.requests("POST", `${PHOREST_US}/api/business/${BUSINESS}/branch/X9QpRsZ3bSvhJAaakg9TXQ/booking`)
+        .length;
+    const sent = posted();
+    ph.hideAppointments();
     await caps.connectors.run(String((await caps.connectors.list(owner))[0]?.id), T0 + 61_000, "push");
     expect(ph.bookings.size).toBe(before);
+    expect(posted()).toBe(sent);
+    const { rows } = await db.client.query({
+      sql: "SELECT state, external_id IS NOT NULL, last_error FROM connector_links WHERE item_id = ?",
+      params: [lost.view.item.id],
+      method: "all",
+    });
+    expect(rows).toEqual([["synced", 1, null]]);
   });
 
   it("the owner's confirm writes it to Phorest first, and waits while Phorest has not answered", async () => {
@@ -597,6 +610,79 @@ describe("Phorest, nothing else confirms first", () => {
     const done = await caps.transitionItem(owner, { item_id: r.view.item.id, event: "confirm" });
     expect(done.view.item.state).toBe("confirmed");
     expect([...ph.bookings.values()].map((b) => [b.start, b.status])).toEqual([["2026-11-04T18:00:00.000Z", "ACTIVE"]]);
+  });
+
+  it("never gives an anyone booking Phorest holds to someone else here: the time taken is refused", async () => {
+    const { db, caps, ph, fade, mei } = await withRules();
+    // Mei and Ravi on the same terms, so the inbox could have given it to either.
+    await db.client.query({
+      sql: "UPDATE service_resources SET price_override = NULL, duration_override_min = NULL WHERE service_id = ?",
+      params: [fade.id],
+      method: "run",
+    });
+    const walkIn = (iso: string) =>
+      db.client.query({
+        sql: "INSERT INTO slot_claims (resource_key, bucket_start, ordinal, item_id, offer_id) VALUES (?, ?, 0, 'walk-in', '')",
+        params: [`resource:${mei.id}`, Date.parse(iso)],
+        method: "run",
+      });
+    const anyone = (idem: string, start: string) =>
+      book(caps, {
+        payload: { ...at(start), reservationFor: { serviceId: fade.id, name: "Skin fade" } },
+        contact: { name: "Aiyana Whitehorse", email: "aiyana@example.com" },
+        idempotency_key: idem,
+      });
+    const posted = () =>
+      ph.platform.requests("POST", `${PHOREST_US}/api/business/${BUSINESS}/branch/X9QpRsZ3bSvhJAaakg9TXQ/booking`)
+        .length;
+    const staffOf = async (id: string) => {
+      const [row] = await db.orm.select().from(schema.items).where(eq(schema.items.id, id));
+      return (row?.payload as { resourceId?: string } | undefined)?.resourceId;
+    };
+
+    // The owner confirms a request Phorest refused at first, once Mei was taken here: nothing is written
+    // to Phorest, and nothing confirmed with Ravi while Phorest would have Mei.
+    ph.refuseNext();
+    const r = await anyone("any-owner", "2026-11-04T17:00:00Z");
+    expect(await staffOf(r.view.item.id)).toBe(mei.id);
+    await walkIn("2026-11-04T17:00:00Z");
+    const sent = posted();
+    await expect(caps.transitionItem(owner, { item_id: r.view.item.id, event: "confirm" })).rejects.toMatchObject({
+      code: "slot_taken",
+    });
+    expect(posted()).toBe(sent);
+    expect((await stateOf(db, r.view.item.id)).state).toBe("requested");
+    expect([...ph.bookings.values()].filter((b) => b.status === "ACTIVE")).toEqual([]);
+
+    // Mei taken here while Phorest was writing her in: it is not confirmed with Ravi either, and Phorest's
+    // booking is taken back.
+    const slow = ph.holdNext();
+    const late = anyone("any-race", "2026-11-04T18:00:00Z");
+    await slow.reached;
+    await walkIn("2026-11-04T18:00:00Z");
+    slow.release();
+    const raced = await late;
+    expect(await stateOf(db, raced.view.item.id)).toEqual({ state: "requested", needsHuman: true });
+    expect(await staffOf(raced.view.item.id)).toBe(mei.id);
+    expect([...ph.bookings.values()].map((b) => [b.staffId, b.status])).toEqual([[STAFF_MEI, "CANCELED"]]);
+  });
+
+  it("the owner's confirm writes nothing to Phorest for a time already taken here", async () => {
+    const { db, caps, ph, mei, request } = await withRules();
+    ph.refuseNext();
+    const r = await request("taken-1");
+    await db.client.query({
+      sql: "INSERT INTO slot_claims (resource_key, bucket_start, ordinal, item_id, offer_id) VALUES (?, ?, 0, 'walk-in', '')",
+      params: [`resource:${mei.id}`, Date.parse("2026-11-04T17:00:00Z")],
+      method: "run",
+    });
+    const before = ph.platform.seen.length;
+    await expect(caps.transitionItem(owner, { item_id: r.view.item.id, event: "confirm" })).rejects.toMatchObject({
+      code: "slot_taken",
+    });
+    expect(ph.platform.seen.slice(before)).toEqual([]);
+    expect(ph.bookings.size).toBe(0);
+    expect((await stateOf(db, r.view.item.id)).state).toBe("requested");
   });
 
   it("a booking Phorest took but the inbox cannot confirm is taken back out of Phorest", async () => {
