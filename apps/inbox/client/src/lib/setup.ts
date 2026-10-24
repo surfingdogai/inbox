@@ -118,7 +118,7 @@ export const KINDS: readonly SetupKind[] = [
   {
     key: "appointments",
     label: "Appointments",
-    line: "A salon, a clinic, a studio, classes.",
+    line: "A clinic, a studio, a tutor, classes.",
     preset: "appointments",
     doors: { booking: true, quoteRequest: true, message: true },
     connect: ["booking", "calendars"],
@@ -148,6 +148,49 @@ export const KINDS: readonly SetupKind[] = [
     connect: ["booking", "calendars"],
   },
 ];
+
+/** The setup wizard's steps, in order: a salon is asked who works here once it has said what it offers. */
+export interface WizardStep {
+  readonly id: "kind" | "you" | "doors" | "offer" | "staff" | "hours" | "answering";
+  readonly label: string;
+}
+
+const STEPS: readonly WizardStep[] = [
+  { id: "kind", label: "What you run" },
+  { id: "you", label: "You" },
+  { id: "doors", label: "What agents can do" },
+  { id: "offer", label: "What you offer" },
+  { id: "hours", label: "When you are open" },
+  { id: "answering", label: "Answering" },
+];
+
+export function wizardSteps(kind: SetupKind | undefined): readonly WizardStep[] {
+  if (kind?.key !== "salon") return STEPS;
+  const at = STEPS.findIndex((s) => s.id === "offer") + 1;
+  return [...STEPS.slice(0, at), { id: "staff", label: "Who works here" }, ...STEPS.slice(at)];
+}
+
+/**
+ * The people a salon named at setup, as the staff they are saved as (ADR-035): each named one, in the
+ * order added, with the services they give. Prices, lengths, photos and hours are Settings' to add.
+ */
+export function staffBodies(
+  people: readonly { readonly name: string; readonly services: readonly string[] }[],
+): { name: string; sort: number; services: { service_id: string }[] }[] {
+  return people
+    .filter((p) => p.name.trim())
+    .map((p, i) => ({ name: p.name.trim(), sort: i, services: p.services.map((id) => ({ service_id: id })) }));
+}
+
+/**
+ * Who works here as the services offered arrive: everyone the owner has not picked services for yet,
+ * and who is not kept yet, gives every one of them (one just added in the step before included).
+ */
+export function withOffered<
+  P extends { readonly services: readonly string[]; readonly picked?: boolean; readonly saved?: string },
+>(people: readonly P[], offered: readonly string[]): P[] {
+  return people.map((p) => (p.saved || p.picked ? p : { ...p, services: [...offered] }));
+}
 
 /** The kind of a key, if it is one. */
 export function kindOf(key: string | null | undefined): SetupKind | undefined {

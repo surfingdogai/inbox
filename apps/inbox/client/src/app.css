@@ -1420,6 +1420,10 @@ textarea.json-editor {
 .offer > .wide {
   grid-column: 1 / -1;
 }
+/* Someone a salon names at setup: their name and its remove on one line, the services they give below. */
+.offer.person {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
 @media (max-width: 620px) {
   .offer {
     grid-template-columns: minmax(0, 1fr) auto;

@@ -34,10 +34,15 @@ import {
   ownerEmailDoc,
   SETUP_NETWORK,
   type SetupKind,
+  staffBodies,
   type WizardDoors,
+  type WizardStep,
+  withOffered,
   wizardDoorsDoc,
   wizardPreset,
+  wizardSteps,
 } from "../lib/setup";
+import { useStaff, useStaffWrite } from "../lib/staff";
 import type { Weekly } from "../lib/types";
 
 export const Route = createFileRoute("/setup")({
@@ -80,16 +85,8 @@ const DOORS: readonly { readonly key: keyof WizardDoors; readonly label: string;
   { key: "message", label: "Agents can send a message", line: "Anything else, for you to answer." },
 ];
 
-/** The wizard's steps by id: a kind of business that needs others (a place to stay) names its own. */
-const STEPS = [
-  { id: "kind", label: "What you run" },
-  { id: "you", label: "You" },
-  { id: "doors", label: "What agents can do" },
-  { id: "offer", label: "What you offer" },
-  { id: "hours", label: "When you are open" },
-  { id: "answering", label: "Answering" },
-] as const;
-type StepId = (typeof STEPS)[number]["id"];
+/** The wizard's steps by id (`wizardSteps`): a salon is asked who works here too. */
+type StepId = WizardStep["id"];
 
 const DEFAULT_HOURS: Weekly = {
   mon: [["09:00", "17:00"]],
@@ -132,6 +129,18 @@ interface Offer {
   price: string;
 }
 
+/**
+ * Someone a salon names at setup, with the services they give; `picked` once the owner chose those
+ * (until then they give every service offered), `saved` once they are kept.
+ */
+interface Person {
+  readonly id: number;
+  name: string;
+  services: readonly string[];
+  picked?: boolean;
+  saved?: string;
+}
+
 function SetupWizard() {
   const navigate = useNavigate();
   const profile = useProfile();
@@ -149,12 +158,17 @@ function SetupWizard() {
   const productWrite = useProductWrite();
   const saveWeekly = useSaveWeekly();
   const applyPreset = useApplyPreset();
+  const staffWrite = useStaffWrite();
 
   const [step, setStep] = useState(0);
-  const at: StepId = STEPS[step]?.id ?? "kind";
   // What the business runs (ADR-032): it sets the rules to start from and what agents can do to begin with.
   const [kindKey, setKindKey] = useState<string | null>(null);
   const kind = kindOf(kindKey);
+  const steps = wizardSteps(kind);
+  const at: StepId = steps[step]?.id ?? "kind";
+  // Who works here (ADR-035, a salon): one name each, the services they give.
+  const [people, setPeople] = useState<Person[]>([{ id: 1, name: "", services: [] }]);
+  const [nextPerson, setNextPerson] = useState(2);
   const [tz] = useState(guessTimezone);
   const [name, setName] = useState("");
   const [timezone, setTimezone] = useState(tz);
@@ -207,7 +221,15 @@ function SetupWizard() {
 
   // Whatever is in flight is the error worth showing; they never overlap.
   const problem: ApiProblem | null =
-    [saveProfile.error, saveSettings.error, serviceWrite.error, productWrite.error, saveWeekly.error, applyPreset.error]
+    [
+      saveProfile.error,
+      saveSettings.error,
+      serviceWrite.error,
+      productWrite.error,
+      saveWeekly.error,
+      applyPreset.error,
+      staffWrite.error,
+    ]
       .filter(Boolean)
       .map((e) => problemOf(e))[0] ?? null;
   const busy =
@@ -216,7 +238,16 @@ function SetupWizard() {
     serviceWrite.isPending ||
     productWrite.isPending ||
     saveWeekly.isPending ||
-    applyPreset.isPending;
+    applyPreset.isPending ||
+    staffWrite.isPending;
+  const offered = (services.data?.items ?? []).filter((s) => s.active === 1);
+  // Who works here: each person gives every service offered, as the list of them arrives, until the owner
+  // picks theirs.
+  const offeredIds = offered.map((s) => s.id).join(",");
+  useEffect(() => {
+    if (at !== "staff" || !offeredIds) return;
+    setPeople((ps) => withOffered(ps, offeredIds.split(",")));
+  }, [at, offeredIds]);
 
   const existing = (services.data?.items.length ?? 0) + (products.data?.items.length ?? 0);
   // Booked at a time, or only asked about for a price.
@@ -259,6 +290,18 @@ function SetupWizard() {
           for (const body of planned.bodies) await productWrite.mutateAsync({ body });
         }
       }
+      if (at === "staff") {
+        // Kept once each: back and on again updates who was kept, never adds them twice.
+        const bodies = staffBodies(people);
+        const named = people.filter((p) => p.name.trim());
+        const kept: Person[] = [];
+        for (const [i, body] of bodies.entries()) {
+          const p = named[i] as Person;
+          const view = await staffWrite.mutateAsync(p.saved ? { id: p.saved, body } : { body });
+          kept.push({ ...p, saved: view.id });
+        }
+        setPeople((all) => all.map((p) => kept.find((k) => k.id === p.id) ?? p));
+      }
       if (at === "hours" && doors.booking) {
         await saveWeekly.mutateAsync({ weekly: hours });
       }
@@ -276,7 +319,7 @@ function SetupWizard() {
   };
 
   const next = async () => {
-    if (await saveStep()) setStep((s) => Math.min(s + 1, STEPS.length - 1));
+    if (await saveStep()) setStep((s) => Math.min(s + 1, steps.length - 1));
   };
 
   const canAdvance =
@@ -284,6 +327,7 @@ function SetupWizard() {
     (at === "you" && name.trim().length > 0) ||
     (at === "doors" && (doors.booking || doors.quoteRequest || doors.message)) ||
     (at === "offer" && (!doors.booking || offers.some((o) => o.name.trim()) || existing > 0)) ||
+    at === "staff" ||
     at === "hours" ||
     at === "answering";
 
@@ -311,7 +355,7 @@ function SetupWizard() {
       </div>
 
       <ol className="steps" aria-label="Setup steps">
-        {STEPS.map(({ id, label }, i) => (
+        {steps.map(({ id, label }, i) => (
           <li key={id} className={clsx("stepdot", i === step && "is-now", i < step && "is-done")}>
             <span className="n">{i < step ? <Check className="icon" aria-hidden="true" /> : i + 1}</span>
             <span className="l">{label}</span>
@@ -453,7 +497,13 @@ function SetupWizard() {
                       id={`su-o-${o.id}`}
                       className="input"
                       value={o.name}
-                      placeholder={doors.booking ? "Initial consultation" : "Kitchen fitting"}
+                      placeholder={
+                        kind?.key === "salon"
+                          ? "Cut & blow-dry"
+                          : doors.booking
+                            ? "Initial consultation"
+                            : "Kitchen fitting"
+                      }
                       onChange={(e) =>
                         setOffers((all) => all.map((x) => (x.id === o.id ? { ...x, name: e.target.value } : x)))
                       }
@@ -503,6 +553,90 @@ function SetupWizard() {
               <Plus className="icon" aria-hidden="true" />
               Add another
             </button>
+          </>
+        )}
+
+        {at === "staff" && (
+          <>
+            <h2 className="sec">Who works here?</h2>
+            <p className="lede small">
+              The people clients book by name, and what each gives. Clients see a first name. Their own prices, hours
+              and photos are in Settings, under Staff.
+            </p>
+            <div className="stack">
+              {people.map((p) => (
+                <div className="offer person row-glass" key={p.id}>
+                  <Field id={`su-s-${p.id}`} label="Name">
+                    <input
+                      id={`su-s-${p.id}`}
+                      className="input"
+                      value={p.name}
+                      placeholder="Mei Chen"
+                      onChange={(e) =>
+                        setPeople((all) => all.map((x) => (x.id === p.id ? { ...x, name: e.target.value } : x)))
+                      }
+                    />
+                  </Field>
+                  {people.length > 1 && !p.saved && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      aria-label={`Remove ${p.name || "this person"}`}
+                      onClick={() => setPeople((all) => all.filter((x) => x.id !== p.id))}
+                    >
+                      <Trash2 className="icon" aria-hidden="true" />
+                    </button>
+                  )}
+                  {offered.length > 0 && (
+                    <fieldset className="chips-field wide">
+                      <legend className="label">Services</legend>
+                      <div className="chips">
+                        {offered.map((svc) => {
+                          const on = p.services.includes(svc.id);
+                          return (
+                            <button
+                              key={svc.id}
+                              type="button"
+                              className="chip chip-toggle"
+                              aria-pressed={on}
+                              onClick={() =>
+                                setPeople((all) =>
+                                  all.map((x) =>
+                                    x.id === p.id
+                                      ? {
+                                          ...x,
+                                          picked: true,
+                                          services: on
+                                            ? x.services.filter((s) => s !== svc.id)
+                                            : [...x.services, svc.id],
+                                        }
+                                      : x,
+                                  ),
+                                )
+                              }
+                            >
+                              {svc.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </fieldset>
+                  )}
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => {
+                setPeople((all) => [...all, { id: nextPerson, name: "", services: offered.map((s) => s.id) }]);
+                setNextPerson((n) => n + 1);
+              }}
+            >
+              <Plus className="icon" aria-hidden="true" />
+              Add someone
+            </button>
+            <p className="hint">Optional: with nobody named, bookings are taken for the salon as a whole.</p>
           </>
         )}
 
@@ -584,8 +718,8 @@ function SetupWizard() {
             </button>
           )}
           <button type="button" className="btn btn-primary" onClick={() => void next()} disabled={!canAdvance || busy}>
-            {busy ? "Saving…" : step === STEPS.length - 1 ? "Finish" : "Continue"}
-            {!busy && step < STEPS.length - 1 && <ArrowRight className="icon" aria-hidden="true" />}
+            {busy ? "Saving…" : step === steps.length - 1 ? "Finish" : "Continue"}
+            {!busy && step < steps.length - 1 && <ArrowRight className="icon" aria-hidden="true" />}
           </button>
         </div>
       </section>
@@ -598,17 +732,22 @@ const PRESET_WORDS: Readonly<Partial<Record<string, string>>> = {
   appointments: "bookings",
   trades: "requests for a price",
   shop: "orders",
+  salon: "salons and barbers",
 };
 const PRESET_LINES: Readonly<Partial<Record<string, string>>> = {
   appointments: "Bookings in a free slot are confirmed, and everything else waits for you.",
   trades: "Requests for a price are flagged for you, and anything urgent goes to the top.",
   shop: "Small orders are accepted and asked to pay, and large ones wait for you.",
+  salon: "A returning client is confirmed when their stylist is free; a first visit, and anything else, waits for you.",
 };
 
 /** The end. What works now, and — just as important — what does not yet. */
 function Finished({ onOpen, kind }: { onOpen: () => void; kind?: SetupKind | undefined }) {
   const origin = typeof window === "undefined" ? "" : window.location.origin;
   const [connecting, setConnecting] = useState(true);
+  // A salon with nobody named yet: who people book by name is still to add.
+  const staff = useStaff();
+  const nobody = kind?.key === "salon" && staff.isSuccess && staff.data.items.length === 0;
   return (
     <main className="page page-narrow setup">
       <div className="page-head">
@@ -642,6 +781,11 @@ function Finished({ onOpen, kind }: { onOpen: () => void; kind?: SetupKind | und
         )}
         <h3 className="sec">Not set up yet</h3>
         <ul className="checks">
+          {nobody && (
+            <li>
+              <b>Your staff.</b> Who people book by name: <a href="/settings/services?tab=staff">Settings, Staff</a>.
+            </li>
+          )}
           <li>
             <b>Email in.</b> So a customer can simply write to you. Settings, then the docs page on email.
           </li>
