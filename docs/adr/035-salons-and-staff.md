@@ -22,8 +22,9 @@ salon's own credentials can be used with.
 - `resources` gains `kind` (`staff` | `table` | `room` | `vehicle` | `equipment`), `public_name`, a
   small `photo`, `sort`, and `external_id`/`source` for those a salon's system sent in.
 - **Customers see a first name only**: `public_name`, else the first word of the name the owner knows
-  them by (where names are written family name first, the owner says the name customers see). Never a
-  surname, hours or anything else. `list_staff` (MCP and `GET /v1/staff`) gives the name, a photo and
+  them by (where names are written family name first, or without spaces, the owner says the name
+  customers see: the setup wizard and Settings show it beside each name). Never a surname, hours or
+  anything else. `list_staff` (MCP and `GET /v1/staff`) gives the name, a photo and
   the services each gives, and is offered only once the business lists staff.
 - **A photo** is a JPEG of at most 32 KB the owner app draws at 320 pixels at most, kept as a data URL.
   The inbox reads it again before keeping it: it must be a well-formed JPEG, and every segment that can
@@ -32,7 +33,8 @@ salon's own credentials can be used with.
   storage for attachments arrives with the trades track; a staff photo moves there then.)
 - `service_resources` ties a member of staff to each service they give, with their own price (minor
   units, for the whole booking) and length when they are not the service's. Their price is money: the
-  owner's in person, never the owner's AI's.
+  owner's in person, never the owner's AI's, which may not untie them from a service that carries it
+  either (tied again, they would be at the service's price).
 - **Their own hours** are an `availability_rules` row with their `resource_id`; without one they work the
   business's (or the service's) hours. Such rows are never read as the business's hours, closures or
   published hours.
@@ -45,10 +47,12 @@ salon's own credentials can be used with.
   own capacity), their own length, the add-ons added; asked for anyone, each time lists who is free.
 - A booking for anyone goes to the first free in the owner's order, passing over anyone who already has
   a request at that time, so two requests go to two people. It keeps that it was for anyone
-  (`payload.anyStaff`) and is confirmed with whoever is free then, at the same price and length. Nobody
-  free: nobody is named before it binds ("with whoever is free"), and a person answers it, as any request
-  for a taken time. A booking always carries who it is with and their first name, and its end follows
-  their length, whatever the request said.
+  (`payload.anyStaff`) and is confirmed with whoever is free then, at the same price and length, so the
+  customer confirms that price and "with whoever is free": nobody is named, nor part of the confirmed
+  terms, before it binds, and the confirmation names whoever it went to. Nobody free: a person answers
+  it, as any request for a taken time. A booking always carries who it is with and their first name,
+  and its end follows their length, whatever the request said. One the salon's own system holds keeps
+  the person written there (§6).
 - Who a booking is with is never a customer's to set: `payload.resourceId` is dropped from every
   request, and the inbox sets it from `staff_id` or from whoever is free.
 - A service's places were held under its own key (`service:<id>`) before anyone was tied to it, and
@@ -99,14 +103,20 @@ salon's own credentials can be used with.
   against when it was booked, and the customer confirms them as they will apply. Without a policy, the
   business-wide cancellation window stands.
 - A deposit the policy keeps (`deposit.refundable: false`) comes back while cancelling is free, and is
-  kept once no free step is ahead, as the policy sentence says.
+  kept once no free step is ahead, as the policy sentence says; a fee from then on is that fee or the
+  deposit paid, whichever is more, and is said so.
+- The right of withdrawal wins where it runs (ADR-018 §7): a paid booking the customer cancels in its
+  period, before the start, is withdrawn from, and all that was paid comes back, the deposit too. What
+  the customer confirms, and the confirmation after payment, say so beside the cancellation terms, and
+  the owner reads it under the policy. Once the period is over (or for a service excepted from it, or a
+  business that sells only to businesses), the policy and a kept deposit apply as written.
 - Who it is with, the add-ons, the deposit and the policy are part of what a customer confirms (the
   confirm step's terms and summary). A confirmed booking with a policy answers a customer's cancel with
   the fee and what comes back (`409 confirm_terms`, `fee_sha`); it is cancelled, as a late cancellation
   when it costs something, only once they send that fingerprint back. The fee is the business's to take,
   from the deposit or through its own link.
 - The owner's AI may name add-ons and tie staff to services; deposits, policies, what comes first and
-  every price are the owner's in person.
+  every price are the owner's in person. It cannot drop a priced add-on, or send it again without its id.
 
 ### 6. A salon's own booking system, written first
 
@@ -122,10 +132,12 @@ salon's own credentials can be used with.
   Nothing is written first that the inbox could not confirm on its own anyway: a price a person sets,
   what a person checks first, a time inside the minimum notice, a time its own places or calendars hold.
   Taken there but then not confirmable here, it is cancelled there again (`rolled_back`) and the owner
-  told.
+  told. A booking for anyone keeps the person written there: it is never picked again at confirm, so a
+  time taken here meanwhile is refused rather than given to someone the system's diary does not hold.
 - **Only the system's answer confirms such a booking** (the `system_first` guard in `transitionItem`): no
   rule, no owner's AI and no key, and nobody while the answer is on its way. A person's confirm is written
-  there first and stands on the answer; a customer's yes to another time we proposed goes to a person.
+  there first and stands on the answer, once the time is checked here (a time taken here is refused and
+  nothing is written); a customer's yes to another time we proposed goes to a person.
 - Cancelled here, it is cancelled there (`BookingWriter.remove`); a move is made in the salon's system.
 - Its free times are offered when it can say them, asked of it once a minute at most for the same
   question; when it cannot (a rate limit, an outage, times it gives that cannot be read), the inbox's own
