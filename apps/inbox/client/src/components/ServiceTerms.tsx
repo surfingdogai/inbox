@@ -5,17 +5,18 @@ import { majorText, parseMajor } from "../lib/actions";
 import { problemOf } from "../lib/api";
 import { minorUnitsOf } from "../lib/currencies";
 import { formatMoney } from "../lib/format";
-import { useServiceWrite } from "../lib/queries";
-import { DEPOSIT_PRESETS, depositKey, POLICY_PRESETS, policyKey, policyWords } from "../lib/staff";
+import { useIntegrations, useServiceWrite } from "../lib/queries";
+import { DEPOSIT_PRESETS, depositKey, POLICY_PRESETS, percentText, policyKey, policyWords } from "../lib/staff";
 import type { ServiceBody, ServiceRow } from "../lib/types";
 import { DurationPicker, MoneyInput } from "./Choosers";
 import { Field, FormActions } from "./Form";
 
 /**
- * A service's terms (ADR-035): what can be added to it ("+ blow-dry, 15 min"), the deposit that keeps a
- * booking, its own cancellation policy (presets first), and what must come first (a patch test within
- * so many days). Customers read the add-ons, the deposit and the policy before they confirm; what comes
- * first is checked, never shown.
+ * A service's terms (ADR-035): what can be added to it ("+ blow-dry, 15 min"), the deposit that holds a
+ * booking (only once a payment platform can ask for it), its own cancellation policy (presets first,
+ * each said in full under the chips), and what must come first (a patch test, at least 48 hours before
+ * and within so many days). Customers read the add-ons, the deposit and the policy before they confirm;
+ * what comes first is checked, never shown. A deposit or policy set elsewhere is kept as it is.
  */
 
 type Terms = ServiceRow & {
@@ -24,22 +25,25 @@ type Terms = ServiceRow & {
     | null;
   readonly deposit?: DepositRule | null;
   readonly policy?: Policy | null;
-  readonly requires?: { serviceId: string; withinDays: number } | null;
+  readonly requires?: { serviceId: string; withinDays: number; atLeastHours?: number } | null;
 };
 
-/** The terms in a few words, under the service's name. */
-export function termsLine(s: ServiceRow, currency: string): string {
+/** The terms in a few words, under the service's name: "1 add-on · 30% deposit · … · after Patch test (180 days)". */
+export function termsLine(s: ServiceRow, currency: string, services: readonly ServiceRow[] = []): string {
   const t = s as Terms;
   const out: string[] = [];
   if (t.addOns?.length) out.push(`${t.addOns.length} add-on${t.addOns.length === 1 ? "" : "s"}`);
   if (t.deposit)
     out.push(
       t.deposit.kind === "percent"
-        ? `${t.deposit.value} % deposit`
+        ? `${percentText(t.deposit.value)} deposit`
         : `${formatMoney({ value: t.deposit.value, currency: s.price?.currency ?? currency })} deposit`,
     );
   if (t.policy) out.push(policyWords(t.policy));
-  if (t.requires) out.push("needs another first");
+  if (t.requires) {
+    const first = services.find((x) => x.id === t.requires?.serviceId)?.name ?? "another service";
+    out.push(`after ${first} (${t.requires.withinDays} days)`);
+  }
   return out.join(" · ");
 }
 
@@ -48,8 +52,8 @@ const ADD_LENGTHS = [
   { value: 15, label: "15 min" },
   { value: 30, label: "30 min" },
 ];
+// A patch test stays good for months, and is read two days on: the windows start at a month.
 const WITHIN = [
-  { value: 2, label: "2 days" },
   { value: 30, label: "30 days" },
   { value: 180, label: "6 months" },
   { value: 365, label: "A year" },
@@ -60,16 +64,21 @@ export function ServiceTerms({
   services,
   currency,
   onDone,
+  onCancel,
 }: {
   service: ServiceRow;
   services: readonly ServiceRow[];
   currency: string;
   onDone: (text: string) => void;
+  onCancel: () => void;
 }) {
   const id = useId();
   const t = service as Terms;
   const money = service.price?.currency ?? currency;
   const write = useServiceWrite();
+  // A deposit is asked by a link on the business's own payment platform: without one, nothing would.
+  const integrations = useIntegrations();
+  const payments = (integrations.data?.connections ?? []).some((c) => c.pay_on === true);
   const [addOns, setAddOns] = useState(
     (t.addOns ?? []).map((a) => ({
       id: a.id,
@@ -87,9 +96,11 @@ export function ServiceTerms({
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const rule: DepositRule | null =
-      deposit === "fixed"
-        ? { kind: "amount", value: parseMajor(fixed, minorUnitsOf(money)) ?? 0 }
-        : (DEPOSIT_PRESETS.find((p) => p.key === deposit)?.rule ?? null);
+      deposit === "custom"
+        ? (t.deposit ?? null)
+        : deposit === "fixed"
+          ? { kind: "amount", value: parseMajor(fixed, minorUnitsOf(money)) ?? 0 }
+          : (DEPOSIT_PRESETS.find((p) => p.key === deposit)?.rule ?? null);
     const chosen =
       policy === "custom" ? (t.policy ?? null) : (POLICY_PRESETS.find((p) => p.key === policy)?.policy ?? null);
     const body = {
@@ -105,7 +116,13 @@ export function ServiceTerms({
         })),
       deposit: rule && (rule.kind === "percent" || rule.value > 0) ? rule : null,
       policy: chosen,
-      requires: first ? { service_id: first, within_days: Number(within) } : null,
+      requires: first
+        ? {
+            service_id: first,
+            within_days: Number(within),
+            ...(t.requires?.atLeastHours !== undefined ? { at_least_hours: t.requires.atLeastHours } : {}),
+          }
+        : null,
     };
     write.mutate(
       { id: service.id, body: body as unknown as ServiceBody },
@@ -174,14 +191,37 @@ export function ServiceTerms({
         <legend className="label">Deposit</legend>
         <div className="chips" role="radiogroup">
           {DEPOSIT_PRESETS.map((p) => (
-            <label key={p.key} className="chip">
-              <input type="radio" name={`${id}-dep`} checked={deposit === p.key} onChange={() => setDeposit(p.key)} />
+            <label key={p.key} className={`chip${p.rule && !payments ? " is-disabled" : ""}`}>
+              <input
+                type="radio"
+                name={`${id}-dep`}
+                checked={deposit === p.key}
+                disabled={p.rule !== null && !payments}
+                onChange={() => setDeposit(p.key)}
+              />
               <span>{p.label}</span>
             </label>
           ))}
+          {deposit === "custom" && t.deposit && (
+            <label className="chip">
+              <input type="radio" name={`${id}-dep`} checked readOnly />
+              <span>
+                As set:{" "}
+                {t.deposit.kind === "percent"
+                  ? percentText(t.deposit.value)
+                  : formatMoney({ value: t.deposit.value, currency: money })}
+              </span>
+            </label>
+          )}
         </div>
         {deposit === "fixed" && <MoneyInput id={`${id}-fixed`} value={fixed} currency={money} onChange={setFixed} />}
-        <p className="hint">Paid on your own payment platform when a booking is confirmed. The rest at the visit.</p>
+        {payments ? (
+          <p className="hint">Paid on your own payment platform when a booking is confirmed. The rest at the visit.</p>
+        ) : (
+          <p className="hint">
+            To ask for a deposit, connect Stripe or Mollie in <a href="/settings/integrations">Integrations</a>.
+          </p>
+        )}
       </fieldset>
 
       <fieldset className="chips-field">
@@ -196,10 +236,16 @@ export function ServiceTerms({
           {policy === "custom" && (
             <label className="chip">
               <input type="radio" name={`${id}-pol`} checked readOnly />
-              <span>As set: {policyWords(t.policy)}</span>
+              <span>As set</span>
             </label>
           )}
         </div>
+        {/* What the chosen one charges, every fee of it, before it is saved. */}
+        {(() => {
+          const chosen = policy === "custom" ? t.policy : POLICY_PRESETS.find((p) => p.key === policy)?.policy;
+          const words = policyWords(chosen);
+          return words ? <p className="terms-words">{words[0]?.toUpperCase() + words.slice(1)}.</p> : null;
+        })()}
         <p className="hint">
           Customers see it, dated, before they confirm. Some places limit cancellation fees: check yours.
         </p>
@@ -231,7 +277,11 @@ export function ServiceTerms({
             onChange={setWithin}
           />
         )}
-        <p className="hint">Checked against your own bookings with that client. Nobody is shown anyone's records.</p>
+        <p className="hint">
+          {first
+            ? `At least ${t.requires?.atLeastHours ?? 48} h before, within the days you choose. Checked against your own bookings with that client; nobody is shown anyone's records.`
+            : "Checked against your own bookings with that client. Nobody is shown anyone's records."}
+        </p>
       </fieldset>
       {write.error && (
         <p className="hint error" role="alert">
@@ -241,6 +291,9 @@ export function ServiceTerms({
       <FormActions>
         <button type="submit" className="btn btn-primary" disabled={write.isPending}>
           Save terms
+        </button>
+        <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={write.isPending}>
+          Cancel
         </button>
       </FormActions>
     </form>

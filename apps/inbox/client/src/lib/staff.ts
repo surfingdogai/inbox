@@ -123,16 +123,19 @@ export async function smallPhoto(file: File): Promise<string> {
 
 /* --- a service's terms ---------------------------------------------------------- */
 
-/** Cancellation policies to start from, as the owner reads them; "custom" opens the steps. */
+/**
+ * Cancellation policies to start from, as the owner reads them, each label naming its fee; "custom" is
+ * one set elsewhere, kept as it is. "Your usual policy": the business-wide cancellation window.
+ */
 export const POLICY_PRESETS: readonly {
   readonly key: string;
   readonly label: string;
   readonly policy: Policy | null;
 }[] = [
-  { key: "none", label: "The salon's usual rule", policy: null },
+  { key: "none", label: "Your usual policy", policy: null },
   {
     key: "free24",
-    label: "Free until 24 h before",
+    label: "Free until 24 h, then 50%",
     policy: {
       steps: [{ before: { hours: 24 }, fee: { kind: "none" } }],
       after: { kind: "percent", value: 50 },
@@ -141,7 +144,7 @@ export const POLICY_PRESETS: readonly {
   },
   {
     key: "free48",
-    label: "Free until 48 h, then 50 %",
+    label: "Free until 48 h, then 50%",
     policy: {
       steps: [{ before: { hours: 48 }, fee: { kind: "none" } }],
       after: { kind: "percent", value: 50 },
@@ -166,7 +169,19 @@ export function policyKey(p: Policy | null | undefined): string {
   return POLICY_PRESETS.find((x) => x.policy && JSON.stringify(x.policy) === s)?.key ?? "custom";
 }
 
-/** A policy in a few words, for the service line: "Free until 24 h · then 50 % · no-show: full". */
+/** A share in the owner's words: "30%". */
+export function percentText(value: number): string {
+  try {
+    return new Intl.NumberFormat("en-GB", { style: "percent", maximumFractionDigits: 1 }).format(value / 100);
+  } catch {
+    return `${value}%`;
+  }
+}
+
+/**
+ * A policy in a few words, for the service line and under its choice: "free until 24 h before · then
+ * 50% · no-show: full price". A deposit the policy keeps is said as kept once cancelling is not free.
+ */
 export function policyWords(p: Policy | null | undefined): string {
   if (!p) return "";
   const fee = (f: Policy["after"]) =>
@@ -175,16 +190,19 @@ export function policyWords(p: Policy | null | undefined): string {
       : f.kind === "full"
         ? "full price"
         : f.kind === "percent"
-          ? `${f.value ?? 0} %`
+          ? percentText(f.value ?? 0)
           : f.kind === "units"
             ? `${f.value ?? 1} visit`
             : "a fixed fee";
+  const before = (s: Policy["steps"][number]) =>
+    s.before.hours !== undefined ? `${s.before.hours} h` : `${s.before.days} days`;
   const steps = p.steps.map((s) =>
-    s.fee.kind === "none"
-      ? `free until ${s.before.hours !== undefined ? `${s.before.hours} h` : `${s.before.days} days`} before`
-      : `${fee(s.fee)} until ${s.before.hours ?? s.before.days}`,
+    s.fee.kind === "none" ? `free until ${before(s)} before` : `${fee(s.fee)} until ${before(s)} before`,
   );
-  return [...steps, `then ${fee(p.after)}`, `no-show: ${fee(p.noShow)}`].join(" · ");
+  const kept = p.deposit?.refundable === false && p.after.kind === "none";
+  return [...steps, kept ? "then the deposit is kept" : `then ${fee(p.after)}`, `no-show: ${fee(p.noShow)}`].join(
+    " · ",
+  );
 }
 
 export const DEPOSIT_PRESETS: readonly {
@@ -193,26 +211,42 @@ export const DEPOSIT_PRESETS: readonly {
   readonly rule: DepositRule | null;
 }[] = [
   { key: "none", label: "No deposit", rule: null },
-  { key: "p20", label: "20 %", rule: { kind: "percent", value: 20 } },
-  { key: "p50", label: "50 %", rule: { kind: "percent", value: 50 } },
+  { key: "p20", label: "20%", rule: { kind: "percent", value: 20 } },
+  { key: "p50", label: "50%", rule: { kind: "percent", value: 50 } },
   { key: "fixed", label: "A fixed amount", rule: { kind: "amount", value: 0 } },
 ];
 
+/** The chip a service's deposit is on; "custom" for a share no chip holds (30%), kept as it is. */
 export function depositKey(rule: DepositRule | null | undefined): string {
   if (!rule) return "none";
   if (rule.kind === "amount") return "fixed";
-  return DEPOSIT_PRESETS.find((p) => p.rule?.kind === "percent" && p.rule.value === rule.value)?.key ?? "p20";
+  return DEPOSIT_PRESETS.find((p) => p.rule?.kind === "percent" && p.rule.value === rule.value)?.key ?? "custom";
 }
 
-/** A booking's dated policy, for the owner: each step's last moment in the business's zone, and its fee. */
-export function datedSteps(dated: DatedPolicy, money: (m: Money) => string, when: (iso: string) => string): string[] {
+/**
+ * A booking's dated policy, for the owner: each step's last moment in the business's zone, and its fee.
+ * A deposit the policy keeps is said as kept once cancelling is no longer free, as the customer read it.
+ */
+export function datedSteps(
+  dated: DatedPolicy,
+  money: (m: Money) => string,
+  when: (iso: string) => string,
+  opts: { readonly depositKept?: boolean } = {},
+): string[] {
   const out = dated.steps.map((s) =>
     s.fee.value === 0 ? `Free until ${when(s.until)}` : `${money(s.fee)} until ${when(s.until)}`,
   );
-  const after = dated.after.value === 0 ? "free" : money(dated.after);
+  const kept = opts.depositKept === true && dated.after.value === 0;
+  const after = kept ? "the deposit is kept" : dated.after.value === 0 ? "free" : money(dated.after);
   // Booked after every step had passed: only what cancelling costs now.
   out.push(
-    dated.steps.length > 0 ? `then ${after}` : dated.after.value === 0 ? "Free to cancel" : `Cancelling costs ${after}`,
+    dated.steps.length > 0
+      ? `then ${after}`
+      : kept
+        ? "Cancelling keeps the deposit"
+        : dated.after.value === 0
+          ? "Free to cancel"
+          : `Cancelling costs ${after}`,
   );
   out.push(`no-show ${money(dated.noShow)}`);
   return out;

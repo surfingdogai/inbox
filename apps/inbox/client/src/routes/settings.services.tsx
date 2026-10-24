@@ -236,6 +236,7 @@ function ServicesCard({ currency }: { currency: string }) {
               )
             }
             onKeep={() => setConfirm(null)}
+            onNotice={setNotice}
           />
         ))}
       </div>
@@ -289,6 +290,7 @@ function ServiceLine({
   onArchive,
   onRestore,
   onKeep,
+  onNotice,
 }: {
   service: ServiceRow;
   editing: boolean;
@@ -307,6 +309,8 @@ function ServiceLine({
   onArchive: () => void;
   onRestore: () => void;
   onKeep: () => void;
+  /** Saved elsewhere on the row (its terms): said in the card's notice. */
+  onNotice: (text: string) => void;
 }) {
   const archived = s.active !== 1;
   // Add-ons, the deposit, cancelling, what comes first (ADR-035).
@@ -320,7 +324,9 @@ function ServiceLine({
           {archived && <span className="pill pill-xs">Archived</span>}
         </div>
         <div className="s">{describeService(s, currency)}</div>
-        {termsLine(s, currency) && <div className="s">{termsLine(s, currency)}</div>}
+        {termsLine(s, currency, all.data?.items ?? []) && (
+          <div className="s">{termsLine(s, currency, all.data?.items ?? [])}</div>
+        )}
         {s.description && <div className="s">{s.description}</div>}
       </div>
       <div className="rowx">
@@ -391,7 +397,11 @@ function ServiceLine({
             service={s}
             services={all.data?.items ?? []}
             currency={currency}
-            onDone={() => setTerms(false)}
+            onDone={(text) => {
+              setTerms(false);
+              onNotice(text);
+            }}
+            onCancel={() => setTerms(false)}
           />
         </div>
       )}
