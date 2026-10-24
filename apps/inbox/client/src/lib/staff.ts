@@ -94,6 +94,39 @@ export function shownName(name: string, publicName?: string | null): string {
   return name.trim().split(/\s+/u)[0] || "Staff";
 }
 
+/** One line of a booking's block on the day by staff: what it is, when it starts, or who it is for. */
+export interface BlockLine {
+  readonly id: "what" | "when" | "who";
+  readonly clock?: string | undefined;
+  readonly text: string;
+}
+
+/**
+ * What a booking's block on the day by staff says, as far as its height allows: the start and the
+ * service first (in a lane it shares with another booking, the service alone, so its name is not lost
+ * behind the time, and the start under it), then the customer. A line that does not fit is left out,
+ * never cut through: a block of half an hour is one line.
+ */
+export function blockLines(b: {
+  readonly clock: string;
+  readonly service: string;
+  readonly customer?: string | null | undefined;
+  /** The block's height in pixels: about 14.5 a line, under 8 of padding and border. */
+  readonly height: number;
+  /** Side by side with another booking: half the column or less. */
+  readonly narrow: boolean;
+}): BlockLine[] {
+  const fits = Math.max(1, Math.floor((b.height - 8) / 14.5));
+  const lines: BlockLine[] = b.narrow
+    ? [
+        { id: "what", text: b.service },
+        { id: "when", clock: b.clock, text: "" },
+      ]
+    : [{ id: "what", clock: b.clock, text: b.service }];
+  if (b.customer) lines.push({ id: "who", text: b.customer });
+  return lines.slice(0, fits);
+}
+
 /**
  * A photo made small enough to keep: drawn at most 320 pixels a side as a JPEG (which carries none of
  * the camera's metadata), smaller in quality until it is under 32 KB. The inbox reads it again.

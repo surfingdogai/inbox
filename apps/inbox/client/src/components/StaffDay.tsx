@@ -4,7 +4,7 @@ import { useState } from "react";
 import { problemOf } from "../lib/api";
 import { formatClock } from "../lib/format";
 import { useAvailability } from "../lib/queries";
-import { minutesIn, todayIn, useStaff, useStaffDay } from "../lib/staff";
+import { blockLines, minutesIn, todayIn, useStaff, useStaffDay } from "../lib/staff";
 import type { Weekly } from "../lib/types";
 import "./staff.css";
 
@@ -13,7 +13,8 @@ import "./staff.css";
  * owner's order, their bookings placed by the hour, a request dashed until it is confirmed, and a
  * column for bookings with nobody yet. The day runs the business's hours that day (and any booking
  * outside them); each column is shaded outside that person's own hours, and says "Off" for someone not
- * working that day. Shown only once the business lists staff.
+ * working that day. Only the columns scroll sideways, under the hours, which stay in view. Shown only
+ * once the business lists staff.
  */
 export function StaffDayCard({
   tz,
@@ -27,6 +28,7 @@ export function StaffDayCard({
   const staff = useStaff();
   const listed = (staff.data?.items ?? []).some((s) => s.active);
   const [offset, setOffset] = useState(0);
+  const [scrolled, setScrolled] = useState(false);
   const date = todayIn(zone, Date.now() + offset * 86_400_000);
   const day = useStaffDay(date, listed);
   const availability = useAvailability();
@@ -82,77 +84,96 @@ export function StaffDayCard({
       )}
       {day.isSuccess && !(compact && all.length === 0) && (
         <div
-          className="staffday-grid"
-          style={{ gridTemplateColumns: `36px repeat(${columns.length}, minmax(140px, 1fr))` }}
+          className={`staffday-scroll${scrolled ? " is-scrolled" : ""}`}
+          onScroll={(e) => setScrolled(e.currentTarget.scrollLeft > 0)}
         >
-          <div className="staffday-col" style={{ minWidth: 36 }}>
-            <div className="staffday-head">&nbsp;</div>
-            <div className="staffday-times" style={{ height: px(to) }}>
-              {hours.map((h) => (
-                <span key={h} style={{ top: px(h) }}>
-                  {String(h / 60).padStart(2, "0")}
-                </span>
-              ))}
-            </div>
-          </div>
-          {columns.map((c) => {
-            const works = c.staff ? hoursOf(c.staff.id) : null;
-            const off = works !== null && works.length === 0;
-            return (
-              <div key={c.staff?.id ?? "nobody"} className="staffday-col">
-                {/* One height for every head, so each column's hours line up with the ruler's. */}
-                <div className="staffday-head" title={c.staff?.name ?? "Not given to anyone yet"}>
-                  <span className="staff-avatar is-initials" aria-hidden="true">
-                    {(c.staff?.name ?? "?").slice(0, 1)}
+          <div
+            className="staffday-grid"
+            style={{ gridTemplateColumns: `36px repeat(${columns.length}, minmax(140px, 1fr))` }}
+          >
+            <div className="staffday-col staffday-ruler" style={{ minWidth: 36 }}>
+              <div className="staffday-head">&nbsp;</div>
+              <div className="staffday-times" style={{ height: px(to) }}>
+                {hours.map((h) => (
+                  <span key={h} style={{ top: px(h) }}>
+                    {String(h / 60).padStart(2, "0")}
                   </span>
-                  <span className="staffday-who">
-                    <span className="staffday-name">{c.staff?.name ?? "Not given to anyone yet"}</span>
-                    <span className="staffday-count">
-                      {c.bookings.length} booking{c.bookings.length === 1 ? "" : "s"}
-                      {off && <span className="pill pill-xs">Off</span>}
-                    </span>
-                  </span>
-                </div>
-                <div className="staffday-track" style={{ height: px(to), ["--hour" as string]: `${hourPx}px` }}>
-                  {works &&
-                    outside(works, from, to).map(([a, b]) => (
-                      <div
-                        key={a}
-                        className="staffday-off"
-                        style={{ top: px(a), height: px(b) - px(a) }}
-                        aria-hidden="true"
-                      />
-                    ))}
-                  {c.bookings.map((b, i) => {
-                    const top = px(minutesIn(b.start, zone));
-                    const lane = lanes(c.bookings, zone)[i] ?? { at: 0, of: 1 };
-                    const height = Math.max(18, px(minutesIn(b.end, zone)) - top - 2);
-                    const request = b.state !== "confirmed" && b.state !== "completed";
-                    return (
-                      <Link
-                        key={b.id}
-                        to="/items/$id"
-                        params={{ id: b.id }}
-                        search={(prev) => prev}
-                        className={`staffday-block${request ? " is-request" : ""}${b.needsHuman ? " is-needs" : ""}`}
-                        style={{
-                          top,
-                          height,
-                          left: `calc(${(lane.at / lane.of) * 100}% + 4px)`,
-                          width: `calc(${100 / lane.of}% - 6px)`,
-                          right: "auto",
-                        }}
-                        title={`${formatClock(b.start, zone)} ${b.service}${b.customer ? ` · ${b.customer}` : ""}`}
-                      >
-                        <b>{formatClock(b.start, zone)}</b> {b.service}
-                        {b.customer && <div className="hint">{b.customer}</div>}
-                      </Link>
-                    );
-                  })}
-                </div>
+                ))}
               </div>
-            );
-          })}
+            </div>
+            {columns.map((c) => {
+              const works = c.staff ? hoursOf(c.staff.id) : null;
+              const off = works !== null && works.length === 0;
+              return (
+                <div key={c.staff?.id ?? "nobody"} className="staffday-col">
+                  {/* One height for every head, so each column's hours line up with the ruler's. */}
+                  <div className="staffday-head" title={c.staff?.name ?? "Not given to anyone yet"}>
+                    <span className="staff-avatar is-initials" aria-hidden="true">
+                      {(c.staff?.name ?? "?").slice(0, 1)}
+                    </span>
+                    <span className="staffday-who">
+                      <span className="staffday-name">{c.staff?.name ?? "Nobody yet"}</span>
+                      <span className="staffday-count">
+                        {c.bookings.length} booking{c.bookings.length === 1 ? "" : "s"}
+                        {off && <span className="pill pill-xs">Off</span>}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="staffday-track" style={{ height: px(to), ["--hour" as string]: `${hourPx}px` }}>
+                    {works &&
+                      outside(works, from, to).map(([a, b]) => (
+                        <div
+                          key={a}
+                          className="staffday-off"
+                          style={{ top: px(a), height: px(b) - px(a) }}
+                          aria-hidden="true"
+                        />
+                      ))}
+                    {c.bookings.map((b, i) => {
+                      const top = px(minutesIn(b.start, zone));
+                      const lane = lanes(c.bookings, zone)[i] ?? { at: 0, of: 1 };
+                      const height = Math.max(18, px(minutesIn(b.end, zone)) - top - 2);
+                      const request = b.state !== "confirmed" && b.state !== "completed";
+                      const clock = formatClock(b.start, zone);
+                      const lines = blockLines({
+                        clock,
+                        service: b.service,
+                        customer: b.customer,
+                        height,
+                        narrow: lane.of > 1,
+                      });
+                      return (
+                        <Link
+                          key={b.id}
+                          to="/items/$id"
+                          params={{ id: b.id }}
+                          search={(prev) => prev}
+                          className={`staffday-block${request ? " is-request" : ""}${b.needsHuman ? " is-needs" : ""}`}
+                          style={{
+                            top,
+                            height,
+                            left: `calc(${(lane.at / lane.of) * 100}% + 4px)`,
+                            width: `calc(${100 / lane.of}% - 6px)`,
+                            right: "auto",
+                          }}
+                          title={`${clock} ${b.service}${b.customer ? ` · ${b.customer}` : ""}`}
+                          aria-label={`${clock} ${b.service}${b.customer ? `, ${b.customer}` : ""}`}
+                        >
+                          {lines.map((l) => (
+                            <span key={l.id} className={l.id === "who" ? "staffday-line hint" : "staffday-line"}>
+                              {l.clock && <b>{l.clock}</b>}
+                              {l.clock && l.text ? " " : ""}
+                              {l.text}
+                            </span>
+                          ))}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </section>

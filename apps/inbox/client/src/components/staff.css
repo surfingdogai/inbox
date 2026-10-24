@@ -76,11 +76,31 @@
 
 /* The day by staff */
 .staffday {
+  min-width: 0;
+}
+/* Only the columns scroll sideways: the title, the day's buttons and the hours stay where they are. */
+.staffday-scroll {
+  min-width: 0;
   overflow-x: auto;
 }
+/* The hours stay in view while the columns scroll under them: a pane of glass only once they do. */
+.staffday-ruler {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  margin-right: -8px;
+  padding-right: 8px;
+}
+.staffday-scroll.is-scrolled .staffday-ruler {
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(12px);
+  border-right: 1px solid var(--hairline);
+}
+/* As wide as its columns, so the hours can stay in view across all of them. */
 .staffday-grid {
   display: grid;
   gap: 8px;
+  width: max-content;
   min-width: 100%;
 }
 .staffday-col {
@@ -162,6 +182,13 @@
   text-decoration: none;
   color: var(--ink);
   transition: transform 160ms ease;
+}
+/* A line of a block: whole, or ended with an ellipsis, never wrapped into the next. */
+.staffday-line {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .staffday-block:hover {
   transform: translateX(1px);

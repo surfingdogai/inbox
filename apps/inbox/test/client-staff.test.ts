@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  blockLines,
   DEPOSIT_PRESETS,
   datedSteps,
   depositKey,
@@ -114,5 +115,24 @@ describe("the name customers see", () => {
     expect(shownName("María José Ruiz", " María José ")).toBe("María José");
     expect(shownName("Mei Chen")).toBe("Mei");
     expect(shownName("Mei Chen", " ")).toBe("Mei");
+  });
+});
+
+describe("a booking on the day by staff", () => {
+  const b = { clock: "15:00", service: "Men's cut", customer: "Lena Fischer" };
+  it("says what fits its height, never a line cut through", () => {
+    // Half an hour (20 px): the start and the service, no customer under them.
+    expect(blockLines({ ...b, height: 20, narrow: false })).toEqual([
+      { id: "what", clock: "15:00", text: "Men's cut" },
+    ]);
+    // Three quarters (31 px): still one line.
+    expect(blockLines({ ...b, height: 31, narrow: false }).map((l) => l.id)).toEqual(["what"]);
+    // An hour (42 px): the customer too.
+    expect(blockLines({ ...b, height: 42, narrow: false }).map((l) => l.id)).toEqual(["what", "who"]);
+  });
+
+  it("names the service first beside another booking, the start under it when there is room", () => {
+    expect(blockLines({ ...b, height: 20, narrow: true })).toEqual([{ id: "what", text: "Men's cut" }]);
+    expect(blockLines({ ...b, height: 64, narrow: true }).map((l) => l.id)).toEqual(["what", "when", "who"]);
   });
 });
