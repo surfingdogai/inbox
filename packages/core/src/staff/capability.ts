@@ -331,12 +331,15 @@ export class StaffCapabilities {
       });
     }
     const before = await this.db.orm.select().from(serviceResources).where(eq(serviceResources.resourceId, staffId));
-    // Their own prices stay as the owner set them, unless the owner sets them.
+    // Their own prices stay as the owner set them, unless the owner sets them: never changed, and never
+    // dropped by untying them from the service (tied again, they would be at its own price).
     if (!isPerson(caller)) {
       for (const s of list) {
         const was = before.find((b) => b.serviceId === s.service_id)?.priceOverride ?? null;
         if (s.price_override !== undefined && (s.price_override ?? null) !== was) throw staffMoney();
       }
+      if (before.some((b) => b.priceOverride !== null && !list.some((s) => s.service_id === b.serviceId)))
+        throw staffMoney();
     }
     await this.db.batch([
       { sql: "DELETE FROM service_resources WHERE resource_id = ?", params: [staffId], method: "run" },

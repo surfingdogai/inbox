@@ -270,11 +270,13 @@ export class SetupCapabilities {
         ...(a.price ? { price: { value: a.price.value, currency: a.price.currency.toUpperCase() } } : {}),
       }));
       if (!isPerson(caller)) {
-        // The owner's AI may name and time add-ons; what one costs stays as the owner set it.
+        // The owner's AI may name and time add-ons; what one costs stays as the owner set it. A priced one
+        // stays too, by its id: sent again without it, it would be swapped for a copy that costs nothing.
         const priceOf = (x: { id: string; price?: { value: number; currency: string } | undefined }) =>
           x.price ? `${x.price.value} ${x.price.currency}` : "";
         const changed = next.some((a) => priceOf(a) !== priceOf(before.find((b) => b.id === a.id) ?? { id: a.id }));
-        if (changed) throw ownerMoney("add_ons", "What an add-on costs is the owner's to set.");
+        const dropped = before.some((b) => b.price && !next.some((a) => a.id === b.id));
+        if (changed || dropped) throw ownerMoney("add_ons", "What an add-on costs is the owner's to set.");
       }
       await this.published(
         caller,

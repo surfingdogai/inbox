@@ -564,16 +564,57 @@ describe("staff", () => {
   });
 
   it("are the owner's: the owner's AI may tie them to services, never set their price", async () => {
-    const { caps, fade, ravi } = await mapleAndFade();
+    const { caps, fade, beard, ravi } = await mapleAndFade();
     const ai: Caller = { ...owner, actor: { kind: "owner_ai", id: "ai", channel: "mcp_owner" } };
     await expect(
       caps.staff.update(ai, { staff_id: ravi.id, services: [{ service_id: fade.id, price_override: 3000 }] }),
     ).rejects.toMatchObject({ code: "not_allowed", details: { reason: "owner_money" } });
     const kept = await caps.staff.update(ai, { staff_id: ravi.id, services: [{ service_id: fade.id }] });
     expect(kept.services).toEqual([{ serviceId: fade.id, priceOverride: 5500, durationOverrideMin: null }]);
+    // Nor by untying them from it, to tie them again at the service's own price.
+    await expect(
+      caps.staff.update(ai, { staff_id: ravi.id, services: [{ service_id: beard.id }] }),
+    ).rejects.toMatchObject({ code: "not_allowed", details: { reason: "owner_money" } });
+    const still = await caps.staff.list(owner);
+    expect(still.find((x) => x.id === ravi.id)?.services.map((x) => [x.serviceId, x.priceOverride])).toEqual([
+      [fade.id, 5500],
+    ]);
+    // The owner may: it is their price.
+    const untied = await caps.staff.update(owner, { staff_id: ravi.id, services: [{ service_id: beard.id }] });
+    expect(untied.services.map((x) => x.serviceId)).toEqual([beard.id]);
     await expect(
       caps.setup.updateService(ai, { service_id: fade.id, deposit: { kind: "percent", value: 20 } }),
     ).rejects.toMatchObject({ code: "not_allowed" });
+  });
+
+  it("keep an add-on's price as the owner set it: the owner's AI cannot swap it for one that costs nothing", async () => {
+    const { caps, fade } = await mapleAndFade();
+    const ai: Caller = { ...owner, actor: { kind: "owner_ai", id: "ai", channel: "mcp_owner" } };
+    const towel = fade.addOns?.[0];
+    expect(towel).toMatchObject({ name: "Hot towel", price: { value: 1000, currency: "CAD" } });
+    // Sent again without its id or its price: refused, and still priced.
+    await expect(
+      caps.setup.updateService(ai, { service_id: fade.id, add_ons: [{ name: "Hot towel", duration_min: 15 }] }),
+    ).rejects.toMatchObject({ code: "not_allowed" });
+    // Dropped altogether: refused too.
+    await expect(caps.setup.updateService(ai, { service_id: fade.id, add_ons: [] })).rejects.toMatchObject({
+      code: "not_allowed",
+    });
+    // Named and timed again by its id, at its price: the AI's to do; an unpriced one beside it, too.
+    const renamed = await caps.setup.updateService(ai, {
+      service_id: fade.id,
+      add_ons: [
+        { id: towel?.id, name: "Hot towel & balm", duration_min: 20, price: { value: 1000, currency: "CAD" } },
+        { name: "Eyebrow tidy", duration_min: 5 },
+      ],
+    });
+    expect(renamed.addOns?.map((a) => [a.id === towel?.id, a.name, a.durationMin, a.price?.value ?? null])).toEqual([
+      [true, "Hot towel & balm", 20, 1000],
+      [false, "Eyebrow tidy", 5, null],
+    ]);
+    // The owner may take it off.
+    const none = await caps.setup.updateService(owner, { service_id: fade.id, add_ons: [] });
+    expect(none.addOns).toEqual([]);
   });
 });
 
