@@ -38,10 +38,13 @@ export async function ownerSalonLines(
   return out;
 }
 
-/** What a person must check before this booking is confirmed, when its create said so. */
+/**
+ * What a person must check before this booking is confirmed, when its create said so; once it is
+ * confirmed, what to check before the visit, with nothing more to confirm.
+ */
 export async function checkFirstOf(db: Db, itemId: string): Promise<string | null> {
   const { rows } = await db.client.query({
-    sql: `SELECT s.requires, f.name FROM item_events e
+    sql: `SELECT s.requires, f.name, i.state FROM item_events e
             JOIN items i ON i.id = e.item_id
             JOIN services s ON s.id = json_extract(i.payload, '$.reservationFor.serviceId')
             LEFT JOIN services f ON f.id = json_extract(s.requires, '$.serviceId')
@@ -60,5 +63,9 @@ export async function checkFirstOf(db: Db, itemId: string): Promise<string | nul
   const days = requires.withinDays ?? 0;
   const hours = leadHours({ serviceId: "", withinDays: days, atLeastHours: requires.atLeastHours });
   const span = hours > 0 ? `between ${days} days and ${hours} hours before` : `within ${days} days before`;
-  return `${String(r[1] ?? "what comes first")}, ${span}. Check this client has had it, then confirm.`;
+  const what = String(r[1] ?? "what comes first");
+  const open = r[2] === "requested" || r[2] === "needs_info" || r[2] === "proposed";
+  return open
+    ? `${what}, ${span}. Check this client has had it, then confirm.`
+    : `${what}, ${span}: check this client has had it.`;
 }

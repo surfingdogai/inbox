@@ -4,6 +4,7 @@ import {
   DEPOSIT_PRESETS,
   datedSteps,
   depositKey,
+  ownLengths,
   POLICY_PRESETS,
   policyKey,
   policyWords,
@@ -134,5 +135,23 @@ describe("a booking on the day by staff", () => {
   it("names the service first beside another booking, the start under it when there is room", () => {
     expect(blockLines({ ...b, height: 20, narrow: true })).toEqual([{ id: "what", text: "Men's cut" }]);
     expect(blockLines({ ...b, height: 64, narrow: true }).map((l) => l.id)).toEqual(["what", "when", "who"]);
+  });
+
+  it("gives a long booking's service the room it has, so its name reads whole", () => {
+    // Five and a half hours (240 px of block): the service wraps onto every line the customer leaves.
+    const long = blockLines({ ...b, service: "Knotless braids, waist length", height: 240, narrow: false });
+    expect(long.map((l) => l.id)).toEqual(["what", "who"]);
+    expect(long[0]?.rows).toBe(Math.floor((240 - 8) / 14.5) - 1);
+    // Exactly as tall as its lines: none to spare, one line each.
+    expect(blockLines({ ...b, height: 42, narrow: false }).every((l) => l.rows === undefined)).toBe(true);
+  });
+});
+
+describe("someone's own length for a service", () => {
+  it("offers, in one press, the lengths around the usual one", () => {
+    expect(ownLengths(300).map((l) => l.label)).toEqual(["Usual (5 h)", "4 h 30", "5 h 30", "6 h"]);
+    expect(ownLengths(300).map((l) => l.value)).toEqual([null, 270, 330, 360]);
+    // Never nothing: half an hour less of half an hour is left out.
+    expect(ownLengths(30).map((l) => l.value)).toEqual([null, 60, 90]);
   });
 });

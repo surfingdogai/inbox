@@ -568,7 +568,7 @@ function SetupWizard() {
           <>
             <h2 className="sec">Who works here?</h2>
             <p className="lede small">
-              The people clients book by name, and what each gives. Clients see the first word of a name unless you
+              The people customers book by name, and what each gives. Customers see the first word of a name unless you
               change it. Their own prices, hours and photos are in Settings, under Staff.
             </p>
             <div className="stack">
@@ -588,7 +588,7 @@ function SetupWizard() {
                     </Field>
                     <Field
                       id={`su-sn-${p.id}`}
-                      label="Clients see"
+                      label="Customers see"
                       hint={p.name.trim() && !p.shown?.trim() ? `Default: ${shownName(p.name)}.` : undefined}
                     >
                       <input

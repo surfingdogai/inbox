@@ -160,7 +160,11 @@ export function StaffDayCard({
                           aria-label={`${clock} ${b.service}${b.customer ? `, ${b.customer}` : ""}`}
                         >
                           {lines.map((l) => (
-                            <span key={l.id} className={l.id === "who" ? "staffday-line hint" : "staffday-line"}>
+                            <span
+                              key={l.id}
+                              className={`staffday-line${l.id === "who" ? " hint" : ""}${l.rows ? " is-wrap" : ""}`}
+                              style={l.rows ? { WebkitLineClamp: l.rows } : undefined}
+                            >
                               {l.clock && <b>{l.clock}</b>}
                               {l.clock && l.text ? " " : ""}
                               {l.text}

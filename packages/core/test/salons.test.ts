@@ -2024,8 +2024,13 @@ describe("emails", () => {
     expect(String(rows[0]?.[0])).toContain(`Check first: ${patch.name}`);
     // And the booking says it beside its confirm.
     expect((await caps.getItem(owner, { item_id: r.view.item.id })).check_first).toMatch(
-      /^Patch test, between 180 days/,
+      /^Patch test, between 180 days.*then confirm\.$/,
     );
+    // Once a person confirmed it, what to check before the visit, and nothing more to confirm.
+    await transitionItem(db, owner, { itemId: r.view.item.id, event: "confirm" });
+    const after = (await caps.getItem(owner, { item_id: r.view.item.id })).check_first;
+    expect(after).toMatch(/^Patch test, between 180 days and 48 hours before: check this client has had it\.$/);
+    expect(after).not.toContain("confirm");
   });
 });
 

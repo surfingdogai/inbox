@@ -435,7 +435,7 @@ describe("the setup wizard's doors", () => {
   });
 
   it("show the systems a kind runs its days in first, and say plainly which need setup", () => {
-    const way = (status: "ready" | "soon" | "setup", hint?: string) =>
+    const way = (status: "ready" | "soon" | "setup", hint?: string, tag?: string) =>
       ({
         kind: "x",
         preset: null,
@@ -445,6 +445,7 @@ describe("the setup wizard's doors", () => {
         form: [],
         action: "Connect",
         ...(hint ? { hint } : {}),
+        ...(tag ? { tag } : {}),
       }) as const;
     const card = (id: string, group: GalleryCard["group"], status: "ready" | "soon", ways: GalleryCard["ways"]) =>
       ({ id, title: id, line: `${id} line`, group, industries: [], status, ways }) as GalleryCard;
@@ -453,6 +454,9 @@ describe("the setup wizard's doors", () => {
       card("calendar", "calendars", "ready", [way("ready")]),
       card("gated", "lodging", "soon", [way("setup", "Needs a partner key on this server.")]),
       card("later", "lodging", "soon", [way("soon")]),
+      card("waits", "booking", "soon", [
+        way("setup", "Not available yet: it has to approve it first.", "Not available yet"),
+      ]),
     ];
     expect(cardsFor(cards, ["lodging", "calendars"]).map((c) => c.id)).toEqual(["gated", "later", "calendar"]);
     expect(cardState(cards[0] as GalleryCard)).toEqual({ tag: null, hint: null });
@@ -461,6 +465,11 @@ describe("the setup wizard's doors", () => {
       hint: "Needs a partner key on this server.",
     });
     expect(cardState(cards[3] as GalleryCard)).toEqual({ tag: "Soon", hint: null });
+    // One that waits on its company says so, as Settings → Integrations does: nothing for the owner to set up.
+    expect(cardState(cards[4] as GalleryCard)).toEqual({
+      tag: "Not available yet",
+      hint: "Not available yet: it has to approve it first.",
+    });
   });
 
   it("make what is offered asked about for a price when agents cannot book", () => {

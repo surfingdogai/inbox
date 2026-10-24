@@ -2,13 +2,13 @@ import { ArrowDown, ArrowUp, CalendarDays, ImagePlus, Plus, Trash2 } from "lucid
 import { type FormEvent, useId, useState } from "react";
 import { majorText, parseMajor } from "../lib/actions";
 import { problemOf } from "../lib/api";
-import { lengthWords } from "../lib/catalogue";
+import { describePrice } from "../lib/catalogue";
 import { minorUnitsOf } from "../lib/currencies";
-import { formatMoney } from "../lib/format";
 import { checkDraft, toDraft } from "../lib/hours";
 import { useIntegrations, useServices } from "../lib/queries";
 import {
   initials,
+  ownLengths,
   type StaffBody,
   type StaffServiceBody,
   type StaffView,
@@ -65,7 +65,9 @@ export function StaffCard({ currency }: { currency: string }) {
           </button>
         )}
       </SectionHead>
-      <p className="lede small">Who people book by name. Customers see a first name and a photo, nothing else.</p>
+      <p className="lede small">
+        Who people book by name. Customers see the name you choose and a photo, nothing else.
+      </p>
       {notice && <Toast tone="success" text={notice} onDismiss={() => setNotice(null)} />}
       {staff.isPending && <div className="skeleton sk-line" />}
       {staff.isError && (
@@ -180,8 +182,14 @@ function StaffLine({
         <Avatar name={s.name} photo={s.photo} />
         <div>
           <div className="t">
-            <b>{s.publicName}</b>
-            {s.name !== s.publicName && <span className="hint"> · {s.name}</span>}
+            <span className="staff-names">
+              <b>{s.publicName}</b>
+              {s.name !== s.publicName && (
+                <span className="hint staff-fullname" title={s.name}>
+                  {s.name}
+                </span>
+              )}
+            </span>
             {!s.active && <span className="pill pill-xs">Off the list</span>}
             {s.source !== "builtin" && (
               <span className="pill pill-xs">From {s.source === "phorest" ? "Phorest" : s.source}</span>
@@ -256,15 +264,6 @@ interface Gives {
   /** In minutes; "" for the service's own length. */
   readonly length: string;
 }
-
-/** Their length for a service: its usual one first, named. */
-const lengthsFor = (usual: number) => [
-  { value: null, label: `Usual (${lengthWords(usual)})` },
-  { value: 30, label: "30 min" },
-  { value: 45, label: "45 min" },
-  { value: 60, label: "1 h" },
-  { value: 90, label: "1 h 30" },
-];
 
 function StaffEditor({
   initial,
@@ -460,8 +459,8 @@ function StaffEditor({
               {fixed && (
                 <Field
                   id={`${id}-${svc.id}-price`}
-                  label="Their price"
-                  hint={`Default ${formatMoney({ value: svc.price?.value ?? 0, currency: svc.price?.currency ?? currency })}`}
+                  label={svc.price?.per === "person" ? "Their price, per person" : "Their price"}
+                  hint={`Default ${describePrice(svc.price, currency)}`}
                 >
                   <MoneyInput
                     id={`${id}-${svc.id}-price`}
@@ -477,7 +476,7 @@ function StaffEditor({
                 legend="Their length"
                 value={g.length}
                 unit="min"
-                presets={lengthsFor(svc.durationMin)}
+                presets={ownLengths(svc.durationMin)}
                 min={5}
                 max={1440}
                 onChange={(length) => setGives((x) => ({ ...x, [svc.id]: { ...g, length } }))}

@@ -4,6 +4,26 @@
   align-items: center;
   gap: 10px;
 }
+/* Their own name beside what customers see: on the same line, cut short rather than wrapped onto its own. */
+.staff-names {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+.staff-names b {
+  flex: none;
+}
+.staff-fullname {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.staff-fullname::before {
+  content: "· ";
+}
 .staff-avatar {
   flex: none;
   width: 36px;
@@ -83,7 +103,11 @@
   min-width: 0;
   overflow-x: auto;
 }
-/* The hours stay in view while the columns scroll under them: a pane of glass only once they do. */
+/*
+ * The hours stay in view while the columns scroll under them: once they do, on a pane that hides them,
+ * the card's glass over its own fallback surface over the ground, opaque in both themes. Not a blur: the card and the
+ * inbox are blurred already, and a third blur inside them does not render.
+ */
 .staffday-ruler {
   position: sticky;
   left: 0;
@@ -92,8 +116,9 @@
   padding-right: 8px;
 }
 .staffday-scroll.is-scrolled .staffday-ruler {
-  background: var(--glass-bg-strong);
-  backdrop-filter: blur(12px);
+  background:
+    linear-gradient(var(--glass-bg-strong), var(--glass-bg-strong)),
+    linear-gradient(var(--glass-fallback), var(--glass-fallback)), var(--ground);
   border-right: 1px solid var(--hairline);
 }
 /* As wide as its columns, so the hours can stay in view across all of them. */
@@ -189,6 +214,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* The service on a tall block: wrapped onto the lines it has room for, the last ended with an ellipsis. */
+.staffday-line.is-wrap {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .staffday-block:hover {
   transform: translateX(1px);

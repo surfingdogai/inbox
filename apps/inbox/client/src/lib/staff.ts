@@ -1,6 +1,7 @@
 import type { DatedPolicy, DepositRule, Policy, StaffDay, StaffView } from "@surfingdog/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ownerCall } from "./api";
+import { lengthWords } from "./catalogue";
 import type { Money, Weekly } from "./types";
 
 /**
@@ -94,18 +95,32 @@ export function shownName(name: string, publicName?: string | null): string {
   return name.trim().split(/\s+/u)[0] || "Staff";
 }
 
+/**
+ * The lengths offered for someone's own length of a service, each one press: its usual one first,
+ * named, then half an hour less, half an hour more and an hour more (none of nothing).
+ */
+export function ownLengths(usual: number): { readonly value: number | null; readonly label: string }[] {
+  return [
+    { value: null, label: `Usual (${lengthWords(usual)})` },
+    ...[usual - 30, usual + 30, usual + 60].filter((m) => m > 0).map((m) => ({ value: m, label: lengthWords(m) })),
+  ];
+}
+
 /** One line of a booking's block on the day by staff: what it is, when it starts, or who it is for. */
 export interface BlockLine {
   readonly id: "what" | "when" | "who";
   readonly clock?: string | undefined;
   readonly text: string;
+  /** How many lines the service may wrap onto, in a block taller than its lines: absent, one. */
+  readonly rows?: number | undefined;
 }
 
 /**
  * What a booking's block on the day by staff says, as far as its height allows: the start and the
  * service first (in a lane it shares with another booking, the service alone, so its name is not lost
  * behind the time, and the start under it), then the customer. A line that does not fit is left out,
- * never cut through: a block of half an hour is one line.
+ * never cut through: a block of half an hour is one line. A taller block gives the service the room
+ * left, so a long name reads whole on a long booking.
  */
 export function blockLines(b: {
   readonly clock: string;
@@ -124,7 +139,9 @@ export function blockLines(b: {
       ]
     : [{ id: "what", clock: b.clock, text: b.service }];
   if (b.customer) lines.push({ id: "who", text: b.customer });
-  return lines.slice(0, fits);
+  const shown = lines.slice(0, fits);
+  const spare = fits - shown.length;
+  return spare > 0 ? shown.map((l) => (l.id === "what" ? { ...l, rows: 1 + spare } : l)) : shown;
 }
 
 /**
