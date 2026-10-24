@@ -8,6 +8,7 @@ import {
   offerSummary,
   orderLinesText,
   personalisedLine,
+  salonLines,
   statusSentence,
   waitingOn,
   whatOf,
@@ -427,12 +428,27 @@ export class CustomerDoors {
     const flags = await withdrawalFlagsOf(this.db, type, payload);
     const excepted = flags.find((f) => f !== "standard") as keyof typeof words.except | undefined;
     const start = type === "booking" ? Date.parse((payload as PayloadOf<"booking">).startTime) : Number.NaN;
+    // A salon's deposit or own cancellation terms (ADR-035) give way to the right of withdrawal while it
+    // runs: a paid booking cancelled then is withdrawn from, and all that was paid comes back. Nothing is
+    // paid yet as they confirm: until it is, cancelling is under those terms, and they are told so.
+    const terms = type === "booking" && (payload.deposit !== undefined || payload.policy !== undefined);
     const withdrawal = excepted
       ? words.except[excepted]
       : type === "order"
         ? words.lineGoods(vars({ days }))
-        : `${words.lineService(vars({ days }))}${start - now < settings.returns.days * 86_400_000 ? ` ${words.startsEarly}` : ""}`;
-    return [main, personalisedLine(payload, a), trader, withdrawal, c.confirmStep.obligation(vars({ total }))]
+        : [
+            words.lineService(vars({ days })),
+            ...(terms ? [words.paidBack, words.unpaidTerms] : []),
+            ...(start - now < settings.returns.days * 86_400_000 ? [words.startsEarly] : []),
+          ].join(" ");
+    return [
+      main,
+      type === "booking" ? salonLine(payload as PayloadOf<"booking">, a) : "",
+      personalisedLine(payload, a),
+      trader,
+      withdrawal,
+      c.confirmStep.obligation(vars({ total })),
+    ]
       .filter(Boolean)
       .join(" ");
   }
@@ -749,6 +765,11 @@ export class CustomerDoors {
         ) {
           return this.acceptancePassedOn(c, item, hashInput, acceptanceText(offer, audience));
         }
+        // A time the salon's own system holds is confirmed by a person, who writes it there first
+        // (ADR-035): their yes goes to that person, never refused.
+        if (error instanceof WriteError && error.code === "guard_failed" && guardOf(error) === "system_first") {
+          return this.acceptancePassedOn(c, item, hashInput, acceptanceText(offer, audience));
+        }
         throw error;
       }
     }
@@ -765,7 +786,7 @@ export class CustomerDoors {
       view: await this.present(result, fresh, nowOf(c)),
       waiting_on: "us",
       appended: true,
-      passed_on: changePassedOn(result, fresh),
+      passed_on: passedOnText(result, fresh),
       replayed,
     };
   }
@@ -1408,7 +1429,11 @@ export class CustomerDoors {
           return { page: await this.passOn(ctx, caller, String(input?.startTime ?? ""), reason) };
         }
         // Their yes to our change, which can no longer be made online: a person takes it, never refused.
-        if (error.code === "guard_failed" && row.action === "accept_change" && ACCEPT_PASSED_ON.has(guardOf(error))) {
+        if (
+          error.code === "guard_failed" &&
+          ((row.action === "accept_change" && ACCEPT_PASSED_ON.has(guardOf(error))) ||
+            (row.action === "accept_time" && guardOf(error) === "system_first"))
+        ) {
           return { page: await this.passOnAcceptance(ctx, caller) };
         }
         // A withdrawal that can no longer be made online: a return we answer, once the goods reached
@@ -2185,13 +2210,13 @@ export class CustomerDoors {
   private async passOnAcceptance(ctx: LinkContext, caller: Caller): Promise<CustomerPage> {
     const { item, audience } = ctx;
     const offer = await openOffer(item, { minNoticeMin: audience.minNoticeMin });
-    if (offer?.kind === "change") {
+    if (offer?.kind === "change" || offer?.kind === "time") {
       await once(this.db, caller, "public.link_acceptance", { link: ctx.row.jti }, async () => {
         await appendThreadEntry(this.db, caller, item, acceptanceText(offer, audience), "in");
         return true;
       });
     }
-    return this.plain(ctx, 200, changePassedOn(item, audience));
+    return this.plain(ctx, 200, passedOnText(item, audience));
   }
 
   /**
@@ -2452,6 +2477,16 @@ function standingOffer(item: Item): OpenOffer {
 }
 
 /** That their change went to a person, and the promise stands as agreed, in the business's words. */
+/**
+ * What a customer reads once their yes went to a person: what was agreed stands, for a change to it;
+ * for a time we proposed that nothing binds yet (one the salon's own system holds, ADR-035), only
+ * that a person answers.
+ */
+function passedOnText(item: Item, a: Audience): string {
+  if (item.type === "booking" && item.state === "proposed") return copyFor(a.lang).problems.passedOn(vars({}));
+  return changePassedOn(item, a);
+}
+
 function changePassedOn(item: Item, a: Audience): string {
   const c = copyFor(a.lang);
   return c.problems.changePassedOn(
@@ -2496,4 +2531,9 @@ async function lastEvent(db: Db, itemId: string): Promise<{ event: string; actor
   });
   const r = rows[0];
   return r ? { event: String(r[0]), actorKind: String(r[1]) } : null;
+}
+
+/** A salon's booking's own lines (ADR-035), as the customer reads them before they confirm. */
+function salonLine(p: PayloadOf<"booking">, a: Audience): string {
+  return salonLines(p, a).join(" ");
 }

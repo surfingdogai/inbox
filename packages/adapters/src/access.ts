@@ -46,6 +46,12 @@ export const ROUTE_SCOPES: Readonly<Record<string, readonly string[]>> = {
   "POST /services": ["catalogue:write"],
   "PATCH /services/:id": ["catalogue:write"],
   "DELETE /services/:id": ["catalogue:write"],
+  // Staff (ADR-035): their own prices are the owner's in person, checked by the capability.
+  "GET /staff": [READ_SETUP, "catalogue:write"],
+  "POST /staff": ["catalogue:write"],
+  "PATCH /staff/:id": ["catalogue:write"],
+  "DELETE /staff/:id": ["catalogue:write"],
+  "GET /staff/day": ["inbox:read"],
   "GET /products": [READ_SETUP, "catalogue:write"],
   "POST /products": ["catalogue:write"],
   "PATCH /products/:id": ["catalogue:write"],
@@ -90,6 +96,9 @@ export const ROUTE_SCOPES: Readonly<Record<string, readonly string[]>> = {
   "PATCH /integrations/:id": ["integrations:write"],
   "POST /integrations/:id/sync": ["integrations:write"],
   "POST /integrations/:id/link": ["integrations:write"],
+  // Reading a tool's setup; keeping it is the owner's in person, checked by the capability.
+  "GET /integrations/:id/setup": [READ_SETUP, "integrations:write"],
+  "POST /integrations/:id/setup": ["*"],
   "DELETE /integrations/:id": ["integrations:write"],
   "GET /events": ["events:read", "inbox:read"],
   "GET /api-keys": [READ_SETUP, "keys:write"],

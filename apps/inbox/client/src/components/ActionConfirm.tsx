@@ -11,11 +11,14 @@ import {
   moneyMajor,
   networkNote,
   parseMoney,
+  proposedPrice,
+  proposePriceStart,
   sumLines,
 } from "../lib/actions";
 import type { ApiProblem } from "../lib/api";
 import { formatDateTime, formatMoney } from "../lib/format";
 import { useSettings } from "../lib/queries";
+import { depositPaid } from "../lib/staff";
 import type { Item, Money, Transition } from "../lib/types";
 
 /**
@@ -70,7 +73,11 @@ export function ActionConfirm({
   const booking = item.type === "booking" ? item.payload : undefined;
   const [start, setStart] = useState(isoToLocal(booking?.startTime));
   const [end, setEnd] = useState(isoToLocal(booking?.endTime));
-  const [price, setPrice] = useState(moneyMajor(booking?.totalPrice));
+  // For anyone, another time goes with whoever is free then, at their price unless the owner names one.
+  const [priceStart] = useState(() => proposePriceStart(booking, transition.event));
+  const [price, setPrice] = useState(priceStart);
+  const withStaff = booking?.anyStaff === true || typeof booking?.resourceId === "string";
+  const forAnyone = booking?.anyStaff === true && transition.event === "propose";
 
   const [total, setTotal] = useState("");
   const [validThrough, setValidThrough] = useState("");
@@ -103,7 +110,13 @@ export function ActionConfirm({
   const [method, setMethod] = useState<"post" | "drop_off" | "collection">("post");
   const [address, setAddress] = useState("");
   const [ref, setRef] = useState("");
-  const [amount, setAmount] = useState("");
+  // A booking's deposit still to pay (ADR-035): what the owner most likely took at the desk, said first.
+  const depositLeft = transition.event === "record_payment" && booking ? depositPaid(booking)?.left : undefined;
+  const depositDue =
+    depositLeft && depositLeft.value > 0 && depositLeft.currency.toUpperCase() === currency.toUpperCase()
+      ? depositLeft
+      : undefined;
+  const [amount, setAmount] = useState(() => (depositDue ? moneyMajor(depositDue) : ""));
   const [url, setUrl] = useState("");
 
   const build = (): { ok: true; input: Record<string, unknown> | undefined } | { ok: false; problem: string } => {
@@ -140,8 +153,8 @@ export function ActionConfirm({
         const endTime = localToIso(end);
         if (!startTime || !endTime) return { ok: false, problem: "Add the start and the end time." };
         if (endTime <= startTime) return { ok: false, problem: "The end must come after the start." };
-        const totalPrice = price.trim() ? parseMoney(price, currency) : undefined;
-        if (price.trim() && !totalPrice) return { ok: false, problem: "The price must be a number, like 45 or 45.90." };
+        const totalPrice = proposedPrice(price, priceStart, currency);
+        if (totalPrice === null) return { ok: false, problem: "The price must be a number, like 45 or 45.90." };
         return {
           ok: true,
           input: {
@@ -480,6 +493,7 @@ export function ActionConfirm({
               className="input"
               inputMode="decimal"
               value={price}
+              placeholder={forAnyone ? moneyMajor(booking?.totalPrice) : undefined}
               onChange={(e) => setPrice(e.target.value)}
             />
           </div>
@@ -498,6 +512,9 @@ export function ActionConfirm({
           <div className="hint wide">
             Times are in your local time zone. The customer accepts it, declines it or picks another time, from our
             email or their assistant.
+            {withStaff && " The end follows the length of whoever it is with, when theirs is longer."}
+            {forAnyone &&
+              " For anyone, it goes with whoever is free then: left blank, the price is theirs, which the customer confirms."}
           </div>
         </div>
       )}
@@ -736,6 +753,13 @@ export function ActionConfirm({
               onChange={(e) => setAmount(e.target.value)}
             />
           </div>
+          {transition.event === "record_payment" && (
+            <div className="hint wide">
+              {depositDue
+                ? `The deposit still to pay. Left blank, it counts as that deposit, ${formatMoney(depositDue)}.`
+                : "Left blank, it counts as the whole price paid."}
+            </div>
+          )}
         </div>
       )}
 

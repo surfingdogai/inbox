@@ -12,7 +12,18 @@ import {
 } from "../client/src/lib/hours";
 import { NETWORKS_WHY } from "../client/src/lib/networks";
 import { EMPTY_RULE, parseValue, showValue, toDefinition, toForm } from "../client/src/lib/rules";
-import { joinNetworkDoc, networkOffer, offerBodies, ownerEmailDoc, SETUP_NETWORK } from "../client/src/lib/setup";
+import {
+  joinNetworkDoc,
+  KINDS,
+  kindOf,
+  networkOffer,
+  offerBodies,
+  ownerEmailDoc,
+  SETUP_NETWORK,
+  staffBodies,
+  withOffered,
+  wizardSteps,
+} from "../client/src/lib/setup";
 
 // The rule editor reads rules back as the server words them, and turns its forms into the JSON the engine runs.
 describe("client rule summaries", () => {
@@ -196,6 +207,64 @@ describe("the setup wizard's offers", () => {
   it("saves where the owner hears of new requests as one merged key, empty meaning their sign-in address", () => {
     expect(ownerEmailDoc(" ana@oficinamare.pt ")).toEqual({ notifications: { ownerEmail: "ana@oficinamare.pt" } });
     expect(ownerEmailDoc("")).toEqual({ notifications: { ownerEmail: null } });
+  });
+});
+
+describe("the setup wizard's staff", () => {
+  it("asks a salon who works here, after what it offers, and nobody else", () => {
+    expect(wizardSteps(kindOf("salon")).map((s) => s.id)).toEqual([
+      "kind",
+      "you",
+      "doors",
+      "offer",
+      "staff",
+      "hours",
+      "answering",
+    ]);
+    expect(wizardSteps(kindOf("appointments")).map((s) => s.id)).not.toContain("staff");
+    expect(wizardSteps(undefined).map((s) => s.id)).not.toContain("staff");
+    // Two choices never both claim salons.
+    expect(KINDS.filter((k) => /salon/i.test(`${k.label} ${k.line}`)).map((k) => k.key)).toEqual(["salon"]);
+  });
+
+  it("saves each named person with the services they give, in the order they were added", () => {
+    expect(
+      staffBodies([
+        { name: " Ọláolúwa Bello ", services: ["svc-cut", "svc-colour"] },
+        { name: " ", services: ["svc-cut"] },
+        { name: "Kenji", services: [] },
+        // Family name first, or written without a space: the owner says what clients see.
+        { name: "Nguyễn Thu Hà", shown: " Hà ", services: [] },
+        { name: "김지우", shown: "지우", services: [] },
+        { name: "Amara Nwosu", shown: " ", services: [] },
+      ]),
+    ).toEqual([
+      { name: "Ọláolúwa Bello", sort: 0, services: [{ service_id: "svc-cut" }, { service_id: "svc-colour" }] },
+      { name: "Kenji", sort: 1, services: [] },
+      { name: "Nguyễn Thu Hà", sort: 2, public_name: "Hà", services: [] },
+      { name: "김지우", sort: 3, public_name: "지우", services: [] },
+      { name: "Amara Nwosu", sort: 4, services: [] },
+    ]);
+    // Kept already, then its name to show emptied: back to the default, not the old name.
+    expect(
+      staffBodies([
+        { name: "Nguyễn Thu Hà", shown: "", services: [], saved: "01STAFF" },
+        { name: "María José Ruiz", shown: "María José", services: [], saved: "01STAFF2" },
+      ]),
+    ).toEqual([
+      { name: "Nguyễn Thu Hà", sort: 0, public_name: null, services: [] },
+      { name: "María José Ruiz", sort: 1, public_name: "María José", services: [] },
+    ]);
+  });
+
+  it("gives everyone not yet picked for every service offered, as the list of them arrives", () => {
+    // The services list arrives in two reads: the one just added comes second, and is given too.
+    const first = withOffered([{ id: 1, name: "Ana", services: [] }], ["svc-cut"]);
+    expect(withOffered(first, ["svc-cut", "svc-colour"])[0]?.services).toEqual(["svc-cut", "svc-colour"]);
+    // Picked by the owner, or kept already: left as they are.
+    const picked = { id: 2, name: "Mei", services: ["svc-cut"], picked: true };
+    const kept = { id: 3, name: "Ravi", services: ["svc-cut"], saved: "01STAFF" };
+    expect(withOffered([picked, kept], ["svc-cut", "svc-colour"])).toEqual([picked, kept]);
   });
 });
 

@@ -45,6 +45,8 @@ export interface GalleryWay {
   readonly note?: string | undefined;
   readonly hint?: string | undefined;
   readonly href?: string | undefined;
+  /** The few words on its tile while it is not ready, when not "Needs setup": "Not available yet". */
+  readonly tag?: string | undefined;
   /**
    * For a payment platform: where it sends what it says (this inbox's own address) and which events,
    * for an owner whose key cannot add the webhook itself and adds it by hand. Absent when this inbox
@@ -226,6 +228,27 @@ export const GALLERY: readonly CardSpec[] = [
       { kind: "square", preset: "oauth", label: "Sign in with Square" },
     ],
   },
+  // Booking systems (ADR-035): a salon's own system, which takes each booking first. Each needs
+  // something only the company can arrange, so each says "set up" until then.
+  {
+    id: "phorest",
+    title: "Phorest",
+    line: "Services, staff and bookings",
+    group: "booking",
+    industries: ["salons"],
+    ways: [
+      { kind: "phorest", preset: "eu", label: "Phorest · Europe" },
+      { kind: "phorest", preset: "us", label: "Phorest · Americas & Australia" },
+    ],
+  },
+  {
+    id: "mindbody",
+    title: "Mindbody",
+    line: "Services, staff and bookings",
+    group: "booking",
+    industries: ["salons", "gyms"],
+    ways: [{ kind: "mindbody", preset: null, label: "Mindbody" }],
+  },
 ];
 
 /** The card a connection belongs to, for its tile's state. */
@@ -247,10 +270,20 @@ export function leanOf(counts: { readonly services: number; readonly products: n
   return null;
 }
 
-/** The groups in the order this inbox sees them: a shop sees its shop and till first. */
-export function galleryGroups(lean: Lean): GalleryGroup[] {
+/**
+ * The groups in the order this inbox sees them: a shop sees its shop and till first. A group the
+ * industry tracks add (ADR-032) is shown once it has a card here: booking systems after calendars for
+ * a business with services to book, any other after the rest.
+ */
+export function galleryGroups(lean: Lean, cards: readonly Pick<GalleryCard, "group">[] = []): GalleryGroup[] {
   const order: ConnectorGroup[] =
     lean === "shop" ? ["shops", "payments", "calendars"] : ["calendars", "payments", "shops"];
+  const present = new Set(cards.map((c) => c.group));
+  if (present.has("booking") && !order.includes("booking")) {
+    if (lean === "shop") order.push("booking");
+    else order.splice(order.indexOf("calendars") + 1, 0, "booking");
+  }
+  for (const g of present) if (!order.includes(g)) order.push(g);
   return order.map((id) => ({ id, label: GROUP_LABELS[id] }));
 }
 
@@ -349,6 +382,7 @@ function wayOf(
     ...(note ? { note } : {}),
     ...(unready?.hint ? { hint: unready.hint } : {}),
     ...(unready?.href ? { href: unready.href } : {}),
+    ...(unready?.tag ? { tag: unready.tag } : {}),
     ...(def.hookEvents && live && opts.hookBase
       ? { hook: { url: `${opts.hookBase}${w.kind}`, events: def.hookEvents } }
       : {}),

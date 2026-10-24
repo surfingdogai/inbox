@@ -32,16 +32,36 @@ const DAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 export const NO_HOURS: Weekly = {};
 
 /**
- * The weekly hours a service is booked in: its own, else the business's, else none. Hours are never
- * made up: a business that saved none is open to no booking, whatever it lists.
+ * The weekly hours a service is booked in: with a member of staff, theirs when they set some (ADR-035);
+ * else the service's own, else the business's, else none. Hours are never made up: a business that
+ * saved none is open to no booking, whatever it lists. One member of staff's rows are never another's
+ * nor the business's.
  */
 export function weeklyFor(
-  rules: readonly { readonly serviceId: string | null; readonly weekly: unknown }[],
+  rules: readonly {
+    readonly serviceId: string | null;
+    readonly weekly: unknown;
+    readonly resourceId?: string | null | undefined;
+  }[],
   serviceId: string,
+  resourceId?: string | undefined,
 ): Weekly {
-  return (rules.find((r) => r.serviceId === serviceId)?.weekly ??
-    rules.find((r) => !r.serviceId)?.weekly ??
+  const own = resourceId ? rules.find((r) => r.resourceId === resourceId && !r.serviceId)?.weekly : undefined;
+  const shared = rules.filter((r) => !r.resourceId);
+  return (own ??
+    shared.find((r) => r.serviceId === serviceId)?.weekly ??
+    shared.find((r) => !r.serviceId)?.weekly ??
     NO_HOURS) as Weekly;
+}
+
+/**
+ * A member of staff a time is looked for with (ADR-035): their claims key, how many bookings they take
+ * at once, and how long the service takes with them (their own length, and the add-ons).
+ */
+export interface SlotResource {
+  readonly id: string;
+  readonly capacity: number;
+  readonly durationMin: number;
 }
 
 /** Whether a service is asked about for a price rather than booked (`price.model` "quote"). */
@@ -95,6 +115,10 @@ export async function findSlots(
     minNoticeMin: number;
     /** A booking looking for somewhere to move: its own places do not count as taken. */
     exceptItemId?: string | undefined;
+    /** With one member of staff: their hours, their places, their length (ADR-035). */
+    resource?: SlotResource | undefined;
+    /** How long it takes, when not the service's own length: its add-ons added (ADR-035). */
+    durationMin?: number | undefined;
   },
 ): Promise<{ service: { id: string; name: string; durationMin: number }; slots: Slot[] }> {
   const [service] = await db.orm.select().from(services).where(eq(services.id, input.serviceId));
@@ -125,19 +149,23 @@ export async function findSlots(
         or(eq(availabilityRules.serviceId, service.id), isNull(availabilityRules.serviceId)),
       ),
     );
-  const weekly = weeklyFor(rules, service.id);
+  const r = input.resource;
+  const weekly = weeklyFor(rules, service.id, r?.id);
   const closures = await readClosures(db, service.id);
   const localDate = dateLocaliser(input.timezone);
-  const spec: SlotSpec = { ...service, resourceKey: `service:${service.id}` };
+  const spec: SlotSpec = r
+    ? { ...service, capacity: r.capacity, resourceKey: `resource:${r.id}`, serviceId: service.id }
+    : { ...service, resourceKey: `service:${service.id}`, serviceId: service.id };
   const step = service.granularityMin * 60_000;
-  const duration = service.durationMin * 60_000;
+  const durationMin = r?.durationMin ?? input.durationMin ?? service.durationMin;
+  const duration = durationMin * 60_000;
   const local = localiser(input.timezone);
   const slots: Slot[] = [];
   const limit = input.limit ?? 200;
   // The first start worth looking at: inside the window, and not before the notice runs out.
   const earliest = Math.max(from, input.now + input.minNoticeMin * 60_000);
   const first = Math.ceil(earliest / step) * step;
-  const serviceView = { id: service.id, name: service.name, durationMin: service.durationMin };
+  const serviceView = { id: service.id, name: service.name, durationMin };
   if (first + duration > to) return { service: serviceView, slots };
   // One read of the claims across the whole window, then pure arithmetic per candidate.
   // The whole window in one read. bucketRange, not bucketsFor: this is a range to read, not a
@@ -177,6 +205,8 @@ export async function slotOffered(
     readonly end: number;
     readonly timezone: string;
     readonly exceptItemId: string;
+    /** With one member of staff (ADR-035): their hours and their places. */
+    readonly resource?: Pick<SlotResource, "id" | "capacity"> | undefined;
   },
 ): Promise<boolean> {
   const [service] = await db.orm.select().from(services).where(eq(services.id, input.serviceId));
@@ -191,7 +221,7 @@ export async function slotOffered(
         or(eq(availabilityRules.serviceId, service.id), isNull(availabilityRules.serviceId)),
       ),
     );
-  const weekly = weeklyFor(rules, service.id);
+  const weekly = weeklyFor(rules, service.id, input.resource?.id);
   if (!withinOpening(localiser(input.timezone), weekly, input.start, input.end)) return false;
   const closures = await readClosures(db, service.id);
   const localDate = dateLocaliser(input.timezone);
@@ -200,7 +230,14 @@ export async function slotOffered(
     (isClosed(closures, localDate(input.start)) || isClosed(closures, localDate(input.end - 1)))
   )
     return false;
-  const spec: SlotSpec = { ...service, resourceKey: `service:${service.id}` };
+  const spec: SlotSpec = input.resource
+    ? {
+        ...service,
+        capacity: input.resource.capacity,
+        resourceKey: `resource:${input.resource.id}`,
+        serviceId: service.id,
+      }
+    : { ...service, resourceKey: `service:${service.id}`, serviceId: service.id };
   let buckets: number[];
   try {
     buckets = bucketsFor(spec, new Date(input.start).toISOString(), new Date(input.end).toISOString());

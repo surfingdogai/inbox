@@ -118,6 +118,8 @@ a {
   max-width: 900px;
   margin: 0 auto;
   display: grid;
+  /* One column no wider than the page: a long row inside never widens the page past the screen. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   align-content: start;
 }
@@ -633,6 +635,8 @@ a {
     border-bottom: 1px solid var(--hairline);
     overflow-x: auto;
     scrollbar-width: none;
+    /* What is placed out of sight in it (a switch's hidden legend) scrolls with it, never the page. */
+    position: relative;
   }
   .rail::-webkit-scrollbar {
     display: none;
@@ -754,6 +758,18 @@ a {
 }
 .catalogue-row .wide {
   grid-column: 1 / -1;
+}
+/* On a phone, a service's or a person's actions go under its lines, so the lines keep their width. */
+@media (max-width: 620px) {
+  .catalogue-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .catalogue-row > .rowx {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    /* Close together, so a service's five actions keep to one line. */
+    gap: 4px;
+  }
 }
 .catalogue-row.is-archived .catalogue-main {
   opacity: 0.7;
@@ -1356,6 +1372,16 @@ textarea.json-editor {
   border-color: transparent;
   background: color-mix(in oklab, var(--good, var(--ink)) 18%, transparent);
 }
+/* Seven steps (a salon's): the dots, and the current step's label beside its dot. */
+.steps-compact .stepdot {
+  flex: 0 0 auto;
+}
+.steps-compact .stepdot:not(.is-now) .l {
+  display: none;
+}
+.steps-compact .stepdot.is-now {
+  flex: 0 1 auto;
+}
 @media (max-width: 620px) {
   .stepdot .l {
     display: none;
@@ -1405,6 +1431,10 @@ textarea.json-editor {
 }
 .offer > .wide {
   grid-column: 1 / -1;
+}
+/* Someone a salon names at setup: their name and its remove on one line, the services they give below. */
+.offer.person {
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 @media (max-width: 620px) {
   .offer {
@@ -1492,6 +1522,19 @@ fieldset.chips,
     background-color 0.18s,
     border-color 0.18s,
     color 0.18s;
+}
+/* In a row of choices, a long name wraps inside its card: a chip never pushes the page sideways. */
+.chips .chip {
+  box-sizing: border-box;
+  max-width: 100%;
+  height: auto;
+  min-height: 30px;
+  padding-block: 5px;
+  border-radius: 15px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: start;
+  line-height: 1.35;
 }
 .chip:hover {
   background: var(--row-bg-hover);
@@ -2179,6 +2222,11 @@ legend.label-line {
     min-height: 40px;
     height: auto;
     padding: 0 14px;
+  }
+  .chips .chip {
+    min-height: 40px;
+    padding-block: 8px;
+    border-radius: 20px;
   }
   .chip-other .input,
   .input.unit-select {

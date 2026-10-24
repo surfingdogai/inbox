@@ -676,7 +676,10 @@ async function readState(caps: Capabilities, db: Db, caller: Caller): Promise<St
   const [profile, services, open, closures, rules, products, settings] = await Promise.all([
     caps.setup.getProfile(caller),
     caps.setup.listServices(caller),
-    db.client.query({ sql: "SELECT service_id, weekly FROM availability_rules WHERE kind = 'open'", method: "all" }),
+    db.client.query({
+      sql: "SELECT service_id, weekly FROM availability_rules WHERE kind = 'open' AND resource_id IS NULL",
+      method: "all",
+    }),
     readClosures(db),
     caps.setup.listRules(caller),
     db.client.query({ sql: "SELECT 1 FROM products WHERE active = 1 LIMIT 1", method: "all" }),

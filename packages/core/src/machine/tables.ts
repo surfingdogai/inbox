@@ -154,10 +154,15 @@ export const customerOrderChangeInput = z.object({
   reasonCode: reasonCodeSchema.optional(),
 });
 
-/** The owner records a customer's own cancellation: what they said, and when they asked (default now). */
+/**
+ * The owner records a customer's own cancellation: what they said, and when they asked (default now) —
+ * the arrival of their message when `entryId` names it, which is how the owner's AI dates it.
+ */
 export const recordCancelInput = z.object({
   note: z.string().trim().min(1, "say what the customer said").max(2_000),
   askedAt: isoDateTime.optional(),
+  /** The customer's message in which they asked to cancel (a thread entry of this item): its arrival dates it. */
+  entryId: z.string().min(1).max(64).optional(),
 });
 
 /**
@@ -545,6 +550,7 @@ export const bookingMachine: Machine<BookingState> = {
       effects: ["release_slot", "notify_owner", "notify_customer", "close"],
     },
     {
+      // A deposit or payment made under a salon's own terms (ADR-035): what they do not keep is owed back.
       event: "cancel",
       label: "Cancel booking",
       from: ["confirmed"],
@@ -552,7 +558,7 @@ export const bookingMachine: Machine<BookingState> = {
       by: customers,
       guards: ["customer_owns_item", "within_cancellation_window"],
       input: noteInput,
-      effects: ["release_slot", "issue_receipt:outcome", "notify_owner", "notify_customer", "close"],
+      effects: ["release_slot", "issue_receipt:outcome", "link_refund", "notify_owner", "notify_customer", "close"],
     },
     {
       // Fired by `cancel_item` once the window has closed, when the owner records late cancellations.
@@ -563,7 +569,7 @@ export const bookingMachine: Machine<BookingState> = {
       by: customers,
       guards: ["customer_owns_item", "outside_cancellation_window"],
       input: noteInput,
-      effects: ["release_slot", "issue_receipt:outcome", "notify_owner", "notify_customer", "close"],
+      effects: ["release_slot", "issue_receipt:outcome", "link_refund", "notify_owner", "notify_customer", "close"],
       unlisted: true,
     },
     {
@@ -609,7 +615,8 @@ export const bookingMachine: Machine<BookingState> = {
       internalNote: true,
       guards: ["asked_within_window"],
       input: recordCancelInput,
-      effects: ["release_slot", "issue_receipt:outcome", "notify_customer", "close"],
+      // What of a paid deposit comes back, as the customer's own cancel opens it (ADR-035).
+      effects: ["release_slot", "issue_receipt:outcome", "link_refund", "notify_customer", "close"],
     },
     {
       // Fired by the owner door once `record_cancel` found the window closed when the customer asked,
@@ -622,7 +629,7 @@ export const bookingMachine: Machine<BookingState> = {
       internalNote: true,
       guards: ["asked_outside_window"],
       input: recordCancelInput,
-      effects: ["release_slot", "issue_receipt:outcome", "notify_customer", "close"],
+      effects: ["release_slot", "issue_receipt:outcome", "link_refund", "notify_customer", "close"],
       unlisted: true,
     },
     // A payment or deposit for the booking: it gates nothing, but makes the booking a paid contract

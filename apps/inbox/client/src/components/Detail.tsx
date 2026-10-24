@@ -20,6 +20,7 @@ import { useItem, useItemPayments, useReply, useSettings, useTransition } from "
 import type { Party, Transition } from "../lib/types";
 import { ActionBar } from "./ActionBar";
 import { ActionConfirm } from "./ActionConfirm";
+import { BookingSalon } from "./BookingSalon";
 import { Conversation } from "./Conversation";
 import { CustomerBlock } from "./Customer";
 import { CustomerData } from "./CustomerData";
@@ -56,8 +57,10 @@ export function ItemDetailView({
   const query = useItem(id);
   // Pay links (ADR-023): an order's own, or, on a refund, the order's it pays back.
   const loaded = query.data?.item;
+  // A booking's deposit (ADR-035) has its link too.
+  const deposited = loaded?.type === "booking" && "deposit" in loaded.payload && loaded.payload.deposit !== undefined;
   const pays = useItemPayments(
-    loaded?.type === "order" ? loaded.id : loaded?.type === "refund" ? loaded.linkedItemId : null,
+    loaded?.type === "order" || deposited ? loaded.id : loaded?.type === "refund" ? loaded.linkedItemId : null,
     loaded?.type === "order" && WAITING.has(loaded.state),
   );
   const settings = useSettings();
@@ -190,7 +193,8 @@ export function ItemDetailView({
               : undefined
           }
         />
-        {item.type === "order" && (
+        <BookingSalon item={item} tz={tz} checkFirst={query.data.check_first} />
+        {(item.type === "order" || (item.type === "booking" && "deposit" in item.payload && item.payload.deposit)) && (
           <Payments itemId={item.id} payments={payments} none={pays.data?.none ?? null} tz={tz} />
         )}
         <Receipts receipts={query.data.receipts ?? []} tz={tz} />

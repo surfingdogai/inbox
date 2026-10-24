@@ -19,6 +19,15 @@ Settings → **Integrations**. Calendars, payments, and shops and tills, each a 
 
 On a hosted inbox, Google says **Soon** until Google has checked our sign-in.
 
+## Booking systems
+
+A salon's own booking system, written to first: each booking is confirmed here only once the system took it ([Salons](/docs/salons/)).
+
+| Card | Status |
+| --- | --- |
+| **Phorest** | Not available yet: you will connect with the API access Phorest gives your salon ([Phorest](/docs/connectors/phorest/)) |
+| **Mindbody** | Not available yet: Mindbody has to approve it first ([Mindbody](/docs/connectors/mindbody/)) |
+
 ## Being built
 
 **WooCommerce**, **Shopify**, **Square**, **Calendly**, and a **calendar link to share** (your bookings, for any calendar or a booking site's import). And, in Settings → General, sending agents to your page on another booking or ordering site for one kind of request.

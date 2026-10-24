@@ -13,10 +13,14 @@ export type {
   PolicyFee,
 } from "@surfingdog/spec";
 export {
+  type BookingDeposit,
   CARD_BRANDS,
   currencyCodeProblem,
+  type DepositRule,
   datedPolicySchema,
   decimalOf,
+  depositFor,
+  depositRuleSchema,
   discoverySnippets,
   ISO_4217_FUNDS,
   ISO_4217_MINOR_UNITS,
@@ -31,9 +35,14 @@ export {
   paymentScheduleSchema,
   paymentTermsSchema,
   paymentToken,
+  policySchema,
   publishedPayments,
   readDoorsElsewhere,
+  type ServiceAddOn,
+  type StaffMember,
+  serviceAddOnSchema,
   shareOf,
+  staffMemberSchema,
 } from "@surfingdog/spec";
 export * from "./access/index";
 export * from "./capabilities/index";
@@ -112,6 +121,7 @@ export {
   type SettingsPatch,
 } from "./settings/policy";
 export * from "./settings/schema";
+export * from "./staff/index";
 export { canonicalNetworkOrigin } from "./util/hosts";
 export { canonicalLanguages, currencyProblem, isHundredthsCurrency, isMoneyCurrency } from "./util/locale";
 export { formatMinor, moneyText, servicePriceText } from "./util/money";

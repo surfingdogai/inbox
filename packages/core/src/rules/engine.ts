@@ -10,11 +10,13 @@ import {
   itemEvents,
   items,
   parties,
+  resources,
   rules as rulesTable,
   services,
   threadEntries,
 } from "../schema/tables";
 import { readSettings, SECRET_SETTINGS_PATHS, type Settings } from "../settings/schema";
+import { nobodyFree } from "../staff/store";
 import type { Caller } from "../write/caller";
 import { jobStatement } from "../write/common";
 import { WriteError } from "../write/errors";
@@ -385,21 +387,35 @@ async function bookingFacts(db: Db, item: Item, timezone: string): Promise<RuleC
   if (item.type !== "booking") return { slotIsFree: null, withinBusinessHours: null };
   const [service] = await db.orm.select().from(services).where(eq(services.id, item.payload.reservationFor.serviceId));
   if (!service) return { slotIsFree: false, withinBusinessHours: false };
+  // With a member of staff (ADR-035): their places, as many as they take at once, and their hours.
+  const resource = item.payload.resourceId
+    ? (
+        await db.orm
+          .select({ capacity: resources.capacity })
+          .from(resources)
+          .where(eq(resources.id, item.payload.resourceId))
+      )[0]
+    : undefined;
   const spec = {
     ...service,
+    ...(resource ? { capacity: resource.capacity } : {}),
     resourceKey: item.payload.resourceId ? `resource:${item.payload.resourceId}` : `service:${service.id}`,
+    serviceId: service.id,
   };
   let slotIsFree = false;
-  try {
-    const buckets = bucketsFor(spec, item.payload.startTime, item.payload.endTime);
-    const taken = await readClaims(db, spec, buckets, item.id);
-    slotIsFree = planClaims(spec, buckets, taken).ok;
-  } catch {
-    slotIsFree = false;
+  // For anyone, and nobody who gives it is free (ADR-035 §2): taken, for a person to answer.
+  if (!(await nobodyFree(db, item.payload as unknown as Record<string, unknown>))) {
+    try {
+      const buckets = bucketsFor(spec, item.payload.startTime, item.payload.endTime);
+      const taken = await readClaims(db, spec, buckets, item.id);
+      slotIsFree = planClaims(spec, buckets, taken).ok;
+    } catch {
+      slotIsFree = false;
+    }
   }
   const rows = await db.orm.select().from(availabilityRules).where(eq(availabilityRules.kind, "open"));
   // Hours nobody set are no hours: a booking is never within them.
-  const weekly = weeklyFor(rows, service.id);
+  const weekly = weeklyFor(rows, service.id, item.payload.resourceId);
   const closures = await readClosures(db, service.id);
   const withinBusinessHours =
     withinOpening(localiser(timezone), weekly, Date.parse(item.payload.startTime), Date.parse(item.payload.endTime)) &&

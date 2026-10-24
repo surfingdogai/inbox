@@ -174,14 +174,28 @@ export function customerItem(item: Item): Item {
   const { flags: _flags, ...rest } = item;
   // Nor how far a negotiation has gone: the round is the business's to count (ADR-018 §4).
   const offer = (item.payload as { offer?: Record<string, unknown> }).offer;
-  const payload = offer
+  let payload: Record<string, unknown> = offer
     ? (() => {
         const { round: _round, ...pointer } = offer;
         return { ...item.payload, offer: pointer };
       })()
     : item.payload;
+  // A booking for anyone names nobody before it binds (ADR-035 §2): whoever it went to may change.
+  if (item.type === "booking" && payload.anyStaff === true && !BOUND.has(item.state)) {
+    const { resourceId: _who, staffName: _named, ...unnamed } = payload;
+    payload = unnamed;
+    // Nor whoever a time we proposed was held for: its length and price are what they confirm.
+    const proposed = payload.proposed as Record<string, unknown> | undefined;
+    if (proposed && ("resourceId" in proposed || "staffName" in proposed)) {
+      const { resourceId: _held, staffName: _heldName, ...time } = proposed;
+      payload = { ...payload, proposed: time };
+    }
+  }
   return { ...rest, payload, state: item.state === "spam" ? "closed" : item.state } as unknown as Item;
 }
+
+/** The states a booking reached once it bound both sides: who it is with is part of it then. */
+const BOUND: ReadonlySet<string> = new Set(["confirmed", "completed", "no_show"]);
 
 const TYPE_WORD: Record<ItemType, string> = {
   message: "Message",
@@ -231,9 +245,10 @@ export function describeToCustomer(item: Item, audience: Audience = DEFAULT_AUDI
   return statusSentence(item, audience);
 }
 
-export function describe(item: Item): string {
+/** The item for the business, in a line; times in `zone` when given (the owner's email), else in UTC. */
+export function describe(item: Item, zone?: string | undefined): string {
   const what = item.subject ? `${TYPE_WORD[item.type]} "${item.subject}"` : TYPE_WORD[item.type];
-  const when = item.type === "booking" ? ` for ${formatWhen(item.payload.startTime)}` : "";
+  const when = item.type === "booking" ? ` for ${formatWhen(item.payload.startTime, zone)}` : "";
   const prices = statedPrices(item);
   const who = item.channel === "email" || item.channel === "form" ? "The customer" : "The customer's assistant";
   const price = prices ? ` ${who} suggested ${moneyText(prices.stated)}; your price is ${moneyText(prices.ours)}.` : "";
@@ -268,9 +283,25 @@ function statedPrices(item: Item): { stated: Money; ours: Money } | null {
   return stated && ours ? { stated, ours } : null;
 }
 
-function formatWhen(isoTime: string): string {
+function formatWhen(isoTime: string, zone?: string | undefined): string {
   const d = new Date(isoTime);
   if (Number.isNaN(d.getTime())) return isoTime;
+  if (zone && zone !== "UTC" && zone !== "Etc/UTC") {
+    try {
+      const at = new Intl.DateTimeFormat("en-CA", {
+        timeZone: zone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23",
+      }).format(d);
+      return `${at.replace(",", "")} (${(zone.split("/").pop() ?? zone).replaceAll("_", " ")} time)`;
+    } catch {
+      // An unknown zone: in UTC, as before.
+    }
+  }
   return `${d.toISOString().replace("T", " ").slice(0, 16)} UTC`;
 }
 

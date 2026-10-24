@@ -30,12 +30,22 @@ export interface SnapshotService {
   readonly price?: { readonly value: number; readonly currency: string } | null | undefined;
   /** The staff (by `externalId`) who give it, when the tool says. */
   readonly staff?: readonly string[] | undefined;
+  /** A member of staff's own price or length for it, when the tool keeps one (ADR-035). */
+  readonly overrides?:
+    | readonly {
+        readonly staff: string;
+        readonly price?: { readonly value: number; readonly currency: string } | undefined;
+        readonly durationMin?: number | undefined;
+      }[]
+    | undefined;
 }
 
 export interface SnapshotStaff {
   readonly externalId: string;
   /** As customers may see them: first names only are shown publicly. */
   readonly name: string;
+  /** Their usual weekly hours, as the tool's roster shows them, in the business's zone (ADR-035). */
+  readonly hours?: Readonly<Record<string, readonly (readonly [string, string])[]>> | undefined;
 }
 
 export interface SnapshotMenuSection {

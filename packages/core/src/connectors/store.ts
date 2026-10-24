@@ -112,31 +112,42 @@ export interface BusyDetail extends Interval {
  * What connected calendars take off [from, to) for a resource: every connector's current generation,
  * and everything past how far ahead it was read, from connectors that are not paused and whose busy
  * times are on and apply to the service (all services unless the owner chose some). A resource that
- * is not a service is covered by connectors that apply to all.
+ * is not a service is covered by connectors that apply to all, or to the service it is booked for
+ * (`serviceId`: a member of staff giving it, ADR-035). A calendar tied to one member of staff takes
+ * only their times off: it applies to their resource and to nothing else.
  */
-export async function busyDetails(db: Db, from: number, to: number, resourceKey: string): Promise<BusyDetail[]> {
+export async function busyDetails(
+  db: Db,
+  from: number,
+  to: number,
+  resourceKey: string,
+  forService?: string | undefined,
+): Promise<BusyDetail[]> {
   const { rows } = await db.client.query({
-    sql: `SELECT b.start_ms, b.end_ms, c.id, c.name, c.config_public, 0 FROM connector_busy b
+    sql: `SELECT b.start_ms, b.end_ms, c.id, c.name, c.config_public, 0, c.resource_id FROM connector_busy b
             JOIN connectors c ON c.id = b.connector_id AND b.gen = c.busy_gen
            WHERE c.status <> 'disabled' AND ${BUSY_ON.replace("config_public", "c.config_public")}
              AND b.end_ms > ? AND b.start_ms < ?
           UNION ALL
-          SELECT MAX(c.busy_until, ?), ?, c.id, c.name, c.config_public, 1 FROM connectors c
+          SELECT MAX(c.busy_until, ?), ?, c.id, c.name, c.config_public, 1, c.resource_id FROM connectors c
            WHERE c.kind <> 'feed' AND c.status <> 'disabled' AND c.busy_gen IS NOT NULL
              AND c.busy_until IS NOT NULL AND c.busy_until < ? AND ${BUSY_ON.replace("config_public", "c.config_public")}`,
     params: [from, to, from, to, to],
     method: "all",
   });
   if (rows.length === 0) return [];
-  const serviceId = resourceKey.startsWith("service:") ? resourceKey.slice("service:".length) : null;
+  const serviceId = forService ?? (resourceKey.startsWith("service:") ? resourceKey.slice("service:".length) : null);
   const out: BusyDetail[] = [];
   const applies = new Map<string, boolean>();
-  for (const [start, end, id, name, configPublic, beyond] of rows) {
+  for (const [start, end, id, name, configPublic, beyond, resourceId] of rows) {
     const key = String(id);
     let ok = applies.get(key);
     if (ok === undefined) {
       const services = servicesOf(configPublic);
-      ok = services === null || (serviceId !== null && services.includes(serviceId));
+      ok =
+        resourceId !== null && resourceId !== undefined
+          ? resourceKey === `resource:${String(resourceId)}`
+          : services === null || (serviceId !== null && services.includes(serviceId));
       applies.set(key, ok);
     }
     if (!ok) continue;
@@ -152,8 +163,14 @@ export async function busyDetails(db: Db, from: number, to: number, resourceKey:
 }
 
 /** The times connected calendars take off [from, to) for a resource (`busyDetails`, as intervals). */
-export async function busyOverlapping(db: Db, from: number, to: number, resourceKey: string): Promise<Interval[]> {
-  return (await busyDetails(db, from, to, resourceKey)).map((b) => ({ start: b.start, end: b.end }));
+export async function busyOverlapping(
+  db: Db,
+  from: number,
+  to: number,
+  resourceKey: string,
+  forService?: string | undefined,
+): Promise<Interval[]> {
+  return (await busyDetails(db, from, to, resourceKey, forService)).map((b) => ({ start: b.start, end: b.end }));
 }
 
 function servicesOf(configPublic: unknown): string[] | null {

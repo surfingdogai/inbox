@@ -57,11 +57,30 @@ const carried = { pass, key };
 export const listServicesInput = z.object(paging);
 export const listProductsInput = z.object({ ...paging, q: z.string().max(100).optional() });
 
+/**
+ * A member of staff by the id `list_staff` gives, or `any` (the default): whoever gives the service and
+ * is free (ADR-035). Only where the business lists staff.
+ */
+const staffId = z
+  .string()
+  .min(1)
+  .max(64)
+  .optional()
+  .describe("A member of staff's id from list_staff, or any (the default): whoever gives the service and is free.");
+/** Add-ons of the service, by the ids `list_services` gives (`addOns`): each makes the booking longer. */
+const addOnIds = z
+  .array(z.string().min(1).max(64))
+  .max(10)
+  .optional()
+  .describe("Add-ons of the service by id (list_services, addOns): each makes the booking longer, and some cost more.");
+
 export const checkAvailabilityInput = z.object({
   service_id: z.string().min(1),
   from: isoDateTime.describe("Start of the window to search, ISO 8601."),
   to: isoDateTime.describe("End of the window, at most 14 days after from."),
   party_size: z.number().int().min(1).max(1000).optional(),
+  staff_id: staffId,
+  add_ons: addOnIds,
 });
 
 export const requestQuoteInput = z.object({
@@ -96,9 +115,19 @@ export const createBookingInput = z.object({
     change: true,
     paymentRef: true,
     paidAmount: true,
+    // Who it is with is the inbox's to set, from staff_id (ADR-035): never a claim key a customer picks.
+    resourceId: true,
+    staffName: true,
+    anyStaff: true,
+    addOns: true,
+    deposit: true,
+    policy: true,
+    terms: true,
   }),
   contact: contactSchema.optional(),
   message: z.string().max(20_000).optional(),
+  staff_id: staffId,
+  add_ons: addOnIds,
   terms_sha: confirmedTerms,
   idempotency_key: idempotencyKey,
   ...carried,
@@ -135,6 +164,13 @@ export const getItemStatusInput = z.object({ item_id: z.string().min(1), access_
 export const cancelItemInput = z.object({
   item_id: z.string().min(1),
   reason: z.string().max(2_000).optional(),
+  fee_sha: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{43}$/)
+    .optional()
+    .describe(
+      "A confirmed booking with a cancellation fee: the fingerprint of the fee your person saw (details.fee_sha of the 409 confirm_terms a cancel without it gets).",
+    ),
   access_token: accessToken,
   idempotency_key: idempotencyKey,
   ...carried,
@@ -473,6 +509,10 @@ export const updateSettingsInput = z.object({
 });
 
 export type ListServicesInput = z.infer<typeof listServicesInput>;
+export const listStaffInput = z.object({
+  service_id: z.string().min(1).max(64).optional().describe("Only who gives this service."),
+});
+export type ListStaffInput = z.infer<typeof listStaffInput>;
 export type ListProductsInput = z.infer<typeof listProductsInput>;
 export type CheckAvailabilityInput = z.infer<typeof checkAvailabilityInput>;
 export type RequestQuoteInput = z.infer<typeof requestQuoteInput>;

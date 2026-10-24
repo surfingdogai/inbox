@@ -6,15 +6,19 @@ import { AccessCapabilities } from "../access/keys";
 import { assertNoLeak, PUBLISHED, stringsIn } from "../access/leaks";
 import { isOwnerOrSystem, mayDirectDataOut, ownerOnlyError } from "../access/outbound";
 import { ConnectorCapabilities } from "../connectors/capability";
+import { hasPayLinks } from "../connectors/pay-queue";
+import { registerScheduleSource, scheduleSourceOf } from "../connectors/schedules";
+import { audienceFor } from "../customer/audience";
 import { effectiveWrittenBy, isAutomated } from "../customer/mail";
 import { isChangeable } from "../customer/offer";
 import type { Db } from "../db";
-import type { Item, ItemType } from "../domain/types";
+import type { Item, ItemType, Money } from "../domain/types";
 import { networksStopped } from "../identity/stops";
 import type { IdentityAnswer } from "../identity/types";
 import { mailForItem, senderOf } from "../jobs/mail-log";
 import { type DraftView, draftIsStale, draftRow, draftView, dropDraftStatement } from "../negotiation/drafts";
 import { type OfferView, offerRows, offerView } from "../negotiation/offers";
+import { paidFor } from "../negotiation/refunds";
 import { rewardProblems } from "../negotiation/rewards";
 import {
   listingJobStatement,
@@ -33,6 +37,7 @@ import {
   parties,
   partyContacts,
   products,
+  resources,
   services,
   settings as settingsTable,
   threadEntries,
@@ -70,7 +75,25 @@ import {
   type Settings,
   settingsWriteSchema,
 } from "../settings/schema";
+import {
+  bookFirstInSystem,
+  bookingFeeAt,
+  bookingSchedules,
+  cancelFeeOf,
+  checkFirstOf,
+  dayByStaff,
+  findStaffSlots,
+  fromSystem,
+  hasStaff,
+  prepareBooking,
+  registerBookingResolver,
+  StaffCapabilities,
+  type StaffDay,
+  type StaffSlot,
+  writeFirstForPerson,
+} from "../staff/index";
 import { hashText } from "../util/canonical";
+import { formatMinor } from "../util/money";
 import {
   type Caller,
   type EventActor,
@@ -78,6 +101,7 @@ import {
   isCustomer,
   isOwnerAssistant,
   isOwnerInPerson,
+  isPerson,
   nowOf,
   permissionKind,
   withIdempotencyKey,
@@ -86,14 +110,15 @@ import { findIdempotent } from "../write/common";
 import { hiddenTransitions } from "../write/corrections";
 import type { CreateResult } from "../write/create";
 import { type FieldProblem, fromZod, WriteError } from "../write/errors";
+import { setFlags } from "../write/flags";
 import { type OnceOptions, type OnceResult, once } from "../write/idempotency";
 import { heldReplyStatements, namesOtherMoney } from "../write/limits";
 import { isAutomation } from "../write/offers";
 import { withdrawalOf } from "../write/returns";
 import { appendThreadEntry } from "../write/thread";
-import { type TransitionResult, transitionItem } from "../write/transition";
+import { cancelAskedAt, customerSaidAt, type TransitionResult, transitionItem } from "../write/transition";
 import { customerItem, type ItemView, type PartyView, rowToItem, viewFor } from "../write/views";
-import { askedForAPrice, findSlots, quoteNotBookable, type Slot, unknownService } from "./availability";
+import { askedForAPrice, quoteNotBookable, type Slot, unknownService } from "./availability";
 import { CustomerDoors, type CustomerItemView } from "./customer";
 import { CustomerData } from "./customers";
 import { doorSwitch, offeredItemTypes } from "./directory";
@@ -227,6 +252,8 @@ export interface EntryDelivery {
 export interface ItemDetail extends ItemView {
   /** Who is asking, as the owner sees it (ADR-017 §8.2): the match, the history, the networks, the agent. */
   readonly customer?: CustomerView | undefined;
+  /** A salon's booking a person checks before confirming (ADR-035): what comes first, and when. */
+  readonly check_first?: string | undefined;
   readonly events: readonly {
     seq: number;
     event: string;
@@ -300,6 +327,9 @@ export class Capabilities {
 
   /** Keys and scopes (ADR-004): integration keys, and the one scope check every owner door calls. */
   readonly access: AccessCapabilities;
+
+  /** Staff (ADR-035): who gives which service, their hours, and who customers can book. */
+  readonly staff: StaffCapabilities;
 
   /**
    * People and customers (ADR-017 §2, §8): what agents carry, first keys, customers the business
@@ -502,6 +532,11 @@ export class Capabilities {
     this.baseUrl = baseUrl;
     this.discoveryFetch = outbound?.discovery ?? outbound?.fetch;
     this.customers = new CustomerData(db);
+    this.staff = new StaffCapabilities(db, () => this.baseUrl);
+    // A booking's deposit link, and the bookings written first to a salon's own system (ADR-035).
+    // A host or a test that registered its own source for bookings keeps it.
+    if (!scheduleSourceOf("booking")) registerScheduleSource("booking", bookingSchedules);
+    registerBookingResolver(this.connectors);
     this.customer = new CustomerDoors(db, {
       access: this.access,
       people: this.people,
@@ -664,7 +699,26 @@ export class Capabilities {
       .where(and(...conditions))
       .orderBy(services.sort, services.name, services.id)
       .limit(input.limit + 1);
-    return page(rows, input.limit, (r) => r.id);
+    // What must come first, and where a service came from, are the business's own (ADR-035).
+    const shown = rows.map(({ requires: _requires, externalId: _externalId, source: _source, ...r }) => r);
+    return page(shown, input.limit, (r) => r.id) as Page<typeof services.$inferSelect>;
+  }
+
+  /** Whether the business lists staff now (ADR-035): the tools that name them are offered only then. */
+  async listsStaff(): Promise<boolean> {
+    return hasStaff(this.db);
+  }
+
+  /** One day by member of staff, in the business's zone (ADR-035): the owner app's day view. */
+  async staffDay(caller: Caller, date: string): Promise<StaffDay> {
+    if (isCustomer(caller)) throw new WriteError("not_allowed", "this needs the owner");
+    const profile = await this.getBusinessProfile();
+    return dayByStaff(this.db, date, profile.timezone);
+  }
+
+  /** Who customers can book (ADR-035): first names, photos and the services each gives. */
+  async listStaff(input: T.ListStaffInput): Promise<{ items: Awaited<ReturnType<StaffCapabilities["publicList"]>> }> {
+    return { items: await this.staff.publicList(input.service_id) };
   }
 
   /** Active products by name; the cursor works as for services (keyset on name, id). */
@@ -701,14 +755,46 @@ export class Capabilities {
     if (elsewhere) throw takenElsewhere("booking", elsewhere);
     await this.refuseUnbookable(opts.caller, input.service_id);
     const [profile, settings] = await Promise.all([this.getBusinessProfile(), readSettings(this.db)]);
-    return findSlots(this.db, {
+    const now = opts.now ?? Date.now();
+    // A service booked through the salon's own system (ADR-035): the times it says are free.
+    const system = await this.systemTimes(input, now, settings.booking.minNoticeMin);
+    if (system) return system;
+    return findStaffSlots(this.db, {
       serviceId: input.service_id,
+      staffId: input.staff_id,
+      addOnIds: input.add_ons,
       from: input.from,
       to: input.to,
       timezone: profile.timezone,
-      now: opts.now ?? Date.now(),
+      now,
       minNoticeMin: settings.booking.minNoticeMin,
     });
+  }
+
+  /** The free times a salon's own system gives for a service it holds, when it can say now (ADR-035). */
+  private async systemTimes(
+    input: T.CheckAvailabilityInput,
+    now: number,
+    minNoticeMin: number,
+  ): Promise<{ service: { id: string; name: string; durationMin: number }; slots: StaffSlot[] } | null> {
+    if (input.add_ons?.length) return null;
+    const [service] = await this.db.orm.select().from(services).where(eq(services.id, input.service_id));
+    if (!service?.active || service.source === "builtin") return null;
+    const from = Date.parse(input.from);
+    const to = Date.parse(input.to);
+    if (!(to > from) || to - from > 14 * 86_400_000) return null;
+    let staffExternalId: string | undefined;
+    if (input.staff_id && input.staff_id !== "any") {
+      const [r] = await this.db.orm
+        .select({ externalId: resources.externalId, source: resources.source })
+        .from(resources)
+        .where(eq(resources.id, input.staff_id));
+      if (!r?.externalId || r.source !== service.source) return null;
+      staffExternalId = r.externalId;
+    }
+    const read = await this.connectors.systemSlots({ serviceId: service.id, staffExternalId, from, to }, now);
+    if (!read) return null;
+    return fromSystem(this.db, { service, slots: read.slots, source: read.kind, now, minNoticeMin });
   }
 
   async requestQuote(caller: Caller, input: T.RequestQuoteInput): Promise<CreateResult> {
@@ -733,13 +819,51 @@ export class Capabilities {
     // Priced for this customer once — the owner's reward for their record included — so the summary
     // they confirm and the booking as written hold the same price (ADR-018 §4, Q3).
     const pricing = await this.customer.pricingFor(c, input);
+    // Who it is with, its add-ons, its deposit and policy, and what comes first (ADR-035): made ready
+    // before the confirm step, so the customer confirms all of it.
+    const profile = await this.getBusinessProfile();
+    const now = nowOf(c);
+    const prepared = await prepareBooking(this.db, {
+      payload: input.payload as Record<string, unknown>,
+      staffId: input.staff_id,
+      addOnIds: input.add_ons,
+      timezone: profile.timezone,
+      lang: input.contact?.locale ?? c.locale ?? profile.languages[0] ?? "en",
+      now,
+      partyId: c.actor.partyId,
+      pricing,
+    });
+    const ready = { ...input, payload: prepared.payload as T.CreateBookingInput["payload"] };
     // A priced request binds a consumer once they confirmed it: without that, nothing is written (CRD art. 8(2)).
-    const confirmed = await this.customer.confirmCreate(c, "booking", input, pricing);
-    return this.people.create(
+    const confirmed = await this.customer.confirmCreate(c, "booking", ready, pricing);
+    const created = await this.people.create(
       c,
-      { type: "booking", payload: input.payload, contact: input.contact, message: input.message, confirmed, pricing },
+      {
+        type: "booking",
+        payload: prepared.payload,
+        contact: input.contact,
+        message: input.message,
+        confirmed,
+        pricing,
+        asked: { payload: input.payload, staffId: input.staff_id, addOns: input.add_ons },
+        ...(prepared.checkFirst ? { checkFirst: true, flags: { needsHuman: true } } : {}),
+      },
       input,
     );
+    if (created.replayed) return created;
+    if (prepared.ownerNote) {
+      await appendThreadEntry(this.db, systemCaller(now), created.view.item, prepared.ownerNote, "note");
+      return created;
+    }
+    // A salon's own booking system takes it first, and only then is it confirmed (ADR-035).
+    const first = await bookFirstInSystem(this.db, this.connectors, created.view.item.id, now);
+    if (first !== "confirmed") return created;
+    const [row] = await this.db.orm.select().from(items).where(eq(items.id, created.view.item.id));
+    if (!row) return created;
+    const audience = isCustomer(c)
+      ? await audienceFor(this.db, { locale: input.contact?.locale ?? c.locale ?? null })
+      : undefined;
+    return { ...created, view: viewFor(rowToItem(row), permissionKind(c), undefined, undefined, audience) };
   }
 
   async createOrder(caller: Caller, input: T.CreateOrderInput): Promise<CreateResult> {
@@ -822,6 +946,24 @@ export class Capabilities {
 
   private async cancelOnce(c: Caller, input: T.CancelItemInput): Promise<TransitionResult> {
     const note = input.reason ? { input: { note: input.reason }, reason: input.reason } : {};
+    // Only their own: nothing of another's booking — its fee, its terms, what was paid — is said first.
+    if (isCustomer(c)) await this.loadOwned(c, input.item_id);
+    // A confirmed booking with its own policy (ADR-035): the fee is said before anything is cancelled.
+    const fee = isCustomer(c) ? await this.cancelFeeFor(c, input) : null;
+    if (fee) {
+      const event = fee.fee.value > 0 ? "cancel_late" : "cancel";
+      try {
+        const done = await transitionItem(this.db, c, { itemId: input.item_id, event, ...note });
+        await this.moneyBackNote(c, done, fee.fee);
+        return done;
+      } catch (error) {
+        // Cancelling turned dear while the request was on its way: said again, at its new fee.
+        if (error instanceof WriteError && error.code === "guard_failed" && event === "cancel") {
+          await this.cancelFeeFor(c, { ...input, fee_sha: undefined });
+        }
+        throw error;
+      }
+    }
     // A retry of a cancellation that was taken as a withdrawal is answered as that withdrawal.
     if (c.idempotency && (await findIdempotent(this.db, c.idempotency))) {
       try {
@@ -836,8 +978,9 @@ export class Capabilities {
     if (isCustomer(c) && (await this.withdrawalRuns(c, input.item_id))) {
       return transitionItem(this.db, c, { itemId: input.item_id, event: "withdraw", ...note });
     }
+    let done: TransitionResult;
     try {
-      return await transitionItem(this.db, c, { itemId: input.item_id, event: "cancel", ...note });
+      done = await transitionItem(this.db, c, { itemId: input.item_id, event: "cancel", ...note });
     } catch (error) {
       if (!(error instanceof WriteError)) throw error;
       const closed =
@@ -848,8 +991,140 @@ export class Capabilities {
       // `cancel_late`, so that is the request to replay.
       const retried = error.code === "idempotency_mismatch" && c.idempotency !== undefined;
       if (!closed && !retried) throw error;
-      return transitionItem(this.db, c, { itemId: input.item_id, event: "cancel_late", ...note });
+      done = await transitionItem(this.db, c, { itemId: input.item_id, event: "cancel_late", ...note });
     }
+    if (isCustomer(c)) await this.moneyBackNote(c, done, null);
+    return done;
+  }
+
+  /**
+   * What the owner reads once a customer cancelled a booking made on a salon's own terms (ADR-035): the
+   * fee the customer agreed to, and what of what they paid is owed back and by when (its refund is open
+   * beside the booking), or, where nothing says what is kept, that a person decides. Said once; nothing
+   * is charged or refunded here.
+   */
+  private async moneyBackNote(
+    c: Caller,
+    done: TransitionResult,
+    fee: Money | null,
+    opts: Partial<Omit<RecordedCancel, "fee">> & { readonly recorded?: boolean } = {},
+  ): Promise<void> {
+    const item = done.view.item;
+    if (done.replayed || item.type !== "booking" || item.state !== "cancelled_by_customer") return;
+    const refund = done.linked?.item.type === "refund" ? done.linked.item : null;
+    const owed = refund ? (refund.payload as { amount: Money; refundDue?: string; kind?: string }) : null;
+    // Taken as their withdrawal: its own refund and its own words, none of these.
+    if (owed?.kind === "withdrawal") return;
+    const p = item.payload;
+    if (!p.policy && !p.deposit) return;
+    const paid = paidFor(p);
+    const charged = fee !== null && fee.value > 0;
+    // Dated by a message the owner's AI named, for less than it would cost now: said, so a person checks
+    // what it rests on.
+    const less =
+      !isPerson(c) && opts.message !== undefined && opts.feeNow !== undefined && opts.feeNow.value > (fee?.value ?? 0);
+    if (!paid && !charged && !less) return;
+    const business = await this.getBusinessProfile();
+    // An English note for the owner, its money and its day written as English writes them, in the
+    // business's zone: never a sentence of one language around the numbers of another.
+    const locale = OWNER_LOCALE;
+    const money = (m: Money) => formatMinor(m, locale);
+    const by = owed?.refundDue ? ` by ${dayIn(owed.refundDue, business.timezone, locale)}` : "";
+    // Back the way it came: through the payment platform that took it, else by the owner's own hand.
+    const how = (await this.paidThroughPlatform(item.id))
+      ? "Refund it through your payment platform"
+      : "Pay it back to them yourself";
+    // The customer's own door showed them the fee and they said yes; one the owner records was said in
+    // the customer's message it is dated by, which the note names, else by phone or at the desk, and the
+    // inbox showed them nothing.
+    const message = opts.message;
+    const said = message
+      ? `in their message of ${momentIn(message.at, business.timezone, locale)} (“${excerpt(message.text)}”)`
+      : null;
+    const head = !charged
+      ? said
+        ? `Cancelled by the customer ${said}.`
+        : "Cancelled by the customer."
+      : opts.recorded
+        ? said
+          ? `Cancelled late by the customer ${said}, with a fee of ${money(fee)} under its policy.`
+          : `Cancelled late by phone or at the desk, with a fee of ${money(fee)} under its policy.`
+        : `Cancelled with a fee of ${money(fee)} under its policy, as the customer saw it and agreed.`;
+    let tail: string;
+    if (owed) {
+      tail = charged
+        ? `It comes out of what they paid: ${money(owed.amount)} is owed back to them${by}. ${how}; nothing was charged or refunded here.`
+        : `It was free under its terms, so all they paid, ${money(owed.amount)}, is owed back to them${by}. ${how}; nothing was refunded here.`;
+    } else if (charged) {
+      const same = paid !== null && paid.currency.toUpperCase() === fee.currency.toUpperCase();
+      tail = !paid
+        ? "Take it from the deposit, or ask for it; nothing was charged here."
+        : same && paid.value < fee.value
+          ? `They paid ${money(paid)}, which goes towards it: ask them for the rest, ${money({ value: fee.value - paid.value, currency: fee.currency })}; nothing was charged here.`
+          : same
+            ? `It comes out of what they paid, ${money(paid)}, which covers it; nothing was charged here.`
+            : "It comes out of what they paid, or ask them for the rest; nothing was charged here.";
+    } else if (!paid) {
+      tail = "Nothing was paid, and its terms owe nothing for it.";
+    } else {
+      // Paid, and its terms do not say what comes back (late, with a deposit and no policy): a person decides.
+      tail = `They paid ${money(paid as Money)}, and its terms do not say what of it comes back now. Decide what does, and ${how.charAt(0).toLowerCase()}${how.slice(1)}; nothing was refunded here.`;
+      await setFlags(this.db, systemCaller(nowOf(c)), { itemId: item.id, flags: { needsHuman: true } });
+    }
+    const check =
+      less && opts.feeNow
+        ? ` It is dated by that message: dated now, the fee would be ${money(opts.feeNow)}. Check that message asked to cancel.`
+        : "";
+    if (check) await setFlags(this.db, systemCaller(nowOf(c)), { itemId: item.id, flags: { needsHuman: true } });
+    await appendThreadEntry(this.db, systemCaller(nowOf(c)), item, `${head} ${tail}${check}`, "note");
+  }
+
+  /**
+   * Whether a booking's payment came in through a payment platform: recorded by its connection, while
+   * one still takes payments. One the owner recorded (cash at the desk, a card machine) is theirs to
+   * give back by hand.
+   */
+  private async paidThroughPlatform(itemId: string): Promise<boolean> {
+    if (!(await hasPayLinks(this.db))) return false;
+    const { rows } = await this.db.client.query({
+      sql: `SELECT actor_kind FROM item_events WHERE item_id = ? AND event = 'record_payment' ORDER BY seq DESC LIMIT 1`,
+      params: [itemId],
+      method: "all",
+    });
+    return rows.length === 0 || rows[0]?.[0] === "connector";
+  }
+
+  /**
+   * The fee for cancelling a confirmed booking under its own policy (ADR-035), as the customer is shown
+   * it first: null when it has none, or nothing to confirm (free); a `confirm_terms` refusal with the fee
+   * and what comes back until they send its `fee_sha`; the fee itself once they did.
+   */
+  private async cancelFeeFor(c: Caller, input: T.CancelItemInput): Promise<{ fee: Money } | null> {
+    const [row] = await this.db.orm.select().from(items).where(eq(items.id, input.item_id));
+    if (row?.type !== "booking" || row.state !== "confirmed") return null;
+    const item = rowToItem(row);
+    if (item.type !== "booking" || !item.payload.policy) return null;
+    // Withdrawal decides first where it runs (ADR-018 §7): never a fee.
+    if (await this.withdrawalRuns(c, item.id)) return null;
+    const lang = (await audienceFor(this.db, { locale: c.locale ?? null })).lang;
+    const quote = await cancelFeeOf({ id: item.id, payload: item.payload }, nowOf(c), lang);
+    if (!quote) return null;
+    if (quote.fee.value === 0) return { fee: quote.fee };
+    if (input.fee_sha === quote.sha) return { fee: quote.fee };
+    throw new WriteError(
+      "confirm_terms",
+      `${quote.sentence} Nothing is cancelled yet: show your person this, and send fee_sha once they said yes.`,
+      {
+        details: {
+          summary: quote.sentence,
+          fee: quote.fee,
+          ...(quote.refund ? { refund_owed: quote.refund } : {}),
+          fee_sha: quote.sha,
+          policy: item.payload.policy,
+          ...(input.fee_sha ? { changed: true } : {}),
+        },
+      },
+    );
   }
 
   /**
@@ -1095,6 +1370,7 @@ export class Capabilities {
       mailForItem(this.db, item.id),
     ]);
     const draft = await draftRow(this.db, item.id);
+    const check = item.type === "booking" ? await checkFirstOf(this.db, item.id) : null;
     const delivery = new Map<string, EntryDelivery>();
     for (const m of mail) {
       if (m.entryId && m.recipient === "customer") {
@@ -1110,6 +1386,7 @@ export class Capabilities {
       ...viewFor(item, permissionKind(caller), partyViews.get(row.partyId), hidden.get(item.id)),
       receipts,
       customer: await this.people.customerView(row),
+      ...(check ? { check_first: check } : {}),
       events: events.map((e) => ({
         seq: e.seq,
         event: e.event,
@@ -1173,9 +1450,23 @@ export class Capabilities {
       ...(input.expected_version !== undefined ? { expectedVersion: input.expected_version } : {}),
       ...(writtenBy ? { writtenBy } : {}),
     };
+    // A booking the salon's own system holds is written there first, and confirmed on its answer (ADR-035).
+    if (input.event === "confirm" && isPerson(c)) {
+      const { wrote } = await writeFirstForPerson(this.db, this.connectors, input.item_id, nowOf(c));
+      if (wrote) {
+        try {
+          return await transitionItem(this.db, c, request);
+        } catch (error) {
+          // Not confirmed here after all: not held there either.
+          if (error instanceof WriteError) await this.connectors.takeBackFirstWrite(wrote, input.item_id, nowOf(c));
+          throw error;
+        }
+      }
+    }
     if (input.event !== "record_cancel") return transitionItem(this.db, c, request);
+    let done: TransitionResult;
     try {
-      return await transitionItem(this.db, c, request);
+      done = await transitionItem(this.db, c, request);
     } catch (error) {
       if (!(error instanceof WriteError)) throw error;
       const late =
@@ -1184,8 +1475,13 @@ export class Capabilities {
       // A retried request whose first try was the late one: its key is stored for `record_cancel_late`.
       const retried = error.code === "idempotency_mismatch" && c.idempotency !== undefined;
       if (!late && !retried) throw error;
-      return transitionItem(this.db, c, { ...request, event: "record_cancel_late" });
+      done = await transitionItem(this.db, c, { ...request, event: "record_cancel_late" });
     }
+    // The customer's cancel by phone or at the desk, as their own door says it (ADR-035): the fee under
+    // its policy when they asked, and what of what they paid is owed back, beside its refund.
+    const recorded = await recordedCancel(this.db, c, done, input, nowOf(c));
+    await this.moneyBackNote(c, done, recorded.fee, { recorded: true, ...recorded });
+    return done;
   }
 
   /**
@@ -1822,6 +2118,90 @@ export class Capabilities {
   }
 }
 
+/** Owner-facing notes are English: their money and days are written as English writes them. */
+const OWNER_LOCALE = "en-GB";
+
+/** A cancel the business recorded (ADR-035), as the owner's note says it. */
+interface RecordedCancel {
+  /** What it costs under the booking's own policy, when the customer asked; null for one without. */
+  readonly fee: Money | null;
+  /** The customer's message it is dated by, when one was named (`entryId`). */
+  readonly message?: { readonly at: number; readonly text: string } | undefined;
+  /** What it would cost dated now, when a message dated it. */
+  readonly feeNow?: Money | undefined;
+}
+
+/**
+ * A recorded cancellation of a confirmed booking with its own policy (ADR-035): its fee, judged when the
+ * customer asked, as the write judged it (`cancelAskedAt`), and the message it is dated by, beside what it
+ * would cost dated now. No fee for one without a policy, and for a request nobody had confirmed: nothing
+ * was promised, so nothing is owed, as on the customer's own door.
+ */
+async function recordedCancel(
+  db: Db,
+  caller: Caller,
+  done: TransitionResult,
+  input: T.TransitionItemInput,
+  now: number,
+): Promise<RecordedCancel> {
+  const item = done.view.item;
+  if (done.replayed || item.type !== "booking") return { fee: null };
+  const said = (input.input ?? {}) as Record<string, unknown>;
+  const message =
+    typeof said.entryId === "string"
+      ? await customerSaidAt(db, item, said.entryId, caller).catch(() => undefined)
+      : undefined;
+  if (!item.payload.policy) return { fee: null, message };
+  const { rows } = await db.client.query({
+    sql: `SELECT from_state FROM item_events WHERE item_id = ? AND event IN ('record_cancel', 'record_cancel_late')
+           ORDER BY seq DESC LIMIT 1`,
+    params: [item.id],
+    method: "all",
+  });
+  if (rows[0]?.[0] !== "confirmed") return { fee: null };
+  const askedAt = await cancelAskedAt(db, item, said, caller, now).catch(() => now);
+  return {
+    fee: bookingFeeAt(item.payload, askedAt),
+    ...(message ? { message, feeNow: bookingFeeAt(item.payload, now) } : {}),
+  };
+}
+
+/** A moment as the owner reads it, in the business's zone: "Wed, 2 Dec 2026, 07:30". */
+function momentIn(ms: number, timezone: string, locale: string): string {
+  const d = new Date(ms);
+  const opts = {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  } as const;
+  try {
+    return new Intl.DateTimeFormat(locale, { ...opts, timeZone: timezone }).format(d);
+  } catch {
+    return new Intl.DateTimeFormat(locale, { ...opts, timeZone: "UTC" }).format(d);
+  }
+}
+
+/** The first words of a message, on one line, as a note quotes it. */
+function excerpt(text: string): string {
+  const line = text.replace(/\s+/g, " ").trim();
+  return line.length > 80 ? `${line.slice(0, 79).trimEnd()}…` : line;
+}
+
+/** A day as the owner reads it, in the business's zone: "Wed, 2 Dec 2026". */
+function dayIn(iso: string, timezone: string, locale: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
+  const opts = { weekday: "short", day: "numeric", month: "short", year: "numeric" } as const;
+  try {
+    return new Intl.DateTimeFormat(locale, { ...opts, timeZone: timezone }).format(d);
+  } catch {
+    return new Intl.DateTimeFormat(locale, { ...opts, timeZone: "UTC" }).format(d);
+  }
+}
+
 function metaString(meta: unknown, key: string): string | null {
   if (!meta || typeof meta !== "object") return null;
   const v = (meta as Record<string, unknown>)[key];
@@ -2041,6 +2421,16 @@ function noHoldError(paths: readonly string[]): WriteError {
 function hostCaller(now: number): Caller {
   return {
     actor: { kind: "system", id: "host", channel: "system" },
+    tier: "verified_principal",
+    sandbox: false,
+    now: () => now,
+  };
+}
+
+/** The inbox itself, for a note it leaves the owner on an item (ADR-035). */
+function systemCaller(now: number): Caller {
+  return {
+    actor: { kind: "system", id: "booking_prepare", channel: "system" },
     tier: "verified_principal",
     sandbox: false,
     now: () => now,

@@ -34,6 +34,12 @@ interface Words {
   readonly free: (when: string) => string;
   readonly paid: (when: string, fee: string) => string;
   readonly after: (fee: string) => string;
+  /** After the free steps, with nothing more to pay: the deposit is what is kept. */
+  readonly afterKept: string;
+  /** Booked once the free steps had passed: cancelling keeps the deposit. */
+  readonly onlyKept: string;
+  /** After a fee, where the deposit the policy keeps may be more: ", or the deposit paid if that is more". */
+  readonly orKept: string;
   readonly only: (fee: string) => string;
   readonly noShow: (fee: string) => string;
   readonly whole: { readonly stay: string; readonly price: string };
@@ -46,6 +52,9 @@ const WORDS: Readonly<Record<PolicyLang, Words>> = {
     free: (w) => `Free cancellation until ${w}.`,
     paid: (w, f) => `Until ${w}, cancelling costs ${f}.`,
     after: (f) => `After that: ${f}.`,
+    afterKept: "After that, the deposit is not refunded.",
+    onlyKept: "If you cancel, the deposit is not refunded.",
+    orKept: ", or the deposit paid if that is more",
     only: (f) => `Cancelling costs ${f}.`,
     noShow: (f) => `No-show: ${f}.`,
     whole: { stay: "the full stay", price: "the full price" },
@@ -56,6 +65,9 @@ const WORDS: Readonly<Record<PolicyLang, Words>> = {
     free: (w) => `Cancelación gratuita hasta el ${w}.`,
     paid: (w, f) => `Hasta el ${w}, cancelar cuesta ${f}.`,
     after: (f) => `Después: ${f}.`,
+    afterKept: "Después, el depósito no se devuelve.",
+    onlyKept: "Si cancelas, el depósito no se devuelve.",
+    orKept: ", o el depósito pagado si es mayor",
     only: (f) => `Cancelar cuesta ${f}.`,
     noShow: (f) => `Si no se presenta: ${f}.`,
     whole: { stay: "la estancia completa", price: "el precio completo" },
@@ -66,6 +78,9 @@ const WORDS: Readonly<Record<PolicyLang, Words>> = {
     free: (w) => `Annulation gratuite jusqu'au ${w}.`,
     paid: (w, f) => `Jusqu'au ${w}, l'annulation coûte ${f}.`,
     after: (f) => `Ensuite : ${f}.`,
+    afterKept: "Ensuite, l'acompte n'est pas remboursé.",
+    onlyKept: "En cas d'annulation, l'acompte n'est pas remboursé.",
+    orKept: ", ou l'acompte versé s'il est plus élevé",
     only: (f) => `L'annulation coûte ${f}.`,
     noShow: (f) => `Non-présentation : ${f}.`,
     whole: { stay: "le séjour complet", price: "le prix total" },
@@ -76,6 +91,9 @@ const WORDS: Readonly<Record<PolicyLang, Words>> = {
     free: (w) => `Kostenlose Stornierung bis ${w}.`,
     paid: (w, f) => `Bis ${w} kostet eine Stornierung ${f}.`,
     after: (f) => `Danach: ${f}.`,
+    afterKept: "Danach wird die Anzahlung nicht erstattet.",
+    onlyKept: "Bei einer Stornierung wird die Anzahlung nicht erstattet.",
+    orKept: " oder die geleistete Anzahlung, falls diese höher ist",
     only: (f) => `Eine Stornierung kostet ${f}.`,
     noShow: (f) => `Bei Nichterscheinen: ${f}.`,
     whole: { stay: "der gesamte Aufenthalt", price: "der volle Preis" },
@@ -86,6 +104,9 @@ const WORDS: Readonly<Record<PolicyLang, Words>> = {
     free: (w) => `Cancellazione gratuita fino al ${w}.`,
     paid: (w, f) => `Fino al ${w}, la cancellazione costa ${f}.`,
     after: (f) => `Dopo: ${f}.`,
+    afterKept: "Dopo, l'acconto non viene restituito.",
+    onlyKept: "Se annulli, l'acconto non viene restituito.",
+    orKept: ", o l'acconto versato se è maggiore",
     only: (f) => `La cancellazione costa ${f}.`,
     noShow: (f) => `Mancata presentazione: ${f}.`,
     whole: { stay: "l'intero soggiorno", price: "il prezzo intero" },
@@ -96,6 +117,9 @@ const WORDS: Readonly<Record<PolicyLang, Words>> = {
     free: (w) => `Cancelamento gratuito até ${w}.`,
     paid: (w, f) => `Até ${w}, cancelar custa ${f}.`,
     after: (f) => `Depois disso: ${f}.`,
+    afterKept: "Depois disso, o sinal não é devolvido.",
+    onlyKept: "Se cancelar, o sinal não é devolvido.",
+    orKept: ", ou o sinal pago, se for maior",
     only: (f) => `Cancelar custa ${f}.`,
     noShow: (f) => `Se não comparecer: ${f}.`,
     whole: { stay: "a estadia completa", price: "o preço total" },
@@ -121,6 +145,10 @@ export interface SentenceOptions {
   readonly place?: string | undefined;
   /** A locale for dates and money when the tag alone does not say it (`pt-BR`, `es-MX`). */
   readonly locale?: string | undefined;
+  /** A deposit the policy keeps (ADR-035): once cancelling is no longer free, it is what is kept. */
+  readonly depositKept?: boolean | undefined;
+  /** That deposit: a fee at least as much is said alone; a smaller one, with the deposit if that is more. */
+  readonly deposit?: Money | undefined;
 }
 
 /** The policy in one short paragraph, true to the dated steps: every fee, its date and time, and no-show. */
@@ -159,10 +187,24 @@ export function policySentence(dated: DatedPolicy, opts: SentenceOptions): strin
     }
     return w.when(date, time, place);
   };
+  // A deposit the policy keeps is kept once no free step is ahead, as far as it was paid: a fee from then
+  // on is that fee or the deposit, whichever is more (`bookingFeeAt`), and is said so.
+  const lastFree = dated.steps.reduce((at, s, i) => (s.fee.value === 0 ? i : at), -1);
+  const fee = (m: Money, i: number) =>
+    opts.depositKept === true &&
+    i > lastFree &&
+    !(opts.deposit && opts.deposit.currency === m.currency && m.value >= opts.deposit.value) &&
+    !(m.value >= opts.total.value && m.currency === opts.total.currency)
+      ? `${money(m)}${w.orKept}`
+      : money(m);
   const out: string[] = [];
-  for (const s of dated.steps)
-    out.push(s.fee.value === 0 ? w.free(when(s.until)) : w.paid(when(s.until), money(s.fee)));
-  out.push(dated.steps.length > 0 ? w.after(money(dated.after)) : w.only(money(dated.after)));
+  dated.steps.forEach((s, i) => {
+    out.push(s.fee.value === 0 ? w.free(when(s.until)) : w.paid(when(s.until), fee(s.fee, i)));
+  });
+  const kept = opts.depositKept === true && dated.after.value === 0;
+  const after = fee(dated.after, dated.steps.length);
+  const last = dated.steps.length > 0 ? (kept ? w.afterKept : w.after(after)) : kept ? w.onlyKept : w.only(after);
+  out.push(last);
   out.push(w.noShow(money(dated.noShow)));
   return out.join(" ");
 }

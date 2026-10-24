@@ -311,7 +311,16 @@ export async function resolveWrite(db: Db, journalId: string, now: number): Prom
       params: [found.externalId, now, row.id],
       method: "run",
     });
-    if (done.changes === 1) await resolver.settled(db, row, "written", found, now);
+    if (done.changes === 1) {
+      // Kept as the item's link too: the next sync knows the system holds it, and never writes it again.
+      await db.client.query({
+        sql: `UPDATE connector_links SET external_id = COALESCE(external_id, ?), state = 'synced', updated_at = ?
+               WHERE connector_id = ? AND item_id = ?`,
+        params: [found.externalId, now, row.connectorId, row.itemId],
+        method: "run",
+      });
+      await resolver.settled(db, row, "written", found, now);
+    }
     return "found: written";
   }
   if (now - row.createdAt < RESOLVE_WITHIN_MS) {

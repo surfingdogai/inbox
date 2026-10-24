@@ -21,7 +21,8 @@ export async function readClosures(db: Db, serviceId?: string): Promise<Closure[
   const rows = await db.orm
     .select({ weekly: availabilityRules.weekly })
     .from(availabilityRules)
-    .where(and(eq(availabilityRules.kind, "closed"), scope));
+    // A member of staff's own rows (ADR-035) are theirs, never the business's.
+    .where(and(eq(availabilityRules.kind, "closed"), scope, isNull(availabilityRules.resourceId)));
   return rows
     .map((r) => r.weekly as Closure | null)
     .filter((c): c is Closure => Boolean(c && typeof c.from === "string" && typeof c.to === "string"));

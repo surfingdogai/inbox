@@ -202,6 +202,29 @@ export function moneyMajor(m: Money | undefined): string {
   return m ? majorText(m.value, m.currency) : "";
 }
 
+/**
+ * The price the form for a time we propose starts from (ADR-035): the booking's own; for another time
+ * for a request asked for anyone, nothing, since the time goes with whoever is free then and, left
+ * blank, carries their price. A change to what was agreed keeps its price unless one is named.
+ */
+export function proposePriceStart(
+  booking: { readonly totalPrice?: Money | undefined; readonly anyStaff?: boolean | undefined } | undefined,
+  event = "propose",
+): string {
+  return booking?.anyStaff === true && event === "propose" ? "" : moneyMajor(booking?.totalPrice);
+}
+
+/**
+ * The price a time we propose sends: only one the owner typed or changed. The one the form started
+ * from, sent back untouched, would be named as ours and kept, where the person free then has their own
+ * (ADR-035). Undefined: no price sent; null: what was typed is not a price.
+ */
+export function proposedPrice(typed: string, started: string, currency: string): Money | undefined | null {
+  const text = typed.trim();
+  if (!text || text === started.trim()) return undefined;
+  return parseMoney(text, currency) ?? null;
+}
+
 export interface QuoteLine {
   readonly name: string;
   readonly quantity: number;

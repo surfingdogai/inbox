@@ -1,9 +1,9 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { Db } from "../db";
 import type { Item, ItemType, Money, PayloadOf, Personalised } from "../domain/types";
 import { floorsFor } from "../negotiation/catalogue";
 import { type Reward, rewardFor, rewardPrice, type Standing } from "../negotiation/rewards";
-import { business, products, services } from "../schema/tables";
+import { business, products, serviceResources, services } from "../schema/tables";
 import { readSettings } from "../settings/schema";
 import { type FieldProblem, WriteError } from "./errors";
 
@@ -67,11 +67,29 @@ export interface ServicePricing {
   readonly reward: Reward | null;
 }
 
+/**
+ * Who a booking is with and what was added to it (ADR-035): a member of staff's own price and length
+ * for the service, when the owner set them, and each add-on's minutes and price.
+ */
+export interface BookedWith {
+  readonly resourceId?: string | undefined;
+  readonly addOns?: readonly { readonly durationMin: number; readonly price?: Money | undefined }[] | undefined;
+}
+
+/** What a booking payload says it is with, for `servicePricing`. */
+export function bookedWith(b: {
+  readonly resourceId?: string | undefined;
+  readonly addOns?: BookedWith["addOns"];
+}): BookedWith {
+  return { resourceId: b.resourceId, addOns: b.addOns };
+}
+
 export async function servicePricing(
   db: Db,
   serviceId: string,
   partySize: number | undefined,
   pricing?: PricingFor,
+  withWhom: BookedWith = {},
 ): Promise<ServicePricing | null> {
   const [service] = await db.orm
     .select({
@@ -83,8 +101,36 @@ export async function servicePricing(
     .from(services)
     .where(eq(services.id, serviceId));
   if (!service) return null;
-  const list = await serviceTotal(db, service.price, partySize);
-  const base = { name: service.name, durationMin: service.durationMin, negotiable: service.negotiable !== 0 };
+  const own = withWhom.resourceId ? await staffTerms(db, serviceId, withWhom.resourceId) : null;
+  const addOns = withWhom.addOns ?? [];
+  const addedMin = addOns.reduce((n, a) => n + a.durationMin, 0);
+  // A member of staff's own price is for the service as the business sells it with them: per person on a
+  // service priced per person, as the service's own price is.
+  const price: ServicePrice =
+    own?.priceOverride !== null && own?.priceOverride !== undefined && service.price?.model === "fixed"
+      ? { ...service.price, value: own.priceOverride }
+      : service.price;
+  const base = {
+    name: service.name,
+    durationMin: (own?.durationOverrideMin ?? service.durationMin) + addedMin,
+    negotiable: service.negotiable !== 0,
+  };
+  const listed = await serviceTotal(db, price, partySize);
+  // An add-on's price is added to a fixed price, in its currency; an add-on in another currency is a
+  // person's to price.
+  let list = listed;
+  if (listed) {
+    let value = listed.value;
+    for (const a of addOns) {
+      if (!a.price) continue;
+      if (a.price.currency.toUpperCase() !== listed.currency) {
+        list = null;
+        break;
+      }
+      value += a.price.value;
+    }
+    if (list) list = { value, currency: listed.currency };
+  }
   if (!list) return { ...base, list: null, customer: null, floor: null, reward: null };
   const per = (await floorsFor(db, "service", [serviceId])).get(serviceId);
   const places = service.price?.per === "person" ? (partySize ?? 1) : 1;
@@ -168,7 +214,7 @@ export function orderPersonalised(
 
 async function priceBooking(db: Db, payload: PayloadOf<"booking">, pricing?: PricingFor): Promise<Priced> {
   const { customerStatedPrice: _sent, personalised: _chosen, ...asked } = payload;
-  const service = await servicePricing(db, asked.reservationFor.serviceId, asked.partySize, pricing);
+  const service = await servicePricing(db, asked.reservationFor.serviceId, asked.partySize, pricing, bookedWith(asked));
   if (!service) return { payload: asked, unpriced: asked.totalPrice !== undefined };
   const named = { ...asked, reservationFor: { ...asked.reservationFor, name: clip(service.name, 200) } };
   if (!service.list || !service.customer) return { payload: named, unpriced: named.totalPrice !== undefined };
@@ -194,6 +240,22 @@ async function priceBooking(db: Db, payload: PayloadOf<"booking">, pricing?: Pri
 
 /** A service's price as the catalogue holds it: fixed, from, or by quote; per booking unless it says per person. */
 type ServicePrice = (typeof services.$inferSelect)["price"];
+
+/** A member of staff's own price and length for a service, when the owner set them (ADR-035). */
+async function staffTerms(
+  db: Db,
+  serviceId: string,
+  resourceId: string,
+): Promise<{ priceOverride: number | null; durationOverrideMin: number | null } | null> {
+  const [row] = await db.orm
+    .select({
+      priceOverride: serviceResources.priceOverride,
+      durationOverrideMin: serviceResources.durationOverrideMin,
+    })
+    .from(serviceResources)
+    .where(and(eq(serviceResources.serviceId, serviceId), eq(serviceResources.resourceId, resourceId)));
+  return row ?? null;
+}
 
 /**
  * What the catalogue charges for one booking of a service: its fixed price, times the party for a

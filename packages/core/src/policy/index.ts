@@ -92,8 +92,8 @@ export function datePolicy(policy: Policy, ctx: PolicyContext): DatedPolicy {
 
 /**
  * What cancelling costs at `at`: the fee of the first step still ahead, else the fee after the last
- * one; at least what is kept whatever the step (a deposit given as not refundable), and never more than
- * the total.
+ * one; at least what is kept (a deposit given as not refundable, once no free step is ahead), and never
+ * more than the total.
  */
 export function feeAt(
   dated: DatedPolicy,

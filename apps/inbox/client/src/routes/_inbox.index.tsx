@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { StatePill } from "../components/Pills";
+import { StaffDayCard } from "../components/StaffDay";
 import { api, problemOf } from "../lib/api";
 import {
   formatClock,
@@ -96,6 +97,9 @@ function TodayPane() {
           </ul>
         )}
       </section>
+
+      {/* A salon's day, a column per member of staff (ADR-035): only once it lists staff. */}
+      <StaffDayCard tz={tz} />
 
       <section className="card glass stack">
         <h3 className="sec">Waiting for you</h3>

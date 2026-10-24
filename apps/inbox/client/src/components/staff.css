@@ -1,0 +1,297 @@
+/* Staff (ADR-035): thin, small, one accent. */
+.staff-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+/* Their lines beside the photo take the room that is left, and no more, so a long name can be cut short. */
+.staff-main > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.staff-main .t {
+  min-width: 0;
+}
+/* Their own name beside what customers see: on the same line, cut short rather than wrapped onto its own. */
+.staff-line-names {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+.staff-line-names b {
+  flex: none;
+}
+.staff-fullname {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.staff-fullname::before {
+  content: "· ";
+}
+.staff-avatar {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 9999px;
+  object-fit: cover;
+  border: 1px solid var(--hairline);
+}
+.staff-avatar.is-initials {
+  display: inline-grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-2);
+  background: var(--row-bg);
+}
+.staff-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.staff-photo {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+.staff-names {
+  flex: 1 1 280px;
+}
+.staff-terms {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(140px, 1fr) minmax(200px, 2fr);
+  gap: 10px;
+  align-items: end;
+  padding: 10px 12px;
+}
+.staff-terms-name {
+  align-self: center;
+  font-size: 13px;
+}
+@media (max-width: 640px) {
+  .staff-terms {
+    grid-template-columns: 1fr;
+  }
+}
+/* A service they give at its usual price and length: one line, its own terms a press away. */
+.staff-terms-closed {
+  font-size: 13px;
+  padding: 2px 2px;
+}
+/* Their hours on a phone: a window's two times wrap rather than cut off. */
+.staff-editor .hours-window {
+  flex-wrap: wrap;
+}
+.staff-editor .hours-window select {
+  min-width: 7.5em;
+}
+/* What the chosen policy charges, said in full under its chips. */
+.terms-words {
+  font-size: 12.5px;
+  color: var(--ink);
+  margin: 2px 0 0;
+}
+.chip.is-disabled {
+  opacity: 0.5;
+}
+
+/* The day by staff */
+.staffday {
+  min-width: 0;
+}
+/* Only the columns scroll sideways: the title, the day's buttons and the hours stay where they are. */
+.staffday-scroll {
+  min-width: 0;
+  overflow-x: auto;
+}
+/*
+ * The hours stay in view while the columns scroll under them: once they do, on a pane that hides them,
+ * the card's glass over its own fallback surface over the ground, opaque in both themes. Not a blur: the card and the
+ * inbox are blurred already, and a third blur inside them does not render.
+ */
+.staffday-ruler {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  margin-right: -8px;
+  padding-right: 8px;
+}
+.staffday-scroll.is-scrolled .staffday-ruler {
+  background:
+    linear-gradient(var(--glass-bg-strong), var(--glass-bg-strong)),
+    linear-gradient(var(--glass-fallback), var(--glass-fallback)), var(--ground);
+  border-right: 1px solid var(--hairline);
+}
+/* As wide as its columns, so the hours can stay in view across all of them. */
+.staffday-grid {
+  display: grid;
+  gap: 8px;
+  width: max-content;
+  min-width: 100%;
+}
+.staffday-col {
+  min-width: 140px;
+}
+/* Every head one height, the ruler's too: the name on one line, the count and "Off" under it. */
+.staffday-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  height: 40px;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 0 2px 6px;
+}
+.staffday-who {
+  display: grid;
+  min-width: 0;
+  line-height: 1.25;
+}
+.staffday-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.staffday-count {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  white-space: nowrap;
+  color: var(--ink-3);
+  font-size: 11.5px;
+  font-weight: 400;
+}
+.staffday-count .pill {
+  height: 15px;
+  padding: 0 6px;
+  font-size: 10.5px;
+}
+.staffday-head .staff-avatar {
+  width: 22px;
+  height: 22px;
+  font-size: 10px;
+}
+.staffday-track {
+  position: relative;
+  border-left: 1px solid var(--hairline);
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(var(--hour) - 1px),
+    var(--hairline) calc(var(--hour) - 1px),
+    var(--hairline) var(--hour)
+  );
+}
+/* Outside someone's own hours: a faint wash, under their bookings. */
+.staffday-off {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: color-mix(in srgb, var(--ink-2) 7%, transparent);
+  pointer-events: none;
+}
+.staffday-block {
+  position: absolute;
+  left: 4px;
+  right: 2px;
+  overflow: hidden;
+  padding: 3px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--glass-border-strong);
+  background: var(--glass-bg-strong);
+  font-size: 11.5px;
+  line-height: 1.25;
+  text-decoration: none;
+  color: var(--ink);
+  transition: transform 160ms ease;
+}
+/* A line of a block: whole, or ended with an ellipsis, never wrapped into the next. */
+.staffday-line {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The service on a tall block: wrapped onto the lines it has room for, the last ended with an ellipsis; a
+   word too long for a narrow lane is broken where its language hyphenates it, never mid-letter. */
+.staffday-line.is-wrap {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  white-space: normal;
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+.staffday-block:hover {
+  transform: translateX(1px);
+}
+.staffday-block.is-request {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--ink-2) 35%, transparent);
+  color: var(--ink-2);
+}
+.staffday-block.is-needs {
+  border-color: color-mix(in srgb, var(--violet) 55%, transparent);
+}
+.staffday-times {
+  position: relative;
+  font-size: 10.5px;
+  color: var(--ink-3, var(--ink-2));
+}
+.staffday-times span {
+  position: absolute;
+  right: 4px;
+  transform: translateY(-50%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .staffday-block {
+    transition: none;
+  }
+}
+
+/* A booking with someone: who, the deposit, the policy */
+.booking-salon {
+  display: grid;
+  gap: 4px;
+  margin: 2px 0 12px;
+  font-size: 13px;
+}
+.booking-salon .bs-row {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.booking-salon .k {
+  min-width: 84px;
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
+.services-tabs {
+  width: fit-content;
+}
+
+/* The day by staff above the list: a phone's alone, where the home pane is not shown. */
+.list-day {
+  display: none;
+}
+@media (max-width: 899px) {
+  .list-day {
+    display: block;
+    margin-bottom: 12px;
+  }
+  /* A business with no staff: nothing there, and no gap for it. */
+  .list-day:empty {
+    display: none;
+  }
+}

@@ -132,6 +132,8 @@ export function icsConnector(): ConnectorDefinition {
     kind: "ics",
     title: "Calendar link",
     group: "calendars",
+    // A stylist's own calendar link: busy times only (ADR-035): tied to them, it takes only their times off and holds only their bookings.
+    perResource: true,
     capabilities: ["busy_times"],
     auth: "form",
     form: icsForm,

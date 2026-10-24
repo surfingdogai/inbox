@@ -89,7 +89,9 @@ export function IntegrationsCard() {
   const byCard = new Map<string, ConnectionView[]>();
   for (const c of connections) byCard.set(cardOf(c), [...(byCard.get(cardOf(c)) ?? []), c]);
   const card = data?.cards.find((c) => c.id === open) ?? null;
-  const soon = (data?.cards ?? []).filter((c) => c.status === "soon");
+  // A card every way of which needs something only the server or the company can give (a booking
+  // system, ADR-035) says "Needs setup", never "Soon".
+  const soon = (data?.cards ?? []).filter((c) => c.status === "soon" && !needsSetup(c));
   // Payments (ADR-023): one platform sends an order's links per mode; the one that does is named. A shop
   // that takes its orders at its own checkout is one of them (ADR-026).
   const sending = connections.filter((c) => c.payments && c.pay_on && !c.payments.disconnecting);
@@ -199,7 +201,8 @@ export function IntegrationsCard() {
                     }}
                   />
                 )}
-                {here && here.status === "ready" && !keyPanel && data.can_connect && (
+                {/* A card that needs setup opens too: to say what it needs, once. */}
+                {here && (here.status === "ready" || needsSetup(here)) && !keyPanel && data.can_connect && (
                   <ConnectPanel
                     key={here.id}
                     card={here}
@@ -266,7 +269,8 @@ function Tile({
   onOpen: () => void;
 }) {
   const Icon = ICONS[card.group];
-  const soon = card.status === "soon";
+  const setup = needsSetup(card);
+  const soon = card.status === "soon" && !setup;
   const tag = tagOf(connections);
   const body = (
     <>
@@ -277,6 +281,8 @@ function Tile({
       </span>
       {soon ? (
         <span className="int-tag">Soon</span>
+      ) : setup ? (
+        <span className="int-tag">{setupTag(card)}</span>
       ) : tag ? (
         <span className={clsx("int-tag", tag.tone === "on" && "is-on", tag.tone === "warn" && "is-warn")}>
           {tag.text}
@@ -368,6 +374,32 @@ function ConnectPanel({
     ...(w.preset ? { preset: w.preset } : {}),
     values,
   });
+  // Nothing to connect yet: what each way needs, and where it is explained; said once when every way
+  // needs the same (a system's two servers), without its name again.
+  if (needsSetup(card)) {
+    const hints = [...new Map(setup.map((w) => [w.hint ?? "", w])).values()];
+    return (
+      <div className="confirm row-glass stack int-panel">
+        {hints.map((w) => (
+          <p key={keyOf(w)} className="hint">
+            {hints.length > 1 ? `${w.label}: ` : ""}
+            {(w.hint ?? "Needs setting up first.").replace(/^Needs setup:\s*/i, "")}{" "}
+            {w.href && (
+              <a className="int-link" href={w.href} target="_blank" rel="noopener noreferrer">
+                How
+                <ExternalLink className="icon-xs" aria-hidden="true" />
+              </a>
+            )}
+          </p>
+        ))}
+        <div className="rowx">
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onCancel}>
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  }
   if (!way) return null;
   return (
     <div className="confirm row-glass stack int-panel">
@@ -1465,4 +1497,14 @@ function NewLink({
       )}
     </div>
   );
+}
+
+/** Every way of the card needs something only the server or the company can give: nothing to connect yet. */
+function needsSetup(card: GalleryCard): boolean {
+  return card.ways.length > 0 && card.ways.every((w) => w.status === "setup");
+}
+
+/** Such a card's tag, as its panel says it: "Not available yet" when it waits on another company. */
+function setupTag(card: GalleryCard): string {
+  return card.ways.find((w) => w.tag)?.tag ?? "Needs setup";
 }

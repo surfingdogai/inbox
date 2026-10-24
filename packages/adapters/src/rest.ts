@@ -64,6 +64,7 @@ import { ownerOperation, routeScopes } from "./access";
 import { publicOrigin } from "./origin";
 import { problemResponse, unauthorized } from "./problem";
 import * as R from "./responses";
+import { staffOwnerRoutes, staffPublicRoutes } from "./staff";
 
 /**
  * The REST door. Same operations as MCP, described for OpenAPI from the same Zod schemas.
@@ -556,6 +557,9 @@ export function publicRest(caps: Capabilities): Hono<CallerEnv> {
       return c.json(await caps.acknowledgeReceipt(c.get("caller"), input));
     },
   );
+
+  // Who customers can book at a salon (ADR-035): first names, photos, the services each gives.
+  staffPublicRoutes(app, caps, hook as never);
 
   return app;
 }
@@ -1665,6 +1669,9 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
       return once(c, "keys.revoke", input, (caller) => caps.access.revokeKey(caller, input));
     },
   );
+
+  // A salon's staff, its day by staff, and starting from its own tool (ADR-035).
+  staffOwnerRoutes(app, caps, { once, owner, hook: hook as never });
 
   return app;
 }

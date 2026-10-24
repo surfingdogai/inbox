@@ -16,6 +16,14 @@ export interface SlotSpec {
   readonly granularityMin: number;
   readonly bufferBeforeMin: number;
   readonly bufferAfterMin: number;
+  /**
+   * The service booked (ADR-035). Its places are held under two keys over time: its own
+   * (`service:<id>`) before anyone gave it, and each member of staff's (`resource:<id>`) since. With
+   * it, each read sees the other: a member of staff is busy wherever the own key of a service they give
+   * holds a booking (nobody knows with whom), and the service's own places count every booking of it a
+   * member of staff holds. A business calendar chosen for this service applies to its staff too.
+   */
+  readonly serviceId?: string | undefined;
 }
 
 export const MAX_BUCKETS = 96;
@@ -95,10 +103,11 @@ export async function readClaims(
     }
     set.add(r.ordinal);
   }
+  await otherKeys(db, spec, buckets, exceptItemId, taken);
   const g = spec.granularityMin * 60_000;
   const first = buckets[0] ?? 0;
   const last = (buckets[buckets.length - 1] ?? 0) + g;
-  const busy = await busyOverlapping(db, first, last, resourceKey);
+  const busy = await busyOverlapping(db, first, last, resourceKey, spec.serviceId);
   if (busy.length > 0) {
     for (const b of buckets) {
       if (!busy.some((i) => i.start < b + g && i.end > b)) continue;
@@ -108,6 +117,57 @@ export async function readClaims(
     }
   }
   return taken;
+}
+
+/** Every place of a bucket, taken. */
+function fill(taken: Map<number, Set<number>>, bucket: number, capacity: number, count = capacity): void {
+  const set = taken.get(bucket) ?? new Set<number>();
+  for (let o = 0, added = 0; o < Math.max(capacity, 1) && added < count; o++) {
+    if (set.has(o)) continue;
+    set.add(o);
+    added++;
+  }
+  taken.set(bucket, set);
+}
+
+/** The service's places held under its other key (`SlotSpec.serviceId`), added to what is taken. */
+async function otherKeys(
+  db: Db,
+  spec: SlotSpec,
+  buckets: readonly number[],
+  exceptItemId: string,
+  taken: Map<number, Set<number>>,
+): Promise<void> {
+  const serviceId = spec.serviceId;
+  if (!serviceId) return;
+  const lo = buckets[0] ?? 0;
+  const hi = buckets[buckets.length - 1] ?? 0;
+  if (spec.resourceKey.startsWith("resource:")) {
+    // Booked before anyone gave it: whoever it is with, nobody here is free then. The person is one across
+    // the services they give, so a booking held under any of those services' own keys takes them.
+    const resourceId = spec.resourceKey.slice("resource:".length);
+    const { rows } = await db.client.query({
+      sql: `SELECT DISTINCT bucket_start FROM slot_claims
+             WHERE (resource_key = ? OR resource_key IN
+                     (SELECT 'service:' || service_id FROM service_resources WHERE resource_id = ?))
+               AND bucket_start >= ? AND bucket_start <= ? AND item_id <> ?`,
+      params: [`service:${serviceId}`, resourceId, lo, hi, exceptItemId],
+      method: "all",
+    });
+    for (const r of rows) fill(taken, Number(r[0]), spec.capacity);
+    return;
+  }
+  if (spec.resourceKey !== `service:${serviceId}`) return;
+  // With nobody giving it now: each of its bookings a member of staff still holds takes a place.
+  const { rows } = await db.client.query({
+    sql: `SELECT c.bucket_start, COUNT(DISTINCT c.item_id) FROM slot_claims c JOIN items i ON i.id = c.item_id
+           WHERE c.resource_key LIKE 'resource:%' AND c.bucket_start >= ? AND c.bucket_start <= ? AND c.item_id <> ?
+             AND json_extract(i.payload, '$.reservationFor.serviceId') = ?
+           GROUP BY c.bucket_start`,
+    params: [lo, hi, exceptItemId, serviceId],
+    method: "all",
+  });
+  for (const r of rows) fill(taken, Number(r[0]), spec.capacity, Number(r[1]));
 }
 
 /** Picks the lowest free ordinal per bucket, or reports the first full bucket. */
