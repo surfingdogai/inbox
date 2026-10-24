@@ -104,7 +104,8 @@ export async function servicePricing(
   const own = withWhom.resourceId ? await staffTerms(db, serviceId, withWhom.resourceId) : null;
   const addOns = withWhom.addOns ?? [];
   const addedMin = addOns.reduce((n, a) => n + a.durationMin, 0);
-  // A member of staff's own price is for the service as the business sells it with them.
+  // A member of staff's own price is for the service as the business sells it with them: per person on a
+  // service priced per person, as the service's own price is.
   const price: ServicePrice =
     own?.priceOverride !== null && own?.priceOverride !== undefined && service.price?.model === "fixed"
       ? { ...service.price, value: own.priceOverride }

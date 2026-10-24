@@ -135,7 +135,10 @@ export const serviceResources = sqliteTable(
   {
     serviceId: text("service_id").notNull(),
     resourceId: text("resource_id").notNull(),
-    /** Minor units of the service's currency, for the whole booking. */
+    /**
+     * Minor units of the service's currency, as its own price is: for the whole booking, or for each
+     * person on a service priced per person.
+     */
     priceOverride: integer("price_override"),
     durationOverrideMin: integer("duration_override_min"),
     createdAt: createdAt(),
