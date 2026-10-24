@@ -201,7 +201,8 @@ export function IntegrationsCard() {
                     }}
                   />
                 )}
-                {here && here.status === "ready" && !keyPanel && data.can_connect && (
+                {/* A card that needs setup opens too: to say what it needs, once. */}
+                {here && (here.status === "ready" || needsSetup(here)) && !keyPanel && data.can_connect && (
                   <ConnectPanel
                     key={here.id}
                     card={here}
@@ -373,14 +374,16 @@ function ConnectPanel({
     ...(w.preset ? { preset: w.preset } : {}),
     values,
   });
-  if (!way) return null;
-  // Nothing to connect yet: what each way needs, and where it is explained.
+  // Nothing to connect yet: what each way needs, and where it is explained; said once when every way
+  // needs the same (a system's two servers), without its name again.
   if (needsSetup(card)) {
+    const hints = [...new Map(setup.map((w) => [w.hint ?? "", w])).values()];
     return (
       <div className="confirm row-glass stack int-panel">
-        {setup.map((w) => (
+        {hints.map((w) => (
           <p key={keyOf(w)} className="hint">
-            {w.label}: {w.hint ?? "needs setting up first."}{" "}
+            {hints.length > 1 ? `${w.label}: ` : ""}
+            {(w.hint ?? "Needs setting up first.").replace(/^Needs setup:\s*/i, "")}{" "}
             {w.href && (
               <a className="int-link" href={w.href} target="_blank" rel="noopener noreferrer">
                 How
@@ -397,6 +400,7 @@ function ConnectPanel({
       </div>
     );
   }
+  if (!way) return null;
   return (
     <div className="confirm row-glass stack int-panel">
       {main.length > 1 && !way.advanced && (
