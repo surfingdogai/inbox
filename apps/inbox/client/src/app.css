@@ -757,6 +757,18 @@ a {
 .catalogue-row .wide {
   grid-column: 1 / -1;
 }
+/* On a phone, a service's or a person's actions go under its lines, so the lines keep their width. */
+@media (max-width: 620px) {
+  .catalogue-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .catalogue-row > .rowx {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    /* Close together, so a service's five actions keep to one line. */
+    gap: 4px;
+  }
+}
 .catalogue-row.is-archived .catalogue-main {
   opacity: 0.7;
 }

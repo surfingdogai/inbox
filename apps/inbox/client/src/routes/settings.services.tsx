@@ -88,9 +88,10 @@ function ServicesTabs() {
   const tab = tabOf();
   return (
     <fieldset className="seg services-tabs">
-      <legend className="sr-only">Services or staff</legend>
+      <legend className="sr-only">What you offer, or your staff</legend>
+      {/* Not "Services" twice: the Settings tab says it already. */}
       <button type="button" aria-pressed={tab === "services"} onClick={() => go("services")}>
-        Services
+        What you offer
       </button>
       <button type="button" aria-pressed={tab === "staff"} onClick={() => go("staff")}>
         Staff
