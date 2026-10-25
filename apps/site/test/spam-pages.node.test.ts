@@ -67,7 +67,7 @@ describe("the spam filter's pages", () => {
     expect(read("src/content/docs/docs/index.md")).toContain("(/docs/spam/)");
     expect(read("astro.config.mjs")).toContain('"docs/spam"');
     expect(read(PAGE)).toContain('href="/docs/spam/"');
-    expect(read(PAGE)).toContain("`/guides/${SPAM_GUIDE.slug}/`");
+    expect(read(PAGE)).toContain(["`/guides/$", "{SPAM_GUIDE.slug}/`"].join(""));
     expect(SPAM_GUIDE.slug).toBe("stop-contact-form-spam");
   });
 
