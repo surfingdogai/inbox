@@ -634,7 +634,7 @@ export async function screenAtDoor(deps: SpamDeps, ctx: DoorContext): Promise<Do
   const decision = decide({
     type: ctx.type,
     signals,
-    veto: veto || answer?.customerIntent === true,
+    veto,
     choices: run.choices,
     learning: run.learning,
     answer,
@@ -1024,7 +1024,7 @@ export async function runScreenJob(
     extra.push(countStatement("capped", now));
   } else if (run.on.size > 0) ai = "skipped";
 
-  const veto = namesOwnOffer(reading.normalised, business.offers) || answer?.customerIntent === true;
+  const veto = namesOwnOffer(reading.normalised, business.offers);
   const alerted = await ownerAlerted(db, input.eventId);
   const decision = decide({
     type: item.type,

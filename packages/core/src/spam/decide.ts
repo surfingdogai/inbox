@@ -26,7 +26,7 @@ export interface DecideInput {
   readonly signals: readonly Signal[];
   /** A sender the business knows: only checks that point at a third party ran, and they only label. */
   readonly trusted?: boolean | undefined;
-  /** It names one of the business's own services or products, or the AI found it asks about them. */
+  /** It names one of the business's own services or products. */
   readonly veto?: boolean | undefined;
   /** What each filter that is on does with what it is sure of. */
   readonly choices?: ReadonlyMap<Filter, FilterChoice> | undefined;
@@ -133,6 +133,12 @@ export function decide(input: DecideInput): Decision {
     // The business's own offer named, or a pass presented: what the words alone would do labels at most.
     if (input.veto && content) atMostWarn();
     if (content && signals.some((s) => s.c === "pass")) atMostWarn();
+    // The AI finding it asks for what the business offers lowers only what the filters found: a model
+    // told "customer" never brings back what the free protection puts aside alone.
+    const filtered = (s: Signal) => s.f === "pitches" || s.f === "scams" || s.f === "junk" || s.f === "ai";
+    const filtersNeeded =
+      signals.some((s) => filtered(s) && s.w > 0) && sum(signals.filter((s) => !filtered(s))) < ASIDE_AT;
+    if (input.answer?.customerIntent && filtersNeeded) atMostWarn();
     for (const [filter, choice] of input.choices ?? []) if (choice === "label" && needs(filter)) atMostWarn();
     for (const source of input.learning ?? []) {
       if (band === "aside" && needs(source)) {
