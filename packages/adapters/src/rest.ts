@@ -214,7 +214,7 @@ export function publicRest(caps: Capabilities): Hono<CallerEnv> {
     describeRoute({
       tags: ["public"],
       summary: "Products. Pass next_cursor back as cursor for the next page.",
-      responses: json("Products", R.pageOf(R.productSchema)),
+      responses: json("Products", R.pageOf(R.publicProductSchema)),
     }),
     validator("query", listProductsQuery, hook),
     async (c) => {

@@ -168,6 +168,36 @@ export interface Page<T> {
 }
 
 /**
+ * A product as customers and their agents read it at the public doors: what it is, its price and
+ * stock, and its terms. Never where it came from (`source`, which for a feed is its address, query
+ * string and any key in it included), the source's own id, its location, or its dates: those are the
+ * owner's, at the owner's door.
+ */
+export interface PublicProduct {
+  readonly id: string;
+  readonly sku: string | null;
+  readonly name: string;
+  readonly description: string | null;
+  readonly price: { value: number; currency: string };
+  readonly stock: number | null;
+  readonly active: number;
+  readonly withdrawal: string;
+  readonly negotiable: number;
+}
+
+const PUBLIC_PRODUCT = {
+  id: products.id,
+  sku: products.sku,
+  name: products.name,
+  description: products.description,
+  price: products.price,
+  stock: products.stock,
+  active: products.active,
+  withdrawal: products.withdrawal,
+  negotiable: products.negotiable,
+} as const;
+
+/**
  * A customer's view of their item (the status door): the item as they see it, what we proposed and
  * who we wait on (`CustomerItemView`), its receipts, and who the inbox takes them for.
  */
@@ -695,8 +725,11 @@ export class Capabilities {
     return page(rows, input.limit, (r) => r.id);
   }
 
-  /** Active products by name; the cursor works as for services (keyset on name, id). */
-  async listProducts(input: T.ListProductsInput): Promise<Page<typeof products.$inferSelect>> {
+  /**
+   * Active products by name, each as customers and their agents see it (`PublicProduct`); the cursor
+   * works as for services (keyset on name, id).
+   */
+  async listProducts(input: T.ListProductsInput): Promise<Page<PublicProduct>> {
     const conditions: SQL[] = [eq(products.active, 1)];
     if (input.q) conditions.push(sql`lower(${products.name}) LIKE ${`%${input.q.toLowerCase()}%`}`);
     if (input.cursor) {
@@ -708,7 +741,7 @@ export class Capabilities {
       conditions.push(or(gt(products.name, c.name), and(eq(products.name, c.name), gt(products.id, c.id))) ?? sql`1`);
     }
     const rows = await this.db.orm
-      .select()
+      .select(PUBLIC_PRODUCT)
       .from(products)
       .where(and(...conditions))
       .orderBy(products.name, products.id)

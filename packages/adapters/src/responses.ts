@@ -507,7 +507,7 @@ export const serviceSchema = z.looseObject({
     ),
 });
 
-export const productSchema = z.looseObject({
+const productFields = {
   id: z.string(),
   sku: nullableString,
   name: z.string(),
@@ -515,12 +515,25 @@ export const productSchema = z.looseObject({
   price: money,
   stock: z.number().int().nullable(),
   active: z.number().int(),
-  withdrawal: z
-    .string()
-    .optional()
-    .describe(
-      "standard: the customer may withdraw within the legal period; else the exception the law allows (perishable, personalised, sealed_hygiene, …).",
-    ),
+};
+
+const withdrawalOf = z
+  .string()
+  .describe(
+    "standard: the customer may withdraw within the legal period; else the exception the law allows (perishable, personalised, sealed_hygiene, …).",
+  );
+
+/** A product at the owner's door: the whole row, where it came from included. */
+export const productSchema = z.looseObject({ ...productFields, withdrawal: withdrawalOf.optional() });
+
+/** A product at the public doors: these fields and no others, never where it came from. */
+export const publicProductSchema = z.object({
+  ...productFields,
+  withdrawal: withdrawalOf,
+  negotiable: z
+    .number()
+    .int()
+    .describe("1: a customer may suggest a price of their own for it where the business takes one; 0: never."),
 });
 
 export const pageOf = <T extends z.ZodType>(item: T) => z.object({ items: z.array(item), next_cursor: nullableString });

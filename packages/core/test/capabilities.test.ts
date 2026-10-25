@@ -99,6 +99,27 @@ describe("public capabilities", () => {
     expect(paged.next_cursor).not.toBeNull();
   });
 
+  it("answers with a product's public fields only, never where it came from", async () => {
+    const { db, caps } = await setup();
+    // A feed's address can carry its key in the query string; its own ids and dates are the inbox's.
+    await db.orm.insert(products).values({
+      id: ulid(),
+      sku: "TB-25",
+      name: "Inner tube 700×25",
+      price: { value: 499, currency: "EUR" },
+      source: "feed:https://shop.example/feed.xml?key=feed-secret-123",
+      externalId: "shop-ext-77",
+      createdAt: T0,
+      updatedAt: T0,
+    });
+    const [tube] = (await caps.listProducts({ limit: 50, q: "tube" })).items;
+    expect(Object.keys(tube ?? {}).sort()).toEqual(
+      ["active", "description", "id", "name", "negotiable", "price", "sku", "stock", "withdrawal"].sort(),
+    );
+    expect(tube).toMatchObject({ sku: "TB-25", price: { value: 499, currency: "EUR" }, stock: null });
+    expect(JSON.stringify(tube)).not.toMatch(/feed-secret|shop-ext-77|feed:/);
+  });
+
   it("finds free slots inside opening hours in the business time zone, minus claims", async () => {
     const { db, caps, svc } = await setup();
     // Lisbon is UTC+1 in September: 09:00-12:00 local on Tuesday 22 Sep = 08:00-11:00Z.
