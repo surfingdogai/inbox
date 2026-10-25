@@ -149,6 +149,31 @@ describe("importing", () => {
     });
   });
 
+  it("prices a feed that names no currency in the business's own, as its profile gives it", async () => {
+    const { db, caps } = await setup();
+    // A hardware shop in Pune sets its currency where the owner app and the owner's tools do.
+    await caps.setup.updateProfile(owner, { currency: "INR" });
+    const feed = await caps.feeds.add(owner, { url: "https://shop.example.com/feed.csv" });
+    expect(feed.currency).toBe("INR");
+    await caps.feeds.importBody(feed.id, ["id,title,price", "B1,Hammer,250.00", "B2,Spirit level,"].join("\n"), T0);
+    const listed = await caps.setup.listProducts(owner);
+    expect(listed.find((p) => p.name === "Hammer")?.price).toEqual({ value: 25_000, currency: "INR" });
+    expect(listed.find((p) => p.name === "Spirit level")?.price).toEqual({ value: 0, currency: "INR" });
+
+    // A feed connected before it kept a currency of its own reads the profile's too.
+    await db.client.query({
+      sql: "UPDATE connectors SET config_public = ? WHERE id = ?",
+      params: [JSON.stringify({ url: feed.url }), feed.id],
+      method: "run",
+    });
+    expect((await caps.feeds.get(owner, feed.id)).currency).toBe("INR");
+    await caps.feeds.importBody(feed.id, ["id,title,price", "B1,Hammer,260.00"].join("\n"), T0 + 1000);
+    expect((await caps.setup.listProducts(owner)).find((p) => p.name === "Hammer")?.price).toEqual({
+      value: 26_000,
+      currency: "INR",
+    });
+  });
+
   it("sells at a sale's price while it runs on the business's own clock, and at the regular price after", async () => {
     const { caps } = await setup();
     await caps.updateSettings(owner, { doc: { business: { timezone: "America/Vancouver", currency: "CAD" } } });

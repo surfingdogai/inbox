@@ -78,7 +78,8 @@ export class FeedCapabilities {
       .where(eq(connectors.kind, "feed"))
       .orderBy(asc(connectors.name));
     const out: FeedConnector[] = [];
-    for (const row of rows) out.push(this.view(row, await this.activeCount(urlOf(row))));
+    const currency = rows.length ? await this.currency() : "";
+    for (const row of rows) out.push(this.view(row, await this.activeCount(urlOf(row)), currency));
     return out;
   }
 
@@ -87,10 +88,9 @@ export class FeedCapabilities {
     requireNotAssistant(caller, "connect");
     const now = nowOf(caller);
     const url = normaliseFeedUrl(input.url);
-    const settings = await readSettings(this.db);
     const config: FeedConfig = {
       url,
-      currency: (input.currency ?? settings.business.currency ?? "EUR").toUpperCase(),
+      currency: (input.currency ?? (await this.currency())).toUpperCase(),
       deactivateMissing: input.deactivate_missing ?? true,
     };
     const id = ulid(now);
@@ -118,7 +118,7 @@ export class FeedCapabilities {
   async get(caller: Caller, connectorId: string): Promise<FeedConnector> {
     requireOwner(caller);
     const row = await this.row(connectorId);
-    return this.view(row, await this.activeCount(urlOf(row)));
+    return this.view(row, await this.activeCount(urlOf(row)), await this.currency());
   }
 
   /** Queues an import now. The handler in `@surfingdog/adapters` does the fetching. */
@@ -164,9 +164,22 @@ export class FeedCapabilities {
     return {
       id: row.id,
       url: config.url ?? row.externalId ?? "",
-      currency: (config.currency ?? "EUR").toUpperCase(),
+      currency: (config.currency ?? (await this.currency())).toUpperCase(),
       deactivateMissing: config.deactivateMissing !== false,
     };
+  }
+
+  /**
+   * The business's currency, as its profile gives it (where the owner app and the owner's tools set
+   * it), else its settings: what a feed's price with no currency of its own is in, as every price of
+   * the business's is.
+   */
+  private async currency(): Promise<string> {
+    const [[row], settings] = await Promise.all([
+      this.db.orm.select({ currency: business.currency }).from(business).limit(1),
+      readSettings(this.db),
+    ]);
+    return row?.currency || settings.business.currency;
   }
 
   /** The business's time zone, as its profile gives it. */
@@ -366,14 +379,14 @@ export class FeedCapabilities {
     return owner === undefined || owner === id ? product.sku : null;
   }
 
-  private view(row: typeof connectors.$inferSelect, productCount: number): FeedConnector {
+  private view(row: typeof connectors.$inferSelect, productCount: number, currency: string): FeedConnector {
     const config = (row.configPublic ?? {}) as FeedConfig;
     return {
       id: row.id,
       name: row.name,
       url: config.url ?? row.externalId ?? "",
       status: row.status,
-      currency: (config.currency ?? "EUR").toUpperCase(),
+      currency: (config.currency ?? currency).toUpperCase(),
       deactivate_missing: config.deactivateMissing !== false,
       last_sync_at: row.lastSyncAt ?? null,
       last_error: row.lastError ?? null,
