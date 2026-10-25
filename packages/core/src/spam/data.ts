@@ -5,7 +5,10 @@
  * other, it is only never treated as one company's own domain.
  */
 
-/** Mail providers whose domain is shared by many people: never a company's domain, never a handle. */
+/**
+ * Mail providers and relays whose domain is shared by many people: never a company's domain, never a
+ * handle, matched by the address's full host.
+ */
 export const SHARED_MAIL_PROVIDERS: ReadonlySet<string> = new Set([
   "gmail.com",
   "googlemail.com",
@@ -324,6 +327,61 @@ export const SHARED_MAIL_PROVIDERS: ReadonlySet<string> = new Set([
   "mailfence.com",
   "disroot.org",
   "riseup.net",
+  // Relays that give each person an address of their own on one domain, matched by the full host:
+  // privacy relays, and the booking sites' and marketplaces' guest and buyer addresses.
+  "privaterelay.appleid.com",
+  "duck.com",
+  "mozmail.com",
+  "simplelogin.com",
+  "simplelogin.fr",
+  "slmail.me",
+  "aleeas.com",
+  "anonaddy.com",
+  "anonaddy.me",
+  "addy.io",
+  "passmail.net",
+  "passmail.com",
+  "passinbox.com",
+  "passfwd.com",
+  "guest.booking.com",
+  "guest.airbnb.com",
+  "reply.airbnb.com",
+  "m.expediapartnercentral.com",
+  "marketplace.amazon.com",
+  "marketplace.amazon.co.uk",
+  "marketplace.amazon.de",
+  "marketplace.amazon.fr",
+  "marketplace.amazon.it",
+  "marketplace.amazon.es",
+  "marketplace.amazon.nl",
+  "marketplace.amazon.se",
+  "marketplace.amazon.pl",
+  "marketplace.amazon.com.be",
+  "marketplace.amazon.com.tr",
+  "marketplace.amazon.ae",
+  "marketplace.amazon.sa",
+  "marketplace.amazon.eg",
+  "marketplace.amazon.in",
+  "marketplace.amazon.sg",
+  "marketplace.amazon.co.jp",
+  "marketplace.amazon.com.au",
+  "marketplace.amazon.ca",
+  "marketplace.amazon.com.mx",
+  "marketplace.amazon.com.br",
+  "members.ebay.com",
+  "members.ebay.co.uk",
+  "members.ebay.de",
+  "members.ebay.fr",
+  "members.ebay.it",
+  "members.ebay.es",
+  "members.ebay.at",
+  "members.ebay.ch",
+  "members.ebay.ie",
+  "members.ebay.nl",
+  "members.ebay.be",
+  "members.ebay.pl",
+  "members.ebay.ca",
+  "members.ebay.com.au",
 ]);
 
 /** Domains that hand out throwaway addresses. */

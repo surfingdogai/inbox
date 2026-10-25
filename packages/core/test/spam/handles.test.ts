@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { countFirstStatements } from "../../src/spam/handles";
 import { WriteError } from "../../src/write/errors";
-import { agent, DAY, fakeJudge, idOf, MIN, owner, sentText, spamSetup, T0 } from "./harness";
+import { agent, DAY, fakeJudge, idOf, MIN, owner, sentText, spamSetup, T0, visitor } from "./harness";
 
 /**
  * Budgets per handle (ADR-029 §4.4): a stranger starts a few conversations a day under each of its
@@ -266,6 +266,23 @@ describe("rotating", () => {
     const s = await spamSetup();
     for (let i = 0; i < 25; i++) await sendAs(s, i, { email: `person${i}@gmail.com` });
     expect((await screens(s)).every((x) => x === "delivered")).toBe(true);
+  });
+
+  it("counts no relay that gives each customer an address of their own as one company's domain", async () => {
+    for (const relay of ["guest.booking.com", "privaterelay.appleid.com", "duck.com", "marketplace.amazon.co.uk"]) {
+      const s = await spamSetup();
+      for (let i = 0; i < 21; i++) {
+        await s.caps.sendMessage(
+          visitor(T0 + i * MIN),
+          {
+            body: `Hello, booking ${4100000 + i}: could we park a car on day ${(i % 3) + 1}?`,
+            contact: { email: `guest${i}x@${relay}` },
+          },
+          { screen: { door: "email", email: { serverMarked: false, auth: { dmarc: "pass" } } } },
+        );
+      }
+      expect((await screens(s)).at(-1), relay).toBe("delivered");
+    }
   });
 
   it("counts no large provider as one company's domain, wherever its people are", async () => {
