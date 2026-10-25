@@ -7,7 +7,7 @@ import { readSettings, type Settings } from "../settings/schema";
 import { type Caller, isCustomer } from "../write/caller";
 import { WriteError } from "../write/errors";
 import { SHARED_MAIL_PROVIDERS } from "./data";
-import { answerSignals, type Decision, decide } from "./decide";
+import { answerSignals, type Decision, decide, decidedAtDoor } from "./decide";
 import { basicLearningUntil, type FilterState, filterStates } from "./filters";
 import { checkBudgets, countFirstStatements, handleRef, handlesOf, type SenderHandles, standingOf } from "./handles";
 import { buildPrompt, type JudgeMessage, type JudgePort, lendAnswer, runJudge } from "./judge";
@@ -601,10 +601,11 @@ export async function screenAtDoor(deps: SpamDeps, ctx: DoorContext): Promise<Do
   signals.push(...phraseSignals(reading.normalised, reading.text, run.on));
   const veto = namesOwnOffer(reading.normalised, business.offers);
 
-  // The AI check: a stranger's first contact, with a filter on, no certain signal, enough words, room left.
+  // The AI check: a stranger's first contact, with a filter on, nothing certain (what the door saw
+  // putting it aside alone is as certain), enough words, room left.
   let ai: AiOutcome = "none";
   let answer: CheckedAnswer | null = null;
-  const certain = signals.some((s) => s.x === 1);
+  const certain = signals.some((s) => s.x === 1) || decidedAtDoor(signals);
   const enough = reading.note ? reading.text.length >= 20 : reading.text.length >= 20 || reading.domains.length > 0;
   let pending = false;
   if (run.on.size > 0 && !certain && enough && !ctx.sandbox) {
@@ -960,7 +961,9 @@ export async function runScreenJob(
   let answer: CheckedAnswer | null = null;
   let tokens = { in: 0, out: 0, ms: 0 };
   const port = deps.judge();
-  const room = run.on.size > 0 ? await aiRoom(deps, settings, now) : "none";
+  // A mail domain that takes no mail may complete what the door saw: then nothing is paid for.
+  const decided = decidedAtDoor(signals);
+  const room = run.on.size > 0 && !decided ? await aiRoom(deps, settings, now) : "none";
   // Another copy may have been judged since this one came in: its answer is reused, not paid for again.
   const reused =
     port && room === "room" && reading.print
@@ -1022,7 +1025,7 @@ export async function runScreenJob(
   } else if (room === "capped") {
     ai = "capped";
     extra.push(countStatement("capped", now));
-  } else if (run.on.size > 0) ai = "skipped";
+  } else if (run.on.size > 0 && !decided) ai = "skipped";
 
   const veto = namesOwnOffer(reading.normalised, business.offers);
   const alerted = await ownerAlerted(db, input.eventId);

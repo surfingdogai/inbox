@@ -54,7 +54,7 @@ export interface Decision {
 }
 
 /** Signals about how a request came, not what it says: a customer's words never veto these. */
-const DOOR_CODES = new Set([
+export const DOOR_CODES: ReadonlySet<string> = new Set([
   "trap",
   "no_key",
   "key_invalid",
@@ -90,6 +90,13 @@ function sum(signals: readonly Signal[]): number {
   }
   return basic + Math.max(0, filters + customer);
 }
+/**
+ * Whether what the door saw reaches the aside band on its own (a forged key sent in a moment): no
+ * answer of the AI check can lower that, so none is asked for.
+ */
+export const decidedAtDoor = (signals: readonly Signal[]): boolean =>
+  signals.filter((s) => DOOR_CODES.has(s.c)).reduce((n, s) => n + s.w, 0) >= ASIDE_AT;
+
 const positive = (signals: readonly Signal[], source: Source) =>
   signals.filter((s) => s.f === source && s.w > 0).reduce((n, s) => n + s.w, 0);
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { filterDays } from "../../src/spam/filters";
 import { monthCharge } from "../../src/spam/meter";
-import { agent, DAY, fakeJudge, HOUR, MIN, owner, ownerAi, spamSetup, T0 } from "./harness";
+import { agent, DAY, fakeJudge, HOUR, idOf, MIN, owner, ownerAi, spamSetup, T0, visitor } from "./harness";
 
 /**
  * Metering (ADR-029 §15, the founder's decision: a cost per inbox × number of filters): a filter-day
@@ -169,5 +169,48 @@ describe("the month's usage", () => {
     expect(await count()).toBe(0);
     await s.q("UPDATE items SET screen = 'released'");
     expect(await count()).toBe(1);
+  });
+});
+
+describe("a bot's run at the form", () => {
+  it("costs no AI check when what it did there puts it aside alone, and leaves the caps to real pitches", async () => {
+    const judge = fakeJudge({ kind: "sales_pitch", certainty: "high", topic: "seo", quotes: ["rank your cafe first"] });
+    const s = await spamSetup({
+      filters: ["pitches"],
+      judge,
+      host: { ai: true, filters: ["pitches"], dayCap: 5, monthCap: 1_500, reader: null, billing: "off", price: null },
+    });
+    // Twenty posts under forged keys, each sent less than half a second after the form was drawn.
+    for (let i = 0; i < 20; i++) {
+      const t = T0 + i * 1_000;
+      const r = await s.caps.sendMessage(
+        visitor(t),
+        {
+          body: `Cheap followers for your page, offer number ${i}, best prices this week.`,
+          contact: { name: `Bot ${i}`, email: `bot${i}@followers${i}.example.net` },
+        },
+        { screen: { door: "form", form: { key: "invalid", trap: false, drawnAt: t - 400 } } },
+      );
+      await s.drain(t);
+      expect(await s.q("SELECT screen FROM items WHERE id = ?", [idOf(r)])).toEqual([["aside"]]);
+    }
+    expect(judge.calls).toHaveLength(0);
+    // A real pitch, typed at the form at a person's pace, is still read: the day's checks are its own.
+    const t = T0 + 5 * MIN;
+    const pitch = await s.caps.sendMessage(
+      visitor(t),
+      {
+        body: "Hello, we will rank your cafe first on every search, guaranteed or your money back. Reply for prices.",
+        contact: { name: "Rank Co", email: "hello@rankco.example.net" },
+      },
+      { screen: { door: "form", form: { key: "valid", trap: false, drawnAt: t - 90_000 } } },
+    );
+    await s.drain(t + MIN);
+    expect(judge.calls).toHaveLength(1);
+    expect(
+      await s.q("SELECT i.screen, v.ai FROM items i JOIN spam_verdicts v ON v.item_id = i.id WHERE i.id = ?", [
+        idOf(pitch),
+      ]),
+    ).toEqual([["aside", "judged"]]);
   });
 });
