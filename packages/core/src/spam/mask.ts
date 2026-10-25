@@ -76,18 +76,28 @@ export function mask(text: string): string {
     .replace(PHONE, phoneOf);
 }
 
-/** Where two numbers written one after the other part: a slash, a line, a spaced dash, two spaces. */
-const BETWEEN_NUMBERS = /(\s*[/\n]\s*|\s+[-\u2010-\u2015\u2212]\s+|\s{2,})/;
+/**
+ * Where two numbers written one after the other part, from the surest: a slash, a line, a spaced
+ * dash, two spaces; then any one space (an ideographic one too); then a dot between digits.
+ */
+const BETWEEN_NUMBERS = [/(\s*[/\n]\s*|\s+[-\u2010-\u2015\u2212]\s+|\s{2,})/, /(\s+)/, /((?<=\d)\.(?=\d))/];
 
-/** A run of digits as a phone number, or as it is; a run too long for one number, each part on its own. */
+/**
+ * A run of digits as a phone number, or as it is; a run too long for one number, each part on its
+ * own. Never a run of seven digits or more left as written: what no split parts cleanly is one number.
+ */
 function phoneOf(m: string): string {
   const digits = m.replace(/\D/g, "");
   if (digits.length < 7) return m;
   if (DATE_LIKE.test(m.trim())) return m;
   if (digits.length <= 16) return "[phone]";
-  const parts = m.split(BETWEEN_NUMBERS);
-  if (parts.length === 1) return m;
-  return parts.map((p, i) => (i % 2 === 1 ? p : phoneOf(p))).join("");
+  for (const between of BETWEEN_NUMBERS) {
+    const parts = m.split(between);
+    if (parts.length === 1) continue;
+    const out = parts.map((p, i) => (i % 2 === 1 ? p : phoneOf(p))).join("");
+    if (![...out.matchAll(new RegExp(PHONE))].some((r) => r[0].replace(/\D/g, "").length >= 7)) return out;
+  }
+  return "[phone]";
 }
 
 /**

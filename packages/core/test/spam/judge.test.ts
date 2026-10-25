@@ -116,6 +116,39 @@ describe("what the check is sent", () => {
     expect(p.request.user).toContain("Subject: Tel [phone] / [phone]");
   });
 
+  it("never lets two numbers side by side through, however they are spaced or dotted", () => {
+    const pairs = [
+      "WhatsApp (11) 98765-4321 (11) 3456-7890",
+      "Contato: (21) 99876-5432 (21) 2345-6789",
+      "Tél : 01.23.45.67.89 06.12.34.56.78",
+      "Telefono 06.1234.5678 333.123.4567",
+      "212.555.0123 212.555.0456",
+      "(030) 1234567 (0171) 7654321",
+      "090-1234-5678\u3000090-8765-4321",
+      "０９０－１２３４－５６７８\u3000０９０－８７６５－４３２１",
+      "912345678.913456789",
+      "+55 11 98765 4321 +55 21 99876 5432",
+    ];
+    /** No run of seven digits or more is left anywhere, whatever stands between them. */
+    const leaks = (text: string) => /\d(?:[\s().\-/\u2010-\u2015\u2212\u30fc\u3000]*\d){6,}/u.test(text);
+    for (const text of pairs) {
+      expect(leaks(mask(text)), `${text} => ${mask(text)}`).toBe(false);
+      // The body as the job sends it (judgeText), the subject and the name as the prompt masks them.
+      const p = buildPrompt(
+        business,
+        message(judgeText(`Call ${text}`), { subject: `Tel ${text}`, displayName: `Ana ${text}` }),
+      );
+      const lines = p.request.user.split("\n").filter((l) => /^(From|Subject):/.test(l) || l.startsWith("Call"));
+      expect(lines.length, text).toBeGreaterThanOrEqual(2);
+      for (const line of [...lines, sentText({ system: p.request.system, user: p.request.user } as never)]) {
+        expect(leaks(line), `${text} => ${line}`).toBe(false);
+      }
+    }
+    // Each still read as a number of its own where it can be.
+    expect(mask("Tél : 01.23.45.67.89 06.12.34.56.78")).toBe("Tél : [phone] [phone]");
+    expect(mask("912345678.913456789")).toBe("[phone].[phone]");
+  });
+
   it("masks addresses in scripts written with vowel signs, and accents typed apart from their letter", () => {
     const cases: [string, string][] = [
       ["मेरा ईमेल रमेश.कुमार@डाकघर.भारत है", "मेरा ईमेल [email] है"],
