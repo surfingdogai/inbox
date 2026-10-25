@@ -149,6 +149,22 @@ describe("importing", () => {
     });
   });
 
+  it("sells at a sale's price while it runs on the business's own clock, and at the regular price after", async () => {
+    const { caps } = await setup();
+    await caps.updateSettings(owner, { doc: { business: { timezone: "America/Vancouver", currency: "CAD" } } });
+    const feed = await caps.feeds.add(owner, { url: "https://shop.example.com/feed.csv" });
+    const body = [
+      "id,title,price,sale_price,sale_price_effective_date",
+      "H1,Helmet,80.00,60.00,2026-10-01/2026-10-20",
+    ].join("\n");
+    // 02:00 on the 21st in UTC is still the evening of the 20th in Vancouver: the sale is on.
+    await caps.feeds.importBody(feed.id, body, Date.parse("2026-10-21T02:00:00Z"));
+    expect((await caps.setup.listProducts(owner))[0]?.price).toEqual({ value: 6_000, currency: "CAD" });
+    // The next morning there, it is over.
+    await caps.feeds.importBody(feed.id, body, Date.parse("2026-10-21T16:00:00Z"));
+    expect((await caps.setup.listProducts(owner))[0]?.price).toEqual({ value: 8_000, currency: "CAD" });
+  });
+
   it("deactivates what leaves the feed and never deletes it", async () => {
     const { db, caps } = await setup();
     const feed = await caps.feeds.add(owner, { url: "https://shop.example.com/feed.csv" });

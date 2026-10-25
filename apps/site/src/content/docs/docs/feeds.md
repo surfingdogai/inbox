@@ -36,12 +36,15 @@ Columns are matched by name, ignoring case, spaces and punctuation, so `Product 
 | Identity | `id`, `sku`, `mpn`, `gtin`, `ean`, `reference`, `referencia`, `artikelnummer` |
 | Name | `title`, `name`, `product_name`, `nome`, `nombre`, `titel`, `titre` |
 | Description | `description`, `summary`, `descricao`, `descripcion` |
-| Price | `sale_price` first, then `price`, `preco`, `precio`, `preis`, `prix` |
+| Price | `price`, `regular_price`, `unit_price`, `preco`, `precio`, `preis`, `prix` |
+| Sale | `sale_price`, with `sale_price_effective_date`, or `Date sale price starts` and `Date sale price ends` |
 | Stock | `quantity`, `stock`, `inventory`, `qty`, `estoque` |
 | Availability | `availability`, `in_stock`, `stock_status` |
 | Links | `link`, `image_link` |
 
-The sale price wins over the list price, because it is what you are actually selling at today.
+The sale price is the price while the sale runs, and the regular price before and after it, the same in both formats. A sale with no dates runs. Dates written without an offset (`2026-11-27/2026-11-30`) are read on your business's clock, a date alone meaning that whole day; a sale whose dates cannot be read is not taken to be on. A feed is read again every few hours, so a sale starts and ends here at the next read after its dates.
+
+A `cost` column is never read as a price: it is what you pay, not what you sell at. A product with no price is kept off sale until the feed gives it one.
 
 ### Prices
 

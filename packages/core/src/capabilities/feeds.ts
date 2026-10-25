@@ -3,7 +3,7 @@ import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
 import type { Db } from "../db";
 import { type FeedParseResult, type FeedProduct, type FeedSkip, parseFeed } from "../feeds/parse";
 import { ulid } from "../ids";
-import { connectors, products } from "../schema/tables";
+import { business, connectors, products } from "../schema/tables";
 import { readSettings } from "../settings/schema";
 import { type Caller, isCustomer, isOwnerAssistant, nowOf } from "../write/caller";
 import { jobStatement } from "../write/common";
@@ -169,6 +169,15 @@ export class FeedCapabilities {
     };
   }
 
+  /** The business's time zone, as its profile gives it. */
+  private async timezone(): Promise<string> {
+    const [[row], settings] = await Promise.all([
+      this.db.orm.select({ timezone: business.timezone }).from(business).limit(1),
+      readSettings(this.db),
+    ]);
+    return row?.timezone || settings.business.timezone;
+  }
+
   /**
    * Parses a feed body and writes it. Pure enough to test without a network: the caller has already
    * done the fetching, and everything that can go wrong with the *content* goes wrong here.
@@ -177,7 +186,8 @@ export class FeedCapabilities {
     const config = await this.configFor(connectorId);
     let parsed: FeedParseResult;
     try {
-      parsed = parseFeed(body, { defaultCurrency: config.currency });
+      // A sale's dates are read against the import's own moment, on the business's clock.
+      parsed = parseFeed(body, { defaultCurrency: config.currency, now: at, timezone: await this.timezone() });
     } catch (error) {
       await this.markError(connectorId, String((error as Error).message ?? error), at);
       throw error;

@@ -53,6 +53,10 @@ export interface FeedParseOptions {
   readonly defaultCurrency?: string;
   /** A feed longer than this stops here. Protects the database and the Worker's memory alike. */
   readonly maxProducts?: number;
+  /** The moment the feed is read at, which decides whether a sale runs (`saleRunning`). Now by default. */
+  readonly now?: number;
+  /** The business's IANA time zone, for a sale's dates written without an offset. UTC by default. */
+  readonly timezone?: string;
 }
 
 export class FeedParseError extends Error {
@@ -69,18 +73,29 @@ export const DEFAULT_MAX_PRODUCTS = 5000;
 
 /* --- Field names -------------------------------------------------------- */
 
+/** The columns a row's price is chosen from, beside `price` itself: a sale's price and its dates. */
+type SaleField = "salePrice" | "saleWindow" | "saleStarts" | "saleEnds";
+
 /**
  * What a column may be called. Google's own names come first because a feed built for Google is
  * the commonest export by a distance; the rest are what the platforms and their translations
  * actually write. Matching is done on a squashed form, so `Product Name`, `product_name` and
  * `productname` are one name.
+ *
+ * `price` is the regular price, and never `cost`: a sheet with what the shop pays and no price has
+ * no price, rather than selling at cost. A sale's price is its own column, the price only while the
+ * sale runs (`sellingPrice`): Google's `sale_price_effective_date`, or an export's own start and end.
  */
-const FIELD_ALIASES: Readonly<Record<keyof FeedProduct | "quantity", readonly string[]>> = {
+const FIELD_ALIASES: Readonly<Record<keyof FeedProduct | "quantity" | SaleField, readonly string[]>> = {
   externalId: ["id", "gid", "itemid", "productid", "uniqueid", "identifier", "sku", "variantid", "ref"],
   name: ["title", "name", "productname", "producttitle", "itemname", "nome", "nombre", "titel", "titre"],
   description: ["description", "descr", "productdescription", "summary", "descricao", "descripcion"],
   sku: ["sku", "mpn", "skucode", "productcode", "code", "reference", "referencia", "artikelnummer", "ean", "gtin"],
-  price: ["price", "saleprice", "unitprice", "amount", "cost", "preco", "precio", "preis", "prix"],
+  price: ["price", "regularprice", "unitprice", "amount", "preco", "precio", "preis", "prix"],
+  salePrice: ["saleprice"],
+  saleWindow: ["salepriceeffectivedate"],
+  saleStarts: ["datesalepricestarts"],
+  saleEnds: ["datesalepriceends"],
   stock: ["quantity", "stock", "stockquantity", "inventory", "inventoryquantity", "qty", "onhand", "estoque"],
   quantity: ["quantity", "stock", "stockquantity", "inventory", "inventoryquantity", "qty", "onhand", "estoque"],
   available: ["availability", "available", "instock", "stockstatus", "status", "disponibilidade"],
@@ -99,9 +114,8 @@ function squash(header: string): string {
 }
 
 /**
- * Picks the column for each field. A feed that names two candidates keeps the earlier alias, which
- * is why `sale_price` sits behind `price`: when a shop publishes both we want the one it sells at.
- * `id` and `sku` share aliases on purpose, and a feed with only one of them uses it for both.
+ * Picks the column for each field. A feed that names two candidates keeps the earlier alias. `id`
+ * and `sku` share aliases on purpose, and a feed with only one of them uses it for both.
  */
 function mapColumns(headers: readonly string[]): { index: Record<string, number>; mapped: Record<string, string> } {
   const squashed = headers.map(squash);
@@ -274,6 +288,110 @@ function readNumber(text: string): { whole: string; fraction: string; negative: 
   if (whole === "") whole = "0";
   if (!/^\d+$/.test(whole)) return null;
   return { whole, fraction, negative };
+}
+
+/* --- A sale and its dates ------------------------------------------------ */
+
+/** What a price is read against: the currency a bare amount is in, and the business's clock. */
+interface PriceClock {
+  readonly currency: string;
+  readonly now: number;
+  readonly timezone: string;
+}
+
+/**
+ * What a row sells at, the same in both formats: its sale price while the sale runs, and its
+ * regular price before and after. A sale with no dates runs, as Google reads it. An ended sale whose
+ * price the feed still carries is over; the feed is read again within hours, so a sale starts and
+ * ends here at the import after its dates.
+ */
+function sellingPrice(
+  regular: string,
+  sale: string,
+  window: string,
+  at: PriceClock,
+): { value: number; currency: string } | null {
+  const offer = parsePrice(sale, at.currency);
+  if (offer && saleRunning(window, at.now, at.timezone)) return offer;
+  return parsePrice(regular, at.currency);
+}
+
+type Bound = { readonly instant: number } | { readonly wall: string };
+
+/**
+ * Whether a sale runs at `now`: `start/end` in ISO 8601, as Google's `sale_price_effective_date`
+ * writes it (`2026-11-27T00:00-0500/2026-11-30T23:59-0500`). A bound with an offset is that instant;
+ * one without is the business's own clock in `timezone`, and a date alone is that whole day. Either
+ * end may be left open. No dates at all: it runs. Dates that cannot be read: it is not known to run,
+ * so it does not.
+ */
+export function saleRunning(window: string, now: number, timezone: string): boolean {
+  const text = window.trim();
+  if (text === "") return true;
+  const parts = text.split("/");
+  if (parts.length > 2) return false;
+  const from = (parts[0] ?? "").trim();
+  const to = (parts[1] ?? "").trim();
+  const start = from === "" ? null : readBound(from, "start");
+  const end = to === "" ? null : readBound(to, "end");
+  if (start === undefined || end === undefined) return false;
+  let wall: string | undefined;
+  const clock = () => {
+    wall ??= wallClock(now, timezone);
+    return wall;
+  };
+  const begun = start === null || ("instant" in start ? now >= start.instant : clock() >= start.wall);
+  const over = end !== null && ("instant" in end ? now >= end.instant : clock() >= end.wall);
+  return begun && !over;
+}
+
+/** One end of a sale: an instant, or a wall-clock time (`YYYY-MM-DDTHH:MM:SS`) to read in the business's zone. */
+function readBound(raw: string, edge: "start" | "end"): Bound | undefined {
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?\s*(Z|[+-]\d{2}:?\d{2})?)?$/i.exec(
+    raw,
+  );
+  if (!m) return undefined;
+  const [, y = "", mo = "", d = "", h, mi = "", sec, zone] = m;
+  const day = `${y}-${mo}-${d}`;
+  if (h === undefined) {
+    if (!validWall(`${day}T00:00:00`)) return undefined;
+    // A date alone is that whole day: from its first moment, until the first moment of the next.
+    const next = new Date(Date.UTC(Number(y), Number(mo) - 1, Number(d) + 1)).toISOString().slice(0, 10);
+    return { wall: `${edge === "end" ? next : day}T00:00:00` };
+  }
+  const wall = `${day}T${h}:${mi}:${sec ?? "00"}`;
+  if (!validWall(wall)) return undefined;
+  if (!zone) return { wall };
+  const offset = zone.toUpperCase() === "Z" ? "Z" : `${zone.slice(0, 3)}:${zone.slice(-2)}`;
+  const instant = Date.parse(`${wall}${offset}`);
+  return Number.isFinite(instant) ? { instant } : undefined;
+}
+
+/** A real date and time: 31 February is not one, though `Date.parse` rolls it into March. */
+function validWall(wall: string): boolean {
+  const ms = Date.parse(`${wall}Z`);
+  return Number.isFinite(ms) && new Date(ms).toISOString().slice(0, 19) === wall;
+}
+
+/** `now` on the business's clock, as `YYYY-MM-DDTHH:MM:SS`; on UTC's when the zone is not one. */
+function wallClock(now: number, timezone: string): string {
+  let parts: Intl.DateTimeFormatPart[];
+  try {
+    parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(new Date(now));
+  } catch {
+    return new Date(now).toISOString().slice(0, 19);
+  }
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? "00";
+  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}:${get("second")}`;
 }
 
 const IN_STOCK = new Set([
@@ -553,8 +671,10 @@ const XML_FIELDS: Readonly<Record<string, readonly string[]>> = {
   name: ["title", "name"],
   description: ["description", "summary", "content"],
   sku: ["mpn", "sku", "gtin", "identifier"],
-  // Sale price first: it is what the shop is actually selling at today.
-  price: ["sale_price", "price"],
+  // The regular price; a sale's price is the price only while the sale runs (`sellingPrice`).
+  price: ["price"],
+  salePrice: ["sale_price"],
+  saleWindow: ["sale_price_effective_date"],
   stock: ["quantity", "inventory", "stock"],
   available: ["availability", "in_stock", "stock_status"],
   url: ["link", "url"],
@@ -567,13 +687,17 @@ const XML_FIELDS: Readonly<Record<string, readonly string[]>> = {
 export function parseFeed(text: string, options: FeedParseOptions = {}): FeedParseResult {
   const body = text.replace(/^﻿/, "").trim();
   if (body === "") throw new FeedParseError("empty", "the feed is empty");
-  const currency = (options.defaultCurrency ?? "EUR").toUpperCase();
+  const at: PriceClock = {
+    currency: (options.defaultCurrency ?? "EUR").toUpperCase(),
+    now: options.now ?? Date.now(),
+    timezone: options.timezone ?? "UTC",
+  };
   const limit = Math.max(1, options.maxProducts ?? DEFAULT_MAX_PRODUCTS);
   const looksXml = body.startsWith("<") || /<(?:rss|feed|products|channel)\b/i.test(body.slice(0, 2000));
-  return looksXml ? parseXmlFeed(body, currency, limit) : parseCsvFeed(body, currency, limit);
+  return looksXml ? parseXmlFeed(body, at, limit) : parseCsvFeed(body, at, limit);
 }
 
-function parseXmlFeed(raw: string, currency: string, limit: number): FeedParseResult {
+function parseXmlFeed(raw: string, at: PriceClock, limit: number): FeedParseResult {
   // Masked once for the whole document, so an item boundary can never fall inside CDATA.
   const masked = maskCdata(raw);
   const entries = xmlEntries(masked.text);
@@ -618,7 +742,7 @@ function parseXmlFeed(raw: string, currency: string, limit: number): FeedParseRe
       name,
       description: read("description") || null,
       sku: read("sku") || null,
-      price: parsePrice(read("price"), currency),
+      price: sellingPrice(read("price"), read("salePrice"), read("saleWindow"), at),
       stock,
       available: parseAvailability(availability) ?? (stock === null ? null : stock > 0),
       url: read("url") || null,
@@ -628,7 +752,7 @@ function parseXmlFeed(raw: string, currency: string, limit: number): FeedParseRe
   return { format: "xml", products, skipped, truncated, mapped: {} };
 }
 
-function parseCsvFeed(body: string, currency: string, limit: number): FeedParseResult {
+function parseCsvFeed(body: string, at: PriceClock, limit: number): FeedParseResult {
   const delimiter = detectDelimiter(body);
   const rows = parseDelimited(body, delimiter);
   const headers = rows[0];
@@ -657,15 +781,15 @@ function parseCsvFeed(body: string, currency: string, limit: number): FeedParseR
     const row = rows[r] as string[];
     // A trailing blank line is not a row, and neither is a line of empty cells.
     if (row.every((cell) => cell.trim() === "")) continue;
-    const at = (field: string): string => {
+    const cell = (field: string): string => {
       const column = index[field];
       return column === undefined ? "" : (row[column] ?? "").trim();
     };
-    const name = at("name");
+    const name = cell("name");
     // The name is an identity of last resort, and only for a sheet that has no id column at all.
     // When the feed HAS one and this row left it empty, the row is broken: falling back to the
     // name would make a second product the day someone fixes a typo in it.
-    const externalId = at("externalId") || at("sku") || (hasIdColumn ? "" : name);
+    const externalId = cell("externalId") || cell("sku") || (hasIdColumn ? "" : name);
     const line = r + 1;
     if (externalId === "") {
       skipped.push({ row: line, reason: "no_id", sample: sample(row.join(delimiter)) });
@@ -680,17 +804,21 @@ function parseCsvFeed(body: string, currency: string, limit: number): FeedParseR
       continue;
     }
     seen.add(externalId);
-    const stock = parseCount(at("stock"));
+    const stock = parseCount(cell("stock"));
+    // Google's one interval, else an export's own start and end.
+    const starts = cell("saleStarts");
+    const ends = cell("saleEnds");
+    const window = cell("saleWindow") || (starts || ends ? `${starts}/${ends}` : "");
     products.push({
       externalId,
       name,
-      description: at("description") || null,
-      sku: at("sku") || null,
-      price: parsePrice(at("price"), currency),
+      description: cell("description") || null,
+      sku: cell("sku") || null,
+      price: sellingPrice(cell("price"), cell("salePrice"), window, at),
       stock,
-      available: parseAvailability(at("available")) ?? (stock === null ? null : stock > 0),
-      url: at("url") || null,
-      imageUrl: at("imageUrl") || null,
+      available: parseAvailability(cell("available")) ?? (stock === null ? null : stock > 0),
+      url: cell("url") || null,
+      imageUrl: cell("imageUrl") || null,
     });
   }
   return { format: "csv", products, skipped, truncated, mapped };

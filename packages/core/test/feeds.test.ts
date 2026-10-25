@@ -236,6 +236,76 @@ describe("parseFeed, Google Merchant XML", () => {
   });
 });
 
+describe("the price a feed sells at", () => {
+  // 20 October 2026, 10:00 in Toronto.
+  const NOW = Date.parse("2026-10-20T14:00:00Z");
+  const csv = (window: string) =>
+    ["id,title,price,sale_price,sale_price_effective_date", `B1,Bell,12.99 CAD,9.99 CAD,${window}`].join("\n");
+  const xml = (window: string) => `<rss xmlns:g="http://base.google.com/ns/1.0"><channel><item>
+      <g:id>B1</g:id><title>Bell</title>
+      <g:sale_price>9.99 CAD</g:sale_price><g:price>12.99 CAD</g:price>
+      ${window ? `<g:sale_price_effective_date>${window}</g:sale_price_effective_date>` : ""}
+    </item></channel></rss>`;
+  const both = (window: string, timezone = "America/Toronto") =>
+    [csv(window), xml(window)].map((body) => parseFeed(body, { now: NOW, timezone }).products[0]?.price?.value);
+
+  it("is the sale price in both formats when the sale has no dates", () => {
+    expect(both("")).toEqual([999, 999]);
+  });
+
+  it("is the sale price only inside its dates, and the regular price before and after", () => {
+    expect(both("2026-10-01T00:00-04:00/2026-10-31T23:59-04:00")).toEqual([999, 999]);
+    // Google's own spelling of an offset, without the colon.
+    expect(both("2026-10-01T00:00-0400/2026-10-31T23:59-0400")).toEqual([999, 999]);
+    // Ended: the sale is over, whatever the sale_price column still says.
+    expect(both("2026-09-01T00:00Z/2026-09-30T23:59Z")).toEqual([1299, 1299]);
+    // Not started yet.
+    expect(both("2026-11-27/2026-11-30")).toEqual([1299, 1299]);
+    // A window nobody can read is not known to be on.
+    expect(both("Black Friday")).toEqual([1299, 1299]);
+  });
+
+  it("reads dates without an offset on the business's own clock", () => {
+    // 21 October, 02:00 UTC: still the 20th in Vancouver, already the 21st in Tokyo.
+    const late = Date.parse("2026-10-21T02:00:00Z");
+    const window = "2026-10-01/2026-10-20";
+    const at = (timezone: string) =>
+      [csv(window), xml(window)].map((body) => parseFeed(body, { now: late, timezone }).products[0]?.price?.value);
+    expect(at("America/Vancouver")).toEqual([999, 999]);
+    expect(at("Asia/Tokyo")).toEqual([1299, 1299]);
+    // A bound with its own offset is that instant, wherever the business is.
+    const fixed = "2026-10-01T00:00+09:00/2026-10-21T00:00+09:00";
+    expect(
+      [csv(fixed), xml(fixed)].map(
+        (body) => parseFeed(body, { now: late, timezone: "America/Vancouver" }).products[0]?.price?.value,
+      ),
+    ).toEqual([1299, 1299]);
+  });
+
+  it("reads a shop export's regular price and its sale's own start and end", () => {
+    const woo = [
+      "ID,Name,Regular price,Sale price,Date sale price starts,Date sale price ends",
+      "11,Bell,12.99,9.99,2026-09-01 00:00:00,2026-09-30 23:59:59",
+      "12,Horn,20.00,15.00,2026-10-01,2026-10-31",
+      "13,Light,30.00,,,",
+    ].join("\n");
+    const prices = parseFeed(woo, { defaultCurrency: "CAD", now: NOW, timezone: "America/Toronto" }).products.map(
+      (p) => p.price?.value,
+    );
+    expect(prices).toEqual([1299, 1500, 3000]);
+  });
+
+  it("never sells at cost", () => {
+    const sheet = ["sku,name,cost,rrp", "W-1,Widget,4.00,9.99"].join("\n");
+    const result = parseFeed(sheet, { defaultCurrency: "GBP" });
+    expect(result.products[0]?.price).toBeNull();
+    expect(result.mapped.price).toBeUndefined();
+    // With a price column beside it, the price is the price.
+    const priced = parseFeed(["sku,name,cost,price", "W-1,Widget,4.00,9.99"].join("\n"), { defaultCurrency: "GBP" });
+    expect(priced.products[0]?.price).toEqual({ value: 999, currency: "GBP" });
+  });
+});
+
 describe("the limit", () => {
   it("has a default, so a feed cannot fill the database by being long", () => {
     expect(DEFAULT_MAX_PRODUCTS).toBeGreaterThan(0);
