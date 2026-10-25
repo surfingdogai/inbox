@@ -3,14 +3,14 @@ title: Spam filter
 description: How the inbox keeps sales pitches, scams and junk off your desk without losing a customer, what it reads, what leaves your server and when, connecting your own AI model, and what a sender sees.
 ---
 
-The inbox screens every request from someone new as it arrives, on every door: email, your own website, and AI agents. What is not from a customer waits under **Spam** or **Held** instead of on your desk. You aren't alerted, and one tap brings anything back.
+The inbox screens every request from someone new as it arrives, on every door: email, your own website, and AI agents. What is not from a customer waits under **Spam** or **Held** instead of on your desk, kept for as long as you choose, one tap back. You aren't alerted, except once on your phone for a booking held for the next two days.
 
 Settings → **Spam**. The design is ADR-029 in the repository's `docs/adr`.
 
 ## What it never does
 
-- It never refuses, bounces or deletes a request for what it says, and never answers differently. The worst a request meets is being put aside or held, kept and explained. A sender starting far more new requests in a day than a person would is asked to try again later.
-- It never reads someone you know: a customer you have answered, confirmed or let in, anyone on **Let through**, a reply in a conversation, and everything your business makes itself.
+- It never refuses, bounces or deletes a request for what it says. The worst a request meets is being put aside or held, kept and explained, and its sender sees the same pages and answers as without a filter; a request held for a certain reason gets no acknowledgement (see [What the sender sees](#what-the-sender-sees)). A sender starting far more new requests in a day than a person would is asked to try again later.
+- It never puts aside or holds someone you know: a customer you have answered, confirmed or let in, anyone on **Let through**, a reply in a conversation, and everything your business makes itself. A check that points at a third party (a change of bank details, a look-alike or disguised link) can still label them, and an address on Let through typed where nothing vouches for it is read like a stranger's, labelled at most.
 - It never uses language, script, country, name, spelling, length, email provider, time of day or "written by an AI" as a reason. Checks on characters look for disguise and nothing else, such as a Cyrillic letter inside a Latin word.
 - Whatever a filter does or fails to do, a request goes through: a check that times out, fails or runs out of room lets it in on what the free protection found.
 
@@ -20,8 +20,8 @@ Settings → **Spam**. The design is ADR-029 in the repository's `docs/adr`.
 | --- | --- | --- | --- |
 | **Delivered** | alerted as usual | as usual | as usual |
 | **Delivered with a label** ("May be a sales pitch") | alerted; on Needs you with a small chip | rules may flag it and do nothing more: nothing is confirmed, quoted, answered or asked for | as usual |
-| **Held** (bookings, orders, quote requests) | listed under Held; a morning email if you want one | nothing runs; no time, stock or pay link is taken | as usual: "we have your request" |
-| **Put aside** (messages; a quote request for a certain reason, never otherwise) | listed under Spam with why | nothing runs | a message reads as closed, a quote request as received |
+| **Held** (bookings, orders, quote requests) | listed under Held; a morning email if you want one | nothing runs; no time, stock or pay link is taken | as usual ("we have your request"), or nothing when a certain signal held it |
+| **Put aside** (messages; a quote request for a certain reason, never otherwise) | listed under Spam with why | nothing runs | a message reads as open, one nobody answered yet; a quote request as received |
 
 A booking or an order is never put aside, at most held. A held booking holds no time: another customer can book and be confirmed for the same slot. A held request lapses by its own clock, silently.
 
@@ -32,9 +32,9 @@ A booking or an order is never put aside, at most held. A held booking holds no 
 On every door, on every inbox, with no AI:
 
 - **Form bots**: your form's hidden field filled in (each form names it differently), a form your page never drew, one filled in faster than anyone types.
-- **Mail a server marked as spam** on its way. From someone you know it labels, nothing more. An address makes someone known where something vouches for it (a mail server, a pass). Typed at a form, given to an assistant or on mail no server vouches for, it is read as a stranger's.
+- **Mail a server marked as spam** on its way. From someone you know it labels, nothing more. An address makes someone known where something vouches for it (a mail server, a pass). Typed at a form, given to an assistant or on mail no server vouches for, it is read as a stranger's is, and labelled at most.
 - **Posing as you**: your business's name from an address that isn't yours, an address made to look like yours, answers that would go elsewhere (Reply-To), a display name showing another address.
-- **Disguised links**: a link showing one address and going to another; links to sites listed for scams or malware.
+- **Disguised links**: a link showing one address and going to another; a link that hides where it goes (a bare network address, a name written before the site's).
 - **Waves**: the same message, nearly the same message, or the same link from many senders this week. A short honest question repeats freely, and bookings worded the same way by a platform never make a wave.
 - **Floods**: more new conversations in a day than a person starts. A sender is known by their agent's own key, their pass, their mailbox and their mail domain, never by their network address, and never by an AI platform's key, which signs for all of that platform's users. An address nothing vouched for (typed at a form, given to an assistant, on mail no server vouched for) is counted apart from the same address's signed mail and never gets anyone refused, and what a bot sent counts against nobody. A request that names nobody at all still counts in a wave.
 
@@ -70,7 +70,7 @@ It runs on a stranger's opening message, with a filter on, when nothing certain 
 
 - **Sent:** the message's text with every email address, phone number, IBAN, account and card number, payment address and link taken out (a link is cut to its domain), in any script's digits, the subject and the sender's name masked the same way, the sender's domain (never their address), the domains its links go to, how many files it has, and your business's name, description, languages and the names of your services and products.
 - **Never sent:** addresses, phone numbers, anything about other customers, your settings, attachments.
-- **The free protection**, with no AI, sends one thing: a new sender's mail domain is looked up in DNS (at a public DNS-over-HTTPS resolver) to see whether it takes mail. Nothing else it reads leaves your server.
+- **The free protection** sends nothing: what it reads stays on your server. With an AI check, never without one, a new sender's mail domain is looked up in DNS (at a public DNS-over-HTTPS resolver) to see whether it takes mail.
 - The text sits between two random boundary lines, with a fresh value the answer must return. The answer is held to a schema of fixed choices; no sentence a model writes reaches you, a customer or your rules. Instructions inside a message change nothing, and a message that talks to an assistant or a filter is never delivered without a label.
 - Eight seconds an attempt, one retry after two, twenty seconds in all; any failure lets the request through.
 - The same text from another sender this week reuses the answer instead of asking again.
@@ -136,7 +136,7 @@ The inbox's WordPress plugin points AI agents at your inbox. It does not pass yo
 
 ## What the sender sees
 
-Exactly what they would without a filter: the same page after sending, the same answers to their assistant, the same status when they look again. A held request reads as received, byte for byte.
+The same page after sending, the same answers to their assistant and the same status when they look again as without a filter. A held request reads as received, byte for byte. What differs is below: a request held for a certain reason gets no acknowledgement.
 
 - **Confirm it's me.** Every new customer's acknowledgement (bookings, orders, quote requests) carries one more line and a button: "Please confirm it's you, so we know your request reached the right person." Pressing it proves their address and, if their request was held for an uncertain reason, lets it in. Their later requests are screened as before, with more room for new ones in a day; a sender becomes known when you press Let it in or Not spam. A request held for a certain reason (a bot's form, a server's mark, a wave) gets no acknowledgement at all, so a forged address is never written to.
 - **An assistant's answer** says where that email went (`identity.confirm.sent_to`, masked) — see [Getting your person's request seen](/for-agents.md).

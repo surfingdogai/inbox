@@ -7,7 +7,7 @@ import type { ItemSpamSummary, ItemView, SpamStatus } from "./types";
  */
 
 export const HELD_TOP =
-  "Held until the sender confirms or you let them in. You weren't alerted and nothing ran. Bookings here hold no time.";
+  "Held until the sender confirms or you let them in. No rule ran, and you weren't alerted, except once on your phone for a booking in the next two days. Bookings here hold no time.";
 export const SPAM_TOP = "Put aside. Not spam moves one back.";
 export const HELD_EMPTY = "Nothing held.";
 export const SPAM_EMPTY = "Nothing put aside.";
@@ -122,10 +122,17 @@ export function toastFor(act: SpamAct, view: ItemView, now: number = Date.now())
   }
   if (act === "not_spam" || act === "looks_fine") {
     const domain = sender?.company_domain ?? null;
+    // Looks fine takes a label off something that was on the desk all along.
+    const text =
+      act === "looks_fine"
+        ? address
+          ? `Label taken off. Messages from ${address} come straight to you from now on.`
+          : "Label taken off. This sender comes straight to you from now on."
+        : address
+          ? `Back in your inbox. Messages from ${address} won't be put aside again.`
+          : "Back in your inbox. Messages from this sender won't be put aside again.";
     return {
-      text: address
-        ? `Back in your inbox. Messages from ${address} won't be put aside again.`
-        : "Back in your inbox. Messages from this sender won't be put aside again.",
+      text,
       ...(domain ? { follow: { kind: "let_domain" as const, label: `Let everyone at ${domain} through` } } : {}),
     };
   }
@@ -199,11 +206,11 @@ export const ACT_LABEL: Readonly<Record<SpamAct, string>> = {
 // ---- Settings → Spam --------------------------------------------------------------------------
 
 export const SETTINGS_INTRO =
-  "What isn't from a customer waits under Spam or Held instead of on your desk. You aren't alerted, and one tap brings anything back.";
+  "What isn't from a customer waits under Spam or Held instead of on your desk, kept for as long as you choose, one tap back. You aren't alerted, except once on your phone for a booking held for the next two days.";
 export const BASIC_LINE =
   "Stops form bots, mail a server already marked as spam, senders posing as you, disguised links, the same message from many senders, and floods of new requests from one sender.";
 export const BASIC_FREE =
-  "Free. Only a new sender's mail domain is looked up in DNS; nothing else it reads leaves your inbox.";
+  "Free, and nothing it reads leaves your inbox. A new sender's mail domain is looked up in DNS with an AI check, never without one.";
 export const FILTERS_LINE = "Each one reads new messages from people you haven't dealt with before.";
 export const ONLY_YOU = "Only you can change this, signed in.";
 

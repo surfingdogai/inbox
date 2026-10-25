@@ -153,7 +153,7 @@ export function heldDigestMail(
   return {
     subject: total === 1 ? "1 held for you to check" : `${total} held for you to check`,
     text: [
-      "The spam filter held these since yesterday. You weren't alerted and nothing ran. Let in anything that's yours:",
+      "The spam filter held these since yesterday. No rule or webhook ran for them. Let in anything that's yours:",
       "",
       ...shown.map((l) => `· ${[l.who, l.what, l.chip].filter(Boolean).join(" — ")}`),
       ...(total > shown.length ? [`· and ${total - shown.length} more`] : []),

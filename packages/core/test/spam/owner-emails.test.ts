@@ -51,7 +51,7 @@ describe("the words", () => {
     expect(one?.subject).toBe("1 held for you to check");
     expect(one?.text).toBe(
       [
-        "The spam filter held these since yesterday. You weren't alerted and nothing ran. Let in anything that's yours:",
+        "The spam filter held these since yesterday. No rule or webhook ran for them. Let in anything that's yours:",
         "",
         "· Guest 1 — Booking request for Fri 30 Oct, 15:00 — Sales pitch",
         "",

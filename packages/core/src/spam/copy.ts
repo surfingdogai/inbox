@@ -51,7 +51,6 @@ export const CHIPS: Readonly<Record<string, string>> = {
   no_mail: "Address takes no mail",
   link_mismatch: "Disguised link",
   link_disguised: "Disguised link",
-  listed_link: "Listed link",
   shortener: "Short link",
   link_only: "Only links",
   many_links: "Many links",
@@ -149,8 +148,6 @@ export function sentenceOf(
       return "A link shows one address and goes to another.";
     case "link_disguised":
       return "A link hides where it goes.";
-    case "listed_link":
-      return "It links to a site listed for scams or malware.";
     case "shortener":
       return "It links through a link shortener.";
     case "link_only":

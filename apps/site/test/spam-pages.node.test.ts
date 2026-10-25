@@ -105,15 +105,35 @@ describe("the spam filter's pages", () => {
     // The sender got their acknowledgement: what was not told is the owner, and nothing ran.
     expect(read(PAGE)).not.toMatch(/Nobody was told/);
     expect(docs).not.toMatch(/Nobody is told/);
-    expect(docs).toContain("You aren't alerted, and one tap brings anything back.");
+    // What is put aside is kept as long as the owner chooses; a held booking for the next two days
+    // reaches the phone once: neither "anything back" nor "nothing ran" is said.
+    expect(docs).toContain("kept for as long as you choose, one tap back");
+    expect(docs).toContain("You aren't alerted, except once on your phone for a booking held for the next two days.");
+    for (const text of [docs, read(PAGE), ...Object.values(SPAM_LINES)]) {
+      expect(text).not.toMatch(/brings anything back|weren't alerted and nothing ran|Nothing is lost/);
+    }
     // A release runs the rules and the webhooks; a held sender's acknowledgement went, or never goes.
     expect(docs).not.toMatch(/the rules, the webhooks, the acknowledgement/);
-    // What leaves the server for the free protection: a new sender's mail domain, looked up in DNS.
+    // What leaves the server: a new sender's mail domain, looked up in DNS with an AI check, never without.
     expect(docs).toMatch(/mail domain is looked up in DNS/);
-    // A bot's form messages go after a week: nothing says nothing is deleted or dropped.
+    expect(docs).toContain("With an AI check, never without one, a new sender's mail domain is looked up in DNS");
+    // A bot's form messages go after a week, and the owner may choose a time: nothing says nothing is deleted.
     const ours = SPAM_GUIDE_OPTIONS.find((o) => o.ours)?.what ?? "";
-    expect(ours).not.toMatch(/nothing deleted/);
-    expect(ours).toContain("nothing a person wrote is deleted");
+    expect(ours).not.toMatch(/nothing (a person wrote is )?deleted/);
+    expect(ours).toContain("kept for as long as you choose");
+    // No promise the design breaks: a doubted customer waits, a certain hold sends no acknowledgement.
+    expect(`${SPAM_PAGE.heading} ${SPAM_PAGE.description}`).not.toMatch(/Keep every customer|come straight in/);
+    const sees = SPAM_FAQS.find((f) => f.q === "What does a customer see?")?.a ?? "";
+    expect(sees).not.toMatch(/^The same as without a filter/);
+    expect(sees).toContain("unless it looks sent by a bot");
+    expect(docs).not.toMatch(/never answers differently|Exactly what they would without a filter/);
+    expect(docs).toContain("or nothing when a certain signal held it");
+    expect(docs).toContain("a message reads as open, one nobody answered yet");
+    // Nothing it does not do: no list of sites is looked up.
+    expect(docs).not.toMatch(/listed for scams/);
+    // Someone known is never put aside or held, and may still be labelled.
+    expect(docs).not.toMatch(/never reads someone you know/);
+    expect(read(GUIDE)).not.toMatch(/never filtered again/);
     expect(read(GUIDE)).not.toContain("It never drops a message.");
     expect(read(GUIDE)).toContain("It never drops a customer's message.");
     // A count the tests outgrow is never printed.

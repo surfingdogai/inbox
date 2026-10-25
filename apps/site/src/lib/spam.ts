@@ -14,8 +14,8 @@ export const SPAM_PAGE = {
   path: "/inbox/spam/",
   title: "Spam filter for your inbox · Surfing Dog",
   description:
-    "Sales pitches, scams and junk wait aside; real customers come straight in. Every choice is explained, and one tap undoes it.",
-  heading: "Keep the pitches out. Keep every customer.",
+    "Sales pitches, scams and junk wait aside; requests it doubts wait for you, one tap away. Every choice is explained, and one tap undoes it.",
+  heading: "Keep the pitches out. See every customer.",
   lede: "A spam filter for what your business gets by email, from your website and from AI agents. It explains every choice, and one tap undoes it.",
 } as const;
 
@@ -38,7 +38,7 @@ export const SPAM_FREE: readonly string[] = [
 
 export const SPAM_LINES = {
   why: "Under Spam, each message carries a short label and a sentence saying why, and the words it found are quoted. Nothing a model wrote is shown: the reasons are the filter's own.",
-  lost: "Bookings it doubts wait for the sender to confirm, and hold no time. Messages it puts aside are kept, and one tap brings them back.",
+  lost: "Bookings it doubts wait for the sender to confirm, and hold no time. Messages it puts aside are kept for as long as you choose, and one tap brings them back.",
   form: "Put our form on any site, with no script and no puzzle for your customers. Or let your own website's forms pass what they receive to your inbox, with a key that can do nothing else.",
   yours:
     "No spam company's cloud, no sharing between businesses. Before anything is read by AI, email addresses, phone numbers and bank details are taken out.",
@@ -52,7 +52,7 @@ export const SPAM_FAQS: readonly Faq[] = [
   },
   {
     q: "What does a customer see?",
-    a: "The same as without a filter: the same page after sending, the same email saying their request arrived, and the same answers to their assistant. A new customer's email asks them to confirm it is them; every new customer gets it, so it says nothing about the filter.",
+    a: "The same page after sending and the same answers to their assistant. They get the same email saying their request arrived, unless it looks sent by a bot, matches one you marked, or comes from a sender you put aside. That email asks every new customer to confirm it is them, so it gives nothing away.",
   },
   {
     q: "Does it work in my language?",
@@ -124,7 +124,7 @@ export const SPAM_GUIDE_OPTIONS: readonly GuideOption[] = [
   },
   {
     way: "Filtering in your inbox (Surfing Dog Inbox, ours)",
-    what: "Free protection on every door, three filters you switch on, and nothing a person wrote is deleted: what it catches waits under Spam or Held with its reason, one tap back. Open source; on your own server it is free, with your own AI model or none.",
+    what: "Free protection on every door, three filters you switch on, and what it catches waits under Spam or Held with its reason, kept for as long as you choose, one tap back. Open source; on your own server it is free, with your own AI model or none.",
     links: [
       { label: "The spam filter", href: "/inbox/spam/" },
       { label: "How it decides", href: "/docs/spam/" },

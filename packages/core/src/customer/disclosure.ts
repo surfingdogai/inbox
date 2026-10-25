@@ -80,9 +80,9 @@ const EN: DisclosureCopy = {
     stopped: (date) =>
       `Done. Since ${date} we tell no booking network anything more about you. Your bookings, orders and our emails work as before.`,
     spamHeading: "Keeping out spam",
-    spam: "We check new messages from people we haven't heard from before, to keep unwanted messages away from our team. The check can include a reading by an automated service, which sees the message without email addresses, phone numbers or bank details and keeps nothing. A person here can always see and bring back any message the check set aside.",
+    spam: "We check new messages from people we haven't heard from before, to keep unwanted messages away from our team. The check can include a reading by an automated service, which sees the message without email addresses, phone numbers or bank details and keeps nothing. A person here can see and bring back any message the check set aside while it is kept.",
     spamOwn:
-      "We check new messages from people we haven't heard from before, to keep unwanted messages away from our team. The check can include a reading by an automated service, which sees the message without email addresses, phone numbers or bank details. A person here can always see and bring back any message the check set aside.",
+      "We check new messages from people we haven't heard from before, to keep unwanted messages away from our team. The check can include a reading by an automated service, which sees the message without email addresses, phone numbers or bank details. A person here can see and bring back any message the check set aside while it is kept.",
   },
 };
 
@@ -119,9 +119,9 @@ const PT: DisclosureCopy = {
     stopped: (date) =>
       `Feito. Desde ${date} não dizemos mais nada sobre si a nenhuma rede de reservas. As suas marcações, encomendas e os nossos emails continuam como antes.`,
     spamHeading: "Proteção contra spam",
-    spam: "Verificamos as mensagens novas de quem ainda não nos contactou, para manter as mensagens indesejadas longe da nossa equipa. A verificação pode incluir uma leitura por um serviço automático, que vê a mensagem sem endereços de email, números de telefone ou dados bancários, e não guarda nada. Alguém da nossa equipa pode sempre ver e recuperar qualquer mensagem posta de parte.",
+    spam: "Verificamos as mensagens novas de quem ainda não nos contactou, para manter as mensagens indesejadas longe da nossa equipa. A verificação pode incluir uma leitura por um serviço automático, que vê a mensagem sem endereços de email, números de telefone ou dados bancários, e não guarda nada. Alguém da nossa equipa pode ver e recuperar qualquer mensagem posta de parte enquanto for guardada.",
     spamOwn:
-      "Verificamos as mensagens novas de quem ainda não nos contactou, para manter as mensagens indesejadas longe da nossa equipa. A verificação pode incluir uma leitura por um serviço automático, que vê a mensagem sem endereços de email, números de telefone ou dados bancários. Alguém da nossa equipa pode sempre ver e recuperar qualquer mensagem posta de parte.",
+      "Verificamos as mensagens novas de quem ainda não nos contactou, para manter as mensagens indesejadas longe da nossa equipa. A verificação pode incluir uma leitura por um serviço automático, que vê a mensagem sem endereços de email, números de telefone ou dados bancários. Alguém da nossa equipa pode ver e recuperar qualquer mensagem posta de parte enquanto for guardada.",
   },
 };
 

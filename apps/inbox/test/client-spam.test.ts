@@ -169,7 +169,7 @@ describe("rows and chips", () => {
 
   it("says at the top of Held what waited, without saying nobody was told: the sender got their acknowledgement", () => {
     expect(HELD_TOP).toBe(
-      "Held until the sender confirms or you let them in. You weren't alerted and nothing ran. Bookings here hold no time.",
+      "Held until the sender confirms or you let them in. No rule ran, and you weren't alerted, except once on your phone for a booking in the next two days. Bookings here hold no time.",
     );
     expect(HELD_TOP).not.toMatch(/nobody was told/i);
   });
@@ -254,6 +254,11 @@ describe("one press, and Undo", () => {
     // A provider many share is never offered as a company's domain (the server leaves it out).
     const shared = view({ email: "kemal@gmail.com", spam: { sender: sender("kemal@gmail.com", null) } });
     expect(toastFor("looks_fine", shared, now).follow).toBeUndefined();
+    // Looks fine takes a label off something that was on the desk all along.
+    expect(toastFor("looks_fine", kemal, now)).toEqual({
+      text: "Label taken off. Messages from kemal@atolye.example come straight to you from now on.",
+      follow: { kind: "let_domain", label: "Let everyone at atolye.example through" },
+    });
     expect(toastFor("spam", kemal, now)).toEqual({
       text: "Put aside.",
       follow: { kind: "block", label: "Always put aside messages from kemal@atolye.example" },
@@ -406,11 +411,11 @@ describe("Settings → Spam, in every state", () => {
     expect(SETTINGS_INTRO).not.toMatch(/nothing is deleted/i);
     // A held sender got their acknowledgement: the owner wasn't alerted, which is all that is said.
     expect(SETTINGS_INTRO).toBe(
-      "What isn't from a customer waits under Spam or Held instead of on your desk. You aren't alerted, and one tap brings anything back.",
+      "What isn't from a customer waits under Spam or Held instead of on your desk, kept for as long as you choose, one tap back. You aren't alerted, except once on your phone for a booking held for the next two days.",
     );
-    // The free protection looks up a new sender's mail domain, and says so.
+    // A new sender's mail domain is looked up with an AI check, never by the free protection alone.
     expect(BASIC_FREE).toBe(
-      "Free. Only a new sender's mail domain is looked up in DNS; nothing else it reads leaves your inbox.",
+      "Free, and nothing it reads leaves your inbox. A new sender's mail domain is looked up in DNS with an AI check, never without one.",
     );
     // A bot's form messages go after a week: the Spam list never says nothing is deleted.
     expect(SPAM_TOP).toBe("Put aside. Not spam moves one back.");
