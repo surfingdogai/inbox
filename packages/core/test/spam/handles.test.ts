@@ -201,25 +201,35 @@ describe("a key from a directory nobody recognises", () => {
   const OWN_DIRECTORY = "https://bulk-sender.example";
   const via = (t: number) => agent(t, { key: BULK, platform: OWN_DIRECTORY });
 
-  it("is the sender's own key: five new conversations a day, and the sixth waits", async () => {
+  it("is a platform's all the same: its users are counted each on their own, never as one sender", async () => {
     const s = await spamSetup();
-    for (let i = 0; i < 30; i++) await s.caps.sendMessage(via(T0 + i * MIN), { body: PITCH });
-    const all = await screens(s);
-    expect(all.slice(0, 5)).toEqual(Array(5).fill("delivered"));
-    expect(all.slice(5).every((x) => x === "aside:many_new")).toBe(true);
-    // Bookings, each with a new free-mail address: the key still counts them.
-    const t = await spamSetup();
+    // Eight people, each with their own address, through a platform no network this inbox uses knows.
     for (let i = 0; i < 8; i++) {
-      await t.caps.createBooking(via(T0 + i * MIN), {
-        payload: {
-          reservationFor: { serviceId: t.svc, name: "Latte art class" },
-          startTime: new Date(T0 + 3 * DAY + (i % 4) * 3_600_000).toISOString(),
-          endTime: new Date(T0 + 3 * DAY + (i % 4) * 3_600_000 + 3_600_000).toISOString(),
-        },
-        contact: { name: `Guest ${i}`, email: `guest.number.${i}@gmail.com` },
+      await s.caps.sendMessage(agent(T0 + i * MIN, { key: BULK, platform: "https://assistant.example" }), {
+        body: words(i),
+        contact: { name: `Customer ${i}`, email: `customer.${i}@gmail.com` },
       });
     }
-    expect(await screens(t)).toEqual([...Array(5).fill("delivered"), ...Array(3).fill("held:many_new")]);
+    expect(await screens(s)).toEqual(Array(8).fill("delivered"));
+    // Its own ceiling is a flood's, lower than a recognised platform's.
+    const t = await spamSetup();
+    for (let i = 0; i < 500; i++) await t.db.batch(countFirstStatements([{ kind: "platform_key", ref: BULK }], T0 + i));
+    const refused = await t.caps
+      .sendMessage(via(T0 + MIN), { body: words(1), contact: { name: "Anyone", email: "anyone@example.org" } })
+      .catch((e) => e);
+    expect(refused).toMatchObject({ code: "too_many_requests", status: 429 });
+  });
+
+  it("still makes a wave of the same pitch sent under it, as unsigned copies do", async () => {
+    const s = await spamSetup();
+    for (let i = 0; i < 10; i++) await s.caps.sendMessage(via(T0 + i * MIN), { body: PITCH });
+    const all = await screens(s);
+    expect(all.slice(0, 2)).toEqual(["delivered", "delivered"]);
+    expect(all.slice(4)).toEqual(Array(6).fill("aside:wave"));
+    // And one person through it is counted by their mailbox.
+    const t = await spamSetup();
+    for (let i = 0; i < 6; i++) await sendAs(t, i, { key: BULK, email: "one.person@mailbox.example.org" });
+    expect((await screens(t)).at(-1)).toBe("aside:many_new");
   });
 });
 

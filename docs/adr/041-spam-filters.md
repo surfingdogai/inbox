@@ -71,11 +71,12 @@ switched on.*
    AI" are never signals. Repeats count other senders only (prints: SHA-256 and a 64-bit SimHash over
    character 4-grams, in eight bands); a short honest question repeats freely. Per-handle budgets of new
    conversations a day: an agent's own key (`Sdi-Agent-Key`) 5 (ceiling 50), a pass 10 (50), a mailbox 5
-   (30), a mail domain 20 (100); a pass widens its mailbox's and domain's. A recognised platform's key
-   (Web Bot Auth's `Signature-Agent`, `vouched`) signs for every one of its users, so it is no sender:
-   it never makes a request wait on its own, is on no list, is trusted by nobody, and only a flood of
-   1,500 new conversations a day answers 429. A key from a directory nobody recognises is the agent's
-   own: anyone can host a directory. A request that names nobody (no mailbox, no key of its own, no
+   (30), a mail domain 20 (100); a pass widens its mailbox's and domain's. A platform's key (Web Bot
+   Auth's `Signature-Agent`) signs for every one of its users, so it is no sender, whether a network
+   recognises the platform (`vouched`) or not: it never makes a request wait on its own, is on no list,
+   is trusted by nobody, and only a flood of 1,500 new conversations a day (500 for a platform nobody
+   recognises) answers 429; its users are counted by their own mailbox, pass or carried code, and the
+   same words sent under it still make a wave. A request that names nobody (no mailbox, no key of its own, no
    pass) is a sender of its own for repeats, so unsigned copies of one pitch still make a wave. A request
    under an address nothing vouched for (mail no DMARC pass or aligned DKIM vouched for, a form, an
    assistant no pass proves it for) is counted apart from that address's vouched mail, and what is

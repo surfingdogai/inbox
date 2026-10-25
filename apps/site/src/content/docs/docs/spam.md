@@ -36,7 +36,7 @@ On every door, on every inbox, with no AI:
 - **Posing as you**: your business's name from an address that isn't yours, an address made to look like yours, answers that would go elsewhere (Reply-To), a display name showing another address.
 - **Disguised links**: a link showing one address and going to another; links to sites listed for scams or malware.
 - **Waves**: the same message, nearly the same message, or the same link from many senders this week. A short honest question repeats freely, and bookings worded the same way by a platform never make a wave.
-- **Floods**: more new conversations in a day than a person starts. A sender is known by their agent's own key, their pass, their mailbox and their mail domain, never by their network address, and never by a recognised AI platform's key, which signs for all of that platform's users (a key from a directory nobody recognises is the agent's own). Mail no server vouched for is counted apart from the same address's signed mail, and what a bot sent counts against nobody. A request that names nobody at all still counts in a wave.
+- **Floods**: more new conversations in a day than a person starts. A sender is known by their agent's own key, their pass, their mailbox and their mail domain, never by their network address, and never by an AI platform's key, which signs for all of that platform's users. An address nothing vouched for (typed at a form, given to an assistant, on mail no server vouched for) is counted apart from the same address's signed mail and never gets anyone refused, and what a bot sent counts against nobody. A request that names nobody at all still counts in a wave.
 
 Its point-based outcomes started with a learning week of their own, from the day your inbox was updated.
 
