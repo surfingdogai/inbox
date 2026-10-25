@@ -42,7 +42,7 @@ Your own address is never shown to a customer.
 - **Its own email coming back** — an alert sent to an address that forwards here — is recognised and dropped, so nothing loops.
 - **Out-of-office and returned emails** never start a conversation and are never answered. A returned email marks the email it returns as not delivered, and the request asks for you.
 - **Mailings and notices** — a newsletter, a shop's or a bank's notice, anything from a `noreply` address — that answer no conversation are dropped: nobody is told and nothing is answered.
-- **Spam:** an email a server on its way marked as spam is put aside, unanswered. It waits under Spam, where you can take it out.
+- **Spam:** an email a server on its way marked as spam is put aside, unanswered, unless it comes from someone you know, when it is only labelled. It waits under Spam, where you can take it out. The [spam filter](/docs/spam/) says what else it keeps off your desk.
 - **Attachments** are kept for you to download, or delete: up to 10 files and 15 MB an email, 10 MB a file, and a limit for what one sender leaves in a day. Files that run, such as `.exe` or macro documents, are named but never kept. Nothing of spam is kept. They are erased with the customer.
 - **Answers by email that are not sent** — from another address, one its mail server could not show was yours, or one that still has your own address in it — are kept on the request as a note for you, saying why. Answer from the inbox instead.
 

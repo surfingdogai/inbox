@@ -31,6 +31,7 @@ export const it: Dict = {
       About: "Chi siamo",
       FAQ: "Domande frequenti",
       "How it works": "Come funziona",
+      "Spam filter": "Filtro antispam",
       "Try it": "Provalo",
       Assistants: "Assistenti",
       Requests: "Richieste",

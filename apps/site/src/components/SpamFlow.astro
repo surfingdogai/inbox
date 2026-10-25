@@ -1,0 +1,237 @@
+---
+/**
+ * The spam filter page's picture (/inbox/spam/): envelopes drift in from three doors — email, the
+ * website, AI agents. Customers land on the desk as rows; a sales pitch and a scam settle softly into
+ * the tray below, under a quiet label; one marked with a question mark settles there too, and a tap
+ * lifts it back to the desk. Thin lines, ink and greys, no red.
+ *
+ * The positions come from src/lib/spam-flow.ts, the same numbers for the server and the script: the
+ * figure ships as the composed still frame (REST), the clock starts there, and reduced motion is
+ * that frame, held. It stops while nobody can see it.
+ */
+import { DESK, DOORS, GATE, NODE_X, PIECES, pose, REST, ROWS, TRAY, tap, trayCaption, VIEW } from "../lib/spam-flow";
+
+const rest = PIECES.map((p) => ({ p, at: pose(p, REST) }));
+const ring = tap(REST);
+const caption = trayCaption(REST);
+const flat = (n: number) => Math.round(n * 10) / 10;
+---
+
+<figure
+  class="spf"
+  role="img"
+  aria-label="Messages arrive by email, from the website and from AI agents. Customers land on the desk. A sales pitch and a scam settle into a tray below, kept and labelled. One the filter wasn't sure of settles there too, and a tap brings it back to the desk."
+>
+  <svg viewBox={`0 0 ${VIEW.w} ${VIEW.h}`} aria-hidden="true" focusable="false">
+    {
+      DOORS.map((d) => (
+        <g>
+          <text x="24" y={d.y + 3} class="spf-cap">
+            {d.label}
+          </text>
+          <path d={`M${NODE_X},${d.y} C${(NODE_X + GATE.x) / 2},${d.y} ${(NODE_X + GATE.x) / 2},${GATE.y} ${GATE.x},${GATE.y}`} class="spf-line" />
+          <circle cx={NODE_X} cy={d.y} r="3" class="spf-node" />
+        </g>
+      ))
+    }
+    <rect x={DESK.x} y={DESK.y} width={DESK.w} height={DESK.h} rx="12" class="spf-desk" />
+    <text x={DESK.x + 14} y={DESK.y + 18} class="spf-cap">YOUR INBOX</text>
+    {
+      ROWS.map((y) => (
+        <line x1={DESK.x + 26} y1={y} x2={DESK.x + DESK.w - 24} y2={y} class="spf-slot" />
+      ))
+    }
+    <rect x={TRAY.x} y={TRAY.y} width={TRAY.w} height={TRAY.h} rx="12" class="spf-tray" />
+    <text x={TRAY.x + 14} y={TRAY.y + 16} class="spf-cap spf-tray-cap" data-tray style={`opacity:${caption}`}>
+      PUT ASIDE · KEPT · ONE TAP BACK
+    </text>
+    {
+      rest.map(({ p, at }) => (
+        <g data-row={p.id} style={`opacity:${flat(at.row)}`}>
+          <line
+            x1={DESK.x + 26}
+            y1={at.rowY ?? ROWS[0]}
+            x2={DESK.x + DESK.w - 60}
+            y2={at.rowY ?? ROWS[0]}
+            class="spf-row"
+            data-rowline
+          />
+          <circle cx={DESK.x + 26} cy={at.rowY ?? ROWS[0]} r="3" class="spf-dot" data-rowdot />
+        </g>
+      ))
+    }
+    <circle cx="0" cy="0" r={flat(ring.r)} class="spf-tap" data-tap style={`opacity:${flat(ring.o)}`} />
+    {
+      rest.map(({ p, at }) => (
+        <g
+          data-piece={p.id}
+          class:list={["spf-env", `is-${p.kind}`]}
+          transform={`translate(${flat(at.x)},${flat(at.y)})`}
+          style={`opacity:${flat(at.o)}`}
+        >
+          <rect x="-11" y="-7.5" width="22" height="15" rx="2.5" />
+          <path d="M-11,-6.5 L0,1.5 L11,-6.5" />
+          {p.kind === "unsure" && (
+            <text x="15" y="-5" class="spf-q">
+              ?
+            </text>
+          )}
+        </g>
+      ))
+    }
+  </svg>
+</figure>
+
+<script>
+  import { PIECES, LOOP, pose, REST, tap, trayCaption } from "../lib/spam-flow";
+
+  const flat = (n: number) => Math.round(n * 10) / 10;
+
+  function start(fig: HTMLElement) {
+    const piece = new Map(PIECES.map((p) => [p.id, fig.querySelector<SVGGElement>(`[data-piece="${p.id}"]`)]));
+    const row = new Map(PIECES.map((p) => [p.id, fig.querySelector<SVGGElement>(`[data-row="${p.id}"]`)]));
+    const ring = fig.querySelector<SVGCircleElement>("[data-tap]");
+    const tray = fig.querySelector<SVGTextElement>("[data-tray]");
+    const unsure = PIECES.find((p) => p.lift);
+
+    const paint = (t: number) => {
+      for (const p of PIECES) {
+        const at = pose(p, t);
+        const g = piece.get(p.id);
+        if (g) {
+          g.setAttribute("transform", `translate(${flat(at.x)},${flat(at.y)})`);
+          g.style.opacity = String(flat(at.o));
+        }
+        const r = row.get(p.id);
+        if (r) {
+          r.style.opacity = String(flat(at.row));
+          if (at.rowY !== null) {
+            r.querySelector("[data-rowline]")?.setAttribute("y1", String(at.rowY));
+            r.querySelector("[data-rowline]")?.setAttribute("y2", String(at.rowY));
+            r.querySelector("[data-rowdot]")?.setAttribute("cy", String(at.rowY));
+          }
+        }
+      }
+      if (ring && unsure) {
+        const k = tap(t);
+        const here = pose(unsure, Math.min(t, unsure.lift?.at ?? t));
+        ring.setAttribute("cx", String(flat(here.x)));
+        ring.setAttribute("cy", String(flat(here.y)));
+        ring.setAttribute("r", String(flat(k.r)));
+        ring.style.opacity = String(flat(k.o));
+      }
+      if (tray) tray.style.opacity = String(flat(trayCaption(t)));
+    };
+
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let frame = 0;
+    let visible = false;
+    let origin = performance.now() - REST * 1000;
+    const tick = (now: number) => {
+      paint(((now - origin) / 1000) % LOOP);
+      frame = requestAnimationFrame(tick);
+    };
+    const run = () => {
+      cancelAnimationFrame(frame);
+      frame = 0;
+      if (still.matches || !visible) {
+        paint(REST);
+        origin = performance.now() - REST * 1000;
+        return;
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    new IntersectionObserver((entries) => {
+      visible = entries.some((e) => e.isIntersecting);
+      run();
+    }).observe(fig);
+    still.addEventListener("change", run);
+  }
+
+  for (const fig of document.querySelectorAll<HTMLElement>(".spf")) {
+    try {
+      start(fig);
+    } catch {
+      // The still picture stays.
+    }
+  }
+</script>
+
+<style>
+  .spf {
+    margin: 0;
+    aspect-ratio: 640 / 300;
+    width: 100%;
+  }
+  .spf svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  .spf-cap {
+    font-family: inherit;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    fill: var(--ink-3);
+  }
+  .spf-line {
+    fill: none;
+    stroke: var(--hairline-strong);
+    stroke-width: 1;
+  }
+  .spf-node {
+    fill: var(--ground);
+    stroke: var(--ink-3);
+    stroke-width: 1;
+  }
+  .spf-desk {
+    fill: var(--glass-bg);
+    stroke: var(--hairline-strong);
+    stroke-width: 1;
+  }
+  .spf-tray {
+    fill: none;
+    stroke: var(--hairline-strong);
+    stroke-width: 1;
+    stroke-dasharray: 3 4;
+  }
+  .spf-slot {
+    stroke: var(--hairline);
+    stroke-width: 1;
+  }
+  .spf-row {
+    stroke: var(--ink-2);
+    stroke-width: 1.2;
+    stroke-linecap: round;
+  }
+  .spf-dot {
+    fill: var(--violet);
+  }
+  .spf-env rect {
+    fill: var(--ground);
+    stroke: var(--ink);
+    stroke-width: 1.1;
+  }
+  .spf-env path {
+    fill: none;
+    stroke: var(--ink);
+    stroke-width: 1;
+    stroke-linejoin: round;
+  }
+  .spf-env.is-pitch rect,
+  .spf-env.is-pitch path {
+    stroke: var(--ink-3);
+  }
+  .spf-q {
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    fill: var(--violet);
+  }
+  .spf-tap {
+    fill: none;
+    stroke: var(--violet);
+    stroke-width: 1.2;
+  }
+</style>

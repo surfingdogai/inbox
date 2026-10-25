@@ -41,12 +41,13 @@ export const guideHref = (slug: GuideSlug | "") => (slug ? `/guides/${slug}/` : 
 export const CHECK_HREF = "/check";
 
 /**
- * Pages for one platform's owners, beside the guides and outside their contract: the network's
- * result pages don't link them, so they may be added or renamed. Each is its own page under
- * src/pages/guides/.
+ * Pages beside the guides and outside their contract: for one platform's owners, or on one question
+ * any business has (contact form spam). The network's result pages don't link them, so they may be
+ * added or renamed. Each is its own page under src/pages/guides/.
  */
 export const PLATFORM_PAGES: readonly { readonly slug: string; readonly label: string }[] = [
   { slug: "shopify-ai-assistants", label: "Shopify and AI assistants" },
+  { slug: "stop-contact-form-spam", label: "Contact form spam" },
 ];
 
 /** What the leaderboards can list (the network's ?can= values), or the agent-ready as a whole. */

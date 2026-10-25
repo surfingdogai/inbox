@@ -31,6 +31,7 @@ Still to come: connectors (coming)<!-- hosted: open --> and<!-- hosted: closed -
 - [Run it yourself](/docs/run-it-yourself/): one command on your own server, the Docker image on a [platform](/docs/platforms/) you use, or Cloudflare Workers; updates that roll back, and [backups](/docs/backups/).
 - [Setting a business up for agents](/docs/setting-up-for-agents/): guidance, not rules, from a real installation: the inbox as the front door, or as a thin agent door in front of the tools a business already has; what handles each door; making doors findable; payments; helpdesk bridges.
 - [Concepts](/docs/concepts/): items and their states, rules, agent policy and trust tiers, networks, and receipts: promises kept, broken or still open.
+- [Spam filter](/docs/spam/): what it keeps off your desk, what it never loses, what leaves your server and when, and connecting your own AI model.
 - [Connect your AI](/docs/connect-your-ai/): let Claude, ChatGPT or any MCP client work your inbox through the owner MCP.
 - [API](/docs/api/): every public and owner operation, and the conventions they share.
 - [Manifest](/docs/manifest/): the discovery document an instance publishes.

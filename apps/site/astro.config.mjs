@@ -95,7 +95,7 @@ export default defineConfig({
         },
         {
           label: "Understand",
-          items: ["docs/concepts", "docs/your-page", "docs/manifest", "docs/self-hosted-vs-hosted"],
+          items: ["docs/concepts", "docs/your-page", "docs/spam", "docs/manifest", "docs/self-hosted-vs-hosted"],
         },
         {
           label: "Integrate",

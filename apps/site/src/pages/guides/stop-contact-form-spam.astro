@@ -1,0 +1,174 @@
+---
+// How to stop contact form spam without losing customers (ADR-029 §13.2): the ways there are, what
+// each costs and how each fails, with our own inbox as one labelled row. A page beside the eight
+// guides and outside their contract, like the Shopify page; its words are in src/lib/spam.ts.
+import Faqs from "../../components/Faqs.astro";
+import GuideAnswer from "../../components/GuideAnswer.astro";
+import GuideOptions from "../../components/GuideOptions.astro";
+import Layout from "../../layouts/Layout.astro";
+import { faqPage } from "../../lib/faq";
+import { guideHref } from "../../lib/guides";
+import { SPAM_CHECKED, SPAM_GUIDE, SPAM_GUIDE_FAQS, SPAM_GUIDE_OPTIONS, SPAM_SOURCES } from "../../lib/spam";
+
+const site = Astro.site?.toString() ?? "https://surfingdog.ai/";
+const url = new URL(`/guides/${SPAM_GUIDE.slug}/`, site).toString();
+/** When this page was last read against its sources. */
+const MODIFIED = "2026-10-24";
+const ld = [
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: SPAM_GUIDE.title,
+    description: SPAM_GUIDE.description,
+    abstract: SPAM_GUIDE.answer,
+    datePublished: MODIFIED,
+    dateModified: MODIFIED,
+    author: { "@type": "Organization", name: "Surfing Dog", url: site },
+    publisher: { "@id": `${site}#org` },
+    isPartOf: { "@type": "CollectionPage", name: "Guides", url: new URL(guideHref(""), site).toString() },
+    image: new URL("/art/og-inbox-v1.png", site).toString(),
+    mainEntityOfPage: url,
+    url,
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: site },
+      { "@type": "ListItem", position: 2, name: "Guides", item: new URL(guideHref(""), site).toString() },
+      { "@type": "ListItem", position: 3, name: "Contact form spam", item: url },
+    ],
+  },
+  faqPage(SPAM_GUIDE_FAQS, url),
+];
+const sources = Object.values(SPAM_SOURCES);
+---
+
+<Layout title={`${SPAM_GUIDE.title} · Surfing Dog`} description={SPAM_GUIDE.description} type="article" ld={ld}>
+  <article class="wrap wrap-read section is-head guide" aria-labelledby="g-title">
+    <p class="eyebrow"><a href={guideHref("")}>Guides</a> · Contact form spam</p>
+    <h1 class="h-page" id="g-title">{SPAM_GUIDE.title}</h1>
+    <GuideAnswer text={SPAM_GUIDE.answer} />
+
+    <div class="prose g-body">
+      <h2 id="cost">What a lost customer costs</h2>
+      <p>
+        A guesthouse in Hoi An, a dentist in Lagos and a plumber in Montréal get the same mail: search rankings, new
+        websites, lists of leads, and invoices for services nobody ordered. Their customers write in Vietnamese, English
+        and French, from free email addresses, sometimes in a hurry and sometimes through an AI assistant. A filter that
+        mistakes one of them for a pitch costs a booking; a pitch that gets through costs a second of reading. Pick a
+        way to filter that knows which of those two mistakes is worse.
+      </p>
+    </div>
+
+    <GuideOptions options={SPAM_GUIDE_OPTIONS} />
+
+    <div class="prose g-body">
+      <h2 id="good">What a good filter does</h2>
+      <ul>
+        <li><b>It never drops a message.</b> What it catches is kept where you can see it, and comes back in one tap.</li>
+        <li>
+          <b>It says why</b>, in a sentence: a hidden field filled in, the same message from forty senders, a link that
+          goes somewhere other than it shows.
+        </li>
+        <li>
+          <b>It reads strangers, and nobody else.</b> Someone you have answered, or let through once, is never filtered again.
+        </li>
+        <li>
+          <b>Language is never a reason.</b> Nor is the script, the country, the email provider, spelling or a name.
+        </li>
+        <li>
+          <b>A booking it doubts waits</b> for the sender to confirm, and holds no time; it is never thrown away.
+        </li>
+      </ul>
+
+      <h2 id="steps">Set it up in four steps</h2>
+      <ol>
+        <li>Add a hidden field and a time check to your form. They are free and ask nothing of your customers.</li>
+        <li>Send what your form receives somewhere that keeps what it catches, with a reason for each.</li>
+        <li>
+          For the opening week, label instead of putting aside: look at what it would have caught, and bring back anything
+          that was a customer.
+        </li>
+        <li>
+          Test it as a customer would: from another address, in another language, asking for a price. It should reach
+          you.
+        </li>
+      </ol>
+      <p>
+        Our own inbox does all of this, with three filters you switch on: <a href="/inbox/spam/">the spam filter</a>.
+      </p>
+    </div>
+
+    <Faqs faqs={SPAM_GUIDE_FAQS} />
+    <details class="sources">
+      <summary>Sources, read {SPAM_CHECKED}</summary>
+      <ul>
+        {
+          sources.map((s) => (
+            <li>
+              <a class="link" href={s.href} rel="noopener">
+                {s.label}
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+    </details>
+  </article>
+</Layout>
+
+<style>
+  .guide {
+    padding-bottom: var(--section-y);
+  }
+  .eyebrow a {
+    color: inherit;
+    text-decoration: none;
+  }
+  .eyebrow a:hover,
+  .eyebrow a:focus-visible {
+    text-decoration: underline;
+  }
+  .g-body {
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+  }
+  .g-body > :global(p:first-child) {
+    font-size: inherit;
+    line-height: inherit;
+    color: inherit;
+  }
+  .g-body h2 {
+    font-size: var(--fs-section);
+  }
+  .g-body ul {
+    list-style: disc;
+  }
+  .g-body ol {
+    list-style: decimal;
+  }
+  .g-body li::marker {
+    color: var(--ink-3);
+  }
+  .g-body b {
+    font-weight: 600;
+  }
+  .sources summary {
+    width: fit-content;
+    font-size: var(--fs-fine);
+    color: var(--ink-3);
+    cursor: pointer;
+  }
+  .sources summary:hover {
+    color: var(--ink-2);
+  }
+  .sources ul {
+    display: grid;
+    gap: var(--sp-1);
+    margin: var(--sp-2) 0 0;
+    padding-left: 1.25rem;
+    list-style: disc;
+    font-size: var(--fs-fine);
+  }
+</style>

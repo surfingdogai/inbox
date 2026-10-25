@@ -1,0 +1,221 @@
+---
+// The inbox's spam filter, for a business (ADR-029 §13.1): what it keeps out, what it never loses,
+// what it tells you, and what it costs. The words are in src/lib/spam.ts, shared with its guide and
+// with the owner app's Settings → Spam.
+import Faqs from "../../components/Faqs.astro";
+import Shot from "../../components/Shot.astro";
+import SpamFlow from "../../components/SpamFlow.astro";
+import Layout from "../../layouts/Layout.astro";
+import { faqPage } from "../../lib/faq";
+import { HOSTED_CTA } from "../../lib/hosted";
+import { SPAM_FAQS, SPAM_FILTERS, SPAM_FREE, SPAM_GUIDE, SPAM_LINES, SPAM_PAGE } from "../../lib/spam";
+
+const site = Astro.site?.toString() ?? "https://surfingdog.ai/";
+const url = new URL(SPAM_PAGE.path, site).toString();
+const ld = [
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: SPAM_PAGE.heading,
+    description: SPAM_PAGE.description,
+    url,
+    isPartOf: { "@type": "SoftwareApplication", name: "Surfing Dog Inbox", url: new URL("/inbox/", site).toString() },
+    publisher: { "@id": `${site}#org` },
+  },
+  faqPage(SPAM_FAQS, url),
+];
+---
+
+<Layout title={SPAM_PAGE.title} description={SPAM_PAGE.description} image="/art/og-inbox-v1.png" ld={ld}>
+  <section class="wrap section is-head spam-hero" aria-labelledby="spam-h">
+    <div class="spam-hero-words">
+      <p class="eyebrow"><a href="/inbox/">Inbox</a> · Spam filter</p>
+      <h1 class="h-page" id="spam-h">{SPAM_PAGE.heading}</h1>
+      <p class="lede">{SPAM_PAGE.lede}</p>
+      <div class="hero-actions head-cta">
+        {
+          HOSTED_CTA ? (
+            <a class="btn btn-primary" href={HOSTED_CTA.href}>
+              {HOSTED_CTA.label}
+            </a>
+          ) : (
+            <a class="btn btn-primary" href="/install/">
+              Install your inbox
+            </a>
+          )
+        }
+        <a class="btn btn-secondary" href="/docs/spam/">How it decides</a>
+      </div>
+    </div>
+    <div class="glass spam-art">
+      <SpamFlow />
+    </div>
+  </section>
+
+  <section class="wrap section section-tight" aria-labelledby="filters-h">
+    <h2 class="h-section" id="filters-h">Three filters</h2>
+    <p class="muted intro">Each one reads new messages from people you haven't dealt with before. Switch on the ones you want.</p>
+    <ul class="grid-cards spam-cards">
+      {
+        SPAM_FILTERS.map((f) => (
+          <li class="glass card">
+            <h3 class="h-card">{f.title}</h3>
+            <p class="card-text">{f.line}</p>
+          </li>
+        ))
+      }
+    </ul>
+    <p class="fine muted">
+      Each starts with a learning week: it labels what it would put aside, and puts nothing aside yet. Put aside, or
+      just label: the choice is yours, filter by filter.
+    </p>
+  </section>
+
+  <section class="wrap section section-tight spam-two" aria-labelledby="free-h">
+    <div>
+      <h2 class="h-section" id="free-h">Free, always on</h2>
+      <ul class="gets">
+        {SPAM_FREE.map((line) => <li>{line}</li>)}
+      </ul>
+    </div>
+    <Shot
+      src="/shots/spam-settings-day.png"
+      alt="Settings, Spam: basic protection always on, three filters with a switch each, put aside or just label, the learning week, who reads, the two lists and the two emails"
+      title="Settings → Spam"
+      caption="Switches and choices, nothing to type."
+    />
+  </section>
+
+  <section class="wrap section section-tight spam-two" aria-labelledby="why-h">
+    <div>
+      <h2 class="h-section" id="why-h">It tells you why</h2>
+      <p class="muted">{SPAM_LINES.why}</p>
+    </div>
+    <Shot
+      src="/shots/spam-day.png"
+      night="/shots/spam-night.png"
+      alt="Spam: a list of messages put aside, each with a small label, and one opened: why it's here, the words it found, and Not spam"
+      title="Spam"
+      caption="Each one labelled, its reason in plain words, one tap back."
+    />
+  </section>
+
+  <section class="wrap section section-tight spam-two" aria-labelledby="lost-h">
+    <div>
+      <h2 class="h-section" id="lost-h">Nothing is lost</h2>
+      <p class="muted">{SPAM_LINES.lost}</p>
+      <p class="muted">
+        A request held for a booking in the next two days reaches your phone, once, without a name. Nothing else that
+        waits does.
+      </p>
+      <Shot
+        class="spam-phone"
+        src="/shots/phone-held.png"
+        alt="The phone app: Held, with a booking request that may be from a customer, and Let it in"
+        title="On your phone"
+      />
+    </div>
+    <Shot
+      src="/shots/held-day.png"
+      alt="Held: requests waiting for the sender to confirm or for you to let them in, the ones that may be customers at the top, each with Let it in and Spam"
+      title="Held"
+      caption="Bookings here hold no time. Nobody was told."
+    />
+  </section>
+
+  <section class="wrap wrap-read section section-tight" aria-labelledby="form-h">
+    <h2 class="h-section" id="form-h">Keep your form</h2>
+    <p class="muted">{SPAM_LINES.form}</p>
+    <h2 class="h-section" id="yours-h">Your messages stay yours</h2>
+    <p class="muted">{SPAM_LINES.yours}</p>
+    <h2 class="h-section" id="cost-h">What it costs</h2>
+    <p class="muted">{SPAM_LINES.cost}</p>
+    <p class="fine">
+      Read more: <a class="link" href={`/guides/${SPAM_GUIDE.slug}/`}>{SPAM_GUIDE.title.toLowerCase()}</a> ·
+      <a class="link" href="/docs/spam/">the spam filter, in the docs</a>
+    </p>
+  </section>
+
+  <section class="wrap wrap-read section section-tight">
+    <Faqs faqs={SPAM_FAQS} />
+  </section>
+</Layout>
+
+<style>
+  .eyebrow a {
+    color: inherit;
+    text-decoration: none;
+  }
+  .eyebrow a:hover,
+  .eyebrow a:focus-visible {
+    text-decoration: underline;
+  }
+  .spam-hero {
+    display: grid;
+    gap: var(--sp-7);
+    align-items: center;
+  }
+  @media (min-width: 900px) {
+    .spam-hero {
+      grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    }
+  }
+  .head-cta {
+    margin-top: var(--sp-5);
+  }
+  .spam-art {
+    padding: var(--sp-4);
+    border-radius: var(--radius-card, 18px);
+  }
+  .muted {
+    color: var(--ink-2);
+  }
+  .intro {
+    margin: var(--sp-2) 0 var(--sp-4);
+  }
+  .spam-cards {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  @media (min-width: 760px) {
+    .spam-cards {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+  .fine {
+    margin-top: var(--sp-3);
+    font-size: var(--fs-fine);
+  }
+  .spam-two {
+    display: grid;
+    gap: var(--sp-6);
+    align-items: start;
+  }
+  @media (min-width: 900px) {
+    .spam-two {
+      grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+    }
+  }
+  .spam-two p + p {
+    margin-top: var(--sp-3);
+  }
+  .gets {
+    display: grid;
+    gap: 6px;
+    margin-top: var(--sp-3);
+    padding-left: 1.1rem;
+    font-size: var(--fs-ui);
+    color: var(--ink-2);
+  }
+  .spam-two :global(.spam-phone) {
+    max-width: 260px;
+    margin-top: var(--sp-5);
+  }
+  .wrap-read .h-section + p {
+    margin-top: var(--sp-2);
+  }
+  .wrap-read p + .h-section {
+    margin-top: var(--sp-7);
+  }
+</style>
