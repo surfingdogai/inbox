@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_
 CREATE INDEX IF NOT EXISTS events_due ON events (next_at);
 CREATE TABLE IF NOT EXISTS judge_day (day TEXT NOT NULL, tenant_id TEXT NOT NULL, n INTEGER NOT NULL, tokens_in INTEGER NOT NULL DEFAULT 0, tokens_out INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, tenant_id));
 CREATE TABLE IF NOT EXISTS judge_total_day (day TEXT PRIMARY KEY, tokens INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS judge_told (day TEXT NOT NULL, tenant_id TEXT NOT NULL, type TEXT NOT NULL, PRIMARY KEY (day, tenant_id, type));
 `;
 
 export const LEDGER_TABLES = [
@@ -54,6 +55,7 @@ export const LEDGER_TABLES = [
   "events",
   "judge_day",
   "judge_total_day",
+  "judge_told",
 ] as const;
 
 const dayOf = (now: number) => new Date(now).toISOString().slice(0, 10);
@@ -264,12 +266,15 @@ export class Ledger {
     return { n: r.n, tokens_in: r.tin, tokens_out: r.tout };
   }
 
-  /** One event to the control plane per kind, inbox and day. */
+  /**
+   * One event to the control plane per kind, inbox and day: marked told apart from the queue, which
+   * forgets each event once it is delivered.
+   */
   private tellOnce(tenantId: string, type: string, day: string, data: Record<string, unknown>): void {
-    const seen = this.db
-      .prepare("SELECT 1 FROM events WHERE tenant_id = ? AND type = ? AND at LIKE ?")
-      .get(tenantId, type, `${day}%`);
-    if (seen) return;
+    const first = this.db
+      .prepare("INSERT OR IGNORE INTO judge_told (day, tenant_id, type) VALUES (?, ?, ?)")
+      .run(day, tenantId, type);
+    if (Number(first.changes) === 0) return;
     this.db
       .prepare("INSERT INTO events (tenant_id, type, at, data, tries, next_at) VALUES (?, ?, ?, ?, 0, ?)")
       .run(tenantId, type, new Date(this.now()).toISOString(), JSON.stringify(data), this.now());
@@ -412,6 +417,7 @@ export class Ledger {
     this.db.prepare("DELETE FROM recipient_day WHERE day < ?").run(before);
     this.db.prepare("DELETE FROM tenant_day WHERE day < ?").run(before);
     this.db.prepare("DELETE FROM check_day WHERE day < ?").run(before);
+    this.db.prepare("DELETE FROM judge_told WHERE day < ?").run(before);
     this.db.prepare("DELETE FROM blames WHERE at < ? AND reported = 1").run(this.now() - 7 * 86_400_000);
   }
 }

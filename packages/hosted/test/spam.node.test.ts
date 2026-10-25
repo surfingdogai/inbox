@@ -231,6 +231,33 @@ describe("the ledger's count of AI checks", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
+  it("tells the control plane once a day, even after the first was delivered", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sdh-spam-"));
+    let now = Date.parse("2026-10-26T10:00:00Z");
+    const l = new Ledger(join(dir, "ledger.db"), { hashKey: "k", now: () => now });
+    const caps = { day: 1, month: 100, dailyTokens: 2_000 };
+    expect(l.reserveJudge("tn_1", caps)).toBe("ok");
+    l.recordJudge("tn_1", 1_900, 150);
+    // What the shards pass on: each event told is gone from the queue.
+    const told = () => {
+      const events = l.claimEvents();
+      for (const e of events) l.eventDone(e.id);
+      return events.map((e) => `${e.tenant_id} ${e.type}`);
+    };
+    expect([l.reserveJudge("tn_1", caps), l.reserveJudge("tn_2", caps)]).toEqual(["breaker", "breaker"]);
+    expect(told()).toEqual(["tn_1 spam_breaker", "tn_2 spam_breaker"]);
+    // The next refusals today tell nothing more.
+    for (let i = 0; i < 5; i++) expect(l.reserveJudge("tn_1", caps)).toBe("breaker");
+    expect(told()).toEqual([]);
+    // The next day is a new one.
+    now += 86_400_000;
+    expect(l.reserveJudge("tn_1", caps)).toBe("ok");
+    expect(l.reserveJudge("tn_1", caps)).toBe("tenant");
+    expect(told()).toEqual(["tn_1 spam_cap_reached"]);
+    l.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
   it("stops every inbox's checks once the runtime's own day is spent", () => {
     const dir = mkdtempSync(join(tmpdir(), "sdh-spam-"));
     const l = new Ledger(join(dir, "ledger.db"), { hashKey: "k", now: () => Date.parse("2026-10-26T10:00:00Z") });

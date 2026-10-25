@@ -6,9 +6,10 @@ import { hostOf, registrableDomain, withoutInvisible } from "./normalise";
  * to [bank account]", and none of the data. Masking runs before anything leaves the inbox.
  */
 
-const EMAIL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}.-]+\.[\p{L}]{2,}/gu;
+/** Letters with their marks (Devanagari's vowel signs, Thai's, an accent typed apart from its letter). */
+const EMAIL = /[\p{L}\p{M}\p{N}._%+-]+@[\p{L}\p{M}\p{N}.-]+\.[\p{L}\p{M}]{2,}/gu;
 /** A payment address with no top-level domain, as instant-payment systems write them (name@bank). */
-const PAY_ADDRESS = /[\p{L}\p{N}._-]{2,}@[\p{L}]{2,}(?![\p{L}\p{N}@-]|\.[\p{L}\p{N}])/gu;
+const PAY_ADDRESS = /[\p{L}\p{M}\p{N}._-]{2,}@[\p{L}\p{M}]{2,}(?![\p{L}\p{M}\p{N}@-]|\.[\p{L}\p{M}\p{N}])/gu;
 const URL = /\b(?:https?:\/\/|www\.)[^\s<>"'()[\]{}]+/giu;
 /** An IBAN as people write it: a country, two check digits, then groups of letters and digits. */
 const IBAN = /\b[A-Z]{2}\d{2}(?:[ -]?[A-Z0-9]{4}){2,7}(?:[ -]?[A-Z0-9]{1,4})?\b/gi;
@@ -72,12 +73,21 @@ export function mask(text: string): string {
     .replace(IBAN, (m) => (/\d.*\d.*\d.*\d/.test(m.slice(4)) ? "[bank account]" : m))
     .replace(CARD, (m) => (luhn(m.replace(/\D/g, "")) ? "[card number]" : m))
     .replace(ACCOUNT, "[bank account]")
-    .replace(PHONE, (m) => {
-      const digits = m.replace(/\D/g, "");
-      if (digits.length < 7 || digits.length > 16) return m;
-      if (DATE_LIKE.test(m.trim())) return m;
-      return "[phone]";
-    });
+    .replace(PHONE, phoneOf);
+}
+
+/** Where two numbers written one after the other part: a slash, a line, a spaced dash, two spaces. */
+const BETWEEN_NUMBERS = /(\s*[/\n]\s*|\s+[-\u2010-\u2015\u2212]\s+|\s{2,})/;
+
+/** A run of digits as a phone number, or as it is; a run too long for one number, each part on its own. */
+function phoneOf(m: string): string {
+  const digits = m.replace(/\D/g, "");
+  if (digits.length < 7) return m;
+  if (DATE_LIKE.test(m.trim())) return m;
+  if (digits.length <= 16) return "[phone]";
+  const parts = m.split(BETWEEN_NUMBERS);
+  if (parts.length === 1) return m;
+  return parts.map((p, i) => (i % 2 === 1 ? p : phoneOf(p))).join("");
 }
 
 /**

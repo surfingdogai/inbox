@@ -102,6 +102,34 @@ describe("what the check is sent", () => {
     );
   });
 
+  it("masks two phone numbers written one after the other, each on its own", () => {
+    const cases: [string, string][] = [
+      ["Tel: 912 345 678 / 913 456 789", "Tel: [phone] / [phone]"],
+      ["Tel.: 21 123 4567 / 91 234 5678", "Tel.: [phone] / [phone]"],
+      ["+351 912 345 678 - 213 456 789", "[phone] - [phone]"],
+      ["912 345 678\n213 456 789", "[phone]\n[phone]"],
+      ["Tél : 06 12 34 56 78 / 01 23 45 67 89", "Tél : [phone] / [phone]"],
+      ["Call 912 345 678  or 213 456 789", "Call [phone]  or [phone]"],
+    ];
+    for (const [text, masked] of cases) expect(mask(text), text).toBe(masked);
+    const p = buildPrompt(business, message("Please call", { subject: "Tel 912 345 678 / 913 456 789" }));
+    expect(p.request.user).toContain("Subject: Tel [phone] / [phone]");
+  });
+
+  it("masks addresses in scripts written with vowel signs, and accents typed apart from their letter", () => {
+    const cases: [string, string][] = [
+      ["मेरा ईमेल रमेश.कुमार@डाकघर.भारत है", "मेरा ईमेल [email] है"],
+      ["राम@उदाहरण.भारत पर लिखें", "[email] पर लिखें"],
+      ["อีเมล สมชาย@ตัวอย่าง.ไทย ครับ", "อีเมล [email] ครับ"],
+      ["محمد@مثال.مصر", "[email]"],
+      [`Write to jose\u0301.rodri\u0301guez@example.es`, "Write to [email]"],
+      ["Pay to ரமேஷ்@வங்கி now", "Pay to [payment address] now"],
+    ];
+    for (const [text, masked] of cases) expect(mask(text), text).toBe(masked);
+    const p = buildPrompt(business, message("Hello", { displayName: "रमेश.कुमार@डाकघर.भारत" }));
+    expect(p.request.user).toContain('From: "[email]" at example.org');
+  });
+
   it("masks the subject and the sender's name as it masks the text: no address, number or account leaves", () => {
     const p = buildPrompt(
       business,
