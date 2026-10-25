@@ -275,6 +275,65 @@ describe("what a bot sent under someone's address", () => {
   });
 });
 
+describe("an address typed where nothing vouches for it", () => {
+  const anna = { name: "Anna Kowalska", email: "anna.kowalska@biuro.example.pl" };
+  const signedMail = { screen: { door: "email" as const, email: { serverMarked: false, auth: { dmarc: "pass" } } } };
+  const slowForm = (t: number) => ({
+    screen: { door: "form" as const, form: { key: "valid" as const, trap: false, drawnAt: t - 90_000 } },
+  });
+  const ask = (i: number) => `Hello, a question about order ${1000 + i}: could it come on day ${i + 1} instead?`;
+
+  it("never spends her signed mail's budget, nor her company's", async () => {
+    const s = await spamSetup();
+    // Five form posts at a person's pace, naming her, then her own mail, which a server vouched for.
+    for (let i = 0; i < 5; i++) {
+      const t = T0 + i * MIN;
+      await s.caps.sendMessage(visitor(t), { body: ask(i), contact: anna }, slowForm(t));
+    }
+    const own = await s.caps.sendMessage(
+      visitor(T0 + HOUR),
+      {
+        body: "Hello, could we order three kilos of the house blend for our office, delivered on Thursday?",
+        contact: anna,
+      },
+      signedMail,
+    );
+    expect(await s.q("SELECT screen FROM items WHERE id = ?", [idOf(own)])).toEqual([["delivered"]]);
+    // Twenty posts naming twenty people at her company, then a colleague's signed mail.
+    const t = await spamSetup();
+    for (let i = 0; i < 20; i++) {
+      const at = T0 + i * MIN;
+      await t.caps.sendMessage(
+        visitor(at),
+        { body: ask(i), contact: { name: `Person ${i}`, email: `person${i}@biuro.example.pl` } },
+        slowForm(at),
+      );
+    }
+    const marek = await t.caps.sendMessage(
+      visitor(T0 + HOUR),
+      {
+        body: "Good morning, we would like a quote for coffee at our office: about twenty people, every weekday.",
+        contact: { name: "Marek Nowak", email: "marek.nowak@biuro.example.pl" },
+      },
+      signedMail,
+    );
+    expect(await t.q("SELECT screen FROM items WHERE id = ?", [idOf(marek)])).toEqual([["delivered"]]);
+  });
+
+  it("never gets her own assistant refused, however many unsigned requests named her", async () => {
+    const s = await spamSetup();
+    for (let i = 0; i < 30; i++) await s.caps.sendMessage(agent(T0 + i * 1_000), { body: ask(i), contact: anna });
+    const own = await s.caps
+      .sendMessage(agent(T0 + MIN, { key: "annasOwnAssistantKey00000000000000000000000" }), {
+        body: "Hello, could we order three kilos of the house blend for our office, delivered on Thursday?",
+        contact: anna,
+      })
+      .catch((e) => e);
+    expect(own).not.toBeInstanceOf(WriteError);
+    expect(await s.q("SELECT COUNT(*) FROM items")).toEqual([[31]]);
+  });
+});
+
 describe("a form a bot hurried through with a forged key", () => {
   it("counts against nobody: the person it names writes her own message, and it is no 'many new'", async () => {
     const s = await spamSetup();

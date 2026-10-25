@@ -501,24 +501,31 @@ export async function screenAtDoor(deps: SpamDeps, ctx: DoorContext): Promise<Do
   );
   const agent = ctx.identity?.agent ?? ctx.caller.agent;
   const passes = (ctx.identity?.presentations ?? []).map((p) => ({ network: p.network, ppid: p.ppid }));
-  const unsigned = ctx.screen.email && reading.email ? !emailAuthenticated(ctx.screen.email, reading.email) : false;
+  // Whether anything vouched for the address the request names: mail a server authenticated, or a pass
+  // that proved it. Anyone can type an address at a form, give one to an assistant, or forge a From.
+  const vouched =
+    (ctx.identity?.presentations ?? []).some((p) => p.emailMatch === "proven") ||
+    (ctx.screen.email !== undefined &&
+      reading.email !== undefined &&
+      emailAuthenticated(ctx.screen.email, reading.email));
+  const unsigned = reading.email !== undefined && !vouched;
   const sender = await handlesOf(deps.secrets, {
     email: reading.email,
-    ...(ctx.screen.email && reading.email ? { authenticated: !unsigned } : {}),
+    ...(reading.email ? { authenticated: !unsigned } : {}),
     agent,
     passes,
     carriedFor: ctx.caller.carriedFor,
   });
   // A platform's key is on no list: it signs for all of the platform's users.
-  const listed = await listOf(db, {
-    email: reading.email,
-    thumbprint: sender.platform ? undefined : agent?.thumbprint,
-  });
+  const thumbprint = sender.platform ? undefined : agent?.thumbprint;
+  const listed = await listOf(db, { email: reading.email, thumbprint });
+  // An address on Let through lets a request in only where something vouched for it; its app's key, always.
+  const allowed = listed === "allow" && (!unsigned || (await listOf(db, { thumbprint })) === "allow");
   const standing = await standingOf(db, sender, now);
   const strong = ctx.match.match === "strong" && ctx.match.joinPartyId !== undefined;
   const known =
     ctx.caller.tier === "reputed_principal" ||
-    listed === "allow" ||
+    allowed ||
     standing.trusted ||
     (strong && (await businessActed(db, ctx.match.joinPartyId as string)));
 

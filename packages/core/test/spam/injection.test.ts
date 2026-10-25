@@ -218,7 +218,7 @@ describe("a model fooled into 'customer'", () => {
       await basic.drain(T0 + MIN);
       expect(await verdictOf(basic, idOf(a)), `${what}, filters off`).toEqual(["aside", "spam"]);
 
-      const judge = fakeJudge({ ...said });
+      const judge = fakeJudge({ ...said, quotes: [...said.quotes] });
       const s = await spamSetup({ filters: ["pitches", "scams", "junk"], judge });
       const b = await s.caps.sendMessage(agent(T0), { body: text, contact: pat });
       await s.drain(T0 + MIN);

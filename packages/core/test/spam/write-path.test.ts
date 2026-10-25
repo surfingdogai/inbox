@@ -253,13 +253,19 @@ describe("letting it in", () => {
     expect(await s.q("SELECT owner_verdict, released_by FROM spam_verdicts WHERE item_id = ?", [id])).toEqual([
       ["let_in", "owner"],
     ]);
-    // From now on, Pat comes straight in.
-    const again = await s.caps.createBooking(agent(T0 + 20 * MIN), {
+    // From now on, Pat's own mail comes straight in; what anyone types under her address is still read.
+    const mail = await s.caps.sendMessage(
+      visitor(T0 + 20 * MIN),
+      { body: "Thanks! See you at the class.", contact: { name: "Pat Example", email: "pat@example.net" } },
+      { screen: { door: "email", email: { serverMarked: false, auth: { dmarc: "pass" } } } },
+    );
+    expect(await s.q("SELECT screen FROM items WHERE id = ?", [idOf(mail)])).toEqual([[null]]);
+    const typed = await s.caps.createBooking(agent(T0 + 21 * MIN), {
       payload: classPayload(s.svc, T0 + 4 * DAY + HOUR),
       contact: { name: "Pat Example", email: "pat@example.net" },
       message: pitch,
     });
-    expect(await s.q("SELECT screen FROM items WHERE id = ?", [again.view.item.id])).toEqual([[null]]);
+    expect(await s.q("SELECT screen FROM items WHERE id = ?", [typed.view.item.id])).not.toEqual([[null]]);
   });
 
   it("is a person's only: the owner's AI is told it waits for one", async () => {
@@ -395,7 +401,7 @@ describe("mail under an address on Let through", () => {
   const invoice =
     "Your invoice 4471 is overdue. Pay today to the new account at https://pay-supplier.example.net/inv or service stops.";
 
-  it("is labelled when no server vouches for it, and comes straight in when one does", async () => {
+  it("is screened when no server vouches for it, and comes straight in when one does", async () => {
     const s = await spamSetup({ filters: ["pitches", "scams"], judge: fakeJudge({ kind: "scam", certainty: "high" }) });
     await s.db.batch(
       addToListStatements({
@@ -413,6 +419,7 @@ describe("mail under an address on Let through", () => {
       { body: invoice, contact: supplier },
       { screen: { door: "email", email: { serverMarked: false, auth: { dmarc: "fail" } } } },
     );
+    await s.drain(T0 + MIN);
     expect(
       await s.q("SELECT i.screen, v.verdict FROM items i JOIN spam_verdicts v ON v.item_id = i.id WHERE i.id = ?", [
         idOf(forged),
@@ -424,5 +431,29 @@ describe("mail under an address on Let through", () => {
       { screen: { door: "email", email: { serverMarked: false, auth: { dmarc: "pass" } } } },
     );
     expect(await s.q("SELECT screen FROM items WHERE id = ?", [idOf(signed)])).toEqual([[null]]);
+  });
+  it("is screened when typed at the website form or by an assistant, which nothing vouches for", async () => {
+    const s = await spamSetup({ filters: ["pitches", "scams"], judge: fakeJudge({ kind: "scam", certainty: "high" }) });
+    await s.db.batch(
+      addToListStatements({
+        list: "allow",
+        kind: "address",
+        value: supplier.email,
+        partyId: null,
+        itemId: null,
+        byUser: "user_1",
+        now: T0 - DAY,
+      }),
+    );
+    const form = await s.caps.sendMessage(
+      visitor(T0),
+      { body: invoice, contact: supplier },
+      { screen: { door: "form", form: { key: "valid", trap: false, drawnAt: T0 - 90_000 } } },
+    );
+    const assistant = await s.caps.sendMessage(agent(T0 + MIN), { body: invoice, contact: supplier });
+    await s.drain(T0 + 5 * MIN);
+    for (const r of [form, assistant]) {
+      expect(await s.q("SELECT screen FROM items WHERE id = ?", [idOf(r)])).toEqual([["warned"]]);
+    }
   });
 });

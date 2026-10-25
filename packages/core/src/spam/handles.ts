@@ -78,6 +78,12 @@ export interface SenderHandles {
   readonly vouched: boolean;
   /** Whether the key is a recognised platform's, shared by all its users, rather than the agent's own. */
   readonly platform: boolean;
+  /**
+   * Whether the address it names is one nothing vouched for (mail no server authenticated, a form, an
+   * assistant no pass proves it for): its counts are kept apart, never refuse anyone, and a person's
+   * trust in that mailbox does not make the request theirs.
+   */
+  readonly unsigned: boolean;
 }
 
 /**
@@ -94,8 +100,9 @@ export async function handlesOf(
   input: {
     readonly email?: string | undefined;
     /**
-     * For an email: whether its sender was authenticated (DMARC, or a DKIM signature of its own domain).
-     * Undefined at a door that has no such thing.
+     * Whether something vouched for the address: an email's sender authenticated (DMARC, or a DKIM
+     * signature of its own domain), or a pass that proved it. Undefined where it is not asked (a stored
+     * item's handles, for what a person teaches).
      */
     readonly authenticated?: boolean | undefined;
     readonly agent?:
@@ -145,7 +152,14 @@ export async function handlesOf(
     handles.push(h);
     counted.push(h);
   }
-  return { handles, counted, first: mailbox ?? key ?? pass, vouched: input.agent?.level === "vouched", platform };
+  return {
+    handles,
+    counted,
+    first: mailbox ?? key ?? pass,
+    vouched: input.agent?.level === "vouched",
+    platform,
+    unsigned: unsigned && mailbox !== null,
+  };
 }
 
 /** What this inbox knows of a sender's handles. */
@@ -180,9 +194,10 @@ export async function standingOf(db: Db, sender: SenderHandles, now: number): Pr
     // Only the handles a sender cannot share with strangers speak for them: a mailbox, a key, a pass.
     if (!who.has(k) || !PERSONAL.has(String(r[0]) as HandleKind)) continue;
     const marked = Number(r[6] ?? 0);
-    // A person's trust holds until a spam mark after it; a sender's own proof, only while nothing they
-    // sent was ever marked as spam: a pitcher's real mailbox proves nothing about the next pitch.
-    if (Number(r[5] ?? 0) > marked) trusted = true;
+    // A person's trust holds until a spam mark after it, and a mailbox's only where something vouched
+    // for the address; a sender's own proof, only while nothing they sent was ever marked as spam: a
+    // pitcher's real mailbox proves nothing about the next pitch.
+    if (Number(r[5] ?? 0) > marked && !(sender.unsigned && r[0] === "mailbox")) trusted = true;
     if (Number(r[4] ?? 0) > 0 && marked === 0) proven = true;
   }
   return { trusted, proven, today };
@@ -212,7 +227,9 @@ export function checkBudgets(
     const widen =
       (lifts.pass && (h.kind === "mailbox" || h.kind === "mail_domain") ? 2 : 1) * (standing.proven ? PROVEN_WIDEN : 1);
     const count = (standing.today.get(keyOf(h)) ?? 0) + 1;
-    if (base.ceiling !== null && count > base.ceiling * widen) ceiling = true;
+    // What anyone can run up by typing an address refuses nobody: it only ever makes a request wait.
+    const forgeable = s.unsigned && (h.kind === "mailbox" || h.kind === "mail_domain");
+    if (base.ceiling !== null && !forgeable && count > base.ceiling * widen) ceiling = true;
     if (base.day !== null && count > base.day * widen && (over === null || count > over.count))
       over = { kind: h.kind, count };
   }
@@ -298,7 +315,7 @@ export async function itemHandles(db: Db, secrets: SecretBox | null, itemId: str
     method: "all",
   });
   const r = rows[0];
-  if (!r) return { handles: [], counted: [], first: null, vouched: false, platform: false };
+  if (!r) return { handles: [], counted: [], first: null, vouched: false, platform: false, unsigned: false };
   const thumbprint = r[0] === null || r[0] === undefined ? undefined : String(r[0]);
   const level = r[1] === null || r[1] === undefined ? "none" : String(r[1]);
   const platform = r[2] === null || r[2] === undefined || r[2] === "" ? undefined : String(r[2]);

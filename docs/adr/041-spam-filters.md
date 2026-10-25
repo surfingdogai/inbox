@@ -39,10 +39,13 @@ switched on.*
 3. **Strangers only.** Known customers — a strong match (ADR-017 §8.2) with a party the business acted
    on —, a handle a person trusted, anyone on Let through, replies on a thread, and everything the
    business makes are never screened and cost no model call. A mailbox its sender proved is still a
-   stranger's: pitchers use real mailboxes because they want replies. A trusted sender still gets the checks
-   that point at a third party (a server mark, a look-alike, a disguised link, a change of bank details),
-   as a label only; mail under their address that no DMARC pass or aligned DKIM vouches for is also
-   labelled for a failed DMARC and for a scam's phrases, since it may not be theirs.
+   stranger's: pitchers use real mailboxes because they want replies. An address on Let through, or a
+   mailbox a person trusted, makes a request known only where something vouched for the address (mail
+   a server authenticated with DMARC or aligned DKIM, a pass that proved it): typed at a form, given to an
+   assistant or on mail nobody signed, it is a stranger's, since anyone can type it. A trusted sender
+   still gets the checks that point at a third party (a server mark, a look-alike, a disguised link, a
+   change of bank details), as a label only; a request of theirs under an address nothing vouched for is
+   also labelled for a failed DMARC and for a scam's phrases, since it may not be theirs.
 4. **Doors.** The inbox's own form signs each form it draws (an id and an HMAC under the inbox's secret)
    and names its hidden field per form; a filled field puts a message aside and holds a booking, never
    drops it, and the visitor sees the same page whatever was decided, with a way to reach the business
@@ -73,9 +76,10 @@ switched on.*
    it never makes a request wait on its own, is on no list, is trusted by nobody, and only a flood of
    1,500 new conversations a day answers 429. A key from a directory nobody recognises is the agent's
    own: anyone can host a directory. A request that names nobody (no mailbox, no key of its own, no
-   pass) is a sender of its own for repeats, so unsigned copies of one pitch still make a wave. Email
-   under an address that no DMARC pass or aligned DKIM vouched for is counted apart from that address's
-   signed mail, and a request a certain bot signal decided (a hidden field, a form never drawn, a
+   pass) is a sender of its own for repeats, so unsigned copies of one pitch still make a wave. A request
+   under an address nothing vouched for (mail no DMARC pass or aligned DKIM vouched for, a form, an
+   assistant no pass proves it for) is counted apart from that address's vouched mail, and what is
+   counted there makes a request wait but never refuses one; a request a certain bot signal decided (a hidden field, a form never drawn, a
    server's mark, a wave, a block), or one that what a bot did at the form puts aside alone (a forged
    key sent in a moment), counts against nobody, so forgeries never spend a real sender's budget. The AI
    check finding a customer takes its points off what the filters found, never off the free

@@ -21,7 +21,8 @@ describe("erasing a customer", () => {
     await s.caps.transitionItem(owner(T0 + MIN), { item_id: id, event: "mark_spam" });
     await s.caps.transitionItem(owner(T0 + 2 * MIN), { item_id: id, event: "unspam" });
     expect(await s.q("SELECT COUNT(*) FROM spam_lists")).toEqual([[1]]);
-    expect(Number((await s.q("SELECT COUNT(*) FROM spam_handles WHERE kind = 'mailbox'"))[0]?.[0])).toBe(1);
+    // Their mailbox, trusted, and what was counted under it apart (nothing vouched for the address).
+    expect(Number((await s.q("SELECT COUNT(*) FROM spam_handles WHERE kind = 'mailbox'"))[0]?.[0])).toBe(2);
     const party = (await s.q("SELECT party_id FROM items WHERE id = ?", [id]))[0]?.[0] as string;
     const asked = await s.caps.customers.erase(owner(T0 + 3 * MIN), { party_id: party }).catch((e) => e);
     await s.caps.customers.erase(owner(T0 + 3 * MIN), { party_id: party, confirm: asked.details.confirm });
