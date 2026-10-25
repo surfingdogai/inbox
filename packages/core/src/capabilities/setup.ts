@@ -28,7 +28,7 @@ import { readSettings } from "../settings/schema";
 import { canonicalLanguages } from "../util/locale";
 import { type Caller, holdsMoney, isCustomer, isOwnerAssistant, isPerson, nowOf } from "../write/caller";
 import { fromZod, WriteError } from "../write/errors";
-import { heldForPrice } from "../write/pricing";
+import { heldForPrice, heldForStock } from "../write/pricing";
 import { RULE_SKIPPED_EVENT } from "../write/skipped";
 import { rowToItem } from "../write/views";
 import { NO_HOURS, type Weekly } from "./availability";
@@ -632,18 +632,22 @@ export class SetupCapabilities {
     // What a run would hold back here, as the engine decides it, and so what it would really do.
     const held = matched ? await heldBack(this.db, item.id, eventRow, parsed.data.if) : null;
     const skippedActions = held ? parsed.data.actions.filter(isNegative) : [];
-    // A promise on a price the business did not set waits for a person (ADR-018 §3.2): the run
-    // asks one instead, and stops there.
+    // A promise on a price the business did not set waits for a person (ADR-018 §3.2), and so does an
+    // order for what is off sale or past the stock: the run asks one instead, and stops there.
     const actions = parsed.data.actions.filter((a) => !skippedActions.includes(a));
     let unpriced: Action[] = [];
+    let why: "price" | "stock" = "price";
     for (const [i, a] of actions.entries()) {
-      if (!matched || a.action !== "transition" || !(await heldForPrice(this.db, item, a.event))) continue;
+      if (!matched || a.action !== "transition") continue;
+      if (await heldForPrice(this.db, item, a.event)) why = "price";
+      else if (await heldForStock(this.db, item, a.event)) why = "stock";
+      else continue;
       unpriced = actions.slice(i);
       break;
     }
     const skipped = [
       ...(held ? skippedActions.map((a) => skippedSentence(input.name, a, held)) : []),
-      ...(unpriced[0] ? [priceSentence(input.name, unpriced[0])] : []),
+      ...(unpriced[0] ? [priceSentence(input.name, unpriced[0], why)] : []),
     ];
     return {
       matched,
@@ -921,9 +925,11 @@ function ruleMoney(): WriteError {
 const ASK_A_PERSON = "flag it for a person";
 
 /** Why a rule's promise waits for a person, in the owner's words, for a rule's test. */
-function priceSentence(ruleName: string | undefined, action: Action): string {
+function priceSentence(ruleName: string | undefined, action: Action, why: "price" | "stock"): string {
   const rule = ruleName?.trim() ? `Rule '${ruleName.trim()}'` : "This rule";
-  return `${rule} wanted to ${describeAction(action)}, but the request holds a price that is not in your catalogue, so it asks a person to price it first`;
+  return why === "stock"
+    ? `${rule} wanted to ${describeAction(action)}, but the order is for a product off sale or for more than you have in stock, so it asks a person to decide`
+    : `${rule} wanted to ${describeAction(action)}, but the request holds a price that is not in your catalogue, so it asks a person to price it first`;
 }
 
 /** The profile's view of where a hosted business joined from, when its host said. */

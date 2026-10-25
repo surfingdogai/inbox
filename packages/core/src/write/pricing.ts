@@ -224,6 +224,7 @@ async function priceOrder(db: Db, payload: PayloadOf<"order">, pricing?: Pricing
   let currency: string | undefined;
   let unpriced = false;
   const clash: FieldProblem[] = [];
+  const offSale: FieldProblem[] = [];
   const orderedItem: PayloadOf<"order">["orderedItem"] = [];
   lines.forEach((line, i) => {
     const byId = line.productId !== undefined ? catalogue.byId.get(line.productId) : undefined;
@@ -239,6 +240,11 @@ async function priceOrder(db: Db, payload: PayloadOf<"order">, pricing?: Pricing
     if (!product) {
       unpriced = true;
       orderedItem.push(line);
+      return;
+    }
+    // A product taken off sale is not ordered: the line is refused, never priced from it.
+    if (product.active === 0) {
+      offSale.push({ path: `payload.orderedItem.${i}`, problem: "invalid", message: "not on sale" });
       return;
     }
     const list: Money = { value: product.price.value, currency: product.price.currency.toUpperCase() };
@@ -268,6 +274,11 @@ async function priceOrder(db: Db, payload: PayloadOf<"order">, pricing?: Pricing
   if (clash.length) {
     throw new WriteError("invalid_input", "A line names two different products: send its productId or its sku.", {
       fields: clash,
+    });
+  }
+  if (offSale.length) {
+    throw new WriteError("invalid_input", "A line is for a product we no longer sell, so it cannot be ordered.", {
+      fields: offSale,
     });
   }
   // Nothing here is the catalogue's: every line is for a person to price, as the customer wrote it.
@@ -340,6 +351,42 @@ export async function heldForPrice(db: Db, item: Pick<Item, "id" | "type">, even
   return rows.length > 0;
 }
 
+/** Why a rule asks a person instead of taking an order (`heldForStock`), in the owner's words. */
+export const IN_STOCK_REASON =
+  "a person decides this, because it is for a product off sale or for more than you have in stock";
+
+/**
+ * Why automation (a rule, the owner's AI, a key without `money:write`) may not take an order as it
+ * stands, judged when it would: `accept` takes its lines, `accept_change` the lines of the change. A
+ * line for a product off sale (`not_on_sale`), or more of a product than its counted stock, over all
+ * its lines (`not_enough_stock`), is a person's to decide. Null when nothing holds it. Stock is never
+ * counted down here.
+ */
+export async function heldForStock(
+  db: Db,
+  item: Item,
+  event: string,
+): Promise<"not_on_sale" | "not_enough_stock" | null> {
+  if (item.type !== "order") return null;
+  const lines =
+    event === "accept" ? item.payload.orderedItem : event === "accept_change" ? item.payload.change?.orderedItem : null;
+  if (!lines?.length) return null;
+  const catalogue = await productsFor(db, lines);
+  const wanted = new Map<string, { stock: number | null; quantity: number }>();
+  for (const line of lines) {
+    const product =
+      (line.productId !== undefined ? catalogue.byId.get(line.productId) : undefined) ??
+      (line.sku !== undefined ? catalogue.bySku.get(line.sku) : undefined);
+    if (!product) continue;
+    if (product.active === 0) return "not_on_sale";
+    const w = wanted.get(product.id) ?? { stock: product.stock, quantity: 0 };
+    w.quantity += line.quantity;
+    wanted.set(product.id, w);
+  }
+  for (const w of wanted.values()) if (w.stock !== null && w.quantity > w.stock) return "not_enough_stock";
+  return null;
+}
+
 /**
  * The item as a rule reads it: the price the customer's request stated is not there, so no rule
  * can confirm, accept or answer on it — only on the business's price, which is `totalPrice`.
@@ -371,6 +418,10 @@ interface CatalogueProduct {
   readonly name: string;
   readonly price: Money;
   readonly negotiable: number;
+  /** 0: off sale. */
+  readonly active: number;
+  /** Units in stock, when the business counts them. */
+  readonly stock: number | null;
 }
 
 async function productsFor(db: Db, lines: readonly { productId?: string | undefined; sku?: string | undefined }[]) {
@@ -384,6 +435,8 @@ async function productsFor(db: Db, lines: readonly { productId?: string | undefi
     name: products.name,
     price: products.price,
     negotiable: products.negotiable,
+    active: products.active,
+    stock: products.stock,
   };
   for (let i = 0; i < ids.length; i += CHUNK) {
     const rows = await db.orm

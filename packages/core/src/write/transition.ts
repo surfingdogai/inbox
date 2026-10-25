@@ -64,6 +64,7 @@ import { inRequestState, isAutomation, legacyRows, NEGOTIATES, planOffers, reque
 import {
   assertBusinessPriced,
   heldForPrice,
+  heldForStock,
   linePricing,
   orderPersonalised,
   type PricingFor,
@@ -284,6 +285,14 @@ async function attempt_(
       "guard_failed",
       "The customer's request holds a price we did not set, so only the owner can confirm or accept it. Tell the owner in a note (reply with internal: true) what you would do.",
       { details: { guard: "business_priced", draft_for_owner: true } },
+    );
+  }
+  // Nor takes an order for a product off sale, or for more than its counted stock: a person decides.
+  if (automation && (await heldForStock(db, item, input.event))) {
+    throw new WriteError(
+      "guard_failed",
+      "The order is for a product we no longer sell, or for more than we have in stock, so only the owner can accept it. Tell the owner in a note (reply with internal: true) what you would do.",
+      { details: { guard: "in_stock", draft_for_owner: true } },
     );
   }
   if (isAutomation(caller)) {

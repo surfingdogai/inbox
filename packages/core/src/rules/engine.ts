@@ -19,7 +19,7 @@ import type { Caller } from "../write/caller";
 import { jobStatement } from "../write/common";
 import { WriteError } from "../write/errors";
 import { setFlags } from "../write/flags";
-import { withoutStatedPrices } from "../write/pricing";
+import { IN_STOCK_REASON, withoutStatedPrices } from "../write/pricing";
 import { recordRuleSkipped } from "../write/skipped";
 import { bucketsFor, planClaims, readClaims } from "../write/slots";
 import { appendThreadEntry } from "../write/thread";
@@ -191,15 +191,21 @@ export async function runRulesForEvent(
               ? error.message
               : String(error);
         report.errors.push(`${rule.name}: ${message}`);
-        // The promise waits for a person to price it (ADR-018 §3.2), or to book a time inside the
-        // minimum notice, which no rule does (the founder, 23 September 2026): the rule asks one instead.
+        // The promise waits for a person to price it (ADR-018 §3.2), to book a time inside the minimum
+        // notice, which no rule does (the founder, 23 September 2026), or to take an order for what is
+        // off sale or past the stock: the rule asks one instead.
         const guard =
           error instanceof WriteError
             ? error.code === "outside_limits"
               ? "outside_limits"
               : error.details?.guard
             : undefined;
-        if (guard === "business_priced" || guard === "not_too_soon" || guard === "outside_limits") {
+        if (
+          guard === "business_priced" ||
+          guard === "not_too_soon" ||
+          guard === "outside_limits" ||
+          guard === "in_stock"
+        ) {
           try {
             current = (
               await setFlags(db, ruleActor, {
@@ -210,7 +216,9 @@ export async function runRulesForEvent(
                     ? `${rule.name}: a person prices this first, because the request holds a price that is not in your catalogue`
                     : guard === "outside_limits"
                       ? `${rule.name}: a person decides this, because it is outside the limits you set for automation`
-                      : `${rule.name}: a person books this, because it starts within your minimum notice or has started`,
+                      : guard === "in_stock"
+                        ? `${rule.name}: ${IN_STOCK_REASON}`
+                        : `${rule.name}: a person books this, because it starts within your minimum notice or has started`,
                 causation,
               })
             ).item;

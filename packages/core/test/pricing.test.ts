@@ -475,6 +475,99 @@ describe("the business sets its prices", () => {
   });
 });
 
+describe("what is on sale, and how many there are", () => {
+  const ai: Caller = {
+    actor: { kind: "owner_ai", id: "client_1", channel: "mcp_owner" },
+    actsAs: "owner",
+    principal: { via: "oauth", id: "client_1", name: "Assistant", scopes: ["*"], userId: "u1" },
+    tier: "verified_principal",
+    sandbox: false,
+    now: () => T0,
+  };
+
+  it("takes no order for a product off sale, by its id or its sku", async () => {
+    const { db, prod, caps } = await setup("shop");
+    await db.orm.update(products).set({ active: 0 }).where(eq(products.id, prod.chain));
+    for (const line of [
+      { productId: prod.chain, name: "Chain", quantity: 1, price: EUR(1_850) },
+      { sku: "CH-9", name: "Chain", quantity: 1, price: EUR(1_850) },
+    ]) {
+      await expect(
+        caps.createOrder(agent, { payload: { orderedItem: [line], totalPrice: EUR(1_850) } }),
+      ).rejects.toMatchObject({
+        code: "invalid_input",
+        fields: [{ path: "payload.orderedItem.0", message: "not on sale" }],
+      });
+    }
+    expect(await db.orm.select({ id: items.id }).from(items)).toEqual([]);
+  });
+
+  it("leaves an order for more than the stock to a person: no rule and no AI accepts it", async () => {
+    const { db, prod, caps, drain } = await setup("shop");
+    await db.orm.update(products).set({ stock: 2 }).where(eq(products.id, prod.chain));
+    // Three chains in all, over two lines: €55.50, well within the shop's €200 for an automatic yes.
+    const over = await caps.createOrder(agent, {
+      payload: {
+        orderedItem: [
+          { productId: prod.chain, name: "Chain", quantity: 2, price: EUR(1_850) },
+          { sku: "CH-9", name: "Chain", quantity: 1, price: EUR(1_850) },
+        ],
+        totalPrice: EUR(5_550),
+      },
+    });
+    const within = await caps.createOrder(agent, {
+      payload: {
+        orderedItem: [{ productId: prod.chain, name: "Chain", quantity: 2, price: EUR(1_850) }],
+        totalPrice: EUR(3_700),
+      },
+    });
+    await drain();
+    const held = await row(db, over.view.item.id);
+    expect(held.state).toBe("received");
+    expect(held.item.flags.needsHuman).toBe(true);
+    const events = await db.orm
+      .select({ event: itemEvents.event, reason: itemEvents.reason })
+      .from(itemEvents)
+      .where(eq(itemEvents.itemId, over.view.item.id));
+    expect(events.map((e) => e.event)).toEqual(["create", "flags"]);
+    expect(events[1]?.reason).toContain("more than you have in stock");
+    // Within the stock, the preset takes it as before.
+    expect((await row(db, within.view.item.id)).state).toBe("awaiting_payment");
+    // "Try it" says what the run does.
+    const tried = await caps.setup.testRule(owner, {
+      definition: PRESETS.shop?.[0]?.definition as never,
+      item_id: over.view.item.id,
+    });
+    expect(tried.would).toEqual(["flag it for a person"]);
+    expect(tried.skipped?.[0]).toContain("more than you have in stock");
+    // The owner's AI drafts for the owner; the owner accepts it in person.
+    await expect(caps.transitionItem(ai, { item_id: over.view.item.id, event: "accept" })).rejects.toMatchObject({
+      code: "guard_failed",
+      details: { guard: "in_stock", draft_for_owner: true },
+    });
+    const accepted = await caps.transitionItem(owner, { item_id: over.view.item.id, event: "accept" });
+    expect(accepted.view.item.state).toBe("accepted");
+    // Stock is the owner's to count: accepting takes nothing off it.
+    const [chain] = await db.orm.select({ stock: products.stock }).from(products).where(eq(products.id, prod.chain));
+    expect(chain?.stock).toBe(2);
+  });
+
+  it("asks a person for an order whose product went off sale before a rule could accept it", async () => {
+    const { db, prod, caps, drain } = await setup("shop");
+    const order = await caps.createOrder(agent, {
+      payload: {
+        orderedItem: [{ productId: prod.chain, name: "Chain", quantity: 1, price: EUR(1_850) }],
+        totalPrice: EUR(1_850),
+      },
+    });
+    await db.orm.update(products).set({ active: 0 }).where(eq(products.id, prod.chain));
+    await drain();
+    const held = await row(db, order.view.item.id);
+    expect(held.state).toBe("received");
+    expect(held.item.flags.needsHuman).toBe(true);
+  });
+});
+
 describe("a price per person (the founder, 23 September 2026)", () => {
   const lesson = async (db: Awaited<ReturnType<typeof setup>>["db"], per?: "booking" | "person") => {
     const id = ulid();
