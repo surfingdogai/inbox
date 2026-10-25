@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { COPY, copyFor, vars, WITHDRAWAL_UK, withdrawalCopy } from "../src/customer/copy";
 import { statusSentence } from "../src/customer/describe";
+import { DISCLOSURE } from "../src/customer/disclosure";
 import { moneyIn, shortRef, whenText, zoneName } from "../src/customer/format";
+import { FRONT_COPY } from "../src/customer/front-copy";
 import { customerLang, langFromHeader } from "../src/customer/lang";
 import type { Item } from "../src/domain/types";
+import { tooManyWords } from "../src/spam/screen";
 
 /**
  * Every word the business says to a customer, in every language it writes: the business's voice,
@@ -210,5 +213,51 @@ describe("the customer's words", () => {
     expect(copyFor("pt").labels.accept).toBe("Aceitar");
     expect(copyFor("en").page.acceptTime.buttonPriced).toBe("Order with obligation to pay");
     expect(copyFor("pt").page.acceptTime.buttonPriced).toBe("Encomenda com obrigação de pagar");
+  });
+
+  it("says nothing of a spam filter to the sender, in either language (ADR-029 §14)", () => {
+    // What a sender may read because of the filter: the line under the Sent page, the confirm line and
+    // its page, the answer past a day's ceiling, and the privacy page's paragraph.
+    const said = {
+      en: [
+        FRONT_COPY.en.sent.safety({ email: "hola@kopisenja.example", phone: "+62 21 555 0199" }),
+        FRONT_COPY.en.sent.safety({ email: "hola@kopisenja.example" }),
+        FRONT_COPY.en.sent.safety({ phone: "+62 21 555 0199" }),
+        copyFor("en").mail.confirmMe,
+        copyFor("en").mail.confirmMeButton,
+        ...Object.values(copyFor("en").page.confirmMe),
+        tooManyWords("en"),
+        DISCLOSURE.en.privacy.spam,
+      ],
+      pt: [
+        FRONT_COPY.pt.sent.safety({ email: "ola@kopisenja.example", phone: "+62 21 555 0199" }),
+        copyFor("pt").mail.confirmMe,
+        copyFor("pt").mail.confirmMeButton,
+        ...Object.values(copyFor("pt").page.confirmMe),
+        tooManyWords("pt-BR"),
+        DISCLOSURE.pt.privacy.spam,
+      ],
+    };
+    const ABOUT_US = {
+      en: [/spam/i, /filter/i, /\bheld\b/i, /\bhold\b/i, /score/i, ...FORBIDDEN_EN],
+      pt: [/spam/i, /filtr/i, /retid/i, /pontua/i, ...FORBIDDEN_PT],
+    };
+    for (const lang of ["en", "pt"] as const) {
+      for (const text of said[lang]) {
+        expect(text.trim().length).toBeGreaterThan(0);
+        for (const word of ABOUT_US[lang]) expect(text, `${lang}: ${text}`).not.toMatch(word);
+      }
+    }
+    // The words the plan gives, exactly.
+    expect(copyFor("en").mail.confirmMe).toBe(
+      "Please confirm it's you, so we know your request reached the right person.",
+    );
+    expect(copyFor("pt").mail.confirmMeButton).toBe("Confirmo que sou eu");
+    expect(copyFor("en").page.confirmMe.done).toBe("Thank you, that's confirmed. We'll be in touch.");
+    expect(tooManyWords("en")).toBe("We have had many new requests from you. Please try again later.");
+    expect(tooManyWords("pt")).toBe("Recebemos muitos pedidos novos seus. Por favor, tente mais tarde.");
+    expect(FRONT_COPY.en.sent.safety({ email: "a@b.example", phone: "+1 555 0100" })).toBe(
+      "Haven't heard from us in two working days? Write to a@b.example or call +1 555 0100.",
+    );
   });
 });

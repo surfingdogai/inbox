@@ -1,9 +1,9 @@
 # ADR-029 — Spam filters
 
 **Status:** proposed, 24 October 2026. The core pipeline, its signals, the AI check behind a port, every
-door, the hosted plumbing and the metering are built and tested; the owner app's screens, the phone app,
-the site's pages and the WordPress plugin are not yet. Every open business decision ships switched off
-(§12). Amends ADR-026 §7 and the inbox's own form (§4).
+door, the hosted plumbing, the metering, the owner app's screens, the owner's two emails, the phone app
+and the site's pages are built and tested; the WordPress plugin's connection is not yet. Every open
+business decision ships switched off (§12). Amends ADR-026 §7 and the inbox's own form (§4).
 
 ## Context
 
@@ -124,6 +124,25 @@ brings it back.
 - **A sixth booking in a day from one address** is held (`many_new`) but gets no acknowledgement that
   day (three acknowledgements an address a day): its sender cannot confirm it until the next one; the
   owner sees it under Held.
+- **Undo sends nothing.** Let it in, Not spam, Looks fine and Spam wait six seconds on the owner's
+  screen before they are sent, so Undo leaves no trace anywhere (no list, no print, no rule run);
+  another press, leaving the inbox or closing the page sends what waits at once. The follow-up a toast
+  offers (a company's domain through, a sender always aside, another time) sends the act first.
+- **Spam lists everything put aside**: `state: spam` on the owner's list also takes what the filter put
+  aside, including a held booking a person sent there, which keeps its own state. Each listed row carries
+  the filter's summary (chip, cause, certain, may be a customer, who sent it), and Held lists what may
+  be a customer first: the AI check found one or wasn't sure, held only for many new requests, or its
+  words name the business's own offer and nothing certain held it.
+- **The owner's own model** on one's own server is kept in `spam_model` (one row, the key sealed under
+  `model-key`, never downloaded); the provider calls are the host's (`ModelKit`): the Messages API on
+  the provider's own SDK, and chat completions for the other two. The model list is the provider's own.
+  A hosted inbox, or a server with `SPAM_MODEL_*` set, takes none.
+- **The owner's two emails** (`spam_held_digest`, `spam_weekly`) are scheduled by the quarter-hour
+  sweep at their hour in the business's time, one job a day and one a Monday, and decide as they run.
+- **The phone** reads the filter at `/v1/phone/spam` and may switch the two emails there; filters are
+  switched on the web. A held booking for a time within 48 hours queues one notification, only where a
+  phone listens, and only while it is still held.
+- **Spam is never red** in the owner app or the phone: Mark as spam and the Spam state are in ink.
 
 ## Consequences
 
