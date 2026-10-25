@@ -253,6 +253,19 @@ export class Ledger {
     });
   }
 
+  /**
+   * An attempt that was sent and came back without its usage (it timed out, the connection was cut):
+   * what it may have cost, against the runtime's day only, so a provider's slowdown still trips the
+   * breaker. No inbox's own count of tokens takes it.
+   */
+  recordJudgeEstimate(tokens: number): void {
+    this.db
+      .prepare(
+        "INSERT INTO judge_total_day (day, tokens) VALUES (?, ?) ON CONFLICT (day) DO UPDATE SET tokens = tokens + excluded.tokens",
+      )
+      .run(dayOf(this.now()), Math.max(0, Math.ceil(tokens)));
+  }
+
   /** The AI checks one inbox made in a month, and their tokens, as the ledger counted them. */
   judged(
     tenantId: string,

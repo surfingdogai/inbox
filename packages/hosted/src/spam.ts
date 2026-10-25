@@ -96,6 +96,9 @@ export function tenantJudge(o: {
       const tokensIn = r.ok ? r.tokensIn : (r.tokensIn ?? 0);
       const tokensOut = r.ok ? r.tokensOut : (r.tokensOut ?? 0);
       if (tokensIn || tokensOut) o.ledger.recordJudge(o.tenantId, tokensIn, tokensOut);
+      // Sent, and back without its usage: about a token every three characters, and the whole answer.
+      else if (!r.ok && (r.why === "timeout" || r.why === "unavailable"))
+        o.ledger.recordJudgeEstimate((req.system.length + req.user.length) / 3 + req.maxTokens);
       return r;
     },
   };

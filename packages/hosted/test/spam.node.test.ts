@@ -272,6 +272,42 @@ describe("the ledger's count of AI checks", () => {
   });
 });
 
+describe("checks that time out", () => {
+  it("still count against the runtime's day, so a provider's slowdown trips the breaker", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "sdh-spam-"));
+    const ledger = new Ledger(join(dir, "ledger.db"), { hashKey: "k", now: () => Date.parse("2026-10-26T10:00:00Z") });
+    let sent = 0;
+    const slow = {
+      judge: {
+        async judge() {
+          sent++;
+          return { ok: false as const, why: "timeout" as const };
+        },
+      },
+      dailyTokens: 4_000,
+    };
+    const judge = tenantJudge({
+      model: slow,
+      ledger,
+      tenantId: "tn_1",
+      policy: spamHostPolicy({ spam: { ...SPAM, day_cap: 1_000 } } as PolicyPayload),
+    });
+    const request = { system: "s".repeat(3_000), user: "u".repeat(3_000), schema: {}, maxTokens: 300 };
+    const outcomes: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      const r = await judge?.judge(request, new AbortController().signal);
+      outcomes.push(r && !r.ok ? r.why : "ok");
+    }
+    // Each attempt sent may have cost about its prompt and its answer: two of them spend the day.
+    expect(sent).toBe(2);
+    expect(outcomes).toEqual(["timeout", "timeout", "capped", "capped", "capped"]);
+    // The inbox's own count of tokens is what came back, none of the estimate.
+    expect(ledger.judged("tn_1", "2026-10")).toEqual({ n: 2, tokens_in: 0, tokens_out: 0 });
+    ledger.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+});
+
 describe("a hosted inbox's spam filter", () => {
   it("asks no model where the policy has no spam block: the filters look for known phrases only", async () => {
     const { t, host, owner } = await liveInbox(undefined);
