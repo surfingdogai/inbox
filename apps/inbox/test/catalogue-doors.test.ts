@@ -1,12 +1,14 @@
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
-import { schema, ulid } from "@surfingdog/core";
+import { createApiKey } from "@surfingdog/adapters";
+import { type Caller, schema, ulid } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
-import { type App, createApp } from "../src/app";
+import { type App, createApp, createInbox } from "../src/app";
 import { freshDb } from "./harness";
 
 /**
- * The catalogue at the public doors, as customers and their agents read it: a product's public
- * fields only, never where it came from (a feed's address can hold its key). Node and workerd.
+ * The catalogue at the doors, as customers, their agents and the owner's AI read it: a product's
+ * public fields only, never where it came from (a feed's address can hold its key), and each price
+ * written in its own currency. Node and workerd.
  */
 const T0 = Date.parse("2026-10-20T09:00:00Z");
 const FEED = "feed:https://shop.example/products.xml?token=feed-secret-0123";
@@ -68,5 +70,47 @@ describe("products at the public doors", () => {
     const page = r.structuredContent as { items: Record<string, unknown>[] };
     expect(Object.keys(page.items[0] ?? {}).sort()).toEqual(PUBLIC_FIELDS);
     expect(JSON.stringify(r)).not.toMatch(/feed-secret|ext-1001|feed:/);
+  });
+});
+
+describe("prices in words", () => {
+  const owner: Caller = {
+    actor: { kind: "owner", id: "u1", channel: "owner_ui" },
+    tier: "verified_principal",
+    sandbox: false,
+    now: () => T0,
+  };
+
+  it("writes each price in its own currency, yen with no minor unit, at both doors", async () => {
+    const db = await freshDb();
+    await db.orm.insert(schema.business).values({
+      id: "self",
+      name: "Kissa Records",
+      timezone: "Asia/Tokyo",
+      currency: "EUR",
+      createdAt: T0,
+      updatedAt: T0,
+    });
+    const inbox = createInbox({ db, background: () => {} });
+    // A record shop's feed, priced in yen.
+    const feed = await inbox.caps.feeds.add(owner, { url: "https://records.example.com/feed.csv" });
+    await inbox.caps.feeds.importBody(
+      feed.id,
+      ["id,title,price", "R1,Vinyl record,4980 JPY", "R2,Record sleeve,¥350", "R3,Cleaning cloth,8.50 EUR"].join("\n"),
+      T0,
+    );
+    const pub = await connect(inbox.app, "/mcp");
+    const listed = await pub.callTool({ name: "list_products", arguments: {} });
+    const text = (listed.content as { text: string }[])[0]?.text ?? "";
+    expect(text).toContain("Vinyl record JP¥4,980 (id ");
+    expect(text).toContain("Record sleeve JP¥350 (id ");
+    expect(text).toContain("Cleaning cloth €8.50 (id ");
+
+    const key = await createApiKey(db, { kind: "owner", name: "t" });
+    const own = await connect(inbox.app, "/mcp/owner", { authorization: `Bearer ${key.key}` });
+    const ownText = ((await own.callTool({ name: "list_products", arguments: {} })).content as { text: string }[])[0]
+      ?.text;
+    expect(ownText).toContain(": Vinyl record JP¥4,980");
+    expect(ownText).toContain(": Cleaning cloth €8.50");
   });
 });

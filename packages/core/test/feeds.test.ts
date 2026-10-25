@@ -27,9 +27,13 @@ describe("parsePrice", () => {
     expect(parsePrice("1,234", "EUR")).toEqual({ value: 123_400, currency: "EUR" });
   });
 
-  it("gives a zero-decimal currency no minor units", () => {
-    expect(parsePrice("500 JPY", "EUR")).toEqual({ value: 500, currency: "JPY" });
-    expect(parsePrice("2500 HUF", "EUR")).toEqual({ value: 2500, currency: "HUF" });
+  it("keeps a currency with no minor unit in hundredths, as every amount here is kept", () => {
+    // ¥500 is 50000, as the owner's own prices, the doors and the receipts all count it.
+    expect(parsePrice("500 JPY", "EUR")).toEqual({ value: 50_000, currency: "JPY" });
+    expect(parsePrice("¥4,980", "EUR")).toEqual({ value: 498_000, currency: "JPY" });
+    // A yen price written with a fraction is someone's formatter, not money.
+    expect(parsePrice("1500.00 JPY", "EUR")).toEqual({ value: 150_000, currency: "JPY" });
+    expect(parsePrice("2500 HUF", "EUR")).toEqual({ value: 250_000, currency: "HUF" });
   });
 
   it("refuses what is not a price", () => {

@@ -96,7 +96,7 @@ export {
 export * from "./settings/schema";
 export { canonicalNetworkOrigin } from "./util/hosts";
 export { canonicalLanguages, currencyProblem, isHundredthsCurrency } from "./util/locale";
-export { servicePriceText } from "./util/money";
+export { moneyText, servicePriceText } from "./util/money";
 export { crc32, type ZipFile, zip } from "./util/zip";
 export { USER_AGENT, VERSION } from "./version";
 export * from "./write/index";

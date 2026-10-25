@@ -29,6 +29,7 @@ import {
   listServicesInput,
   makeBusinessOfferInput,
   makeOfferInput,
+  moneyText,
   type OnceOptions,
   openReturnInput,
   patchOf,
@@ -319,8 +320,7 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
           const page = await caps.listProducts(args);
           return {
             text:
-              page.items.map((p) => `${p.name} ${p.price.value / 100} ${p.price.currency} (id ${p.id})`).join("; ") ||
-              "No products yet.",
+              page.items.map((p) => `${p.name} ${moneyText(p.price)} (id ${p.id})`).join("; ") || "No products yet.",
             structured: page,
           };
         }),
@@ -915,7 +915,7 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
               items
                 .map(
                   (p) =>
-                    `${p.id}: ${p.name} ${(p.price.value / 100).toFixed(2)} ${p.price.currency}${p.stock === null ? "" : `, stock ${p.stock}`}${p.active ? "" : " (archived)"}`,
+                    `${p.id}: ${p.name} ${moneyText(p.price)}${p.stock === null ? "" : `, stock ${p.stock}`}${p.active ? "" : " (archived)"}`,
                 )
                 .join("\n") || "No products yet.",
             structured: { items },

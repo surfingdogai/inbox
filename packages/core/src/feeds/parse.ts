@@ -207,8 +207,12 @@ const ISO_CURRENCIES = new Set([
   "ZAR",
 ]);
 
-/** Currencies whose amounts have no minor unit at all, so 500 JPY is 500 and not 50,000. */
-const ZERO_DECIMAL = new Set(["JPY", "KRW", "VND", "CLP", "ISK", "HUF", "XAF", "XOF", "RWF", "UGX"]);
+/**
+ * Currencies priced in whole units. Kept in hundredths all the same, as every amount in this inbox
+ * is (`util/locale.ts`, `moneyText`, the owner app): ¥500 is 50000, exactly. Storing it as 500 made
+ * every door and receipt say ¥5. A fraction written after one of these is a formatter's, not money.
+ */
+const WHOLE_UNITS = new Set(["JPY", "KRW", "VND", "CLP", "ISK", "HUF", "XAF", "XOF", "RWF", "UGX"]);
 
 /**
  * `12.99 EUR`, `EUR 12.99`, `€12,99`, `1.234,56 €`, `£9` and a bare `9.5` all have to land on the
@@ -243,10 +247,8 @@ export function parsePrice(raw: string, defaultCurrency: string): { value: numbe
 
   const number = readNumber(text);
   if (!number) return null;
-  const exponent = ZERO_DECIMAL.has(currency) ? 0 : 2;
-  // A zero-decimal currency written with a fraction is someone's formatter, not money.
-  const value =
-    exponent === 0 ? Number(number.whole) : Number(number.whole) * 100 + Number(`${number.fraction}00`.slice(0, 2));
+  const fraction = WHOLE_UNITS.has(currency) ? 0 : Number(`${number.fraction}00`.slice(0, 2));
+  const value = Number(number.whole) * 100 + fraction;
   if (!Number.isFinite(value)) return null;
   return { value: number.negative ? -value : value, currency };
 }
