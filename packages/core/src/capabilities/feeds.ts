@@ -5,6 +5,7 @@ import { type FeedParseResult, type FeedProduct, type FeedSkip, parseFeed } from
 import { ulid } from "../ids";
 import { business, connectors, products } from "../schema/tables";
 import { readSettings } from "../settings/schema";
+import { currencyProblem } from "../util/locale";
 import { type Caller, isCustomer, isOwnerAssistant, nowOf } from "../write/caller";
 import { jobStatement } from "../write/common";
 import { WriteError } from "../write/errors";
@@ -88,9 +89,18 @@ export class FeedCapabilities {
     requireNotAssistant(caller, "connect");
     const now = nowOf(caller);
     const url = normaliseFeedUrl(input.url);
+    // A currency prices here are counted in (`util/locale.ts`): in another, every price the feed
+    // states without one of its own would be no price, and nothing in it would go on sale.
+    const named = input.currency?.trim().toUpperCase();
+    const problem = named === undefined ? null : currencyProblem(named);
+    if (problem) {
+      throw new WriteError("invalid_input", `currency: ${problem}`, {
+        fields: [{ path: "currency", problem: "invalid", message: problem }],
+      });
+    }
     const config: FeedConfig = {
       url,
-      currency: (input.currency ?? (await this.currency())).toUpperCase(),
+      currency: (named ?? (await this.currency())).toUpperCase(),
       deactivateMissing: input.deactivate_missing ?? true,
     };
     const id = ulid(now);

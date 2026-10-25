@@ -64,6 +64,19 @@ describe("connecting a feed", () => {
     }
   });
 
+  it("refuses a currency prices here are not counted in, as every other door does", async () => {
+    const { caps } = await setup();
+    for (const currency of ["JPY", "kwd"]) {
+      await expect(
+        caps.feeds.add(owner, { url: "https://shop.example.com/feed.csv", currency }),
+        currency,
+      ).rejects.toMatchObject({ code: "invalid_input", fields: [{ path: "currency" }] });
+    }
+    expect((await caps.feeds.add(owner, { url: "https://shop.example.com/feed.csv", currency: "huf" })).currency).toBe(
+      "HUF",
+    );
+  });
+
   it("upgrades http, because a price list read over a rewritable connection is not a price list", async () => {
     const { caps } = await setup();
     const feed = await caps.feeds.add(owner, { url: "http://shop.example.com/feed.csv" });
@@ -188,6 +201,52 @@ describe("importing", () => {
     // The next morning there, it is over.
     await caps.feeds.importBody(feed.id, body, Date.parse("2026-10-21T16:00:00Z"));
     expect((await caps.setup.listProducts(owner))[0]?.price).toEqual({ value: 8_000, currency: "CAD" });
+  });
+
+  it("puts nothing on sale at nothing or less, or in a currency it does not count", async () => {
+    const { db, caps } = await setup();
+    await caps.updateSettings(owner, { doc: { business: { currency: "USD" } } });
+    const feed = await caps.feeds.add(owner, { url: "https://shop.example.com/feed.csv" });
+    // A product stored before a feed's yen were refused: on sale, at whole yen.
+    await db.client.query({
+      sql: `INSERT INTO products (id, name, price, source, external_id, active, created_at, updated_at)
+            VALUES ('old_yen', 'Record sleeve', ?, 'feed:https://shop.example.com/feed.csv', 'R2', 1, ?, ?)`,
+      params: [JSON.stringify({ value: 350, currency: "JPY" }), T0, T0],
+      method: "run",
+    });
+    await caps.feeds.importBody(
+      feed.id,
+      [
+        "id,title,price",
+        "P1,Gift card,0.00 USD",
+        "P2,Refund,-5.00 USD",
+        "R1,Vinyl record,4980 JPY",
+        "R2,Record sleeve,¥350",
+        "K1,Dates,12.500 KWD",
+        "M1,Mug,8.50",
+      ].join("\n"),
+      T0,
+    );
+    expect((await caps.listProducts({ limit: 50 })).items.map((p) => [p.name, p.price])).toEqual([
+      ["Mug", { value: 850, currency: "USD" }],
+    ]);
+    const all = await caps.setup.listProducts(owner);
+    // Never relabelled as the business's own currency, nor a thousand times the amount.
+    expect(all.find((p) => p.name === "Dates")).toMatchObject({ active: 0, price: { value: 0, currency: "USD" } });
+    expect(all.find((p) => p.name === "Refund")).toMatchObject({ active: 0, price: { value: 0, currency: "USD" } });
+    // What was on sale in yen is taken off it, and kept.
+    expect(all.find((p) => p.name === "Record sleeve")).toMatchObject({ id: "old_yen", active: 0 });
+    // An order for one is refused, as for anything off sale.
+    await expect(
+      caps.createOrder(customer, {
+        payload: {
+          orderedItem: [
+            { productId: "old_yen", name: "Record sleeve", quantity: 1, price: { value: 350, currency: "JPY" } },
+          ],
+          totalPrice: { value: 350, currency: "JPY" },
+        },
+      }),
+    ).rejects.toMatchObject({ code: "invalid_input" });
   });
 
   it("deactivates what leaves the feed and never deletes it", async () => {

@@ -13,6 +13,8 @@
  * imports 412 of 415 products needs to know what the other three were.
  */
 
+import { isHundredthsCurrency } from "../util/locale";
+
 /** A product as a feed describes it, normalised. `null` means the feed did not say. */
 export interface FeedProduct {
   /** The feed's own id for this product. The key we reconcile on, so it is required. */
@@ -20,11 +22,17 @@ export interface FeedProduct {
   readonly name: string;
   readonly description: string | null;
   readonly sku: string | null;
-  /** Minor units and an ISO currency, as the rest of the schema stores money. */
+  /**
+   * Hundredths and an ISO currency, as the rest of the schema stores money. Null when the row gives
+   * none to sell at: no price, nothing or less, or one in a currency not counted in hundredths.
+   */
   readonly price: { readonly value: number; readonly currency: string } | null;
   /** Units in stock when the feed counts them. A feed that only says "in stock" leaves this null. */
   readonly stock: number | null;
-  /** What the feed claims about availability, when it says anything at all. */
+  /**
+   * What the feed claims about availability, when it says anything at all; false as well when the
+   * row is priced in a currency not counted here (`sellingPrice`).
+   */
   readonly available: boolean | null;
   readonly url: string | null;
   readonly imageUrl: string | null;
@@ -208,11 +216,37 @@ const ISO_CURRENCIES = new Set([
 ]);
 
 /**
- * Currencies priced in whole units. Kept in hundredths all the same, as every amount in this inbox
- * is (`util/locale.ts`, `moneyText`, the owner app): ¥500 is 50000, exactly. Storing it as 500 made
- * every door and receipt say ¥5. A fraction written after one of these is a formatter's, not money.
+ * Currencies a price cell may name that are not counted in hundredths (`util/locale.ts`): none
+ * (yen, won, pesos, francs), or thousandths (dinars, rials). Recognised so that a row naming one is
+ * never priced in the default currency instead; and then given no price, since every amount here
+ * is kept in hundredths and no door takes these: ¥4,980 would read as ¥49.80, and 12.500 KWD as
+ * twelve thousand five hundred.
  */
-const WHOLE_UNITS = new Set(["JPY", "KRW", "VND", "CLP", "ISK", "HUF", "XAF", "XOF", "RWF", "UGX"]);
+const UNCOUNTED_CURRENCIES = new Set([
+  "BHD",
+  "BIF",
+  "CLP",
+  "DJF",
+  "GNF",
+  "IQD",
+  "ISK",
+  "JOD",
+  "JPY",
+  "KMF",
+  "KRW",
+  "KWD",
+  "LYD",
+  "OMR",
+  "PYG",
+  "RWF",
+  "TND",
+  "UGX",
+  "VND",
+  "VUV",
+  "XAF",
+  "XOF",
+  "XPF",
+]);
 
 /**
  * `12.99 EUR`, `EUR 12.99`, `€12,99`, `1.234,56 €`, `£9` and a bare `9.5` all have to land on the
@@ -222,15 +256,27 @@ const WHOLE_UNITS = new Set(["JPY", "KRW", "VND", "CLP", "ISK", "HUF", "XAF", "X
  * four rather than one and a bit. The rule used here is the one a person uses reading it: the
  * LAST separator is the decimal point when it leaves two or fewer digits behind it, and every
  * separator is a grouping mark otherwise.
+ *
+ * Null for no price to sell at: none written, nothing or less (a placeholder `0.00`, a refund's
+ * `-5.00`), or a currency not counted in hundredths, named or by default.
  */
 export function parsePrice(raw: string, defaultCurrency: string): { value: number; currency: string } | null {
+  return readPrice(raw, defaultCurrency).price;
+}
+
+/** `parsePrice`, and whether the cell named a price in a currency not counted here (`uncounted`). */
+function readPrice(
+  raw: string,
+  defaultCurrency: string,
+): { price: { value: number; currency: string } | null; uncounted: boolean } {
+  const none = { price: null, uncounted: false };
   const text = raw.trim();
-  if (text === "") return null;
+  if (text === "") return none;
 
   let currency = "";
   for (const match of text.matchAll(/\b([A-Z]{3})\b/g)) {
     const code = match[1] as string;
-    if (ISO_CURRENCIES.has(code)) {
+    if (ISO_CURRENCIES.has(code) || UNCOUNTED_CURRENCIES.has(code)) {
       currency = code;
       break;
     }
@@ -246,11 +292,12 @@ export function parsePrice(raw: string, defaultCurrency: string): { value: numbe
   if (currency === "") currency = defaultCurrency.toUpperCase();
 
   const number = readNumber(text);
-  if (!number) return null;
-  const fraction = WHOLE_UNITS.has(currency) ? 0 : Number(`${number.fraction}00`.slice(0, 2));
-  const value = Number(number.whole) * 100 + fraction;
-  if (!Number.isFinite(value)) return null;
-  return { value: number.negative ? -value : value, currency };
+  if (!number) return none;
+  if (!isHundredthsCurrency(currency)) return { price: null, uncounted: true };
+  const value = Number(number.whole) * 100 + Number(`${number.fraction}00`.slice(0, 2));
+  // Nothing or less is a placeholder, or a refund, never a price to sell at: no price, as one left out.
+  if (!Number.isFinite(value) || value <= 0 || number.negative) return none;
+  return { price: { value, currency }, uncounted: false };
 }
 
 /**
@@ -301,21 +348,27 @@ interface PriceClock {
   readonly timezone: string;
 }
 
+type Money = { readonly value: number; readonly currency: string };
+
+/** What a row sells at (`sellingPrice`). */
+interface Selling {
+  readonly price: Money | null;
+  /** The row is priced in a currency not counted here: kept off sale, not at its last price. */
+  readonly offSale: boolean;
+}
+
 /**
  * What a row sells at, the same in both formats: its sale price while the sale runs, and its
  * regular price before and after. A sale with no dates runs, as Google reads it. An ended sale whose
  * price the feed still carries is over; the feed is read again within hours, so a sale starts and
- * ends here at the import after its dates.
+ * ends here at the import after its dates. A row priced in a currency not counted here has a price
+ * but none to sell at: it is kept off sale (`offSale`), rather than at the price it last had.
  */
-function sellingPrice(
-  regular: string,
-  sale: string,
-  window: string,
-  at: PriceClock,
-): { value: number; currency: string } | null {
-  const offer = parsePrice(sale, at.currency);
-  if (offer && saleRunning(window, at.now, at.timezone)) return offer;
-  return parsePrice(regular, at.currency);
+function sellingPrice(regularCell: string, saleCell: string, window: string, at: PriceClock): Selling {
+  const offer = readPrice(saleCell, at.currency);
+  const regular = readPrice(regularCell, at.currency);
+  const price = offer.price && saleRunning(window, at.now, at.timezone) ? offer.price : regular.price;
+  return { price, offSale: price === null && (regular.uncounted || offer.uncounted) };
 }
 
 type Bound = { readonly instant: number } | { readonly wall: string };
@@ -737,16 +790,14 @@ function parseXmlFeed(raw: string, at: PriceClock, limit: number): FeedParseResu
       continue;
     }
     seen.add(externalId);
-    const availability = read("available");
     const stock = parseCount(read("stock"));
     products.push({
       externalId,
       name,
       description: read("description") || null,
       sku: read("sku") || null,
-      price: sellingPrice(read("price"), read("salePrice"), read("saleWindow"), at),
       stock,
-      available: parseAvailability(availability) ?? (stock === null ? null : stock > 0),
+      ...priced(sellingPrice(read("price"), read("salePrice"), read("saleWindow"), at), read("available"), stock),
       url: read("url") || null,
       imageUrl: read("imageUrl") || null,
     });
@@ -816,14 +867,23 @@ function parseCsvFeed(body: string, at: PriceClock, limit: number): FeedParseRes
       name,
       description: cell("description") || null,
       sku: cell("sku") || null,
-      price: sellingPrice(cell("price"), cell("salePrice"), window, at),
       stock,
-      available: parseAvailability(cell("available")) ?? (stock === null ? null : stock > 0),
+      ...priced(sellingPrice(cell("price"), cell("salePrice"), window, at), cell("available"), stock),
       url: cell("url") || null,
       imageUrl: cell("imageUrl") || null,
     });
   }
   return { format: "csv", products, skipped, truncated, mapped };
+}
+
+/** A row's price and availability, from what it sells at and what it claims. */
+function priced(
+  selling: Selling,
+  availability: string,
+  stock: number | null,
+): Pick<FeedProduct, "price" | "available"> {
+  const claim = parseAvailability(availability) ?? (stock === null ? null : stock > 0);
+  return { price: selling.price, available: selling.offSale ? false : claim };
 }
 
 function sample(text: string): string {

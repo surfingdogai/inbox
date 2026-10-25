@@ -319,9 +319,7 @@ export const addFeedInput = z.object({
     .max(2_000)
     .describe("The feed URL, as the shop's platform gives it. A comma-separated export or a Google Merchant XML feed."),
   name: z.string().max(120).optional().describe("What to call it. Defaults to the host it is fetched from."),
-  currency: z
-    .string()
-    .length(3)
+  currency: currencySchema
     .optional()
     .describe("Used for prices the feed states with no currency of their own. Defaults to the business currency."),
   deactivate_missing: z

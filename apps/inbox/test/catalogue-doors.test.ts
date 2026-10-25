@@ -81,7 +81,7 @@ describe("prices in words", () => {
     now: () => T0,
   };
 
-  it("writes each price in its own currency, yen with no minor unit, at both doors", async () => {
+  it("writes each price in its own currency at both doors, and lists no yen it cannot count", async () => {
     const db = await freshDb();
     await db.orm.insert(schema.business).values({
       id: "self",
@@ -92,25 +92,37 @@ describe("prices in words", () => {
       updatedAt: T0,
     });
     const inbox = createInbox({ db, background: () => {} });
-    // A record shop's feed, priced in yen.
     const feed = await inbox.caps.feeds.add(owner, { url: "https://records.example.com/feed.csv" });
+    // The body is handed in below: the import connecting queued would fetch the feed in the
+    // background of the calls that follow, after the test has ended.
+    await db.client.query({ sql: "DELETE FROM jobs", method: "run" });
+    // A record shop's feed, in three currencies: one of them is not counted in hundredths here.
     await inbox.caps.feeds.importBody(
       feed.id,
-      ["id,title,price", "R1,Vinyl record,4980 JPY", "R2,Record sleeve,¥350", "R3,Cleaning cloth,8.50 EUR"].join("\n"),
+      [
+        "id,title,price",
+        "R1,Vinyl record,4980 JPY",
+        "R2,Record sleeve,12.00 USD",
+        "R3,Cleaning cloth,8.50 EUR",
+        "R4,Record mat,9.5 GBP",
+      ].join("\n"),
       T0,
     );
     const pub = await connect(inbox.app, "/mcp");
     const listed = await pub.callTool({ name: "list_products", arguments: {} });
     const text = (listed.content as { text: string }[])[0]?.text ?? "";
-    expect(text).toContain("Vinyl record JP¥4,980 (id ");
-    expect(text).toContain("Record sleeve JP¥350 (id ");
+    expect(text).toContain("Record sleeve US$12.00 (id ");
     expect(text).toContain("Cleaning cloth €8.50 (id ");
+    expect(text).toContain("Record mat £9.50 (id ");
+    // Never ¥49.80, nor €4,980.00: a price in yen is no price here, so the record is not on sale.
+    expect(text).not.toContain("Vinyl record");
 
     const key = await createApiKey(db, { kind: "owner", name: "t" });
     const own = await connect(inbox.app, "/mcp/owner", { authorization: `Bearer ${key.key}` });
     const ownText = ((await own.callTool({ name: "list_products", arguments: {} })).content as { text: string }[])[0]
       ?.text;
-    expect(ownText).toContain(": Vinyl record JP¥4,980");
     expect(ownText).toContain(": Cleaning cloth €8.50");
+    expect(ownText).toContain(": Record sleeve US$12.00");
+    expect(ownText).toMatch(/: Vinyl record €0\.00 \(archived\)/);
   });
 });

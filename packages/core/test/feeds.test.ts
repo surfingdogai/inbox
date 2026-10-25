@@ -27,19 +27,65 @@ describe("parsePrice", () => {
     expect(parsePrice("1,234", "EUR")).toEqual({ value: 123_400, currency: "EUR" });
   });
 
-  it("keeps a currency with no minor unit in hundredths, as every amount here is kept", () => {
-    // ¥500 is 50000, as the owner's own prices, the doors and the receipts all count it.
-    expect(parsePrice("500 JPY", "EUR")).toEqual({ value: 50_000, currency: "JPY" });
-    expect(parsePrice("¥4,980", "EUR")).toEqual({ value: 498_000, currency: "JPY" });
-    // A yen price written with a fraction is someone's formatter, not money.
-    expect(parsePrice("1500.00 JPY", "EUR")).toEqual({ value: 150_000, currency: "JPY" });
+  it("gives no price in a currency not counted in hundredths, as no door here takes one", () => {
+    // Yen, won, pesos: no minor unit. Dinars: thousandths, so 12.500 is twelve and a half, not 12,500.
+    for (const raw of [
+      "500 JPY",
+      "¥4,980",
+      "1500.00 JPY",
+      "₩12000 KRW",
+      "15000 CLP",
+      "12.500 KWD",
+      "1.250 BHD",
+      "0.750 BHD",
+      "3.500 OMR",
+      "7.250 JOD",
+    ]) {
+      expect(parsePrice(raw, "EUR"), raw).toBeNull();
+    }
+    // Nor is a bare amount priced in one by default.
+    expect(parsePrice("4980", "JPY")).toBeNull();
+    // Forints are counted in hundredths, as euros are.
     expect(parsePrice("2500 HUF", "EUR")).toEqual({ value: 250_000, currency: "HUF" });
+    expect(parsePrice("2.500,50 HUF", "EUR")).toEqual({ value: 250_050, currency: "HUF" });
   });
 
   it("refuses what is not a price", () => {
     expect(parsePrice("", "EUR")).toBeNull();
     expect(parsePrice("on request", "EUR")).toBeNull();
     expect(parsePrice("   ", "EUR")).toBeNull();
+  });
+
+  it("gives no price of nothing or less: a placeholder is not a price to sell at", () => {
+    for (const raw of ["0", "0.00 USD", "0,00 €", "-5.00 USD", "-0.01"]) expect(parsePrice(raw, "USD"), raw).toBeNull();
+  });
+});
+
+describe("a row priced in a currency we do not count, or at nothing", () => {
+  it("is no product on sale, in either format, and says so", () => {
+    const csv = parseFeed(
+      ["id,title,price", "K1,Dates,12.500 KWD", "J1,Record,4980 JPY", "Z1,Gift card,0.00 USD", "E1,Mug,8.50 EUR"].join(
+        "\n",
+      ),
+      { defaultCurrency: "EUR" },
+    ).products;
+    expect(csv.map((p) => [p.externalId, p.price, p.available])).toEqual([
+      ["K1", null, false],
+      ["J1", null, false],
+      // Nothing is a price left out, as an empty cell is: kept off sale until it has one.
+      ["Z1", null, null],
+      ["E1", { value: 850, currency: "EUR" }, null],
+    ]);
+    const xml = parseFeed(
+      `<rss xmlns:g="http://base.google.com/ns/1.0"><channel><item><g:id>K1</g:id><title>Dates</title><g:price>12.500 KWD</g:price></item></channel></rss>`,
+      { defaultCurrency: "EUR" },
+    ).products[0];
+    expect([xml?.price, xml?.available]).toEqual([null, false]);
+  });
+
+  it("sells at the regular price when the sale's is nothing", () => {
+    const rows = parseFeed(["id,title,price,sale_price", "B1,Bell,12.99 USD,0.00 USD"].join("\n")).products;
+    expect(rows[0]?.price).toEqual({ value: 1299, currency: "USD" });
   });
 });
 

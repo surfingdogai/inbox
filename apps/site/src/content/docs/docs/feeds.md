@@ -52,7 +52,9 @@ A price cell is read the way a person reads it. `12.99 EUR`, `EUR 12.99`, `€12
 
 The decimal separator is decided by what follows it: two digits or fewer make it a decimal point, three make it a thousands mark. So `1.234,56` is one thousand two hundred and thirty-four, and `1.234` is one thousand two hundred and thirty-four as well, which is what a shop means by it.
 
-If a price states no currency, your business currency is used. A three-letter word that is not a real currency code is ignored rather than believed, so `12.99 incl VAT` is not priced in VAT.
+If a price states no currency, your business currency is used, or the one you gave the feed. A three-letter word that is not a real currency code is ignored rather than believed, so `12.99 incl VAT` is not priced in VAT.
+
+Every price here is counted in hundredths of its currency. A price in a currency that is not, such as yen (`4980 JPY`, `¥4,980`), won or Kuwaiti dinars (`12.500 KWD`), is not read as a price, never as euros or a thousand times the amount: the product is kept off sale. A price of nothing or less, such as a placeholder `0.00`, counts as no price.
 
 ## What it never does
 
