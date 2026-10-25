@@ -276,8 +276,8 @@ describe("Settings → Spam, in every state", () => {
     expect(readerLine(status({ reader: "hosted_ai" }))).toBe(
       "Read by an AI service we pay for, only for new senders, with email addresses, phone numbers and bank details taken out. It keeps nothing.",
     );
-    expect(readerLine(status({ reader: "hosted_ai", reader_name: "a model provider in the EU" }))).toContain(
-      "Read by a model provider in the EU, an AI service we pay for",
+    expect(readerLine(status({ reader: "hosted_ai", reader_name: "Example Models Co" }))).toContain(
+      "Read by Example Models Co, an AI service we pay for",
     );
     expect(readerLine(status({ reader: "hosted_phrases" }))).toBe(
       "For now the filters look for known phrases only. Reading by AI comes later, and you'll be told first.",
