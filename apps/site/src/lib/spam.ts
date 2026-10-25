@@ -48,7 +48,7 @@ export const SPAM_LINES = {
 export const SPAM_FAQS: readonly Faq[] = [
   {
     q: "Will I miss a customer?",
-    a: "No request is refused, bounced or deleted by the filter. What it is sure of waits under Spam, explained, until you clear it. Bookings, orders and quote requests it doubts wait under Held, holding no time, until the sender confirms or you let them in. What it is unsure of reaches you with a label.",
+    a: "Nothing is refused, bounced or deleted for what it says. What it is sure of waits under Spam, explained. Bookings, orders and quote requests it doubts wait under Held, holding no time, until the sender confirms or you let them in. The rest reaches you, labelled if unsure. A sender flooding you with new requests is asked to retry later.",
   },
   {
     q: "What does a customer see?",
@@ -141,7 +141,7 @@ export const SPAM_GUIDE_OPTIONS: readonly GuideOption[] = [
 export const SPAM_GUIDE_FAQS: readonly Faq[] = [
   {
     q: "Should spam be deleted automatically?",
-    a: "No. A filter is sometimes wrong, and a deleted customer is a lost one. Keep what it catches where you can see it, with the reason, and clear it yourself, or after a month or three if you choose.",
+    a: "No. A filter is sometimes wrong, and a deleted customer is a lost one. Keep what it catches where you can see it, with the reason, for as long as you choose: for good, or a month or three.",
   },
   {
     q: "Do I need a CAPTCHA?",

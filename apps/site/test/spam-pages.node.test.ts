@@ -89,6 +89,23 @@ describe("the spam filter's pages", () => {
     expect(published).not.toMatch(/\bservers? (in|at)\b|\bhosted in\b|data cent(er|re)/i);
   });
 
+  it("say what it does as it does it: a flood asked to come back later, nothing to clear, who was not told", () => {
+    const docs = read(DOCS);
+    // It never refuses for what a request says; a sender starting far more than a person would is asked to retry.
+    expect(docs).not.toMatch(/It never refuses, bounces, deletes/);
+    expect(docs).toMatch(/never refuses, bounces or deletes a request for what it says/);
+    expect(docs).toContain("asked to try again later");
+    const miss = SPAM_FAQS.find((f) => f.q === "Will I miss a customer?")?.a ?? "";
+    expect(miss).toContain("for what it says");
+    expect(miss).toContain("asked to retry later");
+    // There is no "clear" to press: what is kept is kept until a time is chosen.
+    for (const text of [docs, ...SPAM_FAQS.map((f) => f.a), ...SPAM_GUIDE_FAQS.map((f) => f.a)]) {
+      expect(text).not.toMatch(/until (you|I) clear/i);
+    }
+    // The sender got their acknowledgement: what was not told is the owner, and nothing ran.
+    expect(read(PAGE)).not.toMatch(/Nobody was told/);
+  });
+
   it("answer in a few words, with questions that fit a search result", () => {
     expect(SPAM_PAGE.title.length).toBeLessThanOrEqual(60);
     expect(SPAM_PAGE.description.length).toBeLessThanOrEqual(160);
@@ -128,6 +145,7 @@ describe("the spam filter's pages", () => {
     const shown = [...read(PAGE).matchAll(/(?:src|night)="(\/shots\/[^"]+)"/g)].map((m) => m[1] ?? "");
     expect(shown.sort()).toEqual([
       "/shots/held-day.png",
+      "/shots/phone-held-night.png",
       "/shots/phone-held.png",
       "/shots/spam-day.png",
       "/shots/spam-night.png",

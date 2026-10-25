@@ -13,7 +13,13 @@
  *   held-day.png                     Held, with a booking request that may be a customer's open
  *   spam-settings-day.png            Settings → Spam
  *
- *   pnpm --filter @surfingdog/inbox shots
+ * and, from the phone app's demo (its Vite server, 390×508 at 2×, the top of the screen):
+ *
+ *   phone-held.png, phone-held-night.png   a held booking request: why it's here, Let it in and Spam
+ *
+ *   pnpm --filter @surfingdog/inbox shots                 everything
+ *   pnpm --filter @surfingdog/inbox shots phone           the phone's alone
+ *   pnpm --filter @surfingdog/inbox shots spam held       those whose names start so
  *
  * Needs Google Chrome on this machine: playwright-core drives it through channel "chrome" and
  * downloads nothing.
@@ -49,7 +55,61 @@ function cli(args, env) {
   if (r.status !== 0) throw new Error(`${args.join(" ")} failed with status ${r.status}`);
 }
 
+/** The phone app's held booking request, light and dark, from its demo on a Vite dev server. */
+async function phoneShots() {
+  const mobile = path.resolve(app, "../mobile");
+  const vite = path.join(mobile, "node_modules", ".bin", "vite");
+  const mport = 5300 + Math.floor(Math.random() * 100);
+  const dev = spawn(vite, ["--port", String(mport), "--strictPort", "--host", "127.0.0.1"], {
+    cwd: mobile,
+    stdio: ["ignore", "pipe", "inherit"],
+  });
+  let log = "";
+  dev.stdout.on("data", (chunk) => {
+    log += String(chunk);
+  });
+  let browser;
+  try {
+    await waitFor(() => log.includes(`127.0.0.1:${mport}`), 30_000, "the phone app's dev server");
+    browser = await chromium.launch({ channel: "chrome" });
+    await mkdir(out, { recursive: true });
+    for (const [colorScheme, name] of [
+      ["light", "phone-held"],
+      ["dark", "phone-held-night"],
+    ]) {
+      const context = await browser.newContext({
+        viewport: { width: 390, height: 844 },
+        deviceScaleFactor: 2,
+        colorScheme,
+        locale: "en-GB",
+        timezoneId: "Europe/Lisbon",
+        reducedMotion: "reduce",
+        isMobile: true,
+        hasTouch: true,
+      });
+      const page = await context.newPage();
+      await page.goto(`http://127.0.0.1:${mport}/?demo&screen=item&id=amara`, { waitUntil: "networkidle" });
+      await page.getByRole("button", { name: "Let it in" }).first().waitFor({ timeout: 20_000 });
+      await page.evaluate(() => document.fonts.ready);
+      await sleep(400);
+      // The heading, why it's here with Let it in, and what was asked: the top of the screen.
+      await page.screenshot({ path: path.join(out, `${name}.png`), clip: { x: 0, y: 0, width: 390, height: 508 } });
+      console.log(`wrote ${path.relative(process.cwd(), path.join(out, `${name}.png`))}`);
+      await context.close();
+    }
+  } finally {
+    await browser?.close();
+    dev.kill();
+  }
+}
+
+/** The prints asked for by the start of their names; none named, every one. */
+const only = process.argv.slice(2);
+const wanted = (name) => only.length === 0 || only.some((o) => name.startsWith(o));
+
 async function main() {
+  if (wanted("phone")) await phoneShots();
+  if (only.length > 0 && only.every((o) => "phone".startsWith(o))) return;
   if (!existsSync(path.join(app, "dist", "client", "index.html"))) {
     console.log("no client build yet: building it");
     const r = spawnSync("pnpm", ["build:client"], { cwd: app, stdio: "inherit" });
@@ -124,6 +184,7 @@ async function main() {
 
     await mkdir(out, { recursive: true });
     const shot = async (name, url, colorScheme, ready) => {
+      if (!wanted(name)) return;
       await page.emulateMedia({ colorScheme });
       await page.goto(`${base}${url}`);
       await page.locator(ready).first().waitFor({ timeout: 20_000 });

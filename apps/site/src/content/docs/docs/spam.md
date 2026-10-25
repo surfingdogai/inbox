@@ -3,13 +3,13 @@ title: Spam filter
 description: How the inbox keeps sales pitches, scams and junk off your desk without losing a customer, what it reads, what leaves your server and when, connecting your own AI model, and what a sender sees.
 ---
 
-The inbox screens every request from someone new as it arrives, on every door: email, your own website, and AI agents. What is not from a customer waits under **Spam** or **Held** instead of on your desk. Nobody is told, nothing is deleted, and one tap brings anything back.
+The inbox screens every request from someone new as it arrives, on every door: email, your own website, and AI agents. What is not from a customer waits under **Spam** or **Held** instead of on your desk. Nobody is told, and one tap brings anything back.
 
 Settings → **Spam**. The design is ADR-029 in the repository's `docs/adr`.
 
 ## What it never does
 
-- It never refuses, bounces, deletes or answers differently. The worst a request meets is being put aside or held, kept and explained.
+- It never refuses, bounces or deletes a request for what it says, and never answers differently. The worst a request meets is being put aside or held, kept and explained. A sender starting far more new requests in a day than a person would is asked to try again later.
 - It never reads someone you know: a customer you have answered, confirmed or let in, anyone on **Let through**, a reply in a conversation, and everything your business makes itself.
 - It never uses language, script, country, name, spelling, length, email provider, time of day or "written by an AI" as a reason. Checks on characters look for disguise and nothing else, such as a Cyrillic letter inside a Latin word.
 - Whatever a filter does or fails to do, a request goes through: a check that times out, fails or runs out of room lets it in on what the free protection found.
@@ -36,7 +36,7 @@ On every door, on every inbox, with no AI:
 - **Posing as you**: your business's name from an address that isn't yours, an address made to look like yours, answers that would go elsewhere (Reply-To), a display name showing another address.
 - **Disguised links**: a link showing one address and going to another; links to sites listed for scams or malware.
 - **Waves**: the same message, nearly the same message, or the same link from many senders this week. A short honest question repeats freely, and bookings worded the same way by a platform never make a wave.
-- **Floods**: more new conversations in a day than a person starts. A sender is known by their key, their pass, their mailbox and their mail domain, never by their network address.
+- **Floods**: more new conversations in a day than a person starts. A sender is known by their agent's own key, their pass, their mailbox and their mail domain, never by their network address, and never by an AI platform's key, which signs for all of that platform's users. Mail no server vouched for is counted apart from the same address's signed mail, and what a bot sent counts against nobody.
 
 Its point-based outcomes started with a learning week of their own, from the day your inbox was updated.
 
@@ -68,7 +68,7 @@ Under **Why it's here**, an item says the strongest reason in a sentence, the ot
 
 It runs on a stranger's opening message, with a filter on, when nothing certain decided, the message has words enough, and there is room under the caps.
 
-- **Sent:** the message's text with every email address, phone number, IBAN, card number and link taken out (a link is cut to its domain), the sender's domain (never their address), the subject, the domains its links go to, how many files it has, and your business's name, description, languages and the names of your services and products.
+- **Sent:** the message's text with every email address, phone number, IBAN, account and card number, payment address and link taken out (a link is cut to its domain), in any script's digits, the subject and the sender's name masked the same way, the sender's domain (never their address), the domains its links go to, how many files it has, and your business's name, description, languages and the names of your services and products.
 - **Never sent:** addresses, phone numbers, anything about other customers, your settings, attachments.
 - The text sits between two random boundary lines, with a fresh value the answer must return. The answer is held to a schema of fixed choices; no sentence a model writes reaches you, a customer or your rules. Instructions inside a message change nothing, and a message that talks to an assistant or a filter is never delivered without a label.
 - Eight seconds an attempt, one retry after two, twenty seconds in all; any failure lets the request through.
@@ -80,7 +80,7 @@ On a **hosted** inbox, the host pays for the model and you connect nothing. Unti
 
 On **your own server**, either:
 
-- **Settings → Integrations → Your AI model**: choose Anthropic, OpenAI or Google Gemini, paste a key from your account (it is kept sealed under `INBOX_SECRET_KEY` and never shown again, nor downloaded), choose a model from the provider's own list (smaller models cost less and are enough here), and press **Test**: two samples go through, a sales pitch that should be spotted and a customer asking a price in Japanese who should come through. On Google's free tier, what you send may be used to improve its products: use a paid key.
+- **Settings → Integrations → Your AI model**, the owner's own to set, signed in: choose Anthropic, OpenAI or Google Gemini, paste a key from your account (it is kept sealed under `INBOX_SECRET_KEY` and never shown again, nor downloaded), choose a model from the provider's own list (smaller models cost less and are enough here), and press **Test**: two samples go through, a sales pitch that should be spotted and a customer asking a price in Japanese who should come through. On Google's free tier, what you send may be used to improve its products: use a paid key.
 - or the server's environment, which then shows as "Set by your server":
 
 | Variable | |
@@ -137,7 +137,7 @@ The inbox's WordPress plugin points AI agents at your inbox. It does not pass yo
 
 Exactly what they would without a filter: the same page after sending, the same answers to their assistant, the same status when they look again. A held request reads as received, byte for byte.
 
-- **Confirm it's me.** Every new customer's acknowledgement (bookings, orders, quote requests) carries one more line and a button: "Please confirm it's you, so we know your request reached the right person." Pressing it proves their address and, if their request was held for an uncertain reason, lets it in. A request held for a certain reason (a bot's form, a server's mark, a wave) gets no acknowledgement at all, so a forged address is never written to.
+- **Confirm it's me.** Every new customer's acknowledgement (bookings, orders, quote requests) carries one more line and a button: "Please confirm it's you, so we know your request reached the right person." Pressing it proves their address and, if their request was held for an uncertain reason, lets it in. Their later requests are screened as before, with more room for new ones in a day; a sender becomes known when you press Let it in or Not spam. A request held for a certain reason (a bot's form, a server's mark, a wave) gets no acknowledgement at all, so a forged address is never written to.
 - **An assistant's answer** says where that email went (`identity.confirm.sent_to`, masked) — see [Getting your person's request seen](/for-agents.md).
 - **Too many new requests** from one agent: `429` with `Retry-After`, and a line in the sender's language, with no reason given.
 - Your **privacy page** gains a short "Keeping out spam" section while a model may read, and loses it when none may.
@@ -154,6 +154,6 @@ The owner MCP's `spam_status` reads the filters, this month's counts, who reads,
 
 ## Removing data
 
-Erasing a customer removes the filter's verdicts on their requests, their prints, their rows on the lists and their mailbox's history. A download of your inbox keeps the verdicts, the lists, when each filter was on and the day counts; never the prints, the handles, the cached answers, or your model's key.
+Erasing a customer removes the filter's verdicts on their requests, their prints, the AI check's answers about their words, their rows on the lists and their handles' history. A download of your inbox keeps the verdicts, the lists, when each filter was on and the day counts; never the prints, the handles, the cached answers, or your model's key.
 
-**Keep what's put aside**: until you clear it (the default), 90 days or 30 days. A bot's form messages go after seven days whatever you choose; nothing you brought back is ever removed.
+**Keep what's put aside**: **Keep them** (the default), 90 days or 30 days. A bot's form messages go after seven days whatever you choose; nothing you brought back is ever removed.
