@@ -403,6 +403,89 @@ describe("a reworded wave behind one chat number", () => {
   });
 });
 
+describe("a reworded wave behind one link a big brand's name hides", () => {
+  const sharedOf = async (s: Awaited<ReturnType<typeof spamSetup>>) =>
+    (await s.q("SELECT v.signals FROM spam_verdicts v ORDER BY v.created_at")).map((r) =>
+      (JSON.parse(String(r[0])) as { c: string; d?: string }[]).find((x) => x.c === "same_link_domain"),
+    );
+  const WORDINGS = [
+    (link: string) => `Your host account is on hold. Verify your listing within 24 hours: ${link}`,
+    (link: string) => `We noticed unusual activity on your listing. Please confirm your details here ${link}`,
+    (link: string) => `Action needed: your property will be hidden from guests unless you verify at ${link}`,
+    (link: string) => `Final reminder, the payout for your listing is paused. Confirm the account: ${link}`,
+    (link: string) => `Security check for hosts: keep your listing live by signing in at ${link} today`,
+  ];
+
+  it("is the same link from many senders, behind a brand's name on a domain anyone can register", async () => {
+    for (const [link, domain] of [
+      ["https://airbnb.info.pl/host-verify", "airbnb.info.pl"],
+      ["https://tripadvisor.web.za/owner/verify", "tripadvisor.web.za"],
+    ] as const) {
+      const s = await spamSetup();
+      for (const [i, body] of WORDINGS.entries()) {
+        await s.caps.sendMessage(agent(T0 + i * MIN), {
+          body: body(link),
+          contact: { name: `N${i}`, email: `n${i}@mail${i}.example.org` },
+        });
+      }
+      const shared = await sharedOf(s);
+      expect(shared.slice(0, 2), domain).toEqual([undefined, undefined]);
+      for (const x of shared.slice(2)) expect(x, domain).toMatchObject({ d: domain });
+    }
+  });
+
+  it("is the same link from many senders behind one shared document or form", async () => {
+    for (const [link, host] of [
+      ["https://docs.google.com/forms/d/e/1FAIpQLSdWaveFormId0123456789/viewform", "docs.google.com"],
+      ["https://drive.google.com/file/d/1WaveFileId0123456789abcdef/view?usp=sharing", "drive.google.com"],
+      ["https://www.dropbox.com/scl/fi/wave0123456789/listing.pdf?dl=0", "dropbox.com"],
+      ["https://1drv.ms/u/s!AkWaveOneDriveId0123456789", "1drv.ms"],
+      ["https://wetransfer.com/downloads/wave0123456789abcdef/abc123", "wetransfer.com"],
+    ] as const) {
+      const s = await spamSetup();
+      for (const [i, body] of WORDINGS.entries()) {
+        await s.caps.sendMessage(agent(T0 + i * MIN), {
+          body: body(link),
+          contact: { name: `N${i}`, email: `n${i}@mail${i}.example.org` },
+        });
+      }
+      const shared = await sharedOf(s);
+      expect(shared.slice(0, 2), host).toEqual([undefined, undefined]);
+      for (const x of shared.slice(2)) expect(x, host).toMatchObject({ d: host });
+    }
+    // Customers each sharing a document of their own make no wave.
+    const t = await spamSetup();
+    for (let i = 0; i < 5; i++) {
+      await t.caps.sendMessage(agent(T0 + i * MIN), {
+        body: `Hello, here is the guest list for our class on day ${i + 1}: https://docs.google.com/spreadsheets/d/1Guest${i}List0123456789/edit`,
+        contact: { name: `C${i}`, email: `c${i}@home${i}.example.org` },
+      });
+    }
+    expect((await t.q("SELECT DISTINCT screen FROM items")).map((r) => r[0])).toEqual(["delivered"]);
+  });
+});
+
+describe("customers who link the business's own page on a booking or review site", () => {
+  it("are delivered however many send one in a week", async () => {
+    const s = await spamSetup();
+    for (const [i, body] of [
+      "Hi, I saw you on https://www.thefork.com/restaurant/kopi-senja-r48211 — do you take groups of eight?",
+      "Is the menu on https://www.thefork.com/restaurant/kopi-senja-r48211 still current?",
+      "Can I use my points from https://www.thefork.com/restaurant/kopi-senja-r48211 at the café?",
+      "Your page https://www.yelp.com/biz/kopi-senja says you open at 8, is that right on Sundays?",
+      "We loved the class! Is https://www.opentable.com/r/kopi-senja the right place to book again?",
+    ].entries()) {
+      await s.caps.sendMessage(agent(T0 + i * DAY), {
+        body,
+        contact: { name: `G${i}`, email: `g${i}@home${i}.example.org` },
+      });
+    }
+    expect((await s.q("SELECT screen FROM items ORDER BY created_at")).map((r) => r[0])).toEqual(
+      Array(5).fill("delivered"),
+    );
+  });
+});
+
 describe("customers who link a big site on their own country's domain", () => {
   it("are delivered however many send one in a week", async () => {
     const s = await spamSetup();

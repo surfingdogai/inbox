@@ -89,10 +89,12 @@ switched on.*
    check finding a customer takes its points off what the filters found, never off the free
    protection's, and a filter on Just label or learning only lowers what its own points were needed
    for: a filter switched on only ever puts more aside. A link to the business's own site, a platform it
-   uses or a host everyone links to (a map's share link, a profile, a drive; the big sites on any
-   country's own domain too) makes no message "only links"; shorteners are known by their full host,
-   and count in a shared link domain like any other. On a shared host, one chat number, channel or site
-   there (`wa.me/…`, `t.me/…`) counts as a shared link domain would, kept as a keyed hash. Words aimed
+   uses or a host everyone links to (a map's share link, a profile, a drive, a booking or review site's
+   page; the big sites on the country domains they run too, never their name on a domain anyone may
+   register) makes no message "only links"; shorteners are known by their full host, and count in a
+   shared link domain like any other. On a shared host, one chat number, channel, site, shared document
+   or form there (`wa.me/…`, `t.me/…`, `docs.google.com/forms/…`) counts as a shared link domain would,
+   kept as a keyed hash. Words aimed
    at an AI count in the sender's name as in the text, and need an addressee or a verdict dictated; a
    name of the business's own offer may carry a short ending ("classes") or Korean particles.
 7. **The AI check.** Behind `JudgePort`; the inbox ships a Messages API adapter on the provider's own SDK
