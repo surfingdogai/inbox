@@ -345,6 +345,48 @@ describe("the price a feed sells at", () => {
     expect(prices).toEqual([1299, 1500, 3000]);
   });
 
+  it("says when its price changes by the sale's dates, so the change is made then", () => {
+    const start = Date.parse("2026-11-27T05:00:00Z");
+    const end = Date.parse("2026-12-01T05:00:00Z");
+    // Not started: the regular price now, the sale's from its first moment, the regular from its last.
+    for (const body of [csv("2026-11-27/2026-11-30"), xml("2026-11-27/2026-11-30")]) {
+      const p = parseFeed(body, { now: NOW, timezone: "America/Toronto" }).products[0];
+      expect(p?.price).toEqual({ value: 1299, currency: "CAD" });
+      expect(p?.priceChanges).toEqual([
+        { at: start, price: { value: 999, currency: "CAD" }, available: true },
+        { at: end, price: { value: 1299, currency: "CAD" }, available: true },
+      ]);
+    }
+    // Running: only its end is to come.
+    const during = Date.parse("2026-11-28T12:00:00Z");
+    expect(
+      parseFeed(csv("2026-11-27/2026-11-30"), { now: during, timezone: "America/Toronto" }).products[0]?.priceChanges,
+    ).toEqual([{ at: end, price: { value: 1299, currency: "CAD" }, available: true }]);
+    // Over, with no dates, or with dates nobody can read: nothing is to come.
+    for (const window of ["2026-09-01T00:00Z/2026-09-30T23:59Z", "", "Black Friday"]) {
+      expect(
+        parseFeed(csv(window), { now: NOW, timezone: "America/Toronto" }).products[0]?.priceChanges,
+        window,
+      ).toBeUndefined();
+    }
+  });
+
+  it("keeps a row whose only price is a sale that is not on off sale, until it is on", () => {
+    const sheet = ["id,title,sale_price,sale_price_effective_date", "B1,Bell,9.99 CAD,2026-11-27/2026-11-30"].join(
+      "\n",
+    );
+    const before = parseFeed(sheet, { now: NOW, timezone: "America/Toronto" }).products[0];
+    expect([before?.price, before?.available]).toEqual([null, false]);
+    expect(before?.priceChanges).toEqual([
+      { at: Date.parse("2026-11-27T05:00:00Z"), price: { value: 999, currency: "CAD" }, available: true },
+      { at: Date.parse("2026-12-01T05:00:00Z"), price: null, available: false },
+    ]);
+    // After it, the price it had is not kept: it was the sale's.
+    const after = parseFeed(sheet, { now: Date.parse("2026-12-02T12:00:00Z"), timezone: "America/Toronto" })
+      .products[0];
+    expect([after?.price, after?.available]).toEqual([null, false]);
+  });
+
   it("never sells at cost", () => {
     const sheet = ["sku,name,cost,rrp", "W-1,Widget,4.00,9.99"].join("\n");
     const result = parseFeed(sheet, { defaultCurrency: "GBP" });

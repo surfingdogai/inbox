@@ -6,6 +6,7 @@ import {
   FEED_SYNC_INTERVAL_MS,
   isPublicHost,
   type JobHandler,
+  type ScheduledPriceChange,
   USER_AGENT,
 } from "@surfingdog/core";
 
@@ -34,6 +35,11 @@ const TIMEOUT_MS = 30_000;
 
 export interface FeedImportPayload {
   readonly connectorId: string;
+  /**
+   * The price changes a sale's dates give at this job's moment, and after it: present on the job an
+   * import queues for that moment, and on no regular one.
+   */
+  readonly changes?: readonly ScheduledPriceChange[];
 }
 
 export class FeedFetchError extends Error {
@@ -197,15 +203,22 @@ export function feedImportHandler(deps: FeedImportDeps): JobHandler {
       return { note: `feed ${payload.connectorId} is gone` };
     }
 
-    // The successor is scheduled BEFORE the fetch, exactly as the network ping does it: a feed
-    // that is down today must not be a feed that stops importing for ever. The dedupe key is the
-    // window, so many attempts in one window still leave one job.
-    const nextAt = at + FEED_SYNC_INTERVAL_MS;
-    await ensureJob(db, FEED_IMPORT_KIND, `feed:${config.id}:${Math.floor(nextAt / FEED_SYNC_INTERVAL_MS)}`, {
-      now: at,
-      runAt: nextAt,
-      payload: { connectorId: config.id },
-    });
+    if (payload.changes) {
+      // A sale starts or ends now: its price changes before the feed is read, so a sale that has
+      // ended is over even while the feed is down. This job is not one of the regular imports, and
+      // schedules none: they run on their own, and one more here would start a second chain.
+      await deps.caps.feeds.applyPriceChanges(config.id, payload.changes, at);
+    } else {
+      // The successor is scheduled BEFORE the fetch, exactly as the network ping does it: a feed
+      // that is down today must not be a feed that stops importing for ever. The dedupe key is the
+      // window, so many attempts in one window still leave one job.
+      const nextAt = at + FEED_SYNC_INTERVAL_MS;
+      await ensureJob(db, FEED_IMPORT_KIND, `feed:${config.id}:${Math.floor(nextAt / FEED_SYNC_INTERVAL_MS)}`, {
+        now: at,
+        runAt: nextAt,
+        payload: { connectorId: config.id },
+      });
+    }
     if (!config.url) {
       await deps.caps.feeds.markError(config.id, "this feed has no URL", at);
       return { note: "no url" };

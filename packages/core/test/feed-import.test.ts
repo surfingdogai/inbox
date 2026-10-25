@@ -4,7 +4,7 @@ import { Capabilities } from "../src/capabilities/service";
 import { createDb, type Db } from "../src/db";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
 import type { Caller } from "../src/write/index";
-import { makeClient, resetTables } from "./harness";
+import { confirming, makeClient, resetTables } from "./harness";
 
 /**
  * Feed import end to end, minus the network (ADR-015 §7.3): the body is handed in, because what
@@ -247,6 +247,46 @@ describe("importing", () => {
         },
       }),
     ).rejects.toMatchObject({ code: "invalid_input" });
+  });
+
+  it("changes a price when its sale starts and ends, not at the next read", async () => {
+    const { db, caps } = await setup();
+    await caps.updateSettings(owner, { doc: { business: { currency: "USD" } } });
+    const feed = await caps.feeds.add(owner, { url: "https://shop.example.com/feed.xml" });
+    await db.client.query({ sql: "DELETE FROM jobs", method: "run" });
+    const xml = `<?xml version="1.0"?><rss xmlns:g="http://base.google.com/ns/1.0" version="2.0"><channel><item><g:id>H1</g:id><g:title>Helmet</g:title><g:price>80.00 USD</g:price><g:sale_price>40.00 USD</g:sale_price><g:sale_price_effective_date>2026-11-27T00:00Z/2026-11-28T13:00Z</g:sale_price_effective_date></item></channel></rss>`;
+    const noon = Date.parse("2026-11-28T12:00:00Z");
+    const end = Date.parse("2026-11-28T13:00:00Z");
+    await caps.feeds.importBody(feed.id, xml, noon);
+    expect((await caps.listProducts({ limit: 5 })).items[0]?.price).toEqual({ value: 4_000, currency: "USD" });
+    // One job, at the sale's end, carrying what it sells at from then.
+    const jobs = await db.client.query({ sql: "SELECT kind, run_at, payload FROM jobs", method: "all" });
+    expect(jobs.rows).toHaveLength(1);
+    const [kind, runAt, payload] = jobs.rows[0] as [string, number, string];
+    expect([kind, Number(runAt)]).toEqual(["feed_import", end]);
+    const changes = (JSON.parse(payload) as { changes: never[] }).changes;
+    expect(changes).toEqual([{ at: end, externalId: "H1", price: { value: 8_000, currency: "USD" }, available: true }]);
+    // Reading the feed again replaces that job rather than adding another.
+    await caps.feeds.importBody(feed.id, xml, noon + 60_000);
+    expect((await db.client.query({ sql: "SELECT COUNT(*) FROM jobs", method: "all" })).rows[0]?.[0]).toBe(1);
+    // Before its moment, nothing changes; at it, the regular price, though the feed was not read.
+    expect(await caps.feeds.applyPriceChanges(feed.id, changes, end - 1)).toEqual({ applied: 0 });
+    expect(await caps.feeds.applyPriceChanges(feed.id, changes, end)).toEqual({ applied: 1 });
+    expect((await caps.listProducts({ limit: 5 })).items[0]?.price).toEqual({ value: 8_000, currency: "USD" });
+    // An order placed after the sale ended pays the regular price.
+    const helmet = (await caps.listProducts({ limit: 5 })).items[0];
+    const order = await confirming(caps).createOrder(
+      { ...customer, now: () => Date.parse("2026-11-28T17:00:00Z") },
+      {
+        payload: {
+          orderedItem: [
+            { productId: helmet?.id as string, name: "Helmet", quantity: 1, price: { value: 4_000, currency: "USD" } },
+          ],
+          totalPrice: { value: 4_000, currency: "USD" },
+        },
+      },
+    );
+    expect(order.view.item.payload).toMatchObject({ totalPrice: { value: 8_000, currency: "USD" } });
   });
 
   it("deactivates what leaves the feed and never deletes it", async () => {

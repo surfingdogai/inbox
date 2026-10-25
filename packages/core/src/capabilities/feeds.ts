@@ -1,7 +1,7 @@
 import type { Statement } from "@surfingdog/platform";
 import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
 import type { Db } from "../db";
-import { type FeedParseResult, type FeedProduct, type FeedSkip, parseFeed } from "../feeds/parse";
+import { type FeedParseResult, type FeedPriceChange, type FeedProduct, type FeedSkip, parseFeed } from "../feeds/parse";
 import { ulid } from "../ids";
 import { business, connectors, products } from "../schema/tables";
 import { readSettings } from "../settings/schema";
@@ -60,6 +60,16 @@ export interface FeedImportSummary {
   readonly truncated: boolean;
   /** Which feed column became which field, so an owner can see what we made of their header row. */
   readonly mapped: Readonly<Record<string, string>>;
+}
+
+/**
+ * A price one of a feed's products changes to at a moment its sale's dates give (`FeedPriceChange`):
+ * carried by the import job queued for that moment, which makes it whether or not the feed can be
+ * read then (`applyPriceChanges`).
+ */
+export interface ScheduledPriceChange extends FeedPriceChange {
+  /** The feed's own id for the product. */
+  readonly externalId: string;
 }
 
 interface FeedConfig {
@@ -218,6 +228,11 @@ export class FeedCapabilities {
     let summary: FeedImportSummary;
     try {
       summary = await this.apply(connectorId, config.url, parsed, config.deactivateMissing, config.currency, at);
+      // What the feed's sale dates change, made at their moment rather than at the next read.
+      const changes: ScheduledPriceChange[] = [];
+      for (const p of parsed.products)
+        for (const c of p.priceChanges ?? []) changes.push({ ...c, externalId: p.externalId });
+      await this.db.batch(priceChangeJob(connectorId, changes, at));
     } catch (error) {
       // The batches already written stay written: without interactive transactions there is
       // nothing to roll back to. What must not happen is the connector reading as if nothing
@@ -234,6 +249,44 @@ export class FeedCapabilities {
       method: "run",
     });
     return summary;
+  }
+
+  /**
+   * Makes the price changes a feed's sale dates gave whose moment has come (`ScheduledPriceChange`):
+   * a sale's price from its start, the regular price from its end, or off sale when there is none.
+   * Called by the import job queued for that moment before it reads the feed, so a sale that has
+   * ended is over even while the feed cannot be read. The changes still to come wait for the next
+   * such job. A product that left the feed is not among them: each import replaces that job.
+   */
+  async applyPriceChanges(
+    connectorId: string,
+    changes: readonly ScheduledPriceChange[],
+    at: number,
+  ): Promise<{ applied: number }> {
+    const source = feedSource(urlOf(await this.row(connectorId)));
+    const known = (Array.isArray(changes) ? changes : []).filter(isPriceChange);
+    const due = known.filter((c) => c.at <= at).sort((a, b) => a.at - b.at);
+    const statements: Statement[] = due.map((c) =>
+      c.price
+        ? {
+            sql: "UPDATE products SET price = ?, active = ?, updated_at = ? WHERE source = ? AND external_id = ?",
+            params: [
+              JSON.stringify({ value: c.price.value, currency: c.price.currency.toUpperCase() }),
+              c.available ? 1 : 0,
+              at,
+              source,
+              c.externalId,
+            ],
+            method: "run" as const,
+          }
+        : {
+            sql: "UPDATE products SET active = 0, updated_at = ? WHERE source = ? AND external_id = ?",
+            params: [at, source, c.externalId],
+            method: "run" as const,
+          },
+    );
+    await this.db.batch([...statements, ...priceChangeJob(connectorId, known, at)]);
+    return { applied: due.length };
   }
 
   async markError(connectorId: string, message: string, at: number): Promise<void> {
@@ -473,6 +526,43 @@ export function normaliseFeedUrl(raw: string): string {
   }
   url.hash = "";
   return url.toString();
+}
+
+/**
+ * The one import job a feed keeps queued for the price changes still to come after `now`, at the
+ * first of them and carrying them all; any it had queued before is replaced. None when nothing is
+ * to come. It schedules no import after it: the feed's regular imports run on their own.
+ */
+function priceChangeJob(connectorId: string, changes: readonly ScheduledPriceChange[], now: number): Statement[] {
+  const pending = changes.filter((c) => c.at > now).sort((a, b) => a.at - b.at);
+  const first = pending[0];
+  return [
+    {
+      sql: "DELETE FROM jobs WHERE kind = ? AND status = 'queued' AND dedupe_key LIKE ?",
+      params: [FEED_IMPORT_KIND, `feed:${connectorId}:at:%`],
+      method: "run",
+    },
+    ...(first
+      ? [
+          jobStatement(FEED_IMPORT_KIND, { connectorId, changes: pending }, now, {
+            runAt: first.at,
+            dedupeKey: `feed:${connectorId}:at:${first.at}`,
+          }),
+        ]
+      : []),
+  ];
+}
+
+/** A change as the job carries it: written here, read back from the queue. */
+function isPriceChange(c: unknown): c is ScheduledPriceChange {
+  if (typeof c !== "object" || c === null) return false;
+  const { at, externalId, price, available } = c as Record<string, unknown>;
+  const money =
+    price === null ||
+    (typeof price === "object" &&
+      Number.isSafeInteger((price as { value?: unknown }).value) &&
+      typeof (price as { currency?: unknown }).currency === "string");
+  return typeof at === "number" && typeof externalId === "string" && typeof available === "boolean" && money;
 }
 
 /** A connector row's feed URL, from its config with the unique external id as the fallback. */

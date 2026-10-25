@@ -201,6 +201,46 @@ describe("the import job", () => {
     expect(Number((rows[0] as unknown[])[0])).toBe(1);
   });
 
+  it("changes a price at its sale's start and end though the feed is down, and starts no second chain", async () => {
+    const { db, caps } = await freshDb();
+    await caps.updateSettings(owner, { doc: { business: { currency: "USD" } } });
+    const feed = await caps.feeds.add(owner, { url: "https://shop.example.com/feed.xml" });
+    await db.client.query({ sql: "DELETE FROM jobs", method: "run" });
+    const start = Date.parse("2026-11-27T00:00:00Z");
+    const end = Date.parse("2026-11-28T13:00:00Z");
+    const xml = `<rss xmlns:g="http://base.google.com/ns/1.0"><channel><item><g:id>H1</g:id><g:title>Helmet</g:title><g:price>80.00 USD</g:price><g:sale_price>40.00 USD</g:sale_price><g:sale_price_effective_date>2026-11-27T00:00Z/2026-11-28T13:00Z</g:sale_price_effective_date></item></channel></rss>`;
+    await caps.feeds.importBody(feed.id, xml, start - 3_600_000);
+    const down = feedImportHandler({ caps, fetchImpl: async () => new Response("down", { status: 503 }) });
+    const queued = async () =>
+      (
+        await db.client.query({
+          sql: "SELECT id, kind, payload, run_at FROM jobs WHERE status = 'queued' ORDER BY run_at",
+          method: "all",
+        })
+      ).rows.map((r) => {
+        const [id, kind, payload, runAt] = r as [string, string, string, number];
+        return { id, kind, payload: JSON.parse(payload) as unknown, runAt: Number(runAt) };
+      });
+    const price = async () => (await caps.listProducts({ limit: 5 })).items[0]?.price.value;
+    expect(await price()).toBe(8_000);
+
+    // At the sale's start, the feed down: the sale's price all the same.
+    const [first] = await queued();
+    expect(first?.runAt).toBe(start);
+    const r1 = await down(first as never, { db, now: start });
+    expect(r1?.note).toContain("503");
+    expect(await price()).toBe(4_000);
+    // What is still to come waits for its own moment, and no regular import was added beside it.
+    const [second, ...more] = await queued();
+    expect(more).toEqual([]);
+    expect(second?.runAt).toBe(end);
+
+    // At its end, still down: the regular price.
+    await down(second as never, { db, now: end });
+    expect(await price()).toBe(8_000);
+    expect(await queued()).toEqual([]);
+  });
+
   it("shrugs at a job for a feed that has been disconnected", async () => {
     const { db, caps } = await freshDb();
     const handler = feedImportHandler({ caps, fetchImpl: async () => reply(CSV) });

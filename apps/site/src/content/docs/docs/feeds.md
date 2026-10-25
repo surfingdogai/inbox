@@ -42,7 +42,7 @@ Columns are matched by name, ignoring case, spaces and punctuation, so `Product 
 | Availability | `availability`, `in_stock`, `stock_status` |
 | Links | `link`, `image_link` |
 
-The sale price is the price while the sale runs, and the regular price before and after it, the same in both formats. A sale with no dates runs. Dates written without an offset (`2026-11-27/2026-11-30`) are read on your business's clock, a date alone meaning that whole day; a sale whose dates cannot be read is not taken to be on. A feed is read again every few hours, so a sale starts and ends here at the next read after its dates.
+The sale price is the price while the sale runs, and the regular price before and after it, the same in both formats. A sale with no dates runs. Dates written without an offset (`2026-11-27/2026-11-30`) are read on your business's clock, a date alone meaning that whole day; a sale whose dates cannot be read is not taken to be on. A sale starts and ends here at the moment its dates give: the feed is read again then, and the price changes even if the feed cannot be read at that moment. A product whose only price is a sale that is not on is kept off sale.
 
 A `cost` column is never read as a price: it is what you pay, not what you sell at. A product with no price is kept off sale until the feed gives it one.
 

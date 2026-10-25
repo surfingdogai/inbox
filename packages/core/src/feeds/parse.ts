@@ -31,11 +31,27 @@ export interface FeedProduct {
   readonly stock: number | null;
   /**
    * What the feed claims about availability, when it says anything at all; false as well when the
-   * row is priced in a currency not counted here (`sellingPrice`).
+   * row names a price but none it can be sold at now (`sellingPrice`).
    */
   readonly available: boolean | null;
   readonly url: string | null;
   readonly imageUrl: string | null;
+  /**
+   * When the price changes by the row's own sale dates, after the moment it was read at: its sale's
+   * start and end, earliest first, with what it sells at from then. Made at that moment
+   * (`FeedCapabilities.applyPriceChanges`), not at the next read.
+   */
+  readonly priceChanges?: readonly FeedPriceChange[];
+}
+
+/** A price a row's sale dates change on their own (`FeedProduct.priceChanges`). */
+export interface FeedPriceChange {
+  /** The instant, in milliseconds. */
+  readonly at: number;
+  /** What it sells at from then; null for none, so it is kept off sale with the price it has. */
+  readonly price: { readonly value: number; readonly currency: string } | null;
+  /** Whether it is on sale from then: a price, and nothing in the feed that says it is not. */
+  readonly available: boolean;
 }
 
 export interface FeedSkip {
@@ -94,7 +110,9 @@ type SaleField = "salePrice" | "saleWindow" | "saleStarts" | "saleEnds";
  * no price, rather than selling at cost. A sale's price is its own column, the price only while the
  * sale runs (`sellingPrice`): Google's `sale_price_effective_date`, or an export's own start and end.
  */
-const FIELD_ALIASES: Readonly<Record<keyof FeedProduct | "quantity" | SaleField, readonly string[]>> = {
+const FIELD_ALIASES: Readonly<
+  Record<Exclude<keyof FeedProduct, "priceChanges"> | "quantity" | SaleField, readonly string[]>
+> = {
   externalId: ["id", "gid", "itemid", "productid", "uniqueid", "identifier", "sku", "variantid", "ref"],
   name: ["title", "name", "productname", "producttitle", "itemname", "nome", "nombre", "titel", "titre"],
   description: ["description", "descr", "productdescription", "summary", "descricao", "descripcion"],
@@ -350,25 +368,43 @@ interface PriceClock {
 
 type Money = { readonly value: number; readonly currency: string };
 
-/** What a row sells at (`sellingPrice`). */
+/** What a row sells at now (`sellingPrice`), and when that changes by its sale's dates. */
 interface Selling {
   readonly price: Money | null;
-  /** The row is priced in a currency not counted here: kept off sale, not at its last price. */
+  /** The row names a price, but none it can be sold at now: kept off sale, not at its last price. */
   readonly offSale: boolean;
+  /** The instants its sale starts and ends after now, with the price from each. */
+  readonly changes: readonly { readonly at: number; readonly price: Money | null }[];
 }
 
 /**
  * What a row sells at, the same in both formats: its sale price while the sale runs, and its
- * regular price before and after. A sale with no dates runs, as Google reads it. An ended sale whose
- * price the feed still carries is over; the feed is read again within hours, so a sale starts and
- * ends here at the import after its dates. A row priced in a currency not counted here has a price
- * but none to sell at: it is kept off sale (`offSale`), rather than at the price it last had.
+ * regular price before and after. A sale with no dates runs, as Google reads it; one whose dates
+ * cannot be read does not. An ended sale whose price the feed still carries is over. The moments a
+ * sale starts and ends after the read are given with the price from each, so the price changes then,
+ * not at the next read. A row whose only price is a sale that is not on, or is priced in a currency
+ * not counted here, has a price but none to sell at now: it is kept off sale (`offSale`), rather than
+ * at the price it last had.
  */
 function sellingPrice(regularCell: string, saleCell: string, window: string, at: PriceClock): Selling {
   const offer = readPrice(saleCell, at.currency);
   const regular = readPrice(regularCell, at.currency);
-  const price = offer.price && saleRunning(window, at.now, at.timezone) ? offer.price : regular.price;
-  return { price, offSale: price === null && (regular.uncounted || offer.uncounted) };
+  const bounds = offer.price ? saleBounds(window, at.timezone) : null;
+  const runs = (t: number) =>
+    bounds !== null && (bounds.start === null || t >= bounds.start) && (bounds.end === null || t < bounds.end);
+  const priceAt = (t: number) => (runs(t) ? offer.price : regular.price);
+  const price = priceAt(at.now);
+  const changes: { at: number; price: Money | null }[] = [];
+  let last = price;
+  for (const t of [bounds?.start ?? null, bounds?.end ?? null]) {
+    if (t === null || t <= at.now) continue;
+    const next = priceAt(t);
+    if (next?.value === last?.value && next?.currency === last?.currency) continue;
+    changes.push({ at: t, price: next });
+    last = next;
+  }
+  const offSale = price === null && (regular.uncounted || (offer.price !== null && !regular.price) || offer.uncounted);
+  return { price, offSale, changes };
 }
 
 type Bound = { readonly instant: number } | { readonly wall: string };
@@ -381,23 +417,35 @@ type Bound = { readonly instant: number } | { readonly wall: string };
  * so it does not.
  */
 export function saleRunning(window: string, now: number, timezone: string): boolean {
+  const b = saleBounds(window, timezone);
+  return b !== null && (b.start === null || now >= b.start) && (b.end === null || now < b.end);
+}
+
+/**
+ * A sale's dates as instants (`saleRunning`): its first moment and the first moment after it, either
+ * null when left open. Null when they cannot be read.
+ */
+function saleBounds(window: string, timezone: string): { start: number | null; end: number | null } | null {
   const text = window.trim();
-  if (text === "") return true;
+  if (text === "") return { start: null, end: null };
   const parts = text.split("/");
-  if (parts.length > 2) return false;
+  if (parts.length > 2) return null;
   const from = (parts[0] ?? "").trim();
   const to = (parts[1] ?? "").trim();
   const start = from === "" ? null : readBound(from, "start");
   const end = to === "" ? null : readBound(to, "end");
-  if (start === undefined || end === undefined) return false;
-  let wall: string | undefined;
-  const clock = () => {
-    wall ??= wallClock(now, timezone);
-    return wall;
-  };
-  const begun = start === null || ("instant" in start ? now >= start.instant : clock() >= start.wall);
-  const over = end !== null && ("instant" in end ? now >= end.instant : clock() >= end.wall);
-  return begun && !over;
+  if (start === undefined || end === undefined) return null;
+  const instant = (b: Bound) => ("instant" in b ? b.instant : instantOf(b.wall, timezone));
+  return { start: start === null ? null : instant(start), end: end === null ? null : instant(end) };
+}
+
+/** The instant a wall-clock time (`YYYY-MM-DDTHH:MM:SS`) is on the business's clock; UTC's when the zone is not one. */
+function instantOf(wall: string, timezone: string): number {
+  const naive = Date.parse(`${wall}Z`);
+  let t = naive;
+  // The zone's offset is read off its clock at the instant guessed, twice, for one that changes in between.
+  for (let i = 0; i < 2; i++) t = naive - (Date.parse(`${wallClock(t, timezone)}Z`) - t);
+  return t;
 }
 
 /** One end of a sale: an instant, or a wall-clock time (`YYYY-MM-DDTHH:MM:SS`) to read in the business's zone. */
@@ -876,14 +924,19 @@ function parseCsvFeed(body: string, at: PriceClock, limit: number): FeedParseRes
   return { format: "csv", products, skipped, truncated, mapped };
 }
 
-/** A row's price and availability, from what it sells at and what it claims. */
+/** A row's price, availability and the changes its sale's dates bring, from what it sells at and what it claims. */
 function priced(
   selling: Selling,
   availability: string,
   stock: number | null,
-): Pick<FeedProduct, "price" | "available"> {
+): Pick<FeedProduct, "price" | "available" | "priceChanges"> {
   const claim = parseAvailability(availability) ?? (stock === null ? null : stock > 0);
-  return { price: selling.price, available: selling.offSale ? false : claim };
+  const changes = selling.changes.map((c) => ({ ...c, available: claim !== false && c.price !== null }));
+  return {
+    price: selling.price,
+    available: selling.offSale ? false : claim,
+    ...(changes.length ? { priceChanges: changes } : {}),
+  };
 }
 
 function sample(text: string): string {
