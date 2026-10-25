@@ -274,3 +274,94 @@ describe("what a bot sent under someone's address", () => {
     expect(await s.q("SELECT COUNT(*) FROM spam_handles WHERE firsts > 1")).toEqual([[0]]);
   });
 });
+
+describe("a form a bot hurried through with a forged key", () => {
+  it("counts against nobody: the person it names writes her own message, and it is no 'many new'", async () => {
+    const s = await spamSetup();
+    const anna = { name: "Anna Kowalska", email: "anna.kowalska@biuro.example.pl" };
+    for (let i = 0; i < 5; i++) {
+      const t = T0 + i * 1_000;
+      const r = await s.caps.sendMessage(
+        visitor(t),
+        { body: `Cheap followers for your page, offer number ${i}, best prices this week.`, contact: anna },
+        { screen: { door: "form", form: { key: "invalid", trap: false, drawnAt: t - 400 } } },
+      );
+      expect(await s.q("SELECT screen FROM items WHERE id = ?", [idOf(r)])).toEqual([["aside"]]);
+    }
+    const t = T0 + 10_000;
+    const own = await s.caps.sendMessage(
+      visitor(t),
+      {
+        body: "Hello, could we order three kilos of the house blend for our office, delivered on Thursday?",
+        contact: anna,
+      },
+      { screen: { door: "form", form: { key: "valid", trap: false, drawnAt: t - 90_000 } } },
+    );
+    expect(await s.q("SELECT screen FROM items WHERE id = ?", [idOf(own)])).toEqual([["delivered"]]);
+  });
+});
+
+describe("a reworded wave behind one chat number", () => {
+  const NUMBER = "6281299990000";
+  const WORDINGS = [
+    `Part-time job from home, earn 300 a day liking videos. Message us: https://wa.me/${NUMBER}`,
+    `Looking for staff! Simple online tasks, daily pay. Contact https://wa.me/${NUMBER}`,
+    `Earn extra income in your free time, no experience needed. Chat: https://wa.me/${NUMBER}`,
+    `Flexible remote work, paid every day, only a phone needed. Join via https://wa.me/${NUMBER}`,
+    `We are hiring online assistants, high commission, start today. Write to https://wa.me/${NUMBER}`,
+  ];
+
+  it("is the same link from many senders, and its number is kept nowhere", async () => {
+    const s = await spamSetup();
+    for (const [i, body] of WORDINGS.entries()) {
+      await s.caps.sendMessage(agent(T0 + i * MIN), {
+        body,
+        contact: { name: `R${i}`, email: `r${i}@mail${i}.example.org` },
+      });
+    }
+    const rows = await s.q(
+      "SELECT i.screen, v.signals FROM items i JOIN spam_verdicts v ON v.item_id = i.id ORDER BY i.created_at",
+    );
+    const shared = rows.map((r) =>
+      (JSON.parse(String(r[1])) as { c: string; d?: string }[]).find((x) => x.c === "same_link_domain"),
+    );
+    expect(shared.slice(0, 2)).toEqual([undefined, undefined]);
+    for (const [i, x] of shared.slice(2).entries()) expect(x, String(i)).toMatchObject({ d: "wa.me" });
+    expect(rows.slice(2).map((r) => r[0])).toEqual(["warned", "warned", "warned"]);
+    expect(JSON.stringify(await s.q("SELECT link_domains FROM spam_prints"))).not.toContain(NUMBER);
+    expect(JSON.stringify(rows)).not.toContain(NUMBER);
+  });
+
+  it("never joins customers who each link a chat of their own", async () => {
+    const s = await spamSetup();
+    for (let i = 0; i < 5; i++) {
+      await s.caps.sendMessage(agent(T0 + i * MIN), {
+        body: `Hello, I'd like to book the latte art class for ${i + 2} people. My WhatsApp: https://wa.me/62812000000${i}`,
+        contact: { name: `C${i}`, email: `c${i}@home${i}.example.org` },
+      });
+    }
+    expect((await s.q("SELECT DISTINCT screen FROM items")).map((r) => r[0])).toEqual(["delivered"]);
+  });
+});
+
+describe("customers who link a big site on their own country's domain", () => {
+  it("are delivered however many send one in a week", async () => {
+    const s = await spamSetup();
+    const asks = [
+      "¿Abren hoy? https://www.google.es/maps/place/Kopi+Senja",
+      "¿Es aquí? https://www.google.es/maps/place/Kopi+Senja/@-8.6,115.2",
+      "¿Siguen aquí? https://www.google.es/maps/place/Kopi+Senja?hl=es",
+    ];
+    for (const [i, body] of asks.entries()) {
+      await s.caps.sendMessage(agent(T0 + i * DAY), {
+        body,
+        contact: { name: `L${i}`, email: `l${i}@correo${i}.example.es` },
+      });
+    }
+    expect((await s.q("SELECT screen FROM items ORDER BY created_at")).map((r) => r[0])).toEqual([
+      "delivered",
+      "delivered",
+      "delivered",
+    ]);
+  });
+});

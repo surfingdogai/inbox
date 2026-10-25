@@ -9,20 +9,31 @@ import { WriteError } from "../write/errors";
 import { SHARED_MAIL_PROVIDERS } from "./data";
 import { answerSignals, type Decision, decide } from "./decide";
 import { basicLearningUntil, type FilterState, filterStates } from "./filters";
-import { checkBudgets, countFirstStatements, handlesOf, type SenderHandles, standingOf } from "./handles";
+import { checkBudgets, countFirstStatements, handleRef, handlesOf, type SenderHandles, standingOf } from "./handles";
 import { buildPrompt, type JudgeMessage, type JudgePort, lendAnswer, runJudge } from "./judge";
 import { listOf } from "./lists";
 import { judgeText } from "./mask";
 import { checksSoFar, countStatement } from "./meter";
-import { emailDomain, hostOf, linkDomains, normalise, registrableDomain } from "./normalise";
+import {
+  emailDomain,
+  hostOf,
+  hrefsOf,
+  isSharedHost,
+  linkDomains,
+  linksIn,
+  normalise,
+  registrableDomain,
+  sharedAccountOf,
+} from "./normalise";
 import { asksBankChange, foundWords, isGibberish, phraseHits } from "./phrases";
 import { hamming, NEAR_BITS, NO_REPEATS, type Print, printOf, printStatement, repeatsOf, sha256Hex } from "./prints";
 import { agentSignals } from "./signals/agent";
-import { contentSignals, looksLike, PROVIDER_DOMAINS } from "./signals/content";
+import { contentSignals, looksLike, PROVIDER_DOMAINS, talksToFilter } from "./signals/content";
 import { emailAuthenticated, emailSignals } from "./signals/email";
 import { formSignals } from "./signals/form";
 import {
   type AiOutcome,
+  ASIDE_AT,
   type CheckedAnswer,
   type Door,
   type Filter,
@@ -192,18 +203,37 @@ export async function businessContext(db: Db, settings?: Settings): Promise<Busi
 
 /**
  * Whether the words name one of the business's own services or products: then they may be a customer's.
- * The name as words of its own ("tea", never the "tea" in "team"), with three letters at least.
+ * The name as words of its own, with three letters at least: never the "tea" in "team", but a name of
+ * five letters or more with a short ending written onto it ("latte art classes"), and a name in Hangul
+ * with the particles Korean writes onto it ("아메리카노를").
  */
 export function namesOwnOffer(normalised: string, offers: readonly string[]): boolean {
   const plain = stripMarks(normalised);
   return offers.some((o) => {
     const name = stripMarks(normalise(o));
-    return [...name.matchAll(/\p{L}/gu)].length >= 3 && foundWords(plain, name);
+    const letters = [...name.matchAll(/\p{L}/gu)].length;
+    if (letters < 3) return false;
+    if (foundWords(plain, name)) return true;
+    const ending = /\p{Script=Hangul}$/u.test(name)
+      ? /^\p{Script=Hangul}{1,3}(?![\p{L}\p{N}])/u
+      : letters >= 5
+        ? /^\p{L}{1,3}(?![\p{L}\p{N}])/u
+        : null;
+    if (!ending) return false;
+    for (let at = plain.indexOf(name); at >= 0; at = plain.indexOf(name, at + 1)) {
+      if (at > 0 && /[\p{L}\p{N}]/u.test(plain[at - 1] ?? "")) continue;
+      if (ending.test(plain.slice(at + name.length))) return true;
+    }
+    return false;
   });
 }
 
+/** Accents taken off, and Hangul put back together after: "café" → "cafe", "를" stays one letter. */
 function stripMarks(text: string): string {
-  return text.normalize("NFD").replace(/\p{M}+/gu, "");
+  return text
+    .normalize("NFD")
+    .replace(/\p{M}+/gu, "")
+    .normalize("NFC");
 }
 
 /**
@@ -364,6 +394,8 @@ interface Reading {
   readonly normalised: string;
   readonly print: Print | null;
   readonly domains: readonly string[];
+  /** What its links count as among other senders' (R3): kept with its print, never sent anywhere. */
+  readonly links: readonly string[];
   readonly email: string | undefined;
 }
 
@@ -374,6 +406,7 @@ async function readingOf(
   subject: string | undefined,
   contact: Contact | undefined,
   html?: string,
+  secrets: SecretBox | null = null,
 ): Promise<Reading> {
   const words = wordsOf(type, payload, message);
   const text =
@@ -385,8 +418,27 @@ async function readingOf(
     normalised,
     print: normalised ? await printOf(normalised) : null,
     domains: linkDomains(text, html),
+    links: await linksCounted(secrets, text, html),
     email: contact?.email,
   };
+}
+
+/**
+ * The links of a request as repeats count them: each link's registrable domain, but on a host
+ * everyone links to only the one account it points at there (`wa.me/…`), under a keyed hash so no
+ * number or name is kept; the host alone counts for nothing.
+ */
+async function linksCounted(secrets: SecretBox | null, text: string, html?: string): Promise<string[]> {
+  const out = new Set<string>();
+  for (const link of [...linksIn(text), ...(html ? hrefsOf(html).map((a) => a.href) : [])]) {
+    const host = hostOf(link);
+    if (!host) continue;
+    const account = sharedAccountOf(link);
+    if (account) out.add(`${host}/${await handleRef(secrets, "link", account)}`);
+    else if (!isSharedHost(host)) out.add(registrableDomain(host));
+    if (out.size >= 10) break;
+  }
+  return [...out];
 }
 
 /** The phrase signals of the filters that are on. */
@@ -400,15 +452,23 @@ function phraseSignals(normalised: string, raw: string, on: ReadonlySet<Filter>)
   return out;
 }
 
-/** Security checks that point at a third party: what even a known sender gets, as a label only. */
+/**
+ * Security checks that point at a third party: what even a known sender gets, as a label only. Mail
+ * no server vouches for may not be theirs at all: a failed DMARC, and a scam's words, label it too.
+ */
 function securitySignals(
   door: ScreenInput,
   reading: Reading,
   business: BusinessContext,
   on: ReadonlySet<Filter>,
+  unsigned: boolean,
 ): Signal[] {
   const out: Signal[] = [];
   if (door.email?.serverMarked) out.push({ c: "server_marked", w: 6, f: "basic" });
+  if (unsigned && door.email?.auth?.dmarc === "fail") out.push({ c: "dmarc_fail", w: 2, f: "basic" });
+  if (unsigned && phraseHits(reading.normalised, on).some((h) => h.filter === "scams")) {
+    out.push({ c: "scam_phrases", w: 3, f: "scams" });
+  }
   const content = contentSignals({
     text: reading.text,
     html: door.email?.html,
@@ -430,14 +490,21 @@ export async function screenAtDoor(deps: SpamDeps, ctx: DoorContext): Promise<Do
   const settings = await readSettings(db);
   const business = await businessContext(db, settings);
   const run = await running(deps, now);
-  const reading = await readingOf(ctx.type, ctx.payload, ctx.message, ctx.subject, ctx.contact, ctx.screen.email?.html);
+  const reading = await readingOf(
+    ctx.type,
+    ctx.payload,
+    ctx.message,
+    ctx.subject,
+    ctx.contact,
+    ctx.screen.email?.html,
+    deps.secrets,
+  );
   const agent = ctx.identity?.agent ?? ctx.caller.agent;
   const passes = (ctx.identity?.presentations ?? []).map((p) => ({ network: p.network, ppid: p.ppid }));
+  const unsigned = ctx.screen.email && reading.email ? !emailAuthenticated(ctx.screen.email, reading.email) : false;
   const sender = await handlesOf(deps.secrets, {
     email: reading.email,
-    ...(ctx.screen.email && reading.email
-      ? { authenticated: emailAuthenticated(ctx.screen.email, reading.email) }
-      : {}),
+    ...(ctx.screen.email && reading.email ? { authenticated: !unsigned } : {}),
     agent,
     passes,
     carriedFor: ctx.caller.carriedFor,
@@ -458,7 +525,7 @@ export async function screenAtDoor(deps: SpamDeps, ctx: DoorContext): Promise<Do
   // A sender the business knows is never screened: only what points at a third party is checked,
   // and it can only label ("Confirm by phone before paying"): a hijacked mailbox is flagged and seen.
   if (known && listed !== "block") {
-    const security = securitySignals(ctx.screen, reading, business, run.on);
+    const security = securitySignals(ctx.screen, reading, business, run.on, unsigned);
     if (security.length === 0) return NOT_SCREENED;
     const decision = decide({ type: ctx.type, signals: security, trusted: true });
     const label = security.some((s) => s.c === "bank_change_known")
@@ -489,8 +556,13 @@ export async function screenAtDoor(deps: SpamDeps, ctx: DoorContext): Promise<Do
   const vouchedFor =
     (ctx.screen.door === "agent" && passes.length > 0) || (ctx.screen.door === "agent" && sender.vouched);
   const found =
-    reading.print && sender.first && !vouchedFor
-      ? await repeatsOf(db, { print: reading.print, sender: sender.first.ref, domains: reading.domains, now })
+    reading.print && !vouchedFor
+      ? await repeatsOf(db, {
+          print: reading.print,
+          sender: sender.first?.ref ?? ANYONE,
+          domains: reading.links,
+          now,
+        })
       : NO_REPEATS;
   // The same words in a booking or an order note are a person's request said the usual way: they
   // count as points there, never as a wave on their own.
@@ -512,6 +584,11 @@ export async function screenAtDoor(deps: SpamDeps, ctx: DoorContext): Promise<Do
       noMail,
     }),
   );
+  // The sender's name is read by the AI check too: words aimed at it there are heard as in the text.
+  const named = [ctx.contact?.name, ctx.screen.email?.displayName].filter((n): n is string => Boolean(n?.trim()));
+  if (!signals.some((x) => x.c === "talks_to_filter") && named.some(talksToFilter)) {
+    signals.push({ c: "talks_to_filter", w: 3, f: "basic" });
+  }
   // Budgets, for strangers: past a day's budget the request waits; past a ceiling an agent comes back later.
   const pass = ctx.screen.door === "agent" && passes.length > 0;
   const budget = checkBudgets(sender, standing, { pass });
@@ -592,15 +669,37 @@ function pendingRow(
         params: [itemId, ctx.screen.door, Math.round(score * 10) / 10, JSON.stringify(signals), ctx.now],
         method: "run",
       },
-      ...strangerStatements(itemId, ctx, reading, sender, { counts: true, partyId: partyId ?? null }),
+      ...strangerStatements(itemId, ctx, reading, sender, { counts: countsAgainst(signals), partyId: partyId ?? null }),
     ],
   };
 }
 
+/** What a bot does at a form: never a person's doing, whatever address it names. */
+const BOT_AT_THE_FORM = new Set(["trap", "no_key", "key_invalid", "too_fast", "key_replayed"]);
+
+/**
+ * Whether a request counts against the handles it names: not when a certain bot signal decided it,
+ * nor when what a bot did at the form reaches the aside band on its own (a forged key sent in a
+ * moment): whoever it names may not have sent it.
+ */
+function countsAgainst(signals: readonly Signal[]): boolean {
+  if (signals.some((s) => s.x === 1 && NO_PROOF.has(s.c))) return false;
+  return signals.filter((s) => BOT_AT_THE_FORM.has(s.c)).reduce((n, s) => n + s.w, 0) < ASIDE_AT;
+}
+
+/**
+ * Who a print is from when the request names nobody (no mailbox, no key of its own, no pass): the
+ * request itself, so ten unsigned copies of one pitch are ten senders, and a wave. At the door, before
+ * the item has an id, a sender no print has.
+ */
+const ANYONE = "item:";
+const printSender = (sender: SenderHandles, itemId: string) => sender.first?.ref ?? `${ANYONE}${itemId}`;
+
 /**
  * The print of a stranger's request, and one more new conversation under each of their handles. A
  * request a certain bot signal decided (a hidden field filled, a form never drawn, mail a server
- * marked, a wave, Always put aside) counts against no one: whoever it names may not have sent it.
+ * marked, a wave, Always put aside), or one a bot's doing at the form puts aside alone, counts against
+ * no one: whoever it names may not have sent it.
  */
 function strangerStatements(
   itemId: string,
@@ -610,13 +709,13 @@ function strangerStatements(
   o: { readonly counts: boolean; readonly partyId: string | null },
 ): Statement[] {
   const out: Statement[] = [];
-  if (reading.print && sender.first) {
+  if (reading.print) {
     out.push(
       printStatement({
         itemId,
-        sender: sender.first.ref,
+        sender: printSender(sender, itemId),
         print: reading.print,
-        domains: reading.domains,
+        domains: reading.links,
         now: ctx.now,
       }),
     );
@@ -690,7 +789,7 @@ function verdictRow(
       },
       ...(o.reading && o.sender
         ? strangerStatements(itemId, ctx, o.reading, o.sender, {
-            counts: !signals.some((s) => s.x === 1 && NO_PROOF.has(s.c)),
+            counts: countsAgainst(signals),
             partyId: partyId ?? null,
           })
         : []),

@@ -124,8 +124,10 @@ export function decide(input: DecideInput): Decision {
   // A sender the business knows is only ever labelled: a customer's hijacked mailbox is flagged and seen.
   if (input.trusted) atMostWarn();
   if (band === "aside" && !certain) {
-    // Which sources the band needs: without that source's points, it would not reach it.
-    const needs = (source: Source) => positive(signals, source) > 0 && score - positive(signals, source) < ASIDE_AT;
+    // Which sources the band needs: without that source's points, added up the same way, it would not
+    // reach it. A model's "customer" taking the filter's points off leaves the free protection's whole.
+    const needs = (source: Source) =>
+      positive(signals, source) > 0 && sum(signals.filter((s) => s.f !== source)) < ASIDE_AT;
     const words = signals.filter((s) => s.w > 0 && !DOOR_CODES.has(s.c)).reduce((n, s) => n + s.w, 0);
     const content = words > 0 && score - words < ASIDE_AT;
     // The business's own offer named, or a pass presented: what the words alone would do labels at most.

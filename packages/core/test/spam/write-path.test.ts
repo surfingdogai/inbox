@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { RuleDefinition } from "../../src/rules/schema";
+import { addToListStatements } from "../../src/spam/lists";
+import { normalise } from "../../src/spam/normalise";
+import { namesOwnOffer } from "../../src/spam/screen";
 import { transitionItem } from "../../src/write/transition";
 import {
   agent,
@@ -8,6 +11,7 @@ import {
   DAY,
   fakeJudge,
   HOUR,
+  idOf,
   MIN,
   owner,
   ownerAi,
@@ -355,5 +359,70 @@ describe("put aside at the door", () => {
     // A bot's request cannot be confirmed from the email it never got, nor by guessing the item.
     expect(await s.caps.spam.confirmFromSender(b.view.item.id, T0 + 6 * MIN)).toBe("confirmed");
     expect(await s.q("SELECT screen FROM items WHERE id = ?", [b.view.item.id])).toEqual([["held"]]);
+  });
+});
+
+describe("words that name the business's own offer", () => {
+  it("name it in the plural, or with a suffix written onto it, and never inside another word", () => {
+    const offers = ["Latte art class", "Tea", "아메리카노"];
+    const names = (text: string) => namesOwnOffer(normalise(text), offers);
+    expect(names("Are your latte art classes running on Friday?")).toBe(true);
+    expect(names("Is the latte art class on Friday?")).toBe(true);
+    expect(names("아메리카노를 두 잔 예약할 수 있나요?")).toBe(true);
+    expect(names("아메리카노 있나요?")).toBe(true);
+    expect(names("Our team would like a tour")).toBe(false);
+    expect(names("Do you have teapots?")).toBe(false);
+  });
+
+  it("keep a customer the AI mistook for a pitch at a label, however the offer is written", async () => {
+    for (const body of [
+      "Hi! Are there two places left in the latte art class this Friday?",
+      "Hi! Are there two places left in the latte art classes this Friday?",
+    ]) {
+      const s = await spamSetup({
+        filters: ["pitches"],
+        judge: fakeJudge({ kind: "sales_pitch", certainty: "high", topic: "seo", quotes: ["this Friday"] }),
+      });
+      const r = await s.caps.sendMessage(agent(T0), { body, contact: { name: "Mia", email: "mia@home.example.org" } });
+      await s.drain(T0 + MIN);
+      expect(await s.q("SELECT screen FROM items WHERE id = ?", [idOf(r)]), body).toEqual([["warned"]]);
+    }
+  });
+});
+
+describe("mail under an address on Let through", () => {
+  const supplier = { name: "Supplier Ltd", email: "ap@supplier-ltd.example" };
+  const invoice =
+    "Your invoice 4471 is overdue. Pay today to the new account at https://pay-supplier.example.net/inv or service stops.";
+
+  it("is labelled when no server vouches for it, and comes straight in when one does", async () => {
+    const s = await spamSetup({ filters: ["pitches", "scams"], judge: fakeJudge({ kind: "scam", certainty: "high" }) });
+    await s.db.batch(
+      addToListStatements({
+        list: "allow",
+        kind: "address",
+        value: supplier.email,
+        partyId: null,
+        itemId: null,
+        byUser: "user_1",
+        now: T0 - DAY,
+      }),
+    );
+    const forged = await s.caps.sendMessage(
+      visitor(T0),
+      { body: invoice, contact: supplier },
+      { screen: { door: "email", email: { serverMarked: false, auth: { dmarc: "fail" } } } },
+    );
+    expect(
+      await s.q("SELECT i.screen, v.verdict FROM items i JOIN spam_verdicts v ON v.item_id = i.id WHERE i.id = ?", [
+        idOf(forged),
+      ]),
+    ).toEqual([["warned", "warn"]]);
+    const signed = await s.caps.sendMessage(
+      visitor(T0 + MIN),
+      { body: "Thanks for the order, the beans ship on Tuesday.", contact: supplier },
+      { screen: { door: "email", email: { serverMarked: false, auth: { dmarc: "pass" } } } },
+    );
+    expect(await s.q("SELECT screen FROM items WHERE id = ?", [idOf(signed)])).toEqual([[null]]);
   });
 });

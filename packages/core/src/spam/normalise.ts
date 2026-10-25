@@ -1,4 +1,4 @@
-import { SECOND_LEVEL } from "./data";
+import { ACCOUNT_PATHS, SECOND_LEVEL, SHARED_BRANDS, SHARED_HOSTS } from "./data";
 
 /**
  * Text as the spam filter compares it (ADR-029 §5): the same message twice is the same text, whatever
@@ -154,6 +154,38 @@ export function registrableDomain(host: string): string {
   const second = labels[labels.length - 2] ?? "";
   const take = tld.length === 2 && SECOND_LEVEL.has(second) ? 3 : 2;
   return labels.slice(-take).join(".");
+}
+
+/**
+ * Whether a host is one many honest people link to: listed, or under a listed brand's own name on
+ * `.com` or a country's code (`google.es`, `amazon.co.jp`; never `amazon.example.net`).
+ */
+export function isSharedHost(host: string): boolean {
+  const d = registrableDomain(host);
+  if (SHARED_HOSTS.has(host) || SHARED_HOSTS.has(d)) return true;
+  const [brand, ...rest] = d.split(".");
+  if (!brand || !SHARED_BRANDS.has(brand)) return false;
+  const [a = "", b = ""] = rest;
+  return rest.length === 1 ? a === "com" || a.length === 2 : rest.length === 2 && SECOND_LEVEL.has(a) && b.length === 2;
+}
+
+/**
+ * What a link on a shared host points at, when the start of its path names one account there
+ * (`wa.me/6281…`, `t.me/channel`, `sites.google.com/view/x`): the host and that part, lower case;
+ * null for any other link.
+ */
+export function sharedAccountOf(link: string): string | null {
+  const host = hostOf(link);
+  const take = host ? ACCOUNT_PATHS[host] : undefined;
+  if (!host || !take) return null;
+  try {
+    const url = new URL(/^https?:\/\//i.test(link) ? link : `http://${link}`);
+    const parts = url.pathname.split("/").filter(Boolean);
+    if (parts.length < take) return null;
+    return `${host}/${parts.slice(0, take).join("/").toLowerCase()}`;
+  } catch {
+    return null;
+  }
 }
 
 /** The registrable domains a text links to, each once (at most ten). */

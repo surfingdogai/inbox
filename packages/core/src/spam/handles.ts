@@ -9,8 +9,10 @@ import { dayOf, type Handle, type HandleKind } from "./types";
 /**
  * Who asks, as handles this inbox keeps its own history on (ADR-029 §4.4): an agent's own key, a
  * network pass, a mailbox, a mail domain, the code a network carries a request under. Never a client's
- * network address: many people share one. Nor a platform's key (Web Bot Auth): a platform signs every
- * one of its users' requests with the same key, so it is only a large flood bucket, never a sender. A
+ * network address: many people share one. Nor a recognised platform's key (Web Bot Auth, `vouched`): a
+ * platform signs every one of its users' requests with the same key, so it is only a large flood
+ * bucket, never a sender. A key from a directory nobody recognises is the sender's own: anyone can
+ * host a directory. A
  * stranger may start a few conversations a day under each handle; past that their next request waits
  * (`many_new`) and costs no AI check, and past a ceiling an agent is asked to come back later. Rotating
  * keys is caught by the mailbox, rotating mailboxes by the key or the domain, rotating both by the
@@ -44,8 +46,8 @@ export const PERSONAL: ReadonlySet<HandleKind> = new Set(["agent_key", "pass", "
 
 const encoder = new TextEncoder();
 
-/** A keyed hash of a mailbox or a domain: the same here every time, meaningless anywhere else. */
-export async function handleRef(secrets: SecretBox | null, kind: HandleKind, value: string): Promise<string> {
+/** A keyed hash of a mailbox, a domain or a link's account: the same here every time, meaningless anywhere else. */
+export async function handleRef(secrets: SecretBox | null, kind: HandleKind | "link", value: string): Promise<string> {
   const text = `${kind}\0${value}`;
   if (!secrets) return `h:${(await sha256Hex(`surfingdog-inbox/spam-handle\0${text}`)).slice(0, 40)}`;
   const key = await secrets.mac("spam-handle");
@@ -70,17 +72,20 @@ export interface SenderHandles {
   readonly handles: readonly Handle[];
   /** What a day's budgets are counted under: the same, with unsigned mail kept apart. */
   readonly counted: readonly Handle[];
-  /** The handle repeats are counted by: the mailbox, else the agent's own key, else the pass. */
+  /** The handle repeats are counted by: the mailbox, else the agent's own key, else the pass; else none. */
   readonly first: Handle | null;
   /** Whether the key is a vouched platform's. */
   readonly vouched: boolean;
-  /** Whether the key is a platform's, shared by all its users, rather than the agent's own. */
+  /** Whether the key is a recognised platform's, shared by all its users, rather than the agent's own. */
   readonly platform: boolean;
 }
 
-/** Whether an agent's key is a platform's (it came from a platform's directory), not the agent's own. */
+/**
+ * Whether an agent's key is a recognised platform's (`vouched`: a directory a network recognises lists
+ * it), not the agent's own. A directory nobody recognises makes no platform: its key counts as its own.
+ */
 export function isPlatformKey(agent: { readonly level?: string; readonly platform?: string | undefined } | undefined) {
-  return agent !== undefined && (Boolean(agent.platform) || agent.level === "vouched");
+  return agent?.level === "vouched";
 }
 
 /** The handles of one request, as the door and the caller give them. */

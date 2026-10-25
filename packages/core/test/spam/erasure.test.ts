@@ -58,6 +58,30 @@ describe("erasing a customer the AI check read", () => {
     expect(await s.q("SELECT kind FROM spam_handles ORDER BY kind")).toEqual([["mail_domain"]]);
   });
 
+  it("removes its answer for the words of someone who gave only a phone number", async () => {
+    const judge = fakeJudge({
+      kind: "customer",
+      certainty: "high",
+      customer_intent: true,
+      topic: "none",
+      quotes: ["my daughter Aiko has a nut allergy"],
+    });
+    const s = await spamSetup({ filters: ["pitches"], judge });
+    const m = await s.caps.sendMessage(agent(T0), {
+      body: "Hello, my daughter Aiko has a nut allergy. Are the pastries at the class made without nuts?",
+      contact: { name: "Yuki Tanaka", phone: "+81 90 1234 5678" },
+    });
+    await s.drain(T0 + MIN);
+    const id = (m as { view: { item: { id: string } } }).view.item.id;
+    expect(String((await s.q("SELECT answer FROM spam_cache"))[0]?.[0])).toContain("aiko");
+    const party = (await s.q("SELECT party_id FROM items WHERE id = ?", [id]))[0]?.[0] as string;
+    const asked = await s.caps.customers.erase(owner(T0 + 3 * MIN), { party_id: party }).catch((e) => e);
+    await s.caps.customers.erase(owner(T0 + 3 * MIN), { party_id: party, confirm: asked.details.confirm });
+    for (const table of ["spam_cache", "spam_prints", "spam_verdicts"]) {
+      expect(await s.q(`SELECT COUNT(*) FROM ${table}`), table).toEqual([[0]]);
+    }
+  });
+
   it("leaves nothing of a stranger's handles for longer than a month unseen, unless a person or a mark needs it", async () => {
     const s = await spamSetup();
     await s.caps.sendMessage(agent(T0), {

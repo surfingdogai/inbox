@@ -176,4 +176,16 @@ describe("a customer found by the AI check", () => {
       }),
     ).toMatchObject({ verdict: "warn", score: 3 });
   });
+
+  it("never lets a filter on Just label, or in its learning week, lower what the free protection alone puts aside", () => {
+    const signals = [s("link_mismatch", 3), s("link_disguised", 3), s("pitch_phrases", 2, "pitches"), customer];
+    expect(decide({ type: "message", signals, choices: new Map([["pitches", "label"]]) }).verdict).toBe("aside");
+    expect(decide({ type: "message", signals, choices: on("pitches"), learning: new Set(["pitches"]) })).toMatchObject({
+      verdict: "aside",
+      learning: false,
+    });
+    // What the filter's own points are needed for, it still only labels.
+    const needed = [s("link_mismatch", 3), s("pitch_phrases", 3, "pitches")];
+    expect(decide({ type: "message", signals: needed, choices: new Map([["pitches", "label"]]) }).verdict).toBe("warn");
+  });
 });

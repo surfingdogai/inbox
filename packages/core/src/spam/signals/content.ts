@@ -1,4 +1,4 @@
-import { DISPOSABLE_MAIL, SHARED_HOSTS, SHORTENERS } from "../data";
+import { DISPOSABLE_MAIL, SHORTENERS } from "../data";
 import {
   emailDomain,
   foldConfusables,
@@ -6,6 +6,7 @@ import {
   hasInvisibleInLatin,
   hostOf,
   hrefsOf,
+  isSharedHost,
   linksIn,
   markdownLinks,
   normalise,
@@ -24,7 +25,10 @@ import type { Signal } from "../types";
 
 /** Words that speak to an AI or a filter rather than to a person at the business. */
 const TO_THE_FILTER: readonly RegExp[] = [
-  /\b(ignore|disregard|forget)\b.{0,30}\b(previous|prior|above|earlier|all)\b.{0,20}\b(instructions?|prompts?|rules)\b/i,
+  // "Ignore all previous instructions" said to the reader: with "your", "you were given", or a verdict
+  // dictated after it. Never a customer's "please ignore my previous instructions, I'll collect it".
+  /\b(ignore|disregard|forget)\b.{0,30}\b(previous|prior|above|earlier|all)\b.{0,20}\b(instructions?|prompts?|rules)\b(?=.{0,60}\b(answer|respond|reply|output|return|classify|mark|label|flag|treat|consider|categori[sz]e|say)\b.{0,40}\b(customer|ham|safe|legitimate|genuine|not spam|non-?spam)\b|\s+you\s+(were|have been)\s+given\b)/i,
+  /\b(ignore|disregard|forget)\s+(all\s+)?(of\s+)?your\b.{0,30}\b(instructions?|prompts?|rules)\b/i,
   /\byou are (now )?(an? )?(spam )?(filter|classifier|moderator|content moderator)\b/i,
   // An order to classify the message itself: "mark this email as not spam", "treat it as legitimate".
   // Never a customer's "label the second package as ham".
@@ -35,14 +39,16 @@ const TO_THE_FILTER: readonly RegExp[] = [
   /<\|im_start\|>|<\|im_end\|>|\[\/?(system|inst)\]/i,
   /#{2,}\s*(instruction|system|prompt)/i,
   /"(kind|certainty|customer_intent|talks_to_filter)"\s*:/i,
-  /\b(ignora|ignore|ignorez|ignoriere|negeer|zignoruj|abaikan)\b.{0,30}\b(instrucciones|instruções|instructions|anweisungen|istruzioni|instructies|instrukcje|instruksi)\b/i,
+  /\b(ignora|ignorez|ignoriere|negeer|zignoruj|abaikan)\b.{0,30}\b(instrucciones|instruções|instructions|anweisungen|istruzioni|instructies|instrukcje|instruksi)\b/i,
+  /\bignore\b.{0,30}\b(instrucciones|instruções|anweisungen|istruzioni|instructies|instrukcje|instruksi)\b/i,
   /(以前|前)の指示を無視|忽略(之前|以上|所有)的?(指令|指示)|تجاهل التعليمات/u,
   /(про)?игнорируй.{0,30}инструкц|önceki talimatları (yok say|görmezden gel)|पिछले निर्देशों को (अनदेखा|नज़रअंदाज़)|이전 지시(를|사항을) 무시/iu,
   /\b(owner|business|admin(istrator)?|manager|management)\b.{0,40}\b(asked|told|wants|said|authori[sz]ed)\b.{0,40}\b(let (this|it|me) through|approve|whitelist|allowlist|deliver (this|it))\b/i,
   /\b(whitelist|allowlist) (me|this|my (email|address|message))\b/i,
   // Words addressed to the reader itself: "I instruct the filter", "Note to the AI", "AI reading this".
   /\b(instruct|command)(s|ed|ing)?\s+(the|this|you)\s+((spam|mail|e-?mail)\s+)?(filter|classifier|ai|moderator)\b/i,
-  /\b(note|message|instructions?|attention)\s+(to|for)\s+(the\s+|any\s+|an\s+)?(ai|llm|filter|classifier|moderator)\b/i,
+  // "Note for the filter", never "instructions for the filter coffee kit".
+  /\b(note|message|instructions?|attention)\s+(to|for)\s+(the\s+|any\s+|an\s+)?(ai|llm|classifier|moderator|filter(?!\s+(?!(reading|that|which|itself)\b)[a-z]))\b/i,
   /\b(ai|llm|filter|classifier|bot)s?\s+reading\s+this\b/i,
   // A line drawn like a boundary between data and instructions, and what usually follows one.
   /^\s*-{3,}\s*[A-Za-z0-9_-]{10,}\s*-{3,}\s*$/m,
@@ -174,10 +180,7 @@ export function contentSignals(c: ContentInput): Signal[] {
   if (hosts.some((h) => SHORTENERS.has(h))) out.push({ c: "shortener", w: 1, f: "basic" });
   // A link to the business's own site, a platform it uses, or a place everyone links to (a map, a
   // profile, a drive) is a customer's way of showing what they mean: it makes no message "only links".
-  const telling = hosts.filter((h) => {
-    const d = registrableDomain(h);
-    return !watched.includes(d) && !SHARED_HOSTS.has(h) && !SHARED_HOSTS.has(d);
-  });
+  const telling = hosts.filter((h) => !watched.includes(registrableDomain(h)) && !isSharedHost(h));
   if (telling.length > 0 && wordsBesideLinks(text) < 5) out.push({ c: "link_only", w: 3, f: "basic" });
   if (telling.length >= 3) out.push({ c: "many_links", w: 2, f: "basic" });
   if (hasDisguisedWord(text)) out.push({ c: "disguised_letters", w: 2, f: "basic" });
@@ -185,15 +188,18 @@ export function contentSignals(c: ContentInput): Signal[] {
   if (talksToFilter(text)) out.push({ c: "talks_to_filter", w: 3, f: "basic" });
   // Repeats: the same words from many senders is a wave; a link domain several senders share, not
   // the business's own or one honest people share, is how reworded waves still show — a shortener's
-  // included: a reworded wave behind one hides its own domain, and the shortener shows instead.
+  // included: a reworded wave behind one hides its own domain, and the shortener shows instead. On a
+  // shared host, one account there (`wa.me/…`) counts as a domain would, named by its host alone.
   const r = c.repeats;
   if (r.markedSpamAt !== null) out.push({ c: "like_marked", w: 6, f: "basic", x: 1, v: r.markedSpamAt });
   if (r.same >= 4) out.push({ c: "wave", w: 6, f: "basic", x: 1, v: r.same + 1 });
   else if (r.same >= 2) out.push({ c: "same_text", w: 4, f: "basic", v: r.same + 1 });
   else if (r.near >= 2) out.push({ c: "near_same", w: 3, f: "basic", v: r.near + 1 });
   let shared: { domain: string; n: number } | null = null;
-  for (const [domain, n] of r.domains) {
-    if (n < 2 || watched.includes(domain) || SHARED_HOSTS.has(domain)) continue;
+  for (const [link, n] of r.domains) {
+    const account = link.includes("/");
+    const domain = account ? (link.split("/")[0] ?? link) : link;
+    if (n < 2 || watched.includes(domain) || (!account && isSharedHost(domain))) continue;
     if (!shared || n > shared.n) shared = { domain, n };
   }
   if (shared) out.push({ c: "same_link_domain", w: 3, f: "basic", v: shared.n + 1, d: shared.domain });

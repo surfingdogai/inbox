@@ -132,22 +132,24 @@ describe("an agent's key", () => {
   });
 });
 
-describe("a platform's key, which signs for all its users", () => {
+describe("a recognised platform's key, which signs for all its users", () => {
   const PLATFORM = "pLaTfOrMkEyThUmBpRiNt0123456789abcdefghijk";
   const DIRECTORY = "https://assistant-platform.example";
+  /** Signed with the key a recognised platform's directory lists (`vouched`). */
+  const via = (t: number) => agent(t, { key: PLATFORM, level: "vouched", platform: DIRECTORY });
 
   it("never puts a customer's message aside, nor holds their booking, for the platform's other users", async () => {
     const s = await spamSetup();
     // Fifty-two people, each with their own address and their own words, through one assistant platform.
     for (let i = 0; i < 52; i++) {
-      await s.caps.sendMessage(agent(T0 + i * 1_000, { key: PLATFORM, platform: DIRECTORY }), {
+      await s.caps.sendMessage(via(T0 + i * 1_000), {
         body: words(i),
         contact: { name: `Customer ${i}`, email: `person${i}@home${i}.example.org` },
       });
     }
     expect((await screens(s)).filter((x) => x !== "delivered")).toEqual([]);
     for (let i = 0; i < 8; i++) {
-      const b = await s.caps.createBooking(agent(T0 + DAY / 2 + i * 1_000, { key: PLATFORM, platform: DIRECTORY }), {
+      const b = await s.caps.createBooking(via(T0 + DAY / 2 + i * 1_000), {
         payload: {
           reservationFor: { serviceId: s.svc, name: "Latte art class" },
           startTime: new Date(T0 + 3 * DAY + (i % 4) * 3_600_000).toISOString(),
@@ -166,10 +168,10 @@ describe("a platform's key, which signs for all its users", () => {
     expect((await screens(s)).at(-1)).toBe("aside:many_new");
     const t = await spamSetup();
     // Its own ceiling is a flood's: far past what any one sender would start in a day.
-    for (let i = 0; i < 500; i++)
+    for (let i = 0; i < 1_500; i++)
       await t.db.batch(countFirstStatements([{ kind: "platform_key", ref: PLATFORM }], T0 + i));
     const refused = await t.caps
-      .sendMessage(agent(T0 + MIN, { key: PLATFORM, platform: DIRECTORY }), {
+      .sendMessage(via(T0 + MIN), {
         body: words(1),
         contact: { name: "Anyone", email: "anyone@example.org" },
       })
@@ -179,7 +181,7 @@ describe("a platform's key, which signs for all its users", () => {
 
   it("is on no list and trusted by nobody: letting one user in lets in no one else", async () => {
     const s = await spamSetup();
-    const first = await s.caps.sendMessage(agent(T0, { key: PLATFORM, platform: DIRECTORY }), {
+    const first = await s.caps.sendMessage(via(T0), {
       body: words(1),
       contact: { name: "No address" },
     });
@@ -187,6 +189,48 @@ describe("a platform's key, which signs for all its users", () => {
     await s.caps.transitionItem(owner(T0 + 2 * MIN), { item_id: idOf(first), event: "unspam" });
     expect(await s.q("SELECT COUNT(*) FROM spam_lists")).toEqual([[0]]);
     expect(await s.q("SELECT COUNT(*) FROM spam_handles WHERE trusted_at IS NOT NULL")).toEqual([[0]]);
+  });
+});
+
+/** A pitch with no contact at all, as a bulk sender writes it to every business. */
+const PITCH =
+  "Hi, I noticed your website and we offer SEO services and guest posts. WhatsApp +62 812 5555 0101 for prices.";
+
+describe("a key from a directory nobody recognises", () => {
+  const BULK = "bulkSenderOwnDirectoryKey000000000000000000";
+  const OWN_DIRECTORY = "https://bulk-sender.example";
+  const via = (t: number) => agent(t, { key: BULK, platform: OWN_DIRECTORY });
+
+  it("is the sender's own key: five new conversations a day, and the sixth waits", async () => {
+    const s = await spamSetup();
+    for (let i = 0; i < 30; i++) await s.caps.sendMessage(via(T0 + i * MIN), { body: PITCH });
+    const all = await screens(s);
+    expect(all.slice(0, 5)).toEqual(Array(5).fill("delivered"));
+    expect(all.slice(5).every((x) => x === "aside:many_new")).toBe(true);
+    // Bookings, each with a new free-mail address: the key still counts them.
+    const t = await spamSetup();
+    for (let i = 0; i < 8; i++) {
+      await t.caps.createBooking(via(T0 + i * MIN), {
+        payload: {
+          reservationFor: { serviceId: t.svc, name: "Latte art class" },
+          startTime: new Date(T0 + 3 * DAY + (i % 4) * 3_600_000).toISOString(),
+          endTime: new Date(T0 + 3 * DAY + (i % 4) * 3_600_000 + 3_600_000).toISOString(),
+        },
+        contact: { name: `Guest ${i}`, email: `guest.number.${i}@gmail.com` },
+      });
+    }
+    expect(await screens(t)).toEqual([...Array(5).fill("delivered"), ...Array(3).fill("held:many_new")]);
+  });
+});
+
+describe("a request that names nobody", () => {
+  it("is a sender of its own: the same pitch, unsigned and with no contact, becomes a wave", async () => {
+    const s = await spamSetup();
+    for (let i = 0; i < 10; i++) await s.caps.sendMessage(agent(T0 + i * MIN), { body: PITCH });
+    const all = await screens(s);
+    expect(all.slice(0, 2)).toEqual(["delivered", "delivered"]);
+    expect(all.slice(2, 4)).toEqual(["warned:same_text", "warned:same_text"]);
+    expect(all.slice(4)).toEqual(Array(6).fill("aside:wave"));
   });
 });
 
@@ -212,6 +256,14 @@ describe("rotating", () => {
     const s = await spamSetup();
     for (let i = 0; i < 25; i++) await sendAs(s, i, { email: `person${i}@gmail.com` });
     expect((await screens(s)).every((x) => x === "delivered")).toBe(true);
+  });
+
+  it("counts no large provider as one company's domain, wherever its people are", async () => {
+    for (const provider of ["foxmail.com", "docomo.ne.jp", "yahoo.de", "outlook.es", "hotmail.com.br"]) {
+      const s = await spamSetup();
+      for (let i = 0; i < 21; i++) await sendAs(s, i, { email: `person${i}@${provider}` });
+      expect((await screens(s)).at(-1), provider).toBe("delivered");
+    }
   });
 });
 
