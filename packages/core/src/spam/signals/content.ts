@@ -192,6 +192,7 @@ export function contentSignals(c: ContentInput): Signal[] {
   // shared host, one account there (`wa.me/…`) counts as a domain would, named by its host alone.
   const r = c.repeats;
   if (r.markedSpamAt !== null) out.push({ c: "like_marked", w: 6, f: "basic", x: 1, v: r.markedSpamAt });
+  else if (r.markedNearAt != null) out.push({ c: "like_marked", w: 4, f: "basic", v: r.markedNearAt });
   if (r.same >= 4) out.push({ c: "wave", w: 6, f: "basic", x: 1, v: r.same + 1 });
   else if (r.same >= 2) out.push({ c: "same_text", w: 4, f: "basic", v: r.same + 1 });
   else if (r.near >= 2) out.push({ c: "near_same", w: 3, f: "basic", v: r.near + 1 });
@@ -203,7 +204,8 @@ export function contentSignals(c: ContentInput): Signal[] {
     if (!shared || n > shared.n) shared = { domain, n };
   }
   if (shared) out.push({ c: "same_link_domain", w: 3, f: "basic", v: shared.n + 1, d: shared.domain });
-  if (r.markedKept && r.markedSpamAt === null) out.push({ c: "like_kept", w: -3, f: "basic" });
+  if (r.markedKept && r.markedSpamAt === null && r.markedNearAt == null)
+    out.push({ c: "like_kept", w: -3, f: "basic" });
   return out;
 }
 

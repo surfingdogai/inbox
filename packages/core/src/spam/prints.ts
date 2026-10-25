@@ -109,8 +109,13 @@ export interface Repeats {
   readonly near: number;
   /** Per linked domain, other senders who linked to it in the week. */
   readonly domains: ReadonlyMap<string, number>;
-  /** When the owner marked one like it as spam in the half year; null when never. */
+  /** When the owner marked this very text, or one like it from this sender, as spam in the half year; null when never. */
   readonly markedSpamAt: number | null;
+  /**
+   * When the owner marked one like it from another sender as spam in the half year: many people's
+   * assistants write the same way, so it counts as points, never on its own. Null when never.
+   */
+  readonly markedNearAt?: number | null | undefined;
   /** Whether the owner marked one like it Not spam. */
   readonly markedKept: boolean;
 }
@@ -148,18 +153,21 @@ export async function repeatsOf(
   const same = new Set<string>();
   const near = new Set<string>();
   let markedSpamAt: number | null = null;
+  let markedNearAt: number | null = null;
   let markedKept = false;
   for (const r of rows) {
     const [s, sha, sim, mark, at] = [String(r[0]), String(r[1]), String(r[2]), Number(r[3]), Number(r[4])];
     const close = sha === print.sha || hamming(sim, print.sim) <= NEAR_BITS;
     if (!close) continue;
-    if (mark === 1 && (markedSpamAt === null || at > markedSpamAt)) markedSpamAt = at;
+    if (mark === 1 && (sha === print.sha || s === sender)) {
+      if (markedSpamAt === null || at > markedSpamAt) markedSpamAt = at;
+    } else if (mark === 1 && (markedNearAt === null || at > markedNearAt)) markedNearAt = at;
     if (mark === -1) markedKept = true;
     if (s === sender || at < since) continue;
     near.add(s);
     if (sha === print.sha) same.add(s);
   }
-  return { same: same.size, near: near.size, domains, markedSpamAt, markedKept };
+  return { same: same.size, near: near.size, domains, markedSpamAt, markedNearAt, markedKept };
 }
 
 export function printStatement(input: {

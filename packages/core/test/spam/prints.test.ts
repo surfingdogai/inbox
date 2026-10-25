@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { sentenceOf } from "../../src/spam/copy";
 import { normalise, shingles } from "../../src/spam/normalise";
 import { bandsOf, hamming, printOf, simhash } from "../../src/spam/prints";
-import { agent, idOf, owner, spamSetup, T0 } from "./harness";
+import { agent, classPayload, DAY, idOf, MIN, owner, spamSetup, T0 } from "./harness";
 
 /**
  * Prints (ADR-029 §8): the same message is the same print whatever its spacing, case, invisible
@@ -96,7 +96,44 @@ describe("repeats", () => {
     expect((await s.q("SELECT screen FROM items")).every((r) => r[0] === "delivered")).toBe(true);
   });
 
-  it("keep the owner's marks: one like a message marked spam is put aside, one like a message brought back is lifted", async () => {
+  it("never put another person's request aside as certain because their assistant wrote it the same way", async () => {
+    const s = await spamSetup();
+    const template = (n: number, day: string, time: string) =>
+      `Hello! I'm an AI assistant contacting you on behalf of my user, who would like to know whether you have a table for ${n} on ${day} at ${time}. Please reply to this message to confirm.`;
+    const marked = await s.caps.sendMessage(agent(T0), {
+      body: template(2, "Friday", "7pm"),
+      contact: { name: "Someone", email: "someone@mail1.example.org" },
+    });
+    await s.caps.transitionItem(owner(T0 + MIN), { item_id: idOf(marked), event: "mark_spam" });
+    // Three days later, other people's assistants write the same way, with their own party, day and time.
+    const sofia = await s.caps.sendMessage(agent(T0 + 3 * DAY), {
+      body: template(4, "Saturday", "8pm"),
+      contact: { name: "Sofia Rossi", email: "sofia.rossi@posta.example.it" },
+    });
+    expect(
+      await s.q(
+        "SELECT i.screen, v.cause, v.certain FROM items i JOIN spam_verdicts v ON v.item_id = i.id WHERE i.id = ?",
+        [idOf(sofia)],
+      ),
+    ).toEqual([["warned", "like_marked", 0]]);
+    const kenji = await s.caps.createBooking(agent(T0 + 3 * DAY + MIN), {
+      payload: classPayload(s.svc, T0 + 6 * DAY),
+      contact: { name: "Kenji Sato", email: "kenji.sato@mail.example.jp" },
+      message: template(6, "Thursday", "12:30"),
+    });
+    await s.drain(T0 + 3 * DAY + 5 * MIN);
+    expect(await s.q("SELECT v.certain FROM spam_verdicts v WHERE v.item_id = ?", [kenji.view.item.id])).toEqual([[0]]);
+    // He hears that it arrived, with the link to confirm it is him.
+    expect(s.mail.sent.filter((m) => m.to.includes("kenji.sato@mail.example.jp"))).toHaveLength(1);
+    // The same text again from the sender it was marked for stays certain.
+    const again = await s.caps.sendMessage(agent(T0 + 3 * DAY + 2 * MIN), {
+      body: template(2, "Friday", "7pm"),
+      contact: { name: "Someone", email: "someone@mail1.example.org" },
+    });
+    expect(await s.q("SELECT screen FROM items WHERE id = ?", [idOf(again)])).toEqual([["aside"]]);
+  });
+
+  it("keep the owner's marks: one like a message marked spam is labelled, one like a message brought back is lifted", async () => {
     const s = await spamSetup();
     const first = await s.caps.sendMessage(agent(T0), {
       body: LONG_PITCH,

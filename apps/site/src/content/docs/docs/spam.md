@@ -32,7 +32,7 @@ A booking or an order is never put aside, at most held. A held booking holds no 
 On every door, on every inbox, with no AI:
 
 - **Form bots**: your form's hidden field filled in (each form names it differently), a form your page never drew, one filled in faster than anyone types.
-- **Mail a server marked as spam** on its way. From someone you know it labels, nothing more; so does mail under their address that no server vouches for, when its check failed or it reads like a scam.
+- **Mail a server marked as spam** on its way. From someone you know it labels, nothing more. An address makes someone known only where something vouches for it (a mail server, a pass): typed at a form, given to an assistant or on mail no server vouches for, it is read as a stranger's.
 - **Posing as you**: your business's name from an address that isn't yours, an address made to look like yours, answers that would go elsewhere (Reply-To), a display name showing another address.
 - **Disguised links**: a link showing one address and going to another; links to sites listed for scams or malware.
 - **Waves**: the same message, nearly the same message, or the same link from many senders this week. A short honest question repeats freely, and bookings worded the same way by a platform never make a wave.
@@ -54,7 +54,7 @@ Each filter looks for known phrases on its own, in many languages, and reads wit
 
 ## How it decides
 
-Certain signals decide alone: a hidden field filled in, a form never drawn, a server's mark, a sender you put aside, a wave, a text like one you marked as spam. The rest add points: from 3 it labels, from 6 it puts aside or holds. Then each of these can lower the outcome, never raise it:
+Certain signals decide alone: a hidden field filled in, a form never drawn, a server's mark, a sender you put aside, a wave, a message you marked as spam sent again, or one like it from the same sender. One like it from someone else only adds points, since assistants write many people's requests the same way. The rest add points: from 3 it labels, from 6 it puts aside or holds. Then each of these can lower the outcome, never raise it:
 
 - someone you know is labelled at most;
 - words that name your own services or products keep the outcome at a label;

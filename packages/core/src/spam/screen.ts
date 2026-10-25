@@ -573,23 +573,27 @@ export async function screenAtDoor(deps: SpamDeps, ctx: DoorContext): Promise<Do
       : NO_REPEATS;
   // The same words in a booking or an order note are a person's request said the usual way: they
   // count as points there, never as a wave on their own.
-  const repeats = ctx.type === "booking" || ctx.type === "order" ? { ...found, same: Math.min(found.same, 3) } : found;
+  const templated = ctx.type === "booking" || ctx.type === "order";
+  const repeats = templated ? { ...found, same: Math.min(found.same, 3) } : found;
   const mailDomain = emailDomain(reading.email);
   const noMail =
     mailDomain && !SHARED_MAIL_PROVIDERS.has(mailDomain)
       ? await cachedMail(db, mailDomain, now).then((v) => (v === null ? null : !v))
       : null;
+  const content = contentSignals({
+    text: reading.text,
+    html: ctx.screen.email?.html,
+    email: reading.email,
+    ownDomains: business.ownDomains,
+    providerDomains: business.providerDomains,
+    linkDomains: reading.domains,
+    repeats,
+    noMail,
+  });
+  // One like a booking or an order marked as spam holds it for proof, never past it: its sender still
+  // hears it arrived, with the link to confirm it is them.
   signals.push(
-    ...contentSignals({
-      text: reading.text,
-      html: ctx.screen.email?.html,
-      email: reading.email,
-      ownDomains: business.ownDomains,
-      providerDomains: business.providerDomains,
-      linkDomains: reading.domains,
-      repeats,
-      noMail,
-    }),
+    ...(templated ? content.map((s) => (s.c === "like_marked" ? { c: s.c, w: s.w, f: s.f, v: s.v } : s)) : content),
   );
   // The sender's name is read by the AI check too: words aimed at it there are heard as in the text.
   const named = [ctx.contact?.name, ctx.screen.email?.displayName].filter((n): n is string => Boolean(n?.trim()));

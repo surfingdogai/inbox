@@ -61,7 +61,8 @@ switched on.*
    proves the mailbox and lets go that one request if it was held for an uncertain reason. Their later
    requests are screened as before, with budgets three times as wide; a proof made after anything from
    that mailbox was marked spam widens nothing. Only a person's Let it in or Not spam makes a sender known. A request held for a certain one
-   (a trap, no key, a server mark, a wave, a block, like one marked spam) gets no acknowledgement at all,
+   (a trap, no key, a server mark, a wave, a block, a message like one marked spam: that very text, or
+   one from the sender it was marked for) gets no acknowledgement at all,
    so a forged address is never written to. Create answers say where the link went:
    `identity.confirm.sent_to`, masked; the MCP text says so in words.
 6. **Signals and deciding.** Certain signals decide alone; the rest are points (a label from 3, put aside
@@ -69,7 +70,9 @@ switched on.*
    label keeps a filter's verdicts at a label; the learning week labels. Character checks look only for
    disguise: language, script, country, address, name, email provider, spelling, length and "written by an
    AI" are never signals. Repeats count other senders only (prints: SHA-256 and a 64-bit SimHash over
-   character 4-grams, in eight bands); a short honest question repeats freely. Per-handle budgets of new
+   character 4-grams, in eight bands); a short honest question repeats freely. A text near one marked
+   spam from another sender adds points (4), never decides alone, and a booking's or an order's like one
+   marked holds it at most, never certain: assistants write many people's requests the same way. Per-handle budgets of new
    conversations a day: an agent's own key (`Sdi-Agent-Key`) 5 (ceiling 50), a pass 10 (50), a mailbox 5
    (30), a mail domain 20 (100); a pass widens its mailbox's and domain's. A platform's key (Web Bot
    Auth's `Signature-Agent`) signs for every one of its users, so it is no sender, whether a network
