@@ -113,6 +113,42 @@ describe("importing", () => {
     expect(after.find((p) => p.name === "Chain lube")?.price).toEqual({ value: 925, currency: "EUR" });
   });
 
+  it("keeps the last price when a row leaves it out, and never puts a row with no price ever on sale", async () => {
+    const { caps } = await setup();
+    // A hardware shop in Pune: its prices are in rupees, and its feed names no currency.
+    await caps.updateSettings(owner, { doc: { business: { currency: "INR" } } });
+    const feed = await caps.feeds.add(owner, { url: "https://shop.example.com/feed.csv" });
+    await caps.feeds.importBody(feed.id, ["id,title,price", "B1,Hammer,250.00", "B2,Spirit level,"].join("\n"), T0);
+    const first = await caps.setup.listProducts(owner);
+    expect(first.find((p) => p.name === "Hammer")).toMatchObject({
+      active: 1,
+      price: { value: 25_000, currency: "INR" },
+    });
+    // No price: kept off sale, in the business's own currency, never a currency guessed for it.
+    expect(first.find((p) => p.name === "Spirit level")).toMatchObject({
+      active: 0,
+      price: { value: 0, currency: "INR" },
+    });
+    expect((await caps.listProducts({ limit: 50 })).items.map((p) => p.name)).toEqual(["Hammer"]);
+
+    // A row that leaves its price out has not made it free: the last price stays, on sale.
+    await caps.feeds.importBody(feed.id, ["id,title,price", "B1,Hammer,", "B2,Spirit level,"].join("\n"), T0 + 1000);
+    const second = await caps.setup.listProducts(owner);
+    expect(second.find((p) => p.name === "Hammer")).toMatchObject({ active: 1, price: { value: 25_000 } });
+    expect(second.find((p) => p.name === "Spirit level")).toMatchObject({ active: 0 });
+
+    // Once it has a price, it is on sale.
+    await caps.feeds.importBody(
+      feed.id,
+      ["id,title,price", "B1,Hammer,250", "B2,Spirit level,99"].join("\n"),
+      T0 + 2000,
+    );
+    expect((await caps.setup.listProducts(owner)).find((p) => p.name === "Spirit level")).toMatchObject({
+      active: 1,
+      price: { value: 9_900, currency: "INR" },
+    });
+  });
+
   it("deactivates what leaves the feed and never deletes it", async () => {
     const { db, caps } = await setup();
     const feed = await caps.feeds.add(owner, { url: "https://shop.example.com/feed.csv" });

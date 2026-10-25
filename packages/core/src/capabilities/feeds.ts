@@ -184,7 +184,7 @@ export class FeedCapabilities {
     }
     let summary: FeedImportSummary;
     try {
-      summary = await this.apply(connectorId, config.url, parsed, config.deactivateMissing, at);
+      summary = await this.apply(connectorId, config.url, parsed, config.deactivateMissing, config.currency, at);
     } catch (error) {
       // The batches already written stay written: without interactive transactions there is
       // nothing to roll back to. What must not happen is the connector reading as if nothing
@@ -218,6 +218,7 @@ export class FeedCapabilities {
     url: string,
     parsed: FeedParseResult,
     deactivateMissing: boolean,
+    currency: string,
     now: number,
   ): Promise<FeedImportSummary> {
     const source = feedSource(url);
@@ -258,8 +259,14 @@ export class FeedCapabilities {
       const current = byExternal.get(product.externalId);
       const id = current?.id ?? ulid(now);
       const sku = this.skuFor(product, id, takenSku);
-      const price = product.price ?? current?.price ?? null;
-      const active = product.available === false ? 0 : 1;
+      // Kept from the last time it had one: a feed that leaves a price out has not made it free. A
+      // stored price of nothing is the mark of a product that never had one, not a price. With none
+      // at all it is never on sale: it is kept off sale, in `currency` (the feed's, which is the
+      // business's unless the owner named another), until the feed gives it one.
+      const kept = current?.price && current.price.value > 0 ? current.price : null;
+      const price = product.price ?? kept;
+      const active = product.available === false || price === null ? 0 : 1;
+      const stored = price ?? { value: 0, currency: (current?.price?.currency ?? currency).toUpperCase() };
 
       if (!current) {
         statements.push({
@@ -278,7 +285,7 @@ export class FeedCapabilities {
             sku,
             product.name,
             product.description,
-            JSON.stringify(price ?? { value: 0, currency: "EUR" }),
+            JSON.stringify(stored),
             product.stock,
             source,
             product.externalId,
@@ -293,22 +300,13 @@ export class FeedCapabilities {
         continue;
       }
 
-      if (!changed(current, product, price, active, sku)) {
+      if (!changed(current, product, stored, active, sku)) {
         unchanged++;
         continue;
       }
       statements.push({
         sql: `UPDATE products SET sku = ?, name = ?, description = ?, price = ?, stock = ?, active = ?, updated_at = ? WHERE id = ?`,
-        params: [
-          sku,
-          product.name,
-          product.description,
-          JSON.stringify(price ?? { value: 0, currency: "EUR" }),
-          product.stock,
-          active,
-          now,
-          id,
-        ],
+        params: [sku, product.name, product.description, JSON.stringify(stored), product.stock, active, now, id],
         method: "run",
       });
       if (sku) takenSku.set(sku, id);
