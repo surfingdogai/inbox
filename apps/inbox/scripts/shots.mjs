@@ -9,6 +9,9 @@
  *   settings-day.png                 the settings page
  *   rules-day.png                    the rules screen
  *   availability-day.png             the opening hours screen
+ *   spam-day.png, spam-night.png     Spam, with a pitch the filter put aside open: why it's here
+ *   held-day.png                     Held, with a booking request that may be a customer's open
+ *   spam-settings-day.png            Settings → Spam
  *
  *   pnpm --filter @surfingdog/inbox shots
  *
@@ -60,6 +63,12 @@ async function main() {
     INBOX_PUBLIC_URL: base,
     // An empty instance hands itself only to a listed owner; the pipeline's owner is this address.
     INBOX_OWNER_EMAIL: email,
+    // The spam filter reads with a model on this machine, as the showcase's verdicts say; nothing is
+    // ever asked of it here, since the showcase writes them.
+    SPAM_MODEL_API: "chat",
+    SPAM_MODEL_URL: "http://127.0.0.1:11434/v1",
+    SPAM_MODEL: "local-model",
+    SPAM_MODEL_NAME: "a small local model",
   };
   cli(["seed-showcase"], env);
 
@@ -109,6 +118,9 @@ async function main() {
     const [booking] = await items("type=booking&state=confirmed");
     const [quote] = await items("type=quote_request&state=quoted");
     if (!booking || !quote) throw new Error("the showcase seed did not produce the expected items");
+    const pitch = (await items("state=spam&open_only=false")).find((v) => v.spam?.cause === "pitches");
+    const held = (await items("screen=held&open_only=false")).find((v) => v.spam?.may_be_customer);
+    if (!pitch || !held) throw new Error("the showcase seed did not produce the spam filter's items");
 
     await mkdir(out, { recursive: true });
     const shot = async (name, url, colorScheme, ready) => {
@@ -123,9 +135,13 @@ async function main() {
     await shot("inbox-day", "/", "light", ".today-list");
     await shot("inbox-night", "/", "dark", ".today-list");
     await shot("item-day", `/items/${quote.item.id}`, "light", ".card .actions");
-    await shot("settings-day", "/settings", "light", ".settings-grid");
+    await shot("settings-day", "/settings", "light", ".subnav");
     await shot("rules-day", "/settings/rules", "light", ".rule-line");
     await shot("availability-day", "/settings/availability", "light", ".hours-day");
+    await shot("spam-day", `/items/${pitch.item.id}?f=spam`, "light", ".spam-why");
+    await shot("spam-night", `/items/${pitch.item.id}?f=spam`, "dark", ".spam-why");
+    await shot("held-day", `/items/${held.item.id}?f=held`, "light", ".spam-why");
+    await shot("spam-settings-day", "/settings/spam", "light", ".spam-settings");
   } finally {
     await browser?.close();
     server.kill();

@@ -311,12 +311,12 @@ function ScreenRow({
           {filter === "held" ? (
             <>
               <span className="who">{heldWho(view)}</span>
-              <span className="s"> · {heldWhat(view, tz)}</span>
+              <span className="screen-what"> · {heldWhat(view, tz)}</span>
             </>
           ) : (
             <>
               <span className="who">{partyName(view.party)}</span>
-              <span className="s"> · {snippetFor(item, tz)}</span>
+              <span className="screen-what"> · {snippetFor(item, tz)}</span>
             </>
           )}
         </div>

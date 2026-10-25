@@ -3310,9 +3310,7 @@ pre.found-code {
   margin: 0 -9px -6px 0;
 }
 .screen-open {
-  display: grid;
-  gap: 5px;
-  justify-items: start;
+  display: block;
   min-width: 0;
   color: inherit;
   text-decoration: none;
@@ -3345,6 +3343,15 @@ pre.found-code {
   overflow: hidden;
   text-overflow: ellipsis;
   vertical-align: 1px;
+}
+.screen-what {
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.screen-open > .spam-chip {
+  display: flex;
+  width: fit-content;
+  margin-top: 5px;
 }
 .spam-chip.is-customer {
   border-color: color-mix(in srgb, var(--palm-ink) 35%, transparent);
