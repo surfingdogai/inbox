@@ -383,13 +383,6 @@ interface PingResult {
 }
 
 /**
- * The ping, signed sdi-instance/1 with the receipt key when this instance has one (ADR-017 §7.3):
- * signed, it is answered with the business's standing; unsigned, it is taken as it always was
- * (R18). A network that answers a signed ping 401 is pinged again unsigned at once, so a network
- * that does not take signatures never stops hearing from this inbox. Each call is signed afresh:
- * a signature is good once.
- */
-/**
  * The SHA-256 of the manifest served at `origin`, in lowercase hex, for the ping. Null when this
  * inbox was given no way to read it, or reading it failed: the ping goes all the same, without it.
  */
@@ -411,6 +404,13 @@ async function signingKey(deps: NetworkDeps): Promise<InstanceSigningKey | null>
   }
 }
 
+/**
+ * The ping, signed sdi-instance/1 with the receipt key when this instance has one (ADR-017 §7.3):
+ * signed, it is answered with the business's standing; unsigned, it is taken as it always was
+ * (R18). A network that answers a signed ping 401 is pinged again unsigned at once, so a network
+ * that does not take signatures never stops hearing from this inbox. Each call is signed afresh:
+ * a signature is good once.
+ */
 async function signedPing(
   deps: NetworkDeps,
   url: string,
