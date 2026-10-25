@@ -277,6 +277,29 @@ describe("importing", () => {
     });
   });
 
+  it("prices `$` and `kr` in the business's own dollars or crowns, and orders in them", async () => {
+    // A shop in Sydney, one in Toronto and one in Bergen: `$` and `kr` were US dollars and Swedish crowns.
+    for (const [currency, cell, value] of [
+      ["AUD", "$25.00", 2_500],
+      ["CAD", "$25.00", 2_500],
+      ["NOK", "199,00 kr", 19_900],
+    ] as const) {
+      const { caps } = await setup();
+      await caps.setup.updateProfile(owner, { currency });
+      const feed = await caps.feeds.add(owner, { url: "https://shop.example.com/feed.csv" });
+      await caps.feeds.importBody(feed.id, ["id,title,price", `B1,Bell,"${cell}"`].join("\n"), T0);
+      const [bell] = (await caps.listProducts({ limit: 50 })).items;
+      expect(bell?.price, currency).toEqual({ value, currency });
+      const order = await confirming(caps).createOrder(customer, {
+        payload: {
+          orderedItem: [{ productId: bell?.id, name: "Bell", quantity: 1, price: { value, currency } }],
+          totalPrice: { value, currency },
+        },
+      });
+      expect(order.view.item.payload, currency).toMatchObject({ totalPrice: { value, currency } });
+    }
+  });
+
   it("changes a price when its sale starts and ends, not at the next read", async () => {
     const { db, caps } = await setup();
     await caps.updateSettings(owner, { doc: { business: { currency: "USD" } } });

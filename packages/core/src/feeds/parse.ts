@@ -162,87 +162,165 @@ function mapColumns(headers: readonly string[]): { index: Record<string, number>
 
 /* --- Money -------------------------------------------------------------- */
 
-/**
- * Longest symbol first, and the lookup honours that order. `"R$".includes("$")` is true, so a
- * shorter symbol tested first claims every price carrying the longer one, and Brazilian reais
- * were stored as dollars.
- */
-const CURRENCY_SYMBOLS: ReadonlyArray<readonly [string, string]> = [
-  ["R$", "BRL"],
-  ["zł", "PLN"],
-  ["Kč", "CZK"],
-  ["kr", "SEK"],
-  ["€", "EUR"],
-  ["£", "GBP"],
-  ["¥", "JPY"],
-  ["$", "USD"],
+/** The currencies whose sign is `$`. */
+const DOLLARS = [
+  ..."USD CAD AUD NZD MXN SGD HKD TWD ARS CLP COP CUP DOP UYU".split(" "),
+  ..."BSD BBD BZD BMD BND KYD FJD GYD JMD LRD NAD SBD SRD TTD XCD".split(" "),
 ];
 
 /**
- * ISO 4217: what a small European shop prices in, plus the majors. The check exists because a
- * price cell reads `12.99 EUR incl. VAT` as often as it reads `12.99 EUR`, and matching any
- * three-letter uppercase token stored the product in a currency called VAT. Or RRP. Or NEW.
+ * A currency's sign, the currencies that write it, and what it means in a feed whose currency is none
+ * of them (null: nothing it can be taken to mean). A sign several currencies write is the feed's own
+ * currency when that is one of them: `$25.00` is Australian dollars in a shop in Sydney, and `kr` is
+ * Norwegian crowns in Bergen. A sign with its country's letters (`A$`, `C$`, `HK$`) names one.
+ *
+ * Tested longest first (`CURRENCY_SIGNS`). `"R$".includes("$")` is true, so a shorter sign tested
+ * first claims every price carrying the longer one, and Brazilian reais were stored as dollars.
+ *
+ * A sign whose currency is not counted in hundredths (`¥`, `₩`, `円`, `د.ك`) is here so that it gives
+ * no price, never the feed's currency at a hundred or a thousand times the amount.
  */
-const ISO_CURRENCIES = new Set([
-  "AED",
-  "ARS",
-  "AUD",
-  "BGN",
-  "BRL",
-  "CAD",
-  "CHF",
-  "CLP",
-  "CNY",
-  "COP",
-  "CZK",
-  "DKK",
-  "EGP",
-  "EUR",
-  "GBP",
-  "HKD",
-  "HRK",
-  "HUF",
-  "IDR",
-  "ILS",
-  "INR",
-  "ISK",
-  "JPY",
-  "KRW",
-  "MAD",
-  "MXN",
-  "MYR",
-  "NGN",
-  "NOK",
-  "NZD",
-  "PEN",
-  "PHP",
-  "PLN",
-  "RON",
-  "RSD",
-  "RUB",
-  "SAR",
-  "SEK",
-  "SGD",
-  "THB",
-  "TRY",
-  "TWD",
-  "UAH",
-  "USD",
-  "UYU",
-  "VND",
-  "ZAR",
+const SIGNS: ReadonlyArray<readonly [string, readonly string[], string | null]> = [
+  ["US$", ["USD"], "USD"],
+  ["CA$", ["CAD"], "CAD"],
+  ["AU$", ["AUD"], "AUD"],
+  ["NZ$", ["NZD"], "NZD"],
+  ["HK$", ["HKD"], "HKD"],
+  ["MX$", ["MXN"], "MXN"],
+  ["NT$", ["TWD"], "TWD"],
+  ["RD$", ["DOP"], "DOP"],
+  ["TT$", ["TTD"], "TTD"],
+  ["CN¥", ["CNY"], "CNY"],
+  ["JP¥", ["JPY"], "JPY"],
+  ["ر.ع.", ["OMR"], "OMR"],
+  ["د.م.", ["MAD"], "MAD"],
+  ["R$", ["BRL"], "BRL"],
+  ["E£", ["EGP"], "EGP"],
+  ["A$", ["AUD"], "AUD"],
+  ["C$", ["CAD", "NIO"], "CAD"],
+  ["S$", ["SGD"], "SGD"],
+  ["J$", ["JMD"], "JMD"],
+  ["zł", ["PLN"], "PLN"],
+  ["Kč", ["CZK"], "CZK"],
+  ["kr", ["SEK", "NOK", "DKK", "ISK"], "SEK"],
+  // Arabic: the dirham, riyal, rial, dinar and pound of each country by its own letters.
+  ["د.إ", ["AED"], "AED"],
+  ["ر.س", ["SAR"], "SAR"],
+  ["ر.ق", ["QAR"], "QAR"],
+  ["ر.ع", ["OMR"], "OMR"],
+  ["ر.ي", ["YER"], "YER"],
+  ["د.ك", ["KWD"], "KWD"],
+  ["د.ب", ["BHD"], "BHD"],
+  ["د.ا", ["JOD"], "JOD"],
+  ["د.أ", ["JOD"], "JOD"],
+  ["د.ع", ["IQD"], "IQD"],
+  ["د.ت", ["TND"], "TND"],
+  ["د.ج", ["DZD"], "DZD"],
+  ["د.م", ["MAD"], "MAD"],
+  ["ل.د", ["LYD"], "LYD"],
+  ["ج.م", ["EGP"], "EGP"],
+  ["ل.ل", ["LBP"], "LBP"],
+  ["ل.س", ["SYP"], "SYP"],
+  ["€", ["EUR"], "EUR"],
+  ["£", ["GBP", "GIP", "FKP", "SHP", "EGP"], "GBP"],
+  ["¥", ["JPY", "CNY"], "JPY"],
+  ["￥", ["JPY", "CNY"], "JPY"],
+  ["円", ["JPY"], "JPY"],
+  ["元", ["CNY", "TWD", "HKD", "MOP"], "CNY"],
+  ["圆", ["CNY"], "CNY"],
+  ["圓", ["TWD", "HKD", "MOP"], "TWD"],
+  ["₩", ["KRW", "KPW"], "KRW"],
+  ["￦", ["KRW", "KPW"], "KRW"],
+  ["원", ["KRW"], "KRW"],
+  ["₫", ["VND"], "VND"],
+  ["₲", ["PYG"], "PYG"],
+  ["₹", ["INR"], "INR"],
+  ["₪", ["ILS"], "ILS"],
+  ["₺", ["TRY"], "TRY"],
+  ["₽", ["RUB"], "RUB"],
+  ["₴", ["UAH"], "UAH"],
+  ["฿", ["THB"], "THB"],
+  ["₱", ["PHP"], "PHP"],
+  ["₦", ["NGN"], "NGN"],
+  ["₡", ["CRC", "SVC"], "CRC"],
+  ["₵", ["GHS"], "GHS"],
+  ["₸", ["KZT"], "KZT"],
+  ["₼", ["AZN"], "AZN"],
+  ["₾", ["GEL"], "GEL"],
+  ["₭", ["LAK"], "LAK"],
+  ["₮", ["MNT"], "MNT"],
+  ["৳", ["BDT"], "BDT"],
+  ["៛", ["KHR"], "KHR"],
+  ["֏", ["AMD"], "AMD"],
+  ["؋", ["AFN"], "AFN"],
+  // The rupee sign and the rial sign are several countries': only the feed's own currency says which.
+  ["₨", ["PKR", "LKR", "NPR", "MUR", "SCR", "INR"], null],
+  ["﷼", ["SAR", "QAR", "OMR", "YER", "IRR"], null],
+  ["$", DOLLARS, "USD"],
+  ["＄", DOLLARS, "USD"],
+];
+/** `SIGNS`, longest first. */
+const CURRENCY_SIGNS = [...SIGNS].sort((a, b) => b[0].length - a[0].length);
+
+/**
+ * Three capital letters a price cell carries that are not a currency, whatever the runtime lists:
+ * `12.99 EUR incl. VAT` is as common as `12.99 EUR`, and a product was once stored in a currency
+ * called VAT. Or RRP. Or NEW. With them, the ISO codes that are also English words a cell carries in
+ * capitals (ALL, TOP, CUP, SOS, BAM): a business that prices in one sets its currency, and a bare
+ * number is read in it.
+ */
+const NOT_CURRENCIES = new Set([
+  "VAT",
+  "RRP",
+  "SRP",
+  "UVP",
+  "PVP",
+  "NEW",
+  "NOW",
+  "WAS",
+  "OFF",
+  "TAX",
+  "NET",
+  "INC",
+  "EXC",
+  "GST",
+  "HST",
+  "PST",
+  "QST",
+  "IVA",
+  "TVA",
+  "BTW",
+  "MVA",
+  "ALV",
+  "DPH",
+  "PDV",
+  "DDV",
+  "KDV",
+  "TTC",
+  "POA",
+  "TBC",
+  "PER",
+  "PCS",
+  "BOX",
+  "SET",
+  "ALL",
+  "TOP",
+  "CUP",
+  "SOS",
+  "BAM",
 ]);
 
 /**
- * Currencies a price cell may name that are not counted in hundredths (`util/locale.ts`): none
- * (yen, won, pesos, francs), or thousandths (dinars, rials). Recognised so that a row naming one is
- * never priced in the default currency instead; and then given no price, since every amount here
- * is kept in hundredths and no door takes these: ¥4,980 would read as ¥49.80, and 12.500 KWD as
- * twelve thousand five hundred.
+ * ISO 4217 currencies not counted in hundredths (`util/locale.ts`): none (yen, won, pesos, francs),
+ * thousandths (dinars, rials), ten-thousandths, and the funds and metals. Recognised so that a row
+ * naming one is never priced in the default currency instead; and then given no price, since every
+ * amount here is kept in hundredths and no door takes these: ¥4,980 would read as ¥49.80, and
+ * 12.500 KWD as twelve thousand five hundred.
  */
 const UNCOUNTED_CURRENCIES = new Set([
   "BHD",
   "BIF",
+  "CLF",
   "CLP",
   "DJF",
   "GNF",
@@ -259,12 +337,41 @@ const UNCOUNTED_CURRENCIES = new Set([
   "RWF",
   "TND",
   "UGX",
+  "UYI",
+  "UYW",
   "VND",
   "VUV",
   "XAF",
+  "XAG",
+  "XAU",
+  "XDR",
   "XOF",
+  "XPD",
   "XPF",
+  "XPT",
+  "XSU",
 ]);
+
+/**
+ * The currency a price cell is in: the ISO code it names, else the sign it carries, else the feed's
+ * own (`fallback`). Any code counted in hundredths is read (`isHundredthsCurrency`, every one the
+ * runtime knows), as is one that is not, to give no price in it. Null for a currency sign it cannot
+ * name (`¢`, `₿`, or the rupee sign in a feed priced in euros): not the feed's currency, and none
+ * it can price in.
+ */
+function currencyOf(text: string, fallback: string): string | null {
+  for (const match of text.matchAll(/\b([A-Z]{3})\b/g)) {
+    const code = match[1] as string;
+    if (NOT_CURRENCIES.has(code)) continue;
+    if (isHundredthsCurrency(code) || UNCOUNTED_CURRENCIES.has(code)) return code;
+  }
+  for (const [sign, users, otherwise] of CURRENCY_SIGNS) {
+    if (text.includes(sign)) return users.includes(fallback) ? fallback : otherwise;
+  }
+  // Any other currency's sign (Unicode's Sc): some currency, and not one to take for the feed's.
+  if (/\p{Sc}/u.test(text)) return null;
+  return fallback;
+}
 
 /**
  * `12.99 EUR`, `EUR 12.99`, `€12,99`, `1.234,56 €`, `£9` and a bare `9.5` all have to land on the
@@ -276,7 +383,8 @@ const UNCOUNTED_CURRENCIES = new Set([
  * separator is a grouping mark otherwise.
  *
  * Null for no price to sell at: none written, nothing or less (a placeholder `0.00`, a refund's
- * `-5.00`), or a currency not counted in hundredths, named or by default.
+ * `-5.00`), or in a currency not counted in hundredths, named, by its sign or by default, or a
+ * sign that names no currency it can price in.
  */
 export function parsePrice(raw: string, defaultCurrency: string): { value: number; currency: string } | null {
   return readPrice(raw, defaultCurrency).price;
@@ -294,28 +402,10 @@ function readPrice(
   const none = { price: null, unsellable: false };
   const text = raw.trim();
   if (text === "") return none;
-
-  let currency = "";
-  for (const match of text.matchAll(/\b([A-Z]{3})\b/g)) {
-    const code = match[1] as string;
-    if (ISO_CURRENCIES.has(code) || UNCOUNTED_CURRENCIES.has(code)) {
-      currency = code;
-      break;
-    }
-  }
-  if (currency === "") {
-    for (const [symbol, code] of CURRENCY_SYMBOLS) {
-      if (text.includes(symbol)) {
-        currency = code;
-        break;
-      }
-    }
-  }
-  if (currency === "") currency = defaultCurrency.toUpperCase();
-
   const number = readNumber(text);
   if (!number) return none;
-  if (!isHundredthsCurrency(currency)) return { price: null, unsellable: true };
+  const currency = currencyOf(text, defaultCurrency.toUpperCase());
+  if (currency === null || !isHundredthsCurrency(currency)) return { price: null, unsellable: true };
   const value = Number(number.whole) * 100 + Number(`${number.fraction}00`.slice(0, 2));
   // Nothing or less is a placeholder, or a refund, never a price to sell at.
   if (!Number.isFinite(value) || value <= 0 || number.negative) return { price: null, unsellable: true };

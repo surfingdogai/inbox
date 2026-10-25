@@ -50,6 +50,62 @@ describe("parsePrice", () => {
     expect(parsePrice("2.500,50 HUF", "EUR")).toEqual({ value: 250_050, currency: "HUF" });
   });
 
+  it("gives no price for such a currency written with its own sign, nor reads the sign as the default", () => {
+    // Dinars, won, yen and dong by their signs were read as euros or dollars, at a hundred or a
+    // thousand times the amount: 12.500 د.ك was €12,500.00.
+    for (const [raw, fallback] of [
+      ["12.500 د.ك", "EUR"],
+      ["1.250 د.ب", "EUR"],
+      ["3.500 ر.ع.", "EUR"],
+      ["₩12,000", "EUR"],
+      ["4,980円", "USD"],
+      ["₫50.000", "USD"],
+      ["₲ 150.000", "USD"],
+    ] as const) {
+      expect(parsePrice(raw, fallback), raw).toBeNull();
+    }
+    // A sign it cannot name is no price either, rather than the business's currency: 99¢ is not €99.
+    for (const raw of ["99¢", "₿0.01", "₨ 250", "250 ﷼"]) expect(parsePrice(raw, "EUR"), raw).toBeNull();
+    // A currency's own sign is read in that currency.
+    expect(parsePrice("₹250.00", "EUR")).toEqual({ value: 25_000, currency: "INR" });
+    expect(parsePrice("₺120,00", "EUR")).toEqual({ value: 12_000, currency: "TRY" });
+    expect(parsePrice("25.00 د.إ", "EUR")).toEqual({ value: 2_500, currency: "AED" });
+    // And a sign several currencies write is the business's, when it is one of them.
+    expect(parsePrice("₨ 250", "PKR")).toEqual({ value: 25_000, currency: "PKR" });
+    expect(parsePrice("250 ﷼", "SAR")).toEqual({ value: 25_000, currency: "SAR" });
+  });
+
+  it("reads a sign the business's currency writes as the business's currency", () => {
+    // `$` is the Australian, Canadian and Mexican sign as much as the American, and `kr` the
+    // Norwegian and Danish as much as the Swedish: a shop in Sydney was stored in US dollars.
+    expect(parsePrice("$25.00", "AUD")).toEqual({ value: 2_500, currency: "AUD" });
+    expect(parsePrice("$25.00", "CAD")).toEqual({ value: 2_500, currency: "CAD" });
+    expect(parsePrice("$249.00", "MXN")).toEqual({ value: 24_900, currency: "MXN" });
+    expect(parsePrice("199,00 kr", "NOK")).toEqual({ value: 19_900, currency: "NOK" });
+    expect(parsePrice("199,00 kr", "DKK")).toEqual({ value: 19_900, currency: "DKK" });
+    expect(parsePrice("¥98.00", "CNY")).toEqual({ value: 9_800, currency: "CNY" });
+    // In a feed priced in none of them, the sign is what it means most often, as before.
+    expect(parsePrice("$25.00", "EUR")).toEqual({ value: 2_500, currency: "USD" });
+    expect(parsePrice("199,00 kr", "EUR")).toEqual({ value: 19_900, currency: "SEK" });
+    // A sign with its country's letters names that one currency, whatever the business's.
+    expect(parsePrice("A$25.00", "EUR")).toEqual({ value: 2_500, currency: "AUD" });
+    expect(parsePrice("C$25.00", "EUR")).toEqual({ value: 2_500, currency: "CAD" });
+    expect(parsePrice("NZ$25.00", "EUR")).toEqual({ value: 2_500, currency: "NZD" });
+    expect(parsePrice("US$25.00", "AUD")).toEqual({ value: 2_500, currency: "USD" });
+    expect(parsePrice("HK$25.00", "EUR")).toEqual({ value: 2_500, currency: "HKD" });
+    expect(parsePrice("S$25.00", "EUR")).toEqual({ value: 2_500, currency: "SGD" });
+  });
+
+  it("reads any currency counted in hundredths by its code, not only those of a short list", () => {
+    // A code missing from the list was priced in the business's currency instead: 45.00 QAR was €45.00.
+    expect(parsePrice("45.00 QAR", "EUR")).toEqual({ value: 4_500, currency: "QAR" });
+    expect(parsePrice("1,299.50 PKR", "EUR")).toEqual({ value: 129_950, currency: "PKR" });
+    expect(parsePrice("KES 1,500.00", "EUR")).toEqual({ value: 150_000, currency: "KES" });
+    expect(parsePrice("25.00 GEL", "EUR")).toEqual({ value: 2_500, currency: "GEL" });
+    expect(parsePrice("4 500,00 KZT", "EUR")).toEqual({ value: 450_000, currency: "KZT" });
+    expect(parsePrice("TTD 25.00", "EUR")).toEqual({ value: 2_500, currency: "TTD" });
+  });
+
   it("refuses what is not a price", () => {
     expect(parsePrice("", "EUR")).toBeNull();
     expect(parsePrice("on request", "EUR")).toBeNull();
