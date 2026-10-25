@@ -72,8 +72,8 @@ describe("a row priced in a currency we do not count, or at nothing", () => {
     expect(csv.map((p) => [p.externalId, p.price, p.available])).toEqual([
       ["K1", null, false],
       ["J1", null, false],
-      // Nothing is a price left out, as an empty cell is: kept off sale until it has one.
-      ["Z1", null, null],
+      // Nothing is a price, but none to sell at: kept off sale, at the price it last had.
+      ["Z1", null, false],
       ["E1", { value: 850, currency: "EUR" }, null],
     ]);
     const xml = parseFeed(

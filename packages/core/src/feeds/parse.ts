@@ -282,12 +282,16 @@ export function parsePrice(raw: string, defaultCurrency: string): { value: numbe
   return readPrice(raw, defaultCurrency).price;
 }
 
-/** `parsePrice`, and whether the cell named a price in a currency not counted here (`uncounted`). */
+/**
+ * `parsePrice`, and whether the cell names a price but none it can be sold at (`unsellable`): in a
+ * currency not counted here, or nothing or less. Such a row is kept off sale at the price it last had,
+ * where one left empty keeps that price on sale.
+ */
 function readPrice(
   raw: string,
   defaultCurrency: string,
-): { price: { value: number; currency: string } | null; uncounted: boolean } {
-  const none = { price: null, uncounted: false };
+): { price: { value: number; currency: string } | null; unsellable: boolean } {
+  const none = { price: null, unsellable: false };
   const text = raw.trim();
   if (text === "") return none;
 
@@ -311,11 +315,11 @@ function readPrice(
 
   const number = readNumber(text);
   if (!number) return none;
-  if (!isHundredthsCurrency(currency)) return { price: null, uncounted: true };
+  if (!isHundredthsCurrency(currency)) return { price: null, unsellable: true };
   const value = Number(number.whole) * 100 + Number(`${number.fraction}00`.slice(0, 2));
-  // Nothing or less is a placeholder, or a refund, never a price to sell at: no price, as one left out.
-  if (!Number.isFinite(value) || value <= 0 || number.negative) return none;
-  return { price: { value, currency }, uncounted: false };
+  // Nothing or less is a placeholder, or a refund, never a price to sell at.
+  if (!Number.isFinite(value) || value <= 0 || number.negative) return { price: null, unsellable: true };
+  return { price: { value, currency }, unsellable: false };
 }
 
 /**
@@ -371,7 +375,7 @@ type Money = { readonly value: number; readonly currency: string };
 /** What a row sells at now (`sellingPrice`), and when that changes by its sale's dates. */
 interface Selling {
   readonly price: Money | null;
-  /** The row names a price, but none it can be sold at now: kept off sale, not at its last price. */
+  /** The row names a price, but none it can be sold at now: kept off sale, not on sale at its last price. */
   readonly offSale: boolean;
   /** The instants its sale starts and ends after now, with the price from each. */
   readonly changes: readonly { readonly at: number; readonly price: Money | null }[];
@@ -383,8 +387,8 @@ interface Selling {
  * cannot be read does not. An ended sale whose price the feed still carries is over. The moments a
  * sale starts and ends after the read are given with the price from each, so the price changes then,
  * not at the next read. A row whose only price is a sale that is not on, or is priced in a currency
- * not counted here, has a price but none to sell at now: it is kept off sale (`offSale`), rather than
- * at the price it last had.
+ * not counted here or at nothing or less, has a price but none to sell at now: it is kept off sale
+ * (`offSale`), rather than on sale at the price it last had.
  */
 function sellingPrice(regularCell: string, saleCell: string, window: string, at: PriceClock): Selling {
   const offer = readPrice(saleCell, at.currency);
@@ -403,7 +407,8 @@ function sellingPrice(regularCell: string, saleCell: string, window: string, at:
     changes.push({ at: t, price: next });
     last = next;
   }
-  const offSale = price === null && (regular.uncounted || (offer.price !== null && !regular.price) || offer.uncounted);
+  const offSale =
+    price === null && (regular.unsellable || (offer.price !== null && !regular.price) || offer.unsellable);
   return { price, offSale, changes };
 }
 

@@ -249,6 +249,34 @@ describe("importing", () => {
     ).rejects.toMatchObject({ code: "invalid_input" });
   });
 
+  it("takes a product off sale at its last price when the feed now prices it at nothing or less", async () => {
+    const { caps } = await setup();
+    await caps.updateSettings(owner, { doc: { business: { currency: "EUR" } } });
+    const feed = await caps.feeds.add(owner, { url: "https://shop.example.com/feed.csv" });
+    await caps.feeds.importBody(feed.id, ["id,title,price", "A1,Tea,12.00", "A2,Mug,8.00"].join("\n"), T0);
+    // A shop that marks what it no longer sells at 0.00, or a refund's -5.00: neither stays on sale.
+    await caps.feeds.importBody(feed.id, ["id,title,price", "A1,Tea,0.00", "A2,Mug,-5.00"].join("\n"), T0 + 1000);
+    const all = await caps.setup.listProducts(owner);
+    expect(all.find((p) => p.name === "Tea")).toMatchObject({ active: 0, price: { value: 1_200, currency: "EUR" } });
+    expect(all.find((p) => p.name === "Mug")).toMatchObject({ active: 0, price: { value: 800, currency: "EUR" } });
+    expect((await caps.listProducts({ limit: 50 })).items).toEqual([]);
+    const tea = all.find((p) => p.name === "Tea");
+    await expect(
+      confirming(caps).createOrder(customer, {
+        payload: {
+          orderedItem: [{ productId: tea?.id, name: "Tea", quantity: 1, price: { value: 1_200, currency: "EUR" } }],
+          totalPrice: { value: 1_200, currency: "EUR" },
+        },
+      }),
+    ).rejects.toMatchObject({ code: "invalid_input" });
+    // A price again puts it back on sale.
+    await caps.feeds.importBody(feed.id, ["id,title,price", "A1,Tea,12.50", "A2,Mug,8.00"].join("\n"), T0 + 2000);
+    expect((await caps.setup.listProducts(owner)).find((p) => p.name === "Tea")).toMatchObject({
+      active: 1,
+      price: { value: 1_250, currency: "EUR" },
+    });
+  });
+
   it("changes a price when its sale starts and ends, not at the next read", async () => {
     const { db, caps } = await setup();
     await caps.updateSettings(owner, { doc: { business: { currency: "USD" } } });

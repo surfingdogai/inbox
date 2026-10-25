@@ -54,7 +54,9 @@ The decimal separator is decided by what follows it: two digits or fewer make it
 
 If a price states no currency, your business currency is used, or the one you gave the feed. A three-letter word that is not a real currency code is ignored rather than believed, so `12.99 incl VAT` is not priced in VAT.
 
-Every price here is counted in hundredths of its currency. A price in a currency that is not, such as yen (`4980 JPY`, `¥4,980`), won or Kuwaiti dinars (`12.500 KWD`), is not read as a price, never as euros or a thousand times the amount: the product is kept off sale. A price of nothing or less, such as a placeholder `0.00`, counts as no price.
+Every price here is counted in hundredths of its currency. A price in a currency that is not, such as yen (`4980 JPY`, `¥4,980`), won or Kuwaiti dinars (`12.500 KWD`), is not read as a price, never as euros or a thousand times the amount: the product is kept off sale.
+
+A price of nothing or less, such as a placeholder `0.00` or a refund's `-5.00`, is no price to sell at either: the product is kept off sale, with the price it last had, until the feed gives it a price again. A price left empty is different: the product keeps the price it last had, and stays on sale.
 
 ## What it never does
 
