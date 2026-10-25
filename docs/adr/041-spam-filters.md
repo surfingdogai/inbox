@@ -42,7 +42,8 @@ switched on.*
    stranger's: pitchers use real mailboxes because they want replies. An address on Let through, or a
    mailbox a person trusted, makes a request known only where something vouched for the address (mail
    a server authenticated with DMARC or aligned DKIM, a pass that proved it): typed at a form, given to an
-   assistant or on mail nobody signed, it is a stranger's, since anyone can type it. A trusted sender
+   assistant or on mail nobody signed, it is read as a stranger's is, since anyone can type it, and only
+   ever labelled, since a person let it through. A trusted sender
    still gets the checks that point at a third party (a server mark, a look-alike, a disguised link, a
    change of bank details), as a label only; a request of theirs under an address nothing vouched for is
    also labelled for a failed DMARC and for a scam's phrases, since it may not be theirs.

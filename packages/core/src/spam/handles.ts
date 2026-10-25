@@ -167,6 +167,8 @@ export async function handlesOf(
 export interface HandleStanding {
   /** A handle a person trusted (Let it in, Not spam, Looks fine) with no spam mark since. */
   readonly trusted: boolean;
+  /** A mailbox a person trusted, named where nothing vouched for the address: it is screened, and only labelled. */
+  readonly trustedAddress: boolean;
   /** A handle the sender proved (the confirm link), never marked as spam: their budgets are wider. */
   readonly proven: boolean;
   /** Per handle, the new conversations it started today. */
@@ -178,9 +180,10 @@ const keyOf = (h: Handle) => `${h.kind} ${h.ref}`;
 export async function standingOf(db: Db, sender: SenderHandles, now: number): Promise<HandleStanding> {
   const today = new Map<string, number>();
   let trusted = false;
+  let trustedAddress = false;
   let proven = false;
   const all = [...new Map([...sender.handles, ...sender.counted].map((h) => [keyOf(h), h])).values()];
-  if (all.length === 0) return { trusted, proven, today };
+  if (all.length === 0) return { trusted, trustedAddress, proven, today };
   const { rows } = await db.client.query({
     sql: `SELECT kind, ref, day, firsts, proven_at, trusted_at, marked_at FROM spam_handles
            WHERE ${all.map(() => "(kind = ? AND ref = ?)").join(" OR ")}`,
@@ -198,10 +201,13 @@ export async function standingOf(db: Db, sender: SenderHandles, now: number): Pr
     // A person's trust holds until a spam mark after it, and a mailbox's only where something vouched
     // for the address; a sender's own proof, only while nothing they sent was ever marked as spam: a
     // pitcher's real mailbox proves nothing about the next pitch.
-    if (Number(r[5] ?? 0) > marked && !(sender.unsigned && r[0] === "mailbox")) trusted = true;
+    if (Number(r[5] ?? 0) > marked) {
+      if (sender.unsigned && r[0] === "mailbox") trustedAddress = true;
+      else trusted = true;
+    }
     if (Number(r[4] ?? 0) > 0 && marked === 0) proven = true;
   }
-  return { trusted, proven, today };
+  return { trusted, trustedAddress, proven, today };
 }
 
 export interface BudgetCheck {

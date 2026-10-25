@@ -9,7 +9,15 @@ import { WriteError } from "../write/errors";
 import { SHARED_MAIL_PROVIDERS } from "./data";
 import { answerSignals, type Decision, decide, decidedAtDoor } from "./decide";
 import { basicLearningUntil, type FilterState, filterStates } from "./filters";
-import { checkBudgets, countFirstStatements, handleRef, handlesOf, type SenderHandles, standingOf } from "./handles";
+import {
+  checkBudgets,
+  countFirstStatements,
+  handleRef,
+  handlesOf,
+  itemHandles,
+  type SenderHandles,
+  standingOf,
+} from "./handles";
 import { buildPrompt, type JudgeMessage, type JudgePort, lendAnswer, runJudge } from "./judge";
 import { listOf } from "./lists";
 import { judgeText } from "./mask";
@@ -528,6 +536,9 @@ export async function screenAtDoor(deps: SpamDeps, ctx: DoorContext): Promise<Do
     allowed ||
     standing.trusted ||
     (strong && (await businessActed(db, ctx.match.joinPartyId as string)));
+  // Someone a person let through, named by an address nothing vouched for here: read, since anyone can
+  // type it, and only ever labelled, since a person let them through.
+  const letThrough = !known && (listed === "allow" || standing.trustedAddress);
 
   // A sender the business knows is never screened: only what points at a third party is checked,
   // and it can only label ("Confirm by phone before paying"): a hijacked mailbox is flagged and seen.
@@ -646,6 +657,7 @@ export async function screenAtDoor(deps: SpamDeps, ctx: DoorContext): Promise<Do
   const decision = decide({
     type: ctx.type,
     signals,
+    trusted: letThrough,
     veto,
     choices: run.choices,
     learning: run.learning,
@@ -1042,9 +1054,15 @@ export async function runScreenJob(
 
   const veto = namesOwnOffer(reading.normalised, business.offers);
   const alerted = await ownerAlerted(db, input.eventId);
+  // Nothing the business knows is pending: one a person let through by its address was named where
+  // nothing vouched for it, and is only labelled.
+  const letThrough =
+    (await listOf(db, { email: item.email })) === "allow" ||
+    (await standingOf(db, await itemHandles(db, deps.secrets, input.itemId), now)).trusted;
   const decision = decide({
     type: item.type,
     signals,
+    trusted: letThrough,
     veto,
     choices: run.choices,
     learning: run.learning,

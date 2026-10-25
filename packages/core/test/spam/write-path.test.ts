@@ -432,6 +432,34 @@ describe("mail under an address on Let through", () => {
     );
     expect(await s.q("SELECT screen FROM items WHERE id = ?", [idOf(signed)])).toEqual([[null]]);
   });
+  it("is read but never put aside or held when typed where nothing vouches for it: a person let it through", async () => {
+    const s = await spamSetup({ filters: ["pitches"], judge: fakeJudge(pitchAnswer) });
+    await s.db.batch(
+      addToListStatements({
+        list: "allow",
+        kind: "address",
+        value: supplier.email,
+        partyId: null,
+        itemId: null,
+        byUser: "user_1",
+        now: T0 - DAY,
+      }),
+    );
+    const form = await s.caps.sendMessage(
+      visitor(T0),
+      { body: pitch, contact: supplier },
+      { screen: { door: "form", form: { key: "valid", trap: false, drawnAt: T0 - 90_000 } } },
+    );
+    const booking = await s.caps.createBooking(agent(T0 + MIN), {
+      payload: classPayload(s.svc),
+      contact: supplier,
+      message: pitch,
+    });
+    await s.drain(T0 + 5 * MIN);
+    expect(await s.q("SELECT screen FROM items WHERE id = ?", [idOf(form)])).toEqual([["warned"]]);
+    expect(await s.q("SELECT screen FROM items WHERE id = ?", [booking.view.item.id])).toEqual([["warned"]]);
+  });
+
   it("is screened when typed at the website form or by an assistant, which nothing vouches for", async () => {
     const s = await spamSetup({ filters: ["pitches", "scams"], judge: fakeJudge({ kind: "scam", certainty: "high" }) });
     await s.db.batch(

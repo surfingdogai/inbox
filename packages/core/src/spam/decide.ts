@@ -24,7 +24,10 @@ import {
 export interface DecideInput {
   readonly type: ItemType;
   readonly signals: readonly Signal[];
-  /** A sender the business knows: only checks that point at a third party ran, and they only label. */
+  /**
+   * A sender the business knows (only checks that point at a third party ran), or one a person let
+   * through, named by an address nothing vouched for: either is only ever labelled.
+   */
   readonly trusted?: boolean | undefined;
   /** It names one of the business's own services or products. */
   readonly veto?: boolean | undefined;
