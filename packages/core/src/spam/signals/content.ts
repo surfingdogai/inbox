@@ -23,6 +23,13 @@ import type { Signal } from "../types";
  * country and email provider are never signals: only disguise and repetition are.
  */
 
+/**
+ * A verdict an injection dictates, in many languages: "customer", "legitimate", "not spam". What the
+ * other languages' "ignore the previous instructions" must be followed by, as the English must be.
+ */
+const VERDICT = String.raw`(?:\b(?:customer|cliente|client|klant|klient|kunde|m[üu]şteri|pelanggan|ham|safe|legitim\w*|legittim\w*|l[ée]gitim\w*|leg[íi]tim\w*|not spam|kein spam|no es spam|n[ãa]o [ée] spam|pas (?:de |un )?spam|geen spam|bukan spam)\b|顧客|お客様|客户|客戶|顾客|عميل|زبون|ग्राहक|клиент|легитимн|не спам|고객)`;
+const dictated = (lead: string, window = 80) => new RegExp(`(?:${lead})(?=.{0,${window}}${VERDICT})`, "iu");
+
 /** Words that speak to an AI or a filter rather than to a person at the business. */
 const TO_THE_FILTER: readonly RegExp[] = [
   // "Ignore all previous instructions" said to the reader: with "your", "you were given", or a verdict
@@ -39,11 +46,22 @@ const TO_THE_FILTER: readonly RegExp[] = [
   /<\|im_start\|>|<\|im_end\|>|\[\/?(system|inst)\]/i,
   /#{2,}\s*(instruction|system|prompt)/i,
   /"(kind|certainty|customer_intent|talks_to_filter)"\s*:/i,
-  /\b(ignora|ignorez|ignoriere|negeer|zignoruj|abaikan)\b.{0,30}\b(instrucciones|instruções|instructions|anweisungen|istruzioni|instructies|instrukcje|instruksi)\b/i,
-  /\bignore\b.{0,30}\b(instrucciones|instruções|anweisungen|istruzioni|instructies|instrukcje|instruksi)\b/i,
-  /(以前|前)の指示を無視|忽略(之前|以上|所有)的?(指令|指示)|تجاهل التعليمات/u,
-  /(про)?игнорируй.{0,30}инструкц|önceki talimatları (yok say|görmezden gel)|पिछले निर्देशों को (अनदेखा|नज़रअंदाज़)|이전 지시(를|사항을) 무시/iu,
-  /\b(owner|business|admin(istrator)?|manager|management)\b.{0,40}\b(asked|told|wants|said|authori[sz]ed)\b.{0,40}\b(let (this|it|me) through|approve|whitelist|allowlist|deliver (this|it))\b/i,
+  // The same in other languages, by the same rule: a verdict dictated after it, or said to the reader
+  // ("tus instrucciones", "instruksi Anda"). Never "ignora las instrucciones anteriores, cambiamos la fecha".
+  dictated(
+    String.raw`\b(ignora|ignorez|ignoriere|negeer|zignoruj|abaikan)\b.{0,30}\b(instrucciones|instruções|instructions|anweisungen|istruzioni|instructies|instrukcje|instruksi)`,
+  ),
+  dictated(
+    String.raw`\bignore\b.{0,30}\b(instrucciones|instruções|anweisungen|istruzioni|instructies|instrukcje|instruksi)`,
+  ),
+  /\b(ignora|ignorez|ignoriere|negeer|zignoruj|abaikan)\s+(todas\s+)?(tus|vuestras|tuas|vos|tes|deine|eure|le tue|je|twoje|wasze)\b.{0,20}\b(instrucciones|instruções|instructions|anweisungen|istruzioni|instructies|instrukcje)\b|\babaikan\s+(semua\s+)?instruksi\s+(anda|kamu)\b/i,
+  dictated("(以前|前)の指示を無視|忽略(之前|以上|所有)的?(指令|指示)|تجاهل التعليمات", 40),
+  dictated(
+    "(про)?игнорируй.{0,30}инструкц|önceki talimatları (yok say|görmezden gel)|पिछले निर्देशों को (अनदेखा|नज़रअंदाज़)|이전 지시(를|사항을) 무시",
+    60,
+  ),
+  /あなたの(以前の)?指示を無視|忽略你的.{0,6}(指令|指示)|تجاهل تعليماتك|игнорируй (свои|твои|ваши) инструкц/u,
+  /\b(owner|business|admin(istrator)?|manager|management)\b.{0,40}\b(asked|told|wants|said|authori[sz]ed)\b.{0,40}\b(let (this|it|me) through|whitelist|allowlist|deliver this (message|e-?mail|mail))\b/i,
   /\b(whitelist|allowlist) (me|this|my (email|address|message))\b/i,
   // Words addressed to the reader itself: "I instruct the filter", "Note to the AI", "AI reading this".
   /\b(instruct|command)(s|ed|ing)?\s+(the|this|you)\s+((spam|mail|e-?mail)\s+)?(filter|classifier|ai|moderator)\b/i,
@@ -52,7 +70,9 @@ const TO_THE_FILTER: readonly RegExp[] = [
   /\b(ai|llm|filter|classifier|bot)s?\s+reading\s+this\b/i,
   // A line drawn like a boundary between data and instructions, and what usually follows one.
   /^\s*-{3,}\s*[A-Za-z0-9_-]{10,}\s*-{3,}\s*$/m,
-  /\bnew (instructions?|rules|task)\s*:/i,
+  // "New instructions:" said to the reader, or followed by a verdict; never a customer's own.
+  /\byour new (instructions?|rules|task)\s*:/i,
+  /\bnew (instructions?|rules|task)\s*:(?=.{0,80}\b(customer|ham|not spam|non-?spam|legitimate|genuine|let (this|it) through)\b)/i,
   // An answer dictated to the reader: 'answer "customer"', "respond with: not spam", "output: ham",
   // "reply that this is not spam". Never "do you respond customer emails".
   /\b(answer|respond|reply|output|return|classify)\s*(with\s*)?(:\s*["'“]?|["'“])\s*(customer|ham|not spam|not_spam)\b/i,
