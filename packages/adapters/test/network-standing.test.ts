@@ -10,6 +10,7 @@ import {
   readNetworkStatus,
   verifyInstanceRequest,
 } from "@surfingdog/core";
+import { sha256Hex } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { type NetworkDeps, networkPingHandler, networkPingOneHandler, pingNetworksNow } from "../src/network";
 import { freshDb } from "./db";
@@ -37,8 +38,14 @@ type Answer = (verified: boolean, headers: Record<string, string>) => Response;
 
 /** A network that knows the instance, checks every signed ping against its published keys, and answers with `answer`. */
 function network(keys: () => Promise<readonly PublicJwk[]>, answer: Answer) {
-  const calls: { url: string; signed: boolean; verified: boolean; error?: string; headers: Record<string, string> }[] =
-    [];
+  const calls: {
+    url: string;
+    signed: boolean;
+    verified: boolean;
+    error?: string;
+    headers: Record<string, string>;
+    body?: string;
+  }[] = [];
   const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const headers = (init?.headers ?? {}) as Record<string, string>;
@@ -69,7 +76,7 @@ function network(keys: () => Promise<readonly PublicJwk[]>, answer: Answer) {
         error = e instanceof Error ? e.message : String(e);
       }
     }
-    calls.push({ url, signed, verified, headers, ...(error ? { error } : {}) });
+    calls.push({ url, signed, verified, headers, body: String(init?.body ?? ""), ...(error ? { error } : {}) });
     return answer(verified, headers);
   }) as typeof fetch;
   return { calls, fetchImpl };
@@ -90,7 +97,7 @@ const standingAnswer =
         })
       : new Response(null, { status: 204 });
 
-async function setup(answer: Answer, opts: { secret?: boolean } = {}) {
+async function setup(answer: Answer, opts: { secret?: boolean; manifest?: NetworkDeps["manifest"] } = {}) {
   const { db } = await freshDb();
   const caps = new Capabilities(db, opts.secret === false ? null : createSecretBox([KEY]), BASE, 0);
   await caps.updateSettings(owner(T0), {
@@ -102,6 +109,7 @@ async function setup(answer: Answer, opts: { secret?: boolean } = {}) {
     version: "0.0.0",
     fetchImpl: net.fetchImpl,
     instanceKey: async () => (caps.secrets ? caps.receipts.keys.active() : null),
+    ...(opts.manifest ? { manifest: opts.manifest } : {}),
   };
   const runner = new JobRunner()
     .register(NETWORK_PING_KIND, networkPingHandler(deps))
@@ -149,6 +157,43 @@ describe("the signed ping", () => {
     });
     await s.ping(T0 + 3_600_000);
     expect(s.net.calls.filter((c) => c.url.endsWith("/v1/ranking"))).toHaveLength(1);
+  });
+
+  it("carries the SHA-256 of the manifest it serves, signed, so a network that holds another reads it at once", async () => {
+    const served: string[] = [];
+    const s = await setup(standingAnswer({ score: 0.5, tier: "building", ranked: true }), {
+      manifest: async (origin) => {
+        served.push(origin);
+        return JSON.stringify({ spec: "surfingdog-inbox/0", instance: origin, item_types: ["message"] });
+      },
+    });
+    await s.ping(T0);
+    const [ping] = s.net.calls.filter((c) => c.url.endsWith("/ping"));
+    expect(ping).toMatchObject({ signed: true, verified: true });
+    // The manifest as the network reads it, at the domain it pings for.
+    expect(served).toEqual(["https://demo.example.com"]);
+    const body = JSON.parse(ping?.body ?? "{}") as { manifest_sha256?: string };
+    const text = JSON.stringify({
+      spec: "surfingdog-inbox/0",
+      instance: "https://demo.example.com",
+      item_types: ["message"],
+    });
+    // Lowercase hex, as the protocol's ping schema has it.
+    expect(body.manifest_sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(body.manifest_sha256).toBe(await sha256Hex(new TextEncoder().encode(text)));
+  });
+
+  it("pings all the same, with no manifest_sha256, when the manifest cannot be read", async () => {
+    const s = await setup(standingAnswer({ score: 0.5, tier: "building", ranked: true }), {
+      manifest: async () => {
+        throw new Error("database busy");
+      },
+    });
+    await s.ping(T0);
+    const [ping] = s.net.calls.filter((c) => c.url.endsWith("/ping"));
+    expect(ping).toMatchObject({ signed: true, verified: true });
+    expect(JSON.parse(ping?.body ?? "{}")).not.toHaveProperty("manifest_sha256");
+    expect(await s.view()).toMatchObject({ last_ping_at: new Date(T0).toISOString(), last_error: null });
   });
 
   it("keeps the last standing, dated, when a later ping brings none", async () => {

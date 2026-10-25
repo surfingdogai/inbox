@@ -60,7 +60,7 @@ import {
   V2_ONLY_KINDS,
   wantsListed,
 } from "@surfingdog/core";
-import type { Statement } from "@surfingdog/platform";
+import { type Statement, sha256Hex } from "@surfingdog/platform";
 import { z } from "zod";
 import { pruneIdentity } from "./identity";
 import { pruneRateLimits } from "./limits";
@@ -129,6 +129,12 @@ export interface NetworkDeps {
    * own standing at the network; an unsigned one is taken as it always was.
    */
   readonly instanceKey?: (() => Promise<InstanceSigningKey | null>) | undefined;
+  /**
+   * The discovery manifest exactly as this inbox serves it at `origin`, as text. The hourly ping
+   * carries its SHA-256 (`manifest_sha256`, protocol §4.1), and a network that holds another fetches
+   * it at once, so a changed profile shows within minutes rather than at the next regular read.
+   */
+  readonly manifest?: ((origin: string) => Promise<string>) | undefined;
 }
 
 export interface PingCounts {
@@ -269,13 +275,17 @@ export function networkPingOneHandler(deps: NetworkDeps): JobHandler {
       return { note: instance.problem };
     }
     const domain = instance.domain;
+    // The key first: an inbox's first receipt key is made on first use, and the manifest publishes it.
+    const key = await signingKey(deps);
+    const manifestSha = await manifestDigest(deps, `https://${domain}`);
     const body = JSON.stringify({
       version: deps.version,
       runtime: runtimeName(db),
       ...(entry.share.counts ? { counts: await countLast24h(db, now) } : {}),
+      ...(manifestSha ? { manifest_sha256: manifestSha } : {}),
     });
     const pingUrl = `${network}/v1/instances/${encodeURIComponent(domain)}/ping`;
-    const ping = () => signedPing(deps, pingUrl, body, domain);
+    const ping = () => signedPing(deps, pingUrl, body, domain, key);
 
     const first = await ping();
     if (isOk(first.res)) {
@@ -379,13 +389,35 @@ interface PingResult {
  * that does not take signatures never stops hearing from this inbox. Each call is signed afresh:
  * a signature is good once.
  */
-async function signedPing(deps: NetworkDeps, url: string, body: string, domain: string): Promise<PingResult> {
-  let key: InstanceSigningKey | null = null;
+/**
+ * The SHA-256 of the manifest served at `origin`, in lowercase hex, for the ping. Null when this
+ * inbox was given no way to read it, or reading it failed: the ping goes all the same, without it.
+ */
+async function manifestDigest(deps: NetworkDeps, origin: string): Promise<string | null> {
+  if (!deps.manifest) return null;
   try {
-    key = deps.instanceKey ? await deps.instanceKey() : null;
+    return await sha256Hex(new TextEncoder().encode(await deps.manifest(origin)));
   } catch {
-    key = null;
+    return null;
   }
+}
+
+/** The key the ping is signed with, or null when this inbox cannot sign. */
+async function signingKey(deps: NetworkDeps): Promise<InstanceSigningKey | null> {
+  try {
+    return deps.instanceKey ? await deps.instanceKey() : null;
+  } catch {
+    return null;
+  }
+}
+
+async function signedPing(
+  deps: NetworkDeps,
+  url: string,
+  body: string,
+  domain: string,
+  key: InstanceSigningKey | null,
+): Promise<PingResult> {
   if (!key) return { res: await call(deps, url, body), signature: "unsigned" };
   const signed = await signInstanceRequest({ method: "POST", url, body, instance: `https://${domain}`, key });
   const res = await call(deps, url, body, MAX_BODY, signed.headers);

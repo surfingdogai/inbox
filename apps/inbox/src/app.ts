@@ -218,6 +218,13 @@ export function createInbox(deps: AppDeps): Inbox {
     // The hourly ping is signed with the receipt key when there is one (ADR-017 §7.3), and is then
     // answered with the business's own standing at each network.
     instanceKey: async () => (caps.secrets ? caps.receipts.keys.active() : null),
+    // The manifest exactly as this inbox serves it at that origin, read from its own door: the ping
+    // carries its SHA-256 (protocol §4.1), so a network that holds another reads it again at once.
+    manifest: async (origin: string) => {
+      const res = await app.request(new Request(`${origin}${MANIFEST_PATH}`));
+      if (!res.ok) throw new Error(`the manifest answered ${res.status}`);
+      return res.text();
+    },
   };
   // People (ADR-017 §2, §8): the network calls a create makes about its customer, and the mail a
   // one-time code goes out by. Without INBOX_SECRET_KEY the port cannot sign, and nothing is asked.

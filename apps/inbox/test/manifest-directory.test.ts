@@ -1,11 +1,14 @@
+import { pingNetworksNow } from "@surfingdog/adapters";
 import {
   type Caller,
   MANIFEST_PATH,
   type Manifest,
   manifestSchema,
+  networkSuccessStatement,
   productInput,
   serviceInput,
 } from "@surfingdog/core";
+import { sha256Hex } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { createInbox } from "../src/app";
 import { freshDb } from "./harness";
@@ -239,5 +242,42 @@ describe("the manifest's carried_requests (ADR-025)", () => {
     };
     expect((await flags(carried)).carried).toBe(true);
     expect((await flags(direct)).carried).toBeUndefined();
+  });
+});
+
+describe("the hourly ping", () => {
+  it("carries the SHA-256 of the manifest exactly as it is served (protocol §4.1)", async () => {
+    const db = await freshDb();
+    const NET = "https://net.example.com";
+    const pings: string[] = [];
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.endsWith("/ping")) {
+        pings.push(String(init?.body ?? ""));
+        return new Response(null, { status: 204 });
+      }
+      return Response.json({ version: 1 });
+    }) as typeof fetch;
+    const inbox = createInbox({
+      db,
+      now: () => NOW,
+      baseUrl: ORIGIN,
+      secretKey: "manifest-ping-test-secret-0123456789",
+      fetchImpl,
+      background: () => {},
+    });
+    await inbox.caps.updateSettings(owner, {
+      doc: {
+        business: { name: "Lakeside Bakery" },
+        networks: { [NET]: { enabled: true, share: { listing: true, counts: false, receipts: false } } },
+      },
+    });
+    await db.client.query(networkSuccessStatement(NET, NOW, { registration: "registered", pinged: true }));
+    await pingNetworksNow(db, NOW);
+    for (let i = 0; i < 10; i++) if ((await inbox.runner.runDue(db, { now: NOW })).claimed === 0) break;
+    expect(pings.length).toBeGreaterThan(0);
+    const served = await (await inbox.app.request(`${ORIGIN}${MANIFEST_PATH}`)).text();
+    const digest = await sha256Hex(new TextEncoder().encode(served));
+    for (const ping of pings) expect((JSON.parse(ping) as { manifest_sha256?: string }).manifest_sha256).toBe(digest);
   });
 });
