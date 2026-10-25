@@ -351,25 +351,40 @@ export async function heldForPrice(db: Db, item: Pick<Item, "id" | "type">, even
   return rows.length > 0;
 }
 
+/** An order's line as `heldForStock` counts it: the product it names, and how many. */
+export interface StockLine {
+  readonly productId?: string | undefined;
+  readonly sku?: string | undefined;
+  readonly quantity: number;
+}
+
 /** Why a rule asks a person instead of taking an order (`heldForStock`), in the owner's words. */
 export const IN_STOCK_REASON =
   "a person decides this, because it is for a product off sale or for more than you have in stock";
 
 /**
  * Why automation (a rule, the owner's AI, a key without `money:write`) may not take an order as it
- * stands, judged when it would: `accept` takes its lines, `accept_change` the lines of the change. A
- * line for a product off sale (`not_on_sale`), or more of a product than its counted stock, over all
- * its lines (`not_enough_stock`), is a person's to decide. Null when nothing holds it. Stock is never
- * counted down here.
+ * stands, or offer it, judged when it would: `accept` takes its lines, `accept_change` the lines of
+ * the change, and `propose` and `propose_change` send `offered`, the lines it would put to the
+ * customer, whose yes binds us. A line for a product off sale (`not_on_sale`), or more of a product
+ * than its counted stock, over all its lines (`not_enough_stock`), is a person's to decide. Null when
+ * nothing holds it. Stock is never counted down here.
  */
 export async function heldForStock(
   db: Db,
   item: Item,
   event: string,
+  offered?: readonly StockLine[],
 ): Promise<"not_on_sale" | "not_enough_stock" | null> {
   if (item.type !== "order") return null;
   const lines =
-    event === "accept" ? item.payload.orderedItem : event === "accept_change" ? item.payload.change?.orderedItem : null;
+    event === "accept"
+      ? item.payload.orderedItem
+      : event === "accept_change"
+        ? item.payload.change?.orderedItem
+        : event === "propose" || event === "propose_change"
+          ? offered
+          : null;
   if (!lines?.length) return null;
   const catalogue = await productsFor(db, lines);
   const wanted = new Map<string, { stock: number | null; quantity: number }>();

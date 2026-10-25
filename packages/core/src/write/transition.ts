@@ -68,6 +68,7 @@ import {
   linePricing,
   orderPersonalised,
   type PricingFor,
+  type StockLine,
   sameMoney,
 } from "./pricing";
 import {
@@ -398,6 +399,20 @@ async function attempt_(
   }
   if (effects.has("apply_change")) applyChange(item.type, payload);
   if (t.change && t.offer === "keep") delete payload.change;
+  // Nor offers what it may not take (`in_stock` above): the customer's yes to what we offer binds us,
+  // with nobody at the business looking, so lines for a product off sale or past its counted stock
+  // are a person's to send.
+  if (automation && item.type === "order" && (t.event === "propose" || t.event === "propose_change")) {
+    const offered = (payload[t.change ? "change" : "proposed"] as { orderedItem?: StockLine[] } | undefined)
+      ?.orderedItem;
+    if (await heldForStock(db, item, t.event, offered)) {
+      throw new WriteError(
+        "guard_failed",
+        "This offers a product we no longer sell, or more than we have in stock, so only the owner can send it. Tell the owner in a note (reply with internal: true) what you would do.",
+        { details: { guard: "in_stock", draft_for_owner: true } },
+      );
+    }
+  }
   // What automation offers, as it would go to the customer, against the owner's limits (ADR-018 §4):
   // its catalogue lines at this customer's price on the way. Outside them it is a draft for a person,
   // written once the checks every offer passes have passed.

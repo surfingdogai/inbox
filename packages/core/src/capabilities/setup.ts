@@ -4,7 +4,7 @@ import { isOwnerOrSystem } from "../access/outbound";
 import { businessFacts } from "../customer/audience";
 import { customerLang } from "../customer/lang";
 import type { Db } from "../db";
-import type { ItemType } from "../domain/types";
+import type { Item, ItemType } from "../domain/types";
 import { ulid } from "../ids";
 import { amountsIn, discountIn, speltAmountIn } from "../negotiation/amounts";
 import { allFloors, type FloorView, floorStatement } from "../negotiation/catalogue";
@@ -28,7 +28,7 @@ import { readSettings } from "../settings/schema";
 import { canonicalLanguages } from "../util/locale";
 import { type Caller, holdsMoney, isCustomer, isOwnerAssistant, isPerson, nowOf } from "../write/caller";
 import { fromZod, WriteError } from "../write/errors";
-import { heldForPrice, heldForStock } from "../write/pricing";
+import { heldForPrice, heldForStock, type StockLine } from "../write/pricing";
 import { RULE_SKIPPED_EVENT } from "../write/skipped";
 import { rowToItem } from "../write/views";
 import { NO_HOURS, type Weekly } from "./availability";
@@ -640,7 +640,7 @@ export class SetupCapabilities {
     for (const [i, a] of actions.entries()) {
       if (!matched || a.action !== "transition") continue;
       if (await heldForPrice(this.db, item, a.event)) why = "price";
-      else if (await heldForStock(this.db, item, a.event)) why = "stock";
+      else if (await heldForStock(this.db, item, a.event, offeredLines(item, a))) why = "stock";
       else continue;
       unpriced = actions.slice(i);
       break;
@@ -924,11 +924,24 @@ function ruleMoney(): WriteError {
 /** What a rule does instead of a promise on a price the business did not set (ADR-018 §3.2). */
 const ASK_A_PERSON = "flag it for a person";
 
+/**
+ * The lines a rule's offer on an order would put to the customer, as its run would send them: those
+ * it names, else, for a change, the order's own.
+ */
+function offeredLines(item: Item, action: Action & { action: "transition" }): StockLine[] | undefined {
+  if (item.type !== "order") return undefined;
+  const named = action.input?.orderedItem;
+  if (Array.isArray(named)) return named as StockLine[];
+  return action.event === "propose_change" ? item.payload.orderedItem : undefined;
+}
+
 /** Why a rule's promise waits for a person, in the owner's words, for a rule's test. */
 function priceSentence(ruleName: string | undefined, action: Action, why: "price" | "stock"): string {
   const rule = ruleName?.trim() ? `Rule '${ruleName.trim()}'` : "This rule";
+  const offers = action.action === "transition" && (action.event === "propose" || action.event === "propose_change");
+  const what = offers ? "it would offer" : "the order is for";
   return why === "stock"
-    ? `${rule} wanted to ${describeAction(action)}, but the order is for a product off sale or for more than you have in stock, so it asks a person to decide`
+    ? `${rule} wanted to ${describeAction(action)}, but ${what} a product off sale or more than you have in stock, so it asks a person to decide`
     : `${rule} wanted to ${describeAction(action)}, but the request holds a price that is not in your catalogue, so it asks a person to price it first`;
 }
 

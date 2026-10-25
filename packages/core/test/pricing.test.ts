@@ -566,6 +566,108 @@ describe("what is on sale, and how many there are", () => {
     expect(held.state).toBe("received");
     expect(held.item.flags.needsHuman).toBe(true);
   });
+
+  it("sends no offer past the stock, or for a product off sale: the owner's AI leaves it to a person", async () => {
+    const { db, prod, caps } = await setup();
+    await db.orm.update(products).set({ stock: 2 }).where(eq(products.id, prod.chain));
+    await db.orm.update(products).set({ active: 0 }).where(eq(products.id, prod.saddle));
+    const order = await caps.createOrder(agent, {
+      payload: {
+        orderedItem: [{ productId: prod.chain, name: "Chain", quantity: 3, price: EUR(1_850) }],
+        totalPrice: EUR(5_550),
+      },
+    });
+    const id = order.view.item.id;
+    const chains = (quantity: number) => ({ productId: prod.chain, name: "Chain", quantity, price: EUR(1_850) });
+    // Refused the yes, it may not send the same lines as our offer, for the customer's yes to bind us.
+    for (const orderedItem of [
+      [chains(3)],
+      [chains(2), { sku: "CH-9", name: "Chain", quantity: 1, price: EUR(1_850) }],
+      [chains(1), { productId: prod.saddle, name: "Saddle", quantity: 1, price: EUR(15_000) }],
+    ]) {
+      await expect(
+        caps.transitionItem(ai, { item_id: id, event: "propose", input: { orderedItem } }),
+      ).rejects.toMatchObject({ code: "guard_failed", details: { guard: "in_stock", draft_for_owner: true } });
+    }
+    expect((await row(db, id)).state).toBe("received");
+    // What is in stock and on sale it offers as before.
+    const offered = await caps.transitionItem(ai, {
+      item_id: id,
+      event: "propose",
+      input: { orderedItem: [chains(2)] },
+    });
+    expect(offered.view.item.state).toBe("proposed");
+    // The owner in person may offer what they like.
+    const s2 = await caps.createOrder(agent, {
+      payload: { orderedItem: [chains(1)], totalPrice: EUR(1_850) },
+    });
+    const mine = await caps.transitionItem(owner, {
+      item_id: s2.view.item.id,
+      event: "propose",
+      input: { orderedItem: [chains(3)] },
+    });
+    expect(mine.view.item.state).toBe("proposed");
+  });
+
+  it("asks no change past the stock on an accepted order, nor one that adds a product off sale", async () => {
+    const { db, prod, caps } = await setup();
+    await caps.updateSettings(owner, { doc: { negotiation: { ai: { mayProposeChanges: true } } } });
+    await db.orm.update(products).set({ stock: 2 }).where(eq(products.id, prod.chain));
+    await db.orm.update(products).set({ active: 0 }).where(eq(products.id, prod.saddle));
+    const chains = (quantity: number) => ({ productId: prod.chain, name: "Chain", quantity, price: EUR(1_850) });
+    const order = await caps.createOrder(agent, {
+      payload: { orderedItem: [chains(1)], totalPrice: EUR(1_850) },
+    });
+    const id = order.view.item.id;
+    await caps.transitionItem(owner, { item_id: id, event: "accept" });
+    for (const orderedItem of [
+      [chains(5)],
+      [chains(1), { productId: prod.saddle, name: "Saddle", quantity: 1, price: EUR(15_000) }],
+    ]) {
+      await expect(
+        caps.transitionItem(ai, { item_id: id, event: "propose_change", input: { orderedItem } }),
+      ).rejects.toMatchObject({ code: "guard_failed", details: { guard: "in_stock", draft_for_owner: true } });
+    }
+    const [current] = await db.orm.select().from(items).where(eq(items.id, id));
+    expect(rowToItem(current as typeof items.$inferSelect).payload).not.toHaveProperty("change");
+    // Within the stock, it asks.
+    const asked = await caps.transitionItem(ai, {
+      item_id: id,
+      event: "propose_change",
+      input: { orderedItem: [chains(2)] },
+    });
+    expect(asked.view.item.payload).toMatchObject({ change: { orderedItem: [{ quantity: 2 }] } });
+  });
+
+  it("flags a rule's offer past the stock for a person, and 'Try it' says so", async () => {
+    const { db, prod, caps, drain } = await setup();
+    await db.orm.update(products).set({ stock: 2 }).where(eq(products.id, prod.chain));
+    const definition = {
+      on: ["item.created"],
+      if: { path: "item.type", op: "eq", value: "order" },
+      actions: [
+        {
+          action: "transition",
+          event: "propose",
+          input: { orderedItem: [{ productId: prod.chain, name: "Chain", quantity: 3, price: EUR(1_850) }] },
+        },
+      ],
+    } as never;
+    await caps.setup.createRule(owner, { name: "Offer three chains", priority: 0, enabled: true, definition });
+    const order = await caps.createOrder(agent, {
+      payload: {
+        orderedItem: [{ productId: prod.chain, name: "Chain", quantity: 1, price: EUR(1_850) }],
+        totalPrice: EUR(1_850),
+      },
+    });
+    await drain();
+    const held = await row(db, order.view.item.id);
+    expect(held.state).toBe("received");
+    expect(held.item.flags.needsHuman).toBe(true);
+    const tried = await caps.setup.testRule(owner, { name: "Offer three chains", definition, item_id: held.id });
+    expect(tried.would).toEqual(["flag it for a person"]);
+    expect(tried.skipped?.[0]).toContain("it would offer a product off sale or more than you have in stock");
+  });
 });
 
 describe("a price per person (the founder, 23 September 2026)", () => {
