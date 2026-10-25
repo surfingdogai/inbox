@@ -41,7 +41,8 @@ switched on.*
    business makes are never screened and cost no model call. A mailbox its sender proved is still a
    stranger's: pitchers use real mailboxes because they want replies. A trusted sender still gets the checks
    that point at a third party (a server mark, a look-alike, a disguised link, a change of bank details),
-   as a label only.
+   as a label only; mail under their address that no DMARC pass or aligned DKIM vouches for is also
+   labelled for a failed DMARC and for a scam's phrases, since it may not be theirs.
 4. **Doors.** The inbox's own form signs each form it draws (an id and an HMAC under the inbox's secret)
    and names its hidden field per form; a filled field puts a message aside and holds a booking, never
    drops it, and the visitor sees the same page whatever was decided, with a way to reach the business
@@ -67,23 +68,31 @@ switched on.*
    AI" are never signals. Repeats count other senders only (prints: SHA-256 and a 64-bit SimHash over
    character 4-grams, in eight bands); a short honest question repeats freely. Per-handle budgets of new
    conversations a day: an agent's own key (`Sdi-Agent-Key`) 5 (ceiling 50), a pass 10 (50), a mailbox 5
-   (30), a mail domain 20 (100); a pass widens its mailbox's and domain's. A platform's key (Web Bot
-   Auth's `Signature-Agent`) signs for every one of its users, so it is no sender: it never makes a
-   request wait on its own, is on no list, is trusted by nobody, and only a flood of 500 new
-   conversations a day (1,500 vouched) answers 429. Email under an address that no DMARC pass or aligned
-   DKIM vouched for is counted apart from that address's signed mail, and a request a certain bot signal
-   decided (a hidden field, a form never drawn, a server's mark, a wave, a block) counts against nobody,
-   so forgeries never spend a real sender's budget. The AI check finding a customer takes its points off
-   what the filters found, never off the free protection's: a filter switched on only ever puts more
-   aside. A link to the business's own site, a platform it uses or a host everyone links to (a map's
-   share link, a profile, a drive) makes no message "only links"; shorteners are known by their full
-   host, and count in a shared link domain like any other.
+   (30), a mail domain 20 (100); a pass widens its mailbox's and domain's. A recognised platform's key
+   (Web Bot Auth's `Signature-Agent`, `vouched`) signs for every one of its users, so it is no sender:
+   it never makes a request wait on its own, is on no list, is trusted by nobody, and only a flood of
+   1,500 new conversations a day answers 429. A key from a directory nobody recognises is the agent's
+   own: anyone can host a directory. A request that names nobody (no mailbox, no key of its own, no
+   pass) is a sender of its own for repeats, so unsigned copies of one pitch still make a wave. Email
+   under an address that no DMARC pass or aligned DKIM vouched for is counted apart from that address's
+   signed mail, and a request a certain bot signal decided (a hidden field, a form never drawn, a
+   server's mark, a wave, a block), or one that what a bot did at the form puts aside alone (a forged
+   key sent in a moment), counts against nobody, so forgeries never spend a real sender's budget. The AI
+   check finding a customer takes its points off what the filters found, never off the free
+   protection's, and a filter on Just label or learning only lowers what its own points were needed
+   for: a filter switched on only ever puts more aside. A link to the business's own site, a platform it
+   uses or a host everyone links to (a map's share link, a profile, a drive; the big sites on any
+   country's own domain too) makes no message "only links"; shorteners are known by their full host,
+   and count in a shared link domain like any other. On a shared host, one chat number, channel or site
+   there (`wa.me/…`, `t.me/…`) counts as a shared link domain would, kept as a keyed hash. Words aimed
+   at an AI count in the sender's name as in the text, and need an addressee or a verdict dictated; a
+   name of the business's own offer may carry a short ending ("classes") or Korean particles.
 7. **The AI check.** Behind `JudgePort`; the inbox ships a Messages API adapter on the provider's own SDK
    and a chat-completions adapter (any provider or a local model server). It runs for a stranger's first
    contact with a filter on, no certain signal, enough words and room under the caps. It is sent masked
    text only (addresses, phone numbers, bank, account and card numbers and payment addresses removed,
-   in any script's digits and in full-width forms, links down to their domain, characters drawn as
-   nothing taken out), the subject and the sender's name masked the same way, the sender's domain and
+   in any script's digits and letters with their marks, in full-width forms, two numbers written one
+   after the other each on its own, links down to their domain, characters drawn as nothing taken out), the subject and the sender's name masked the same way, the sender's domain and
    never their address, inside a random boundary, with a fresh check value it must
    return; the answer is held to a JSON schema of enums, and no model sentence reaches anyone. Its quotes
    must be found word for word, or they are dropped, and two dropped make it unclear. It is one vote: it
@@ -147,9 +156,11 @@ brings it back.
   owner sees it under Held.
 - **Undo sends nothing.** Let it in, Not spam, Looks fine and Spam wait six seconds on the owner's
   screen before they are sent, so Undo leaves no trace anywhere (no list, no print, no rule run);
-  another press, leaving the inbox or closing the page sends what waits at once, and on the phone
-  leaving the item or the app going to the background; nothing else does. The follow-up a toast
-  offers (a company's domain through, a sender always aside, another time) sends the act first.
+  another press, an answer to the item, leaving the inbox or closing the page sends what waits at once,
+  and on the phone leaving the item or the app going to the background; nothing else does. The
+  follow-up a toast offers (a company's domain through, a sender always aside, another time) sends the
+  act first. A Let it in that an answer already did is done, with nothing said; the toast sits above
+  an item's action bar.
 - **Spam lists everything put aside**: `state: spam` on the owner's list also takes what the filter put
   aside, including a held booking a person sent there, which keeps its own state. Each listed row carries
   the filter's summary (chip, cause, certain, may be a customer, who sent it), and Held lists what may
@@ -174,10 +185,11 @@ brings it back.
 - A held request reads exactly as a delivered one, at the door, on every read and on the confirm page.
 - Hosted inboxes can offer filters at a cost bounded per inbox and per runtime before any is charged.
 - New tables: `spam_verdicts`, `spam_lists`, `spam_prints`, `spam_handles`, `spam_filter_spans`,
-  `spam_days`, `spam_cache`, `spam_domains` (migration 0026), and the ledger's `judge_day` and
-  `judge_total_day`. Erasing a customer removes their verdicts, prints, the AI check's cached answers
-  for their words, list rows and handles; handles nobody trusted are pruned after a month unseen. The
-  owner's download keeps verdicts, lists, spans and day counts.
+  `spam_days`, `spam_cache`, `spam_domains` (migration 0026), and the ledger's `judge_day`,
+  `judge_total_day` and `judge_told` (the control plane is told once per cap, inbox and day). Erasing a
+  customer removes their verdicts, prints (every screened request has one, whoever it names), the AI
+  check's cached answers for their words, list rows and handles; handles nobody trusted are pruned
+  after a month unseen. The owner's download keeps verdicts, lists, spans and day counts.
 
 ## Not decided here (each ships off)
 

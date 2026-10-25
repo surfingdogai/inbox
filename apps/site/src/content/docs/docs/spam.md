@@ -3,7 +3,7 @@ title: Spam filter
 description: How the inbox keeps sales pitches, scams and junk off your desk without losing a customer, what it reads, what leaves your server and when, connecting your own AI model, and what a sender sees.
 ---
 
-The inbox screens every request from someone new as it arrives, on every door: email, your own website, and AI agents. What is not from a customer waits under **Spam** or **Held** instead of on your desk. Nobody is told, and one tap brings anything back.
+The inbox screens every request from someone new as it arrives, on every door: email, your own website, and AI agents. What is not from a customer waits under **Spam** or **Held** instead of on your desk. You aren't alerted, and one tap brings anything back.
 
 Settings → **Spam**. The design is ADR-029 in the repository's `docs/adr`.
 
@@ -25,18 +25,18 @@ Settings → **Spam**. The design is ADR-029 in the repository's `docs/adr`.
 
 A booking or an order is never put aside, at most held. A held booking holds no time: another customer can book and be confirmed for the same slot. A held request lapses by its own clock, silently.
 
-**Let it in** (Held) and **Not spam** (Spam) run what was held back, once: the rules, the webhooks, the acknowledgement. **Looks fine** takes a label off. Each is one press, with **Undo** for six seconds, and teaches the filter: that sender comes straight in from then on.
+**Let it in** (Held) and **Not spam** (Spam) run what was held back, once: the rules and the webhooks. A request held for a bot's signal got no acknowledgement, and gets none after Let it in either. **Looks fine** takes a label off. Each is one press, with **Undo** for six seconds, and teaches the filter: that sender comes straight in from then on.
 
 ## Free protection, always on
 
 On every door, on every inbox, with no AI:
 
 - **Form bots**: your form's hidden field filled in (each form names it differently), a form your page never drew, one filled in faster than anyone types.
-- **Mail a server marked as spam** on its way. From someone you know it labels, nothing more.
+- **Mail a server marked as spam** on its way. From someone you know it labels, nothing more; so does mail under their address that no server vouches for, when its check failed or it reads like a scam.
 - **Posing as you**: your business's name from an address that isn't yours, an address made to look like yours, answers that would go elsewhere (Reply-To), a display name showing another address.
 - **Disguised links**: a link showing one address and going to another; links to sites listed for scams or malware.
 - **Waves**: the same message, nearly the same message, or the same link from many senders this week. A short honest question repeats freely, and bookings worded the same way by a platform never make a wave.
-- **Floods**: more new conversations in a day than a person starts. A sender is known by their agent's own key, their pass, their mailbox and their mail domain, never by their network address, and never by an AI platform's key, which signs for all of that platform's users. Mail no server vouched for is counted apart from the same address's signed mail, and what a bot sent counts against nobody.
+- **Floods**: more new conversations in a day than a person starts. A sender is known by their agent's own key, their pass, their mailbox and their mail domain, never by their network address, and never by a recognised AI platform's key, which signs for all of that platform's users (a key from a directory nobody recognises is the agent's own). Mail no server vouched for is counted apart from the same address's signed mail, and what a bot sent counts against nobody. A request that names nobody at all still counts in a wave.
 
 Its point-based outcomes started with a learning week of their own, from the day your inbox was updated.
 
@@ -70,6 +70,7 @@ It runs on a stranger's opening message, with a filter on, when nothing certain 
 
 - **Sent:** the message's text with every email address, phone number, IBAN, account and card number, payment address and link taken out (a link is cut to its domain), in any script's digits, the subject and the sender's name masked the same way, the sender's domain (never their address), the domains its links go to, how many files it has, and your business's name, description, languages and the names of your services and products.
 - **Never sent:** addresses, phone numbers, anything about other customers, your settings, attachments.
+- **The free protection**, with no AI, sends one thing: a new sender's mail domain is looked up in DNS (at a public DNS-over-HTTPS resolver) to see whether it takes mail. Nothing else it reads leaves your server.
 - The text sits between two random boundary lines, with a fresh value the answer must return. The answer is held to a schema of fixed choices; no sentence a model writes reaches you, a customer or your rules. Instructions inside a message change nothing, and a message that talks to an assistant or a filter is never delivered without a label.
 - Eight seconds an attempt, one retry after two, twenty seconds in all; any failure lets the request through.
 - The same text from another sender this week reuses the answer instead of asking again.

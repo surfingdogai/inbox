@@ -104,6 +104,21 @@ describe("the spam filter's pages", () => {
     }
     // The sender got their acknowledgement: what was not told is the owner, and nothing ran.
     expect(read(PAGE)).not.toMatch(/Nobody was told/);
+    expect(docs).not.toMatch(/Nobody is told/);
+    expect(docs).toContain("You aren't alerted, and one tap brings anything back.");
+    // A release runs the rules and the webhooks; a held sender's acknowledgement went, or never goes.
+    expect(docs).not.toMatch(/the rules, the webhooks, the acknowledgement/);
+    // What leaves the server for the free protection: a new sender's mail domain, looked up in DNS.
+    expect(docs).toMatch(/mail domain is looked up in DNS/);
+    // A bot's form messages go after a week: nothing says nothing is deleted or dropped.
+    const ours = SPAM_GUIDE_OPTIONS.find((o) => o.ours)?.what ?? "";
+    expect(ours).not.toMatch(/nothing deleted/);
+    expect(ours).toContain("nothing a person wrote is deleted");
+    expect(read(GUIDE)).not.toContain("It never drops a message.");
+    expect(read(GUIDE)).toContain("It never drops a customer's message.");
+    // A count the tests outgrow is never printed.
+    const language = SPAM_FAQS.find((f) => f.q === "Does it work in my language?")?.a ?? "";
+    expect(language).toContain("more than 140 customer messages in 29 languages");
   });
 
   it("answer in a few words, with questions that fit a search result", () => {

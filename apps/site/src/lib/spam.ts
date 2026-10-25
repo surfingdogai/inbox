@@ -56,7 +56,7 @@ export const SPAM_FAQS: readonly Faq[] = [
   },
   {
     q: "Does it work in my language?",
-    a: "Yes. Language, script, country, name, spelling and email provider are never reasons. It looks at how a message came and what it asks for. Its tests include 138 customer messages in 29 languages, short, rude, misspelled or machine-translated, and none of them is put aside.",
+    a: "Yes. Language, script, country, name, spelling and email provider are never reasons. It looks at how a message came and what it asks for. Its tests include more than 140 customer messages in 29 languages, short, rude, misspelled or machine-translated, and none of them is put aside.",
   },
   {
     q: "Which AI models can I use?",
@@ -124,7 +124,7 @@ export const SPAM_GUIDE_OPTIONS: readonly GuideOption[] = [
   },
   {
     way: "Filtering in your inbox (Surfing Dog Inbox, ours)",
-    what: "Free protection on every door, three filters you switch on, and nothing deleted: what it catches waits under Spam or Held with its reason, one tap back. Open source; on your own server it is free, with your own AI model or none.",
+    what: "Free protection on every door, three filters you switch on, and nothing a person wrote is deleted: what it catches waits under Spam or Held with its reason, one tap back. Open source; on your own server it is free, with your own AI model or none.",
     links: [
       { label: "The spam filter", href: "/inbox/spam/" },
       { label: "How it decides", href: "/docs/spam/" },
