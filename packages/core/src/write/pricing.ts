@@ -369,6 +369,12 @@ export const IN_STOCK_REASON =
  * customer, whose yes binds us. A line for a product off sale (`not_on_sale`), or more of a product
  * than its counted stock, over all its lines (`not_enough_stock`), is a person's to decide. Null when
  * nothing holds it. Stock is never counted down here.
+ *
+ * A change is to an order already agreed, whose units the stock may already have had taken off it,
+ * by the shop or by the owner, and whose product may have gone off sale since. So a change is judged
+ * on what it adds: for each product, only the units over those the order holds count against the
+ * stock, and a product off sale holds it only when the change adds some. A change that moves the date,
+ * or asks for fewer, adds nothing.
  */
 export async function heldForStock(
   db: Db,
@@ -386,19 +392,28 @@ export async function heldForStock(
           ? offered
           : null;
   if (!lines?.length) return null;
-  const catalogue = await productsFor(db, lines);
-  const wanted = new Map<string, { stock: number | null; quantity: number }>();
+  const change = event === "accept_change" || event === "propose_change";
+  const held: readonly StockLine[] = change ? item.payload.orderedItem : [];
+  const catalogue = await productsFor(db, [...lines, ...held]);
+  const productOf = (line: StockLine) =>
+    (line.productId !== undefined ? catalogue.byId.get(line.productId) : undefined) ??
+    (line.sku !== undefined ? catalogue.bySku.get(line.sku) : undefined);
+  const wanted = new Map<string, { product: CatalogueProduct; quantity: number }>();
   for (const line of lines) {
-    const product =
-      (line.productId !== undefined ? catalogue.byId.get(line.productId) : undefined) ??
-      (line.sku !== undefined ? catalogue.bySku.get(line.sku) : undefined);
+    const product = productOf(line);
     if (!product) continue;
-    if (product.active === 0) return "not_on_sale";
-    const w = wanted.get(product.id) ?? { stock: product.stock, quantity: 0 };
+    const w = wanted.get(product.id) ?? { product, quantity: 0 };
     w.quantity += line.quantity;
     wanted.set(product.id, w);
   }
-  for (const w of wanted.values()) if (w.stock !== null && w.quantity > w.stock) return "not_enough_stock";
+  // What the order already holds, which a change takes again rather than adds.
+  for (const line of held) {
+    const w = wanted.get(productOf(line)?.id ?? "");
+    if (w) w.quantity -= line.quantity;
+  }
+  const added = [...wanted.values()].filter((w) => w.quantity > 0);
+  if (added.some((w) => w.product.active === 0)) return "not_on_sale";
+  for (const w of added) if (w.product.stock !== null && w.quantity > w.product.stock) return "not_enough_stock";
   return null;
 }
 

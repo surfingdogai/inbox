@@ -515,3 +515,66 @@ describe("a changed promise and the networks", () => {
     expect(await queued(plain.view.item.id)).toContain("outcome");
   });
 });
+
+describe("stock that the sale itself used", () => {
+  /** The shop counts the order's chains off its stock after the yes, or takes the chain off sale. */
+  const after = (s: Setup, set: { stock?: number | null; active?: number }) =>
+    s.db.orm.update(products).set(set).where(eq(products.sku, "CH-9"));
+  const chains = (quantity: number) => [{ sku: "CH-9", name: "Chain", quantity, price: EUR(1850) }];
+
+  it("the owner's AI still takes a customer's change for fewer, or for another date, once the stock is gone", async () => {
+    const s = await setup();
+    const fewer = await acceptedOrder(s);
+    const later = await acceptedOrder(s);
+    const more = await acceptedOrder(s);
+    await after(s, { stock: 0 });
+    const when = iso(T0 + 10 * DAY);
+    await s.caps.customer.makeOffer(anon(fewer.token), {
+      item_id: fewer.id,
+      terms: { lines: [{ index: 0, quantity: 2 }] },
+    });
+    await s.caps.customer.makeOffer(anon(later.token), { item_id: later.id, terms: { delivery_when: when } });
+    await transitionItem(s.db, ai, { itemId: fewer.id, event: "accept_change" });
+    await transitionItem(s.db, ai, { itemId: later.id, event: "accept_change" });
+    expect((await itemOf(s, fewer.id)).payload).toMatchObject({
+      orderedItem: [{ quantity: 2 }],
+      totalPrice: EUR(3700),
+    });
+    expect((await itemOf(s, later.id)).payload).toMatchObject({ orderedItem: [{ quantity: 3 }], delivery: { when } });
+    // More than is left is still the owner's to take.
+    await s.caps.customer.makeOffer(anon(more.token), {
+      item_id: more.id,
+      terms: { lines: [{ index: 0, quantity: 5 }] },
+    });
+    const held = await fail(transitionItem(s.db, ai, { itemId: more.id, event: "accept_change" }));
+    expect(held.details).toMatchObject({ guard: "in_stock", draft_for_owner: true });
+  });
+
+  it("the owner's AI still asks for another date or fewer once the stock is gone or it is off sale, never for more", async () => {
+    const s = await setup({ negotiation: { ai: { mayProposeChanges: true } } });
+    for (const gone of [{ stock: 0 }, { active: 0 }]) {
+      const later = await acceptedOrder(s);
+      const fewer = await acceptedOrder(s);
+      const more = await acceptedOrder(s);
+      await after(s, gone);
+      const when = iso(T0 + 10 * DAY);
+      await transitionItem(s.db, ai, {
+        itemId: later.id,
+        event: "propose_change",
+        input: { delivery: { method: "delivery", when } },
+      });
+      expect((await itemOf(s, later.id)).payload, JSON.stringify(gone)).toMatchObject({
+        change: { orderedItem: [{ quantity: 3 }], delivery: { when } },
+      });
+      await transitionItem(s.db, ai, { itemId: fewer.id, event: "propose_change", input: { orderedItem: chains(2) } });
+      expect((await itemOf(s, fewer.id)).payload, JSON.stringify(gone)).toMatchObject({
+        change: { orderedItem: [{ quantity: 2 }] },
+      });
+      const held = await fail(
+        transitionItem(s.db, ai, { itemId: more.id, event: "propose_change", input: { orderedItem: chains(4) } }),
+      );
+      expect(held.details, JSON.stringify(gone)).toMatchObject({ guard: "in_stock", draft_for_owner: true });
+      await after(s, { stock: null, active: 1 });
+    }
+  });
+});
