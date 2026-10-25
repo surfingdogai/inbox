@@ -1,7 +1,16 @@
-/** An amount in minor units as a business writes it to a person: `€100.00`, `£9.50`. */
+/**
+ * An amount in minor units as a business writes it to a person: `€100.00`, `£9.50`, `HUF 2,500.50`.
+ * Always two places, as every amount here is kept: a locale's own display digits drop the forint's
+ * fillér and the rupiah's sen, and a price the inbox holds is written as it holds it.
+ */
 export function moneyText(m: { readonly value: number; readonly currency: string }): string {
   try {
-    return new Intl.NumberFormat("en-GB", { style: "currency", currency: m.currency }).format(m.value / 100);
+    return new Intl.NumberFormat("en-GB", {
+      style: "currency",
+      currency: m.currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(m.value / 100);
   } catch {
     return `${(m.value / 100).toFixed(2)} ${m.currency}`;
   }

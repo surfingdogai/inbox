@@ -105,6 +105,7 @@ describe("prices in words", () => {
         "R2,Record sleeve,12.00 USD",
         "R3,Cleaning cloth,8.50 EUR",
         "R4,Record mat,9.5 GBP",
+        "R5,Record brush,2500.50 HUF",
       ].join("\n"),
       T0,
     );
@@ -114,6 +115,8 @@ describe("prices in words", () => {
     expect(text).toContain("Record sleeve US$12.00 (id ");
     expect(text).toContain("Cleaning cloth €8.50 (id ");
     expect(text).toContain("Record mat £9.50 (id ");
+    // Every amount here is in hundredths, forints too: never HUF 2,501.
+    expect(text).toMatch(/Record brush HUF\s2,500\.50 \(id /);
     // Never ¥49.80, nor €4,980.00: a price in yen is no price here, so the record is not on sale.
     expect(text).not.toContain("Vinyl record");
 
@@ -123,6 +126,7 @@ describe("prices in words", () => {
       ?.text;
     expect(ownText).toContain(": Cleaning cloth €8.50");
     expect(ownText).toContain(": Record sleeve US$12.00");
+    expect(ownText).toMatch(/: Record brush HUF\s2,500\.50/);
     expect(ownText).toMatch(/: Vinyl record €0\.00 \(archived\)/);
   });
 });
