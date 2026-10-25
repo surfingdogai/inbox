@@ -26,6 +26,20 @@ function waiting(ms = 60) {
 }
 
 describe("a press waiting for Undo", () => {
+  it("is sent now when asked, and says when it was: what comes after waits for it", async () => {
+    const sent: string[] = [];
+    const w = new Waiting<string>(async (act) => {
+      await sleep(30);
+      sent.push(act);
+    }, 6_000);
+    w.start("let_in");
+    await w.now();
+    expect(sent).toEqual(["let_in"]);
+    // Nothing waits: done at once.
+    await w.now();
+    expect(sent).toEqual(["let_in"]);
+  });
+
   it("is sent once, when its time ends, and nothing else sends it", async () => {
     const { w, sent, done } = waiting();
     w.start("not_spam");

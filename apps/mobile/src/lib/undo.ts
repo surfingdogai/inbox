@@ -21,7 +21,7 @@ export class Waiting<A> {
 
   /** A press: one already waiting is sent first, and this one waits its six seconds. */
   start(act: A): void {
-    this.now();
+    void this.now();
     this.current = { act, timer: setTimeout(() => this.now(), this.ms) };
   }
 
@@ -34,13 +34,13 @@ export class Waiting<A> {
     this.onDone();
   }
 
-  /** Sends what waits at once, if anything does. */
-  now(): void {
+  /** Sends what waits at once, if anything does; done when it was sent (what comes after may wait for it). */
+  now(): Promise<void> {
     const w = this.current;
-    if (!w) return;
+    if (!w) return Promise.resolve();
     clearTimeout(w.timer);
     this.current = null;
     this.onDone();
-    void this.send(w.act);
+    return Promise.resolve(this.send(w.act)).catch(() => undefined);
   }
 }

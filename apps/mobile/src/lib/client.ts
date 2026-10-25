@@ -67,14 +67,16 @@ export class InboxClient {
     if (res.ok) return (await res.json()) as T;
     let detail = `The inbox answered ${res.status}.`;
     let code = `http_${res.status}`;
+    let details: Record<string, unknown> | undefined;
     try {
-      const p = (await res.json()) as { detail?: string; code?: string };
+      const p = (await res.json()) as { detail?: string; code?: string; details?: Record<string, unknown> };
       detail = p.detail ?? detail;
       code = p.code ?? code;
+      details = p.details && typeof p.details === "object" ? p.details : undefined;
     } catch {
       // not JSON
     }
-    throw new InboxError(detail, res.status, code);
+    throw new InboxError(detail, res.status, code, details);
   }
 
   /** What needs the owner (open items a rule flagged, or nobody has answered), or everything open. */

@@ -159,9 +159,13 @@ export function ItemDetailView({
     setPending(t);
   };
 
-  const run = (t: Transition, input: Record<string, unknown> | undefined) => {
+  const run = async (t: Transition, input: Record<string, unknown> | undefined) => {
+    // A press still waiting for its Undo goes first (a Let it in before the answer it allows); if it
+    // was on this item, the answer is sent against the version it left.
+    const moved = await spam.flush(item.id);
+    const version = moved ? ((await query.refetch()).data?.item.version ?? item.version) : item.version;
     transition.mutate(
-      { event: t.event, ...(input ? { input } : {}), expected_version: item.version },
+      { event: t.event, ...(input ? { input } : {}), expected_version: version },
       {
         onSuccess: (r) => {
           setPending(null);
@@ -191,7 +195,7 @@ export function ItemDetailView({
       error={transition.error ? problemOf(transition.error) : null}
       showTitle={!phone}
       alternatives={transitions}
-      onSubmit={(input) => run(pending, input)}
+      onSubmit={(input) => void run(pending, input)}
       onCancel={() => setPending(null)}
       onSwitch={pick}
       payLink={openLink ? { provider: openLink.provider, customer: party?.name?.trim() || "the customer" } : undefined}

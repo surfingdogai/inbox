@@ -2,13 +2,14 @@ import { schema } from "@surfingdog/core";
 import { logMailOut } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { readPhoneLink } from "../../../packages/core/src/phones/links";
+import { alreadyDone } from "../../inbox/client/src/lib/spam";
 import { createInbox } from "../../inbox/src/app";
 import { freshDb, futureDay, openWeekdays } from "../../inbox/test/harness";
 import { clientIp, signInByCode } from "../../inbox/test/owner-session";
 import { InboxClient } from "../src/lib/client";
 import { webNative } from "../src/lib/native";
 import type { KV } from "../src/lib/offline";
-import { type Fetch, Sessions } from "../src/lib/session";
+import { type Fetch, InboxError, Sessions } from "../src/lib/session";
 import { actionsFor, spamFiltersLine, spamFoot } from "../src/lib/view";
 
 /**
@@ -138,6 +139,18 @@ describe("against an inbox", () => {
     const detail = await s.client.item(first);
     expect(detail.spam).toMatchObject({ screen: "released" });
     expect((await s.client.spam()).held_now).toBe(0);
+  });
+
+  it("hears that a held request was let in already, when an answer to it did so first", async () => {
+    const s = await setup();
+    await openWeekdays(s.db);
+    const id = await heldBooking(s);
+    const detail = await s.client.item(id);
+    await s.client.transition(id, { event: "confirm", expected_version: detail.item.version }, crypto.randomUUID());
+    const late = await s.client.spamAct(id, "let-in", crypto.randomUUID()).catch((e: InboxError) => e);
+    expect(late).toBeInstanceOf(InboxError);
+    expect(late).toMatchObject({ code: "wrong_state", details: { screen: "released" } });
+    expect(alreadyDone("let_in", late as InboxError)).toBe(true);
   });
 
   it("switches the two emails, but never a filter", async () => {

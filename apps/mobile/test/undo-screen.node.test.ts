@@ -17,6 +17,12 @@ describe("the phone's item screen", () => {
     expect(source).not.toMatch(/\}, \[commit\]\);/);
   });
 
+  it("sends what waits before it answers the request, and lifts the Undo toast above the answer buttons", () => {
+    const run = source.slice(source.indexOf("const run = async"), source.indexOf("const sendReply"));
+    expect(run).toMatch(/await waiting\.current\?\.now\(\);[\s\S]*app\.act\(/);
+    expect(source).toMatch(/className="toast undo"[^>]*style=\{lift/);
+  });
+
   it("sends what waits when the item closes, the page hides or the app pauses, and on nothing else", () => {
     const effect = source.slice(source.indexOf("const q = waiting.current;"), source.indexOf("}, []);"));
     expect(effect).toContain('document.addEventListener("visibilitychange", hidden)');

@@ -2,14 +2,15 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { api, problemOf } from "../lib/api";
-import { followDone, type SpamAct, type ToastCopy, toastFor, UNDO_MS } from "../lib/spam";
+import { alreadyDone, followDone, type SpamAct, type ToastCopy, toastFor, toastLift, UNDO_MS } from "../lib/spam";
 import type { ItemView } from "../lib/types";
 
 /**
  * Let it in, Not spam, Looks fine and Spam (ADR-029 §11.3): one press each, a toast saying what it did,
  * and Undo for six seconds. Nothing is sent until the six seconds are up, so Undo leaves no trace
- * anywhere: no list changed, nothing taught, no rule run. Another press, leaving the inbox or closing
- * the page sends what waits at once.
+ * anywhere: no list changed, nothing taught, no rule run. Another press, an answer to the item,
+ * leaving the inbox or closing the page sends what waits at once. The toast sits above an item's
+ * action bar, never over its buttons.
  */
 
 interface Pending {
@@ -24,6 +25,8 @@ interface SpamActions {
   readonly act: (view: ItemView, act: SpamAct) => void;
   /** Items whose act waits: lists leave them out until it is sent or undone. */
   readonly hidden: ReadonlySet<string>;
+  /** Sends what waits now; true when it was an act on this item (its version may have moved). */
+  readonly flush: (itemId: string) => Promise<boolean>;
 }
 
 const Ctx = createContext<SpamActions | null>(null);
@@ -59,17 +62,22 @@ export function SpamActionsProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [pending, setPending] = useState<Pending | null>(null);
+  // What was sent and is still on its way: its row stays hidden until the inbox answered.
+  const [sending, setSending] = useState<ReadonlySet<string>>(new Set());
+  const [lift, setLift] = useState<number | null>(null);
   const [notice, setNotice] = useState<{ text: string; tone: "success" | "danger" } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const waiting = useRef<Pending | null>(null);
   const keys = useRef(0);
 
   const refresh = useCallback(
-    (id: string) => {
-      void qc.invalidateQueries({ queryKey: ["items"] });
-      void qc.invalidateQueries({ queryKey: ["counts"] });
-      void qc.invalidateQueries({ queryKey: ["item", id] });
-      void qc.invalidateQueries({ queryKey: ["spam"] });
+    async (id: string) => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["items"] }),
+        qc.invalidateQueries({ queryKey: ["counts"] }),
+        qc.invalidateQueries({ queryKey: ["item", id] }),
+        qc.invalidateQueries({ queryKey: ["spam"] }),
+      ]).catch(() => undefined);
     },
     [qc],
   );
@@ -81,18 +89,39 @@ export function SpamActionsProvider({ children }: { children: ReactNode }) {
       waiting.current = null;
       if (timer.current) clearTimeout(timer.current);
       timer.current = null;
+      const id = p.view.item.id;
+      setSending((cur) => new Set([...cur, id]));
       setPending((cur) => (cur?.key === p.key ? null : cur));
       try {
         await send(p.view, p.act, keepalive);
         return true;
       } catch (error) {
-        setNotice({ tone: "danger", text: problemOf(error).detail });
+        const problem = problemOf(error);
+        // Let in already, by an answer the owner gave meanwhile: what they asked for is done.
+        if (alreadyDone(p.act, problem)) return true;
+        setNotice({ tone: "danger", text: problem.detail });
         return false;
       } finally {
-        refresh(p.view.item.id);
+        // The row comes back, if it does, only once the lists are read again.
+        await refresh(id);
+        setSending((cur) => {
+          const next = new Set(cur);
+          next.delete(id);
+          return next;
+        });
       }
     },
     [refresh],
+  );
+
+  const flush = useCallback(
+    async (itemId: string) => {
+      const w = waiting.current;
+      if (!w) return false;
+      await commit(w);
+      return w.view.item.id === itemId;
+    },
+    [commit],
   );
 
   const act = useCallback(
@@ -102,6 +131,9 @@ export function SpamActionsProvider({ children }: { children: ReactNode }) {
       const p: Pending = { key: keys.current, view, act: kind, toast: toastFor(kind, view) };
       waiting.current = p;
       setNotice(null);
+      // On a phone's width an item's actions run along the bottom: the toast goes above them.
+      const bar = document.querySelector<HTMLElement>(".bar")?.getBoundingClientRect();
+      setLift(toastLift(bar && bar.height > 0 ? bar.top : null, window.innerHeight));
       setPending(p);
       timer.current = setTimeout(() => void commit(p), UNDO_MS);
     },
@@ -160,13 +192,13 @@ export function SpamActionsProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(t);
   }, [notice]);
 
-  const hidden = useMemo(() => new Set(pending ? [pending.view.item.id] : []), [pending]);
-  const value = useMemo(() => ({ act, hidden }), [act, hidden]);
+  const hidden = useMemo(() => new Set([...sending, ...(pending ? [pending.view.item.id] : [])]), [pending, sending]);
+  const value = useMemo(() => ({ act, hidden, flush }), [act, hidden, flush]);
 
   return (
     <Ctx.Provider value={value}>
       {children}
-      <div className="spam-toasts" aria-live="polite">
+      <div className="spam-toasts" aria-live="polite" style={lift !== null ? { bottom: `${lift}px` } : undefined}>
         {pending && (
           <output className="toast glass-strong spam-toast">
             <i className="dot" />

@@ -8,7 +8,7 @@ import type { ItemSpamSummary, ItemView, SpamStatus } from "./types";
 
 export const HELD_TOP =
   "Held until the sender confirms or you let them in. You weren't alerted and nothing ran. Bookings here hold no time.";
-export const SPAM_TOP = "Put aside, not deleted. Not spam moves one back.";
+export const SPAM_TOP = "Put aside. Not spam moves one back.";
 export const HELD_EMPTY = "Nothing held.";
 export const SPAM_EMPTY = "Nothing put aside.";
 export const MAY_BE_CUSTOMER = "May be a customer";
@@ -157,6 +157,26 @@ export function followDone(kind: "let_domain" | "block", view: ItemView): string
 export const UNDO_MS = 6_000;
 
 /**
+ * Whether an act the inbox refused was done already: a Let it in (or a Not spam or Looks fine sent
+ * as one) on something a reply or an answer let in first. Nothing to say to the owner then.
+ */
+export function alreadyDone(
+  act: SpamAct,
+  problem: { readonly code?: string; readonly details?: Record<string, unknown> | undefined },
+): boolean {
+  return act !== "spam" && problem.code === "wrong_state" && problem.details?.screen === "released";
+}
+
+/**
+ * How far above the screen's bottom the Undo toast sits so it covers none of an action bar's buttons:
+ * 12px over the bar's top, when one is shown along the bottom; null when none is.
+ */
+export function toastLift(barTop: number | null, viewportHeight: number): number | null {
+  if (barTop === null || barTop <= 0 || barTop >= viewportHeight) return null;
+  return Math.round(viewportHeight - barTop + 12);
+}
+
+/**
  * Which acts an item offers (§11.2): held → Let it in · Spam; put aside → Not spam; labelled →
  * Looks fine · Spam, where its own transitions allow Spam.
  */
@@ -179,10 +199,11 @@ export const ACT_LABEL: Readonly<Record<SpamAct, string>> = {
 // ---- Settings → Spam --------------------------------------------------------------------------
 
 export const SETTINGS_INTRO =
-  "What isn't from a customer waits under Spam or Held instead of on your desk. Nobody is told, and one tap brings anything back.";
+  "What isn't from a customer waits under Spam or Held instead of on your desk. You aren't alerted, and one tap brings anything back.";
 export const BASIC_LINE =
   "Stops form bots, mail a server already marked as spam, senders posing as you, disguised links, the same message from many senders, and floods of new requests from one sender.";
-export const BASIC_FREE = "Free. Nothing it reads leaves your inbox.";
+export const BASIC_FREE =
+  "Free. Only a new sender's mail domain is looked up in DNS; nothing else it reads leaves your inbox.";
 export const FILTERS_LINE = "Each one reads new messages from people you haven't dealt with before.";
 export const ONLY_YOU = "Only you can change this, signed in.";
 

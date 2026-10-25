@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { countFor, countsFrom, paramsFor, parseFilter, showHeld } from "../client/src/lib/filters";
 import {
   actsFor,
+  alreadyDone,
+  BASIC_FREE,
   basicMonth,
   byWords,
   CONNECT_MODEL,
@@ -23,11 +25,13 @@ import {
   readerLine,
   rowTag,
   SETTINGS_INTRO,
+  SPAM_TOP,
   showsModelUse,
   testFailed,
   testLine,
   timePassed,
   toastFor,
+  toastLift,
   turnOnSheet,
   UNDO_MS,
   warnSentence,
@@ -190,6 +194,24 @@ describe("rows and chips", () => {
 });
 
 describe("one press, and Undo", () => {
+  it("counts a Let it in that something else did first as done, and nothing else", () => {
+    const released = { code: "wrong_state", details: { screen: "released" } };
+    expect(alreadyDone("let_in", released)).toBe(true);
+    expect(alreadyDone("not_spam", released)).toBe(true);
+    expect(alreadyDone("looks_fine", released)).toBe(true);
+    expect(alreadyDone("spam", released)).toBe(false);
+    expect(alreadyDone("let_in", { code: "wrong_state", details: { screen: "aside" } })).toBe(false);
+    expect(alreadyDone("let_in", { code: "version_conflict" })).toBe(false);
+  });
+
+  it("lifts the Undo toast above an action bar along the bottom, so it covers none of its buttons", () => {
+    expect(toastLift(707, 844)).toBe(149);
+    expect(toastLift(728, 844)).toBe(128);
+    // No bar, or one hidden (a wide screen draws none).
+    expect(toastLift(null, 844)).toBeNull();
+    expect(toastLift(0, 844)).toBeNull();
+  });
+
   it("offers Let it in · Spam when held, Not spam when put aside, Looks fine · Spam when labelled", () => {
     expect(actsFor(view({ spam: { screen: "held" } }))).toEqual(["let_in", "spam"]);
     expect(actsFor(view({ type: "message", state: "spam", spam: { screen: "aside" } }))).toEqual(["not_spam"]);
@@ -382,6 +404,16 @@ describe("Settings → Spam, in every state", () => {
     // What goes whatever the choice is said where the choice is made, and the intro promises no less.
     expect(KEEP_BOTS).toBe("A bot's form messages go after seven days.");
     expect(SETTINGS_INTRO).not.toMatch(/nothing is deleted/i);
+    // A held sender got their acknowledgement: the owner wasn't alerted, which is all that is said.
+    expect(SETTINGS_INTRO).toBe(
+      "What isn't from a customer waits under Spam or Held instead of on your desk. You aren't alerted, and one tap brings anything back.",
+    );
+    // The free protection looks up a new sender's mail domain, and says so.
+    expect(BASIC_FREE).toBe(
+      "Free. Only a new sender's mail domain is looked up in DNS; nothing else it reads leaves your inbox.",
+    );
+    // A bot's form messages go after a week: the Spam list never says nothing is deleted.
+    expect(SPAM_TOP).toBe("Put aside. Not spam moves one back.");
   });
 
   it("says what the model's Test found, or why it could not", () => {

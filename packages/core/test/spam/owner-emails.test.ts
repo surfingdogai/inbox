@@ -51,7 +51,7 @@ describe("the words", () => {
     expect(one?.subject).toBe("1 held for you to check");
     expect(one?.text).toBe(
       [
-        "The spam filter held these since yesterday. Nothing is lost, and nobody was told. Let in anything that's yours:",
+        "The spam filter held these since yesterday. You weren't alerted and nothing ran. Let in anything that's yours:",
         "",
         "· Guest 1 — Booking request for Fri 30 Oct, 15:00 — Sales pitch",
         "",
@@ -65,6 +65,8 @@ describe("the words", () => {
     expect(many?.text.split("\n").filter((l) => l.startsWith("· Guest"))).toHaveLength(10);
     expect(many?.text).toContain("· and 2 more");
     expect(heldDigestMail([], 0, "x")).toBeNull();
+    // A sender held for an uncertain reason got their acknowledgement: nobody says nobody was told.
+    expect(one?.text).not.toMatch(/nobody was told/i);
   });
 
   it("sums up the week with the three nearest the line", () => {

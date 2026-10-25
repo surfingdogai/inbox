@@ -87,10 +87,29 @@ export function chipOf(cause: string | null, warned = false): string {
   return (warned ? WARN_CHIPS[cause] : undefined) ?? CHIPS[cause] ?? "Spam filter";
 }
 
+/** "Mon 26 Oct", in the business's time: the app's short date. */
+function dayWords(ms: number, tz: string | undefined): string {
+  const d = new Date(ms);
+  const format = (timeZone: string) =>
+    new Intl.DateTimeFormat("en-GB", { timeZone, weekday: "short", day: "numeric", month: "short" })
+      .format(d)
+      .replace(/,/g, "");
+  try {
+    return format(tz ?? "UTC");
+  } catch {
+    return format("UTC");
+  }
+}
+
 /** The sentence for one signal, with what it measured. */
 export function sentenceOf(
   s: Signal,
-  ctx: { readonly topic?: string | undefined; readonly address?: string | undefined } = {},
+  ctx: {
+    readonly topic?: string | undefined;
+    readonly address?: string | undefined;
+    /** The business's time zone, for a day named. */
+    readonly tz?: string | undefined;
+  } = {},
 ): string {
   const n = s.v ?? 0;
   switch (s.c) {
@@ -152,7 +171,7 @@ export function sentenceOf(
     case "same_link_domain":
       return `${n} senders this week linked to ${s.d ?? "the same site"}.`;
     case "like_marked":
-      return `It reads like a message you marked as spam on ${new Date(n).toISOString().slice(0, 10)}.`;
+      return `It reads like a message you marked as spam on ${dayWords(n, ctx.tz)}.`;
     case "many_new":
       return `This sender made ${n} new requests today.`;
     case "blocked":
@@ -190,7 +209,12 @@ export function warnSentence(cause: string | null): string {
 /** The owner's lines under "Why it's here": the strongest cause first, then the others. */
 export function reasons(
   signals: readonly Signal[],
-  ctx: { readonly topic?: string | undefined; readonly address?: string | undefined; readonly learning?: boolean } = {},
+  ctx: {
+    readonly topic?: string | undefined;
+    readonly address?: string | undefined;
+    readonly learning?: boolean;
+    readonly tz?: string | undefined;
+  } = {},
 ): string[] {
   const seen = new Set<string>();
   const lines: string[] = [];

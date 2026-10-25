@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { sentenceOf } from "../../src/spam/copy";
 import { normalise, shingles } from "../../src/spam/normalise";
 import { bandsOf, hamming, printOf, simhash } from "../../src/spam/prints";
-import { agent, owner, spamSetup, T0 } from "./harness";
+import { agent, idOf, owner, spamSetup, T0 } from "./harness";
 
 /**
  * Prints (ADR-029 §8): the same message is the same print whatever its spacing, case, invisible
@@ -104,11 +105,17 @@ describe("repeats", () => {
     const id = (first as { view: { item: { id: string } } }).view.item.id;
     await s.caps.transitionItem(owner(T0 + 1_000), { item_id: id, event: "mark_spam" });
     // The same template, another greeting: what a mailing to many businesses looks like.
-    await s.caps.sendMessage(agent(T0 + 2_000), {
+    const second = await s.caps.sendMessage(agent(T0 + 2_000), {
       body: LONG_PITCH.replace("Dear business owner", "Hello"),
       contact: { name: "B", email: "b@other.example.net" },
     });
     expect((await s.q("SELECT cause FROM spam_verdicts ORDER BY created_at DESC LIMIT 1"))[0]?.[0]).toBe("like_marked");
+    // The day of the mark in the app's words, in the business's time.
+    const detail = await s.caps.getItem(owner(T0 + 3_000), { item_id: idOf(second) });
+    expect(detail.spam?.reasons).toContain("It reads like a message you marked as spam on Mon 26 Oct.");
+    const late = { c: "like_marked", w: 6, f: "basic" as const, x: 1 as const, v: Date.parse("2026-10-25T20:00:00Z") };
+    expect(sentenceOf(late, { tz: "Asia/Jakarta" })).toBe("It reads like a message you marked as spam on Mon 26 Oct.");
+    expect(sentenceOf(late, { tz: "UTC" })).toBe("It reads like a message you marked as spam on Sun 25 Oct.");
     // Never a word kept: hashes and domains only.
     const prints = await s.q("SELECT * FROM spam_prints");
     expect(JSON.stringify(prints)).not.toMatch(/agency|audit|first page/i);

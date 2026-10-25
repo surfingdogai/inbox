@@ -4,10 +4,12 @@ import { formatDay, formatWhen, partyName, stateWord } from "../../../inbox/clie
 import {
   ACT_LABEL,
   actsFor,
+  alreadyDone,
   byWords,
   quoteLine,
   type SpamAct,
   toastFor,
+  toastLift,
   UNDO_MS,
   warnSentence,
 } from "../../../inbox/client/src/lib/spam";
@@ -128,8 +130,15 @@ export function Item({
           ACT_LABEL[act],
         );
       void a.refresh();
-      setDetail(await a.loadItem(d.item.id));
+      const next = await a.loadItem(d.item.id);
+      detailRef.current = next;
+      setDetail(next);
     } catch (e) {
+      // Let in already, by an answer given meanwhile: what the owner asked for is done.
+      if (e instanceof InboxError && alreadyDone(act, e)) {
+        void a.refresh();
+        return;
+      }
       a.toast(
         e instanceof InboxError && e.offline
           ? "You're offline: press it again when you're back."
@@ -165,9 +174,14 @@ export function Item({
       q?.now();
     };
   }, []);
+  // The answer buttons along the bottom: the Undo toast sits above them, never over them.
+  const barRef = useRef<HTMLDivElement | null>(null);
+  const [lift, setLift] = useState<number | null>(null);
   const spamAct = (act: SpamAct) => {
     if (!detail) return;
     waiting.current?.start(act);
+    const bar = barRef.current?.getBoundingClientRect();
+    setLift(toastLift(bar && bar.height > 0 ? bar.top : null, window.innerHeight));
     setUndo({ act, text: toastFor(act, detail).text });
   };
   const cancelAct = () => waiting.current?.undo();
@@ -220,10 +234,13 @@ export function Item({
   const run = async (event: string, label: string, input?: Record<string, unknown>) => {
     setBusy(true);
     try {
+      // A press still waiting for its Undo goes first (a Let it in before the answer it allows), and
+      // the answer is sent against the version it left.
+      await waiting.current?.now();
       await app.act(
         item.id,
         "transition",
-        { event, expected_version: item.version, ...(input ? { input } : {}) },
+        { event, expected_version: detailRef.current?.item.version ?? item.version, ...(input ? { input } : {}) },
         label,
       );
       if (reply.trim()) await app.act(item.id, "reply", { body: reply.trim(), internal: false }, "Reply");
@@ -309,7 +326,7 @@ export function Item({
         )}
       </main>
       {actions && (actions.primary || actions.propose || actions.decline) && item.closedAt === null && (
-        <div className="actions">
+        <div className="actions" ref={barRef}>
           {actions.primary && (
             <button
               type="button"
@@ -400,7 +417,7 @@ export function Item({
         />
       )}
       {undo && (
-        <div className="toast undo" role="status">
+        <div className="toast undo" role="status" style={lift !== null ? { bottom: lift } : undefined}>
           <span>{undo.text}</span>
           <button type="button" onClick={cancelAct}>
             Undo

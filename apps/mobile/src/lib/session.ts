@@ -66,6 +66,8 @@ export class InboxError extends Error {
     message: string,
     readonly status: number,
     readonly code: string,
+    /** What the inbox's problem said beside its sentence (the screen an item was on, a time to wait). */
+    readonly details?: Record<string, unknown>,
   ) {
     super(message);
     this.name = "InboxError";

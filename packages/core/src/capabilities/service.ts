@@ -1602,7 +1602,7 @@ export class Capabilities {
     return {
       ...base,
       ...(calendar ? { calendar } : {}),
-      ...(verdict && summary ? { spam: spamView(verdict, summary) } : {}),
+      ...(verdict && summary ? { spam: spamView(verdict, summary, await this.timezone()) } : {}),
       receipts,
       customer: await this.people.customerView(row),
       events: events.map((e) => ({
@@ -2756,9 +2756,9 @@ function mergeAdds(
 }
 
 /** The filter's verdict as the owner reads it (ADR-029 §11.2): our sentences, never a model's. */
-function spamView(v: SpamVerdictView, summary: ItemSpamSummary): ItemSpamView {
+function spamView(v: SpamVerdictView, summary: ItemSpamSummary, tz: string): ItemSpamView {
   const topic = v.answer?.topic;
-  const lines = reasons(v.signals as never, { topic, learning: v.learning });
+  const lines = reasons(v.signals as never, { topic, learning: v.learning, tz });
   const ai = v.signals.some((s) => s.c === "ai_kind" && s.w > 0);
   const sentence =
     v.cause === "pitches" || v.cause === "scams" || v.cause === "junk" ? kindSentence(v.cause, topic) : "";
