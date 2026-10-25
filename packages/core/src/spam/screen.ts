@@ -1030,6 +1030,8 @@ export async function runScreenJob(
     } else {
       ai = outcome.why === "capped" ? "capped" : "failed";
       extra.push(countStatement(ai === "capped" ? "capped" : "failed", now));
+      // A check the host's ledger refused was never made: its reservation is given back.
+      if (ai === "capped") extra.push(countStatement("judged", now, -1));
     }
     if (tokens.in) extra.push(countStatement("tokens_in", now, tokens.in));
     if (tokens.out) extra.push(countStatement("tokens_out", now, tokens.out));

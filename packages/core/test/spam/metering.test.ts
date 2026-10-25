@@ -146,6 +146,18 @@ describe("the month's usage", () => {
     expect(usage.filter_days.scams).toBe(0);
   });
 
+  it("counts no check the host's ledger refused as one made", async () => {
+    const judge = fakeJudge(() => ({ ok: false, why: "capped" }));
+    const s = await spamSetup({ filters: ["pitches"], judge });
+    await s.caps.sendMessage(agent(T0), {
+      body: "We will rank your cafe first on every search, guaranteed or your money back.",
+      contact: { email: "a@pitch.example.net" },
+    });
+    await s.drain(T0 + MIN);
+    expect(judge.calls).toHaveLength(1);
+    expect(await s.caps.spam.usage(OCT, T0 + HOUR)).toMatchObject({ judged: 0, capped: 1 });
+  });
+
   it("leaves what is held, being screened or put aside out of a hosted inbox's requests, and counts one let in again", async () => {
     const s = await spamSetup();
     await s.caps.createBooking(agent(T0), {
