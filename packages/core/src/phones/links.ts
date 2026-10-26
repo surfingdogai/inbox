@@ -15,11 +15,18 @@
  */
 export const APP_SCHEME = "ai.surfingdog.inbox";
 /**
- * Where an owner gets the Android app, once there is a place to get it (a test build page, then the
- * Play Store). Null until Surfing Dog decides where: then Settings → Phone and the page a QR code
- * opens offer "Get it for Android".
+ * Where an owner gets the Android app: Surfing Dog's download page, with the APK, its SHA-256 and the
+ * steps to install it. A page, never the APK itself, so Settings → Phone, the page a QR code opens and
+ * the app's own "A new version is ready" all land on the install steps, and the address stays when the
+ * app is also in a store. Null would hide every "Get it for Android".
  */
-export const ANDROID_APP_URL: string | null = null;
+export const ANDROID_APP_URL: string | null = "https://surfingdog.ai/phone";
+/**
+ * The newest Android release, as the app reads it to say a new version is ready (apps/mobile
+ * lib/update.ts): `{ versionCode, versionName, minSupported, url, sha256, size, certSha256 }`, published
+ * with the download page.
+ */
+export const ANDROID_LATEST_URL = "https://surfingdog.ai/phone/latest.json";
 const SECRET = /^sdi_pp_[A-Za-z0-9_-]{43}$/;
 const ITEM = /^[0-9A-Za-z_-]{1,64}$/;
 

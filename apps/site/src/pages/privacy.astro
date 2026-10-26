@@ -9,14 +9,16 @@
 // holds no IP address and no query string (the front server's error log can hold both, and the
 // headers). Those logs have no time limit yet: the logs bullet names one only once it is set. Requests
 // the MCP server carries to a business's inbox (ADR-025) pass through and are not written down; one
-// record of each is kept (when, which business, which kind, the outcome), 400 days.
+// record of each is kept (when, which business, which kind, the outcome), 400 days. The phone app
+// (ADR-028): what the inbox, the push relay (docs/protocol/push-relay.md) and Google see, the update
+// check against /phone/latest.json, and what stays on the phone.
 // It is a draft for a lawyer to review before the hosted service opens, and it says so.
 import Layout from "../layouts/Layout.astro";
 import { DOOR_SHARE_SHOWN, doorHistoryPublic } from "../lib/door-history";
 import { CARRY_PROMISE, HOSTED_KEEPS } from "../lib/gateway";
 import { HOSTED_PILOT_OPEN } from "../lib/hosted";
 
-const UPDATED = "18 October 2026";
+const UPDATED = "27 October 2026";
 ---
 
 <Layout
@@ -208,6 +210,38 @@ const UPDATED = "18 October 2026";
           the keyed hash a register challenge keeps (above). An error at our front server (for example while the service restarts) can be logged with the
           request's IP address, the address it asked for (a REST search's words included) and its headers. These logs
           are kept in the server's system log, which is trimmed by size, with no fixed time limit yet.
+        </li>
+      </ul>
+
+      <h2 class="h-section" id="phone-h">The phone app</h2>
+      <p>
+        Surfing Dog Inbox for Android talks to the inboxes you connect it to, and to Google for notifications. It
+        sends us nothing about how you use it, and no crash reports.
+      </p>
+      <ul>
+        <li>
+          <b>Your inbox</b> gets the phone's maker and model as its name, the phone's public keys and its push token.
+          You see each phone, and remove it, in Settings → Phone.
+        </li>
+        <li>
+          <b>The camera</b> reads the code from your inbox inside the app. The picture never leaves the phone.
+        </li>
+        <li>
+          <b>Notifications</b> are encrypted by your inbox for your phone alone, then sent through our relay at
+          <code>push.surfingdog.ai</code> to Google's Firebase Cloud Messaging. The relay keeps, for each phone, the
+          inbox it belongs to, its push token (encrypted) and when it last delivered. It cannot read what it carries,
+          keeps no message, and deletes a phone nothing reached for 90 days. Google sees the push token, a Firebase
+          installation ID, when each message arrives and how big it is, under Google's own privacy policy.
+        </li>
+        <li>
+          <b>Updates.</b> At most twice a day the app reads <code>surfingdog.ai/phone/latest.json</code> to see
+          whether a new version is out: an ordinary request, logged as any visit to this website is. The app itself
+          comes from GitHub, under GitHub's privacy statement.
+        </li>
+        <li>
+          <b>On the phone</b>, what the app keeps is encrypted with a key in the phone's Android Keystore, and is never
+          backed up. Remove an inbox from the phone in the app's Settings, or uninstall the app, and it is
+          gone.
         </li>
       </ul>
 

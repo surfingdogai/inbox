@@ -314,7 +314,8 @@ export function ownerPhoneRoutes(deps: PhoneDoorDeps): Hono<CallerEnv> {
  * the app": an `intent://` link pinned to the app's package, so the secret goes to the Surfing Dog
  * Inbox app and to no other app, and the browser opens the page that says how to get the app when it
  * is not installed. Anywhere else it says to scan the code from the app. The secret is in the fragment,
- * read by this page alone, and never sent anywhere: not to this server, not in a Referer.
+ * read by this page alone, and never sent anywhere: not to this server, not in a Referer. Without a
+ * code, and when the app is missing, it links to the download page (`ANDROID_APP_URL`).
  */
 export function phonePage(): string {
   // The page names nobody: on an inbox not yet open to anyone, it says no more than its front page.
@@ -327,8 +328,8 @@ a.b{display:none;margin-top:8px;height:48px;border-radius:9999px;background:#141
 <body><main><h1 id="h">Open this in the app</h1><p id="t">On your phone, open the Surfing Dog Inbox app and scan the code from there.</p><a class="b" id="go" href="#">Open in the app</a><a class="q" id="get" href="#">Get it for Android</a><small id="s"></small></main>
 <script>(function(){var f=new URLSearchParams(location.hash.slice(1));history.replaceState(null,"",location.pathname);var G=${get};var h=document.getElementById("h"),t=document.getElementById("t"),s=document.getElementById("s"),g=document.getElementById("get");
 function getApp(){if(G){g.href=G;g.style.display="inline";}s.textContent="iPhone soon.";}
-if(f.get("app")==="missing"){h.textContent="The app isn't on this phone yet";t.textContent=G?"Get Surfing Dog Inbox for Android, then scan the code again.":"Surfing Dog Inbox for Android isn't in the Play Store yet.";getApp();return;}
-var k=f.get("pair")?"pair":f.get("link")?"link":null;var x=k&&f.get(k);if(f.get("v")!=="1"||!x||!/^sdi_pp_[A-Za-z0-9_-]{43}$/.test(x))return;
+if(f.get("app")==="missing"){h.textContent="The app isn't on this phone yet";t.textContent=G?"Get Surfing Dog Inbox for Android, then scan the code again.":"Surfing Dog Inbox for Android isn't available yet.";getApp();return;}
+var k=f.get("pair")?"pair":f.get("link")?"link":null;var x=k&&f.get(k);if(f.get("v")!=="1"||!x||!/^sdi_pp_[A-Za-z0-9_-]{43}$/.test(x)){getApp();return;}
 if(k==="link"){h.textContent="Sign in on your phone";t.textContent="Open this on the phone that asked for it.";}else{h.textContent="Connect this phone";t.textContent="Opens the Surfing Dog Inbox app. Nothing to type.";}
 if(!/Android/i.test(navigator.userAgent)){t.textContent=k==="link"?"Open this link on the phone that asked for it.":"On your phone, open the Surfing Dog Inbox app and scan the code from there.";getApp();return;}
 var back=G||(location.origin+location.pathname+"#v=1&app=missing");var a=document.getElementById("go");

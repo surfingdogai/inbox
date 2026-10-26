@@ -4,10 +4,11 @@ name: android
 # and a test build a person can install (the `internal` build type: built as a release is, so not
 # debuggable, and shrunk), kept as the run's artifact for 14 days. A second job runs the Keystore tests on
 # an emulator, then installs that very APK there and checks that it opens. Nothing is published to any
-# store from here.
+# store from here. The public app is built by workflow android-release, from a tag, with the release
+# key; a test build is signed with the test key, so it never installs over the public app.
 #
 # Two repository secrets (Settings → Secrets and variables → Actions):
-#   DEBUG_KEYSTORE_BASE64 one signing keystore for every build, base64. Without it each run signs with a
+#   DEBUG_KEYSTORE_BASE64 one signing keystore for every test build, base64. Without it each run signs with a
 #                         new key, so a newer APK installs only after the older one is removed (and with
 #                         it the phone's connection to its inbox): set it before anyone tests.
 #   GOOGLE_SERVICES_JSON_BASE64  the Firebase config for ai.surfingdog.inbox (google-services.json),
@@ -117,6 +118,18 @@ jobs:
           echo "name=${name}" >> "$GITHUB_OUTPUT"
           sha256sum "${name}.apk"
           echo "- APK: \`${name}.apk\`, sha256 \`$(sha256sum "${name}.apk" | cut -d' ' -f1)\`" >> "$GITHUB_STEP_SUMMARY"
+      - name: who signed it, and what it asks for
+        env:
+          APK: ${{ steps.apk.outputs.name }}.apk
+        run: |
+          bt="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          {
+            echo "- A test build, signed with the test key: it never installs over the public app."
+            echo '```'
+            "$bt/apksigner" verify --print-certs "$APK" | grep -E '^Signer #1 certificate (DN|SHA-256 digest)'
+            "$bt/aapt2" dump badging "$APK" | grep -E "^(package|targetSdkVersion|uses-permission)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.apk.outputs.name }}

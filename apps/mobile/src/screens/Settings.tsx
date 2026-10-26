@@ -3,8 +3,12 @@ import { DEFAULT_PREFS, type NotifyPrefs } from "../../../../packages/core/src/p
 import { useApp } from "../context";
 import type { PhoneRow } from "../lib/client";
 import { setUpPush } from "../lib/push";
+import { versionLine } from "../lib/update";
 import { agoSentence } from "../lib/view";
 import { Nav } from "./Nav";
+
+/** The privacy policy's part about this app. */
+const PRIVACY_URL = "https://surfingdog.ai/privacy/#phone-h";
 
 const KINDS: readonly [keyof NotifyPrefs["kinds"], string][] = [
   ["booking", "Booking and stay requests"],
@@ -266,6 +270,28 @@ export function Settings() {
                   Remove from this phone
                 </button>
               )}
+            </div>
+          </div>
+        </section>
+        <section className="group" aria-labelledby="app-h">
+          <h2 id="app-h">This app</h2>
+          <div className="rows">
+            <div>
+              <span className="two">
+                <span>Version {app.appInfo ? versionLine(app.appInfo.version, app.appInfo.build) : ""}</span>
+                {app.update.kind !== "none" && <small>{app.update.versionName} is ready</small>}
+              </span>
+              {app.update.kind !== "none" && (
+                <a className="btn link" href={app.update.page} rel="noopener">
+                  Get it
+                </a>
+              )}
+            </div>
+            <div>
+              <span>Privacy</span>
+              <a className="btn link" href={PRIVACY_URL} rel="noopener">
+                Read
+              </a>
             </div>
           </div>
         </section>

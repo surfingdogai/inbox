@@ -97,3 +97,26 @@ releases need organisation accounts, which are pending; until then CI builds the
 (as a release: not debuggable, shrunk) that a person installs by hand, signed with one key kept as a
 repository secret. iOS waits for the Apple account: the same screens, the Keychain where Android has the
 Keystore, and APNs behind the same relay.
+
+## Amendment 1 (26 Oct 2026): the Android app by direct download
+
+Until the store accounts exist, the public Android app is an APK attached to a GitHub Release and offered
+from `https://surfingdog.ai/phone`, which is `ANDROID_APP_URL`: Settings → Phone, the page a pairing code
+opens without the app, and the app's own update line all land there, on the install steps, never on the
+file itself.
+
+- **One release key, for good.** A phone installs an update only from the key that signed what it has, so
+  the release key (PKCS12, RSA 4096, `CN=Surfing Dog Inbox, O=Surfing Dog`) is not the test key and
+  never meets it. Only the workflow `android-release` holds it, in the GitHub environment
+  `android-release`, which a reviewer approves; it builds only from a tag `android-v<version>` on `main`
+  that matches `apps/mobile/package.json`, and fails unless the APK is signed by the certificate whose
+  SHA-256 it pins. Its result is a draft release, published by a person. Test builds keep the test key,
+  so neither installs over the other.
+- **Version numbers from the tag.** `android-v1.2.3` is versionName `1.2.3` and versionCode `10203`
+  (major × 10000 + minor × 100 + patch): always above the test builds, numbered by their CI run.
+- **Updates without a store.** `https://surfingdog.ai/phone/latest.json`, published with the page, names
+  the newest release, its SHA-256, the certificate, and the oldest version the inbox still works with.
+  The app reads it at most twice a day and says "A new version is ready", opening the page in the
+  browser; it installs nothing itself and asks for no permission to. A test build never asks.
+- **Android's back button** closes an open sheet, then goes back a screen, then puts the app in the
+  background.

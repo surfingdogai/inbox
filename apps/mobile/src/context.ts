@@ -4,6 +4,7 @@ import type { InboxClient, PhoneMe } from "./lib/client";
 import type { Native } from "./lib/native";
 import type { QueuedAction } from "./lib/offline";
 import type { InboxEntry, Sessions } from "./lib/session";
+import type { UpdateState } from "./lib/update";
 
 export type Route =
   | { readonly name: "inbox" }
@@ -52,6 +53,12 @@ export interface App {
   removeActive(): Promise<void>;
   toast(text: string): void;
   setMe(me: PhoneMe): void;
+  /** This build's version and versionCode, once read. */
+  readonly appInfo: { readonly version: string; readonly build: number } | null;
+  /** Whether a newer version is ready on the download page. */
+  readonly update: UpdateState;
+  /** Android's back button closes this first while it returns true (an open sheet); returns its removal. */
+  onBack(handler: () => boolean): () => void;
 }
 
 export const AppContext = createContext<App | null>(null);

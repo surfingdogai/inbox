@@ -7,7 +7,9 @@ android {
         applicationId "ai.surfingdog.inbox"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        // CI sets these from the run (ANDROID_VERSION_CODE, ANDROID_VERSION_NAME); local builds are 1 / 0.1.0.
+        // CI sets these (ANDROID_VERSION_CODE, ANDROID_VERSION_NAME); local builds are 1 / 0.1.0. A release
+        // takes them from its tag, android-v1.2.3 → 1.2.3 and 10203 (major × 10000 + minor × 100 + patch),
+        // so a release is always above every test build (numbered by their run) and never goes down.
         versionCode((System.getenv("ANDROID_VERSION_CODE") ?: "1") as int)
         versionName(System.getenv("ANDROID_VERSION_NAME") ?: "0.1.0")
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -17,15 +19,39 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
-    buildTypes {
+    // The release key: one PKCS12 keystore that signs every public build for good (a phone installs an
+    // update only from the same key). Only the workflow android-release holds it, from the secrets of
+    // the GitHub environment android-release, and hands it over in ANDROID_RELEASE_KEYSTORE (the file),
+    // ANDROID_RELEASE_KEYSTORE_PASSWORD and ANDROID_RELEASE_KEY_ALIAS. Without them a release build is
+    // unsigned, and nothing can install it.
+    def releaseKeystore = System.getenv("ANDROID_RELEASE_KEYSTORE")
+    signingConfigs {
         release {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (releaseKeystore) {
+                storeFile = file(releaseKeystore)
+                storeType = "pkcs12"
+                storePassword = System.getenv("ANDROID_RELEASE_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ANDROID_RELEASE_KEY_ALIAS") ?: "surfingdog-inbox"
+                // A PKCS12 keystore has one password, for the store and its key.
+                keyPassword = System.getenv("ANDROID_RELEASE_KEYSTORE_PASSWORD")
+            }
         }
-        // The test build a person installs by hand (ADR-028): built as a release is, so not debuggable
-        // (no `run-as`, no debugger reading tokens from memory) and shrunk, signed with the debug key
-        // (in CI the repository's DEBUG_KEYSTORE_BASE64, so each build installs over the last). The
-        // debug build is for the emulator's tests only.
+    }
+    buildTypes {
+        // The public app (apps/mobile/README.md → Releases): shrunk, not debuggable, signed with the
+        // release key. Built only by the workflow android-release, from a tag on main.
+        release {
+            debuggable false
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig = (releaseKeystore ? signingConfigs.release : null)
+        }
+        // The test build a person installs by hand (ADR-028): built as the release is, so not debuggable
+        // (no `run-as`, no debugger reading tokens from memory) and shrunk, but signed with the test key
+        // (in CI the repository's DEBUG_KEYSTORE_BASE64, so each test build installs over the last). The
+        // test key is not the release key, so a test build can never install over the public app, nor
+        // the public app over a test build: remove one before installing the other. The debug build is
+        // for the emulator's tests only.
         internal {
             initWith release
             debuggable false

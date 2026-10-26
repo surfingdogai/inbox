@@ -8,6 +8,7 @@ import { type Native, native as nativeOf } from "./lib/native";
 import { Box, type KV, Outbox, type QueuedAction } from "./lib/offline";
 import { setUpPush } from "./lib/push";
 import { type Fetch, type InboxEntry, InboxError, Sessions } from "./lib/session";
+import { checkForUpdate, NO_UPDATE, type UpdateState } from "./lib/update";
 import { needsYou } from "./lib/view";
 import { Connect } from "./screens/Connect";
 import { Inbox } from "./screens/Inbox";
@@ -26,6 +27,18 @@ export interface Deps {
   readonly allowLocal: boolean;
   /** Where the app opens; the inbox unless a screenshot or a test says otherwise. */
   readonly initial?: Route | undefined;
+  /** This build's version and versionCode (Capacitor's App.getInfo on the phone). */
+  readonly appInfo?: (() => Promise<AppInfo>) | undefined;
+}
+
+export interface AppInfo {
+  readonly version: string;
+  readonly build: number;
+}
+
+async function capAppInfo(): Promise<AppInfo> {
+  const i = await CapApp.getInfo();
+  return { version: i.version, build: Number.parseInt(i.build, 10) || 0 };
 }
 
 const ACTIVE = "active";
@@ -54,7 +67,13 @@ export function defaultDeps(): Deps {
   } catch {
     kv = memoryKv();
   }
-  return { native: nativeOf(), fetch: (i, init) => fetch(i, init), kv, allowLocal: import.meta.env.DEV };
+  return {
+    native: nativeOf(),
+    fetch: (i, init) => fetch(i, init),
+    kv,
+    allowLocal: import.meta.env.DEV,
+    appInfo: capAppInfo,
+  };
 }
 
 /** An item's cached details, with when they were read (the cache drops what nobody read for a month). */
@@ -84,6 +103,10 @@ export function App({ deps }: { deps: Deps }) {
   );
   const [toastText, setToastText] = useState<string | null>(null);
   const [needCounts, setNeedCounts] = useState<Record<string, number>>({});
+  const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
+  const [update, setUpdate] = useState<UpdateState>(NO_UPDATE);
+  /** What Android's back button closes first: an open sheet, before the screen under it. */
+  const backHandlers = useRef<(() => boolean)[]>([]);
   const pendingLink = useRef<string | null>(null);
   const hiddenAt = useRef<number | null>(null);
   const unlockedAt = useRef(0);
@@ -128,6 +151,27 @@ export function App({ deps }: { deps: Deps }) {
       alive = false;
     };
   }, [native, sessions, deps.kv]);
+
+  // ---- this build, and whether a newer one is ready (installed from the download page, not a store) ----
+  useEffect(() => {
+    let alive = true;
+    void (deps.appInfo ?? capAppInfo)()
+      .then((i) => alive && setAppInfo(i))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [deps.appInfo]);
+  const checkUpdate = useRef<() => void>(() => undefined);
+  checkUpdate.current = () => {
+    if (!appInfo) return;
+    void checkForUpdate(deps.fetch, deps.kv, appInfo.build)
+      .then(setUpdate)
+      .catch(() => undefined);
+  };
+  useEffect(() => {
+    if (ready && !locked && !insecure && appInfo) checkUpdate.current();
+  }, [ready, locked, insecure, appInfo]);
 
   /** Everything of one inbox goes from the phone: tokens, keys, cached items, what waited to send. */
   const wipe = useCallback(
@@ -384,13 +428,43 @@ export function App({ deps }: { deps: Deps }) {
       if (locked) return;
       if (away > RELOCK_MS && inboxes.length > 0 && (await native.canAuthenticate().catch(() => false)))
         setLocked(true);
-      else void flush().then(refresh);
+      else {
+        void flush().then(refresh);
+        checkUpdate.current();
+      }
     });
     return () => {
       void sub.then((s) => s.remove());
       void state.then((s) => s.remove());
     };
   }, [locked, openLink, native, inboxes.length, flush, refresh]);
+
+  // Android's back button and back gesture: an open sheet closes, then an item goes back to the list,
+  // then another tab goes back to the inbox, and from the inbox the app goes to the background.
+  const onBackButton = useRef<() => void>(() => undefined);
+  onBackButton.current = () => {
+    const handler = backHandlers.current[backHandlers.current.length - 1];
+    if (handler?.()) return;
+    if (locked || insecure) {
+      void CapApp.minimizeApp().catch(() => undefined);
+      return;
+    }
+    if (stack.length > 1) back();
+    else if (inboxes.length > 0 && route.name !== "inbox") setStack([{ name: "inbox" }]);
+    else void CapApp.minimizeApp().catch(() => undefined);
+  };
+  const onBack = useCallback((handler: () => boolean) => {
+    backHandlers.current.push(handler);
+    return () => {
+      backHandlers.current = backHandlers.current.filter((h) => h !== handler);
+    };
+  }, []);
+  useEffect(() => {
+    const sub = CapApp.addListener("backButton", () => onBackButton.current());
+    return () => {
+      void sub.then((s) => s.remove()).catch(() => undefined);
+    };
+  }, []);
 
   useEffect(() => {
     if (!ready || locked || insecure || !pendingLink.current) return;
@@ -460,6 +534,9 @@ export function App({ deps }: { deps: Deps }) {
     removeActive,
     toast,
     setMe,
+    appInfo,
+    update,
+    onBack,
   };
 
   if (!ready) return <div className="shell" />;

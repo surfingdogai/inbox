@@ -3,6 +3,11 @@
 The owner's phone app (ADR-028): new requests on the phone, answered from there. The inbox stays on the
 business's own website; the app connects to it with a QR code from Settings → Phone.
 
+## Get the app
+
+The public app is on [surfingdog.ai/phone](https://surfingdog.ai/phone): the APK, its SHA-256, the
+signing certificate and the steps to install it. The app says when a new version is ready.
+
 ## Install a test build
 
 Every push that touches the app builds a test APK in GitHub Actions (workflow **android**): the
@@ -16,6 +21,9 @@ The phone needs a screen lock (PIN, pattern or password): the app's keys rely on
 open your inbox → Settings → Phone → **Add a phone**, and in the app press **Scan the code**. The app asks
 "Connect to <your inbox>?" and then shows two digits; the computer shows "<your phone> wants to connect"
 with the same two: press **Confirm** there.
+
+A test build is signed with the test key, the public app with the release key: neither installs over
+the other. Remove one before installing the other, then connect again.
 
 ## The two repository secrets
 
@@ -50,6 +58,43 @@ Add them in GitHub → the repository → Settings → Secrets and variables →
 
 Neither file belongs in the repository (`google-services.json` is ignored here), and the workflow never
 prints them.
+
+## Releases
+
+The public app is built by the workflow **android-release** (`.github/workflows/android-release.yml`),
+only from a tag `android-v<version>` on `main` whose version is `version` in this folder's
+`package.json`. versionName is that version; versionCode is major × 10000 + minor × 100 + patch
+(`1.0.0` → `10000`), above every test build.
+
+**The release key** signs every public build for good: a phone installs an update only from the same
+key, so a lost key means everyone uninstalls and connects again. It is a PKCS12 keystore, alias
+`surfingdog-inbox`, RSA 4096, certificate `CN=Surfing Dog Inbox, O=Surfing Dog`, SHA-256
+`98:94:60:20:92:35:DB:AD:49:62:3F:5F:C2:11:69:C3:47:F9:8A:90:02:5A:92:36:E8:99:88:1A:E4:75:27:BF`.
+Keep it, and its password, in two places offline. The workflow pins that SHA-256 and fails on any other.
+
+Once, in GitHub → Settings → Environments, make the environment **`android-release`**: a required
+reviewer, and deployments only from tags `android-v*`. Its two secrets:
+
+```sh
+base64 -i android-release.p12 | gh secret set RELEASE_KEYSTORE_BASE64 --env android-release --repo surfingdogai/inbox
+printf '%s' "$PASSWORD" | gh secret set RELEASE_KEYSTORE_PASSWORD --env android-release --repo surfingdogai/inbox
+```
+
+`GOOGLE_SERVICES_JSON_BASE64` (below) must be set too: a release never goes out without notifications.
+
+Each release:
+
+1. Set `version` in `apps/mobile/package.json` and merge it to `main`.
+2. `git tag android-v<version> <commit on main> && git push origin android-v<version>`, then approve the
+   run's `android-release` environment in GitHub.
+3. The run builds and signs the APK, checks its certificate, package, version and permissions (in the
+   run's summary), opens it on an emulator, and makes a **draft** GitHub Release with
+   `surfingdog-inbox-<version>.apk`, its `.sha256`, `latest.json` and a build attestation.
+4. Install the draft's APK on real phones and try it, then publish the release (keep it from being
+   marked Latest: the repository's Latest is the inbox).
+5. Copy the release's `latest.json` over `apps/site/public/phone/latest.json` and publish the site:
+   the download page then offers it, and installed apps say "A new version is ready". Raise
+   `minSupported` there only when older versions no longer work with inboxes.
 
 ## Build it yourself
 

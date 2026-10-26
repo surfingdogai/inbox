@@ -986,3 +986,27 @@ fieldset.group legend {
     transition: none;
   }
 }
+
+/* "A new version is ready" (screens/Update.tsx): one thin line, opening the download page. */
+.update-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  font-size: 13px;
+  color: var(--ink-2);
+  text-decoration: none;
+}
+.update-line .go {
+  flex: none;
+  font-weight: 600;
+  color: var(--link);
+}
+.update-line.needed {
+  background: var(--warn-bg);
+  border-color: transparent;
+  color: var(--warn-ink);
+}

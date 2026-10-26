@@ -16,6 +16,7 @@ import {
 import { CheckIcon, ChevronDown, SearchIcon } from "./icons";
 import { Nav } from "./Nav";
 import { CannotReach } from "./Offline";
+import { UpdateLine } from "./Update";
 
 /** The inbox (the approved Main screen): what needs the owner, everything open, and what was handled. */
 export function Inbox() {
@@ -73,6 +74,7 @@ export function Inbox() {
         </div>
       </header>
       <main className="body">
+        <UpdateLine />
         {shown.length === 0 && !app.loading && !app.listLoaded && app.offline && <CannotReach inbox={name} />}
         {shown.length === 0 && !app.loading && app.listLoaded && (
           <div className="empty">

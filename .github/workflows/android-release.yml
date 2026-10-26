@@ -1,0 +1,242 @@
+name: android-release
+
+# The public Android app (apps/mobile, ADR-028), from a tag `android-v<version>` on main whose version
+# is the one in apps/mobile/package.json:
+#
+#   git tag android-v1.0.0 <commit on main> && git push origin android-v1.0.0
+#
+# 1. build: in the GitHub environment `android-release`, which a reviewer approves and which alone
+#    holds the release key. The screens are typed, tested and built, the JVM tests run, and the release
+#    APK is built, shrunk and signed. Then it is checked: signed by the release certificate below and
+#    no other, the package, version and permissions as expected, not debuggable.
+# 2. emulator: that very APK installed on an emulator, opened, and still running.
+# 3. draft: a DRAFT GitHub Release with the APK, its SHA-256 and latest.json, attested. A person
+#    publishes it (apps/mobile/README.md → Releases); nothing here makes it public.
+#
+# versionName is the tag's version, versionCode major × 10000 + minor × 100 + patch (1.0.0 → 10000),
+# always above the test builds of workflow android, which are numbered by their run.
+#
+# Secrets, in the environment android-release (never printed; written to a file and removed):
+#   RELEASE_KEYSTORE_BASE64    the release keystore (PKCS12, alias surfingdog-inbox), base64
+#   RELEASE_KEYSTORE_PASSWORD  its password
+# and the repository's GOOGLE_SERVICES_JSON_BASE64 (as in workflow android). A release without any of
+# them fails: it never falls back to another key, or to a build without notifications.
+# Every action is pinned by commit.
+on:
+  push:
+    tags: ["android-v[0-9]+.[0-9]+.[0-9]+"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-release
+  cancel-in-progress: false
+
+env:
+  # The release certificate's SHA-256 (CN=Surfing Dog Inbox, O=Surfing Dog), as apksigner prints it.
+  # It is public: every copy of the app carries it, and the download page shows it. An APK signed by
+  # anything else fails the build.
+  RELEASE_CERT_SHA256: 989460209235dbad49623f5fc21169c347f98a90025a9236e899881ae47527bf
+  APP_ID: ai.surfingdog.inbox
+
+jobs:
+  build:
+    name: release APK · built, signed, checked
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: android-release
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      code: ${{ steps.version.outputs.code }}
+      name: ${{ steps.version.outputs.name }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          # main's history, to check the tag is on it.
+          fetch-depth: 0
+      - id: version
+        name: the tag is on main, and is the version in the code
+        run: |
+          version="${GITHUB_REF_NAME#android-v}"
+          echo "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::$GITHUB_REF_NAME is not android-v<major>.<minor>.<patch>"; exit 1; }
+          IFS=. read -r major minor patch <<< "$version"
+          [ "$minor" -lt 100 ] && [ "$patch" -lt 100 ] && [ "$major" -ge 1 ] && [ "$major" -lt 200000 ] || { echo "::error::$version: major 1 or more, minor and patch below 100"; exit 1; }
+          app=$(node -p 'require("./apps/mobile/package.json").version')
+          [ "$version" = "$app" ] || { echo "::error::the tag says $version, apps/mobile/package.json says $app"; exit 1; }
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || { echo "::error::$GITHUB_REF_NAME ($GITHUB_SHA) is not on main"; exit 1; }
+          code=$((10#$major * 10000 + 10#$minor * 100 + 10#$patch))
+          {
+            echo "version=$version"
+            echo "code=$code"
+            echo "name=surfingdog-inbox-$version"
+          } >> "$GITHUB_OUTPUT"
+          echo "Surfing Dog Inbox for Android $version (versionCode $code), commit $GITHUB_SHA"
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      # No caches in a release: everything comes fresh, checked against the lockfile.
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Android SDK licences
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
+      - name: the screens, typed and tested
+        run: |
+          pnpm --filter @surfingdog/mobile typecheck
+          pnpm exec vitest run --project node apps/mobile/test packages/core/test/phones-crypto.test.ts
+      - name: the screens, built and copied into the Android project
+        run: |
+          pnpm --filter @surfingdog/mobile build
+          pnpm --filter @surfingdog/mobile exec cap sync android
+
+      - name: Firebase config
+        env:
+          GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+        run: |
+          [ -n "$GOOGLE_SERVICES_JSON_BASE64" ] || { echo "::error::GOOGLE_SERVICES_JSON_BASE64 is not set: a release must get notifications."; exit 1; }
+          printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" | base64 -d > apps/mobile/android/app/google-services.json
+          echo "notifications: on (google-services.json written)"
+
+      - name: JVM tests and the release APK, signed with the release key
+        working-directory: apps/mobile/android
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          ANDROID_VERSION_CODE: ${{ steps.version.outputs.code }}
+          ANDROID_VERSION_NAME: ${{ steps.version.outputs.version }}
+        run: |
+          if [ -z "$RELEASE_KEYSTORE_BASE64" ] || [ -z "$RELEASE_KEYSTORE_PASSWORD" ]; then
+            echo "::error::RELEASE_KEYSTORE_BASE64 and RELEASE_KEYSTORE_PASSWORD must be set in the environment android-release."
+            exit 1
+          fi
+          keystore="$RUNNER_TEMP/release.p12"
+          trap 'rm -f "$keystore"' EXIT
+          (umask 077 && printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 -d > "$keystore")
+          ANDROID_RELEASE_KEYSTORE="$keystore" \
+          ANDROID_RELEASE_KEYSTORE_PASSWORD="$RELEASE_KEYSTORE_PASSWORD" \
+          ANDROID_RELEASE_KEY_ALIAS=surfingdog-inbox \
+            ./gradlew --no-daemon --stacktrace testDebugUnitTest assembleRelease
+
+      - name: the APK, checked
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          CODE: ${{ steps.version.outputs.code }}
+          NAME: ${{ steps.version.outputs.name }}
+        run: |
+          apk=apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+          [ -f "$apk" ] || { echo "::error::no signed app-release.apk (an unsigned one means the release key was not used)"; ls -R apps/mobile/android/app/build/outputs/apk || true; exit 1; }
+          bt="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          "$bt/apksigner" verify --verbose --print-certs "$apk" > signers.txt
+          cat signers.txt
+          grep -q '^Verified using v2 scheme (APK Signature Scheme v2): true' signers.txt || { echo "::error::not signed with APK Signature Scheme v2"; exit 1; }
+          [ "$(grep -c '^Signer #[0-9]* certificate SHA-256 digest:' signers.txt)" = 1 ] || { echo "::error::expected exactly one signer"; exit 1; }
+          got="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' signers.txt)"
+          [ "$got" = "$RELEASE_CERT_SHA256" ] || { echo "::error::signed by $got, not the release certificate $RELEASE_CERT_SHA256"; exit 1; }
+          "$bt/aapt2" dump badging "$apk" > badging.txt
+          grep -q "^package: name='$APP_ID' versionCode='$CODE' versionName='$VERSION'" badging.txt || { echo "::error::package, versionCode or versionName is not $APP_ID $CODE $VERSION"; head -1 badging.txt; exit 1; }
+          if grep -q '^application-debuggable' badging.txt; then echo "::error::the release APK is debuggable"; exit 1; fi
+          mkdir -p out
+          cp "$apk" "out/$NAME.apk"
+          (cd out && sha256sum "$NAME.apk" > "$NAME.apk.sha256")
+          sha="$(cut -d' ' -f1 "out/$NAME.apk.sha256")"
+          size="$(stat -c %s "out/$NAME.apk")"
+          cert="$(echo "$RELEASE_CERT_SHA256" | tr 'a-f' 'A-F' | sed 's/../&:/g; s/:$//')"
+          # The minimum version the inbox still works with stays as the site's latest.json says it.
+          min="$(jq -r '.minSupported // 1' apps/site/public/phone/latest.json 2>/dev/null || echo 1)"
+          jq -n --argjson code "$CODE" --arg version "$VERSION" --arg tag "$GITHUB_REF_NAME" --arg name "$NAME" \
+            --arg sha "$sha" --argjson size "$size" --arg cert "$cert" --argjson min "$min" \
+            --arg date "$(date -u +%Y-%m-%d)" \
+            '{versionCode: $code, versionName: $version, minSupported: $min,
+              url: ("https://github.com/surfingdogai/inbox/releases/download/" + $tag + "/" + $name + ".apk"),
+              sha256: $sha, size: $size, certSha256: $cert, published: $date}' > out/latest.json
+          cat out/latest.json
+          {
+            echo "## Surfing Dog Inbox for Android $VERSION"
+            echo "- APK: \`$NAME.apk\`, $size bytes, sha256 \`$sha\`"
+            echo "- versionCode $CODE · signed by the release certificate \`$cert\`"
+            echo '```'
+            grep -E '^(Verified using|Signer #1 certificate (DN|SHA-256|SHA-1))' signers.txt
+            grep -E "^(package|sdkVersion|targetSdkVersion|application-label|uses-permission)" badging.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: android-release
+          path: out/
+          retention-days: 30
+          if-no-files-found: error
+
+  emulator:
+    name: release APK · installed and opened on an emulator
+    runs-on: ubuntu-latest
+    needs: build
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: android-release
+          path: out
+      - run: cd out && sha256sum -c ./*.apk.sha256
+      - name: KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: |
+            adb shell svc power stayon true
+            adb shell input keyevent 82
+            adb shell locksettings set-pin 1111
+            sh apps/mobile/scripts/smoke-apk.sh out/${{ needs.build.outputs.name }}.apk
+
+  draft:
+    name: a draft GitHub Release, for a person to publish
+    runs-on: ubuntu-latest
+    needs: [build, emulator]
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: android-release
+          path: out
+      - run: cd out && sha256sum -c ./*.apk.sha256
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-path: out/${{ needs.build.outputs.name }}.apk
+      - name: the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.build.outputs.version }}
+          NAME: ${{ needs.build.outputs.name }}
+        run: |
+          sha="$(cut -d' ' -f1 "out/$NAME.apk.sha256")"
+          cert="$(jq -r .certSha256 out/latest.json)"
+          cat > notes.md <<EOF
+          **Surfing Dog Inbox for Android $VERSION.** Install it from https://surfingdog.ai/phone, where the steps are.
+
+          - \`$NAME.apk\` · SHA-256 \`$sha\`
+          - Signed by the certificate with SHA-256 \`$cert\`. A copy signed by anything else is not ours.
+          - Android 7.0 or later, with a screen lock. Installs over an earlier version and keeps its connections.
+
+          Check it with \`sha256sum -c $NAME.apk.sha256\`, or \`gh attestation verify $NAME.apk -R surfingdogai/inbox\`.
+          EOF
+          gh release create "$GITHUB_REF_NAME" --verify-tag --draft --latest=false \
+            --title "Surfing Dog Inbox for Android $VERSION" --notes-file notes.md \
+            "out/$NAME.apk" "out/$NAME.apk.sha256" out/latest.json
+          echo "- A **draft** release $GITHUB_REF_NAME waits to be published (apps/mobile/README.md → Releases)." >> "$GITHUB_STEP_SUMMARY"

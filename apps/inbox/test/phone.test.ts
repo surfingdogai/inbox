@@ -403,6 +403,9 @@ describe("the sign-in link", () => {
     expect(html).toContain("package=ai.surfingdog.inbox");
     expect(html).toContain("Connect this phone");
     expect(html).toContain("Opens the Surfing Dog Inbox app. Nothing to type.");
+    // Without the app, the browser lands on the download page, never on a store that doesn't have it.
+    expect(html).toContain('var G="https://surfingdog.ai/phone"');
+    expect(html).not.toContain("Play Store");
     const item = await app.request(`${ORIGIN}/i/01ABC`);
     expect(item.status).toBe(302);
     expect(item.headers.get("location")).toBe("/items/01ABC");

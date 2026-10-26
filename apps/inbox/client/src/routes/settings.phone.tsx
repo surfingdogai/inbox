@@ -143,6 +143,15 @@ function ConnectCard({
       {!code && (
         <>
           <p className="lede small">Get new requests on your phone and answer them there. Your inbox stays here.</p>
+          {getApp && (
+            <p className="hint">
+              First, the app on your phone:{" "}
+              <a href={getApp} target="_blank" rel="noopener">
+                Get it for Android
+              </a>{" "}
+              · iPhone soon
+            </p>
+          )}
           <div className="rowx">
             <button
               type="button"
@@ -234,8 +243,8 @@ function ConnectCard({
                 No app yet?{" "}
                 <a href={getApp} target="_blank" rel="noopener">
                   Get it for Android
-                </a>
-                . · iPhone soon
+                </a>{" "}
+                · iPhone soon
               </p>
             )}
             <div className="rowx">

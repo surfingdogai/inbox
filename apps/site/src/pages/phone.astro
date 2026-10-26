@@ -1,0 +1,236 @@
+---
+// The phone app's download page (ADR-028), at the address the inbox names as ANDROID_APP_URL
+// (packages/core/src/phones/links.ts): Settings → Phone, the page a pairing code opens without the
+// app, and the app's own "A new version is ready" all land here. Everything about the release comes
+// from public/phone/latest.json, the file the app reads for updates, written by the workflow
+// android-release: the APK's address, version, size and SHA-256, and the signing certificate. Until
+// that file names an APK with its SHA-256, the page offers no download and says the app is on its way.
+// The QR code (public/phone/qr.svg) opens this page; it pairs nothing.
+import latest from "../../public/phone/latest.json";
+import Layout from "../layouts/Layout.astro";
+
+const released =
+  typeof latest.url === "string" && typeof latest.sha256 === "string" && /^[0-9a-f]{64}$/.test(latest.sha256);
+const size = typeof latest.size === "number" ? `${(latest.size / 1_000_000).toFixed(1)} MB` : null;
+const SOURCE = "https://github.com/surfingdogai/inbox/tree/main/apps/mobile";
+const NOTES = `https://github.com/surfingdogai/inbox/releases/tag/android-v${latest.versionName}`;
+
+const does: string[] = [
+  "New bookings, orders, quotes and messages arrive as notifications, with names hidden on the lock screen unless you choose to show them.",
+  "Accept, propose another time or decline, each confirmed before it goes.",
+  "Today's bookings at a glance, and every inbox you look after in one app.",
+  "Works offline: what you do waits on the phone and is sent when you're back.",
+  "Opens with your fingerprint or face, and asks for it again before accepting from a notification.",
+];
+const asks: { what: string; why: string }[] = [
+  { what: "Camera", why: "to scan the code from your inbox. The picture never leaves the phone." },
+  { what: "Notifications", why: "to tell you about new requests. Asked once you're connected." },
+  { what: "Fingerprint or face", why: "to open the app and confirm an Accept." },
+];
+---
+
+<Layout
+  title="Surfing Dog Inbox for Android · Surfing Dog"
+  description="The phone app for your Surfing Dog Inbox: new requests as notifications, answered from your phone. Download it for Android, check it, and connect it with one scan."
+>
+  <section class="wrap wrap-read section is-head" aria-labelledby="phone-h">
+    <p class="eyebrow">Phone app</p>
+    <h1 class="h-page" id="phone-h">Surfing Dog Inbox for Android</h1>
+    <p class="lede">New requests on your phone, answered from there. Your inbox stays on your own website.</p>
+  </section>
+
+  <section class="wrap wrap-read section section-tight" aria-labelledby="get-h">
+    <h2 class="sr-only" id="get-h">Get the app</h2>
+    <div class="get">
+      <div class="get-main">
+        {
+          released ? (
+            <>
+              <p>
+                <a class="btn btn-primary" href={latest.url} download>
+                  Download for Android
+                </a>
+              </p>
+              <p class="hint">
+                Version {latest.versionName}
+                {size && <> · {size}</>} · Android 7.0 or later · <a class="link" href={NOTES}>Release notes</a>
+              </p>
+            </>
+          ) : (
+            <p class="soon">The first version is on its way. This page offers it the day it's out.</p>
+          )
+        }
+        <p class="hint">iPhone soon.</p>
+      </div>
+      <figure class="qr">
+        <img src="/phone/qr.svg" width="132" height="132" alt="A code that opens this page on your phone" />
+        <figcaption>On a computer? Scan this with your phone's camera to open this page there.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="section section-tight" aria-labelledby="install-h">
+    <div class="wrap wrap-read prose">
+      <h2 class="h-section" id="install-h">Install it</h2>
+      <p>The app comes from this page, not a store, so Android asks you to allow it once.</p>
+      <ol>
+        <li>
+          On your phone, open this page in Chrome and tap <b>Download for Android</b>. If Chrome says the file can be
+          harmful, tap <b>Download anyway</b>.
+        </li>
+        <li>Open the file from the download notification, or from Files → Downloads.</li>
+        <li>
+          If Android says it isn't allowed to install apps from this source, tap <b>Settings</b>, turn on
+          <b>Allow from this source</b>, and go back. On Android 7: Settings → Security → <b>Unknown sources</b>.
+        </li>
+        <li>
+          Tap <b>Install</b>. If Play Protect says it doesn't know the developer, tap <b>More details</b> →
+          <b>Install anyway</b>, or let it scan the app.
+        </li>
+        <li>
+          On a Samsung phone, if <b>Auto Blocker</b> stops it: Settings → Security and privacy → Auto Blocker, off for
+          the install, then on again.
+        </li>
+      </ol>
+      <p>You can turn <b>Allow from this source</b> off again afterwards.</p>
+
+      <h2 class="h-section" id="connect-h">Connect it to your inbox</h2>
+      <ol>
+        <li>The phone needs a screen lock (a PIN, pattern or password): the app's keys rely on it.</li>
+        <li>On a computer, open your inbox → Settings → Phone → <b>Add a phone</b>. A code appears.</li>
+        <li>In the app, tap <b>Scan the code</b>. It asks to connect to your inbox and shows two digits.</li>
+        <li>On the computer, check the same two digits and press <b>Confirm</b>. Nothing to type.</li>
+      </ol>
+      <p>No camera? The app can ask your inbox to email you a sign-in link instead.</p>
+
+      <h2 class="h-section" id="does-h">What it does</h2>
+      <ul>{does.map((d) => <li>{d}</li>)}</ul>
+
+      <h2 class="h-section" id="asks-h">What it asks for</h2>
+      <ul>
+        {
+          asks.map((a) => (
+            <li>
+              <b>{a.what}</b>, {a.why}
+            </li>
+          ))
+        }
+      </ul>
+      <p>
+        Notifications go through Google Play services, so a phone without them gets none. On some phones (Xiaomi,
+        Oppo, Huawei) allow background activity for Surfing Dog Inbox, or notifications can wait until you open it.
+        What the app sends, and to whom, is on the <a href="/privacy/#phone-h">privacy page</a>.
+      </p>
+
+      <h2 class="h-section" id="updates-h">Updates</h2>
+      <p>
+        The app tells you when a new version is ready and opens this page. Install it over the one you have: your
+        connections stay. Had a test build? Remove it first, then connect again.
+      </p>
+
+      <h2 class="h-section" id="check-h">Check the file</h2>
+      <p>Every copy of the app we publish is signed with the same certificate. One signed by anything else is not ours.</p>
+      <dl class="facts">
+        {
+          released && (
+            <div>
+              <dt>The file's SHA-256</dt>
+              <dd>
+                <code>{latest.sha256}</code>
+              </dd>
+            </div>
+          )
+        }
+        <div>
+          <dt>Signing certificate, SHA-256</dt>
+          <dd>
+            <code>{latest.certSha256}</code>
+          </dd>
+        </div>
+        <div>
+          <dt>Package</dt>
+          <dd>
+            <code>ai.surfingdog.inbox</code>
+          </dd>
+        </div>
+      </dl>
+      <p>
+        The app is open source, MIT licensed: <a href={SOURCE}>its code</a>. Each release on GitHub carries a build
+        attestation (<code>gh attestation verify</code>).
+      </p>
+    </div>
+  </section>
+</Layout>
+
+<style>
+  /* Steps are numbered, and lists marked, quietly. */
+  .prose ol {
+    list-style: decimal;
+  }
+  .prose ul {
+    list-style: disc;
+  }
+  .prose li::marker {
+    color: var(--ink-3);
+  }
+  .get {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-6);
+    padding: var(--sp-5) 0;
+    border-top: 1px solid var(--hairline);
+    border-bottom: 1px solid var(--hairline);
+  }
+  .get-main {
+    flex: 1 1 260px;
+  }
+  .soon {
+    color: var(--ink-2);
+  }
+  .qr {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+    margin: 0;
+    flex: 0 1 320px;
+  }
+  .qr img {
+    flex: none;
+    border-radius: 8px;
+  }
+  .qr figcaption {
+    font-size: var(--fs-fine);
+    line-height: 1.5;
+    color: var(--ink-3);
+  }
+  /* On a phone the code would only open the page it is on. */
+  @media (max-width: 640px) {
+    .qr {
+      display: none;
+    }
+  }
+  .facts {
+    margin: 0;
+    border-top: 1px solid var(--hairline);
+  }
+  .facts > div {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .facts dt {
+    font-size: var(--fs-fine);
+    color: var(--ink-3);
+  }
+  .facts dd {
+    margin: 4px 0 0;
+    overflow-wrap: anywhere;
+  }
+  .facts code {
+    padding: 0;
+    border: 0;
+    background: none;
+    font-size: 0.82em;
+  }
+</style>

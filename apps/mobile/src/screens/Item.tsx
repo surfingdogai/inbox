@@ -53,6 +53,20 @@ export function Item({
   const [sheet, setSheet] = useState<"propose" | "confirm" | "decline" | "more" | null>(null);
   const [other, setOther] = useState<{ event: string; label: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  // Android's back button closes an open sheet before it leaves the item.
+  const { onBack } = app;
+  const open = sheet !== null || other !== null;
+  useEffect(
+    () =>
+      open
+        ? onBack(() => {
+            setSheet(null);
+            setOther(null);
+            return true;
+          })
+        : undefined,
+    [open, onBack],
+  );
   const tz = app.me?.business.timezone;
 
   const load = useCallback(async () => {
