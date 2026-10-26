@@ -198,6 +198,13 @@ function callerOf(ctx: { authInfo?: { extra?: Record<string, unknown> } | undefi
   return caller;
 }
 
+/** A product's availability in the words a tool's text gives it (`on_sale`: available, its stock not counted). */
+const AVAILABILITY_WORDS = {
+  in_stock: "in stock",
+  out_of_stock: "out of stock",
+  on_sale: "available, stock not counted",
+} as const;
+
 const readOnly = { readOnlyHint: true, idempotentHint: true } as const;
 const writes = { readOnlyHint: false, idempotentHint: true, destructiveHint: false } as const;
 
@@ -319,9 +326,22 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
       (args) =>
         run(async () => {
           const page = await caps.listProducts(args);
+          // Asked for by id or barcode, none found: not on sale here now, which is not "no products".
+          const none = args.ids
+            ? `None of these is on sale here now: ${args.ids.join(", ")}.`
+            : args.gtin
+              ? `Nothing with the barcode ${args.gtin} is on sale here now.`
+              : args.q
+                ? "No products match."
+                : "No products yet.";
           return {
             text:
-              page.items.map((p) => `${p.name} ${moneyText(p.price)} (id ${p.id})`).join("; ") || "No products yet.",
+              page.items
+                .map((p) => {
+                  const gtin = p.gtin ? `, gtin ${p.gtin}` : "";
+                  return `${p.name} ${moneyText(p.price)} (id ${p.id}${gtin}, ${AVAILABILITY_WORDS[p.availability]})`;
+                })
+                .join("; ") || none,
             structured: page,
           };
         }),

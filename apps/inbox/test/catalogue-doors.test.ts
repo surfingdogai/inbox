@@ -114,6 +114,35 @@ describe("list_products by id and by barcode (ADR-029)", () => {
     const bad = await client.callTool({ name: "list_products", arguments: { gtin: "4006381333932" } });
     expect(bad.isError).toBe(true);
   });
+
+  it("says in words each product's barcode and stock, and that one asked for is not on sale now", async () => {
+    const { db, app } = await setup();
+    const id = ulid();
+    await db.orm.insert(schema.products).values({
+      id,
+      name: "Moka pot",
+      price: { value: 1890, currency: "EUR" },
+      gtin: "04006381333931",
+      stock: 0,
+      createdAt: T0,
+      updatedAt: T0,
+    });
+    const gone = ulid();
+    await db.orm.insert(schema.products).values({
+      id: gone,
+      name: "Grinder",
+      price: { value: 9900, currency: "EUR" },
+      active: 0,
+      createdAt: T0,
+      updatedAt: T0,
+    });
+    const client = await connect(app, "/mcp");
+    const text = async (args: Record<string, unknown>) =>
+      ((await client.callTool({ name: "list_products", arguments: args })).content as { text: string }[])[0]?.text;
+    expect(await text({ ids: [id] })).toBe(`Moka pot €18.90 (id ${id}, gtin 04006381333931, out of stock)`);
+    expect(await text({ ids: [gone] })).toBe(`None of these is on sale here now: ${gone}.`);
+    expect(await text({ gtin: "9506000134352" })).toBe("Nothing with the barcode 9506000134352 is on sale here now.");
+  });
 });
 
 describe("prices in words", () => {
