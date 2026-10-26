@@ -910,6 +910,13 @@ export const connectionSchema = z.looseObject({
     .array(z.looseObject({ text: z.string(), href: z.string().optional(), link: z.string().optional() }))
     .optional()
     .describe("What the owner should know about it now: a shop that adds tax at checkout, an earlier key to remove"),
+  note: z
+    .string()
+    .nullable()
+    .optional()
+    .describe(
+      "A line the connector says of the connection, when it does less than its card: Calendly Free: busy times only",
+    ),
 });
 
 const paymentSchema = z.looseObject({

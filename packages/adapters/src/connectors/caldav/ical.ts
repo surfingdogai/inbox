@@ -277,9 +277,21 @@ export function busyFromICal(text: string, window: Interval, opts: BusyOptions):
 
 /* --- writing one event ----------------------------------------------------- */
 
-/** Text as iCalendar escapes it: backslash, semicolon, comma and line breaks. */
+/**
+ * Text as iCalendar escapes it (RFC 5545 §3.3.11): backslash, semicolon, comma, and every line break
+ * (CRLF, LF or a lone CR) as `\n`; any other control character goes, since a strict reader may take
+ * one as the end of the line.
+ */
 export function escapeText(text: string): string {
-  return text.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+  return (
+    text
+      .replace(/\\/g, "\\\\")
+      .replace(/;/g, "\\;")
+      .replace(/,/g, "\\,")
+      .replace(/\r\n|\r|\n/g, "\\n")
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what is removed
+      .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "")
+  );
 }
 
 /** Folds a content line at 75 octets, never inside a character. */

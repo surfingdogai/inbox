@@ -183,13 +183,13 @@ describe("the gallery says only what is true", () => {
   it("lists no card for a connector nobody is building, and says soon only for what is", () => {
     const cards = gallery(new Map());
     // Nothing registered: only the cards being built show, each soon, with nothing to press.
-    expect(cards.map((c) => c.id)).toEqual(["calendly", "ics_feed", "square"]);
+    expect(cards.map((c) => c.id)).toEqual(["square"]);
     expect(
       cards.every((c) => c.status === "soon" && c.ways.every((w) => w.status === "soon" && w.form.length === 0)),
     ).toBe(true);
     // Every card being built belongs to a track of this workflow; every other one has a connector today.
     const building = GALLERY.filter((c) => c.building).map((c) => c.id);
-    expect(building).toEqual(["calendly", "ics_feed", "square"]);
+    expect(building).toEqual(["square"]);
   });
 
   it("turns a card from soon to ready the moment its connector registers, a way at a time", () => {

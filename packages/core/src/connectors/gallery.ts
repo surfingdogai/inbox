@@ -60,7 +60,8 @@ export interface GalleryWay {
   readonly hook?: { readonly url: string; readonly events: readonly string[] } | undefined;
   /**
    * What must be in place before the form is worth filling in, and where to do it: a payment platform
-   * needs this inbox's own public https address (Settings, Inbox address) to tell it of payments.
+   * needs this inbox's own public https address (Settings, Inbox address) to tell it of payments, and a
+   * link to share needs it for other sites to fetch the link (and, hosted, the inbox live there).
    */
   readonly needs?: { readonly text: string; readonly href: string } | undefined;
 }
@@ -164,17 +165,18 @@ export const GALLERY: readonly CardSpec[] = [
     line: "Busy times in, bookings out",
     group: "calendars",
     industries: ["trades", "salons", "clinics", "gyms"],
-    building: true,
-    ways: [{ kind: "calendly", preset: null, label: "Calendly" }],
+    ways: [
+      { kind: "calendly", preset: "oauth", label: "Sign in with Calendly" },
+      { kind: "calendly", preset: null, label: "Personal access token", advanced: true },
+    ],
   },
   {
     id: "ics_feed",
-    title: "Calendar link to share",
-    line: "Your bookings, for any calendar",
+    title: "Share your bookings",
+    line: "A private calendar link for other sites",
     group: "calendars",
     industries: ["stays", "all"],
-    building: true,
-    ways: [{ kind: "ics_feed", preset: null, label: "Calendar link to share" }],
+    ways: [{ kind: "ics_feed", preset: null, label: "Share your bookings" }],
   },
   {
     id: "stripe",
@@ -285,7 +287,7 @@ export function gallery(
     out.push({
       id: card.id,
       title: card.title,
-      line: card.id === "calendar" ? calendarLine(ordered) : needs ? NEEDS_ADDRESS.line : card.line,
+      line: card.id === "calendar" ? calendarLine(ordered) : needs ? NEEDS_LINE : card.line,
       group: card.group,
       industries: card.industries,
       status: ordered.some((w) => w.status === "ready") ? "ready" : "soon",
@@ -347,6 +349,7 @@ function wayOf(
     auth === "oauth" && def.oauth?.before && live ? describeForm(def.oauth.before, undefined, opts.prefill) : [];
   const note = preset?.note ?? def.note;
   const consent = preset?.consent ?? def.consent;
+  const needs = live ? needsOf(def, opts) : null;
   return {
     kind: w.kind,
     preset: w.preset,
@@ -367,10 +370,26 @@ function wayOf(
     ...(def.hookEvents && live && opts.hookBase
       ? { hook: { url: `${opts.hookBase}${w.kind}`, events: def.hookEvents } }
       : {}),
-    ...(def.hookEvents && live && !opts.hookBase
-      ? { needs: { text: NEEDS_ADDRESS.text, href: NEEDS_ADDRESS.href } }
-      : {}),
+    ...(needs ? { needs } : {}),
   };
+}
+
+/**
+ * What a ready way needs first, when it needs this inbox's own address: a payment platform tells it of
+ * payments there; a link to share is fetched from there by other sites, so it is never made on an
+ * address they cannot reach (none, plain http, or a hosted inbox's setup address before it is live).
+ */
+function needsOf(
+  def: ConnectorDefinition,
+  opts: { readonly hookBase?: string | null | undefined; readonly hooksLive?: boolean | undefined },
+): { readonly text: string; readonly href: string } | null {
+  if (def.feed) {
+    if (!opts.hookBase) return { text: NEEDS_FEED.text, href: NEEDS_FEED.href };
+    if (opts.hooksLive === false) return { text: NEEDS_FEED.live, href: NEEDS_FEED.href };
+    return null;
+  }
+  if (def.hookEvents && !opts.hookBase) return { text: NEEDS_ADDRESS.text, href: NEEDS_ADDRESS.href };
+  return null;
 }
 
 /** Whether a way can be used here: the definition's readiness, then the preset's own. */
@@ -390,10 +409,19 @@ function defaultAction(auth: ConnectorAuth, label: string): string {
 export const POST_NOT_LIVE =
   "Your shop can send this inbox its key once the inbox is live at its own address. Until then, paste the keys.";
 
+/** What a card says when every way it has needs this inbox's own address first. */
+const NEEDS_LINE = "Needs this inbox's address first";
+
 /** A payment platform tells this inbox of payments at its own address, which it needs to know first. */
 const NEEDS_ADDRESS = {
-  line: "Needs this inbox's address first",
   text: "Stripe and Mollie tell this inbox of payments at its own https address. Add it first: Settings → General, Inbox address.",
+  href: "/settings#s-app-url",
+} as const;
+
+/** A link to share is fetched from this inbox's own address by other sites. */
+const NEEDS_FEED = {
+  text: "Booking sites fetch this link from your inbox's own https address. Add it first: Settings → General, Inbox address.",
+  live: "Booking sites fetch this link from your inbox's own address. It can be made once your inbox is live there.",
   href: "/settings#s-app-url",
 } as const;
 

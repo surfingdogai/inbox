@@ -2488,6 +2488,29 @@ legend.label-line {
   min-width: 0;
   user-select: all;
 }
+/* A link a connection serves (a calendar to share): one line, cut short with its whole address in its
+   title, and a labelled Copy beside it; where to paste it underneath. */
+.int-link-url {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: all;
+}
+.int-copy {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+/* What a connection does less of than its card says (a plan, an event type missing): quiet, one line each. */
+.int-note {
+  margin-top: 4px;
+}
 /* The rows to tick on a platform's key page, under the field that asks for the key. */
 .int-steps {
   margin: 0;
@@ -2500,6 +2523,10 @@ legend.label-line {
 }
 .int-steps li::marker {
   color: var(--ink-3);
+}
+/* Where to paste a link, under its line. */
+.int-hook .int-steps {
+  margin-top: 6px;
 }
 .int-question {
   margin: 0;

@@ -255,6 +255,20 @@ describe("the host rules (C1.4)", () => {
     expect(decide(lost, req("GET", "/")).kind).toBe("neutral");
   });
 
+  it("a calendar link to share is fetched at the inbox's own name once live, never at its setup address", () => {
+    const feed = "/v1/feeds/ics_feed/AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-AbCd.ics";
+    // Closed to agents (below level 2, or the slug host): refused like every other door.
+    expect(ownerVerdict({ method: "GET", path: feed })).toBe("refuse");
+    expect(ownerVerdict({ method: "GET", path: feed, cookie: "sdi_session=a" })).toBe("refuse");
+    for (const state of ["setup", "dns_pending", "cert_pending"] as const) {
+      expect(decide(base({ kind: "slug", state }), req("GET", feed)).kind).toBe("not_found");
+    }
+    expect(decide(base({ kind: "slug", state: "live" }), req("GET", feed)).kind).toBe("not_found");
+    // Live at its own name: passed to the inbox, which answers whoever holds the link.
+    expect(decide(base({ kind: "own", state: "live" }), req("GET", feed))).toEqual({ kind: "proxy", readOnly: false });
+    expect(decide(base({ kind: "own", state: "live" }), req("HEAD", feed))).toEqual({ kind: "proxy", readOnly: false });
+  });
+
   it("own host suspended from live: agents 423, the owner's allowlist passes", () => {
     const r = base({ kind: "own", state: "suspended", prevState: "live" });
     expect(decide(r, req("POST", "/v1/bookings"))).toEqual({ kind: "locked", why: "suspended" });

@@ -181,6 +181,8 @@ export interface PublicConfig {
   readonly choices: readonly ConnectionChoice[];
   /** A shop's catalogue reading (ADR-030 §3); null for a connection that sends none. */
   readonly catalogue: CatalogueState | null;
+  /** What the connector says of the connection in a line (`Connected.note`); null or absent for nothing. */
+  readonly note?: string | null | undefined;
 }
 
 /** A connection as every door shows it: never a secret. */
@@ -262,6 +264,8 @@ export interface ConnectionView {
   readonly test_label: string;
   /** What the owner should know about it now, a line each (`ConnectorDefinition.notes`). */
   readonly notes: readonly ConnectionNote[];
+  /** A line the connector says of the connection, when it does less than its card: "Calendly Free: busy times only". */
+  readonly note: string | null;
 }
 
 export interface IntegrationsView {
@@ -764,17 +768,25 @@ export class ConnectorCapabilities {
         redirectUri: String(row[2]),
         input: started.values,
       });
-      const view = await this.store(
-        def,
-        started.preset,
-        connected,
-        undefined,
-        p.now,
-        this.secrets,
-        true,
-        Object.keys(started.values).length > 0 ? started.values : undefined,
-        inbound,
-      );
+      let view: ConnectionView;
+      try {
+        view = await this.store(
+          def,
+          started.preset,
+          connected,
+          undefined,
+          p.now,
+          this.secrets,
+          true,
+          Object.keys(started.values).length > 0 ? started.values : undefined,
+          inbound,
+        );
+      } catch (error) {
+        // What the platform made for the sign-in (a webhook) goes again, and what worked before stays.
+        await settle(connected, false);
+        throw error;
+      }
+      await settle(connected, true);
       return { returnTo, ok: true, message: `${def.title} is connected.`, id: view.id };
     } catch (error) {
       const message =
@@ -925,9 +937,11 @@ export class ConnectorCapabilities {
     requirePerson(caller, "change");
     const box = requireSecretBox(this.secrets);
     const row = await this.row(id);
-    if (!this.definitions.get(row.kind)?.feed) {
+    const def = this.definitions.get(row.kind);
+    if (!def?.feed) {
       throw new WriteError("invalid_input", "This connection serves no link.", { details: { connection_id: id } });
     }
+    await this.requireReachable(def);
     const token = newInboundToken();
     await this.db.client.query({
       sql: "UPDATE connectors SET inbound_token = ?, inbound_enc = ?, updated_at = ? WHERE id = ?",
@@ -1266,7 +1280,7 @@ export class ConnectorCapabilities {
         const choices = fresh.choices ? mergeChoices(row.config.choices, fresh.choices) : null;
         await this.db.client.query({
           sql: `UPDATE connectors SET config_public = json_set(config_public, '$.account', ?, '$.calendars', json(?),
-                       '$.destinations', json(?), '$.refreshedAt', ?${fresh.extra ? ", '$.extra', json(?)" : ""}${choices ? ", '$.choices', json(?)" : ""}), updated_at = ? WHERE id = ?`,
+                       '$.destinations', json(?), '$.refreshedAt', ?${fresh.extra ? ", '$.extra', json(?)" : ""}${choices ? ", '$.choices', json(?)" : ""}${fresh.note !== undefined ? ", '$.note', ?" : ""}), updated_at = ? WHERE id = ?`,
           params: [
             fresh.account,
             JSON.stringify(fresh.calendars),
@@ -1274,6 +1288,7 @@ export class ConnectorCapabilities {
             now,
             ...(fresh.extra ? [JSON.stringify(fresh.extra)] : []),
             ...(choices ? [JSON.stringify(choices)] : []),
+            ...(fresh.note !== undefined ? [fresh.note ?? null] : []),
             now,
             row.id,
           ],
@@ -1819,8 +1834,25 @@ export class ConnectorCapabilities {
     if (!def.feed) {
       throw new WriteError("not_allowed", `${def.title} serves no link here.`, { details: { kind: def.kind } });
     }
+    // One link per kind: the one made is on its line, and a new one is made from there.
+    const made = await this.db.client.query({
+      sql: "SELECT id FROM connectors WHERE kind = ? AND external_id = ?",
+      params: [def.kind, def.kind],
+      method: "all",
+    });
+    if (made.rows[0]) {
+      throw new WriteError(
+        "wrong_state",
+        "Your link is made already. Copy it from its line, or make a new one there.",
+        {
+          details: { connection_id: String(made.rows[0][0]) },
+        },
+      );
+    }
+    await this.requireReachable(def);
     const connected: Connected = {
-      account: def.title,
+      // Nothing to sign in to: no account to name beside its title.
+      account: "",
       externalId: def.kind,
       secret: {},
       calendars: [],
@@ -1852,7 +1884,8 @@ export class ConnectorCapabilities {
       destination: connected.defaults.destination,
       services: null,
       busyOn: def.capabilities.includes("busy_times"),
-      bookingsOn: def.capabilities.includes("write_bookings"),
+      // On when the connector writes bookings, unless the account cannot take them (a plan that refuses other apps).
+      bookingsOn: def.capabilities.includes("write_bookings") && connected.defaults.bookings !== false,
       refreshedAt: now,
       inputs: inputs ?? {},
       payOn: def.capabilities.includes("pay_links"),
@@ -1863,6 +1896,7 @@ export class ConnectorCapabilities {
       disconnectTries: 0,
       choices: connected.choices ?? [],
       catalogue: null,
+      note: connected.note ?? null,
     };
     const presetLabel = preset ? def.presets?.find((p) => p.id === preset)?.label : undefined;
     const title = name?.trim() || presetLabel || def.title;
@@ -1901,7 +1935,7 @@ export class ConnectorCapabilities {
                        last_error = NULL, last_error_at = NULL, error_code = NULL, failing_since = NULL, failures = 0,
                        notified_at = NULL,
                        config_public = json_set(config_public, '$.account', ?, '$.calendars', json(?), '$.destinations', json(?),
-                       '$.extra', json(?), '$.refreshedAt', ?, '$.mode', ?${inputs ? ", '$.inputs', json(?)" : ""}${connected.choices ? ", '$.choices', json(?)" : ""}),
+                       '$.extra', json(?), '$.refreshedAt', ?, '$.mode', ?, '$.note', ?${inputs ? ", '$.inputs', json(?)" : ""}${connected.choices ? ", '$.choices', json(?)" : ""}),
                        ${address ? "inbound_token = ?, inbound_enc = ?, " : ""}updated_at = ? WHERE id = ?`,
           params: [
             sealed,
@@ -1911,6 +1945,7 @@ export class ConnectorCapabilities {
             JSON.stringify(config.extra),
             now,
             config.mode,
+            config.note ?? null,
             ...(inputs ? [JSON.stringify(inputs)] : []),
             ...(connected.choices
               ? [JSON.stringify(mergeChoices(await this.choicesOf(existingId), connected.choices))]
@@ -1979,6 +2014,22 @@ export class ConnectorCapabilities {
   /** What a connection's choosers hold now, for connecting it again in place. */
   private async choicesOf(id: string): Promise<readonly ConnectionChoice[]> {
     return (await this.rowOrNull(id))?.config.choices ?? [];
+  }
+
+  /**
+   * A link is made only where other sites can fetch it: at this inbox's own https address, once its host
+   * lets platforms reach it (a hosted inbox is live at its own name). Never on a setup address, which
+   * answers only its owner and changes when the inbox moves.
+   */
+  private async requireReachable(def: ConnectorDefinition): Promise<void> {
+    if (this.hooksLive && (await this.hookBase()) !== null) return;
+    throw new WriteError(
+      "not_allowed",
+      this.hooksLive
+        ? "Other sites fetch this link from your inbox's own https address. Add it first: Settings → General, Inbox address."
+        : "Other sites can fetch this link once your inbox is live at its own address.",
+      { details: { kind: def.kind, reason: "address" } },
+    );
   }
 
   /** Where platforms send what they tell this inbox: `<origin>/v1/hooks/<kind>`; null without an https origin. */
@@ -2249,6 +2300,7 @@ export class ConnectorCapabilities {
       disconnect_note: def?.disconnectNote ?? null,
       test_label: def?.testLabel ?? "test key",
       notes: notesOf(def, row.config.extra ?? {}, now),
+      note: row.config.note ?? null,
     };
   }
 
@@ -2471,6 +2523,7 @@ function normaliseConfig(raw: unknown): PublicConfig {
     disconnectTries: typeof c.disconnectTries === "number" ? c.disconnectTries : 0,
     choices: Array.isArray(c.choices) ? c.choices.filter(isChoice) : [],
     catalogue: catalogueStateOf(c.catalogue),
+    note: typeof c.note === "string" && c.note ? c.note.slice(0, 300) : null,
   };
 }
 

@@ -1,8 +1,10 @@
 import type { ConnectorDefinition, OAuthClient } from "@surfingdog/core";
 import { calcomConnector } from "./calcom";
 import { caldavConnector } from "./caldav/index";
+import { calendlyConnector } from "./calendly";
 import { googleCalendarConnector } from "./google";
 import { icsConnector } from "./ics";
+import { icsFeedConnector } from "./ics-feed";
 import { mollieConnector } from "./mollie";
 import { shopifyConnector } from "./shopify/index";
 import { stripeConnector } from "./stripe";
@@ -15,6 +17,19 @@ export { CALDAV_PRESETS, caldavConnector, caldavForm, isOwnUid, ownUid } from ".
 export { expandRRule, parseRRule } from "./caldav/rrule";
 export { multistatus, parseXml } from "./caldav/xml";
 export { resolveZone, zonedToUtc } from "./caldav/zones";
+export {
+  CALENDLY_API,
+  CALENDLY_AUTH,
+  CALENDLY_AUTO,
+  CALENDLY_EVENTS,
+  CALENDLY_FREE_NOTE,
+  CALENDLY_NO_TYPES_NOTE,
+  CALENDLY_SCOPES,
+  CALENDLY_TOLERANCE_S,
+  type CalendlyOptions,
+  calendlyConnector,
+  calendlyForm,
+} from "./calendly";
 export { lookupMx, lookupPath, lookupSrv } from "./dns";
 export {
   GOOGLE_CALENDAR_SCOPES,
@@ -26,6 +41,7 @@ export {
 export { hmacSha256Base64, verifyBase64Hmac, verifyHexHmac } from "./hook-sign";
 export { basicAuth, CREDENTIAL_FAMILIES, connectorHttp, mayCarryCredentials } from "./http";
 export { ICS_PRESETS, icsConnector, icsForm } from "./ics";
+export { bookingsCalendar, ICS_FEED_AHEAD_DAYS, ICS_FEED_PAST_DAYS, icsFeedConnector } from "./ics-feed";
 export { MOLLIE_API, MOLLIE_EVENTS, MOLLIE_METHODS, mollieConnector, mollieForm } from "./mollie";
 export { constantTimeEqual, hmacSha256Hex } from "./pay-sign";
 export {
@@ -79,6 +95,8 @@ export interface ConnectorHostOptions {
  * private link need nothing of the host; Google needs the instance's OAuth client, and without one
  * says "Soon" on a hosted inbox (ours is on its way) and "set up" on one's own server. Stripe and
  * Mollie take the business's own key and need nothing of the host but its public address (ADR-023).
+ * Calendly takes the owner's token, and its sign-in beside it needs the instance's Calendly app, as
+ * Google's does.
  *
  * A connector added here takes one import, one export line and one entry below (ADR-030 §7), in the
  * order WooCommerce, Shopify, Square, Calendly, the calendar link to share.
@@ -94,5 +112,7 @@ export function builtInConnectors(opts: ConnectorHostOptions = {}): ConnectorDef
     mollieConnector(),
     shopifyConnector(opts.oauth?.shopify ?? null),
     woocommerceConnector(),
+    calendlyConnector(opts.oauth?.calendly ?? null, { hosted: opts.hosted }),
+    icsFeedConnector(),
   ];
 }
