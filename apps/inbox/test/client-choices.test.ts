@@ -467,6 +467,17 @@ describe("the setup wizard's doors", () => {
       hint: "Needs a partner key on this server.",
     });
     expect(cardState(cards[3] as GalleryCard)).toEqual({ tag: "Soon", hint: null });
+    // Several systems that each need their partner account: all named, never only the first.
+    const many = card("property", "lodging", "soon", [
+      { ...way("soon"), label: "Beds24" },
+      { ...way("setup", "Needs a Mews partner token on this server."), label: "Mews" },
+      { ...way("setup", "Needs an apaleo connect client on this server."), label: "apaleo" },
+      { ...way("setup", "Needs a Cloudbeds partner app on this server."), label: "Cloudbeds" },
+    ]);
+    expect(cardState(many)).toEqual({
+      tag: "Needs setup",
+      hint: "Mews, apaleo, Cloudbeds: each needs a partner account on this server.",
+    });
   });
 
   it("make what is offered asked about for a price when agents cannot book", () => {

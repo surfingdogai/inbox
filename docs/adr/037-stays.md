@@ -255,7 +255,10 @@ fixtures and a local fake, never with real credentials: Beds24
 Smoobu (<https://docs.smoobu.com/>), Guesty (<https://open-api-docs.guesty.com/>), Mews
 (<https://docs.mews.com/connector-api/>), apaleo (<https://api.apaleo.com/>) and Cloudbeds
 (<https://developers.cloudbeds.com/>). A system that needs a partner or developer account ships
-code-complete but switched off, saying "Needs setup", with a checklist for the founder.
+code-complete but switched off, with a checklist for the founder. Switched off, it reads as Google does
+(ADR-026 §6): a hosted inbox shows it as "Soon", with no hint, since there is nothing for its owner to
+do; an inbox on its owner's own server says "Needs setup", with what its operator sets and where that
+is explained. Until then a stay comes to the owner as a request, which they confirm themselves.
 
 ### 8.5 The seam and its contract
 
@@ -272,6 +275,22 @@ can. A reserve that lands after the resolver stopped looking is looked for once 
 change, a confirmation or a cancellation whose answer never came is the owner's to check, and they are
 told. `packages/adapters/test/property/contract.ts` is the contract every adapter runs against its own
 fake; the generic fake runs it here.
+
+Three more rules, from the systems that price a stay themselves (Mews, apaleo, Cloudbeds):
+
+- **What the guest agreed is told, never sent as a price.** The stay's reference and the total the guest
+  agreed go in the reservation's note or comment. After each write the system's own total (taxes and
+  fees in) comes back on the link (`LinkState.total`); when it differs, the owner gets a note on the
+  stay, for them alone, to check the folio before charging anything more. A system whose rates leave
+  out the property's own taxes and fees gives no price at all, so a guest is never quoted below the folio.
+- **Once written, never refused.** A status or a note the system does not take after it made the
+  reservation never turns into a no for the guest while the system holds the room; and a reservation
+  found again by our key is the stay only while it is live there.
+- **A put-back that fails is said.** A change the system took and then could not undo
+  (`StayPutBackError`) leaves the system and the inbox holding the stay differently: the inbox keeps the
+  stay as it was and tells the owner to set it right in the system, never that it "keeps its dates,
+  here and there". Rooms a system gives back in its own order are paired with the stay's by their type
+  and their guests, never by position.
 
 ## 9. Onboarding
 

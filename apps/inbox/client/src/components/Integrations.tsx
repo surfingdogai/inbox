@@ -17,6 +17,7 @@ import {
 import { Fragment, useEffect, useRef, useState } from "react";
 import { type ApiProblem, api, problemOf } from "../lib/api";
 import { session } from "../lib/auth";
+import { cardState } from "../lib/connect";
 import { accountOf, bookedTwice, isBookingPlatform, lengthGaps, servesLink, tagOf } from "../lib/integrations";
 import { type PropertyView, useProperty } from "../lib/property";
 import { useIntegrations, useIntegrationWrite, useServices } from "../lib/queries";
@@ -160,7 +161,8 @@ export function IntegrationsCard({
   const byCard = new Map<string, ConnectionView[]>();
   for (const c of connections) byCard.set(cardOf(c), [...(byCard.get(cardOf(c)) ?? []), c]);
   const card = data?.cards.find((c) => c.id === open) ?? null;
-  const soon = (data?.cards ?? []).filter((c) => c.status === "soon");
+  // Still to come here (not the ones that need this server's operator first, which say so on their tile).
+  const soon = (data?.cards ?? []).filter((c) => cardState(c).tag === "Soon");
   // Payments (ADR-023): one platform sends an order's links per mode; the one that does is named. A shop
   // that takes its orders at its own checkout is one of them (ADR-030).
   const sending = connections.filter((c) => c.payments && c.pay_on && !c.payments.disconnecting);
@@ -176,6 +178,13 @@ export function IntegrationsCard({
         { id: "payments" as const, label: "Payments" },
         { id: "shops" as const, label: "Shops and checkouts" },
       ];
+  // The cards a kind of business sees in a group (a place to stay books no minutes).
+  const cardsOf = (group: string) => (data?.cards ?? []).filter((c) => c.group === group && !skip.includes(c.id));
+  // A group whose cards are all still to come, nothing connected: on a phone it goes, heading and all,
+  // and its cards are named on one line after the last group.
+  const allSoonOf = (cards: readonly GalleryCard[]) =>
+    cards.length > 0 && cards.every((c) => cardState(c).tag === "Soon" && (byCard.get(c.id) ?? []).length === 0);
+  const comingAlone = groups.flatMap((g) => (allSoonOf(cardsOf(g.id)) ? cardsOf(g.id) : []));
   // A booking platform (Cal.com, Calendly) adds the bookings it is given to the calendar it checks, so
   // with both adding them each booking would show twice there.
   const twice = bookedTwice(connections);
@@ -237,12 +246,14 @@ export function IntegrationsCard({
         <div className="int-groups">
           {groups.map((g) => {
             // A kind of business leaves out the cards it has no use for (a place to stay books no minutes).
-            const cards = data.cards.filter((c) => c.group === g.id && !skip.includes(c.id));
+            const cards = cardsOf(g.id);
             if (cards.length === 0) return null;
+            // A group whose cards are all still to come: on a phone, its heading goes with its tiles.
+            const allSoon = allSoonOf(cards);
             const here = card && card.group === g.id ? card : null;
             const keyPanel = here && here.group === "payments" && (byCard.get(here.id) ?? []).length > 0;
             return (
-              <div key={g.id} className="int-group stack-xs">
+              <div key={g.id} className={clsx("int-group stack-xs", allSoon && "is-all-soon")}>
                 <h3 className="int-group-head">{g.label}</h3>
                 <div className="int-grid">
                   {cards.map((c) => (
@@ -264,11 +275,12 @@ export function IntegrationsCard({
                     />
                   ))}
                 </div>
-                {cards.some((c) => c.status === "soon") && (
+                {/* On a phone, the cards still to come in a group with others are one line under it. */}
+                {!allSoon && cards.some((c) => cardState(c).tag === "Soon") && (
                   <p className="int-soon-line">
                     Soon:{" "}
                     {cards
-                      .filter((c) => c.status === "soon")
+                      .filter((c) => cardState(c).tag === "Soon")
                       .map((c) => c.title)
                       .join(" · ")}
                   </p>
@@ -318,6 +330,11 @@ export function IntegrationsCard({
           })}
         </div>
       )}
+      {comingAlone.length > 0 && (
+        <div className="int-soon-block">
+          <p className="int-soon-line">Coming: {comingAlone.map((c) => c.title).join(" · ")}</p>
+        </div>
+      )}
       {data && (
         <p className="int-elsewhere">
           {soon.some((c) => c.group === "shops" || c.group === "calendars")
@@ -365,7 +382,9 @@ function Tile({
   onOpen: () => void;
 }) {
   const Icon = ICONS[card.group];
-  const soon = card.status === "soon";
+  // The same word as on the Property page: Soon, or Needs setup with what this server's operator sets.
+  const state = cardState(card);
+  const soon = state.tag !== null;
   const tag = tagOf(connections, unmatched);
   const body = (
     <>
@@ -373,11 +392,13 @@ function Tile({
       <span className="int-text">
         <span className="int-name">{card.title}</span>
         <span className="int-line">
-          {instead && card.status === "ready" && card.group === "payments" ? `${instead} takes payment now` : card.line}
+          {instead && card.status === "ready" && card.group === "payments"
+            ? `${instead} takes payment now`
+            : (state.hint ?? card.line)}
         </span>
       </span>
       {soon ? (
-        <span className="int-tag">Soon</span>
+        <span className="int-tag">{state.tag}</span>
       ) : tag ? (
         <span className={clsx("int-tag", tag.tone === "on" && "is-on", tag.tone === "warn" && "is-warn")}>
           {tag.text}
@@ -386,7 +407,7 @@ function Tile({
     </>
   );
   if (soon) {
-    return <div className="int-tile is-soon">{body}</div>;
+    return <div className={clsx("int-tile", state.tag === "Soon" ? "is-soon" : "is-setup")}>{body}</div>;
   }
   return (
     <button

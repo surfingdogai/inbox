@@ -302,6 +302,18 @@ export class ConnectorError extends Error {
   }
 }
 
+/**
+ * A property system took a change (new nights, other rooms) that then had to be undone, and could not
+ * be put back as it was: the system and the inbox now hold the stay differently, and only the owner can
+ * set it right there. Refused, never retried: the inbox keeps the stay as it was and tells the owner.
+ */
+export class StayPutBackError extends ConnectorError {
+  constructor(message: string) {
+    super("refused", message);
+    this.name = "StayPutBackError";
+  }
+}
+
 /* --- what a connection holds ---------------------------------------------- */
 
 /** A calendar the owner can read busy times from, or send bookings to. */
@@ -514,6 +526,11 @@ export interface LinkState {
   /** The times last written, when known: a platform that moves a booking by rescheduling needs them. */
   readonly start?: number | undefined;
   readonly end?: number | undefined;
+  /**
+   * For a stay a property system took: what the system says it costs as written (its own total, taxes
+   * and fees in), when it says. The inbox tells the owner when it differs from what the guest agreed.
+   */
+  readonly total?: PayAmount | undefined;
 }
 
 export interface BookingWriter {
@@ -1317,7 +1334,11 @@ export interface OutboundStay {
     readonly rateId?: string | undefined;
     readonly adults: number;
     readonly childrenAges: readonly number[];
-    /** What the room costs, written by the inbox: a system does not price what an API writes. */
+    /**
+     * What the room costs, as the guest agreed it in the inbox. A system that prices a stay from its own
+     * rate is not sent it as a price: it goes in the reservation's note, and the system's own total is
+     * read back (`LinkState.total`), so the owner is told when the two differ.
+     */
     readonly price: PayAmount;
   }[];
   /** Only once confirmed, and only to the property's own system. */

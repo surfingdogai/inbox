@@ -82,6 +82,10 @@ export interface FakePropertySystem {
     readBack: "ok" | "fails";
     /** How many looks by our reference miss before one finds it (an index that lags the write). */
     findMisses: number;
+    /** What the system says a booking comes to, by its own rate, taxes and fees; null when it says nothing. */
+    total: number | null;
+    /** How many changes it takes before it refuses every one after (null: no end). */
+    patchesLeft: number | null;
     credits: number;
     /** When the credits come back, ms from the fake's own clock. */
     resetsInMs: number;
@@ -122,6 +126,8 @@ export function genericPropertySystem(opts: {
     write: "ok",
     readBack: "ok",
     findMisses: 0,
+    total: null,
+    patchesLeft: null,
     credits: 100,
     resetsInMs: 300_000,
   };
@@ -278,6 +284,10 @@ export function genericPropertySystem(opts: {
       const b = bookings.get(req.params.id ?? "");
       if (!b) return answer(404, { error: "no such booking" });
       if (mode.write === "refuse") return answer(409, { error: "not free" });
+      if (mode.patchesLeft !== null) {
+        if (mode.patchesLeft <= 0) return answer(409, { error: "not changed" });
+        mode.patchesLeft--;
+      }
       const body = JSON.parse(req.body) as Partial<FakeBooking> & { rooms?: string[] };
       const next = {
         checkIn: body.checkIn ?? b.checkIn,
@@ -338,6 +348,10 @@ export function genericPropertySystem(opts: {
     if (res.status >= 400) throw new ConnectorError("bad_response", `The system answered ${res.status}.`);
     return { res, json: JSON.parse(res.text) };
   };
+
+  /** The system's own word on what a stay comes to, when it gives one. */
+  const ownTotal = (stay: OutboundStay) =>
+    mode.total === null ? {} : { total: { value: mode.total, currency: stay.rooms[0]?.price.currency ?? "" } };
 
   const definition: ConnectorDefinition = {
     kind: "fake_property",
@@ -435,7 +449,7 @@ export function genericPropertySystem(opts: {
             price: stay.rooms.reduce((a, r) => a + r.price.value, 0),
             ...(stay.guest ? { guest: stay.guest } : {}),
           });
-          return link;
+          return { ...link, ...ownTotal(stay) };
         }
         const { json } = await call(ctx, "POST", "/bookings", {
           reference: stay.key,
@@ -446,7 +460,7 @@ export function genericPropertySystem(opts: {
           price: stay.rooms.reduce((a, r) => a + r.price.value, 0),
           ...(stay.guest ? { guest: stay.guest } : {}),
         });
-        return { externalId: (json as { id: string }).id, etag: null, calendar: null };
+        return { externalId: (json as { id: string }).id, etag: null, calendar: null, ...ownTotal(stay) };
       },
       async cancel(ctx, link) {
         await call(ctx, "POST", `/bookings/${link.externalId}/cancel`);
