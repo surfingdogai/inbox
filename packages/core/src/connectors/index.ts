@@ -1,4 +1,19 @@
 export {
+  AGENT_PROFILE_RE,
+  AgentPayments,
+  type AgentPaymentView,
+  type AgentPayOffer,
+  type AgentPaySettings,
+  type AgentPayState,
+  agentPayWords,
+  DECLINES_PER_INBOX,
+  DECLINES_PER_ORDER,
+  type OrderPayment,
+  type PayOrderOutcome,
+  type PayOrderRequest,
+  payNowLabel,
+} from "./agent-pay";
+export {
   type AuthorizeInput,
   authorizeInput,
   type CatalogueState as ConnectorCatalogueState,

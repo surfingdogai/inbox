@@ -740,6 +740,19 @@ export class PaymentLinks {
    * names for its products ("Sourdough and 2 more"), never words a customer's agent typed (a name,
    * an address), and the order's reference; "Order 4F2K9Q" when a line is not from the catalogue.
    */
+  /**
+   * What a payment for an order is called in the business's dashboard, as its link would be: the
+   * catalogue's names and the reference, in the customer's language (ADR-042 charges by it). Null for
+   * no order.
+   */
+  async chargeTitle(itemId: string): Promise<string | null> {
+    const order = await this.order(itemId);
+    if (!order) return null;
+    const facts = await businessFacts(this.db);
+    const lang: CustomerLang = customerLang(order.locale, facts.languages) === "pt" ? "pt" : "en";
+    return this.titleOf(order, lang, shortRef(order.id), PAGE_WORDS[lang].order);
+  }
+
   private async titleOf(order: OrderFacts, lang: CustomerLang, reference: string, noun: string): Promise<string> {
     const ids = order.productIds;
     const plain = `${noun} ${reference}`;

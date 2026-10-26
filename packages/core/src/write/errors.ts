@@ -58,6 +58,33 @@ export type WriteErrorCode =
   | "too_many_requests"
   /** Something the inbox depends on did not answer just now (an owner's own AI provider): try again later. */
   | "unavailable"
+  /**
+   * ADR-042, an assistant paying an order directly: the business takes no payment from assistants for
+   * it (`details.reason`: off, no_connection, currency, zero_total, connection, refused).
+   */
+  | "agent_pay_unavailable"
+  /** The order is not accepted yet: nothing is charged before it is (`details.retry_after_s` or `waiting_on`). */
+  | "not_accepted_yet"
+  | "already_paid"
+  /** A change to the order waits for an answer: what it comes to is not settled. */
+  | "change_pending"
+  /** The terms the customer confirmed are not the order's now: `details` carries the current fingerprint. */
+  | "terms_changed"
+  /** Another payment for the order is on its way: retry with the same idempotency key. */
+  | "in_progress"
+  /** The token is not for this business, this mode, or this inbox's platform. */
+  | "token_invalid"
+  | "token_expired"
+  /** The token was spent, or revoked by the customer or their platform. */
+  | "token_used"
+  /** The token's limit is below the order's total, or in another currency. */
+  | "token_limit"
+  /** The card was declined: nothing was charged. */
+  | "payment_declined"
+  /** The card asks its holder to confirm the payment themselves: `details.payment_url` when there is one. */
+  | "authentication_required"
+  /** The payment platform could not be reached: retry with the same idempotency key; nothing is charged twice. */
+  | "platform_unavailable"
   | "internal";
 
 export interface FieldProblem {
@@ -94,6 +121,19 @@ const STATUS: Record<WriteErrorCode, number> = {
   geo_terms: 422,
   too_many_requests: 429,
   unavailable: 503,
+  agent_pay_unavailable: 409,
+  not_accepted_yet: 409,
+  already_paid: 409,
+  change_pending: 409,
+  terms_changed: 409,
+  in_progress: 409,
+  token_invalid: 422,
+  token_expired: 422,
+  token_used: 422,
+  token_limit: 422,
+  payment_declined: 402,
+  authentication_required: 402,
+  platform_unavailable: 503,
   internal: 500,
 };
 

@@ -23,6 +23,7 @@ import {
   publicProduct,
   siteDomains,
 } from "../catalogue/publish";
+import { type OrderPayment, payNowLabel } from "../connectors/agent-pay";
 import { ConnectorCapabilities, registerSyncStep } from "../connectors/capability";
 import { registerPosOrderApplier } from "../connectors/hooks";
 import { registerScheduleSource, scheduleSourceOf } from "../connectors/schedules";
@@ -223,6 +224,12 @@ export interface Page<T> {
  */
 export interface ItemStatus extends ItemView {
   readonly identity: IdentityAnswer;
+  /**
+   * An order's payment as its customer's assistant reads it (ADR-042): due, on its way or paid; the
+   * business's link while one is open; and, when the business takes payments from assistants, how to
+   * pay it directly (`agent`). Absent before the order is accepted, and for anyone but its customer.
+   */
+  readonly payment?: OrderPayment | undefined;
   readonly reference?: string;
   readonly offer?: CustomerItemView["offer"];
   readonly waiting_on?: CustomerItemView["waiting_on"];
@@ -237,6 +244,16 @@ export interface ItemStatus extends ItemView {
    * rule or the business's assistant sent.
    */
   readonly thread?: readonly CustomerThreadEntry[];
+}
+
+/** What paying an order directly answers (ADR-042): paid, or on its way, and the order as it stands. */
+export interface PayOrderResult {
+  readonly state: "paid" | "processing";
+  readonly amount: { readonly value: number; readonly currency: string };
+  /** What to tell the person, in the business's words. */
+  readonly human: string;
+  readonly view: ItemStatus;
+  readonly replayed: boolean;
 }
 
 export interface CustomerThreadEntry {
@@ -822,11 +839,20 @@ export class Capabilities {
       },
       ...(s.commerce.legal.legalName.trim() ? { trader: traderOf(s.commerce.legal) } : {}),
       ...(elsewhere.length ? { doors_elsewhere: elsewhere } : {}),
-      ...(s.payments.accepted.length ? { payments: publishedPayments(s.payments.accepted) } : {}),
+      ...(await this.declaredPayments(s.payments.accepted)),
       // How a trade takes work (ADR-039): where it goes, emergencies, call-out. Never the area's base.
       ...(itemTypes.includes("quote_request") && workProfile(s) ? { work: workProfile(s) ?? undefined } : {}),
       ...(await this.kitchenProfileOf()),
     };
+  }
+
+  /**
+   * What the profile says the business takes: what the owner declared, and, while customers' assistants
+   * can pay it directly (ADR-042), `acp_delegated`, which nobody types: it follows the owner's switch.
+   */
+  private async declaredPayments(accepted: readonly string[]): Promise<{ payments?: string[] }> {
+    const declared = (await this.connectors.agentPay.anyOn()) ? [...accepted, "acp_delegated"] : [...accepted];
+    return declared.length ? { payments: publishedPayments(declared) } : {};
   }
 
   /** The profile's `kitchen`, when the business takes orders for a time or books tables (ADR-040). */
@@ -1192,11 +1218,29 @@ export class Capabilities {
         (await hashText(input.access_token)) === row.accessTokenHash);
     const item = rowToItem(row);
     // A customer reads it in the business's words and language, with what we proposed and who we wait on.
-    const view = isCustomer(caller)
-      ? await this.customer.present(item, await this.customer.audienceOf(item, c), nowOf(c))
-      : viewFor(item, permissionKind(caller));
+    const audience = isCustomer(caller) ? await this.customer.audienceOf(item, c) : null;
+    const customerView = audience ? await this.customer.present(item, audience, nowOf(c)) : null;
+    const view = customerView ?? viewFor(item, permissionKind(caller));
+    // An order's payment, and how its assistant may pay it directly (ADR-042).
+    const payment =
+      customerView && item.type === "order"
+        ? await this.connectors.agentPay.paymentOf(row.id, customerView.agreed?.terms_sha ?? null, nowOf(c))
+        : null;
     return {
       ...view,
+      ...(customerView && payment
+        ? {
+            payment,
+            ...(payment.agent
+              ? {
+                  next: [
+                    { action: "pay_order" as const, label: payNowLabel(audience?.lang ?? "en") },
+                    ...customerView.next,
+                  ],
+                }
+              : {}),
+          }
+        : {}),
       // The business's replies reach a customer who came through an assistant too, not only by email.
       ...(isCustomer(caller) ? { thread: await customerThread(this.db, row.id) } : {}),
       receipts,
@@ -1206,6 +1250,73 @@ export class Capabilities {
         { presented },
         !isCustomer(caller) ? "business" : creator ? "creator" : "presenter",
       ),
+    };
+  }
+
+  /**
+   * A customer's assistant pays an accepted order directly (ADR-042): with the one-time token its
+   * platform got for the business, on the business's own account, for exactly the total the customer
+   * confirmed (`terms_sha`). Only the order's own customer (its access token, a pass it recognises, or
+   * the agent key it was made with): never the business's keys or its AI. Once per idempotency key, and
+   * once per token; the answer is the order as it stands, with its receipt.
+   */
+  async payOrder(caller: Caller, input: T.PayOrderInput, door: "mcp" | "rest"): Promise<PayOrderResult> {
+    await this.access.requireScope(caller, ["inbox:write"], "public:pay_order");
+    if (!isCustomer(caller)) {
+      throw new WriteError(
+        "not_allowed",
+        "Only the order's customer pays it here: the business's keys and its AI never do.",
+      );
+    }
+    const { caller: recognised } = await this.people.recognise(caller, input);
+    const c = withToken(withIdempotencyKey(recognised, input.idempotency_key), input.access_token);
+    if (!c.idempotency) {
+      throw new WriteError(
+        "invalid_input",
+        "Missing: idempotency_key. Add it and retry: a payment is never made twice.",
+        {
+          fields: [
+            { path: "idempotency_key", problem: "missing", message: "a key you generate and keep for this payment" },
+          ],
+        },
+      );
+    }
+    const row = await this.loadOwned(c, input.item_id);
+    if (row.type !== "order") {
+      throw new WriteError("wrong_state", "Only an order is paid this way.", { details: { item_id: row.id } });
+    }
+    // The request is remembered by the token's hash, never the token.
+    const hashed = {
+      item_id: row.id,
+      terms_sha: input.terms_sha,
+      handler: input.payment.handler,
+      credential: await hashText(`spt:${input.payment.token}`),
+      allowance: input.payment.allowance ?? null,
+    };
+    const { result, replayed } = await this.once(c, "public:pay_order", hashed, () =>
+      this.connectors.agentPay.pay(
+        {
+          itemId: row.id,
+          termsSha: input.terms_sha,
+          token: input.payment.token,
+          allowance: input.payment.allowance,
+          door,
+        },
+        nowOf(c),
+      ),
+    );
+    const view = await this.getItemStatus(caller, {
+      item_id: row.id,
+      ...(input.access_token ? { access_token: input.access_token } : {}),
+      ...(input.pass ? { pass: input.pass } : {}),
+      ...(input.key ? { key: input.key } : {}),
+    });
+    return {
+      state: result.state,
+      amount: result.amount,
+      human: view.payment?.human ?? view.human,
+      view,
+      replayed,
     };
   }
 

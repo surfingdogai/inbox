@@ -200,6 +200,34 @@ export const customerItemViewSchema = z.looseObject({
     ),
   receipts: z.array(receiptViewSchema).optional(),
   identity: z.looseObject({}).optional().describe("On the status door: who the inbox takes the customer for."),
+  payment: z
+    .looseObject({
+      state: z.enum(["due", "processing", "paid"]),
+      amount: z.object({ value: z.number().int(), currency: z.string() }).describe("In the currency's own minor unit."),
+      payment_url: z.string().nullable().describe("The business's link to pay, while one is open: for your person."),
+      agent: z
+        .looseObject({
+          handler: z.literal("stripe_spt"),
+          psp: z.string(),
+          business_profile: z
+            .string()
+            .describe("The business's Stripe profile: what your platform gets the token for."),
+          environment: z.enum(["livemode", "testmode"]),
+          amount: z.object({ value: z.number().int(), currency: z.string() }),
+          platform_amount: z
+            .object({ value: z.number().int(), currency: z.string() })
+            .nullable()
+            .describe("The total as Stripe counts it: the token's limit."),
+          terms_sha: z.string().describe("Send it back with the token: the terms your person confirmed."),
+          binding_id: z.string(),
+          spec: z.string(),
+        })
+        .nullable()
+        .describe("How to pay it directly (POST /v1/items/{id}/pay), when the business takes that; null otherwise."),
+      human: z.string().describe("In the business's words: relay it as it is."),
+    })
+    .optional()
+    .describe("On the status door, for an accepted order: its payment, and how your platform may pay it directly."),
   calendar: z
     .object({
       free: z.boolean(),
@@ -982,6 +1010,21 @@ const paymentSchema = z.looseObject({
 export const itemPaymentsSchema = z.object({
   item_id: z.string(),
   payments: z.array(paymentSchema),
+  agent_payments: z
+    .array(
+      z.looseObject({
+        id: z.string(),
+        via: z.literal("agent"),
+        provider: z.string(),
+        state: z.enum(["creating", "processing", "paid", "declined", "failed", "cancelled", "unknown"]),
+        amount: z.object({ value: z.number().int(), currency: z.string() }),
+        payment_id: z.string().nullable(),
+        dashboard_url: z.string().nullable().describe("The payment in your own dashboard: where it is refunded."),
+        failure: z.string().nullable(),
+      }),
+    )
+    .optional()
+    .describe("What customers' assistants paid, or tried to, directly into your account, newest first."),
   none: z
     .string()
     .nullable()
@@ -1046,3 +1089,12 @@ export const integrationsSchema = z.object({
 });
 
 export const authorizeSchema = z.object({ authorize_url: z.string().describe("Open it in the owner's browser") });
+
+/** What `POST /v1/items/{id}/pay` answers: paid, or on its way, and the order as it stands. */
+export const payOrderResultSchema = z.looseObject({
+  state: z.enum(["paid", "processing"]),
+  amount: z.object({ value: z.number().int(), currency: z.string() }),
+  human: z.string().describe("In the business's words: relay it as it is."),
+  view: customerItemViewSchema,
+  replayed: z.boolean(),
+});

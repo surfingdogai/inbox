@@ -15,6 +15,7 @@ import { type Caller, isCustomer, isOwnerAssistant, isPerson, nowOf } from "../w
 import { jobStatement } from "../write/common";
 import { fromZod, WriteError } from "../write/errors";
 import { type TransitionResult, transitionItem } from "../write/transition";
+import { AgentPayments, type AgentPaymentView } from "./agent-pay";
 import {
   activeProducts,
   connectorSource,
@@ -257,6 +258,18 @@ export interface ConnectionView {
   readonly pay_on: boolean;
   /** `live` or `test` for a payment platform; null otherwise. */
   readonly mode: "live" | "test" | null;
+  /**
+   * A payment platform that takes payments from customers' assistants (ADR-042): the owner's switch,
+   * the Stripe profile assistants pay through, what the key lacks when switching on was refused, why the
+   * inbox switched it off itself, and how many orders assistants paid. Null for one that takes none.
+   */
+  readonly agent_pay: {
+    readonly on: boolean;
+    readonly profile: string | null;
+    readonly missing: readonly string[];
+    readonly stopped: string | null;
+    readonly paid: number;
+  } | null;
   /** A payment platform's links: waiting to be paid, paid, and failing to be made; null otherwise. */
   readonly payments: {
     readonly open: number;
@@ -333,6 +346,13 @@ export const updateConnectionInput = z.object({
   paused: z.boolean().optional(),
   /** A payment platform: make pay links for the orders the inbox accepts (ADR-023). */
   pay_on: z.boolean().optional(),
+  /**
+   * A payment platform: let customers' assistants pay accepted orders directly, with a one-time token
+   * from their platform (ADR-042). The owner's in person; switching on asks the key for what it needs.
+   */
+  agent_pay: z.boolean().optional(),
+  /** The Stripe profile assistants' platforms get tokens for (`profile_…`), from Stripe's profiles page. */
+  agent_profile: z.string().trim().min(1).max(130).optional(),
   /** What the owner chose of the connection's choosers, by key: an option's id, or null for none. */
   choices: z.record(z.string().max(40), z.string().max(200).nullable()).optional(),
 });
@@ -391,6 +411,8 @@ export class ConnectorCapabilities {
   private fixedRedirect: ((kind: string) => string | undefined) | null = null;
   /** Pay links in the business's own payment account (ADR-023). */
   readonly payments: PaymentLinks;
+  /** Customers' assistants paying accepted orders directly, on the business's own account (ADR-042). */
+  readonly agentPay: AgentPayments;
   /**
    * Whether platforms can reach this inbox's `/v1/hooks/*` now: a hosted inbox before it goes live
    * answers only its owner (its host says so through the policy).
@@ -405,6 +427,7 @@ export class ConnectorCapabilities {
     private readonly baseUrl: string | undefined,
   ) {
     this.payments = new PaymentLinks(this.payHost());
+    this.agentPay = new AgentPayments(this.payHost(), this.payments);
     this.hooks = new ConnectorHooks(this.hookHost());
   }
 
@@ -525,6 +548,8 @@ export class ConnectorCapabilities {
     readonly none: string | null;
     /** The order's payment link is one of these (shown as the platform's, never as a link of its own). */
     readonly link_is_ours: boolean;
+    /** What customers' assistants paid, or tried to, directly (ADR-042), newest first. */
+    readonly agent_payments: readonly AgentPaymentView[];
   }> {
     requireOwnerSide(caller);
     const { rows } = await this.db.client.query({
@@ -534,9 +559,13 @@ export class ConnectorCapabilities {
     });
     if (!rows[0]) throw new WriteError("not_found", "no such item", { details: { item_id: itemId } });
     const payments = await this.payments.forItem(itemId);
-    const none = payments.length === 0 ? await this.payments.whyNone(itemId, nowOf(caller)) : null;
+    const agent = await this.agentPay.forItem(itemId);
+    const none =
+      payments.length === 0 && !agent.some((a) => a.state === "paid")
+        ? await this.payments.whyNone(itemId, nowOf(caller))
+        : null;
     const ours = payments.length > 0 && (await this.payments.ownsOrderLink(itemId));
-    return { item_id: itemId, payments, none, link_is_ours: ours };
+    return { item_id: itemId, payments, none, link_is_ours: ours, agent_payments: agent };
   }
 
   /* --- connecting with a form ---------------------------------------------- */
@@ -1126,6 +1155,17 @@ export class ConnectorCapabilities {
           )
         : [];
     if (input.bookings_on !== undefined) json.push(["$.bookingsOn", input.bookings_on]);
+    // Customers' assistants paying directly (ADR-042): the key is asked for what it needs, last of all,
+    // so a refusal above writes nothing; what it lacks is answered, not thrown.
+    let agent: { readonly on: boolean; readonly missing: readonly string[] } | null = null;
+    if (input.agent_pay !== undefined || input.agent_profile !== undefined) {
+      if (!this.paysFor(row.kind)) {
+        throw new WriteError("invalid_input", "This connection takes no payments.", {
+          fields: [{ path: "agent_pay", problem: "invalid", message: "not a payment platform" }],
+        });
+      }
+      agent = await this.agentPay.setAgentPay(row.id, { on: input.agent_pay, profile: input.agent_profile }, now);
+    }
     if (input.name !== undefined) {
       sets.push("name = ?");
       params.push(input.name);
@@ -1163,7 +1203,10 @@ export class ConnectorCapabilities {
       );
     }
     if (statements.length > 0) await this.db.batch(statements);
-    return this.view(await this.row(id), now);
+    const view = await this.view(await this.row(id), now);
+    return agent && agent.missing.length > 0 && view.agent_pay
+      ? { ...view, agent_pay: { ...view.agent_pay, missing: agent.missing } }
+      : view;
   }
 
   async syncNow(caller: Caller, id: string): Promise<{ queued: true; connection_id: string }> {
@@ -1389,8 +1432,12 @@ export class ConnectorCapabilities {
       }
       // A payment platform (ADR-023): what a webhook may have missed is asked of the platform.
       if (def.payments && def.capabilities.includes("pay_links")) {
-        const r = await this.payments.reconcile(this.payConnectionOf(row, def, ctx), now);
+        const conn = this.payConnectionOf(row, def, ctx);
+        const r = await this.payments.reconcile(conn, now);
         payNote = `, ${r.checked} link${r.checked === 1 ? "" : "s"} checked, ${r.paid} paid${r.refunded ? `, ${r.refunded} refunded` : ""}`;
+        // Payments assistants made directly that the platform settles later (ADR-042).
+        const settled = await this.agentPay.settle(conn, now);
+        if (settled > 0) payNote += `, ${settled} assistant payment${settled === 1 ? "" : "s"} checked`;
       }
       // What a track reads on every sync (ADR-040): a till's word on the orders written to it, an
       // ordering system's orders for the owner's view.
@@ -2375,6 +2422,10 @@ export class ConnectorCapabilities {
     const l = links.rows[0] ?? [];
     const presetLabel = row.config.preset ? def?.presets?.find((p) => p.id === row.config.preset)?.label : undefined;
     const pays = def?.payments && def.capabilities.includes("pay_links") ? await this.payments.counts(row.id) : null;
+    const agentPay =
+      pays && this.agentPay.takes(row.kind, def?.payments)
+        ? { ...(await this.agentPay.settingsOf(row.id)), missing: [], paid: await this.agentPay.paidCount(row.id) }
+        : null;
     const hook = row.config.extra?.webhook;
     const withheld = def ? withheldOf(def, row.config.extra) : {};
     return {
@@ -2411,6 +2462,7 @@ export class ConnectorCapabilities {
       created_at: row.createdAt,
       pay_on: row.config.payOn,
       mode: row.config.mode,
+      agent_pay: agentPay,
       payments:
         pays && def?.payments
           ? {

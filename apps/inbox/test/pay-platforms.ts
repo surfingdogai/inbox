@@ -7,8 +7,11 @@ import {
   STRIPE_INVALID_KEY,
   STRIPE_MISSING_PARAM,
   STRIPE_PERMISSION_ERROR,
+  stripeCardDeclined,
   stripeEvent,
+  stripePaymentIntent,
   stripeSession,
+  stripeTokenRefused,
 } from "../../../packages/adapters/test/fixtures/payments";
 
 /**
@@ -31,6 +34,21 @@ export interface StripeLink {
   submit: string;
 }
 
+/**
+ * A Shared Payment Token an assistant's platform got for the business (ADR-042), as Stripe holds it:
+ * granted to a profile, in a mode, with its limits, and what charging it does (a card that pays, one
+ * that is declined, one that asks its holder to confirm, a payment that settles later).
+ */
+export interface GrantedToken {
+  profile: string;
+  livemode: boolean;
+  currency: string;
+  maxAmount: number;
+  expiresAt: number;
+  outcome: "succeeded" | "processing" | "requires_action" | "declined" | "authentication_required";
+  deactivated: null | "consumed" | "revoked" | "expired";
+}
+
 /** Stripe, as one account: prices, payment links, checkouts and webhook endpoints, by its rules. */
 export function stripePlatform(key: string, base = "https://inbox.example.com") {
   const live = key.includes("_live_");
@@ -49,6 +67,18 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
   const outage: { prices: number | null; close: number | null } = { prices: null, close: null };
   /** Whether the key may make card-hold pages and customers (ADR-036): asked only when holds are switched on. */
   const holds: { allowed: boolean } = { allowed: true };
+  /**
+   * Assistants' payments (ADR-042): the account's profile, whether the key may write PaymentIntents, the
+   * tokens platforms got for the profile, the PaymentIntents made from them, and outages.
+   */
+  const agent: { allowed: boolean; profile: string; down: number | null } = {
+    allowed: true,
+    profile: live ? "profile_1FjordLive00001" : "profile_test_1Fjord0001",
+    down: null,
+  };
+  const tokens = new Map<string, GrantedToken>();
+  const intents = new Map<string, ReturnType<typeof stripePaymentIntent>>();
+  const answered = new Map<string, { status: number; body: unknown }>();
   let n = 0;
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -172,6 +202,37 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
       if (f.get("active") === "false") link.active = false;
       return json({ id: link.id, object: "payment_link", active: link.active });
     }
+    // Assistants' payments (ADR-042): PaymentIntents from shared payment tokens, in the preview version.
+    if (url.pathname === "/v1/payment_intents" || url.pathname.startsWith("/v1/payment_intents/")) {
+      if (agent.allowed === false) return json(STRIPE_PERMISSION_ERROR("rak_payment_intent_write"), 403);
+      if (headers.get("stripe-version") !== "2026-09-30.preview") {
+        return json(
+          { error: { type: "invalid_request_error", message: "shared payment tokens need the preview version" } },
+          400,
+        );
+      }
+      if (agent.down !== null) return json({ error: { type: "api_error", message: "An error occurred." } }, agent.down);
+      const [, , , id, verb] = url.pathname.split("/");
+      if (method === "GET" && id) {
+        const pi = intents.get(id);
+        return pi ? json(pi) : json({ error: { type: "invalid_request_error", code: "resource_missing" } }, 404);
+      }
+      if (method === "POST" && id && verb === "cancel") {
+        const pi = intents.get(id);
+        if (!pi) return json({ error: { type: "invalid_request_error", code: "resource_missing" } }, 404);
+        pi.status = "canceled";
+        return json(pi);
+      }
+      if (route !== "POST /v1/payment_intents") return new Response("not found", { status: 404 });
+      if (!body) return json(STRIPE_MISSING_PARAM("amount"), 400);
+      // An idempotent request is answered as it was the first time, whatever that was.
+      const k = headers.get("idempotency-key");
+      const seen = k ? answered.get(k) : undefined;
+      if (seen) return json(seen.body, seen.status);
+      const answer = chargeToken(f);
+      if (k) answered.set(k, answer);
+      return json(answer.body, answer.status);
+    }
     // Card holds (ADR-036): a Checkout Session in setup mode, and a customer probe that makes nothing.
     if (route === "POST /v1/checkout/sessions") {
       if (holds.allowed === false) return json(STRIPE_PERMISSION_ERROR, 403);
@@ -209,6 +270,65 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
     }
     return new Response("not found", { status: 404 });
   }) as typeof fetch;
+
+  /** A PaymentIntent from a shared payment token, by Stripe's rules for one (ADR-042). */
+  function chargeToken(f: URLSearchParams): { status: number; body: unknown } {
+    const spt = f.get("payment_method_data[shared_payment_granted_token]") ?? "";
+    const token = tokens.get(spt);
+    const amount = Number(f.get("amount"));
+    const currency = String(f.get("currency"));
+    // Another business's token, another mode's, or none: Stripe knows no such token for this account.
+    if (!token || token.profile !== agent.profile || token.livemode !== live) {
+      return { status: 400, body: stripeTokenRefused("missing", spt) };
+    }
+    if (token.deactivated === "consumed") return { status: 400, body: stripeTokenRefused("consumed", spt) };
+    if (token.deactivated === "revoked") return { status: 400, body: stripeTokenRefused("revoked", spt) };
+    if (token.deactivated === "expired" || token.expiresAt <= Date.now()) {
+      return { status: 400, body: stripeTokenRefused("expired", spt) };
+    }
+    if (token.currency !== currency || amount > token.maxAmount) {
+      return { status: 400, body: stripeTokenRefused("limit", spt) };
+    }
+    const id = `pi_${live ? "" : "test_"}${++n}`;
+    const metadata: Record<string, string> = {};
+    for (const [k, v] of f) if (k.startsWith("metadata[")) metadata[k.slice(9, -1)] = v;
+    if (token.outcome === "declined" || token.outcome === "authentication_required") {
+      const declined = stripeCardDeclined(
+        token.outcome === "declined" ? "insufficient_funds" : "authentication_required",
+        id,
+      );
+      intents.set(id, {
+        ...stripePaymentIntent({ id, amount, currency, status: "requires_payment_method", livemode: live, metadata }),
+      });
+      return { status: 402, body: declined };
+    }
+    token.deactivated = "consumed";
+    const pi = stripePaymentIntent({ id, amount, currency, status: token.outcome, livemode: live, metadata });
+    intents.set(id, pi);
+    return { status: 200, body: pi };
+  }
+
+  /** An assistant's platform gets a token for the business's profile (Stripe's test helper does the same). */
+  function grantToken(o: Partial<GrantedToken> & { maxAmount: number; currency: string }): string {
+    const id = `spt_${live ? "" : "test_"}${(++n).toString().padStart(8, "0")}grant`;
+    tokens.set(id, {
+      profile: agent.profile,
+      livemode: live,
+      expiresAt: Date.now() + 3_600_000,
+      outcome: "succeeded",
+      deactivated: null,
+      ...o,
+    });
+    return id;
+  }
+
+  /** A payment that was processing settles: paid, or not. */
+  function settle(id: string, status: "succeeded" | "requires_payment_method") {
+    const pi = intents.get(id);
+    if (!pi) throw new Error(`no payment intent ${id}`);
+    pi.status = status;
+    pi.amount_received = status === "succeeded" ? pi.amount : 0;
+  }
 
   /** The customer saves a card on a hold's page: the session completes with a SetupIntent and a Customer. */
   function saveCard(sessionId: string) {
@@ -251,7 +371,23 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
       body,
     });
   }
-  return { fetch: fetchImpl, links, endpoints, sessions, calls, pay, saveCard, holds, outage, account };
+  return {
+    fetch: fetchImpl,
+    links,
+    endpoints,
+    sessions,
+    calls,
+    pay,
+    saveCard,
+    holds,
+    outage,
+    account,
+    agent,
+    tokens,
+    intents,
+    grantToken,
+    settle,
+  };
 }
 
 /** Mollie, as one profile: payment links and the payments made on them. */

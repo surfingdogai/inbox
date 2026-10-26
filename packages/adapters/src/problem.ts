@@ -45,6 +45,19 @@ const TITLES: Record<string, string> = {
   geo_terms: "A price may not depend on where someone is",
   too_many_requests: "Too many requests",
   unavailable: "Not available just now",
+  agent_pay_unavailable: "This business takes no payment from assistants for this order",
+  not_accepted_yet: "Not accepted yet",
+  already_paid: "Paid already",
+  change_pending: "A change waits for an answer",
+  terms_changed: "The order changed",
+  in_progress: "A payment is on its way",
+  token_invalid: "Token not for this business",
+  token_expired: "Token expired",
+  token_used: "Token used",
+  token_limit: "Token below the total",
+  payment_declined: "Payment declined",
+  authentication_required: "The card holder must confirm",
+  platform_unavailable: "Payment platform unavailable",
   unauthorized: "Authentication required",
   internal: "Something went wrong",
 };
@@ -73,10 +86,12 @@ export function problemFrom(error: unknown): Problem {
 
 export function problemResponse(c: Context, error: unknown): Response {
   const p = problemFrom(error);
-  const retry = p.status === 429 ? Number(p.details?.retry_after_s) : Number.NaN;
+  // A refusal that says when to try again says it in the header too: too many requests, or an
+  // agent's payment on its way.
+  const after = Number(p.details?.retry_after_s);
   return c.json(p, p.status as ContentfulStatusCode, {
     "Content-Type": "application/problem+json",
-    ...(Number.isFinite(retry) && retry > 0 ? { "Retry-After": String(Math.ceil(retry)) } : {}),
+    ...(Number.isFinite(after) && after > 0 ? { "Retry-After": String(Math.ceil(after)) } : {}),
   });
 }
 

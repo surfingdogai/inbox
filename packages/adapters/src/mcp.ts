@@ -34,6 +34,7 @@ import {
   type OnceOptions,
   openReturnInput,
   patchOf,
+  payOrderInput,
   productIdInput,
   productInput,
   profileInput,
@@ -92,6 +93,10 @@ export const PUBLIC_INSTRUCTIONS = [
   "A booking or an order that carries a price binds your person only once they confirmed it: create_booking and create_order without terms_sha answer with the summary to show them (confirm); call again with its terms_sha on their clear yes.",
   "Your person may withdraw from a paid booking or an order within the period the business states (withdrawal on get_item_status): withdraw_from_contract shows the statement first; send confirm_withdrawal on their yes. Once the goods reached them, request_return asks to send them back (faulty goods cost them nothing).",
 ].join(" ");
+
+/** Said only while the business takes payments straight from assistants' platforms (ADR-042). */
+export const AGENT_PAY_INSTRUCTIONS =
+  "Once an order is accepted, get_item_status says how to pay it: payment.agent when the business takes a payment straight from your platform (pay_order, with a one-time Stripe shared payment token for payment.agent.business_profile and payment.agent.platform_amount, on your person's yes to that total), else payment_url for your person.";
 
 export const OWNER_INSTRUCTIONS = [
   "You are working this business's inbox on the owner's behalf. list_items shows what needs a person; get_item shows the full story;",
@@ -295,6 +300,8 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
     // (ADR-040) how its menu reads, allergens included, and how an order for a time is made.
     const work = await takesWork(caps);
     const menu = await hasMenuDoors(caps);
+    // A business whose assistants' payments are on (ADR-042) has the tool to pay with.
+    const agentPay = await caps.connectors.agentPay.anyOn();
     // A kitchen that takes its orders on its own site (ADR-035): its menu reads here, orders go there.
     const ordersAt = menu ? await caps.food.orderDoorElsewhere() : null;
     const instructions = [
@@ -302,6 +309,7 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
       ...(stays ? [STAY_INSTRUCTIONS] : []),
       ...(work ? [TRADES_INSTRUCTIONS] : []),
       ...(menu ? [foodInstructions(ordersAt)] : []),
+      ...(agentPay ? [AGENT_PAY_INSTRUCTIONS] : []),
     ];
     const server = new McpServer({ name, version }, { instructions: instructions.join(" ") });
     if (stays) registerPublicStayTools(server, caps, caller);
@@ -483,6 +491,39 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
           return { text: `${text}${lastFromUs(v)}${identityText(v.identity, undefined)}`, structured: v };
         }),
     );
+    if (agentPay) {
+      server.registerTool(
+        "pay_order",
+        {
+          title: "Pay for an order",
+          description:
+            "Pay an order the business accepted, straight from your platform, when get_item_status shows payment.agent: send the one-time Stripe shared payment token (spt_…) your platform got for payment.agent.business_profile and payment.agent.platform_amount, with agreed.terms_sha, on your person's yes to that total, and an idempotency_key you keep. Nothing is charged unless the order is accepted and the total is the one they confirmed, and it is charged once. Without payment.agent, give your person payment_url instead. A decline charges nothing: ask them for another way to pay.",
+          inputSchema: payOrderInput,
+          annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false },
+        },
+        async (args) => {
+          try {
+            const r = await caps.payOrder(caller, args, "mcp");
+            return ok(
+              `${r.human}${r.state === "processing" ? " Read get_item_status for when it is paid." : ""}${r.replayed ? " (Same request as before; nothing was done twice.)" : ""}`,
+              r,
+            );
+          } catch (error) {
+            // A refusal the person should hear is said in the business's words too.
+            const said = error instanceof WriteError ? error.details?.human : undefined;
+            const out = failed(error);
+            if (typeof said !== "string") return out;
+            const [first] = out.content;
+            return {
+              ...out,
+              content: [
+                { type: "text", text: `${first?.type === "text" ? first.text : ""} Tell your person: "${said}"` },
+              ],
+            };
+          }
+        },
+      );
+    }
     server.registerTool(
       "accept_offer",
       {

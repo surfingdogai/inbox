@@ -177,6 +177,46 @@ export const createOrderInput = z.object({
 
 export const getItemStatusInput = z.object({ item_id: z.string().min(1), access_token: accessToken, ...carried });
 
+/**
+ * A customer's assistant pays an accepted order directly (ADR-042): with the one-time token its platform
+ * got for the business's profile and the order's total, and the fingerprint of the terms its person
+ * confirmed. Charged once, for exactly the order's total, on the business's own account; nothing is
+ * charged unless the order is accepted and the total is the one they confirmed.
+ */
+export const payOrderInput = z.object({
+  item_id: z.string().min(1).max(64),
+  access_token: accessToken,
+  terms_sha: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{43}$/)
+    .describe("agreed.terms_sha from get_item_status: the order your person confirmed. Charged for exactly its total."),
+  payment: z.object({
+    handler: z
+      .enum(["stripe_spt"])
+      .describe("payment.agent.handler from get_item_status: stripe_spt, a Stripe shared payment token."),
+    token: z
+      .string()
+      .min(8)
+      .max(255)
+      .regex(/^[A-Za-z0-9_]+$/)
+      .describe(
+        "The one-time token (spt_…) your platform got for payment.agent.business_profile and payment.agent.platform_amount, on your person's yes to that total. Never a card number.",
+      ),
+    allowance: z
+      .object({
+        max_amount: z.number().int().positive(),
+        currency: z.string().regex(/^[A-Za-z]{3}$/),
+        expires_at: z.string().datetime({ offset: true }).optional(),
+      })
+      .optional()
+      .describe(
+        "What your platform says the token allows, if it says: checked against the total, and it can only refuse.",
+      ),
+  }),
+  idempotency_key: idempotencyKey,
+  ...carried,
+});
+
 export const cancelItemInput = z.object({
   item_id: z.string().min(1),
   reason: z.string().max(2_000).optional(),
@@ -594,6 +634,7 @@ export type CreateOrderInput = z.infer<typeof createOrderInput>;
 export type GetItemStatusInput = z.infer<typeof getItemStatusInput>;
 export type AcknowledgeReceiptInput = z.infer<typeof acknowledgeReceiptInput>;
 export type CancelItemInput = z.infer<typeof cancelItemInput>;
+export type PayOrderInput = z.infer<typeof payOrderInput>;
 export type SendMessageInput = z.infer<typeof sendMessageInput>;
 export type VerifyCustomerInput = z.infer<typeof verifyCustomerInput>;
 export type AcceptOfferInput = z.infer<typeof acceptOfferInput>;

@@ -384,7 +384,9 @@ export type NextAction =
   | "withdraw_from_contract"
   | "request_return"
   | "cancel_item"
-  | "send_message";
+  | "send_message"
+  /** An accepted order its assistant can pay directly (ADR-042). */
+  | "pay_order";
 
 /** What the customer can do next, in the order they would most likely do it, with the business's labels. */
 export function nextActions(

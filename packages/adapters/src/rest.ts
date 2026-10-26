@@ -36,6 +36,7 @@ import {
   type OnceOptions,
   offerDraftInput,
   openReturnInput,
+  payOrderInput,
   presetKeySchema,
   productInput,
   profileInput,
@@ -454,6 +455,46 @@ export function publicRest(caps: Capabilities, opts: { readonly baseUrl?: string
       content: { "application/json": { schema: resolver(R.passedOnResultSchema) } },
     },
   };
+  app.post(
+    "/items/:id/pay",
+    describeRoute({
+      tags: ["public"],
+      summary: "Pay for your order, straight from your platform",
+      description:
+        "When GET /items/{id} shows payment.agent, the business takes a payment straight from your platform for the order it accepted: send the one-time Stripe shared payment token (spt_…) your platform got for payment.agent.business_profile and payment.agent.platform_amount, on your person's yes to that total, with agreed.terms_sha and an Idempotency-Key. It is charged once, on the business's own Stripe account, for exactly the order's total; nothing is charged unless the order is accepted and the total is the one your person confirmed. 200 paid, with the order and its receipt; 202 processing, to read again on GET /items/{id}. Without payment.agent, give your person payment_url instead.",
+      responses: {
+        ...json("Paid", R.payOrderResultSchema),
+        202: {
+          description: "The payment is on its way: read GET /items/{id} for when it is paid.",
+          content: { "application/json": { schema: resolver(R.payOrderResultSchema) } },
+        },
+        402: {
+          description:
+            "payment_declined (nothing was charged: ask your person for another card, and pay with a new token; details.attempts_left) or authentication_required (the card asks its holder to confirm: give them details.payment_url). details.human says it in the business's words.",
+        },
+        403: { description: "The order is someone else's, or the caller is the business's own key or AI." },
+        409: {
+          description:
+            "agent_pay_unavailable (details.reason: off, no_connection, currency, zero_total, connection, refused: give your person payment_url), not_accepted_yet (details.retry_after_s, or waiting_on), already_paid, change_pending, terms_changed (details.terms_sha is the order's now: ask your person again), in_progress (retry with the same Idempotency-Key), or wrong_state.",
+        },
+        422: {
+          description:
+            "token_invalid (not for this business or mode), token_expired, token_used, token_limit (below the total or another currency): get a new token.",
+        },
+        429: { description: "too_many_attempts: too many declined payments today; give your person payment_url." },
+        503: {
+          description:
+            "platform_unavailable: retry with the same token and Idempotency-Key (Retry-After). Never charged twice.",
+        },
+      },
+    }),
+    answer(payOrderInput),
+    async (c) => {
+      const r = await caps.payOrder(c.get("caller"), withItem(c, c.req.valid("json")) as never, "rest");
+      return c.json(r, r.state === "processing" ? 202 : 200);
+    },
+  );
+
   /** A counter, or a suggestion kept for a person (202). */
   const answeredOrPassedOn = (c: Context<CallerEnv>, r: object) => c.json(r, "passed_on" in r ? 202 : 200);
 
