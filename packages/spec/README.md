@@ -113,6 +113,17 @@ or network:
   ignores `platform`; a 0.8 manifest reads as before. The spec's own examples (a time zone, an amount) no longer name
   one country, and minor units follow each currency's ISO 4217 exponent.
 
+- 0.10 ([ADR-032](../../docs/adr/032-money-policies-schedules.md)): money in every currency's own minor unit: a
+  `money.value` is an integer count of the ISO 4217 minor unit of its `currency` (4500 is KSh 45.00,
+  ¥4,500, KWD 4.500), read with `minorUnits`, `decimalOf`, `parseDecimal` and `shareOf` (the exponent
+  table is `ISO_4217_MINOR_UNITS`; fund codes, metals and "no currency" are not money a price is in).
+  A reader on 0.9 that assumed hundredths for every currency must move: its amounts were already in
+  minor units for every currency it took. Policies as data (`policySchema`: steps before a start, fees
+  `none`, `percent`, `amount`, `units` or `full`, a no-show fee and whether a deposit is refundable; a
+  dated policy, `datedPolicySchema`), and payment schedules in UCP's `payment.terms` shape
+  (`paymentScheduleSchema`: `immediate`, `deferred` or `at_property`; `scheduleProblem`, the invariant
+  that the schedules add up to the total).
+
 Everything here is published, byte for byte, at https://surfingdog.ai/spec/ (the files under
 `/spec/schemas/`, `/spec/vectors/` and `/spec/vocab/`, the vocabulary's versions at
 `/spec/capabilities/v<N>.json` and the latest at `/spec/capabilities.json`, and `/spec/index.json`,

@@ -809,26 +809,41 @@ async function connectionId(s: S, kind = "stripe"): Promise<string> {
 const sentTo = (s: S, to: string) => s.mail.sent.filter((m) => m.to.includes(to));
 
 describe("only money this inbox counts right", () => {
-  it("makes no link for an order in yen or dinars (not counted in hundredths), and tells the owner once each", async () => {
+  it("makes no link in a currency Stripe has no test for (dinars, Ugandan shillings), and tells the owner once each", async () => {
     const s = await setup();
     await connectStripe(s);
-    const yen = await orderIn(s, 50_000, "JPY");
+    const shilling = await orderIn(s, 50_000, "UGX");
     const dinar = await orderIn(s, 12_500, "KWD");
-    await accept(s, yen);
+    await accept(s, shilling);
     await accept(s, dinar);
     await drain(s, 60_000);
     expect(s.stripe.links.size).toBe(0);
-    for (const id of [yen, dinar]) {
-      expect(await paymentsOf(s, id)).toMatchObject([
-        { state: "error", error: "This currency is not counted in hundredths here, so no link was made." },
-      ]);
-      expect((await itemOf(s.db, id)).state).toBe("accepted");
-    }
+    expect(await paymentsOf(s, dinar)).toMatchObject([
+      { state: "error", error: "Stripe does not list KWD among the currencies it takes, so no link is made in it." },
+    ]);
+    expect(await paymentsOf(s, shilling)).toMatchObject([
+      {
+        state: "error",
+        error: "Stripe lists UGX as zero-decimal and also as written in hundredths, so no link is made in it.",
+      },
+    ]);
+    for (const id of [shilling, dinar]) expect((await itemOf(s.db, id)).state).toBe("accepted");
     // Another event on the order makes no second row and no second email.
-    await s.inbox.caps.connectors.payments.ensure(yen, Date.now());
+    await s.inbox.caps.connectors.payments.ensure(shilling, Date.now());
     await drain(s, 60_000);
-    expect(await paymentsOf(s, yen)).toHaveLength(1);
+    expect(await paymentsOf(s, shilling)).toHaveLength(1);
     expect(sentTo(s, "ana@salon.example").filter((m) => m.subject.endsWith("has no payment link"))).toHaveLength(2);
+  });
+
+  it("makes a yen link on Stripe for exactly the yen: 50 000 is ¥50,000, never ¥500 (ADR-032)", async () => {
+    const s = await setup();
+    await connectStripe(s);
+    const yen = await orderIn(s, 50_000, "JPY");
+    await accept(s, yen);
+    await drain(s, 60_000);
+    const [link] = [...s.stripe.links.values()];
+    expect(link).toMatchObject({ amount: 50_000, currency: "jpy" });
+    expect(await paymentsOf(s, yen)).toMatchObject([{ state: "open", amount: { value: 50_000, currency: "JPY" } }]);
   });
 
   it("writes a euro amount to Mollie in hundredths: 4500 is 45.00", async () => {

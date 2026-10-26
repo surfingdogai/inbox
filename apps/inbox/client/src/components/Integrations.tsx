@@ -1,6 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import clsx from "clsx";
 import {
+  BedDouble,
+  CalendarCheck,
   CalendarDays,
   Check,
   ChevronRight,
@@ -9,6 +11,8 @@ import {
   ExternalLink,
   RefreshCw,
   ShoppingBag,
+  Store,
+  Wrench,
 } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { type ApiProblem, api, problemOf } from "../lib/api";
@@ -33,7 +37,15 @@ interface Notice {
   readonly text: string;
 }
 
-const ICONS = { calendars: CalendarDays, payments: CreditCard, shops: ShoppingBag } as const;
+const ICONS = {
+  calendars: CalendarDays,
+  payments: CreditCard,
+  shops: ShoppingBag,
+  lodging: BedDouble,
+  work: Wrench,
+  pos: Store,
+  booking: CalendarCheck,
+} as const;
 
 /** The card a connection belongs to, as the server says. */
 const cardOf = (c: ConnectionView) => c.card ?? c.kind;

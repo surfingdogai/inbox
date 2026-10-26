@@ -1,3 +1,4 @@
+import { minorUnitsOf } from "./currencies";
 import type { Customer, Item, ItemType, ItemView, Money, Party, Receipt } from "./types";
 
 /**
@@ -167,12 +168,19 @@ export function channelWord(channel: string): string {
   return CHANNEL_WORDS[channel] ?? channel;
 }
 
+/** An amount in its currency's own minor unit (ADR-032): `€45.00`, `¥4,500`, `KWD 4.500`. */
 export function formatMoney(m: Money | null | undefined, locale?: string): string {
   if (!m) return "";
+  const e = minorUnitsOf(m.currency);
   try {
-    return new Intl.NumberFormat(locale, { style: "currency", currency: m.currency }).format(m.value / 100);
+    return new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency: m.currency,
+      minimumFractionDigits: e,
+      maximumFractionDigits: e,
+    }).format(m.value / 10 ** e);
   } catch {
-    return `${(m.value / 100).toFixed(2)} ${m.currency}`;
+    return `${(m.value / 10 ** e).toFixed(e)} ${m.currency}`;
   }
 }
 

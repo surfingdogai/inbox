@@ -13,7 +13,7 @@ import { allFloors, type FloorView, floorStatement } from "../negotiation/catalo
 import { describeAction, summarizeRule } from "../rules/describe";
 import { buildRuleContext, heldBack } from "../rules/engine";
 import { evaluate } from "../rules/evaluate";
-import { PRESETS, type PresetConfirm, presetFor } from "../rules/presets";
+import { PRESET_NAMES, PRESETS, type PresetConfirm, presetFor } from "../rules/presets/index";
 import { geoTermsProblem, isNegative, positiveOnlyProblem, skippedSentence } from "../rules/reputation";
 import { type Action, type RuleDefinition, ruleDefinitionSchema } from "../rules/schema";
 import {
@@ -87,11 +87,7 @@ export interface Availability {
   readonly closures: readonly Closure[];
 }
 
-export const PRESET_NAMES: Record<S.ApplyPresetInput["preset"], string> = {
-  appointments: "Appointments",
-  trades: "Trades & quotes",
-  shop: "Shop",
-};
+export { PRESET_NAMES };
 
 type ServiceRow = typeof services.$inferSelect;
 type ProductRow = typeof products.$inferSelect;

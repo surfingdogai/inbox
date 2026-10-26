@@ -1,4 +1,5 @@
 import type { Money } from "../domain/types";
+import { formatMinor } from "../util/money";
 import type { CustomerLang } from "./lang";
 
 /**
@@ -113,13 +114,9 @@ export function zoneName(timezone: string, lang: CustomerLang, at: Date = new Da
   return zone;
 }
 
-/** `€45.00` · `45,00 €`. */
+/** `€45.00` · `45,00 €` · `¥4,500`: in the currency's own minor unit (ADR-032). */
 export function moneyIn(m: Money | { readonly value: number; readonly currency: string }, lang: CustomerLang): string {
-  try {
-    return new Intl.NumberFormat(LOCALE[lang], { style: "currency", currency: m.currency }).format(m.value / 100);
-  } catch {
-    return `${(m.value / 100).toFixed(2)} ${m.currency}`;
-  }
+  return formatMinor(m, LOCALE[lang]);
 }
 
 /**

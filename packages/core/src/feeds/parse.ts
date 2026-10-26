@@ -13,8 +13,8 @@
  * imports 412 of 415 products needs to know what the other three were.
  */
 
-import type { GtinHint } from "@surfingdog/spec";
-import { isHundredthsCurrency } from "../util/locale";
+import { type GtinHint, ISO_4217_FUNDS, minorUnits } from "@surfingdog/spec";
+import { isMoneyCurrency } from "../util/locale";
 
 /** A product as a feed describes it, normalised. `null` means the feed did not say. */
 export interface FeedProduct {
@@ -24,8 +24,8 @@ export interface FeedProduct {
   readonly description: string | null;
   readonly sku: string | null;
   /**
-   * Hundredths and an ISO currency, as the rest of the schema stores money. Null when the row gives
-   * none to sell at: no price, nothing or less, or one in a currency not counted in hundredths.
+   * Minor units of an ISO currency, as the rest of the schema stores money (ADR-032). Null when the row
+   * gives none to sell at: no price, nothing or less, or one in no currency a price is set in.
    */
   readonly price: { readonly value: number; readonly currency: string } | null;
   /** Units in stock when the feed counts them. A feed that only says "in stock" leaves this null. */
@@ -216,8 +216,9 @@ const DOLLARS = [
  * Tested longest first (`CURRENCY_SIGNS`). `"R$".includes("$")` is true, so a shorter sign tested
  * first claims every price carrying the longer one, and Brazilian reais were stored as dollars.
  *
- * A sign whose currency is not counted in hundredths (`¥`, `₩`, `円`, `د.ك`) is here so that it gives
- * no price, never the feed's currency at a hundred or a thousand times the amount.
+ * A sign whose currency is not counted in hundredths (`¥`, `₩`, `円`, `د.ك`) names its own currency,
+ * read in that currency's own minor unit (ADR-032), never the feed's currency at a hundred or a
+ * thousand times the amount.
  */
 const SIGNS: ReadonlyArray<readonly [string, readonly string[], string | null]> = [
   ["US$", ["USD"], "USD"],
@@ -234,6 +235,7 @@ const SIGNS: ReadonlyArray<readonly [string, readonly string[], string | null]> 
   ["ر.ع.", ["OMR"], "OMR"],
   ["د.م.", ["MAD"], "MAD"],
   ["R$", ["BRL"], "BRL"],
+  ["KSh", ["KES"], "KES"],
   ["E£", ["EGP"], "EGP"],
   ["A$", ["AUD"], "AUD"],
   ["C$", ["CAD", "NIO"], "CAD"],
@@ -350,51 +352,16 @@ const NOT_CURRENCIES = new Set([
 ]);
 
 /**
- * ISO 4217 currencies not counted in hundredths (`util/locale.ts`): none (yen, won, pesos, francs),
- * thousandths (dinars, rials), ten-thousandths, and the funds and metals. Recognised so that a row
- * naming one is never priced in the default currency instead; and then given no price, since every
- * amount here is kept in hundredths and no door takes these: ¥4,980 would read as ¥49.80, and
- * 12.500 KWD as twelve thousand five hundred.
+ * ISO 4217 codes that are no money a price is set in: the metals and the units of account (the fund
+ * codes are `ISO_4217_FUNDS`). Recognised so that a row naming one is never priced in the default
+ * currency instead; and then given no price.
  */
-const UNCOUNTED_CURRENCIES = new Set([
-  "BHD",
-  "BIF",
-  "CLF",
-  "CLP",
-  "DJF",
-  "GNF",
-  "IQD",
-  "ISK",
-  "JOD",
-  "JPY",
-  "KMF",
-  "KRW",
-  "KWD",
-  "LYD",
-  "OMR",
-  "PYG",
-  "RWF",
-  "TND",
-  "UGX",
-  "UYI",
-  "UYW",
-  "VND",
-  "VUV",
-  "XAF",
-  "XAG",
-  "XAU",
-  "XDR",
-  "XOF",
-  "XPD",
-  "XPF",
-  "XPT",
-  "XSU",
-]);
+const NOT_MONEY = new Set(["XAG", "XAU", "XDR", "XPD", "XPT", "XSU"]);
 
 /**
  * The currency a price cell is in: the ISO code it names, else the sign it carries, else the feed's
- * own (`fallback`). Any code counted in hundredths is read (`isHundredthsCurrency`, every one the
- * runtime knows), as is one that is not, to give no price in it. Null for a currency sign it cannot
+ * own (`fallback`). Any ISO 4217 currency is read, in its own minor unit (`minorUnits`, ADR-032), as
+ * is a fund code, a metal or a unit of account, to give no price in it. Null for a currency sign it cannot
  * name (`¢`, `₿`, or the rupee sign in a feed priced in euros): not the feed's currency, and none
  * it can price in.
  */
@@ -402,7 +369,7 @@ function currencyOf(text: string, fallback: string): string | null {
   for (const match of text.matchAll(/\b([A-Z]{3})\b/g)) {
     const code = match[1] as string;
     if (NOT_CURRENCIES.has(code)) continue;
-    if (isHundredthsCurrency(code) || UNCOUNTED_CURRENCIES.has(code)) return code;
+    if (minorUnits(code) !== null || ISO_4217_FUNDS.has(code) || NOT_MONEY.has(code)) return code;
   }
   for (const [sign, users, otherwise] of CURRENCY_SIGNS) {
     if (text.includes(sign)) return users.includes(fallback) ? fallback : otherwise;
@@ -418,12 +385,12 @@ function currencyOf(text: string, fallback: string): string | null {
  * separator as a comma and the thousands separator as a full stop: `1.234,56` is one thousand
  * two hundred, and `1.234` on its own is almost certainly one thousand two hundred and thirty
  * four rather than one and a bit. The rule used here is the one a person uses reading it: the
- * LAST separator is the decimal point when it leaves two or fewer digits behind it, and every
- * separator is a grouping mark otherwise.
+ * LAST separator is the decimal point when it leaves two or fewer digits behind it (three, alone, in
+ * a currency counted in thousandths), and every separator is a grouping mark otherwise.
  *
  * Null for no price to sell at: none written, nothing or less (a placeholder `0.00`, a refund's
- * `-5.00`), or in a currency not counted in hundredths, named, by its sign or by default, or a
- * sign that names no currency it can price in.
+ * `-5.00`), or in no currency a price is set in (a fund, a metal), named, by its sign or by default,
+ * or a sign that names no currency it can price in.
  */
 export function parsePrice(raw: string, defaultCurrency: string): { value: number; currency: string } | null {
   return readPrice(raw, defaultCurrency).price;
@@ -441,11 +408,17 @@ function readPrice(
   const none = { price: null, unsellable: false };
   const text = raw.trim();
   if (text === "") return none;
-  const number = readNumber(text);
-  if (!number) return none;
   const currency = currencyOf(text, defaultCurrency.toUpperCase());
-  if (currency === null || !isHundredthsCurrency(currency)) return { price: null, unsellable: true };
-  const value = Number(number.whole) * 100 + Number(`${number.fraction}00`.slice(0, 2));
+  // Every amount is kept in the currency's own minor unit (ADR-032): ¥500 is 500, €5 is 500, KWD 5 is 5000.
+  const exponent = currency !== null && isMoneyCurrency(currency) ? minorUnits(currency) : null;
+  const number = readNumber(text, exponent ?? 2);
+  if (!number) return none;
+  if (currency === null || exponent === null) return { price: null, unsellable: true };
+  // A zero-decimal currency written with a fraction is someone's formatter, not money.
+  const value =
+    exponent === 0
+      ? Number(number.whole)
+      : Number(number.whole) * 10 ** exponent + Number(number.fraction.padEnd(exponent, "0").slice(0, exponent));
   // Nothing or less is a placeholder, or a refund, never a price to sell at.
   if (!Number.isFinite(value) || value <= 0 || number.negative) return { price: null, unsellable: true };
   return { price: { value, currency }, unsellable: false };
@@ -461,7 +434,7 @@ function readPrice(
  * first numeric RUN instead leaves the sentence outside the number, where it belongs. The first
  * run and not the last, because `12.99 EUR incl. 20% VAT` has to be twelve ninety-nine.
  */
-function readNumber(text: string): { whole: string; fraction: string; negative: boolean } | null {
+function readNumber(text: string, exponent: number): { whole: string; fraction: string; negative: boolean } | null {
   const match = text.match(/-?\d[\d.,\u00a0\u202f' ]*/);
   if (!match) return null;
   const negative = match[0].startsWith("-");
@@ -478,8 +451,10 @@ function readNumber(text: string): { whole: string; fraction: string; negative: 
   if (lastSeparator >= 0) {
     const tail = body.slice(lastSeparator + 1);
     // Two digits or fewer after the last separator: it is the decimal point. Three, and it was a
-    // thousands mark, which is why `1.234` reads as 1234 rather than 1.234.
-    if (tail.length > 0 && tail.length <= 2 && /^\d+$/.test(tail)) {
+    // thousands mark, which is why `1.234` reads as 1234 rather than 1.234 — except in a currency
+    // counted in thousandths (KWD, BHD), where three digits after the only separator are its fils.
+    const most = exponent === 3 && body.replace(/[^.,]/g, "").length === 1 ? 3 : 2;
+    if (tail.length > 0 && tail.length <= most && /^\d+$/.test(tail)) {
       whole = body.slice(0, lastSeparator);
       fraction = tail;
     }
@@ -659,7 +634,7 @@ export function parseAvailability(raw: string): boolean | null {
 }
 
 function parseCount(raw: string): number | null {
-  const number = readNumber(raw);
+  const number = readNumber(raw, 2);
   if (!number) return null;
   // `10.00` is ten. Deleting the decimal point rather than truncating made it a thousand, and a
   // shop with ten in stock told every agent it had a thousand.

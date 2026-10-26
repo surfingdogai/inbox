@@ -3,6 +3,7 @@ import clsx from "clsx";
 import { ArrowLeft, ArrowRight, Check, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { CurrencySelect, LengthPicker, MoneyInput, TimeZonePicker } from "../components/Choosers";
+import { ConnectYourSystem } from "../components/ConnectYourSystem";
 import { ErrorState } from "../components/Feedback";
 import { Field, Switch } from "../components/Form";
 import { HoursEditor } from "../components/Hours";
@@ -26,10 +27,13 @@ import {
 } from "../lib/queries";
 import {
   joinNetworkDoc,
+  KINDS,
+  kindOf,
   networkOffer,
   offerBodies,
   ownerEmailDoc,
   SETUP_NETWORK,
+  type SetupKind,
   type WizardDoors,
   wizardDoorsDoc,
   wizardPreset,
@@ -76,7 +80,16 @@ const DOORS: readonly { readonly key: keyof WizardDoors; readonly label: string;
   { key: "message", label: "Agents can send a message", line: "Anything else, for you to answer." },
 ];
 
-const STEPS = ["You", "What agents can do", "What you offer", "When you are open", "Answering"] as const;
+/** The wizard's steps by id: a kind of business that needs others (a place to stay) names its own. */
+const STEPS = [
+  { id: "kind", label: "What you run" },
+  { id: "you", label: "You" },
+  { id: "doors", label: "What agents can do" },
+  { id: "offer", label: "What you offer" },
+  { id: "hours", label: "When you are open" },
+  { id: "answering", label: "Answering" },
+] as const;
+type StepId = (typeof STEPS)[number]["id"];
 
 const DEFAULT_HOURS: Weekly = {
   mon: [["09:00", "17:00"]],
@@ -138,6 +151,10 @@ function SetupWizard() {
   const applyPreset = useApplyPreset();
 
   const [step, setStep] = useState(0);
+  const at: StepId = STEPS[step]?.id ?? "kind";
+  // What the business runs (ADR-032): it sets the rules to start from and what agents can do to begin with.
+  const [kindKey, setKindKey] = useState<string | null>(null);
+  const kind = kindOf(kindKey);
   const [tz] = useState(guessTimezone);
   const [name, setName] = useState("");
   const [timezone, setTimezone] = useState(tz);
@@ -204,7 +221,7 @@ function SetupWizard() {
   const existing = (services.data?.items.length ?? 0) + (products.data?.items.length ?? 0);
   // Booked at a time, or only asked about for a price.
   const asked = !doors.booking;
-  const preset = wizardPreset(doors);
+  const preset = wizardPreset(doors, kind);
 
   const leave = () => {
     rememberSkip();
@@ -215,7 +232,7 @@ function SetupWizard() {
   const saveStep = async (): Promise<boolean> => {
     setLocal(null);
     try {
-      if (step === 0) {
+      if (at === "you") {
         // A business already named keeps the languages it has, the email language first; a new one starts with it.
         const known = profile.data?.name?.trim() ? (profile.data.languages ?? []) : [];
         await saveProfile.mutateAsync({
@@ -227,10 +244,10 @@ function SetupWizard() {
         // A merge: only this one key is sent, everything else in the settings stays as it is.
         if (!ownerEmailHeld) await saveSettings.mutateAsync({ doc: ownerEmailDoc(ownerEmail) });
       }
-      if (step === 1) {
+      if (at === "doors") {
         await saveSettings.mutateAsync({ doc: wizardDoorsDoc(doors) });
       }
-      if (step === 2) {
+      if (at === "offer") {
         const planned = offerBodies(offers, "services", currency, asked);
         if ("problem" in planned) {
           setLocal(planned.problem);
@@ -242,10 +259,10 @@ function SetupWizard() {
           for (const body of planned.bodies) await productWrite.mutateAsync({ body });
         }
       }
-      if (step === 3 && doors.booking) {
+      if (at === "hours" && doors.booking) {
         await saveWeekly.mutateAsync({ weekly: hours });
       }
-      if (step === 4) {
+      if (at === "answering") {
         if (rules && preset) await applyPreset.mutateAsync({ key: preset, replace: false });
         // A merge of the one key: only the owner in person switches a network on, and this is them.
         if (join && offer === "switch") await saveSettings.mutateAsync({ doc: joinNetworkDoc() });
@@ -263,11 +280,12 @@ function SetupWizard() {
   };
 
   const canAdvance =
-    (step === 0 && name.trim().length > 0) ||
-    (step === 1 && (doors.booking || doors.quoteRequest || doors.message)) ||
-    (step === 2 && (!doors.booking || offers.some((o) => o.name.trim()) || existing > 0)) ||
-    step === 3 ||
-    step === 4;
+    at === "kind" ||
+    (at === "you" && name.trim().length > 0) ||
+    (at === "doors" && (doors.booking || doors.quoteRequest || doors.message)) ||
+    (at === "offer" && (!doors.booking || offers.some((o) => o.name.trim()) || existing > 0)) ||
+    at === "hours" ||
+    at === "answering";
 
   if (profile.isError) {
     return (
@@ -281,7 +299,7 @@ function SetupWizard() {
     );
   }
 
-  if (done) return <Finished onOpen={leave} />;
+  if (done) return <Finished onOpen={leave} kind={kind} />;
 
   return (
     <main className="page page-narrow setup">
@@ -293,8 +311,8 @@ function SetupWizard() {
       </div>
 
       <ol className="steps" aria-label="Setup steps">
-        {STEPS.map((label, i) => (
-          <li key={label} className={clsx("stepdot", i === step && "is-now", i < step && "is-done")}>
+        {STEPS.map(({ id, label }, i) => (
+          <li key={id} className={clsx("stepdot", i === step && "is-now", i < step && "is-done")}>
             <span className="n">{i < step ? <Check className="icon" aria-hidden="true" /> : i + 1}</span>
             <span className="l">{label}</span>
           </li>
@@ -302,7 +320,32 @@ function SetupWizard() {
       </ol>
 
       <section className="card glass stack">
-        {step === 0 && (
+        {at === "kind" && (
+          <fieldset className="chips-field stack">
+            <legend>
+              <h2 className="sec">What do you run?</h2>
+            </legend>
+            <div className="chips" role="radiogroup">
+              {KINDS.map((k) => (
+                <label key={k.key} className="chip">
+                  <input
+                    type="radio"
+                    name="su-kind"
+                    checked={kindKey === k.key}
+                    onChange={() => {
+                      setKindKey(k.key);
+                      setDoors(k.doors);
+                    }}
+                  />
+                  <span>{k.label}</span>
+                </label>
+              ))}
+            </div>
+            <p className="hint">{kind ? kind.line : "Pick the nearest. You can change everything later."}</p>
+          </fieldset>
+        )}
+
+        {at === "you" && (
           <>
             <h2 className="sec">Who is this inbox for?</h2>
             <p className="lede small">
@@ -315,7 +358,7 @@ function SetupWizard() {
                 className="input"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Oficina Maré"
+                placeholder="Maple & Fade"
               />
             </Field>
             <div className="grid2">
@@ -368,7 +411,7 @@ function SetupWizard() {
           </>
         )}
 
-        {step === 1 && (
+        {at === "doors" && (
           <>
             <h2 className="sec">What can agents do?</h2>
             <p className="lede small">As many as you like. You can change them any time in Settings.</p>
@@ -388,7 +431,7 @@ function SetupWizard() {
           </>
         )}
 
-        {step === 2 && (
+        {at === "offer" && (
           <>
             <h2 className="sec">{doors.booking ? "What can people book?" : "What can people ask you about?"}</h2>
             <p className="lede small">
@@ -463,7 +506,7 @@ function SetupWizard() {
           </>
         )}
 
-        {step === 3 && (
+        {at === "hours" && (
           <>
             <h2 className="sec">When are you open?</h2>
             {doors.booking ? (
@@ -487,7 +530,7 @@ function SetupWizard() {
           </>
         )}
 
-        {step === 4 && (
+        {at === "answering" && (
           <>
             <h2 className="sec">What should it answer on its own?</h2>
             <p className="lede small">
@@ -497,13 +540,11 @@ function SetupWizard() {
             {preset ? (
               <>
                 <Switch checked={rules} onChange={setRules} disabled={busy}>
-                  Start from the rules for {preset === "appointments" ? "bookings" : "requests for a price"}
+                  Start from the rules for {PRESET_WORDS[preset] ?? "your kind of business"}
                 </Switch>
                 <p className="hint">
-                  {preset === "trades"
-                    ? "Requests for a price are flagged for you, and anything urgent goes to the top."
-                    : "Bookings in a free slot are confirmed, and everything else waits for you."}{" "}
-                  Each rule reads in plain words in Settings, and switches off.
+                  {PRESET_LINES[preset] ?? "Everything waits for you."} Each rule reads in plain words in Settings, and
+                  switches off.
                 </p>
               </>
             ) : (
@@ -552,9 +593,22 @@ function SetupWizard() {
   );
 }
 
+/** How the last step names a preset's rules, and what they do, in a line each. */
+const PRESET_WORDS: Readonly<Partial<Record<string, string>>> = {
+  appointments: "bookings",
+  trades: "requests for a price",
+  shop: "orders",
+};
+const PRESET_LINES: Readonly<Partial<Record<string, string>>> = {
+  appointments: "Bookings in a free slot are confirmed, and everything else waits for you.",
+  trades: "Requests for a price are flagged for you, and anything urgent goes to the top.",
+  shop: "Small orders are accepted and asked to pay, and large ones wait for you.",
+};
+
 /** The end. What works now, and — just as important — what does not yet. */
-function Finished({ onOpen }: { onOpen: () => void }) {
+function Finished({ onOpen, kind }: { onOpen: () => void; kind?: SetupKind | undefined }) {
   const origin = typeof window === "undefined" ? "" : window.location.origin;
+  const [connecting, setConnecting] = useState(true);
   return (
     <main className="page page-narrow setup">
       <div className="page-head">
@@ -579,6 +633,13 @@ function Finished({ onOpen }: { onOpen: () => void }) {
             <dd className="mono">{origin}/mcp/owner</dd>
           </div>
         </dl>
+        {kind && connecting && (
+          <ConnectYourSystem
+            groups={kind.connect}
+            lede="Bring in what you already use, so agents see the truth."
+            onSkip={() => setConnecting(false)}
+          />
+        )}
         <h3 className="sec">Not set up yet</h3>
         <ul className="checks">
           <li>

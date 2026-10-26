@@ -27,42 +27,44 @@ describe("parsePrice", () => {
     expect(parsePrice("1,234", "EUR")).toEqual({ value: 123_400, currency: "EUR" });
   });
 
-  it("gives no price in a currency not counted in hundredths, as no door here takes one", () => {
-    // Yen, won, pesos: no minor unit. Dinars: thousandths, so 12.500 is twelve and a half, not 12,500.
-    for (const raw of [
-      "500 JPY",
-      "¥4,980",
-      "1500.00 JPY",
-      "₩12000 KRW",
-      "15000 CLP",
-      "12.500 KWD",
-      "1.250 BHD",
-      "0.750 BHD",
-      "3.500 OMR",
-      "7.250 JOD",
-    ]) {
-      expect(parsePrice(raw, "EUR"), raw).toBeNull();
+  it("reads a currency not counted in hundredths in its own minor unit, never a hundred times the amount", () => {
+    // Yen, won, pesos: no minor unit. Dinars: thousandths, so 12.500 is twelve and a half, not 12,500 (ADR-032).
+    for (const [raw, value, currency] of [
+      ["500 JPY", 500, "JPY"],
+      ["¥4,980", 4_980, "JPY"],
+      ["1500.00 JPY", 1_500, "JPY"],
+      ["₩12000 KRW", 12_000, "KRW"],
+      ["15000 CLP", 15_000, "CLP"],
+      ["12.500 KWD", 12_500, "KWD"],
+      ["1.250 BHD", 1_250, "BHD"],
+      ["0.750 BHD", 750, "BHD"],
+      ["3.500 OMR", 3_500, "OMR"],
+      ["7.250 JOD", 7_250, "JOD"],
+    ] as const) {
+      expect(parsePrice(raw, "EUR"), raw).toEqual({ value, currency });
     }
-    // Nor is a bare amount priced in one by default.
-    expect(parsePrice("4980", "JPY")).toBeNull();
+    // A bare amount is in the default currency's own unit.
+    expect(parsePrice("4980", "JPY")).toEqual({ value: 4_980, currency: "JPY" });
     // Forints are counted in hundredths, as euros are.
     expect(parsePrice("2500 HUF", "EUR")).toEqual({ value: 250_000, currency: "HUF" });
     expect(parsePrice("2.500,50 HUF", "EUR")).toEqual({ value: 250_050, currency: "HUF" });
+    // Fund codes and metals are no money a price is set in, and never the default currency either.
+    for (const raw of ["12.50 CLF", "1.5 XAU"]) expect(parsePrice(raw, "EUR"), raw).toBeNull();
   });
 
-  it("gives no price for such a currency written with its own sign, nor reads the sign as the default", () => {
+  it("reads such a currency by its own sign, in its own minor unit, never the sign as the default", () => {
     // Dinars, won, yen and dong by their signs were read as euros or dollars, at a hundred or a
     // thousand times the amount: 12.500 د.ك was €12,500.00.
-    for (const [raw, fallback] of [
-      ["12.500 د.ك", "EUR"],
-      ["1.250 د.ب", "EUR"],
-      ["3.500 ر.ع.", "EUR"],
-      ["₩12,000", "EUR"],
-      ["4,980円", "USD"],
-      ["₫50.000", "USD"],
-      ["₲ 150.000", "USD"],
+    for (const [raw, fallback, value, currency] of [
+      ["12.500 د.ك", "EUR", 12_500, "KWD"],
+      ["1.250 د.ب", "EUR", 1_250, "BHD"],
+      ["3.500 ر.ع.", "EUR", 3_500, "OMR"],
+      ["₩12,000", "EUR", 12_000, "KRW"],
+      ["4,980円", "USD", 4_980, "JPY"],
+      ["₫50.000", "USD", 50_000, "VND"],
+      ["₲ 150.000", "USD", 150_000, "PYG"],
     ] as const) {
-      expect(parsePrice(raw, fallback), raw).toBeNull();
+      expect(parsePrice(raw, fallback), raw).toEqual({ value, currency });
     }
     // A sign it cannot name is no price either, rather than the business's currency: 99¢ is not €99.
     for (const raw of ["99¢", "₿0.01", "₨ 250", "250 ﷼"]) expect(parsePrice(raw, "EUR"), raw).toBeNull();
@@ -106,6 +108,15 @@ describe("parsePrice", () => {
     expect(parsePrice("TTD 25.00", "EUR")).toEqual({ value: 2_500, currency: "TTD" });
   });
 
+  it("gives a zero-decimal currency no minor units", () => {
+    expect(parsePrice("500 JPY", "EUR")).toEqual({ value: 500, currency: "JPY" });
+    // ISO 4217 counts forints in hundredths: 2500 HUF is 250 000 fillér (ADR-032).
+    expect(parsePrice("2500 HUF", "EUR")).toEqual({ value: 250_000, currency: "HUF" });
+    expect(parsePrice("KSh 4,500", "EUR")).toEqual({ value: 450_000, currency: "KES" });
+    expect(parsePrice("4.500 KWD", "EUR")).toEqual({ value: 4_500, currency: "KWD" });
+    expect(parsePrice("₩12,000", "KRW")).toEqual({ value: 12_000, currency: "KRW" });
+  });
+
   it("refuses what is not a price", () => {
     expect(parsePrice("", "EUR")).toBeNull();
     expect(parsePrice("on request", "EUR")).toBeNull();
@@ -117,23 +128,31 @@ describe("parsePrice", () => {
   });
 });
 
-describe("a row priced in a currency we do not count, or at nothing", () => {
+describe("a row priced in no currency a price is set in, or at nothing", () => {
   it("is no product on sale, in either format, and says so", () => {
     const csv = parseFeed(
-      ["id,title,price", "K1,Dates,12.500 KWD", "J1,Record,4980 JPY", "Z1,Gift card,0.00 USD", "E1,Mug,8.50 EUR"].join(
-        "\n",
-      ),
+      [
+        "id,title,price",
+        "U1,Bond,12.50 CLF",
+        "K1,Dates,12.500 KWD",
+        "J1,Record,4980 JPY",
+        "Z1,Gift card,0.00 USD",
+        "E1,Mug,8.50 EUR",
+      ].join("\n"),
       { defaultCurrency: "EUR" },
     ).products;
     expect(csv.map((p) => [p.externalId, p.price, p.available])).toEqual([
-      ["K1", null, false],
-      ["J1", null, false],
+      // A fund code is no currency a price is set in: kept off sale.
+      ["U1", null, false],
+      // Dinars and yen are each counted in their own minor unit (ADR-032).
+      ["K1", { value: 12_500, currency: "KWD" }, null],
+      ["J1", { value: 4_980, currency: "JPY" }, null],
       // Nothing is a price, but none to sell at: kept off sale, at the price it last had.
       ["Z1", null, false],
       ["E1", { value: 850, currency: "EUR" }, null],
     ]);
     const xml = parseFeed(
-      `<rss xmlns:g="http://base.google.com/ns/1.0"><channel><item><g:id>K1</g:id><title>Dates</title><g:price>12.500 KWD</g:price></item></channel></rss>`,
+      `<rss xmlns:g="http://base.google.com/ns/1.0"><channel><item><g:id>K1</g:id><title>Gold</title><g:price>1.5 XAU</g:price></item></channel></rss>`,
       { defaultCurrency: "EUR" },
     ).products[0];
     expect([xml?.price, xml?.available]).toEqual([null, false]);

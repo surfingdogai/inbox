@@ -5,6 +5,7 @@ import {
   isoToLocal,
   lateCloseNote,
   localToIso,
+  moneyMajor,
   networkNote,
   orderActions,
   parseMajor,
@@ -179,6 +180,31 @@ describe("client actions", () => {
       ["€45", undefined],
     ];
     for (const [typed, minor] of table) expect(parseMajor(typed), JSON.stringify(typed)).toBe(minor);
+  });
+
+  it("reads a price in the currency's own places: none for yen, thousandths for dinars (ADR-032)", () => {
+    const yen: [string, number | undefined][] = [
+      ["90540", 90_540],
+      ["90,540", 90_540],
+      ["90 540", 90_540],
+      ["90.540", 90_540],
+      ["4.5", undefined],
+      ["4,50", undefined],
+    ];
+    for (const [typed, minor] of yen) expect(parseMajor(typed, 0), `JPY ${typed}`).toBe(minor);
+    const dinar: [string, number | undefined][] = [
+      ["42.750", 42_750],
+      ["42,750", 42_750],
+      ["42.75", 42_750],
+      ["1,042.750", 1_042_750],
+      ["42.7501", undefined],
+    ];
+    for (const [typed, minor] of dinar) expect(parseMajor(typed, 3), `KWD ${typed}`).toBe(minor);
+    expect(parseMoney("90,540", "JPY")).toEqual({ value: 90_540, currency: "JPY" });
+    expect(parseMoney("4,500", "KES")).toEqual({ value: 450_000, currency: "KES" });
+    expect(parseMoney("42.750", "KWD")).toEqual({ value: 42_750, currency: "KWD" });
+    expect(moneyMajor({ value: 90_540, currency: "JPY" })).toBe("90540");
+    expect(moneyMajor({ value: 42_750, currency: "KWD" })).toBe("42.750");
   });
 
   it("parses money in major units and sums lines", () => {

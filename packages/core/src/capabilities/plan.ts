@@ -17,7 +17,7 @@ import { customerLang } from "../customer/lang";
 import type { Db } from "../db";
 import { type ItemType, itemTypeSchema } from "../domain/types";
 import { ulid } from "../ids";
-import { PRESETS, type PresetConfirm, presetFor } from "../rules/presets";
+import { PRESETS, type PresetConfirm, presetFor } from "../rules/presets/index";
 import { type RuleDefinition, ruleDefinitionSchema } from "../rules/schema";
 import {
   isDoorElsewhereUrl,

@@ -43,7 +43,15 @@ export { hmacSha256Base64, verifyBase64Hmac, verifyHexHmac } from "./hook-sign";
 export { basicAuth, CREDENTIAL_FAMILIES, connectorHttp, mayCarryCredentials } from "./http";
 export { ICS_PRESETS, icsConnector, icsForm } from "./ics";
 export { bookingsCalendar, ICS_FEED_AHEAD_DAYS, ICS_FEED_PAST_DAYS, icsFeedConnector } from "./ics-feed";
-export { MOLLIE_API, MOLLIE_EVENTS, MOLLIE_METHODS, mollieConnector, mollieForm } from "./mollie";
+export {
+  MOLLIE_API,
+  MOLLIE_DECIMALS,
+  MOLLIE_EVENTS,
+  MOLLIE_METHODS,
+  mollieConnector,
+  mollieCurrencyProblem,
+  mollieForm,
+} from "./mollie";
 export { constantTimeEqual, hmacSha256Hex } from "./pay-sign";
 export {
   SHOPIFY_API_VERSION,
@@ -64,11 +72,15 @@ export {
   squareForm,
 } from "./square/index";
 export {
+  fromStripeAmount,
   STRIPE_API,
+  STRIPE_CURRENCIES,
   STRIPE_EVENTS,
+  STRIPE_GUARANTEE_PERMISSIONS,
   STRIPE_PERMISSIONS,
   STRIPE_TOLERANCE_S,
   STRIPE_VERSION,
+  stripeAmount,
   stripeConnector,
   stripeForm,
 } from "./stripe";

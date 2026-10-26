@@ -152,7 +152,7 @@ export const moneySchema = z.object({
     .number()
     .int()
     .describe(
-      "Minor units in the currency's ISO 4217 exponent: 4500 is CA$45.00 or ₹45.00, ¥4,500 in JPY, 4.500 in KWD.",
+      "Minor units of the currency's own ISO 4217 exponent (minorUnits): 4500 is CA$45.00 or ₹45.00, ¥4,500 in JPY, 4.500 in KWD.",
     ),
   currency: z.string().length(3),
 });

@@ -305,12 +305,27 @@ describe("opening hours that run to midnight", () => {
   });
 });
 
-describe("currencies are counted in hundredths", () => {
-  it("only an ISO 4217 code in hundredths is taken, for the profile, a service's price and a product's", () => {
-    for (const ok of ["EUR", "USD", "GBP", "CHF", "BRL", "PLN", "HUF", "eur"]) {
+describe("currencies are counted in their own minor unit (ADR-032)", () => {
+  it("any ISO 4217 currency is taken, for the profile, a service's price and a product's; funds and metals are not", () => {
+    for (const ok of [
+      "EUR",
+      "USD",
+      "GBP",
+      "CHF",
+      "BRL",
+      "PLN",
+      "HUF",
+      "JPY",
+      "KRW",
+      "ISK",
+      "KWD",
+      "BHD",
+      "KES",
+      "eur",
+    ]) {
       expect(profileInput.safeParse({ currency: ok }).success, ok).toBe(true);
     }
-    for (const bad of ["JPY", "KRW", "ISK", "KWD", "BHD", "CLF", "XAU", "XXX", "ABC", "EURO", "€"]) {
+    for (const bad of ["CLF", "UYI", "XAU", "XXX", "ABC", "EURO", "€"]) {
       expect(profileInput.safeParse({ currency: bad }).success, bad).toBe(false);
       expect(
         serviceInput.safeParse({ name: "x", price: { model: "fixed", value: 100, currency: bad } }).success,
@@ -320,7 +335,9 @@ describe("currencies are counted in hundredths", () => {
     }
     expect(profileInput.parse({ currency: " gbp " }).currency).toBe("GBP");
     expect(isHundredthsCurrency("EUR")).toBe(true);
-    expect(currencyProblem("JPY")).toContain("hundredths");
+    expect(isHundredthsCurrency("JPY")).toBe(false);
+    expect(currencyProblem("JPY")).toBeNull();
+    expect(currencyProblem("CLF")).toContain("fund code");
     expect(currencyProblem("ABC")).toContain("not an ISO 4217");
   });
 });

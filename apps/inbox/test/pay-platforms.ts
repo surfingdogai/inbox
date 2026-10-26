@@ -6,6 +6,7 @@ import {
   STRIPE_EMPTY_LIST,
   STRIPE_INVALID_KEY,
   STRIPE_MISSING_PARAM,
+  STRIPE_PERMISSION_ERROR,
   stripeEvent,
   stripeSession,
 } from "../../../packages/adapters/test/fixtures/payments";
@@ -26,6 +27,8 @@ export interface StripeLink {
   name: string;
   thanks: string;
   inactive: string;
+  /** The words on Stripe's button: pay, or book for a booking's deposit (ADR-032). */
+  submit: string;
 }
 
 /** Stripe, as one account: prices, payment links, checkouts and webhook endpoints, by its rules. */
@@ -44,6 +47,8 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
   const calls: string[] = [];
   /** What making a price answers for now: Stripe down (500), or a refusal (400); and switching a link off. */
   const outage: { prices: number | null; close: number | null } = { prices: null, close: null };
+  /** Whether the key may make card-hold pages and customers (ADR-032): asked only when holds are switched on. */
+  const holds: { allowed: boolean } = { allowed: true };
   let n = 0;
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -153,6 +158,7 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
           name: price?.name ?? "",
           thanks: f.get("after_completion[hosted_confirmation][custom_message]") ?? "",
           inactive: f.get("inactive_message") ?? "",
+          submit: f.get("submit_type") ?? "",
         };
         links.set(id, link);
         return { id, object: "payment_link", url: link.url, active: true, livemode: live, metadata: link.meta };
@@ -166,12 +172,54 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
       if (f.get("active") === "false") link.active = false;
       return json({ id: link.id, object: "payment_link", active: link.active });
     }
+    // Card holds (ADR-032): a Checkout Session in setup mode, and a customer probe that makes nothing.
+    if (route === "POST /v1/checkout/sessions") {
+      if (holds.allowed === false) return json(STRIPE_PERMISSION_ERROR, 403);
+      if (!body) return json(STRIPE_MISSING_PARAM("mode"), 400);
+      return once(() => {
+        const id = `cs_${live ? "live" : "test"}_hold${++n}`;
+        const session = {
+          id,
+          object: "checkout.session",
+          mode: f.get("mode"),
+          currency: f.get("currency"),
+          customer_creation: f.get("customer_creation"),
+          expires_at: Number(f.get("expires_at")),
+          success_url: f.get("success_url"),
+          cancel_url: f.get("cancel_url"),
+          submit_type: f.get("submit_type"),
+          metadata: meta("metadata"),
+          status: "open",
+          setup_intent: null as string | null,
+          customer: null as string | null,
+          livemode: live,
+          url: `https://checkout.stripe.com/c/pay/${id}`,
+        };
+        sessions.set(id, session as unknown as ReturnType<typeof stripeSession>);
+        return session;
+      });
+    }
+    if (method === "POST" && url.pathname.startsWith("/v1/customers/")) {
+      if (holds.allowed === false) return json(STRIPE_PERMISSION_ERROR, 403);
+      return json({ error: { message: "No such customer", type: "invalid_request_error" } }, 404);
+    }
     if (method === "GET" && url.pathname.startsWith("/v1/checkout/sessions/")) {
       const s = sessions.get(url.pathname.split("/").at(-1) ?? "");
       return s ? json(s) : json({ error: { message: "No such checkout.session" } }, 404);
     }
     return new Response("not found", { status: 404 });
   }) as typeof fetch;
+
+  /** The customer saves a card on a hold's page: the session completes with a SetupIntent and a Customer. */
+  function saveCard(sessionId: string) {
+    const session = sessions.get(sessionId) as unknown as
+      | { status: string; setup_intent: string | null; customer: string | null }
+      | undefined;
+    if (!session) throw new Error(`no session ${sessionId}`);
+    session.status = "complete";
+    session.setup_intent = `seti_${++n}`;
+    session.customer = `cus_${n}`;
+  }
 
   /** The customer pays at a link: the checkout as Stripe keeps it, and the signed webhook Stripe sends. */
   async function pay(linkId: string, opts: { status?: "paid" | "unpaid"; type?: string } = {}) {
@@ -188,6 +236,8 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
       inbox: link.meta.sdi_inbox ?? "",
     });
     (session as { payment_intent: string }).payment_intent = `pi_${n}`;
+    // The checkout is in the link's own currency, in Stripe's count of it.
+    (session as { currency: string }).currency = link.currency;
     sessions.set(id, session);
     const body = JSON.stringify(stripeEvent(opts.type ?? "checkout.session.completed", session, `evt_${n}`));
     const [endpoint] = endpoints.values();
@@ -201,7 +251,7 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
       body,
     });
   }
-  return { fetch: fetchImpl, links, endpoints, sessions, calls, pay, outage, account };
+  return { fetch: fetchImpl, links, endpoints, sessions, calls, pay, saveCard, holds, outage, account };
 }
 
 /** Mollie, as one profile: payment links and the payments made on them. */
@@ -212,6 +262,7 @@ export function molliePlatform(key: string) {
       id: string;
       amount: { value: string; currency: string };
       webhookUrl: string;
+      expiresAt: string | null;
       archived: boolean;
       paid: boolean;
       method: string;
@@ -233,12 +284,17 @@ export function molliePlatform(key: string) {
       return json({ status: 401, detail: "Missing authentication" }, 401);
     if (method === "GET" && url.pathname === "/v2/profiles/me") return json(MOLLIE_PROFILE);
     if (method === "POST" && url.pathname === "/v2/payment-links") {
-      const b = JSON.parse(body) as { amount: { value: string; currency: string }; webhookUrl: string };
+      const b = JSON.parse(body) as {
+        amount: { value: string; currency: string };
+        webhookUrl: string;
+        expiresAt?: string;
+      };
       const id = `pl_test${++n}`;
       links.set(id, {
         id,
         amount: b.amount,
         webhookUrl: b.webhookUrl,
+        expiresAt: b.expiresAt ?? null,
         archived: false,
         paid: false,
         method: "ideal",
