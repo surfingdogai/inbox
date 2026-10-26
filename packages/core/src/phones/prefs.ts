@@ -46,12 +46,14 @@ export function readPrefs(json: string | null | undefined): NotifyPrefs {
 
 /**
  * The kind a phone's switches know an item by: `handled` when the owner has nothing to do on it
- * (a rule answered it), else its own. Refunds are about money, as orders are.
+ * (a rule answered it), else its own. Refunds are about money, as orders are; a stay is a booking of
+ * rooms (ADR-037), so the Bookings switch governs it.
  */
 export function pushKindOf(item: Pick<Item, "type">, awaitsOwner: boolean): PushKind {
   if (!awaitsOwner) return "handled";
   switch (item.type) {
     case "booking":
+    case "stay":
       return "booking";
     case "order":
     case "refund":

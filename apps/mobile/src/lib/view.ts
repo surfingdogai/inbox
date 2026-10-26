@@ -1,9 +1,12 @@
+import { HOLD_WORDS } from "../../../inbox/client/src/lib/food-words";
 import {
   formatClock,
   formatDay,
   formatMoney,
   localDateKey,
   partyName,
+  slotShort,
+  slotWhen,
   truncate,
 } from "../../../inbox/client/src/lib/format";
 import { stayTitle } from "../../../inbox/client/src/lib/stays";
@@ -127,11 +130,24 @@ export function channelPhrase(item: Item): string {
   }
 }
 
-/** The first line of a card: who, or for an order, what. */
-export function cardTitle(view: ItemView): string {
+/** How a kitchen's order for a time is had (ADR-040's `fulfil.method`): in a card, and as its fact's name. */
+const FULFIL_WORDS: Readonly<Record<string, readonly [string, string]>> = {
+  pickup: ["pick-up", "Pick-up"],
+  delivery: ["delivery", "Delivery"],
+  dine_in: ["eat in", "Eat in"],
+};
+
+/** The first line of a card: who, or for an order, what (and for a kitchen's order, how and its slot). */
+export function cardTitle(view: ItemView, tz?: string, now: number = Date.now()): string {
   const { item } = view;
   if (item.type === "order") {
     const count = item.payload.orderedItem.reduce((n, l) => n + l.quantity, 0);
+    const fulfil = item.payload.fulfil;
+    if (fulfil) {
+      const how = FULFIL_WORDS[fulfil.method]?.[0] ?? fulfil.method;
+      const at = fulfil.slot ? ` ${slotShort(fulfil.slot.start, tz, now)}` : "";
+      return `${count} item${count === 1 ? "" : "s"} · ${how}${at}`;
+    }
     const delivery = item.payload.delivery;
     const when = delivery?.when ? ` ${formatDay(delivery.when)}` : "";
     const how =
@@ -139,6 +155,31 @@ export function cardTitle(view: ItemView): string {
     return `${count} item${count === 1 ? "" : "s"}${how}`;
   }
   return partyName(view.party);
+}
+
+/** A kitchen's order for a time, as a fact on its screen: ["Pick-up", "Today, 17:30"]. Null for any other. */
+export function fulfilFact(
+  view: Pick<ItemView, "item">,
+  tz?: string,
+  now: number = Date.now(),
+): [string, string] | null {
+  const { item } = view;
+  if (item.type !== "order" || !item.payload.fulfil) return null;
+  const f = item.payload.fulfil;
+  return [FULFIL_WORDS[f.method]?.[1] ?? f.method, f.slot ? slotWhen(f.slot.start, tz, now) : ""];
+}
+
+/**
+ * Why a kitchen's order waits for the owner (`payload.kitchen.hold`), as the owner app says it:
+ * allergens nobody confirmed first. A kitchen that accepts each order by hand says nothing here.
+ */
+export function holdNotes(view: Pick<ItemView, "item">): string[] {
+  const { item } = view;
+  if (item.type !== "order") return [];
+  const holds = (item.payload.kitchen?.hold ?? []).filter((h) => h !== "owner_accepts");
+  return [...holds]
+    .sort((a, b) => Number(b === "allergens_unconfirmed") - Number(a === "allergens_unconfirmed"))
+    .map((h) => HOLD_WORDS[h] ?? h);
 }
 
 /** The second line: when and what, or the first words. */

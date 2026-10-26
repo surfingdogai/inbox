@@ -3,7 +3,16 @@ import { formatDay, formatWhen, partyName, stateWord } from "../../../inbox/clie
 import type { ItemDetail } from "../../../inbox/client/src/lib/types";
 import { useApp } from "../context";
 import type { Slots } from "../lib/client";
-import { actionsFor, agoSentence, calendarWords, money, requestWord, sentPhrase } from "../lib/view";
+import {
+  actionsFor,
+  agoSentence,
+  calendarWords,
+  fulfilFact,
+  holdNotes,
+  money,
+  requestWord,
+  sentPhrase,
+} from "../lib/view";
 import { CheckIcon, ChevronLeft, CloseIcon, MoreIcon } from "./icons";
 
 /** What the "…" menu may do in one press: answers that need no words or times typed. */
@@ -161,6 +170,12 @@ export function Item({
             {sentPhrase(item)} · {agoSentence(item.createdAt)}
           </div>
         </div>
+        {/* Why a kitchen's order waits for the owner (ADR-040), as the owner app says it: before Accept. */}
+        {holdNotes(detail).map((note) => (
+          <p key={note} className="hold" role="note">
+            {note}
+          </p>
+        ))}
         <Facts detail={detail} tz={tz} />
         {(words.length > 0 || first) && (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -350,6 +365,9 @@ function Facts({ detail, tz }: { detail: ItemDetail; tz: string | undefined }) {
         d.method === "pickup" ? "Pick-up" : d.method === "delivery" ? "Delivery" : "Digital",
         d.when ? formatDay(d.when, tz) : "",
       ]);
+    // A kitchen's order for a time (ADR-040): how, and its slot.
+    const fulfil = fulfilFact(detail, tz);
+    if (fulfil) rows.push(fulfil);
   } else if (item.type === "quote_request") {
     rows.push(["For", item.payload.itemOffered.name]);
     if (item.payload.budget) rows.push(["Budget", money(item.payload.budget)]);

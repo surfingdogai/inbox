@@ -480,6 +480,8 @@ describe("what a phone is told, and when", () => {
     expect(pushKindOf({ type: "refund" }, true)).toBe("order");
     expect(pushKindOf({ type: "quote_request" }, true)).toBe("quote");
     expect(pushKindOf({ type: "booking" }, false)).toBe("handled");
+    // A stay is a booking of rooms: the phone's Bookings switch governs it, never Messages.
+    expect(pushKindOf({ type: "stay" }, true)).toBe("booking");
   });
 });
 
@@ -815,6 +817,79 @@ describe("what a minimal notification never carries", () => {
     expect(buildPushPayload({ ...ctx, event: "counter" }).title).toBe("They asked for another time");
     expect(buildPushPayload({ ...ctx, event: "request_change" }).title).toBe("They asked for a change");
     expect(buildPushPayload({ ...ctx, event: "something_new" }).title).toBe("An update on a request");
+  });
+});
+
+describe("kitchen orders and stays on the lock screen", () => {
+  const base = {
+    version: 1,
+    partyId: "p",
+    locationId: null,
+    channel: "mcp_public",
+    subject: null,
+    flags: { needsHuman: true, sandbox: false, priority: 0 },
+    linkedItemId: null,
+    createdAt: "2026-11-04T17:00:00Z",
+    updatedAt: "2026-11-04T17:00:00Z",
+    closedAt: null,
+  };
+  const kitchenOrder = (hold: string[]) => ({
+    ...base,
+    id: "01K",
+    type: "order",
+    state: "received",
+    payload: {
+      orderedItem: [{ productId: "pr", name: "Agua de jamaica", quantity: 2, price: { value: 3500, currency: "MXN" } }],
+      totalPrice: { value: 7000, currency: "MXN" },
+      fulfil: { method: "pickup", slot: { start: "2026-11-04T23:30:00Z", end: "2026-11-04T23:45:00Z" } },
+      kitchen: { instant: false, hold },
+    },
+  });
+  const ctx = (item: unknown, kind: "order" | "booking") => ({
+    item: item as never,
+    kind,
+    event: "create",
+    details: false,
+    timezone: "America/Mexico_City",
+    now: Date.parse("2026-11-04T17:00:00Z"),
+  });
+
+  it("says an order for a time's method and slot, in the business's zone", () => {
+    const p = buildPushPayload(ctx(kitchenOrder([]), "order"));
+    expect(p.body).toBe("2 items · pick-up Wed 4 Nov, 17:30");
+    expect(p.action).toEqual({ event: "accept", label: "Accept order" });
+  });
+
+  it("offers no one-tap Accept for an order whose allergens nobody confirmed, and says why", () => {
+    const p = buildPushPayload(ctx(kitchenOrder(["allergens_unconfirmed"]), "order"));
+    expect(p.action).toBeUndefined();
+    expect(p.body).toContain("allergens to check");
+    // A kitchen that accepts each order by hand is offered Accept: that is what it is for.
+    expect(buildPushPayload(ctx(kitchenOrder(["owner_accepts"]), "order")).action?.event).toBe("accept");
+  });
+
+  it("names a stay request as one, with its dates and nights, and never the guests", () => {
+    const stay = {
+      ...base,
+      id: "01S",
+      type: "stay",
+      state: "requested",
+      payload: {
+        propertyId: "pp",
+        checkIn: "2026-12-12",
+        checkOut: "2026-12-15",
+        rooms: [{ roomTypeName: "Japanese room", adults: 2, childrenAges: [], extras: [] }],
+        guests: { lead: { name: "Amara Okafor" }, others: [] },
+        requests: "A ground-floor room, please.",
+        totalPrice: { value: 88740, currency: "JPY" },
+      },
+    };
+    const p = buildPushPayload({ ...ctx(stay, "booking"), timezone: "Asia/Tokyo" });
+    expect(p.kind).toBe("booking");
+    expect(p.title).toBe("New stay request");
+    expect(p.body).toMatch(/^Sat 12 Dec – Tue 15 Dec · 3 nights · \S*88,740$/);
+    expect(JSON.stringify(p)).not.toMatch(/Amara|ground-floor/);
+    expect(p.action).toBeUndefined();
   });
 });
 

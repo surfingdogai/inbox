@@ -62,7 +62,7 @@ export function Today() {
                   style={{ border: 0, background: "none", padding: 0, width: "100%", fontSize: 14 }}
                   onClick={() => app.go({ name: "item", id: v.item.id })}
                 >
-                  <span>{cardTitle(v)}</span>
+                  <span>{cardTitle(v, tz)}</span>
                   <span className="sub">
                     {v.item.type === "order" && v.item.payload.delivery?.when
                       ? formatDay(v.item.payload.delivery.when, tz)

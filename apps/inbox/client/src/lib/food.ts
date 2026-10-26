@@ -198,14 +198,7 @@ export const METHOD_WORDS: Readonly<Record<string, string>> = {
   dine_in: "Eat in",
 };
 
-/** Why an order waits for a person, in the owner's words (`payload.kitchen.hold`). */
-export const HOLD_WORDS: Readonly<Record<string, string>> = {
-  allergens_unconfirmed:
-    "Allergens on this order are not confirmed yet: check them with the kitchen before you accept.",
-  over_cap: "Over what you set aside for this slot or day: accept only if the kitchen can make it.",
-  made_to_order: "Made to order: you decide on each one.",
-  owner_accepts: "You accept each order (Settings → Kitchen).",
-};
+export { HOLD_WORDS } from "./food-words";
 
 export const DIETARY_WORDS: Readonly<Record<string, string>> = {
   vegan: "Vegan",

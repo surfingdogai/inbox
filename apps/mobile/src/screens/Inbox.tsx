@@ -28,7 +28,7 @@ export function Inbox() {
   const { needs, open, handled } = useMemo(() => {
     const q = query?.trim().toLowerCase() ?? "";
     const match = (v: ItemView) =>
-      !q || `${cardTitle(v)} ${cardLine(v, tz)} ${v.party?.email ?? ""}`.toLowerCase().includes(q);
+      !q || `${cardTitle(v, tz)} ${cardLine(v, tz)} ${v.party?.email ?? ""}`.toLowerCase().includes(q);
     const all = app.views.filter(match);
     return {
       needs: all.filter(needsYou),
@@ -102,7 +102,7 @@ export function Inbox() {
                   <span>{ago(v.item.updatedAt)}</span>
                 </div>
                 <div className="what">
-                  {cardTitle(v)} · {cardLine(v, tz)}
+                  {cardTitle(v, tz)} · {cardLine(v, tz)}
                 </div>
               </button>
             ))}
@@ -128,7 +128,7 @@ function Card({ view, tz, onOpen }: { view: ItemView; tz: string | undefined; on
         </span>
         <span>{ago(view.item.createdAt)}</span>
       </div>
-      <div className="who">{cardTitle(view)}</div>
+      <div className="who">{cardTitle(view, tz)}</div>
       <div className="what">{cardLine(view, tz)}</div>
       {(amount || waiting || calendar) && (
         <div className="foot">

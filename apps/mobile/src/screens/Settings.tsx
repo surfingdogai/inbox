@@ -7,7 +7,7 @@ import { agoSentence } from "../lib/view";
 import { Nav } from "./Nav";
 
 const KINDS: readonly [keyof NotifyPrefs["kinds"], string][] = [
-  ["booking", "Booking requests"],
+  ["booking", "Booking and stay requests"],
   ["order", "Orders"],
   ["quote", "Quote requests"],
   ["message", "Messages"],

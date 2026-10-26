@@ -91,6 +91,19 @@ const LATER: Readonly<Record<string, string>> = {
   cancel: "A customer cancelled",
 };
 
+/** How an order for a time is had (ADR-040's `fulfil.method`), as the line under the title says it. */
+const FULFIL_WORD: Readonly<Record<string, string>> = { pickup: "pick-up", delivery: "delivery", dine_in: "eat in" };
+
+/** A kitchen order held for its allergens (`payload.kitchen.hold`): a person checks them before accepting. */
+function allergensHeld(item: Item): boolean {
+  return item.type === "order" && (item.payload.kitchen?.hold ?? []).includes("allergens_unconfirmed");
+}
+
+/** A stay's local date ("2026-12-12") as its day: the date itself, whatever the zone. */
+function stayDay(date: string, locale: string): string {
+  return when(`${date}T12:00:00Z`, "UTC", locale).day;
+}
+
 function oneLine(s: string, max: number): string {
   const flat = s.replace(/\s+/g, " ").trim();
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
@@ -106,11 +119,32 @@ function summary(ctx: PayloadContext, tz: string, locale: string): string {
     }
     case "order": {
       const count = item.payload.orderedItem.reduce((n, l) => n + l.quantity, 0);
-      const how = item.payload.delivery?.method;
-      const by = item.payload.delivery?.when ? when(item.payload.delivery.when, tz, locale).day : "";
-      const way =
-        how === "pickup" ? `pick-up${by ? ` ${by}` : ""}` : how === "delivery" ? `delivery${by ? ` ${by}` : ""}` : "";
-      return [`${count} item${count === 1 ? "" : "s"}`, way].filter(Boolean).join(" · ");
+      const fulfil = item.payload.fulfil;
+      let way: string;
+      if (fulfil) {
+        // A kitchen's order for a time (ADR-040): how, and the slot's day and time.
+        const at = fulfil.slot ? when(fulfil.slot.start, tz, locale) : null;
+        way = `${FULFIL_WORD[fulfil.method] ?? fulfil.method}${at ? ` ${at.day}, ${at.time}` : ""}`;
+      } else {
+        const how = item.payload.delivery?.method;
+        const by = item.payload.delivery?.when ? when(item.payload.delivery.when, tz, locale).day : "";
+        way =
+          how === "pickup" ? `pick-up${by ? ` ${by}` : ""}` : how === "delivery" ? `delivery${by ? ` ${by}` : ""}` : "";
+      }
+      return [`${count} item${count === 1 ? "" : "s"}`, way, allergensHeld(item) ? "allergens to check" : ""]
+        .filter(Boolean)
+        .join(" · ");
+    }
+    case "stay": {
+      // Its dates and nights (ADR-037), never who is coming.
+      const nights = Math.round((Date.parse(item.payload.checkOut) - Date.parse(item.payload.checkIn)) / 86_400_000);
+      return [
+        `${stayDay(item.payload.checkIn, locale)} – ${stayDay(item.payload.checkOut, locale)}`,
+        `${nights} night${nights === 1 ? "" : "s"}`,
+        item.payload.totalPrice ? moneyText(item.payload.totalPrice) : "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
     }
     case "quote_request":
       return ctx.offered || (ctx.details ? item.payload.itemOffered.name : "Quote request");
@@ -133,6 +167,8 @@ function actionFor(ctx: PayloadContext, tz: string, locale: string): PushPayload
     return { event: "confirm", label: `Accept ${when(item.payload.startTime, tz, locale).time}` };
   }
   if (item.type === "order" && (item.state === "received" || item.state === "needs_info")) {
+    // Allergens nobody confirmed are checked with the kitchen first, in the app: never one tap.
+    if (allergensHeld(item)) return undefined;
     return { event: "accept", label: "Accept order" };
   }
   return undefined;
@@ -144,6 +180,7 @@ export function buildPushPayload(ctx: PayloadContext): PushPayload {
   const { item } = ctx;
   const isNew = ctx.event === "create";
   let title = isNew ? NEW[ctx.kind] : (LATER[ctx.event] ?? "An update on a request");
+  if (isNew && item.type === "stay" && ctx.kind !== "handled") title = "New stay request";
   if (isNew && item.type === "order" && ctx.kind !== "handled")
     title = `${title} · ${moneyText(item.payload.totalPrice)}`;
   // A booking's price rides in the body, after its time and service, as the approved design has it.

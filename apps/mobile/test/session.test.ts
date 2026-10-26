@@ -8,7 +8,19 @@ import { InboxClient } from "../src/lib/client";
 import { type Native, webNative } from "../src/lib/native";
 import { Box, ITEM_KEEP_MS, type KV, Outbox } from "../src/lib/offline";
 import { type Fetch, InboxError, type PendingPhone, Sessions } from "../src/lib/session";
-import { actionsFor, ago, agoSentence, badgeOf, calendarWords, money, needsYou, today } from "../src/lib/view";
+import {
+  actionsFor,
+  ago,
+  agoSentence,
+  badgeOf,
+  calendarWords,
+  cardTitle,
+  fulfilFact,
+  holdNotes,
+  money,
+  needsYou,
+  today,
+} from "../src/lib/view";
 
 /**
  * The phone app's own logic against a real inbox (ADR-028): pairing with a code from Settings → Phone,
@@ -366,5 +378,27 @@ describe("the screens' words", () => {
       )?.line,
     ).toBe("Clashes with Tom Hale, 14:00");
     expect(calendarWords({})).toBeNull();
+  });
+
+  it("says a kitchen's order for a time with its method and slot, and why it waits", () => {
+    const now = Date.parse("2026-11-04T17:00:00Z");
+    const order = (hold: string[]) =>
+      view({
+        type: "order",
+        state: "received",
+        payload: {
+          orderedItem: [{ productId: "pr", name: "Pizza", quantity: 1, price: { value: 18900, currency: "MXN" } }],
+          totalPrice: { value: 18900, currency: "MXN" },
+          fulfil: { method: "pickup", slot: { start: "2026-11-04T23:30:00Z" } },
+          kitchen: { instant: false, hold },
+        },
+      });
+    expect(cardTitle(order([]), "America/Mexico_City", now)).toBe("1 item · pick-up 17:30");
+    expect(fulfilFact(order([]), "America/Mexico_City", now)).toEqual(["Pick-up", "Today, 17:30"]);
+    expect(holdNotes(order(["allergens_unconfirmed", "owner_accepts"]))).toEqual([
+      "Allergens on this order are not confirmed yet: check them with the kitchen before you accept.",
+    ]);
+    expect(holdNotes(order([]))).toEqual([]);
+    expect(holdNotes(view({}))).toEqual([]);
   });
 });

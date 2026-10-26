@@ -383,6 +383,14 @@ button.card {
   height: 14px;
   stroke-width: 2.2;
 }
+/* Why a kitchen's order waits for the owner (ADR-040): allergens nobody confirmed first. */
+.hold {
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+  font-size: 13px;
+}
 .facts .clash {
   color: var(--ink-2);
   font-size: 14px;
