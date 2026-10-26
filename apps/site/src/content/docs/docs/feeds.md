@@ -40,11 +40,20 @@ Columns are matched by name, ignoring case, spaces and punctuation, so `Product 
 | Sale | `sale_price`, with `sale_price_effective_date`, or `Date sale price starts` and `Date sale price ends` |
 | Stock | `quantity`, `stock`, `inventory`, `qty`, `estoque` |
 | Availability | `availability`, `in_stock`, `stock_status` |
-| Links | `link`, `image_link` |
+| Links | `link`, `image_link` (kept only when they are `https` on a public host) |
+| Barcode | `gtin`, `ean`, `upc`, `barcode`, `isbn`, `jan`, `ean13`, `gtin8` to `gtin14` |
+| Brand | `brand`, `marca`, `marke`, `marque`, `vendor`, `manufacturer` |
+| Part number | `mpn`, `manufacturer_part_number`, `part_number` |
+| Condition | `condition` (`new`, `used`, `refurbished`, and their Portuguese, Spanish, German, French and Italian words) |
+| Category, as a hint | `google_product_category`, `product_category`, `product_type`, `category` |
 
 The sale price is the price while the sale runs, and the regular price before and after it, the same in both formats. A sale with no dates runs. Dates written without an offset (`2026-11-27/2026-11-30`) are read on your business's clock, a date alone meaning that whole day; a sale whose dates cannot be read is not taken to be on. A sale starts and ends here at the moment its dates give: the feed is read again then, and the price changes even if the feed cannot be read at that moment. A product whose only price is a sale that is not on is kept off sale.
 
 A `cost` column is never read as a price: it is what you pay, not what you sell at. A product with no price is kept off sale until the feed gives it one.
+
+### Barcodes
+
+A barcode is read beside the identity, not instead of it: a sheet whose only code is its `ean` still has that code as the product's SKU, so an agent that orders by it is served. It is checked the way the networks check it: spaces and hyphens removed, a UPC whose leading 0 a spreadsheet dropped put right, an ISBN-10 read as its book barcode, and the last digit checked against the others. One that does not add up, a number a spreadsheet turned into `4.00638E+12`, a shop's own in-store code or a coupon is kept for you to read beside the product, and the product is listed without a barcode until it is fixed. A row that leaves the barcode, the brand or the part number out has not lost them: what an earlier read gave is kept. The category is a hint for later and never shown. Google's `identifier_exists` is read, and saying a product has no barcode stays yours to do, in the app.
 
 ### Prices
 

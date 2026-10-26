@@ -25,6 +25,10 @@ adds, optional for a network, the reporters' reading allowance and `GET /v1/door
 Spec 0.8.2 adds, optional for a network, listing rules (§4.10, §4.13): who its directory lists among the businesses
 it found, real businesses above the rest on its leaderboards (`real_business`, `?real=1`), and the
 real businesses it counts (`real_businesses_verified`); a row without `real_business` reads as before.
+Spec 0.9 adds, optional for a network and for an inbox, the catalogue (§4.18, [ADR-029](../adr/029-catalogue.md)):
+an inbox whose owner lists its products on networks serves a signed feed of them, its manifest names it, and
+its signed ping says when it changed; one barcode check (`vectors/gtin.json`) holds on both sides. A ping, an
+answer or a manifest without `catalogue` reads as before.
 
 A **network** is a service that inboxes report to: it lists businesses, keeps the receipts they
 publish, gives customers a key and passes, and orders the directory by the published rules. Anyone
@@ -71,6 +75,9 @@ also gives customers keys and passes, scores, and hears reports and contests. It
 | The census: an edition, and the list of them | [`schemas/census-edition.json`](../../packages/spec/schemas/census-edition.json), [`schemas/census-editions.json`](../../packages/spec/schemas/census-editions.json), an example in [`vectors/census-edition.json`](../../packages/spec/vectors/census-edition.json) (§4.16) |
 | The census for an assistant: the MCP tool `get_census` | [`schemas/mcp-get-census-input.json`](../../packages/spec/schemas/mcp-get-census-input.json), [`schemas/mcp-get-census-output.json`](../../packages/spec/schemas/mcp-get-census-output.json) (§4.16) |
 | The reporters' reading allowance: what earns credit, who is a contributor | [`vectors/door-reports.json`](../../packages/spec/vectors/door-reports.json) `contributors` (§4.15) |
+| Barcodes: how one is read, checked and classified, and the GS1 prefixes pinned | [`vectors/gtin.json`](../../packages/spec/vectors/gtin.json) (§4.18) |
+| The catalogue: a page, products by id, the switch | [`schemas/catalogue-page.json`](../../packages/spec/schemas/catalogue-page.json), [`schemas/catalogue-items.json`](../../packages/spec/schemas/catalogue-items.json), [`schemas/catalogue-switch-request.json`](../../packages/spec/schemas/catalogue-switch-request.json) (§4.18) |
+| A template's sample product names | [`vocab/placeholder-titles.json`](../../packages/spec/vocab/placeholder-titles.json) (§4.18) |
 
 ## 1. Conventions
 
@@ -1707,6 +1714,95 @@ businesses an hour, and the network's own total last; a request one limit refuse
 An assistant platform's published outbound range is many people, never a trusted caller: each address in
 it keeps a limit of its own, and the range as a whole a share of the network's. A network MUST NOT carry to a business that has no inbox; a later version may
 let a business that claimed its listing opt in.
+
+### 4.18 The catalogue (spec 0.9, MAY)
+
+An inbox MAY list the business's products on the networks it reports to ([ADR-029](../adr/029-catalogue.md)),
+and a network MAY read them. The network pulls: the inbox serves a signed feed, any network can read it,
+and the inbox keeps nothing per network. Orders never move: an assistant reads the live price at the
+business's own door (`list_products` with `ids`) and orders there, as it does today.
+
+**The owner's switch.** *Your products on networks* is on for every inbox unless the owner switches it off,
+with "List my products here" per network, on by default, and "Keep it off networks" per product. Products
+are listed only while the business is in that network's directory. Only the owner in person changes any
+of it: never the owner's AI and never a key handed to another system.
+
+**The manifest** names the feed while the products are listed and the inbox can sign it:
+`catalogue: {"feed": "https://{inbox}/v1/catalogue/changes", "items": "https://{inbox}/v1/catalogue/items"}`.
+Absent, the business lists no products. A network reads the feed only at the URL its manifest names, on
+the business's own domain, https, with no redirect off it.
+
+**`GET /v1/catalogue/changes?after=<cursor>&limit=<1..500>`** on the inbox (`schemas/catalogue-page.json`):
+
+```json
+{
+  "version": 1, "domain": "inbox.loja.example", "as_of": "2026-10-25T09:14:03.000Z",
+  "catalogue": {"count": 212, "updated_at": "2026-10-25T09:12:00.000Z", "tax_included": true, "rev": "3b0c51d0a7e4b8c3"},
+  "items": [
+    {"id": "01JC…", "state": "listed", "sku": "MOKA-6", "name": "Moka pot, 6 cups", "description": null,
+     "price": {"value": 18990, "currency": "BRL"}, "availability": "in_stock", "gtin": "09506000134352",
+     "no_gtin": false, "brand": "Bialetti", "mpn": null, "condition": "new",
+     "url": "https://loja.example/produtos/moka-6", "image_url": null,
+     "updated_at": "2026-10-25T09:12:00.000Z", "hash": "5f1d3a9c0e2b7d44"},
+    {"id": "01JD…", "state": "withdrawn", "updated_at": "2026-10-25T09:11:00.000Z"}
+  ],
+  "next_cursor": null
+}
+```
+
+- Every product comes in the order the inbox's database last wrote it, listed or `withdrawn` (archived, kept
+  off networks, or no longer listable). The inbox never deletes a product, so every withdrawal reaches the
+  feed. The cursor is opaque. A page ends at `next_cursor: null`; a reader keeps the `after` it asked that
+  last page with and asks from it next time, reading that page again, which changes nothing it holds.
+- **Listed** only when the product is on sale, not kept off networks, priced above 0 in an ISO 4217
+  currency, and not named as a template's sample (`vocab/placeholder-titles.json`). The name is at most 150
+  characters, the description 1,000.
+- `availability` is `in_stock` (counted, above 0), `out_of_stock` (counted, 0) or `on_sale` (not counted):
+  never a count. `gtin` is 14 digits, only when it reads as a product's barcode (below); `url` only when the
+  page is on the business's own site; `image_url` is a link, never a copy. `hash` is the first 16 hex digits
+  of SHA-256 over the item's canonical JSON (keys sorted), without `updated_at` and `hash`.
+- `catalogue` says what a reader compares: the listed `count`, the latest change, whether prices include
+  tax (`null`: not said), and `rev`, which moves with any write to any product and with any of these.
+- Never in it: where a product came from, a source's own ids, a location, a barcode that did not pass,
+  the owner's lowest prices, costs, stock counts, or anything about a customer.
+- `Cache-Control: public, max-age=60` and an `ETag`; `If-None-Match` with it is answered `304`.
+  `404 not_listed` while the owner keeps the products off networks, the business is out of the directories,
+  or the inbox cannot sign. `422` for a cursor the feed did not give or a limit past 500.
+
+**`GET /v1/catalogue/items?ids=a,b`** (at most 50, `schemas/catalogue-items.json`): `{"items": […], "missing": […]}`,
+each as the feed has it, `missing` the ids the inbox has no product for. `Cache-Control: no-store`.
+
+**The signature.** Both answer with `Catalogue-Signature`: a compact JWS, `alg: EdDSA`,
+`typ: "sdi-catalogue+jws"`, `kid` a key the manifest publishes under `receipt_keys` (the receipt key, which
+also signs sdi-instance/1), over `{iss, url, body_sha256, as_of, rev}`: the inbox's domain, the address asked,
+query string included, the SHA-256 of the body as sent in lowercase hex, and the page's `as_of` and `rev`.
+A reader verifies the JWS, then that `iss` is the domain it read, `url` the address it asked and
+`body_sha256` the body's, before it keeps anything; a page that fails is refused whole. It is the record of
+what the business stated, and when.
+
+**The ping.** A signed ping (§4.1) to a network that may list the products carries
+`catalogue: {"listed": true, "count": 212, "updated_at": "…", "rev": "…"}`; a network whose `rev` differs
+reads the feed again. To a network last told the products were listed, and that should no longer list them,
+the next signed ping carries `{"listed": false}` once. An unsigned ping never carries it. A signed ping's
+`200` MAY carry the network's own block (`catalogue: {listed, offers_live, held: [{why, count, sample:
+[{id, name}] ≤ 5}], checked_at}`), which the owner sees: how many it lists, and what it holds back and why,
+in words for the owner. An inbox reads it leniently: a block that does not read is left out.
+
+**The switch, at once.** `POST /v1/instances/{domain}/catalogue {"listed": true|false}`, signed sdi-instance/1
+(`schemas/catalogue-switch-request.json`), when the owner's answer for that network changes, and by the
+hourly tick while what the network was last told differs; `200 {listed, offers_live}`. A network never told
+lists no products, so an inbox that wants them listed tells it once. `false` withdraws every offer at once.
+`429` waits for the next hour; a network that lists no products answers `404`, and is asked again a day later.
+
+**Barcodes** (`normaliseGtin`, `@surfingdog/spec`; `vectors/gtin.json`, which the network's own code runs too):
+spaces, hyphens and full stops removed, a leading `(01)` or the `01` of a 16-digit scan dropped; a number a
+spreadsheet shortened (`4.00638E+12`) refused; an ISBN-10 read as its 978 barcode; 8 digits an EAN-8, or a
+UPC-E expanded from a UPC field; 11 digits a UPC-A with its leading 0 back, only from a barcode or UPC field;
+12, 13 and 14 as given; GS1's check digit checked, never corrected; padded to 14. A shop's own code
+(`02`, `04`, `2`, an RCN-8, indicator 9) and a coupon (`05`, `980`–`984`, `99`) are never a product's
+barcode, and are never published. A magazine's issue (`977`) is `serial`, a book (`978`, `979`) `book`,
+indicator digits 1 to 8 a case or pack of several. Two offers are one product only when their barcodes
+are the same 14 digits; a product with no barcode is its business's own.
 
 ## 5. Persons and passes
 
