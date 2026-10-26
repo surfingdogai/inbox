@@ -17,7 +17,7 @@ import {
 import { type FakePlatform, type FakeRequest, fakePlatform, json } from "../platform";
 
 /**
- * A local Cloudbeds (ADR-033 §8.4), answering the v1.3 operations its reference documents
+ * A local Cloudbeds (ADR-037 §8.4), answering the v1.3 operations its reference documents
  * (`test/fixtures/property/cloudbeds.ts` names the pages): `x-api-key`, `{success, data}` answers, form
  * bodies with PHP-style arrays, `getRatePlans` with its per-day detail, reservations with their rooms,
  * the key exchange for a code, and webhooks made with a header of the subscriber's. Its documentation

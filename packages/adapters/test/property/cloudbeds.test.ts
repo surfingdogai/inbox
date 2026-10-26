@@ -25,7 +25,7 @@ import {
 import { propertyContract, runContext } from "./contract";
 
 /**
- * Cloudbeds (ADR-033 §8.4) against a local Cloudbeds built from its documentation: the property system
+ * Cloudbeds (ADR-037 §8.4) against a local Cloudbeds built from its documentation: the property system
  * contract (Cloudbeds documents no refusal of a full night, so the connector checks the nights live and
  * refuses them itself), a booking another channel took between the check and the write found by counting
  * reservations against rooms, the key delivered for a code, webhooks made with a header of ours and

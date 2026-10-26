@@ -20,7 +20,7 @@ import {
 import { propertyContract, runContext } from "./contract";
 
 /**
- * apaleo (ADR-033 §8.4) against a local apaleo built from its OpenAPI files: the property system
+ * apaleo (ADR-037 §8.4) against a local apaleo built from its OpenAPI files: the property system
  * contract, the idempotency key replayed (and a booking cancelled since never answered as written), the
  * externalCode found after the key has lapsed, rooms paired by their own number, a put-back apaleo would
  * not take said as such, its own total read back, the date line, the token refreshed, the sign-in asking

@@ -1,5 +1,5 @@
 /**
- * apaleo answers for the apaleo connector's tests (ADR-033 §8.4), in the shapes apaleo's public OpenAPI
+ * apaleo answers for the apaleo connector's tests (ADR-037 §8.4), in the shapes apaleo's public OpenAPI
  * files define, read 20 October 2026 (saved copies in the build's notes, fetched without credentials):
  *
  * - booking-v1: https://api.apaleo.com/swagger/booking-v1/swagger.json — `POST /booking/v1/bookings`

@@ -1,5 +1,5 @@
 /**
- * Cloudbeds answers for the Cloudbeds connector's tests (ADR-033 §8.4), in the shapes its developer
+ * Cloudbeds answers for the Cloudbeds connector's tests (ADR-037 §8.4), in the shapes its developer
  * documentation gives, read 20 October 2026 (saved copies in the build's notes, never fetched with a key):
  *
  * - partner path and evaluation: https://developers.cloudbeds.com/docs/getting-started-as-a-partner-in-5-steps

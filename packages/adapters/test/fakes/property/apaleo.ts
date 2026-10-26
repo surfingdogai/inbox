@@ -15,7 +15,7 @@ import {
 import { type FakePlatform, fakePlatform, json } from "../platform";
 
 /**
- * A local apaleo (ADR-033 §8.4), answering the paths and shapes of apaleo's public OpenAPI files
+ * A local apaleo (ADR-037 §8.4), answering the paths and shapes of apaleo's public OpenAPI files
  * (`test/fixtures/property/apaleo.ts` names them): its identity server's token endpoint (authorization
  * code, refresh token, client credentials; one-hour tokens); properties, unit groups, rate plans and their
  * rates; unit-group availability in time slices; offers; bookings made with an `Idempotency-Key` that

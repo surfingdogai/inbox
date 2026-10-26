@@ -28,7 +28,7 @@ import { z } from "zod";
 import { retryAfterMs } from "../http";
 
 /**
- * apaleo (ADR-033 §8.4), built from its public OpenAPI files (booking-v1, inventory-v1, availability-v1,
+ * apaleo (ADR-037 §8.4), built from its public OpenAPI files (booking-v1, inventory-v1, availability-v1,
  * rateplan-v1, account-v1 and webhook-v1, at https://api.apaleo.com/swagger/<api>/swagger.json and
  * https://webhook.apaleo.com/swagger/webhook-v1/swagger.json) and its OAuth guides
  * (https://apaleo.dev/guides/oauth-connection/auth-code-grant.html,

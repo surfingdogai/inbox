@@ -1,5 +1,5 @@
 /**
- * Mews Connector API answers for the Mews connector's tests (ADR-033 §8.4), written after the
+ * Mews Connector API answers for the Mews connector's tests (ADR-037 §8.4), written after the
  * documentation's own examples, read 20 October 2026 (saved copies in the build's notes, never fetched
  * with a token):
  *

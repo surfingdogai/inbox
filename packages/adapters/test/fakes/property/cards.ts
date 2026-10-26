@@ -1,7 +1,7 @@
 import type { FakeRequest } from "../platform";
 
 /**
- * No card ever leaves the inbox for a property system (ADR-033 §11): what each fake received is read,
+ * No card ever leaves the inbox for a property system (ADR-037 §11): what each fake received is read,
  * JSON or form, for a field that would carry card data (a card number, its token, a payment account,
  * an authorization, a credit card id) and for any run of 13 to 19 digits that passes the Luhn check.
  * Answers the offending requests; empty is the only good answer.

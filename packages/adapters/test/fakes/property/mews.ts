@@ -16,7 +16,7 @@ import {
 import { type FakePlatform, fakePlatform, json } from "../platform";
 
 /**
- * A local Mews (ADR-033 §8.4), speaking the Connector API as its documentation describes it
+ * A local Mews (ADR-037 §8.4), speaking the Connector API as its documentation describes it
  * (`test/fixtures/property/mews.ts` names the pages): every operation a POST of JSON to
  * `https://api.mews.com/api/connector/v1/<operation>` with the two tokens and the client's name in the
  * body; 401 for a token it does not know; 403 for a rule it applies (a night it has no room for when

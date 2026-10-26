@@ -256,7 +256,7 @@ Smoobu (<https://docs.smoobu.com/>), Guesty (<https://open-api-docs.guesty.com/>
 (<https://docs.mews.com/connector-api/>), apaleo (<https://api.apaleo.com/>) and Cloudbeds
 (<https://developers.cloudbeds.com/>). A system that needs a partner or developer account ships
 code-complete but switched off, with a checklist for the founder. Switched off, it reads as Google does
-(ADR-026 §6): a hosted inbox shows it as "Soon", with no hint, since there is nothing for its owner to
+(ADR-030 §6): a hosted inbox shows it as "Soon", with no hint, since there is nothing for its owner to
 do; an inbox on its owner's own server says "Needs setup", with what its operator sets and where that
 is explained. Until then a stay comes to the owner as a request, which they confirm themselves.
 

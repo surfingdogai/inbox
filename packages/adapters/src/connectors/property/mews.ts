@@ -30,7 +30,7 @@ import { hmacSha256Hex } from "../pay-sign";
 import { matchRooms } from "./match";
 
 /**
- * Mews (ADR-033 §8.4), through its Connector API: https://docs.mews.com/connector-api/.
+ * Mews (ADR-037 §8.4), through its Connector API: https://docs.mews.com/connector-api/.
  *
  * **Switched off until a partner token exists.** Every call carries two tokens and a name
  * (https://docs.mews.com/connector-api/guidelines/authentication): a `ClientToken`, which Mews issues

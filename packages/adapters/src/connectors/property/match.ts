@@ -1,5 +1,5 @@
 /**
- * Which room of a stay each room a property system already holds for it is (ADR-033 §8.4). A system
+ * Which room of a stay each room a property system already holds for it is (ADR-037 §8.4). A system
  * gives a stay's rooms back in its own order — Cloudbeds lists the assigned ones first, Mews a group in
  * no documented order — so position says nothing: each room it holds is paired with one of the stay's by
  * its room type and its people first, then by its room type, then with what is left. A stay whose rooms

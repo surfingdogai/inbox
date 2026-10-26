@@ -22,7 +22,7 @@ import {
 import { propertyContract, runContext } from "./contract";
 
 /**
- * Mews (ADR-033 §8.4) against a local Mews built from its documentation: the property system contract,
+ * Mews (ADR-037 §8.4) against a local Mews built from its documentation: the property system contract,
  * its own hold (`Optional` with `ReleasedUtc`) and that hold let go, a move onto a full night refused
  * before it is written, one another booking raced past put back whole (and said when it cannot be), a
  * group's rooms paired by kind, never by place, the guest only once confirmed, what the guest agreed in

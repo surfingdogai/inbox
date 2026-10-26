@@ -30,7 +30,7 @@ import { constantTimeEqual } from "../pay-sign";
 import { matchRooms } from "./match";
 
 /**
- * Cloudbeds (ADR-033 §8.4), built from its developer documentation (https://developers.cloudbeds.com/):
+ * Cloudbeds (ADR-037 §8.4), built from its developer documentation (https://developers.cloudbeds.com/):
  * the partner guides (getting started in 5 steps, API keys for technology partners, the property-level
  * quickstart, the alternative OAuth method, user authorization flows, webhooks) and the API reference of
  * `getHotels`, `getHotelDetails`, `getRoomTypes`, `getRooms`, `getRatePlans`, `getTaxesAndFees`,

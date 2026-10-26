@@ -6,9 +6,9 @@ import { CLIENT as CLOUDBEDS_CLIENT } from "../fixtures/property/cloudbeds";
 import { CLIENT_TOKEN } from "../fixtures/property/mews";
 
 /**
- * The property systems that need a partner account (ADR-033 §8.4): registered in every release. Until
+ * The property systems that need a partner account (ADR-037 §8.4): registered in every release. Until
  * their operator holds the partner's credentials, a hosted inbox shows each as **Soon**, with nothing for
- * its owner to do and no word on why (Google's way, ADR-026 §6); an inbox on its owner's own server says
+ * its owner to do and no word on why (Google's way, ADR-030 §6); an inbox on its owner's own server says
  * **Needs setup**, with what its operator sets and where it is explained. Nothing to press either way.
  * With the credentials, each is a way to connect like any other. A business that is not a place to stay
  * never sees the card.

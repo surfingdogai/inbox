@@ -109,7 +109,7 @@ export interface OAuthClients {
 }
 
 /**
- * What a server's operator holds for the property systems that need a partner account (ADR-033 §8.4):
+ * What a server's operator holds for the property systems that need a partner account (ADR-037 §8.4):
  * Mews's client token, apaleo's connect client, Cloudbeds' partner app; and its switches for a property's
  * own credentials (apaleo's simple client, a key made in Cloudbeds), both off by default. Nothing here is
  * read from the environment yet: until a partnership exists and its operator sets it, each is "Soon" on a
