@@ -23,7 +23,7 @@ import { createInbox, type Inbox } from "../src/app";
 import { confirmed, freshDb, futureDay, nextDay, openWeekdays } from "./harness";
 
 /**
- * Calendly and the calendar link to share (ADR-030), end to end through the doors an owner, a customer
+ * Calendly and the calendar link to share (ADR-033), end to end through the doors an owner, a customer
  * and a platform use: a plumber in Cape Town connects Calendly with a personal access token, its
  * Calendly bookings take times off what agents are offered, a booking the owner confirms is made on
  * Calendly in the business's own name, and a signed webhook makes the inbox look again at once. A

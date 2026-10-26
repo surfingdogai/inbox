@@ -20,7 +20,7 @@ import { constantTimeEqual, hmacSha256Hex } from "./hook-sign";
 import { basicAuth, retryAfterMs } from "./http";
 
 /**
- * Calendly (ADR-030) over its API v2, in the business's own account: signed in with Calendly (OAuth, the
+ * Calendly (ADR-033) over its API v2, in the business's own account: signed in with Calendly (OAuth, the
  * authorization code flow with PKCE, through the Calendly app of whoever runs the server), or with a
  * personal access token the owner makes and pastes. Nothing of ours in between either way.
  *
@@ -943,7 +943,7 @@ export interface CalendlyOptions {
 
 /**
  * Calendly, with a personal access token (always), and a sign-in with Calendly beside it once the
- * server has its Calendly app (`CALENDLY_CLIENT_ID`, `CALENDLY_CLIENT_SECRET`; ADR-026 §5): until then
+ * server has its Calendly app (`CALENDLY_CLIENT_ID`, `CALENDLY_CLIENT_SECRET`; ADR-030 §5): until then
  * that way says "Soon" on a hosted inbox and "set up" on one's own server.
  */
 export function calendlyConnector(client: OAuthClient | null = null, opts: CalendlyOptions = {}): ConnectorDefinition {

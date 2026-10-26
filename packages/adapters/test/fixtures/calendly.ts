@@ -2,7 +2,7 @@ import { basicAuth, hmacSha256Hex } from "../../src/index";
 import { type FakePlatform, fakePlatform, json } from "../fakes/platform";
 
 /**
- * Calendly as its API v2 documents it (ADR-030), for the Calendly connector's tests: no test calls
+ * Calendly as its API v2 documents it (ADR-033), for the Calendly connector's tests: no test calls
  * Calendly. Shapes follow the documented examples, read 20 October 2026:
  *
  * - `GET /users/me`: https://developer.calendly.com/api-docs/calendly-api/users/get-current-user

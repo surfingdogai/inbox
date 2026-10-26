@@ -32,7 +32,7 @@ import {
 } from "./fixtures/calendly";
 
 /**
- * The Calendly connector (ADR-030) against a fake Calendly answering as its API v2 documents
+ * The Calendly connector (ADR-033) against a fake Calendly answering as its API v2 documents
  * (fixtures/calendly.ts), through the inbox's own connector client: https only, public hosts only. A
  * plumber in Cape Town; no test calls Calendly.
  */

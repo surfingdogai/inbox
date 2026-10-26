@@ -14,7 +14,7 @@ import {
 import { fakePlatform } from "./fakes/platform";
 
 /**
- * The calendar link to share (ADR-030): confirmed bookings as RFC 5545 for another platform to import
+ * The calendar link to share (ADR-033): confirmed bookings as RFC 5545 for another platform to import
  * (https://www.rfc-editor.org/rfc/rfc5545), and read back by the inbox's own calendar link without
  * blocking its own time twice. A B&B in Oaxaca and a studio in Melbourne.
  */

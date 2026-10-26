@@ -1,6 +1,6 @@
-# ADR-030 — Calendly, and the calendar link to share
+# ADR-033 — Calendly, and the calendar link to share
 
-**Status:** proposed, 20 October 2026. Builds on ADR-022 (calendars) and ADR-026 (the shared base for
+**Status:** proposed, 20 October 2026. Builds on ADR-022 (calendars) and ADR-030 (the shared base for
 connectors). Two connectors: Calendly (`calendly`), signed in with Calendly or with the business's own
 token, and a calendar of the inbox's confirmed bookings that another platform imports by link
 (`ics_feed`, shown as **Share your bookings**). No spec change.
@@ -27,7 +27,7 @@ one (`ics`, ADR-022). What was missing was the other direction.
   run (and by two at once), and anything the run saves after it (a new webhook key) carries the new one,
   never the spent one. Disconnecting revokes it (`POST /oauth/revoke`,
   https://developer.calendly.com/api-docs/calendly-o-auth/o-auth/post-oauth-revoke). It needs the Calendly
-  app of whoever runs the server (`CALENDLY_CLIENT_ID`, `CALENDLY_CLIENT_SECRET`, ADR-026 §5): until then
+  app of whoever runs the server (`CALENDLY_CLIENT_ID`, `CALENDLY_CLIENT_SECRET`, ADR-030 §5): until then
   the way says "Soon" on a hosted inbox and "set up" on one's own server, as Google does. The app is
   registered with the scopes below and the redirect `<inbox>/oauth/connect/calendly/callback` (hosted: the
   host's one redirect address). A sign-in that reconnects the same account removes this inbox's webhook
@@ -77,7 +77,7 @@ their copies in a connected calendar, which carry no id here, by their times (`o
 - **The invitee is the business itself.** Calendly requires an invitee email and emails whoever it names
   (notifications run "as if booked via the Calendly UI"), so the invitee is the account's own address
   under the customer's name, in the business's time zone. The customer, whom the inbox has told already,
-  hears nothing from Calendly; the base gives a booking writer no customer email in any case (ADR-026 §2,
+  hears nothing from Calendly; the base gives a booking writer no customer email in any case (ADR-030 §2,
   rule 5). The list's option "let Calendly email the customer too" is not built: it would need the
   customer's email given to a writer, a base change.
 - **Event types it can use:** active, standard, one-on-one (`kind: solo`), booked at once (not a poll),
@@ -130,7 +130,7 @@ their copies in a connected calendar, which carry no id here, by their times (`o
 
 ### 5. The calendar link to share (Share your bookings)
 
-- `auth: "link"`, served at `GET /v1/feeds/ics_feed/<token>.ics` by the base (ADR-026 §5): a 32-byte
+- `auth: "link"`, served at `GET /v1/feeds/ics_feed/<token>.ics` by the base (ADR-030 §5): a 32-byte
   token, its hash for the lookup, sealed for the owner to see again; **Make a new link** stops the old
   one at once; shown to the owner in person only; `noindex`, no cookies, `private, max-age=300`.
 - **Made only where other sites can fetch it.** A link is made (or made again) only at the inbox's own
@@ -167,7 +167,7 @@ their copies in a connected calendar, which carry no id here, by their times (`o
   way back. The owner app treats Calendly as a booking platform with Cal.com: the "each booking would show
   twice" warning, the **Event type** chooser and "bookings go out".
 - The site's connector pages (`docs/connectors/calendly.md`, `calendar-link.md`) describe them; the
-  integrations page keeps "Being built" until this is merged and deployed (ADR-026 §6).
+  integrations page keeps "Being built" until this is merged and deployed (ADR-030 §6).
 - Not here: Calendly bookings as inbox items; a Calendly-side cancel told to the owner; booking sites'
   all-day exports counting as busy without `TRANSP:OPAQUE` (the `ics` connector counts an all-day event
   only when it is marked busy, ADR-022; many booking sites mark none).
