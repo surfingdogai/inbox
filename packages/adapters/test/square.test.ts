@@ -611,6 +611,53 @@ describe("the catalogue", () => {
     });
   });
 
+  it("reads what each one is: the variation's barcode, its page on Square Online, its picture or else its item's", async () => {
+    const { sq, def, ctx } = await connected({ seller: "melbourne" });
+    type Item = {
+      id: string;
+      item_data: Record<string, unknown> & {
+        variations: { id: string; item_variation_data: Record<string, unknown> }[];
+      };
+    };
+    const flat = sq.items.find((i) => i.id === "ITMFLATWHITE0000") as Item;
+    Object.assign(flat.item_data, {
+      image_ids: ["IMGFLATWHITE0000"],
+      ecom_uri: "https://laneway-cafe.square.site/product/flat-white/12",
+    });
+    const [regular, large] = flat.item_data.variations;
+    Object.assign(regular?.item_variation_data ?? {}, { upc: "9300601123452" });
+    Object.assign(large?.item_variation_data ?? {}, { upc: "9300601543212", image_ids: ["IMGFLATWHITELRG0"] });
+    sq.images.push(
+      {
+        type: "IMAGE",
+        id: "IMGFLATWHITE0000",
+        image_data: { name: "Flat white", url: "https://items-images.example.net/flat.jpg" },
+      },
+      {
+        type: "IMAGE",
+        id: "IMGFLATWHITELRG0",
+        image_data: { name: "Large", url: "https://items-images.example.net/flat-large.jpg" },
+      },
+    );
+    const page: Page = await def.catalogue?.page(ctx(), { cursor: null, since: null });
+    const byId = new Map(page?.products.map((p) => [p.externalId, p]));
+    // As Square gives it, from its UPC field (12 to 14 digits): the inbox checks it as it stores it.
+    expect(byId.get("VARFLATWHITEREG0")).toMatchObject({
+      gtin: { raw: "9300601123452", hint: "upc" },
+      url: "https://laneway-cafe.square.site/product/flat-white/12",
+      imageUrl: "https://items-images.example.net/flat.jpg",
+    });
+    // The variation's own picture before its item's.
+    expect(byId.get("VARFLATWHITELRG0")).toMatchObject({
+      gtin: { raw: "9300601543212", hint: "upc" },
+      imageUrl: "https://items-images.example.net/flat-large.jpg",
+    });
+    // An item with none of them says nothing of them.
+    expect(byId.get("VARBANANABREAD00")).not.toHaveProperty("gtin");
+    expect(byId.get("VARBANANABREAD00")).not.toHaveProperty("imageUrl");
+    expect(body(sq, "POST", "/v2/catalog/search").at(-1)).toMatchObject({ include_related_objects: true });
+  });
+
   it("follows the location the owner chooses: its own prices, and what is sold only there", async () => {
     const { def, ctx } = await connected({ seller: "melbourne" });
     const read = async (c: RunContext) => {

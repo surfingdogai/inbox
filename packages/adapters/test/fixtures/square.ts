@@ -101,6 +101,8 @@ export interface FakeSquare {
   cancelBefore: number;
   /** Variations changed on their own (one taken off its item, say), as `SearchCatalogObjects` answers them. */
   readonly variationChanges: Record<string, unknown>[];
+  /** Pictures of the catalogue (`CatalogImage`), named by an item's or a variation's `image_ids`. */
+  readonly images: Record<string, unknown>[];
   /** Whether a payment link's answer carries its order (`related_resources`), as Square's example does. */
   relatedOrders: boolean;
   /** Pays an order through its link, as a customer at Square's checkout. */
@@ -345,6 +347,21 @@ export function fakeSquare(opts: FakeSquareOptions = {}): FakeSquare {
   const id = (prefix: string) => `${prefix}${String(++n).padStart(6, "0")}${"X".repeat(10)}`.slice(0, 22);
   const idempotent = new Map<string, Response>();
   const nowIso = () => new Date().toISOString();
+  // The pictures some objects name (`image_ids`, an item's own and its variations'), as related objects.
+  const imagesNamed = (objects: readonly Record<string, unknown>[]): Record<string, unknown>[] => {
+    const ids = new Set<string>();
+    const name = (data: unknown) => {
+      for (const i of ((data as { image_ids?: unknown[] } | undefined)?.image_ids ?? []) as unknown[])
+        if (typeof i === "string") ids.add(i);
+    };
+    for (const o of objects) {
+      const data = o.item_data as { variations?: Record<string, unknown>[] } | undefined;
+      name(data);
+      for (const v of data?.variations ?? []) name(v.item_variation_data);
+      name(o.item_variation_data);
+    }
+    return sq.images.filter((img) => ids.has(String(img.id)));
+  };
 
   const sq: FakeSquare = {
     platform,
@@ -372,6 +389,7 @@ export function fakeSquare(opts: FakeSquareOptions = {}): FakeSquare {
     blocked: [],
     cancelBefore: 0,
     variationChanges: [],
+    images: [],
     relatedOrders: true,
     pay(orderId, payOpts = {}) {
       const order = sq.orders.get(orderId);
@@ -843,12 +861,15 @@ export function fakeSquare(opts: FakeSquareOptions = {}): FakeSquare {
           const start = Number(body.cursor ?? 0);
           const size = 3;
           const page = list.slice(start, start + size);
-          // A variation's item, when asked for what the page refers to.
+          // What the page refers to, when asked: a variation's item, and the pictures the page names.
           const related = body.include_related_objects
-            ? page
-                .filter((o) => o.type === "ITEM_VARIATION")
-                .map((v) => sq.items.find((i) => i.id === (v.item_variation_data as { item_id?: string }).item_id))
-                .filter((i): i is Record<string, unknown> => i !== undefined && !page.includes(i))
+            ? [
+                ...page
+                  .filter((o) => o.type === "ITEM_VARIATION")
+                  .map((v) => sq.items.find((i) => i.id === (v.item_variation_data as { item_id?: string }).item_id))
+                  .filter((i): i is Record<string, unknown> => i !== undefined && !page.includes(i)),
+                ...imagesNamed(page),
+              ]
             : [];
           return json({
             objects: page,
@@ -874,6 +895,8 @@ export function fakeSquare(opts: FakeSquareOptions = {}): FakeSquare {
               related.push(item);
             }
           }
+          // One level deep, as Square goes: the variations' own pictures, not their items'.
+          related.push(...imagesNamed(objects));
           return json({ objects, related_objects: related });
         }),
       )

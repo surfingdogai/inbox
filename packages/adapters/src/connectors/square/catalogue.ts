@@ -21,6 +21,11 @@ import { arr, fromSquare, iso, obj, type SquareApi, str } from "./api";
  * Prices are Square's in the currency's smallest unit, kept here in hundredths (`fromSquare`): exact
  * for a currency counted in hundredths and for one with no minor unit (¥12,800 is 1280000). One counted
  * in thousandths comes in with no price, and is kept off sale.
+ *
+ * What it is (ADR-029), each only when Square has it: its barcode from the variation's `upc` (the
+ * dashboard's GTIN field, 12 to 14 digits), checked when it is stored; the link to its first picture,
+ * the variation's own or else its item's (`image_ids`, read from the `CatalogImage` objects Square
+ * sends beside them); and its page on Square Online (`ecom_uri`, deprecated and still answered).
  */
 
 /** Items asked for in a page: fifty, each with every variation, its descriptions and its prices at each location. */
@@ -54,9 +59,9 @@ export function catalogueReader(apiOf: (ctx: RunContext) => Promise<SquareApi>):
             // What changed: variations too, each with its item, since one taken off an item leaves no trace on it.
             object_types: changed ? ["ITEM", "ITEM_VARIATION"] : ["ITEM"],
             limit: ITEMS_PER_PAGE,
-            ...(changed
-              ? { begin_time: iso(p.since ?? 0), include_deleted_objects: true, include_related_objects: true }
-              : {}),
+            // The objects the page names come too: a variation's item, and the pictures of both.
+            include_related_objects: true,
+            ...(changed ? { begin_time: iso(p.since ?? 0), include_deleted_objects: true } : {}),
             ...(at ? { cursor: at } : {}),
           },
           { maxBytes: PAGE_BYTES },
@@ -78,7 +83,7 @@ export function catalogueReader(apiOf: (ctx: RunContext) => Promise<SquareApi>):
           const item = parents.get(String(obj(variation.item_variation_data).item_id));
           if (item) byId.set(String(variation.id), { item, variation });
         }
-        const products = await productsOf(api, [...byId.values()], location);
+        const products = await productsOf(api, [...byId.values()], location, imagesOf(read));
         const next = str(read.cursor);
         // A pass of what changed goes on to the stock counts that changed.
         return { products, cursor: next ? `c:${next}` : p.since !== null ? "i:" : null };
@@ -117,9 +122,28 @@ export function catalogueReader(apiOf: (ctx: RunContext) => Promise<SquareApi>):
         .filter((o) => o.type === "ITEM_VARIATION")
         .map((variation) => ({ item: items.get(String(obj(variation.item_variation_data).item_id)), variation }))
         .filter((x): x is { item: Obj; variation: Obj } => x.item !== undefined);
-      return { products: await productsOf(api, pairs, location), cursor: next ? `i:${next}` : null };
+      return { products: await productsOf(api, pairs, location, imagesOf(got)), cursor: next ? `i:${next}` : null };
     },
   };
+}
+
+/** The pictures an answer carries (`CatalogImage`), by id: the link to each. */
+function imagesOf(answer: Obj): ReadonlyMap<string, string> {
+  const out = new Map<string, string>();
+  for (const o of [...arr(answer.objects), ...arr(answer.related_objects)]) {
+    const url = o.type === "IMAGE" && typeof o.id === "string" ? str(obj(o.image_data).url) : null;
+    if (url) out.set(String(o.id), url);
+  }
+  return out;
+}
+
+/** The link to the first of `ids` the answer carries a picture for. */
+function firstImage(ids: unknown, images: ReadonlyMap<string, string>): string | null {
+  for (const id of Array.isArray(ids) ? ids : []) {
+    const url = typeof id === "string" ? images.get(id) : undefined;
+    if (url) return url;
+  }
+  return null;
 }
 
 /** Products for a page of item variations, their stock read at the location in one call. */
@@ -127,6 +151,7 @@ async function productsOf(
   api: SquareApi,
   pairs: readonly { readonly item: Obj; readonly variation: Obj }[],
   location: string,
+  images: ReadonlyMap<string, string>,
 ): Promise<CatalogueProduct[]> {
   const kept = pairs.filter(({ item }) => {
     const type = str(obj(item.item_data).product_type);
@@ -160,6 +185,9 @@ async function productsOf(
       here.sold_out !== true &&
       !(visibility && HIDDEN_ONLINE.has(visibility)) &&
       isAt(presenceOf(item, variation), location);
+    const upc = str(vd.upc)?.trim();
+    const imageUrl = firstImage(vd.image_ids, images) ?? firstImage(data.image_ids, images);
+    const url = str(data.ecom_uri)?.trim();
     out.push({
       externalId: id,
       name: name.slice(0, 200),
@@ -168,6 +196,9 @@ async function productsOf(
       price,
       stock: tracks(variation, location) ? (stock.get(id) ?? 0) : null,
       available,
+      ...(upc ? { gtin: { raw: upc, hint: "upc" as const } } : {}),
+      ...(url ? { url } : {}),
+      ...(imageUrl ? { imageUrl } : {}),
     });
   }
   return out;

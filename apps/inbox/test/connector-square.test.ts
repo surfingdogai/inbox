@@ -339,6 +339,36 @@ describe("an order paid at the salon's own Square checkout", () => {
     expect(pay).toMatchObject({ state: "open", provider: "Square", url: link?.url });
   });
 
+  it("keeps each item's barcode checked: a good one as its 14 digits, one that fails the check for the owner only", async () => {
+    const s = await setup();
+    type Item = {
+      id: string;
+      item_data: Record<string, unknown> & { variations: { item_variation_data: Record<string, unknown> }[] };
+    };
+    const shampoo = s.sq.items.find((i) => i.id === "ITMARGANSHAMPOO0") as Item;
+    shampoo.item_data.image_ids = ["IMGARGANSHAMP000"];
+    s.sq.images.push({
+      type: "IMAGE",
+      id: "IMGARGANSHAMP000",
+      image_data: { name: "Argan shampoo", url: "https://items-images.example.net/argan.jpg" },
+    });
+    Object.assign(shampoo.item_data.variations[0]?.item_variation_data ?? {}, { upc: "049634061230" });
+    // One digit off: Square takes the field as typed, the inbox does not publish it.
+    const oil = s.sq.items.find((i) => i.id === "ITMBEARDOIL00000") as Item;
+    Object.assign(oil.item_data.variations[0]?.item_variation_data ?? {}, { upc: "049634061231" });
+    await connected(s);
+    const { rows } = await s.db.client.query({
+      sql: "SELECT external_id, gtin, gtin_given, image_url, catalogue_seq FROM products ORDER BY external_id",
+      method: "all",
+    });
+    expect(rows.map((r) => r.slice(0, 4))).toEqual([
+      ["VARARGANSHAMP250", "00049634061230", null, "https://items-images.example.net/argan.jpg"],
+      ["VARBEARDOIL30ML0", null, "049634061231", null],
+    ]);
+    // Each write moved its place in the signed catalogue feed.
+    expect(rows.every((r) => Number(r[4]) > 0)).toBe(true);
+  });
+
   it("marks it paid only once Square, asked back, says so; keeps ids only; counts a delivery once", async () => {
     const s = await setup();
     await connected(s);

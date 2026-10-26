@@ -50,7 +50,7 @@ By its name and length: a 45-minute **Haircut** here goes to the 45-minute **Hai
 
 | | |
 | --- | --- |
-| Reads | your business name; your open locations (name, currency, phone); whether Square Appointments is on, and your plan; your services, their length and who takes them; who is free when; items and variations (name, SKU, price, stock); the orders, payments and refunds of the links it made |
+| Reads | your business name; your open locations (name, currency, phone); whether Square Appointments is on, and your plan; your services, their length and who takes them; who is free when; items and variations (name, SKU, barcode, price, stock, the link to their picture, and their Square Online page); the orders, payments and refunds of the links it made |
 | Writes | bookings, and a customer record for each customer they are for (their name and your location's phone, no email); orders with their links to pay; one webhook subscription, at your connection's own address |
 | Never keeps | your Square customers, or any order or booking it did not make. A webhook is kept as its id, its topic and the ids it names. |
 
