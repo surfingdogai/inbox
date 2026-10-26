@@ -80,7 +80,7 @@ export function isHundredthsCurrency(code: string): boolean {
  * ISO 4217 currencies with no minor unit at all (yen, won, dong, Chilean pesos…). Kept in hundredths
  * here like every other amount (¥1,500 is 150000), which is exact, and written out as a decimal a
  * shop takes in its own currency ("1500.00"). Only a shop that takes such a decimal makes links in
- * them (ADR-027); a payment platform that counts in minor units does not.
+ * them (ADR-032); a payment platform that counts in minor units does not.
  */
 const NO_MINOR_UNIT: ReadonlySet<string> = new Set([
   "BIF",

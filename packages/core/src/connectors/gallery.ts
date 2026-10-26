@@ -42,7 +42,7 @@ export interface GalleryWay {
   readonly again?: string | undefined;
   /**
    * For a way that works only once this inbox is live at its own https address (a store that POSTs
-   * its key here, ADR-026 §5): said as it is, above the way that works meanwhile. Its status is `setup`.
+   * its key here, ADR-030 §5): said as it is, above the way that works meanwhile. Its status is `setup`.
    */
   readonly untilLive?: string | undefined;
   /** What the platform will ask, said before the owner goes there. */
@@ -386,7 +386,7 @@ function defaultAction(auth: ConnectorAuth, label: string): string {
   return "Connect";
 }
 
-/** Why a store that POSTs its key here cannot do so yet, and what works meanwhile (ADR-026 §5). */
+/** Why a store that POSTs its key here cannot do so yet, and what works meanwhile (ADR-030 §5). */
 export const POST_NOT_LIVE =
   "Your shop can send this inbox its key once the inbox is live at its own address. Until then, paste the keys.";
 

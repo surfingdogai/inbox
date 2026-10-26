@@ -621,7 +621,7 @@ export class ConnectorCapabilities {
         details: { reason: "form", kind: def.kind },
       });
     }
-    // A platform that POSTs the key itself must reach this inbox: an https address, live (ADR-026 §5).
+    // A platform that POSTs the key itself must reach this inbox: an https address, live (ADR-030 §5).
     if (def.oauth.delivery === "post" && !(await this.postReachable())) {
       throw new WriteError("not_allowed", POST_NOT_LIVE, { details: { reason: "not_live", kind: def.kind } });
     }

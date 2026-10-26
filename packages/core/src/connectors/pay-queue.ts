@@ -58,7 +58,7 @@ export async function linkComing(
   };
   const value = Number(p.totalPrice?.value ?? 0);
   const currency = String(p.totalPrice?.currency ?? "").toUpperCase();
-  // A currency with no minor unit is a shop's to take (ADR-027); the connection decides when it makes the link.
+  // A currency with no minor unit is a shop's to take (ADR-032); the connection decides when it makes the link.
   if (!Number.isInteger(value) || value <= 0 || !(isHundredthsCurrency(currency) || isWholeUnitCurrency(currency))) {
     return false;
   }

@@ -473,7 +473,7 @@ export class PaymentLinks {
     }
     // Every amount here is in hundredths: a currency counted otherwise would be a link a hundred times wrong.
     // A shop takes a decimal in its own currency, so one with no minor unit (yen, won) is exact there
-    // (ADR-027); a payment platform counts in minor units and is never sent one.
+    // (ADR-032); a payment platform counts in minor units and is never sent one.
     const wholeUnits = conn.shop ? isWholeUnitCurrency(want.currency) : false;
     if (!isHundredthsCurrency(want.currency) && !wholeUnits) {
       return this.refuse(order, conn, want, NOT_HUNDREDTHS, now);

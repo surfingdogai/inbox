@@ -51,7 +51,7 @@ define( 'SDI_KEEP', 7 * 24 * 3600 );
  * Check, Surfing Dog's checker. Both through wp_safe_remote_get, https only, no redirect followed,
  * with a timeout and a size cap.
  *
- * With WooCommerce active (ADR-027 in the inbox's repository), it also:
+ * With WooCommerce active (ADR-032 in the inbox's repository), it also:
  *
  *   - offers Connect WooCommerce, which opens the inbox's own Settings → Integrations with the
  *     WooCommerce drawer open; the owner presses Connect your shop there, and Approve on WooCommerce's

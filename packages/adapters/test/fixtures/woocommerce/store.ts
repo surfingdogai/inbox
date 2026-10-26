@@ -2,7 +2,7 @@ import { hmacSha256Base64 } from "../../../src/connectors/hook-sign";
 import { type FakePlatform, fakePlatform, json } from "../../fakes/platform";
 
 /**
- * A made-up WooCommerce store for the connector's tests (ADR-027), answering as WooCommerce's REST API
+ * A made-up WooCommerce store for the connector's tests (ADR-032), answering as WooCommerce's REST API
  * v3 documents it (https://woocommerce.github.io/woocommerce-rest-api-docs/, read 20 October 2026) and
  * as its source behaves where the docs are silent:
  *

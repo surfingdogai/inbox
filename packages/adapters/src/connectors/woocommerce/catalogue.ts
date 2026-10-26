@@ -3,7 +3,7 @@ import { call, currencyRefusal, hundredths, plain } from "./api";
 import { keysOf, storeOf } from "./state";
 
 /**
- * A store's products into the inbox's catalogue (ADR-026 §3, ADR-027 §3), one request per page so a
+ * A store's products into the inbox's catalogue (ADR-030 §3, ADR-032 §3), one request per page so a
  * run stays within its budget however the store is built:
  *
  * - **Simple products** are one sellable unit each (`p:<id>`); a **variable** product is not, its

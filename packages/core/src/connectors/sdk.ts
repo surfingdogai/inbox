@@ -1000,7 +1000,7 @@ export function subtractIntervals(busy: readonly Interval[], spans: readonly Int
  * so these never guess another exponent: a guess is a link for a hundred times the order. A currency
  * with no minor unit (JPY) is exact in hundredths (¥2,800 is 280000) and reaches a shop's `createLink`
  * (capability `shop_orders`) only, as `decimalAmount` writes it ("2800.00"): a shop that counts in
- * minor units divides by 100 first. A payment platform is never sent one (ADR-027).
+ * minor units divides by 100 first. A payment platform is never sent one (ADR-032).
  */
 
 /** Hundredths as a decimal string, the way some platforms want it: 4500 → "45.00". */

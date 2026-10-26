@@ -18,7 +18,7 @@ import { ErrorState, Toast } from "./Feedback";
 import { Field, SectionHead, Switch } from "./Form";
 
 /**
- * Settings → Integrations, the gallery (ADR-022, ADR-026): what is connected first, then the cards in
+ * Settings → Integrations, the gallery (ADR-022, ADR-030): what is connected first, then the cards in
  * their groups (Calendars, Payments, Shops and checkouts), each one thing an owner recognises, with its
  * ways in. Everything here is drawn from what the server says: the form from the connector's own
  * schema, a sign-in's words and what it asks first, a link to make, the choosers once connected, so a

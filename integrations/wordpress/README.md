@@ -14,7 +14,7 @@ answers there with its manifest, it publishes the lines of ADR-024 and
 The copy is fetched by WP-Cron twice a day and when the address is saved, never while a visitor
 waits; a failed fetch waits 15 minutes; with no good copy for a week, nothing is published.
 
-With WooCommerce active (ADR-027), Settings → Agent inbox also offers **Connect WooCommerce**, which
+With WooCommerce active (ADR-032), Settings → Agent inbox also offers **Connect WooCommerce**, which
 opens the inbox's Settings → Integrations with its WooCommerce card open
 (`https://<inbox>/settings/integrations?connect=woocommerce`); llms.txt gains the shop's line (agents
 order through the inbox once it is connected to the shop); and, while the inbox is connected to the shop

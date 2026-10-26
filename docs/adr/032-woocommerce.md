@@ -1,6 +1,6 @@
-# ADR-027 — WooCommerce: a business's own WordPress shop
+# ADR-032 — WooCommerce: a business's own WordPress shop
 
-**Status:** proposed, 20 October 2026. Builds on ADR-026 (the shared base for shops, tills and links),
+**Status:** proposed, 20 October 2026. Builds on ADR-030 (the shared base for shops, tills and links),
 ADR-023 (pay links) and ADR-024 (the WordPress plugin's discovery lines). Connector kind `woocommerce`,
 frozen once merged.
 
@@ -69,7 +69,7 @@ Sources, read on 20 October 2026:
   without pretty permalinks; and the key pair in the query for a host that drops the Authorization
   header, as WooCommerce documents. Such a request never follows a redirect.
 - The account is the store's address without `www.` (`connector:woocommerce:<host><path>` for its
-  products, ADR-026 §3), and its name the site's own (`/wp-json/?_fields=name`).
+  products, ADR-030 §3), and its name the site's own (`/wp-json/?_fields=name`).
 
 ### 2. What is read, and nothing else
 
@@ -122,7 +122,7 @@ shipping details**: the inbox wrote them, and has no need to read them back.
   applied to it (its own tax over its own total, to six decimals), and a cent of rounding goes on the
   largest line, so the order comes to what the customer accepted. A store whose prices **exclude** tax
   adds it on top: its total is not the customer's, the link is held, and the owner can propose the
-  store's total (ADR-026 §2). The store's total is always the one checked.
+  store's total (ADR-030 §2). The store's total is always the one checked.
 - An order in another currency than the store's is not written into it (`refused`, the order says why).
 - **The region as the store knows it.** WooCommerce matches state tax rates (HST in Ontario, GST in an
   Indian state, ICMS in a Brazilian one) on the state's code, and an address's `addressRegion` is free
@@ -142,7 +142,7 @@ Read back with the key, by webhook and on each sync:
   pix, ideal…), left out otherwise.
 - **fulfilled**: `completed`, with tracking when the Shipment Tracking extension recorded one.
 - **cancelled**: `cancelled`, in the bin, or gone. Unpaid, this closes the link and leaves the order to
-  the owner (ADR-026 §2).
+  the owner (ADR-030 §2).
 - **refunded**: the order's refunds, in all, which mark done a refund the inbox owes. Read whenever the
   order is `processing`, `completed` or `refunded` (a full refund is no longer paid, and is still a refund).
 - **Closing a link** cancels the store's order while it is still `pending` or `failed` (WooCommerce emails
@@ -164,7 +164,7 @@ Read back with the key, by webhook and on each sync:
   event's id the second order of the second would be dropped as a duplicate. A delivery sent again is
   the same body, and still dropped.
 - An order the inbox did not make (the shop's own checkout) is let go unkept, by the signed body's own
-  `_sdi_ref` and mark. The inbox copies no order it did not make (ADR-026: not now). Nothing a body says
+  `_sdi_ref` and mark. The inbox copies no order it did not make (ADR-030: not now). Nothing a body says
   is believed: the order is read back with the key.
 - Every few hours the webhooks are put right: made where missing, moved when the inbox moves to its own
   domain, switched back on when the store switched one off after failed deliveries. A webhook of this
@@ -222,7 +222,7 @@ is saved:
   no developer account, no OAuth client, the same on a hosted inbox and one's own server.
 - The owner app opens one card's drawer from `?connect=<card id>`, once, when the card can be connected
   there, brought into view with its button focused; the owner still presses its one button.
-- Changes to the shared base (ADR-026), each generic: a `post` sign-in is offered and started only when
+- Changes to the shared base (ADR-030), each generic: a `post` sign-in is offered and started only when
   the platform can reach the inbox (`GalleryWay.untilLive`, `authorize` refuses it); `success=0` on the
   way back is a decline; `OAuthFlow.accountOf` makes a second approval of the same account a connection
   again in place; a run goes on with the `extra` its refresh found; `ConnectorDefinition.notes` puts a
@@ -233,5 +233,5 @@ is saved:
   is merged and deployed, not before.
 - Not here: orders placed at the shop's own checkout into the inbox; a WooCommerce order-status door
   for agents; currencies counted in thousandths; sending the store's total to the customer by itself
-  for a store that adds tax at checkout (the owner sends it, ADR-026 §2); taking a key back over the API
+  for a store that adds tax at checkout (the owner sends it, ADR-030 §2); taking a key back over the API
   (WooCommerce has none).

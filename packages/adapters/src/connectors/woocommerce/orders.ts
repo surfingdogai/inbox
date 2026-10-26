@@ -17,7 +17,7 @@ import { extraOf, keysOf, markOf, storeOf } from "./state";
 
 /**
  * Orders the inbox accepts, written into the business's own WooCommerce store and paid at its own
- * checkout (ADR-026 §2, ADR-027 §4). The store is the business's: the customer's name, email, phone and
+ * checkout (ADR-030 §2, ADR-032 §4). The store is the business's: the customer's name, email, phone and
  * address go there, and only what fulfilling needs (`ShopOrder`).
  *
  * - **Made pending**, at the inbox's prices: each line a product or variation of the store's own
@@ -32,7 +32,7 @@ import { extraOf, keysOf, markOf, storeOf } from "./state";
  * - **Tax.** WooCommerce adds tax to a line's total. A store whose prices include tax would charge it
  *   twice, so the lines are written again without it, at the rate the store itself applied, to come
  *   to what the customer accepted. A store whose prices exclude tax adds it on top: its total is then
- *   not the customer's, and the link is held for the owner to propose it (ADR-026 §2).
+ *   not the customer's, and the link is held for the owner to propose it (ADR-030 §2).
  * - **Paid** means the store, asked with the key, says `processing` or `completed` with `date_paid`;
  *   cash on delivery only once `completed`. **Fulfilled** is `completed`; **cancelled** is
  *   `cancelled`, the bin, or gone; **refunded** is the store's refunds on the order.
@@ -331,7 +331,7 @@ function itemsOf(wc: Raw, order: ShopOrder): Item[] {
  * written again without it, at the rate the store itself applied to that line (its own tax over its
  * own total), so that with tax the order comes to what the customer accepted. A second pass puts a
  * rounding cent left over on the largest line. A store whose prices exclude tax is left as it
- * counts: its total goes back to the base, which holds the link (ADR-026 §2).
+ * counts: its total goes back to the base, which holds the link (ADR-030 §2).
  */
 async function settleTotals(ctx: RunContext, store: Store, keys: Keys, wc: Raw, order: ShopOrder): Promise<Raw> {
   let current = wc;

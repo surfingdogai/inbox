@@ -35,7 +35,7 @@ export { WOO_TOPICS } from "./hooks";
 export { orderBody as wooOrderBody, WOO_METHODS } from "./orders";
 
 /**
- * WooCommerce (ADR-027): the business's own WordPress shop, with a key pair the store makes for this
+ * WooCommerce (ADR-032): the business's own WordPress shop, with a key pair the store makes for this
  * inbox. Nobody holds a developer account: the owner presses **Connect your shop**, WooCommerce's own
  * Approve page opens in their WordPress admin (`/wc-auth/v1/authorize`, `read_write`), and the store
  * POSTs the key pair it made to this inbox, server to server, before the owner comes back

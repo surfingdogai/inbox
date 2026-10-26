@@ -14,7 +14,7 @@ import { hmacSha256Base64, woocommerceConnector } from "../src/index";
 import { type FakeWooStore, fakeWooStore, simple, variable, variation } from "./fixtures/woocommerce/store";
 
 /**
- * Contract tests for the WooCommerce connector (ADR-027) against a made-up store that answers as
+ * Contract tests for the WooCommerce connector (ADR-032) against a made-up store that answers as
  * WooCommerce's REST API v3 documents it (fixtures/woocommerce/store.ts), through the inbox's own
  * connector client: https only, public hosts only, no redirect followed. Its businesses: a pizzeria in
  * São Paulo (BRL), a hardware shop in Pune whose prices include GST (INR), a bakery in Toronto whose

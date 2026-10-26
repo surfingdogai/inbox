@@ -12,7 +12,7 @@ import { factsOf } from "./orders";
 import { extraOf, keysOf, markOf, randomSecret, storeOf, type WooExtra } from "./state";
 
 /**
- * The store's webhooks, at the connection's own address (ADR-026 §4, ADR-027 §5). WooCommerce signs
+ * The store's webhooks, at the connection's own address (ADR-030 §4, ADR-032 §5). WooCommerce signs
  * each delivery with `X-WC-Webhook-Signature`: the base64 HMAC-SHA-256 of the body under the
  * webhook's secret, and names it in `X-WC-Webhook-Topic`, `-ID` and `-Delivery-ID`. The delivery id is
  * no event's own: WooCommerce makes it of the webhook's id and the second it is sent
@@ -27,7 +27,7 @@ import { extraOf, keysOf, markOf, randomSecret, storeOf, type WooExtra } from ".
  * Only ids are kept, never a body: WooCommerce sends the whole order, the customer's details with
  * it. And nothing a body says is believed: what an event names is read back with the key. An order
  * the inbox did not make (the shop's own checkout) is let go unkept, by the body's own signed
- * `_sdi_ref` and mark: the inbox copies no order it did not make (ADR-026, not now).
+ * `_sdi_ref` and mark: the inbox copies no order it did not make (ADR-030, not now).
  *
  * https://woocommerce.com/document/webhooks/,
  * https://github.com/woocommerce/woocommerce/blob/trunk/plugins/woocommerce/includes/class-wc-webhook.php,

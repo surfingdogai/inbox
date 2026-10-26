@@ -14,7 +14,7 @@ import { createInbox } from "../src/app";
 import { confirmed, freshDb } from "./harness";
 
 /**
- * WooCommerce (ADR-027) end to end, through the doors an owner, a customer's agent and a store use,
+ * WooCommerce (ADR-032) end to end, through the doors an owner, a customer's agent and a store use,
  * with a made-up store that answers as WooCommerce's REST API documents it: a pizzeria in São Paulo
  * selling in reais, and a bakery in Toronto whose prices leave HST to the checkout. The owner connects
  * with one press on the store's own Approve page; the store's catalogue comes in; an order the owner
