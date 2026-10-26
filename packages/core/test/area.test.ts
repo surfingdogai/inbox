@@ -19,7 +19,7 @@ import {
 import { parseStoredSettings } from "../src/settings/schema";
 
 /**
- * Where a business works (ADR-034 §3), checked in several countries: a radius from a base it chose as
+ * Where a business works (ADR-039 §3), checked in several countries: a radius from a base it chose as
  * a place (never typed coordinates, never published, a site told as a band), postal prefixes in each
  * country's own shape (nothing geocoded), and "on request" whenever it cannot be told.
  */

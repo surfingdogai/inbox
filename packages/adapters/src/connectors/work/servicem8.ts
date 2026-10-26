@@ -21,7 +21,7 @@ import { z } from "zod";
 import { addressLine, failOn, fileName, jobTitle, jsonOf, multipart, splitName, uuidFrom } from "./common";
 
 /**
- * ServiceM8 (ADR-034 §5), with the owner's own API key: "You do not need a ServiceM8 Developer account
+ * ServiceM8 (ADR-039 §5), with the owner's own API key: "You do not need a ServiceM8 Developer account
  * to use API keys" (https://developer.servicem8.com/docs/authentication). A request the owner takes on
  * becomes a job in Quote status, with a client, a job contact, the site as the job address, and the
  * customer's photos and plans in the job diary; the staff's scheduled job activities are the busy
@@ -483,7 +483,7 @@ export function servicem8Connector(client: OAuthClient | null = null): Connector
       openUrl: openJob,
     },
 
-    // Start from ServiceM8 (ADR-034 §5): its opening hours, kept only when the owner keeps them.
+    // Start from ServiceM8 (ADR-039 §5): its opening hours, kept only when the owner keeps them.
     setup: {
       async read(ctx) {
         return servicem8Setup(ctx, await fresh(ctx, client));

@@ -12,7 +12,7 @@ import { isPostalCode, normalisePostal, postalMatches, postalPrefixProblem } fro
 export * from "./postal";
 
 /**
- * Where a business works (ADR-034 §3): a radius, postal prefixes, or anywhere, and what happens to a
+ * Where a business works (ADR-039 §3): a radius, postal prefixes, or anywhere, and what happens to a
  * request from outside. The radius is measured from a base the owner chooses as a place, never as
  * numbers typed in: the business's own premises (Settings → General, on the map), or where the
  * owner's device is when they set it ("Where I am now"). The base is never published, never shown to a

@@ -1339,15 +1339,15 @@ export const blobs = sqliteTable("blobs", {
   partyId: text("party_id"),
   createdAt: createdAt(),
   deletedAt: integer("deleted_at"),
-  /** The file's name as it is shown (0027). */
+  /** The file's name as it is shown (0031). */
   name: text("name"),
-  /** Until when a file nobody's request took yet is kept (0027): an hour after it came. */
+  /** Until when a file nobody's request took yet is kept (0031): an hour after it came. */
   expiresAt: integer("expires_at"),
-  /** Who sent a file nobody's request took yet (0027): the rate limits' address; cleared when one takes it. */
+  /** Who sent a file nobody's request took yet (0031): the rate limits' address; cleared when one takes it. */
   sentBy: text("sent_by"),
 });
 
-/** A file's bytes, in pieces of 512 KB (0027, ADR-034 §2): what `blobs` names, kept in the database itself. */
+/** A file's bytes, in pieces of 512 KB (0031, ADR-039 §2): what `blobs` names, kept in the database itself. */
 export const attachmentChunks = sqliteTable(
   "attachment_chunks",
   {

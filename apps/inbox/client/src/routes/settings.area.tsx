@@ -18,7 +18,7 @@ export const Route = createFileRoute("/settings/area")({
 });
 
 /**
- * Settings → Area (ADR-034 §3): where the business works. Postal codes, or a distance from a place it
+ * Settings → Area (ADR-039 §3): where the business works. Postal codes, or a distance from a place it
  * chooses — its premises as Settings → General has them, or where this device is now — or anywhere;
  * and what a request from outside gets. The place a radius is measured from is never shown to anyone:
  * agents are told the radius, or the postal codes, and a request's site as a band.

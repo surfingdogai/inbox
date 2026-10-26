@@ -123,7 +123,7 @@ export interface OAuthClients {
   readonly square?: OAuthClient | null | undefined;
   readonly calendly?: OAuthClient | null | undefined;
   /**
-   * Job tools (ADR-034): ServiceM8's Public Application (`SERVICEM8_CLIENT_ID`/`_SECRET`, Development
+   * Job tools (ADR-039): ServiceM8's Public Application (`SERVICEM8_CLIENT_ID`/`_SECRET`, Development
    * Partner) for its one-click sign-in beside the owner's API key, and Jobber's app
    * (`JOBBER_CLIENT_ID`/`_SECRET`, reviewed by Jobber), its only way in.
    */
@@ -132,7 +132,7 @@ export interface OAuthClients {
 }
 
 /**
- * What whoever runs the server switched on of the job tools (ADR-034 §5): the Jobber API version its
+ * What whoever runs the server switched on of the job tools (ADR-039 §5): the Jobber API version its
  * app was checked against (`JOBBER_API_VERSION`), and the tools whose API terms they cleared for this
  * use (`JOB_TOOLS_CLEARED=housecallpro,fergus`). Absent, those say "set up".
  */
@@ -205,7 +205,7 @@ export function builtInConnectors(opts: ConnectorHostOptions = {}): ConnectorDef
       propertyKey: opts.partners?.cloudbedsPropertyKey,
     }),
     smoobuConnector(),
-    // Job tools (ADR-034): the owner's own key for ServiceM8; Housecall Pro and Fergus with it too, once
+    // Job tools (ADR-039): the owner's own key for ServiceM8; Housecall Pro and Fergus with it too, once
     // their API terms are cleared here; Jobber only through a reviewed app and a version checked for it.
     servicem8Connector(opts.oauth?.servicem8 ?? null),
     housecallproConnector({ cleared: opts.jobTools?.cleared?.includes("housecallpro") }),

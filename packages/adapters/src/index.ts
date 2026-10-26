@@ -344,7 +344,7 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
       if (refused) return refused;
     }
     // Whether a site is inside the area is a read, but one a script could ask round the edge with to
-    // find where a radius is measured from: it has a bucket of its own (ADR-034 §3).
+    // find where a radius is measured from: it has a bucket of its own (ADR-039 §3).
     if (caller.auth?.kind !== "owner" && isAreaRoute(c.req.method, c.req.path)) {
       const refused = await limited(c, ["area"], caller.auth?.id);
       if (refused) return refused;

@@ -242,7 +242,7 @@ export interface ConnectorHttpRequest {
   readonly headers?: Readonly<Record<string, string>> | undefined;
   readonly body?: string | undefined;
   /**
-   * A body of bytes, sent as is in place of `body` (ADR-034): a file in a multipart form, which a
+   * A body of bytes, sent as is in place of `body` (ADR-039): a file in a multipart form, which a
    * string cannot carry. Its `content-type` header is the caller's to give.
    */
   readonly bytes?: Uint8Array | undefined;
@@ -1043,7 +1043,7 @@ export interface FeedServer {
   serve(ctx: FeedContext, request: FeedRequest): Promise<FeedResponse>;
 }
 
-/* --- job tools (ADR-034) --------------------------------------------------- */
+/* --- job tools (ADR-039) --------------------------------------------------- */
 
 /** A file a request carries, as a job tool is handed it: read only when the tool takes files. */
 export interface OutboundFile {
@@ -1220,9 +1220,9 @@ export interface ConnectorDefinition {
   readonly hooks?: HooksHandler | undefined;
   /** A link the inbox serves for the connection (`auth: "link"`, ADR-030 §5). */
   readonly feed?: FeedServer | undefined;
-  /** Requests the owner takes on, written into their job tool (capability `requests_out`, ADR-034). */
+  /** Requests the owner takes on, written into their job tool (capability `requests_out`, ADR-039). */
   readonly requests?: RequestsWriter | undefined;
-  /** Services, staff and hours to start from (`setup_in`; a job tool's opening hours, ADR-034). */
+  /** Services, staff and hours to start from (`setup_in`; a job tool's opening hours, ADR-039). */
   readonly setup?: SetupReader | undefined;
 }
 

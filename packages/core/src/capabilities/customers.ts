@@ -669,7 +669,7 @@ export function eraseStatements(parties: readonly string[], now: number): Statem
       ),
       // What a job wrote about its work on their items (an error may quote an address).
       run(`UPDATE jobs SET last_error = NULL WHERE json_extract(payload, '$.itemId') IN ${theirItems}`),
-      // The files they sent with their requests (ADR-034 §2): the bytes go now, the rows are marked.
+      // The files they sent with their requests (ADR-039 §2): the bytes go now, the rows are marked.
       run(`DELETE FROM attachment_chunks WHERE key IN (SELECT key FROM blobs WHERE party_id IN ${inParties})`, [
         ...part,
       ]),

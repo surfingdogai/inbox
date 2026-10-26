@@ -84,7 +84,7 @@ export const checkAvailabilityInput = z.object({
 });
 
 /**
- * The job a request for a price describes (ADR-034 §4), as the customer's agent sends it: what the
+ * The job a request for a price describes (ADR-039 §4), as the customer's agent sends it: what the
  * inbox writes itself (whether the site is inside the area, the visit booked) is not theirs to send.
  */
 export const jobInput = jobSchema
@@ -134,7 +134,7 @@ export const createBookingInput = z.object({
   message: z.string().max(20_000).optional(),
   attachments: filesInputSchema,
   /**
-   * A site visit for a request for a price this customer made (ADR-034 §4): the request's id, and its
+   * A site visit for a request for a price this customer made (ADR-039 §4): the request's id, and its
    * access token when the request was made without an account. The visit is tied to it once booked.
    */
   visit_for: z

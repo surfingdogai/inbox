@@ -27,7 +27,7 @@ export const Route = createFileRoute("/settings/work")({
 });
 
 /**
- * Settings → Work (ADR-034 §4): how a trade takes work. The call-out fee, what a visit outside opening
+ * Settings → Work (ADR-039 §4): how a trade takes work. The call-out fee, what a visit outside opening
  * hours adds, free estimates, whether agents may ask for an emergency job, the service a site visit is
  * booked as, and which requests go into the owner's job tool. Choices, never typed codes; only the
  * owner in person changes them.
@@ -308,7 +308,7 @@ function WorkForm({ data, onReload }: { data: SettingsDoc; onReload: () => void 
 }
 
 /**
- * "Start from your tool" (ADR-034 §5): the opening hours a job tool keeps, read when the owner asks,
+ * "Start from your tool" (ADR-039 §5): the opening hours a job tool keeps, read when the owner asks,
  * shown beside the inbox's own, and kept only when they press. Hours from a tool in another time zone
  * are shown, never kept as they are: Availability is where they are set then.
  */

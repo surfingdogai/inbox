@@ -2,7 +2,7 @@ import type { FakePlatform, FakeRequest } from "./platform";
 import { json } from "./platform";
 
 /**
- * Job tools as local fakes (ADR-034 §5), each answering the way its published reference says, with
+ * Job tools as local fakes (ADR-039 §5), each answering the way its published reference says, with
  * shapes transcribed from it. No real job tool is ever called.
  *
  * - ServiceM8: https://developer.servicem8.com/reference/createjobs.md (x-record-uuid, `{"errorCode":0,

@@ -2,7 +2,7 @@ import { ConnectorError, type ConnectorHttpResponse, type OutboundRequest, type 
 import { retryAfterMs } from "../http";
 
 /**
- * What the job-tool connectors share (ADR-034 §5): ids made from the inbox's own mark so a request is
+ * What the job-tool connectors share (ADR-039 §5): ids made from the inbox's own mark so a request is
  * written once whatever happens, a multipart body for files, and the few words every tool's answers
  * are read with. Web APIs only.
  */

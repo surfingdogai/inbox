@@ -21,7 +21,7 @@ export interface SnapshotSource {
   readonly account: string;
   readonly readAt: number;
   /**
-   * The time zone the tool keeps its times in, when it says (ADR-034): hours from a tool in another
+   * The time zone the tool keeps its times in, when it says (ADR-039): hours from a tool in another
    * zone than the inbox's are shown, never kept as they are.
    */
   readonly zone?: string | undefined;

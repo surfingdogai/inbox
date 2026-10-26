@@ -844,11 +844,11 @@ const sections = {
     })
     .prefault({}),
   /**
-   * Where the business works (ADR-034 §3): a radius from a base it chose as a place, postal prefixes,
+   * Where the business works (ADR-039 §3): a radius from a base it chose as a place, postal prefixes,
    * or anywhere; what a request from outside gets; delivery zones. The base is never published.
    */
   area: areaSettingsSchema,
-  /** How a trade takes work (ADR-034 §4): call-out, out of hours, emergencies, visits, its job tool. */
+  /** How a trade takes work (ADR-039 §4): call-out, out of hours, emergencies, visits, its job tool. */
   work: workSettingsSchema,
   testMode: z.boolean().default(false),
 };

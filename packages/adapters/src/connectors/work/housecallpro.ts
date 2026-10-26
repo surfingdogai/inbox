@@ -16,7 +16,7 @@ import { constantTimeEqual, hmacSha256Base64, hmacSha256Hex } from "../hook-sign
 import { jsonOf, splitName } from "./common";
 
 /**
- * Housecall Pro (ADR-034 §5), with the business's own API key: "Any Housecall Pro user on the MAX plan
+ * Housecall Pro (ADR-039 §5), with the business's own API key: "Any Housecall Pro user on the MAX plan
  * has access to creating API keys, and you are welcome to reference our open API docs to build an
  * integration on their behalf" (https://docs.housecallpro.com). A request the owner takes on becomes a
  * lead (`POST /leads`, with the customer inline), which shows in the Job inbox once its API Leads

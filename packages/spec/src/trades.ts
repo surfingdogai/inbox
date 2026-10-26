@@ -3,7 +3,7 @@ import { moneySchema } from "./base";
 import { paymentScheduleSchema } from "./schedule";
 
 /**
- * Trades and projects (spec 0.11, ADR-034): files on a request, where a business works, and the job
+ * Trades and projects (spec 0.12, ADR-039): files on a request, where a business works, and the job
  * a request for a price describes.
  *
  * - **Files.** A request may carry photos and plans: JPEG, PNG, WebP or PDF, told apart by their first
@@ -15,7 +15,7 @@ import { paymentScheduleSchema } from "./schedule";
  *   could tell of a request's site (`areaCheckSchema`) as a band of kilometres, never a distance.
  * - **Job.** A request for a price says how urgent it is, whether a visit comes first, the site and a
  *   few windows that suit, and a budget range (`jobSchema`). A quote says whether it is an estimate or
- *   fixed, how it is paid in stages (the 0.10 payment schedule, adding up to the total), any call-out
+ *   fixed, how it is paid in stages (the 0.11 payment schedule, adding up to the total), any call-out
  *   or visit fee and whether accepting credits it, and whether tax is included (`tradeQuoteSchema`).
  */
 
@@ -26,7 +26,7 @@ export const ATTACHMENT_TYPES = ["image/jpeg", "image/png", "image/webp", "appli
 export type AttachmentType = (typeof ATTACHMENT_TYPES)[number];
 
 /**
- * How many files and how large (est.; ADR-034 §2): at most six on a request, each up to 10 MB; over
+ * How many files and how large (est.; ADR-039 §2): at most six on a request, each up to 10 MB; over
  * MCP up to 4 MB each sent inline and 8 MB in one call (larger ones by address, or uploaded first);
  * an upload is kept for an hour for a request to name.
  *

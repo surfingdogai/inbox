@@ -11,12 +11,12 @@ import { jobStatement } from "../write/common";
 import type { JobToolMode } from "./settings";
 
 /**
- * Requests into the owner's job tool (ADR-034 §5): ServiceM8, Housecall Pro, Fergus, Jobber. A request
+ * Requests into the owner's job tool (ADR-039 §5): ServiceM8, Housecall Pro, Fergus, Jobber. A request
  * goes there only as the owner chose (Settings → Work): every one as it arrives, only the ones they
  * take on (they quote it, or press "Send to …"), or none. The default is only the ones they take on:
  * a tool full of requests nobody looked at is how a tradesperson stops using it.
  *
- * Each write is written first and journalled (`writeFirst`, ADR-032): one at a time per request and
+ * Each write is written first and journalled (`writeFirst`, ADR-036): one at a time per request and
  * tool, under a key that is the same on every retry, so a request is never in the tool twice, and one
  * whose answer never came is looked for by that key before anything else. Only what the job needs goes
  * (who to answer, the site, what it is, when suits, the photos); nothing goes back to any network. A

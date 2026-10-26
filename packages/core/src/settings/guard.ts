@@ -67,7 +67,7 @@ export const OWNER_ONLY_SETTINGS: readonly Watched[] = [
   // A place to stay's clocks and messages (ADR-037): when requests lapse, when stays count as stayed,
   // and when arrival details go to a guest.
   { path: ["stays"] },
-  // Where the business works and its call-out fee (ADR-034): what agents are told, the money a
+  // Where the business works and its call-out fee (ADR-039): what agents are told, the money a
   // request may carry, and whether requests go into a job tool on another platform.
   { path: ["area"] },
   { path: ["work"] },

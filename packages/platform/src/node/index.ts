@@ -49,7 +49,7 @@ export interface NodeSqliteClient extends SqliteClient {
 export function nodeSqliteClient(path: string, options: NodeSqliteOptions = {}): NodeSqliteClient {
   const db = new DatabaseSync(path, { timeout: 5000 });
   // Secure delete: what a delete removes is overwritten, not left in free pages for whoever reads the
-  // file (an erased customer's photos, ADR-034 §2).
+  // file (an erased customer's photos, ADR-039 §2).
   db.exec(
     "PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000; PRAGMA secure_delete = ON;",
   );

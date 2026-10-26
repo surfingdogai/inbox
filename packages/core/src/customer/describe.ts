@@ -304,7 +304,7 @@ function quotedSentence(item: Extract<Item, { type: "quote_request" }>, a: Audie
  */
 export function offerSummary(item: Item, offer: OpenOffer, a: Audience = DEFAULT_AUDIENCE): string {
   const c = copyFor(a.lang);
-  // A trade's quote (ADR-034 §4) says how it is paid, its call-out fee and whether tax is in.
+  // A trade's quote (ADR-039 §4) says how it is paid, its call-out fee and whether tax is in.
   const trade =
     offer.kind === "quote" && offer.terms.totalPrice
       ? tradeQuoteWords(

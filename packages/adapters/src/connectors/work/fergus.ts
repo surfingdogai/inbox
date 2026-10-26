@@ -15,7 +15,7 @@ import { retryAfterMs } from "../http";
 import { fileName, jsonOf, multipart, tagFrom } from "./common";
 
 /**
- * Fergus (ADR-034 §5), with a Personal Access Token the business makes in Fergus ("Access to the APIs
+ * Fergus (ADR-039 §5), with a Personal Access Token the business makes in Fergus ("Access to the APIs
  * is provided via a Personal Access Token (PAT) or via OAuth"; Fergus API Terms, api.fergus.com/docs).
  * A request the owner takes on becomes an enquiry (`POST /enquiries`, source "Online request"), with the
  * customer's photos and plans attached to it (`POST /attachments`, entity `enquiry`); calendar events

@@ -31,7 +31,7 @@ import {
 } from "./fakes/work";
 
 /**
- * The job tools (ADR-034 §5) against local fakes of their published references: connect with the
+ * The job tools (ADR-039 §5) against local fakes of their published references: connect with the
  * owner's own key, write a request the owner took on (a ServiceM8 job in Quote status with its photos,
  * a Housecall Pro lead, a Fergus enquiry with its files, a Jobber request), find it again after an
  * answer that never came, a key withdrawn, a 429, and a webhook nobody signed. Runs on Node and in workerd.

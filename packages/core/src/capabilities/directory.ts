@@ -135,7 +135,7 @@ export async function directoryProfile(
     readonly directory: Settings["directory"];
     /** How it is paid (`settings.payments.accepted`): published as `payments`. */
     readonly payments?: readonly string[] | undefined;
-    /** Attributes of a network's vocabulary the business declares (ADR-034: free estimates, emergencies). */
+    /** Attributes of a network's vocabulary the business declares (ADR-039: free estimates, emergencies). */
     readonly attributes?: Readonly<Record<string, true>> | undefined;
     readonly now: number;
   },

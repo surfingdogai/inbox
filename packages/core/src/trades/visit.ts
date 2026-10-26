@@ -1,7 +1,7 @@
 import type { Db } from "../db";
 
 /**
- * A site visit tied to its request for a price (ADR-034 §4): the booking names the request it is for
+ * A site visit tied to its request for a price (ADR-039 §4): the booking names the request it is for
  * (`linked_item_id`), and the request names its visit (`job.visitBookingId`), so the owner sees one
  * from the other. The visit is booked like any booking, on request unless the owner's rules confirm
  * it; this only ties the two together, once the booking is made.

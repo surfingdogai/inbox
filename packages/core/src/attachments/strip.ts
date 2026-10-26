@@ -1,7 +1,7 @@
 import type { AttachmentType } from "@surfingdog/spec";
 
 /**
- * Image metadata out (ADR-034 §2), in pure TypeScript: a photo of a leak carries where and when it was
+ * Image metadata out (ADR-039 §2), in pure TypeScript: a photo of a leak carries where and when it was
  * taken, the phone, and often a thumbnail of what it showed before it was cropped. All of it goes; only
  * which way up the picture is (the EXIF orientation) is kept, written again as a record of one tag.
  *

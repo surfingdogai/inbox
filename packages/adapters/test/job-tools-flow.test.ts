@@ -14,7 +14,7 @@ import { fakePlatform } from "./fakes/platform";
 import { fakeServiceM8 } from "./fakes/work";
 
 /**
- * A request into the owner's job tool (ADR-034 §5), through the inbox: only as the owner chose
+ * A request into the owner's job tool (ADR-039 §5), through the inbox: only as the owner chose
  * (default: the ones they take on, when they quote one or press Send), never a test request, never by
  * the owner's AI, once however often it is asked. Against a local ServiceM8.
  */

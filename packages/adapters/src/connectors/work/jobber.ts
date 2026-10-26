@@ -18,7 +18,7 @@ import { retryAfterMs } from "../http";
 import { jobTitle, jsonOf, splitName } from "./common";
 
 /**
- * Jobber (ADR-034 §5): code-complete and switched off. Jobber connects only through an app in its
+ * Jobber (ADR-039 §5): code-complete and switched off. Jobber connects only through an app in its
  * Developer Center, by OAuth, and an app goes beyond five connected accounts only after Jobber's app
  * review; that is the founder's to start (docs/partners/trades.md). It is on only when the server holds
  * the app's client id and secret (`JOBBER_CLIENT_ID`, `JOBBER_CLIENT_SECRET`) **and** the API version the

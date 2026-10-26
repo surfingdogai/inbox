@@ -31,7 +31,7 @@ export function connectorHttp(opts: { readonly fetchImpl?: typeof fetch | undefi
       let url = checked(request.url);
       const origin = url.hostname;
       let method = request.method.toUpperCase();
-      // A body of bytes (a file in a multipart form) goes as it is (ADR-034).
+      // A body of bytes (a file in a multipart form) goes as it is (ADR-039).
       let body: string | Uint8Array | undefined = request.bytes ?? request.body;
       const headers: Record<string, string> = { "user-agent": USER_AGENT, ...(request.headers ?? {}) };
       for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {

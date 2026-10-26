@@ -6,7 +6,7 @@ import type { Settings } from "../settings/schema";
 import type { WorkSettings } from "./settings";
 
 /**
- * What a request for a price is checked against before it is taken (ADR-034 §4): its site against the
+ * What a request for a price is checked against before it is taken (ADR-039 §4): its site against the
  * area, and an emergency against the emergency door. Words go to the customer's agent and are relayed
  * to its person: in the business's name, never naming the software.
  */

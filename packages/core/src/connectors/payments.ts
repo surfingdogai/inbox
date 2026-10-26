@@ -442,7 +442,7 @@ export class PaymentLinks {
     const ours = new Set(rows.map((r) => r.url).filter((u): u is string => u !== null));
     // The owner set a link of their own: it is theirs, and ours goes.
     const foreign = order.paymentUrl !== null && !ours.has(order.paymentUrl);
-    // An order paid in a trade's stages (ADR-034 §4) gets no link for the whole: the business asks for each.
+    // An order paid in a trade's stages (ADR-039 §4) gets no link for the whole: the business asks for each.
     const want =
       WANTS_LINK.has(order.state) && order.total.value > 0 && !order.legacy && !foreign && !order.paid && !order.staged
         ? order.total
@@ -2389,7 +2389,7 @@ interface OrderFacts {
   readonly legacy: boolean;
   /** A change to the order waits for an answer: what it comes to is not settled. */
   readonly changeOpen: boolean;
-  /** Paid in a trade's stages (ADR-034 §4): the business asks for each; no link for the whole. */
+  /** Paid in a trade's stages (ADR-039 §4): the business asks for each; no link for the whole. */
   readonly staged: boolean;
   /** Each line's catalogue product, or null for a line named by whoever ordered. */
   readonly productIds: readonly (string | null)[];

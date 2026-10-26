@@ -1,5 +1,5 @@
 /**
- * Files as phones and laptops send them, built byte by byte for the tests (ADR-034 §2): a JPEG with
+ * Files as phones and laptops send them, built byte by byte for the tests (ADR-039 §2): a JPEG with
  * EXIF (orientation 6 and a GPS IFD), XMP, an MPF index, a comment and a phone's trailer after the
  * end; a PNG with tEXt and eXIf; a WebP with EXIF and XMP; a HEIC's and an AVIF's first box; a PDF.
  * None decodes as a picture, and none needs to: what is checked is what is left in them.

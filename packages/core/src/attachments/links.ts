@@ -3,7 +3,7 @@ import { b64u, unb64u } from "../receipts/sign";
 import type { SecretBox } from "../secrets/box";
 
 /**
- * How the business sees a file (ADR-034 §2): through a link that names the file, when it stops
+ * How the business sees a file (ADR-039 §2): through a link that names the file, when it stops
  * working, and a MAC over both under the instance's own key. Nobody else can make one, it works for
  * ten minutes, and rotating `INBOX_SECRET_KEY` retires every link out there. Files are never public.
  */

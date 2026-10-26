@@ -40,7 +40,7 @@ export const quoteInput = z.object({
         name: z.string().max(200),
         quantity: z.number().int().min(1),
         price: moneySchema,
-        /** On a trade's quote (ADR-034 §4): labour, materials or other. */
+        /** On a trade's quote (ADR-039 §4): labour, materials or other. */
         kind: quoteLineKind,
       }),
     )
@@ -52,7 +52,7 @@ export const quoteInput = z.object({
   startTime: isoDateTime.optional(),
   /** Defaults to the start plus the service's duration. */
   endTime: isoDateTime.optional(),
-  // A trade's quote (ADR-034 §4): estimate or fixed, stages, call-out and visit fees, tax.
+  // A trade's quote (ADR-039 §4): estimate or fixed, stages, call-out and visit fees, tax.
   ...tradeQuoteInput,
 });
 export const paymentInput = z.object({

@@ -1,7 +1,7 @@
 import type { AttachmentType } from "@surfingdog/spec";
 
 /**
- * What a file is, from its first bytes (ADR-034 §2): never from the type or the name a sender gave.
+ * What a file is, from its first bytes (ADR-039 §2): never from the type or the name a sender gave.
  * Only four kinds are taken; HEIC and AVIF (what phones often send) are named so the refusal can say
  * what to send instead, and everything else is `unknown`.
  */

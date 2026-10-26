@@ -139,7 +139,7 @@ export const ROUTE_SCOPES: Readonly<Record<string, readonly string[]>> = {
   "GET /property/system/:connectorId": ["integrations:write"],
   "POST /property/system": ["integrations:write"],
   "POST /stays/:id/draft-quote": ["inbox:read"],
-  // Trades (ADR-034): a request's files and where it stands in the job tool read like the item; sending it is
+  // Trades (ADR-039): a request's files and where it stands in the job tool read like the item; sending it is
   // an integration's write, and a person's only, checked by the capability.
   "GET /items/:id/files": ["inbox:read"],
   "GET /items/:id/job-tool": ["inbox:read"],

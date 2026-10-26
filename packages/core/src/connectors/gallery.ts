@@ -254,7 +254,7 @@ export const GALLERY: readonly CardSpec[] = [
       { kind: "cloudbeds", preset: null, label: "Cloudbeds" },
     ],
   },
-  // A trade's job tool (ADR-034 §5): requests the owner takes on go in as jobs, leads or enquiries,
+  // A trade's job tool (ADR-039 §5): requests the owner takes on go in as jobs, leads or enquiries,
   // and its scheduled visits block those times. Jobber says "set up" until our reviewed app is on the
   // server; ServiceM8's own sign-in likewise, beside the owner's API key.
   {
@@ -291,7 +291,7 @@ export function leanOf(counts: {
   readonly products: number;
   /** A place to stay (ADR-037): it leans to stays, with its property system first. */
   readonly rooms?: number | undefined;
-  /** A trade (ADR-034): it set where it works or how it takes work, or has a job tool. */
+  /** A trade (ADR-039): it set where it works or how it takes work, or has a job tool. */
   readonly trade?: boolean | undefined;
 }): Lean {
   if ((counts.rooms ?? 0) > 0) return "stays";

@@ -4,7 +4,7 @@ import { ownerCall } from "./api";
 import type { Weekly } from "./types";
 
 /**
- * Trades (ADR-034): where the business works, how it takes work, a request's files and its job tool,
+ * Trades (ADR-039): where the business works, how it takes work, a request's files and its job tool,
  * as the owner sees them. The calls, the query hooks, and the few words the screens share, kept here so
  * they are tested once. Type-only imports from core: nothing of the server is bundled.
  */

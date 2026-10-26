@@ -6,8 +6,8 @@ import { type Money, moneySchema } from "../domain/types";
 import type { FieldProblem } from "../write/errors";
 
 /**
- * A trade's quote (ADR-034 §4): an estimate or a fixed price, the stages it is paid in (the payment
- * schedule of ADR-032, adding up to the total: a deposit, a payment at a stage, the balance on
+ * A trade's quote (ADR-039 §4): an estimate or a fixed price, the stages it is paid in (the payment
+ * schedule of ADR-036, adding up to the total: a deposit, a payment at a stage, the balance on
  * completion), what a call-out or a visit costs and whether it is already taken off the total, and
  * whether the prices include tax. The business sets every amount; nothing here prices anything.
  *

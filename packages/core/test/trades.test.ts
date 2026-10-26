@@ -18,7 +18,7 @@ import { confirming, makeClient, openWeekdays, resetTables } from "./harness";
 import { base64, contains, heic, pdf, phoneJpeg, SECRET_PLACE, textPng } from "./trades-files";
 
 /**
- * A trade's requests (ADR-034), end to end on the capabilities: a request for a price with its job and
+ * A trade's requests (ADR-039), end to end on the capabilities: a request for a price with its job and
  * its photos, checked against the area and the emergency door; files the business alone sees, through
  * its own links, gone with the customer; a quote in stages that adds up, said to the customer in the
  * business's words, and an order from it that asks for no whole-total link; a site visit tied to its

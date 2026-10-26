@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://surfingdog.ai/spec/schemas/attachment-ref.json",
-  "title": "A file on a request, as an item names it (spec 0.11)",
+  "title": "A file on a request, as an item names it (spec 0.12)",
   "type": "object",
   "properties": {
     "id": {

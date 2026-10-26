@@ -16,7 +16,7 @@ export * from "./store";
 export * from "./strip";
 
 /**
- * Files on a request (ADR-034 §2). A customer's agent sends each file one of three ways:
+ * Files on a request (ADR-039 §2). A customer's agent sends each file one of three ways:
  *
  * - `{upload_id}`: uploaded first (`POST /v1/uploads`, the bytes as the body), within the hour;
  * - `{data_base64, name?}`: inline, over MCP, up to 4 MB each and 8 MB in one call;

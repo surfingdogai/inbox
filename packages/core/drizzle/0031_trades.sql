@@ -1,4 +1,4 @@
--- Trades and projects (ADR-034). Files on a request: a customer's photos and plans are kept in the
+-- Trades and projects (ADR-039). Files on a request: a customer's photos and plans are kept in the
 -- inbox's own database, in pieces of 512 KB (`attachment_chunks`), so every runtime keeps them the same
 -- way and an erasure or a copy of the database takes them with the rest. `blobs` gains the file's name
 -- as it is shown, and `expires_at`: a file arrives before the request that names it and is kept an hour

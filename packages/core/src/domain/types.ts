@@ -104,11 +104,11 @@ export const quoteLineSchema = z.object({
   name: z.string().max(200),
   quantity: z.number().int().min(1),
   price: moneySchema,
-  /** What kind of work the line is, on a trade's quote (ADR-034 §4): labour, materials or other. */
+  /** What kind of work the line is, on a trade's quote (ADR-039 §4): labour, materials or other. */
   kind: quoteLineKindSchema.optional(),
 });
 
-/** The files a request carries (ADR-034 §2): written by the inbox once each was checked and cleaned. */
+/** The files a request carries (ADR-039 §2): written by the inbox once each was checked and cleaned. */
 export const attachmentsSchema = z.array(attachmentRefSchema).max(6);
 
 /**
@@ -148,7 +148,7 @@ export const quoteRequestPayloadSchema = z.object({
   budget: moneySchema.optional(),
   requestedFor: isoDateTime.optional(),
   deliveryAddress: postalAddressSchema.optional(),
-  /** What the job is (ADR-034 §4): urgency, a visit first or not, the site, windows, a budget range. */
+  /** What the job is (ADR-039 §4): urgency, a visit first or not, the site, windows, a budget range. */
   job: jobSchema.optional(),
   attachments: attachmentsSchema.optional(),
   /** Filled by the business when it quotes. */
@@ -163,7 +163,7 @@ export const quoteRequestPayloadSchema = z.object({
       /** For a quote that creates a booking: the time it is for (ADR-018 §3.3). */
       startTime: isoDateTime.optional(),
       endTime: isoDateTime.optional(),
-      // A trade's quote (ADR-034 §4; spec `tradeQuoteSchema`): estimate or fixed, stages adding up to
+      // A trade's quote (ADR-039 §4; spec `tradeQuoteSchema`): estimate or fixed, stages adding up to
       // the total, call-out and visit fees and whether accepting takes them off, and whether tax is in.
       kind: z.enum(["estimate", "fixed"]).optional(),
       stages: z.array(paymentScheduleSchema).min(1).max(4).optional(),
@@ -216,7 +216,7 @@ export const bookingPayloadSchema = z.object({
   personalised: personalisedSchema.optional(),
   resourceId: z.string().optional(),
   notes: z.string().max(5_000).optional(),
-  /** Files the customer sent with it (ADR-034 §2), checked and cleaned by the inbox. */
+  /** Files the customer sent with it (ADR-039 §2), checked and cleaned by the inbox. */
   attachments: attachmentsSchema.optional(),
   /**
    * A payment or deposit recorded for the booking (`record_payment`): it gates nothing, but a booking
@@ -279,10 +279,10 @@ export const orderPayloadSchema = z.object({
   paidAmount: moneySchema.optional(),
   paymentUrl: z.url().optional(),
   notes: z.string().max(5_000).optional(),
-  /** Files the customer sent with it (ADR-034 §2): a cake's picture, a plan. Checked and cleaned by the inbox. */
+  /** Files the customer sent with it (ADR-039 §2): a cake's picture, a plan. Checked and cleaned by the inbox. */
   attachments: attachmentsSchema.optional(),
   /**
-   * The stages it is paid in, from the trade's quote it came from (ADR-034 §4): the business asks for
+   * The stages it is paid in, from the trade's quote it came from (ADR-039 §4): the business asks for
    * each as it falls due, and no link for the whole total is made. Only the inbox writes it.
    */
   schedule: z.array(paymentScheduleSchema).min(1).max(4).optional(),

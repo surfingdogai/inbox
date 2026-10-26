@@ -1,5 +1,5 @@
 /**
- * Postal codes, country by country (ADR-034 §3): what a whole code looks like once it is normalised
+ * Postal codes, country by country (ADR-039 §3): what a whole code looks like once it is normalised
  * (capitals, no spaces or dashes), what a prefix the owner may cover looks like, and how a code is
  * matched against one. Built from each country's published format; a country not here takes no postal
  * prefixes (a radius, or anywhere, works everywhere). Nothing is geocoded: a code is matched as text.

@@ -185,7 +185,7 @@ describe("Settings → Integrations", () => {
       ["square", "ready"],
       ["woocommerce", "ready"],
       ["shopify", "ready"],
-      // A trade's job tool (ADR-034): ServiceM8 with the owner's own key.
+      // A trade's job tool (ADR-039): ServiceM8 with the owner's own key.
       ["job_tool", "ready"],
     ]);
     const tools = body.cards.find((c) => c.id === "job_tool");

@@ -13,7 +13,7 @@ import {
 } from "../client/src/lib/trades";
 
 /**
- * The owner's trade screens (ADR-034), the parts that decide something: the last stage of a quote as
+ * The owner's trade screens (ADR-039), the parts that decide something: the last stage of a quote as
  * the rest of the total, a stage's date as noon where the business is, prices before tax where they are
  * quoted that way, the area's words, and the setup asking a trade where it works. Fixtures from
  * several countries: Perth (AUD), Toronto (CAD), Nairobi (KES), Santiago (CLP).

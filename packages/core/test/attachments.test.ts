@@ -46,7 +46,7 @@ import {
 } from "./trades-files";
 
 /**
- * Files on a request (ADR-034 §2): told apart by their first bytes and never by what a sender says;
+ * Files on a request (ADR-039 §2): told apart by their first bytes and never by what a sender says;
  * cleaned of where and when a photo was taken (only which way up it is stays); kept in the business's
  * own database in pieces, for the business alone, through links that work for ten minutes; fetched by
  * address only from a public https host. Runs on Node and in workerd.

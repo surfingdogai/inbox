@@ -19,7 +19,7 @@ export interface FakeRequest {
   readonly url: URL;
   readonly headers: Headers;
   readonly body: string;
-  /** A body sent as bytes (a file in a multipart form, ADR-034): as it was, beside its latin-1 text in `body`. */
+  /** A body sent as bytes (a file in a multipart form, ADR-039): as it was, beside its latin-1 text in `body`. */
   readonly bytes?: Uint8Array | undefined;
   /** What the route's `:name` parts matched. */
   readonly params: Readonly<Record<string, string>>;

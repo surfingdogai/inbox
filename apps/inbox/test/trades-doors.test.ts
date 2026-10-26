@@ -6,7 +6,7 @@ import { type App, createApp } from "../src/app";
 import { freshDb } from "./harness";
 
 /**
- * The trades doors (ADR-034) as an agent and the owner meet them, on both runtimes: check_area over MCP
+ * The trades doors (ADR-039) as an agent and the owner meet them, on both runtimes: check_area over MCP
  * and REST; a request with its job and photos, inline over MCP and uploaded first over REST; HEIC
  * refused with what to send; the owner's short-lived links to the files, served with headers that
  * run nothing; and the area's base in no answer. Southern Cross Renovations, Perth (AUD), works in

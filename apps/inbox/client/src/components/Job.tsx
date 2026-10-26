@@ -27,7 +27,7 @@ import { Switch } from "./Form";
 import "../trades.css";
 
 /**
- * A request for a price's job (ADR-034 §4), on its detail screen: how urgent, whether a visit comes
+ * A request for a price's job (ADR-039 §4), on its detail screen: how urgent, whether a visit comes
  * first, where the site stands against the area (a band, never a distance), the windows that suit,
  * the photos and plans (through links that work for ten minutes), the owner's job tool, and a quote in
  * stages. Thin, small, quiet: one accent, the urgency, only when it is an emergency.

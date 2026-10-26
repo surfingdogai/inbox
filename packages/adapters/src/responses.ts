@@ -491,7 +491,7 @@ export const businessProfileSchema = profileSchema.extend({
   work: workProfileSchema
     .optional()
     .describe(
-      "How a trade takes work (spec 0.11): where it goes (a radius or postal prefixes, never its base), emergencies online, call-out and out-of-hours fees, free estimates.",
+      "How a trade takes work (spec 0.12): where it goes (a radius or postal prefixes, never its base), emergencies online, call-out and out-of-hours fees, free estimates.",
     ),
 });
 

@@ -6,7 +6,7 @@ import { CountrySelect } from "./Choosers";
 import "../trades.css";
 
 /**
- * Where a trade works, as the setup asks it (ADR-034 §3): postal codes, or a distance from where this
+ * Where a trade works, as the setup asks it (ADR-039 §3): postal codes, or a distance from where this
  * device is now; or skipped, and the inbox says it works anywhere. Settings → Area has the rest (the
  * premises, a request from outside). The place a distance is measured from is never shown to anyone.
  */

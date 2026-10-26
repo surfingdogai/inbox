@@ -1,7 +1,7 @@
-# ADR-034 — Trades and projects: files on a request, where a business works, the job, its job tool
+# ADR-039 — Trades and projects: files on a request, where a business works, the job, its job tool
 
-**Status:** proposed, 21 October 2026. Builds on ADR-032 (money in every currency's own minor unit,
-payment schedules, write first) and ADR-026 (the connectors' shared base). Spec 0.11.0, migration 0027.
+**Status:** proposed, 21 October 2026. Builds on ADR-036 (money in every currency's own minor unit,
+payment schedules, write first) and ADR-030 (the connectors' shared base). Spec 0.12.0, migration 0031.
 Numbered provisionally; renumbering at merge is fine.
 
 ## Context
@@ -101,7 +101,7 @@ band) and `visitBookingId`. The customer's agent never sends the inbox's fields.
 
 ### 4. A trade's quote
 
-The quote gains `kind` (estimate or fixed), `stages` (the ADR-032 payment schedule, at most four, adding
+The quote gains `kind` (estimate or fixed), `stages` (the ADR-036 payment schedule, at most four, adding
 up to the total, a later one with its date), `callOutFee` and `visitFee` (with `creditedIfAccepted`),
 `tax` (included or not, with lines), and a `kind` on each line (labour, materials, other). The quote is
 refused, field by field, when they do not add up.
@@ -156,7 +156,7 @@ is the connectors base's file to change.
   (`opening_time_<day>`, `closing_time_<day>`, minutes from midnight, in its `timezone_name`).
   Settings → Work reads them when the owner asks (`GET /v1/owner/integrations/:id/setup`), shows them
   beside the inbox's own, and keeps them only when the owner presses; hours kept in another zone are
-  shown, never copied. The reader is the same `SetupReader` seam a booking system uses (ADR-035).
+  shown, never copied. The reader is the `SetupReader` seam (`setup_in`), which a booking system can use too.
 - A Fergus token lasts a year: when it was connected is kept, and Settings → Work says when it runs out.
 
 ### 6. Presets

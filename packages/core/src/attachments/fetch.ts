@@ -2,7 +2,7 @@ import { isPublicHost } from "../util/hosts";
 import { USER_AGENT } from "../version";
 
 /**
- * A file an agent names by address (ADR-034 §2), fetched the way every address someone else chose is
+ * A file an agent names by address (ADR-039 §2), fetched the way every address someone else chose is
  * here: https only, a public host name and never an address, no user or password in it, each redirect
  * checked again (at most two), a time limit, and the body read only up to the largest file taken. The
  * host's `fetchImpl` (`pinnedFetch` on Node) then refuses a name that resolves to a private address.

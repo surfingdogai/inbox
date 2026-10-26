@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://surfingdog.ai/spec/schemas/area-summary.json",
-  "title": "Where a business works, as it says so in public (spec 0.11)",
+  "title": "Where a business works, as it says so in public (spec 0.12)",
   "type": "object",
   "properties": {
     "mode": {

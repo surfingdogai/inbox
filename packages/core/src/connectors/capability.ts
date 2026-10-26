@@ -433,7 +433,7 @@ export class ConnectorCapabilities {
   async integrations(caller: Caller): Promise<IntegrationsView> {
     requireOwnerSide(caller);
     const settings = await readSettings(this.db);
-    // A trade (ADR-034) sees its job tools first: one that set where it works or how it takes work.
+    // A trade (ADR-039) sees its job tools first: one that set where it works or how it takes work.
     const trade = isTrade(settings) || (await jobToolConnections(this.db)).length > 0;
     const lean = leanOf({ ...(await this.holdings()), trade });
     return {
@@ -1374,7 +1374,7 @@ export class ConnectorCapabilities {
 
   /**
    * A connection's definition and what it runs with, for a caller outside this class that drives one
-   * (a property system's stays, ADR-037; a job tool's requests, ADR-034); null when it is gone, paused,
+   * (a property system's stays, ADR-037; a job tool's requests, ADR-039); null when it is gone, paused,
    * or cannot run here.
    */
   async contextFor(
@@ -1831,7 +1831,7 @@ export class ConnectorCapabilities {
 
   /**
    * What a connected tool says about the business, read now to start from (`setup_in`): a job
-   * tool's opening hours (ADR-034), a booking system's services and staff. Nothing is kept here: the
+   * tool's opening hours (ADR-039), a booking system's services and staff. Nothing is kept here: the
    * owner keeps what they choose, through the screens that already keep it.
    */
   async setupSnapshot(caller: Caller, id: string): Promise<SetupSnapshot> {

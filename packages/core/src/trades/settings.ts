@@ -2,7 +2,7 @@ import { z } from "zod";
 import { moneySchema } from "../domain/types";
 
 /**
- * Settings → Work (ADR-034 §4): how a trade takes work. Each is a choice, never a typed code:
+ * Settings → Work (ADR-039 §4): how a trade takes work. Each is a choice, never a typed code:
  *
  * - `callOutFee`: the call-out fee, and whether accepting the quote takes it off;
  * - `outOfHours`: what a visit outside the opening hours (Settings → Availability) adds, as an amount

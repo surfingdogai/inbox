@@ -8,7 +8,7 @@ import { problemFrom, problemResponse } from "./problem";
 import type { CallerEnv } from "./rest";
 
 /**
- * The trades doors (ADR-034): `check_area` for a customer's agent (MCP and REST), uploads of a
+ * The trades doors (ADR-039): `check_area` for a customer's agent (MCP and REST), uploads of a
  * request's files (`POST /v1/uploads`), the business's own short-lived links to them
  * (`GET /v1/files/<id>`), and the owner's view of a request's files and job tool. Generated from the
  * same Zod schemas on every door; what an agent is told speaks as the business.

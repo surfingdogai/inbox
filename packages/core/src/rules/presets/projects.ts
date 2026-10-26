@@ -2,7 +2,7 @@ import { OFFER_A_CODE, type PresetSpec } from "./common";
 import { URGENCY_FIRST } from "./trades";
 
 /**
- * Building and renovation (ADR-034 §4): larger jobs, quoted in stages, often after a site visit. Every
+ * Building and renovation (ADR-039 §4): larger jobs, quoted in stages, often after a site visit. Every
  * request for a price goes to a person; one with plans or photos attached is marked for a closer look;
  * a site outside the area waits for the owner. Nothing confirms on its own and nothing refuses anybody.
  */

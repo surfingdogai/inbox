@@ -3,7 +3,7 @@
  * Web-standard APIs only; runtimes plug in through @surfingdog/platform.
  */
 
-// Trades and projects (spec 0.11, ADR-034).
+// Trades and projects (spec 0.12, ADR-039).
 export type {
   AreaCheck,
   AreaSummary,

@@ -72,7 +72,7 @@ export type MacPurpose =
    */
   | "connector-marker"
   /**
-   * A short-lived link to a file a customer sent with a request (ADR-034 §2): only the business sees
+   * A short-lived link to a file a customer sent with a request (ADR-039 §2): only the business sees
    * it, through a link that stops working within minutes.
    */
   | "attachment-link";

@@ -1,5 +1,5 @@
 /**
- * Trades and projects (ADR-034): the job a request for a price describes, a trade's quote, Settings →
+ * Trades and projects (ADR-039): the job a request for a price describes, a trade's quote, Settings →
  * Work, the owner's job tool, and the doors that use them.
  */
 export * from "./capability";

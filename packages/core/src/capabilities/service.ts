@@ -170,7 +170,7 @@ export interface BusinessProfile {
    * publishes it: tokens of the payments vocabulary, with card for a card brand; absent when none is ticked.
    */
   readonly payments?: readonly string[] | undefined;
-  /** How a trade takes work (ADR-034, spec `workProfileSchema`): absent for a business that set none of it. */
+  /** How a trade takes work (ADR-039, spec `workProfileSchema`): absent for a business that set none of it. */
   readonly work?: WorkProfile | undefined;
 }
 
@@ -383,7 +383,7 @@ export class Capabilities {
    */
   readonly phones: PhoneCapabilities;
 
-  /** Trades and projects (ADR-034): files on a request, where the business works, its job tool. */
+  /** Trades and projects (ADR-039): files on a request, where the business works, its job tool. */
   readonly trades: TradeCapabilities;
 
   private readonly baseUrl: string | undefined;
@@ -754,7 +754,7 @@ export class Capabilities {
       ...(s.commerce.legal.legalName.trim() ? { trader: traderOf(s.commerce.legal) } : {}),
       ...(elsewhere.length ? { doors_elsewhere: elsewhere } : {}),
       ...(s.payments.accepted.length ? { payments: publishedPayments(s.payments.accepted) } : {}),
-      // How a trade takes work (ADR-034): where it goes, emergencies, call-out. Never the area's base.
+      // How a trade takes work (ADR-039): where it goes, emergencies, call-out. Never the area's base.
       ...(itemTypes.includes("quote_request") && workProfile(s) ? { work: workProfile(s) ?? undefined } : {}),
     };
   }
@@ -959,7 +959,7 @@ export class Capabilities {
   async requestQuote(caller: Caller, input: T.RequestQuoteInput): Promise<CreateResult> {
     await this.refuseShut(caller, "quote_request");
     const c = withIdempotencyKey(caller, input.idempotency_key);
-    // The site against the area, an emergency against its door, the files checked and kept (ADR-034).
+    // The site against the area, an emergency against its door, the files checked and kept (ADR-039).
     const inboxAdds = await this.trades.prepareRequest(c, input.payload, input.attachments);
     return this.people.create(
       c,
@@ -989,7 +989,7 @@ export class Capabilities {
     const pricing = await this.customer.pricingFor(c, input);
     // A priced request binds a consumer once they confirmed it: without that, nothing is written (CRD art. 8(2)).
     const confirmed = await this.customer.confirmCreate(c, "booking", input, pricing);
-    // A site visit names the request for a price it is for, which this customer made (ADR-034 §4).
+    // A site visit names the request for a price it is for, which this customer made (ADR-039 §4).
     const visitFor = input.visit_for ? await this.visitRequest(c, input.visit_for) : null;
     const inboxAdds = await this.trades.prepareFiles(c, input.attachments);
     const made = await this.people.create(

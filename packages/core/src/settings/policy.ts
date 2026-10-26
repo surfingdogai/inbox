@@ -51,7 +51,7 @@ export interface HostPolicy {
    */
   readonly hooksLive?: boolean | undefined;
   /**
-   * What the files customers send with their requests may take in all, in bytes (ADR-034 §2): a host
+   * What the files customers send with their requests may take in all, in bytes (ADR-039 §2): a host
    * keeps each inbox to its share (500 MB for a hosted inbox, est.). Absent: no limit but the database's
    * own, which is a self-hosted inbox's to watch.
    */

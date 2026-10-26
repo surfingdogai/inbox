@@ -75,7 +75,7 @@ export async function linkComing(
   const currency = String(p.totalPrice?.currency ?? "").toUpperCase();
   if (!Number.isInteger(value) || value <= 0 || !isMoneyCurrency(currency)) return false;
   if (p.change !== undefined && p.change !== null) return false;
-  // Paid in a trade's stages (ADR-034 §4): no link for the whole is coming.
+  // Paid in a trade's stages (ADR-039 §4): no link for the whole is coming.
   if (Array.isArray(p.schedule) && p.schedule.length > 0) return false;
   const url = typeof p.paymentUrl === "string" ? p.paymentUrl : null;
   const { rows } = await db.client.query({

@@ -272,7 +272,7 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
     const name = profile.name.trim() || profile.domain || "Inbox";
     // A place to stay (ADR-037) says how its stays are asked for, held and booked, and has the tools.
     const stays = await takesStays(caps);
-    // A trade (ADR-034) says how a job is asked for, with its photos, and where it works.
+    // A trade (ADR-039) says how a job is asked for, with its photos, and where it works.
     const work = await takesWork(caps);
     const instructions = [
       PUBLIC_INSTRUCTIONS,

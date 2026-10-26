@@ -661,7 +661,7 @@ export function publicRest(caps: Capabilities, opts: { readonly baseUrl?: string
 
   // A place to stay (ADR-037 §6.1): what is free, a quote, a request, a hold, a booking, a change.
   stayPublicRoutes(app, caps, hook as never);
-  // Trades (ADR-034): whether a site is inside the area, a request's files uploaded first, the business's links to them.
+  // Trades (ADR-039): whether a site is inside the area, a request's files uploaded first, the business's links to them.
   tradesPublicRoutes(app, caps, hook as never);
   return app;
 }
@@ -1973,7 +1973,7 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
 
   // A place to stay's setup (ADR-037 §6.2).
   stayOwnerRoutes(app, caps);
-  // Trades (ADR-034): a request's files and its job tool.
+  // Trades (ADR-039): a request's files and its job tool.
   tradesOwnerRoutes(app, caps);
   return app;
 }

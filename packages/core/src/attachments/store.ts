@@ -5,7 +5,7 @@ import type { JobHandler } from "../jobs/runner";
 import { ensureJob } from "../jobs/schedule";
 
 /**
- * Where a request's files are kept (ADR-034 §2): in the inbox's own database, in pieces of 512 KB,
+ * Where a request's files are kept (ADR-039 §2): in the inbox's own database, in pieces of 512 KB,
  * so the same code keeps them on every runtime (D1, a Durable Object, a SQLite file) with no store of
  * its own to set up, and a database copy or an erasure takes them with everything else. `blobs` holds
  * one row per file (`kind = 'attachment'`), `attachment_chunks` its bytes.

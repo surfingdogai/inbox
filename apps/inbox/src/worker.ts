@@ -50,7 +50,7 @@ type Bindings = Env & {
   SQUARE_CLIENT_SECRET?: string;
   CALENDLY_CLIENT_ID?: string;
   CALENDLY_CLIENT_SECRET?: string;
-  /** A job tool's sign-in through the server's own app (ADR-034 §5); without them, "set up". */
+  /** A job tool's sign-in through the server's own app (ADR-039 §5); without them, "set up". */
   SERVICEM8_CLIENT_ID?: string;
   SERVICEM8_CLIENT_SECRET?: string;
   JOBBER_CLIENT_ID?: string;

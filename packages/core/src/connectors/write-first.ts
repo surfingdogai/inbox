@@ -20,7 +20,7 @@ import { ConnectorError } from "./sdk";
  * promised until the resolver has read it back, or has taken it back once it never could.
  */
 
-/** `request`: a request for a price written into a job tool (ADR-034). */
+/** `request`: a request for a price written into a job tool (ADR-039). */
 export type WriteOp = "reserve" | "modify" | "cancel" | "release" | "request";
 export type WriteOutcome = "pending" | "written" | "refused" | "unknown" | "rolled_back";
 

@@ -86,12 +86,12 @@ export const LIMITS = {
    */
   email: { capacity: 200, perMs: 400 / 3_600_000 } satisfies Limit,
   /**
-   * A file uploaded for a request (ADR-034 §2): up to 10 MB each, kept in the business's database for an
+   * A file uploaded for a request (ADR-039 §2): up to 10 MB each, kept in the business's database for an
    * hour. Thirty at once and sixty an hour per address: six files on each of ten requests.
    */
   upload: { capacity: 30, perMs: 60 / 3_600_000 } satisfies Limit,
   /**
-   * Asking whether a site is inside where a trade works (`check_area`, `GET /v1/area`, ADR-034 §3):
+   * Asking whether a site is inside where a trade works (`check_area`, `GET /v1/area`, ADR-039 §3):
    * twenty at once and sixty an hour per address. A customer's agent asks once or twice; a script
    * asking round the edge to find where the radius is measured from asks hundreds.
    */
@@ -253,12 +253,12 @@ const CREATE_PATHS = /^\/v1\/(bookings|orders|quotes|messages|stays|stays\/holds
 const UCP_SESSION_CREATES = /^\/v1\/ucp\/lodging\/booking-sessions(\/[^/]+\/complete)?\/?$/;
 const UCP_SESSION_UPDATE = /^\/v1\/ucp\/lodging\/booking-sessions\/[^/]+\/?$/;
 
-/** The public route that tells whether a site is inside where the business works (ADR-034 §3). */
+/** The public route that tells whether a site is inside where the business works (ADR-039 §3). */
 export function isAreaRoute(method: string, path: string): boolean {
   return (method === "GET" || method === "HEAD") && /^\/v1\/area\/?$/.test(path);
 }
 
-/** The public route a request's files are uploaded by first (ADR-034 §2). */
+/** The public route a request's files are uploaded by first (ADR-039 §2). */
 export function isUploadRoute(method: string, path: string): boolean {
   return method === "POST" && /^\/v1\/uploads\/?$/.test(path);
 }

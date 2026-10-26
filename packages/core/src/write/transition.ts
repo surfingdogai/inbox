@@ -1340,7 +1340,7 @@ async function attempt_(
     }),
   );
   if (payFollows && payItem) statements.push(payLinkStatement(payItem, eventId, now));
-  // A request the owner quotes is one they take on: it goes to their job tool unless they send none (ADR-034 §5).
+  // A request the owner quotes is one they take on: it goes to their job tool unless they send none (ADR-039 §5).
   if (item.type === "quote_request" && t.event === "quote") {
     statements.push(...(await workPushStatements(db, item.id, "quoted", now)));
   }
@@ -2551,7 +2551,7 @@ async function completeQuote(
       }
       sum += l.price.value * l.quantity;
     });
-    // Prices before tax (ADR-034 §4): the lines and the tax on top make the total the customer pays.
+    // Prices before tax (ADR-039 §4): the lines and the tax on top make the total the customer pays.
     const tax = taxOnTop(q as unknown as TradeQuoteTerms);
     if (!problems.some((p) => p.path.endsWith(".currency")) && sum + tax !== q.totalPrice.value) {
       problems.push({
@@ -2563,7 +2563,7 @@ async function completeQuote(
       });
     }
   }
-  // A trade's quote (ADR-034 §4): its stages add up to the total, its fees in the total's currency.
+  // A trade's quote (ADR-039 §4): its stages add up to the total, its fees in the total's currency.
   problems.push(...tradeQuoteProblems(q as unknown as TradeQuoteTerms, now));
   if (q.creates === "booking") {
     const offered = payload.itemOffered as { serviceId?: string };
@@ -2827,7 +2827,7 @@ function orderFromQuote(
     totalPrice: q.totalPrice,
     ...(payload.deliveryAddress ? { shippingAddress: payload.deliveryAddress } : {}),
     ...(q.notes ? { notes: q.notes } : {}),
-    // A trade's stages (ADR-034 §4) go with the order: the business asks for each as it falls due.
+    // A trade's stages (ADR-039 §4) go with the order: the business asks for each as it falls due.
     ...((q as { stages?: unknown[] }).stages?.length ? { schedule: (q as { stages?: unknown[] }).stages } : {}),
   };
 }

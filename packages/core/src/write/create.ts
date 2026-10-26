@@ -80,7 +80,7 @@ export interface CreateInput {
    */
   readonly stayExtra?: Readonly<Record<string, unknown>> | undefined;
   /**
-   * What the inbox adds to a customer's request itself (ADR-034): the files it kept for it (their refs
+   * What the inbox adds to a customer's request itself (ADR-039): the files it kept for it (their refs
    * in the payload, the files handed to the item in the item's own batch), whether the site is inside
    * the area, the priority that follows. Never part of the idempotency hash: `hash` stands for what
    * the customer sent (the files as they sent them), so a retry with the same files is the same request.
@@ -297,7 +297,7 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
   const statements: Statement[] = [];
   if (idem && requestHash) statements.push(idempotencyStatement(idem, requestHash, 201, response, id, now));
   statements.push(...party.statements);
-  // The files kept for this request are handed to it in its own batch (ADR-034 §2).
+  // The files kept for this request are handed to it in its own batch (ADR-039 §2).
   if (adds?.files.length) statements.push(...attachStatements(adds.files, id, party.partyId, now));
   statements.push({
     sql: `INSERT INTO items (id, type, state, version, party_id, location_id, channel, subject, linked_item_id, access_token_hash, payload, flags,
@@ -436,7 +436,7 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
   if (await hasEventListeners(db)) {
     statements.push(webhookFanoutStatement({ id: eventId, type: `${input.type}.create`, itemId: id }, now));
   }
-  // A customer's request for a price goes to the owner's job tool when the owner sends every one (ADR-034 §5).
+  // A customer's request for a price goes to the owner's job tool when the owner sends every one (ADR-039 §5).
   if (input.type === "quote_request" && isCustomer(caller)) {
     statements.push(...(await workPushStatements(db, id, "created", now)));
   }

@@ -2,7 +2,7 @@ import { OFFER_A_CODE, type Preset, type PresetSpec } from "./common";
 
 /**
  * Trades and quotes: every request for a price goes to a person, emergencies and jobs needed within a
- * day first (the job's urgency, ADR-034 §4, and the words a customer used), and a site outside the area
+ * day first (the job's urgency, ADR-039 §4, and the words a customer used), and a site outside the area
  * the business works in waits for the owner to decide. Nothing here refuses anybody: the emergency door
  * and the area are Settings → Work and Area, checked as a request comes in.
  * Amounts are in minor units of the business's currency.

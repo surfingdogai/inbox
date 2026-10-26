@@ -72,7 +72,7 @@ describe("request bodies", () => {
       const r = await app.request(json(path, { pad: big }, owner));
       expect(r.status, path).toBe(413);
     }
-    // Where a request's files come (ADR-034 §2): an upload takes one file of 10 MB, a request with its
+    // Where a request's files come (ADR-039 §2): an upload takes one file of 10 MB, a request with its
     // files inline up to 12 MB; past that, refused before anything reads them.
     const huge = "x".repeat(MAX_MCP_FILES_BODY + 1);
     for (const path of ["/mcp", "/v1/quotes", "/v1/bookings", "/v1/orders"]) {

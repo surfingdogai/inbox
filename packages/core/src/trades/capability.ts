@@ -27,7 +27,7 @@ import { isTrade, JOB_WORDS, judgeRequest, openNow, premisesOf, siteOf, workProf
 import { jobToolConnections, type PushOutcome, pushRequest, sentTo } from "./job-tool";
 
 /**
- * The trades doors (ADR-034): files on a request, where the business works, the job a request
+ * The trades doors (ADR-039): files on a request, where the business works, the job a request
  * describes, and the owner's job tool. Each door calls these; what a customer's agent is told speaks
  * as the business.
  */

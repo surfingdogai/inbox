@@ -21,7 +21,7 @@ function SettingsLayout() {
   // A place to stay has its own tab; another business never sees it.
   const property = useProperty();
   const stays = (property.data?.properties.length ?? 0) > 0 || path === "/settings/property";
-  // A trade has Area and Work (ADR-034): it said where it works or how it takes work, or has a job tool,
+  // A trade has Area and Work (ADR-039): it said where it works or how it takes work, or has a job tool,
   // or it takes requests for a price and no bookings (what a trade's setup starts with). A salon that
   // also quotes, or a shop, never sees them; a link straight to either still opens it.
   const settings = useSettings();

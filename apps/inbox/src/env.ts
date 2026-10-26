@@ -100,7 +100,7 @@ export function outboundDenyFrom(value: string | undefined): { ranges: AddressRa
 }
 
 /**
- * What the server switched on of the job tools (ADR-034 §5): JOBBER_API_VERSION, the Jobber API version
+ * What the server switched on of the job tools (ADR-039 §5): JOBBER_API_VERSION, the Jobber API version
  * the server's Jobber app was checked against (Jobber stays "set up" without one, or with the
  * template's 2022-03-10); JOB_TOOLS_CLEARED, the tools whose API terms whoever runs the server cleared
  * for this use (`housecallpro`, `fergus`), each "set up" until named.
@@ -124,7 +124,7 @@ const OAUTH_ENV = {
   shopify: ["SHOPIFY_CLIENT_ID", "SHOPIFY_CLIENT_SECRET"],
   square: ["SQUARE_CLIENT_ID", "SQUARE_CLIENT_SECRET"],
   calendly: ["CALENDLY_CLIENT_ID", "CALENDLY_CLIENT_SECRET"],
-  // Job tools (ADR-034): ServiceM8's Public Application, Jobber's reviewed app.
+  // Job tools (ADR-039): ServiceM8's Public Application, Jobber's reviewed app.
   servicem8: ["SERVICEM8_CLIENT_ID", "SERVICEM8_CLIENT_SECRET"],
   jobber: ["JOBBER_CLIENT_ID", "JOBBER_CLIENT_SECRET"],
 } as const;
