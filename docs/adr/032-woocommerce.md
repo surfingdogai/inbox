@@ -2,7 +2,8 @@
 
 **Status:** proposed, 20 October 2026. Builds on ADR-030 (the shared base for shops, tills and links),
 ADR-023 (pay links) and ADR-024 (the WordPress plugin's discovery lines). Connector kind `woocommerce`,
-frozen once merged.
+frozen once merged. Amended by ADR-036: every amount is in its currency's own minor unit, so a store's
+yen are whole yen here too (¥1,200 is 1200), read and written in the store's own decimals.
 
 ## Context
 

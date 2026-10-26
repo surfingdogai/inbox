@@ -2,7 +2,9 @@
 
 **Status:** proposed, 20 October 2026. Builds on ADR-022 (calendars), ADR-023 (pay links), ADR-030
 (the connectors' shared base) and ADR-032 (currencies without a minor unit, which the base takes from
-the WooCommerce track). Code: `packages/adapters/src/connectors/square/`.
+the WooCommerce track). Code: `packages/adapters/src/connectors/square/`. Amended by ADR-036: every
+amount is in its currency's own minor unit, which is Square's smallest unit too, so ¥12,800 is 12800
+on both sides.
 
 ## Context
 
