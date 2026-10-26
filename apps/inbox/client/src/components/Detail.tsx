@@ -32,7 +32,7 @@ import { DetailSkeleton, ErrorState, Toast } from "./Feedback";
 import { Details, Fields } from "./Fields";
 import { JobBlock } from "./Job";
 import { OrderBlock } from "./OrderBlock";
-import { Payments, RefundAt } from "./Payments";
+import { AgentPayments, Payments, RefundAt } from "./Payments";
 import { StatePill, TypePill } from "./Pills";
 import { Receipts } from "./Receipts";
 import { Sheet } from "./Sheet";
@@ -245,6 +245,7 @@ export function ItemDetailView({
         {item.type === "order" && (
           <Payments itemId={item.id} payments={payments} none={pays.data?.none ?? null} tz={tz} />
         )}
+        {item.type === "order" && <AgentPayments payments={pays.data?.agent_payments ?? []} tz={tz} />}
         <Receipts receipts={query.data.receipts ?? []} tz={tz} />
         <Emails mail={query.data.mail ?? []} tz={tz} />
         <CustomerData

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { problemOf } from "../lib/api";
 import { formatDateTime, formatMoney, methodName } from "../lib/format";
 import { useProposeShopTotal } from "../lib/queries";
-import type { PaymentView } from "../lib/types";
+import type { AgentPaymentView, PaymentView } from "../lib/types";
 
 /**
  * An order's payment through the business's own Stripe or Mollie account (ADR-023), the one place it
@@ -126,6 +126,57 @@ export function RefundAt({ payment, owed }: { payment: PaymentView; owed: string
         <ExternalLink className="icon-xs" aria-hidden="true" />
       </a>
     </p>
+  );
+}
+
+/**
+ * What customers' assistants paid directly into the business's own Stripe (ADR-042): each payment that
+ * went through, with how and where to refund it, and what the owner should know (one that came after
+ * the order was cancelled); an attempt that did not go through is one quiet count.
+ */
+export function AgentPayments({ payments, tz }: { payments: readonly AgentPaymentView[]; tz: string | undefined }) {
+  if (payments.length === 0) return null;
+  const done = payments.filter((p) => p.state === "paid" || p.state === "processing" || p.state === "unknown");
+  const tried = payments.length - done.length;
+  return (
+    <div className="stack receipts payments">
+      <div className="eyebrow">Paid by the customer's assistant</div>
+      {done.length > 0 && (
+        <ul className="receipt-list">
+          {done.map((p) => (
+            <li className="receipt" key={p.id}>
+              <CreditCard className="icon" aria-hidden="true" />
+              <span className="what">
+                <b>{p.provider}</b> ·{" "}
+                {p.state === "paid"
+                  ? `paid directly ${formatMoney(p.paid_amount ?? p.amount)}${p.method ? ` by ${methodName(p.method)}` : ""}`
+                  : p.state === "processing"
+                    ? `on its way: ${formatMoney(p.amount)}`
+                    : `not confirmed by ${p.provider}: check it there`}
+                {!p.livemode && <span className="opt"> · test</span>}
+              </span>
+              {p.paid_at && (
+                <time className="when" dateTime={new Date(p.paid_at).toISOString()}>
+                  {formatDateTime(new Date(p.paid_at).toISOString(), tz)}
+                </time>
+              )}
+              {p.dashboard_url && (
+                <a className="btn btn-ghost btn-sm" href={p.dashboard_url} target="_blank" rel="noreferrer">
+                  Refund in {p.provider}
+                  <ExternalLink className="icon" aria-hidden="true" />
+                </a>
+              )}
+              {p.note && <p className="hint">{p.note}</p>}
+            </li>
+          ))}
+        </ul>
+      )}
+      {tried > 0 && (
+        <p className="hint">
+          {tried} {tried === 1 ? "payment" : "payments"} by the assistant did not go through. Nothing was charged.
+        </p>
+      )}
+    </div>
   );
 }
 

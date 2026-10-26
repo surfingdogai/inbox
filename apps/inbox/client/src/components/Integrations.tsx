@@ -1426,6 +1426,7 @@ function PayChoices({
           ? `Refunds are made in ${c.title}, on the order's page.`
           : `Refunds are made in ${c.title}, from the payment's own page.`}
       </p>
+      {c.agent_pay && <AgentPayChoice connection={c} onNotice={onNotice} />}
       <div className="rowx">
         <button type="button" className="btn btn-ghost btn-sm" onClick={onNewKey}>
           {again ?? `New ${credential}`}
@@ -1434,6 +1435,107 @@ function PayChoices({
       {write.error && (
         <p className="hint error" role="alert">
           {problemOf(write.error).detail}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Where a business finds its Stripe profile ID, and edits its key. */
+const STRIPE_PROFILES = "https://dashboard.stripe.com/profiles";
+const STRIPE_KEYS = "https://dashboard.stripe.com/apikeys";
+
+/**
+ * "Let AI assistants pay you directly" (ADR-042): the owner's switch, in person, under the links. On asks
+ * for the Stripe profile ID assistants get a token for, and the key is asked then for PaymentIntents:
+ * Write; what it lacks is said with where to add it. Off takes effect at once.
+ */
+function AgentPayChoice({ connection: c, onNotice }: { connection: ConnectionView; onNotice: (n: Notice) => void }) {
+  const write = useIntegrationWrite();
+  const agent = c.agent_pay;
+  const [profile, setProfile] = useState(agent?.profile ?? "");
+  const [asking, setAsking] = useState(false);
+  const [missing, setMissing] = useState<readonly string[]>([]);
+  if (!agent) return null;
+  const test = c.mode === "test";
+  const save = (on: boolean) =>
+    write.mutate(
+      { id: c.id, patch: on ? { agent_pay: true, agent_profile: profile.trim() } : { agent_pay: false } },
+      {
+        onSuccess: (answer) => {
+          const lacks = (answer as ConnectionView).agent_pay?.missing ?? [];
+          setMissing(lacks);
+          if (lacks.length > 0) return;
+          setAsking(false);
+          onNotice({
+            tone: "success",
+            text: on ? "Assistants can pay you directly." : "Assistants are sent your payment link instead.",
+          });
+        },
+      },
+    );
+  return (
+    <div className="stack">
+      <Switch checked={agent.on || asking} onChange={(on) => (on ? setAsking(true) : save(false))}>
+        Let AI assistants pay you directly
+      </Switch>
+      <p className="hint">
+        When a customer's assistant orders, it can pay for an order you accepted with a one-time token from Stripe, for
+        exactly the total the customer confirmed. The money goes to your Stripe account, like your payment links. Card
+        numbers never reach this inbox.
+      </p>
+      {agent.stopped && !agent.on && (
+        <p className="hint error" role="alert">
+          {agent.stopped}
+        </p>
+      )}
+      {(asking || agent.on) && (
+        <Field
+          id={`agent-profile-${c.id}`}
+          label="Your Stripe profile ID"
+          hint="Starts with profile_. Assistants use it to ask Stripe for a token made for you."
+        >
+          <div className="rowx">
+            <input
+              id={`agent-profile-${c.id}`}
+              className="input"
+              value={profile}
+              placeholder="profile_…"
+              spellCheck={false}
+              autoComplete="off"
+              onChange={(e) => setProfile(e.target.value)}
+            />
+            <button
+              type="button"
+              className="btn btn-sm"
+              disabled={!profile.trim().startsWith("profile_") || write.isPending}
+              onClick={() => save(true)}
+            >
+              {agent.on ? "Save" : "Switch on"}
+            </button>
+          </div>
+          <a className="hint" href={STRIPE_PROFILES} target="_blank" rel="noreferrer">
+            Find it in Stripe →
+          </a>
+        </Field>
+      )}
+      {missing.length > 0 && (
+        <p className="hint error" role="alert">
+          Your Stripe key needs one more permission: <strong>{missing.join(", ")}</strong>. On Stripe's key page, edit
+          the key, set it to Write, save, then switch this on again.{" "}
+          <a href={STRIPE_KEYS} target="_blank" rel="noreferrer">
+            Open Stripe's key page →
+          </a>
+        </p>
+      )}
+      {agent.on && (
+        <p className="hint">
+          {test
+            ? "Test key: only test orders can be paid this way, with Stripe's test tokens."
+            : `Assistants can pay you directly. ${agent.paid} ${agent.paid === 1 ? "order" : "orders"} paid this way.`}{" "}
+          Before an assistant can pay you, Stripe may ask you to accept its terms for agent payments and to confirm each
+          assistant's app in your Stripe dashboard. Available where Stripe offers it: the US, Canada, the UK and most of
+          Europe.
         </p>
       )}
     </div>

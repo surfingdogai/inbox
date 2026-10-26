@@ -2,6 +2,7 @@ import { authHeaders } from "./auth";
 import { attachmentName } from "./download";
 import type {
   AddFeedBody,
+  AgentPaymentView,
   AuthorizeBody,
   Availability,
   BusinessProfile,
@@ -399,10 +400,14 @@ export const api = {
     ),
   /** An order's pay links in the business's own Stripe or Mollie account (ADR-023). */
   itemPayments: (id: string) =>
-    call<{ item_id: string; payments: PaymentView[]; none: string | null; link_is_ours: boolean }>(
-      "GET",
-      `/v1/owner/items/${encodeURIComponent(id)}/payments`,
-    ),
+    call<{
+      item_id: string;
+      payments: PaymentView[];
+      none: string | null;
+      link_is_ours: boolean;
+      /** What customers' assistants paid directly (ADR-042). */
+      agent_payments?: AgentPaymentView[];
+    }>("GET", `/v1/owner/items/${encodeURIComponent(id)}/payments`),
   feeds: () => call<{ items: FeedConnector[] }>("GET", "/v1/owner/feeds"),
   addFeed: (body: AddFeedBody) => call<FeedConnector>("POST", "/v1/owner/feeds", { body }),
   importFeed: (id: string) =>

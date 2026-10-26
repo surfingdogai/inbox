@@ -1,5 +1,6 @@
 import type {
   Action,
+  AgentPaymentView,
   AttachmentRef,
   Availability,
   BusinessProfile,
@@ -63,6 +64,7 @@ import type {
  */
 export type {
   Action,
+  AgentPaymentView,
   AttachmentRef,
   Availability,
   BusinessProfile,
@@ -388,6 +390,10 @@ export interface ConnectionPatch {
   readonly paused?: boolean;
   /** A payment platform: accepted orders get a link to pay (ADR-023). */
   readonly pay_on?: boolean;
+  /** A payment platform: customers' assistants pay accepted orders directly (ADR-042). The owner's, in person. */
+  readonly agent_pay?: boolean;
+  /** The Stripe profile assistants pay through (`profile_…`). */
+  readonly agent_profile?: string;
   /** What the owner chose of the connection's choosers (a till's location), by key (ADR-030). */
   readonly choices?: Readonly<Record<string, string | null>>;
 }
