@@ -12,6 +12,7 @@ import {
   type ShopOrder,
 } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
+import { fromSquare, toSquare } from "../src/connectors/square/api";
 import {
   builtInConnectors,
   hmacSha256Base64,
@@ -708,13 +709,18 @@ describe("the catalogue", () => {
     ]);
   });
 
-  it("prices a shop in yen exactly, in hundredths: ¥12,800 is 1280000", async () => {
+  it("prices a shop in yen exactly, in whole yen as Square does: ¥12,800 is 12800 (ADR-036)", async () => {
     const { def, ctx } = await connected({ seller: "osaka" });
     const page = await def.catalogue?.page(ctx(), { cursor: null, since: null });
     expect(page?.products.map((p) => [p.name, p.price, p.available])).toEqual([
-      ["三徳包丁 Santoku · 165 mm", { value: 1_280_000, currency: "JPY" }, true],
-      ["土鍋 Donabe · 2 people", { value: 680_000, currency: "JPY" }, true],
+      ["三徳包丁 Santoku · 165 mm", { value: 12_800, currency: "JPY" }, true],
+      ["土鍋 Donabe · 2 people", { value: 6_800, currency: "JPY" }, true],
     ]);
+    // Square's smallest unit is the inbox's minor unit; one counted in thousandths is never converted.
+    expect([fromSquare(12_800, "JPY"), toSquare(12_800, "JPY"), fromSquare(4_500, "EUR")]).toEqual([
+      12_800, 12_800, 4_500,
+    ]);
+    expect([fromSquare(1_250, "KWD"), toSquare(1_250, "KWD")]).toEqual([null, null]);
   });
 
   it("reads a page past the client's usual 2 MB: a catalogue never stops on one large page", async () => {
@@ -915,12 +921,12 @@ describe("orders paid at the seller's own Square checkout", () => {
     expect(e).toMatchObject({ code: "bad_response", message: "Square did not say what the order comes to." });
   });
 
-  it("writes an order in yen as Square counts it, whole yen, and reads it back in hundredths", async () => {
+  it("writes an order in yen as Square counts it, whole yen, and reads it back the same", async () => {
     const { sq, def, ctx } = await connected({ seller: "osaka" });
     const yen = (value: number) => ({ value, currency: "JPY" });
     const request = payRequest({
       ref: "01JREFOSAKA000000000000001",
-      amount: yen(1_330_000),
+      amount: yen(13_300),
       order: order({
         lines: [
           {
@@ -928,11 +934,11 @@ describe("orders paid at the seller's own Square checkout", () => {
             sku: "SNT-165",
             name: "三徳包丁 Santoku",
             quantity: 1,
-            unit: yen(1_280_000),
+            unit: yen(12_800),
           },
-          { externalId: null, sku: null, name: "Gift wrapping", quantity: 1, unit: yen(50_000) },
+          { externalId: null, sku: null, name: "Gift wrapping", quantity: 1, unit: yen(500) },
         ],
-        total: yen(1_330_000),
+        total: yen(13_300),
         customer: { name: "佐藤 陽菜", email: "hina@example.jp", phone: "+81 90 5555 0147", language: "ja" },
       }),
     });
@@ -941,27 +947,12 @@ describe("orders paid at the seller's own Square checkout", () => {
       order: { line_items: Record<string, unknown>[] };
     };
     expect(sent.order.line_items[1]).toMatchObject({ base_price_money: { amount: 500, currency: "JPY" } });
-    expect(link?.total).toEqual(yen(1_330_000));
+    expect(link?.total).toEqual(yen(13_300));
     const orderId = String(link?.externalId).split(":")[1] ?? "";
     sq.pay(orderId);
     const [fact] =
       (await def.payments?.check(ctx(), { ref: request.ref, externalId: String(link?.externalId), itemId: "x" })) ?? [];
-    expect(fact?.amount).toEqual(yen(1_330_000));
-    // A fraction of a yen is no price Square takes: refused before Square is asked.
-    const e = await refusal(
-      def.payments?.createLink(
-        ctx(),
-        payRequest({
-          ref: "01JREFOSAKA000000000000002",
-          amount: yen(50_050),
-          order: order({
-            lines: [{ externalId: null, sku: null, name: "Furoshiki", quantity: 1, unit: yen(50_050) }],
-            total: yen(50_050),
-          }),
-        }),
-      ) ?? Promise.resolve(),
-    );
-    expect(e).toMatchObject({ code: "config" });
+    expect(fact?.amount).toEqual(yen(13_300));
     expect(sq.orders.size).toBe(1);
   });
 

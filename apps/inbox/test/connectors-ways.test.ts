@@ -685,11 +685,12 @@ describe("an order in a currency with no minor unit, or one counted in thousandt
     return { shop, pays: pays.payments };
   }
 
-  it("writes yen into the shop, exact in hundredths: a shop takes a decimal in its own currency", async () => {
+  it("writes yen into the shop in whole yen: a shop takes a decimal in its own currency", async () => {
+    // ¥2,800: yen have no minor unit, so the amount is whole yen (ADR-036).
     const { shop, pays } = await accepted(
       "osaka-zakka.example.com",
       "JPY",
-      280_000,
+      2_800,
       {
         name: "Zakka Osaka",
         currency: "USD",
@@ -699,7 +700,7 @@ describe("an order in a currency with no minor unit, or one counted in thousandt
       { name: "Haruto Sato", email: "haruto@example.com", locale: "ja" },
       "Furoshiki",
     );
-    expect([...shop.orders.values()].map((o) => [o.total, o.currency])).toEqual([[280_000, "JPY"]]);
+    expect([...shop.orders.values()].map((o) => [o.total, o.currency])).toEqual([[2_800, "JPY"]]);
     expect(pays[0]).toMatchObject({ state: "open", error: null });
   });
 

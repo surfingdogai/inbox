@@ -464,13 +464,14 @@ describe("an order paid at the salon's own Square checkout", () => {
   it("sells in yen at a shop in Osaka: priced exactly, and Square's link made in whole yen", async () => {
     const s = await setup({ seller: "osaka" });
     await connected(s);
+    // Whole yen, as Square counts them and as the inbox does (ADR-036): ¥6,800 is 6800.
     const { rows } = await s.db.client.query({
       sql: "SELECT external_id, price, active FROM products ORDER BY external_id",
       method: "all",
     });
     expect(rows.map((r) => [String(r[0]), JSON.parse(String(r[1])), Number(r[2])])).toEqual([
-      ["VARDONABE2PERS00", { value: 680_000, currency: "JPY" }, 1],
-      ["VARSANTOKU165MM0", { value: 1_280_000, currency: "JPY" }, 1],
+      ["VARDONABE2PERS00", { value: 6_800, currency: "JPY" }, 1],
+      ["VARSANTOKU165MM0", { value: 12_800, currency: "JPY" }, 1],
     ]);
     const productId = String(
       (
@@ -487,8 +488,8 @@ describe("an order paid at the salon's own Square checkout", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           payload: {
-            orderedItem: [{ productId, name: "土鍋 Donabe", quantity: 1, price: { value: 680_000, currency: "JPY" } }],
-            totalPrice: { value: 680_000, currency: "JPY" },
+            orderedItem: [{ productId, name: "土鍋 Donabe", quantity: 1, price: { value: 6_800, currency: "JPY" } }],
+            totalPrice: { value: 6_800, currency: "JPY" },
             delivery: { method: "pickup" },
           },
           contact: { name: "Tanaka Yui", email: "yui.tanaka@example.jp", locale: "ja" },
@@ -502,7 +503,7 @@ describe("an order paid at the salon's own Square checkout", () => {
     const order = orderOf(s.sq);
     expect([order.total, order.currency]).toEqual([6_800, "JPY"]);
     const [pay] = await paymentsOf(s, id);
-    expect(pay).toMatchObject({ state: "open", amount: { value: 680_000, currency: "JPY" } });
+    expect(pay).toMatchObject({ state: "open", amount: { value: 6_800, currency: "JPY" } });
   });
 
   it("takes the webhook away when disconnected, and the shelf off sale", async () => {

@@ -1,5 +1,5 @@
 import { type CatalogueProduct, type CatalogueReader, ConnectorError, type RunContext } from "@surfingdog/core";
-import { call, currencyRefusal, hundredths, plain } from "./api";
+import { call, currencyRefusal, minorOf, plain } from "./api";
 import { keysOf, storeOf } from "./state";
 
 /**
@@ -14,7 +14,7 @@ import { keysOf, storeOf } from "./state";
  * - **Stock** is WooCommerce's count where it counts (`manage_stock`, the parent's for a variation
  *   managed there), 0 when it says out of stock without counting, and unknown otherwise.
  * - **Prices** are the store's active price (`price`: the sale price while a sale is on), in the
- *   store's currency, in hundredths. A product with no price comes in with none, and the shared upsert
+ *   store's currency, in its own minor unit (ADR-036). A product with no price comes in with none, and the shared upsert
  *   keeps it off sale.
  * - **What changed** is read with `modified_after` in GMT (WooCommerce saves a product's modified time
  *   on every save, a stock change included); a variable product changed has all its variations read,
@@ -112,9 +112,9 @@ function describe(p: Raw): string | null {
 }
 
 function priceOf(p: Raw, currency: string | null) {
-  // A currency this inbox cannot count is never read as hundredths: no price, so never on sale here.
+  // A currency this inbox cannot take from a shop is never read: no price, so never on sale here.
   if (!currency || currencyRefusal(currency)) return null;
-  const value = p.price === "" || p.price === null ? null : hundredths(p.price);
+  const value = p.price === "" || p.price === null ? null : minorOf(p.price, currency);
   return value === null || value < 0 ? null : { value, currency };
 }
 

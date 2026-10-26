@@ -7,7 +7,7 @@ import type { ItemType, Money } from "../domain/types";
 import { randomToken, ulid } from "../ids";
 import { ensureJob } from "../jobs/schedule";
 import { readSettings } from "../settings/schema";
-import { isHundredthsCurrency } from "../util/locale";
+import { isHundredthsCurrency, isWholeUnitCurrency } from "../util/locale";
 import type { Caller } from "../write/caller";
 import { jobStatement } from "../write/common";
 import { WriteError } from "../write/errors";
@@ -81,14 +81,17 @@ const NOT_HUNDREDTHS = "This currency is not counted in hundredths here, so no l
 /**
  * Why no link can be made in this amount's currency on this platform, or null (ADR-036): the
  * platform's own word (`currencyProblem`, a table with a test per currency), or, for one that says
- * nothing of currencies, every currency but those counted in hundredths.
+ * nothing of currencies, every currency but those counted in hundredths. A shop or till (`shop`,
+ * capability `shop_orders`) also takes a currency with no minor unit (yen, won): it is written there
+ * as a decimal in the shop's own currency (`decimalAmount`, "2800"), which is exact (ADR-032).
  */
-export function linkCurrencyProblem(payments: PaymentsHandler, amount: Money): string | null {
+export function linkCurrencyProblem(payments: PaymentsHandler, amount: Money, shop = false): string | null {
   if (payments.currencyProblem) {
     const why = payments.currencyProblem(amount);
     return why ? `${why.replace(/[.\s]+$/, "")}.` : null;
   }
-  return isHundredthsCurrency(amount.currency) ? null : NOT_HUNDREDTHS;
+  if (isHundredthsCurrency(amount.currency)) return null;
+  return shop && isWholeUnitCurrency(amount.currency) ? null : NOT_HUNDREDTHS;
 }
 /** The note on a link closed because its connection was disconnected. */
 const DISCONNECTED = "the payment platform was disconnected";
@@ -497,7 +500,7 @@ export class PaymentLinks {
     }
     // Every amount is in its currency's own minor unit (ADR-036), and the platform's adapter converts it
     // from a table with a test per currency: one it has no test for gets no link, said with the reason.
-    const currencyWhy = linkCurrencyProblem(conn.payments, want);
+    const currencyWhy = linkCurrencyProblem(conn.payments, want, Boolean(conn.shop));
     if (currencyWhy) return this.refuse(order, conn, want, currencyWhy, now);
     // A new link: the row first, under the one-live-link index, then the platform.
     const id = ulid(now);
@@ -928,7 +931,7 @@ export class PaymentLinks {
         notes.push(`no ${w.purpose} link: ${last.lastError ?? "the platform would not make it"}`);
         continue;
       }
-      const why = linkCurrencyProblem(conn.payments, w.amount);
+      const why = linkCurrencyProblem(conn.payments, w.amount, Boolean(conn.shop));
       if (why) {
         notes.push(await this.refuseScheduled(item, w, conn, why, now));
         continue;

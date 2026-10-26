@@ -160,25 +160,24 @@ export function refusal(a: Answer, doing: string): ConnectorError {
 /**
  * Square counts money in the currency's smallest unit: cents for most, whole yen or won for a currency
  * with none (https://developer.squareup.com/docs/build-basics/common-data-types/working-with-monetary-amounts).
- * The inbox counts in hundredths, which is exact for both: ¥12,800 is 1280000 here and 12800 in Square.
- * A currency counted any other way (thousandths) is never converted: null.
+ * So does the inbox (ADR-036), so an amount is the same number on both sides: ¥12,800 is 12800 in
+ * each. A currency counted any other way (thousandths) is never converted: null.
  */
+function squareCounts(code: string): boolean {
+  return isHundredthsCurrency(code) || isWholeUnitCurrency(code);
+}
+
+/** An amount Square gives, as the inbox counts it; null when it is not one. */
 export function fromSquare(amount: unknown, currency: string): number | null {
   const n = Number(amount);
   if (typeof amount !== "number" || !Number.isInteger(n) || n < 0) return null;
-  const code = currency.toUpperCase();
-  if (isHundredthsCurrency(code)) return n;
-  if (isWholeUnitCurrency(code)) return n * 100;
-  return null;
+  return squareCounts(currency.toUpperCase()) ? n : null;
 }
 
-/** Hundredths as Square counts them, or null when they are not (a yen amount with a fraction). */
+/** An amount here as Square counts it, or null when Square does not count that currency so. */
 export function toSquare(value: number, currency: string): number | null {
-  const code = currency.toUpperCase();
   if (!Number.isInteger(value) || value < 0) return null;
-  if (isHundredthsCurrency(code)) return value;
-  if (isWholeUnitCurrency(code)) return value % 100 === 0 ? value / 100 : null;
-  return null;
+  return squareCounts(currency.toUpperCase()) ? value : null;
 }
 
 /** SHA-256 of a text, as lowercase hex, with Web Crypto. */

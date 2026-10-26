@@ -2,8 +2,10 @@ import {
   ConnectorError,
   type ConnectorHttp,
   type ConnectorHttpResponse,
+  decimalAmount,
   isHundredthsCurrency,
   isWholeUnitCurrency,
+  minorUnits,
 } from "@surfingdog/core";
 import { basicAuth, retryAfterMs } from "../http";
 
@@ -243,13 +245,14 @@ export const SETTINGS_ROUTE = "/wc/v3/settings/general";
 
 /**
  * Why a store's currency cannot be taken here, in the owner's words; null when it can. Every amount
- * here is in hundredths: a currency with no minor unit (yen, won, dong) is exact in them, and a shop
- * takes it back as a decimal in its own currency; one counted in thousandths (Kuwaiti or Bahraini
- * dinars) is not, and is refused before a price of the shop's is read wrong.
+ * here is in its currency's own minor unit (ADR-036): a currency counted in hundredths, or with no
+ * minor unit (yen, won, dong) in whole units, is read and written back as the decimal the shop writes
+ * in its own currency; one counted in thousandths (Kuwaiti or Bahraini dinars) is not taken from a
+ * shop yet, and is refused before a price of the shop's is read.
  */
 export function currencyRefusal(currency: string | null): string | null {
   if (currency === null || isHundredthsCurrency(currency) || isWholeUnitCurrency(currency)) return null;
-  return `Your shop sells in ${currency}, which this inbox cannot take orders in yet: its amounts are counted in hundredths.`;
+  return `Your shop sells in ${currency}, which this inbox cannot take orders in yet from a shop: its amounts are counted in thousandths.`;
 }
 
 /**
@@ -462,23 +465,24 @@ export function plain(html: string): string {
 }
 
 /**
- * A decimal amount as a store writes it ("12.50", "1200", "4.5833") in hundredths, rounded half up
- * at the third decimal: WooCommerce keeps more decimals than it shows. Null when it is not a number.
+ * A decimal amount as a store writes it ("12.50", "1200", "4.5833") in the minor unit of its
+ * `currency` (ADR-036: cents, or whole yen), rounded half up at the next decimal: WooCommerce keeps
+ * more decimals than it shows. Null when it is not a number.
  */
-export function hundredths(raw: unknown): number | null {
+export function minorOf(raw: unknown, currency: string): number | null {
+  const e = minorUnits(currency) ?? 2;
   const text = typeof raw === "number" ? String(raw) : typeof raw === "string" ? raw.trim() : "";
   const m = /^(-?)(\d{1,13})(?:\.(\d+))?$/.exec(text);
   if (!m) return null;
-  const fraction = `${m[3] ?? ""}000`;
-  let value = Number(m[2]) * 100 + Number(fraction.slice(0, 2));
-  if (Number(fraction[2]) >= 5) value += 1;
+  const fraction = `${m[3] ?? ""}${"0".repeat(e + 1)}`;
+  let value = Number(m[2]) * 10 ** e + (e > 0 ? Number(fraction.slice(0, e)) : 0);
+  if (Number(fraction[e]) >= 5) value += 1;
   return m[1] === "-" ? -value : value;
 }
 
-/** Hundredths written as WooCommerce takes an amount: 4500 → "45.00". */
-export function decimal(value: number): string {
-  const s = String(Math.abs(Math.trunc(value))).padStart(3, "0");
-  return `${value < 0 ? "-" : ""}${s.slice(0, -2)}.${s.slice(-2)}`;
+/** Minor units written as WooCommerce takes an amount in its currency: 4500 EUR → "45.00", 1200 JPY → "1200". */
+export function decimal(value: number, currency: string): string {
+  return decimalAmount({ value: Math.trunc(value), currency });
 }
 
 /** The meta value a store answer holds under `key`, as a string; null when it has none. */

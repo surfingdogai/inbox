@@ -29,7 +29,7 @@ import { hooks, hooksStale, keepWebhooks, removeWebhooks } from "./hooks";
 import { payments } from "./orders";
 import { extraOf, keysOf, storeOf, type WooExtra } from "./state";
 
-export { hundredths, normalizeStore, routeUrl, storeId } from "./api";
+export { minorOf, normalizeStore, routeUrl, storeId } from "./api";
 export { PAGE_SIZE as WOO_PAGE_SIZE } from "./catalogue";
 export { WOO_TOPICS } from "./hooks";
 export { orderBody as wooOrderBody, WOO_METHODS } from "./orders";

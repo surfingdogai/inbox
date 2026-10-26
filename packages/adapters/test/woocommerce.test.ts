@@ -9,7 +9,7 @@ import {
   type ShopOrder,
 } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
-import { hundredths, normalizeStore, plain, routeUrl } from "../src/connectors/woocommerce/api";
+import { minorOf, normalizeStore, plain, routeUrl } from "../src/connectors/woocommerce/api";
 import { hmacSha256Base64, woocommerceConnector } from "../src/index";
 import { type FakeWooStore, fakeWooStore, simple, variable, variation } from "./fixtures/woocommerce/store";
 
@@ -149,15 +149,17 @@ describe("a store's address and amounts", () => {
     expect(plain("<p>Caf&#233; &#x2615;</p>")).toBe("Café ☕");
   });
 
-  it("reads the store's decimals in hundredths, rounding at the third, and never guesses", () => {
+  it("reads the store's decimals in its currency's minor unit, rounding at the next, and never guesses", () => {
     expect([
-      hundredths("12.50"),
-      hundredths("1200"),
-      hundredths("4.5833"),
-      hundredths("0.005"),
-      hundredths("-5.00"),
+      minorOf("12.50", "EUR"),
+      minorOf("1200", "EUR"),
+      minorOf("4.5833", "EUR"),
+      minorOf("0.005", "EUR"),
+      minorOf("-5.00", "EUR"),
     ]).toEqual([1250, 120_000, 458, 1, -500]);
-    expect([hundredths(""), hundredths("12,50"), hundredths(null), hundredths("1e3")]).toEqual([
+    // Yen have no minor unit (ADR-036): ¥1,200 is 1200, and a fraction rounds to the yen.
+    expect([minorOf("1200", "JPY"), minorOf("1200.00", "JPY"), minorOf("1199.5", "JPY")]).toEqual([1200, 1200, 1200]);
+    expect([minorOf("", "EUR"), minorOf("12,50", "EUR"), minorOf(null, "EUR"), minorOf("1e3", "EUR")]).toEqual([
       null,
       null,
       null,
@@ -579,15 +581,15 @@ describe("the store's catalogue", () => {
     expect(store.platform.seen.filter((r) => r.url.pathname === "/wp-json/wc/v3/products")).toHaveLength(2);
   });
 
-  it("prices a store in yen in hundredths, exactly, and refuses a store counted in thousandths", async () => {
+  it("prices a store in yen in whole yen, exactly, and refuses a store counted in thousandths", async () => {
     const osaka = fakeWooStore({ host: "zakka-osaka.example.jp", name: "Zakka Osaka", currency: "JPY" });
     osaka.settings.decimals = 0;
     osaka.products.push(simple(1, "Furoshiki, indigo", "1200"));
     const c = await connected(osaka);
     expect(c.extra).toMatchObject({ currency: "JPY" });
     const [furoshiki] = await readAll(runCtx(osaka, c));
-    // ¥1,200 is 120000 hundredths, as every amount here is kept; never 1200.
-    expect(furoshiki?.price).toEqual({ value: 120_000, currency: "JPY" });
+    // ¥1,200 is 1200: yen have no minor unit, and every amount here is in its own (ADR-036).
+    expect(furoshiki?.price).toEqual({ value: 1_200, currency: "JPY" });
     const order = shopOrder(
       [
         {
@@ -595,7 +597,7 @@ describe("the store's catalogue", () => {
           sku: null,
           name: "Furoshiki, indigo",
           quantity: 2,
-          unit: { value: 120_000, currency: "JPY" },
+          unit: { value: 1_200, currency: "JPY" },
         },
       ],
       {
@@ -610,7 +612,7 @@ describe("the store's catalogue", () => {
       },
     );
     const link = await woo.payments?.createLink(runCtx(osaka, c), payRequest(order));
-    expect(link?.total).toEqual({ value: 240_000, currency: "JPY" });
+    expect(link?.total).toEqual({ value: 2_400, currency: "JPY" });
     expect([...osaka.orders.values()][0]?.lines[0]?.total).toBe(2_400);
 
     const kuwait = fakeWooStore({ host: "souq-spices.example.com.kw", name: "Souq Spices", currency: "KWD" });

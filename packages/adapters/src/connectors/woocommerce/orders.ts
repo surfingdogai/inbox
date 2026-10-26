@@ -1,6 +1,7 @@
 import {
   ConnectorError,
   type KnownLink,
+  minorUnits,
   type OrderFact,
   type PayLink,
   type PayLinkRequest,
@@ -11,7 +12,7 @@ import {
   type RunContext,
   type ShopOrder,
 } from "@surfingdog/core";
-import { call, decimal, hundredths, type Keys, metaOf, plain, type Store } from "./api";
+import { call, decimal, type Keys, metaOf, minorOf, plain, type Store } from "./api";
 import { isoGmt } from "./catalogue";
 import { extraOf, keysOf, markOf, storeOf } from "./state";
 
@@ -196,7 +197,7 @@ export function orderBody(order: ShopOrder, req: PayLinkRequest, mark: string): 
   const line_items: Raw[] = [];
   const fee_lines: Raw[] = [];
   order.lines.forEach((l, i) => {
-    const total = decimal(l.unit.value * l.quantity);
+    const total = decimal(l.unit.value * l.quantity, l.unit.currency);
     const meta_data = [{ key: "_sdi_line", value: String(i) }];
     const m = /^(p|v):(\d{1,20})$/.exec(l.externalId ?? "");
     if (m) {
@@ -298,7 +299,7 @@ async function findOrder(ctx: RunContext, store: Store, keys: Keys, ref: string)
 interface Item {
   readonly kind: "line_items" | "fee_lines";
   readonly id: number;
-  /** What the customer accepted for the line, in hundredths. */
+  /** What the customer accepted for the line, in minor units. */
   readonly gross: number;
   /** What WooCommerce holds for it before tax, and the tax it added: in units, to six decimals. */
   readonly total: number;
@@ -335,22 +336,25 @@ function itemsOf(wc: Raw, order: ShopOrder): Item[] {
  */
 async function settleTotals(ctx: RunContext, store: Store, keys: Keys, wc: Raw, order: ShopOrder): Promise<Raw> {
   let current = wc;
+  const currency = order.total.currency;
+  // Minor units to the store's own decimals: a hundredth of a euro, a whole yen (ADR-036).
+  const unit = 10 ** (minorUnits(currency) ?? 2);
   for (let pass = 0; pass < 2; pass++) {
-    const total = hundredths(current.total);
+    const total = minorOf(current.total, currency);
     if (total === null || total === order.total.value) return current;
-    const tax = hundredths(current.total_tax) ?? 0;
+    const tax = minorOf(current.total_tax, currency) ?? 0;
     if (current.prices_include_tax !== true || tax <= 0) return current;
     const items = itemsOf(current, order).filter((i) => i.total > 0 && i.tax > 0);
     if (items.length === 0) return current;
     const nets = new Map<Item, number>();
     if (pass === 0) {
-      for (const i of items) nets.set(i, i.gross / 100 / (1 + i.tax / i.total));
+      for (const i of items) nets.set(i, i.gross / unit / (1 + i.tax / i.total));
     } else {
       const left = order.total.value - total;
       // More than a cent a line is not rounding: what the store counts is left for the owner.
       if (Math.abs(left) > items.length) return current;
       const largest = [...items].sort((a, b) => b.gross - a.gross)[0] as Item;
-      nets.set(largest, largest.total + left / 100 / (1 + largest.tax / largest.total));
+      nets.set(largest, largest.total + left / unit / (1 + largest.tax / largest.total));
     }
     const body: Record<string, Raw[]> = {};
     for (const [i, net] of nets) {
@@ -386,8 +390,8 @@ function linkOf(store: Store, wc: Raw): PayLink {
       "Your shop's checkout is not on https, so its link to pay was not sent. Set WordPress's address to https.",
     );
   }
-  const total = hundredths(wc.total);
   const currency = typeof wc.currency === "string" ? wc.currency.toUpperCase() : "";
+  const total = minorOf(wc.total, currency);
   return {
     externalId: String(id),
     url: pay.toString(),
@@ -489,8 +493,8 @@ function paidFact(store: Store, wc: Raw, ref: string): PaymentFact | null {
   const paidAt = cash ? gmtOf(wc.date_completed_gmt) : gmtOf(wc.date_paid_gmt);
   const paid = cash ? status === "completed" : (status === "processing" || status === "completed") && paidAt !== null;
   if (!paid) return null;
-  const value = hundredths(wc.total);
   const currency = typeof wc.currency === "string" ? wc.currency.toUpperCase() : "";
+  const value = minorOf(wc.total, currency);
   const method = methodOf(wc.payment_method);
   return {
     status: "paid",
@@ -543,7 +547,7 @@ function refundsOf(wc: Raw): RefundFact | null {
   let total = 0;
   const ids: number[] = [];
   for (const r of list) {
-    const value = hundredths(r.total);
+    const value = minorOf(r.total, currency);
     if (value === null || !Number.isInteger(r.id)) continue;
     total += Math.abs(value);
     ids.push(Number(r.id));

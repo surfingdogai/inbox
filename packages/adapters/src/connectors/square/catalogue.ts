@@ -18,9 +18,9 @@ import { arr, fromSquare, iso, obj, type SquareApi, str } from "./api";
  * - https://developer.squareup.com/reference/square/catalog-api/batch-retrieve-catalog-objects
  * - https://developer.squareup.com/reference/square/inventory-api/batch-retrieve-inventory-counts
  *
- * Prices are Square's in the currency's smallest unit, kept here in hundredths (`fromSquare`): exact
- * for a currency counted in hundredths and for one with no minor unit (¥12,800 is 1280000). One counted
- * in thousandths comes in with no price, and is kept off sale.
+ * Prices are Square's in the currency's smallest unit, which is the inbox's minor unit too
+ * (`fromSquare`, ADR-036): ¥12,800 is 12800 in both. One counted in thousandths comes in with no
+ * price, and is kept off sale.
  *
  * What it is (ADR-029), each only when Square has it: its barcode from the variation's `upc` (the
  * dashboard's GTIN field, 12 to 14 digits), checked when it is stored; the link to its first picture,
@@ -216,7 +216,7 @@ function tracks(variation: Obj, location: string): boolean {
   return (here.track_inventory ?? vd.track_inventory) === true;
 }
 
-/** A fixed price in hundredths, or none: a variable price is asked at the till, never guessed. */
+/** A fixed price in minor units, or none: a variable price is asked at the till, never guessed. */
 function priceOf(pricing: unknown, money: unknown): CatalogueProduct["price"] {
   if (pricing === "VARIABLE_PRICING") return null;
   const m = obj(money);

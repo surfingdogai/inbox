@@ -25,7 +25,7 @@ import { arr, fromSquare, msOf, obj, refusal, type SquareApi, type SquareEnv, st
  * whose payment Square says is `COMPLETED`, read with the business's key; the order's reference is the
  * inbox's own id for the link, so the facts find it however they arrive. A link the inbox closes is
  * deleted, which cancels its order: so the order is read first, and a link that was paid meanwhile is
- * never deleted. Amounts are Square's smallest unit, kept here in hundredths (`fromSquare`, `toSquare`).
+ * never deleted. Amounts are Square's smallest unit, the inbox's own minor unit too (`fromSquare`, `toSquare`).
  *
  * - https://developer.squareup.com/docs/checkout-api/square-order-checkout
  * - https://developer.squareup.com/docs/checkout-api/optional-checkout-configurations
@@ -163,7 +163,7 @@ async function paidOf(api: SquareApi, ctx: RunContext, order: Obj, linkId: strin
   return out;
 }
 
-/** An amount Square gives, in hundredths here; null when it is not one this inbox can hold. */
+/** An amount Square gives, in the inbox's minor units; null when it is not one this inbox can hold. */
 function moneyOf(m: Obj): { value: number; currency: string } | null {
   const currency = str(m.currency)?.toUpperCase();
   const value = currency ? fromSquare(m.amount, currency) : null;
