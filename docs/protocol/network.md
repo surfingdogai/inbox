@@ -1795,9 +1795,9 @@ lists no products, so an inbox that wants them listed tells it once. `false` wit
 `429` waits for the next hour; a network that lists no products answers `404`, and is asked again a day later.
 
 **Barcodes** (`normaliseGtin`, `@surfingdog/spec`; `vectors/gtin.json`, which the network's own code runs too):
-spaces, hyphens and full stops removed, a leading `(01)` or the `01` of a 16-digit scan dropped; a number a
-spreadsheet shortened (`4.00638E+12`) refused; an ISBN-10 read as its 978 barcode; 8 digits an EAN-8, or a
-UPC-E expanded from a UPC field; 11 digits a UPC-A with its leading 0 back, only from a barcode or UPC field;
+spaces, hyphens and full stops removed, a leading `(01)` or the `01` of a 16-digit scan dropped; a barcode a
+spreadsheet or a program wrote as a number (`4.00638E+12`, `3017620422003.0`) refused; an ISBN-10 read as its
+978 barcode, except from a UPC field; 8 digits an EAN-8, or a UPC-E expanded from a UPC field; 11 digits a UPC-A with its leading 0 back, only from a barcode or UPC field;
 12, 13 and 14 as given; GS1's check digit checked, never corrected; padded to 14. A shop's own code
 (`02`, `04`, `2`, an RCN-8, indicator 9) and a coupon (`05`, `980`–`984`, `99`) are never a product's
 barcode, and are never published. A magazine's issue (`977`) is `serial`, a book (`978`, `979`) `book`,

@@ -221,6 +221,36 @@
       "expect": { "problem": "spreadsheet_number" }
     },
     {
+      "name": "a barcode a spreadsheet or a program wrote as a decimal number",
+      "input": "3017620422003.0",
+      "hint": "barcode",
+      "expect": { "problem": "spreadsheet_number" }
+    },
+    {
+      "name": "the same with a decimal comma and two zeros",
+      "input": "7622210449283,00",
+      "hint": "any",
+      "expect": { "problem": "spreadsheet_number" }
+    },
+    {
+      "name": "ten digits from a UPC column are not an ISBN-10, even when its check holds",
+      "input": "2840000059",
+      "hint": "upc",
+      "expect": { "problem": "length" }
+    },
+    {
+      "name": "dashes between the digits",
+      "input": "978\u20130\u2013306\u201340615\u20137",
+      "hint": "any",
+      "expect": { "ok": { "gtin14": "09780306406157", "form": "gtin13", "kind": "book", "level": "unit" } }
+    },
+    {
+      "name": "a no-break space and a tab between the digits",
+      "input": "4006381\u00a0333\t931",
+      "hint": "barcode",
+      "expect": { "ok": { "gtin14": "04006381333931", "form": "gtin13", "kind": "global", "level": "unit" } }
+    },
+    {
       "name": "all zeros",
       "input": "0000000000000",
       "hint": "any",

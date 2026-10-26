@@ -8,12 +8,13 @@ import placeholders from "../vocab/placeholder-titles.json" with { type: "json" 
  *
  * What it does, in order:
  *
- * 1. Trims, then reads a value a spreadsheet turned into a number (`4.00638E+12`) as
- *    `spreadsheet_number`: its last digits are gone and cannot come back. Spaces, hyphens and full
- *    stops are then removed, and so is a leading `(01)`, or the `01` of a 16-digit GS1-128 or
- *    DataMatrix scan.
+ * 1. Trims, then reads a value a spreadsheet or a program turned into a number (`4.00638E+12`, or
+ *    `3017620422003.0`) as `spreadsheet_number`: its last digits or its leading zeros may be gone,
+ *    and cannot come back. Spaces, hyphens and full stops are then removed, and so is a leading
+ *    `(01)`, or the `01` of a 16-digit GS1-128 or DataMatrix scan.
  * 2. Reads an ISBN-10 whose own check holds (`X` allowed) as the book's barcode: `978`, its first
- *    nine digits and a new check digit.
+ *    nine digits and a new check digit. Never from a UPC column, where ten digits are a UPC-A that
+ *    lost its leading zeros.
  * 3. Refuses anything left that is not a digit (`not_digits`).
  * 4. Takes 8 digits as an EAN-8, or, from a field that said UPC (`hint: "upc"`) and starting 0 or 1,
  *    as a UPC-E, expanded to its UPC-A. Takes 11 digits only from a field that said barcode or UPC,
@@ -131,7 +132,8 @@ function isbn10Holds(ten: string): boolean {
   return sum % 11 === 0;
 }
 
-const SPREADSHEET = /^\d+(?:[.,]\d+)?[eE]\+?\d+$/;
+/** A power of ten (`4.00638E+12`), or a whole number with a decimal point (`3017620422003.0`). */
+const SPREADSHEET = /^\d+(?:[.,]\d+)?[eE]\+?\d+$|^\d+[.,]0+$/;
 /** Spaces (any), hyphens and dashes, and full stops: what people and printers put between digits. */
 const SEPARATORS = /[\s\-‐-―.]/g;
 
@@ -146,7 +148,7 @@ export function normaliseGtin(raw: string, hint: GtinHint = "any"): GtinResult {
   if (s === "") return { problem: "empty" };
 
   let repaired: GtinRepair | undefined;
-  if (/^\d{9}[\dXx]$/.test(s) && isbn10Holds(s)) {
+  if (hint !== "upc" && /^\d{9}[\dXx]$/.test(s) && isbn10Holds(s)) {
     const body = `978${s.slice(0, 9)}`;
     s = `${body}${gtinCheckDigit(body)}`;
     repaired = "isbn10";

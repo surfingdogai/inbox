@@ -571,6 +571,17 @@ describe("what a product is (ADR-029)", () => {
     expect(byName.get("In-store bread")).toMatchObject({ gtin: null, gtinGiven: "2001234567893" });
   });
 
+  it("never takes a barcode a spreadsheet wrote as a decimal number, nor ten UPC digits as a book", async () => {
+    const { caps } = await setup();
+    const feed = await caps.feeds.add(owner, { url: "https://shop.example.com/feed.csv" });
+    await caps.feeds.importBody(feed.id, "id,title,price,ean\nA1,Hazelnut spread 400 g,4.50,3017620422003.0", T0);
+    const other = await caps.feeds.add(owner, { url: "https://shop.example.com/upc.csv" });
+    await caps.feeds.importBody(other.id, "id,title,price,upc\nB1,Potato chips 200 g,2.50,2840000059", T0);
+    const byName = new Map((await caps.setup.listProducts(owner)).map((p) => [p.name, p]));
+    expect(byName.get("Hazelnut spread 400 g")).toMatchObject({ gtin: null, gtinGiven: "3017620422003.0" });
+    expect(byName.get("Potato chips 200 g")).toMatchObject({ gtin: null, gtinGiven: "2840000059" });
+  });
+
   it("updates a row whose barcode alone changed, and keeps what a later read leaves out", async () => {
     const { caps } = await setup();
     const feed = await caps.feeds.add(owner, { url: "https://shop.example.com/feed.csv" });
