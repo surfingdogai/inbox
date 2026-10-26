@@ -14,7 +14,7 @@ import { canonicalNetworkOrigin } from "../src/util/hosts";
  * instead of failing the document, and no more than eight are ever read.
  */
 const read = (doc: unknown) => parseStoredSettings(doc).settings.networks;
-const all = { listing: true, counts: true, receipts: true };
+const all = { listing: true, counts: true, receipts: true, catalogue: true };
 
 describe("reading networks", () => {
   it("lists the default network, switched off, on a fresh document", () => {

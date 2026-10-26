@@ -53,6 +53,12 @@ export const networkEntrySchema = z.object({
         .boolean()
         .default(true)
         .describe("Publish every receipt and acknowledgement; the manifest names the network under review_services."),
+      catalogue: z
+        .boolean()
+        .default(true)
+        .describe(
+          "List my products here while 'Your products on networks' is on (ADR-029). Only the owner in person changes it.",
+        ),
     })
     .prefault({}),
   resume: z
@@ -767,6 +773,35 @@ const sections = {
     })
     .prefault({})
     .describe("Requests a network carries to you for people's AI assistants."),
+  /**
+   * The business's products on the networks it reports to (ADR-029): on for every inbox unless the
+   * owner switches it off (the founder, 26 October 2026), and listed only while the business is in a
+   * network's directory (`wantsCatalogue`). On, the inbox serves its signed feed of what is on sale
+   * (`GET /v1/catalogue/changes`) and its ping tells each network when the catalogue changed; off, the
+   * feed answers 404 and each network is told to stop showing them. The business's own doors list and
+   * take orders for its products either way. Who the business sells to, at what price, is the owner's:
+   * only the owner in person changes any of this (`guard.ts`).
+   */
+  catalogue: z
+    .object({
+      listed: z
+        .boolean()
+        .default(true)
+        .describe("List your products on the networks you report to. Only the owner in person changes it."),
+      taxIncluded: z
+        .boolean()
+        .nullable()
+        .default(null)
+        .describe("Whether your prices include tax; null when not said, which networks show as tax not said."),
+      skuBarcodes: z
+        .enum(["ask", "used", "not_now"])
+        .default("ask")
+        .describe(
+          "The one-time offer to use product codes that are valid barcodes as barcodes: ask, used, or not_now once the owner said not now.",
+        ),
+    })
+    .prefault({})
+    .describe("Your products on the networks you report to."),
   /**
    * Where the details a setup plan filled in came from (`capabilities/plan.ts`), per field: the page,
    * when it was read, and how. Kept so the owner app can ask the owner to check what was only read

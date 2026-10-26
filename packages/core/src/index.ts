@@ -3,13 +3,25 @@
  * Web-standard APIs only; runtimes plug in through @surfingdog/platform.
  */
 
-export type { DoorElsewhere, Manifest } from "@surfingdog/spec";
+export type {
+  CatalogueItem,
+  CataloguePage,
+  DoorElsewhere,
+  Manifest,
+  PingCatalogue,
+  PingCatalogueAnswer,
+} from "@surfingdog/spec";
 export {
   CARD_BRANDS,
+  CATALOGUE_ITEMS_MAX,
+  CATALOGUE_PAGE_MAX,
+  CATALOGUE_SIGNATURE_HEADER,
   discoverySnippets,
+  gtinDisplay,
   isPaymentToken,
   MANIFEST_PATH,
   manifestSchema,
+  normaliseGtin,
   PAYMENT_TOKENS,
   PAYMENTS_VOCABULARY,
   paymentLabel,
@@ -19,6 +31,7 @@ export {
 } from "@surfingdog/spec";
 export * from "./access/index";
 export * from "./capabilities/index";
+export * from "./catalogue/index";
 export * from "./connectors/index";
 export * from "./customer/index";
 export { createDb, type Db, type Orm, schema } from "./db";

@@ -72,7 +72,7 @@ describe("settings writes", () => {
     expect((await readSettings(db)).networks[A]).toEqual({
       enabled: true,
       issue: true,
-      share: { listing: true, counts: false, receipts: true },
+      share: { listing: true, counts: false, receipts: true, catalogue: true },
     });
     await caps.updateSettings(owner, { doc: { business: { languages: ["pt", "en"] } } });
     await caps.updateSettings(owner, { doc: { business: { languages: ["pt"] } } });
@@ -322,14 +322,16 @@ describe("networks in settings writes", () => {
     expect(await jobs()).toEqual([]);
     await caps.updateSettings(owner, { doc: { networks: { [A]: { enabled: true } } } });
     const hour = Math.floor(Date.parse("2026-09-22T10:37:13Z") / 3_600_000);
-    // And the listing job, since the answer to "is the business in your directory" changed.
+    // And the listing and catalogue jobs, since the answers to "is the business in your directory"
+    // and "may you list its products" changed.
     expect(await jobs()).toEqual([
+      `network.catalogue network.catalogue:${A}:${Date.parse("2026-09-22T10:37:13Z")}`,
       `network.listing network.listing:${A}:${Date.parse("2026-09-22T10:37:13Z")}`,
       `network_ping_one network_ping:${A}:${hour}`,
       `network_publish network_publish:${A}:${hour}`,
     ]);
     // Changing something else does not queue them again.
     await caps.updateSettings(owner, { doc: { networks: { [A]: { issue: false } } } });
-    expect(await jobs()).toHaveLength(3);
+    expect(await jobs()).toHaveLength(4);
   });
 });

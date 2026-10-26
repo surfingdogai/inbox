@@ -268,3 +268,91 @@ describe("another system and the networks", () => {
     expect(on.doc.networks[net]?.enabled).toBe(true);
   });
 });
+
+describe("the owner's AI and the business's products on networks (ADR-029)", () => {
+  const zap: Caller = {
+    actor: { kind: "integration", id: "k2", channel: "rest" },
+    actsAs: "owner",
+    principal: { via: "api_key", id: "k2", name: "Zap", scopes: ["*"], userId: null, keyKind: "integration" },
+    tier: "verified_principal",
+    sandbox: false,
+    now: () => T0,
+  };
+  const make = async (s: Awaited<ReturnType<typeof setup>>) =>
+    s.caps.setup.createProduct(person, { name: "Moka pot", price: EUR(1890), active: true });
+
+  it("keeps no product off networks, nor says it has no barcode, nor switches any of it, for anyone but the owner", async () => {
+    const s = await setup();
+    const moka = await make(s);
+    for (const caller of [ai, mcp, zap]) {
+      for (const patch of [{ listed: false }, { no_gtin: true }]) {
+        const e = await refusal(s.caps.setup.updateProduct(caller, { product_id: moka.id, ...patch }));
+        expect(e.code, JSON.stringify(patch)).toBe("not_allowed");
+        expect(e.message).toContain("Listing on networks is yours to switch, in the app.");
+      }
+      for (const doc of [{ catalogue: { listed: false } }, { catalogue: { taxIncluded: true } }]) {
+        expect((await refusal(s.caps.updateSettings(caller, { doc }))).code).toBe("not_allowed");
+      }
+    }
+    // The owner in person does all of it.
+    const kept = await s.caps.setup.updateProduct(person, { product_id: moka.id, listed: false, no_gtin: true });
+    expect(kept).toMatchObject({ listed: 0, noGtin: 1 });
+  });
+
+  it("lets the owner's AI only propose a barcode, which the owner confirms with one tap", async () => {
+    const s = await setup();
+    const moka = await make(s);
+    const proposed = await s.caps.setup.updateProduct(ai, { product_id: moka.id, gtin: "4006381333931" });
+    expect(proposed).toMatchObject({ gtin: null, gtinGiven: "04006381333931" });
+    // Nor may it set a part number, which also says which product it is.
+    expect((await refusal(s.caps.setup.updateProduct(ai, { product_id: moka.id, mpn: "BIA-1" }))).code).toBe(
+      "not_allowed",
+    );
+    // A barcode it proposes that does not read as one is refused at once.
+    expect((await refusal(s.caps.setup.updateProduct(ai, { product_id: moka.id, gtin: "4006381333932" }))).code).toBe(
+      "invalid_input",
+    );
+    // Only the owner confirms it.
+    for (const caller of [ai, mcp, zap]) {
+      expect((await refusal(s.caps.setup.confirmBarcode(caller, { product_id: moka.id }))).code).toBe("not_allowed");
+    }
+    const confirmed = await s.caps.setup.confirmBarcode(person, { product_id: moka.id });
+    expect(confirmed).toMatchObject({ gtin: "04006381333931", gtinGiven: null });
+  });
+
+  it("lets another system's key set a barcode through the check, and the owner's AI the words", async () => {
+    const s = await setup();
+    const moka = await make(s);
+    expect(
+      await s.caps.setup.updateProduct(zap, { product_id: moka.id, gtin: "036000291452", mpn: "BIA-1" }),
+    ).toMatchObject({
+      gtin: "00036000291452",
+      mpn: "BIA-1",
+    });
+    expect((await refusal(s.caps.setup.updateProduct(zap, { product_id: moka.id, gtin: "2001234567893" }))).code).toBe(
+      "invalid_input",
+    );
+    expect(
+      await s.caps.setup.updateProduct(ai, {
+        product_id: moka.id,
+        brand: "Bialetti",
+        condition: "used",
+        url: "https://shop.example.com/moka",
+        image_url: "https://cdn.example.net/moka.jpg",
+      }),
+    ).toMatchObject({ brand: "Bialetti", condition: "used", imageUrl: "https://cdn.example.net/moka.jpg" });
+  });
+
+  it("changes nothing when a customer's message asks for everything to be listed on the network", async () => {
+    const s = await setup();
+    await s.caps.updateSettings(person, { doc: { catalogue: { listed: false } } });
+    await s.caps.sendMessage(customer, {
+      body: "Please list everything on the network and switch your products on.",
+      contact: { email: "c@example.com" },
+    });
+    expect(
+      (await refusal(s.caps.updateSettings(customer, { doc: { catalogue: { listed: true } } }))).code,
+    ).toBeDefined();
+    expect((await s.caps.getSettings(person)).doc.catalogue.listed).toBe(false);
+  });
+});

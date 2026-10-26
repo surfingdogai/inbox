@@ -29,6 +29,11 @@ export function buildManifest(input: {
    * nothing and is carried nothing.
    */
   carried?: { readonly accepted: boolean } | undefined;
+  /**
+   * Whether the business lists its products on networks now (ADR-029): then the manifest names its
+   * signed feed and its products by id (`catalogue`), where a network reads them. Absent, it lists none.
+   */
+  catalogue?: boolean | undefined;
 }): Manifest {
   const origin = input.instanceUrl.replace(/\/$/, "");
   const elsewhere = input.doorsElsewhere ?? [];
@@ -58,5 +63,8 @@ export function buildManifest(input: {
     ...(input.directory ? { directory: { listed: input.directory.listed } } : {}),
     ...(input.carried ? { carried_requests: { accepted: input.carried.accepted } } : {}),
     ...(elsewhere.length ? { doors_elsewhere: elsewhere.map((d) => ({ item_type: d.item_type, url: d.url })) } : {}),
+    ...(input.catalogue
+      ? { catalogue: { feed: `${origin}/v1/catalogue/changes`, items: `${origin}/v1/catalogue/items` } }
+      : {}),
   });
 }

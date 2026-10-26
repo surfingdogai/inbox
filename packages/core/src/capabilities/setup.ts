@@ -1,6 +1,8 @@
-import { and, asc, desc, eq, ne } from "drizzle-orm";
+import { normaliseGtin } from "@surfingdog/spec";
+import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
 import { assertNoLeak, PUBLISHED, stringsIn } from "../access/leaks";
 import { isOwnerOrSystem } from "../access/outbound";
+import { NEXT_CATALOGUE_SEQ, storedLink } from "../catalogue/identity";
 import { businessFacts } from "../customer/audience";
 import { customerLang } from "../customer/lang";
 import type { Db } from "../db";
@@ -319,13 +321,17 @@ export class SetupCapabilities {
   /** A new product. One the owner's AI adds is saved unpublished: a product always has a price. */
   async createProduct(caller: Caller, input: S.ProductInput): Promise<ProductRow> {
     requireOwner(caller);
-    await this.published(caller, [input.sku, input.name, input.description]);
+    await this.published(caller, [input.sku, input.name, input.description, input.brand, input.mpn]);
     const now = nowOf(caller);
     const id = ulid();
     const held = isOwnerAssistant(caller);
     if (input.withdrawal !== undefined && input.withdrawal !== "standard" && !isPerson(caller))
       throw withdrawalOwners();
     if (input.negotiable === false && !isPerson(caller)) throw negotiableOwners();
+    if ((input.listed === false || input.no_gtin === true) && !isPerson(caller)) {
+      throw listingOwners(input.listed === false ? "listed" : "no_gtin");
+    }
+    const ident = productIdentity(caller, input, null);
     try {
       await this.db.orm.insert(products).values({
         id,
@@ -337,6 +343,10 @@ export class SetupCapabilities {
         active: input.active && !held ? 1 : 0,
         ...(input.withdrawal ? { withdrawal: input.withdrawal } : {}),
         ...(input.negotiable === false ? { negotiable: 0 } : {}),
+        ...identityRow(ident),
+        ...(input.no_gtin === true ? { noGtin: 1 } : {}),
+        ...(input.listed === false ? { listed: 0 } : {}),
+        catalogueSeq: sql.raw(NEXT_CATALOGUE_SEQ),
         createdAt: now,
         updatedAt: now,
       });
@@ -349,7 +359,26 @@ export class SetupCapabilities {
   async updateProduct(caller: Caller, input: S.UpdateProductInput): Promise<ProductRow> {
     requireOwner(caller);
     const { product_id, ...patch } = input;
-    await this.published(caller, [patch.sku, patch.name, patch.description]);
+    await this.published(caller, [patch.sku, patch.name, patch.description, patch.brand, patch.mpn]);
+    let ident: Partial<IdentityPatch> = {};
+    if (
+      patch.listed !== undefined ||
+      patch.no_gtin !== undefined ||
+      patch.gtin !== undefined ||
+      patch.mpn !== undefined ||
+      patch.url !== undefined ||
+      patch.image_url !== undefined
+    ) {
+      const stored = await this.product(product_id);
+      for (const [key, was] of [
+        ["listed", stored.listed],
+        ["no_gtin", stored.noGtin],
+      ] as const) {
+        const want = patch[key];
+        if (want !== undefined && (want ? 1 : 0) !== was && !isPerson(caller)) throw listingOwners(key);
+      }
+      ident = productIdentity(caller, patch, stored);
+    }
     if (patch.withdrawal !== undefined && !isPerson(caller)) {
       if ((await this.product(product_id)).withdrawal !== patch.withdrawal) throw withdrawalOwners();
     }
@@ -380,6 +409,15 @@ export class SetupCapabilities {
           active: patch.active === undefined ? undefined : patch.active ? 1 : 0,
           withdrawal: patch.withdrawal,
           negotiable: patch.negotiable === undefined ? undefined : patch.negotiable ? 1 : 0,
+          gtin: ident.gtin,
+          gtin_given: ident.gtinGiven,
+          brand: patch.brand,
+          mpn: ident.mpn,
+          condition: patch.condition,
+          url: ident.url,
+          image_url: ident.imageUrl,
+          no_gtin: patch.no_gtin === undefined ? undefined : patch.no_gtin ? 1 : 0,
+          listed: patch.listed === undefined ? undefined : patch.listed ? 1 : 0,
         },
         nowOf(caller),
         "product_id",
@@ -392,6 +430,24 @@ export class SetupCapabilities {
 
   async archiveProduct(caller: Caller, input: { product_id: string }): Promise<ProductRow> {
     return this.updateProduct(caller, { product_id: input.product_id, active: false });
+  }
+
+  /**
+   * The owner's one tap on a barcode their AI proposed (ADR-029): it becomes the product's barcode.
+   * The owner in person only, since what a model read or wrote never says what a product is by itself.
+   */
+  async confirmBarcode(caller: Caller, input: { product_id: string }): Promise<ProductRow> {
+    requireOwner(caller);
+    if (!isPerson(caller)) throw listingOwners("gtin");
+    const stored = await this.product(input.product_id);
+    const r = stored.gtinGiven ? normaliseGtin(stored.gtinGiven, "barcode") : null;
+    if (!r || !("ok" in r)) {
+      throw new WriteError("wrong_state", "there is no proposed barcode on this product to confirm", {
+        fields: [{ path: "product_id", problem: "invalid", message: "no proposed barcode" }],
+      });
+    }
+    await this.patchRow("products", stored.id, { gtin: r.ok.gtin14, gtin_given: null }, nowOf(caller), "product_id");
+    return this.product(stored.id);
   }
 
   private async product(id: string): Promise<ProductRow> {
@@ -733,7 +789,9 @@ export class SetupCapabilities {
     now: number,
     field: string,
   ): Promise<void> {
-    const sets: string[] = ["updated_at = ?"];
+    // A product moves to the end of the signed catalogue feed with any change (ADR-029).
+    const sets: string[] =
+      table === "products" ? ["updated_at = ?", `catalogue_seq = ${NEXT_CATALOGUE_SEQ}`] : ["updated_at = ?"];
     const params: (string | number | null)[] = [now];
     for (const [col, value] of Object.entries(cols)) {
       if (value === undefined) continue;
@@ -868,6 +926,96 @@ function withdrawalOwners(): WriteError {
       details: { reason: "owner_only", draft_for_owner: true },
     },
   );
+}
+
+/** The refusal for keeping a product off networks, or saying it has no barcode, from anyone but the owner. */
+function listingOwners(path: string): WriteError {
+  return new WriteError(
+    "not_allowed",
+    "Listing on networks is yours to switch, in the app. Only the owner changes whether a product is on networks, which barcode it has, or that it has none, signed in to the owner app. Tell the owner in a note what you suggest.",
+    {
+      fields: [{ path, problem: "invalid", message: "only the owner in person changes this" }],
+      details: { reason: "owner_in_person", ask_owner: true, where: "Products" },
+    },
+  );
+}
+
+/** The identity columns a product write sets: undefined leaves one as it is. */
+interface IdentityPatch {
+  readonly gtin: string | null | undefined;
+  readonly gtinGiven: string | null | undefined;
+  readonly mpn: string | null | undefined;
+  readonly url: string | null | undefined;
+  readonly imageUrl: string | null | undefined;
+}
+
+/**
+ * What a product write does with its barcode, part number and links (ADR-029). A barcode is checked
+ * (`normaliseGtin`) and kept as 14 digits, or refused with the reason; from the owner's AI it is only
+ * proposed (`gtin_given`), for the owner to confirm with one tap. The owner's AI may not set the part
+ * number, which says what the product is as much as a barcode does. Links are kept only on public https
+ * hosts.
+ */
+function productIdentity(
+  caller: Caller,
+  input: Pick<S.UpdateProductInput, "gtin" | "mpn" | "url" | "image_url">,
+  stored: ProductRow | null,
+): IdentityPatch {
+  let gtin: string | null | undefined;
+  let gtinGiven: string | null | undefined;
+  if (input.gtin === null) {
+    if (isOwnerAssistant(caller) && stored?.gtin) throw listingOwners("gtin");
+    gtin = null;
+    gtinGiven = null;
+  } else if (input.gtin !== undefined) {
+    const r = normaliseGtin(input.gtin, "barcode");
+    if (!("ok" in r)) {
+      const why = r.problem === "check_digit" ? `its last digit should be ${r.expected}` : r.problem.replace("_", " ");
+      throw new WriteError("invalid_input", `gtin: ${input.gtin} does not read as a product's barcode (${why})`, {
+        fields: [{ path: "gtin", problem: "invalid", message: `not a product's barcode: ${r.problem}` }],
+      });
+    }
+    if (isOwnerAssistant(caller)) {
+      if (r.ok.gtin14 !== stored?.gtin) gtinGiven = r.ok.gtin14;
+    } else {
+      gtin = r.ok.gtin14;
+      gtinGiven = null;
+    }
+  }
+  if (input.mpn !== undefined && isOwnerAssistant(caller) && (input.mpn || null) !== (stored?.mpn ?? null)) {
+    throw new WriteError(
+      "not_allowed",
+      "A product's part number is the owner's to set, in the app: it says which product it is. Tell the owner in a note what you suggest.",
+      {
+        fields: [{ path: "mpn", problem: "invalid", message: "only the owner changes this" }],
+        details: { reason: "owner_in_person", draft_for_owner: true },
+      },
+    );
+  }
+  const link = (path: string, value: string | null | undefined) => {
+    if (value === undefined || value === null) return value;
+    const kept = storedLink(value);
+    if (!kept) throw unknown(path, "an https address on a public host");
+    return kept;
+  };
+  return {
+    gtin,
+    gtinGiven,
+    mpn: input.mpn === undefined ? undefined : input.mpn || null,
+    url: link("url", input.url),
+    imageUrl: link("image_url", input.image_url),
+  };
+}
+
+/** The identity columns of a new row, as `productIdentity` decided them. */
+function identityRow(i: IdentityPatch): Partial<typeof products.$inferInsert> {
+  return {
+    ...(i.gtin !== undefined ? { gtin: i.gtin } : {}),
+    ...(i.gtinGiven !== undefined ? { gtinGiven: i.gtinGiven } : {}),
+    ...(i.mpn !== undefined ? { mpn: i.mpn } : {}),
+    ...(i.url !== undefined ? { url: i.url } : {}),
+    ...(i.imageUrl !== undefined ? { imageUrl: i.imageUrl } : {}),
+  };
 }
 
 function ownerMoney(path: string, what: string): WriteError {

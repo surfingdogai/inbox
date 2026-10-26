@@ -55,7 +55,24 @@ const key = z
 const carried = { pass, key };
 
 export const listServicesInput = z.object(paging);
-export const listProductsInput = z.object({ ...paging, q: z.string().max(100).optional() });
+export const listProductsInput = z.object({
+  ...paging,
+  q: z.string().max(100).optional(),
+  ids: z
+    .array(z.string().min(1).max(64))
+    .min(1)
+    .max(50)
+    .optional()
+    .describe("Only these products, by id (at most 50): read the live price of what a network showed you."),
+  gtin: z
+    .string()
+    .min(1)
+    .max(32)
+    .optional()
+    .describe(
+      "Only products with this barcode (GTIN, EAN, UPC or ISBN), in any of its lengths. One that does not read as a barcode is refused.",
+    ),
+});
 
 export const checkAvailabilityInput = z.object({
   service_id: z.string().min(1),

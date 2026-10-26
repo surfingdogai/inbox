@@ -89,7 +89,7 @@ export function changedSettings(before: Settings, after: Settings, watched: read
 
 /**
  * Networks a write opens: switched on, allowed to issue keys, or given something more to share
- * (listing, counts, receipts). Each is sent something about this inbox's customers once it is.
+ * (listing, counts, receipts, the catalogue). Each is sent something about this inbox's customers once it is.
  * Coming back into the directories (`directory.listed` false to true) opens every network at once,
  * so it counts too: an owner who left them decides in person whether to return.
  */
@@ -104,9 +104,28 @@ export function openedNetworks(before: Settings, after: Settings): string[] {
       continue;
     }
     if (entry.issue && !was.issue) out.push(`networks.${origin}.issue`);
-    for (const share of ["listing", "counts", "receipts"] as const) {
+    for (const share of ["listing", "counts", "receipts", "catalogue"] as const) {
       if (entry.share[share] && !was.share[share]) out.push(`networks.${origin}.share.${share}`);
     }
+  }
+  return out;
+}
+
+/**
+ * The business's products on networks (ADR-029), which only the owner in person switches, on or off:
+ * "Your products on networks", the tax chooser, the one-time barcode offer, and each network's "List
+ * my products here". A customer's message must never get the owner's AI to put the catalogue on a
+ * network, or take it off. A network the write adds or removes is not compared here: adding one is
+ * `openedNetworks`' to judge, and removing one takes its products with it.
+ */
+export function catalogueChanges(before: Settings, after: Settings): string[] {
+  const out: string[] = [];
+  for (const key of ["listed", "taxIncluded", "skuBarcodes"] as const) {
+    if (before.catalogue[key] !== after.catalogue[key]) out.push(`catalogue.${key}`);
+  }
+  for (const [origin, entry] of Object.entries(after.networks)) {
+    const was = before.networks[origin];
+    if (was && was.share.catalogue !== entry.share.catalogue) out.push(`networks.${origin}.share.catalogue`);
   }
   return out;
 }

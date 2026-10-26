@@ -114,7 +114,26 @@ describe("public capabilities", () => {
     });
     const [tube] = (await caps.listProducts({ limit: 50, q: "tube" })).items;
     expect(Object.keys(tube ?? {}).sort()).toEqual(
-      ["active", "description", "id", "name", "negotiable", "price", "sku", "stock", "withdrawal"].sort(),
+      [
+        "active",
+        "availability",
+        "brand",
+        "condition",
+        "description",
+        "gtin",
+        "id",
+        "image_url",
+        "mpn",
+        "name",
+        "negotiable",
+        "no_gtin",
+        "price",
+        "sku",
+        "stock",
+        "updated_at",
+        "url",
+        "withdrawal",
+      ].sort(),
     );
     expect(tube).toMatchObject({ sku: "TB-25", price: { value: 499, currency: "EUR" }, stock: null });
     expect(JSON.stringify(tube)).not.toMatch(/feed-secret|shop-ext-77|feed:/);

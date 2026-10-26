@@ -1,5 +1,6 @@
 import type { Statement } from "@surfingdog/platform";
 import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
+import { identityChanged, mergedIdentity, NEXT_CATALOGUE_SEQ, type StoredIdentity } from "../catalogue/identity";
 import type { Db } from "../db";
 import { type FeedParseResult, type FeedPriceChange, type FeedProduct, type FeedSkip, parseFeed } from "../feeds/parse";
 import { ulid } from "../ids";
@@ -166,7 +167,7 @@ export class FeedCapabilities {
     const deactivated = await this.activeCount(url);
     await this.db.batch([
       {
-        sql: "UPDATE products SET active = 0, updated_at = ? WHERE source = ? AND active = 1",
+        sql: `UPDATE products SET active = 0, catalogue_seq = ${NEXT_CATALOGUE_SEQ}, updated_at = ? WHERE source = ? AND active = 1`,
         params: [now, feedSource(url)],
         method: "run",
       },
@@ -269,7 +270,7 @@ export class FeedCapabilities {
     const statements: Statement[] = due.map((c) =>
       c.price
         ? {
-            sql: "UPDATE products SET price = ?, active = ?, updated_at = ? WHERE source = ? AND external_id = ?",
+            sql: `UPDATE products SET price = ?, active = ?, catalogue_seq = ${NEXT_CATALOGUE_SEQ}, updated_at = ? WHERE source = ? AND external_id = ?`,
             params: [
               JSON.stringify({ value: c.price.value, currency: c.price.currency.toUpperCase() }),
               c.available ? 1 : 0,
@@ -280,7 +281,7 @@ export class FeedCapabilities {
             method: "run" as const,
           }
         : {
-            sql: "UPDATE products SET active = 0, updated_at = ? WHERE source = ? AND external_id = ?",
+            sql: `UPDATE products SET active = 0, catalogue_seq = ${NEXT_CATALOGUE_SEQ}, updated_at = ? WHERE source = ? AND external_id = ?`,
             params: [at, source, c.externalId],
             method: "run" as const,
           },
@@ -318,6 +319,14 @@ export class FeedCapabilities {
         stock: products.stock,
         active: products.active,
         sku: products.sku,
+        gtin: products.gtin,
+        gtinGiven: products.gtinGiven,
+        brand: products.brand,
+        mpn: products.mpn,
+        condition: products.condition,
+        url: products.url,
+        imageUrl: products.imageUrl,
+        sourceCategory: products.sourceCategory,
       })
       .from(products)
       .where(eq(products.source, source));
@@ -353,6 +362,9 @@ export class FeedCapabilities {
       const price = product.price ?? kept;
       const active = product.available === false || price === null ? 0 : 1;
       const stored = price ?? { value: 0, currency: (current?.price?.currency ?? currency).toUpperCase() };
+      // Its barcode, brand, part number, condition and links (ADR-029): what this read gives, and what
+      // it leaves out kept. A source never sets `no_gtin` or `listed`: those are the owner's.
+      const ident = mergedIdentity(current ?? null, product);
 
       if (!current) {
         statements.push({
@@ -360,12 +372,18 @@ export class FeedCapabilities {
           // time both read an empty catalogue, and without this both inserted, so sixty products
           // became a hundred and twenty and both imports reported success. The unique index
           // added in migration 5 is what this conflicts against; the loser updates.
-          sql: `INSERT INTO products (id, sku, name, description, price, stock, source, external_id, active, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          sql: `INSERT INTO products (id, sku, name, description, price, stock, source, external_id, active,
+                                      gtin, gtin_given, brand, mpn, condition, url, image_url, source_category,
+                                      catalogue_seq, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${NEXT_CATALOGUE_SEQ}, ?, ?)
                 ON CONFLICT (source, external_id) WHERE external_id IS NOT NULL
                 DO UPDATE SET name = excluded.name, description = excluded.description,
                               price = excluded.price, stock = excluded.stock,
-                              active = excluded.active, updated_at = excluded.updated_at`,
+                              active = excluded.active, gtin = excluded.gtin, gtin_given = excluded.gtin_given,
+                              brand = excluded.brand, mpn = excluded.mpn, condition = excluded.condition,
+                              url = excluded.url, image_url = excluded.image_url,
+                              source_category = excluded.source_category, catalogue_seq = excluded.catalogue_seq,
+                              updated_at = excluded.updated_at`,
           params: [
             id,
             sku,
@@ -376,6 +394,7 @@ export class FeedCapabilities {
             source,
             product.externalId,
             active,
+            ...identityParams(ident),
             now,
             now,
           ],
@@ -386,13 +405,25 @@ export class FeedCapabilities {
         continue;
       }
 
-      if (!changed(current, product, stored, active, sku)) {
+      if (!changed(current, product, stored, active, sku) && !identityChanged(current, ident)) {
         unchanged++;
         continue;
       }
       statements.push({
-        sql: `UPDATE products SET sku = ?, name = ?, description = ?, price = ?, stock = ?, active = ?, updated_at = ? WHERE id = ?`,
-        params: [sku, product.name, product.description, JSON.stringify(stored), product.stock, active, now, id],
+        sql: `UPDATE products SET sku = ?, name = ?, description = ?, price = ?, stock = ?, active = ?,
+                gtin = ?, gtin_given = ?, brand = ?, mpn = ?, condition = ?, url = ?, image_url = ?, source_category = ?,
+                catalogue_seq = ${NEXT_CATALOGUE_SEQ}, updated_at = ? WHERE id = ?`,
+        params: [
+          sku,
+          product.name,
+          product.description,
+          JSON.stringify(stored),
+          product.stock,
+          active,
+          ...identityParams(ident),
+          now,
+          id,
+        ],
         method: "run",
       });
       if (sku) takenSku.set(sku, id);
@@ -410,7 +441,7 @@ export class FeedCapabilities {
         50,
       )) {
         statements.push({
-          sql: `UPDATE products SET active = 0, updated_at = ? WHERE id IN (${chunk.map(() => "?").join(", ")})`,
+          sql: `UPDATE products SET active = 0, catalogue_seq = ${NEXT_CATALOGUE_SEQ}, updated_at = ? WHERE id IN (${chunk.map(() => "?").join(", ")})`,
           params: [now, ...chunk],
           method: "run",
         });
@@ -601,6 +632,11 @@ function changed(
     (current.stock ?? null) !== product.stock ||
     current.active !== active
   );
+}
+
+/** The identity columns in the order the statements above name them. */
+function identityParams(i: StoredIdentity): (string | null)[] {
+  return [i.gtin, i.gtinGiven, i.brand, i.mpn, i.condition, i.url, i.imageUrl, i.sourceCategory];
 }
 
 function* chunks<T>(values: readonly T[], size: number): Generator<T[]> {

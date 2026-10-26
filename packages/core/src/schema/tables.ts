@@ -118,10 +118,45 @@ export const products = sqliteTable(
      * ADR-018 §4, Q1): 1, or 0. Public; the owner's in person, and never written by a feed.
      */
     negotiable: integer("negotiable").notNull().default(1),
+    /**
+     * Its barcode as 14 digits, check digit verified, never a shop's own code or a coupon (0026,
+     * ADR-029). Public, and what networks match one business's product to another's by.
+     */
+    gtin: text("gtin"),
+    /**
+     * A barcode that is not its barcode yet: as a source gave it when it did not pass the check, or as
+     * the owner's AI proposed it, waiting for the owner. Never public.
+     */
+    gtinGiven: text("gtin_given"),
+    /** The owner says it has no barcode (bread, a print, a repair): 1 or 0. The owner's in person. */
+    noGtin: integer("no_gtin").notNull().default(0),
+    brand: text("brand"),
+    /** The maker's part number, as it was given; never invented. */
+    mpn: text("mpn"),
+    /** `new`, `used` or `refurbished`. */
+    condition: text("condition").notNull().default("new"),
+    /** Its page; published only when it is on the business's own site. */
+    url: text("url"),
+    /** A link to its picture (https, a public host); the picture is never copied. */
+    imageUrl: text("image_url"),
+    /** What a source said its category was (`google_product_category`, `product_type`): a hint, never public. */
+    sourceCategory: text("source_category"),
+    /** 0 keeps it off networks, on sale at the business's own doors still. The owner's in person. */
+    listed: integer("listed").notNull().default(1),
+    /**
+     * Where it is in the signed catalogue feed (0026): every write that changes what the feed shows of
+     * it sets this to the next number, `NEXT_CATALOGUE_SEQ`, in the same statement. Never public.
+     */
+    catalogueSeq: integer("catalogue_seq").notNull().default(0),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [unique("products_sku").on(t.sku), index("products_source_external").on(t.source, t.externalId)],
+  (t) => [
+    unique("products_sku").on(t.sku),
+    index("products_source_external").on(t.source, t.externalId),
+    index("products_catalogue_seq").on(t.catalogueSeq, t.id),
+    index("products_gtin").on(t.gtin).where(sql`${t.gtin} IS NOT NULL`),
+  ],
 );
 
 /**
@@ -685,6 +720,17 @@ export const networkStatus = sqliteTable("network_status", {
    */
   doors: text("doors"),
   doorsAt: integer("doors_at"),
+  /**
+   * The business's products there (0026, ADR-029): what it was last told by the signed
+   * `POST /v1/instances/{domain}/catalogue` or the ping (1, 0, or null for never), and what its answer
+   * to a signed ping last said: how many it lists, what it holds back and why (JSON), and when; and the
+   * last thing that went wrong telling it, in a few words.
+   */
+  catalogueListed: integer("catalogue_listed"),
+  catalogueCount: integer("catalogue_count"),
+  catalogueHeld: text("catalogue_held"),
+  catalogueAt: integer("catalogue_at"),
+  catalogueError: text("catalogue_error"),
   updatedAt: updatedAt(),
 });
 

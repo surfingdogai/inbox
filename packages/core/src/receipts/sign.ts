@@ -1,5 +1,11 @@
-import type { ReceiptAckPayloadV2, ReceiptHeader, ReceiptPayload, ReceiptPayloadV2 } from "@surfingdog/spec";
-import { passRefSchema } from "@surfingdog/spec";
+import type {
+  CatalogueSignature,
+  ReceiptAckPayloadV2,
+  ReceiptHeader,
+  ReceiptPayload,
+  ReceiptPayloadV2,
+} from "@surfingdog/spec";
+import { CATALOGUE_SIGNATURE_TYP, catalogueSignatureSchema, passRefSchema } from "@surfingdog/spec";
 
 /**
  * Receipts: Ed25519 compact JWS, hand-rolled on WebCrypto (ADR-016).
@@ -210,6 +216,54 @@ export async function verifyReceipt(
   );
   if (!ok) throw new ReceiptError("bad_signature", "the signature does not match that key");
   return payload as unknown as ReceiptPayload | ReceiptPayloadV2;
+}
+
+/* --- the catalogue's pages ---------------------------------------------- */
+
+/**
+ * A catalogue page's `Catalogue-Signature` (ADR-029, protocol §4.18): the same receipt key, its own
+ * `typ`, over what the page was and where it was asked (`iss`, `url`, `body_sha256`, `as_of`, `rev`).
+ * It proves the business stated those products at that time, to whoever kept the page.
+ */
+export async function signCatalogue(payload: CatalogueSignature, key: KeyPair): Promise<string> {
+  return compactSign({ alg: ALG, typ: CATALOGUE_SIGNATURE_TYP, kid: key.kid }, payload, key.privateJwk);
+}
+
+/** SHA-256 of a page's body as it was sent, lowercase hex: what `body_sha256` must be. */
+export async function bodySha256(body: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", encoder.encode(body) as BufferSource);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Checks a page's signature under the keys a manifest publishes, then that it is over this body. The
+ * reader still checks `iss` against the domain it read and `url` against the address it asked.
+ */
+export async function verifyCatalogueSignature(
+  jws: string,
+  keys: readonly PublicJwk[],
+  body: string,
+): Promise<CatalogueSignature> {
+  const { header, payload, signingInput, signature } = parse(jws);
+  if (header.alg !== ALG) throw new ReceiptError("bad_alg", `a catalogue page is signed ${ALG}`);
+  if (header.typ !== CATALOGUE_SIGNATURE_TYP)
+    throw new ReceiptError("bad_typ", `this is not a ${CATALOGUE_SIGNATURE_TYP}`);
+  const kid = typeof header.kid === "string" ? header.kid : "";
+  const jwk = await keyFor(keys, kid);
+  if (!jwk) throw new ReceiptError("unknown_key", `no published key with kid ${kid || "(none)"}`);
+  const ok = await crypto.subtle.verify(
+    ED25519,
+    await importPublic(jwk),
+    signature as BufferSource,
+    encoder.encode(signingInput) as BufferSource,
+  );
+  if (!ok) throw new ReceiptError("bad_signature", "the signature does not match that key");
+  const claims = catalogueSignatureSchema.safeParse(payload);
+  if (!claims.success) throw new ReceiptError("bad_payload", "these are not a catalogue page's claims");
+  if (claims.data.body_sha256 !== (await bodySha256(body))) {
+    throw new ReceiptError("bad_payload", "body_sha256 is not this body's");
+  }
+  return claims.data;
 }
 
 /* --- the acknowledgement ------------------------------------------------- */

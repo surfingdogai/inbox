@@ -142,6 +142,47 @@ export const productInput = z.object({
     .describe(
       "While price counters are on, whether a customer may suggest their own price for it (true, the default). Only the owner sets it.",
     ),
+  gtin: z
+    .string()
+    .min(1)
+    .max(32)
+    .nullable()
+    .optional()
+    .describe(
+      "Its barcode (GTIN, EAN, UPC or ISBN), in any length: checked, kept as 14 digits, and refused when it does not read as a product's barcode (a wrong digit, a shop's own code, a coupon). null clears it. The owner's AI only proposes one, which the owner confirms.",
+    ),
+  no_gtin: z.boolean().optional().describe("It has no barcode (bread, a print, a repair). Only the owner sets it."),
+  brand: z
+    .string()
+    .trim()
+    .max(70)
+    .nullable()
+    .optional()
+    .describe("Who makes it, as on the pack; never guessed from the name."),
+  mpn: z
+    .string()
+    .trim()
+    .max(70)
+    .nullable()
+    .optional()
+    .describe("The maker's part number, as on the pack. The owner's AI may not set it."),
+  condition: z.enum(["new", "used", "refurbished"]).optional().describe("new (the default), used or refurbished."),
+  url: z
+    .url({ protocol: /^https$/ })
+    .max(2048)
+    .nullable()
+    .optional()
+    .describe("Its page. Networks are given it only when it is on your own site."),
+  image_url: z
+    .url({ protocol: /^https$/ })
+    .max(2048)
+    .nullable()
+    .optional()
+    .describe("A link to its picture, on a public host. The picture is never copied."),
+  listed: z
+    .boolean()
+    .optional()
+    .describe("false keeps it off networks; it stays on sale at your own doors. Only the owner sets it."),
 });
 export const updateProductInput = patchOf(productInput).extend({ product_id: z.string().min(1) });
 export const productIdInput = z.object({ product_id: z.string().min(1) });

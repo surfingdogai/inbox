@@ -1,10 +1,20 @@
-import type { MailOut } from "@surfingdog/platform";
-import { type DiscoveryAnswer, type DoorElsewhere, publishedPayments } from "@surfingdog/spec";
+import type { MailOut, Statement } from "@surfingdog/platform";
+import { type DiscoveryAnswer, type DoorElsewhere, normaliseGtin, publishedPayments } from "@surfingdog/spec";
 import { and, desc, eq, gt, inArray, isNotNull, lt, or, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
 import { AccessCapabilities } from "../access/keys";
 import { assertNoLeak, PUBLISHED, stringsIn } from "../access/leaks";
 import { isOwnerOrSystem, mayDirectDataOut, ownerOnlyError } from "../access/outbound";
+import { type CatalogueStatus, type HeldReason, productNotes, skuIsBarcode } from "../catalogue/diagnostics";
+import { CatalogueCapabilities } from "../catalogue/feed";
+import { NEXT_CATALOGUE_SEQ } from "../catalogue/identity";
+import {
+  type CatalogueContext,
+  listableWhy,
+  type PublicProduct,
+  publicProduct,
+  siteDomains,
+} from "../catalogue/publish";
 import { ConnectorCapabilities } from "../connectors/capability";
 import { effectiveWrittenBy, isAutomated } from "../customer/mail";
 import { isChangeable } from "../customer/offer";
@@ -18,11 +28,13 @@ import { type DraftView, draftIsStale, draftRow, draftView, dropDraftStatement }
 import { type OfferView, offerRows, offerView } from "../negotiation/offers";
 import { rewardProblems } from "../negotiation/rewards";
 import {
+  catalogueJobStatement,
   listingJobStatement,
   type NetworkView,
   networkStartStatements,
   networkViews,
   reportableDomain,
+  wantsCatalogue,
   wantsListed,
 } from "../network/index";
 import { PhoneCapabilities } from "../phones/phones";
@@ -41,6 +53,7 @@ import {
 } from "../schema/tables";
 import type { SecretBox } from "../secrets/box";
 import {
+  catalogueChanges,
   changedSettings,
   DATA_OUT_SETTINGS,
   hostOnlyChanges,
@@ -80,6 +93,7 @@ import {
   isCustomer,
   isOwnerAssistant,
   isOwnerInPerson,
+  isPerson,
   nowOf,
   permissionKind,
   withIdempotencyKey,
@@ -166,36 +180,6 @@ export interface Page<T> {
   readonly items: readonly T[];
   readonly next_cursor: string | null;
 }
-
-/**
- * A product as customers and their agents read it at the public doors: what it is, its price and
- * stock, and its terms. Never where it came from (`source`, which for a feed is its address, query
- * string and any key in it included), the source's own id, its location, or its dates: those are the
- * owner's, at the owner's door.
- */
-export interface PublicProduct {
-  readonly id: string;
-  readonly sku: string | null;
-  readonly name: string;
-  readonly description: string | null;
-  readonly price: { value: number; currency: string };
-  readonly stock: number | null;
-  readonly active: number;
-  readonly withdrawal: string;
-  readonly negotiable: number;
-}
-
-const PUBLIC_PRODUCT = {
-  id: products.id,
-  sku: products.sku,
-  name: products.name,
-  description: products.description,
-  price: products.price,
-  stock: products.stock,
-  active: products.active,
-  withdrawal: products.withdrawal,
-  negotiable: products.negotiable,
-} as const;
 
 /**
  * A customer's view of their item (the status door): the item as they see it, what we proposed and
@@ -332,6 +316,8 @@ export class Capabilities {
 
   /** Signed receipts and their acknowledgements (ADR-016). Issued by a job, read by every door. */
   readonly receipts: ReceiptCapabilities;
+  /** The signed catalogue feed networks read (ADR-029). */
+  readonly catalogue: CatalogueCapabilities;
 
   /** Keys and scopes (ADR-004): integration keys, and the one scope check every owner door calls. */
   readonly access: AccessCapabilities;
@@ -544,6 +530,7 @@ export class Capabilities {
       outbound?.privateFetch,
     );
     this.receipts = new ReceiptCapabilities(db, secrets, baseUrl);
+    this.catalogue = new CatalogueCapabilities(db, secrets ? this.receipts.keys : null, () => this.catalogueContext());
     this.access = new AccessCapabilities(db);
     this.people = new IdentityCapabilities(db, secrets);
     this.phones = new PhoneCapabilities(db, secrets);
@@ -732,6 +719,17 @@ export class Capabilities {
   async listProducts(input: T.ListProductsInput): Promise<Page<PublicProduct>> {
     const conditions: SQL[] = [eq(products.active, 1)];
     if (input.q) conditions.push(sql`lower(${products.name}) LIKE ${`%${input.q.toLowerCase()}%`}`);
+    if (input.ids) conditions.push(inArray(products.id, input.ids));
+    if (input.gtin !== undefined) {
+      // Checked before it matches: a barcode with a wrong digit is said to be one, not quietly no match.
+      const r = normaliseGtin(input.gtin, "barcode");
+      if (!("ok" in r)) {
+        throw new WriteError("invalid_input", `gtin: ${input.gtin} does not read as a barcode (${r.problem})`, {
+          fields: [{ path: "gtin", problem: "invalid", message: `not a barcode: ${r.problem}` }],
+        });
+      }
+      conditions.push(eq(products.gtin, r.ok.gtin14));
+    }
     if (input.cursor) {
       const [c] = await this.db.orm
         .select({ name: products.name, id: products.id })
@@ -740,13 +738,125 @@ export class Capabilities {
       if (!c) throw badCursor();
       conditions.push(or(gt(products.name, c.name), and(eq(products.name, c.name), gt(products.id, c.id))) ?? sql`1`);
     }
-    const rows = await this.db.orm
-      .select(PUBLIC_PRODUCT)
-      .from(products)
-      .where(and(...conditions))
-      .orderBy(products.name, products.id)
-      .limit(input.limit + 1);
-    return page(rows, input.limit, (r) => r.id);
+    const [rows, ctx] = await Promise.all([
+      this.db.orm
+        .select()
+        .from(products)
+        .where(and(...conditions))
+        .orderBy(products.name, products.id)
+        .limit(input.limit + 1),
+      this.catalogueContext(),
+    ]);
+    return page(
+      rows.map((r) => publicProduct(r, ctx)),
+      input.limit,
+      (r) => r.id,
+    );
+  }
+
+  /**
+   * The owner's view of their products on networks (ADR-029): the switch and why it cannot work, what
+   * is listed, what needs a look and why, each network's answer, and the one-time offer of barcodes.
+   */
+  async catalogueStatus(caller: Caller): Promise<CatalogueStatus> {
+    if (isCustomer(caller)) throw new WriteError("not_allowed", "this needs the owner");
+    const settings = await readSettings(this.db);
+    const [rows, views] = await Promise.all([
+      this.db.orm.select().from(products).orderBy(products.name, products.id),
+      networkViews(this.db, settings),
+    ]);
+    const heldBy = new Map<string, HeldReason[]>();
+    for (const v of views) {
+      if (!v.catalogue.wants) continue;
+      for (const h of v.catalogue.held) {
+        for (const s of h.sample) heldBy.set(s.id, [...(heldBy.get(s.id) ?? []), { network: v.origin, why: h.why }]);
+      }
+    }
+    const counts = { listed: 0, needs_look: 0, kept_off: 0, off_sale: 0 };
+    const withNotes: CatalogueStatus["products"][number][] = [];
+    let skus = 0;
+    for (const row of rows) {
+      if (row.active !== 1) counts.off_sale++;
+      else if (row.listed !== 1) counts.kept_off++;
+      else if (listableWhy(row) === null) counts.listed++;
+      if (skuIsBarcode(row)) skus++;
+      // A product the owner keeps off networks, or archived with a price, has nothing to look at here.
+      if (row.listed !== 1 || (row.active !== 1 && row.price.value > 0)) continue;
+      const notes = productNotes(row, heldBy.get(row.id) ?? []);
+      if (notes.length === 0) continue;
+      counts.needs_look++;
+      withNotes.push({ id: row.id, name: row.name, notes });
+    }
+    const on = Object.keys(settings.networks).filter((o) => settings.networks[o]?.enabled);
+    const blocked: CatalogueStatus["blocked"] =
+      on.length === 0
+        ? "no_network"
+        : !on.some((o) => wantsListed(settings, o))
+          ? "out_of_directory"
+          : !this.catalogue.canSign()
+            ? "cannot_sign"
+            : null;
+    return {
+      listed: settings.catalogue.listed,
+      tax_included: settings.catalogue.taxIncluded,
+      blocked,
+      counts,
+      products: withNotes,
+      sku_offer: settings.catalogue.skuBarcodes === "ask" && skus > 0 ? { count: skus } : null,
+      networks: views
+        .filter((v) => v.enabled)
+        .map((v) => ({
+          origin: v.origin,
+          wants: v.catalogue.wants,
+          told: v.catalogue.told,
+          offers_live: v.catalogue.offers_live,
+          held: v.catalogue.held.reduce((n, h) => n + h.count, 0),
+          checked_at: v.catalogue.checked_at,
+          error: v.catalogue.error,
+        })),
+    };
+  }
+
+  /**
+   * The owner's answer to "your product codes are barcodes; use them as barcodes too?" (ADR-029): each
+   * imported product whose code reads as a barcode, and that has none, gets it as its barcode, and the
+   * offer is not made again; or, not now, it is not made again either. The owner in person only.
+   */
+  async useSkusAsBarcodes(caller: Caller, input: { readonly use: boolean }): Promise<{ used: number }> {
+    if (isCustomer(caller)) throw new WriteError("not_allowed", "this needs the owner");
+    if (!isPerson(caller)) {
+      throw new WriteError("not_allowed", "Listing on networks is yours to switch, in the app.", {
+        details: { reason: "owner_in_person", ask_owner: true, where: "Products" },
+      });
+    }
+    const now = nowOf(caller);
+    let used = 0;
+    if (input.use) {
+      const rows = await this.db.orm.select().from(products);
+      const statements: Statement[] = [];
+      for (const row of rows) {
+        const gtin = skuIsBarcode(row);
+        if (!gtin) continue;
+        statements.push({
+          sql: `UPDATE products SET gtin = ?, catalogue_seq = ${NEXT_CATALOGUE_SEQ}, updated_at = ? WHERE id = ? AND gtin IS NULL`,
+          params: [gtin, now, row.id],
+          method: "run",
+        });
+        used++;
+      }
+      for (let i = 0; i < statements.length; i += 40) await this.db.batch(statements.slice(i, i + 40));
+    }
+    await this.updateSettings(caller, { doc: { catalogue: { skuBarcodes: input.use ? "used" : "not_now" } } });
+    return { used };
+  }
+
+  /** The business's own site, for the product pages the public view may name (`publish.ts`). */
+  async catalogueContext(): Promise<CatalogueContext> {
+    const [[row], s] = await Promise.all([
+      this.db.orm.select({ domain: business.domain }).from(business).limit(1),
+      readSettings(this.db),
+    ]);
+    return { sites: siteDomains({ domain: row?.domain ?? null, website: s.directory.url }) };
   }
 
   /**
@@ -1688,6 +1798,9 @@ export class Capabilities {
         })),
       });
     }
+    // Who the business's products are shown to, and how their prices read, are the owner's (ADR-029).
+    const catalogue = catalogueChanges(before, after);
+    if (catalogue.length && !isOwnerOrSystem(caller)) throw catalogueOwnerError(catalogue);
     const trusted = changedSettings(before, after, OWNER_ONLY_SETTINGS);
     if (trusted.length && !isOwnerOrSystem(caller)) {
       throw ownerOnlyError(`change ${trusted.join(", ")}`, "Settings", {
@@ -1796,9 +1909,14 @@ export class Capabilities {
     const listing = [...new Set([...Object.keys(before.networks), ...Object.keys(after.networks)])].filter(
       (origin) => wantsListed(before, origin) !== wantsListed(after, origin),
     );
+    // Likewise for the business's products (ADR-029): each network whose `wantsCatalogue` moved.
+    const listingProducts = [...new Set([...Object.keys(before.networks), ...Object.keys(after.networks)])].filter(
+      (origin) => wantsCatalogue(before, origin) !== wantsCatalogue(after, origin),
+    );
     const statements = [
       ...started.flatMap(([origin, entry]) => networkStartStatements(origin, entry, now)),
       ...listing.map((origin) => listingJobStatement(origin, now)),
+      ...listingProducts.map((origin) => catalogueJobStatement(origin, now)),
     ];
     if (statements.length) await this.db.batch(statements);
     return redact(after, version, caller, this.lockedOf(after));
@@ -2113,6 +2231,22 @@ function networkOpenedError(opened: readonly string[]): WriteError {
           path === "directory.listed" || path === "directory.resume"
             ? "only the owner in person can put the business back in the directories"
             : "only the owner in person can switch a network on or share more with it",
+      })),
+    },
+  );
+}
+
+/** The refusal for the catalogue's switches from anyone but the owner in person (ADR-029). */
+function catalogueOwnerError(paths: readonly string[]): WriteError {
+  return new WriteError(
+    "not_allowed",
+    "Listing on networks is yours to switch, in the app. Only the owner can change it, signed in to the owner app (Settings → Networks). Nothing was changed; tell the owner what you suggest.",
+    {
+      details: { reason: "owner_in_person", ask_owner: true, where: "Settings → Networks" },
+      fields: paths.map((path) => ({
+        path: `doc.${path}`,
+        problem: "invalid" as const,
+        message: "only the owner in person can change this",
       })),
     },
   );

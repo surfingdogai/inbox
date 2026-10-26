@@ -1,14 +1,16 @@
 import type { Statement } from "@surfingdog/platform";
-import type { PingCarried, PingDoors } from "@surfingdog/spec";
+import type { PingCarried, PingCatalogueAnswer, PingDoors } from "@surfingdog/spec";
 import type { Db } from "../db";
 import { ulid } from "../ids";
 import { DEFAULT_NETWORK, enabledNetworks, type NetworkEntry, type Settings } from "../settings/schema";
 import { isPublicHost } from "../util/hosts";
 import { jobStatement } from "../write/common";
 import { readPingCarried } from "./carried";
+import { storedPingCatalogue } from "./catalogue";
 import { storedPingDoors } from "./doors";
 
 export { networkCarriedStatement, readPingCarried } from "./carried";
+export { networkCatalogueAnswerStatement, readPingCatalogue, storedPingCatalogue } from "./catalogue";
 export { networkDoorsStatement, readPingDoors, storedPingDoors } from "./doors";
 
 /**
@@ -33,6 +35,12 @@ export const NETWORK_RECEIPT_KIND = "network_receipt";
  * whenever what the network was last told is not what the settings want.
  */
 export const NETWORK_LISTING_KIND = "network.listing";
+/**
+ * Telling one network whether it may list the business's products (ADR-029): the signed
+ * `POST /v1/instances/{domain}/catalogue`. Queued when `wantsCatalogue` changes, and by the hourly
+ * tick whenever what the network was last told is not what the settings want.
+ */
+export const NETWORK_CATALOGUE_KIND = "network.catalogue";
 
 export const PING_PERIOD_MS = 60 * 60_000;
 
@@ -82,6 +90,59 @@ export function networkLane(payload: unknown): string | undefined {
 export function wantsListed(settings: Settings, origin: string): boolean {
   const entry = settings.networks[origin];
   return settings.directory.listed && !!entry?.enabled && entry.share.listing;
+}
+
+/**
+ * Whether the business's products are listed at one network (ADR-029): "Your products on networks"
+ * on, the network sharing them ("List my products here"), and the business in that network's
+ * directory, since products are listed only beside it.
+ */
+export function wantsCatalogue(settings: Settings, origin: string): boolean {
+  return settings.catalogue.listed && wantsListed(settings, origin) && !!settings.networks[origin]?.share.catalogue;
+}
+
+/**
+ * Whether a network must be told about the products (`catalogue_listed`: 1, 0, or null for never).
+ * Unlike the directory, a network lists no products until it is told to, so a network never told is
+ * owed a yes, and never owed a no.
+ */
+export function catalogueOwed(told: number | null | undefined, want: boolean): boolean {
+  if (told === null || told === undefined) return want;
+  return told !== (want ? 1 : 0);
+}
+
+/** The job that tells one network what `wantsCatalogue` says now, read when it runs, in the network's lane. */
+export function catalogueJobStatement(origin: string, now: number): Statement {
+  return jobStatement(NETWORK_CATALOGUE_KIND, { network: origin } satisfies NetworkJobPayload, now, {
+    dedupeKey: `${NETWORK_CATALOGUE_KIND}:${origin}:${now}`,
+  });
+}
+
+/**
+ * What a network was told of the products and took (the switch's `200`, or a signed ping that carried
+ * `catalogue`), with how many it lists when it said; the last error is cleared.
+ */
+export function networkCatalogueToldStatement(
+  network: string,
+  now: number,
+  listed: boolean,
+  offersLive: number | null = null,
+): Statement {
+  return {
+    sql: `UPDATE network_status SET catalogue_listed = ?, catalogue_count = COALESCE(?, catalogue_count),
+            catalogue_error = NULL, updated_at = ? WHERE network = ?`,
+    params: [listed ? 1 : 0, offersLive, now, network],
+    method: "run",
+  };
+}
+
+/** What went wrong telling a network about the products, in a few words, and when. */
+export function networkCatalogueErrorStatement(network: string, now: number, error: string): Statement {
+  return {
+    sql: "UPDATE network_status SET catalogue_error = ?, catalogue_at = ?, updated_at = ? WHERE network = ?",
+    params: [shortError(error), now, now, network],
+    method: "run",
+  };
 }
 
 /**
@@ -322,6 +383,14 @@ export interface NetworkStatusRow {
   /** How agents got on at the business's doors, as the network's answer to a signed ping last said it; and when. */
   readonly doors: PingDoors | null;
   readonly doorsAt: number | null;
+  /**
+   * The business's products there (ADR-029): what it was last told (1, 0, or null for never), what
+   * its answer to a signed ping last said of them and when, and the last thing that went wrong telling it.
+   */
+  readonly catalogueListed: number | null;
+  readonly catalogue: PingCatalogueAnswer | null;
+  readonly catalogueAt: number | null;
+  readonly catalogueError: string | null;
 }
 
 /**
@@ -344,7 +413,7 @@ export interface BusinessStanding {
 export type PingSignature = "verified" | "unsigned" | "ignored" | "refused" | `invalid: ${string}`;
 
 const STATUS_COLUMNS =
-  "registration, registered_at, last_ping_at, last_error, last_error_at, failing_since, failures, rules_version, rules_next_version, rules_next_at, rules_checked_at, standing, standing_at, ping_signature, recognised_platforms, platforms_checked_at, level, claims, listed, listed_at, doors, doors_at";
+  "registration, registered_at, last_ping_at, last_error, last_error_at, failing_since, failures, rules_version, rules_next_version, rules_next_at, rules_checked_at, standing, standing_at, ping_signature, recognised_platforms, platforms_checked_at, level, claims, listed, listed_at, doors, doors_at, catalogue_listed, catalogue_count, catalogue_held, catalogue_at, catalogue_error";
 
 export async function readNetworkStatus(db: Db, network: string): Promise<NetworkStatusRow | undefined> {
   const { rows } = await db.client.query({
@@ -668,6 +737,10 @@ function statusOf(r: readonly unknown[]): NetworkStatusRow {
     listedAt: n(r[19]),
     doors: storedPingDoors(r[20]),
     doorsAt: n(r[21]),
+    catalogueListed: n(r[22]),
+    catalogue: storedPingCatalogue(r[24], r[23] === null || r[23] === undefined ? null : Number(r[23])),
+    catalogueAt: n(r[25]),
+    catalogueError: r[26] === null || r[26] === undefined ? null : String(r[26]),
   };
 }
 
@@ -738,6 +811,21 @@ export interface NetworkView {
    * and when: null until one did, and three days after the last.
    */
   readonly carried: (PingCarried & { readonly at: string }) | null;
+  /**
+   * The business's products there (ADR-029): whether the settings want them listed (`wants`), what
+   * the network was last told (`told`: true, false, or null for never), what its answer to a signed
+   * ping last said of them (how many it lists, what it holds back and why) and when, and the last thing
+   * that went wrong telling it.
+   */
+  readonly catalogue: {
+    readonly wants: boolean;
+    readonly told: boolean | null;
+    readonly offers_live: number | null;
+    readonly held: PingCatalogueAnswer["held"];
+    readonly checked_at: string | null;
+    readonly at: string | null;
+    readonly error: string | null;
+  };
   /**
    * What it has been sent. `held` are queued receipts waiting for the network to take the rules
    * that read them: acceptances and outcomes (claims v2, version 3), agreed changes and refunds
@@ -872,6 +960,15 @@ export async function networkViews(
       ping_signature: s?.pingSignature ?? null,
       doors: s?.doors && s.doorsAt !== null ? { ...s.doors, at: new Date(s.doorsAt).toISOString() } : null,
       carried: carriedBy.get(origin) ?? null,
+      catalogue: {
+        wants: wantsCatalogue(settings, origin),
+        told: s?.catalogueListed === null || s?.catalogueListed === undefined ? null : s.catalogueListed === 1,
+        offers_live: s?.catalogue?.offers_live ?? null,
+        held: s?.catalogue?.held ?? [],
+        checked_at: s?.catalogue?.checked_at ?? null,
+        at: iso(s?.catalogueAt ?? null),
+        error: s?.catalogueError ?? null,
+      },
       receipts: tally.get(origin) ?? { published: 0, queued: 0, refused: 0, held: 0, withheld: 0 },
     };
   });

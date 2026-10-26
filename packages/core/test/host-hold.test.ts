@@ -113,7 +113,12 @@ describe("a hosted inbox joins its host's network from day one", () => {
     const s = await readSettings(db);
     // Listed, counted, receipts: and no first-time customer's email until a person switches keys on.
     expect(s.networks[DEFAULT_NETWORK]).toMatchObject({ enabled: true, issue: false });
-    expect(s.networks[DEFAULT_NETWORK]?.share).toEqual({ listing: true, counts: true, receipts: true });
+    expect(s.networks[DEFAULT_NETWORK]?.share).toEqual({
+      listing: true,
+      counts: true,
+      receipts: true,
+      catalogue: true,
+    });
     expect(s.networks[DEFAULT_NETWORK]?.resume).toBeUndefined();
     expect(s.directory.listed).toBe(true);
     expect(s.directory.resume).toBeUndefined();

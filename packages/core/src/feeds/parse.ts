@@ -13,6 +13,7 @@
  * imports 412 of 415 products needs to know what the other three were.
  */
 
+import type { GtinHint } from "@surfingdog/spec";
 import { isHundredthsCurrency } from "../util/locale";
 
 /** A product as a feed describes it, normalised. `null` means the feed did not say. */
@@ -37,12 +38,28 @@ export interface FeedProduct {
   readonly url: string | null;
   readonly imageUrl: string | null;
   /**
+   * What the product is, beside its price (ADR-029), each only when the row says it, so a feed that
+   * says nothing of them reads as it always did. The barcode as the row gave it, with the kind of
+   * column it came from (`normaliseGtin` checks it when it is stored); the brand and the maker's part
+   * number as written; the condition when it reads as new, used or refurbished; Google's
+   * `identifier_exists` (`noGtin`: the row says it has no barcode); and what the row says its category
+   * is, a hint only.
+   */
+  readonly gtin?: { readonly raw: string; readonly hint: GtinHint };
+  readonly brand?: string;
+  readonly mpn?: string;
+  readonly condition?: FeedCondition;
+  readonly noGtin?: boolean;
+  readonly sourceCategory?: string;
+  /**
    * When the price changes by the row's own sale dates, after the moment it was read at: its sale's
    * start and end, earliest first, with what it sells at from then. Made at that moment
    * (`FeedCapabilities.applyPriceChanges`), not at the next read.
    */
   readonly priceChanges?: readonly FeedPriceChange[];
 }
+
+export type FeedCondition = "new" | "used" | "refurbished";
 
 /** A price a row's sale dates change on their own (`FeedProduct.priceChanges`). */
 export interface FeedPriceChange {
@@ -113,6 +130,28 @@ type SaleField = "salePrice" | "saleWindow" | "saleStarts" | "saleEnds";
 const FIELD_ALIASES: Readonly<
   Record<Exclude<keyof FeedProduct, "priceChanges"> | "quantity" | SaleField, readonly string[]>
 > = {
+  // The barcode, besides the sku it already was: `ean` and `gtin` stay sku aliases, so an agent that
+  // orders by a sku equal to the barcode is still served (ADR-029).
+  gtin: [
+    "gtin",
+    "ean",
+    "upc",
+    "barcode",
+    "isbn",
+    "jan",
+    "ean13",
+    "gtin8",
+    "gtin12",
+    "gtin13",
+    "gtin14",
+    "eancode",
+    "upccode",
+  ],
+  brand: ["brand", "marca", "marke", "marque", "vendor", "manufacturer", "fabricante", "hersteller"],
+  mpn: ["mpn", "manufacturerpartnumber", "partnumber"],
+  condition: ["condition", "condicao", "condicion", "zustand", "etat"],
+  noGtin: ["identifierexists"],
+  sourceCategory: ["googleproductcategory", "productcategory", "producttype", "category", "categoria", "kategorie"],
   externalId: ["id", "gid", "itemid", "productid", "uniqueid", "identifier", "sku", "variantid", "ref"],
   name: ["title", "name", "productname", "producttitle", "itemname", "nome", "nombre", "titel", "titre"],
   description: ["description", "descr", "productdescription", "summary", "descricao", "descripcion"],
@@ -865,6 +904,12 @@ function xmlField(children: readonly XmlChild[], names: readonly string[], secti
 
 /** The XML names for each field: Google's, plus the Atom and RSS spellings. */
 const XML_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  gtin: ["gtin", "ean", "upc", "isbn", "barcode"],
+  brand: ["brand"],
+  mpn: ["mpn"],
+  condition: ["condition"],
+  noGtin: ["identifier_exists"],
+  sourceCategory: ["google_product_category", "product_type"],
   externalId: ["id", "item_group_id", "guid", "sku", "mpn"],
   name: ["title", "name"],
   description: ["description", "summary", "content"],
@@ -943,6 +988,14 @@ function parseXmlFeed(raw: string, at: PriceClock, limit: number): FeedParseResu
       ...priced(sellingPrice(read("price"), read("salePrice"), read("saleWindow"), at), read("available"), stock),
       url: read("url") || null,
       imageUrl: read("imageUrl") || null,
+      ...identity((field) => {
+        // The barcode's hint is the element it came in: <g:upc>, <g:isbn>, or any other.
+        for (const name of XML_FIELDS[field] ?? []) {
+          const value = xmlField(children, [name], masked.sections);
+          if (value !== "") return { value, from: name };
+        }
+        return { value: "", from: "" };
+      }),
     });
   }
   return { format: "xml", products, skipped, truncated, mapped: {} };
@@ -1014,9 +1067,67 @@ function parseCsvFeed(body: string, at: PriceClock, limit: number): FeedParseRes
       ...priced(sellingPrice(cell("price"), cell("salePrice"), window, at), cell("available"), stock),
       url: cell("url") || null,
       imageUrl: cell("imageUrl") || null,
+      ...identity((field) => ({ value: cell(field), from: mapped[field] ?? "" })),
     });
   }
   return { format: "csv", products, skipped, truncated, mapped };
+}
+
+/* --- What a product is ---------------------------------------------------- */
+
+const CONDITIONS: Readonly<Record<string, FeedCondition>> = {
+  new: "new",
+  novo: "new",
+  nuevo: "new",
+  neu: "new",
+  neuf: "new",
+  nuovo: "new",
+  used: "used",
+  usado: "used",
+  gebraucht: "used",
+  occasion: "used",
+  usato: "used",
+  secondhand: "used",
+  refurbished: "refurbished",
+  recondicionado: "refurbished",
+  reacondicionado: "refurbished",
+  remanufactured: "refurbished",
+  renewed: "refurbished",
+  generalueberholt: "refurbished",
+  reconditionne: "refurbished",
+};
+
+/** What kind of column a barcode came from, by its name: a UPC one, an ISBN one, or a barcode one. */
+function gtinHint(column: string): GtinHint {
+  const name = squash(column);
+  if (name.startsWith("upc")) return "upc";
+  if (name === "isbn") return "isbn";
+  return "barcode";
+}
+
+/**
+ * A row's identity fields (`FeedProduct.gtin` … `sourceCategory`), each only when the row says it.
+ * `read` gives a field's text and the column or element it came from.
+ */
+function identity(
+  read: (field: string) => { value: string; from: string },
+): Pick<FeedProduct, "gtin" | "brand" | "mpn" | "condition" | "noGtin" | "sourceCategory"> {
+  const text = (field: string, max: number) => read(field).value.replace(/\s+/g, " ").trim().slice(0, max);
+  const gtin = read("gtin");
+  const brand = text("brand", 70);
+  const mpn = text("mpn", 70);
+  const condition = CONDITIONS[squash(read("condition").value)];
+  const exists = parseAvailability(read("noGtin").value);
+  const category = text("sourceCategory", 250);
+  return {
+    ...(gtin.value.trim() ? { gtin: { raw: gtin.value.trim().slice(0, 64), hint: gtinHint(gtin.from) } } : {}),
+    ...(brand ? { brand } : {}),
+    ...(mpn ? { mpn } : {}),
+    ...(condition ? { condition } : {}),
+    // Google's `identifier_exists`: yes or no, which reads as availability's yes and no.
+    ...(exists === null ? {} : { noGtin: !exists }),
+    ...(category ? { sourceCategory: category } : {}),
+  };
 }
 
 /** A row's price, availability and the changes its sale's dates bring, from what it sells at and what it claims. */

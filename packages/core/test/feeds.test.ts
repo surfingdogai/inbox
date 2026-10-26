@@ -577,3 +577,67 @@ describe("XML fields belong to the item, not to something inside it", () => {
     expect(product?.price).toEqual({ value: 750, currency: "EUR" });
   });
 });
+
+describe("what a product is, beside its price (ADR-029)", () => {
+  it("keeps a Merchant XML item's barcode and part number apart, with its sku as it was", () => {
+    const xml = `<?xml version="1.0"?>
+<rss version="2.0" xmlns:g="http://base.google.com/ns/1.0"><channel>
+  <item>
+    <g:id>SKU-1</g:id><title>Moka pot, 6 cups</title><g:price>18.90 EUR</g:price>
+    <g:gtin>8006363011662</g:gtin><g:mpn>BIA-0001162</g:mpn><g:brand>Bialetti</g:brand>
+    <g:condition>refurbished</g:condition><g:identifier_exists>yes</g:identifier_exists>
+    <g:google_product_category>Home &amp; Garden &gt; Kitchen</g:google_product_category>
+    <link>https://shop.example/moka</link><g:image_link>https://shop.example/moka.jpg</g:image_link>
+  </item>
+  <item><g:id>SKU-2</g:id><title>Sourdough loaf</title><g:price>4.50 EUR</g:price><g:identifier_exists>no</g:identifier_exists></item>
+</channel></rss>`;
+    const [moka, loaf] = parseFeed(xml).products;
+    expect(moka).toMatchObject({
+      sku: "BIA-0001162",
+      gtin: { raw: "8006363011662", hint: "barcode" },
+      mpn: "BIA-0001162",
+      brand: "Bialetti",
+      condition: "refurbished",
+      noGtin: false,
+      sourceCategory: "Home & Garden > Kitchen",
+      url: "https://shop.example/moka",
+      imageUrl: "https://shop.example/moka.jpg",
+    });
+    expect(loaf).toMatchObject({ noGtin: true });
+    expect(loaf).not.toHaveProperty("gtin");
+  });
+
+  it("fills the barcode from a CSV's EAN, UPC or ISBN column, saying which", () => {
+    const csv = (header: string) => `id,title,price,${header}\n1,Chain lube,8.50,4006381333931\n`;
+    expect(parseFeed(csv("EAN")).products[0]?.gtin).toEqual({ raw: "4006381333931", hint: "barcode" });
+    expect(parseFeed(csv("Barcode")).products[0]?.gtin).toEqual({ raw: "4006381333931", hint: "barcode" });
+    expect(parseFeed(csv("UPC")).products[0]?.gtin).toEqual({ raw: "4006381333931", hint: "upc" });
+    expect(parseFeed(csv("ISBN")).products[0]?.gtin).toEqual({ raw: "4006381333931", hint: "isbn" });
+    // The barcode is still the sku of a sheet that names no other, so an agent ordering by it is served.
+    expect(parseFeed(csv("EAN")).products[0]?.sku).toBe("4006381333931");
+    expect(parseFeed(csv("EAN")).mapped.gtin).toBe("EAN");
+  });
+
+  it("reads a condition in the words shops use, and none it cannot place", () => {
+    const csv = (c: string) => `id,title,price,condition\n1,Bike,100.00,${c}\n`;
+    expect(parseFeed(csv("New")).products[0]?.condition).toBe("new");
+    expect(parseFeed(csv("usado")).products[0]?.condition).toBe("used");
+    expect(parseFeed(csv("Refurbished")).products[0]?.condition).toBe("refurbished");
+    expect(parseFeed(csv("like a dream")).products[0]).not.toHaveProperty("condition");
+  });
+
+  it("reads an old feed exactly as before: nothing new where it says nothing", () => {
+    const csv = "id,title,price\n7,Bell,3.00\n";
+    expect(parseFeed(csv).products[0]).toEqual({
+      externalId: "7",
+      name: "Bell",
+      description: null,
+      sku: null,
+      price: { value: 300, currency: "EUR" },
+      stock: null,
+      available: null,
+      url: null,
+      imageUrl: null,
+    });
+  });
+});

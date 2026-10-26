@@ -530,3 +530,63 @@ describe("a sku that changes in the feed", () => {
     expect((await caps.setup.listProducts(owner))[0]?.sku).toBe("LUBE-200");
   });
 });
+
+describe("what a product is (ADR-029)", () => {
+  const FEED = [
+    "id,title,price,ean,brand,mpn,condition,link,image_link,google_product_category",
+    "A1,Moka pot,18.90,4006381333931,Bialetti,BIA-1,used,https://shop.example.com/moka,https://cdn.example.net/moka.jpg,Kitchen",
+    "A2,Tea towel,4.00,4006381333932,,,,http://shop.example.com/towel,http://cdn.example.net/towel.jpg,",
+    "A3,In-store bread,2.50,2001234567893,,,,,,",
+  ].join("\n");
+
+  it("stores the barcode checked to 14 digits, the brand, part number, condition and links", async () => {
+    const { caps } = await setup();
+    const feed = await caps.feeds.add(owner, { url: "https://shop.example.com/feed.csv" });
+    await caps.feeds.importBody(feed.id, FEED, T0);
+    const byName = new Map((await caps.setup.listProducts(owner)).map((p) => [p.name, p]));
+    expect(byName.get("Moka pot")).toMatchObject({
+      // The part number comes before the barcode among the sku's names, as it always did.
+      sku: "BIA-1",
+      gtin: "04006381333931",
+      gtinGiven: null,
+      brand: "Bialetti",
+      mpn: "BIA-1",
+      condition: "used",
+      url: "https://shop.example.com/moka",
+      imageUrl: "https://cdn.example.net/moka.jpg",
+      sourceCategory: "Kitchen",
+      noGtin: 0,
+      listed: 1,
+    });
+    // A barcode whose last digit is wrong is kept as it came, for the owner, and is not the barcode;
+    // a link that is not https is not kept.
+    expect(byName.get("Tea towel")).toMatchObject({
+      gtin: null,
+      gtinGiven: "4006381333932",
+      condition: "new",
+      url: null,
+      imageUrl: null,
+    });
+    // A shop's own code is never its barcode either.
+    expect(byName.get("In-store bread")).toMatchObject({ gtin: null, gtinGiven: "2001234567893" });
+  });
+
+  it("updates a row whose barcode alone changed, and keeps what a later read leaves out", async () => {
+    const { caps } = await setup();
+    const feed = await caps.feeds.add(owner, { url: "https://shop.example.com/feed.csv" });
+    const head = "id,title,sku,price,gtin,brand";
+    await caps.feeds.importBody(feed.id, `${head}\nA1,Moka pot,MOKA,18.90,4006381333932,Bialetti`, T0);
+    const fixed = await caps.feeds.importBody(
+      feed.id,
+      `${head}\nA1,Moka pot,MOKA,18.90,4006381333931,Bialetti`,
+      T0 + 1000,
+    );
+    expect(fixed.updated).toBe(1);
+    const [moka] = await caps.setup.listProducts(owner);
+    expect(moka).toMatchObject({ gtin: "04006381333931", gtinGiven: null, updatedAt: T0 + 1000 });
+    // A read without the columns has not said the product lost its barcode or its brand.
+    const plain = await caps.feeds.importBody(feed.id, "id,title,sku,price\nA1,Moka pot,MOKA,18.90", T0 + 2000);
+    expect(plain.unchanged).toBe(1);
+    expect((await caps.setup.listProducts(owner))[0]).toMatchObject({ gtin: "04006381333931", brand: "Bialetti" });
+  });
+});
