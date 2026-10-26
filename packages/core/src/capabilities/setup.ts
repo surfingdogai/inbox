@@ -344,6 +344,9 @@ export class SetupCapabilities {
         ...(input.withdrawal ? { withdrawal: input.withdrawal } : {}),
         ...(input.negotiable === false ? { negotiable: 0 } : {}),
         ...identityRow(ident),
+        // Who makes it and its condition, as `updateProduct` writes them: the feed and every door name them.
+        ...(input.brand ? { brand: input.brand } : {}),
+        ...(input.condition ? { condition: input.condition } : {}),
         ...(input.no_gtin === true ? { noGtin: 1 } : {}),
         ...(input.listed === false ? { listed: 0 } : {}),
         catalogueSeq: sql.raw(NEXT_CATALOGUE_SEQ),

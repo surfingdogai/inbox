@@ -180,6 +180,25 @@ describe("what a reader compares", () => {
     expect(again.status).toBe(304);
   });
 
+  it("carries the brand and condition of a product the owner adds, as of one the owner changes", async () => {
+    const { caps } = await setup();
+    const made = await caps.setup.createProduct(owner, {
+      name: "Moka pot, 6 cups",
+      price: { value: 18990, currency: "EUR" },
+      active: true,
+      brand: "Cafeteira",
+      condition: "refurbished",
+    });
+    expect(made).toMatchObject({ brand: "Cafeteira", condition: "refurbished" });
+    expect(pageOf(await read(caps)).items).toEqual([
+      expect.objectContaining({ id: made.id, brand: "Cafeteira", condition: "refurbished" }),
+    ]);
+    await caps.setup.updateProduct(owner, { product_id: made.id, brand: "Moka & Co", condition: "new" });
+    expect(pageOf(await read(caps)).items).toEqual([
+      expect.objectContaining({ id: made.id, brand: "Moka & Co", condition: "new" }),
+    ]);
+  });
+
   it("every way a product changes moves it to the end of the feed", async () => {
     const { caps } = await setup();
     const when = async (fn: () => Promise<unknown>) => {
