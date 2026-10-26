@@ -108,6 +108,7 @@ export default defineConfig({
             "docs/property-systems",
             "docs/trades",
             "docs/job-tools",
+            "docs/ordering",
             // One page per connector, as each is built: docs/connectors/<name>.md, ordered by its own frontmatter.
             { label: "Connectors", collapsed: true, items: [{ autogenerate: { directory: "docs/connectors" } }] },
             "docs/feeds",

@@ -1,8 +1,10 @@
 import { createFileRoute, Outlet, redirect, useParams } from "@tanstack/react-router";
 import { ItemList } from "../components/ItemList";
+import { KitchenStrip } from "../components/KitchenToday";
 import { Rail } from "../components/Rail";
 import { ensureSignedIn } from "../lib/auth";
 import { type Filter, parseFilter } from "../lib/filters";
+import { usePhone } from "../lib/media";
 import { useBusiness, useCounts, useIntegrations, useSettings } from "../lib/queries";
 
 export interface InboxSearch {
@@ -36,11 +38,20 @@ function InboxLayout() {
   const failing = broken ? { title: broken.title, error: broken.last_error } : undefined;
   const name = business.data?.name || settings.data?.doc.business.name || "Inbox";
   const tz = business.data?.timezone ?? settings.data?.doc.business.timezone;
+  // On a phone the list is the home, so a kitchen's pause is there too.
+  const phone = usePhone();
 
   return (
     <div className="inbox glass" data-view={id ? "detail" : "list"}>
       <Rail name={name} filter={filter} q={q} counts={counts.data} testMode={testMode} failing={failing} />
-      <ItemList filter={filter} q={q} sandbox={testMode} selected={id} tz={tz} />
+      <ItemList
+        filter={filter}
+        q={q}
+        sandbox={testMode}
+        selected={id}
+        tz={tz}
+        head={phone && settings.data?.doc.kitchen.enabled ? <KitchenStrip tz={tz} /> : undefined}
+      />
       <section className="detail" aria-label="Item">
         <Outlet />
       </section>

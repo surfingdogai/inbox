@@ -3,6 +3,7 @@ import {
   type DiscoveryAnswer,
   type DoorElsewhere,
   doorPlace,
+  type KitchenProfile,
   normaliseGtin,
   publishedPayments,
   type WorkProfile,
@@ -22,16 +23,20 @@ import {
   publicProduct,
   siteDomains,
 } from "../catalogue/publish";
-import { ConnectorCapabilities } from "../connectors/capability";
-import { registerScheduleSource } from "../connectors/schedules";
+import { ConnectorCapabilities, registerSyncStep } from "../connectors/capability";
+import { registerPosOrderApplier } from "../connectors/hooks";
+import { registerScheduleSource, scheduleSourceOf } from "../connectors/schedules";
 import { effectiveWrittenBy, isAutomated } from "../customer/mail";
 import { isChangeable } from "../customer/offer";
 import type { Db } from "../db";
-import type { Item, ItemType } from "../domain/types";
+import type { Item, ItemFlags, ItemType } from "../domain/types";
 import type { AttachmentRef } from "../email/attachments";
 import { networksStopped } from "../identity/stops";
 import type { IdentityAnswer } from "../identity/types";
 import { mailForItem, senderOf } from "../jobs/mail-log";
+import { FoodCapabilities } from "../kitchen/capability";
+import { tableDeposits } from "../kitchen/deposits";
+import { applyPosState, elsewhereStep, posStatusStep, registerFoodResolver } from "../kitchen/pos";
 import { type DraftView, draftIsStale, draftRow, draftView, dropDraftStatement } from "../negotiation/drafts";
 import { type OfferView, offerRows, offerView } from "../negotiation/offers";
 import { rewardProblems } from "../negotiation/rewards";
@@ -172,6 +177,8 @@ export interface BusinessProfile {
   readonly payments?: readonly string[] | undefined;
   /** How a trade takes work (ADR-039, spec `workProfileSchema`): absent for a business that set none of it. */
   readonly work?: WorkProfile | undefined;
+  /** How a kitchen takes orders and tables (ADR-036, spec `kitchenProfileSchema`): absent when it does not. */
+  readonly kitchen?: KitchenProfile | undefined;
 }
 
 /** schema.org `MerchantReturnPolicy`: a finite window, how things come back, who pays, a full refund. */
@@ -385,6 +392,8 @@ export class Capabilities {
 
   /** Trades and projects (ADR-039): files on a request, where the business works, its job tool. */
   readonly trades: TradeCapabilities;
+  /** Restaurants, takeaways, bakeries and cafés (ADR-036): the menu, orders for a time, tables. */
+  readonly food: FoodCapabilities;
 
   private readonly baseUrl: string | undefined;
   /** How the discovery check reaches its network (`checkDiscovery`): the host's outbound fetch, or none in a demo. */
@@ -579,6 +588,30 @@ export class Capabilities {
     });
     // A request written into a job tool whose answer never came is looked for by the trades layer.
     registerWorkResolver(this.connectors);
+    this.food = new FoodCapabilities(db, {
+      connectors: this.connectors,
+      // A person's pause is the inbox's write: any person at the business may press it (ADR-036).
+      writeSettings: async (doc, now) => {
+        await this.writeSettings(
+          {
+            actor: { kind: "system", id: "kitchen", channel: "system" },
+            tier: "verified_principal",
+            sandbox: false,
+            now: () => now,
+          },
+          { doc },
+          false,
+        );
+      },
+    });
+    // An order written into a till whose answer never came, the till's word back, orders taken elsewhere.
+    registerFoodResolver(this.connectors);
+    registerPosOrderApplier(async (...a) => void (await applyPosState(...a)));
+    // A table's deposit gets its link through the payments side (ADR-036), where no other booking
+    // source is registered (a salon's, ADR-035, reads the same deposit).
+    if (!scheduleSourceOf("booking")) registerScheduleSource("booking", tableDeposits);
+    registerSyncStep(posStatusStep);
+    registerSyncStep(elsewhereStep);
     this.customer = new CustomerDoors(db, {
       access: this.access,
       people: this.people,
@@ -756,7 +789,14 @@ export class Capabilities {
       ...(s.payments.accepted.length ? { payments: publishedPayments(s.payments.accepted) } : {}),
       // How a trade takes work (ADR-039): where it goes, emergencies, call-out. Never the area's base.
       ...(itemTypes.includes("quote_request") && workProfile(s) ? { work: workProfile(s) ?? undefined } : {}),
+      ...(await this.kitchenProfileOf()),
     };
+  }
+
+  /** The profile's `kitchen`, when the business takes orders for a time or books tables (ADR-036). */
+  private async kitchenProfileOf(): Promise<{ kitchen?: KitchenProfile }> {
+    const kitchen = await this.food.profile(Date.now());
+    return kitchen ? { kitchen } : {};
   }
 
   /**
@@ -953,6 +993,7 @@ export class Capabilities {
       timezone: profile.timezone,
       now: opts.now ?? Date.now(),
       minNoticeMin: settings.booking.minNoticeMin,
+      ...(input.party_size !== undefined ? { partySize: input.party_size } : {}),
     });
   }
 
@@ -984,14 +1025,25 @@ export class Capabilities {
     await this.refuseShut(caller, "booking");
     await this.refuseUnbookable(caller, input.payload?.reservationFor?.serviceId, { booking: true });
     const c = withIdempotencyKey(caller, input.idempotency_key);
+    // A table (ADR-036): a party above the size the business books online becomes a request for a price;
+    // one it books carries its deposit and policy, which the customer confirms with it.
+    const replay = c.idempotency ? await findIdempotent(this.db, c.idempotency) : null;
+    const table = replay
+      ? null
+      : await this.food.planTable(c, input.payload, input.contact?.locale ?? caller.locale ?? "en");
+    if (table?.kind === "quote") return this.tableQuote(c, input, table.words);
+    const shown = table?.kind === "booking" ? { ...input, payload: { ...input.payload, ...table.adds } } : input;
     // Priced for this customer once — the owner's reward for their record included — so the summary
     // they confirm and the booking as written hold the same price (ADR-018 §4, Q3).
     const pricing = await this.customer.pricingFor(c, input);
     // A priced request binds a consumer once they confirmed it: without that, nothing is written (CRD art. 8(2)).
-    const confirmed = await this.customer.confirmCreate(c, "booking", input, pricing);
+    const confirmed = await this.customer.confirmCreate(c, "booking", shown, pricing);
     // A site visit names the request for a price it is for, which this customer made (ADR-039 §4).
     const visitFor = input.visit_for ? await this.visitRequest(c, input.visit_for) : null;
-    const inboxAdds = await this.trades.prepareFiles(c, input.attachments);
+    const files = await this.trades.prepareFiles(c, input.attachments);
+    // A table's deposit and policy, dated for this booking, as the customer confirmed them (ADR-036).
+    const inboxAdds =
+      table?.kind === "booking" ? mergeAdds(files, { payload: table.adds, claims: [], flags: {} }) : files;
     const made = await this.people.create(
       c,
       {
@@ -1009,6 +1061,31 @@ export class Capabilities {
     return made;
   }
 
+  /**
+   * A table for more than the business books online, asked for as a request for a price (ADR-036): the
+   * business answers with a quote for the event or the private room. The agent is told so.
+   */
+  private async tableQuote(c: Caller, input: T.CreateBookingInput, words: string): Promise<CreateResult> {
+    const p = input.payload;
+    const party = p.partySize ?? 1;
+    const made = await this.people.create(
+      c,
+      {
+        type: "quote_request",
+        payload: {
+          itemOffered: { name: p.reservationFor.name, serviceId: p.reservationFor.serviceId },
+          quantity: party,
+          description: (p.notes ?? input.message ?? `A table for ${party}`).slice(0, 5_000) || `A table for ${party}`,
+          requestedFor: p.startTime,
+        },
+        contact: input.contact,
+        message: input.message,
+      },
+      input,
+    );
+    return { ...made, note: words };
+  }
+
   /** The request a site visit is for: a request for a price of this customer's own, still open. */
   private async visitRequest(caller: Caller, visit: { item_id: string; access_token?: string | undefined }) {
     const row = await this.loadOwned(withToken(caller, visit.access_token), visit.item_id);
@@ -1023,22 +1100,37 @@ export class Capabilities {
   async createOrder(caller: Caller, input: T.CreateOrderInput): Promise<CreateResult> {
     await this.refuseElsewhere(caller, "order");
     const c = withIdempotencyKey(caller, input.idempotency_key);
+    // An order for a time is checked by the kitchen before anything is asked or promised (ADR-036): the
+    // pause, the slot, delivery, what is served then; a retry of one already made is answered as it was.
+    const replay = c.idempotency ? await findIdempotent(this.db, c.idempotency) : null;
+    const lang = input.contact?.locale ?? caller.locale ?? "en";
+    const checked = replay ? null : await this.food.checkOrder(c, input.payload, { lang });
     const pricing = await this.customer.pricingFor(c, input);
     const confirmed = await this.customer.confirmCreate(c, "order", input, pricing);
-    const inboxAdds = await this.trades.prepareFiles(c, input.attachments);
-    return this.people.create(
-      c,
-      {
-        type: "order",
-        payload: input.payload,
-        contact: input.contact,
-        message: input.message,
-        confirmed,
-        pricing,
-        ...(inboxAdds ? { inboxAdds } : {}),
-      },
-      input,
-    );
+    const files = await this.trades.prepareFiles(c, input.attachments);
+    // The order takes its slot and the daily places in the batch that writes it. Two orders for the
+    // last place: one gets it, and the other is planned again once, then told the slot was taken.
+    for (let attempt = 1; ; attempt++) {
+      const kitchen = checked ? await this.food.prepareOrder(checked, input.payload, null) : null;
+      const inboxAdds = mergeAdds(files, kitchen);
+      try {
+        return await this.people.create(
+          c,
+          {
+            type: "order",
+            payload: input.payload,
+            contact: input.contact,
+            message: input.message,
+            confirmed,
+            pricing,
+            ...(inboxAdds ? { inboxAdds } : {}),
+          },
+          input,
+        );
+      } catch (error) {
+        if (!(error instanceof WriteError && error.code === "slot_taken") || !kitchen || attempt >= 2) throw error;
+      }
+    }
   }
 
   async getItemStatus(caller: Caller, input: T.GetItemStatusInput): Promise<ItemStatus> {
@@ -2432,5 +2524,34 @@ function hostCaller(now: number): Caller {
     tier: "verified_principal",
     sandbox: false,
     now: () => now,
+  };
+}
+
+/**
+ * What the inbox adds to a customer's create from two places at once (ADR-034's files, ADR-036's
+ * kitchen): their payload fields, files, claims and flags together, and a hash that stands for both.
+ */
+function mergeAdds(
+  a:
+    | {
+        payload: Readonly<Record<string, unknown>>;
+        files: readonly string[];
+        flags?: Partial<ItemFlags> | undefined;
+        hash: unknown;
+      }
+    | undefined,
+  b: {
+    payload: Readonly<Record<string, unknown>>;
+    claims: readonly { resourceKey: string; claims: readonly [number, number][] }[];
+    flags: Partial<ItemFlags>;
+  } | null,
+) {
+  if (!b) return a;
+  return {
+    payload: { ...(a?.payload ?? {}), ...b.payload },
+    files: a?.files ?? [],
+    flags: { ...(a?.flags ?? {}), ...b.flags },
+    hash: a?.hash ?? null,
+    claims: b.claims,
   };
 }

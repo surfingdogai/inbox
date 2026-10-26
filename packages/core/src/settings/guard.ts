@@ -71,6 +71,9 @@ export const OWNER_ONLY_SETTINGS: readonly Watched[] = [
   // request may carry, and whether requests go into a job tool on another platform.
   { path: ["area"] },
   { path: ["work"] },
+  // How a kitchen confirms and charges (ADR-036): whether orders confirm at once, the places set aside,
+  // tips, and pausing another platform. Pausing itself has a door of its own, open to every person.
+  { path: ["kitchen"] },
 ];
 
 function at(doc: unknown, path: readonly string[]): unknown {

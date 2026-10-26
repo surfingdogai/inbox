@@ -427,7 +427,10 @@ describe("the setup wizard's doors", () => {
       "A salon, clinic or studio",
       "A trade",
       "Building and renovation",
-      "A shop, bakery or kitchen",
+      "A restaurant or takeaway",
+      "A bakery",
+      "A café",
+      "A shop",
       "A place to stay",
     ]);
     for (const k of KINDS) {

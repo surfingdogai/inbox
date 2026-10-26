@@ -6,6 +6,7 @@
 export * from "./base";
 export * from "./conformance";
 export * from "./door-platforms";
+export * from "./food";
 export * from "./gtin";
 export * from "./money";
 export * from "./network/index";

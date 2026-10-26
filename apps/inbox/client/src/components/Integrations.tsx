@@ -459,6 +459,25 @@ function preferredWay(card: GalleryCard, email: string | null): { way: GalleryWa
   return { way: ready.find((w) => !w.advanced) ?? ready[0] };
 }
 
+/**
+ * What a way not set up yet needs, in its own words; on a hosted inbox before it is live, when it will
+ * work. Named in a list under the form; opened from its chip, the chip names it.
+ */
+function SetupWords({ way, named }: { way: GalleryWay; named: boolean }) {
+  if (way.untilLive) return <>{way.untilLive}</>;
+  return (
+    <>
+      {named ? `${way.label}: ${way.hint ?? "needs setting up on the server."}` : (way.hint ?? "Not available yet.")}{" "}
+      {way.href && (
+        <a className="int-link" href={way.href} target="_blank" rel="noopener noreferrer">
+          How
+          <ExternalLink className="icon-xs" aria-hidden="true" />
+        </a>
+      )}
+    </>
+  );
+}
+
 function ConnectPanel({
   card,
   made,
@@ -492,7 +511,8 @@ function ConnectPanel({
   const main = card.ways.filter((w) => !w.advanced && w.status !== "soon");
   const coming = card.ways.filter((w) => !w.advanced && w.status === "soon");
   // Chips when more than one way is ready (a till's sign-in not set up is no choice), and one way alone
-  // still has its chip when others are coming, so the form says which system it is for.
+  // still has its chip when others are coming, so the form says which system it is for. Without chips,
+  // what each way not set up yet needs is said under the form.
   const chips = main.filter((w) => w.status === "ready").length > 1 || (main.length === 1 && coming.length > 0);
   const others = card.ways.filter((w) => w.advanced && w.status === "ready" && keyOf(w) !== keyOf(way));
   // Back to the way most people use, from one under More options: never to the way already open (the
@@ -514,36 +534,35 @@ function ConnectPanel({
               key={keyOf(w)}
               type="button"
               aria-pressed={keyOf(w) === keyOf(way)}
-              disabled={w.status !== "ready"}
-              title={w.status === "ready" ? undefined : (w.hint ?? "Soon")}
+              // One not set up yet opens to say why: there is nothing to press in it.
               onClick={() => setPicked(keyOf(w))}
             >
               {w.label}
               {w.status === "ready" && w.fresh && <span className="opt"> · new</span>}
-              {w.status === "setup" && <span className="opt"> · set up</span>}
+              {w.status === "setup" && <span className="opt"> · not yet</span>}
             </button>
           ))}
         </fieldset>
       )}
       {picked === null && preferred.hint && <p className="hint">{preferred.hint}</p>}
-      {setup.map((w) =>
-        w.untilLive ? (
+      {!chips &&
+        setup.map((w) => (
           <p key={keyOf(w)} className="hint">
-            {w.untilLive}
+            <SetupWords way={w} named />
           </p>
-        ) : (
-          <p key={keyOf(w)} className="hint">
-            {w.label}: {w.hint ?? "needs setting up on the server."}{" "}
-            {w.href && (
-              <a className="int-link" href={w.href} target="_blank" rel="noopener noreferrer">
-                How
-                <ExternalLink className="icon-xs" aria-hidden="true" />
-              </a>
-            )}
+        ))}
+      {way.status === "setup" ? (
+        <>
+          <p className="hint">
+            <SetupWords way={way} named={false} />
           </p>
-        ),
-      )}
-      {way.needs ? (
+          <div className="rowx">
+            <button type="button" className="btn btn-ghost btn-sm" onClick={onCancel}>
+              Close
+            </button>
+          </div>
+        </>
+      ) : way.needs ? (
         <>
           <p className="hint">{way.needs.text}</p>
           <div className="rowx">

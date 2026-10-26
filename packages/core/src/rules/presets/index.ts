@@ -1,7 +1,10 @@
 import { z } from "zod";
 import type { RuleDefinition } from "../schema";
 import { appointments } from "./appointments";
+import { bakery } from "./bakery";
+import { cafe } from "./cafe";
 import { OFFER_A_CODE, OFFER_A_CODE_PT, type Preset, type PresetSpec } from "./common";
+import { food } from "./food";
 import { projects } from "./projects";
 import { shop } from "./shop";
 import { stays } from "./stays";
@@ -14,7 +17,16 @@ export type { Preset, PresetSpec } from "./common";
  * one import and one entry here, and the key schema, the owner app's choice, the plan and the hosted
  * sign-up all follow from this list.
  */
-export const PRESET_REGISTRY = [appointments, trades, shop, stays, projects] as const satisfies readonly PresetSpec[];
+export const PRESET_REGISTRY = [
+  appointments,
+  trades,
+  shop,
+  stays,
+  projects,
+  food,
+  bakery,
+  cafe,
+] as const satisfies readonly PresetSpec[];
 
 export type PresetKey = (typeof PRESET_REGISTRY)[number]["key"];
 

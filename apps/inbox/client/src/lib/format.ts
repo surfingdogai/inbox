@@ -223,6 +223,31 @@ export function formatDateTime(iso: string, tz?: string, locale?: string): strin
   return `${formatDay(iso, tz, locale)}, ${formatClock(iso, tz, locale)}`;
 }
 
+/**
+ * When an order is for, with its day unless it is today in the business's zone (ADR-036): "Today,
+ * 10:00", "Tomorrow, 08:00", "Fri 23 Oct, 10:00". A bakery that bakes on the wrong day reads this.
+ */
+export function slotWhen(iso: string, tz?: string, now: number = Date.now(), locale?: string): string {
+  const day = localDateKey(iso, tz);
+  if (!day) return iso;
+  const today = localDateKey(now, tz);
+  if (day === today) return `Today, ${formatClock(iso, tz, locale)}`;
+  if (day === dayAfter(today)) return `Tomorrow, ${formatClock(iso, tz, locale)}`;
+  return formatDateTime(iso, tz, locale);
+}
+
+/** The calendar day after a YYYY-MM-DD, whatever the clocks do that night. */
+function dayAfter(key: string): string {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(Date.UTC(y ?? 1970, (m ?? 1) - 1, (d ?? 1) + 1)).toISOString().slice(0, 10);
+}
+
+/** The same in a list row, shorter: "10:00" today, "Tomorrow 08:00", "Fri 23 Oct 10:00". */
+export function slotShort(iso: string, tz?: string, now: number = Date.now(), locale?: string): string {
+  const when = slotWhen(iso, tz, now, locale);
+  return when.startsWith("Today, ") ? when.slice(7) : when.replace(", ", " ");
+}
+
 /** "Tue 23 Sep · 14:00–15:30", or both days when the end falls on another day. */
 export function formatWhen(start: string, end?: string | undefined, tz?: string, locale?: string): string {
   const s = parse(start);

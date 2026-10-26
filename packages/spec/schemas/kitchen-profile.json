@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://surfingdog.ai/spec/schemas/kitchen-profile.json",
+  "title": "get_business_profile's kitchen: how orders are taken",
+  "type": "object",
+  "properties": {
+    "methods": {
+      "maxItems": 3,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["pickup", "delivery", "dine_in"]
+      }
+    },
+    "prep_min": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1440
+    },
+    "slot_min": {
+      "type": "integer",
+      "minimum": 5,
+      "maximum": 240
+    },
+    "confirms": {
+      "type": "string",
+      "enum": ["on_request", "within_caps"],
+      "description": "on_request: a person accepts each order. within_caps: orders inside what the kitchen set aside confirm at once."
+    },
+    "paused_until": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+    },
+    "tips": {
+      "type": "object",
+      "properties": {
+        "choices": {
+          "maxItems": 6,
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 50
+          }
+        }
+      },
+      "required": ["choices"]
+    },
+    "delivery": {
+      "type": "object",
+      "properties": {
+        "zones": {
+          "maxItems": 10,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "radius_km": {
+                "type": "number"
+              },
+              "postal": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "country": {
+                      "type": "string",
+                      "pattern": "^[A-Z]{2}$",
+                      "description": "ISO 3166-1 alpha-2, in capitals."
+                    },
+                    "prefix": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 10,
+                      "pattern": "^[A-Z0-9]+$",
+                      "description": "The start of the postal code, in capitals, with no spaces or dashes."
+                    }
+                  },
+                  "required": ["country", "prefix"]
+                }
+              },
+              "fee": {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991,
+                    "description": "Minor units of the currency's own ISO 4217 exponent (minorUnits): 4500 is CA$45.00 or ₹45.00, ¥4,500 in JPY, 4.500 in KWD."
+                  },
+                  "currency": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 3
+                  }
+                },
+                "required": ["value", "currency"]
+              },
+              "minimum_order": {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991,
+                    "description": "Minor units of the currency's own ISO 4217 exponent (minorUnits): 4500 is CA$45.00 or ₹45.00, ¥4,500 in JPY, 4.500 in KWD."
+                  },
+                  "currency": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 3
+                  }
+                },
+                "required": ["value", "currency"]
+              },
+              "eta_min": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": ["name"]
+          }
+        }
+      },
+      "required": ["zones"]
+    },
+    "tables": {
+      "type": "object",
+      "properties": {
+        "max_party": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "quote_above": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "confirms": {
+          "type": "string",
+          "enum": ["on_request", "set_aside"]
+        }
+      },
+      "required": ["max_party", "confirms"]
+    },
+    "allergens": {
+      "type": "string",
+      "maxLength": 300,
+      "description": "How allergens are answered: a status per dish, and ask the business when it is not confirmed."
+    }
+  },
+  "required": ["methods", "prep_min", "slot_min", "confirms", "allergens"]
+}

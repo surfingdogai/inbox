@@ -348,6 +348,9 @@ describe("MCP doors", () => {
       "get_today",
       "map_calendar",
       "property_sync_now",
+      // A kitchen's (ADR-036).
+      "set_order_progress",
+      "set_sold_out",
     ]);
     // Every owner tool names the scopes that let a caller through; one missing is a gap in the
     // log-first record and, once scopes are enforced, a tool only the owner could call.

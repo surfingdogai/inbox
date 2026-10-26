@@ -46,6 +46,9 @@ import { type Contact, type Item, type Money, type PayloadOf, payloadSchemas } f
 import { collectCarried } from "../identity/carried";
 import { localStanding } from "../identity/context";
 import { stopNetworks } from "../identity/stops";
+import { fulfilWords } from "../kitchen/order";
+import { tableWords } from "../kitchen/tables";
+import { kitchenWords } from "../kitchen/words";
 import { lawOf } from "../negotiation/holidays";
 import { agreedOf, legacyOfferId, offerRows, openOf } from "../negotiation/offers";
 import { rewardsOf } from "../negotiation/rewards";
@@ -449,7 +452,15 @@ export class CustomerDoors {
       : type === "order"
         ? words.lineGoods(vars({ days }))
         : `${words.lineService(vars({ days }))}${start - now < settings.returns.days * 86_400_000 ? ` ${words.startsEarly}` : ""}`;
-    return [main, personalisedLine(payload, a), trader, withdrawal, c.confirmStep.obligation(vars({ total }))]
+    // An order for a time says how and when, the delivery fee and the tip; a table its deposit and its
+    // cancellation policy (ADR-036): all of it before the customer is bound.
+    const kitchen =
+      type === "order"
+        ? fulfilWords(payload as PayloadOf<"order">, kitchenWords(a.lang, settings.business.name), a.timezone, a.lang)
+            .map((l) => `${l}.`)
+            .join(" ")
+        : tableWords(payload as PayloadOf<"booking">, a);
+    return [main, kitchen, personalisedLine(payload, a), trader, withdrawal, c.confirmStep.obligation(vars({ total }))]
       .filter(Boolean)
       .join(" ");
   }

@@ -40,6 +40,8 @@ const row = (over: Partial<Row> = {}): Row => ({
   sourceCategory: "Kitchen > Coffee",
   listed: 1,
   catalogueSeq: 7,
+  menu: null,
+  soldOutOn: null,
   createdAt: T0 - 86_400_000,
   updatedAt: T0,
   seenAt: T0,

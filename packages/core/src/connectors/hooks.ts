@@ -16,6 +16,7 @@ import {
   type HooksHandler,
   type InboundRequest,
   type Interval,
+  type PosOrderState,
   type RunContext,
 } from "./sdk";
 
@@ -36,6 +37,17 @@ import {
  * - **Polling is the source of truth.** A webhook is a nudge: a connection that hears none still finds
  *   everything on its next sync.
  */
+
+/** Who applies a channel's signed word on an order (ADR-036): the kitchen's, registered once. */
+const POS_ORDER_APPLIER: {
+  fn?: (db: Db, connectorId: string, externalId: string, state: PosOrderState, now: number) => Promise<void>;
+} = {};
+
+export function registerPosOrderApplier(
+  fn: (db: Db, connectorId: string, externalId: string, state: PosOrderState, now: number) => Promise<void>,
+): void {
+  POS_ORDER_APPLIER.fn = fn;
+}
 
 /** The job that reads back what a platform's webhook named, and applies it. */
 export const CONNECTOR_HOOK_KIND = "connector_hook";
@@ -233,6 +245,7 @@ export class ConnectorHooks {
         }
         case "catalogue":
         case "busy":
+        case "sync":
           await this.host.syncNow(connectorId, now, `hook:${eventId}`);
           handled++;
           break;
@@ -249,6 +262,12 @@ export class ConnectorHooks {
           handled++;
           break;
         }
+        case "pos_order":
+          if (POS_ORDER_APPLIER.fn) {
+            await POS_ORDER_APPLIER.fn(this.host.db, connectorId, f.externalId, f.state, now);
+            handled++;
+          }
+          break;
         case "revoked":
           await this.host.failed(
             connectorId,

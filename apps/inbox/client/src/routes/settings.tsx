@@ -3,6 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { ThemeButton, ThemeSwitch } from "../components/ThemeSwitch";
 import { ensureSignedIn } from "../lib/auth";
+import { foodKind } from "../lib/food";
 import { useProperty } from "../lib/property";
 import { useSettings } from "../lib/queries";
 import { useWork } from "../lib/trades";
@@ -32,12 +33,15 @@ function SettingsLayout() {
     (doors !== undefined && doors.quoteRequest !== false && doors.booking === false) ||
     path === "/settings/area" ||
     path === "/settings/work";
+  // A kitchen has Menu and Kitchen (ADR-036): it takes orders for a time, or its rules are a kitchen's.
+  const food = foodKind(settings.data?.doc) || path === "/settings/menu" || path === "/settings/kitchen";
   // The tab you are on is always in view, on a phone too, where the row scrolls: again once the
-  // Property tab or a trade's Area and Work appear, which move every tab after them.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the path, the Property tab and a trade's tabs are what move the current tab
+  // Property tab, a trade's Area and Work or a kitchen's Menu and Kitchen appear, which move the tabs
+  // after them.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the path and the tabs that appear are what move the current tab
   useEffect(() => {
     tabs.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [path, stays, work]);
+  }, [path, stays, work, food]);
   return (
     <main className="page page-narrow">
       <div className="page-head">
@@ -67,6 +71,16 @@ function SettingsLayout() {
         <Link to="/settings/availability" className="tab">
           Availability
         </Link>
+        {food && (
+          <>
+            <Link to="/settings/menu" className="tab">
+              Menu
+            </Link>
+            <Link to="/settings/kitchen" className="tab">
+              Kitchen
+            </Link>
+          </>
+        )}
         {work && (
           <>
             <Link to="/settings/area" className="tab">

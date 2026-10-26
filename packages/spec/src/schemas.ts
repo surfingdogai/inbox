@@ -9,6 +9,17 @@ import {
   receiptPublishSchema,
 } from "./base";
 import {
+  allergenInfoSchema,
+  fulfilSchema,
+  getMenuInputSchema,
+  getMenuOutputSchema,
+  kitchenProfileSchema,
+  listOrderSlotsInputSchema,
+  listOrderSlotsOutputSchema,
+  orderProgressSchema,
+  tableRulesSchema,
+} from "./food";
+import {
   aiCatalogSchema,
   askBusinessInputSchema,
   attributesResponseSchema,
@@ -308,6 +319,19 @@ export const JSON_SCHEMAS: Record<string, { schema: z.ZodType; title: string }> 
   "work-profile": { schema: workProfileSchema, title: "get_business_profile's work: area, emergencies, call-out" },
   "mcp-check-area-input": { schema: checkAreaInputSchema, title: "MCP check_area: arguments" },
   "mcp-check-area-output": { schema: checkAreaOutputSchema, title: "MCP check_area: structuredContent" },
+  // Restaurants, takeaways, bakeries and cafés (spec 0.11, ADR-036).
+  "allergen-info": { schema: allergenInfoSchema, title: "A dish's allergens and whether a person confirmed them" },
+  fulfil: { schema: fulfilSchema, title: "How an order is fulfilled: method, slot, zone and fee (spec 0.11)" },
+  "order-progress": { schema: orderProgressSchema, title: "A kitchen's progress inside fulfilling (spec 0.11)" },
+  "kitchen-profile": { schema: kitchenProfileSchema, title: "get_business_profile's kitchen: how orders are taken" },
+  "table-rules": { schema: tableRulesSchema, title: "A table service's party sizes, deposit and covers set aside" },
+  "mcp-get-menu-input": { schema: getMenuInputSchema, title: "MCP get_menu: arguments" },
+  "mcp-get-menu-output": { schema: getMenuOutputSchema, title: "MCP get_menu: structuredContent" },
+  "mcp-list-order-slots-input": { schema: listOrderSlotsInputSchema, title: "MCP list_order_slots: arguments" },
+  "mcp-list-order-slots-output": {
+    schema: listOrderSlotsOutputSchema,
+    title: "MCP list_order_slots: structuredContent",
+  },
 };
 
 /**

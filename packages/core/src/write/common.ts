@@ -202,7 +202,11 @@ export async function diagnoseFailure(
     requestHash?: string | undefined;
     itemId?: string | undefined;
     expectedVersion?: number | undefined;
-    claims?: { resourceKey: string; claims: readonly [number, number][] } | undefined;
+    claims?:
+      | { resourceKey: string; claims: readonly [number, number][] }
+      /** Several places at once (an order's slot and its daily caps, ADR-036): the first one taken is said. */
+      | readonly { resourceKey: string; claims: readonly [number, number][] }[]
+      | undefined;
   },
 ): Promise<IdempotentHit> {
   const e = toDbError(error);
@@ -233,20 +237,23 @@ export async function diagnoseFailure(
       details: { guard: "nights_available" },
     });
   }
-  if (ctx.claims) {
-    for (const [bucket, ordinal] of ctx.claims.claims) {
+  const groups = ctx.claims === undefined ? [] : "resourceKey" in ctx.claims ? [ctx.claims] : ctx.claims;
+  for (const group of groups) {
+    for (const [bucket, ordinal] of group.claims) {
       const [row] = await db.orm
         .select({ itemId: slotClaims.itemId })
         .from(slotClaims)
         .where(
           and(
-            eq(slotClaims.resourceKey, ctx.claims.resourceKey),
+            eq(slotClaims.resourceKey, group.resourceKey),
             eq(slotClaims.bucketStart, bucket),
             eq(slotClaims.ordinal, ordinal),
           ),
         );
       if (row && row.itemId !== ctx.itemId)
-        throw new WriteError("slot_taken", "that time was taken a moment ago", { details: { bucket } });
+        throw new WriteError("slot_taken", "that time was taken a moment ago", {
+          details: { bucket, resource: group.resourceKey },
+        });
     }
   }
   throw new WriteError("internal", e.message);

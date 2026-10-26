@@ -118,6 +118,56 @@ export function jobToolsFrom(env: {
   };
 }
 
+/** The environment a kitchen's partner tills read (ADR-036). */
+export interface PosEnv {
+  readonly TOAST_CLIENT_ID?: string | undefined;
+  readonly TOAST_CLIENT_SECRET?: string | undefined;
+  readonly TOAST_API_HOST?: string | undefined;
+  readonly LIGHTSPEED_CLIENT_ID?: string | undefined;
+  readonly LIGHTSPEED_CLIENT_SECRET?: string | undefined;
+  readonly CLOVER_CLIENT_ID?: string | undefined;
+  readonly CLOVER_CLIENT_SECRET?: string | undefined;
+  readonly DELIVERECT_CLIENT_ID?: string | undefined;
+  readonly DELIVERECT_CLIENT_SECRET?: string | undefined;
+  readonly DELIVERECT_CHANNEL?: string | undefined;
+  readonly DELIVERECT_STAGING?: string | undefined;
+}
+
+/**
+ * The partner apps of the food tills whoever runs the server holds (ADR-036): each one only when all of
+ * its values are set, else that till says "Needs setup". A host is https only.
+ */
+export function posFrom(env: PosEnv): {
+  pos: {
+    toast?: { clientId: string; clientSecret: string; apiHost: string };
+    lightspeed?: { clientId: string; clientSecret: string };
+    clover?: { clientId: string; clientSecret: string };
+    deliverect?: { clientId: string; clientSecret: string; channel: string; staging?: boolean };
+  };
+} {
+  const v = (x: string | undefined) => x?.trim() || "";
+  const pair = (id: string | undefined, secret: string | undefined) =>
+    v(id) && v(secret) ? { clientId: v(id), clientSecret: v(secret) } : null;
+  const toast = pair(env.TOAST_CLIENT_ID, env.TOAST_CLIENT_SECRET);
+  const host = v(env.TOAST_API_HOST).replace(/\/+$/, "");
+  const lightspeed = pair(env.LIGHTSPEED_CLIENT_ID, env.LIGHTSPEED_CLIENT_SECRET);
+  const clover = pair(env.CLOVER_CLIENT_ID, env.CLOVER_CLIENT_SECRET);
+  const deliverect = pair(env.DELIVERECT_CLIENT_ID, env.DELIVERECT_CLIENT_SECRET);
+  const channel = v(env.DELIVERECT_CHANNEL);
+  return {
+    pos: {
+      ...(toast && /^https:\/\/[a-z0-9.-]+$/i.test(host) ? { toast: { ...toast, apiHost: host } } : {}),
+      ...(lightspeed ? { lightspeed } : {}),
+      ...(clover ? { clover } : {}),
+      ...(deliverect && channel
+        ? { deliverect: { ...deliverect, channel, ...(flag(env.DELIVERECT_STAGING) ? { staging: true } : {}) } }
+        : {}),
+    },
+  };
+}
+
+const flag = (x: string | undefined) => /^(1|true|yes|on)$/i.test(x?.trim() ?? "");
+
 /** The OAuth clients an inbox may hold, by platform, and the environment variables each comes from. */
 const OAUTH_ENV = {
   google: ["GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"],

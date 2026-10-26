@@ -37,6 +37,7 @@ import { fromZod, WriteError } from "./errors";
 import { NEGOTIATES, requestExpiry, requestRow } from "./offers";
 import { planParty } from "./party";
 import { type PricingFor, priceFromCatalogue } from "./pricing";
+import { claimStatements } from "./slots";
 import { defaultSubject, type ItemView, viewFor } from "./views";
 
 export interface CreateInput {
@@ -91,6 +92,12 @@ export interface CreateInput {
         readonly files: readonly string[];
         readonly flags?: Partial<ItemFlags> | undefined;
         readonly hash: unknown;
+        /**
+         * Places the request takes in the same batch (ADR-036): an order's pickup or delivery slot and
+         * the daily caps of what it orders, each a resource key and its (bucket, ordinal) pairs. Two
+         * requests for the last place: the primary key lets one in, and the other is told `slot_taken`.
+         */
+        readonly claims?: readonly { readonly resourceKey: string; readonly claims: readonly [number, number][] }[];
       }
     | undefined;
 }
@@ -110,6 +117,12 @@ const BUSINESS_FIELDS = [
   "deliveredAt",
   "change",
   "schedule",
+  // A kitchen's word on the order, and whether it may confirm at once (ADR-036); a table's deposit and
+  // its dated policy: the inbox's and the business's, never the customer's.
+  "progress",
+  "kitchen",
+  "deposit",
+  "policy",
 ] as const;
 
 export interface CreateResult {
@@ -126,6 +139,11 @@ export interface CreateResult {
    */
   readonly accessTokenWithheld?: true | undefined;
   readonly replayed: boolean;
+  /**
+   * What the door says beside the item, in the business's words, when it made another kind than was
+   * asked for: a table for more than the business books online is a request for a price (ADR-036).
+   */
+  readonly note?: string | undefined;
   /** Who the inbox takes the customer for (ADR-017 §8.4); the public doors add it. */
   readonly identity?: IdentityAnswer | undefined;
 }
@@ -139,9 +157,17 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
   const schema = payloadSchemas[input.type];
   if (!schema) throw new WriteError("invalid_input", `unknown item type ${String(input.type)}`);
   const adds = input.inboxAdds;
-  const parsed = schema.safeParse(
-    adds ? { ...(input.payload as Record<string, unknown>), ...adds.payload } : input.payload,
-  );
+  // A customer's request never carries what only the business or the inbox writes; what the inbox adds
+  // goes over what they sent.
+  const sent =
+    isCustomer(caller) && input.payload && typeof input.payload === "object"
+      ? Object.fromEntries(
+          Object.entries(input.payload as Record<string, unknown>).filter(
+            ([k]) => !(BUSINESS_FIELDS as readonly string[]).includes(k),
+          ),
+        )
+      : input.payload;
+  const parsed = schema.safeParse(adds ? { ...(sent as Record<string, unknown>), ...adds.payload } : sent);
   if (!parsed.success) throw fromZod(parsed.error, "payload");
 
   const idem = caller.idempotency;
@@ -205,7 +231,9 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
   delete payload.quote;
   // Nor what only the business records: a payment, the goods' delivery, a change to a promise. (A price
   // chosen for them is the pricing's alone: it drops one the request carried.)
-  if (isCustomer(caller)) for (const field of BUSINESS_FIELDS) delete payload[field];
+  // What the inbox added itself (`inboxAdds`: a kitchen's mark, a table's deposit) stays: it is the inbox's.
+  if (isCustomer(caller))
+    for (const field of BUSINESS_FIELDS) if (!(adds && field in adds.payload)) delete payload[field];
   // A stay is checked against its property and written with its times (ADR-037), whoever makes it.
   const stay =
     input.type === "stay"
@@ -299,6 +327,7 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
   statements.push(...party.statements);
   // The files kept for this request are handed to it in its own batch (ADR-039 §2).
   if (adds?.files.length) statements.push(...attachStatements(adds.files, id, party.partyId, now));
+  for (const group of adds?.claims ?? []) statements.push(...claimStatements(group.resourceKey, id, group.claims));
   statements.push({
     sql: `INSERT INTO items (id, type, state, version, party_id, location_id, channel, subject, linked_item_id, access_token_hash, payload, flags,
             agent_thumbprint, agent_level, agent_directory, customer_match, possible_party_id, created_at, updated_at, closed_at, request_expires_at)
@@ -451,7 +480,11 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
         fields: [{ path: "attachments", problem: "invalid", message: FILE_AGAIN }],
       });
     }
-    const hit = await diagnoseFailure(db, error, { idem, requestHash });
+    const hit = await diagnoseFailure(db, error, {
+      idem,
+      requestHash,
+      ...(adds?.claims?.length ? { claims: adds.claims, itemId: id } : {}),
+    });
     return replay(db, caller, hit, requestHash);
   }
   return { view, accessToken, replayed: false };

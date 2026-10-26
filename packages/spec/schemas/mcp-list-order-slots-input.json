@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MCP list_order_slots: arguments",
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+      "description": "The day, YYYY-MM-DD in the business's time zone."
+    },
+    "method": {
+      "default": "pickup",
+      "type": "string",
+      "enum": ["pickup", "delivery", "dine_in"]
+    },
+    "postal_code": {
+      "description": "For delivery: the address's postal code.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 20
+    },
+    "country": {
+      "description": "With a postal code: its country, ISO 3166-1 alpha-2.",
+      "type": "string",
+      "pattern": "^[A-Za-z]{2}$"
+    },
+    "lat": {
+      "type": "number",
+      "minimum": -90,
+      "maximum": 90
+    },
+    "lng": {
+      "type": "number",
+      "minimum": -180,
+      "maximum": 180
+    }
+  },
+  "required": ["date"]
+}

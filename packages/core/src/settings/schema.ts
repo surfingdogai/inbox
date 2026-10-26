@@ -17,6 +17,8 @@ import {
 import { z } from "zod";
 import { areaSettingsSchema } from "../area/index";
 import type { Db } from "../db";
+import { kitchenSettingsSchema } from "../kitchen/settings";
+import { menuSettingsSchema } from "../menu/schema";
 import { settings as settingsTable } from "../schema/tables";
 import { workSettingsSchema } from "../trades/settings";
 import { canonicalNetworkOrigin, isPublicHost, networkOriginOfUrl } from "../util/hosts";
@@ -850,6 +852,10 @@ const sections = {
   area: areaSettingsSchema,
   /** How a trade takes work (ADR-039 §4): call-out, out of hours, emergencies, visits, its job tool. */
   work: workSettingsSchema,
+  /** How a kitchen takes orders for a time (ADR-036): slots, places, delivery, tips, pause. */
+  kitchen: kitchenSettingsSchema,
+  /** The menu's sections and the dayparts items are served in (ADR-036). */
+  menu: menuSettingsSchema,
   testMode: z.boolean().default(false),
 };
 

@@ -139,6 +139,9 @@ export const DOWNLOAD_TABLES: Readonly<Record<string, DownloadTable>> = {
       "Booking sessions AI platforms opened through UCP Lodging, which are sealed. The stays they made are in the copy; a platform starts a new session.",
     strip: empty("ucp_sessions"),
   },
+  pos_orders: {
+    note: "Orders taken in your own ordering system, as this inbox showed them to you: two days, no customer details.",
+  },
   connector_auth: {
     leftOut: "Sign-ins with a calendar that were on their way.",
     strip: empty("connector_auth"),

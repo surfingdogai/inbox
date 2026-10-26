@@ -225,6 +225,13 @@
       "when": 1792700000000,
       "tag": "0031_trades",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "6",
+      "when": 1792400000000,
+      "tag": "0029_food",
+      "breakpoints": true
     }
   ]
 }

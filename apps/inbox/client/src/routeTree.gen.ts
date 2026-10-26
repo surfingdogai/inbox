@@ -21,6 +21,8 @@ import { Route as SettingsEmailRouteImport } from "./routes/settings.email";
 import { Route as SettingsFoundRouteImport } from "./routes/settings.found";
 import { Route as SettingsIntegrationsRouteImport } from "./routes/settings.integrations";
 import { Route as SettingsKeysRouteImport } from "./routes/settings.keys";
+import { Route as SettingsKitchenRouteImport } from "./routes/settings.kitchen";
+import { Route as SettingsMenuRouteImport } from "./routes/settings.menu";
 import { Route as SettingsNetworksRouteImport } from "./routes/settings.networks";
 import { Route as SettingsPaymentsRouteImport } from "./routes/settings.payments";
 import { Route as SettingsPhoneRouteImport } from "./routes/settings.phone";
@@ -89,6 +91,16 @@ const SettingsKeysRoute = SettingsKeysRouteImport.update({
   path: "/keys",
   getParentRoute: () => SettingsRoute,
 } as any);
+const SettingsKitchenRoute = SettingsKitchenRouteImport.update({
+  id: "/kitchen",
+  path: "/kitchen",
+  getParentRoute: () => SettingsRoute,
+} as any);
+const SettingsMenuRoute = SettingsMenuRouteImport.update({
+  id: "/menu",
+  path: "/menu",
+  getParentRoute: () => SettingsRoute,
+} as any);
 const SettingsNetworksRoute = SettingsNetworksRouteImport.update({
   id: "/networks",
   path: "/networks",
@@ -141,6 +153,8 @@ export interface FileRoutesByFullPath {
   "/settings/found": typeof SettingsFoundRoute;
   "/settings/integrations": typeof SettingsIntegrationsRoute;
   "/settings/keys": typeof SettingsKeysRoute;
+  "/settings/kitchen": typeof SettingsKitchenRoute;
+  "/settings/menu": typeof SettingsMenuRoute;
   "/settings/networks": typeof SettingsNetworksRoute;
   "/settings/payments": typeof SettingsPaymentsRoute;
   "/settings/phone": typeof SettingsPhoneRoute;
@@ -160,6 +174,8 @@ export interface FileRoutesByTo {
   "/settings/found": typeof SettingsFoundRoute;
   "/settings/integrations": typeof SettingsIntegrationsRoute;
   "/settings/keys": typeof SettingsKeysRoute;
+  "/settings/kitchen": typeof SettingsKitchenRoute;
+  "/settings/menu": typeof SettingsMenuRoute;
   "/settings/networks": typeof SettingsNetworksRoute;
   "/settings/payments": typeof SettingsPaymentsRoute;
   "/settings/phone": typeof SettingsPhoneRoute;
@@ -183,6 +199,8 @@ export interface FileRoutesById {
   "/settings/found": typeof SettingsFoundRoute;
   "/settings/integrations": typeof SettingsIntegrationsRoute;
   "/settings/keys": typeof SettingsKeysRoute;
+  "/settings/kitchen": typeof SettingsKitchenRoute;
+  "/settings/menu": typeof SettingsMenuRoute;
   "/settings/networks": typeof SettingsNetworksRoute;
   "/settings/payments": typeof SettingsPaymentsRoute;
   "/settings/phone": typeof SettingsPhoneRoute;
@@ -207,6 +225,8 @@ export interface FileRouteTypes {
     | "/settings/found"
     | "/settings/integrations"
     | "/settings/keys"
+    | "/settings/kitchen"
+    | "/settings/menu"
     | "/settings/networks"
     | "/settings/payments"
     | "/settings/phone"
@@ -226,6 +246,8 @@ export interface FileRouteTypes {
     | "/settings/found"
     | "/settings/integrations"
     | "/settings/keys"
+    | "/settings/kitchen"
+    | "/settings/menu"
     | "/settings/networks"
     | "/settings/payments"
     | "/settings/phone"
@@ -248,6 +270,8 @@ export interface FileRouteTypes {
     | "/settings/found"
     | "/settings/integrations"
     | "/settings/keys"
+    | "/settings/kitchen"
+    | "/settings/menu"
     | "/settings/networks"
     | "/settings/payments"
     | "/settings/phone"
@@ -353,6 +377,20 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof SettingsKeysRouteImport;
       parentRoute: typeof SettingsRoute;
     };
+    "/settings/kitchen": {
+      id: "/settings/kitchen";
+      path: "/kitchen";
+      fullPath: "/settings/kitchen";
+      preLoaderRoute: typeof SettingsKitchenRouteImport;
+      parentRoute: typeof SettingsRoute;
+    };
+    "/settings/menu": {
+      id: "/settings/menu";
+      path: "/menu";
+      fullPath: "/settings/menu";
+      preLoaderRoute: typeof SettingsMenuRouteImport;
+      parentRoute: typeof SettingsRoute;
+    };
     "/settings/networks": {
       id: "/settings/networks";
       path: "/networks";
@@ -431,6 +469,8 @@ interface SettingsRouteChildren {
   SettingsFoundRoute: typeof SettingsFoundRoute;
   SettingsIntegrationsRoute: typeof SettingsIntegrationsRoute;
   SettingsKeysRoute: typeof SettingsKeysRoute;
+  SettingsKitchenRoute: typeof SettingsKitchenRoute;
+  SettingsMenuRoute: typeof SettingsMenuRoute;
   SettingsNetworksRoute: typeof SettingsNetworksRoute;
   SettingsPaymentsRoute: typeof SettingsPaymentsRoute;
   SettingsPhoneRoute: typeof SettingsPhoneRoute;
@@ -448,6 +488,8 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsFoundRoute: SettingsFoundRoute,
   SettingsIntegrationsRoute: SettingsIntegrationsRoute,
   SettingsKeysRoute: SettingsKeysRoute,
+  SettingsKitchenRoute: SettingsKitchenRoute,
+  SettingsMenuRoute: SettingsMenuRoute,
   SettingsNetworksRoute: SettingsNetworksRoute,
   SettingsPaymentsRoute: SettingsPaymentsRoute,
   SettingsPhoneRoute: SettingsPhoneRoute,

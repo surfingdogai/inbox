@@ -62,6 +62,7 @@ const DIFF_PERSONAL = [
   "$.payload.deliveryAddress",
   "$.payload.billingAddress",
   "$.payload.shippingAddress",
+  "$.payload.fulfil",
   "$.payload.paymentRef",
   "$.payload.paymentUrl",
   "$.payload.quote[0].notes",
@@ -544,8 +545,18 @@ export function eraseStatements(parties: readonly string[], now: number): Statem
         `UPDATE items SET payload = json_remove(payload, '$.notes', '$.paymentRef') WHERE type = 'booking' AND party_id IN ${inParties}`,
       ),
       run(
-        `UPDATE items SET payload = json_remove(payload, '$.notes', '$.billingAddress', '$.shippingAddress', '$.paymentRef', '$.paymentUrl')
+        `UPDATE items SET payload = json_remove(payload, '$.notes', '$.billingAddress', '$.shippingAddress', '$.paymentRef', '$.paymentUrl', '$.fulfil.geo')
           WHERE type = 'order' AND party_id IN ${inParties}`,
+      ),
+      // A line's word for the kitchen and the writing on a cake are in their own words (ADR-036): they go,
+      // the line stays. json() around the subquery, as below.
+      run(
+        `UPDATE items SET payload = json_set(payload, '$.orderedItem', json((
+            SELECT json_group_array(json_remove(json(e.value), '$.note', '$.brief.message'))
+              FROM json_each(items.payload, '$.orderedItem') e)))
+          WHERE type = 'order' AND party_id IN ${inParties}
+            AND EXISTS (SELECT 1 FROM json_each(items.payload, '$.orderedItem') e
+                         WHERE json_extract(e.value, '$.note') IS NOT NULL OR json_extract(e.value, '$.brief.message') IS NOT NULL)`,
       ),
       // A line no product of the catalogue named is in their own words (the catalogue names its own):
       // its name goes, its quantity and price stay; the title made from it goes first.

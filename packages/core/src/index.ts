@@ -4,7 +4,10 @@
  */
 
 // Trades and projects (spec 0.12, ADR-039).
+// Restaurants, takeaways, bakeries and cafés (spec 0.11, ADR-036).
 export type {
+  AllergenEntry,
+  AllergenInfo,
   AreaCheck,
   AreaSummary,
   AttachmentRef,
@@ -14,10 +17,24 @@ export type {
   CheckAreaInput,
   CheckAreaOutput,
   DatedPolicy,
+  DietaryTag,
   DoorElsewhere,
+  Fulfil,
+  FulfilMethod,
+  GetMenuInput,
+  GetMenuOutput,
   Job,
   JobUrgency,
+  KitchenHold,
+  KitchenMark,
+  KitchenProfile,
+  LineBrief,
+  LineOption,
+  ListOrderSlotsInput,
+  ListOrderSlotsOutput,
   Manifest,
+  MenuItemView,
+  OrderProgress,
   PaymentSchedule,
   PaymentTerms,
   PingCatalogue,
@@ -25,13 +42,20 @@ export type {
   Policy,
   PolicyFee,
   PostalPrefix,
+  TableRules,
+  Tip,
   TradeQuote,
   WorkProfile,
 } from "@surfingdog/spec";
 export {
+  ALLERGEN_CLAIMS,
+  ALLERGEN_CODES,
+  ALLERGENS_VOCABULARY,
   AREA_BANDS_KM,
   ATTACHMENT_LIMITS,
   ATTACHMENT_TYPES,
+  allergenInfoSchema,
+  allergenLabel,
   areaCheckSchema,
   areaSummarySchema,
   attachmentRefSchema,
@@ -42,6 +66,7 @@ export {
   checkAreaInputSchema,
   checkAreaOutputSchema,
   currencyCodeProblem,
+  DIETARY_TAGS,
   DOOR_PLATFORM_GROUPS,
   DOOR_PLATFORMS,
   datedPolicySchema,
@@ -49,16 +74,29 @@ export {
   discoverySnippets,
   doorPlace,
   doorPlatform,
+  expandAllergens,
   fillStayTemplate,
+  fulfilSchema,
+  getMenuInputSchema,
+  getMenuOutputSchema,
   gtinDisplay,
   ISO_4217_FUNDS,
   ISO_4217_MINOR_UNITS,
+  isAllergenCode,
   isPaymentToken,
+  JURISDICTIONS,
   jobSchema,
+  jurisdictionOf,
+  KITCHEN_HOLDS,
+  kitchenProfileSchema,
+  listOrderSlotsInputSchema,
+  listOrderSlotsOutputSchema,
   MANIFEST_PATH,
+  mandatoryAllergens,
   manifestSchema,
   minorUnits,
   normaliseGtin,
+  orderProgressSchema,
   PAYMENT_TOKENS,
   PAYMENTS_VOCABULARY,
   parseDecimal,
@@ -70,7 +108,9 @@ export {
   publishedPayments,
   readDoorsElsewhere,
   shareOf,
+  tableRulesSchema,
   tradeQuoteSchema,
+  WEEKDAYS,
   workProfileSchema,
 } from "@surfingdog/spec";
 export * from "./access/index";
@@ -88,10 +128,12 @@ export { CUSTOMER_FORBIDDEN_WORDS, customerCopyProblems, customerWordsIn } from 
 export * from "./identity/index";
 export { isUlid, randomToken, ulid } from "./ids";
 export * from "./jobs/index";
+export * from "./kitchen/index";
 export * from "./machine/machine";
 export * from "./machine/outcomes";
 export * from "./machine/tables";
 export { buildManifest } from "./manifest";
+export * from "./menu/index";
 export type { FloorKind, FloorView } from "./negotiation/catalogue";
 export {
   amendmentsSendable,

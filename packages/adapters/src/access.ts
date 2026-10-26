@@ -147,6 +147,19 @@ export const ROUTE_SCOPES: Readonly<Record<string, readonly string[]>> = {
   "GET /work": [READ_SETUP],
   // What a connected tool says about the business, to start from: read like a connection.
   "GET /integrations/:id/setup": [READ_SETUP, "integrations:write"],
+  // A kitchen (ADR-036): the menu reads and writes like the catalogue; confirming allergens, importing a
+  // menu and a table's rules are a person's, checked by the capability whatever the scopes; progress and
+  // pausing are the inbox's work.
+  "GET /menu": [READ_SETUP, "catalogue:write"],
+  "PUT /menu/items/:id": ["catalogue:write"],
+  "POST /menu/items/:id/allergens/confirm": ["catalogue:write"],
+  "POST /menu/items/:id/sold-out": ["catalogue:write"],
+  "POST /menu/import": ["catalogue:write"],
+  "PUT /services/:id/tables": ["catalogue:write"],
+  "GET /kitchen": ["inbox:read"],
+  "POST /kitchen/pause": ["inbox:write"],
+  "POST /items/:id/progress": ["inbox:write"],
+  "GET /pos-orders": ["inbox:read"],
   // The owner's in person, with a code sent to their email, checked by the route whatever the scopes.
   "GET /download": ["*"],
   "POST /download/code": ["*"],
@@ -154,6 +167,9 @@ export const ROUTE_SCOPES: Readonly<Record<string, readonly string[]>> = {
 };
 
 export const TOOL_SCOPES: Readonly<Record<string, readonly string[]>> = {
+  // A kitchen's (ADR-036): how far an order is, and what is sold out today.
+  set_order_progress: ["inbox:write"],
+  set_sold_out: ["catalogue:write"],
   list_items: ["inbox:read"],
   get_item: ["inbox:read"],
   transition_item: ["inbox:write"],

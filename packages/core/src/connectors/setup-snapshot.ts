@@ -45,11 +45,41 @@ export interface SnapshotStaff {
 
 export interface SnapshotMenuSection {
   readonly name: string;
-  readonly items: readonly {
+  readonly items: readonly SnapshotMenuItem[];
+}
+
+/** One item of a tool's menu, as read from it (ADR-036): what the owner may keep, one press each. */
+export interface SnapshotMenuItem {
+  readonly externalId: string;
+  /** The tool's own id for the group the item sits in, where its orders must name it (a Toast menu group). */
+  readonly groupExternalId?: string | undefined;
+  readonly name: string;
+  readonly description?: string | null | undefined;
+  readonly price?: { readonly value: number; readonly currency: string } | null | undefined;
+  /** Never inferred, and never confirmed by an import: the owner confirms each one in person. */
+  readonly allergens?:
+    | {
+        readonly contains: readonly string[];
+        readonly mayContain?: readonly string[] | undefined;
+        readonly status: "unconfirmed";
+      }
+    | undefined;
+  /** The tool's option groups, each choice with what it adds in minor units (ADR-036). */
+  readonly optionGroups?: readonly SnapshotOptionGroup[] | undefined;
+  /** Dietary tags the tool holds (vegan, halal…), in the menu vocabulary; claims about allergens arrive unconfirmed too. */
+  readonly dietary?: readonly string[] | undefined;
+}
+
+export interface SnapshotOptionGroup {
+  readonly externalId: string;
+  readonly name: string;
+  readonly min: number;
+  readonly max: number;
+  readonly choices: readonly {
     readonly externalId: string;
     readonly name: string;
-    readonly price?: { readonly value: number; readonly currency: string } | null | undefined;
-    /** Never inferred, and never confirmed by an import: the owner confirms each one in person. */
-    readonly allergens?: { readonly contains: readonly string[]; readonly status: "unconfirmed" } | undefined;
+    /** What it adds, in minor units of the item's currency; 0 for nothing. */
+    readonly priceDelta: number;
+    readonly default?: boolean | undefined;
   }[];
 }

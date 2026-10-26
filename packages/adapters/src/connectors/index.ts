@@ -6,6 +6,13 @@ import { googleCalendarConnector } from "./google";
 import { icsConnector } from "./ics";
 import { icsFeedConnector } from "./ics-feed";
 import { mollieConnector } from "./mollie";
+import { cloverConnector } from "./pos/clover";
+import type { PartnerClient } from "./pos/common";
+import { type DeliverectPartner, deliverectConnector } from "./pos/deliverect";
+import { flipdishConnector } from "./pos/flipdish";
+import { gloriafoodConnector } from "./pos/gloriafood";
+import { lightspeedConnector } from "./pos/lightspeed";
+import { type ToastPartner, toastConnector } from "./pos/toast";
 import { apaleoConnector } from "./property/apaleo";
 import { beds24Connector } from "./property/beds24";
 import { cloudbedsConnector } from "./property/cloudbeds";
@@ -63,6 +70,25 @@ export {
   mollieForm,
 } from "./mollie";
 export { constantTimeEqual, hmacSha256Hex } from "./pay-sign";
+export { CLOVER_REGIONS, cloverConnector, cloverOrderBody, cloverSnapshot } from "./pos/clover";
+export { allergenCodesOf, minorOf, type PartnerClient } from "./pos/common";
+export {
+  DELIVERECT_API,
+  type DeliverectPartner,
+  deliverectConnector,
+  deliverectOrderBody,
+  deliverectState,
+} from "./pos/deliverect";
+export { FLIPDISH_API, FLIPDISH_TOKEN_URL, flipdishConnector, flipdishHours, flipdishSnapshot } from "./pos/flipdish";
+export { GLORIAFOOD_API, gloriafoodConnector, gloriafoodOrder, gloriafoodSnapshot } from "./pos/gloriafood";
+export {
+  LIGHTSPEED_API,
+  LIGHTSPEED_AUTH,
+  lightspeedConnector,
+  lightspeedOrderBody,
+  lightspeedSnapshot,
+} from "./pos/lightspeed";
+export { type ToastPartner, toastConnector, toastOrderBody, toastSnapshot, toastState } from "./pos/toast";
 export { APALEO_HOSTS, APALEO_SCOPES, apaleoConnector } from "./property/apaleo";
 export { CLOUDBEDS_HOSTS, cloudbedsConnector } from "./property/cloudbeds";
 export { MEWS_HOSTS, type MewsPartner, mewsConnector } from "./property/mews";
@@ -156,10 +182,25 @@ export interface PropertyPartners {
   readonly cloudbedsPropertyKey?: boolean | undefined;
 }
 
+/**
+ * The partner apps of the food tills whoever runs the server holds (ADR-036): Toast's client and API
+ * host (`TOAST_CLIENT_ID`, `TOAST_CLIENT_SECRET`, `TOAST_API_HOST`), Lightspeed's and Clover's OAuth
+ * clients (`LIGHTSPEED_CLIENT_ID`/`_SECRET`, `CLOVER_CLIENT_ID`/`_SECRET`), and Deliverect's channel
+ * (`DELIVERECT_CLIENT_ID`, `DELIVERECT_CLIENT_SECRET`, `DELIVERECT_CHANNEL`, `DELIVERECT_STAGING=1`). Absent,
+ * each says "Needs setup".
+ */
+export interface PosPartners {
+  readonly toast?: ToastPartner | null | undefined;
+  readonly lightspeed?: PartnerClient | null | undefined;
+  readonly clover?: PartnerClient | null | undefined;
+  readonly deliverect?: DeliverectPartner | null | undefined;
+}
+
 /** What the host says of itself to the connectors it offers. */
 export interface ConnectorHostOptions {
   readonly oauth?: OAuthClients | undefined;
   readonly jobTools?: JobToolSwitches | undefined;
+  readonly pos?: PosPartners | undefined;
   /** A hosted inbox, whose OAuth clients are the host's own and on their way: "Soon" rather than "set up". */
   readonly hosted?: boolean | undefined;
   /**
@@ -211,5 +252,13 @@ export function builtInConnectors(opts: ConnectorHostOptions = {}): ConnectorDef
     housecallproConnector({ cleared: opts.jobTools?.cleared?.includes("housecallpro") }),
     fergusConnector({ cleared: opts.jobTools?.cleared?.includes("fergus") }),
     jobberConnector(opts.oauth?.jobber ?? null, { apiVersion: opts.jobTools?.jobberApiVersion }),
+    // A kitchen's own systems (ADR-036): GloriaFood and Flipdish with what the owner makes in their own
+    // account; Toast, Lightspeed, Clover and Deliverect only through the server's partner apps.
+    gloriafoodConnector(),
+    flipdishConnector(),
+    toastConnector(opts.pos?.toast ?? null),
+    lightspeedConnector(opts.pos?.lightspeed ?? null),
+    cloverConnector(opts.pos?.clover ?? null),
+    deliverectConnector(opts.pos?.deliverect ?? null),
   ];
 }

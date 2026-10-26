@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect } from "react";
+import { KitchenToday } from "../components/KitchenToday";
 import { StatePill } from "../components/Pills";
 import { api, problemOf } from "../lib/api";
 import { ownerLocale } from "../lib/geo";
@@ -86,6 +87,8 @@ function TodayPane() {
       </div>
 
       {stays && <StaysToday />}
+
+      {settings.data?.doc.kitchen.enabled && <KitchenToday tz={tz} sandbox={sandbox} />}
 
       <section className="card glass stack">
         <h3 className="sec">Bookings today</h3>

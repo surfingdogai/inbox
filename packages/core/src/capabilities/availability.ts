@@ -96,6 +96,8 @@ export async function findSlots(
     minNoticeMin: number;
     /** A booking looking for somewhere to move: its own places do not count as taken. */
     exceptItemId?: string | undefined;
+    /** For a service whose places are people (a table): the party, which a slot must fit. */
+    partySize?: number | undefined;
   },
 ): Promise<{ service: { id: string; name: string; durationMin: number }; slots: Slot[] }> {
   const [service] = await db.orm.select().from(services).where(eq(services.id, input.serviceId));
@@ -129,7 +131,9 @@ export async function findSlots(
   const weekly = weeklyFor(rules, service.id);
   const closures = await readClosures(db, service.id);
   const localDate = dateLocaliser(input.timezone);
-  const spec: SlotSpec = { ...service, resourceKey: `service:${service.id}` };
+  // A service whose places are people (a table's covers, ADR-036): a slot is free for a party that fits.
+  const units = service.capacityUnit === "people" ? Math.max(1, input.partySize ?? 1) : undefined;
+  const spec: SlotSpec = { ...service, resourceKey: `service:${service.id}`, ...(units ? { units } : {}) };
   const step = service.granularityMin * 60_000;
   const duration = service.durationMin * 60_000;
   const local = localiser(input.timezone);

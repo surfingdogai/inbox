@@ -30,6 +30,7 @@ import { EventIcon } from "./EventIcon";
 import { DetailSkeleton, ErrorState, Toast } from "./Feedback";
 import { Details, Fields } from "./Fields";
 import { JobBlock } from "./Job";
+import { OrderBlock } from "./OrderBlock";
 import { Payments, RefundAt } from "./Payments";
 import { StatePill, TypePill } from "./Pills";
 import { Receipts } from "./Receipts";
@@ -197,6 +198,9 @@ export function ItemDetailView({
           }
         />
         {item.type === "quote_request" && <JobBlock item={item} tz={tz} currency={money} />}
+        {item.type === "order" && (
+          <OrderBlock item={item} tz={tz} onDone={(text) => setNotice({ tone: "success", text })} />
+        )}
         {item.type === "order" && (
           <Payments itemId={item.id} payments={payments} none={pays.data?.none ?? null} tz={tz} />
         )}

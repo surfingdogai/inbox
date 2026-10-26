@@ -104,6 +104,8 @@ interface WaySpec {
   readonly preset: string | null;
   readonly label: string;
   readonly advanced?: true;
+  /** Being built now, on a card that is not: "Soon" until its connector is registered (Square among the tills). */
+  readonly building?: true;
 }
 
 interface CardSpec {
@@ -271,6 +273,27 @@ export const GALLERY: readonly CardSpec[] = [
       { kind: "servicem8", preset: "oauth", label: "Sign in with ServiceM8", advanced: true },
     ],
   },
+  // A kitchen's own systems (ADR-036): its menu in from the ordering system or till it runs, and the
+  // orders it accepts here out to its till. GloriaFood and Flipdish with what the owner makes in their
+  // own account; Toast, Lightspeed, Clover and Deliverect say "set up" until our partner app is on the
+  // server.
+  {
+    id: "pos",
+    title: "Ordering and till",
+    line: "Your menu in, accepted orders to your till",
+    group: "pos",
+    industries: ["restaurants", "cafes", "bakeries"],
+    ways: [
+      { kind: "gloriafood", preset: null, label: "GloriaFood" },
+      { kind: "flipdish", preset: null, label: "Flipdish" },
+      { kind: "toast", preset: null, label: "Toast" },
+      { kind: "lightspeed", preset: null, label: "Lightspeed Restaurant" },
+      { kind: "clover", preset: null, label: "Clover" },
+      { kind: "deliverect", preset: null, label: "Deliverect" },
+      // A café on Square looks for it here too: the same way as under Shops and tills.
+      { kind: "square", preset: null, label: "Square", building: true },
+    ],
+  },
 ];
 
 /** The card a connection belongs to, for its tile's state. */
@@ -284,7 +307,7 @@ export function cardOf(kind: string, preset?: string | null): string | undefined
  * appointments, one with more products than services to a shop. Orders the groups and the cards in
  * them; it never hides one.
  */
-export type Lean = "appointments" | "shop" | "stays" | "trades" | null;
+export type Lean = "appointments" | "shop" | "stays" | "trades" | "food" | null;
 
 export function leanOf(counts: {
   readonly services: number;
@@ -293,8 +316,11 @@ export function leanOf(counts: {
   readonly rooms?: number | undefined;
   /** A trade (ADR-039): it set where it works or how it takes work, or has a job tool. */
   readonly trade?: boolean | undefined;
+  /** A kitchen (ADR-036): it takes orders for a time, has a menu, or has an ordering system connected. */
+  readonly food?: boolean | undefined;
 }): Lean {
   if ((counts.rooms ?? 0) > 0) return "stays";
+  if (counts.food) return "food";
   if (counts.trade) return "trades";
   if (counts.products > counts.services) return "shop";
   if (counts.services > 0) return "appointments";
@@ -306,11 +332,13 @@ export function galleryGroups(lean: Lean): GalleryGroup[] {
   const order: ConnectorGroup[] =
     lean === "stays"
       ? ["lodging", "calendars", "payments", "shops"]
-      : lean === "trades"
-        ? ["work", "calendars", "payments", "shops"]
-        : lean === "shop"
-          ? ["shops", "payments", "calendars"]
-          : ["calendars", "payments", "shops"];
+      : lean === "food"
+        ? ["pos", "payments", "calendars", "shops"]
+        : lean === "trades"
+          ? ["work", "calendars", "payments", "shops"]
+          : lean === "shop"
+            ? ["shops", "payments", "calendars"]
+            : ["calendars", "payments", "shops"];
   return order.map((id) => ({ id, label: GROUP_LABELS[id] }));
 }
 
@@ -341,7 +369,10 @@ export function gallery(
       const way = wayOf(spec, w, definitions.get(w.kind), opts);
       if (way) ways.push(way);
     }
-    if (ways.length === 0) continue;
+    // A card not being built itself shows once one of its own ways is registered: a way only being
+    // built (Square among the tills) never makes a card appear on its own.
+    if (ways.length === 0 || (!card.building && !card.ways.some((w) => definitions.has(w.kind) && !w.building)))
+      continue;
     const needs = ways.every((w) => w.needs !== undefined);
     // Ready first, the rest after in the order given, the advanced ones last: what can be pressed comes first.
     const rank = (w: GalleryWay) => (w.advanced ? 2 : w.status === "ready" ? 0 : 1);
@@ -361,7 +392,15 @@ export function gallery(
   if (lean === null) return out;
   // Within a group, the cards this kind of business uses most first; otherwise as listed.
   const fits = new Set<Industry>(
-    lean === "stays" ? ["stays"] : lean === "trades" ? ["trades"] : lean === "shop" ? FOOD_AND_SHOPS : APPOINTMENTS,
+    lean === "stays"
+      ? ["stays"]
+      : lean === "food"
+        ? ["restaurants", "cafes", "bakeries"]
+        : lean === "trades"
+          ? ["trades"]
+          : lean === "shop"
+            ? FOOD_AND_SHOPS
+            : APPOINTMENTS,
   );
   const score = (c: GalleryCard) => (c.industries.includes("all") || c.industries.some((i) => fits.has(i)) ? 0 : 1);
   return out
@@ -385,7 +424,7 @@ function wayOf(
   // Not in this release (its connector, or the preset the way names): "Soon" while it is being built,
   // and not shown otherwise.
   if (!def || (w.preset && !preset)) {
-    if (!card.building) return null;
+    if (!card.building && !w.building) return null;
     return {
       kind: w.kind,
       preset: w.preset,
