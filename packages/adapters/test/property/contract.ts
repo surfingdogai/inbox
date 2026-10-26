@@ -15,8 +15,8 @@ import { describe, expect, it } from "vitest";
  * however often it is sent; refuses (never takes quietly) a stay on a night it has no room for, or
  * takes it and says so itself, definitely (`oversold`: its overbooking flag, or its count of bookings
  * against its rooms), so the inbox's read-back takes the stay back; moves a stay it wrote, refusing or
- * flagging a move onto a full night the same way;
- * cancels by status, never by deleting; and says how many credits it has left, and when it asks the
+ * flagging a move onto a full night the same way (a system whose API moves no stay refuses every move,
+ * and the stay keeps its nights); cancels by status, never by deleting; and says how many credits it has left, and when it asks the
  * inbox to wait. Nothing here names any vendor.
  */
 
@@ -34,6 +34,11 @@ export interface ContractSystem {
   readonly oversells?: boolean | undefined;
   /** The property's currency there: the stays written are priced in it (EUR when not said). */
   readonly currency?: string | undefined;
+  /**
+   * False for a system whose API does not move a stay to other nights: it refuses the move, and the
+   * stay keeps its nights there (and here), for the owner to change in the system itself.
+   */
+  readonly moves?: boolean | undefined;
 }
 
 export function runContext(
@@ -84,6 +89,10 @@ function stay(s: ContractSystem, key: string, checkIn: string, checkOut: string)
       },
     ],
   };
+}
+
+function addOne(night: string): string {
+  return new Date(Date.parse(`${night}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
 }
 
 export function propertyContract(name: string, make: () => ContractSystem): void {
@@ -159,21 +168,27 @@ export function propertyContract(name: string, make: () => ContractSystem): void
       }
     });
 
-    it("moves a stay it wrote, and cancels by status, never by deleting", async () => {
+    it("moves a stay it wrote (or refuses to, keeping its nights), and cancels by status, never by deleting", async () => {
       const s = make();
       const ctx = runContext(s.http, s.secret);
       const writer = s.definition.stayWriter;
       if (!writer) throw new Error("no writer");
       const one = stay(s, "sd-contract-move", "2027-06-01", "2027-06-03");
       const link = await writer.put(ctx, one, null, "confirmed");
-      await writer.put(ctx, { ...one, checkIn: "2027-06-05", checkOut: "2027-06-07" }, link, "confirmed");
+      const moved = { ...one, checkIn: "2027-06-05", checkOut: "2027-06-07" };
+      if (s.moves === false) {
+        await expect(writer.put(ctx, moved, link, "confirmed")).rejects.toMatchObject({ code: "refused" });
+      } else {
+        await writer.put(ctx, moved, link, "confirmed");
+      }
+      const held = s.moves === false ? "2027-06-01" : "2027-06-05";
       const read = await s.definition.stays.ari(ctx, s.propertyId, { from: "2027-06-01", to: "2027-06-08" });
       const rows = Array.isArray(read) ? read : read.rows;
       const units = (night: string) => rows.find((r) => r.roomId === s.oneUnitRoom && r.night === night)?.units;
-      expect(units("2027-06-01")).toBe(1);
-      expect(units("2027-06-05")).toBe(0);
+      expect(units("2027-06-01")).toBe(s.moves === false ? 0 : 1);
+      expect(units("2027-06-05")).toBe(s.moves === false ? 1 : 0);
       await writer.cancel(ctx, link);
-      const after = await s.definition.stays.ari(ctx, s.propertyId, { from: "2027-06-05", to: "2027-06-06" });
+      const after = await s.definition.stays.ari(ctx, s.propertyId, { from: held, to: addOne(held) });
       expect((Array.isArray(after) ? after : after.rows).find((r) => r.roomId === s.oneUnitRoom)?.units).toBe(1);
       // Still there, as cancelled: found by its key.
       expect((await writer.find(ctx, one))?.externalId).toBe(link.externalId);

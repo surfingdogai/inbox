@@ -11,6 +11,7 @@ import { beds24Connector } from "./property/beds24";
 import { cloudbedsConnector } from "./property/cloudbeds";
 import { hostawayConnector } from "./property/hostaway";
 import { type MewsPartner, mewsConnector } from "./property/mews";
+import { smoobuConnector } from "./property/smoobu";
 import { shopifyConnector } from "./shopify/index";
 import { squareConnector } from "./square/index";
 import { stripeConnector } from "./stripe";
@@ -170,5 +171,6 @@ export function builtInConnectors(opts: ConnectorHostOptions = {}): ConnectorDef
       hosted: opts.hosted,
       propertyKey: opts.partners?.cloudbedsPropertyKey,
     }),
+    smoobuConnector(),
   ];
 }

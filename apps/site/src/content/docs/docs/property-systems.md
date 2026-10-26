@@ -15,13 +15,14 @@ Settings → **Property** → **Connect your system**.
 
 **Hostaway** (being built, not in a release yet): [connect with your account ID and API key](/docs/connectors/hostaway/).
 
+**Smoobu** (built, switched off until Smoobu's go-ahead): [how it connects, with your API key and secret](/docs/connectors/smoobu/).
+
 ## Coming
 
 Each of these is shown as **Soon** until its connection is built and released, and none is described as working before then:
 
 | System | Its developer documentation |
 | --- | --- |
-| Smoobu | <https://docs.smoobu.com/> |
 | Guesty | <https://open-api-docs.guesty.com/> |
 | Mews | <https://docs.mews.com/connector-api/> |
 | apaleo | <https://api.apaleo.com/> |
