@@ -14,3 +14,4 @@ export * from "./policy";
 export * from "./schedule";
 export { JSON_SCHEMAS, jsonSchemaOf, SCHEMA_BASE } from "./schemas";
 export * from "./stays";
+export * from "./trades";

@@ -17,6 +17,7 @@ import {
   PROPERTY,
   webhookBody,
 } from "../fixtures/property/apaleo";
+import { eventOf } from "../hook-event";
 import { propertyContract, runContext } from "./contract";
 
 /**
@@ -415,7 +416,7 @@ describe("apaleo: webhooks are hints, checked first", () => {
     // apaleo's own health check, as its guide prints it, is answered before the account is looked at.
     expect(await hooks.verify(ctx(), request(healthcheckBody()))).toBeNull();
     expect(await hooks.verify({ ...ctx(), extra: {} }, request(healthcheckBody("SOMEONE")))).toBeNull();
-    const event = await hooks.verify(ctx(), request(webhookBody(r?.id ?? "")));
+    const event = eventOf(await hooks.verify(ctx(), request(webhookBody(r?.id ?? ""))));
     expect(event?.refs).toEqual([r?.id]);
     expect(await hooks.read(ctx(), event as never)).toEqual([
       { kind: "stay_nights", roomIds: [LAKE.id], from: "2027-08-10", to: "2027-08-12" },

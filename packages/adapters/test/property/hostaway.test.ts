@@ -36,6 +36,7 @@ import {
   REYKJAVIK,
 } from "../fixtures/property/hostaway/listings";
 import { unifiedLogObject } from "../fixtures/property/hostaway/webhooks";
+import { eventOf } from "../hook-event";
 import { propertyContract, runContext } from "./contract";
 
 /**
@@ -1163,7 +1164,7 @@ describe("Hostaway: the unified webhook, its login checked in constant time, its
     // The update comes first, then the creation, then the update again.
     const events = [];
     for (const d of [updated, created, updated]) {
-      const e = await hooks.verify(c.ctx(), request(d.headers, d.body));
+      const e = eventOf(await hooks.verify(c.ctx(), request(d.headers, d.body)));
       if (e) events.push(e);
     }
     expect(events).toHaveLength(3);
@@ -1180,13 +1181,12 @@ describe("Hostaway: the unified webhook, its login checked in constant time, its
     const forged = JSON.parse(updated.body) as { data: Record<string, unknown>; listingMapId: number };
     forged.listingMapId = 310023;
     forged.data.arrivalDate = "2027-06-01";
-    const e = await hooks.verify(c.ctx(), request(updated.headers, JSON.stringify(forged)));
+    const e = eventOf(await hooks.verify(c.ctx(), request(updated.headers, JSON.stringify(forged))));
     if (!e) throw new Error("no event");
     expect((await hooks.read(c.ctx(), e))[0]).toMatchObject({ roomIds: ["310021"], from: "2026-12-15" });
     // A delivery sent again in a later ten minutes is read again: harmless, since reading is the truth.
-    const later = await hooks.verify(
-      { ...c.ctx(), now: c.fake.clock.now + 11 * 60_000 },
-      request(updated.headers, updated.body),
+    const later = eventOf(
+      await hooks.verify({ ...c.ctx(), now: c.fake.clock.now + 11 * 60_000 }, request(updated.headers, updated.body)),
     );
     expect(later?.eventId).not.toBe(events[0]?.eventId);
   });
@@ -1199,7 +1199,7 @@ describe("Hostaway: the unified webhook, its login checked in constant time, its
     for (const name of ["reservation.created", "reservationCreated", "reservation_updated", "booking.changed", ""]) {
       const [d] = c.fake.deliveries(name, r.id);
       if (!d) throw new Error("no delivery");
-      const e = await hooks.verify(c.ctx(), request(d.headers, d.body));
+      const e = eventOf(await hooks.verify(c.ctx(), request(d.headers, d.body)));
       expect(e).toMatchObject({ topic: name || "reservation", refs: [`reservation:${r.id}`] });
       if (!e) continue;
       expect(await hooks.read(c.ctx(), e)).toEqual([
@@ -1225,7 +1225,7 @@ describe("Hostaway: the unified webhook, its login checked in constant time, its
     expect(c.fake.platform.seen.length).toBe(seen);
     // About a reservation, whatever its event is called: its objectId is read back, never the log's own id.
     for (const event of ["reservation.created", "updated", "reservationModified"]) {
-      const e = await hooks.verify(c.ctx(), request(d.headers, shaped("reservation", event)));
+      const e = eventOf(await hooks.verify(c.ctx(), request(d.headers, shaped("reservation", event))));
       expect(e).toMatchObject({ refs: [`reservation:${r.id}`] });
       if (!e) continue;
       expect(await hooks.read(c.ctx(), e)).toEqual([
@@ -1241,7 +1241,7 @@ describe("Hostaway: the unified webhook, its login checked in constant time, its
     const r = c.fake.otaBooking(310022, "2026-12-20", "2026-12-23");
     const [d] = c.fake.deliveries("reservation.created", r.id);
     if (!d) throw new Error("no delivery");
-    const e = await hooks.verify(c.ctx(), request(d.headers, d.body));
+    const e = eventOf(await hooks.verify(c.ctx(), request(d.headers, d.body)));
     if (!e) throw new Error("no event");
     c.fake.reservations.delete(r.id);
     const err = await hooks.read(c.ctx(), e).catch((x: unknown) => x);
@@ -1254,7 +1254,7 @@ describe("Hostaway: the unified webhook, its login checked in constant time, its
       accountId: Number(HOBART_ACCOUNT),
       listingMapId: 310022,
     });
-    const byListing = await hooks.verify(c.ctx(), request(d.headers, body));
+    const byListing = eventOf(await hooks.verify(c.ctx(), request(d.headers, body)));
     if (!byListing) throw new Error("no event");
     const [fact] = await hooks.read(c.ctx(), byListing);
     expect(fact).toMatchObject({ kind: "stay_nights", roomIds: ["310022"] });

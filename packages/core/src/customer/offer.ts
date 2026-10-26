@@ -1,4 +1,5 @@
 import type { Item, ItemOf, Money, OfferPointer, PayloadOf } from "../domain/types";
+import { type TradeTerms, tradeQuoteTerms } from "../trades/quote";
 import { canonicalJson } from "../util/canonical";
 
 /**
@@ -57,6 +58,12 @@ export interface OfferTerms {
         readonly sku?: string | undefined;
       }
     | undefined;
+  /** A trade's quote (ADR-034 §4): estimate or fixed, its stages, its fees, whether tax is in. */
+  readonly quoteKind?: TradeTerms["quoteKind"];
+  readonly stages?: TradeTerms["stages"];
+  readonly callOutFee?: TradeTerms["callOutFee"];
+  readonly visitFee?: TradeTerms["visitFee"];
+  readonly tax?: TradeTerms["tax"];
 }
 
 export interface OpenOffer {
@@ -287,6 +294,8 @@ export function quoteOfferTerms(q: Quote): OfferTerms {
     creates: q.creates,
     ...(q.startTime ? { startTime: q.startTime } : {}),
     ...(q.endTime ? { endTime: q.endTime } : {}),
+    // A trade's quote (ADR-034 §4): only what it holds, so a quote without them keeps its terms.
+    ...tradeQuoteTerms(q),
   };
 }
 

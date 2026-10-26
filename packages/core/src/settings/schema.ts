@@ -15,8 +15,10 @@ import {
   readDoorsElsewhere,
 } from "@surfingdog/spec";
 import { z } from "zod";
+import { areaSettingsSchema } from "../area/index";
 import type { Db } from "../db";
 import { settings as settingsTable } from "../schema/tables";
+import { workSettingsSchema } from "../trades/settings";
 import { canonicalNetworkOrigin, isPublicHost, networkOriginOfUrl } from "../util/hosts";
 
 /**
@@ -841,6 +843,13 @@ const sections = {
       thankYou: z.boolean().default(false),
     })
     .prefault({}),
+  /**
+   * Where the business works (ADR-034 §3): a radius from a base it chose as a place, postal prefixes,
+   * or anywhere; what a request from outside gets; delivery zones. The base is never published.
+   */
+  area: areaSettingsSchema,
+  /** How a trade takes work (ADR-034 §4): call-out, out of hours, emergencies, visits, its job tool. */
+  work: workSettingsSchema,
   testMode: z.boolean().default(false),
 };
 

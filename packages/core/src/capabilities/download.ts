@@ -43,7 +43,7 @@ export const DOWNLOAD_TABLES: Readonly<Record<string, DownloadTable>> = {
       "UPDATE settings SET doc = json_remove(doc, '$.email.inboundSecret', '$.notifications.appUrl', '$.directory.resume')",
       // What a host's hold would bring back (`resume`) means nothing where no host holds it: the copy's
       // networks are the owner's to switch from the start.
-      `UPDATE settings SET doc = json_set(doc, '$.networks', (SELECT json_group_object(key, json(json_remove(value, '$.resume'))) FROM json_each(doc, '$.networks'))) WHERE json_type(doc, '$.networks') = 'object'`,
+      `UPDATE settings SET doc = json_set(doc, '$.networks', json((SELECT json_group_object(key, json(json_remove(value, '$.resume'))) FROM json_each(doc, '$.networks')))) WHERE json_type(doc, '$.networks') = 'object'`,
     ],
   },
   locations: {},
@@ -85,6 +85,10 @@ export const DOWNLOAD_TABLES: Readonly<Record<string, DownloadTable>> = {
   email_confirmations_held: {
     leftOut: "Forwarding confirmations a mail provider sent before their address was added: they answered only once.",
     strip: () => ["DELETE FROM email_confirmations_held"],
+  },
+  attachment_chunks: {
+    leftOut: "The files customers sent with their requests: open each from its request in the app.",
+    strip: empty("attachment_chunks"),
   },
   // The networks this inbox reports to.
   network_status: {},

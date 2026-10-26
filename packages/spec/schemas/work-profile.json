@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://surfingdog.ai/spec/schemas/work-profile.json",
+  "title": "get_business_profile's work: area, emergencies, call-out",
+  "type": "object",
+  "properties": {
+    "area": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["radius", "postal", "anywhere"]
+        },
+        "radius_km": {
+          "description": "For radius: how far the business goes.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "postal": {
+          "description": "For postal: the prefixes it covers.",
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "country": {
+                "type": "string",
+                "pattern": "^[A-Z]{2}$",
+                "description": "ISO 3166-1 alpha-2, in capitals."
+              },
+              "prefix": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 10,
+                "pattern": "^[A-Z0-9]+$",
+                "description": "The start of the postal code, in capitals, with no spaces or dashes."
+              }
+            },
+            "required": ["country", "prefix"]
+          }
+        },
+        "outside": {
+          "type": "string",
+          "enum": ["decline", "on_request"],
+          "description": "A request from outside: declined, or taken for the business to decide."
+        }
+      },
+      "required": ["mode", "outside"]
+    },
+    "emergency": {
+      "type": "string",
+      "enum": ["off", "opening_hours", "always"],
+      "description": "Emergency jobs online: not taken, only while open, or at any hour (inside the area)."
+    },
+    "call_out_fee": {
+      "type": "object",
+      "properties": {
+        "amount": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991,
+              "description": "Minor units of the currency's own ISO 4217 exponent (minorUnits): 4500 is CA$45.00 or ₹45.00, ¥4,500 in JPY, 4.500 in KWD."
+            },
+            "currency": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 3
+            }
+          },
+          "required": ["value", "currency"]
+        },
+        "credited_if_accepted": {
+          "type": "boolean"
+        }
+      },
+      "required": ["amount", "credited_if_accepted"]
+    },
+    "out_of_hours": {
+      "description": "What a visit outside opening hours adds.",
+      "type": "object",
+      "properties": {
+        "surcharge": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "amount"
+                },
+                "amount": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991,
+                      "description": "Minor units of the currency's own ISO 4217 exponent (minorUnits): 4500 is CA$45.00 or ₹45.00, ¥4,500 in JPY, 4.500 in KWD."
+                    },
+                    "currency": {
+                      "type": "string",
+                      "minLength": 3,
+                      "maxLength": 3
+                    }
+                  },
+                  "required": ["value", "currency"]
+                }
+              },
+              "required": ["kind", "amount"]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "percent"
+                },
+                "percent": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 300
+                }
+              },
+              "required": ["kind", "percent"]
+            }
+          ]
+        }
+      },
+      "required": ["surcharge"]
+    },
+    "free_estimates": {
+      "type": "boolean"
+    },
+    "visits": {
+      "type": "string",
+      "enum": ["on_request", "set_aside"],
+      "description": "set_aside: some visit times confirm at once; the rest are on request."
+    }
+  },
+  "required": ["area", "emergency", "free_estimates", "visits"]
+}

@@ -479,4 +479,16 @@ export const MIGRATIONS: readonly Migration[] = [
       "CREATE INDEX IF NOT EXISTS `ucp_sessions_created` ON `ucp_sessions` (`created_at`) WHERE `item_id` IS NULL;",
     ],
   },
+  {
+    version: 32,
+    name: "0027_trades",
+    statements: [
+      "-- Trades and projects (ADR-034). Files on a request: a customer's photos and plans are kept in the\n-- inbox's own database, in pieces of 512 KB (`attachment_chunks`), so every runtime keeps them the same\n-- way and an erasure or a copy of the database takes them with the rest. `blobs` gains the file's name\n-- as it is shown, and `expires_at`: a file arrives before the request that names it and is kept an hour\n-- for it; a request takes it by naming its item and clearing the hour. What nobody took is swept.\nCREATE TABLE IF NOT EXISTS `attachment_chunks` (\n\t`key` text NOT NULL,\n\t`seq` integer NOT NULL,\n\t`data` blob NOT NULL,\n\t`created_at` integer NOT NULL,\n\tPRIMARY KEY(`key`, `seq`)\n);",
+      "ALTER TABLE `blobs` ADD `name` text;",
+      "ALTER TABLE `blobs` ADD `expires_at` integer;",
+      "-- Who sent a file no request has taken yet (the bucket address the rate limits use), to hold each\n-- sender to its share of the files waiting; cleared when a request takes the file.\nALTER TABLE `blobs` ADD `sent_by` text;",
+      "CREATE INDEX IF NOT EXISTS `blobs_item` ON `blobs` (`item_id`) WHERE `item_id` IS NOT NULL;",
+      "CREATE INDEX IF NOT EXISTS `blobs_unclaimed` ON `blobs` (`kind`, `expires_at`) WHERE `item_id` IS NULL;",
+    ],
+  },
 ];

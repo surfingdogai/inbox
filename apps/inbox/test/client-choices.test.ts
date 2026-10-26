@@ -426,6 +426,7 @@ describe("the setup wizard's doors", () => {
     expect(KINDS.map((k) => k.label)).toEqual([
       "A salon, clinic or studio",
       "A trade",
+      "Building and renovation",
       "A shop, bakery or kitchen",
       "A place to stay",
     ]);

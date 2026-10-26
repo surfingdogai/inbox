@@ -1,4 +1,10 @@
-import { stayQuoteSchema } from "@surfingdog/spec";
+import {
+  attachmentRefSchema,
+  jobSchema,
+  paymentScheduleSchema,
+  quoteLineKindSchema,
+  stayQuoteSchema,
+} from "@surfingdog/spec";
 import { z } from "zod";
 
 /**
@@ -98,7 +104,12 @@ export const quoteLineSchema = z.object({
   name: z.string().max(200),
   quantity: z.number().int().min(1),
   price: moneySchema,
+  /** What kind of work the line is, on a trade's quote (ADR-034 §4): labour, materials or other. */
+  kind: quoteLineKindSchema.optional(),
 });
+
+/** The files a request carries (ADR-034 §2): written by the inbox once each was checked and cleaned. */
+export const attachmentsSchema = z.array(attachmentRefSchema).max(6);
 
 /**
  * Where the item's negotiation stands (ADR-018 §1): its open offer, else the last one both sides
@@ -137,6 +148,9 @@ export const quoteRequestPayloadSchema = z.object({
   budget: moneySchema.optional(),
   requestedFor: isoDateTime.optional(),
   deliveryAddress: postalAddressSchema.optional(),
+  /** What the job is (ADR-034 §4): urgency, a visit first or not, the site, windows, a budget range. */
+  job: jobSchema.optional(),
+  attachments: attachmentsSchema.optional(),
   /** Filled by the business when it quotes. */
   quote: z
     .object({
@@ -149,6 +163,21 @@ export const quoteRequestPayloadSchema = z.object({
       /** For a quote that creates a booking: the time it is for (ADR-018 §3.3). */
       startTime: isoDateTime.optional(),
       endTime: isoDateTime.optional(),
+      // A trade's quote (ADR-034 §4; spec `tradeQuoteSchema`): estimate or fixed, stages adding up to
+      // the total, call-out and visit fees and whether accepting takes them off, and whether tax is in.
+      kind: z.enum(["estimate", "fixed"]).optional(),
+      stages: z.array(paymentScheduleSchema).min(1).max(4).optional(),
+      callOutFee: z.object({ amount: moneySchema, creditedIfAccepted: z.boolean() }).optional(),
+      visitFee: z.object({ amount: moneySchema, creditedIfAccepted: z.boolean() }).optional(),
+      tax: z
+        .object({
+          included: z.boolean(),
+          lines: z
+            .array(z.object({ name: z.string().min(1).max(80), amount: moneySchema }))
+            .max(5)
+            .optional(),
+        })
+        .optional(),
     })
     .optional(),
   offer: offerPointerSchema.optional(),
@@ -187,6 +216,8 @@ export const bookingPayloadSchema = z.object({
   personalised: personalisedSchema.optional(),
   resourceId: z.string().optional(),
   notes: z.string().max(5_000).optional(),
+  /** Files the customer sent with it (ADR-034 §2), checked and cleaned by the inbox. */
+  attachments: attachmentsSchema.optional(),
   /**
    * A payment or deposit recorded for the booking (`record_payment`): it gates nothing, but a booking
    * paid at a distance is a contract the customer may withdraw from (ADR-018 §3.1, §7). Only the
@@ -248,6 +279,13 @@ export const orderPayloadSchema = z.object({
   paidAmount: moneySchema.optional(),
   paymentUrl: z.url().optional(),
   notes: z.string().max(5_000).optional(),
+  /** Files the customer sent with it (ADR-034 §2): a cake's picture, a plan. Checked and cleaned by the inbox. */
+  attachments: attachmentsSchema.optional(),
+  /**
+   * The stages it is paid in, from the trade's quote it came from (ADR-034 §4): the business asks for
+   * each as it falls due, and no link for the whole total is made. Only the inbox writes it.
+   */
+  schedule: z.array(paymentScheduleSchema).min(1).max(4).optional(),
   /** When the business marked it fulfilled (`fulfil`): the goods' withdrawal clock starts from delivery, else from this plus the transit days. */
   fulfilledAt: isoDateTime.optional(),
   /** When the goods reached the customer (`fulfil`, `record_delivery`): the withdrawal period runs from it (ADR-018 §7). */

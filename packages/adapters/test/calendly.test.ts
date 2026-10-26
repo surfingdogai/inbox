@@ -30,6 +30,7 @@ import {
   TOKEN,
   USER,
 } from "./fixtures/calendly";
+import { eventOf } from "./hook-event";
 
 /**
  * The Calendly connector (ADR-033) against a fake Calendly answering as its API v2 documents
@@ -593,12 +594,14 @@ describe("Calendly: its webhook", () => {
     const c = fakeCalendly();
     const made = await connected(c);
     const key = String(made.secret.signing_key);
-    const verify = (d: { body: string; headers: Record<string, string> }, now = Date.now()) =>
-      cal.hooks?.verify(runCtx(c, made, { now }).ctx, {
-        headers: new Headers(d.headers),
-        body: d.body,
-        query: new URLSearchParams(),
-      });
+    const verify = async (d: { body: string; headers: Record<string, string> }, now = Date.now()) =>
+      eventOf(
+        await cal.hooks?.verify(runCtx(c, made, { now }).ctx, {
+          headers: new Headers(d.headers),
+          body: d.body,
+          query: new URLSearchParams(),
+        }),
+      );
     return { c, made, key, verify };
   }
 

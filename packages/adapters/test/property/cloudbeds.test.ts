@@ -22,6 +22,7 @@ import {
   RATE_PATIO,
   webhookBody,
 } from "../fixtures/property/cloudbeds";
+import { eventOf } from "../hook-event";
 import { propertyContract, runContext } from "./contract";
 
 /**
@@ -509,7 +510,9 @@ describe("Cloudbeds: webhooks are hints, checked first", () => {
       code: "refused",
     });
     // Its own spelling for dates changed (propertyId, reservationId): the dates it carries are never believed.
-    const event = await hooks.verify(ctx(), request(webhookBody(id, "reservation/dates_changed"), HOOK_SECRET));
+    const event = eventOf(
+      await hooks.verify(ctx(), request(webhookBody(id, "reservation/dates_changed"), HOOK_SECRET)),
+    );
     expect(event?.refs).toEqual([`${PROPERTY.propertyID}:${id}`]);
     expect(await hooks.read(ctx(), event as never)).toEqual([
       { kind: "stay_nights", roomIds: [ATLAS.roomTypeID], from: "2027-09-05", to: "2027-09-08" },

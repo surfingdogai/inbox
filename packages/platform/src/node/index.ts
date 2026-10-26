@@ -32,7 +32,10 @@ export * from "./outbound";
  * so `batch` is a real BEGIN IMMEDIATE … COMMIT. No native module to compile.
  */
 export interface NodeSqliteOptions {
-  /** Extra PRAGMA statements run after open. WAL, NORMAL sync, foreign keys and a 5 s busy timeout are always set. */
+  /**
+   * Extra PRAGMA statements run after open. WAL, NORMAL sync, foreign keys, a 5 s busy timeout and
+   * secure delete are always set.
+   */
   readonly pragmas?: readonly string[];
   /** Prepared statements kept warm. Default 256. */
   readonly statementCache?: number;
@@ -45,8 +48,10 @@ export interface NodeSqliteClient extends SqliteClient {
 
 export function nodeSqliteClient(path: string, options: NodeSqliteOptions = {}): NodeSqliteClient {
   const db = new DatabaseSync(path, { timeout: 5000 });
+  // Secure delete: what a delete removes is overwritten, not left in free pages for whoever reads the
+  // file (an erased customer's photos, ADR-034 §2).
   db.exec(
-    "PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;",
+    "PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000; PRAGMA secure_delete = ON;",
   );
   for (const pragma of options.pragmas ?? []) db.exec(pragma);
   const fts5 = db

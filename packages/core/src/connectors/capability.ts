@@ -9,6 +9,8 @@ import { randomToken, ulid } from "../ids";
 import { ensureJob } from "../jobs/schedule";
 import { requireSecretBox, type SecretBox } from "../secrets/box";
 import { readSettings } from "../settings/schema";
+import { isTrade } from "../trades/job";
+import { jobToolConnections } from "../trades/job-tool";
 import { type Caller, isCustomer, isOwnerAssistant, isPerson, nowOf } from "../write/caller";
 import { jobStatement } from "../write/common";
 import { fromZod, WriteError } from "../write/errors";
@@ -66,6 +68,7 @@ import {
   secretKeys,
   type Withheld,
 } from "./sdk";
+import type { SetupSnapshot } from "./setup-snapshot";
 import {
   BUSY_HORIZON_MS,
   claimLink,
@@ -430,7 +433,9 @@ export class ConnectorCapabilities {
   async integrations(caller: Caller): Promise<IntegrationsView> {
     requireOwnerSide(caller);
     const settings = await readSettings(this.db);
-    const lean = leanOf(await this.holdings());
+    // A trade (ADR-034) sees its job tools first: one that set where it works or how it takes work.
+    const trade = isTrade(settings) || (await jobToolConnections(this.db)).length > 0;
+    const lean = leanOf({ ...(await this.holdings()), trade });
     return {
       groups: galleryGroups(lean),
       cards: gallery(this.definitions, {
@@ -905,6 +910,11 @@ export class ConnectorCapabilities {
     return this.hooks.receive(kind, token, request, now);
   }
 
+  /** What a platform sent the app's one address, for the connection of the account it names (Jobber). */
+  receiveAppHook(kind: string, request: InboundRequest, now: number): Promise<HookAnswer> {
+    return this.hooks.receiveApp(kind, request, now);
+  }
+
   /**
    * A link a connection serves (ADR-030 §5): `GET /v1/feeds/<kind>/<token><extension>`. Whoever holds
    * the link reads it, so the token is all it takes, and it shows only what the connector says a link
@@ -1364,7 +1374,8 @@ export class ConnectorCapabilities {
 
   /**
    * A connection's definition and what it runs with, for a caller outside this class that drives one
-   * (a property system's stays, ADR-037); null when it is gone, paused, or cannot run here.
+   * (a property system's stays, ADR-037; a job tool's requests, ADR-034); null when it is gone, paused,
+   * or cannot run here.
    */
   async contextFor(
     connectorId: string,
@@ -1816,6 +1827,32 @@ export class ConnectorCapabilities {
       method: "all",
     });
     return rows[0] ? bookingOf(itemId, rows[0], origin) : null;
+  }
+
+  /**
+   * What a connected tool says about the business, read now to start from (`setup_in`): a job
+   * tool's opening hours (ADR-034), a booking system's services and staff. Nothing is kept here: the
+   * owner keeps what they choose, through the screens that already keep it.
+   */
+  async setupSnapshot(caller: Caller, id: string): Promise<SetupSnapshot> {
+    requireOwnerSide(caller);
+    const row = await this.row(id);
+    const def = this.definitions.get(row.kind);
+    if (!def?.setup || !def.capabilities.includes("setup_in")) {
+      throw new WriteError("invalid_input", `${def?.title ?? row.kind} has nothing to start from.`, {
+        details: { reason: "no_setup", kind: row.kind },
+      });
+    }
+    if (!this.http) throw new WriteError("not_allowed", "This inbox cannot reach other services.");
+    const now = nowOf(caller);
+    try {
+      return await def.setup.read(await this.runContext(row, now));
+    } catch (error) {
+      if (error instanceof ConnectorError) {
+        throw new WriteError("wrong_state", error.message, { details: { reason: error.code, kind: row.kind } });
+      }
+      throw error;
+    }
   }
 
   /* --- rows and contexts ----------------------------------------------------- */
@@ -2447,6 +2484,14 @@ export class ConnectorCapabilities {
         const { rows } = await this.db.client.query({
           sql: "SELECT id, kind FROM connectors WHERE kind = ? AND inbound_token = ?",
           params: [kind, tokenHash],
+          method: "all",
+        });
+        return rows[0] ? { id: String(rows[0][0]), kind: String(rows[0][1]) } : null;
+      },
+      connectionByAccount: async (kind, externalId) => {
+        const { rows } = await this.db.client.query({
+          sql: "SELECT id, kind FROM connectors WHERE kind = ? AND external_id = ?",
+          params: [kind, externalId],
           method: "all",
         });
         return rows[0] ? { id: String(rows[0][0]), kind: String(rows[0][1]) } : null;

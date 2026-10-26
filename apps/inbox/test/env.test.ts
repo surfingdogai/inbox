@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  jobToolsFrom,
   listFrom,
   oauthFrom,
   outboundDenyFrom,
@@ -115,6 +116,8 @@ describe("the host's settings", () => {
       shopify: null,
       square: { clientId: "sq-id", clientSecret: "sq-secret" },
       calendly: null,
+      servicem8: null,
+      jobber: null,
     });
     expect(r.googleTesting).toBe(true);
     expect(said).toEqual([
@@ -132,5 +135,12 @@ describe("the host's settings", () => {
     expect(said).toEqual([]);
     expect(ucpLodgingFrom("on", undefined, log)).toBe(false);
     expect(said).toEqual(["INBOX_UCP_LODGING is on but INBOX_SECRET_KEY is unset: UCP Lodging stays off."]);
+  });
+
+  it("switches job tools on only as the server says: Jobber's checked version, the tools whose terms are cleared", () => {
+    expect(jobToolsFrom({})).toEqual({ jobTools: { cleared: [] } });
+    expect(jobToolsFrom({ JOBBER_API_VERSION: " 2025-04-16 ", JOB_TOOLS_CLEARED: "HousecallPro, fergus" })).toEqual({
+      jobTools: { jobberApiVersion: "2025-04-16", cleared: ["housecallpro", "fergus"] },
+    });
   });
 });

@@ -134,6 +134,14 @@ export const KINDS: readonly SetupKind[] = [
     connect: ["work", "calendars"],
   },
   {
+    key: "projects",
+    label: "Building and renovation",
+    line: "Larger jobs quoted in stages, often after a visit.",
+    preset: "projects",
+    doors: { booking: false, quoteRequest: true, message: true },
+    connect: ["work", "calendars"],
+  },
+  {
     key: "shop",
     label: "A shop, bakery or kitchen",
     line: "Things people order, to collect or to deliver.",
@@ -250,4 +258,32 @@ export function networkOffer(
  */
 export function joinNetworkDoc(): { networks: Record<string, { enabled: true; issue: false }> } {
   return { networks: { [SETUP_NETWORK]: { enabled: true, issue: false } } };
+}
+
+/** The wizard's steps by id: a kind of business that needs others (a place to stay) names its own. */
+export const STEPS = [
+  { id: "kind", label: "Kind" },
+  { id: "you", label: "You" },
+  { id: "doors", label: "Agents" },
+  { id: "offer", label: "Offer" },
+  { id: "hours", label: "Hours" },
+  { id: "answering", label: "Answering" },
+] as const;
+/** A place to stay (ADR-037): the place and its rooms instead of doors, offers and hours, a night's price with each. */
+export const STAY_STEPS = [
+  { id: "kind", label: "Kind" },
+  { id: "you", label: "You" },
+  { id: "place", label: "Place" },
+  { id: "rooms", label: "Rooms" },
+  { id: "answering", label: "Answering" },
+] as const;
+export type StepId = (typeof STEPS)[number]["id"] | (typeof STAY_STEPS)[number]["id"] | "where";
+
+/** A trade is asked where it works, after who it is: agents check a site against it before they ask. */
+const WHERE = { id: "where", label: "Area" } as const;
+const TRADE_KINDS = new Set(["trades", "projects"]);
+export function stepsFor(kind: string | null | undefined): readonly { readonly id: StepId; readonly label: string }[] {
+  if (kind === "stays") return STAY_STEPS;
+  if (!kind || !TRADE_KINDS.has(kind)) return STEPS;
+  return [STEPS[0], STEPS[1], WHERE, ...STEPS.slice(2)];
 }

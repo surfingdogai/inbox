@@ -20,7 +20,8 @@ import { ConnectorError } from "./sdk";
  * promised until the resolver has read it back, or has taken it back once it never could.
  */
 
-export type WriteOp = "reserve" | "modify" | "cancel" | "release";
+/** `request`: a request for a price written into a job tool (ADR-034). */
+export type WriteOp = "reserve" | "modify" | "cancel" | "release" | "request";
 export type WriteOutcome = "pending" | "written" | "refused" | "unknown" | "rolled_back";
 
 /** The system's answer to a write: its id for what was written. */

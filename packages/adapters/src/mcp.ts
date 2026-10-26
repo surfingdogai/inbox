@@ -66,6 +66,7 @@ import { z } from "zod";
 import { TOOL_SCOPES } from "./access";
 import { problemFrom } from "./problem";
 import { registerOwnerStayTools, registerPublicStayTools, STAY_INSTRUCTIONS, takesStays } from "./stays";
+import { registerPublicTradesTools, TRADES_INSTRUCTIONS, takesWork } from "./trades";
 import { itemTexts, ownerSentence, withUntrusted } from "./untrusted";
 
 /**
@@ -271,11 +272,16 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
     const name = profile.name.trim() || profile.domain || "Inbox";
     // A place to stay (ADR-037) says how its stays are asked for, held and booked, and has the tools.
     const stays = await takesStays(caps);
-    const server = new McpServer(
-      { name, version },
-      { instructions: stays ? `${PUBLIC_INSTRUCTIONS} ${STAY_INSTRUCTIONS}` : PUBLIC_INSTRUCTIONS },
-    );
+    // A trade (ADR-034) says how a job is asked for, with its photos, and where it works.
+    const work = await takesWork(caps);
+    const instructions = [
+      PUBLIC_INSTRUCTIONS,
+      ...(stays ? [STAY_INSTRUCTIONS] : []),
+      ...(work ? [TRADES_INSTRUCTIONS] : []),
+    ];
+    const server = new McpServer({ name, version }, { instructions: instructions.join(" ") });
     if (stays) registerPublicStayTools(server, caps, caller);
+    if (work) registerPublicTradesTools(server, caps, caller);
 
     server.registerTool(
       "get_business_profile",

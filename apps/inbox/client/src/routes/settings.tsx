@@ -4,6 +4,8 @@ import { useEffect, useRef } from "react";
 import { ThemeButton, ThemeSwitch } from "../components/ThemeSwitch";
 import { ensureSignedIn } from "../lib/auth";
 import { useProperty } from "../lib/property";
+import { useSettings } from "../lib/queries";
+import { useWork } from "../lib/trades";
 
 /** Settings: who the business is, how it is emailed, what it offers, when it is open, how it is paid, what runs on its own, who it reports to. */
 export const Route = createFileRoute("/settings")({
@@ -19,12 +21,23 @@ function SettingsLayout() {
   // A place to stay has its own tab; another business never sees it.
   const property = useProperty();
   const stays = (property.data?.properties.length ?? 0) > 0 || path === "/settings/property";
+  // A trade has Area and Work (ADR-034): it said where it works or how it takes work, or has a job tool,
+  // or it takes requests for a price and no bookings (what a trade's setup starts with). A salon that
+  // also quotes, or a shop, never sees them; a link straight to either still opens it.
+  const settings = useSettings();
+  const trades = useWork();
+  const doors = settings.data?.doc.doors;
+  const work =
+    trades.data?.trade === true ||
+    (doors !== undefined && doors.quoteRequest !== false && doors.booking === false) ||
+    path === "/settings/area" ||
+    path === "/settings/work";
   // The tab you are on is always in view, on a phone too, where the row scrolls: again once the
-  // Property tab appears, which moves every tab after it.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the path and the Property tab are what move the current tab
+  // Property tab or a trade's Area and Work appear, which move every tab after them.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the path, the Property tab and a trade's tabs are what move the current tab
   useEffect(() => {
     tabs.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [path, stays]);
+  }, [path, stays, work]);
   return (
     <main className="page page-narrow">
       <div className="page-head">
@@ -54,6 +67,16 @@ function SettingsLayout() {
         <Link to="/settings/availability" className="tab">
           Availability
         </Link>
+        {work && (
+          <>
+            <Link to="/settings/area" className="tab">
+              Area
+            </Link>
+            <Link to="/settings/work" className="tab">
+              Work
+            </Link>
+          </>
+        )}
         <Link to="/settings/payments" className="tab">
           Payments
         </Link>

@@ -21,8 +21,10 @@ import {
   clientAddress,
   consume,
   EVERYONE,
+  isAreaRoute,
   isCreateRoute,
   isNegotiateRoute,
+  isUploadRoute,
   isVerifyRoute,
   LIMITS,
   type LimitClass,
@@ -341,6 +343,12 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
       const refused = await limited(c, ["integration"], caller.principal.id);
       if (refused) return refused;
     }
+    // Whether a site is inside the area is a read, but one a script could ask round the edge with to
+    // find where a radius is measured from: it has a bucket of its own (ADR-034 §3).
+    if (caller.auth?.kind !== "owner" && isAreaRoute(c.req.method, c.req.path)) {
+      const refused = await limited(c, ["area"], caller.auth?.id);
+      if (refused) return refused;
+    }
     // Writes from anyone but the verified owner are limited. The inbound mail webhook is not: it is
     // authenticated by its own secret, and every message arrives from the one gateway address.
     const signed = c.req.header("signature-input") !== undefined;
@@ -354,11 +362,13 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
         c,
         isCreateRoute(c.req.method, c.req.path)
           ? ["public", "create"]
-          : isVerifyRoute(c.req.method, c.req.path)
-            ? ["public", "verify"]
-            : isNegotiateRoute(c.req.method, c.req.path)
-              ? ["public", "negotiate"]
-              : ["public"],
+          : isUploadRoute(c.req.method, c.req.path)
+            ? ["public", "upload"]
+            : isVerifyRoute(c.req.method, c.req.path)
+              ? ["public", "verify"]
+              : isNegotiateRoute(c.req.method, c.req.path)
+                ? ["public", "negotiate"]
+                : ["public"],
         caller.auth?.id,
       );
       if (refused) return refused;
@@ -534,6 +544,23 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
     );
     return c.json(r.body, r.status, { "cache-control": "no-store" });
   });
+  // What a platform sends the app's one address, for every connection (Jobber's webhooks are set per
+  // app): the connector checks the app's signature and names the account, whose connection takes it.
+  // Registered before the connection addresses below, which it would otherwise match.
+  app.post("/v1/hooks/:kind/app", async (c) => {
+    const kind = String(c.req.param("kind"));
+    if (!/^[a-z][a-z0-9_]{1,39}$/.test(kind)) return c.json({ error: "not_found" }, 404);
+    if (Number(c.req.header("content-length") ?? 0) > MAX_HOOK_BYTES) {
+      return c.json({ error: "too_large", detail: "This address takes requests up to 1 MB." }, 413);
+    }
+    const body = await c.req.text();
+    const r = await deps.caps.connectors.receiveAppHook(
+      kind,
+      { headers: c.req.raw.headers, body, query: new URL(c.req.url).searchParams },
+      clock(),
+    );
+    return c.json(r.body, r.status, { "cache-control": "no-store" });
+  });
   // What a platform tells one connection at its own address (ADR-030 §4): the token names the
   // connection, its signature is checked over the exact bytes, and only ids are kept; the platform is
   // answered at once, and what the event names is read back with the business's key by a job.
@@ -550,6 +577,10 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
       { headers: c.req.raw.headers, body, query: new URL(c.req.url).searchParams },
       clock(),
     );
+    // A platform's challenge, answered as it came, as plain text.
+    if (r.text !== undefined) {
+      return c.text(r.text, r.status, { "cache-control": "no-store", "content-type": "text/plain; charset=utf-8" });
+    }
     return c.json(r.body, r.status, { "cache-control": "no-store" });
   });
   // A link a connection serves (ADR-030 §5): a calendar of confirmed bookings another platform imports.
@@ -740,7 +771,7 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
       if (refused) return refused;
     }
     if (counted) {
-      const classes = (["public", "create", "verify", "negotiate"] as const).filter((cls) => costs[cls]);
+      const classes = (["public", "create", "verify", "negotiate", "area"] as const).filter((cls) => costs[cls]);
       const refused = classes.length ? await limited(c, classes, caller.auth?.id, costs) : null;
       if (refused) return refused;
     }

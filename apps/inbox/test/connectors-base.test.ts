@@ -1,5 +1,5 @@
 import { createApiKey } from "@surfingdog/adapters";
-import type { ConnectorDefinition, Db } from "@surfingdog/core";
+import { type ConnectorDefinition, ConnectorError, type Db } from "@surfingdog/core";
 import { logMailOut } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { STRIPE_LIVE_KEY } from "../../../packages/adapters/test/fixtures/payments";
@@ -451,6 +451,62 @@ describe("orders paid at the shop's own checkout", () => {
     const elsewhere = ping.url.replace(/[A-Za-z0-9_-]{43}$/, "A".repeat(43));
     expect((await s.call("POST", elsewhere, ping.body, ping.headers)).status).toBe(404);
     expect((await s.call("POST", `${BASE}/v1/hooks/kibanda/short`, ping.body, ping.headers)).status).toBe(404);
+  });
+
+  it("takes a platform's one app address for the account it names, and answers a challenge as it came", async () => {
+    // A platform that sends every account's events to the app's one address (Jobber's), and proves a
+    // connection's own address with a challenge before it sends to it (ServiceM8's sign-in).
+    const shopDef = fakeShopConnector();
+    const shopHooks = shopDef.hooks as NonNullable<ConnectorDefinition["hooks"]>;
+    const def: ConnectorDefinition = {
+      ...shopDef,
+      hooks: {
+        ...shopHooks,
+        async account(request) {
+          if (request.headers.get("x-app-signature") !== "signed-by-the-app") {
+            throw new ConnectorError("refused", "The signature does not check out.");
+          }
+          const named = (JSON.parse(request.body) as { account?: unknown }).account;
+          return typeof named === "string" ? named : null;
+        },
+        async verify(ctx, request) {
+          const form = new URLSearchParams(request.body);
+          if (form.get("mode") === "subscribe") return { challenge: form.get("challenge") ?? "" };
+          return shopHooks.verify(ctx, request);
+        },
+      },
+    };
+    const s = await setup({ connectors: [def] });
+    await stocked(s);
+    const app = `${BASE}/v1/hooks/kibanda/app`;
+    const event = await signed(s.shop, {
+      id: "evt_app_1",
+      topic: "order.updated",
+      order: "ord_1",
+      extra: { account: "store_kibanda.example.com" },
+    });
+    const taken = await s.call("POST", app, event.body, { ...event.headers, "x-app-signature": "signed-by-the-app" });
+    expect(taken.status).toBe(200);
+    expect(await taken.json()).toEqual({ ok: true, duplicate: false });
+    expect((await events(s.db)).map((e) => e.id)).toEqual(["evt_app_1"]);
+    // Not signed by the app: refused, nothing kept. An account not connected here: nothing to keep.
+    const forged = await s.call("POST", app, event.body, { ...event.headers, "x-app-signature": "made-up" });
+    expect(forged.status).toBe(400);
+    const elsewhere = await signed(s.shop, { id: "evt_app_2", topic: "order.updated", extra: { account: "store_x" } });
+    const other = await s.call("POST", app, elsewhere.body, {
+      ...elsewhere.headers,
+      "x-app-signature": "signed-by-the-app",
+    });
+    expect(await other.json()).toEqual({ ok: true, ignored: true });
+    expect(await events(s.db)).toHaveLength(1);
+    // The connection's own address, proved: the challenge as plain text, and nothing kept.
+    const own = [...s.shop.webhooks.values()][0]?.url ?? "";
+    const proved = await s.call("POST", own, "mode=subscribe&challenge=c0ffee-1234", {
+      "content-type": "application/x-www-form-urlencoded",
+    });
+    expect(proved.status).toBe(200);
+    expect(await proved.text()).toBe("c0ffee-1234");
+    expect(await events(s.db)).toHaveLength(1);
   });
 
   it("holds the link when the shop adds tax the customer did not accept, and lets the owner propose the shop's total", async () => {

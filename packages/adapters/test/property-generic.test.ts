@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { API_KEY, genericPropertySystem, signedHint } from "./fakes/property/generic";
+import { eventOf } from "./hook-event";
 import { propertyContract, runContext } from "./property/contract";
 
 /**
@@ -66,11 +67,13 @@ describe("the generic fake's own behaviour", () => {
     const hooks = sys.definition.hooks;
     if (!hooks) throw new Error("no hooks");
     const ctx = runContext(sys.platform.http, { api_key: API_KEY, hook_secret: "fake-hook-secret-0123456789" });
-    const event = await hooks.verify(ctx, {
-      headers: new Headers({ "x-fake-signature": signature }),
-      body,
-      query: new URLSearchParams(),
-    });
+    const event = eventOf(
+      await hooks.verify(ctx, {
+        headers: new Headers({ "x-fake-signature": signature }),
+        body,
+        query: new URLSearchParams(),
+      }),
+    );
     expect(event?.refs).toEqual(["R1:2027-01-10:2027-01-12"]);
     await expect(
       hooks.verify(ctx, {

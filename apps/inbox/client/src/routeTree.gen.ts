@@ -15,6 +15,7 @@ import { Route as SettingsRouteImport } from "./routes/settings";
 import { Route as SetupRouteImport } from "./routes/setup";
 import { Route as InboxIndexRouteImport } from "./routes/_inbox.index";
 import { Route as SettingsIndexRouteImport } from "./routes/settings.index";
+import { Route as SettingsAreaRouteImport } from "./routes/settings.area";
 import { Route as SettingsAvailabilityRouteImport } from "./routes/settings.availability";
 import { Route as SettingsEmailRouteImport } from "./routes/settings.email";
 import { Route as SettingsFoundRouteImport } from "./routes/settings.found";
@@ -26,6 +27,7 @@ import { Route as SettingsPhoneRouteImport } from "./routes/settings.phone";
 import { Route as SettingsPropertyRouteImport } from "./routes/settings.property";
 import { Route as SettingsRulesRouteImport } from "./routes/settings.rules";
 import { Route as SettingsServicesRouteImport } from "./routes/settings.services";
+import { Route as SettingsWorkRouteImport } from "./routes/settings.work";
 import { Route as InboxItemsIdRouteImport } from "./routes/_inbox.items.$id";
 
 const InboxRoute = InboxRouteImport.update({
@@ -55,6 +57,11 @@ const InboxIndexRoute = InboxIndexRouteImport.update({
 const SettingsIndexRoute = SettingsIndexRouteImport.update({
   id: "/",
   path: "/",
+  getParentRoute: () => SettingsRoute,
+} as any);
+const SettingsAreaRoute = SettingsAreaRouteImport.update({
+  id: "/area",
+  path: "/area",
   getParentRoute: () => SettingsRoute,
 } as any);
 const SettingsAvailabilityRoute = SettingsAvailabilityRouteImport.update({
@@ -112,6 +119,11 @@ const SettingsServicesRoute = SettingsServicesRouteImport.update({
   path: "/services",
   getParentRoute: () => SettingsRoute,
 } as any);
+const SettingsWorkRoute = SettingsWorkRouteImport.update({
+  id: "/work",
+  path: "/work",
+  getParentRoute: () => SettingsRoute,
+} as any);
 const InboxItemsIdRoute = InboxItemsIdRouteImport.update({
   id: "/items/$id",
   path: "/items/$id",
@@ -123,6 +135,7 @@ export interface FileRoutesByFullPath {
   "/login": typeof LoginRoute;
   "/settings": typeof SettingsRouteWithChildren;
   "/setup": typeof SetupRoute;
+  "/settings/area": typeof SettingsAreaRoute;
   "/settings/availability": typeof SettingsAvailabilityRoute;
   "/settings/email": typeof SettingsEmailRoute;
   "/settings/found": typeof SettingsFoundRoute;
@@ -134,12 +147,14 @@ export interface FileRoutesByFullPath {
   "/settings/property": typeof SettingsPropertyRoute;
   "/settings/rules": typeof SettingsRulesRoute;
   "/settings/services": typeof SettingsServicesRoute;
+  "/settings/work": typeof SettingsWorkRoute;
   "/settings/": typeof SettingsIndexRoute;
   "/items/$id": typeof InboxItemsIdRoute;
 }
 export interface FileRoutesByTo {
   "/login": typeof LoginRoute;
   "/setup": typeof SetupRoute;
+  "/settings/area": typeof SettingsAreaRoute;
   "/settings/availability": typeof SettingsAvailabilityRoute;
   "/settings/email": typeof SettingsEmailRoute;
   "/settings/found": typeof SettingsFoundRoute;
@@ -151,6 +166,7 @@ export interface FileRoutesByTo {
   "/settings/property": typeof SettingsPropertyRoute;
   "/settings/rules": typeof SettingsRulesRoute;
   "/settings/services": typeof SettingsServicesRoute;
+  "/settings/work": typeof SettingsWorkRoute;
   "/": typeof InboxIndexRoute;
   "/settings": typeof SettingsIndexRoute;
   "/items/$id": typeof InboxItemsIdRoute;
@@ -161,6 +177,7 @@ export interface FileRoutesById {
   "/login": typeof LoginRoute;
   "/settings": typeof SettingsRouteWithChildren;
   "/setup": typeof SetupRoute;
+  "/settings/area": typeof SettingsAreaRoute;
   "/settings/availability": typeof SettingsAvailabilityRoute;
   "/settings/email": typeof SettingsEmailRoute;
   "/settings/found": typeof SettingsFoundRoute;
@@ -172,6 +189,7 @@ export interface FileRoutesById {
   "/settings/property": typeof SettingsPropertyRoute;
   "/settings/rules": typeof SettingsRulesRoute;
   "/settings/services": typeof SettingsServicesRoute;
+  "/settings/work": typeof SettingsWorkRoute;
   "/_inbox/": typeof InboxIndexRoute;
   "/settings/": typeof SettingsIndexRoute;
   "/_inbox/items/$id": typeof InboxItemsIdRoute;
@@ -183,6 +201,7 @@ export interface FileRouteTypes {
     | "/login"
     | "/settings"
     | "/setup"
+    | "/settings/area"
     | "/settings/availability"
     | "/settings/email"
     | "/settings/found"
@@ -194,12 +213,14 @@ export interface FileRouteTypes {
     | "/settings/property"
     | "/settings/rules"
     | "/settings/services"
+    | "/settings/work"
     | "/settings/"
     | "/items/$id";
   fileRoutesByTo: FileRoutesByTo;
   to:
     | "/login"
     | "/setup"
+    | "/settings/area"
     | "/settings/availability"
     | "/settings/email"
     | "/settings/found"
@@ -211,6 +232,7 @@ export interface FileRouteTypes {
     | "/settings/property"
     | "/settings/rules"
     | "/settings/services"
+    | "/settings/work"
     | "/"
     | "/settings"
     | "/items/$id";
@@ -220,6 +242,7 @@ export interface FileRouteTypes {
     | "/login"
     | "/settings"
     | "/setup"
+    | "/settings/area"
     | "/settings/availability"
     | "/settings/email"
     | "/settings/found"
@@ -231,6 +254,7 @@ export interface FileRouteTypes {
     | "/settings/property"
     | "/settings/rules"
     | "/settings/services"
+    | "/settings/work"
     | "/_inbox/"
     | "/settings/"
     | "/_inbox/items/$id";
@@ -285,6 +309,13 @@ declare module "@tanstack/react-router" {
       path: "/";
       fullPath: "/settings/";
       preLoaderRoute: typeof SettingsIndexRouteImport;
+      parentRoute: typeof SettingsRoute;
+    };
+    "/settings/area": {
+      id: "/settings/area";
+      path: "/area";
+      fullPath: "/settings/area";
+      preLoaderRoute: typeof SettingsAreaRouteImport;
       parentRoute: typeof SettingsRoute;
     };
     "/settings/availability": {
@@ -364,6 +395,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof SettingsServicesRouteImport;
       parentRoute: typeof SettingsRoute;
     };
+    "/settings/work": {
+      id: "/settings/work";
+      path: "/work";
+      fullPath: "/settings/work";
+      preLoaderRoute: typeof SettingsWorkRouteImport;
+      parentRoute: typeof SettingsRoute;
+    };
     "/_inbox/items/$id": {
       id: "/_inbox/items/$id";
       path: "/items/$id";
@@ -387,6 +425,7 @@ const InboxRouteChildren: InboxRouteChildren = {
 const InboxRouteWithChildren = InboxRoute._addFileChildren(InboxRouteChildren);
 
 interface SettingsRouteChildren {
+  SettingsAreaRoute: typeof SettingsAreaRoute;
   SettingsAvailabilityRoute: typeof SettingsAvailabilityRoute;
   SettingsEmailRoute: typeof SettingsEmailRoute;
   SettingsFoundRoute: typeof SettingsFoundRoute;
@@ -398,10 +437,12 @@ interface SettingsRouteChildren {
   SettingsPropertyRoute: typeof SettingsPropertyRoute;
   SettingsRulesRoute: typeof SettingsRulesRoute;
   SettingsServicesRoute: typeof SettingsServicesRoute;
+  SettingsWorkRoute: typeof SettingsWorkRoute;
   SettingsIndexRoute: typeof SettingsIndexRoute;
 }
 
 const SettingsRouteChildren: SettingsRouteChildren = {
+  SettingsAreaRoute: SettingsAreaRoute,
   SettingsAvailabilityRoute: SettingsAvailabilityRoute,
   SettingsEmailRoute: SettingsEmailRoute,
   SettingsFoundRoute: SettingsFoundRoute,
@@ -413,6 +454,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsPropertyRoute: SettingsPropertyRoute,
   SettingsRulesRoute: SettingsRulesRoute,
   SettingsServicesRoute: SettingsServicesRoute,
+  SettingsWorkRoute: SettingsWorkRoute,
   SettingsIndexRoute: SettingsIndexRoute,
 };
 

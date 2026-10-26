@@ -33,6 +33,14 @@ import type { PolicyPayload } from "./types";
 /** A host policy with the doors for agents open or closed (absent means open, to an inbox that knows the field). */
 export type HostedPolicy = HostPolicy & { readonly agents: "open" | "closed" };
 
+/**
+ * What the files customers send with their requests may take in one hosted inbox (ADR-034 §2; 100 MB,
+ * an estimate, I-Q9), those waiting for a request included. They live in the inbox's own database, so
+ * this stays well under the shard's cap on what an inbox holds (200 MB): files alone never fill an
+ * inbox to where it takes no bookings. More room for files means a store of their own.
+ */
+export const HOSTED_ATTACHMENTS_QUOTA_BYTES = 100 * 1024 * 1024;
+
 export function hostedPolicy(p: PolicyPayload): HostedPolicy {
   return {
     ...hostPolicyFor({
@@ -156,8 +164,13 @@ export function tenantEmailHost(
 export function buildInbox(d: BuildDeps): Inbox {
   const p = d.policy;
   const open: HostedPolicy = { ...hostedPolicy(p), ...(d.agentsOpen ? { agents: "open" as const } : {}) };
-  // A platform reaches the inbox's webhook doors only once its doors are open (it is live).
-  const policy: HostedPolicy = { ...open, hooksLive: open.agents === "open" };
+  // A platform reaches the inbox's webhook doors only once its doors are open (it is live). The files
+  // customers send with requests take at most the hosted share (ADR-034 §2).
+  const policy: HostedPolicy = {
+    ...open,
+    hooksLive: open.agents === "open",
+    attachmentsQuotaBytes: HOSTED_ATTACHMENTS_QUOTA_BYTES,
+  };
   const inbox = createInbox({
     db: d.db,
     mailOut: tenantMailOut(d),

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyPresetInput, setupPlanSchema } from "../src/capabilities/index";
+import { evaluate, NO_AGENT_CONTEXT, NO_CUSTOMER, NO_PERSON, type RuleContext } from "../src/rules/evaluate";
 import {
   PRESET_KEYS,
   PRESET_NAMES,
@@ -42,5 +43,43 @@ describe("the preset registry", () => {
       ).toBe(false);
     }
     expect(JSON.stringify(presetFor("appointments", "pt"))).toContain("Talvez já o conheçamos");
+  });
+});
+
+describe("a trade's presets", () => {
+  /** The priority an item ends at, the rules run as the engine runs them: highest priority first. */
+  const endsAt = (key: "trades" | "projects", ctx: RuleContext) => {
+    let priority = 0;
+    const order = [...(PRESETS[key] ?? [])].sort((a, b) => b.priority - a.priority);
+    for (const rule of order) {
+      if (!rule.definition.on.includes("item.created")) continue;
+      if (rule.definition.if && !evaluate(rule.definition.if, ctx)) continue;
+      for (const a of rule.definition.actions) {
+        if (a.action === "set_flags" && a.priority !== undefined) priority = a.priority;
+      }
+    }
+    return priority;
+  };
+  const request = (urgency: string, known: boolean): RuleContext => ({
+    item: { type: "quote_request", payload: { job: { urgency } }, flags: {} },
+    event: { event: "item.created", from: null, to: "received", actorKind: "customer_agent", depth: 0 },
+    party: { kind: "person", tier: "anonymous" },
+    person: NO_PERSON,
+    customer: known ? { ...NO_CUSTOMER, match: "strong", known: true, completed: 2 } : NO_CUSTOMER,
+    agent: NO_AGENT_CONTEXT,
+    settings: {},
+    now: 0,
+    text: "",
+    facts: { slotIsFree: null, withinBusinessHours: null },
+  });
+
+  it("puts a known customer's emergency first, as anyone's", () => {
+    for (const key of ["trades", "projects"] as const) {
+      expect(endsAt(key, request("emergency", true)), key).toBe(3);
+      expect(endsAt(key, request("emergency", false)), key).toBe(3);
+      expect(endsAt(key, request("within_24h", true)), key).toBe(2);
+      expect(endsAt(key, request("flexible", true)), key).toBe(2);
+    }
+    expect(endsAt("trades", request("flexible", false))).toBe(1);
   });
 });

@@ -103,6 +103,15 @@ import {
   updateBusinessOutputSchema,
 } from "./network/index";
 import { propertyPublicSchema, stayAvailabilitySchema, stayQuoteSchema } from "./stays";
+import {
+  areaSummarySchema,
+  attachmentRefSchema,
+  checkAreaInputSchema,
+  checkAreaOutputSchema,
+  jobSchema,
+  tradeQuoteSchema,
+  workProfileSchema,
+} from "./trades";
 
 /**
  * The JSON Schemas published in `packages/spec/schemas/`, one file per name, generated from the Zod
@@ -291,6 +300,14 @@ export const JSON_SCHEMAS: Record<string, { schema: z.ZodType; title: string }> 
   "profile-lodging": { schema: profileLodgingSchema, title: "A profile's lodging (spec 0.11)" },
   "mcp-request-stay-input": { schema: requestStayInputSchema, title: "MCP request_stay: arguments" },
   "mcp-request-stay-output": { schema: carryOutputSchema, title: "MCP request_stay: structuredContent" },
+  // Trades and projects (spec 0.11, ADR-034).
+  "attachment-ref": { schema: attachmentRefSchema, title: "A file on a request, as an item names it (spec 0.11)" },
+  "area-summary": { schema: areaSummarySchema, title: "Where a business works, as it says so in public (spec 0.11)" },
+  job: { schema: jobSchema, title: "A request for a price's job: urgency, visit, site, windows (spec 0.11)" },
+  "trade-quote": { schema: tradeQuoteSchema, title: "A trade's quote: kind, stages, call-out and visit fees, tax" },
+  "work-profile": { schema: workProfileSchema, title: "get_business_profile's work: area, emergencies, call-out" },
+  "mcp-check-area-input": { schema: checkAreaInputSchema, title: "MCP check_area: arguments" },
+  "mcp-check-area-output": { schema: checkAreaOutputSchema, title: "MCP check_area: structuredContent" },
 };
 
 /**

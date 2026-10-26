@@ -10,8 +10,10 @@ import {
   type ConnectorDefinition,
   ConnectorError,
   type FeedBooking,
+  type HookChallenge,
   type HookEvent,
   type HookFact,
+  type HooksHandler,
   type InboundRequest,
   type Interval,
   type RunContext,
@@ -69,6 +71,8 @@ export interface HookHost {
   definition(kind: string): ConnectorDefinition | undefined;
   /** The connection an address names, by its token's hash and kind. */
   connectionByToken(kind: string, tokenHash: string): Promise<{ readonly id: string; readonly kind: string } | null>;
+  /** The connection of one account on a platform, by the platform's id for it (`Connected.externalId`). */
+  connectionByAccount(kind: string, externalId: string): Promise<{ readonly id: string; readonly kind: string } | null>;
   /** One connection, opened; null when it is gone or its secrets do not open here. */
   context(connectorId: string, now: number): Promise<RunContext | null>;
   payConnection(connectorId: string, now: number): Promise<PayConnection | null>;
@@ -81,6 +85,8 @@ export interface HookHost {
 export interface HookAnswer {
   readonly status: 200 | 400 | 404 | 413 | 503;
   readonly body: Record<string, unknown>;
+  /** The answer as plain text instead of `body`: a platform's challenge, sent back as it came. */
+  readonly text?: string | undefined;
 }
 
 export class ConnectorHooks {
@@ -99,12 +105,50 @@ export class ConnectorHooks {
     const conn = await this.host.connectionByToken(kind, await inboundHash(token));
     const def = conn ? this.host.definition(conn.kind) : undefined;
     if (!conn || !def?.hooks) return NOT_FOUND;
+    return this.keep(conn, def.hooks, request, now);
+  }
+
+  /**
+   * A request a platform sent to the app's one address (`POST /v1/hooks/<kind>/app`), for whichever
+   * connection it is about: the connector checks the app's signature and names the account, and the
+   * event goes on as if it had come to that connection's own address. An account not connected here
+   * is answered 200 and kept nowhere: the platform has nothing to send again.
+   */
+  async receiveApp(kind: string, request: InboundRequest, now: number): Promise<HookAnswer> {
+    if (request.body.length > MAX_HOOK_BYTES) {
+      return { status: 413, body: { error: "too_large", detail: "This address takes requests up to 1 MB." } };
+    }
+    const def = this.host.definition(kind);
+    const account = def?.hooks?.account;
+    if (!def?.hooks || !account) return NOT_FOUND;
+    let named: string | null;
+    try {
+      named = await account(request);
+    } catch (error) {
+      if (error instanceof ConnectorError) {
+        return { status: 400, body: { error: "bad_signature", detail: "The signature does not check out." } };
+      }
+      throw error;
+    }
+    if (!named) return { status: 200, body: { ok: true, ping: true } };
+    const conn = await this.host.connectionByAccount(kind, named.slice(0, 200));
+    if (!conn) return { status: 200, body: { ok: true, ignored: true } };
+    return this.keep(conn, def.hooks, request, now);
+  }
+
+  /** One request for one connection: checked by the connector, kept once, read back by a job. */
+  private async keep(
+    conn: { readonly id: string; readonly kind: string },
+    hooks: HooksHandler,
+    request: InboundRequest,
+    now: number,
+  ): Promise<HookAnswer> {
     const ctx = await this.host.context(conn.id, now);
     if (!ctx)
       return { status: 503, body: { error: "unavailable", detail: "This connection cannot be read here now." } };
-    let event: HookEvent | null;
+    let event: HookEvent | HookChallenge | null;
     try {
-      event = await def.hooks.verify(ctx, request);
+      event = await hooks.verify(ctx, request);
     } catch (error) {
       if (error instanceof ConnectorError) {
         return { status: 400, body: { error: "bad_signature", detail: "The signature does not check out." } };
@@ -112,6 +156,8 @@ export class ConnectorHooks {
       throw error;
     }
     if (!event) return { status: 200, body: { ok: true, ping: true } };
+    // The platform proving the address: its challenge back, and nothing kept.
+    if ("challenge" in event) return { status: 200, body: {}, text: event.challenge.slice(0, 200) };
     const eventId = event.eventId.slice(0, 200);
     if (!eventId) return { status: 400, body: { error: "invalid_input", detail: "The request names no delivery." } };
     const kept = keptOf(event);

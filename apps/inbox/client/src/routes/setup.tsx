@@ -7,6 +7,7 @@ import { ConnectYourSystem } from "../components/ConnectYourSystem";
 import { ErrorState } from "../components/Feedback";
 import { Field, Switch } from "../components/Form";
 import { HoursEditor } from "../components/Hours";
+import { WhereYouWork } from "../components/WhereYouWork";
 import { type ApiProblem, problemOf } from "../lib/api";
 import { ensureSignedIn, session } from "../lib/auth";
 import { guessCurrency } from "../lib/currencies";
@@ -35,12 +36,15 @@ import {
   ownerEmailDoc,
   SETUP_NETWORK,
   type SetupKind,
+  type StepId,
+  stepsFor,
   type WizardDoors,
   type WizardRoom,
   wizardDoorsDoc,
   wizardPreset,
   wizardRoomBodies,
 } from "../lib/setup";
+import { type AreaDraft, areaDocOf, areaReady, emptyArea, useWork } from "../lib/trades";
 import type { Weekly } from "../lib/types";
 
 export const Route = createFileRoute("/setup")({
@@ -83,27 +87,8 @@ const DOORS: readonly { readonly key: keyof WizardDoors; readonly label: string;
   { key: "message", label: "Agents can send a message", line: "Anything else, for you to answer." },
 ];
 
-/** The wizard's steps by id: a kind of business that needs others (a place to stay) names its own. */
-const STEPS = [
-  { id: "kind", label: "Kind" },
-  { id: "you", label: "You" },
-  { id: "doors", label: "Agents" },
-  { id: "offer", label: "Offer" },
-  { id: "hours", label: "Hours" },
-  { id: "answering", label: "Answering" },
-] as const;
-/** A place to stay (ADR-037): the place and its rooms instead of doors, offers and hours, a night's price with each. */
-const STAY_STEPS = [
-  { id: "kind", label: "Kind" },
-  { id: "you", label: "You" },
-  { id: "place", label: "Place" },
-  { id: "rooms", label: "Rooms" },
-  { id: "answering", label: "Answering" },
-] as const;
-
 /** The languages a place to stay writes to its guests in: guests' emails and pages ship in these six. */
 const GUEST_LANGS = ["en", "es", "fr", "de", "it", "pt"] as const;
-type StepId = (typeof STEPS)[number]["id"] | (typeof STAY_STEPS)[number]["id"];
 
 const DEFAULT_HOURS: Weekly = {
   mon: [["09:00", "17:00"]],
@@ -168,7 +153,7 @@ function SetupWizard() {
   // What the business runs (ADR-036): it sets the rules to start from and what agents can do to begin with.
   const [kindKey, setKindKey] = useState<string | null>(null);
   const kind = kindOf(kindKey);
-  const steps: readonly { readonly id: StepId; readonly label: string }[] = kind?.key === "stays" ? STAY_STEPS : STEPS;
+  const steps = stepsFor(kindKey);
   const at: StepId = steps[step]?.id ?? "kind";
   // A place to stay: what kind, when guests come and go, its rooms. Its id once saved, for the rooms.
   const [lodging, setLodging] = useState("guesthouse");
@@ -196,6 +181,8 @@ function SetupWizard() {
     setTown(knownPlace.locality ?? "");
   }, [knownPlace, placeRead]);
   const [tz] = useState(guessTimezone);
+  const work = useWork();
+  const [area, setArea] = useState<AreaDraft>(() => emptyArea(countryOfZone(tz) ?? ""));
   const [name, setName] = useState("");
   const [timezone, setTimezone] = useState(tz);
   const [currency, setCurrency] = useState(() => guessCurrency(browserLanguages(), tz));
@@ -293,6 +280,11 @@ function SetupWizard() {
         // A merge: only this one key is sent, everything else in the settings stays as it is.
         if (!ownerEmailHeld) await saveSettings.mutateAsync({ doc: ownerEmailDoc(ownerEmail) });
       }
+      if (at === "where") {
+        // Skipped (no choice made), the inbox says it works anywhere, as before.
+        const doc = areaDocOf(area);
+        if (doc) await saveSettings.mutateAsync({ doc });
+      }
       if (at === "doors") {
         await saveSettings.mutateAsync({ doc: wizardDoorsDoc(doors) });
       }
@@ -386,6 +378,7 @@ function SetupWizard() {
   const canAdvance =
     at === "kind" ||
     (at === "you" && name.trim().length > 0) ||
+    (at === "where" && areaReady(area)) ||
     (at === "doors" && (doors.booking || doors.quoteRequest || doors.message)) ||
     (at === "offer" && (!doors.booking || offers.some((o) => o.name.trim()) || existing > 0)) ||
     at === "hours" ||
@@ -522,6 +515,25 @@ function SetupWizard() {
                 ))}
               </select>
             </Field>
+          </>
+        )}
+
+        {at === "where" && (
+          <>
+            <h2 className="sec">Where you work</h2>
+            <p className="lede small">Agents check a site against this before they ask.</p>
+            <WhereYouWork value={area} onChange={setArea} shapes={work.data?.postal} />
+            <button
+              type="button"
+              className="linkish"
+              disabled={busy}
+              onClick={() => {
+                setArea(emptyArea(area.country));
+                setStep((s) => Math.min(s + 1, steps.length - 1));
+              }}
+            >
+              Skip: anywhere
+            </button>
           </>
         )}
 

@@ -10,6 +10,7 @@ import {
   feedImportHandler,
   hasOwnerSession,
   identityIssueHandler,
+  type JobToolSwitches,
   mountDoors,
   NETWORK_CATALOGUE_KIND,
   NETWORK_LISTING_KIND,
@@ -32,7 +33,9 @@ import {
   webhookFanoutHandler,
 } from "@surfingdog/adapters";
 import {
+  ATTACHMENT_SWEEP_KIND,
   ariSyncHandler,
+  attachmentSweepHandler,
   buildManifest,
   Capabilities,
   CONNECTOR_CATALOGUE_KIND,
@@ -82,6 +85,9 @@ import {
   staySweepHandler,
   stayWriteHandler,
   VERSION,
+  WORK_PUSH_KIND,
+  workAttributes,
+  workPushHandler,
   writeResolveHandler,
 } from "@surfingdog/core";
 import { ensureMigrated, logMailOut, type MailOut, type SqliteSnapshot } from "@surfingdog/platform";
@@ -193,6 +199,8 @@ export interface AppDeps {
    * can sign in, so Google says "Soon" rather than offering a sign-in that fails (ADR-030 §6).
    */
   readonly googleTesting?: boolean | undefined;
+  /** What the server switched on of the job tools (JOBBER_API_VERSION, JOB_TOOLS_CLEARED; ADR-034 §5). */
+  readonly jobTools?: JobToolSwitches | undefined;
   /**
    * Connectors of the host's own, offered beside the ones this release ships (ADR-014): anyone can
    * write one against the connector SDK. One with the kind of a built-in one takes its place.
@@ -279,6 +287,7 @@ export function createInbox(deps: AppDeps): Inbox {
         oauth: deps.oauth,
         hosted: Boolean(deps.oauthRedirect?.("google_calendar")),
         googleTesting: deps.googleTesting,
+        jobTools: deps.jobTools,
       }).filter((d) => !extra.some((e) => e.kind === d.kind)),
       ...extra,
     ],
@@ -358,7 +367,11 @@ export function createInbox(deps: AppDeps): Inbox {
     .register(STAY_SWEEP_KIND, staySweepHandler())
     .register(STAY_MESSAGE_KIND, stayMessageHandler())
     .register(STAY_WRITE_KIND, stayWriteHandler(caps.connectors), { lane: payLane })
-    .register(STAY_ARI_SYNC_KIND, ariSyncHandler(caps.connectors));
+    .register(STAY_ARI_SYNC_KIND, ariSyncHandler(caps.connectors))
+    // Trades (ADR-034): a request the owner takes on, written into their job tool, one request at a time;
+    // and the sweep that removes files no request took within the hour. An inbox with neither enqueues none.
+    .register(WORK_PUSH_KIND, workPushHandler(caps.connectors), { lane: payLane })
+    .register(ATTACHMENT_SWEEP_KIND, attachmentSweepHandler());
   if (demo) {
     for (const kind of [
       NETWORK_PING_ONE_KIND,
@@ -385,6 +398,7 @@ export function createInbox(deps: AppDeps): Inbox {
       CONNECTOR_WRITE_RESOLVE_KIND,
       STAY_WRITE_KIND,
       STAY_ARI_SYNC_KIND,
+      WORK_PUSH_KIND,
     ])
       runner.register(kind, noWebhookHandler);
     runner.register(
@@ -476,6 +490,20 @@ export function createInbox(deps: AppDeps): Inbox {
     },
     referrerPolicy: "no-referrer",
   });
+  // A file a customer sent with a request (ADR-034 §2), through the owner's short-lived link: nothing
+  // runs, nothing loads, it frames nowhere, and no Referer carries the link's signature anywhere.
+  const fileHeaders = secureHeaders({
+    ...common,
+    contentSecurityPolicy: {
+      defaultSrc: ["'none'"],
+      imgSrc: ["'self'"],
+      styleSrc: ["'unsafe-inline'"],
+      frameAncestors: ["'none'"],
+      sandbox: [],
+    },
+    crossOriginResourcePolicy: "same-origin",
+    referrerPolicy: "no-referrer",
+  });
   // The customer's pages set their own headers: the ones behind an email's links, and the business's
   // own page (`/p/*`, and `/` for anyone but the owner signed in, who gets their app there).
   // So do the addresses a platform sends the owner back to after signing in (`/oauth/connect/…`),
@@ -488,9 +516,11 @@ export function createInbox(deps: AppDeps): Inbox {
   app.use("*", (c, next) =>
     customerPage(c.req.path, c.req.raw)
       ? pageHeaders(c, next)
-      : demo && c.req.path.startsWith("/demo/")
-        ? demoHeaders(c, next)
-        : appHeaders(c, next),
+      : c.req.path.startsWith("/v1/files/")
+        ? fileHeaders(c, next)
+        : demo && c.req.path.startsWith("/demo/")
+          ? demoHeaders(c, next)
+          : appHeaders(c, next),
   );
 
   // Every route reads a bounded body, checked before anything reads or parses it: the declared
@@ -498,11 +528,32 @@ export function createInbox(deps: AppDeps): Inbox {
   // above anything a booking, an order, a rule or the settings need; raw inbound email may be as
   // large as Email Routing accepts.
   const readsAny = bodyLimit({ maxSize: MAX_BODY, onError: (c) => tooLarge(c, MAX_BODY, "This inbox") });
+  // A request's files (ADR-034 §2): an upload is one file of up to 10 MB; a customer's agent may send up
+  // to 8 MB of files inline in one MCP call, base64, which is a third larger.
+  const readsUpload = bodyLimit({
+    maxSize: MAX_UPLOAD_BODY,
+    onError: (c) => tooLarge(c, MAX_UPLOAD_BODY, "An upload"),
+  });
+  const readsFiles = bodyLimit({
+    maxSize: MAX_MCP_FILES_BODY,
+    onError: (c) => tooLarge(c, MAX_MCP_FILES_BODY, "This inbox"),
+  });
   const readsMail = bodyLimit({
     maxSize: MAX_EMAIL_BODY,
     onError: (c) => tooLarge(c, MAX_EMAIL_BODY, "Inbound email"),
   });
-  app.use("*", (c, next) => (c.req.path === "/v1/email/inbound" ? readsMail(c, next) : readsAny(c, next)));
+  app.use("*", (c, next) =>
+    c.req.path === "/v1/email/inbound"
+      ? readsMail(c, next)
+      : c.req.path === "/v1/uploads"
+        ? readsUpload(c, next)
+        : c.req.path === "/mcp" ||
+            c.req.path === "/v1/quotes" ||
+            c.req.path === "/v1/bookings" ||
+            c.req.path === "/v1/orders"
+          ? readsFiles(c, next)
+          : readsAny(c, next),
+  );
 
   // Migrations run lazily on the first request after a deploy (ADR-007).
   app.use("*", async (c, next) => {
@@ -575,6 +626,8 @@ export function createInbox(deps: AppDeps): Inbox {
         timezone: profile.timezone,
         directory: settings.directory,
         payments: settings.payments.accepted,
+        // What a trade says of itself as a network's attributes (ADR-034): free estimates, emergencies.
+        attributes: workAttributes(settings),
         now: deps.now ? deps.now() : Date.now(),
       }),
       receiptKeys: jwks.keys as unknown as Record<string, unknown>[],
@@ -642,6 +695,10 @@ export function createInbox(deps: AppDeps): Inbox {
 export const MAX_BODY = 1024 * 1024;
 /** Raw inbound email, as large as Email Routing accepts (and `POST /v1/email/inbound` checks). */
 export const MAX_EMAIL_BODY = 25 * 1024 * 1024;
+/** One file uploaded for a request (ADR-034 §2): up to 10 MB, and a little for the request around it. */
+export const MAX_UPLOAD_BODY = 10 * 1024 * 1024 + 64 * 1024;
+/** A request with its files inline, base64 (8 MB of files is about 10.7 MB of text), and its JSON. */
+export const MAX_MCP_FILES_BODY = 12 * 1024 * 1024;
 
 /** The 413 every body limit answers with, as a problem document. */
 function tooLarge(c: Context, max: number, who: string): Response {

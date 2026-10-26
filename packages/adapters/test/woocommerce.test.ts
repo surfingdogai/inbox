@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 import { minorOf, normalizeStore, plain, routeUrl } from "../src/connectors/woocommerce/api";
 import { hmacSha256Base64, woocommerceConnector } from "../src/index";
 import { type FakeWooStore, fakeWooStore, simple, variable, variation } from "./fixtures/woocommerce/store";
+import { eventOf } from "./hook-event";
 
 /**
  * Contract tests for the WooCommerce connector (ADR-032) against a made-up store that answers as
@@ -1003,7 +1004,7 @@ describe("the store's webhooks", () => {
     const link = await woo.payments?.createLink(ctx, req);
     const id = Number(link?.externalId);
     const good = await store.delivery("order.updated", id, { deliveryId: "5f2b9c0d1e3a4b6c7d8e9f0a1b2c3d4e" });
-    const event = await woo.hooks?.verify(ctx, posted(good.body, good.headers));
+    const event = eventOf(await woo.hooks?.verify(ctx, posted(good.body, good.headers)));
     const hookId = good.headers["x-wc-webhook-id"];
     expect(event).toEqual({
       eventId: expect.stringMatching(new RegExp(`^${hookId}:[0-9a-f]{40}$`)),
@@ -1011,7 +1012,7 @@ describe("the store's webhooks", () => {
       refs: [String(id)],
     });
     // The same delivery again is the same event: the base counts it once.
-    expect((await woo.hooks?.verify(ctx, posted(good.body, good.headers)))?.eventId).toBe(event?.eventId);
+    expect(eventOf(await woo.hooks?.verify(ctx, posted(good.body, good.headers)))?.eventId).toBe(event?.eventId);
     const tampered = await store.delivery("order.updated", id, { tamper: true });
     await expect(woo.hooks?.verify(ctx, posted(tampered.body, tampered.headers))).rejects.toBeInstanceOf(
       ConnectorError,
@@ -1033,15 +1034,17 @@ describe("the store's webhooks", () => {
     const da = await store.delivery("order.updated", a, same);
     const db = await store.delivery("order.updated", b, same);
     expect(da.headers["x-wc-webhook-delivery-id"]).toBe(db.headers["x-wc-webhook-delivery-id"]);
-    const first = await woo.hooks?.verify(ctx, posted(da.body, da.headers));
-    const second = await woo.hooks?.verify(ctx, posted(db.body, db.headers));
+    const first = eventOf(await woo.hooks?.verify(ctx, posted(da.body, da.headers)));
+    const second = eventOf(await woo.hooks?.verify(ctx, posted(db.body, db.headers)));
     expect(first?.refs).toEqual([String(a)]);
     expect(second?.refs).toEqual([String(b)]);
     expect(first?.eventId).not.toBe(second?.eventId);
     // The same order changed again in that second is another event too; the same delivery again is not.
     store.pay(a);
     const changed = await store.delivery("order.updated", a, same);
-    expect((await woo.hooks?.verify(ctx, posted(changed.body, changed.headers)))?.eventId).not.toBe(first?.eventId);
+    expect(eventOf(await woo.hooks?.verify(ctx, posted(changed.body, changed.headers)))?.eventId).not.toBe(
+      first?.eventId,
+    );
   });
 
   it("let go, unkept, an order the shop took itself at its own checkout", async () => {
@@ -1081,7 +1084,7 @@ describe("the store's webhooks", () => {
     const body = JSON.stringify(lying);
     const secret = [...store.webhooks.values()][0]?.secret ?? "";
     const headers = { ...d.headers, "x-wc-webhook-signature": await hmacSha256Base64(secret, body) };
-    const event = await woo.hooks?.verify(ctx, posted(body, headers));
+    const event = eventOf(await woo.hooks?.verify(ctx, posted(body, headers)));
     if (!event) throw new Error("no event");
     expect(await woo.hooks?.read(ctx, event)).toEqual([]);
     store.pay(id);
@@ -1100,7 +1103,7 @@ describe("the store's webhooks", () => {
   it("say products changed, a variation by its own id and its parent's", async () => {
     const { store, ctx } = await hooked();
     const d = await store.delivery("product.updated", 22);
-    const event = await woo.hooks?.verify(ctx, posted(d.body, d.headers));
+    const event = eventOf(await woo.hooks?.verify(ctx, posted(d.body, d.headers)));
     expect(event?.refs).toEqual(["v:22", "p:20"]);
     expect(await woo.hooks?.read(ctx, event as NonNullable<typeof event>)).toEqual([
       { kind: "catalogue", externalIds: ["v:22", "p:20"] },

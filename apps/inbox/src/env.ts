@@ -99,12 +99,34 @@ export function outboundDenyFrom(value: string | undefined): { ranges: AddressRa
   return { ranges, bad };
 }
 
+/**
+ * What the server switched on of the job tools (ADR-034 §5): JOBBER_API_VERSION, the Jobber API version
+ * the server's Jobber app was checked against (Jobber stays "set up" without one, or with the
+ * template's 2022-03-10); JOB_TOOLS_CLEARED, the tools whose API terms whoever runs the server cleared
+ * for this use (`housecallpro`, `fergus`), each "set up" until named.
+ */
+export function jobToolsFrom(env: {
+  readonly JOBBER_API_VERSION?: string | undefined;
+  readonly JOB_TOOLS_CLEARED?: string | undefined;
+}): { jobTools: { jobberApiVersion?: string; cleared: string[] } } {
+  const version = env.JOBBER_API_VERSION?.trim();
+  return {
+    jobTools: {
+      ...(version ? { jobberApiVersion: version } : {}),
+      cleared: listFrom(env.JOB_TOOLS_CLEARED).map((k) => k.toLowerCase()),
+    },
+  };
+}
+
 /** The OAuth clients an inbox may hold, by platform, and the environment variables each comes from. */
 const OAUTH_ENV = {
   google: ["GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"],
   shopify: ["SHOPIFY_CLIENT_ID", "SHOPIFY_CLIENT_SECRET"],
   square: ["SQUARE_CLIENT_ID", "SQUARE_CLIENT_SECRET"],
   calendly: ["CALENDLY_CLIENT_ID", "CALENDLY_CLIENT_SECRET"],
+  // Job tools (ADR-034): ServiceM8's Public Application, Jobber's reviewed app.
+  servicem8: ["SERVICEM8_CLIENT_ID", "SERVICEM8_CLIENT_SECRET"],
+  jobber: ["JOBBER_CLIENT_ID", "JOBBER_CLIENT_SECRET"],
 } as const;
 
 type OAuthEnv = { readonly [K in (typeof OAUTH_ENV)[keyof typeof OAUTH_ENV][number]]?: string | undefined };
@@ -112,7 +134,7 @@ type OAuthEnv = { readonly [K in (typeof OAUTH_ENV)[keyof typeof OAUTH_ENV][numb
 /**
  * The OAuth clients this inbox signs owners in to platforms with, each from its id and secret (both,
  * or neither: one alone is said and left out): GOOGLE_OAUTH_CLIENT_ID/_SECRET, SHOPIFY_CLIENT_ID/_SECRET,
- * SQUARE_CLIENT_ID/_SECRET, CALENDLY_CLIENT_ID/_SECRET. Each is a one-click sign-in beside a way that
+ * SQUARE_CLIENT_ID/_SECRET, CALENDLY_CLIENT_ID/_SECRET, SERVICEM8_CLIENT_ID/_SECRET, JOBBER_CLIENT_ID/_SECRET. Each is a one-click sign-in beside a way that
  * needs no app of the server's (ADR-030 §5); without it, that way shows as "set up" in Settings →
  * Integrations ("Soon" on a hosted inbox). GOOGLE_OAUTH_REDIRECT_URI when the host keeps one redirect
  * address for all its inboxes; GOOGLE_OAUTH_TESTING=1 while Google's client is in Testing mode, so
@@ -155,6 +177,8 @@ export function oauthFrom(
       shopify: client("shopify"),
       square: client("square"),
       calendly: client("calendly"),
+      servicem8: client("servicem8"),
+      jobber: client("jobber"),
     },
     oauthRedirect: fixed ? (kind) => (kind === "google_calendar" ? fixed : undefined) : undefined,
     googleTesting: /^(1|true|yes|on)$/i.test((env.GOOGLE_OAUTH_TESTING ?? "").trim()),

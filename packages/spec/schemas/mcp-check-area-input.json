@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MCP check_area: arguments",
+  "type": "object",
+  "properties": {
+    "postal_code": {
+      "description": "The site's postal code, as written.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 20
+    },
+    "country": {
+      "description": "The site's country, ISO 3166-1 alpha-2, with a postal code.",
+      "type": "string",
+      "pattern": "^[A-Za-z]{2}$"
+    },
+    "lat": {
+      "description": "The site's latitude, when you have a point.",
+      "type": "number",
+      "minimum": -90,
+      "maximum": 90
+    },
+    "lng": {
+      "description": "The site's longitude, with lat.",
+      "type": "number",
+      "minimum": -180,
+      "maximum": 180
+    }
+  }
+}

@@ -254,6 +254,23 @@ export const GALLERY: readonly CardSpec[] = [
       { kind: "cloudbeds", preset: null, label: "Cloudbeds" },
     ],
   },
+  // A trade's job tool (ADR-034 §5): requests the owner takes on go in as jobs, leads or enquiries,
+  // and its scheduled visits block those times. Jobber says "set up" until our reviewed app is on the
+  // server; ServiceM8's own sign-in likewise, beside the owner's API key.
+  {
+    id: "job_tool",
+    title: "Job tool",
+    line: "Requests you take on, in your own tool",
+    group: "work",
+    industries: ["trades"],
+    ways: [
+      { kind: "servicem8", preset: null, label: "ServiceM8" },
+      { kind: "housecallpro", preset: null, label: "Housecall Pro" },
+      { kind: "fergus", preset: null, label: "Fergus" },
+      { kind: "jobber", preset: null, label: "Jobber" },
+      { kind: "servicem8", preset: "oauth", label: "Sign in with ServiceM8", advanced: true },
+    ],
+  },
 ];
 
 /** The card a connection belongs to, for its tile's state. */
@@ -267,15 +284,18 @@ export function cardOf(kind: string, preset?: string | null): string | undefined
  * appointments, one with more products than services to a shop. Orders the groups and the cards in
  * them; it never hides one.
  */
-export type Lean = "appointments" | "shop" | "stays" | null;
+export type Lean = "appointments" | "shop" | "stays" | "trades" | null;
 
 export function leanOf(counts: {
   readonly services: number;
   readonly products: number;
   /** A place to stay (ADR-037): it leans to stays, with its property system first. */
   readonly rooms?: number | undefined;
+  /** A trade (ADR-034): it set where it works or how it takes work, or has a job tool. */
+  readonly trade?: boolean | undefined;
 }): Lean {
   if ((counts.rooms ?? 0) > 0) return "stays";
+  if (counts.trade) return "trades";
   if (counts.products > counts.services) return "shop";
   if (counts.services > 0) return "appointments";
   return null;
@@ -286,9 +306,11 @@ export function galleryGroups(lean: Lean): GalleryGroup[] {
   const order: ConnectorGroup[] =
     lean === "stays"
       ? ["lodging", "calendars", "payments", "shops"]
-      : lean === "shop"
-        ? ["shops", "payments", "calendars"]
-        : ["calendars", "payments", "shops"];
+      : lean === "trades"
+        ? ["work", "calendars", "payments", "shops"]
+        : lean === "shop"
+          ? ["shops", "payments", "calendars"]
+          : ["calendars", "payments", "shops"];
   return order.map((id) => ({ id, label: GROUP_LABELS[id] }));
 }
 
@@ -338,7 +360,9 @@ export function gallery(
   const lean = opts.lean ?? null;
   if (lean === null) return out;
   // Within a group, the cards this kind of business uses most first; otherwise as listed.
-  const fits = new Set<Industry>(lean === "stays" ? ["stays"] : lean === "shop" ? FOOD_AND_SHOPS : APPOINTMENTS);
+  const fits = new Set<Industry>(
+    lean === "stays" ? ["stays"] : lean === "trades" ? ["trades"] : lean === "shop" ? FOOD_AND_SHOPS : APPOINTMENTS,
+  );
   const score = (c: GalleryCard) => (c.industries.includes("all") || c.industries.some((i) => fits.has(i)) ? 0 : 1);
   return out
     .map((c, i) => ({ c, i }))

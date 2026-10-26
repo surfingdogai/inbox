@@ -19,6 +19,8 @@ export interface FakeRequest {
   readonly url: URL;
   readonly headers: Headers;
   readonly body: string;
+  /** A body sent as bytes (a file in a multipart form, ADR-034): as it was, beside its latin-1 text in `body`. */
+  readonly bytes?: Uint8Array | undefined;
   /** What the route's `:name` parts matched. */
   readonly params: Readonly<Record<string, string>>;
 }
@@ -92,7 +94,12 @@ export function fakePlatform(): FakePlatform {
     const url = new URL(input instanceof Request ? input.url : String(input));
     const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
     const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
-    const body = typeof init?.body === "string" ? init.body : init?.body ? String(init.body) : "";
+    const raw = init?.body;
+    const bytes = raw instanceof Uint8Array ? raw : undefined;
+    let body = "";
+    if (typeof raw === "string") body = raw;
+    else if (bytes) for (const b of bytes) body += String.fromCharCode(b);
+    else if (raw) body = String(raw);
     const path = decodeURIComponent(url.pathname);
     const failure = failures.find((f) => f.left > 0 && f.method === method && f.host === url.host && f.path.test(path));
     let params: Record<string, string> = {};
@@ -103,7 +110,7 @@ export function fakePlatform(): FakePlatform {
       params = Object.fromEntries(r.names.map((n, i) => [n, m[i + 1] ?? ""]));
       return true;
     });
-    const req: FakeRequest = { method, url, headers, body, params };
+    const req: FakeRequest = { method, url, headers, body, ...(bytes ? { bytes } : {}), params };
     seen.push(req);
     if (failure) {
       failure.left--;

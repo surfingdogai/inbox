@@ -1,6 +1,7 @@
 import type { Item, ItemType, Money, Personalised } from "../domain/types";
+import { tradeQuoteWords } from "../trades/quote";
 import { cap, copyFor, phraseOf, vars } from "./copy";
-import { moneyIn, oneLine, shortRef, whenText } from "./format";
+import { dateText, moneyIn, oneLine, shortRef, whenText } from "./format";
 import type { CustomerLang } from "./lang";
 import { isChangeable, type OpenOffer, openChange, timeDeadline } from "./offer";
 
@@ -303,7 +304,16 @@ function quotedSentence(item: Extract<Item, { type: "quote_request" }>, a: Audie
  */
 export function offerSummary(item: Item, offer: OpenOffer, a: Audience = DEFAULT_AUDIENCE): string {
   const c = copyFor(a.lang);
-  const sentence = `${statusSentence(item, a)}${offer.withdrawable ? ` ${c.withdrawable}` : ""}`;
+  // A trade's quote (ADR-034 §4) says how it is paid, its call-out fee and whether tax is in.
+  const trade =
+    offer.kind === "quote" && offer.terms.totalPrice
+      ? tradeQuoteWords(
+          { ...offer.terms, totalPrice: offer.terms.totalPrice, kind: offer.terms.quoteKind },
+          a.lang,
+          (iso) => dateText(iso, a.timezone, a.lang),
+        )
+      : "";
+  const sentence = `${statusSentence(item, a)}${offer.withdrawable ? ` ${c.withdrawable}` : ""}${trade ? ` ${trade}` : ""}`;
   if (!offer.obligationToPay || !offer.terms.totalPrice) return sentence;
   return `${sentence} ${c.obligation(vars({ total: moneyIn(offer.terms.totalPrice, a.lang) }))}`;
 }

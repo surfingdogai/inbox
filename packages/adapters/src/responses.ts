@@ -1,3 +1,4 @@
+import { workProfileSchema } from "@surfingdog/core";
 import { z } from "zod";
 
 /**
@@ -486,6 +487,11 @@ export const businessProfileSchema = profileSchema.extend({
     .optional()
     .describe(
       "Kinds of request the business takes somewhere else, and where: a booking platform, its own checkout. None of them is in item_types.",
+    ),
+  work: workProfileSchema
+    .optional()
+    .describe(
+      "How a trade takes work (spec 0.11): where it goes (a radius or postal prefixes, never its base), emergencies online, call-out and out-of-hours fees, free estimates.",
     ),
 });
 

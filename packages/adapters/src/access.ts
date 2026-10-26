@@ -139,6 +139,14 @@ export const ROUTE_SCOPES: Readonly<Record<string, readonly string[]>> = {
   "GET /property/system/:connectorId": ["integrations:write"],
   "POST /property/system": ["integrations:write"],
   "POST /stays/:id/draft-quote": ["inbox:read"],
+  // Trades (ADR-034): a request's files and where it stands in the job tool read like the item; sending it is
+  // an integration's write, and a person's only, checked by the capability.
+  "GET /items/:id/files": ["inbox:read"],
+  "GET /items/:id/job-tool": ["inbox:read"],
+  "POST /items/:id/job-tool": ["integrations:write"],
+  "GET /work": [READ_SETUP],
+  // What a connected tool says about the business, to start from: read like a connection.
+  "GET /integrations/:id/setup": [READ_SETUP, "integrations:write"],
   // The owner's in person, with a code sent to their email, checked by the route whatever the scopes.
   "GET /download": ["*"],
   "POST /download/code": ["*"],

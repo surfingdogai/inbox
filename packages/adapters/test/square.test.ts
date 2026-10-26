@@ -32,6 +32,7 @@ import {
   SANDBOX_TOKEN,
   TOKEN,
 } from "./fixtures/square";
+import { eventOf } from "./hook-event";
 
 /**
  * Contract tests for the Square connector (ADR-034) against a made-up seller answering as Square's API
@@ -1116,7 +1117,7 @@ describe("webhooks at the connection's own address", () => {
         },
       },
     });
-    const event = await def.hooks?.verify(ctx(), inbound(lying));
+    const event = eventOf(await def.hooks?.verify(ctx(), inbound(lying)));
     expect(event).toEqual({
       eventId: expect.any(String),
       topic: "payment.updated",
@@ -1159,7 +1160,7 @@ describe("webhooks at the connection's own address", () => {
     sq.pay(orderId);
     sq.fulfil(orderId, "COMPLETED");
     const read = async (type: string, data: Record<string, unknown>) => {
-      const e = await def.hooks?.verify(ctx(), inbound(await sq.event(type, data)));
+      const e = eventOf(await def.hooks?.verify(ctx(), inbound(await sq.event(type, data))));
       return e ? def.hooks?.read(ctx(), e) : null;
     };
     const picked = await read("order.fulfillment.updated", {
@@ -1203,9 +1204,8 @@ describe("webhooks at the connection's own address", () => {
       type: "revocation",
       object: { revocation: { revoker_type: "MERCHANT" } },
     });
-    const e = (await def.hooks?.verify(ctx(), inbound(revoked))) as NonNullable<
-      Awaited<ReturnType<NonNullable<typeof def.hooks>["verify"]>>
-    >;
+    const e = eventOf(await def.hooks?.verify(ctx(), inbound(revoked)));
+    if (!e) throw new Error("no event");
     expect(await def.hooks?.read(ctx(), e)).toEqual([]);
     sq.tokens.production = "EAAAsomethingelseentirely0000";
     expect(await def.hooks?.read(ctx(), e)).toEqual([{ kind: "revoked" }]);

@@ -61,6 +61,7 @@ import {
   priceElementCreated,
   updateRates,
 } from "../fixtures/property/smoobu/webhooks";
+import { eventOf } from "../hook-event";
 import { propertyContract, runContext } from "./contract";
 
 /**
@@ -1288,7 +1289,7 @@ describe("Smoobu: one address for every event, a second secret in constant time,
       KIJIWE_USER.id,
       reservationData(292, 61001, "2027-04-01", "2027-04-04"),
     );
-    const event = await hooks.verify(c.ctx(), deliver(body));
+    const event = eventOf(await hooks.verify(c.ctx(), deliver(body)));
     expect(event?.topic).toBe("newReservation");
     expect(event?.refs).toEqual(["reservation:292", "nights:61001:2027-04-01:2027-04-04"]);
     const bare = { headers: new Headers(), body, query: new URLSearchParams() };
@@ -1325,11 +1326,11 @@ describe("Smoobu: one address for every event, a second secret in constant time,
   it("names rates changed as nights to read again, and counts a delivery sent twice in ten minutes once", async () => {
     const { c, hooks, deliver } = hooked();
     const body = updateRates(KIJIWE_USER.id, 61002, ["2027-05-03", "2027-05-01", "2027-05-02"], 400000);
-    const a = await hooks.verify(c.ctx(), deliver(body));
+    const a = eventOf(await hooks.verify(c.ctx(), deliver(body)));
     expect(a?.refs).toEqual(["nights:61002:2027-05-01:2027-05-04"]);
-    const b = await hooks.verify(c.ctx(), deliver(body));
+    const b = eventOf(await hooks.verify(c.ctx(), deliver(body)));
     expect(b?.eventId).toBe(a?.eventId);
-    const later = await hooks.verify(c.ctx({ now: c.fake.clock.now + 11 * 60_000 }), deliver(body));
+    const later = eventOf(await hooks.verify(c.ctx({ now: c.fake.clock.now + 11 * 60_000 }), deliver(body)));
     expect(later?.eventId).not.toBe(a?.eventId);
     expect(await hooks.read(c.ctx(), a as never)).toEqual([
       { kind: "stay_nights", roomIds: ["61002"], from: "2027-05-01", to: "2027-05-04" },
@@ -1341,7 +1342,7 @@ describe("Smoobu: one address for every event, a second secret in constant time,
     const { c, hooks, deliver } = hooked();
     const data: Record<string, unknown> = {};
     for (let i = 0; i < 51; i++) data[String(70_000 + i)] = { "2027-05-01": { price: 1, available: 1 } };
-    const event = await hooks.verify(c.ctx(), deliver(deliveryBody("updateRates", KIJIWE_USER.id, data)));
+    const event = eventOf(await hooks.verify(c.ctx(), deliver(deliveryBody("updateRates", KIJIWE_USER.id, data))));
     expect(event?.refs).toEqual(["all"]);
     expect(c.fake.platform.seen).toEqual([]);
   });
@@ -1388,6 +1389,7 @@ describe("Smoobu: one address for every event, a second secret in constant time,
       payments: {} as never,
       definition: (kind) => (kind === "smoobu" ? c.def : undefined),
       connectionByToken: async (kind, h) => (kind === "smoobu" && h === hash ? { id: "conn1", kind: "smoobu" } : null),
+      connectionByAccount: async () => null,
       context: async () => c.ctx(),
       payConnection: async () => null,
       failed: async () => {},

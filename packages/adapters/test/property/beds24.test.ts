@@ -45,6 +45,7 @@ import {
   RYOKAN_HOSHI,
 } from "../fixtures/property/beds24/properties";
 import { bookingWebhook, usageLimitAnswer, wikiHeaders, yamlHeaders } from "../fixtures/property/beds24/webhook";
+import { eventOf } from "../hook-event";
 import { propertyContract, runContext } from "./contract";
 
 /**
@@ -1380,16 +1381,18 @@ describe("Beds24: its booking webhook", () => {
     const b = fake.book({ roomId: 512_002, arrival: "2027-09-01", departure: "2027-09-04", channel: "expedia" });
     if (!conn || !def.hooks) throw new Error("not connected");
     const body = (x: unknown) => ({ headers: new Headers(), body: JSON.stringify(x), query: new URLSearchParams() });
-    const event = await def.hooks.verify(
-      conn.ctx,
-      body(
-        bookingWebhook({
-          id: b.id,
-          propertyId: RYOKAN_HOSHI.id,
-          roomId: 512_002,
-          arrival: "2027-12-24",
-          departure: "2027-12-26",
-        }),
+    const event = eventOf(
+      await def.hooks.verify(
+        conn.ctx,
+        body(
+          bookingWebhook({
+            id: b.id,
+            propertyId: RYOKAN_HOSHI.id,
+            roomId: 512_002,
+            arrival: "2027-12-24",
+            departure: "2027-12-26",
+          }),
+        ),
       ),
     );
     expect(event?.eventId).toBe(`booking:${b.id}:2026-10-20T09:14:03Z`);
@@ -1400,7 +1403,9 @@ describe("Beds24: its booking webhook", () => {
     ]);
     expect(fake.platform.seen.length).toBe(before);
     // A webhook naming no nights: the booking is read back with the token, for the nights Beds24 holds.
-    const bare = await def.hooks.verify(conn.ctx, body({ timeStamp: "2026-10-20T10:00:00Z", booking: { id: b.id } }));
+    const bare = eventOf(
+      await def.hooks.verify(conn.ctx, body({ timeStamp: "2026-10-20T10:00:00Z", booking: { id: b.id } })),
+    );
     expect(await def.hooks.read(conn.ctx, bare as NonNullable<typeof bare>)).toEqual([
       { kind: "stay_nights", roomIds: ["512002"], from: "2027-09-01", to: "2027-09-04" },
     ]);
