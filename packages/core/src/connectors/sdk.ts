@@ -774,6 +774,63 @@ export interface InboundResult {
   readonly facts: readonly PaymentFact[];
 }
 
+/**
+ * A charge on a one-time token a customer's assistant got from its platform for this business
+ * (ADR-042): a Stripe shared payment token (`spt_…`), charged once on the business's own account, for
+ * exactly what the order comes to. The token is the platform's grant, scoped by it and the payment
+ * provider to the business, an amount, a currency and an expiry; the inbox uses it for this one call
+ * and keeps only its hash.
+ */
+export interface AgentChargeRequest {
+  /** The inbox's own id for the attempt: the platform's idempotency key is made from it, so a retry charges once. */
+  readonly ref: string;
+  readonly itemId: string;
+  /** In the inbox's minor units (ISO 4217): exactly the order's total. */
+  readonly amount: PayAmount;
+  /** The token as the assistant sent it. Never logged, never kept. */
+  readonly token: string;
+  /** What the payment is called in the business's dashboard: its catalogue's names and the reference, never words a customer typed. */
+  readonly title: string;
+  /** The six characters the order is known by. */
+  readonly reference: string;
+}
+
+/** Why a charge on an assistant's token did not go through, in the inbox's words (ADR-042 §6). */
+export type AgentChargeFailure =
+  | "declined"
+  | "authentication_required"
+  | "token_invalid"
+  | "token_expired"
+  | "token_used"
+  | "token_limit";
+
+/** A charge as the platform answered it, or read it back with the business's key. */
+export interface AgentCharge {
+  /**
+   * `succeeded`: the money is the business's. `processing`: the platform settles it later.
+   * `requires_action`: the card asks its holder to confirm it themselves. `failed`: nothing was charged.
+   * `canceled`: it was stopped before it was charged.
+   */
+  readonly status: "succeeded" | "processing" | "requires_action" | "failed" | "canceled";
+  /** The platform's id for the payment (`pi_…`), when it made one. */
+  readonly externalId: string | null;
+  /** What the platform took, in the inbox's minor units; null when nothing was. */
+  readonly amount: PayAmount | null;
+  /** How it was paid, in the payment-methods vocabulary (`card`), when the platform says. */
+  readonly method?: string | undefined;
+  readonly livemode: boolean;
+  /** The payment in the business's own dashboard: where it is refunded. */
+  readonly dashboardUrl?: string | undefined;
+  /** Why it failed: our code, and the platform's own (for the owner only, never for the agent). */
+  readonly failure?:
+    | {
+        readonly code: AgentChargeFailure;
+        readonly platformCode: string | null;
+        readonly message: string;
+      }
+    | undefined;
+}
+
 /** What a platform says was refunded of one payment, read back with the business's key. */
 export interface RefundFact {
   readonly amount: PayAmount;
@@ -807,6 +864,27 @@ export interface PaymentsHandler {
    * asked when the owner switches them on and never before: empty when it has everything.
    */
   guaranteePermissions?(ctx: RunContext): Promise<readonly string[]>;
+  /**
+   * What the key lacks to charge an assistant's one-time token (ADR-042), in the platform's own names
+   * ("PaymentIntents: Write"), asked when the owner switches agent payments on and never before, with
+   * a request that makes nothing: empty when it has everything. Absent: the platform takes none.
+   */
+  agentPayPermissions?(ctx: RunContext): Promise<readonly string[]>;
+  /**
+   * Charges an assistant's one-time token on the business's own account, once: the same `ref` is the
+   * same charge, however often it is sent. A decline answers `failed` with why; a platform that cannot
+   * be reached throws (`unreachable`, `rate_limited`), and a key without the permission throws `config`.
+   */
+  chargeToken?(ctx: RunContext, request: AgentChargeRequest): Promise<AgentCharge>;
+  /** A charge as the platform holds it now, read with the key: one that was processing, settled since. */
+  agentCharge?(ctx: RunContext, charge: { readonly externalId: string }): Promise<AgentCharge | null>;
+  /** Stops a charge that waits on its card holder (`requires_action`), so it is never taken later. */
+  cancelCharge?(ctx: RunContext, charge: { readonly externalId: string }): Promise<void>;
+  /**
+   * An amount in the platform's own count of its currency (Stripe writes ISK in hundredths): what an
+   * assistant asks its platform for, so the token's limit is the order's total. Null when it does not convert.
+   */
+  platformAmount?(amount: PayAmount): PayAmount | null;
   /** Stops the link taking payments: the order changed, was cancelled, or was paid another way. */
   closeLink(ctx: RunContext, link: { readonly externalId: string }): Promise<void>;
   /**

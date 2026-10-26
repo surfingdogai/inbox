@@ -254,6 +254,89 @@ export function stripeEvent(
   };
 }
 
+/* --- Stripe: an assistant's shared payment token (ADR-042) ---------------------- */
+
+/**
+ * A PaymentIntent as Stripe answers it (https://docs.stripe.com/api/payment_intents/object), made from
+ * a Shared Payment Token: Stripe clones the customer's card into a new PaymentMethod on confirm
+ * (https://docs.stripe.com/agentic-commerce/concepts/shared-payment-tokens, read 26 October 2026).
+ */
+export function stripePaymentIntent(
+  o: {
+    id?: string;
+    amount?: number;
+    currency?: string;
+    status?: "succeeded" | "processing" | "requires_action" | "requires_payment_method" | "canceled";
+    livemode?: boolean;
+    metadata?: Record<string, string>;
+  } = {},
+) {
+  const status = o.status ?? "succeeded";
+  const amount = o.amount ?? 18900;
+  return {
+    id: o.id ?? "pi_3QFjordbrodPaid0001",
+    object: "payment_intent",
+    amount,
+    amount_capturable: 0,
+    amount_received: status === "succeeded" ? amount : 0,
+    capture_method: "automatic_async",
+    confirmation_method: "automatic",
+    created: 1792999800,
+    currency: o.currency ?? "nok",
+    description: "2 × Sourdough loaf (4F2K9Q)",
+    last_payment_error: null,
+    latest_charge: status === "succeeded" ? "ch_3QFjordbrodCharge001" : null,
+    livemode: o.livemode ?? true,
+    metadata: o.metadata ?? {},
+    next_action: status === "requires_action" ? { type: "use_stripe_sdk", use_stripe_sdk: {} } : null,
+    payment_method: "pm_1QFjordbrodCloned0001",
+    payment_method_types: ["card"],
+    status,
+  };
+}
+
+/** A card Stripe declined on confirm: 402 with the PaymentIntent in the error (https://docs.stripe.com/declines/codes). */
+export function stripeCardDeclined(declineCode: string, intent = "pi_3QFjordbrodDeclined1") {
+  const auth = declineCode === "authentication_required";
+  return {
+    error: {
+      type: "card_error",
+      code: auth ? "authentication_required" : "card_declined",
+      decline_code: declineCode,
+      doc_url: `https://docs.stripe.com/error-codes/${auth ? "authentication-required" : "card-declined"}`,
+      message: auth ? "Your card was declined. This transaction requires authentication." : "Your card was declined.",
+      payment_intent: { ...stripePaymentIntent({ id: intent, status: "requires_payment_method" }) },
+      request_log_url: "https://dashboard.stripe.com/logs/req_1QFjordbrod",
+    },
+  };
+}
+
+/**
+ * A token Stripe refused. Its exact error codes are not documented for shared payment tokens (ADR-042
+ * names this among what is still to check in a sandbox), so these are in the shape of its other
+ * refusals, and the adapter reads the parameter and the words as much as the code.
+ */
+export function stripeTokenRefused(why: "missing" | "expired" | "consumed" | "revoked" | "limit", token: string) {
+  const param = "payment_method_data[shared_payment_granted_token]";
+  const said = {
+    missing: { code: "resource_missing", message: `No such shared_payment.granted_token: '${token}'` },
+    expired: { code: "shared_payment_granted_token_expired", message: "This shared payment token has expired." },
+    consumed: {
+      code: "shared_payment_granted_token_deactivated",
+      message: "This shared payment token was deactivated: consumed.",
+    },
+    revoked: {
+      code: "shared_payment_granted_token_deactivated",
+      message: "This shared payment token was deactivated: revoked.",
+    },
+    limit: {
+      code: "shared_payment_granted_token_usage_limit_exceeded",
+      message: "The amount exceeds the usage limits of this shared payment token.",
+    },
+  }[why];
+  return { error: { type: "invalid_request_error", param, ...said } };
+}
+
 /* --- Mollie ----------------------------------------------------------------- */
 
 export const MOLLIE_LIVE_KEY = fake("live", "FAKEFAKEFAKEnkVtjNVWXLSlXsM");

@@ -112,6 +112,8 @@ export {
 } from "./square/index";
 export {
   fromStripeAmount,
+  STRIPE_AGENT_PERMISSIONS,
+  STRIPE_AGENT_VERSION,
   STRIPE_API,
   STRIPE_CURRENCIES,
   STRIPE_EVENTS,

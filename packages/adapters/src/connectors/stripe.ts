@@ -1,4 +1,7 @@
 import {
+  type AgentCharge,
+  type AgentChargeFailure,
+  type AgentChargeRequest,
   type ConnectContext,
   type Connected,
   type ConnectorDefinition,
@@ -244,6 +247,23 @@ export const STRIPE_GUARANTEE_PERMISSIONS = {
   customers: "Customers: Write",
 } as const;
 
+/**
+ * The API version Stripe documents for charging a Shared Payment Token
+ * (https://docs.stripe.com/agentic-commerce/concepts/shared-payment-tokens, read 26 October 2026):
+ * sent on those calls only, so every other call and the webhook keep reading `STRIPE_VERSION`, and a
+ * test pins both, so neither answer's shape drifts unseen (ADR-042).
+ */
+export const STRIPE_AGENT_VERSION = "2026-09-30.preview";
+
+/**
+ * What a key needs beyond `STRIPE_PERMISSIONS` for a customer's assistant to pay directly (ADR-042),
+ * asked only when the owner switches it on: "a restricted API key that has the PaymentIntents write
+ * permission", in Stripe's words for a seller that charges its own shared payment tokens.
+ */
+export const STRIPE_AGENT_PERMISSIONS = {
+  intents: "PaymentIntents: Write",
+} as const;
+
 /** How old a signed webhook may be: Stripe's own libraries' default. */
 export const STRIPE_TOLERANCE_S = 300;
 const KEY_PAGE = "https://dashboard.stripe.com/apikeys/create";
@@ -302,7 +322,7 @@ async function call(
   key: string,
   method: string,
   path: string,
-  opts: { readonly body?: string; readonly idempotency?: string } = {},
+  opts: { readonly body?: string; readonly idempotency?: string; readonly version?: string } = {},
 ): Promise<{ res: ConnectorHttpResponse; json: Record<string, unknown> }> {
   const res = await ctx.http.request({
     method,
@@ -310,7 +330,7 @@ async function call(
     headers: {
       authorization: `Bearer ${key}`,
       accept: "application/json",
-      "stripe-version": STRIPE_VERSION,
+      "stripe-version": opts.version ?? STRIPE_VERSION,
       ...(opts.body !== undefined ? { "content-type": "application/x-www-form-urlencoded" } : {}),
       ...(opts.idempotency ? { "idempotency-key": opts.idempotency } : {}),
     },
@@ -723,6 +743,204 @@ async function guaranteePermissions(ctx: RunContext): Promise<string[]> {
   return missing;
 }
 
+/* --- a customer's assistant pays directly (ADR-042) ----------------------------------- */
+
+/**
+ * Whether the key may charge a shared payment token, asked with a PaymentIntent that has no parameters
+ * and so makes nothing: Stripe refuses a key without the permission (403), and tells one with it what is
+ * missing (400). Asked in the version the charges are made in, so an account Stripe has not opened the
+ * preview for is said now, in Stripe's words, and not on a customer's order.
+ */
+async function agentPayPermissions(ctx: RunContext): Promise<string[]> {
+  const { res, json } = await call(ctx, keyOf(ctx), "POST", "/v1/payment_intents", {
+    body: "",
+    version: STRIPE_AGENT_VERSION,
+  });
+  if (res.status === 403) return [STRIPE_AGENT_PERMISSIONS.intents];
+  const code = (json.error as { code?: unknown } | undefined)?.code;
+  if (res.status === 400 && code !== "parameter_missing" && /version/i.test(messageOf(json))) {
+    throw new ConnectorError("refused", refusalOf(json, res.status));
+  }
+  return [];
+}
+
+/**
+ * Charges an assistant's shared payment token on the business's own account: one PaymentIntent,
+ * confirmed at once, for exactly what the order comes to, under an idempotency key from the inbox's own
+ * id for the attempt, so a retry is the same charge. The description is the catalogue's names and the
+ * reference; nothing about the customer is sent. Stripe holds the token to the business's profile, its
+ * amount, its currency and its expiry, and refuses one outside them.
+ */
+async function chargeToken(ctx: RunContext, req: AgentChargeRequest): Promise<AgentCharge> {
+  const key = keyOf(ctx);
+  const amount = stripeAmount(req.amount);
+  // Asked only after `currencyProblem` said yes: a refusal here is a bug's, never a guessed amount.
+  if (!amount.ok) throw new ConnectorError("refused", amount.reason);
+  const { res, json } = await call(ctx, key, "POST", "/v1/payment_intents", {
+    version: STRIPE_AGENT_VERSION,
+    idempotency: `sdi-${req.ref}-pi`,
+    body: form([
+      ["amount", amount.value],
+      ["currency", req.amount.currency.toLowerCase()],
+      ["confirm", true],
+      ["payment_method_data[shared_payment_granted_token]", req.token],
+      ["description", req.title.slice(0, 500)],
+      ["metadata[sdi_pay]", req.ref],
+      ["metadata[sdi_item]", req.itemId],
+      ["metadata[sdi_order]", req.reference],
+      ["metadata[sdi_inbox]", ctx.inbox.id],
+    ]),
+  });
+  if (res.status === 403) {
+    throw new ConnectorError(
+      "config",
+      `The Stripe key cannot take payments from assistants: give it ${STRIPE_AGENT_PERMISSIONS.intents} on Stripe's key page.`,
+      { field: "api_key" },
+    );
+  }
+  const error = (json.error ?? null) as Record<string, unknown> | null;
+  // A decline: Stripe answers 402 with the PaymentIntent it made in the error. Nothing was charged.
+  if (res.status === 402 && error?.type === "card_error") {
+    const intent = (error.payment_intent ?? {}) as Record<string, unknown>;
+    const decline = typeof error.decline_code === "string" ? error.decline_code : null;
+    const code = typeof error.code === "string" ? error.code : null;
+    const auth = code === "authentication_required" || decline === "authentication_required";
+    return {
+      status: "failed",
+      externalId: typeof intent.id === "string" ? intent.id : null,
+      amount: null,
+      livemode: modeOf(key) === "live",
+      failure: {
+        code: auth ? "authentication_required" : "declined",
+        platformCode: (decline ?? code)?.slice(0, 80) ?? null,
+        message: messageOf(json),
+      },
+    };
+  }
+  if (res.status >= 400) {
+    const refused = tokenRefusal(error);
+    if (refused) {
+      return {
+        status: "failed",
+        externalId: null,
+        amount: null,
+        livemode: modeOf(key) === "live",
+        failure: {
+          code: refused,
+          platformCode: typeof error?.code === "string" ? error.code.slice(0, 80) : null,
+          message: messageOf(json),
+        },
+      };
+    }
+    if (res.status === 404) throw new ConnectorError("not_found", messageOf(json) || "Stripe has no such thing.");
+    throw new ConnectorError("refused", refusalOf(json, res.status));
+  }
+  const charge = chargeOf(json, key);
+  if (!charge) throw new ConnectorError("bad_response", "Stripe took the payment but did not say what it made.");
+  if (charge.livemode !== (modeOf(key) === "live")) {
+    throw new ConnectorError("bad_response", "Stripe made the payment in the other mode than the key's.");
+  }
+  // Exactly what was asked, or it is not the charge this inbox made.
+  if (
+    Number(json.amount) !== amount.value ||
+    String(json.currency).toLowerCase() !== req.amount.currency.toLowerCase()
+  ) {
+    throw new ConnectorError("bad_response", "Stripe answered with a payment for another amount.");
+  }
+  return charge;
+}
+
+/**
+ * Which of the inbox's reasons a refused token is (ADR-042 §6). Stripe does not document the codes it
+ * gives a shared payment token it will not charge, so the parameter it names and its words are read as
+ * well as the code: expired, spent or revoked, over its limit, or none it knows (another business's,
+ * another mode's). Null for a refusal about something else.
+ */
+function tokenRefusal(error: Record<string, unknown> | null): AgentChargeFailure | null {
+  if (!error) return null;
+  const code = typeof error.code === "string" ? error.code : "";
+  const param = typeof error.param === "string" ? error.param : "";
+  const message = typeof error.message === "string" ? error.message : "";
+  const about = /shared_payment|granted_token/i.test(`${param} ${code} ${message}`);
+  if (!about) return null;
+  const words = `${code} ${message}`;
+  if (/expire/i.test(words)) return "token_expired";
+  if (/consumed|revoked|deactivated|\bused\b/i.test(words)) return "token_used";
+  if (/limit|exceed|max_amount|currency/i.test(words)) return "token_limit";
+  return "token_invalid";
+}
+
+/** A PaymentIntent as Stripe holds it, in the inbox's words; null when the answer is not one. */
+function chargeOf(intent: Record<string, unknown>, key: string): AgentCharge | null {
+  if (intent.object !== "payment_intent" || typeof intent.id !== "string" || !intent.id.startsWith("pi_")) return null;
+  const livemode = typeof intent.livemode === "boolean" ? intent.livemode : modeOf(key) === "live";
+  const currency = typeof intent.currency === "string" ? intent.currency.toUpperCase() : "";
+  const received = currency.length === 3 ? fromStripeAmount(Number(intent.amount_received ?? 0), currency) : null;
+  const types = Array.isArray(intent.payment_method_types) ? intent.payment_method_types : [];
+  const error = (intent.last_payment_error ?? null) as Record<string, unknown> | null;
+  const status =
+    intent.status === "succeeded"
+      ? "succeeded"
+      : intent.status === "processing"
+        ? "processing"
+        : intent.status === "requires_action" || intent.status === "requires_confirmation"
+          ? "requires_action"
+          : intent.status === "canceled"
+            ? "canceled"
+            : "failed";
+  const decline = typeof error?.decline_code === "string" ? error.decline_code : null;
+  const code = typeof error?.code === "string" ? error.code : null;
+  return {
+    status,
+    externalId: intent.id,
+    amount: status === "succeeded" && received !== null && received > 0 ? { value: received, currency } : null,
+    ...(types.includes("card") ? { method: "card" } : {}),
+    livemode,
+    dashboardUrl: dashboard(livemode ? "live" : "test", `payments/${encodeURIComponent(intent.id)}`),
+    ...(status === "failed"
+      ? {
+          failure: {
+            code: code === "authentication_required" ? "authentication_required" : "declined",
+            platformCode: (decline ?? code)?.slice(0, 80) ?? null,
+            message: typeof error?.message === "string" ? error.message.slice(0, 300) : "",
+          },
+        }
+      : {}),
+  };
+}
+
+/** A charge as Stripe holds it now, read with the key (PaymentIntents: Write reads them too). */
+async function agentCharge(ctx: RunContext, charge: { readonly externalId: string }): Promise<AgentCharge | null> {
+  const key = keyOf(ctx);
+  const { res, json } = await call(ctx, key, "GET", `/v1/payment_intents/${encodeURIComponent(charge.externalId)}`, {
+    version: STRIPE_AGENT_VERSION,
+  });
+  if (res.status === 404) return null;
+  if (res.status === 403) {
+    throw new ConnectorError(
+      "config",
+      `The Stripe key cannot read payments from assistants: give it ${STRIPE_AGENT_PERMISSIONS.intents} on Stripe's key page.`,
+      { field: "api_key" },
+    );
+  }
+  if (res.status >= 400) throw new ConnectorError("refused", refusalOf(json, res.status));
+  return chargeOf(json, key);
+}
+
+/** Stops a charge that waits on its card holder, so it is never taken later: one already stopped is let be. */
+async function cancelCharge(ctx: RunContext, charge: { readonly externalId: string }): Promise<void> {
+  const { res, json } = await call(
+    ctx,
+    keyOf(ctx),
+    "POST",
+    `/v1/payment_intents/${encodeURIComponent(charge.externalId)}/cancel`,
+    { body: "", version: STRIPE_AGENT_VERSION },
+  );
+  if (res.status >= 400 && res.status !== 404 && res.status !== 400) {
+    throw new ConnectorError("refused", refusalOf(json, res.status));
+  }
+}
+
 async function closeLink(ctx: RunContext, link: { readonly externalId: string }): Promise<void> {
   await must(
     ctx,
@@ -926,6 +1144,14 @@ export function stripeConnector(): ConnectorDefinition {
       createGuarantee,
       guaranteeFact,
       guaranteePermissions,
+      agentPayPermissions,
+      chargeToken,
+      agentCharge,
+      cancelCharge,
+      platformAmount: (amount) => {
+        const converted = stripeAmount(amount);
+        return converted.ok ? { value: converted.value, currency: amount.currency.toLowerCase() } : null;
+      },
       closeLink,
       check,
       receive: (ctx, request) => receive(ctx, request),
