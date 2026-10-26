@@ -453,6 +453,11 @@ export function networkCatalogueHandler(deps: NetworkDeps): JobHandler {
     if ("status" in res && res.status === 429) {
       return { note: `${host} asked to wait (HTTP 429); the hourly tick asks again` };
     }
+    // Registered and not verified yet (its ping was taken unsigned): it takes the switch once it has
+    // read the manifest. Nothing is wrong for the owner to see; the hourly tick tells it again.
+    if ("status" in res && res.status === 401 && problemCode(res.text) === "unknown_instance") {
+      return { note: `${host} has not verified ${domain} yet; the hourly tick tells it again` };
+    }
     await db.client.query(
       networkCatalogueErrorStatement(network, now, `catalogue: ${"status" in res ? `HTTP ${res.status}` : res.error}`),
     );

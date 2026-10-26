@@ -107,7 +107,7 @@ async function setup(
       const status = opts.switchStatus ? opts.switchStatus() : 200;
       return status === 200
         ? Response.json({ listed: body?.listed === true, offers_live: body?.listed === true ? 2 : 0 })
-        : Response.json({ code: "x" }, { status });
+        : Response.json({ code: status === 401 ? "unknown_instance" : "x" }, { status });
     }
     if (url.pathname.endsWith("/listing")) return Response.json({ domain: "demo.example.com", listed: true });
     return Response.json({ ok: true });
@@ -196,6 +196,24 @@ describe("the switch, at once", () => {
     status = 200;
     await s.tick(T0 + 2 * HOUR);
     expect(await readNetworkStatus(s.db, A)).toMatchObject({ catalogueListed: 1 });
+  });
+
+  it("tells a network that has not verified the inbox yet again at the next hour, with nothing wrong to show", async () => {
+    let status = 401;
+    const s = await setup({ switchStatus: () => status });
+    await s.write(T0, { networks: { [A]: { enabled: true } } });
+    await s.register(A);
+    await s.tick(T0);
+    expect(s.switches()).toHaveLength(1);
+    expect(await readNetworkStatus(s.db, A)).toMatchObject({
+      catalogueListed: null,
+      catalogueError: null,
+      lastError: null,
+    });
+    status = 200;
+    await s.tick(T0 + HOUR);
+    expect(s.switches()).toHaveLength(2);
+    expect(await readNetworkStatus(s.db, A)).toMatchObject({ catalogueListed: 1, catalogueError: null });
   });
 
   it("asks a network that lists no products (404) no more for a day", async () => {
