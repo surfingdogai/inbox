@@ -7,7 +7,7 @@ import type { Money } from "../domain/types";
 import { randomToken, ulid } from "../ids";
 import { ensureJob } from "../jobs/schedule";
 import { readSettings } from "../settings/schema";
-import { isHundredthsCurrency } from "../util/locale";
+import { isHundredthsCurrency, isWholeUnitCurrency } from "../util/locale";
 import type { Caller } from "../write/caller";
 import { jobStatement } from "../write/common";
 import { WriteError } from "../write/errors";
@@ -472,7 +472,12 @@ export class PaymentLinks {
       }
     }
     // Every amount here is in hundredths: a currency counted otherwise would be a link a hundred times wrong.
-    if (!isHundredthsCurrency(want.currency)) return this.refuse(order, conn, want, NOT_HUNDREDTHS, now);
+    // A shop takes a decimal in its own currency, so one with no minor unit (yen, won) is exact there
+    // (ADR-027); a payment platform counts in minor units and is never sent one.
+    const wholeUnits = conn.shop ? isWholeUnitCurrency(want.currency) : false;
+    if (!isHundredthsCurrency(want.currency) && !wholeUnits) {
+      return this.refuse(order, conn, want, NOT_HUNDREDTHS, now);
+    }
     // A new link: the row first, under the one-live-link index, then the platform.
     const id = ulid(now);
     const token = randomToken(12);

@@ -3,7 +3,7 @@ title: Integrations
 description: What your Inbox connects to today, what is being built, and the rules every connection keeps. Your own accounts and keys, paid into your own account, nothing said before it works.
 ---
 
-Settings → **Integrations**. Calendars, payments, and shops and tills, each a card. A card says **Connect** only when your Inbox can connect it. What is being built says **Soon**. Nothing else is listed.
+Settings → **Integrations**. Calendars, payments, and shops and checkouts, each a card. A card says **Connect** only when your Inbox can connect it. What is being built says **Soon**. Nothing else is listed.
 
 ## Works today
 

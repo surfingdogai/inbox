@@ -183,7 +183,7 @@ describe("Settings → Integrations", () => {
       ["stripe", "ready"],
       ["mollie", "ready"],
       ["square", "soon"],
-      ["woocommerce", "soon"],
+      ["woocommerce", "ready"],
       ["shopify", "ready"],
     ]);
     const calendar = body.cards.find((c) => c.id === "calendar");
@@ -358,7 +358,7 @@ describe("an iCloud calendar, end to end", () => {
     // The PATCH synced at once: the work calendar holds nothing here.
     expect(listed.content[0]?.text).toContain(`${view.id} iCloud [active] 0 busy times ahead (read to `);
     expect(listed.content[0]?.text).toContain("), 0 bookings written");
-    expect(listed.content[0]?.text).toContain("Soon: Calendly, Calendar link to share, Square, WooCommerce.");
+    expect(listed.content[0]?.text).toContain("Soon: Calendly, Calendar link to share, Square.");
     expect(JSON.stringify(listed)).not.toContain(APP_PASSWORD);
     const sync = (await client.callTool({ name: "sync_integration", arguments: { connection_id: view.id } })) as {
       isError?: boolean;

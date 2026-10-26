@@ -38,6 +38,13 @@ export interface GalleryWay {
   readonly advanced?: boolean | undefined;
   /** The words on its one button: Connect, Connect your shop, Continue with Google, Make a link. */
   readonly action: string;
+  /** The words on the button that connects it again, when they are not "Connect again with <label>". */
+  readonly again?: string | undefined;
+  /**
+   * For a way that works only once this inbox is live at its own https address (a store that POSTs
+   * its key here, ADR-026 §5): said as it is, above the way that works meanwhile. Its status is `setup`.
+   */
+  readonly untilLive?: string | undefined;
   /** What the platform will ask, said before the owner goes there. */
   readonly consent?: string | undefined;
   /** Steps on the platform once it is made: where to paste a link. */
@@ -113,7 +120,7 @@ interface CardSpec {
 export const GROUP_LABELS: Readonly<Record<ConnectorGroup, string>> = {
   calendars: "Calendars",
   payments: "Payments",
-  shops: "Shops and tills",
+  shops: "Shops and checkouts",
 };
 
 const APPOINTMENTS: readonly Industry[] = ["salons", "clinics", "gyms", "trades"];
@@ -122,7 +129,7 @@ const FOOD_AND_SHOPS: readonly Industry[] = ["shops", "cafes", "restaurants", "b
 /**
  * Every card, in the order they are shown within their group: the calendar most businesses have
  * first, then the booking platforms, the calendar link to share, the payment platforms (ADR-023) and
- * the shops and tills. Outlook is the calendar's published link with Outlook's own steps: busy times
+ * the shops and checkouts. Outlook is the calendar's published link with Outlook's own steps: busy times
  * only, which is what Outlook offers without an app of ours.
  */
 export const GALLERY: readonly CardSpec[] = [
@@ -191,9 +198,8 @@ export const GALLERY: readonly CardSpec[] = [
     line: "Catalogue in, paid at your checkout",
     group: "shops",
     industries: ["shops", "bakeries", "restaurants", "cafes"],
-    building: true,
     ways: [
-      { kind: "woocommerce", preset: null, label: "WooCommerce" },
+      { kind: "woocommerce", preset: null, label: "Connect with one press" },
       { kind: "woocommerce", preset: "keys", label: "Paste the keys instead", advanced: true },
     ],
   },
@@ -257,6 +263,8 @@ export function gallery(
   definitions: ReadonlyMap<string, ConnectorDefinition>,
   opts: {
     readonly hookBase?: string | null | undefined;
+    /** Whether platforms can reach this inbox now (a hosted inbox before it goes live cannot). Absent is true. */
+    readonly hooksLive?: boolean | undefined;
     readonly prefill?: Prefill | undefined;
     readonly lean?: Lean | undefined;
   } = {},
@@ -300,7 +308,11 @@ function wayOf(
   card: CardSpec,
   w: WaySpec,
   def: ConnectorDefinition | undefined,
-  opts: { readonly hookBase?: string | null | undefined; readonly prefill?: Prefill | undefined },
+  opts: {
+    readonly hookBase?: string | null | undefined;
+    readonly hooksLive?: boolean | undefined;
+    readonly prefill?: Prefill | undefined;
+  },
 ): GalleryWay | null {
   const preset = w.preset ? def?.presets?.find((p) => p.id === w.preset) : undefined;
   // Not in this release (its connector, or the preset the way names): "Soon" while it is being built,
@@ -321,7 +333,14 @@ function wayOf(
   const auth: ConnectorAuth = preset?.auth ?? def.auth;
   const ready = readiness(def, preset);
   const unready = ready !== true ? (preset?.whenNotReady ?? def.whenNotReady) : undefined;
-  const status: GalleryWay["status"] = ready === true ? "ready" : (unready?.status ?? "soon");
+  // A store that POSTs its key here must reach this inbox: until it is live at its own https address,
+  // the way that works meanwhile (its keys pasted) is the one offered.
+  const unreachable =
+    ready === true &&
+    auth === "oauth" &&
+    def.oauth?.delivery === "post" &&
+    (!opts.hookBase || opts.hooksLive === false);
+  const status: GalleryWay["status"] = unreachable ? "setup" : ready === true ? "ready" : (unready?.status ?? "soon");
   const live = status === "ready";
   const form = auth === "form" && def.form && live ? describeForm(def.form, preset, opts.prefill) : [];
   const before =
@@ -338,6 +357,8 @@ function wayOf(
     ...(before.length > 0 ? { before } : {}),
     ...(w.advanced ? { advanced: true } : {}),
     action: preset?.action ?? def.action ?? defaultAction(auth, w.label),
+    ...((preset?.again ?? def.again) ? { again: preset?.again ?? def.again } : {}),
+    ...(unreachable ? { untilLive: POST_NOT_LIVE } : {}),
     ...(consent ? { consent } : {}),
     ...(def.steps?.length ? { steps: def.steps } : {}),
     ...(note ? { note } : {}),
@@ -364,6 +385,10 @@ function defaultAction(auth: ConnectorAuth, label: string): string {
   if (auth === "oauth") return `Continue with ${label}`;
   return "Connect";
 }
+
+/** Why a store that POSTs its key here cannot do so yet, and what works meanwhile (ADR-026 §5). */
+export const POST_NOT_LIVE =
+  "Your shop can send this inbox its key once the inbox is live at its own address. Until then, paste the keys.";
 
 /** A payment platform tells this inbox of payments at its own address, which it needs to know first. */
 const NEEDS_ADDRESS = {

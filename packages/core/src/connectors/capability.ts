@@ -19,7 +19,16 @@ import {
   MAX_CATALOGUE,
   upsertCatalogue,
 } from "./catalogue";
-import { cardOf, type GalleryCard, type GalleryGroup, gallery, galleryGroups, leanOf, readiness } from "./gallery";
+import {
+  cardOf,
+  type GalleryCard,
+  type GalleryGroup,
+  gallery,
+  galleryGroups,
+  leanOf,
+  POST_NOT_LIVE,
+  readiness,
+} from "./gallery";
 import {
   ConnectorHooks,
   feedBookings,
@@ -35,6 +44,7 @@ import {
   type CalendarChoice,
   type Connected,
   type ConnectionChoice,
+  type ConnectionNote,
   type ConnectorAuth,
   type ConnectorDefinition,
   ConnectorError,
@@ -250,6 +260,8 @@ export interface ConnectionView {
   readonly disconnect_note: string | null;
   /** What a connection in test mode is called, in the platform's words ("test key", "development store"). */
   readonly test_label: string;
+  /** What the owner should know about it now, a line each (`ConnectorDefinition.notes`). */
+  readonly notes: readonly ConnectionNote[];
 }
 
 export interface IntegrationsView {
@@ -410,6 +422,7 @@ export class ConnectorCapabilities {
       groups: galleryGroups(lean),
       cards: gallery(this.definitions, {
         hookBase: await this.hookBase(),
+        hooksLive: this.hooksLive,
         prefill: { website: settings.directory.url || undefined },
         lean,
       }),
@@ -608,6 +621,10 @@ export class ConnectorCapabilities {
         details: { reason: "form", kind: def.kind },
       });
     }
+    // A platform that POSTs the key itself must reach this inbox: an https address, live (ADR-026 §5).
+    if (def.oauth.delivery === "post" && !(await this.postReachable())) {
+      throw new WriteError("not_allowed", POST_NOT_LIVE, { details: { reason: "not_live", kind: def.kind } });
+    }
     // What the way asks first (a store's address): checked here, kept for the way back.
     let before: Record<string, string> = {};
     if (def.oauth.before) {
@@ -696,11 +713,21 @@ export class ConnectorCapabilities {
       if (row[7] !== null && row[7] !== undefined) {
         return { returnTo, ok: true, message: `${postDef.title} is connected.`, id: String(row[7]) };
       }
+      // Declined on the platform's own page: nothing went wrong, nothing was made.
+      if (p.error === "access_denied") {
+        return {
+          returnTo,
+          ok: false,
+          message: `Nothing was connected: you didn't approve this inbox in ${postDef.title}.`,
+        };
+      }
       if (row[8] !== null && row[8] !== undefined) return { returnTo, ok: false, message: String(row[8]) };
+      const who = postDef.group === "shops" ? "your shop" : postDef.title;
+      const keys = postDef.presets?.some((x) => (x.auth ?? postDef.auth) === "form") === true;
       return {
         returnTo,
         ok: false,
-        message: `Nothing was connected: ${postDef.title} did not send this inbox a key. Try again from Settings.`,
+        message: `Nothing was connected: ${who} could not send this inbox its key. Try again${keys ? ", or paste the keys under More options" : ""}.`,
       };
     }
     const claimed = await this.db.client.query({
@@ -785,6 +812,21 @@ export class ConnectorCapabilities {
       return { status: 400, body: { error: "invalid_input", detail: "That sign-in had expired or was used already." } };
     }
     const started = authInputOf(claimed.rows[0]?.[0]);
+    // The same account approved again (a store's address): connected again in place, its own address kept.
+    let again: ConnectorRow | null = null;
+    try {
+      const account = flow.accountOf?.(started.values) ?? null;
+      if (account) {
+        const found = await this.db.client.query({
+          sql: "SELECT id FROM connectors WHERE kind = ? AND external_id = ?",
+          params: [kind, account],
+          method: "all",
+        });
+        again = found.rows[0] ? await this.rowOrNull(String(found.rows[0][0])) : null;
+      }
+    } catch {
+      again = null;
+    }
     const fail = async (message: string): Promise<HookAnswer> => {
       await this.db.client.query({
         sql: "UPDATE connector_auth SET message = ? WHERE state_hash = ?",
@@ -794,8 +836,12 @@ export class ConnectorCapabilities {
       return { status: 400, body: { error: "refused", detail: message } };
     };
     try {
-      const inbound = await this.inboundFor(def, null);
-      const ctx = await this.connectContext(now, kind, inbound?.token);
+      if (again?.config.disconnectingAt !== null && again?.config.disconnectingAt !== undefined) {
+        return fail(`${def.title} is being disconnected: connect it again once that is done, in a minute or two.`);
+      }
+      const inbound = await this.inboundFor(def, again);
+      const base = await this.connectContext(now, kind, inbound?.token);
+      const ctx = again ? { ...base, previous: { externalId: again.externalId, extra: again.config.extra } } : base;
       const connected = await flow.receivePosted(ctx, request, started.values);
       let view: ConnectionView;
       try {
@@ -1233,6 +1279,8 @@ export class ConnectorCapabilities {
           ],
           method: "run",
         });
+        // The rest of this run works with what the refresh found (a store's address as it answers now).
+        if (fresh.extra) ctx = { ...ctx, extra: fresh.extra };
       }
       if (row.config.busyOn && def.busy && def.capabilities.includes("busy_times")) {
         // Every booking any connection wrote is left out, the ones written since this run began too.
@@ -1939,6 +1987,11 @@ export class ConnectorCapabilities {
     return hookUrlOf(origin, "") === null ? null : `${origin}/v1/hooks/`;
   }
 
+  /** Whether a platform can POST to this inbox now: an https address it knows, and live (the same as webhooks). */
+  private async postReachable(): Promise<boolean> {
+    return this.hooksLive && (await this.hookBase()) !== null;
+  }
+
   private async identity(): Promise<InboxIdentity> {
     const settings = await readSettings(this.db);
     const facts = await businessFacts(this.db, settings);
@@ -2195,6 +2248,7 @@ export class ConnectorCapabilities {
       link: person && def?.feed ? await this.linkOf(row, def.feed.extension) : null,
       disconnect_note: def?.disconnectNote ?? null,
       test_label: def?.testLabel ?? "test key",
+      notes: notesOf(def, row.config.extra ?? {}, now),
     };
   }
 
@@ -2500,6 +2554,27 @@ function deleteStatements(connectorId: string): Statement[] {
     { sql: "DELETE FROM connector_events WHERE connector_id = ?", params: [connectorId], method: "run" },
     { sql: "DELETE FROM connectors WHERE id = ?", params: [connectorId], method: "run" },
   ];
+}
+
+/** A connector's notes on one connection, kept to a few short lines; none when it says none, or fails to. */
+function notesOf(
+  def: ConnectorDefinition | undefined,
+  extra: Readonly<Record<string, unknown>>,
+  now: number,
+): ConnectionNote[] {
+  if (!def?.notes) return [];
+  try {
+    return def
+      .notes({ extra, now })
+      .filter((n) => n && typeof n.text === "string" && n.text.trim())
+      .slice(0, 3)
+      .map((n) => ({
+        text: n.text.slice(0, 300),
+        ...(n.href && /^https:\/\//.test(n.href) ? { href: n.href, link: (n.link ?? "Open").slice(0, 60) } : {}),
+      }));
+  } catch {
+    return [];
+  }
 }
 
 /**

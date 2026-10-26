@@ -137,6 +137,8 @@ export interface ConnectorPreset {
   readonly action?: string | undefined;
   /** What the platform will ask, said before the owner goes there (an OAuth consent page). */
   readonly consent?: string | undefined;
+  /** The words on the button that connects it again, when they are not "Connect again with <label>". */
+  readonly again?: string | undefined;
 }
 
 /** What `FieldHints.prefill` names, as the inbox knows it. */
@@ -311,6 +313,14 @@ export interface Connected {
    * is kept.
    */
   readonly choices?: readonly ConnectionChoice[] | undefined;
+}
+
+/** A line the owner app shows under a connection (`ConnectorDefinition.notes`), with where to act on it. */
+export interface ConnectionNote {
+  readonly text: string;
+  readonly href?: string | undefined;
+  /** The words of the link to `href`. */
+  readonly link?: string | undefined;
 }
 
 /** One chooser the owner app draws for a connection: a till's location, a team member. */
@@ -708,14 +718,22 @@ export interface OAuthFlow {
    */
   postedState?(request: InboundRequest): string | null;
   /**
-   * For a `post` flow: the key the platform POSTed, checked against the platform (the store at the
-   * address the owner gave) before it is kept. Throws `ConnectorError` when it does not check out.
+   * For a `post` flow: the key the platform POSTed, taken from what the POST says (its shape, its
+   * permissions) without asking the platform anything: the platform is waiting for this answer, and a
+   * small host may have no one free to answer another request meanwhile. The key is checked against
+   * the platform on the first sync. Throws `ConnectorError` when it is not one this inbox can use.
    */
   receivePosted?(
     ctx: ConnectContext,
     request: InboundRequest,
     input: Readonly<Record<string, string>>,
   ): Promise<Connected>;
+  /**
+   * The account the `before` values name (a store's address), when they name one: connecting the same
+   * account again on the platform's own page is then connecting again in place, given `previous` and
+   * keeping the connection's own address, so what it made on the platform last time is found again.
+   */
+  accountOf?(input: Readonly<Record<string, string>>): string | null;
 }
 
 /* --- the catalogue (ADR-030 §3) -------------------------------------------- */
@@ -860,6 +878,14 @@ export interface ConnectorDefinition {
    * default) for a payment platform's test key, "development store" for a shop that takes only test orders.
    */
   readonly testLabel?: string | undefined;
+  /** The words on the button that connects it again, when they are not "Connect again with <label>". */
+  readonly again?: string | undefined;
+  /**
+   * What the owner should know about a connection now, a line each under it, from what the connection
+   * keeps about itself (`extra`): a shop that adds tax at checkout, an earlier key to remove. Plain
+   * words, never a secret; `href` where the owner does it.
+   */
+  notes?(view: { readonly extra: Readonly<Record<string, unknown>>; readonly now: number }): readonly ConnectionNote[];
   /** True when this instance can offer it; otherwise why not (an OAuth app with no client set). */
   ready?(): true | string;
   /**
@@ -970,9 +996,11 @@ export function subtractIntervals(busy: readonly Interval[], spans: readonly Int
 
 /**
  * Every amount in this inbox is kept in hundredths (`util/locale.ts`, `moneyIn`): 4500 EUR is 45.00.
- * A currency counted otherwise (none, like JPY; thousandths, like KWD) is refused before a link is
- * made (`isHundredthsCurrency`), so these never guess another exponent: a guess is a link for a
- * hundred times the order.
+ * A currency counted in thousandths (KWD) is refused before a link is made (`isHundredthsCurrency`),
+ * so these never guess another exponent: a guess is a link for a hundred times the order. A currency
+ * with no minor unit (JPY) is exact in hundredths (¥2,800 is 280000) and reaches a shop's `createLink`
+ * (capability `shop_orders`) only, as `decimalAmount` writes it ("2800.00"): a shop that counts in
+ * minor units divides by 100 first. A payment platform is never sent one (ADR-027).
  */
 
 /** Hundredths as a decimal string, the way some platforms want it: 4500 → "45.00". */

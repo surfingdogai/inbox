@@ -906,6 +906,10 @@ export const connectionSchema = z.looseObject({
     .string()
     .optional()
     .describe("What a connection in test mode is called, in the platform's words (test key, development store)"),
+  notes: z
+    .array(z.looseObject({ text: z.string(), href: z.string().optional(), link: z.string().optional() }))
+    .optional()
+    .describe("What the owner should know about it now: a shop that adds tax at checkout, an earlier key to remove"),
 });
 
 const paymentSchema = z.looseObject({
@@ -983,6 +987,13 @@ export const integrationsSchema = z.object({
           before: z.array(formFieldSchema).optional().describe("What a sign-in asks first: a store's address"),
           advanced: z.boolean().optional().describe("A way most people never need, under More options"),
           action: z.string().optional().describe("The words on its button"),
+          again: z.string().optional().describe("The words on the button that connects it again: Approve again"),
+          untilLive: z
+            .string()
+            .optional()
+            .describe(
+              "A store that sends its key here can do so only once this inbox is live at its own https address: why, said above the way that works meanwhile",
+            ),
           consent: z.string().optional().describe("What the platform will ask"),
           steps: z.array(z.string()).optional(),
           note: z.string().optional(),
