@@ -1,6 +1,6 @@
 ---
 title: How AI agents pay a business
-description: A customer's AI assistant can pay an order you accepted straight into your own Stripe account, with a one-time token from its platform, for exactly the total the customer confirmed. One switch, one Stripe permission, no card numbers.
+description: A customer's AI assistant can pay an order you accepted straight into your own Stripe account, with a one-time token, for exactly the total confirmed.
 draft: true
 ---
 
