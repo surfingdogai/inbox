@@ -2,8 +2,7 @@
 
 **Status:** proposed, 21 October 2026. Builds on ADR-037 (stays), and takes the line ADR-037 left under
 "Not decided here". Migration 0030 (`ucp_sessions`). No spec version: this is an optional binding to a
-third-party draft, not part of the inbox's own spec (§7). Numbered provisionally; renumbering at merge
-is fine.
+third-party draft, not part of the inbox's own spec (§7).
 
 ## Context
 

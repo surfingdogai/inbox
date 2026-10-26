@@ -2,7 +2,7 @@
 
 **Status:** proposed, 21 October 2026. Builds on ADR-036 (money in each currency's own minor unit, write
 first, slot claims), ADR-039 (the area matcher, files on a request) and ADR-030 (the connectors' shared
-base). Spec 0.12.0, migration 0032. Numbered provisionally; renumbering at merge is fine.
+base). Spec 0.12.0, migration 0032.
 
 ## Context
 

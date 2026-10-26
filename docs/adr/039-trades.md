@@ -2,7 +2,6 @@
 
 **Status:** proposed, 21 October 2026. Builds on ADR-036 (money in every currency's own minor unit,
 payment schedules, write first) and ADR-030 (the connectors' shared base). Spec 0.12.0, migration 0031.
-Numbered provisionally; renumbering at merge is fine.
 
 ## Context
 

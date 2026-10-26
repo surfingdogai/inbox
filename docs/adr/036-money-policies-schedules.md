@@ -2,7 +2,7 @@
 
 **Status:** proposed, 20 October 2026. The shared ground the industry tracks build on: stays (ADR-037),
 then trades, salons and food. Amends ADR-023 (pay links beyond orders) and ADR-014 (the groups and
-capabilities connectors may name). Numbered provisionally; renumbering at merge is fine.
+capabilities connectors may name).
 
 ## Context
 

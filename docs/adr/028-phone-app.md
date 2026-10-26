@@ -90,7 +90,7 @@ customers.
 
 ## Consequences
 
-Migration 0024 adds `phone_pairings`, `phone_devices` (with `pair_match` and `confirmed_at`) and
+Migration 0025 adds `phone_pairings`, `phone_devices` (with `pair_match` and `confirmed_at`) and
 `phone_tokens` (with `proof_at`); a download leaves all three out (phones connect to an inbox, not to a
 copy). The owner's item views carry `calendar` on open booking requests and `by_rules` in lists. Store
 releases need organisation accounts, which are pending; until then CI builds the `internal` build type
