@@ -13,7 +13,7 @@ import { extraOf, locationOf, type ServiceInfo, servicesAt, teamOf, writeLevel }
 import { arr, iso, msOf, obj, refusal, type SquareApi, sha256, str, why } from "./api";
 
 /**
- * Square Appointments for the inbox (ADR-029): busy times from what Square says is free, and the
+ * Square Appointments for the inbox (ADR-034): busy times from what Square says is free, and the
  * bookings the inbox confirms written into Square.
  *
  * **Busy times.** Square's own answer to "when is this service free" (`SearchAvailability`) already

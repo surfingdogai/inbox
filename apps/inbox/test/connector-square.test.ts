@@ -12,7 +12,7 @@ import { createInbox } from "../src/app";
 import { confirmed, freshDb, futureDay, nextDay, openWeekdays } from "./harness";
 
 /**
- * Square (ADR-029) end to end, through the doors an owner, a customer's agent and Square use, with a
+ * Square (ADR-034) end to end, through the doors an owner, a customer's agent and Square use, with a
  * made-up salon in Toronto that charges in Canadian dollars and a kitchen shop in Osaka that sells in
  * yen (`fixtures/square.ts`). Connected with the owner's own access token: Square's closed hours and
  * busy team come off the free times; on Appointments Plus a booking the owner confirms is written into

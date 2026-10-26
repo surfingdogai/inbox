@@ -8,7 +8,7 @@ import {
 import { retryAfterMs } from "../http";
 
 /**
- * Square's REST API as this connector speaks it (ADR-029): the business's own access token in the
+ * Square's REST API as this connector speaks it (ADR-034): the business's own access token in the
  * `Authorization` header, one API version on every call (`Square-Version`), JSON both ways, and
  * Square's own words when it says no. Square answers from two hosts: production, and the Sandbox a
  * developer tests in (https://developer.squareup.com/docs/build-basics/access-tokens#use-access-token).

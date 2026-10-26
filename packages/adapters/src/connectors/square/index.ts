@@ -33,7 +33,7 @@ import { catalogueReader } from "./catalogue";
 import { orderFacts, ordersHandler } from "./orders";
 
 /**
- * Square (ADR-029): the business's own Square account for its bookings, its items and its orders,
+ * Square (ADR-034): the business's own Square account for its bookings, its items and its orders,
  * paid at its own Square checkout. Salons, barbers, cafés, restaurants, trades and gyms that already
  * run their day on Square keep it as it is; their inbox reads it and writes into it.
  *

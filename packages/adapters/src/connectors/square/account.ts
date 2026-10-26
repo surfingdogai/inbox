@@ -2,7 +2,7 @@ import { type CalendarChoice, type ConnectionChoice, ConnectorError, type RunCon
 import { type Answer, arr, obj, type SquareApi, type SquareEnv, str } from "./api";
 
 /**
- * What a Square connection knows of the account (ADR-029), read when it is connected and every few
+ * What a Square connection knows of the account (ADR-034), read when it is connected and every few
  * hours after: the seller, its open locations (each with its currency and its own phone number), how
  * it takes bookings, the services it books and the team members who take them. Kept as the
  * connection's `extra`, never a secret: none of it is the customer's.

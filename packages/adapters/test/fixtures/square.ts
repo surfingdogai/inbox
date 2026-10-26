@@ -3,7 +3,7 @@ import { type FakePlatform, type FakeRequest, fakePlatform, json } from "../fake
 
 /**
  * A made-up Square seller, answering as Square's API documents it, for the Square connector's tests
- * (ADR-029). No real Square is called. Every shape is written from Square's own examples:
+ * (ADR-034). No real Square is called. Every shape is written from Square's own examples:
  *
  * - Locations, booking profiles, services, availability, bookings:
  *   https://developer.squareup.com/docs/bookings-api/use-the-api

@@ -3,7 +3,7 @@ import { isAt, locationOf, presenceOf } from "./account";
 import { arr, fromSquare, iso, obj, type SquareApi, str } from "./api";
 
 /**
- * Square's items into the inbox's catalogue (ADR-026 §3, ADR-029): each variation of an item is one
+ * Square's items into the inbox's catalogue (ADR-030 §3, ADR-034): each variation of an item is one
  * product, keyed on its catalogue id, priced at the chosen location (its own price there when it has
  * one), in stock as Square counts it there, on sale while it is sold there and not archived, sold out
  * or hidden from Square Online. Services are bookings, not products, and are left out.

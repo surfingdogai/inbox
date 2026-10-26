@@ -14,7 +14,7 @@ import { extraOf, locationOf } from "./account";
 import { arr, fromSquare, msOf, obj, refusal, type SquareApi, type SquareEnv, str, toSquare } from "./api";
 
 /**
- * Orders paid at the business's own Square checkout (ADR-026 §2, ADR-029). Each order the inbox
+ * Orders paid at the business's own Square checkout (ADR-030 §2, ADR-034). Each order the inbox
  * accepts becomes a Square order and its payment link in one call (`CreatePaymentLink` with an
  * `order`): items of the catalogue by their own id, at Square's price; anything else by name at the
  * inbox's; a pickup or a delivery as the order says. The link is Square's checkout in the business's

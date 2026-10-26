@@ -33,7 +33,7 @@ import {
 } from "./fixtures/square";
 
 /**
- * Contract tests for the Square connector (ADR-029) against a made-up seller answering as Square's API
+ * Contract tests for the Square connector (ADR-034) against a made-up seller answering as Square's API
  * documents it (`fixtures/square.ts`), through the inbox's own connector client: what is asked of
  * Square, with which token, and what the inbox makes of the answer. Above all: the token goes to
  * Square's own hosts and nowhere else; bookings are written only the way Square takes them (an access

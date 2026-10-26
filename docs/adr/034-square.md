@@ -1,7 +1,7 @@
-# ADR-029 — Square: bookings, the catalogue and orders paid at the seller's own checkout
+# ADR-034 — Square: bookings, the catalogue and orders paid at the seller's own checkout
 
-**Status:** proposed, 20 October 2026. Builds on ADR-022 (calendars), ADR-023 (pay links), ADR-026
-(the connectors' shared base) and ADR-027 (currencies without a minor unit, which the base takes from
+**Status:** proposed, 20 October 2026. Builds on ADR-022 (calendars), ADR-023 (pay links), ADR-030
+(the connectors' shared base) and ADR-032 (currencies without a minor unit, which the base takes from
 the WooCommerce track). Code: `packages/adapters/src/connectors/square/`.
 
 ## Context
@@ -9,7 +9,7 @@ the WooCommerce track). Code: `packages/adapters/src/connectors/square/`.
 Salons, barbers, cafés, restaurants, trades and gyms run their day on Square: the appointments, the
 till, the items, the money. Their inbox has to fit into that, not stand beside it: a booking the owner
 confirms belongs in Square Appointments, Square's busy team and closed hours belong off the times the
-inbox offers, and an order belongs in Square, paid at the seller's own checkout. The base (ADR-026)
+inbox offers, and an order belongs in Square, paid at the seller's own checkout. The base (ADR-030)
 gives every piece but the platform. This ADR is the platform, and what Square's documentation changed
 in the plan.
 
@@ -118,7 +118,7 @@ from Square Online. Services, gift cards, donations and events are not products.
 price. Prices are Square's in the currency's smallest unit
 (https://developer.squareup.com/docs/build-basics/common-data-types/working-with-monetary-amounts),
 kept here in hundredths: exact for a currency counted in cents and for one with none (¥12,800 is
-1280000, ADR-027); one counted in thousandths comes in with no price and stays off sale. A full pass reads
+1280000, ADR-032); one counted in thousandths comes in with no price and stays off sale. A full pass reads
 every item (`SearchCatalogObjects`); a pass of what changed reads items and variations changed since
 (`begin_time`, deleted ones too, each variation with its item through `include_related_objects`), so a
 variation taken off an item comes off sale within minutes; then the stock counts changed since
@@ -138,7 +138,7 @@ one page.
   (https://developer.squareup.com/docs/orders-api/fulfillments). The customer's name, email and phone
   (only when written with its country code) are given to the checkout to prefill.
 - Taxes are Square's, as the seller set them (`auto_apply_taxes`): Square's total is read back from the
-  order it made, and when it is not what the customer accepted the base holds the link (ADR-026 §2). A
+  order it made, and when it is not what the customer accepted the base holds the link (ADR-030 §2). A
   link whose total cannot be read back is never answered: the base tries again, and never sends it
   unchecked.
 - **Never `app_fee_money`**, never card details, never a share. The link is Square's checkout, in the
@@ -187,7 +187,7 @@ credential is named as the way names it ("New access token"). The connect drawer
 when two ways are ready. This is drawn from the connection, for any connector that books and takes
 payments.
 
-The shared base gains, for any connector (ADR-026 §5):
+The shared base gains, for any connector (ADR-030 §5):
 
 - `ConnectorDefinition.withheld(view)`: what an account cannot do now (`busy_times`,
   `write_bookings`), a line each, read from the connection's `extra`. Withheld capabilities are left out
@@ -196,13 +196,13 @@ The shared base gains, for any connector (ADR-026 §5):
   booking messages to your location's phone, never to your customer").
 - `ConnectionChoice.bookings`: a choice about bookings only, drawn with the booking choices; kept
   across a refresh.
-- From ADR-027 (the WooCommerce track, the same lines): `isWholeUnitCurrency`, and a shop or till
+- From ADR-032 (the WooCommerce track, the same lines): `isWholeUnitCurrency`, and a shop or till
   (`shop_orders`) may make links in a currency with no minor unit. Whichever track lands first brings
   them; the other's copy merges as the same change.
 
 ## Consequences
 
-- A Square connection is the one that makes an order's links in its mode once connected (ADR-026 §2):
+- A Square connection is the one that makes an order's links in its mode once connected (ADR-030 §2):
   Stripe or Mollie links switch off, and the owner can switch Square's off in Change.
 - The seller's Square holds a customer record for each customer of the inbox, under the business's own
   number. Square's confirmations and reminders for the inbox's bookings go to that number.
