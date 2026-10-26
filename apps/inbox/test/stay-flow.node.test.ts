@@ -114,8 +114,10 @@ describe("Kijani House, Nairobi: request, quote, accept, stay, paid at the prope
       expect.objectContaining({ status: "at_property", amount: { value: 1_950_000, currency: "KES" } }),
     ]);
     expect(status.stay.cancel.fee.value).toBe(0);
-    // After check-out the sweep completes it.
-    s.clock.now += 34 * 24 * HOUR;
+    // After check-out the sweep completes it, 24 hours after 11:00 on the check-out day at the property.
+    // The clock is set to just past that, never moved a count of days on from now: 34 days on from a
+    // time before 08:00 UTC fell short of it, and the test failed at night.
+    s.clock.now = Date.parse(`${checkOut}T11:00:00+03:00`) + 25 * HOUR;
     await s.drain();
     const done = await ok<{ item: { state: string } }>(s.owner("GET", `/v1/owner/items/${id}`));
     expect(done.item.state).toBe("completed");
