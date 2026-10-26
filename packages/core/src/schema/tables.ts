@@ -1008,6 +1008,63 @@ export const connectorPayments = sqliteTable(
 );
 
 /**
+ * Each time a customer's assistant paid an accepted order directly, with a one-time token its platform
+ * got for this business (0034, ADR-042), charged on the business's own account. The token is never
+ * kept: only its SHA-256, so one token is one attempt. No customer details.
+ */
+export const agentPayments = sqliteTable(
+  "agent_payments",
+  {
+    id: id(),
+    itemId: text("item_id").notNull(),
+    /** The connection that charged it; not a foreign key, so the record outlives a disconnect. */
+    connectorId: text("connector_id").notNull(),
+    kind: text("kind").notNull(),
+    /** `stripe_spt`: a Stripe shared payment token. */
+    handler: text("handler").notNull(),
+    /** The door the assistant came by: `mcp`, `rest`. */
+    door: text("door").notNull(),
+    amount: integer("amount").notNull(),
+    currency: text("currency").notNull(),
+    livemode: integer("livemode").notNull(),
+    /** The fingerprint of the terms the customer confirmed: what was charged for. */
+    termsSha: text("terms_sha").notNull(),
+    credentialSha: text("credential_sha").notNull(),
+    /** creating | processing | paid | declined | failed | cancelled | unknown. */
+    state: text("state").notNull().default("creating"),
+    /** The platform's id for the payment (`pi_…`). */
+    externalId: text("external_id"),
+    method: text("method"),
+    paidAmount: integer("paid_amount"),
+    paidCurrency: text("paid_currency"),
+    dashboardUrl: text("dashboard_url"),
+    /** Why it did not go through, as the agent was told (`declined`, `token_expired`, …). */
+    failure: text("failure"),
+    /** The platform's own words and code, for the owner. */
+    lastError: text("last_error"),
+    lastErrorAt: integer("last_error_at"),
+    /** What the owner should know (paid after the order was cancelled: refund it there). */
+    note: text("note"),
+    claimUntil: integer("claim_until"),
+    claimedBy: text("claimed_by"),
+    checkedAt: integer("checked_at"),
+    /** When the payment went on the order (`record_payment`); null while it is still to. */
+    recordedAt: integer("recorded_at"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    paidAt: integer("paid_at"),
+  },
+  (t) => [
+    // One attempt in flight, or one paid, per order: two assistants paying at once make one charge.
+    uniqueIndex("agent_payments_live").on(t.itemId).where(sql`${t.state} IN ('creating', 'processing', 'paid')`),
+    uniqueIndex("agent_payments_credential").on(t.credentialSha),
+    uniqueIndex("agent_payments_external").on(t.connectorId, t.externalId),
+    index("agent_payments_item").on(t.itemId, t.createdAt),
+    index("agent_payments_open").on(t.connectorId, t.state, t.checkedAt),
+  ],
+);
+
+/**
  * Every attempt at writing to a business's own system before anything is promised (0028, ADR-036):
  * what was tried, under which key, and what came of it. Never the request itself: it may name the guest.
  */

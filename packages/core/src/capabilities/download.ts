@@ -115,6 +115,9 @@ export const DOWNLOAD_TABLES: Readonly<Record<string, DownloadTable>> = {
   connector_payments: {
     note: "The links orders and deposits were given to pay in your Stripe or Mollie account, and what the platform said about each. The money is in your account there.",
   },
+  agent_payments: {
+    note: "The payments customers' assistants made directly for orders you accepted, into your Stripe account, and what Stripe said about each. No customer details, and never the token they paid with.",
+  },
   connector_writes: {
     note: "Each time this inbox wrote to a system of yours (a property system) before confirming: when, what came of it and the system's id for it. Never what was written.",
   },
