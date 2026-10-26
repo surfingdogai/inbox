@@ -72,6 +72,7 @@ import { lookupMx } from "./connectors/dns";
 import { publicOrigin } from "./origin";
 import { forbidden, problemResponse, unauthorized } from "./problem";
 import * as R from "./responses";
+import { stayOwnerRoutes, stayPublicRoutes } from "./stays";
 
 /**
  * The REST door. Same operations as MCP, described for OpenAPI from the same Zod schemas.
@@ -657,6 +658,8 @@ export function publicRest(caps: Capabilities, opts: { readonly baseUrl?: string
     },
   );
 
+  // A place to stay (ADR-033 §6.1): what is free, a quote, a request, a hold, a booking, a change.
+  stayPublicRoutes(app, caps, hook as never);
   return app;
 }
 
@@ -1965,5 +1968,7 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
     },
   );
 
+  // A place to stay's setup (ADR-033 §6.2).
+  stayOwnerRoutes(app, caps);
   return app;
 }

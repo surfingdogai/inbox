@@ -21,6 +21,7 @@ import { PRESETS, type PresetConfirm, presetFor } from "../rules/presets/index";
 import { type RuleDefinition, ruleDefinitionSchema } from "../rules/schema";
 import {
   isDoorElsewhereUrl,
+  isStayTemplate,
   MAX_SETUP_SOURCES,
   MAX_SUGGESTED_SERVICES,
   readSettings,
@@ -32,7 +33,7 @@ import { servicePriceText } from "../util/money";
 import { type Caller, isCustomer, nowOf } from "../write/caller";
 import { fromZod, WriteError } from "../write/errors";
 import { type Closure, readClosures } from "./closures";
-import type { DoorSwitches } from "./directory";
+import { type DoorSwitches, STAY_ROOM_OFFERED_SQL } from "./directory";
 import type { Capabilities } from "./service";
 import { hasAmount, PRESET_NAMES, servicePriceKey, validTimezone } from "./setup";
 import {
@@ -131,22 +132,35 @@ const planServiceSchema = z.object({
  * Where bookings or orders are taken instead of this inbox: a booking platform, the shop's own
  * checkout. Kept in the settings as `doorsElsewhere`; messages and quotes always stay here.
  */
-const planElsewhereSchema = z.object({
-  door: z.enum(["booking", "order"]).describe("booking: at a booking platform. order: in the shop's own checkout."),
-  url: z
-    .url({ protocol: /^https$/ })
-    .max(2048)
-    .refine(isDoorElsewhereUrl, "an https address on a public host, with no user or password in it")
-    .describe("Where customers go for it."),
-  name: z.string().max(120).optional().describe("What the place is called, for the sentences; not kept."),
-  platform: z
-    .string()
-    .regex(DOOR_PLATFORM_ID)
-    .optional()
-    .describe(
-      "The platform the page is on, from vocab/door-platforms.json (fresha, opentable, toast…): kept when the page is the business's own page there, and otherwise read from the address.",
-    ),
-});
+const planElsewhereSchema = z
+  .object({
+    door: z
+      .enum(["booking", "order", "stay"])
+      .describe("booking: at a booking platform. order: in the shop's own checkout. stay: at its own booking engine."),
+    url: z
+      .url({ protocol: /^https$/ })
+      .max(2048)
+      .refine(isDoorElsewhereUrl, "an https address on a public host, with no user or password in it")
+      .describe("Where customers go for it."),
+    url_template: z
+      .string()
+      .max(2048)
+      .refine(isStayTemplate, "an https deep link on a public host, with {check_in}, {check_out}, {adults}…")
+      .optional()
+      .describe("For a stay: the booking engine's link with {check_in}, {check_out} and {adults} to fill in."),
+    name: z.string().max(120).optional().describe("What the place is called, for the sentences; not kept."),
+    platform: z
+      .string()
+      .regex(DOOR_PLATFORM_ID)
+      .optional()
+      .describe(
+        "The platform the page is on, from vocab/door-platforms.json (fresha, opentable, toast…): kept when the page is the business's own page there, and otherwise read from the address.",
+      ),
+  })
+  .refine((d) => d.url_template === undefined || d.door === "stay", {
+    message: "only a stay's door takes a deep link",
+    path: ["url_template"],
+  });
 
 /**
  * A door elsewhere a plan read, as the settings keep it (ADR-035): the address without its tracking, and the platform
@@ -158,7 +172,13 @@ function plannedElsewhere(d: z.infer<typeof planElsewhereSchema>) {
   const named = doorPlatform(d.platform);
   const platform =
     named && doorPlatformFit(url, named, d.door) === "on_platform" ? named.id : doorPlatformOf(url, d.door)?.id;
-  return { itemType: d.door, url, name: d.name, ...(platform ? { platform } : {}) };
+  return {
+    itemType: d.door,
+    url,
+    name: d.name,
+    ...(platform ? { platform } : {}),
+    ...(d.url_template ? { urlTemplate: d.url_template } : {}),
+  };
 }
 
 /** The ways a person pays (the vocabulary's methods and wallets): what a plan may tick for the owner. */
@@ -577,26 +597,32 @@ export async function applySetupPlan(
     }
   }
   // ---- bookings or orders taken somewhere else ----
-  const elsewhereNow = state.settings.doorsElsewhere.map((d) => ({
+  const kept = (d: {
+    readonly itemType: string;
+    readonly url: string;
+    readonly platform?: string | undefined;
+    readonly urlTemplate?: string | undefined;
+  }) => ({
     itemType: d.itemType,
     url: d.url,
     ...(d.platform ? { platform: d.platform } : {}),
-  }));
-  const elsewhere: { itemType: "booking" | "order"; url: string; name?: string | undefined; platform?: string }[] =
-    plan.doors_elsewhere ? plan.doors_elsewhere.map(plannedElsewhere) : elsewhereNow;
+    ...(d.urlTemplate ? { urlTemplate: d.urlTemplate } : {}),
+  });
+  const elsewhereNow = state.settings.doorsElsewhere.map(kept);
+  const elsewhere = plan.doors_elsewhere ? plan.doors_elsewhere.map(plannedElsewhere) : elsewhereNow;
   if (plan.doors_elsewhere) {
-    const wanted = elsewhere.map((d) => ({
-      itemType: d.itemType,
-      url: d.url,
-      ...(d.platform ? { platform: d.platform } : {}),
-    }));
+    const wanted = elsewhere.map(kept);
     if (!same(byDoor(wanted), byDoor(elsewhereNow))) {
       settingsPatch.doorsElsewhere = wanted;
       for (const d of byDoor(elsewhere)) said.push(elsewhereWords(d));
       for (const d of elsewhereNow) {
         if (!wanted.some((w) => w.itemType === d.itemType)) {
           said.push(
-            d.itemType === "booking" ? "Bookings come to this inbox again." : "Orders come to this inbox again.",
+            d.itemType === "booking"
+              ? "Bookings come to this inbox again."
+              : d.itemType === "stay"
+                ? "Stays come to this inbox again."
+                : "Orders come to this inbox again.",
           );
         }
       }
@@ -656,6 +682,7 @@ export async function applySetupPlan(
         products: state.products,
         elsewhere: away,
         doors: doorsAfter,
+        stays: state.stays,
       })
     : await caps.getBusinessProfile().then((p) => ITEM_ORDER.filter((t) => p.item_types.includes(t)));
   const rules = dryRun ? rulesAfter : (await readState(caps, db, caller)).rules;
@@ -667,6 +694,7 @@ export async function applySetupPlan(
     hours: hoursAfter,
     elsewhere: away,
     doors: doorsAfter,
+    stays: state.stays,
   };
   const missing = shut.map((door) => {
     const needs = door === "booking" ? bookingNeeds(after) : null;
@@ -703,10 +731,12 @@ interface State {
   readonly rules: readonly PlanRule[];
   readonly products: boolean;
   readonly settings: Awaited<ReturnType<typeof readSettings>>;
+  /** A place to stay with a room to offer. */
+  readonly stays: boolean;
 }
 
 async function readState(caps: Capabilities, db: Db, caller: Caller): Promise<State> {
-  const [profile, services, open, closures, rules, products, settings] = await Promise.all([
+  const [profile, services, open, closures, rules, products, settings, rooms] = await Promise.all([
     caps.setup.getProfile(caller),
     caps.setup.listServices(caller),
     db.client.query({ sql: "SELECT service_id, weekly FROM availability_rules WHERE kind = 'open'", method: "all" }),
@@ -714,6 +744,7 @@ async function readState(caps: Capabilities, db: Db, caller: Caller): Promise<St
     caps.setup.listRules(caller),
     db.client.query({ sql: "SELECT 1 FROM products WHERE active = 1 LIMIT 1", method: "all" }),
     readSettings(db),
+    db.client.query({ sql: STAY_ROOM_OFFERED_SQL, params: [], method: "all" }),
   ]);
   const base = open.rows.find((r) => r[0] === null || r[0] === undefined);
   const own = new Map(
@@ -730,6 +761,7 @@ async function readState(caps: Capabilities, db: Db, caller: Caller): Promise<St
     rules: rules.map((r) => ({ name: r.name, priority: r.priority, enabled: r.enabled, definition: r.definition })),
     products: products.rows.length > 0,
     settings,
+    stays: rooms.rows.length > 0,
   };
 }
 
@@ -757,7 +789,7 @@ async function replaceRules(
 
 // ---- doors ---------------------------------------------------------------------------------
 
-const ITEM_ORDER: readonly ItemType[] = ["message", "quote_request", "booking", "order", "refund"];
+const ITEM_ORDER: readonly ItemType[] = ["message", "quote_request", "booking", "order", "refund", "stay"];
 
 interface DoorState {
   readonly services: readonly { id: string; active: boolean; price: unknown }[];
@@ -767,6 +799,8 @@ interface DoorState {
   readonly elsewhere: ReadonlyMap<ItemType, string>;
   /** The owner's switches (`settings.doors`), as the plan leaves them. */
   readonly doors: DoorSwitches;
+  /** A place to stay with a room to offer (`STAY_ROOM_OFFERED_SQL`): a plan never makes one. */
+  readonly stays: boolean;
 }
 
 /** Whether a service is asked about for a price (`quote`) rather than booked at a time. */
@@ -806,6 +840,7 @@ function predictDoors(s: DoorState & { readonly products: boolean }): ItemType[]
   if ((s.doors.quoteRequest === true || active.length > 0 || s.products) && s.doors.quoteRequest !== false)
     on.add("quote_request");
   if (order || (booking && priced)) on.add("refund");
+  if (s.stays && !s.elsewhere.has("stay") && s.doors.stay !== false) on.add("stay");
   return ITEM_ORDER.filter((t) => on.has(t));
 }
 
@@ -837,6 +872,7 @@ function whyShut(door: ItemType, s: DoorState): string {
   if (door === "quote_request") return "Asking for a price turns on once there is a service or a product.";
   if (door === "order") return "Orders turn on once there is a product on offer, which you add in the app.";
   if (door === "refund") return "Refunds turn on once something is sold with a price.";
+  if (door === "stay") return "Stays turn on once your place has a room to offer, in the app's Property settings.";
   return "Messages are always on.";
 }
 
@@ -999,7 +1035,9 @@ function elsewhereWords(d: {
 }) {
   if (d.itemType === "order") return "Orders stay in your own checkout.";
   const named = doorPlatform(d.platform) ? doorPlace(d) : undefined;
-  return `Bookings stay at ${named ?? (d.name?.trim() || new URL(d.url).hostname)}.`;
+  const place = named ?? (d.name?.trim() || new URL(d.url).hostname);
+  if (d.itemType === "stay") return `Stays are booked at ${place}.`;
+  return `Bookings stay at ${place}.`;
 }
 
 /** Doors elsewhere in one order, booking first, so the same list compares the same. */

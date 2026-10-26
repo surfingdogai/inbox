@@ -6,6 +6,7 @@ import {
   partyName,
   truncate,
 } from "../../../inbox/client/src/lib/format";
+import { stayTitle } from "../../../inbox/client/src/lib/stays";
 import type { Item, ItemView } from "../../../inbox/client/src/lib/types";
 
 /**
@@ -18,6 +19,7 @@ const INITIAL: Readonly<Record<Item["type"], string>> = {
   quote_request: "received",
   message: "open",
   refund: "requested",
+  stay: "requested",
 };
 
 export const KIND_WORD: Readonly<Record<Item["type"], string>> = {
@@ -26,6 +28,7 @@ export const KIND_WORD: Readonly<Record<Item["type"], string>> = {
   quote_request: "Quote",
   message: "Message",
   refund: "Refund",
+  stay: "Stay",
 };
 
 const REQUEST_WORD: Readonly<Record<Item["type"], string>> = {
@@ -34,6 +37,7 @@ const REQUEST_WORD: Readonly<Record<Item["type"], string>> = {
   quote_request: "Quote request",
   message: "Message",
   refund: "Refund request",
+  stay: "Stay request",
 };
 
 export function requestWord(item: Item): string {
@@ -151,6 +155,9 @@ export function cardLine(view: ItemView, tz?: string): string {
       return `“${truncate(item.payload.text, 70)}”`;
     case "refund":
       return truncate(item.payload.reason ?? "A refund to decide", 70);
+    case "stay":
+      // A stay says its room, dates and nights, as the owner app's list does.
+      return stayTitle(item.payload);
   }
 }
 
@@ -159,6 +166,7 @@ export function cardAmount(item: Item): string {
   if (item.type === "booking" || item.type === "order")
     return item.payload.totalPrice ? money(item.payload.totalPrice) : "";
   if (item.type === "refund") return money(item.payload.amount);
+  if (item.type === "stay") return item.payload.totalPrice ? money(item.payload.totalPrice) : "";
   return "";
 }
 

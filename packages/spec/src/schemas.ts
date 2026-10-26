@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   doorPlatformsVocabSchema,
   manifestSchema,
+  profileLodgingSchema,
   receiptAckPayloadSchema,
   receiptPayloadSchema,
   receiptPublishResultSchema,
@@ -89,6 +90,7 @@ import {
   reportRequestSchema,
   requestBookingInputSchema,
   requestQuoteInputSchema,
+  requestStayInputSchema,
   scoreRulesSchema,
   searchBusinessesInputSchema,
   searchBusinessesOutputSchema,
@@ -100,6 +102,7 @@ import {
   updateBusinessInputSchema,
   updateBusinessOutputSchema,
 } from "./network/index";
+import { propertyPublicSchema, stayAvailabilitySchema, stayQuoteSchema } from "./stays";
 
 /**
  * The JSON Schemas published in `packages/spec/schemas/`, one file per name, generated from the Zod
@@ -279,6 +282,15 @@ export const JSON_SCHEMAS: Record<string, { schema: z.ZodType; title: string }> 
     title: "GET /v1/census/{edition}: one month of the census, as counts (CC BY 4.0)",
   },
   "census-editions": { schema: censusEditionsSchema, title: "GET /v1/census: the published editions" },
+  "stay-quote": { schema: stayQuoteSchema, title: "A property's quote for a stay (spec 0.10, ADR-033)" },
+  "stay-availability": {
+    schema: stayAvailabilitySchema,
+    title: "check_stay_availability: free rooms, offers and estimates for dates and guests",
+  },
+  property: { schema: propertyPublicSchema, title: "get_property: a place to stay as agents see it" },
+  "profile-lodging": { schema: profileLodgingSchema, title: "A profile's lodging (spec 0.10)" },
+  "mcp-request-stay-input": { schema: requestStayInputSchema, title: "MCP request_stay: arguments" },
+  "mcp-request-stay-output": { schema: carryOutputSchema, title: "MCP request_stay: structuredContent" },
 };
 
 /**

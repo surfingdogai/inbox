@@ -113,6 +113,8 @@ export type ElsewhereKind = DoorElsewhereKind;
 
 /** The kinds a door elsewhere can take, in the order the card shows them. */
 export const ELSEWHERE_KINDS: readonly ElsewhereKind[] = ["booking", "order"];
+/** Every kind a stored door elsewhere may have, in the order they are kept: a stay's (ADR-033) last. */
+const ELSEWHERE_ORDER: readonly string[] = [...ELSEWHERE_KINDS, "stay"];
 
 /** What a door elsewhere is called, as agents and the business's page say it: "Fresha", or the page's host. */
 export function placeOf(d: {
@@ -125,7 +127,8 @@ export function placeOf(d: {
 
 /** The one line a door elsewhere reads as: "Bookings at Fresha". */
 export function elsewhereLine(d: ElsewhereEntry): string {
-  return `${d.itemType === "booking" ? "Bookings" : "Orders"} at ${placeOf(d)}`;
+  const what = d.itemType === "booking" ? "Bookings" : d.itemType === "stay" ? "Stays" : "Orders";
+  return `${what} at ${placeOf(d)}`;
 }
 
 /**
@@ -333,7 +336,7 @@ export function elsewhereDoc(
       ]
     : rest;
   // Bookings first, as everywhere: the same list reads the same.
-  all.sort((a, b) => ELSEWHERE_KINDS.indexOf(a.itemType) - ELSEWHERE_KINDS.indexOf(b.itemType));
+  all.sort((a, b) => ELSEWHERE_ORDER.indexOf(a.itemType) - ELSEWHERE_ORDER.indexOf(b.itemType));
   return { doorsElsewhere: all.length ? all : null };
 }
 

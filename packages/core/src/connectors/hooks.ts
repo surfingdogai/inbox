@@ -2,6 +2,8 @@ import { sha256Hex } from "@surfingdog/platform";
 import type { Db } from "../db";
 import { randomToken, ulid } from "../ids";
 import type { JobHandler } from "../jobs/runner";
+import { staleStatement } from "../property/ari";
+import { ensureAriSync } from "../property/sync";
 import { jobStatement } from "../write/common";
 import type { PayConnection, PaymentLinks } from "./payments";
 import {
@@ -188,6 +190,19 @@ export class ConnectorHooks {
           await this.host.syncNow(connectorId, now, `hook:${eventId}`);
           handled++;
           break;
+        case "stay_nights": {
+          // Never believed: the nights are marked to read again, and the property's poll reads them now.
+          const rooms = f.roomIds?.length ? f.roomIds : [undefined];
+          await this.host.db.batch(rooms.map((r) => staleStatement(connectorId, f.from, f.to, r)));
+          const { rows } = await this.host.db.client.query({
+            sql: "SELECT id FROM properties WHERE connector_id = ? AND active = 1",
+            params: [connectorId],
+            method: "all",
+          });
+          for (const r of rows) await ensureAriSync(this.host.db, String(r[0]), now);
+          handled++;
+          break;
+        }
         case "revoked":
           await this.host.failed(
             connectorId,

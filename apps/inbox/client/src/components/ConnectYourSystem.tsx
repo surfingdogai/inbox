@@ -28,6 +28,8 @@ export function ConnectYourSystem({
   lede,
   onSkip,
   onOpen,
+  skip,
+  lodging,
   children,
 }: {
   groups: readonly ConnectorGroup[];
@@ -35,10 +37,18 @@ export function ConnectYourSystem({
   lede?: string | undefined;
   onSkip: () => void;
   onOpen?: ((card: GalleryCard) => void) | undefined;
+  /** Cards of those groups this kind of business has no use for (a place to stay books no minutes). */
+  skip?: readonly string[] | undefined;
+  /** A place to stay: its calendar card is the links its other channels give, named as it knows them. */
+  lodging?: boolean | undefined;
   children?: ReactNode;
 }) {
   const integrations = useIntegrations();
-  const cards = cardsFor(integrations.data?.cards ?? [], groups);
+  const cards = cardsFor(integrations.data?.cards ?? [], groups)
+    .filter((c) => !skip?.includes(c.id))
+    .map((c) =>
+      lodging && c.id === "calendar" ? { ...c, title: "Calendar links", line: "Airbnb, Booking.com, Vrbo" } : c,
+    );
   return (
     <div className="stack connect-system">
       <h2 className="sec">{title}</h2>
@@ -55,7 +65,7 @@ export function ConnectYourSystem({
                 <Icon className="icon int-icon" aria-hidden="true" />
                 <span className="int-text">
                   <span className="int-name">{c.title}</span>
-                  <span className="int-line">{hint ?? c.line}</span>
+                  <span className="int-line">{lodging && c.id === "calendar" ? c.line : (hint ?? c.line)}</span>
                 </span>
                 {tag && <span className="int-tag">{tag}</span>}
               </>

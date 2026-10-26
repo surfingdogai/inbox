@@ -112,20 +112,22 @@ export interface SetupKind {
   readonly doors: WizardDoors;
   /** The integration groups its businesses run their days in, shown first when connecting. */
   readonly connect: readonly ConnectorGroup[];
+  /** Cards of those groups it has no use for. */
+  readonly skip?: readonly string[];
 }
 
 export const KINDS: readonly SetupKind[] = [
   {
     key: "appointments",
-    label: "Appointments",
-    line: "A salon, a clinic, a studio, classes.",
+    label: "A salon, clinic or studio",
+    line: "Booked at a time: treatments, consultations, classes.",
     preset: "appointments",
     doors: { booking: true, quoteRequest: true, message: true },
     connect: ["booking", "calendars"],
   },
   {
     key: "trades",
-    label: "Trades and quotes",
+    label: "A trade",
     line: "Jobs you quote for and visits you arrange.",
     preset: "trades",
     doors: { booking: false, quoteRequest: true, message: true },
@@ -133,13 +135,73 @@ export const KINDS: readonly SetupKind[] = [
   },
   {
     key: "shop",
-    label: "A shop",
+    label: "A shop, bakery or kitchen",
     line: "Things people order, to collect or to deliver.",
     preset: "shop",
     doors: { booking: false, quoteRequest: false, message: true },
     connect: ["shops", "payments"],
   },
+  {
+    // A place to stay (ADR-033): stays have their own door, opened by the property it sets up; times
+    // and prices for a request are not how a room is let, so those doors start closed.
+    key: "stays",
+    label: "A place to stay",
+    line: "A hotel, a guesthouse, a B&B, holiday rentals.",
+    preset: "stays",
+    doors: { booking: false, quoteRequest: false, message: true },
+    connect: ["lodging", "calendars"],
+    // A stay is nights, never minutes: no booking calendar takes one.
+    skip: ["calcom", "calendly"],
+  },
 ];
+
+/**
+ * A room as the setup wizard first asks for it: what it is called, how many, how many sleep in it, and
+ * what a night costs (optional: without one, each request waits for a price of the owner's own).
+ */
+export interface WizardRoom {
+  readonly id: number;
+  name: string;
+  units: string;
+  sleeps: string;
+  price?: string;
+}
+
+/**
+ * The rooms to make, with each one's price a night in minor units (null where none was typed), or what
+ * is missing: a name each, at least one, numbers that are numbers, prices that are amounts.
+ */
+export function wizardRoomBodies(
+  rooms: readonly WizardRoom[],
+  propertyId: string,
+  currency = "EUR",
+): { bodies: Record<string, unknown>[]; prices: (number | null)[] } | { problem: string } {
+  const named = rooms.filter((r) => r.name.trim());
+  if (named.length === 0) return { problem: "Name at least one kind of room." };
+  const prices: (number | null)[] = [];
+  for (const r of named) {
+    const typed = r.price?.trim() ?? "";
+    if (!typed) {
+      prices.push(null);
+      continue;
+    }
+    const value = parseMajor(typed, minorUnitsOf(currency));
+    if (value === undefined || value <= 0)
+      return { problem: `"${typed}" is not a price a night for ${r.name.trim()}.` };
+    prices.push(value);
+  }
+  const bodies = named.map((r, i) => {
+    const sleeps = Math.max(1, Math.min(20, Number(r.sleeps) || 1));
+    return {
+      property_id: propertyId,
+      name: r.name.trim(),
+      units: Math.max(1, Math.min(500, Number(r.units) || 1)),
+      capacity: { adults: sleeps, children: 0, total: sleeps },
+      sort: i,
+    };
+  });
+  return { bodies, prices };
+}
 
 /** The kind of a key, if it is one. */
 export function kindOf(key: string | null | undefined): SetupKind | undefined {

@@ -14,8 +14,10 @@ import { ConnectorError } from "./sdk";
  * a timeout never counts as a refusal while the write may have landed. What is still unknown then is
  * settled by a job within minutes, through the resolver its owner (stays, bookings) registered.
  *
- * For a system that takes a write even when it oversells (`check_then_write`), the write is read
- * back at once; if ours made it oversold, the inbox cancels its own write and says so.
+ * For a system that takes a write even when it oversells, the write is read back at once, from the
+ * system's own definite word; if ours made it oversold, the inbox takes its own write back and says
+ * so. A read-back that could not be made is no answer: the write is settled as unknown, and nothing is
+ * promised until the resolver has read it back, or has taken it back once it never could.
  */
 
 export type WriteOp = "reserve" | "modify" | "cancel" | "release";
@@ -49,8 +51,8 @@ export interface WriteFirstCall {
   write(key: string): Promise<WrittenRef>;
   /** The write as the system holds it, found by `key`; null when it is not there. */
   find(key: string): Promise<WrittenRef | null>;
-  /** For a system that takes oversold writes: read back now, `conflict` when ours oversold it. */
-  readBack?(ref: WrittenRef): Promise<"ok" | "conflict">;
+  /** For a system that takes oversold writes: read back now, `conflict` when ours oversold it, `unknown` when it could not tell. */
+  readBack?(ref: WrittenRef): Promise<"ok" | "conflict" | "unknown">;
   /** Takes our own write back, after a conflict. */
   rollback?(ref: WrittenRef): Promise<void>;
   readonly now: number;
@@ -241,6 +243,20 @@ export async function writeFirst(db: Db, call: WriteFirstCall): Promise<WriteFir
     }
     if (call.readBack) {
       const seen = await call.readBack(ref);
+      if (seen === "unknown") {
+        // Written, but not known to be sound: the resolver reads it back again before anything is promised.
+        await settle(db, journalId, "unknown", now, {
+          externalId: ref.externalId,
+          resolveAfter: now + RESOLVE_EVERY_MS,
+          detail: "written, not read back yet",
+        });
+        await ensureJob(db, CONNECTOR_WRITE_RESOLVE_KIND, `cwrite:${journalId}`, {
+          now,
+          runAt: now + RESOLVE_EVERY_MS,
+          payload: { journalId },
+        });
+        return { status: "pending", journalId };
+      }
       if (seen === "conflict") {
         await call.rollback?.(ref);
         await settle(db, journalId, "rolled_back", now, {
@@ -266,6 +282,10 @@ export async function writeFirst(db: Db, call: WriteFirstCall): Promise<WriteFir
 export interface WriteResolver {
   /** Looks for the write again, by its key. */
   find(db: Db, row: WriteRow, now: number): Promise<WrittenRef | null>;
+  /** For a system that takes oversold writes: the write found, read back as the write's own read-back would. */
+  readBack?(db: Db, row: WriteRow, ref: WrittenRef, now: number): Promise<"ok" | "conflict" | "unknown">;
+  /** Takes the write back: it oversold, or could never be read back. */
+  rollback?(db: Db, row: WriteRow, ref: WrittenRef, now: number): Promise<void>;
   /** The write is settled: written (with what the system said) or not. */
   settled(db: Db, row: WriteRow, outcome: "written" | "refused", ref: WrittenRef | null, now: number): Promise<void>;
 }
@@ -299,11 +319,53 @@ export async function resolveWrite(db: Db, journalId: string, now: number): Prom
   if (row.outcome !== "unknown") return `settled already: ${row.outcome}`;
   const resolver = resolvers.get(row.owner);
   if (!resolver) return `nobody settles ${row.owner} writes here`;
-  let found: WrittenRef | null = null;
-  try {
-    found = await resolver.find(db, row, now);
-  } catch (error) {
-    if (!(error instanceof ConnectorError)) throw error;
+  // A write that answered but could not be read back is found already: it is read back again.
+  let found: WrittenRef | null = row.externalId ? { externalId: row.externalId } : null;
+  if (!found) {
+    try {
+      found = await resolver.find(db, row, now);
+    } catch (error) {
+      if (!(error instanceof ConnectorError)) throw error;
+    }
+  }
+  if (found && resolver.readBack) {
+    let seen: "ok" | "conflict" | "unknown";
+    try {
+      seen = await resolver.readBack(db, row, found, now);
+    } catch (error) {
+      if (!(error instanceof ConnectorError)) throw error;
+      seen = "unknown";
+    }
+    const late = now - row.createdAt >= RESOLVE_WITHIN_MS;
+    if (seen === "unknown" && !late) {
+      await settle(db, row.id, "unknown", now, { externalId: found.externalId, resolveAfter: now + RESOLVE_EVERY_MS });
+      await ensureJob(db, CONNECTOR_WRITE_RESOLVE_KIND, `cwrite:${row.id}:${Math.floor(now / RESOLVE_EVERY_MS)}`, {
+        now,
+        runAt: now + RESOLVE_EVERY_MS,
+        payload: { journalId: row.id },
+      });
+      return "written, not read back yet";
+    }
+    if (seen !== "ok") {
+      // Oversold, or never known not to be: taken back, and nothing promised.
+      try {
+        await resolver.rollback?.(db, row, found, now);
+      } catch (error) {
+        if (!(error instanceof ConnectorError)) throw error;
+      }
+      const done = await db.client.query({
+        sql: "UPDATE connector_writes SET outcome = 'rolled_back', external_id = ?, detail = ?, resolve_after = NULL, updated_at = ? WHERE id = ? AND outcome = 'unknown'",
+        params: [
+          found.externalId,
+          seen === "conflict" ? "oversold: our write taken back" : "never read back: taken back",
+          now,
+          row.id,
+        ],
+        method: "run",
+      });
+      if (done.changes === 1) await resolver.settled(db, row, "refused", null, now);
+      return seen === "conflict" ? "oversold: taken back" : "never read back: taken back";
+    }
   }
   if (found) {
     const done = await db.client.query({

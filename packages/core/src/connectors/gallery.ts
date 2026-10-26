@@ -233,6 +233,25 @@ export const GALLERY: readonly CardSpec[] = [
       { kind: "square", preset: null, label: "Access token" },
     ],
   },
+  // A place to stay's own system (ADR-033 §8.1): each way is "Soon" until its connector is registered
+  // here, and one that needs a partner account says "Needs setup" once it is. Calendar links per room
+  // are the calendar card's own way.
+  {
+    id: "property",
+    title: "Property system",
+    line: "Rooms, rates and what's free",
+    group: "lodging",
+    industries: ["stays"],
+    ways: [
+      { kind: "beds24", preset: null, label: "Beds24" },
+      { kind: "hostaway", preset: null, label: "Hostaway" },
+      { kind: "smoobu", preset: null, label: "Smoobu" },
+      { kind: "guesty", preset: null, label: "Guesty" },
+      { kind: "mews", preset: null, label: "Mews" },
+      { kind: "apaleo", preset: null, label: "apaleo" },
+      { kind: "cloudbeds", preset: null, label: "Cloudbeds" },
+    ],
+  },
 ];
 
 /** The card a connection belongs to, for its tile's state. */
@@ -246,9 +265,15 @@ export function cardOf(kind: string, preset?: string | null): string | undefined
  * appointments, one with more products than services to a shop. Orders the groups and the cards in
  * them; it never hides one.
  */
-export type Lean = "appointments" | "shop" | null;
+export type Lean = "appointments" | "shop" | "stays" | null;
 
-export function leanOf(counts: { readonly services: number; readonly products: number }): Lean {
+export function leanOf(counts: {
+  readonly services: number;
+  readonly products: number;
+  /** A place to stay (ADR-033): it leans to stays, with its property system first. */
+  readonly rooms?: number | undefined;
+}): Lean {
+  if ((counts.rooms ?? 0) > 0) return "stays";
   if (counts.products > counts.services) return "shop";
   if (counts.services > 0) return "appointments";
   return null;
@@ -257,7 +282,11 @@ export function leanOf(counts: { readonly services: number; readonly products: n
 /** The groups in the order this inbox sees them: a shop sees its shop and till first. */
 export function galleryGroups(lean: Lean): GalleryGroup[] {
   const order: ConnectorGroup[] =
-    lean === "shop" ? ["shops", "payments", "calendars"] : ["calendars", "payments", "shops"];
+    lean === "stays"
+      ? ["lodging", "calendars", "payments", "shops"]
+      : lean === "shop"
+        ? ["shops", "payments", "calendars"]
+        : ["calendars", "payments", "shops"];
   return order.map((id) => ({ id, label: GROUP_LABELS[id] }));
 }
 
@@ -278,9 +307,14 @@ export function gallery(
 ): GalleryCard[] {
   const out: GalleryCard[] = [];
   for (const card of GALLERY) {
+    // A place to stay's own systems are shown to a place to stay only, each "Soon" until its connector is
+    // registered here (ADR-033 §8.1): the hotel connectors track builds them.
+    const staysOnly = card.industries.length > 0 && card.industries.every((i) => i === "stays");
+    if (staysOnly && opts.lean !== "stays") continue;
+    const spec: CardSpec = staysOnly ? { ...card, building: true } : card;
     const ways: GalleryWay[] = [];
-    for (const w of card.ways) {
-      const way = wayOf(card, w, definitions.get(w.kind), opts);
+    for (const w of spec.ways) {
+      const way = wayOf(spec, w, definitions.get(w.kind), opts);
       if (way) ways.push(way);
     }
     if (ways.length === 0) continue;
@@ -302,7 +336,7 @@ export function gallery(
   const lean = opts.lean ?? null;
   if (lean === null) return out;
   // Within a group, the cards this kind of business uses most first; otherwise as listed.
-  const fits = new Set<Industry>(lean === "shop" ? FOOD_AND_SHOPS : APPOINTMENTS);
+  const fits = new Set<Industry>(lean === "stays" ? ["stays"] : lean === "shop" ? FOOD_AND_SHOPS : APPOINTMENTS);
   const score = (c: GalleryCard) => (c.industries.includes("all") || c.industries.some((i) => fits.has(i)) ? 0 : 1);
   return out
     .map((c, i) => ({ c, i }))

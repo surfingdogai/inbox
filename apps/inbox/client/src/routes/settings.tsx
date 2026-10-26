@@ -3,6 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { ThemeButton, ThemeSwitch } from "../components/ThemeSwitch";
 import { ensureSignedIn } from "../lib/auth";
+import { useProperty } from "../lib/property";
 
 /** Settings: who the business is, how it is emailed, what it offers, when it is open, how it is paid, what runs on its own, who it reports to. */
 export const Route = createFileRoute("/settings")({
@@ -15,6 +16,9 @@ export const Route = createFileRoute("/settings")({
 function SettingsLayout() {
   const tabs = useRef<HTMLElement>(null);
   const path = useRouterState({ select: (s) => s.location.pathname });
+  // A place to stay has its own tab; another business never sees it.
+  const property = useProperty();
+  const stays = (property.data?.properties.length ?? 0) > 0 || path === "/settings/property";
   // The tab you are on is always in view, on a phone too, where the row scrolls.
   // biome-ignore lint/correctness/useExhaustiveDependencies: the path is what moves the current tab
   useEffect(() => {
@@ -41,6 +45,11 @@ function SettingsLayout() {
         <Link to="/settings/services" className="tab">
           Services
         </Link>
+        {stays && (
+          <Link to="/settings/property" className="tab">
+            Property
+          </Link>
+        )}
         <Link to="/settings/availability" className="tab">
           Availability
         </Link>

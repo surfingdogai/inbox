@@ -233,7 +233,7 @@ export function isVerifyRoute(method: string, path: string): boolean {
 }
 
 /** Public REST routes that create an item, and so mail the owner. */
-const CREATE_PATHS = /^\/v1\/(bookings|orders|quotes|messages)\/?$/;
+const CREATE_PATHS = /^\/v1\/(bookings|orders|quotes|messages|stays|stays\/holds|stays\/book)\/?$/;
 
 export function isCreateRoute(method: string, path: string): boolean {
   return method === "POST" && CREATE_PATHS.test(path);
@@ -245,7 +245,11 @@ export function isCreateRoute(method: string, path: string): boolean {
  * or asking for a return (`/withdraw`, `/returns`), each of which puts the item on the owner's desk.
  */
 export function isNegotiateRoute(method: string, path: string): boolean {
-  return method === "POST" && /^\/v1\/items\/[^/]+\/(counter|offers|withdraw|returns)\/?$/.test(path);
+  return (
+    method === "POST" &&
+    (/^\/v1\/items\/[^/]+\/(counter|offers|withdraw|returns)\/?$/.test(path) ||
+      /^\/v1\/stays\/[^/]+\/change\/?$/.test(path))
+  );
 }
 
 /**
@@ -268,14 +272,29 @@ export function mcpVerifies(body: unknown): boolean {
 }
 
 /** MCP tools that answer what the business proposed with terms of one's own, withdraw, or ask for a return. */
-const NEGOTIATE_TOOLS = new Set(["suggest_time", "make_offer", "withdraw_from_contract", "request_return"]);
+const NEGOTIATE_TOOLS = new Set([
+  "suggest_time",
+  "make_offer",
+  "withdraw_from_contract",
+  "request_return",
+  "change_stay",
+]);
 
 export function mcpNegotiates(body: unknown): boolean {
   return mcpToolNames(body).some((name) => NEGOTIATE_TOOLS.has(name));
 }
 
 /** MCP tools that create an item. The body is JSON-RPC, a single call or a batch. */
-const CREATE_TOOLS = new Set(["create_booking", "create_order", "request_quote", "send_message"]);
+const CREATE_TOOLS = new Set([
+  "create_booking",
+  "create_order",
+  "request_quote",
+  "send_message",
+  // A place to stay (ADR-033): a request, a hold and a booking each put a stay on the property's desk.
+  "request_stay",
+  "hold_stay",
+  "book_stay",
+]);
 
 export function mcpCreates(body: unknown): boolean {
   return mcpToolNames(body).some((name) => CREATE_TOOLS.has(name));

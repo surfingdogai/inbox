@@ -96,7 +96,62 @@ export type GuardId =
    * Goods are to come back on this return: only then can they arrive (and move the refund's date), or
    * the customer keep them by dropping it. A refund with nothing to send back is money owed, as it is.
    */
-  | "goods_expected";
+  | "goods_expected"
+  // Stays (ADR-033), checked by the stays layer (`stays/transition.ts`) in the same write.
+  /** The quote holds together: its lines and schedule add up to its total, its policy is dated before arrival. */
+  | "stay_quote_complete"
+  /** Each room holds its guests: adults, children and the total within the room type's capacity. */
+  | "capacity_ok"
+  /** Where the property's area requires a short-term rental registration number, it has one. */
+  | "registration_ok"
+  /** Arrival has not passed; a same-day arrival only until the property's same-day cutoff. */
+  | "not_past"
+  /** No requested night is one the property closed, or (connected) its system shows closed. */
+  | "nights_open"
+  /** Every night of every room has a unit free, counting the claims of every other stay. */
+  | "nights_available"
+  /** The quote the guest answers is open and still valid. */
+  | "stay_quote_open"
+  | "stay_quote_lapsed"
+  | "stay_request_lapsed"
+  /** The guest confirmed the terms they were shown: their `terms_sha` is this quote's. */
+  | "terms_confirmed"
+  /** Something is due now (a deposit, a card), or nothing is. */
+  | "payment_due_now"
+  | "nothing_due_now"
+  /** Every amount due now is paid, and the card is saved where one was asked for. */
+  | "payment_complete"
+  /** The window to pay passed. */
+  | "payment_lapsed"
+  /** A payment that came late may still be taken: the stay lapsed only for want of it. */
+  | "late_payment_open"
+  /** The inbox cannot sell these nights twice: rooms kept for direct guests, or the property's fresh system. */
+  | "instant_safe"
+  /** The agent's hold is open, or has lapsed. */
+  | "hold_open"
+  | "hold_lapsed"
+  /** The guest saw the cancellation fee and confirmed it (`fee_sha`). */
+  | "fee_confirmed"
+  /** A fee lower than the policy's is a person's to give. */
+  | "fee_lowered_by_person"
+  /** The stay has not begun. */
+  | "stay_ahead"
+  /** The new nights of a change are open and free. */
+  | "change_nights_open"
+  | "stay_change_open"
+  | "stay_change_theirs"
+  | "stay_change_mine"
+  | "stay_change_lapsed"
+  /** A change both sides agreed is being written to the property's own system, and waits for its answer. */
+  | "stay_change_writing"
+  /** Check-in day has come, in the property's zone. */
+  | "checkin_day_reached"
+  /** Check-out passed, and the hours after it the property waits before a stay counts as stayed. */
+  | "stay_ended"
+  /** The day of arrival ended, in the property's zone, with nobody there. */
+  | "arrival_passed"
+  /** A stayed or a no-show may be corrected once, until the hours after check-out end. */
+  | "stay_correction_window";
 
 export type EffectId =
   | "claim_slot"
@@ -126,7 +181,41 @@ export type EffectId =
   | "review_fact"
   | "notify_customer"
   | "notify_owner"
-  | "close";
+  | "close"
+  // Stays (ADR-033), written by the stays layer in the same batch.
+  /** The stay's nights claimed for good, or held until a deposit or a write settles. */
+  | "claim_nights"
+  | "claim_nights:hold"
+  /** A quote's nights held while it is open, where the property cannot sell them twice. */
+  | "hold_nights"
+  /** Held nights become the stay's for good. */
+  | "promote_claims"
+  | "release_nights"
+  /** A change's new nights claimed and the old ones let go. */
+  | "reclaim_nights"
+  /** The stay is written to the property's own system, first (a job). */
+  | "write_stay"
+  /** The stay is taken off the property's own system again. */
+  | "cancel_stay_write"
+  /** The nights after a no-show's first let go on the property's own system, never by cancelling the stay. */
+  | "release_stay_write"
+  /** A change's new nights held beside the old ones while it is written to the property's own system. */
+  | "hold_change_nights"
+  /** The deposit or balance links the schedule wants, made or closed (the pay-link job). */
+  | "queue_pay_links"
+  | "close_pay_links"
+  /** The policy's fee as of now (or when the guest asked), on the stay. */
+  | "cancellation_fee"
+  /** What was paid less the fee, owed back: a refund for the property to make in its own dashboard. */
+  | "refund_owed"
+  /** The pre-arrival messages, queued for their times. */
+  | "schedule_messages"
+  /** The guest's other dates or rooms become the request. */
+  | "stay_counter"
+  /** The change both sides agreed becomes the stay. */
+  | "apply_stay_change"
+  /** The change not made goes; the stay stays as agreed. */
+  | "drop_change";
 
 /**
  * What a transition does to the item's offers (ADR-018 §2), which the write path carries out in its
@@ -181,6 +270,11 @@ export interface Transition<S extends string = string> {
   readonly offer?: OfferAction;
   /** The offers it makes or closes are changes to a promise (`kind: change`), not offers before one. */
   readonly change?: true;
+  /**
+   * It leaves a terminal state for an open one, so the item opens again (a stay a late payment confirmed
+   * after it lapsed, while its nights were still free). Only the inbox's own jobs fire one.
+   */
+  readonly reopens?: true;
 }
 
 export interface Machine<S extends string = string> {

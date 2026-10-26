@@ -1,7 +1,13 @@
 import type { RuleDefinition } from "../schema";
 
 /** One rule of a preset: its name as the owner reads it, its priority and its definition. */
-export type Preset = { name: string; priority: number; definition: RuleDefinition };
+export type Preset = {
+  name: string;
+  priority: number;
+  definition: RuleDefinition;
+  /** Off until the owner switches it on (a stays preset's "accept date changes", R5). On when absent. */
+  enabled?: boolean;
+};
 
 /**
  * A kind of business's starting rules (ADR-036): one file per key in this folder, and one line in

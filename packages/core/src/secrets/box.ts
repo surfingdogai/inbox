@@ -35,7 +35,9 @@ export type SecretPurpose =
   /** A person's key and first pass from a network, held until they reach the customer (ADR-017 §2.1). */
   | "person-secret"
   /** What push to a phone needs (ADR-028): the relay's secret for it, and the phone's push keys. */
-  | "phone-push";
+  | "phone-push"
+  /** A place to stay's private arrival details (door codes, wifi), opened only to send them (ADR-033 §10). */
+  | "arrival-details";
 
 /**
  * What a deterministic key is derived for. Sealing is randomised and must be; these are the few
@@ -43,6 +45,8 @@ export type SecretPurpose =
  * so one cannot be replayed as another.
  */
 export type MacPurpose =
+  /** A stay's offer id (ADR-033 §6.1): only this inbox can make one, so an agent cannot pass off its own. */
+  | "stay-offer"
   | "receipt-subject"
   /**
    * `trm` on a receipt (ADR-017 Amendment 3): the key each agreed offer's fingerprint is bound under,

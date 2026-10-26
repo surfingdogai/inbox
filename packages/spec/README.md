@@ -121,7 +121,48 @@ or network:
   `none`, `percent`, `amount`, `units` or `full`, a no-show fee and whether a deposit is refundable; a
   dated policy, `datedPolicySchema`), and payment schedules in UCP's `payment.terms` shape
   (`paymentScheduleSchema`: `immediate`, `deferred` or `at_property`; `scheduleProblem`, the invariant
-  that the schedules add up to the total).
+  that the schedules add up to the total). Stays ([ADR-033](../../docs/adr/033-stays.md)), below.
+
+## Stays (0.10)
+
+A place to stay answers in its own inbox (`src/stays.ts`). Everything here is additive: a reader on
+0.9 ignores what it does not know.
+
+- **The item type `stay`.** A stay's dates are the property's local dates (`YYYY-MM-DD`); its nights
+  are their difference, never minutes, so no change of clocks moves one. Its start and end are the
+  check-in date at the property's check-in time and the check-out date at its check-out time, with
+  the zone's offset on each day (`vectors/stay-nights.json`). Receipts may name `typ: "stay"`; they
+  record no outcome codes yet: a network takes stays' outcomes only under rules that say so.
+- **The quote** (`stayQuoteSchema`): every line in the total, taxes and fees paid at the property
+  included (marked `collected: at_property`); the rate plan; the cancellation policy dated for these
+  dates (`datedPolicySchema`); the payment schedule, `immediate`, `deferred` or `at_property` as UCP's
+  `payment.terms`; whether a card holds the stay; and until when it can be accepted. It holds
+  together when `checkStayTotals` finds nothing: the lines add up to the total, the schedule does too,
+  what is collected at the property is left for it, one currency throughout, no fee above the total,
+  the steps in order and before arrival, and it can still be accepted, only until before arrival
+  (`vectors/stay-totals.json`, in JPY and KWD among others). An estimate (`stayEstimateSchema`,
+  `binding: false`) is the property's rates before it answers: never an offer.
+- **Policies** for stays are presets (`stayPolicySteps`: free until N days before arrival, then the
+  first night, half or the full stay; non-refundable; up to four steps of your own), each step ending
+  at 23:59:59 local on its day, whatever the clocks do that day (`vectors/stay-policy.json`, in zones
+  with half-hour daylight saving, changes at midnight and the date line).
+- **What an agent reads**: the property (`propertyPublicSchema`: rooms, rate plans, extras, taxes and
+  fees, children, pets, house rules, how to find it, how it confirms, how soon it answers, and a
+  short-term rental registration number where one is required; never its private arrival details)
+  and what is free (`stayAvailabilitySchema`: per room type and rate plan, `instant` with an offer to
+  hold and book, `on_request` with an estimate, or `unavailable`; `likely_taken` when another of the
+  property's calendars shows the nights as taken). The words come from `vocab/lodging.json`: kinds,
+  beds, amenities, meals, house rules, how a tax or fee is charged, and on-property extras only (no
+  transfer, tour or car hire is on it, so a stay never bundles another trader's travel service).
+- **The manifest** may list `stay` in `item_types`, with a `stay` door (`{mode, answers_within_h,
+  secure, currencies}`), and its profile a `lodging` (`profileLodgingSchema`: kind, rooms, check-in and
+  check-out, how it confirms, how soon it answers, a registration number). `doors_elsewhere` may name
+  `stay` with an optional `url_template`, the property's own booking engine's deep link: a reader keeps
+  it only when, filled in, it is an https URL on the entry's own host, fills `{check_in}`,
+  `{check_out}`, `{adults}`, `{children}` and `{rooms}`, and drops any other `{…}`
+  (`fillStayTemplate`; `vectors/doors-elsewhere-stay.json`).
+- **Carried** (`request_stay`, `schemas/mcp-request-stay-*`): a network may carry a person's request
+  for a stay to the property's own inbox as it carries a booking request (0.8).
 
 Everything here is published, byte for byte, at https://surfingdog.ai/spec/ (the files under
 `/spec/schemas/`, `/spec/vectors/` and `/spec/vocab/`, the vocabulary's versions at
@@ -141,12 +182,16 @@ implementations:
 | `passes.json` | key, pass and pass-reference strings, `ppid`, `email_mac`, and 43 email normalisation cases |
 | `scoring.json` | the network's scores (ADR-017 §5): every worked example, the R5 grid, ageing, hold and release |
 | `ordering.json` | the network's order (ADR-017 §6): shuffles above 2^53, one snapshot's order, cursors |
-| `profile.json` | what the network keeps from a manifest's profile (ADR-017 A2.5): each field checked and dropped alone, hours, categories and tags |
+| `profile.json` | what the network keeps from a manifest's profile (ADR-017 A2.5): each field checked and dropped alone, hours, categories and tags, and a place to stay's `lodging` (0.10) |
 | `doors-elsewhere.json` | what a reader keeps of a manifest's `doors_elsewhere` (`readDoorsElsewhere`): the kinds of request a business takes somewhere else, and where, each entry checked and dropped alone, and since 0.10 the platform each names; `detect` and `clean`, the platform a URL is on and the tracking it carries |
 | `mcp.json` | what an assistant reads from the network's tools (ADR-017 A2.7): the card derived from each listing, today's hours in the business's zone, and one answer of each tool |
 | `score.json` | the agentic score, rules version 2 (§4.13): for each case a profile and every capability's state, and the score, grade, numerator and fixes the published formula gives; `score-v1.json` the same under version 1 |
 | `door-reports.json` | door reports (§4.15): how a network reads a call (strict JSON, the limits, each report taken or ignored and why), what each report can do by its proof and source, how the network's own reads move a door (§4.8), and what earns a reporter points and who is a contributor (`contributors`, §4.15) |
 | `gtin.json` | barcodes (§4.18): how one is read, checked and classified, each input with its hint and what it reads as, the UPC-E expansion for each sixth digit, and the GS1 prefixes pinned; written by hand, the check digits worked out apart from both implementations |
+| `stay-totals.json` | a stay's quote (0.10): when it holds together and why not, in currencies with no minor unit and with three |
+| `stay-policy.json` | a stay's cancellation preset dated for its arrival in zones across clock changes, and the fee at given instants |
+| `stay-nights.json` | a stay's nights, and its start and end with the zone's offset |
+| `doors-elsewhere-stay.json` | a stay taken elsewhere, its deep link kept or dropped, and filled in |
 | `door-history.json` | a door's history (§4.8): the days seen answering, days checked, answered and refused, the floored share from 14 days, the last 90 days as a line, since or from…to, and the door types never shown; `summary` is informative |
 
 `vocab/categories.json` is the categories list a profile names its categories from: each slug with
@@ -173,7 +218,7 @@ Expedia…). Some listed platforms charge the business per booking or order; tha
 platform. A token is never removed or renamed.
 
 `receipts.json` is written by `npx tsx scripts/gen-receipt-vectors.ts` from `packages/core`;
-`receipts-v2.json`, `signatures.json`, `passes.json` and `schemas/` by
+`receipts-v2.json`, `signatures.json`, `passes.json`, the four stay vectors and `schemas/` by
 `npx tsx scripts/gen-network-vectors.ts` (then `npx biome format --write ../spec`). `scoring.json`,
 `ordering.json`, `profile.json`, `mcp.json` and `score.json` come from the network unchanged.
 `door-history.json` is written by `python3 scripts/gen-door-history-vectors.py` (Python's standard

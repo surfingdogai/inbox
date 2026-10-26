@@ -7,6 +7,7 @@ import {
   doorPlatformHolds,
   doorPlatformOf,
   doorTrackingParams,
+  fillStayTemplate,
   hostIsOn,
   isPaymentToken,
   MAX_PROFILE_PAYMENTS,
@@ -742,6 +743,7 @@ const sections = {
       booking: z.boolean().optional().describe("Agents can see your free times and ask to book."),
       quoteRequest: z.boolean().optional().describe("Agents can ask you for a price."),
       message: z.boolean().optional().describe("Agents can send you a message."),
+      stay: z.boolean().optional().describe("Agents can see your rooms and ask for a stay."),
     })
     .prefault({})
     .describe("What agents can do here. Left out, a door follows what the inbox holds; false shuts it."),
@@ -821,8 +823,32 @@ const sections = {
         .describe("What a setup plan read and left for the owner to add. Never published, never booked."),
     })
     .prefault({}),
+  /**
+   * A place to stay (ADR-033): what is not per property. A request nobody answered lapses after
+   * `requestExpiresHours`; a stay counts as stayed `autoCompleteHours` after check-out unless marked a
+   * no-show; the message before arrival goes `preArrivalDays` before, the private arrival details
+   * `arrivalDetailsHours` before; guests are written to in `languages` (the business's when empty).
+   * They bound what automation does with stays, so only the owner in person changes them (`guard.ts`).
+   */
+  stays: z
+    .object({
+      requestExpiresHours: z.number().int().min(1).max(168).default(48),
+      autoCompleteHours: z.number().int().min(1).max(168).default(24),
+      preArrivalDays: z.number().int().min(0).max(14).default(2),
+      arrivalDetailsHours: z.number().int().min(0).max(72).default(48),
+      languages: z.array(z.string().max(12)).max(6).default([]),
+      /** A thank-you after the stay: off unless the owner switches it on. */
+      thankYou: z.boolean().default(false),
+    })
+    .prefault({}),
   testMode: z.boolean().default(false),
 };
+
+/** A stay's deep link: filled in with sample dates, a door elsewhere's address (`fillStayTemplate`). */
+export function isStayTemplate(template: string): boolean {
+  const filled = fillStayTemplate(template, { check_in: "2027-01-10", check_out: "2027-01-12", adults: 2, rooms: 1 });
+  return filled !== null && isDoorElsewhereUrl(filled);
+}
 
 /**
  * A place a door elsewhere may send customers: what any reader of the manifest keeps
@@ -835,7 +861,7 @@ export function isDoorElsewhereUrl(url: string): boolean {
 
 /**
  * One door elsewhere as a write sets it (ADR-035): the kind, the page, and the platform the owner picked it on from
- * `vocab/door-platforms.json`, if any. A page is the business's own: on the platform it names, past the platform's
+ * `vocab/door-platforms.json`, if any; for a stay (ADR-033), the booking engine's deep link too. A page is the business's own: on the platform it names, past the platform's
  * own pages, and with no tracking or affiliate parameter in it. A platform that also serves the business's own domain
  * (Shopify, Wix, SimplyBook.me…) takes a page there too, which the write checks against the business's domain
  * (`doorElsewhereDomainProblems`). Only a write is held to this: a stored door is read by
@@ -844,7 +870,9 @@ export function isDoorElsewhereUrl(url: string): boolean {
 export function doorElsewhereSettingSchema() {
   return z
     .object({
-      itemType: z.enum(["booking", "order"]).describe("booking: at a booking platform. order: in your own checkout."),
+      itemType: z
+        .enum(["booking", "order", "stay"])
+        .describe("booking: at a booking platform. order: in your own checkout. stay: at your own booking engine."),
       url: z
         .url({ protocol: /^https$/ })
         .max(2048)
@@ -853,6 +881,16 @@ export function doorElsewhereSettingSchema() {
           message: "the link carries tracking (like utm_source or fbclid): send people to the page itself",
         })
         .describe("Where customers go for it: an https address."),
+      /**
+       * For a stay (ADR-033): the booking engine's deep link, with {check_in}, {check_out}, {adults},
+       * {children} and {rooms} to fill in, on the same host as `url`.
+       */
+      urlTemplate: z
+        .string()
+        .max(2048)
+        .refine(isStayTemplate, "an https deep link on a public host, with {check_in}, {check_out}, {adults}…")
+        .optional()
+        .describe("For stays: your booking engine's link with {check_in}, {check_out} and {adults} to fill in."),
       platform: z
         .string()
         .regex(DOOR_PLATFORM_ID)
@@ -862,11 +900,17 @@ export function doorElsewhereSettingSchema() {
           "The platform the page is on, from vocab/door-platforms.json (fresha, opentable, toast, shopify…). Left out for any other page.",
         ),
     })
+    .refine((d) => d.urlTemplate === undefined || d.itemType === "stay", {
+      message: "only a stay's door takes a deep link",
+      path: ["urlTemplate"],
+    })
     .superRefine((d, ctx) => {
       const p = doorPlatform(d.platform);
       if (!p) return;
       const fit = doorPlatformFit(d.url, p, d.itemType);
-      const kinds = p.item_types.map((t) => (t === "booking" ? "bookings" : "orders")).join(" and ");
+      const kinds = p.item_types
+        .map((t) => (t === "booking" ? "bookings" : t === "order" ? "orders" : `${t}s`))
+        .join(" and ");
       if (fit === "kind")
         ctx.addIssue({ code: "custom", path: ["platform"], message: `${p.name} takes ${kinds} only` });
       else if (fit === "not_on_platform")
@@ -897,6 +941,13 @@ export function doorElsewhereStoredSchema() {
       if (!isPlainObject(raw)) return raw;
       const door: Record<string, unknown> = { ...raw };
       if (typeof door.url === "string") door.url = cleanDoorUrl(door.url);
+      // A stay's deep link (ADR-033) is dropped alone when it no longer reads, as a reader drops it.
+      if ("urlTemplate" in door) {
+        const t = door.urlTemplate;
+        if (door.itemType !== "stay" || typeof t !== "string" || t.length > 2048 || !isStayTemplate(t)) {
+          delete door.urlTemplate;
+        }
+      }
       if ("platform" in door) {
         const p = doorPlatform(door.platform);
         const fit = p && typeof door.url === "string" ? doorPlatformFit(door.url, p, String(door.itemType)) : null;
@@ -905,28 +956,30 @@ export function doorElsewhereStoredSchema() {
       return door;
     },
     z.object({
-      itemType: z.enum(["booking", "order"]),
+      itemType: z.enum(["booking", "order", "stay"]),
       url: z
         .url({ protocol: /^https$/ })
         .max(2048)
         .refine(isDoorElsewhereUrl, "an https address on a public host, with no user or password in it"),
       platform: z.string().regex(DOOR_PLATFORM_ID).optional(),
+      urlTemplate: z.string().max(2048).optional(),
     }),
   );
 }
 
 /**
  * Kinds of request the business takes somewhere else, and where: bookings at a booking platform,
- * orders in its own shop's checkout. Each is named in the manifest (`doors_elsewhere`) and on the
- * business's own page ("Book at …"), and is no longer among the kinds the inbox lists as its own,
- * so an agent goes there for it. It sends customers to another address, so the owner's AI may not
- * change it (`guard.ts`). A write is held to every rule of a door (`doorElsewhereSettingSchema`); a
- * stored document is read leniently (`doorElsewhereStoredSchema`), so no upgrade loses a door.
+ * orders in its own shop's checkout, stays at its own booking engine. Each is named in the manifest
+ * (`doors_elsewhere`) and on the business's own page ("Book at …"), and is no longer among the kinds
+ * the inbox lists as its own, so an agent goes there for it. It sends customers to another address, so
+ * the owner's AI may not change it (`guard.ts`). A write is held to every rule of a door
+ * (`doorElsewhereSettingSchema`); a stored document is read leniently (`doorElsewhereStoredSchema`), so
+ * no upgrade loses a door.
  */
-function doorsElsewhereList<T extends z.ZodType<{ readonly itemType: "booking" | "order" }>>(door: T) {
+function doorsElsewhereList<T extends z.ZodType<{ readonly itemType: "booking" | "order" | "stay" }>>(door: T) {
   return z
     .array(door)
-    .max(2)
+    .max(3)
     .refine((all) => new Set(all.map((d) => d.itemType)).size === all.length, "one place for each kind")
     .default([])
     .describe(
@@ -982,7 +1035,13 @@ export function publishedDoorsElsewhere(
     const named = doorPlatform(d.platform);
     const platform =
       named && doorPlatformHolds(d.url, named, d.itemType, own) ? named.id : doorPlatformOf(d.url, d.itemType)?.id;
-    return { item_type: d.itemType, url: d.url, ...(platform ? { platform } : {}) };
+    return {
+      item_type: d.itemType,
+      url: d.url,
+      ...(platform ? { platform } : {}),
+      // A stay's deep link into the property's own booking engine (ADR-033 §6.4).
+      ...(d.urlTemplate ? { url_template: d.urlTemplate } : {}),
+    };
   });
 }
 

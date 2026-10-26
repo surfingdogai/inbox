@@ -32,6 +32,7 @@ import {
   webhookFanoutHandler,
 } from "@surfingdog/adapters";
 import {
+  ariSyncHandler,
   buildManifest,
   Capabilities,
   CONNECTOR_CATALOGUE_KIND,
@@ -72,6 +73,14 @@ import {
   readSettings,
   relayAddress,
   type Settings,
+  STAY_ARI_SYNC_KIND,
+  STAY_MESSAGE_KIND,
+  STAY_SWEEP_KIND,
+  STAY_WRITE_KIND,
+  stayDoorOf,
+  stayMessageHandler,
+  staySweepHandler,
+  stayWriteHandler,
   VERSION,
   writeResolveHandler,
 } from "@surfingdog/core";
@@ -337,7 +346,14 @@ export function createInbox(deps: AppDeps): Inbox {
     .register(PAY_CLOSE_KIND, payCloseHandler(caps.connectors), { lane: connectorLane })
     // Write first (ADR-036): a write to a business's own system whose answer never came is looked for
     // again until it is found or its few minutes are up. An inbox with no such system enqueues none.
-    .register(CONNECTOR_WRITE_RESOLVE_KIND, writeResolveHandler());
+    .register(CONNECTOR_WRITE_RESOLVE_KIND, writeResolveHandler())
+    // Stays (ADR-033): the minute sweep while any stay is open, the guest's scheduled messages, and a
+    // property's own system — written to first, one stay's writes one after another, and read into the
+    // availability cache. An inbox that is not a place to stay enqueues none of them.
+    .register(STAY_SWEEP_KIND, staySweepHandler())
+    .register(STAY_MESSAGE_KIND, stayMessageHandler())
+    .register(STAY_WRITE_KIND, stayWriteHandler(caps.connectors), { lane: payLane })
+    .register(STAY_ARI_SYNC_KIND, ariSyncHandler(caps.connectors));
   if (demo) {
     for (const kind of [
       NETWORK_PING_ONE_KIND,
@@ -362,6 +378,8 @@ export function createInbox(deps: AppDeps): Inbox {
       PAY_NOTICE_KIND,
       PAY_CLOSE_KIND,
       CONNECTOR_WRITE_RESOLVE_KIND,
+      STAY_WRITE_KIND,
+      STAY_ARI_SYNC_KIND,
     ])
       runner.register(kind, noWebhookHandler);
     runner.register(
@@ -568,6 +586,8 @@ export function createInbox(deps: AppDeps): Inbox {
       // Where a network reads the business's products, while it lists them and this inbox can sign
       // the feed (ADR-029): a business out of every directory lists none.
       catalogue: !unlisted && caps.catalogue.served(settings) && caps.catalogue.canSign(),
+      // A place to stay's door (ADR-033): how it confirms, how soon it answers, how a stay is secured.
+      stay: await stayDoorOf(deps.db),
     });
     // A minute: a network reads it again within five, and an owner's switch must not wait on a cache.
     return c.json(manifest, 200, { "Cache-Control": "public, max-age=60" });

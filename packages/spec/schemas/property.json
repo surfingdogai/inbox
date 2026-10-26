@@ -1,0 +1,334 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://surfingdog.ai/spec/schemas/property.json",
+  "title": "get_property: a place to stay as agents see it",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["hotel", "bnb", "guesthouse", "hostel", "rental", "apartment", "campsite", "ryokan", "other"]
+    },
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$"
+    },
+    "timezone": {
+      "type": "string"
+    },
+    "check_in_from": {
+      "type": "string",
+      "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+    },
+    "check_in_until": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "check_out_until": {
+      "type": "string",
+      "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+    },
+    "rooms": {
+      "maxItems": 100,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": ["string", "null"]
+          },
+          "capacity": {
+            "type": "object",
+            "properties": {
+              "adults": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "children": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "total": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": ["adults", "children", "total"]
+          },
+          "beds": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": ["double", "single", "queen", "king", "bunk", "sofa_bed", "futon", "cot"]
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": ["type", "count"]
+            }
+          },
+          "size_m2": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "amenities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "accessible": {
+            "type": "boolean"
+          },
+          "photos": {
+            "maxItems": 8,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            }
+          }
+        },
+        "required": ["id", "name", "description", "capacity", "beds", "size_m2", "amenities", "accessible", "photos"]
+      }
+    },
+    "rate_plans": {
+      "maxItems": 40,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "meal": {
+            "type": "string",
+            "enum": ["room_only", "breakfast", "half_board", "full_board", "all_inclusive"]
+          },
+          "refundable": {
+            "type": "boolean"
+          },
+          "secure": {
+            "type": "string",
+            "enum": ["at_property", "deposit", "card"]
+          },
+          "policy": {
+            "type": "string",
+            "description": "The cancellation policy in words, before any dates."
+          },
+          "min_nights": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": ["id", "name", "meal", "refundable", "secure", "policy", "min_nights"]
+      }
+    },
+    "extras": {
+      "maxItems": 40,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "item": {
+            "type": "string",
+            "enum": ["breakfast", "parking", "cot", "late_checkout", "early_checkin", "pet", "towels", "other_on_site"]
+          },
+          "name": {
+            "type": "string"
+          },
+          "price": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "description": "Minor units of the currency's own ISO 4217 exponent (minorUnits): 4500 is CA$45.00 or ₹45.00, ¥4,500 in JPY, 4.500 in KWD."
+              },
+              "currency": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 3
+              }
+            },
+            "required": ["value", "currency"]
+          },
+          "basis": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "item", "name", "price", "basis"]
+      }
+    },
+    "taxes_and_fees": {
+      "maxItems": 40,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["tax", "fee"]
+          },
+          "basis": {
+            "type": "string",
+            "enum": ["per_stay", "per_night", "per_room_night", "per_person_night", "percent_of_room"]
+          },
+          "collected": {
+            "type": "string",
+            "enum": ["with_booking", "at_property"]
+          }
+        },
+        "required": ["name", "kind", "basis", "collected"]
+      }
+    },
+    "children": {
+      "type": "object",
+      "properties": {
+        "welcome": {
+          "type": "boolean"
+        },
+        "from_age": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "free_under": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "cots": {
+          "type": "boolean"
+        }
+      },
+      "required": ["welcome"]
+    },
+    "pets": {
+      "type": "string",
+      "enum": ["no", "yes", "ask"]
+    },
+    "house_rules": {
+      "type": "object",
+      "properties": {
+        "chips": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "quiet": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "string",
+              "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+            },
+            {
+              "type": "string",
+              "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+            }
+          ],
+          "items": false,
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": ["chips"]
+    },
+    "how_to_find_us": {
+      "type": ["string", "null"]
+    },
+    "payments": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "How guests can pay: tokens of vocab/payments.json."
+    },
+    "confirmation": {
+      "type": "string",
+      "description": "The property's own sentence on how it confirms stays."
+    },
+    "answers_within_h": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "registration": {
+      "description": "The property's short-term rental registration number, where one is required.",
+      "type": ["string", "null"]
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "kind",
+    "currency",
+    "timezone",
+    "check_in_from",
+    "check_in_until",
+    "check_out_until",
+    "rooms",
+    "rate_plans",
+    "extras",
+    "taxes_and_fees",
+    "children",
+    "pets",
+    "house_rules",
+    "how_to_find_us",
+    "payments",
+    "confirmation",
+    "answers_within_h",
+    "registration"
+  ]
+}

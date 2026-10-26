@@ -1,4 +1,5 @@
 import { z } from "zod";
+import lodging from "../vocab/lodging.json" with { type: "json" };
 import { DOOR_PLATFORM_ID, doorPlatform, doorPlatformHolds, ownSiteDomain } from "./door-platforms";
 import { MAX_PROFILE_PAYMENTS } from "./payments";
 
@@ -9,7 +10,7 @@ import { MAX_PROFILE_PAYMENTS } from "./payments";
  */
 export const MANIFEST_PATH = "/.well-known/agent-inbox.json";
 
-export const itemTypeSchema = z.enum(["message", "quote_request", "booking", "order", "refund"]);
+export const itemTypeSchema = z.enum(["message", "quote_request", "booking", "order", "refund", "stay"]);
 export type ItemType = z.infer<typeof itemTypeSchema>;
 
 export const trustTierSchema = z.enum(["anonymous", "signed_agent", "verified_principal", "reputed_principal"]);
@@ -70,6 +71,28 @@ export const profileServiceSchema = z.object({
   type: z.enum(["booking", "order", "quote_request"]),
 });
 
+const hhmmTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "use HH:MM");
+
+/** A kind of place to stay, from `vocab/lodging.json` (spec 0.10). */
+export const lodgingKindSchema = z.enum(Object.keys(lodging.kinds) as [string, ...string[]]);
+
+/**
+ * A profile's `lodging` (spec 0.10, ADR-033): what a network may show of a place to stay — its kind,
+ * how many rooms, check-in and check-out, how it confirms stays (each on request, some at once, all
+ * at once) and how soon it answers, and a short-term rental registration number where one is required.
+ * Checked and dropped alone, as every profile field is.
+ */
+export const profileLodgingSchema = z.object({
+  kind: lodgingKindSchema,
+  rooms: z.int().min(1).max(5000).optional(),
+  check_in_from: hhmmTime,
+  check_out_until: hhmmTime,
+  confirmation: z.enum(["request", "instant_some", "instant"]),
+  answer_hours: z.int().min(1).max(168),
+  registration: z.string().max(60).optional(),
+});
+export type ProfileLodging = z.infer<typeof profileLodgingSchema>;
+
 /**
  * Public profile data the directory may index. Nothing else about a business ever leaves the instance. A network
  * checks each field alone and drops a bad one alone (ADR-017 A2.5; `vectors/profile.json`).
@@ -123,6 +146,9 @@ export const profileSchema = z.object({
     .describe(
       "How a customer or their agent can pay: tokens of vocab/payments.json (card, apple_pay, paypal, pix…). A network keeps the tokens it knows and drops the rest alone; a card brand (visa) says card too.",
     ),
+  lodging: profileLodgingSchema
+    .optional()
+    .describe("A place to stay (spec 0.10): its kind, how it confirms, how soon it answers."),
 });
 export type Profile = z.infer<typeof profileSchema>;
 
@@ -245,22 +271,32 @@ export const doorElsewhereSchema = z.object({
     .describe(
       "The platform the page is on, from vocab/door-platforms.json (fresha, opentable, shopify…), only when the page is the business's own page there. Absent for any other page.",
     ),
+  url_template: z
+    .string()
+    .max(2048)
+    .optional()
+    .describe(
+      "Spec 0.10, for a stay: the same booking engine's deep link, with {check_in}, {check_out}, {adults}, {children} and {rooms} to fill in. A reader fills those and drops any other {…}.",
+    ),
 });
 export type DoorElsewhere = z.infer<typeof doorElsewhereSchema>;
 
 /**
  * What a reader keeps of a manifest's `doors_elsewhere`, each entry checked alone and dropped alone:
- * one of the five item types, not one the manifest lists in `item_types` (the inbox takes those
- * itself) and not one an entry kept before it names; and a URL, kept as written, that is https,
- * at most 2048 characters, with no user or password, on a host name of two labels or more whose
- * last label starts with a letter, so never an IP address. Anything else about the manifest is
- * not this function's to judge.
+ * one of the item types, not one the manifest lists in `item_types` (the inbox takes those itself)
+ * and not one an entry kept before it names; and a URL, kept as written, that is https, at most 2048
+ * characters, with no user or password, on a host name of two labels or more whose last label starts
+ * with a letter, so never an IP address. Anything else about the manifest is not this function's to
+ * judge.
  *
  * Since 0.10.0 an entry's `platform` is kept with it when the vocabulary knows the token, the platform takes
  * that kind of request, and the URL is the business's own page there; or the platform serves pages on the
  * business's own domain (`own_site`) and the URL's host is on the business's own website, the manifest's
  * `profile.url`. A reader never trusts an `own_site` token on any other host: anyone can call a stranger's
  * shop theirs. Otherwise the platform alone is dropped and the entry is kept: a door is never lost for its name.
+ *
+ * Since spec 0.10 a stay's entry may carry a `url_template`, kept when, filled in, it is such a URL on
+ * the same host as `url`, and dropped alone otherwise.
  */
 export function readDoorsElsewhere(manifest: unknown): DoorElsewhere[] {
   const m = (typeof manifest === "object" && manifest !== null ? manifest : {}) as Record<string, unknown>;
@@ -276,7 +312,13 @@ export function readDoorsElsewhere(manifest: unknown): DoorElsewhere[] {
     const url = elsewhereUrl(e.url);
     if (!url) continue;
     const platform = elsewherePlatform(e.platform, url, type.data, own);
-    kept.push({ item_type: type.data, url, ...(platform ? { platform } : {}) });
+    const template = type.data === "stay" ? elsewhereTemplate(e.url_template, url) : null;
+    kept.push({
+      item_type: type.data,
+      url,
+      ...(platform ? { platform } : {}),
+      ...(template ? { url_template: template } : {}),
+    });
   }
   return kept;
 }
@@ -285,6 +327,17 @@ function elsewherePlatform(value: unknown, url: string, kind: string, own: reado
   if (typeof value !== "string" || !DOOR_PLATFORM_ID.test(value)) return null;
   const platform = doorPlatform(value);
   return platform && doorPlatformHolds(url, platform, kind, own) ? platform.id : null;
+}
+
+/** A stay's deep link template, kept when filled in it is a door's URL on the same host as the entry's. */
+function elsewhereTemplate(value: unknown, url: string): string | null {
+  if (typeof value !== "string" || value.length > 2048) return null;
+  const sample = value.replace(/\{([a-z_]{1,20})\}/g, (_m, name: string) =>
+    ["check_in", "check_out"].includes(name) ? "2027-01-01" : ["adults", "children", "rooms"].includes(name) ? "1" : "",
+  );
+  const filled = elsewhereUrl(sample);
+  if (!filled) return null;
+  return new URL(filled).hostname === new URL(url).hostname ? value : null;
 }
 
 function elsewhereUrl(value: unknown): string | null {
@@ -407,11 +460,31 @@ export const manifestSchema = z.object({
    * Kinds of request the business takes somewhere else, and where: `[{"item_type": "booking", "url":
    * "https://…", "platform": "fresha"}]`. Absent or empty, the inbox's own doors are all there is.
    */
-  doors_elsewhere: z.array(doorElsewhereSchema).max(5).optional(),
+  doors_elsewhere: z.array(doorElsewhereSchema).max(6).optional(),
   /**
    * Where a network reads the business's products (network.md §4.18, spec 0.9), while its owner lists
    * them on networks: the signed feed of changes, and products by id. Absent, it lists none.
    */
   catalogue: z.object({ feed: z.url({ protocol: /^https$/ }), items: z.url({ protocol: /^https$/ }) }).optional(),
+  /**
+   * Spec 0.10 (ADR-033): a place to stay's door, present when `item_types` lists `stay`: whether stays
+   * are on request (the property answers each with a quote) or some confirm at once from a system it
+   * writes to first, how soon it answers, how a stay is secured, and in which currencies. The name of
+   * the property's system is never here: it is its private setup.
+   */
+  stay: z
+    .object({
+      mode: z.enum(["request", "instant_with_connector"]),
+      answers_within_h: z.int().min(1).max(168).optional(),
+      secure: z
+        .array(z.enum(["at_property", "deposit", "card"]))
+        .max(3)
+        .default([]),
+      currencies: z
+        .array(z.string().regex(/^[A-Z]{3}$/))
+        .max(5)
+        .default([]),
+    })
+    .optional(),
 });
 export type Manifest = z.infer<typeof manifestSchema>;

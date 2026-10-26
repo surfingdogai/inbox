@@ -3,9 +3,9 @@ import type { Migration } from "@surfingdog/platform";
 
 export const MIGRATIONS: readonly Migration[] = [
   {
-    "version": 1,
-    "name": "0000_init",
-    "statements": [
+    version: 1,
+    name: "0000_init",
+    statements: [
       "CREATE TABLE `action_links` (\n\t`jti` text PRIMARY KEY NOT NULL,\n\t`item_id` text NOT NULL,\n\t`action` text NOT NULL,\n\t`expires_at` integer NOT NULL,\n\t`used_at` integer,\n\t`created_at` integer NOT NULL\n);",
       "CREATE TABLE `agents` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`party_id` text NOT NULL,\n\t`name` text,\n\t`operator` text,\n\t`homepage_host` text,\n\t`jwk` text,\n\t`jwk_thumbprint` text,\n\t`tier` text DEFAULT 'anonymous' NOT NULL,\n\t`verified_at` integer,\n\t`created_at` integer NOT NULL,\n\t`last_seen_at` integer,\n\tFOREIGN KEY (`party_id`) REFERENCES `parties`(`id`) ON UPDATE no action ON DELETE no action\n);",
       "CREATE UNIQUE INDEX `agents_jwk_thumbprint_unique` ON `agents` (`jwk_thumbprint`);",
@@ -69,30 +69,28 @@ export const MIGRATIONS: readonly Migration[] = [
       "CREATE UNIQUE INDEX `users_email_unique` ON `users` (`email`);",
       "CREATE TABLE `webhook_deliveries` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`webhook_id` text NOT NULL,\n\t`event_id` text NOT NULL,\n\t`status` text DEFAULT 'queued' NOT NULL,\n\t`attempts` integer DEFAULT 0 NOT NULL,\n\t`next_at` integer,\n\t`last_status` integer,\n\t`created_at` integer NOT NULL,\n\tFOREIGN KEY (`webhook_id`) REFERENCES `webhooks`(`id`) ON UPDATE no action ON DELETE no action\n);",
       "CREATE UNIQUE INDEX `webhook_deliveries_once` ON `webhook_deliveries` (`webhook_id`,`event_id`);",
-      "CREATE TABLE `webhooks` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`url` text NOT NULL,\n\t`secret_enc` text NOT NULL,\n\t`events` text NOT NULL,\n\t`active` integer DEFAULT 1 NOT NULL,\n\t`created_at` integer NOT NULL\n);"
-    ]
+      "CREATE TABLE `webhooks` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`url` text NOT NULL,\n\t`secret_enc` text NOT NULL,\n\t`events` text NOT NULL,\n\t`active` integer DEFAULT 1 NOT NULL,\n\t`created_at` integer NOT NULL\n);",
+    ],
   },
   {
-    "version": 2,
-    "name": "0001_fts_search",
-    "statements": [
+    version: 2,
+    name: "0001_fts_search",
+    statements: [
       "CREATE VIRTUAL TABLE `search_fts` USING fts5(subject, body, party, item_id UNINDEXED, entry_id UNINDEXED, tokenize='unicode61 remove_diacritics 2');",
       "CREATE TRIGGER `thread_entries_ai` AFTER INSERT ON `thread_entries` BEGIN\n  INSERT INTO `search_fts` (subject, body, party, item_id, entry_id)\n  VALUES (new.subject, new.body_text, (SELECT display_name FROM parties WHERE id = new.party_id), new.item_id, new.id);\nEND;",
       "CREATE TRIGGER `thread_entries_ad` AFTER DELETE ON `thread_entries` BEGIN\n  DELETE FROM `search_fts` WHERE entry_id = old.id;\nEND;",
-      "CREATE TRIGGER `thread_entries_au` AFTER UPDATE OF subject, body_text ON `thread_entries` BEGIN\n  DELETE FROM `search_fts` WHERE entry_id = old.id;\n  INSERT INTO `search_fts` (subject, body, party, item_id, entry_id)\n  VALUES (new.subject, new.body_text, (SELECT display_name FROM parties WHERE id = new.party_id), new.item_id, new.id);\nEND;"
-    ]
+      "CREATE TRIGGER `thread_entries_au` AFTER UPDATE OF subject, body_text ON `thread_entries` BEGIN\n  DELETE FROM `search_fts` WHERE entry_id = old.id;\n  INSERT INTO `search_fts` (subject, body, party, item_id, entry_id)\n  VALUES (new.subject, new.body_text, (SELECT display_name FROM parties WHERE id = new.party_id), new.item_id, new.id);\nEND;",
+    ],
   },
   {
-    "version": 3,
-    "name": "0002_shallow_blue_blade",
-    "statements": [
-      "ALTER TABLE `business` ADD `languages` text;"
-    ]
+    version: 3,
+    name: "0002_shallow_blue_blade",
+    statements: ["ALTER TABLE `business` ADD `languages` text;"],
   },
   {
-    "version": 4,
-    "name": "0003_connectors_webhooks",
-    "statements": [
+    version: 4,
+    name: "0003_connectors_webhooks",
+    statements: [
       "-- ADR-015. `connectors`, `webhooks` and `webhook_deliveries` have existed since 0000_init and no\n-- code path in the repository has ever written one, so they are empty on every live instance: this\n-- drops and recreates them instead of altering, which also makes the whole migration idempotent.\n-- Children go first, so the foreign keys never stand in the way.\nDROP VIEW IF EXISTS `events_v1`;",
       "DROP TABLE IF EXISTS `webhook_deliveries`;",
       "DROP TABLE IF EXISTS `webhooks`;",
@@ -109,38 +107,38 @@ export const MIGRATIONS: readonly Migration[] = [
       "CREATE TABLE `webhook_deliveries` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`webhook_id` text NOT NULL,\n\t`event_id` text NOT NULL,\n\t`event_type` text NOT NULL,\n\t`status` text DEFAULT 'pending' NOT NULL,\n\t`attempts` integer DEFAULT 0 NOT NULL,\n\t`next_at` integer,\n\t`last_status` integer,\n\t`last_error` text,\n\t`duration_ms` integer,\n\t`created_at` integer NOT NULL,\n\t`delivered_at` integer,\n\tFOREIGN KEY (`webhook_id`) REFERENCES `webhooks`(`id`) ON UPDATE no action ON DELETE no action\n);",
       "CREATE UNIQUE INDEX `webhook_deliveries_once` ON `webhook_deliveries` (`webhook_id`,`event_id`);",
       "CREATE INDEX `webhook_deliveries_due` ON `webhook_deliveries` (`status`,`next_at`);",
-      "CREATE VIEW `events_v1` AS SELECT\n  e.\"id\" AS \"id\",\n  i.\"type\" || '.' || e.\"event\" AS \"type\",\n  e.\"created_at\" AS \"created_at\",\n  e.\"item_id\" AS \"item_id\",\n  i.\"type\" AS \"item_type\",\n  e.\"to_state\" AS \"item_state\",\n  e.\"seq\" AS \"item_version\",\n  i.\"party_id\" AS \"party_id\",\n  COALESCE(i.\"sandbox\", 0) AS \"sandbox\",\n  e.\"actor_kind\" AS \"actor_kind\",\n  e.\"actor_id\" AS \"actor_id\",\n  e.\"event\" AS \"event\",\n  'item_event' AS \"source\"\nFROM \"item_events\" e JOIN \"items\" i ON i.\"id\" = e.\"item_id\"\nUNION ALL\nSELECT\n  t.\"id\",\n  i.\"type\" || '.message',\n  t.\"created_at\",\n  t.\"item_id\",\n  i.\"type\",\n  i.\"state\",\n  i.\"version\",\n  i.\"party_id\",\n  COALESCE(i.\"sandbox\", 0),\n  t.\"actor_kind\",\n  t.\"actor_id\",\n  'message',\n  'thread_entry'\nFROM \"thread_entries\" t JOIN \"items\" i ON i.\"id\" = t.\"item_id\"\nWHERE t.\"direction\" = 'in';"
-    ]
+      'CREATE VIEW `events_v1` AS SELECT\n  e."id" AS "id",\n  i."type" || \'.\' || e."event" AS "type",\n  e."created_at" AS "created_at",\n  e."item_id" AS "item_id",\n  i."type" AS "item_type",\n  e."to_state" AS "item_state",\n  e."seq" AS "item_version",\n  i."party_id" AS "party_id",\n  COALESCE(i."sandbox", 0) AS "sandbox",\n  e."actor_kind" AS "actor_kind",\n  e."actor_id" AS "actor_id",\n  e."event" AS "event",\n  \'item_event\' AS "source"\nFROM "item_events" e JOIN "items" i ON i."id" = e."item_id"\nUNION ALL\nSELECT\n  t."id",\n  i."type" || \'.message\',\n  t."created_at",\n  t."item_id",\n  i."type",\n  i."state",\n  i."version",\n  i."party_id",\n  COALESCE(i."sandbox", 0),\n  t."actor_kind",\n  t."actor_id",\n  \'message\',\n  \'thread_entry\'\nFROM "thread_entries" t JOIN "items" i ON i."id" = t."item_id"\nWHERE t."direction" = \'in\';',
+    ],
   },
   {
-    "version": 5,
-    "name": "0004_feed_product_identity",
-    "statements": [
+    version: 5,
+    name: "0004_feed_product_identity",
+    statements: [
       "-- ADR-015 §7.3. A feed's products are identified by (source, external_id), and nothing\n-- enforced it, so two imports of one connector running at the same time both read an empty\n-- catalogue and both inserted: 60 products became 120, permanently, with both imports\n-- reporting success. A unique index makes the second writer lose instead of duplicate.\n--\n-- Any duplicates a live instance already carries have to go before the index can be built, and\n-- a product is never deleted here: the earliest row of each pair keeps its identity, and the\n-- later ones are unlinked from the feed and deactivated, so an order that points at one still\n-- has its product.\nUPDATE `products`\n   SET `external_id` = NULL, `active` = 0\n WHERE `external_id` IS NOT NULL\n   AND `source` LIKE 'feed:%'\n   AND `id` NOT IN (\n     SELECT MIN(`id`) FROM `products`\n      WHERE `external_id` IS NOT NULL AND `source` LIKE 'feed:%'\n      GROUP BY `source`, `external_id`\n   );",
-      "CREATE UNIQUE INDEX IF NOT EXISTS `products_feed_once` ON `products` (`source`,`external_id`) WHERE `external_id` IS NOT NULL;"
-    ]
+      "CREATE UNIQUE INDEX IF NOT EXISTS `products_feed_once` ON `products` (`source`,`external_id`) WHERE `external_id` IS NOT NULL;",
+    ],
   },
   {
-    "version": 6,
-    "name": "0005_receipt_events",
-    "statements": [
+    version: 6,
+    name: "0005_receipt_events",
+    statements: [
       "-- ADR-016. A receipt being issued, and being counter-signed, are things that happened to an item,\n-- so they join the developer event stream and the webhooks like any transition: `<type>.receipt_issued`\n-- when the job signs one, `<type>.receipt_acknowledged` when the customer's agent counter-signs.\n-- The view is recreated rather than altered because SQLite has no ALTER VIEW; the two existing\n-- branches are byte-for-byte what 0003 created.\nDROP VIEW IF EXISTS `events_v1`;",
-      "CREATE VIEW `events_v1` AS SELECT\n  e.\"id\" AS \"id\",\n  i.\"type\" || '.' || e.\"event\" AS \"type\",\n  e.\"created_at\" AS \"created_at\",\n  e.\"item_id\" AS \"item_id\",\n  i.\"type\" AS \"item_type\",\n  e.\"to_state\" AS \"item_state\",\n  e.\"seq\" AS \"item_version\",\n  i.\"party_id\" AS \"party_id\",\n  COALESCE(i.\"sandbox\", 0) AS \"sandbox\",\n  e.\"actor_kind\" AS \"actor_kind\",\n  e.\"actor_id\" AS \"actor_id\",\n  e.\"event\" AS \"event\",\n  'item_event' AS \"source\"\nFROM \"item_events\" e JOIN \"items\" i ON i.\"id\" = e.\"item_id\"\nUNION ALL\nSELECT\n  t.\"id\",\n  i.\"type\" || '.message',\n  t.\"created_at\",\n  t.\"item_id\",\n  i.\"type\",\n  i.\"state\",\n  i.\"version\",\n  i.\"party_id\",\n  COALESCE(i.\"sandbox\", 0),\n  t.\"actor_kind\",\n  t.\"actor_id\",\n  'message',\n  'thread_entry'\nFROM \"thread_entries\" t JOIN \"items\" i ON i.\"id\" = t.\"item_id\"\nWHERE t.\"direction\" = 'in'\nUNION ALL\nSELECT\n  r.\"id\",\n  i.\"type\" || '.receipt_issued',\n  r.\"issued_at\",\n  r.\"item_id\",\n  i.\"type\",\n  i.\"state\",\n  i.\"version\",\n  i.\"party_id\",\n  COALESCE(i.\"sandbox\", 0),\n  'system',\n  NULL,\n  'receipt_issued',\n  'receipt'\nFROM \"receipts\" r JOIN \"items\" i ON i.\"id\" = r.\"item_id\"\nUNION ALL\nSELECT\n  r.\"id\" || ':ack',\n  i.\"type\" || '.receipt_acknowledged',\n  r.\"ack_at\",\n  r.\"item_id\",\n  i.\"type\",\n  i.\"state\",\n  i.\"version\",\n  i.\"party_id\",\n  COALESCE(i.\"sandbox\", 0),\n  'customer_agent',\n  NULL,\n  'receipt_acknowledged',\n  'receipt_ack'\nFROM \"receipts\" r JOIN \"items\" i ON i.\"id\" = r.\"item_id\"\nWHERE r.\"ack_at\" IS NOT NULL;"
-    ]
+      'CREATE VIEW `events_v1` AS SELECT\n  e."id" AS "id",\n  i."type" || \'.\' || e."event" AS "type",\n  e."created_at" AS "created_at",\n  e."item_id" AS "item_id",\n  i."type" AS "item_type",\n  e."to_state" AS "item_state",\n  e."seq" AS "item_version",\n  i."party_id" AS "party_id",\n  COALESCE(i."sandbox", 0) AS "sandbox",\n  e."actor_kind" AS "actor_kind",\n  e."actor_id" AS "actor_id",\n  e."event" AS "event",\n  \'item_event\' AS "source"\nFROM "item_events" e JOIN "items" i ON i."id" = e."item_id"\nUNION ALL\nSELECT\n  t."id",\n  i."type" || \'.message\',\n  t."created_at",\n  t."item_id",\n  i."type",\n  i."state",\n  i."version",\n  i."party_id",\n  COALESCE(i."sandbox", 0),\n  t."actor_kind",\n  t."actor_id",\n  \'message\',\n  \'thread_entry\'\nFROM "thread_entries" t JOIN "items" i ON i."id" = t."item_id"\nWHERE t."direction" = \'in\'\nUNION ALL\nSELECT\n  r."id",\n  i."type" || \'.receipt_issued\',\n  r."issued_at",\n  r."item_id",\n  i."type",\n  i."state",\n  i."version",\n  i."party_id",\n  COALESCE(i."sandbox", 0),\n  \'system\',\n  NULL,\n  \'receipt_issued\',\n  \'receipt\'\nFROM "receipts" r JOIN "items" i ON i."id" = r."item_id"\nUNION ALL\nSELECT\n  r."id" || \':ack\',\n  i."type" || \'.receipt_acknowledged\',\n  r."ack_at",\n  r."item_id",\n  i."type",\n  i."state",\n  i."version",\n  i."party_id",\n  COALESCE(i."sandbox", 0),\n  \'customer_agent\',\n  NULL,\n  \'receipt_acknowledged\',\n  \'receipt_ack\'\nFROM "receipts" r JOIN "items" i ON i."id" = r."item_id"\nWHERE r."ack_at" IS NOT NULL;',
+    ],
   },
   {
-    "version": 7,
-    "name": "0006_networks",
-    "statements": [
+    version: 7,
+    name: "0006_networks",
+    statements: [
       "-- ADR-017 §2.7 and §8.1: an inbox reports to several networks. One row per receipt, network and\n-- stage says whether that network has it yet, so evidence never dies with an eight-attempt job:\n-- the hourly publisher for each network posts whatever is still queued, oldest first, which is\n-- the first publication, the backfill when a network is switched on and the catch-up after an\n-- outage, all at once. `network_status` is what the owner sees per network: when it last took a\n-- ping, whether it has verified this instance, and the last error in a few words.\n-- No foreign key on `receipt_id`: rows are only ever inserted from a SELECT on `receipts`, and a\n-- receipt is never deleted. `reviews_outbox` (0000) stays unused; its key has no network in it.\nCREATE TABLE IF NOT EXISTS `network_publications` (\n\t`receipt_id` text NOT NULL,\n\t`network` text NOT NULL,\n\t`stage` text NOT NULL,\n\t`state` text DEFAULT 'queued' NOT NULL,\n\t`attempts` integer DEFAULT 0 NOT NULL,\n\t`last_error` text,\n\t`updated_at` integer NOT NULL,\n\tPRIMARY KEY(`receipt_id`, `network`, `stage`)\n);",
       "CREATE INDEX IF NOT EXISTS `network_publications_queue` ON `network_publications` (`network`,`state`,`receipt_id`);",
-      "CREATE TABLE IF NOT EXISTS `network_status` (\n\t`network` text PRIMARY KEY NOT NULL,\n\t`registration` text DEFAULT 'unregistered' NOT NULL,\n\t`registered_at` integer,\n\t`last_ping_at` integer,\n\t`last_error` text,\n\t`last_error_at` integer,\n\t`failing_since` integer,\n\t`failures` integer DEFAULT 0 NOT NULL,\n\t`updated_at` integer NOT NULL\n);"
-    ]
+      "CREATE TABLE IF NOT EXISTS `network_status` (\n\t`network` text PRIMARY KEY NOT NULL,\n\t`registration` text DEFAULT 'unregistered' NOT NULL,\n\t`registered_at` integer,\n\t`last_ping_at` integer,\n\t`last_error` text,\n\t`last_error_at` integer,\n\t`failing_since` integer,\n\t`failures` integer DEFAULT 0 NOT NULL,\n\t`updated_at` integer NOT NULL\n);",
+    ],
   },
   {
-    "version": 8,
-    "name": "0007_keys_attribution",
-    "statements": [
+    version: 8,
+    name: "0007_keys_attribution",
+    statements: [
       "-- Keys, scopes and attribution. Keys minted in the product are named, scoped and revocable, may\n-- expire, and say who minted them; `last4` lets the owner tell two apart without the key itself.\nALTER TABLE `api_keys` ADD `expires_at` integer;",
       "ALTER TABLE `api_keys` ADD `created_by` text;",
       "ALTER TABLE `api_keys` ADD `last4` text;",
@@ -148,13 +146,13 @@ export const MIGRATIONS: readonly Migration[] = [
       "-- Extra request headers per webhook endpoint, sealed like the signing secret; the names in the clear.\nALTER TABLE `webhooks` ADD `headers_enc` text;",
       "ALTER TABLE `webhooks` ADD `header_names` text DEFAULT '[]' NOT NULL;",
       "-- Every event says who caused it and through which door, so a two-way sync can skip its own echo.\n-- The view is recreated rather than altered because SQLite has no ALTER VIEW; the arms are those\n-- of 0005 with two columns added: `actor_name` and `channel`.\nDROP VIEW IF EXISTS `events_v1`;",
-      "CREATE VIEW `events_v1` AS SELECT\n  e.\"id\" AS \"id\",\n  i.\"type\" || '.' || e.\"event\" AS \"type\",\n  e.\"created_at\" AS \"created_at\",\n  e.\"item_id\" AS \"item_id\",\n  i.\"type\" AS \"item_type\",\n  e.\"to_state\" AS \"item_state\",\n  e.\"seq\" AS \"item_version\",\n  i.\"party_id\" AS \"party_id\",\n  COALESCE(i.\"sandbox\", 0) AS \"sandbox\",\n  e.\"actor_kind\" AS \"actor_kind\",\n  e.\"actor_id\" AS \"actor_id\",\n  json_extract(e.\"meta\", '$.actor_name') AS \"actor_name\",\n  COALESCE(json_extract(e.\"meta\", '$.channel'), i.\"channel\") AS \"channel\",\n  e.\"event\" AS \"event\",\n  'item_event' AS \"source\"\nFROM \"item_events\" e JOIN \"items\" i ON i.\"id\" = e.\"item_id\"\nUNION ALL\nSELECT\n  t.\"id\",\n  i.\"type\" || '.message',\n  t.\"created_at\",\n  t.\"item_id\",\n  i.\"type\",\n  i.\"state\",\n  i.\"version\",\n  i.\"party_id\",\n  COALESCE(i.\"sandbox\", 0),\n  t.\"actor_kind\",\n  t.\"actor_id\",\n  NULL,\n  t.\"channel\",\n  'message',\n  'thread_entry'\nFROM \"thread_entries\" t JOIN \"items\" i ON i.\"id\" = t.\"item_id\"\nWHERE t.\"direction\" = 'in'\nUNION ALL\nSELECT\n  r.\"id\",\n  i.\"type\" || '.receipt_issued',\n  r.\"issued_at\",\n  r.\"item_id\",\n  i.\"type\",\n  i.\"state\",\n  i.\"version\",\n  i.\"party_id\",\n  COALESCE(i.\"sandbox\", 0),\n  'system',\n  NULL,\n  NULL,\n  'system',\n  'receipt_issued',\n  'receipt'\nFROM \"receipts\" r JOIN \"items\" i ON i.\"id\" = r.\"item_id\"\nUNION ALL\nSELECT\n  r.\"id\" || ':ack',\n  i.\"type\" || '.receipt_acknowledged',\n  r.\"ack_at\",\n  r.\"item_id\",\n  i.\"type\",\n  i.\"state\",\n  i.\"version\",\n  i.\"party_id\",\n  COALESCE(i.\"sandbox\", 0),\n  'customer_agent',\n  NULL,\n  NULL,\n  NULL,\n  'receipt_acknowledged',\n  'receipt_ack'\nFROM \"receipts\" r JOIN \"items\" i ON i.\"id\" = r.\"item_id\"\nWHERE r.\"ack_at\" IS NOT NULL;"
-    ]
+      'CREATE VIEW `events_v1` AS SELECT\n  e."id" AS "id",\n  i."type" || \'.\' || e."event" AS "type",\n  e."created_at" AS "created_at",\n  e."item_id" AS "item_id",\n  i."type" AS "item_type",\n  e."to_state" AS "item_state",\n  e."seq" AS "item_version",\n  i."party_id" AS "party_id",\n  COALESCE(i."sandbox", 0) AS "sandbox",\n  e."actor_kind" AS "actor_kind",\n  e."actor_id" AS "actor_id",\n  json_extract(e."meta", \'$.actor_name\') AS "actor_name",\n  COALESCE(json_extract(e."meta", \'$.channel\'), i."channel") AS "channel",\n  e."event" AS "event",\n  \'item_event\' AS "source"\nFROM "item_events" e JOIN "items" i ON i."id" = e."item_id"\nUNION ALL\nSELECT\n  t."id",\n  i."type" || \'.message\',\n  t."created_at",\n  t."item_id",\n  i."type",\n  i."state",\n  i."version",\n  i."party_id",\n  COALESCE(i."sandbox", 0),\n  t."actor_kind",\n  t."actor_id",\n  NULL,\n  t."channel",\n  \'message\',\n  \'thread_entry\'\nFROM "thread_entries" t JOIN "items" i ON i."id" = t."item_id"\nWHERE t."direction" = \'in\'\nUNION ALL\nSELECT\n  r."id",\n  i."type" || \'.receipt_issued\',\n  r."issued_at",\n  r."item_id",\n  i."type",\n  i."state",\n  i."version",\n  i."party_id",\n  COALESCE(i."sandbox", 0),\n  \'system\',\n  NULL,\n  NULL,\n  \'system\',\n  \'receipt_issued\',\n  \'receipt\'\nFROM "receipts" r JOIN "items" i ON i."id" = r."item_id"\nUNION ALL\nSELECT\n  r."id" || \':ack\',\n  i."type" || \'.receipt_acknowledged\',\n  r."ack_at",\n  r."item_id",\n  i."type",\n  i."state",\n  i."version",\n  i."party_id",\n  COALESCE(i."sandbox", 0),\n  \'customer_agent\',\n  NULL,\n  NULL,\n  NULL,\n  \'receipt_acknowledged\',\n  \'receipt_ack\'\nFROM "receipts" r JOIN "items" i ON i."id" = r."item_id"\nWHERE r."ack_at" IS NOT NULL;',
+    ],
   },
   {
-    "version": 9,
-    "name": "0008_outcomes",
-    "statements": [
+    version: 9,
+    name: "0008_outcomes",
+    statements: [
       "-- ADR-017 §3 and §8: a promise now closes with an outcome, and receipts carry claims v2.\n-- A receipt is one per item, kind and outcome: promises keep `outcome` = '', so every receipt\n-- issued before this migration is unchanged and still unique, and an item may now also hold one\n-- receipt per outcome it reached (a no-show and its correction, say). The unique index is swapped\n-- in the same batch, so there is no moment in which two receipts of one kind could be written.\nALTER TABLE `receipts` ADD `outcome` text DEFAULT '' NOT NULL;",
       "-- base64url(SHA-256(jws)), the name a network gives a receipt in reports and acknowledgements.\n-- SQL has no SHA-256, so older rows are filled by the lifecycle sweep, a few hundred at a time.\nALTER TABLE `receipts` ADD `sha` text;",
       "DROP INDEX IF EXISTS `receipts_item_kind`;",
@@ -171,13 +169,13 @@ export const MIGRATIONS: readonly Migration[] = [
       "-- The presentation each network made for an item's customer (§7.2), named in the item's receipts\n-- as `per`. One per item and network; nothing here is a secret.\nCREATE TABLE IF NOT EXISTS `item_presentations` (\n\t`item_id` text NOT NULL,\n\t`network` text NOT NULL,\n\t`presentation_id` text NOT NULL,\n\t`ppid` text,\n\t`person` text,\n\t`created_at` integer NOT NULL,\n\tPRIMARY KEY(`item_id`, `network`)\n);",
       "-- An instance that existed before late cancellations were recorded keeps refusing them until its\n-- owner decides otherwise (§8.1): set where the stored document does not say, never overwritten.\nUPDATE `settings` SET `doc` = json_set(`doc`, '$.booking.lateCancellation', 'refuse')\n WHERE json_valid(`doc`) AND json_type(`doc`, '$.booking') = 'object'\n   AND json_type(`doc`, '$.booking.lateCancellation') IS NULL;",
       "UPDATE `settings` SET `doc` = json_set(`doc`, '$.booking', json('{\"lateCancellation\":\"refuse\"}'))\n WHERE json_valid(`doc`) AND json_type(`doc`) = 'object'\n   AND (json_type(`doc`, '$.booking') IS NULL OR json_type(`doc`, '$.booking') <> 'object');",
-      "-- An instance with items but no settings row has only ever run on the defaults: it gets a row that\n-- says `refuse`, so the new default does not change its policy either.\nINSERT INTO `settings` (`id`, `schema_version`, `doc`, `version`, `updated_at`)\nSELECT 'singleton', 1, '{\"booking\":{\"lateCancellation\":\"refuse\"}}', 1, unixepoch() * 1000\n WHERE NOT EXISTS (SELECT 1 FROM `settings`) AND EXISTS (SELECT 1 FROM `items`);"
-    ]
+      '-- An instance with items but no settings row has only ever run on the defaults: it gets a row that\n-- says `refuse`, so the new default does not change its policy either.\nINSERT INTO `settings` (`id`, `schema_version`, `doc`, `version`, `updated_at`)\nSELECT \'singleton\', 1, \'{"booking":{"lateCancellation":"refuse"}}\', 1, unixepoch() * 1000\n WHERE NOT EXISTS (SELECT 1 FROM `settings`) AND EXISTS (SELECT 1 FROM `items`);',
+    ],
   },
   {
-    "version": 10,
-    "name": "0009_identity",
-    "statements": [
+    version: 10,
+    name: "0009_identity",
+    statements: [
       "-- ADR-017 §2 and §8: people carried by their agents, customers the business already knows, and the\n-- rules that may read either. Every statement is additive: an instance that never enables a network\n-- and never meets a signed agent writes nothing new but its customers' contacts.\n--\n-- Who created an item, as the doors established it: the signed agent's key thumbprint, whether a\n-- platform vouched for it (`vouched`), it held its own key (`self`) or nothing verified (`none`), and\n-- the platform's origin; and how sure the inbox is that the customer is one it knows.\nALTER TABLE `items` ADD `agent_thumbprint` text;",
       "ALTER TABLE `items` ADD `agent_level` text;",
       "ALTER TABLE `items` ADD `agent_directory` text;",
@@ -202,57 +200,57 @@ export const MIGRATIONS: readonly Migration[] = [
       "-- The signed agents that carried customers here, by key thumbprint: recorded, never trusted.\nCREATE TABLE IF NOT EXISTS `carrying_agents` (\n\t`thumbprint` text PRIMARY KEY NOT NULL,\n\t`level` text NOT NULL,\n\t`platform` text,\n\t`label` text,\n\t`items` integer DEFAULT 0 NOT NULL,\n\t`first_seen_at` integer NOT NULL,\n\t`last_seen_at` integer NOT NULL\n);",
       "-- The contacts backfill: one job walking `parties` by id, 200 at a time, each run queueing the next.\nINSERT OR IGNORE INTO `jobs` (`id`, `kind`, `payload`, `run_at`, `status`, `attempts`, `max_attempts`, `dedupe_key`, `created_at`)\nSELECT 'party_contacts_backfill_0009', 'party_contacts_backfill', '{\"after\":\"\"}', unixepoch() * 1000, 'queued', 0, 8,\n       'party_contacts_backfill:', unixepoch() * 1000\n WHERE EXISTS (SELECT 1 FROM `parties`);",
       "-- A rule that reads a customer's record and wanted to refuse them is held back (§8.3), and the item's\n-- history says so for the owner (`rule_skipped`). That is a note to the owner, not something that\n-- happened to the item: the developer event stream and webhooks leave it out, so the view is the\n-- one of 0007 with that one line added.\nDROP VIEW IF EXISTS `events_v1`;",
-      "CREATE VIEW `events_v1` AS SELECT\n  e.\"id\" AS \"id\",\n  i.\"type\" || '.' || e.\"event\" AS \"type\",\n  e.\"created_at\" AS \"created_at\",\n  e.\"item_id\" AS \"item_id\",\n  i.\"type\" AS \"item_type\",\n  e.\"to_state\" AS \"item_state\",\n  e.\"seq\" AS \"item_version\",\n  i.\"party_id\" AS \"party_id\",\n  COALESCE(i.\"sandbox\", 0) AS \"sandbox\",\n  e.\"actor_kind\" AS \"actor_kind\",\n  e.\"actor_id\" AS \"actor_id\",\n  json_extract(e.\"meta\", '$.actor_name') AS \"actor_name\",\n  COALESCE(json_extract(e.\"meta\", '$.channel'), i.\"channel\") AS \"channel\",\n  e.\"event\" AS \"event\",\n  'item_event' AS \"source\"\nFROM \"item_events\" e JOIN \"items\" i ON i.\"id\" = e.\"item_id\"\nWHERE e.\"event\" <> 'rule_skipped'\nUNION ALL\nSELECT\n  t.\"id\",\n  i.\"type\" || '.message',\n  t.\"created_at\",\n  t.\"item_id\",\n  i.\"type\",\n  i.\"state\",\n  i.\"version\",\n  i.\"party_id\",\n  COALESCE(i.\"sandbox\", 0),\n  t.\"actor_kind\",\n  t.\"actor_id\",\n  NULL,\n  t.\"channel\",\n  'message',\n  'thread_entry'\nFROM \"thread_entries\" t JOIN \"items\" i ON i.\"id\" = t.\"item_id\"\nWHERE t.\"direction\" = 'in'\nUNION ALL\nSELECT\n  r.\"id\",\n  i.\"type\" || '.receipt_issued',\n  r.\"issued_at\",\n  r.\"item_id\",\n  i.\"type\",\n  i.\"state\",\n  i.\"version\",\n  i.\"party_id\",\n  COALESCE(i.\"sandbox\", 0),\n  'system',\n  NULL,\n  NULL,\n  'system',\n  'receipt_issued',\n  'receipt'\nFROM \"receipts\" r JOIN \"items\" i ON i.\"id\" = r.\"item_id\"\nUNION ALL\nSELECT\n  r.\"id\" || ':ack',\n  i.\"type\" || '.receipt_acknowledged',\n  r.\"ack_at\",\n  r.\"item_id\",\n  i.\"type\",\n  i.\"state\",\n  i.\"version\",\n  i.\"party_id\",\n  COALESCE(i.\"sandbox\", 0),\n  'customer_agent',\n  NULL,\n  NULL,\n  NULL,\n  'receipt_acknowledged',\n  'receipt_ack'\nFROM \"receipts\" r JOIN \"items\" i ON i.\"id\" = r.\"item_id\"\nWHERE r.\"ack_at\" IS NOT NULL;"
-    ]
+      'CREATE VIEW `events_v1` AS SELECT\n  e."id" AS "id",\n  i."type" || \'.\' || e."event" AS "type",\n  e."created_at" AS "created_at",\n  e."item_id" AS "item_id",\n  i."type" AS "item_type",\n  e."to_state" AS "item_state",\n  e."seq" AS "item_version",\n  i."party_id" AS "party_id",\n  COALESCE(i."sandbox", 0) AS "sandbox",\n  e."actor_kind" AS "actor_kind",\n  e."actor_id" AS "actor_id",\n  json_extract(e."meta", \'$.actor_name\') AS "actor_name",\n  COALESCE(json_extract(e."meta", \'$.channel\'), i."channel") AS "channel",\n  e."event" AS "event",\n  \'item_event\' AS "source"\nFROM "item_events" e JOIN "items" i ON i."id" = e."item_id"\nWHERE e."event" <> \'rule_skipped\'\nUNION ALL\nSELECT\n  t."id",\n  i."type" || \'.message\',\n  t."created_at",\n  t."item_id",\n  i."type",\n  i."state",\n  i."version",\n  i."party_id",\n  COALESCE(i."sandbox", 0),\n  t."actor_kind",\n  t."actor_id",\n  NULL,\n  t."channel",\n  \'message\',\n  \'thread_entry\'\nFROM "thread_entries" t JOIN "items" i ON i."id" = t."item_id"\nWHERE t."direction" = \'in\'\nUNION ALL\nSELECT\n  r."id",\n  i."type" || \'.receipt_issued\',\n  r."issued_at",\n  r."item_id",\n  i."type",\n  i."state",\n  i."version",\n  i."party_id",\n  COALESCE(i."sandbox", 0),\n  \'system\',\n  NULL,\n  NULL,\n  \'system\',\n  \'receipt_issued\',\n  \'receipt\'\nFROM "receipts" r JOIN "items" i ON i."id" = r."item_id"\nUNION ALL\nSELECT\n  r."id" || \':ack\',\n  i."type" || \'.receipt_acknowledged\',\n  r."ack_at",\n  r."item_id",\n  i."type",\n  i."state",\n  i."version",\n  i."party_id",\n  COALESCE(i."sandbox", 0),\n  \'customer_agent\',\n  NULL,\n  NULL,\n  NULL,\n  \'receipt_acknowledged\',\n  \'receipt_ack\'\nFROM "receipts" r JOIN "items" i ON i."id" = r."item_id"\nWHERE r."ack_at" IS NOT NULL;',
+    ],
   },
   {
-    "version": 11,
-    "name": "0010_standing",
-    "statements": [
+    version: 11,
+    name: "0010_standing",
+    statements: [
       "-- ADR-017 §7.3: the hourly ping is signed (sdi-instance/1) when the instance can sign, and a network\n-- answers a signed ping with the business's own standing there. The owner sees it per network, as\n-- the network last said it; nothing about any customer is in it.\nALTER TABLE `network_status` ADD `standing` text;",
       "ALTER TABLE `network_status` ADD `standing_at` integer;",
       "-- Whether the last ping was signed and what the network made of it: `verified` (it answered 200),\n-- `unsigned` (the inbox could not sign), or `invalid: <reason>` from the network's Sdi-Signature.\nALTER TABLE `network_status` ADD `ping_signature` text;",
       "-- The platforms each network recognises (`verified.recognised_platforms` in its `/v1/ranking`, §4),\n-- read once a day beside its rules. A key a platform's directory lists vouches for an agent only\n-- when a network this inbox reports to recognises that platform; otherwise it is the agent's own.\nALTER TABLE `network_status` ADD `recognised_platforms` text;",
-      "ALTER TABLE `network_status` ADD `platforms_checked_at` integer;"
-    ]
+      "ALTER TABLE `network_status` ADD `platforms_checked_at` integer;",
+    ],
   },
   {
-    "version": 12,
-    "name": "0011_customer_links",
-    "statements": [
+    version: 12,
+    name: "0011_customer_links",
+    statements: [
       "-- Links in the business's emails that open the customer's page (ADR-018 §5): one per email and\n-- action, signed, expiring, used once. A GET only shows; a POST acts. `terms_sha` is the fingerprint\n-- of the terms the email carried (for a details link, the question it answers), `lang` the\n-- language the page speaks, and `mail_key` the email the link went out in, which its siblings share.\nALTER TABLE `action_links` ADD `terms_sha` text NOT NULL DEFAULT '';",
       "ALTER TABLE `action_links` ADD `lang` text NOT NULL DEFAULT 'en';",
       "ALTER TABLE `action_links` ADD `mail_key` text;",
       "CREATE INDEX IF NOT EXISTS `action_links_item` ON `action_links` (`item_id`);",
       "CREATE INDEX IF NOT EXISTS `action_links_mail` ON `action_links` (`mail_key`);",
-      "CREATE INDEX IF NOT EXISTS `action_links_expires` ON `action_links` (`expires_at`);"
-    ]
+      "CREATE INDEX IF NOT EXISTS `action_links_expires` ON `action_links` (`expires_at`);",
+    ],
   },
   {
-    "version": 13,
-    "name": "0012_customer_mail",
-    "statements": [
+    version: 13,
+    name: "0012_customer_mail",
+    statements: [
       "-- Every email this inbox sends, what it said and what became of it: a send that failed is visible\n-- on its item and is never shown as sent. One row per email (`job_key`: the notify job, or\n-- `key:<item>` for the code email); a retry sends the same row. `recipient` is `customer` or\n-- `owner`; `status` one of queued, sent, retrying, failed, skipped (`skip_reason`: no_address,\n-- no_sender, test_item).\nCREATE TABLE IF NOT EXISTS `outbound_mail` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`item_id` text,\n\t`job_key` text NOT NULL,\n\t`recipient` text NOT NULL,\n\t`template` text NOT NULL,\n\t`lang` text NOT NULL,\n\t`entry_id` text,\n\t`event_id` text,\n\t`subject` text NOT NULL,\n\t`body_text` text NOT NULL,\n\t`message_ref` text NOT NULL,\n\t`provider_id` text,\n\t`status` text DEFAULT 'queued' NOT NULL,\n\t`skip_reason` text,\n\t`attempts` integer DEFAULT 0 NOT NULL,\n\t`last_error` text,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer NOT NULL,\n\t`sent_at` integer\n);",
       "CREATE UNIQUE INDEX IF NOT EXISTS `outbound_mail_job` ON `outbound_mail` (`job_key`);",
       "CREATE INDEX IF NOT EXISTS `outbound_mail_item` ON `outbound_mail` (`item_id`, `created_at`);",
       "CREATE INDEX IF NOT EXISTS `outbound_mail_status` ON `outbound_mail` (`status`, `updated_at`);",
       "-- The ids a customer's reply names in In-Reply-To and References, and the item each belongs to:\n-- the item's anchor (first in the References of every email about it), each email's own ref, and\n-- the id the mail service gave the email. A reply that names any of them lands on that item.\nCREATE TABLE IF NOT EXISTS `mail_refs` (\n\t`ref` text PRIMARY KEY NOT NULL,\n\t`item_id` text NOT NULL,\n\t`kind` text NOT NULL,\n\t`created_at` integer NOT NULL\n);",
-      "CREATE INDEX IF NOT EXISTS `mail_refs_item` ON `mail_refs` (`item_id`, `kind`);"
-    ]
+      "CREATE INDEX IF NOT EXISTS `mail_refs_item` ON `mail_refs` (`item_id`, `kind`);",
+    ],
   },
   {
-    "version": 14,
-    "name": "0013_customer_privacy",
-    "statements": [
+    version: 14,
+    name: "0013_customer_privacy",
+    statements: [
       "-- A customer who asked the business not to use booking networks for them: set on every party that is\n-- that customer, so each door and each publisher can tell from the item alone that nothing about it\n-- goes to any network.\nALTER TABLE `parties` ADD `networks_off_at` integer;",
       "-- Fingerprints (SHA-256) of a stopped customer's email address and phone number, and of their\n-- parties, so their next request (a new party) is stopped before any network is called, even after\n-- their data was erased. `via`: customer, owner or erased.\nCREATE TABLE IF NOT EXISTS `network_stops` (\n\t`hash` text PRIMARY KEY NOT NULL,\n\t`via` text NOT NULL,\n\t`created_at` integer NOT NULL\n);",
-      "-- Who wrote a reply, when the request said so: `person` (an integration whose user typed it) or\n-- `automation`. Null: judged by who sent it.\nALTER TABLE `thread_entries` ADD `written_by` text;"
-    ]
+      "-- Who wrote a reply, when the request said so: `person` (an integration whose user typed it) or\n-- `automation`. Null: judged by who sent it.\nALTER TABLE `thread_entries` ADD `written_by` text;",
+    ],
   },
   {
-    "version": 15,
-    "name": "0014_offers",
-    "statements": [
+    version: 15,
+    name: "0014_offers",
+    statements: [
       "-- Offers (ADR-018 §1): what one side put to the other — the customer's request, a time or a quote we\n-- proposed, a counter, the changes we suggested to an order — each an immutable snapshot of the terms,\n-- fingerprinted. `form` is the kind `terms_sha` names (time, quote, order, request), so a time or a\n-- quote fingerprints exactly as the links already sent do. At most one open and one draft per item;\n-- every verb closes the open one and opens the next in the batch of its transition.\nCREATE TABLE IF NOT EXISTS `item_offers` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`item_id` text NOT NULL,\n\t`rev` integer NOT NULL,\n\t`parent_id` text,\n\t`kind` text NOT NULL,\n\t`form` text NOT NULL,\n\t`by` text NOT NULL,\n\t`actor_kind` text NOT NULL,\n\t`actor_id` text NOT NULL,\n\t`round` integer DEFAULT 1 NOT NULL,\n\t`status` text NOT NULL,\n\t`valid_through` integer,\n\t`terms` text NOT NULL,\n\t`terms_sha` text NOT NULL,\n\t`changes` text,\n\t`shown` text,\n\t`authored` text NOT NULL,\n\t`binding` integer DEFAULT 1 NOT NULL,\n\t`reason_code` text,\n\t`note` text,\n\t`event_id` text,\n\t`closed_event_id` text,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer NOT NULL\n);",
       "CREATE UNIQUE INDEX IF NOT EXISTS `item_offers_item_rev` ON `item_offers` (`item_id`, `rev`);",
       "CREATE UNIQUE INDEX IF NOT EXISTS `item_offers_one_open` ON `item_offers` (`item_id`) WHERE `status` = 'open';",
@@ -261,78 +259,78 @@ export const MIGRATIONS: readonly Migration[] = [
       "-- A slot held while a time we proposed waits for the customer's answer is an ordinary claim that\n-- carries the offer it holds for; the claim of an agreed booking carries ''.\nALTER TABLE `slot_claims` ADD `offer_id` text DEFAULT '' NOT NULL;",
       "CREATE INDEX IF NOT EXISTS `slot_claims_offer` ON `slot_claims` (`item_id`, `offer_id`);",
       "-- When a request waiting on the business, or on the customer's details, lapses: set by the write\n-- path from now on. NULL on every row that exists today, which therefore never lapses on its own.\nALTER TABLE `items` ADD `request_expires_at` integer;",
-      "CREATE INDEX IF NOT EXISTS `items_request_expiry` ON `items` (`request_expires_at`) WHERE `request_expires_at` IS NOT NULL;"
-    ]
+      "CREATE INDEX IF NOT EXISTS `items_request_expiry` ON `items` (`request_expires_at`) WHERE `request_expires_at` IS NOT NULL;",
+    ],
   },
   {
-    "version": 16,
-    "name": "0015_returns",
-    "statements": [
+    version: 16,
+    name: "0015_returns",
+    statements: [
       "-- Returns and the right of withdrawal (ADR-018 §3.4, §7). What the law lets a product or service be\n-- excepted from withdrawal: `standard` (the right runs), or one of personalised, perishable,\n-- sealed_hygiene, sealed_media, mixed, dated_leisure, urgent_repair, digital_started, price_fluctuates.\n-- It is shown before the order, so it is public like the rest of the catalogue row; only the owner in\n-- person sets it, and feeds never write it.\nALTER TABLE `products` ADD `withdrawal` text DEFAULT 'standard' NOT NULL;",
       "ALTER TABLE `services` ADD `withdrawal` text DEFAULT 'standard' NOT NULL;",
-      "-- The returns and refunds of an order or a booking name it as their linked item, and are found by it.\nCREATE INDEX IF NOT EXISTS `items_linked` ON `items` (`linked_item_id`) WHERE `linked_item_id` IS NOT NULL;"
-    ]
+      "-- The returns and refunds of an order or a booking name it as their linked item, and are found by it.\nCREATE INDEX IF NOT EXISTS `items_linked` ON `items` (`linked_item_id`) WHERE `linked_item_id` IS NOT NULL;",
+    ],
   },
   {
-    "version": 17,
-    "name": "0016_limits",
-    "statements": [
+    version: 17,
+    name: "0016_limits",
+    statements: [
       "-- The owner's limits (ADR-018 §4). A floor is the lowest price the owner lets automation go to for a\n-- product or a service: the owner's alone, so it lives apart from the catalogue rows, which the public\n-- doors and the owner's AI read whole. No read of a product or a service can ever carry one.\nCREATE TABLE IF NOT EXISTS `price_floors` (\n\t`kind` text NOT NULL,\n\t`ref_id` text NOT NULL,\n\t`floor_minor` integer NOT NULL,\n\t`updated_at` integer NOT NULL,\n\tPRIMARY KEY (`kind`, `ref_id`)\n);",
       "-- Whether a customer may suggest a price of their own for it, while price counters are on (Q1).\n-- Public like the rest of the row; only the owner in person changes it, and feeds never write it.\nALTER TABLE `products` ADD `negotiable` integer DEFAULT 1 NOT NULL;",
       "ALTER TABLE `services` ADD `negotiable` integer DEFAULT 1 NOT NULL;",
       "-- What the owner's AI, a rule or another system would have offered outside the owner's limits: kept\n-- for a person to send or drop, never sent. One per item, the latest; not an offer anyone saw, so it\n-- takes no place among the item's offers.\nCREATE TABLE IF NOT EXISTS `offer_drafts` (\n\t`item_id` text PRIMARY KEY NOT NULL,\n\t`id` text NOT NULL,\n\t`event` text NOT NULL,\n\t`input` text NOT NULL,\n\t`terms` text NOT NULL,\n\t`breaches` text NOT NULL,\n\t`item_version` integer NOT NULL,\n\t`actor_kind` text NOT NULL,\n\t`actor_id` text NOT NULL,\n\t`actor_name` text,\n\t`created_at` integer NOT NULL\n);",
-      "-- Keys handed to another system keep doing what they did: setting prices and recording payments and\n-- refunds, as a shop or a till does. From now on a key does that only with `money:write`; without\n-- it, it is held to the owner's limits as the owner's AI is.\nUPDATE `api_keys` SET `scopes` = json_insert(`scopes`, '$[#]', 'money:write')\n WHERE `kind` = 'integration' AND `revoked_at` IS NULL AND json_valid(`scopes`)\n   AND EXISTS (SELECT 1 FROM json_each(`api_keys`.`scopes`) WHERE `value` IN ('inbox:write', '*'))\n   AND NOT EXISTS (SELECT 1 FROM json_each(`api_keys`.`scopes`) WHERE `value` = 'money:write');"
-    ]
+      "-- Keys handed to another system keep doing what they did: setting prices and recording payments and\n-- refunds, as a shop or a till does. From now on a key does that only with `money:write`; without\n-- it, it is held to the owner's limits as the owner's AI is.\nUPDATE `api_keys` SET `scopes` = json_insert(`scopes`, '$[#]', 'money:write')\n WHERE `kind` = 'integration' AND `revoked_at` IS NULL AND json_valid(`scopes`)\n   AND EXISTS (SELECT 1 FROM json_each(`api_keys`.`scopes`) WHERE `value` IN ('inbox:write', '*'))\n   AND NOT EXISTS (SELECT 1 FROM json_each(`api_keys`.`scopes`) WHERE `value` = 'money:write');",
+    ],
   },
   {
-    "version": 18,
-    "name": "0017_amended_receipts",
-    "statements": [
+    version: 18,
+    name: "0017_amended_receipts",
+    statements: [
       "-- Rules version 6 (ADR-017 Amendment 3): a change both sides agreed to a promise is a receipt of its\n-- own, kind `amended`, one per change. A receipt is now one per item, kind, outcome and the agreed\n-- change it records: every receipt issued before this migration keeps `offer_id` = '' and is unchanged\n-- and still unique. The unique index is swapped in the same batch, as 0008 swapped it, so there is no\n-- moment in which two receipts of one kind could be written.\nALTER TABLE `receipts` ADD `offer_id` text DEFAULT '' NOT NULL;",
       "DROP INDEX IF EXISTS `receipts_item_kind_outcome`;",
-      "CREATE UNIQUE INDEX IF NOT EXISTS `receipts_item_kind_outcome_offer` ON `receipts` (`item_id`,`kind`,`outcome`,`offer_id`);"
-    ]
+      "CREATE UNIQUE INDEX IF NOT EXISTS `receipts_item_kind_outcome_offer` ON `receipts` (`item_id`,`kind`,`outcome`,`offer_id`);",
+    ],
   },
   {
-    "version": 19,
-    "name": "0018_network_levels",
-    "statements": [
+    version: 19,
+    name: "0018_network_levels",
+    statements: [
       "-- Network levels (protocol §10): what a network says it offers in its rules' `protocol`, read daily\n-- with the rules. `level` is `directory` or `full`; `claims` the receipt claims it takes (1, 2 or 6).\n-- Both null for a network that says nothing, which is read as before: full, claims by rules version.\nALTER TABLE `network_status` ADD `level` text;",
-      "ALTER TABLE `network_status` ADD `claims` integer;"
-    ]
+      "ALTER TABLE `network_status` ADD `claims` integer;",
+    ],
   },
   {
-    "version": 20,
-    "name": "0019_network_listing",
-    "statements": [
+    version: 20,
+    name: "0019_network_listing",
+    statements: [
       "-- Being in a network's directory (ADR-017 A2.3): what this inbox last told each network, by the\n-- signed `POST /v1/instances/{domain}/listing`. `listed` is the value the network last answered 200\n-- to (1 or 0), null while it has never been told; `listed_at` is when. The manifest's\n-- `directory.listed` says the same to every network at once, for an inbox that cannot sign.\nALTER TABLE `network_status` ADD `listed` integer;",
-      "ALTER TABLE `network_status` ADD `listed_at` integer;"
-    ]
+      "ALTER TABLE `network_status` ADD `listed_at` integer;",
+    ],
   },
   {
-    "version": 21,
-    "name": "0020_owner_sign_in",
-    "statements": [
+    version: 21,
+    name: "0020_owner_sign_in",
+    statements: [
       "-- Owner sign-in (ADR-004): a sign-in email carries a link and a six-digit code, either of which signs\n-- in once. `code_hash` is the code's, hashed with the row's own hash; `attempts` counts the tries at\n-- it, and after five the code stops working (the link, which nobody can guess, still does). The same\n-- columns hold the step-up codes the owner gets before changing their address. `user_id` is the\n-- owner a step-up code or an address change is for, and `detail` what a row is about beyond its\n-- address: an address change's old and new address, or the origin a handoff signs in at.\nALTER TABLE `login_tokens` ADD `code_hash` text;",
       "ALTER TABLE `login_tokens` ADD `attempts` integer NOT NULL DEFAULT 0;",
       "ALTER TABLE `login_tokens` ADD `user_id` text;",
       "ALTER TABLE `login_tokens` ADD `detail` text;",
       "CREATE INDEX IF NOT EXISTS `login_tokens_email` ON `login_tokens` (`email`, `kind`, `created_at`);",
-      "CREATE INDEX IF NOT EXISTS `login_tokens_user` ON `login_tokens` (`user_id`, `kind`, `created_at`);"
-    ]
+      "CREATE INDEX IF NOT EXISTS `login_tokens_user` ON `login_tokens` (`user_id`, `kind`, `created_at`);",
+    ],
   },
   {
-    "version": 22,
-    "name": "0021_door_reports",
-    "statements": [
+    version: 22,
+    name: "0021_door_reports",
+    statements: [
       "-- Door reports (network protocol §4.15): how agents got on at the business's own doors, and what the\n-- network's own reads saw, as a network's answer to a signed ping last said it (its `doors` block,\n-- JSON, read leniently), and when. Counts, states and plain lines only: no customer, no agent and no\n-- key is ever in it.\nALTER TABLE `network_status` ADD `doors` text;",
-      "ALTER TABLE `network_status` ADD `doors_at` integer;"
-    ]
+      "ALTER TABLE `network_status` ADD `doors_at` integer;",
+    ],
   },
   {
-    "version": 23,
-    "name": "0022_calendars",
-    "statements": [
+    version: 23,
+    name: "0022_calendars",
+    statements: [
       "-- Calendars (ADR-022). What a connected calendar says is busy, the bookings this inbox keeps in step\n-- in it, and the sign-ins with a platform that are on their way. Four new tables, columns on\n-- `connectors` and `connector_links`, and two indexes for the bookings that changed; nothing that\n-- exists is changed, and an instance with no calendar writes no row here.\n--\n-- `connector_busy` holds one generation of busy times per connector: a sync writes its rows under a\n-- generation of its own, moves `connectors.busy_gen` to it only if it is newer than the one there\n-- (and the busy times are still switched on), and deletes only the generations older than the\n-- current one. Readers join on `busy_gen`, so a slow sync that finishes after a newer one never puts\n-- old times back, and a half-written generation is never read or deleted. `busy_until` is how far\n-- ahead that generation was read: past it, nothing is known, so nothing is offered.\nALTER TABLE `connectors` ADD `busy_gen` integer;",
       "ALTER TABLE `connectors` ADD `busy_at` integer;",
       "ALTER TABLE `connectors` ADD `busy_until` integer;",
@@ -348,24 +346,24 @@ export const MIGRATIONS: readonly Migration[] = [
       "-- A sign-in with a platform the owner started (OAuth with PKCE): the state's SHA-256, never the state,\n-- and the verifier sealed by the secret box. Used once, gone after ten minutes.\nCREATE TABLE IF NOT EXISTS `connector_auth` (\n\t`state_hash` text PRIMARY KEY NOT NULL,\n\t`kind` text NOT NULL,\n\t`verifier_enc` text NOT NULL,\n\t`redirect_uri` text NOT NULL,\n\t`return_to` text NOT NULL,\n\t`created_at` integer NOT NULL,\n\t`expires_at` integer NOT NULL,\n\t`used_at` integer\n);",
       "-- The bookings that changed since a sync last looked: by the booking, or by its customer (a name\n-- changed, an erasure). Read in pages by (time, id).\nCREATE INDEX IF NOT EXISTS `items_type_updated` ON `items` (`type`, `updated_at`);",
       "CREATE INDEX IF NOT EXISTS `parties_updated` ON `parties` (`updated_at`);",
-      "-- Facts about this inbox itself: `instance_id`, made once at random, which the calendar entries it\n-- writes carry, so it knows its own wherever its address moves.\nCREATE TABLE IF NOT EXISTS `instance_meta` (\n\t`key` text PRIMARY KEY NOT NULL,\n\t`value` text NOT NULL,\n\t`created_at` integer NOT NULL\n);"
-    ]
+      "-- Facts about this inbox itself: `instance_id`, made once at random, which the calendar entries it\n-- writes carry, so it knows its own wherever its address moves.\nCREATE TABLE IF NOT EXISTS `instance_meta` (\n\t`key` text PRIMARY KEY NOT NULL,\n\t`value` text NOT NULL,\n\t`created_at` integer NOT NULL\n);",
+    ],
   },
   {
-    "version": 24,
-    "name": "0023_pay_links",
-    "statements": [
+    version: 24,
+    name: "0023_pay_links",
+    statements: [
       "-- Pay links (ADR-023). One row per link an order was given to pay in the business's own Stripe or\n-- Mollie account: what it asks for, where the customer pays, and what the platform said about it. One\n-- new table and its indexes; nothing that exists changes, and an inbox with no payment platform\n-- connected writes no row here.\n--\n-- `connector_id` names the connection that made the link but is not a foreign key: a paid link is\n-- the business's record of where the money went (and where to refund it), and stays after the\n-- platform is disconnected. `kind` says which platform, for that same reason.\n--\n-- At most one link per order is live at a time (`creating` or `open`): the partial unique index is\n-- what makes two jobs that meet create one link, never two. `claim_until` and `claimed_by` are the\n-- compare-and-set that lets one job, and only one, ask the platform for it.\nCREATE TABLE IF NOT EXISTS `connector_payments` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`connector_id` text NOT NULL,\n\t`kind` text NOT NULL,\n\t`item_id` text NOT NULL,\n\t`amount` integer NOT NULL,\n\t`currency` text NOT NULL,\n\t`livemode` integer NOT NULL,\n\t`state` text DEFAULT 'creating' NOT NULL,\n\t`external_id` text,\n\t`url` text,\n\t`payment_id` text,\n\t`method` text,\n\t`paid_amount` integer,\n\t`paid_currency` text,\n\t`dashboard_url` text,\n\t`claim_until` integer,\n\t`claimed_by` text,\n\t`attempts` integer DEFAULT 0 NOT NULL,\n\t`retry_at` integer,\n\t`checked_at` integer,\n\t`last_error` text,\n\t`last_error_at` integer,\n\t`note` text,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer NOT NULL,\n\t`paid_at` integer,\n\t`closed_at` integer\n);",
       "CREATE UNIQUE INDEX IF NOT EXISTS `connector_payments_live` ON `connector_payments` (`item_id`) WHERE `state` IN ('creating', 'open');",
       "CREATE INDEX IF NOT EXISTS `connector_payments_item` ON `connector_payments` (`item_id`, `created_at`);",
       "CREATE UNIQUE INDEX IF NOT EXISTS `connector_payments_external` ON `connector_payments` (`connector_id`, `external_id`);",
-      "-- The links still waiting for their payment, read back from the platform now and then in case a\n-- webhook never came: by connection, state and when each was last asked about.\nCREATE INDEX IF NOT EXISTS `connector_payments_open` ON `connector_payments` (`connector_id`, `state`, `checked_at`);"
-    ]
+      "-- The links still waiting for their payment, read back from the platform now and then in case a\n-- webhook never came: by connection, state and when each was last asked about.\nCREATE INDEX IF NOT EXISTS `connector_payments_open` ON `connector_payments` (`connector_id`, `state`, `checked_at`);",
+    ],
   },
   {
-    "version": 25,
-    "name": "0024_email_channel",
-    "statements": [
+    version: 25,
+    name: "0024_email_channel",
+    statements: [
       "-- The email channel (ADR-026). Five new tables; nothing that exists changes.\n--\n-- `mail_tokens`: the secret part of a conversation's own address (`name+t…@domain`), of the address\n-- the owner answers an alert at (`name+o…`), and of a forwarding check (`name+c…`). One token per\n-- item and kind, made the first time an email about the item goes out, and kept: a reply can come\n-- weeks later. A token is never the item's id, so knowing an item's id writes into nobody's thread.\n-- A check's token keeps the address it went to (`sent_to`) and whether it was the plain one (`plain`):\n-- what comes back proves only what that token was sent to test, and the day's checks are counted\n-- from these rows, which stay when an address is removed.\nCREATE TABLE IF NOT EXISTS `mail_tokens` (\n\t`token` text PRIMARY KEY NOT NULL,\n\t`kind` text NOT NULL,\n\t`item_id` text,\n\t`forward_id` text,\n\t`sent_to` text,\n\t`plain` integer DEFAULT 0 NOT NULL,\n\t`created_at` integer NOT NULL,\n\t`used_at` integer\n);",
       "CREATE UNIQUE INDEX IF NOT EXISTS `mail_tokens_item_kind` ON `mail_tokens` (`item_id`, `kind`) WHERE `item_id` IS NOT NULL;",
       "CREATE INDEX IF NOT EXISTS `mail_tokens_kind_created` ON `mail_tokens` (`kind`, `created_at`);",
@@ -375,27 +373,27 @@ export const MIGRATIONS: readonly Migration[] = [
       "-- `mail_attachments`: what came attached to an email, with what became of it: `kept` (its bytes are in\n-- `mail_attachment_chunks`, 256 KiB a row, so no row is near any database's limit), `too_large`,\n-- `refused` (a kind of file that runs, which nobody needs from a customer), `full` (the inbox, or what\n-- one sender may leave in a day, holds all it keeps) or `removed` (the owner deleted it). Only the\n-- owner reads them. `sender` is a hash of who sent it and `sender_domain` their domain: what one sender\n-- leaves in a day is counted from them. Both go with the item when its customer is erased.\nCREATE TABLE IF NOT EXISTS `mail_attachments` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`item_id` text NOT NULL,\n\t`entry_id` text,\n\t`filename` text NOT NULL,\n\t`content_type` text NOT NULL,\n\t`size` integer NOT NULL,\n\t`sha256` text,\n\t`state` text NOT NULL,\n\t`chunks` integer DEFAULT 0 NOT NULL,\n\t`sender` text,\n\t`sender_domain` text,\n\t`created_at` integer NOT NULL\n);",
       "CREATE INDEX IF NOT EXISTS `mail_attachments_item` ON `mail_attachments` (`item_id`, `created_at`);",
       "CREATE INDEX IF NOT EXISTS `mail_attachments_created` ON `mail_attachments` (`created_at`);",
-      "CREATE TABLE IF NOT EXISTS `mail_attachment_chunks` (\n\t`attachment_id` text NOT NULL,\n\t`n` integer NOT NULL,\n\t`data` blob NOT NULL,\n\tPRIMARY KEY(`attachment_id`, `n`)\n);"
-    ]
+      "CREATE TABLE IF NOT EXISTS `mail_attachment_chunks` (\n\t`attachment_id` text NOT NULL,\n\t`n` integer NOT NULL,\n\t`data` blob NOT NULL,\n\tPRIMARY KEY(`attachment_id`, `n`)\n);",
+    ],
   },
   {
-    "version": 26,
-    "name": "0025_phones",
-    "statements": [
+    version: 26,
+    name: "0025_phones",
+    statements: [
       "-- The owner's phones (ADR-026). Three new tables and their indexes; nothing that exists changes, and\n-- an inbox nobody pairs a phone with writes no row here.\n--\n-- `phone_pairings`: the one-time secret a QR code in Settings → Phone carries (`kind` 'qr'), or that\n-- a sign-in link emailed to the owner carries ('link', with the PKCE challenge and the device key of\n-- the phone that asked for it). Only the secret's hash is kept; it works once, for minutes, and stops\n-- after a few wrong tries. `device_id` is the phone it paired.\nCREATE TABLE IF NOT EXISTS `phone_pairings` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`secret_hash` text NOT NULL,\n\t`kind` text DEFAULT 'qr' NOT NULL,\n\t`user_id` text NOT NULL,\n\t`code_challenge` text,\n\t`device_key` text,\n\t`attempts` integer DEFAULT 0 NOT NULL,\n\t`expires_at` integer NOT NULL,\n\t`used_at` integer,\n\t`device_id` text,\n\t`created_at` integer NOT NULL\n);",
       "CREATE UNIQUE INDEX IF NOT EXISTS `phone_pairings_secret` ON `phone_pairings` (`secret_hash`);",
       "CREATE INDEX IF NOT EXISTS `phone_pairings_user` ON `phone_pairings` (`user_id`, `created_at`);",
       "-- `phone_devices`: a paired phone, the owner it signs in as, the public half of its device key (the\n-- private half stays in the phone's keystore and signs every token refresh), what it wants to be told\n-- (`notify`, JSON) and how push reaches it: the relay's id for it and, sealed with INBOX_SECRET_KEY,\n-- the relay's secret and the phone's push keys (`push_enc`). A phone paired by QR code waits for the\n-- owner to confirm it on the computer (`confirmed_at` null, `pair_match` the two digits both screens\n-- show) and can do nothing until then. A removed phone keeps its row, `revoked_at` set; one device key\n-- belongs to one live phone at a time.\nCREATE TABLE IF NOT EXISTS `phone_devices` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`user_id` text NOT NULL,\n\t`name` text NOT NULL,\n\t`platform` text NOT NULL,\n\t`key_jwk` text NOT NULL,\n\t`key_thumbprint` text NOT NULL,\n\t`notify` text DEFAULT '{}' NOT NULL,\n\t`push_state` text DEFAULT 'off' NOT NULL,\n\t`push_device` text,\n\t`push_enc` text,\n\t`push_error` text,\n\t`pushed_at` integer,\n\t`pair_match` text,\n\t`confirmed_at` integer,\n\t`created_at` integer NOT NULL,\n\t`last_seen_at` integer,\n\t`revoked_at` integer\n);",
-      "CREATE UNIQUE INDEX IF NOT EXISTS `phone_devices_key` ON `phone_devices` (`key_thumbprint`) WHERE \"phone_devices\".\"revoked_at\" IS NULL;",
+      'CREATE UNIQUE INDEX IF NOT EXISTS `phone_devices_key` ON `phone_devices` (`key_thumbprint`) WHERE "phone_devices"."revoked_at" IS NULL;',
       "CREATE INDEX IF NOT EXISTS `phone_devices_user` ON `phone_devices` (`user_id`, `revoked_at`);",
       "-- `phone_tokens`: a phone's tokens, hashed: access tokens that last minutes, and the refresh token\n-- that rotates on every use (a rotated one used again removes the phone). `proof_at` is the time in\n-- the proof that spent a refresh token: a lost answer may be asked again only with a newer proof.\nCREATE TABLE IF NOT EXISTS `phone_tokens` (\n\t`token_hash` text PRIMARY KEY NOT NULL,\n\t`kind` text NOT NULL,\n\t`device_id` text NOT NULL,\n\t`expires_at` integer NOT NULL,\n\t`rotated_from` text,\n\t`revoked_at` integer,\n\t`proof_at` integer,\n\t`created_at` integer NOT NULL\n);",
-      "CREATE INDEX IF NOT EXISTS `phone_tokens_device` ON `phone_tokens` (`device_id`, `kind`);"
-    ]
+      "CREATE INDEX IF NOT EXISTS `phone_tokens_device` ON `phone_tokens` (`device_id`, `kind`);",
+    ],
   },
   {
-    "version": 27,
-    "name": "0026_catalogue",
-    "statements": [
+    version: 27,
+    name: "0026_catalogue",
+    statements: [
       "-- The catalogue (ADR-029): what every product search asks of a product, as the owner or its source\n-- stated it, and what each network last said of the business's products. Additive: no row changes\n-- value, nothing is backfilled, and an inbox that lists nothing writes nothing new.\n--\n-- `gtin`: the barcode as 14 digits, its check digit verified, never a shop's own code or a coupon\n-- (`@surfingdog/spec`'s `normaliseGtin`). `gtin_given`: a barcode as a source gave it that is not the\n-- product's barcode, either because it did not pass the check (kept so the owner can read what came\n-- in) or because the owner's AI proposed it and the owner has not confirmed it yet; never public.\n-- `no_gtin`: the owner says it has none (bread, a print, a repair). `brand` and `mpn` (the maker's part\n-- number) at most 70 characters, never guessed from the name. `condition`: new, used or refurbished.\n-- `url`: its page, published only when it is on the business's own site. `image_url`: a link to its\n-- picture, never copied. `source_category`: what a source said its category was, a hint only and never\n-- public. `listed`: the owner's own, 0 keeps it off networks while it stays on sale at the business's\n-- own doors.\nALTER TABLE `products` ADD `gtin` text;",
       "ALTER TABLE `products` ADD `gtin_given` text;",
       "ALTER TABLE `products` ADD `no_gtin` integer DEFAULT 0 NOT NULL;",
@@ -413,13 +411,13 @@ export const MIGRATIONS: readonly Migration[] = [
       "ALTER TABLE `network_status` ADD `catalogue_count` integer;",
       "ALTER TABLE `network_status` ADD `catalogue_held` text;",
       "ALTER TABLE `network_status` ADD `catalogue_at` integer;",
-      "ALTER TABLE `network_status` ADD `catalogue_error` text;"
-    ]
+      "ALTER TABLE `network_status` ADD `catalogue_error` text;",
+    ],
   },
   {
-    "version": 28,
-    "name": "0027_connectors_base",
-    "statements": [
+    version: 28,
+    name: "0027_connectors_base",
+    statements: [
       "-- Connectors: the shared base (ADR-030). The columns the shop, booking and calendar-link connectors\n-- share; nothing that exists changes meaning, and an inbox that connects none of them writes nothing\n-- new here.\n--\n-- A connection's own address: `connectors.inbound_token` (since 0003) keeps the SHA-256 of the\n-- unguessable segment of `POST /v1/hooks/<kind>/<token>` and `GET /v1/feeds/<kind>/<token>`, so a\n-- request reaches one connection and the database never holds what opens it; `inbound_enc` keeps the\n-- segment sealed by the secret box, for the connector to name its address with and the owner to see\n-- a link again.\nALTER TABLE `connectors` ADD `inbound_enc` text;",
       "-- A sign-in that asks something first (a store's address) keeps it for the way back, and a platform\n-- that POSTs the key itself (WooCommerce's authorize endpoint) leaves the connection it made, or what\n-- went wrong, for the owner's browser to find when it returns.\nALTER TABLE `connector_auth` ADD `input` text;",
       "ALTER TABLE `connector_auth` ADD `connector_id` text;",
@@ -429,13 +427,13 @@ export const MIGRATIONS: readonly Migration[] = [
       "-- What a shop said an order comes to, with the tax or delivery it adds itself. A link whose shop total\n-- is not what the customer accepted is `held`: made in the shop, never sent, until the owner proposes\n-- the shop's total and the customer accepts it. A held link is live, so the one-live-link index takes\n-- it in: two jobs that meet still make one link per order, never two.\nALTER TABLE `connector_payments` ADD `shop_total` integer;",
       "ALTER TABLE `connector_payments` ADD `shop_currency` text;",
       "DROP INDEX IF EXISTS `connector_payments_live`;",
-      "CREATE UNIQUE INDEX IF NOT EXISTS `connector_payments_live` ON `connector_payments` (`item_id`) WHERE `state` IN ('creating', 'open', 'held');"
-    ]
+      "CREATE UNIQUE INDEX IF NOT EXISTS `connector_payments_live` ON `connector_payments` (`item_id`) WHERE `state` IN ('creating', 'open', 'held');",
+    ],
   },
   {
-    "version": 29,
-    "name": "0028_ready_foundation",
-    "statements": [
+    version: 29,
+    name: "0028_ready_foundation",
+    statements: [
       "-- Payment schedules (ADR-036). An item may now have a link per entry of its payment schedule — a\n-- deposit and a balance open at once — not only one for an order's whole total. `schedule_id` names\n-- the entry ('' for an order's own link, as every link before this was), `purpose` says what it is for\n-- (`pay` | `deposit` | `balance` | `guarantee` | `difference`), and `expires_at` when it stops taking\n-- payments (a deposit's pay window): the inbox closes it on the platform then. Nothing that exists\n-- changes meaning, and an inbox that takes only orders writes the defaults.\nALTER TABLE `connector_payments` ADD `schedule_id` text DEFAULT '' NOT NULL;",
       "ALTER TABLE `connector_payments` ADD `purpose` text DEFAULT 'pay' NOT NULL;",
       "ALTER TABLE `connector_payments` ADD `expires_at` integer;",
@@ -445,7 +443,30 @@ export const MIGRATIONS: readonly Migration[] = [
       "-- Write first (ADR-036): every attempt at writing to a business's own system (a property system, a\n-- booking system) before anything is promised, journalled. `idem_key` is the key the system is sent and\n-- the marker a write is found by after a timeout; `request_sha` the fingerprint of what was written,\n-- never the request (it may name the guest); `outcome` is `pending` | `written` | `refused` | `unknown`\n-- (no answer, not found yet: a job looks again until `resolve_after`'s window ends) | `rolled_back`\n-- (ours oversold the system, and was taken back). `owner` names who settles an unknown one (`stays`).\nCREATE TABLE IF NOT EXISTS `connector_writes` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`connector_id` text NOT NULL,\n\t`item_id` text NOT NULL,\n\t`op` text NOT NULL,\n\t`owner` text NOT NULL,\n\t`attempt` integer NOT NULL,\n\t`idem_key` text NOT NULL,\n\t`request_sha` text NOT NULL,\n\t`outcome` text DEFAULT 'pending' NOT NULL,\n\t`external_id` text,\n\t`detail` text,\n\t`resolve_after` integer,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer NOT NULL\n);",
       "CREATE UNIQUE INDEX IF NOT EXISTS `connector_writes_attempt` ON `connector_writes` (`connector_id`, `item_id`, `attempt`);",
       "CREATE INDEX IF NOT EXISTS `connector_writes_key` ON `connector_writes` (`connector_id`, `item_id`, `op`, `idem_key`);",
-      "CREATE INDEX IF NOT EXISTS `connector_writes_unknown` ON `connector_writes` (`outcome`, `resolve_after`) WHERE `outcome` = 'unknown';"
-    ]
-  }
+      "CREATE INDEX IF NOT EXISTS `connector_writes_unknown` ON `connector_writes` (`outcome`, `resolve_after`) WHERE `outcome` = 'unknown';",
+    ],
+  },
+  {
+    version: 30,
+    name: "0026_stays",
+    statements: [
+      "-- Stays (ADR-033): a place to stay in its own inbox. Ten new tables, nothing that exists changes, and\n-- an inbox that is not a place to stay writes no row here. Conventions as ever (ADR-011): text ULIDs,\n-- integer milliseconds, JSON as text, 0/1 booleans. Amounts are minor units of the property's\n-- currency (ADR-032). Dates are the property's local dates (`YYYY-MM-DD`): a night is the date it\n-- starts on, never a span of milliseconds.\n--\n-- A place to stay: one per location (most inboxes have one; a rental manager up to twenty). `mode` is\n-- how it confirms: `request` (each stay answered with a quote), `allotment` (rooms it keeps for direct\n-- guests, closed on its other channels, confirm at once) or `connected` (its own system, written to\n-- first); `instant` is the owner's own switch for confirming at once from that system. The private\n-- arrival details (door codes, wifi) are sealed by the secret box, bound to the row.\nCREATE TABLE IF NOT EXISTS `properties` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`location_id` text NOT NULL,\n\t`kind` text DEFAULT 'guesthouse' NOT NULL,\n\t`name` text NOT NULL,\n\t`currency` text NOT NULL,\n\t`check_in_from` text DEFAULT '15:00' NOT NULL,\n\t`check_in_until` text,\n\t`check_out_until` text DEFAULT '11:00' NOT NULL,\n\t`mode` text DEFAULT 'request' NOT NULL,\n\t`instant` integer DEFAULT 0 NOT NULL,\n\t`fresh_minutes` integer DEFAULT 15 NOT NULL,\n\t`answer_hours` integer DEFAULT 12 NOT NULL,\n\t`quote_valid_hours` integer DEFAULT 24 NOT NULL,\n\t`pay_within_hours` integer DEFAULT 24 NOT NULL,\n\t`hold_minutes` integer DEFAULT 20 NOT NULL,\n\t`max_nights` integer DEFAULT 30 NOT NULL,\n\t`same_day_until` text,\n\t`children` text DEFAULT '{\"welcome\":true}' NOT NULL,\n\t`pets` text DEFAULT '{\"allowed\":\"no\"}' NOT NULL,\n\t`house_rules` text DEFAULT '{\"chips\":[]}' NOT NULL,\n\t`arrival_public` text,\n\t`arrival_private_enc` text,\n\t`pre_arrival_text` text,\n\t`registration` text,\n\t`prices_include` text,\n\t`connector_id` text,\n\t`external_id` text,\n\t`active` integer DEFAULT 1 NOT NULL,\n\t`sort` integer DEFAULT 0 NOT NULL,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer NOT NULL,\n\tFOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE no action\n);",
+      "CREATE UNIQUE INDEX IF NOT EXISTS `properties_location` ON `properties` (`location_id`);",
+      "CREATE UNIQUE INDEX IF NOT EXISTS `properties_external` ON `properties` (`connector_id`, `external_id`) WHERE `connector_id` IS NOT NULL;",
+      "-- A kind of room: \"Double room\", \"Bed in a 6-bed dorm\". `units` is how many like it (a dorm: beds).\n-- `external_id` is the property system's room id, so a connected property has one copy of its rooms.\nCREATE TABLE IF NOT EXISTS `room_types` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`property_id` text NOT NULL,\n\t`name` text NOT NULL,\n\t`description` text,\n\t`units` integer DEFAULT 1 NOT NULL,\n\t`capacity` text NOT NULL,\n\t`beds` text DEFAULT '[]' NOT NULL,\n\t`size_m2` integer,\n\t`amenities` text DEFAULT '[]' NOT NULL,\n\t`accessible` integer DEFAULT 0 NOT NULL,\n\t`photos` text DEFAULT '[]' NOT NULL,\n\t`external_id` text,\n\t`offered` integer DEFAULT 1 NOT NULL,\n\t`active` integer DEFAULT 1 NOT NULL,\n\t`sort` integer DEFAULT 0 NOT NULL,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer NOT NULL,\n\tFOREIGN KEY (`property_id`) REFERENCES `properties`(`id`) ON UPDATE no action ON DELETE no action\n);",
+      "CREATE INDEX IF NOT EXISTS `room_types_property` ON `room_types` (`property_id`, `active`, `sort`);",
+      "-- A cancellation policy, as the owner chose it (`preset`) and as data (ADR-032 `policySchema`).\nCREATE TABLE IF NOT EXISTS `stay_policies` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`property_id` text NOT NULL,\n\t`preset` text NOT NULL,\n\t`policy` text NOT NULL,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer NOT NULL,\n\tFOREIGN KEY (`property_id`) REFERENCES `properties`(`id`) ON UPDATE no action ON DELETE no action\n);",
+      "-- A rate plan: its meal, its policy, how a stay on it is secured (`deposit`, `balance`, `guarantee`),\n-- the room types it is for (NULL: every one), and a plan it is derived from (non-refundable, 10% less).\nCREATE TABLE IF NOT EXISTS `rate_plans` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`property_id` text NOT NULL,\n\t`name` text NOT NULL,\n\t`meal` text DEFAULT 'room_only' NOT NULL,\n\t`policy_id` text NOT NULL,\n\t`deposit` text DEFAULT '{\"kind\":\"none\"}' NOT NULL,\n\t`balance` text DEFAULT '{\"when\":\"at_property\"}' NOT NULL,\n\t`guarantee` text DEFAULT 'none' NOT NULL,\n\t`room_type_ids` text,\n\t`derived` text,\n\t`min_nights` integer DEFAULT 1 NOT NULL,\n\t`max_nights` integer,\n\t`external_id` text,\n\t`offered` integer DEFAULT 1 NOT NULL,\n\t`active` integer DEFAULT 1 NOT NULL,\n\t`sort` integer DEFAULT 0 NOT NULL,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer NOT NULL,\n\tFOREIGN KEY (`property_id`) REFERENCES `properties`(`id`) ON UPDATE no action ON DELETE no action,\n\tFOREIGN KEY (`policy_id`) REFERENCES `stay_policies`(`id`) ON UPDATE no action ON DELETE no action\n);",
+      "-- Prices per night: a row with `from_date` '' is the base; dated rows are seasons; `weekdays` is a\n-- bitmask (Monday 1 … Sunday 64). `nightly` is for `base_guests`; extra adults and children are added.\nCREATE TABLE IF NOT EXISTS `rates` (\n\t`rate_plan_id` text NOT NULL,\n\t`room_type_id` text NOT NULL,\n\t`from_date` text DEFAULT '' NOT NULL,\n\t`to_date` text DEFAULT '' NOT NULL,\n\t`weekdays` integer DEFAULT 127 NOT NULL,\n\t`nightly` integer NOT NULL,\n\t`base_guests` integer DEFAULT 2 NOT NULL,\n\t`extra_adult` integer,\n\t`extra_child` integer,\n\t`min_nights` integer,\n\tPRIMARY KEY(`rate_plan_id`, `room_type_id`, `from_date`, `weekdays`),\n\tFOREIGN KEY (`rate_plan_id`) REFERENCES `rate_plans`(`id`) ON UPDATE no action ON DELETE no action,\n\tFOREIGN KEY (`room_type_id`) REFERENCES `room_types`(`id`) ON UPDATE no action ON DELETE no action\n);",
+      "-- Taxes and fees: every mandatory one is a line in the total, whoever collects it.\nCREATE TABLE IF NOT EXISTS `stay_fees` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`property_id` text NOT NULL,\n\t`name` text NOT NULL,\n\t`kind` text NOT NULL,\n\t`basis` text NOT NULL,\n\t`amount` integer,\n\t`rate_bp` integer,\n\t`tiers` text,\n\t`collected` text DEFAULT 'with_booking' NOT NULL,\n\t`child_exempt_under` integer,\n\t`max_nights` integer,\n\t`active` integer DEFAULT 1 NOT NULL,\n\t`sort` integer DEFAULT 0 NOT NULL,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer NOT NULL,\n\tFOREIGN KEY (`property_id`) REFERENCES `properties`(`id`) ON UPDATE no action ON DELETE no action\n);",
+      "-- Extras a guest may add: on-property items only (vocab/lodging.json `extras`), never travel services.\nCREATE TABLE IF NOT EXISTS `stay_extras` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`property_id` text NOT NULL,\n\t`item` text NOT NULL,\n\t`name` text NOT NULL,\n\t`price` integer NOT NULL,\n\t`basis` text NOT NULL,\n\t`active` integer DEFAULT 1 NOT NULL,\n\t`sort` integer DEFAULT 0 NOT NULL,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer NOT NULL,\n\tFOREIGN KEY (`property_id`) REFERENCES `properties`(`id`) ON UPDATE no action ON DELETE no action\n);",
+      "-- Night claims: what `slot_claims` is for minutes. The primary key arbitrates the last room (ADR-007):\n-- one ordinal per unit per night, so two stays never hold the same room on the same night through\n-- the inbox. `hold_until` is set while it is held (an agent's hold, a deposit's window, a write in\n-- flight); NULL when it is the stay's for good.\nCREATE TABLE IF NOT EXISTS `night_claims` (\n\t`room_type_id` text NOT NULL,\n\t`night` text NOT NULL,\n\t`ordinal` integer NOT NULL,\n\t`item_id` text NOT NULL,\n\t`hold_until` integer,\n\tPRIMARY KEY(`room_type_id`, `night`, `ordinal`)\n);",
+      "CREATE INDEX IF NOT EXISTS `night_claims_item` ON `night_claims` (`item_id`);",
+      "CREATE INDEX IF NOT EXISTS `night_claims_hold` ON `night_claims` (`hold_until`) WHERE `hold_until` IS NOT NULL;",
+      "-- Rooms the owner keeps for direct guests, closed on every other channel (allotment mode). Only a\n-- person sets one: `set_by` is a user, never the owner's AI.\nCREATE TABLE IF NOT EXISTS `allotments` (\n\t`room_type_id` text NOT NULL,\n\t`from_date` text NOT NULL,\n\t`to_date` text NOT NULL,\n\t`weekdays` integer DEFAULT 127 NOT NULL,\n\t`units` integer NOT NULL,\n\t`closed_elsewhere_at` integer NOT NULL,\n\t`set_by` text NOT NULL,\n\tPRIMARY KEY(`room_type_id`, `from_date`, `weekdays`),\n\tFOREIGN KEY (`room_type_id`) REFERENCES `room_types`(`id`) ON UPDATE no action ON DELETE no action\n);",
+      "-- Availability, rates and inventory as a connected system said them, by its own room ids: the cache\n-- agents are answered from. `source` is how it was read (`poll`, `hint`, `live`); `fetched_at` how\n-- fresh it is. A hint marks a range stale and is never believed: the next read is.\nCREATE TABLE IF NOT EXISTS `stay_ari` (\n\t`connector_id` text NOT NULL,\n\t`room_ext_id` text NOT NULL,\n\t`night` text NOT NULL,\n\t`units` integer NOT NULL,\n\t`closed` integer DEFAULT 0 NOT NULL,\n\t`min_stay` integer,\n\t`max_stay` integer,\n\t`no_arrival` integer DEFAULT 0 NOT NULL,\n\t`no_departure` integer DEFAULT 0 NOT NULL,\n\t`prices` text,\n\t`source` text NOT NULL,\n\t`fetched_at` integer NOT NULL,\n\t`stale` integer DEFAULT 0 NOT NULL,\n\tPRIMARY KEY(`connector_id`, `room_ext_id`, `night`)\n);",
+      "CREATE INDEX IF NOT EXISTS `stay_ari_fetched` ON `stay_ari` (`connector_id`, `fetched_at`);",
+      "-- Nights the owner closed for a room type (or the whole property, `room_type_id` ''): never sold.\nCREATE TABLE IF NOT EXISTS `stay_closures` (\n\t`property_id` text NOT NULL,\n\t`room_type_id` text DEFAULT '' NOT NULL,\n\t`from_date` text NOT NULL,\n\t`to_date` text NOT NULL,\n\t`note` text,\n\t`created_at` integer NOT NULL,\n\tPRIMARY KEY(`property_id`, `room_type_id`, `from_date`),\n\tFOREIGN KEY (`property_id`) REFERENCES `properties`(`id`) ON UPDATE no action ON DELETE no action\n);",
+    ],
+  },
 ];

@@ -1,0 +1,82 @@
+{
+  "description": "A stay's nights are the dates from check-in up to the day before check-out, never minutes; its start is the check-in date at the property's check-in time, its end the check-out date at its check-out time, each with the zone's offset on that day. Read by packages/core/test/stay-vectors.test.ts.",
+  "cases": [
+    {
+      "name": "three nights in Kyoto",
+      "check_in": "2026-12-12",
+      "check_out": "2026-12-15",
+      "zone": "Asia/Tokyo",
+      "from": "15:00",
+      "until": "10:00",
+      "nights": ["2026-12-12", "2026-12-13", "2026-12-14"],
+      "start_time": "2026-12-12T15:00:00+09:00",
+      "end_time": "2026-12-15T10:00:00+09:00"
+    },
+    {
+      "name": "across the end of a year",
+      "check_in": "2026-12-30",
+      "check_out": "2027-01-02",
+      "zone": "Asia/Kolkata",
+      "from": "14:00",
+      "until": "11:00",
+      "nights": ["2026-12-30", "2026-12-31", "2027-01-01"],
+      "start_time": "2026-12-30T14:00:00+05:30",
+      "end_time": "2027-01-02T11:00:00+05:30"
+    },
+    {
+      "name": "across February in a leap-free year",
+      "check_in": "2027-02-27",
+      "check_out": "2027-03-02",
+      "zone": "Africa/Nairobi",
+      "from": "14:00",
+      "until": "11:00",
+      "nights": ["2027-02-27", "2027-02-28", "2027-03-01"],
+      "start_time": "2027-02-27T14:00:00+03:00",
+      "end_time": "2027-03-02T11:00:00+03:00"
+    },
+    {
+      "name": "over the night the clocks go forward in Halifax",
+      "check_in": "2027-03-13",
+      "check_out": "2027-03-15",
+      "zone": "America/Halifax",
+      "from": "16:00",
+      "until": "11:00",
+      "nights": ["2027-03-13", "2027-03-14"],
+      "start_time": "2027-03-13T16:00:00-04:00",
+      "end_time": "2027-03-15T11:00:00-03:00"
+    },
+    {
+      "name": "over the night the clocks go back in Hobart",
+      "check_in": "2027-04-03",
+      "check_out": "2027-04-05",
+      "zone": "Australia/Hobart",
+      "from": "15:00",
+      "until": "10:00",
+      "nights": ["2027-04-03", "2027-04-04"],
+      "start_time": "2027-04-03T15:00:00+11:00",
+      "end_time": "2027-04-05T10:00:00+10:00"
+    },
+    {
+      "name": "St John's, a half-hour zone",
+      "check_in": "2027-07-01",
+      "check_out": "2027-07-03",
+      "zone": "America/St_Johns",
+      "from": "15:00",
+      "until": "11:00",
+      "nights": ["2027-07-01", "2027-07-02"],
+      "start_time": "2027-07-01T15:00:00-02:30",
+      "end_time": "2027-07-03T11:00:00-02:30"
+    },
+    {
+      "name": "Kiritimati, UTC+14",
+      "check_in": "2027-01-01",
+      "check_out": "2027-01-02",
+      "zone": "Pacific/Kiritimati",
+      "from": "14:00",
+      "until": "12:00",
+      "nights": ["2027-01-01"],
+      "start_time": "2027-01-01T14:00:00+14:00",
+      "end_time": "2027-01-02T12:00:00+14:00"
+    }
+  ]
+}

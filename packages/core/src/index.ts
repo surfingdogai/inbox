@@ -106,6 +106,7 @@ export {
 export * from "./network/index";
 export * from "./phones/index";
 export * from "./policy/index";
+export * from "./property/index";
 export * from "./protocol/index";
 export * from "./receipts/index";
 export * from "./rules/index";
@@ -128,6 +129,7 @@ export {
   type SettingsPatch,
 } from "./settings/policy";
 export * from "./settings/schema";
+export * from "./stays/index";
 export { canonicalNetworkOrigin } from "./util/hosts";
 export {
   canonicalLanguages,

@@ -2,7 +2,7 @@ import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import clsx from "clsx";
 import { ArrowLeft, ArrowRight, Check, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { CurrencySelect, LengthPicker, MoneyInput, TimeZonePicker } from "../components/Choosers";
+import { CurrencySelect, LengthPicker, MoneyInput, Stepper, TimeZonePicker } from "../components/Choosers";
 import { ConnectYourSystem } from "../components/ConnectYourSystem";
 import { ErrorState } from "../components/Feedback";
 import { Field, Switch } from "../components/Form";
@@ -12,6 +12,7 @@ import { ensureSignedIn, session } from "../lib/auth";
 import { guessCurrency } from "../lib/currencies";
 import { countryOfZone, emailLangOfCountry } from "../lib/geo";
 import { languageName, languagesToSave } from "../lib/languages";
+import { KIND_WORDS, propertyApi, STANDARD_PLAN, useProperty } from "../lib/property";
 import {
   useApplyPreset,
   useNetworks,
@@ -35,8 +36,10 @@ import {
   SETUP_NETWORK,
   type SetupKind,
   type WizardDoors,
+  type WizardRoom,
   wizardDoorsDoc,
   wizardPreset,
+  wizardRoomBodies,
 } from "../lib/setup";
 import type { Weekly } from "../lib/types";
 
@@ -82,14 +85,25 @@ const DOORS: readonly { readonly key: keyof WizardDoors; readonly label: string;
 
 /** The wizard's steps by id: a kind of business that needs others (a place to stay) names its own. */
 const STEPS = [
-  { id: "kind", label: "What you run" },
+  { id: "kind", label: "Kind" },
   { id: "you", label: "You" },
-  { id: "doors", label: "What agents can do" },
-  { id: "offer", label: "What you offer" },
-  { id: "hours", label: "When you are open" },
+  { id: "doors", label: "Agents" },
+  { id: "offer", label: "Offer" },
+  { id: "hours", label: "Hours" },
   { id: "answering", label: "Answering" },
 ] as const;
-type StepId = (typeof STEPS)[number]["id"];
+/** A place to stay (ADR-033): the place and its rooms instead of doors, offers and hours, a night's price with each. */
+const STAY_STEPS = [
+  { id: "kind", label: "Kind" },
+  { id: "you", label: "You" },
+  { id: "place", label: "Place" },
+  { id: "rooms", label: "Rooms" },
+  { id: "answering", label: "Answering" },
+] as const;
+
+/** The languages a place to stay writes to its guests in: guests' emails and pages ship in these six. */
+const GUEST_LANGS = ["en", "es", "fr", "de", "it", "pt"] as const;
+type StepId = (typeof STEPS)[number]["id"] | (typeof STAY_STEPS)[number]["id"];
 
 const DEFAULT_HOURS: Weekly = {
   mon: [["09:00", "17:00"]],
@@ -112,7 +126,7 @@ function guessTimezone(): string {
  * The customers' email language to start from: the one of the country the time zone is in (Lisbon,
  * São Paulo: Portuguese), else the browser's, else English.
  */
-function guessLang(zone: string): "en" | "pt" {
+function guessLang(zone: string): string {
   const byPlace = emailLangOfCountry(countryOfZone(zone));
   if (byPlace) return byPlace;
   try {
@@ -151,15 +165,41 @@ function SetupWizard() {
   const applyPreset = useApplyPreset();
 
   const [step, setStep] = useState(0);
-  const at: StepId = STEPS[step]?.id ?? "kind";
   // What the business runs (ADR-036): it sets the rules to start from and what agents can do to begin with.
   const [kindKey, setKindKey] = useState<string | null>(null);
   const kind = kindOf(kindKey);
+  const steps: readonly { readonly id: StepId; readonly label: string }[] = kind?.key === "stays" ? STAY_STEPS : STEPS;
+  const at: StepId = steps[step]?.id ?? "kind";
+  // A place to stay: what kind, when guests come and go, its rooms. Its id once saved, for the rooms.
+  const [lodging, setLodging] = useState("guesthouse");
+  const [checkIn, setCheckIn] = useState("15:00");
+  const [checkOut, setCheckOut] = useState("11:00");
+  const [propertyId, setPropertyId] = useState<string | null>(null);
+  const [town, setTown] = useState("");
+  const [rooms, setRooms] = useState<WizardRoom[]>([{ id: 1, name: "", units: "1", sleeps: "2", price: "" }]);
+  // Whether the place has prices once its rooms are saved: then each request is quoted in one press.
+  const [priced, setPriced] = useState(false);
+  const [placeBusy, setPlaceBusy] = useState(false);
+  const [placeError, setPlaceError] = useState<unknown>(null);
+  // Run again, the wizard keeps to the place already set up rather than making a second one.
+  const known = useProperty();
+  const placeId = propertyId ?? known.data?.properties[0]?.id ?? null;
+  // …and starts from what it says of itself, never from the defaults over it.
+  const knownPlace = known.data?.setup?.property;
+  const [placeRead, setPlaceRead] = useState(false);
+  useEffect(() => {
+    if (!knownPlace || placeRead) return;
+    setPlaceRead(true);
+    setLodging(knownPlace.kind);
+    setCheckIn(knownPlace.checkInFrom);
+    setCheckOut(knownPlace.checkOutUntil);
+    setTown(knownPlace.locality ?? "");
+  }, [knownPlace, placeRead]);
   const [tz] = useState(guessTimezone);
   const [name, setName] = useState("");
   const [timezone, setTimezone] = useState(tz);
   const [currency, setCurrency] = useState(() => guessCurrency(browserLanguages(), tz));
-  const [emailLang, setEmailLang] = useState<"en" | "pt">(() => guessLang(tz));
+  const [emailLang, setEmailLang] = useState<string>(() => guessLang(tz));
   // Until the owner picks them, the currency and the email language follow the time zone's country.
   const [picked, setPicked] = useState({ currency: false, lang: false });
   const pickZone = (zone: string) => {
@@ -207,7 +247,15 @@ function SetupWizard() {
 
   // Whatever is in flight is the error worth showing; they never overlap.
   const problem: ApiProblem | null =
-    [saveProfile.error, saveSettings.error, serviceWrite.error, productWrite.error, saveWeekly.error, applyPreset.error]
+    [
+      saveProfile.error,
+      saveSettings.error,
+      serviceWrite.error,
+      productWrite.error,
+      saveWeekly.error,
+      applyPreset.error,
+      placeError,
+    ]
       .filter(Boolean)
       .map((e) => problemOf(e))[0] ?? null;
   const busy =
@@ -216,7 +264,8 @@ function SetupWizard() {
     serviceWrite.isPending ||
     productWrite.isPending ||
     saveWeekly.isPending ||
-    applyPreset.isPending;
+    applyPreset.isPending ||
+    placeBusy;
 
   const existing = (services.data?.items.length ?? 0) + (products.data?.items.length ?? 0);
   // Booked at a time, or only asked about for a price.
@@ -247,6 +296,61 @@ function SetupWizard() {
       if (at === "doors") {
         await saveSettings.mutateAsync({ doc: wizardDoorsDoc(doors) });
       }
+      if (at === "place") {
+        setPlaceError(null);
+        setPlaceBusy(true);
+        try {
+          await saveSettings.mutateAsync({ doc: wizardDoorsDoc(doors) });
+          const saved = await propertyApi.save({
+            ...(placeId ? { id: placeId } : {}),
+            name: name.trim(),
+            kind: lodging,
+            currency,
+            check_in_from: checkIn,
+            check_out_until: checkOut,
+            town: town.trim() || null,
+          });
+          setPropertyId(saved.id);
+        } catch (e) {
+          setPlaceError(e);
+          throw e;
+        } finally {
+          setPlaceBusy(false);
+        }
+      }
+      if (at === "rooms" && placeId) {
+        const planned = wizardRoomBodies(rooms, placeId, currency);
+        if ("problem" in planned) {
+          setLocal(planned.problem);
+          return false;
+        }
+        setPlaceError(null);
+        setPlaceBusy(true);
+        try {
+          // Each room, then a night's price for those that have one, on the place's first plan (a standard
+          // one made for them when there is none): the first request is then quoted in one press.
+          const rates: { room_type_id: string; nightly: number; base_guests: number }[] = [];
+          for (const [i, body] of planned.bodies.entries()) {
+            const made = await propertyApi.room(body);
+            const nightly = planned.prices[i];
+            if (nightly) {
+              rates.push({ room_type_id: made.id, nightly, base_guests: (body.capacity as { total: number }).total });
+            }
+          }
+          if (rates.length > 0) {
+            const plan =
+              known.data?.setup?.plans.find((x) => x.active)?.id ??
+              (await propertyApi.plan({ property_id: placeId, ...STANDARD_PLAN })).id;
+            await propertyApi.rates(rates.map((r) => ({ ...r, rate_plan_id: plan })));
+            setPriced(true);
+          }
+        } catch (e) {
+          setPlaceError(e);
+          throw e;
+        } finally {
+          setPlaceBusy(false);
+        }
+      }
       if (at === "offer") {
         const planned = offerBodies(offers, "services", currency, asked);
         if ("problem" in planned) {
@@ -276,7 +380,7 @@ function SetupWizard() {
   };
 
   const next = async () => {
-    if (await saveStep()) setStep((s) => Math.min(s + 1, STEPS.length - 1));
+    if (await saveStep()) setStep((s) => Math.min(s + 1, steps.length - 1));
   };
 
   const canAdvance =
@@ -285,6 +389,8 @@ function SetupWizard() {
     (at === "doors" && (doors.booking || doors.quoteRequest || doors.message)) ||
     (at === "offer" && (!doors.booking || offers.some((o) => o.name.trim()) || existing > 0)) ||
     at === "hours" ||
+    at === "place" ||
+    (at === "rooms" && rooms.some((r) => r.name.trim())) ||
     at === "answering";
 
   if (profile.isError) {
@@ -299,7 +405,8 @@ function SetupWizard() {
     );
   }
 
-  if (done) return <Finished onOpen={leave} kind={kind} />;
+  if (done)
+    return <Finished onOpen={leave} kind={kind} priced={priced || (known.data?.setup?.rates.length ?? 0) > 0} />;
 
   return (
     <main className="page page-narrow setup">
@@ -311,7 +418,7 @@ function SetupWizard() {
       </div>
 
       <ol className="steps" aria-label="Setup steps">
-        {STEPS.map(({ id, label }, i) => (
+        {steps.map(({ id, label }, i) => (
           <li key={id} className={clsx("stepdot", i === step && "is-now", i < step && "is-done")}>
             <span className="n">{i < step ? <Check className="icon" aria-hidden="true" /> : i + 1}</span>
             <span className="l">{label}</span>
@@ -394,18 +501,25 @@ function SetupWizard() {
                 />
               </Field>
             )}
-            <Field id="su-lang" label="Customers' emails are in">
+            <Field
+              id="su-lang"
+              label={kind?.key === "stays" ? "Guests' emails are in" : "Customers' emails are in"}
+              hint={langHint(kind?.key === "stays" ? GUEST_LANGS : ["en", "pt"], emailLang, kind?.key === "stays")}
+            >
               <select
                 id="su-lang"
                 className="input"
                 value={emailLang}
                 onChange={(e) => {
-                  setEmailLang(e.target.value === "pt" ? "pt" : "en");
+                  setEmailLang(e.target.value);
                   setPicked((p) => ({ ...p, lang: true }));
                 }}
               >
-                <option value="en">{languageName("en")}</option>
-                <option value="pt">{languageName("pt")}</option>
+                {(kind?.key === "stays" ? GUEST_LANGS : (["en", "pt"] as const)).map((l) => (
+                  <option key={l} value={l}>
+                    {languageName(l)}
+                  </option>
+                ))}
               </select>
             </Field>
           </>
@@ -506,6 +620,137 @@ function SetupWizard() {
           </>
         )}
 
+        {at === "place" && (
+          <>
+            <h2 className="sec">Your place</h2>
+            <p className="lede small">
+              What guests' assistants are told first. Prices and policies come next, in Settings.
+            </p>
+            <Field id="su-lodging" label="Kind of place">
+              <select id="su-lodging" className="input" value={lodging} onChange={(e) => setLodging(e.target.value)}>
+                {Object.entries(KIND_WORDS).map(([k, w]) => (
+                  <option key={k} value={k}>
+                    {w}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field id="su-town" label="Town" optional hint="Guests read your times by it, and agents find you by it.">
+              <input
+                id="su-town"
+                className="input"
+                autoComplete="address-level2"
+                value={town}
+                placeholder="Oaxaca"
+                onChange={(e) => setTown(e.target.value)}
+              />
+            </Field>
+            <div className="grid2">
+              <Field id="su-in" label="Check-in from">
+                <input
+                  id="su-in"
+                  className="input"
+                  type="time"
+                  step={900}
+                  value={checkIn}
+                  onChange={(e) => setCheckIn(e.target.value)}
+                />
+              </Field>
+              <Field id="su-out" label="Check-out until">
+                <input
+                  id="su-out"
+                  className="input"
+                  type="time"
+                  step={900}
+                  value={checkOut}
+                  onChange={(e) => setCheckOut(e.target.value)}
+                />
+              </Field>
+            </div>
+            <p className="hint">
+              To start, you answer each request yourself. Rooms you keep for direct guests, or your property system, can
+              confirm stays on their own later.
+            </p>
+          </>
+        )}
+
+        {at === "rooms" && (
+          <>
+            <h2 className="sec">Your rooms</h2>
+            <p className="lede small">
+              One line per kind of room: how many you have, and how many people sleep in one. With a price a night, each
+              request comes with a quote ready to send.
+            </p>
+            <div className="stack">
+              {rooms.map((r) => (
+                <div className="room-row row-glass" key={r.id}>
+                  <div className="room-row-head">
+                    <Field id={`su-r-${r.id}`} label="Name">
+                      <input
+                        id={`su-r-${r.id}`}
+                        className="input"
+                        value={r.name}
+                        placeholder="Double room"
+                        onChange={(e) =>
+                          setRooms((all) => all.map((x) => (x.id === r.id ? { ...x, name: e.target.value } : x)))
+                        }
+                      />
+                    </Field>
+                    {rooms.length > 1 && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm btn-icon room-row-remove"
+                        aria-label={`Remove ${r.name || "this row"}`}
+                        onClick={() => setRooms((all) => all.filter((x) => x.id !== r.id))}
+                      >
+                        <Trash2 className="icon" aria-hidden="true" />
+                      </button>
+                    )}
+                  </div>
+                  <div className="room-row-nums">
+                    <Stepper
+                      id={`su-ru-${r.id}`}
+                      label="How many"
+                      value={r.units}
+                      min={1}
+                      max={500}
+                      onChange={(v) => setRooms((all) => all.map((x) => (x.id === r.id ? { ...x, units: v } : x)))}
+                    />
+                    <Stepper
+                      id={`su-rs-${r.id}`}
+                      label="Sleeps"
+                      value={r.sleeps}
+                      min={1}
+                      max={20}
+                      onChange={(v) => setRooms((all) => all.map((x) => (x.id === r.id ? { ...x, sleeps: v } : x)))}
+                    />
+                    <Field id={`su-rp-${r.id}`} label="A night" optional>
+                      <MoneyInput
+                        id={`su-rp-${r.id}`}
+                        currency={currency}
+                        value={r.price ?? ""}
+                        placeholder="On request"
+                        onChange={(v) => setRooms((all) => all.map((x) => (x.id === r.id ? { ...x, price: v } : x)))}
+                      />
+                    </Field>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => {
+                setRooms((all) => [...all, { id: nextId, name: "", units: "1", sleeps: "2", price: "" }]);
+                setNextId((n) => n + 1);
+              }}
+            >
+              <Plus className="icon" aria-hidden="true" />
+              Add another
+            </button>
+          </>
+        )}
+
         {at === "hours" && (
           <>
             <h2 className="sec">When are you open?</h2>
@@ -584,8 +829,8 @@ function SetupWizard() {
             </button>
           )}
           <button type="button" className="btn btn-primary" onClick={() => void next()} disabled={!canAdvance || busy}>
-            {busy ? "Saving…" : step === STEPS.length - 1 ? "Finish" : "Continue"}
-            {!busy && step < STEPS.length - 1 && <ArrowRight className="icon" aria-hidden="true" />}
+            {busy ? "Saving…" : step === steps.length - 1 ? "Finish" : "Continue"}
+            {!busy && step < steps.length - 1 && <ArrowRight className="icon" aria-hidden="true" />}
           </button>
         </div>
       </section>
@@ -598,50 +843,100 @@ const PRESET_WORDS: Readonly<Partial<Record<string, string>>> = {
   appointments: "bookings",
   trades: "requests for a price",
   shop: "orders",
+  stays: "a place to stay",
 };
 const PRESET_LINES: Readonly<Partial<Record<string, string>>> = {
   appointments: "Bookings in a free slot are confirmed, and everything else waits for you.",
   trades: "Requests for a price are flagged for you, and anything urgent goes to the top.",
   shop: "Small orders are accepted and asked to pay, and large ones wait for you.",
+  stays:
+    "A request is quoted from your rates as a draft for you to send, and nothing is confirmed on its own until you say so.",
 };
 
 /** The end. What works now, and — just as important — what does not yet. */
-function Finished({ onOpen, kind }: { onOpen: () => void; kind?: SetupKind | undefined }) {
+function Finished({
+  onOpen,
+  kind,
+  priced,
+}: {
+  onOpen: () => void;
+  kind?: SetupKind | undefined;
+  priced?: boolean | undefined;
+}) {
+  const navigate = useNavigate();
   const origin = typeof window === "undefined" ? "" : window.location.origin;
   const [connecting, setConnecting] = useState(true);
+  const stays = kind?.key === "stays";
+  // A place to stay's one next step is its prices; where it lives is a detail for its AI.
+  const where = (
+    <dl className="fields">
+      <div>
+        <dt>Agents discover you at</dt>
+        <dd className="mono">{origin}/.well-known/agent-inbox.json</dd>
+      </div>
+      <div>
+        <dt>Their tools are at</dt>
+        <dd className="mono">{origin}/mcp</dd>
+      </div>
+      <div>
+        <dt>Your own AI connects to</dt>
+        <dd className="mono">{origin}/mcp/owner</dd>
+      </div>
+    </dl>
+  );
   return (
     <main className="page page-narrow setup">
       <div className="page-head">
-        <h1>Your inbox is answering</h1>
+        <h1>{stays ? "Your place is set up" : "Your inbox is answering"}</h1>
       </div>
       <section className="card glass stack">
         <p className="lede">
-          It takes requests now, from people and from AI agents, and answers what your rules say it may.
+          {stays
+            ? priced
+              ? "Guests' assistants can ask for dates now, and each request comes with a quote from your prices, for you to send."
+              : "Guests' assistants can ask for dates now. Add your prices so each request is quoted in one press."
+            : "It takes requests now, from people and from AI agents, and answers what your rules say it may."}
         </p>
-        <h3 className="sec">Where it lives</h3>
-        <dl className="fields">
-          <div>
-            <dt>Agents discover you at</dt>
-            <dd className="mono">{origin}/.well-known/agent-inbox.json</dd>
+        {stays && !priced && (
+          <div className="rowx">
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => void navigate({ to: "/settings/property", search: { tab: "Rates" } })}
+            >
+              Add your prices
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={onOpen}>
+              Open the inbox
+            </button>
           </div>
-          <div>
-            <dt>Their tools are at</dt>
-            <dd className="mono">{origin}/mcp</dd>
-          </div>
-          <div>
-            <dt>Your own AI connects to</dt>
-            <dd className="mono">{origin}/mcp/owner</dd>
-          </div>
-        </dl>
+        )}
+        {stays ? (
+          <details className="stack">
+            <summary className="sec">Details for your AI</summary>
+            {where}
+          </details>
+        ) : (
+          <>
+            <h3 className="sec">Where it lives</h3>
+            {where}
+          </>
+        )}
         {kind && connecting && (
           <ConnectYourSystem
             groups={kind.connect}
+            skip={kind.skip}
             lede="Bring in what you already use, so agents see the truth."
             onSkip={() => setConnecting(false)}
           />
         )}
         <h3 className="sec">Not set up yet</h3>
         <ul className="checks">
+          {stays && !priced && (
+            <li>
+              <b>Prices.</b> Settings, Property, Rates: until they are there, you type a price for each request.
+            </li>
+          )}
           <li>
             <b>Email in.</b> So a customer can simply write to you. Settings, then the docs page on email.
           </li>
@@ -649,12 +944,24 @@ function Finished({ onOpen, kind }: { onOpen: () => void; kind?: SetupKind | und
             <b>Where events go.</b> Point your other systems at it in Settings, Integrations.
           </li>
         </ul>
-        <div className="rowx">
-          <button type="button" className="btn btn-primary" onClick={onOpen}>
-            Open the inbox
-          </button>
-        </div>
+        {!(stays && !priced) && (
+          <div className="rowx">
+            <button type="button" className="btn btn-primary" onClick={onOpen}>
+              Open the inbox
+            </button>
+          </div>
+        )}
       </section>
     </main>
   );
+}
+
+/**
+ * The line under the email language: says plainly when the browser's own language is not one the emails
+ * are written in yet, and which they are written in instead.
+ */
+function langHint(offered: readonly string[], chosen: string, stays: boolean): string | undefined {
+  const browser = (typeof navigator === "undefined" ? "" : navigator.language).toLowerCase().split("-")[0] ?? "";
+  if (!browser || offered.includes(browser)) return undefined;
+  return `${languageName(browser)} isn't available for ${stays ? "guests" : "customers"} yet; they are written to in ${languageName(chosen)}.`;
 }

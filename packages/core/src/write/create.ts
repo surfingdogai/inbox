@@ -18,6 +18,7 @@ import { machines } from "../machine/tables";
 import { insertOfferStatement, pointerOf } from "../negotiation/offers";
 import { secretHash } from "../protocol/credentials";
 import { readSettings } from "../settings/schema";
+import { prepareStay } from "../stays/create";
 import { hashJson, hashText } from "../util/canonical";
 import { actorMeta, type Caller, isCustomer, isOwnerAssistant, nowOf, permissionKind } from "./caller";
 import {
@@ -71,6 +72,11 @@ export interface CreateInput {
    * of the idempotency hash.
    */
   readonly pricing?: PricingFor | undefined;
+  /**
+   * What the inbox itself adds to a stay it makes (an estimate from the property's rates, ADR-033):
+   * written after everything the request carried of the kind is dropped. Internal only; never hashed.
+   */
+  readonly stayExtra?: Readonly<Record<string, unknown>> | undefined;
 }
 
 /**
@@ -99,7 +105,7 @@ export interface CreateResult {
 
 /** How long a request's acknowledgement waits, so a rule that confirms it at once sends one email, not two. */
 export const ACK_DELAY_MS = 90_000;
-const ACKNOWLEDGED: ReadonlySet<string> = new Set(["booking", "order", "quote_request"]);
+const ACKNOWLEDGED: ReadonlySet<string> = new Set(["booking", "order", "quote_request", "stay"]);
 
 export async function createItem(db: Db, caller: Caller, input: CreateInput): Promise<CreateResult> {
   const now = nowOf(caller);
@@ -111,7 +117,7 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
   const idem = caller.idempotency;
   // Who is asking (the agent, the presentations) is not the request: a retry carrying a fresh
   // signature or a pass presented again is the same request.
-  const { identity: _identity, confirmed: _confirmed, pricing: _pricing, ...hashed } = input;
+  const { identity: _identity, confirmed: _confirmed, pricing: _pricing, stayExtra: _extra, ...hashed } = input;
   const requestHash = idem ? await hashJson({ op: "create", scope: idem.scope, input: hashed }) : undefined;
   if (idem) {
     const hit = await findIdempotent(db, idem);
@@ -160,6 +166,14 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
   // Nor what only the business records: a payment, the goods' delivery, a change to a promise. (A price
   // chosen for them is the pricing's alone: it drops one the request carried.)
   if (isCustomer(caller)) for (const field of BUSINESS_FIELDS) delete payload[field];
+  // A stay is checked against its property and written with its times (ADR-033), whoever makes it.
+  const stay =
+    input.type === "stay"
+      ? await prepareStay(db, payload, input.stayExtra, {
+          now,
+          person: !isCustomer(caller) && !isOwnerAssistant(caller),
+        })
+      : undefined;
 
   // Customers the business already knows (ADR-017 §8.2): a strong match joins its party, a weak one
   // gets a party of its own that names the known one; either way the create does it, in its batch.
@@ -207,7 +221,7 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
     state: initial,
     version: 1,
     partyId: party.partyId,
-    locationId: input.locationId ?? null,
+    locationId: input.locationId ?? stay?.locationId ?? null,
     channel: caller.actor.channel,
     subject,
     flags,
@@ -251,7 +265,7 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
       input.type,
       initial,
       party.partyId,
-      input.locationId ?? null,
+      input.locationId ?? stay?.locationId ?? null,
       caller.actor.channel,
       subject,
       accessTokenHash,
@@ -270,6 +284,7 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
     method: "run",
   });
   if (request) statements.push(insertOfferStatement(request));
+  if (stay) statements.push(...stay.statements);
   if (stopped) {
     // The party stopped, and the address this request gave fingerprinted: a request from it alone
     // later is stopped at the door, even if it is an address of theirs the inbox had not seen.

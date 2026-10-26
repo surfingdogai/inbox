@@ -39,10 +39,14 @@ describe("dated steps", () => {
       zone: "Asia/Tokyo",
     });
     expect(freeUntil(dated)).toBe("2026-12-09T23:59:59+09:00");
-    // The yen's sign as the runtime's English writes it (JP¥ in en-GB).
+    // English as it is written in Japan (en-JP), the yen's sign as the runtime writes it there.
     expect(policySentence(dated, { lang: "en", total: JPY(90_540), what: "stay", place: "Kyoto" })).toMatch(
-      /^Free cancellation until 9 Dec 2026, 23:59 Kyoto time\. After that: (JP)?¥25,800\. No-show: the full stay\.$/,
+      /^Free cancellation until Dec 9, 2026, 23:59 Kyoto time\. After that: (JP)?¥25,800\. No-show: the full stay\.$/,
     );
+    // A locale given wins: a guest's own region.
+    expect(
+      policySentence(dated, { lang: "en", locale: "en-GB", total: JPY(90_540), what: "stay", place: "Kyoto" }),
+    ).toMatch(/^Free cancellation until 9 Dec 2026, 23:59 Kyoto time\./);
   });
 
   it("dates each step at the end of its local day, whatever the clocks do that day", () => {
@@ -157,8 +161,9 @@ describe("the read-back sentence", () => {
         policySentence(dated, { lang: l, total, what: "stay", place: "Innsbruck" }),
       ]),
     );
+    // English as Austria writes its amounts.
     expect(said.en).toBe(
-      "Free cancellation until 13 Feb 2027, 23:59 Innsbruck time. Until 18 Feb 2027, 23:59 Innsbruck time, cancelling costs €645.00. After that: the full stay. No-show: the full stay.",
+      "Free cancellation until 13 Feb 2027, 23:59 Innsbruck time. Until 18 Feb 2027, 23:59 Innsbruck time, cancelling costs €\u00a0645,00. After that: the full stay. No-show: the full stay.",
     );
     expect(said.de).toContain("Kostenlose Stornierung bis 13.");
     expect(said.de).toContain("23:59 Uhr (Ortszeit Innsbruck)");
@@ -172,10 +177,25 @@ describe("the read-back sentence", () => {
     }
   });
 
-  it("falls back to English for another language, and to the zone's city for its place", () => {
+  it("falls back to English for another language, and names the zone by its country or its own name, never its city", () => {
     expect(policyLang("sw-KE")).toBe("en");
     expect(policyLang("pt-BR")).toBe("pt");
-    expect(policySentence(dated, { lang: "ja", total })).toContain("Vienna time");
+    // Austria has one zone: the country names it.
+    expect(policySentence(dated, { lang: "ja", total })).toContain("23:59 Austria time");
+    expect(policySentence(dated, { lang: "fr", total })).toContain("(heure locale, Autriche)");
+    // Mexico has several: the zone's own name, in the reader's language, never "Mexico City".
+    const oaxaca = datePolicy(policy, {
+      start: { date: "2027-02-20", time: "15:00" },
+      zone: "America/Mexico_City",
+      total: { value: 1_450_00, currency: "MXN" },
+    });
+    const es = policySentence(oaxaca, { lang: "es", total: { value: 1_450_00, currency: "MXN" } });
+    expect(es).not.toContain("Mexico City");
+    expect(es).toMatch(/\(hora [^)]+\)/);
+    // A town given names it.
+    expect(
+      policySentence(oaxaca, { lang: "es", total: { value: 1_450_00, currency: "MXN" }, place: "Oaxaca" }),
+    ).toContain("(hora de Oaxaca)");
   });
 });
 

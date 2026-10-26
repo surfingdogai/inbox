@@ -263,7 +263,7 @@ export async function checkManifest(input: unknown): Promise<ConformanceReport> 
         f.error(
           `$.doors_elsewhere[${i}]`,
           "dropped",
-          "A reader drops this entry: one of the five item types, once, not one in item_types, at an https address on a named host.",
+          "A reader drops this entry: one of the item types, once, not one in item_types, at an https address on a named host.",
         );
         return;
       }

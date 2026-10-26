@@ -39,7 +39,19 @@ export type LinkAction =
    * "Withdraw from contract here" (ADR-018 §7; CRD art. 11a): the statement, then "Confirm withdrawal".
    * Bound to the item, not to terms, and living as long as the right does.
    */
-  | "withdraw";
+  | "withdraw"
+  /**
+   * A stay (ADR-033): the property's quote accepted, declined, or other dates asked for; a confirmed
+   * stay cancelled at the fee the page shows; a card added to hold it; the property's change taken or
+   * left. Each page shows the terms first, and only its POST acts.
+   */
+  | "stay_accept"
+  | "stay_decline"
+  | "stay_dates"
+  | "stay_cancel"
+  | "stay_card"
+  | "stay_change_yes"
+  | "stay_change_no";
 
 export const LINK_ACTIONS: readonly LinkAction[] = [
   "accept_time",
@@ -55,6 +67,13 @@ export const LINK_ACTIONS: readonly LinkAction[] = [
   "details",
   "networks_off",
   "withdraw",
+  "stay_accept",
+  "stay_decline",
+  "stay_dates",
+  "stay_cancel",
+  "stay_card",
+  "stay_change_yes",
+  "stay_change_no",
 ];
 
 export interface LinkRow {
@@ -66,6 +85,8 @@ export interface LinkRow {
   /** The fingerprint of the terms the email carried; for a details link, the question it answers (`detailsSha`). */
   readonly termsSha: string;
   readonly lang: CustomerLang;
+  /** The language the link was minted in, as kept: one of a stay's six (ADR-033), where `lang` keeps en or pt. */
+  readonly langTag: string;
   /** The email the link went out in: its siblings share it. */
   readonly mailKey: string | null;
   readonly createdAt: number;
@@ -413,6 +434,7 @@ async function linkRows(db: Db, column: "jti" | "mail_key", values: readonly str
     usedAt: r[4] === null || r[4] === undefined ? null : Number(r[4]),
     termsSha: String(r[5] ?? ""),
     lang: r[6] === "pt" ? "pt" : "en",
+    langTag: String(r[6] ?? "en"),
     mailKey: r[7] === null || r[7] === undefined ? null : String(r[7]),
     createdAt: Number(r[8]),
   }));

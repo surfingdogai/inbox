@@ -45,6 +45,8 @@ export function buildManifest(input: {
    * signed feed and its products by id (`catalogue`), where a network reads them. Absent, it lists none.
    */
   catalogue?: boolean | undefined;
+  /** A place to stay's door (ADR-033), published while `item_types` lists `stay`. */
+  stay?: Manifest["stay"] | undefined;
 }): Manifest {
   const origin = input.instanceUrl.replace(/\/$/, "");
   const elsewhere = input.doorsElsewhere ?? [];
@@ -84,11 +86,15 @@ export function buildManifest(input: {
             item_type: d.item_type,
             url: d.url,
             ...(kept(d) ? { platform: kept(d) } : {}),
+            ...(d.url_template ? { url_template: d.url_template } : {}),
           })),
         }
       : {}),
     ...(input.catalogue
       ? { catalogue: { feed: `${origin}/v1/catalogue/changes`, items: `${origin}/v1/catalogue/items` } }
+      : {}),
+    ...(input.stay && (input.itemTypes ?? []).includes("stay") && !elsewhere.some((d) => d.item_type === "stay")
+      ? { stay: input.stay }
       : {}),
   });
 }

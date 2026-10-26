@@ -136,3 +136,19 @@ export function emailLangOfCountry(country: string | null | undefined): "en" | "
   if (!country) return null;
   return PORTUGUESE.has(country.toUpperCase()) ? "pt" : "en";
 }
+
+/**
+ * The owner app's one locale: its language (English) as it is written where the business is, from its
+ * time zone's country (`en-MX`, `en-JP`, `en-MA`), so weekdays, dates and amounts read alike on every
+ * screen, whatever the browser is set to. Undefined for a zone with no country.
+ */
+export function ownerLocale(zone: string | null | undefined): string | undefined {
+  const country = countryOfZone(zone);
+  if (!country) return undefined;
+  const tag = `en-${country}`;
+  try {
+    return Intl.NumberFormat.supportedLocalesOf([tag]).length > 0 ? tag : undefined;
+  } catch {
+    return undefined;
+  }
+}

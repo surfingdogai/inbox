@@ -54,6 +54,8 @@ import type { ReceiptCapabilities } from "../receipts/capabilities";
 import { items, parties, products, services } from "../schema/tables";
 import type { SecretBox } from "../secrets/box";
 import { readSettings, type Settings } from "../settings/schema";
+import type { StayTerms } from "../stays/capability";
+import { isStayAction, type StayPageDeps, stayLinkAct, stayLinkView } from "../stays/page";
 import { hashText } from "../util/canonical";
 import { type Caller, isCustomer, nowOf, withIdempotencyKey } from "../write/caller";
 import { findIdempotent } from "../write/common";
@@ -134,6 +136,11 @@ export interface CustomerItemView extends ItemView {
     readonly state: string;
     readonly human: string;
   }[];
+  /**
+   * For a stay (ADR-033): its quote and fingerprint, the payments with their links and deadlines, the
+   * policy in words, what cancelling costs now (with `fee_sha`), the hold or the change open.
+   */
+  readonly stay?: StayTerms | null | undefined;
 }
 
 export interface CustomerWithdrawal {
@@ -191,6 +198,13 @@ interface Deps {
   readonly people: IdentityCapabilities;
   readonly receipts: ReceiptCapabilities;
   readonly secrets: SecretBox | null;
+  /** A stay's terms as its guest reads them, and its pages (ADR-033). */
+  readonly stays?:
+    | {
+        terms(item: Item, lang: string, now: number): Promise<StayTerms | null>;
+        readonly page: Omit<StayPageDeps, "db">;
+      }
+    | undefined;
 }
 
 export class CustomerDoors {
@@ -263,6 +277,9 @@ export class CustomerDoors {
       ).filter((n) => !(current?.expired && n.action === "accept_offer")),
       withdrawal,
       refunds,
+      ...(item.type === "stay" && this.deps.stays
+        ? { stay: await this.deps.stays.terms(item, audience.lang, now) }
+        : {}),
     };
   }
 
@@ -690,6 +707,24 @@ export class CustomerDoors {
     for (let attempt = 1; ; attempt++) {
       const row = await this.loadOwned(c, input.item_id);
       const item = rowToItem(row);
+      // A stay's quote, hold or the property's change is taken on its own terms' fingerprint (ADR-033):
+      // without it, or with one for other terms, the answer gives the terms as they are now.
+      if (item.type === "stay") {
+        const change = item.payload.change;
+        const event = item.state === "held" ? "book" : change && change.by === "business" ? "accept_change" : "accept";
+        const r = await transitionItem(this.db, c, {
+          itemId: item.id,
+          event,
+          input: input.terms_sha ? { terms_sha: input.terms_sha } : {},
+          expectedVersion: item.version,
+          hashInput,
+        }).catch((error: unknown) => {
+          if (error instanceof WriteError && error.code === "version_conflict" && attempt < 3) return null;
+          throw error;
+        });
+        if (r) return this.result(r, c);
+        continue;
+      }
       const audience = await this.audienceOf(item, c);
       const words = copyFor(audience.lang);
       const offer = await openOffer(item, { minNoticeMin: audience.minNoticeMin });
@@ -790,23 +825,36 @@ export class CustomerDoors {
       // declines it. To a change we asked for to what was agreed, it keeps what was agreed; on a change
       // of their own, it takes it back.
       const change = openChange(item);
+      const stayChange = item.type === "stay" ? item.payload.change : undefined;
       const event =
-        (item.type === "booking" || item.type === "order") && item.state === "proposed"
-          ? "cancel"
-          : item.type === "quote_request" && item.state === "quoted"
+        item.type === "stay"
+          ? item.state === "quoted"
             ? "decline"
-            : change
-              ? change.by === "business"
-                ? "decline_change"
-                : "retract_change"
-              : null;
+            : item.state === "held"
+              ? "release"
+              : stayChange
+                ? stayChange.by === "business"
+                  ? "decline_change"
+                  : "retract_change"
+                : null
+          : (item.type === "booking" || item.type === "order") && item.state === "proposed"
+            ? "cancel"
+            : item.type === "quote_request" && item.state === "quoted"
+              ? "decline"
+              : change
+                ? change.by === "business"
+                  ? "decline_change"
+                  : "retract_change"
+                : null;
       if (!event) {
         const audience = await this.audienceOf(item, c);
         throw new WriteError("no_offer", copyFor(audience.lang).problems.nothingToAnswer, {
           details: { state: item.state },
         });
       }
-      if (event === "retract_change") await this.assertOwnChangePinned(c, item, input.offer_id);
+      if (item.type === "stay") {
+        // A stay's answers are pinned by its own fingerprints, not by offer rows.
+      } else if (event === "retract_change") await this.assertOwnChangePinned(c, item, input.offer_id);
       else await this.assertOfferPinned(c, item, input.offer_id);
       const said = input.reason?.trim();
       try {
@@ -1281,6 +1329,8 @@ export class CustomerDoors {
     const ctx = await this.linkContext(token, opts.acceptLanguage ?? null);
     if ("page" in ctx) return ctx.page;
     if (ctx.row.action === "networks_off") return this.networksPage(ctx, opts.now);
+    // A stay's links (ADR-033): its own pages, in the guest's language among six.
+    if (isStayAction(ctx.row.action)) return stayLinkView({ db: this.db, ...this.deps.stays?.page }, ctx, opts.now);
     return this.pageFor(ctx, opts.now, { from: opts.from });
   }
 
@@ -1300,6 +1350,7 @@ export class CustomerDoors {
     const now = opts.now;
     const words = copyFor(audience.lang).page;
     if (row.action === "networks_off") return this.stopFromLink(ctx, form, now);
+    if (isStayAction(row.action)) return stayLinkAct({ db: this.db, ...this.deps.stays?.page }, ctx, form, now);
     if (row.usedAt !== null)
       return { page: this.plain(ctx, 409, words.alreadyDone(vars({ status: status(item, audience) }))) };
     const blocked = await this.blocked(ctx, now);
@@ -1370,6 +1421,8 @@ export class CustomerDoors {
         event = "withdraw";
         input = reason ? { note: reason } : undefined;
         break;
+      default:
+        return { page: this.plain(ctx, 404, words.invalid) };
     }
     const caller: Caller = {
       actor: { kind: "customer_human", id: `link:${row.jti}`, partyId: item.partyId, channel: "action_link" },
@@ -2399,6 +2452,15 @@ function stateAllows(action: LinkAction, item: Item): boolean {
       return item.state === "needs_info";
     case "networks_off":
       return true;
+    case "stay_accept":
+    case "stay_decline":
+    case "stay_dates":
+    case "stay_cancel":
+    case "stay_card":
+    case "stay_change_yes":
+    case "stay_change_no":
+      // A stay's pages judge their own state (stays/page.ts).
+      return item.type === "stay";
     case "withdraw":
       return (
         (item.type === "booking" && item.state === "confirmed") ||

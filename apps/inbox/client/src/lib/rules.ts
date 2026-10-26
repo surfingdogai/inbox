@@ -48,6 +48,12 @@ export const FNS = [
   "person_trusted",
   "customer_known",
   "within_customer_limit",
+  "rates_cover",
+  "nights_free",
+  "nights_closed",
+  "ical_hint_overlap",
+  "free_cancellation",
+  "change_nights_free",
 ] as const;
 export type Fn = (typeof FNS)[number];
 
@@ -60,6 +66,12 @@ export const FN_WORDS: Record<Fn, string> = {
   person_trusted: "the customer is trusted on a network",
   customer_known: "it is a customer you know",
   within_customer_limit: "the total is within the customer's limit",
+  rates_cover: "your rates price every night",
+  nights_free: "the nights are free at once",
+  nights_closed: "you are full or closed on those nights",
+  ical_hint_overlap: "another calendar shows the nights as taken",
+  free_cancellation: "cancelling is still free",
+  change_nights_free: "the new nights are free",
 };
 
 /** Paths an owner is likely to want, with words; anything else can be typed. */
@@ -328,6 +340,8 @@ function actionToRow(a: Action): ActionRow {
       };
     case "stop":
       return { ...EMPTY_ACTION, kind: "stop" };
+    case "draft":
+      return { ...EMPTY_ACTION, kind: "draft", event: a.event };
   }
 }
 
@@ -419,6 +433,9 @@ export function toDefinition(form: RuleForm): Built {
       }
       case "stop":
         actions.push({ action: "stop" });
+        break;
+      case "draft":
+        actions.push({ action: "draft", event: "quote", input: { from: "rates" } });
         break;
     }
   }

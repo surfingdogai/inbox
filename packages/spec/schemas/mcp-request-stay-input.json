@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MCP request_stay: arguments",
+  "type": "object",
+  "properties": {
+    "domain": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253,
+      "description": "The business's domain, as search_businesses or get_business gave it, like bikes.example."
+    },
+    "check_in": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+      "description": "Arrival date, the property's own, as YYYY-MM-DD."
+    },
+    "check_out": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$",
+      "description": "Departure date, after check_in."
+    },
+    "adults": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 20
+    },
+    "children_ages": {
+      "description": "Each child's age on arrival.",
+      "maxItems": 10,
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 17
+      }
+    },
+    "room": {
+      "description": "A room type's name or id from get_property; any room when left out.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "notes": {
+      "description": "Anything the property should know: an arrival time, a cot.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "terms_sha": {
+      "description": "The confirm.terms_sha of the last answer, sent only after your person said yes to its summary.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "contact": {
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "maxLength": 254,
+          "pattern": "^[^\\s@<>()\\[\\],;:\"]{1,64}@[^\\s@<>()\\[\\],;:\"]+\\.[^\\s@<>()\\[\\],;:\"]{2,}$",
+          "description": "Your person's email address, which they agreed to give this business for its answer."
+        },
+        "name": {
+          "description": "The name your person wants the business to use.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        }
+      },
+      "required": ["email"],
+      "additionalProperties": false,
+      "description": "Where the business can answer. Only an email address and a name: never a phone number."
+    },
+    "consent": {
+      "type": "boolean",
+      "const": true,
+      "description": "true only when your person agreed to give this business their email address for its answer. Without it nothing is sent."
+    },
+    "language": {
+      "description": "The language your person wants the answer in, as a tag like en, pt or pt-BR.",
+      "type": "string",
+      "maxLength": 12,
+      "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+    }
+  },
+  "required": ["domain", "check_in", "check_out", "adults", "contact", "consent"]
+}

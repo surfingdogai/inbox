@@ -284,7 +284,7 @@ describe("client filters", () => {
     const everything = { items: [...open.items, view({ closedAt: "2026-09-21T11:00:00Z" })], next_cursor: null };
     const counts = countsFrom(open, everything);
     expect(counts).toMatchObject({ needs: 1, all: 3, done: 1, openMore: true, doneMore: false });
-    expect(counts.byType).toEqual({ message: 0, quote_request: 0, booking: 2, order: 1, refund: 0 });
+    expect(counts.byType).toEqual({ message: 0, quote_request: 0, booking: 2, order: 1, refund: 0, stay: 0 });
   });
 });
 

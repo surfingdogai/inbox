@@ -133,6 +133,10 @@ export async function frontHome(caps: Capabilities, lang: CustomerLang): Promise
         ]
       : []),
   ];
+  // A place to stay that takes stays here says so as schema.org reads it (ADR-033 §6.4).
+  const jsonLd = profile.item_types.includes("stay")
+    ? await caps.stays.frontJsonLd(profile.domain ? `https://${profile.domain}/` : null)
+    : null;
   return {
     ...(await base(caps, lang)),
     heading: f.heading,
@@ -141,6 +145,7 @@ export async function frontHome(caps: Capabilities, lang: CustomerLang): Promise
     nav: [{ label: f.signIn, href: "/login" }],
     // How a visitor can pay, as the owner ticked it: one quiet line under the business's name.
     help: payLine(profile.payments, lang),
+    ...(jsonLd ? { jsonLd } : {}),
   };
 }
 

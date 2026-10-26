@@ -204,6 +204,13 @@
       "when": 1792400000000,
       "tag": "0028_ready_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1792200000000,
+      "tag": "0026_stays",
+      "breakpoints": true
     }
   ]
 }

@@ -7,6 +7,7 @@ import { Field, SectionHead, Switch } from "../components/Form";
 import { IntegrationsCard } from "../components/Integrations";
 import { type ApiProblem, problemOf } from "../lib/api";
 import { relativeTime } from "../lib/format";
+import { useProperty } from "../lib/property";
 import {
   useCreateWebhook,
   useFeeds,
@@ -35,14 +36,19 @@ export const Route = createFileRoute("/settings/integrations")({
  * owner, which is "is this inbox talking to the rest of my business".
  */
 function IntegrationsPage() {
+  // A place to stay lets nights, not minutes or products: no booking calendars, no product feeds.
+  const property = useProperty();
+  const stays = (property.data?.properties.length ?? 0) > 0;
   return (
     <>
-      <IntegrationsCard />
-      <FeedsCard />
+      <IntegrationsCard skip={stays ? STAY_SKIP : []} />
+      {!stays && <FeedsCard />}
       <WebhooksCard />
     </>
   );
 }
+
+const STAY_SKIP = ["calcom", "calendly"] as const;
 
 /* --- Product feeds ------------------------------------------------------- */
 

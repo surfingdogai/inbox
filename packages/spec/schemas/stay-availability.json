@@ -1,0 +1,675 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://surfingdog.ai/spec/schemas/stay-availability.json",
+  "title": "check_stay_availability: free rooms, offers and estimates for dates and guests",
+  "type": "object",
+  "properties": {
+    "property": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "name"]
+    },
+    "check_in": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+    },
+    "check_out": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+    },
+    "nights": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$"
+    },
+    "options": {
+      "maxItems": 60,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "room_type": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "capacity": {
+                "type": "object",
+                "properties": {
+                  "adults": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "children": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "total": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": ["adults", "children", "total"]
+              }
+            },
+            "required": ["id", "name", "capacity"]
+          },
+          "rate_plan": {
+            "description": "Absent when the property gives no price ahead: it answers with its own.",
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "meal": {
+                "type": "string",
+                "enum": ["room_only", "breakfast", "half_board", "full_board", "all_inclusive"]
+              },
+              "refundable": {
+                "type": "boolean"
+              }
+            },
+            "required": ["id", "name", "meal", "refundable"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["instant", "on_request", "unavailable"]
+          },
+          "likely_taken": {
+            "description": "Another calendar of the property's shows these nights as taken.",
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "offer": {
+            "description": "Instant only: a signed offer to hold or book, until valid_through.",
+            "type": "object",
+            "properties": {
+              "offer_id": {
+                "type": "string"
+              },
+              "valid_through": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+              },
+              "quote": {
+                "type": "object",
+                "properties": {
+                  "currency": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{3}$"
+                  },
+                  "lines": {
+                    "minItems": 1,
+                    "maxItems": 40,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": ["subtotal", "extra", "fee", "tax", "discount"]
+                        },
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "description": "Double room, 3 nights · City tax (paid at the property)"
+                        },
+                        "amount": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Minor units of the quote's currency; a discount is negative."
+                        },
+                        "collected": {
+                          "type": "string",
+                          "enum": ["with_booking", "at_property"]
+                        },
+                        "nights": {
+                          "description": "A room line's price night by night.",
+                          "maxItems": 90,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "night": {
+                                "type": "string",
+                                "format": "date",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                              },
+                              "amount": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": ["night", "amount"]
+                          }
+                        }
+                      },
+                      "required": ["type", "label", "amount", "collected"]
+                    }
+                  },
+                  "total": {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Minor units of the currency's own ISO 4217 exponent (minorUnits): 4500 is CA$45.00 or ₹45.00, ¥4,500 in JPY, 4.500 in KWD."
+                      },
+                      "currency": {
+                        "type": "string",
+                        "minLength": 3,
+                        "maxLength": 3
+                      }
+                    },
+                    "required": ["value", "currency"]
+                  },
+                  "ratePlan": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "maxLength": 64
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "meal": {
+                        "type": "string",
+                        "enum": ["room_only", "breakfast", "half_board", "full_board", "all_inclusive"]
+                      },
+                      "refundable": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": ["name", "meal", "refundable"]
+                  },
+                  "policy": {
+                    "type": "object",
+                    "properties": {
+                      "steps": {
+                        "maxItems": 6,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "until": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                            },
+                            "fee": {
+                              "type": "object",
+                              "properties": {
+                                "value": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991,
+                                  "description": "Minor units of the currency's own ISO 4217 exponent (minorUnits): 4500 is CA$45.00 or ₹45.00, ¥4,500 in JPY, 4.500 in KWD."
+                                },
+                                "currency": {
+                                  "type": "string",
+                                  "minLength": 3,
+                                  "maxLength": 3
+                                }
+                              },
+                              "required": ["value", "currency"]
+                            }
+                          },
+                          "required": ["until", "fee"]
+                        },
+                        "description": "Cancelling before `until` costs `fee`; the steps are in order."
+                      },
+                      "after": {
+                        "type": "object",
+                        "properties": {
+                          "value": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991,
+                            "description": "Minor units of the currency's own ISO 4217 exponent (minorUnits): 4500 is CA$45.00 or ₹45.00, ¥4,500 in JPY, 4.500 in KWD."
+                          },
+                          "currency": {
+                            "type": "string",
+                            "minLength": 3,
+                            "maxLength": 3
+                          }
+                        },
+                        "required": ["value", "currency"],
+                        "description": "The fee after the last step, until the start."
+                      },
+                      "noShow": {
+                        "type": "object",
+                        "properties": {
+                          "value": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991,
+                            "description": "Minor units of the currency's own ISO 4217 exponent (minorUnits): 4500 is CA$45.00 or ₹45.00, ¥4,500 in JPY, 4.500 in KWD."
+                          },
+                          "currency": {
+                            "type": "string",
+                            "minLength": 3,
+                            "maxLength": 3
+                          }
+                        },
+                        "required": ["value", "currency"]
+                      },
+                      "zone": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64,
+                        "description": "The IANA zone the steps were dated in: the business's."
+                      }
+                    },
+                    "required": ["steps", "after", "noShow", "zone"]
+                  },
+                  "schedule": {
+                    "minItems": 1,
+                    "maxItems": 4,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64,
+                          "description": "deposit, balance, at_property, difference-1"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": ["immediate", "deferred", "at_property"]
+                        },
+                        "amount": {
+                          "type": "object",
+                          "properties": {
+                            "value": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991,
+                              "description": "Minor units of the currency's own ISO 4217 exponent (minorUnits): 4500 is CA$45.00 or ₹45.00, ¥4,500 in JPY, 4.500 in KWD."
+                            },
+                            "currency": {
+                              "type": "string",
+                              "minLength": 3,
+                              "maxLength": 3
+                            }
+                          },
+                          "required": ["value", "currency"]
+                        },
+                        "dueAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                        },
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        }
+                      },
+                      "required": ["id", "type", "amount", "label"]
+                    }
+                  },
+                  "guarantee": {
+                    "type": "string",
+                    "enum": ["none", "card"]
+                  },
+                  "includes": {
+                    "default": [],
+                    "maxItems": 10,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 60
+                    }
+                  },
+                  "validThrough": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": ["person", "rates", "connected", "allotment"]
+                  },
+                  "notes": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "currency",
+                  "lines",
+                  "total",
+                  "ratePlan",
+                  "policy",
+                  "schedule",
+                  "guarantee",
+                  "validThrough",
+                  "source"
+                ]
+              }
+            },
+            "required": ["offer_id", "valid_through", "quote"]
+          },
+          "estimate": {
+            "description": "On request: the property's rates for these dates, never binding.",
+            "type": "object",
+            "properties": {
+              "currency": {
+                "type": "string",
+                "pattern": "^[A-Z]{3}$"
+              },
+              "lines": {
+                "minItems": 1,
+                "maxItems": 40,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": ["subtotal", "extra", "fee", "tax", "discount"]
+                    },
+                    "label": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200,
+                      "description": "Double room, 3 nights · City tax (paid at the property)"
+                    },
+                    "amount": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991,
+                      "description": "Minor units of the quote's currency; a discount is negative."
+                    },
+                    "collected": {
+                      "type": "string",
+                      "enum": ["with_booking", "at_property"]
+                    },
+                    "nights": {
+                      "description": "A room line's price night by night.",
+                      "maxItems": 90,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "night": {
+                            "type": "string",
+                            "format": "date",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                          },
+                          "amount": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": ["night", "amount"]
+                      }
+                    }
+                  },
+                  "required": ["type", "label", "amount", "collected"]
+                }
+              },
+              "total": {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991,
+                    "description": "Minor units of the currency's own ISO 4217 exponent (minorUnits): 4500 is CA$45.00 or ₹45.00, ¥4,500 in JPY, 4.500 in KWD."
+                  },
+                  "currency": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 3
+                  }
+                },
+                "required": ["value", "currency"]
+              },
+              "ratePlan": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "maxLength": 64
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "meal": {
+                    "type": "string",
+                    "enum": ["room_only", "breakfast", "half_board", "full_board", "all_inclusive"]
+                  },
+                  "refundable": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["name", "meal", "refundable"]
+              },
+              "policy": {
+                "type": "object",
+                "properties": {
+                  "steps": {
+                    "maxItems": 6,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "until": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                        },
+                        "fee": {
+                          "type": "object",
+                          "properties": {
+                            "value": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991,
+                              "description": "Minor units of the currency's own ISO 4217 exponent (minorUnits): 4500 is CA$45.00 or ₹45.00, ¥4,500 in JPY, 4.500 in KWD."
+                            },
+                            "currency": {
+                              "type": "string",
+                              "minLength": 3,
+                              "maxLength": 3
+                            }
+                          },
+                          "required": ["value", "currency"]
+                        }
+                      },
+                      "required": ["until", "fee"]
+                    },
+                    "description": "Cancelling before `until` costs `fee`; the steps are in order."
+                  },
+                  "after": {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Minor units of the currency's own ISO 4217 exponent (minorUnits): 4500 is CA$45.00 or ₹45.00, ¥4,500 in JPY, 4.500 in KWD."
+                      },
+                      "currency": {
+                        "type": "string",
+                        "minLength": 3,
+                        "maxLength": 3
+                      }
+                    },
+                    "required": ["value", "currency"],
+                    "description": "The fee after the last step, until the start."
+                  },
+                  "noShow": {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                        "description": "Minor units of the currency's own ISO 4217 exponent (minorUnits): 4500 is CA$45.00 or ₹45.00, ¥4,500 in JPY, 4.500 in KWD."
+                      },
+                      "currency": {
+                        "type": "string",
+                        "minLength": 3,
+                        "maxLength": 3
+                      }
+                    },
+                    "required": ["value", "currency"]
+                  },
+                  "zone": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "description": "The IANA zone the steps were dated in: the business's."
+                  }
+                },
+                "required": ["steps", "after", "noShow", "zone"]
+              },
+              "schedule": {
+                "minItems": 1,
+                "maxItems": 4,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64,
+                      "description": "deposit, balance, at_property, difference-1"
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": ["immediate", "deferred", "at_property"]
+                    },
+                    "amount": {
+                      "type": "object",
+                      "properties": {
+                        "value": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991,
+                          "description": "Minor units of the currency's own ISO 4217 exponent (minorUnits): 4500 is CA$45.00 or ₹45.00, ¥4,500 in JPY, 4.500 in KWD."
+                        },
+                        "currency": {
+                          "type": "string",
+                          "minLength": 3,
+                          "maxLength": 3
+                        }
+                      },
+                      "required": ["value", "currency"]
+                    },
+                    "dueAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                    },
+                    "label": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    }
+                  },
+                  "required": ["id", "type", "amount", "label"]
+                }
+              },
+              "guarantee": {
+                "type": "string",
+                "enum": ["none", "card"]
+              },
+              "includes": {
+                "default": [],
+                "maxItems": 10,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 60
+                }
+              },
+              "validThrough": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+              },
+              "source": {
+                "type": "string",
+                "enum": ["person", "rates", "connected", "allotment"]
+              },
+              "notes": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "binding": {
+                "type": "boolean",
+                "const": false
+              }
+            },
+            "required": [
+              "currency",
+              "lines",
+              "total",
+              "ratePlan",
+              "policy",
+              "schedule",
+              "guarantee",
+              "validThrough",
+              "source",
+              "binding"
+            ]
+          }
+        },
+        "required": ["room_type", "status"]
+      }
+    },
+    "answers_within_h": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 168
+    },
+    "confirmation": {
+      "type": "string",
+      "enum": ["request", "instant_some", "instant"]
+    }
+  },
+  "required": ["property", "check_in", "check_out", "nights", "currency", "options", "answers_within_h", "confirmation"]
+}

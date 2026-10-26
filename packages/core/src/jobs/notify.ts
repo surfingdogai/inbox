@@ -14,6 +14,10 @@ import { lawOf } from "../negotiation/holidays";
 import { items, parties } from "../schema/tables";
 import type { SecretBox } from "../secrets/box";
 import { readSettings, type Settings } from "../settings/schema";
+import { stayLang } from "../stays/copy";
+import { ARRIVAL_MARKER, ARRIVAL_STATES, ARRIVAL_TEMPLATE, renderStayMail, stayLinks } from "../stays/mail";
+import { ownerStayMail } from "../stays/owner-mail";
+import { openArrival } from "../stays/setup";
 import { withdrawalOf } from "../write/returns";
 import { describe, rowToItem } from "../write/views";
 import {
@@ -32,6 +36,26 @@ import type { JobHandler } from "./runner";
 import { ensureJob } from "./schedule";
 
 export { senderOf } from "./mail-log";
+
+/**
+ * A stay's private arrival details (ADR-033 §10), opened from their seal only as the email goes: the
+ * kept copy holds the email's own marker, never the codes. Only the arrival-details email the inbox wrote
+ * itself carries them, and only while the stay is confirmed or under way: a reply, whoever asked for it
+ * and whatever it says, never does.
+ */
+async function fillArrival(
+  db: Db,
+  secrets: SecretBox | null,
+  item: Item,
+  template: string,
+  text: string,
+): Promise<string> {
+  if (item.type !== "stay" || template !== ARRIVAL_TEMPLATE || !ARRIVAL_STATES.includes(item.state)) {
+    return text.replace(ARRIVAL_MARKER, "");
+  }
+  const details = await openArrival(db, secrets, item.payload.propertyId);
+  return text.replace(ARRIVAL_MARKER, details ?? "");
+}
 
 /**
  * Turns a `notify` job into an email: to the customer at the address they gave, to the owner at the
@@ -77,15 +101,25 @@ export function notifyHandler(
 
     let logged = await mailByJob(db, job.id);
     if (!logged) {
+      const who = p.to === "owner" ? await nameOf(db, item.partyId) : "";
       const composed =
         p.to === "owner"
           ? await capOwnerAlerts(
               db,
-              ownerMail(item, p, settings, await nameOf(db, item.partyId), job.id, sender !== null, {
-                words: await lastWordsOf(db, item.id),
-                byEmail: inboundOf(settings) !== null,
-                business: facts.name,
-              }),
+              ownerMail(
+                item,
+                p,
+                settings,
+                who,
+                job.id,
+                sender !== null,
+                {
+                  words: await lastWordsOf(db, item.id),
+                  byEmail: inboundOf(settings) !== null,
+                  business: facts.name,
+                },
+                await ownerStayMail(db, item, p.event, who),
+              ),
               now,
             )
           : await customerMail(db, item, p, {
@@ -149,10 +183,16 @@ export function notifyHandler(
       // The log keeps the links cut (`cutLinks`); only the email the customer gets carries them whole.
       text:
         logged.recipient === "customer"
-          ? await fillLinks(db, opts.secrets ?? null, logged.bodyText, {
-              mailKey: logged.jobKey,
-              itemId: logged.itemId,
-            })
+          ? await fillArrival(
+              db,
+              opts.secrets ?? null,
+              item,
+              logged.template,
+              await fillLinks(db, opts.secrets ?? null, logged.bodyText, {
+                mailKey: logged.jobKey,
+                itemId: logged.itemId,
+              }),
+            )
           : logged.bodyText,
       headers,
     };
@@ -268,6 +308,48 @@ async function customerMail(
           : !o.canSend
             ? ("no_sender" as const)
             : undefined;
+  // A stay's emails (ADR-033 §12): in the guest's language among six, from the stay as it stands.
+  if (item.type === "stay") {
+    const stayLangOf = stayLang(o.contact?.locale ?? o.settings.stays.languages[0] ?? facts.languages[0]);
+    const links = skip
+      ? null
+      : await stayLinks(db, o.secrets, item, { mailKey: o.jobKey, lang: stayLangOf, base: o.base, now: o.now });
+    const { rows: open } = await db.client.query({
+      sql: "SELECT schedule_id, url, amount, currency FROM connector_payments WHERE item_id = ? AND state = 'open' AND url IS NOT NULL AND purpose <> 'guarantee' ORDER BY created_at",
+      params: [item.id],
+      method: "all",
+    });
+    const rendered = await renderStayMail(db, {
+      item,
+      event: p.event,
+      lang: stayLangOf,
+      words: cause.words,
+      automated: isAutomated(cause.actorKind, cause.channel, cause.writtenBy),
+      replies: o.mailOut.replies !== false,
+      links,
+      pay: open.map((r) => ({
+        scheduleId: String(r[0]),
+        url: String(r[1]),
+        amount: { value: Number(r[2]), currency: String(r[3]) },
+      })),
+      fromState: cause.fromState,
+      now: o.now,
+    });
+    if (!rendered) return { note: `no email for a stay's ${p.event}` };
+    const held = skip ?? (await heldAs(o.mailOut, kind, customerMailKind(p.event, cause, rendered.template)));
+    return {
+      itemId: item.id,
+      jobKey: o.jobKey,
+      recipient: "customer",
+      template: rendered.template,
+      lang: stayLangOf,
+      entryId: cause.entryId,
+      eventId: p.eventId ?? null,
+      subject: rendered.subject,
+      text: cutLinks(rendered.text),
+      ...(held ? { skip: held } : {}),
+    };
+  }
   // What waits for the customer's answer carries the links to give it: a page on this inbox, in
   // the customer's language (ADR-018 §5). Without a secret to sign them, or an address for them to
   // point at, the email asks for a reply instead.
@@ -442,6 +524,8 @@ function ownerMail(
     readonly byEmail: boolean;
     readonly business: string;
   } = { words: null, byEmail: false, business: "" },
+  /** A stay's own words for the owner (ADR-033 S16), when it has them for this event. */
+  stay: { readonly subject: string; readonly lines: readonly string[] } | null = null,
 ): ComposedMail {
   const appUrl = settings.notifications.appUrl ?? "";
   // A customer who wrote is quoted, so the owner can answer from their mailbox; a few lines at most.
@@ -458,9 +542,9 @@ function ownerMail(
     eventId: p.eventId ?? null,
     // One line, whatever the customer typed as their name or subject: a subject with a line break
     // in it is refused by a mail service, and the owner would never hear of the request.
-    subject: oneLine(ownerSubject(item, p.event, who)),
+    subject: oneLine(stay?.subject ?? ownerSubject(item, p.event, who)),
     text: [
-      describe(item),
+      ...(stay ? stay.lines : [describe(item)]),
       "",
       `From: ${who}`,
       ...(said.length ? ["", ...said] : []),
@@ -800,6 +884,7 @@ const TYPE_WORD: Record<Item["type"], string> = {
   booking: "booking",
   order: "order",
   refund: "return",
+  stay: "stay request",
 };
 
 function ownerSubject(item: Item, event: string, who: string): string {
