@@ -23,6 +23,9 @@ import { keysOf, storeOf } from "./state";
  *   to the bin has its variations read too, and they come in off sale.
  * - **A page is small enough to read** whatever a store writes in its descriptions: 25 products a
  *   page (a page builder's description can be tens of kilobytes each), read up to 8 MB.
+ * - **What it is** (ADR-029): its barcode from `global_unique_id` (WooCommerce's GTIN, UPC, EAN or
+ *   ISBN field, since 9.2), checked when it is stored; its page (`permalink`); and the link to its
+ *   first picture, a variation's own or else its product's. Each only when the store gives it.
  *
  * Endpoints: https://woocommerce.github.io/woocommerce-rest-api-docs/#list-all-products and
  * https://woocommerce.github.io/woocommerce-rest-api-docs/#list-all-product-variations (`per_page` at most 100).
@@ -36,9 +39,12 @@ const VARIATION_PAGE_SIZE = 100;
 const PAGE_MAX_BYTES = 8 * 1024 * 1024;
 
 const PRODUCT_FIELDS =
-  "id,name,type,status,purchasable,sku,price,manage_stock,stock_quantity,stock_status,short_description,description";
+  "id,name,type,status,purchasable,sku,price,manage_stock,stock_quantity,stock_status,short_description,description,global_unique_id,permalink,images";
 const VARIATION_FIELDS =
-  "id,name,status,purchasable,sku,price,manage_stock,stock_quantity,stock_status,attributes,description";
+  "id,name,status,purchasable,sku,price,manage_stock,stock_quantity,stock_status,attributes,description,global_unique_id,permalink,image";
+
+/** The longest link kept in a cursor: a product's picture, for its variations that have none of their own. */
+const LINK_MAX = 2048;
 
 /** Where a reading of the catalogue is: the next page of products, and the variable products still to read. */
 interface Cursor {
@@ -46,11 +52,16 @@ interface Cursor {
   readonly phase: "all" | "trash";
   /** The next page of products, or null once they are all listed. */
   readonly page: number | null;
-  /** Variable products whose variations are still to read: id, name, whether it is published. */
-  readonly parents: readonly (readonly [number, string, 0 | 1])[];
+  /**
+   * Variable products whose variations are still to read: id, name, whether it is published, and the
+   * link to its first picture when it has one.
+   */
+  readonly parents: readonly Parent[];
   /** The next page of the first parent's variations. */
   readonly vpage: number;
 }
+
+type Parent = readonly [number, string, 0 | 1] | readonly [number, string, 0 | 1, string];
 
 const START: Cursor = { phase: "all", page: 1, parents: [], vpage: 1 };
 
@@ -62,7 +73,12 @@ function parseCursor(raw: string | null): Cursor {
     const parents = Array.isArray(c.parents)
       ? c.parents
           .filter((p) => Array.isArray(p) && Number.isInteger(p[0]) && typeof p[1] === "string")
-          .map((p) => [Number(p[0]), String(p[1]).slice(0, 120), p[2] === 1 ? 1 : 0] as const)
+          .map(
+            (p): Parent =>
+              typeof p[3] === "string" && p[3] && p[3].length <= LINK_MAX
+                ? [Number(p[0]), String(p[1]).slice(0, 120), p[2] === 1 ? 1 : 0, p[3]]
+                : [Number(p[0]), String(p[1]).slice(0, 120), p[2] === 1 ? 1 : 0],
+          )
       : [];
     const vpage = Number(c.vpage);
     return {
@@ -118,7 +134,7 @@ async function page(
   const c = parseCursor(p.cursor);
   const [parent, ...rest] = c.parents;
   if (parent) {
-    const [id, parentName, published] = parent;
+    const [id, parentName, published, parentImage] = parent;
     let answer: Awaited<ReturnType<typeof call>>;
     try {
       answer = await call(ctx.http, store, keys, "GET", `/wc/v3/products/${id}/variations`, {
@@ -135,7 +151,7 @@ async function page(
     const list = Array.isArray(answer.json) ? (answer.json as Raw[]) : [];
     const products = list
       .filter((v) => Number.isInteger(v.id))
-      .map((v) => variationOf(v, parentName, published, currency));
+      .map((v) => variationOf(v, parentName, published, currency, parentImage ?? null));
     const more = c.vpage < totalPages(answer.headers) && list.length > 0;
     const next: Cursor = more ? { ...c, vpage: c.vpage + 1 } : { ...c, parents: rest, vpage: 1 };
     return { products, cursor: encode(next) };
@@ -163,14 +179,14 @@ async function page(
   }
   const list = Array.isArray(answer.json) ? (answer.json as Raw[]) : [];
   const products: CatalogueProduct[] = [];
-  const parents: (readonly [number, string, 0 | 1])[] = [...c.parents];
+  const parents: Parent[] = [...c.parents];
   for (const item of list) {
     if (!Number.isInteger(item.id)) continue;
     if (trash) {
       // In the bin: off sale, whatever it was; a variable one's variations are read next, off sale too.
       if (item.type === "variable") {
         const name = typeof item.name === "string" ? plain(item.name).slice(0, 120) : "";
-        parents.push([Number(item.id), name, 0]);
+        parents.push(parentOf(item, name, 0));
       } else if (item.type !== "grouped" && item.type !== "external") {
         products.push({ ...simpleOf(item, currency), available: false });
       }
@@ -178,7 +194,7 @@ async function page(
     }
     if (item.type === "variable") {
       const name = typeof item.name === "string" ? plain(item.name).slice(0, 120) : "";
-      parents.push([Number(item.id), name, item.status === "publish" ? 1 : 0]);
+      parents.push(parentOf(item, name, item.status === "publish" ? 1 : 0));
       continue;
     }
     // Grouped products are only a list of others, and external ones are sold elsewhere.
@@ -203,10 +219,44 @@ function simpleOf(p: Raw, currency: string | null): CatalogueProduct {
     price: priceOf(p, currency),
     stock: stockOf(p),
     available: p.status === "publish" && p.purchasable === true,
+    ...identityOf(p, firstImage(p)),
   };
 }
 
-function variationOf(v: Raw, parentName: string, published: 0 | 1, currency: string | null): CatalogueProduct {
+/** A variable product as its variations are read after it: with its picture, for those that have none. */
+function parentOf(p: Raw, name: string, published: 0 | 1): Parent {
+  const image = firstImage(p);
+  return image && image.length <= LINK_MAX ? [Number(p.id), name, published, image] : [Number(p.id), name, published];
+}
+
+/** The link to a product's first picture (`images[0].src`), when it has one. */
+function firstImage(p: Raw): string | null {
+  const [first] = Array.isArray(p.images) ? (p.images as { src?: unknown }[]) : [];
+  return textOf(first?.src);
+}
+
+/** Its barcode, its page and its picture's link, each only when the store gives it. */
+function identityOf(p: Raw, image: string | null): Pick<CatalogueProduct, "gtin" | "url" | "imageUrl"> {
+  const barcode = textOf(p.global_unique_id);
+  const url = textOf(p.permalink);
+  return {
+    ...(barcode ? { gtin: { raw: barcode, hint: "barcode" as const } } : {}),
+    ...(url ? { url } : {}),
+    ...(image ? { imageUrl: image } : {}),
+  };
+}
+
+function textOf(v: unknown): string | null {
+  return typeof v === "string" && v.trim() ? v.trim() : null;
+}
+
+function variationOf(
+  v: Raw,
+  parentName: string,
+  published: 0 | 1,
+  currency: string | null,
+  parentImage: string | null,
+): CatalogueProduct {
   const options = Array.isArray(v.attributes)
     ? (v.attributes as { option?: unknown }[])
         .map((a) => (typeof a?.option === "string" ? plain(a.option) : ""))
@@ -222,6 +272,7 @@ function variationOf(v: Raw, parentName: string, published: 0 | 1, currency: str
     price: priceOf(v, currency),
     stock: stockOf(v),
     available: published === 1 && v.status === "publish" && v.purchasable === true,
+    ...identityOf(v, textOf((v.image as { src?: unknown } | null | undefined)?.src) ?? parentImage),
   };
 }
 

@@ -48,6 +48,10 @@ export interface WooProduct {
   description: string;
   modified: number;
   variations?: WooVariation[];
+  /** WooCommerce's "GTIN, UPC, EAN or ISBN" (9.2): as the owner typed it, "" for none. */
+  global_unique_id?: string;
+  /** The links to its pictures, the first its main one. */
+  images?: string[];
 }
 
 export interface WooVariation {
@@ -61,6 +65,9 @@ export interface WooVariation {
   stock_status: "instock" | "outofstock" | "onbackorder";
   attributes: { id: number; name: string; option: string }[];
   modified: number;
+  global_unique_id?: string;
+  /** The link to the variation's own picture, when it has one. */
+  image?: string;
 }
 
 interface Line {
@@ -323,7 +330,7 @@ export function fakeWooStore(
     for (const p of store.products) {
       if (p.id === id) return productView(p);
       const v = p.variations?.find((x) => x.id === id);
-      if (v) return { ...variationView(v), parent_id: p.id };
+      if (v) return { ...variationView(v, p), parent_id: p.id };
     }
     return { id };
   };
@@ -352,11 +359,21 @@ export function fakeWooStore(
     stock_quantity: p.stock_quantity,
     stock_status: p.stock_status,
     variations: (p.variations ?? []).map((v) => v.id),
+    global_unique_id: p.global_unique_id ?? "",
+    images: (p.images ?? []).map((src, i) => ({ id: p.id * 100 + i, src, name: "", alt: "" })),
     meta_data: [],
   });
 
-  const variationView = (v: WooVariation) => ({
+  // A variation's page is its product's, with its options in the query, as WooCommerce links it.
+  const variationView = (v: WooVariation, parent?: WooProduct) => ({
     id: v.id,
+    ...(parent
+      ? {
+          permalink: `${base}/product/${parent.id}/?${v.attributes
+            .map((a) => `attribute_${encodeURIComponent(a.name.toLowerCase())}=${encodeURIComponent(a.option)}`)
+            .join("&")}`,
+        }
+      : {}),
     date_modified_gmt: gmt(v.modified),
     description: "",
     sku: v.sku,
@@ -368,6 +385,8 @@ export function fakeWooStore(
     stock_quantity: v.stock_quantity,
     stock_status: v.stock_status,
     attributes: v.attributes,
+    global_unique_id: v.global_unique_id ?? "",
+    image: v.image ? { id: v.id * 100, src: v.image, name: "", alt: "" } : null,
     meta_data: [],
   });
 
@@ -617,7 +636,11 @@ export function fakeWooStore(
     if (what === "products" && sub === "variations" && method === "GET") {
       const p = store.products.find((x) => x.id === id);
       if (!p) return wooError(404, "woocommerce_rest_product_invalid_id", "Invalid ID.");
-      return paged((p.variations ?? []).map(variationView), q, fields);
+      return paged(
+        (p.variations ?? []).map((v) => variationView(v, p)),
+        q,
+        fields,
+      );
     }
     if (what === "orders" && !idRaw && method === "GET") {
       const after = q.get("after");

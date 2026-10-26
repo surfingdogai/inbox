@@ -472,6 +472,57 @@ describe("the store's catalogue", () => {
     });
   });
 
+  it("reads what each one is: its barcode, its page, and its picture, a variation's own or else its product's", async () => {
+    const store = fakeWooStore();
+    store.products.push(
+      simple(11, "Pizza Margherita", "49.90", {
+        global_unique_id: " 7891000123454 ",
+        images: [`${store.base}/wp-content/uploads/margherita.jpg`, `${store.base}/wp-content/uploads/forno.jpg`],
+      }),
+      simple(13, "Guaraná 350ml", "6.50"),
+      variable(
+        20,
+        "Pizza Calabresa",
+        [
+          variation(21, "Média", "54.00", {
+            global_unique_id: "7891000543214",
+            image: `${store.base}/wp-content/uploads/calabresa-media.jpg`,
+          }),
+          variation(22, "Grande", "69.00"),
+        ],
+        { images: [`${store.base}/wp-content/uploads/calabresa.jpg`] },
+      ),
+    );
+    const ctx = runCtx(store, await connected(store));
+    const byId = new Map((await readAll(ctx)).map((p) => [p.externalId, p]));
+    // As the store gives it, with the kind of field it came from: the inbox checks it as it stores it.
+    expect(byId.get("p:11")).toMatchObject({
+      gtin: { raw: "7891000123454", hint: "barcode" },
+      url: `${store.base}/product/11/`,
+      imageUrl: `${store.base}/wp-content/uploads/margherita.jpg`,
+    });
+    // No barcode, no picture: nothing said of them.
+    expect(byId.get("p:13")).not.toHaveProperty("gtin");
+    expect(byId.get("p:13")).not.toHaveProperty("imageUrl");
+    expect(byId.get("v:21")).toMatchObject({
+      gtin: { raw: "7891000543214", hint: "barcode" },
+      url: `${store.base}/product/20/?attribute_tamanho=M%C3%A9dia`,
+      imageUrl: `${store.base}/wp-content/uploads/calabresa-media.jpg`,
+    });
+    // A variation with no picture of its own shows its product's.
+    expect(byId.get("v:22")).toMatchObject({ imageUrl: `${store.base}/wp-content/uploads/calabresa.jpg` });
+    expect(byId.get("v:22")).not.toHaveProperty("gtin");
+    // Asked for by name, with the rest of what it reads.
+    const listed = store.platform.seen.find((r) => r.url.pathname === "/wp-json/wc/v3/products");
+    expect(listed?.url.searchParams.get("_fields")?.split(",")).toEqual(
+      expect.arrayContaining(["global_unique_id", "permalink", "images"]),
+    );
+    const variations = store.platform.seen.find((r) => r.url.pathname === "/wp-json/wc/v3/products/20/variations");
+    expect(variations?.url.searchParams.get("_fields")?.split(",")).toEqual(
+      expect.arrayContaining(["global_unique_id", "permalink", "image"]),
+    );
+  });
+
   it("reads a page per call however many variations a product has, and only what changed since, the bin included", async () => {
     const store = fakeWooStore();
     store.products.push(

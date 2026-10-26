@@ -418,6 +418,36 @@ describe("connecting by the store's own Approve page", () => {
     ]);
   });
 
+  it("keeps each product's barcode checked: a good one as its 14 digits, one that fails the check for the owner only", async () => {
+    const s = await setup();
+    const margherita = s.store.products.find((p) => p.id === 11);
+    if (margherita) {
+      margherita.global_unique_id = "7891000123454";
+      margherita.images = [`${s.store.base}/wp-content/uploads/margherita.jpg`];
+    }
+    // One digit off: WooCommerce takes the field as typed, the inbox does not publish it.
+    const grande = s.store.products.find((p) => p.id === 20)?.variations?.find((v) => v.id === 22);
+    if (grande) grande.global_unique_id = "7891000123459";
+    await connected(s);
+    const { rows } = await s.db.client.query({
+      sql: `SELECT external_id, gtin, gtin_given, url, image_url, catalogue_seq FROM products
+            WHERE external_id IN ('p:11', 'v:22') ORDER BY external_id`,
+      method: "all",
+    });
+    expect(rows.map((r) => r.slice(0, 5))).toEqual([
+      [
+        "p:11",
+        "07891000123454",
+        null,
+        `${s.store.base}/product/11/`,
+        `${s.store.base}/wp-content/uploads/margherita.jpg`,
+      ],
+      ["v:22", null, "7891000123459", `${s.store.base}/product/20/?attribute_tamanho=Grande`, null],
+    ]);
+    // Each write moved its place in the signed catalogue feed.
+    expect(rows.every((r) => Number(r[5]) > 0)).toBe(true);
+  });
+
   it("connects the same shop again in place when it is approved again: its webhooks kept, the earlier key said", async () => {
     const s = await setup();
     const id = await connected(s);

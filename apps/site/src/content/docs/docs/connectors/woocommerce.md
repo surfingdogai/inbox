@@ -35,7 +35,7 @@ Your shop must answer over https. Your Inbox calls nothing else.
 
 | | |
 | --- | --- |
-| **Reads** | Your products and their variations: name, SKU, price, stock, whether they are on sale. Your shop's currency, and whether its prices include tax. Your shop's list of states or provinces, to write an address the way your shop does. The orders your Inbox made, and their refunds. Its own webhooks. |
+| **Reads** | Your products and their variations: name, SKU, barcode (the GTIN, UPC, EAN or ISBN field), price, stock, whether they are on sale, their page and the link to their picture. Your shop's currency, and whether its prices include tax. Your shop's list of states or provinces, to write an address the way your shop does. The orders your Inbox made, and their refunds. Its own webhooks. |
 | **Writes** | The orders you accept, as **pending** orders. Its webhooks (three: orders updated, products updated, products deleted). A private note on each order it makes. |
 | **Never** | Orders your shop takes at its own checkout. Your customers' accounts. Your prices, stock or settings. Card details: your customers pay at your checkout, with your payment methods. |
 
