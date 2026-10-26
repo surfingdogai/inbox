@@ -248,6 +248,8 @@ export interface ConnectionView {
   readonly link: string | null;
   /** What the owner removes by hand once it is disconnected, when the platform does not let the inbox. */
   readonly disconnect_note: string | null;
+  /** What a connection in test mode is called, in the platform's words ("test key", "development store"). */
+  readonly test_label: string;
 }
 
 export interface IntegrationsView {
@@ -2192,6 +2194,7 @@ export class ConnectorCapabilities {
           : null,
       link: person && def?.feed ? await this.linkOf(row, def.feed.extension) : null,
       disconnect_note: def?.disconnectNote ?? null,
+      test_label: def?.testLabel ?? "test key",
     };
   }
 

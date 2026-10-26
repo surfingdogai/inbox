@@ -902,6 +902,10 @@ export const connectionSchema = z.looseObject({
     .optional()
     .describe("A link the connection serves (a calendar to import elsewhere), to the owner in person only"),
   disconnect_note: z.string().nullable().optional().describe("What the owner removes by hand once it is disconnected"),
+  test_label: z
+    .string()
+    .optional()
+    .describe("What a connection in test mode is called, in the platform's words (test key, development store)"),
 });
 
 const paymentSchema = z.looseObject({

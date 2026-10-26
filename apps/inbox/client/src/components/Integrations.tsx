@@ -228,13 +228,14 @@ function connectedText(card: GalleryCard, way: GalleryWay): string {
   return "Connected. Reading your calendar now.";
 }
 
-/** What a card's tag says: the worst of its connections. */
+/** What a card's tag says: the worst of its connections, when one is not simply connected. */
 function tagOf(connections: readonly ConnectionView[]): { text: string; tone: "on" | "warn" | "quiet" } | null {
   if (connections.length === 0) return null;
   if (connections.every((c) => c.payments?.disconnecting)) return { text: "Disconnecting", tone: "quiet" };
   if (connections.some((c) => c.status === "error")) return { text: "Failing", tone: "warn" };
   if (connections.every((c) => c.status === "disabled")) return { text: "Paused", tone: "quiet" };
-  return { text: "Connected", tone: "on" };
+  // Connected and well: its row above already says so.
+  return null;
 }
 
 function Tile({
@@ -361,7 +362,7 @@ function ConnectPanel({
     <div className="confirm row-glass stack int-panel">
       {main.length > 1 && !way.advanced && (
         <fieldset className="seg">
-          <legend className="sr-only">Which {card.title.toLowerCase()}</legend>
+          <legend className="sr-only">How to connect {card.title}</legend>
           {main.map((w) => (
             <button
               key={keyOf(w)}
@@ -814,7 +815,7 @@ function ConnectionLine({
     : pays
       ? [
           products,
-          c.mode === "test" ? "test key · links only for orders made in Test mode" : null,
+          c.mode === "test" ? `${c.test_label ?? "test key"} · links only for orders made in Test mode` : null,
           disconnecting
             ? `switching off ${pays.closing} ${pays.closing === 1 ? "link" : "links"}`
             : !c.pay_on
@@ -1087,7 +1088,7 @@ function PayChoices({
         Send a link to pay when you accept an order
       </Switch>
       <ChoiceFields connection={c} onNotice={onNotice} />
-      <p className="hint">Refunds are made in {c.title}, from the payment's own page.</p>
+      <p className="hint">Refunds are made in {c.title}.</p>
       <div className="rowx">
         <button type="button" className="btn btn-ghost btn-sm" onClick={onNewKey}>
           New key

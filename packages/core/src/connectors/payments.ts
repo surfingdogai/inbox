@@ -1410,7 +1410,7 @@ export class PaymentLinks {
       if (calls >= budget) break;
       calls++;
       try {
-        const fact = await read(conn.ctx, { ref: r.id, externalId: r.externalId, itemId: r.itemId });
+        const fact = await read(conn.ctx, { ref: r.id, externalId: r.externalId, itemId: r.itemId, paidAt: r.paidAt });
         await this.checked(r.id, now);
         if (fact) await this.applyOrder(conn, fact, now);
       } catch (error) {
