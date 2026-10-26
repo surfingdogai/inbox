@@ -37,6 +37,7 @@ export const qk = {
   profile: ["profile"] as const,
   services: ["services"] as const,
   products: ["products"] as const,
+  catalogue: ["catalogue"] as const,
   availability: ["availability"] as const,
   rules: ["rules"] as const,
   presets: ["presets"] as const,
@@ -188,6 +189,7 @@ export function useSaveSettings() {
       void qc.invalidateQueries({ queryKey: ["counts"] });
       // A network switched on is pinged within seconds; look again once it has had the chance.
       void qc.invalidateQueries({ queryKey: qk.networks });
+      void qc.invalidateQueries({ queryKey: qk.catalogue });
       setTimeout(() => void qc.invalidateQueries({ queryKey: qk.networks }), 3_000);
     },
   });
@@ -217,6 +219,30 @@ export function useServices() {
 
 export function useProducts() {
   return useQuery({ queryKey: qk.products, queryFn: api.products, staleTime: 30_000 });
+}
+
+/** Your products on networks (ADR-029): the switch, the counts, each product's notes, each network's answer. */
+export function useCatalogue() {
+  return useQuery({ queryKey: qk.catalogue, queryFn: api.catalogue, staleTime: 10_000 });
+}
+
+/** A barcode confirmed, or the one-time offer of barcodes answered: the products and their notes change. */
+export function useCatalogueWrite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (op: { readonly confirm: string } | { readonly skus: boolean }): Promise<{ used: number }> => {
+      if ("confirm" in op) {
+        await api.confirmBarcode(op.confirm);
+        return { used: 1 };
+      }
+      return api.skuBarcodes(op.skus);
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.products });
+      void qc.invalidateQueries({ queryKey: qk.catalogue });
+      void qc.invalidateQueries({ queryKey: qk.settings });
+    },
+  });
 }
 
 /** The owner's lowest prices, by product or service id. */
@@ -284,6 +310,7 @@ export function useProductWrite() {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: qk.products });
+      void qc.invalidateQueries({ queryKey: qk.catalogue });
       void qc.invalidateQueries({ queryKey: qk.business });
       void qc.invalidateQueries({ queryKey: qk.profile });
       void qc.invalidateQueries({ queryKey: ["floors"] });

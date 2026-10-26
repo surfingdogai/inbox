@@ -1,11 +1,12 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import clsx from "clsx";
 import { Plus } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { ErrorState, Toast } from "../components/Feedback";
 import { Field, SectionHead, Switch } from "../components/Form";
 import { type ApiProblem, api, problemOf } from "../lib/api";
+import { catalogueBlockedWords, catalogueStatusLine, catalogueToast } from "../lib/catalogue";
 import {
   carriedWords,
   type DoorPanel,
@@ -20,8 +21,8 @@ import {
   rulesWords,
   standingWords,
 } from "../lib/networks";
-import { qk, useNetworks, useSaveSettings, useSettings } from "../lib/queries";
-import type { NetworkView } from "../lib/types";
+import { qk, useCatalogue, useNetworks, useSaveSettings, useSettings } from "../lib/queries";
+import type { CatalogueStatus, NetworkView } from "../lib/types";
 
 export const Route = createFileRoute("/settings/networks")({
   component: NetworksPage,
@@ -58,7 +59,7 @@ function NetworksPage() {
      * One network's keys to change, merged into what is stored; null removes the network. `resume`,
      * while the host holds it: whether it comes on when the inbox is live.
      */
-    entry: { enabled?: boolean; issue?: boolean; resume?: boolean } | null,
+    entry: { enabled?: boolean; issue?: boolean; resume?: boolean; share?: { catalogue: boolean } } | null,
     done: string,
     from: string = origin,
     after?: () => void,
@@ -100,6 +101,24 @@ function NetworksPage() {
       },
     );
   };
+  // Your products on networks (ADR-029): on unless the owner switches it off; the owner's alone.
+  const catalogue = useCatalogue();
+  const productsOn = settings.data ? settings.data.doc.catalogue.listed : true;
+  const setCatalogue = (doc: { listed?: boolean; taxIncluded?: boolean | null }, done: string | null) => {
+    if (!settings.data || save.isPending) return;
+    save.reset();
+    setNotice(null);
+    setActing("catalogue");
+    save.mutate(
+      { doc: { catalogue: doc }, expected_version: settings.data.version },
+      {
+        onSuccess: () => {
+          setActing(null);
+          if (done) setNotice({ tone: "success", text: done });
+        },
+      },
+    );
+  };
   const reload = () => {
     save.reset();
     void qc.invalidateQueries({ queryKey: qk.settings });
@@ -123,6 +142,15 @@ function NetworksPage() {
           </div>
         )}
       </div>
+      <ProductsOnNetworks
+        on={productsOn}
+        taxIncluded={settings.data ? settings.data.doc.catalogue.taxIncluded : null}
+        status={catalogue.data}
+        pending={save.isPending || !settings.data}
+        error={acting === "catalogue" && problem && !conflict ? problem.detail : null}
+        onSwitch={(on) => setCatalogue({ listed: on }, catalogueToast(on, catalogue.data))}
+        onTax={(included) => setCatalogue({ taxIncluded: included }, null)}
+      />
       <p className="lede small">{NETWORKS_WHY}</p>
       <details className="net-sent">
         <summary className="hint">What a network is sent</summary>
@@ -137,6 +165,11 @@ function NetworksPage() {
           first-time customers a key" on, a customer's first booking or order with an email sends that email to the
           network, which keeps only a keyed hash of it and gives your inbox a key to email to them. A network gets
           customers' email addresses only once it has verified your inbox. Test items never reach a network.
+        </p>
+        <p className="hint">
+          With <i>Your products on networks</i> on: each product on sale here, as your own doors already show it (name,
+          description, price, picture link, barcode, brand, in stock or not, its page on your site). Never your lowest
+          prices, your costs, where a product was imported from, stock counts, or anything about customers.
         </p>
         <p className="hint">
           A network you switch on later gets your older receipts too. It counts a booking or an order whose promise
@@ -205,6 +238,16 @@ function NetworksPage() {
               )
             }
             onRemove={() => change(n.origin, null, `${hostOf(n.origin)} removed from the list.`)}
+            productsOn={productsOn}
+            onProducts={(on) =>
+              change(
+                n.origin,
+                { share: { catalogue: on } },
+                on
+                  ? `${hostOf(n.origin)} lists your products within an hour.`
+                  : `${hostOf(n.origin)} stops showing your products now.`,
+              )
+            }
           />
         ))}
       </div>
@@ -268,6 +311,80 @@ function NewReceiptKey() {
   );
 }
 
+/**
+ * "Your products on networks" (ADR-029): one switch, on by default, with the tax chooser while it is
+ * on, what the networks last said, and why it cannot work when it cannot.
+ */
+function ProductsOnNetworks({
+  on,
+  taxIncluded,
+  status,
+  pending,
+  error,
+  onSwitch,
+  onTax,
+}: {
+  on: boolean;
+  taxIncluded: boolean | null;
+  status: CatalogueStatus | undefined;
+  pending: boolean;
+  error: string | null;
+  onSwitch: (on: boolean) => void;
+  onTax: (included: boolean) => void;
+}) {
+  const blocked = catalogueBlockedWords(status?.blocked ?? null);
+  return (
+    <div className="net-carried">
+      <Switch checked={on} onChange={onSwitch} disabled={pending || blocked !== null}>
+        Your products on networks
+      </Switch>
+      <div className="hint">
+        Your products as you keep them here (name, price, picture, barcode, whether each is in stock) where people's AI
+        assistants look, on the networks you report to. Orders still come to this inbox, at your price when they arrive.
+      </div>
+      {blocked && <div className="hint">{blocked}</div>}
+      {on && !blocked && (
+        <>
+          <div className="chips" role="radiogroup" aria-label="Your prices and tax">
+            <label className="chip">
+              <input
+                type="radio"
+                name="tax"
+                checked={taxIncluded === true}
+                onChange={() => onTax(true)}
+                disabled={pending}
+              />
+              <span>Your prices include tax</span>
+            </label>
+            <label className="chip">
+              <input
+                type="radio"
+                name="tax"
+                checked={taxIncluded === false}
+                onChange={() => onTax(false)}
+                disabled={pending}
+              />
+              <span>Your prices are before tax</span>
+            </label>
+          </div>
+          {taxIncluded === null && <div className="hint">Until you choose, networks show "tax not said".</div>}
+          {status && (
+            <div className="s net-status">
+              <i className="dot" aria-hidden="true" />
+              <Link to="/settings/services">{catalogueStatusLine(status)}</Link>
+            </div>
+          )}
+        </>
+      )}
+      {error && (
+        <div className="hint error" role="alert">
+          {error}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function NetworkLine({
   network: n,
   pending,
@@ -275,6 +392,8 @@ function NetworkLine({
   onToggle,
   onIssue,
   onRemove,
+  productsOn,
+  onProducts,
 }: {
   network: NetworkView;
   pending: boolean;
@@ -282,6 +401,9 @@ function NetworkLine({
   onToggle: (on: boolean) => void;
   onIssue: (on: boolean) => void;
   onRemove: () => void;
+  /** Whether "Your products on networks" is on: each network's own share matters only then. */
+  productsOn: boolean;
+  onProducts: (on: boolean) => void;
 }) {
   const status = networkStatus(n);
   const counts = n.share.receipts && (n.enabled || n.receipts.published > 0) ? receiptWords(n.receipts) : [];
@@ -327,6 +449,15 @@ function NetworkLine({
               it to the customer, so any business on the network recognises them next time.
             </div>
           </div>
+        )}
+        {n.enabled && productsOn && n.share.listing && (
+          <details className="net-sent">
+            <summary className="hint">More</summary>
+            <Switch checked={n.share.catalogue} onChange={onProducts} disabled={pending}>
+              List my products here
+            </Switch>
+            {n.catalogue.error && <div className="hint">{n.catalogue.error}</div>}
+          </details>
         )}
         {error && (
           <div className="hint error" role="alert">

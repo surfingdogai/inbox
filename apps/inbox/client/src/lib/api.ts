@@ -4,6 +4,7 @@ import type {
   AddFeedBody,
   Availability,
   BusinessProfile,
+  CatalogueStatus,
   Closure,
   ConnectBody,
   ConnectionPatch,
@@ -329,6 +330,11 @@ export const api = {
   patchProduct: (id: string, body: ProductBody) =>
     call<ProductRow>("PATCH", `/v1/owner/products/${encodeURIComponent(id)}`, { body }),
   archiveProduct: (id: string) => call<ProductRow>("DELETE", `/v1/owner/products/${encodeURIComponent(id)}`),
+  /** The owner's one tap on a barcode their AI proposed (ADR-029). */
+  confirmBarcode: (id: string) => call<ProductRow>("POST", `/v1/owner/products/${encodeURIComponent(id)}/barcode`),
+  /** Your products on networks: the switch, what is listed, what needs a look (ADR-029). */
+  catalogue: () => call<CatalogueStatus>("GET", "/v1/owner/catalogue"),
+  skuBarcodes: (use: boolean) => call<{ used: number }>("POST", "/v1/owner/catalogue/sku-barcodes", { body: { use } }),
   floors: () => call<{ floors: Floor[] }>("GET", "/v1/owner/catalogue/floors"),
   putFloor: (kind: Floor["kind"], refId: string, floorMinor: number | null) =>
     call<{ floors: Floor[] }>("PUT", "/v1/owner/catalogue/floors", {

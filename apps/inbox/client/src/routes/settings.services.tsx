@@ -2,14 +2,16 @@ import { createFileRoute } from "@tanstack/react-router";
 import clsx from "clsx";
 import { ArrowDown, ArrowUp, Plus } from "lucide-react";
 import { useState } from "react";
-import { ProductEditor, ServiceEditor } from "../components/Catalogue";
+import { ProductEditor, ProductNotes, ServiceEditor } from "../components/Catalogue";
 import { SourceTag } from "../components/Choosers";
 import { ErrorState, Toast } from "../components/Feedback";
 import { SectionHead } from "../components/Form";
 import { problemOf } from "../lib/api";
-import { describeService } from "../lib/catalogue";
+import { describeService, skuOfferWords } from "../lib/catalogue";
 import { formatMoney } from "../lib/format";
 import {
+  useCatalogue,
+  useCatalogueWrite,
   useFloors,
   useProducts,
   useProductWrite,
@@ -20,7 +22,7 @@ import {
   useSettings,
 } from "../lib/queries";
 import { clearSources, sourceNote } from "../lib/sources";
-import type { ProductRow, ServiceRow } from "../lib/types";
+import type { ProductNote, ProductRow, ServiceRow } from "../lib/types";
 
 export const Route = createFileRoute("/settings/services")({
   component: ServicesPage,
@@ -361,6 +363,11 @@ function ProductsCard({ currency }: { currency: string }) {
   const products = useProducts();
   const floors = useFloors();
   const write = useProductWrite();
+  // What needs a look on each product, and the one-time offer of barcodes (ADR-029).
+  const catalogue = useCatalogue();
+  const fix = useCatalogueWrite();
+  const notesOf = new Map((catalogue.data?.products ?? []).map((p) => [p.id, p.notes]));
+  const offer = catalogue.data?.sku_offer ?? null;
   const [editing, setEditing] = useState<Editing>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const rows = products.data?.items ?? [];
@@ -384,6 +391,42 @@ function ProductsCard({ currency }: { currency: string }) {
       </SectionHead>
       <p className="lede small">What agents can ask to order. Stock is optional.</p>
       {notice && <Toast tone="success" text={notice} onDismiss={() => setNotice(null)} />}
+      {offer && (
+        <Toast
+          tone="success"
+          text={skuOfferWords(offer.count)}
+          action={
+            <span className="rowx">
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                disabled={fix.isPending}
+                onClick={() =>
+                  fix.mutate(
+                    { skus: true },
+                    {
+                      onSuccess: (r) =>
+                        setNotice(
+                          r.used === 1 ? "1 product has a barcode now." : `${r.used} products have a barcode now.`,
+                        ),
+                    },
+                  )
+                }
+              >
+                Use them
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                disabled={fix.isPending}
+                onClick={() => fix.mutate({ skus: false })}
+              >
+                Not now
+              </button>
+            </span>
+          }
+        />
+      )}
       {products.isPending && <div className="skeleton sk-line" />}
       {products.isError && (
         <ErrorState
@@ -432,6 +475,11 @@ function ProductsCard({ currency }: { currency: string }) {
                 { onSuccess: () => done(`${p.name} is for sale again.`) },
               )
             }
+            notes={notesOf.get(p.id) ?? []}
+            fixing={fix.isPending}
+            onConfirmBarcode={() =>
+              fix.mutate({ confirm: p.id }, { onSuccess: () => setNotice(`${p.name} has its barcode.`) })
+            }
           />
         ))}
       </div>
@@ -451,6 +499,9 @@ function ProductLine({
   onSave,
   onArchive,
   onRestore,
+  notes,
+  fixing,
+  onConfirmBarcode,
 }: {
   product: ProductRow;
   editing: boolean;
@@ -463,6 +514,10 @@ function ProductLine({
   onSave: Parameters<typeof ProductEditor>[0]["onSubmit"];
   onArchive: () => void;
   onRestore: () => void;
+  /** What needs a look (ADR-029). */
+  notes: readonly ProductNote[];
+  fixing: boolean;
+  onConfirmBarcode: () => void;
 }) {
   const archived = p.active !== 1;
   const meta = [p.sku, formatMoney(p.price), p.stock === null ? "stock not tracked" : `${p.stock} in stock`]
@@ -474,8 +529,10 @@ function ProductLine({
         <div className="t">
           <b>{p.name}</b>
           {archived && <span className="pill pill-xs">Not for sale</span>}
+          {!archived && p.listed === 0 && <span className="pill pill-xs">Off networks</span>}
         </div>
         <div className="s">{meta}</div>
+        <ProductNotes notes={notes} pending={fixing} onConfirmBarcode={onConfirmBarcode} />
       </div>
       <div className="rowx">
         {!archived && (

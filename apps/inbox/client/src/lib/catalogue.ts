@@ -1,6 +1,6 @@
 import { parseMajor } from "./actions";
-import { formatMoney } from "./format";
-import type { PriceModel, ServiceBody, ServicePrice, ServiceRow } from "./types";
+import { formatClock, formatMoney } from "./format";
+import type { CatalogueStatus, PriceModel, ProductBody, ServiceBody, ServicePrice, ServiceRow } from "./types";
 
 /**
  * A service as the owner edits it and as a list says it, as pure functions so they run in tests on
@@ -133,4 +133,87 @@ export function serviceWrite(
     negotiable: d.negotiable,
   };
   return { body, floor: lowest !== (opts.floor ?? null) ? lowest : undefined };
+}
+
+/* --- Your products on networks (ADR-029) ------------------------------------------------------ */
+
+/**
+ * The status line under "Your products on networks": what the networks last said, summed ("209
+ * listed · 3 held · checked 10:42"), or what is ready while none has said anything.
+ */
+export function catalogueStatusLine(s: CatalogueStatus, tz?: string, locale?: string): string {
+  const said = s.networks.filter((n) => n.wants && n.offers_live !== null);
+  if (said.length === 0) {
+    const ready = `${s.counts.listed} ready to list`;
+    return s.networks.some((n) => n.wants) ? `${ready} · not checked yet` : ready;
+  }
+  const listed = said.reduce((n, x) => n + (x.offers_live ?? 0), 0);
+  const held = said.reduce((n, x) => n + x.held, 0);
+  const last = said
+    .map((n) => n.checked_at)
+    .filter((t): t is string => t !== null)
+    .sort()
+    .at(-1);
+  return [
+    `${listed} listed`,
+    ...(held ? [`${held} held`] : []),
+    ...(last ? [`checked ${formatClock(last, tz, locale)}`] : []),
+  ].join(" · ");
+}
+
+/** Why the switch is disabled, in the owner's words, or null when it can work. */
+export function catalogueBlockedWords(blocked: CatalogueStatus["blocked"]): string | null {
+  switch (blocked) {
+    case "out_of_directory":
+      return "Your business is out of the networks' directories (Settings → Be found). Products are listed only with it.";
+    case "cannot_sign":
+      return "Your inbox has no signing key yet, so networks cannot check the products came from you.";
+    case "no_network":
+      return "Switch a network on first.";
+    default:
+      return null;
+  }
+}
+
+/** What the toast says when the owner switches it on or off. */
+export function catalogueToast(on: boolean, s: CatalogueStatus | undefined): string {
+  if (!on) return "Off. Networks stop showing your products now. Your own doors still take orders.";
+  const n = s?.counts.listed ?? 0;
+  const m = s?.counts.needs_look ?? 0;
+  const ready = n === 1 ? "1 product that is ready" : `${n} products that are ready`;
+  return `On. Within an hour, networks show your ${ready}.${m ? ` ${m} need${m === 1 ? "s" : ""} a look first.` : ""}`;
+}
+
+/** The one-time offer to use imported products' codes that are barcodes as their barcodes. */
+export function skuOfferWords(n: number): string {
+  return n === 1
+    ? "1 of your product codes is a barcode. Use it as its barcode too?"
+    : `${n} of your product codes are barcodes. Use them as barcodes too?`;
+}
+
+/** The product editor's listing fields as the owner typed them. */
+export interface ListingDraft {
+  readonly brand: string;
+  readonly mpn: string;
+  readonly condition: "new" | "used" | "refurbished";
+  readonly url: string;
+  readonly imageUrl: string;
+  /** "Keep it off networks". */
+  readonly keptOff: boolean;
+  /** "It has no barcode". */
+  readonly noGtin: boolean;
+}
+
+/** What a save sends of them: trimmed, an empty one as none. */
+export function productListingBody(d: ListingDraft): ProductBody {
+  const orNull = (s: string) => (s.trim() === "" ? null : s.trim());
+  return {
+    brand: orNull(d.brand),
+    mpn: orNull(d.mpn),
+    condition: d.condition,
+    url: orNull(d.url),
+    image_url: orNull(d.imageUrl),
+    listed: !d.keptOff,
+    no_gtin: d.noGtin,
+  };
 }

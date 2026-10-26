@@ -4,6 +4,7 @@ import type {
   Availability,
   BusinessProfile,
   CalendarChoice,
+  CatalogueStatus,
   Closure,
   Condition,
   ConnectedAppView,
@@ -33,6 +34,7 @@ import type {
   Page,
   PaymentView,
   PhoneView,
+  ProductNote,
   Profile,
   ReceiptStatus,
   ReceiptView,
@@ -57,6 +59,7 @@ export type {
   Availability,
   BusinessProfile,
   CalendarChoice,
+  CatalogueStatus,
   Closure,
   Condition,
   ConnectedAppView,
@@ -86,6 +89,7 @@ export type {
   Page,
   PaymentView,
   PhoneView,
+  ProductNote,
   Profile,
   ReceiptStatus,
   ReceiptView,
@@ -239,6 +243,19 @@ export interface ProductRow {
   readonly stock: number | null;
   readonly active: number;
   readonly negotiable?: number | undefined;
+  /** What it is, beside its price (ADR-029): read leniently, since an older server sends none. */
+  readonly gtin?: string | null | undefined;
+  /** A barcode that is not its barcode yet: one that did not pass the check, or one your AI proposed. */
+  readonly gtinGiven?: string | null | undefined;
+  readonly noGtin?: number | undefined;
+  readonly brand?: string | null | undefined;
+  readonly mpn?: string | null | undefined;
+  readonly condition?: string | undefined;
+  readonly url?: string | null | undefined;
+  readonly imageUrl?: string | null | undefined;
+  /** 0: kept off networks. */
+  readonly listed?: number | undefined;
+  readonly source?: string | undefined;
   readonly createdAt: number;
   readonly updatedAt: number;
 }
@@ -251,6 +268,13 @@ export type ProductBody = Partial<{
   readonly stock: number | null;
   readonly active: boolean;
   readonly negotiable: boolean;
+  readonly brand: string | null;
+  readonly mpn: string | null;
+  readonly condition: "new" | "used" | "refurbished";
+  readonly url: string | null;
+  readonly image_url: string | null;
+  readonly listed: boolean;
+  readonly no_gtin: boolean;
 }>;
 
 /** The owner's lowest prices (ADR-018 §4): what their AI, rules and other systems may go down to. */

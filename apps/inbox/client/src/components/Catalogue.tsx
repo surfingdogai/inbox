@@ -2,8 +2,8 @@ import { ChevronRight } from "lucide-react";
 import { type FormEvent, type ReactNode, useId, useState } from "react";
 import { parseMajor } from "../lib/actions";
 import type { ApiProblem } from "../lib/api";
-import { type ServiceDraft, serviceDraft, serviceWrite } from "../lib/catalogue";
-import type { ProductBody, ProductRow, ServiceBody, ServiceRow } from "../lib/types";
+import { type ListingDraft, productListingBody, type ServiceDraft, serviceDraft, serviceWrite } from "../lib/catalogue";
+import type { ProductBody, ProductNote, ProductRow, ServiceBody, ServiceRow } from "../lib/types";
 import { LengthPicker, MoneyInput, Stepper } from "./Choosers";
 import { Field, FormActions, Switch } from "./Form";
 
@@ -298,7 +298,7 @@ export function ServiceEditor({
   );
 }
 
-interface ProductDraft {
+interface ProductDraft extends ListingDraft {
   readonly sku: string;
   readonly name: string;
   readonly description: string;
@@ -307,6 +307,52 @@ interface ProductDraft {
   readonly active: boolean;
   readonly negotiable: boolean;
   readonly floor: string;
+}
+
+const CONDITIONS = [
+  { value: "new", label: "New" },
+  { value: "used", label: "Used" },
+  { value: "refurbished", label: "Refurbished" },
+] as const;
+
+const conditionOf = (c: string | undefined): ListingDraft["condition"] =>
+  c === "used" || c === "refurbished" ? c : "new";
+
+/** A barcode as it is printed: the shortest of 8, 12, 13 or 14 digits. */
+const printed = (gtin14: string) =>
+  gtin14.startsWith("000000") ? gtin14.slice(6) : gtin14.startsWith("00") ? gtin14.slice(2) : gtin14.replace(/^0/, "");
+
+/**
+ * What needs a look on one product (ADR-029), in plain words, with the one tap that fixes it where
+ * there is one: using a barcode the owner's AI proposed.
+ */
+export function ProductNotes({
+  notes,
+  pending,
+  onConfirmBarcode,
+}: {
+  notes: readonly ProductNote[];
+  pending: boolean;
+  onConfirmBarcode: () => void;
+}) {
+  if (notes.length === 0) return null;
+  return (
+    <ul className="hint product-notes">
+      {notes.map((n) => (
+        <li key={`${n.code}:${n.words}`}>
+          {n.words}
+          {n.action === "confirm_barcode" && (
+            <>
+              {" "}
+              <button type="button" className="btn btn-ghost btn-sm" onClick={onConfirmBarcode} disabled={pending}>
+                Use it
+              </button>
+            </>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 export function ProductEditor({
@@ -337,6 +383,13 @@ export function ProductEditor({
     active: initial ? initial.active === 1 : true,
     negotiable: initial ? initial.negotiable !== 0 : true,
     floor: majorOf(floor),
+    brand: initial?.brand ?? "",
+    mpn: initial?.mpn ?? "",
+    condition: conditionOf(initial?.condition),
+    url: initial?.url ?? "",
+    imageUrl: initial?.imageUrl ?? "",
+    keptOff: initial?.listed === 0,
+    noGtin: initial?.noGtin === 1,
   });
   const [local, setLocal] = useState<string | null>(null);
   const set = <K extends keyof ProductDraft>(key: K, value: ProductDraft[K]) => setF((d) => ({ ...d, [key]: value }));
@@ -361,6 +414,7 @@ export function ProductEditor({
         stock,
         active: f.active,
         negotiable: f.negotiable,
+        ...productListingBody(f),
       },
       lowest !== (floor ?? null) ? lowest : undefined,
     );
@@ -434,6 +488,80 @@ export function ProductEditor({
           <div className="hint">Only while you take customers' own prices (Settings). Off, one goes to you.</div>
         </div>
       </div>
+      <MoreOptions>
+        <div className="settings-grid">
+          <div className="wide">
+            <div className="label">Barcode</div>
+            <div className="hint">
+              {initial?.gtin
+                ? printed(initial.gtin)
+                : f.noGtin
+                  ? "It has none."
+                  : "None yet. It comes from your shop's import, or your AI can propose one for you to confirm."}
+            </div>
+            {!initial?.gtin && (
+              <Switch checked={f.noGtin} onChange={(v) => set("noGtin", v)}>
+                It has no barcode
+              </Switch>
+            )}
+          </div>
+          <Field id="pr-brand" label="Brand" optional error={err("brand")} hint="Who makes it, as on the pack.">
+            <input id="pr-brand" className="input" value={f.brand} onChange={(e) => set("brand", e.target.value)} />
+          </Field>
+          <Field id="pr-mpn" label="Part number" optional error={err("mpn")} hint="The maker's, as on the pack.">
+            <input
+              id="pr-mpn"
+              className="input"
+              spellCheck={false}
+              value={f.mpn}
+              onChange={(e) => set("mpn", e.target.value)}
+            />
+          </Field>
+          <div className="wide">
+            <Choice legend="Condition" value={f.condition} options={CONDITIONS} onChange={(v) => set("condition", v)} />
+          </div>
+          <Field
+            id="pr-url"
+            label="Its page"
+            optional
+            error={err("url")}
+            hint="On your own site. Networks are given it only when it is."
+          >
+            <input
+              id="pr-url"
+              className="input"
+              type="url"
+              inputMode="url"
+              placeholder="https://"
+              value={f.url}
+              onChange={(e) => set("url", e.target.value)}
+            />
+          </Field>
+          <Field
+            id="pr-image"
+            label="Picture link"
+            optional
+            error={err("image_url")}
+            hint="A link; it is never copied."
+          >
+            <input
+              id="pr-image"
+              className="input"
+              type="url"
+              inputMode="url"
+              placeholder="https://"
+              value={f.imageUrl}
+              onChange={(e) => set("imageUrl", e.target.value)}
+            />
+          </Field>
+          <div className="wide">
+            <Switch checked={f.keptOff} onChange={(v) => set("keptOff", v)}>
+              Keep it off networks
+            </Switch>
+            <div className="hint">It stays on sale at your own doors.</div>
+          </div>
+        </div>
+      </MoreOptions>
       {(local || (error && !error.fields?.length)) && (
         <p className="hint error" role="alert">
           {local ?? error?.detail}
