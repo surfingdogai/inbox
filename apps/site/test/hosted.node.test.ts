@@ -382,7 +382,7 @@ describe("hosted first, once the pilot is open", () => {
     // The lede says we host it; the fine line carries only the terms.
     expect(open.lede).toContain("We host Surfing Dog Inbox for you at your own address, like inbox.yourbusiness.com");
     expect(open.lede).not.toMatch(/you run/);
-    expect(open.note).toBe("Free during the pilot. Your inbox and its backups are stored in the European Union.");
+    expect(open.note).toBe("Free, or Pro at $10 a month. Your inbox and its backups are stored in the European Union.");
     const closed = hostedHero(false);
     expect(closed.primary).toEqual({ label: "Deploy to Cloudflare", href: DEPLOY_URL, rel: "noopener" });
     expect(closed.also).toBeNull();
@@ -448,7 +448,7 @@ describe("hosted first, once the pilot is open", () => {
   it("the home page, /install, the FAQ, /search and how it works: hosted first while open, today's words while closed", () => {
     const home = hostedHome(true);
     expect(home?.title).toBe("Your own inbox");
-    expect(home?.lead.text).toBe("We host it for you at inbox.yourbusiness.com, free during the pilot.");
+    expect(home?.lead.text).toBe("We host it for you at inbox.yourbusiness.com, free.");
     expect(home?.lead.link.href).toBe(START_URL);
     expect(read("src/components/CopyBlock.astro")).toContain(
       '<a class="btn btn-secondary btn-sm" href={lead.link.href}>',
@@ -459,7 +459,7 @@ describe("hosted first, once the pilot is open", () => {
 
     const install = hostedInstall(true);
     expect(install?.title).toBe("Your own inbox");
-    expect(install?.lede).toBe("We host it for you at inbox.yourbusiness.com, free during the pilot.");
+    expect(install?.lede).toBe("We host it for you at inbox.yourbusiness.com, free.");
     expect(install?.cta.href).toBe(START_URL);
     expect(install?.promptEyebrow).toBe("Or let your AI set it up");
     expect(hostedInstall(false)).toBeNull();
@@ -468,7 +468,7 @@ describe("hosted first, once the pilot is open", () => {
     expect(installPage).toContain('{HOSTED_INSTALL?.promptEyebrow ?? "Step one, and often the only step"}');
     expect(installPage).toContain('id="prompt-h"');
 
-    expect(hostedFaq(true)).toMatch(/^where we host it for you, free during the pilot, or you run it/);
+    expect(hostedFaq(true)).toMatch(/^where we host it for you for free, or you run it/);
     expect(hostedFaq(false)).toBe(
       "on your Cloudflare account or your own server (a hosted option, where we run it for you, is coming)",
     );
@@ -480,10 +480,10 @@ describe("hosted first, once the pilot is open", () => {
     // Setting it up yourself is a link in the card's words, to the line for your AI.
     expect(door.card?.link).toEqual({ label: "your AI sets it up", href: "/install/#prompt-h" });
     expect(`${door.card?.before} ${door.card?.link.label} ${door.card?.after}`).toBe(
-      "Get the inbox at your own address, and agents write to you there. We host it, free during the pilot, or your AI sets it up from one line.",
+      "Get the inbox at your own address, and agents write to you there. We host it for free, or your AI sets it up from one line.",
     );
     expect(read("src/components/ForBusinesses.astro")).toContain("{pills[1] && <StatusPill");
-    expect(door.price).toBe("Hosted inbox: free during the pilot · Self-host: free");
+    expect(door.price).toBe("Hosted inbox: free, Pro $10 a month · Self-host: free");
     const shut = hostedNoDoor(false);
     expect(shut.pills).toEqual([
       { id: "inbox", text: "Live: self-host" },
@@ -499,7 +499,7 @@ describe("hosted first, once the pilot is open", () => {
       }
     }
 
-    expect(hostedHow(true)).toMatch(/^We host it for you at your own address, free during the pilot\./);
+    expect(hostedHow(true)).toMatch(/^We host it for you at your own address, for free\./);
     expect(hostedHow(false)).toContain("We will also host it for you once that opens.");
     expect(read("src/pages/how-it-works.astro")).toContain("text: HOSTED_HOW,");
     const data = hostedHowData(true);
@@ -560,7 +560,7 @@ describe("hosted first, once the pilot is open", () => {
   });
 
   it("llms.txt: hosted first while open, not open yet while closed", () => {
-    expect(hostedLlms(true).where).toMatch(/^hosted by us, free during the pilot, or on its own/);
+    expect(hostedLlms(true).where).toMatch(/^hosted by us for free, or on its own/);
     expect(hostedLlms(true).get).toContain(START_URL);
     expect(hostedLlms(false).where).toContain("a hosted option is not open yet");
     expect(hostedLlms(false).open).toBe("Self-host the inbox today; a hosted inbox is not open yet.");
@@ -592,10 +592,66 @@ describe("hosted first, once the pilot is open", () => {
       expect(words.replace(/\bkeep only a record that it was delivered\b/g, "")).not.toMatch(
         /free forever|forever free|\b(first|only)\b|guarantee/i,
       );
-      // Hosting is free during the pilot, and said so wherever a price is.
-      if (open) expect(words.match(/free during the pilot/g)?.length).toBeGreaterThanOrEqual(7);
-      else expect(words).not.toMatch(/free during the pilot|European Union|app\.surfingdog\.ai/);
+      // Hosting is free, with no end date, and said so wherever a price is; Pro is never said while closed.
+      expect(words).not.toMatch(/during the pilot|no price is set/);
+      if (open) expect(words.match(/\bfree\b/gi)?.length).toBeGreaterThanOrEqual(7);
+      else expect(words).not.toMatch(/European Union|app\.surfingdog\.ai|\$10|\bPro\b/);
     }
+  });
+});
+
+/**
+ * The price (the founder's decision, 26 Oct 2026): the hosted inbox is Free, with no end date, and
+ * Pro is $10 a month, taxes included, for an owner who wants it. Said short, the same way wherever a
+ * price is, with what the $10 supports; no "during the pilot" left on a price, nor "no price is set".
+ */
+const PRO = "$10 a month, taxes included";
+const SUPPORT =
+  "Your $10 supports the open-source inbox, the open network, and keeping access to AI agents out of any one company's connector store.";
+
+describe("the price: Free, and Pro at $10", () => {
+  const flat = (t: string) => t.replace(/\s+/g, " ");
+
+  it("the hosted page says Free, Pro and what the $10 supports", () => {
+    const page = flat(body(`${HOSTED_DIR}/index.md`));
+    expect(page).toContain(
+      "Free: the whole inbox, its connectors, your listing on the network and the catalogue, with basic spam protection. No card, and no end date.",
+    );
+    expect(page).toContain(`Pro, if you want it: ${PRO}, for each inbox. It adds AI spam filters, coming soon.`);
+    expect(page).toContain("Cancel at any time; Pro runs to the end of the month you paid for.");
+    expect(page).toContain(SUPPORT);
+    expect(page).not.toMatch(/during the pilot|30 days before|a price, when there is one/);
+    expect(read(`${HOSTED_DIR}/index.md`)).toMatch(/^description: .*Free, or Pro at \$10 a month\.$/m);
+  });
+
+  it("the guide's question, the comparison and the quickstart say the same", () => {
+    const guide = flat(body(DOCS_PAGE));
+    expect(guide).toContain(
+      `**What does it cost?** Nothing. Pro is optional: ${PRO}, for AI spam filters (coming). ${SUPPORT}`,
+    );
+    expect(guide).toContain(`It is free; Pro is ${PRO}, if you want it ([terms](/hosted/terms/)).`);
+    const vs = flat(version(read("src/content/docs/docs/self-hosted-vs-hosted.md"), true));
+    expect(vs).toContain(`Pro adds AI spam filters (coming). ${SUPPORT}`);
+    expect(vs).not.toContain("no price is set");
+  });
+
+  it("leaves no pilot on a price anywhere a business reads one", () => {
+    const files = [
+      "src/lib/hosted.ts",
+      "src/pages/technical.astro",
+      "src/pages/try.astro",
+      "public/install.md",
+      "src/content/docs/docs/quickstart.md",
+      "src/content/docs/docs/self-hosted-vs-hosted.md",
+      DOCS_PAGE,
+      `${HOSTED_DIR}/index.md`,
+    ];
+    for (const path of files)
+      expect(read(path), path).not.toMatch(/free during the pilot|nothing during the pilot|no price is set/i);
+    expect(readFileSync(repo("README.md"), "utf8")).not.toMatch(/free during the pilot/i);
+    expect(read("src/pages/technical.astro")).toContain(
+      '"We run it for you, at an address on your own domain. Free, or Pro at $10 a month."',
+    );
   });
 });
 
@@ -635,7 +691,8 @@ describe("the docs, in both states", () => {
     const open = version(QUICKSTART, true);
     expect(open.indexOf("## Hosted by us")).toBeLessThan(open.indexOf("## Deploy to Cloudflare"));
     expect(open).toContain(`[Get your agent inbox](${START_URL})`);
-    expect(open).toContain("free during the pilot");
+    expect(open).toContain("on our own servers, free.");
+    expect(open).not.toContain("during the pilot");
     expect(open).toContain("Your inbox and its backups are stored in the European Union.");
     expect(open).not.toMatch(/waitlist|not open yet/);
     const closed = version(QUICKSTART, false);
@@ -660,7 +717,9 @@ describe("the docs, in both states", () => {
   });
 
   it("self-hosted vs hosted and the overview: no 'not open yet' or waitlist while open", () => {
-    expect(version(VS, true)).toContain("Hosted is free during the pilot.");
+    expect(version(VS, true)).toContain("Hosted is free, with Pro at $10 a month if you want it.");
+    expect(version(VS, true)).toContain("| Free; Pro, if you want it: $10 a month, taxes included |");
+    expect(version(VS, false)).not.toMatch(/\$10|\bPro\b/);
     expect(version(VS, true)).toContain("| Hosted by us (pilot) |");
     expect(version(VS, false)).toContain("Hosted is not open yet; until it is, self-host.");
     expect(version(VS, false)).toContain("| Hosted by us (pilot, not open yet) |");

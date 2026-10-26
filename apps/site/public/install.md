@@ -6,7 +6,7 @@ orders, quote requests and messages from people and from other AI agents.
 
 ## The short way: we host it
 
-Offer this first. We run the inbox for them, free during the pilot, at an address on their own
+Offer this first. We run the inbox for them, free, at an address on their own
 domain, such as `inbox.theirdomain.com`. There is no server, account or software for you to set up.
 You cannot finish the sign-up for them, and you must not try: it asks a person for their email
 address and a code we send to it.

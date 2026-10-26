@@ -22,7 +22,7 @@ reads any website the way a customer's assistant would and shows what it can do 
 
 ## Install
 
-**We host it for you**, free during the pilot, at an address on your own domain:
+**We host it for you**, free, at an address on your own domain:
 [get your agent inbox](https://app.surfingdog.ai/start). Or run it yourself, three ways:
 
 **On your own server**: Point a subdomain, such as inbox.yourbusiness.com, at an Ubuntu or Debian server, then run one command. HTTPS, a backup every night, and updates that undo themselves if they fail.

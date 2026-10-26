@@ -53,7 +53,7 @@ export const HOSTED_CTA = hostedCta(HOSTED_PILOT_OPEN);
 
 /** One sentence for the places that list ways to run the inbox. */
 export const HOSTED_LINE = HOSTED_PILOT_OPEN
-  ? "Or let us run it for you: free during the pilot, at an address on your own domain."
+  ? "Or let us run it for you, free, at an address on your own domain."
   : "There's no hosted version yet.";
 
 /**
@@ -61,7 +61,7 @@ export const HOSTED_LINE = HOSTED_PILOT_OPEN
  * words below, because the status list reaches pages' scripts, where the bundler folds it away.
  */
 export const HOSTED_STATUS = HOSTED_PILOT_OPEN
-  ? { label: "A hosted inbox on your own domain, free during the pilot", state: "live" as const }
+  ? { label: "A hosted inbox on your own domain, free", state: "live" as const }
   : { label: "A hosted inbox", state: "coming" as const };
 
 /**
@@ -77,7 +77,7 @@ export const hostedHero = (
         primary: GET,
         also: { label: "Or run it yourself", href: "#run" },
         lede: "Soon your customers' AI agents will book and order for them. We host Surfing Dog Inbox for you at your own address, like inbox.yourbusiness.com: those requests come straight to you, and your rules answer the routine ones.",
-        note: "Free during the pilot. Your inbox and its backups are stored in the European Union.",
+        note: "Free, or Pro at $10 a month. Your inbox and its backups are stored in the European Union.",
       }
     : {
         primary: { label: "Deploy to Cloudflare", href: DEPLOY_URL, rel: "noopener" },
@@ -120,7 +120,7 @@ export const hostedHome = (open: boolean) =>
   open
     ? {
         title: "Your own inbox",
-        lead: { text: "We host it for you at inbox.yourbusiness.com, free during the pilot.", link: GET },
+        lead: { text: "We host it for you at inbox.yourbusiness.com, free.", link: GET },
         what: "Or give this to your AI to run the open-source inbox yourself. It asks before anything that costs money.",
       }
     : null;
@@ -134,7 +134,7 @@ export const hostedInstall = (open: boolean) =>
   open
     ? {
         title: "Your own inbox",
-        lede: "We host it for you at inbox.yourbusiness.com, free during the pilot.",
+        lede: "We host it for you at inbox.yourbusiness.com, free.",
         cta: GET,
         promptEyebrow: "Or let your AI set it up",
       }
@@ -144,7 +144,7 @@ export const HOSTED_INSTALL = hostedInstall(HOSTED_PILOT_OPEN);
 /** Where the inbox runs, in the FAQ's answer to "Does my business move onto Surfing Dog?". */
 export const hostedFaq = (open: boolean) =>
   open
-    ? "where we host it for you, free during the pilot, or you run it on your Cloudflare account or your own server"
+    ? "where we host it for you for free, or you run it on your Cloudflare account or your own server"
     : "on your Cloudflare account or your own server (a hosted option, where we run it for you, is coming)";
 export const HOSTED_FAQ = hostedFaq(HOSTED_PILOT_OPEN);
 
@@ -196,13 +196,12 @@ export const hostedNoDoor = (open: boolean) =>
     ? {
         pills: [{ id: "hosted", text: "Live" }] as DoorPills,
         card: {
-          before:
-            "Get the inbox at your own address, and agents write to you there. We host it, free during the pilot, or",
+          before: "Get the inbox at your own address, and agents write to you there. We host it for free, or",
           link: { label: "your AI sets it up", href: "/install/#prompt-h" } as PilotLink,
           after: "from one line.",
           cta: GET,
         },
-        price: "Hosted inbox: free during the pilot · Self-host: free",
+        price: "Hosted inbox: free, Pro $10 a month · Self-host: free",
       }
     : {
         pills: [
@@ -217,7 +216,7 @@ export const HOSTED_NO_DOOR = hostedNoDoor(HOSTED_PILOT_OPEN);
 /** The first step on /how-it-works, "Pick where it runs". */
 export const hostedHow = (open: boolean) =>
   open
-    ? "We host it for you at your own address, free during the pilot. Or deploy it to your Cloudflare account in one click, or run it on your own server."
+    ? "We host it for you at your own address, for free. Or deploy it to your Cloudflare account in one click, or run it on your own server."
     : "Deploy to your own Cloudflare account in one click, or run it on your own server. We will also host it for you once that opens.";
 export const HOSTED_HOW = hostedHow(HOSTED_PILOT_OPEN);
 
@@ -246,9 +245,9 @@ export const hostedLlms = (open: boolean) =>
     ? {
         summary:
           "open-source software at a business's own address, hosted by us or run by the business itself, so people and agents write to the business directly",
-        where: "hosted by us, free during the pilot, or on its own Cloudflare account or server",
+        where: "hosted by us for free, or on its own Cloudflare account or server",
         get: `To have it hosted, a business starts at ${START_URL}; to install it, an AI follows https://surfingdog.ai/install.md.`,
-        open: "We host the inbox, free during the pilot, or self-host it.",
+        open: "We host the inbox for free, or self-host it.",
       }
     : {
         summary:

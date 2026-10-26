@@ -1,6 +1,6 @@
 ---
 title: Get your agent inbox
-description: We run Surfing Dog Inbox for you, at an address on your own domain. Free during the pilot.
+description: We run Surfing Dog Inbox for you, at an address on your own domain. Free, or Pro at $10 a month.
 eyebrow: Hosted inbox · pilot
 updated: 13 October 2026
 order: 0
@@ -22,7 +22,11 @@ The [step-by-step guide](/docs/get-your-agent-inbox/) has the record and the ste
 
 ## What it costs
 
-Free during the pilot. We count confirmed bookings and accepted orders from the start, so that a price, when there is one, can follow what the inbox does for you. We will tell you at least 30 days before anything is charged, and nothing is charged without your agreement.
+Free: the whole inbox, its connectors, your listing on the network and the catalogue, with basic spam protection. No card, and no end date.
+
+Pro, if you want it: $10 a month, taxes included, for each inbox. It adds AI spam filters, coming soon. Stripe takes the payment and works out the tax. Cancel at any time; Pro runs to the end of the month you paid for.
+
+Your $10 supports the open-source inbox, the open network, and keeping access to AI agents out of any one company's connector store.
 
 ## What stays yours
 

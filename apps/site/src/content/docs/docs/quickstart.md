@@ -11,7 +11,7 @@ Three ways to run the same software. Pick one, then make the first calls at the 
 
 ## Hosted by us
 
-We run the same software for you on our own servers, free during the pilot. You set it up from your website's check result, and it goes live at a hostname on your own domain, such as `inbox.yourbusiness.com`, once you add one DNS record. Your inbox and its backups are stored in the European Union. [Get your agent inbox](https://app.surfingdog.ai/start), or read the [step-by-step guide](/docs/get-your-agent-inbox/) first.
+We run the same software for you on our own servers, free. Pro, at $10 a month, taxes included, is there if you want it. You set it up from your website's check result, and it goes live at a hostname on your own domain, such as `inbox.yourbusiness.com`, once you add one DNS record. Your inbox and its backups are stored in the European Union. [Get your agent inbox](https://app.surfingdog.ai/start), or read the [step-by-step guide](/docs/get-your-agent-inbox/) first.
 
 <!-- hosted: end -->
 

@@ -3,7 +3,7 @@ title: Self-hosted vs hosted
 description: The same software either way. What you run, what we run, and what each one includes.
 ---
 
-The inbox is one codebase with two self-hosting targets and one hosted edition. The core never knows which it is running on. <!-- hosted: open -->Hosted is free during the pilot.<!-- hosted: closed -->Hosted is not open yet; until it is, self-host.<!-- hosted: end -->
+The inbox is one codebase with two self-hosting targets and one hosted edition. The core never knows which it is running on. <!-- hosted: open -->Hosted is free, with Pro at $10 a month if you want it.<!-- hosted: closed -->Hosted is not open yet; until it is, self-host.<!-- hosted: end -->
 
 | | Deploy to Cloudflare | Your own server | Hosted by us (pilot<!-- hosted: closed -->, not open yet<!-- hosted: end -->) |
 | --- | --- | --- | --- |
@@ -16,8 +16,14 @@ The inbox is one codebase with two self-hosting targets and one hosted edition. 
 | Backups | Yours (D1 time travel) | Yours: the installer backs up every night; Litestream optional ([Backups](/docs/backups/)) | Done by us: every hour, encrypted |
 | Network | Join any network, or none, from settings; the setup suggests network.surfingdog.ai | Same | On network.surfingdog.ai from the day it goes live; switch it off, or add others, from settings |
 | Domain | Your Worker route or custom domain | Yours | A hostname on your own domain, such as `inbox.yourbusiness.com`, by one DNS record |
-| Cost | Cloudflare's plan; the free plan starts, sending email needs Workers Paid | Your machine | Free for now; no price is set |
+| Cost | Cloudflare's plan; the free plan starts, sending email needs Workers Paid | Your machine | <!-- hosted: open -->Free; Pro, if you want it: $10 a month, taxes included<!-- hosted: closed -->Free<!-- hosted: end --> |
 | Licence | MIT | MIT | Same software, same licence |
+
+<!-- hosted: open -->
+
+Pro adds AI spam filters (coming). Your $10 supports the open-source inbox, the open network, and keeping access to AI agents out of any one company's connector store.
+
+<!-- hosted: end -->
 
 Two things are worth stating plainly. First, the open-source edition is never crippled: every connector, every door and every format in the hosted edition is in the repository. What hosting takes off a small business is the running of it: updates, email, backups and, later, connections to other services ([ADR-014](https://github.com/surfingdogai/inbox/blob/main/docs/adr/014-connectors-strategy.md)). Second, a hosted inbox's data is stored on our own servers and its encrypted backups in object storage, both in the European Union. Requests reach them through an edge network that ends the encrypted connection and opens a new one to our servers, so that network handles message content in transit; the hosted terms say who processes what, and where. The core does not know it is hosted, so the hosted layer can change later without touching it ([ADR-003](https://github.com/surfingdogai/inbox/blob/main/docs/adr/003-hosted-tenancy.md)).
 
