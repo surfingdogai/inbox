@@ -165,6 +165,114 @@ describe("the catalogue upsert feeds and shops share", () => {
     expect(await deactivateSource(db, source, pass)).toBe(2);
     expect((await catalogue(db, feed))[0]?.active).toBe(true);
   });
+
+  it("keeps what a shop says a product is, checked, and moves its place in the catalogue feed only when it changes", async () => {
+    const db = await freshDb();
+    const identity = async () => {
+      const { rows } = await db.client.query({
+        sql: `SELECT external_id, gtin, gtin_given, brand, mpn, condition, url, image_url, catalogue_seq
+              FROM products WHERE source = ? ORDER BY external_id`,
+        params: [source],
+        method: "all",
+      });
+      return rows.map((r) => ({
+        externalId: String(r[0]),
+        gtin: r[1],
+        gtinGiven: r[2],
+        brand: r[3],
+        mpn: r[4],
+        condition: r[5],
+        url: r[6],
+        imageUrl: r[7],
+        seq: Number(r[8]),
+      }));
+    };
+    await upsertCatalogue(db, {
+      source,
+      products: [
+        // A hardware shop in Pune: an EAN-13 that adds up, the maker and its part number, its page and picture.
+        row("p:1", {
+          gtin: { raw: "8901030865275", hint: "barcode" },
+          brand: "Taparia",
+          mpn: "SDS-930",
+          url: "https://ferreteria.example.in/p/screwdrivers",
+          imageUrl: "https://cdn.ferreteria.example.in/sds-930.jpg",
+        }),
+        // One digit off, a used one, and links that cannot be kept: plain http, a private address.
+        row("p:2", {
+          gtin: { raw: "8901030865278", hint: "barcode" },
+          condition: "used",
+          url: "http://ferreteria.example.in/p/drill",
+          imageUrl: "https://192.168.1.10/drill.jpg",
+        }),
+        row("p:3"),
+      ],
+      now: T0,
+      seenAt: T0,
+      currency: "INR",
+    });
+    const first = await identity();
+    expect(first.map(({ seq: _, ...p }) => p)).toEqual([
+      {
+        externalId: "p:1",
+        gtin: "08901030865275",
+        gtinGiven: null,
+        brand: "Taparia",
+        mpn: "SDS-930",
+        condition: "new",
+        url: "https://ferreteria.example.in/p/screwdrivers",
+        imageUrl: "https://cdn.ferreteria.example.in/sds-930.jpg",
+      },
+      // Kept as given for the owner to read, never as its barcode.
+      {
+        externalId: "p:2",
+        gtin: null,
+        gtinGiven: "8901030865278",
+        brand: null,
+        mpn: null,
+        condition: "used",
+        url: null,
+        imageUrl: null,
+      },
+      {
+        externalId: "p:3",
+        gtin: null,
+        gtinGiven: null,
+        brand: null,
+        mpn: null,
+        condition: "new",
+        url: null,
+        imageUrl: null,
+      },
+    ]);
+    expect(first.every((p) => p.seq > 0)).toBe(true);
+    // A pass that says nothing of them has not said they are gone, and moves nothing in the feed.
+    const quiet = await upsertCatalogue(db, {
+      source,
+      products: [row("p:1"), row("p:2"), row("p:3")],
+      now: T0 + 1,
+      seenAt: T0 + 1,
+      currency: "INR",
+    });
+    expect(quiet).toMatchObject({ updated: 0, unchanged: 3 });
+    expect(await identity()).toEqual(first);
+    // A barcode fixed in the shop is a change: that product, and only it, moves on in the feed.
+    await upsertCatalogue(db, {
+      source,
+      products: [row("p:1"), row("p:2", { gtin: { raw: "8901030865275", hint: "barcode" } }), row("p:3")],
+      now: T0 + 2,
+      seenAt: T0 + 2,
+      currency: "INR",
+    });
+    const fixed = await identity();
+    expect(fixed[1]).toMatchObject({ gtin: "08901030865275", gtinGiven: null });
+    expect(fixed[1]?.seq).toBeGreaterThan(Math.max(...first.map((p) => p.seq)));
+    expect([fixed[0]?.seq, fixed[2]?.seq]).toEqual([first[0]?.seq, first[2]?.seq]);
+    // Taken off sale is a change the feed shows too.
+    expect(await deactivateUnseen(db, source, T0 + 3, T0 + 3)).toBe(3);
+    const off = await identity();
+    expect(off.every((p, i) => p.seq > (fixed[i]?.seq ?? 0))).toBe(true);
+  });
 });
 
 /* --- the gallery ------------------------------------------------------------------------------------ */

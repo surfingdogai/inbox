@@ -1,5 +1,7 @@
 import { type Statement, sha256Hex } from "@surfingdog/platform";
+import type { GtinHint } from "@surfingdog/spec";
 import { z } from "zod";
+import { PRODUCT_CONDITIONS, type SourceIdentity } from "../catalogue/identity";
 import { businessFacts } from "../customer/audience";
 import { moneyIn } from "../customer/format";
 import type { Db } from "../db";
@@ -42,6 +44,7 @@ import { PAY_CLOSE_KIND } from "./pay-queue";
 import { type PayConnection, type PayHost, PaymentLinks, type PaymentView } from "./payments";
 import {
   type CalendarChoice,
+  type CatalogueProduct,
   type Connected,
   type ConnectionChoice,
   type ConnectionNote,
@@ -1469,6 +1472,8 @@ export class ConnectorCapabilities {
           price: p.price,
           stock: p.stock === null || !Number.isFinite(p.stock) ? null : Math.max(0, Math.trunc(p.stock)),
           available: p.available,
+          // What it is beside its price (ADR-029), each only when the shop gives it; checked as it is stored.
+          ...identityOf(p),
         })),
         now,
         seenAt: now,
@@ -2551,6 +2556,27 @@ function isChoice(v: unknown): v is ConnectionChoice {
     Array.isArray(c.options) &&
     (c.value === null || typeof c.value === "string")
   );
+}
+
+/**
+ * A shop's word on what a product is, as the catalogue takes it: a barcode with a kind of field the
+ * check knows, a condition of the three, text as text. Anything else is left out, as if unsaid.
+ */
+const GTIN_HINTS: Readonly<Record<GtinHint, true>> = { barcode: true, upc: true, isbn: true, any: true };
+
+function identityOf(p: CatalogueProduct): SourceIdentity {
+  const text = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v : undefined);
+  const raw = p.gtin && typeof p.gtin.raw === "string" ? p.gtin.raw : "";
+  const condition = PRODUCT_CONDITIONS.find((c) => c === p.condition);
+  return {
+    ...(raw.trim() && p.gtin && Object.hasOwn(GTIN_HINTS, p.gtin.hint) ? { gtin: { raw, hint: p.gtin.hint } } : {}),
+    ...(text(p.brand) ? { brand: text(p.brand) } : {}),
+    ...(text(p.mpn) ? { mpn: text(p.mpn) } : {}),
+    ...(condition ? { condition } : {}),
+    ...(text(p.url) ? { url: text(p.url) } : {}),
+    ...(text(p.imageUrl) ? { imageUrl: text(p.imageUrl) } : {}),
+    ...(text(p.sourceCategory) ? { sourceCategory: text(p.sourceCategory) } : {}),
+  };
 }
 
 const EMPTY_CATALOGUE: CatalogueState = { full: null, lastFullAt: 0, since: null, partial: null, truncated: false };

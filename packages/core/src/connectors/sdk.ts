@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { SourceIdentity } from "../catalogue/identity";
 
 /**
  * The connector SDK (ADR-014, ADR-015, ADR-022).
@@ -765,8 +766,13 @@ export interface OAuthFlow {
 
 /* --- the catalogue (ADR-030 §3) -------------------------------------------- */
 
-/** One sellable unit as a shop sends it in: a simple product, or one variation of a product. */
-export interface CatalogueProduct {
+/**
+ * One sellable unit as a shop sends it in: a simple product, or one variation of a product. Its barcode,
+ * brand, part number, condition, page and picture (`SourceIdentity`, ADR-029) only when the shop gives
+ * them: a barcode with the kind of field it came from, checked when it is stored, so one that fails the
+ * check is kept for the owner to read and never published.
+ */
+export interface CatalogueProduct extends SourceIdentity {
   /** The shop's own id for it, stable: what the inbox keys it on (`p:<id>`, `v:<id>`, a GID). */
   readonly externalId: string;
   readonly name: string;
