@@ -4,7 +4,7 @@ import type { RuleDefinition } from "../schema";
 export type Preset = { name: string; priority: number; definition: RuleDefinition };
 
 /**
- * A kind of business's starting rules (ADR-032): one file per key in this folder, and one line in
+ * A kind of business's starting rules (ADR-036): one file per key in this folder, and one line in
  * `index.ts`. A record only ever speeds things up or asks a person (R25): nothing here refuses anybody.
  */
 export interface PresetSpec<K extends string = string> {

@@ -13,7 +13,7 @@ import {
 import { addDays, daysBetween, instantOf, isoIn, isoWeekday } from "../src/util/zoned";
 
 /**
- * Policies as data (ADR-032): steps before a start, dated in the business's own zone — across zones
+ * Policies as data (ADR-036): steps before a start, dated in the business's own zone — across zones
  * with odd offsets and on days the clocks change — the fee at each moment, and what is owed back.
  */
 

@@ -182,7 +182,7 @@ describe("lengths of time", () => {
 });
 
 describe("currencies", () => {
-  it("offer exactly what the server takes, each in its own minor unit (ADR-032)", () => {
+  it("offer exactly what the server takes, each in its own minor unit (ADR-036)", () => {
     for (const code of new Set([
       ...knownCurrencies(),
       ...Object.keys(ISO_4217_MINOR_UNITS),

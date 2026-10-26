@@ -10,7 +10,7 @@ import {
 } from "../src/rules/presets/index";
 
 /**
- * The presets are a registry (ADR-032): one file per kind of business, one line each in
+ * The presets are a registry (ADR-036): one file per kind of business, one line each in
  * `rules/presets/index.ts`, and every door that takes a preset key reads it from there.
  */
 describe("the preset registry", () => {

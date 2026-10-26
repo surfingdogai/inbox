@@ -17,7 +17,7 @@ import type { Settings } from "./types";
  * for it to be removed sends `null`.
  */
 export interface SettingsForm {
-  /** The business's currency, read only here: the amounts below are typed in its own places (ADR-032). */
+  /** The business's currency, read only here: the amounts below are typed in its own places (ADR-036). */
   readonly currency?: string | undefined;
   readonly cancellationWindowMin: string;
   /** Minutes before a start time after which customers can no longer book it online. */

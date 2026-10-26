@@ -12,7 +12,7 @@
 import { ISO_4217_FUNDS, ISO_4217_MINOR_UNITS, minorUnits } from "@surfingdog/spec";
 
 /**
- * The words and signs a currency is written with, and the ISO codes each may mean (ADR-032): `$` is
+ * The words and signs a currency is written with, and the ISO codes each may mean (ADR-036): `$` is
  * dollars and pesos alike, so an amount beside it is read in the item's own currency when that is one
  * it may mean (a Chilean peso has no minor unit, a dollar has cents), else in the first it names.
  */

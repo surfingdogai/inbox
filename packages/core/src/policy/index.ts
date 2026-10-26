@@ -6,7 +6,7 @@ import { addDays, dateIn, instantOf, isoIn } from "../util/zoned";
 export { type PolicyLang, policyLang, policySentence } from "./words";
 
 /**
- * Cancellation policies as data (ADR-032): a business's steps before the start of what it sells,
+ * Cancellation policies as data (ADR-036): a business's steps before the start of what it sells,
  * dated for one booking in the business's own zone, the fee at any moment, and what is owed back.
  * Pure: nothing here reads or writes storage. Stays keep theirs on their rate plans, appointments on
  * their services; each applies it here.

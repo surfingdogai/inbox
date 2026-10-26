@@ -182,7 +182,7 @@ describe("client actions", () => {
     for (const [typed, minor] of table) expect(parseMajor(typed), JSON.stringify(typed)).toBe(minor);
   });
 
-  it("reads a price in the currency's own places: none for yen, thousandths for dinars (ADR-032)", () => {
+  it("reads a price in the currency's own places: none for yen, thousandths for dinars (ADR-036)", () => {
     const yen: [string, number | undefined][] = [
       ["90540", 90_540],
       ["90,540", 90_540],

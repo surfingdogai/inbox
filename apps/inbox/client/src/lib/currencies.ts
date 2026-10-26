@@ -3,7 +3,7 @@ import { countryOfZone, currencyOfCountry } from "./geo";
 /**
  * Currencies as the owner picks one: the common ones first, each with its symbol and its name
  * (`€ EUR — Euro`), then every other one prices here can be in: every ISO 4217 currency whose minor
- * unit is known, each kept in that unit (ADR-032). The server takes the same list
+ * unit is known, each kept in that unit (ADR-036). The server takes the same list
  * (`packages/core/src/util/locale.ts`; a test holds the two together).
  */
 
@@ -30,7 +30,7 @@ export const COMMON_CURRENCIES: readonly string[] = [
 
 /**
  * Each currency's minor unit, as ISO 4217 gives it (0: none, like JPY; 2: hundredths; 3: thousandths,
- * like KWD): the server's own table (`ISO_4217_MINOR_UNITS` in `@surfingdog/spec`, ADR-032), which a
+ * like KWD): the server's own table (`ISO_4217_MINOR_UNITS` in `@surfingdog/spec`, ADR-036), which a
  * test holds this to. Every amount is kept in this unit, and shown and typed in it.
  */
 export const MINOR_UNITS: Readonly<Record<string, number>> = {

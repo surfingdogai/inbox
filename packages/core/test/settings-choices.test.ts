@@ -305,7 +305,7 @@ describe("opening hours that run to midnight", () => {
   });
 });
 
-describe("currencies are counted in their own minor unit (ADR-032)", () => {
+describe("currencies are counted in their own minor unit (ADR-036)", () => {
   it("any ISO 4217 currency is taken, for the profile, a service's price and a product's; funds and metals are not", () => {
     for (const ok of [
       "EUR",

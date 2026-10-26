@@ -1,5 +1,5 @@
 /**
- * Money in every currency's own minor unit (spec 0.10, ADR-032).
+ * Money in every currency's own minor unit (spec 0.11, ADR-036).
  *
  * Every amount in these formats is an integer count of the currency's minor unit as ISO 4217 defines
  * it: 4500 is 45.00 in AUD or KES, 4500 is ¥4,500 in JPY (no minor unit), and 4500 is 4.500 in KWD

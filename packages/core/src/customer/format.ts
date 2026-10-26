@@ -114,7 +114,7 @@ export function zoneName(timezone: string, lang: CustomerLang, at: Date = new Da
   return zone;
 }
 
-/** `€45.00` · `45,00 €` · `¥4,500`: in the currency's own minor unit (ADR-032). */
+/** `€45.00` · `45,00 €` · `¥4,500`: in the currency's own minor unit (ADR-036). */
 export function moneyIn(m: Money | { readonly value: number; readonly currency: string }, lang: CustomerLang): string {
   return formatMinor(m, LOCALE[lang]);
 }

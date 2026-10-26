@@ -1,5 +1,5 @@
 /**
- * Words a business's customers never read (ADR-032): a guest, a client or a buyer deals with the
+ * Words a business's customers never read (ADR-036): a guest, a client or a buyer deals with the
  * business, in its name and its language, and nothing they read names the software, a network, the
  * receipts and passes their assistant may carry, or a reputation. Identity plumbing goes to agents in
  * machine answers only. Every customer-facing template, page and pay-link title is held to this list

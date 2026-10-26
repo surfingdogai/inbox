@@ -8,7 +8,7 @@ import { currencyCodeProblem, minorUnits } from "@surfingdog/spec";
 
 /**
  * Every amount in this inbox is an integer count of its currency's own ISO 4217 minor unit
- * (ADR-032): 4500 is 45.00 KES, ¥4,500 JPY, 4.500 KWD. The exponent comes from one table
+ * (ADR-036): 4500 is 45.00 KES, ¥4,500 JPY, 4.500 KWD. The exponent comes from one table
  * (`minorUnits` in `@surfingdog/spec`), which the owner app's money formatting, the feeds' prices and
  * every pay-link platform's conversion read, so a currency is never counted a hundred times wrong.
  */
@@ -31,7 +31,7 @@ export function isHundredthsCurrency(code: string): boolean {
 
 /**
  * Whether `code` is a currency with no minor unit at all (yen, won, dong, Chilean pesos…): its
- * amounts here are whole units (¥1,500 is 1500, ADR-032), which is how a shop writes them too.
+ * amounts here are whole units (¥1,500 is 1500, ADR-036), which is how a shop writes them too.
  */
 export function isWholeUnitCurrency(code: string): boolean {
   return isMoneyCurrency(code) && minorUnits(code) === 0;

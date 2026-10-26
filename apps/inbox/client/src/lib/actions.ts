@@ -131,7 +131,7 @@ export function isoToLocal(iso: string | undefined): string {
 
 /**
  * An amount as a person types it, in major units, to minor units of a currency with `exponent`
- * places (2 unless said; ADR-032): `45`, `45,5`, `45,50`, `45.50`, `1 234,50`, `1.234,50` and
+ * places (2 unless said; ADR-036): `45`, `45,5`, `45,50`, `45.50`, `1 234,50`, `1.234,50` and
  * `1,234.50` all read as they are meant (when both `.` and `,` appear, the last is the decimal mark;
  * one followed by exactly three digits groups thousands, but in a currency of thousandths, like KWD,
  * where `4.500` is four dinars five hundred fils). In a currency with no minor unit (JPY) `4,500` is

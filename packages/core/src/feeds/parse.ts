@@ -24,7 +24,7 @@ export interface FeedProduct {
   readonly description: string | null;
   readonly sku: string | null;
   /**
-   * Minor units of an ISO currency, as the rest of the schema stores money (ADR-032). Null when the row
+   * Minor units of an ISO currency, as the rest of the schema stores money (ADR-036). Null when the row
    * gives none to sell at: no price, nothing or less, or one in no currency a price is set in.
    */
   readonly price: { readonly value: number; readonly currency: string } | null;
@@ -217,7 +217,7 @@ const DOLLARS = [
  * first claims every price carrying the longer one, and Brazilian reais were stored as dollars.
  *
  * A sign whose currency is not counted in hundredths (`¥`, `₩`, `円`, `د.ك`) names its own currency,
- * read in that currency's own minor unit (ADR-032), never the feed's currency at a hundred or a
+ * read in that currency's own minor unit (ADR-036), never the feed's currency at a hundred or a
  * thousand times the amount.
  */
 const SIGNS: ReadonlyArray<readonly [string, readonly string[], string | null]> = [
@@ -360,7 +360,7 @@ const NOT_MONEY = new Set(["XAG", "XAU", "XDR", "XPD", "XPT", "XSU"]);
 
 /**
  * The currency a price cell is in: the ISO code it names, else the sign it carries, else the feed's
- * own (`fallback`). Any ISO 4217 currency is read, in its own minor unit (`minorUnits`, ADR-032), as
+ * own (`fallback`). Any ISO 4217 currency is read, in its own minor unit (`minorUnits`, ADR-036), as
  * is a fund code, a metal or a unit of account, to give no price in it. Null for a currency sign it cannot
  * name (`¢`, `₿`, or the rupee sign in a feed priced in euros): not the feed's currency, and none
  * it can price in.
@@ -409,7 +409,7 @@ function readPrice(
   const text = raw.trim();
   if (text === "") return none;
   const currency = currencyOf(text, defaultCurrency.toUpperCase());
-  // Every amount is kept in the currency's own minor unit (ADR-032): ¥500 is 500, €5 is 500, KWD 5 is 5000.
+  // Every amount is kept in the currency's own minor unit (ADR-036): ¥500 is 500, €5 is 500, KWD 5 is 5000.
   const exponent = currency !== null && isMoneyCurrency(currency) ? minorUnits(currency) : null;
   const number = readNumber(text, exponent ?? 2);
   if (!number) return none;

@@ -65,7 +65,7 @@ export interface ServiceDraft {
 const majorOf = (minor: number | null | undefined, currency: string) =>
   minor === null || minor === undefined ? "" : majorText(minor, currency);
 
-/** `currency`: the business's, for a service with no price of its own yet (ADR-032: amounts in its own places). */
+/** `currency`: the business's, for a service with no price of its own yet (ADR-036: amounts in its own places). */
 export function serviceDraft(
   s: ServiceRow | undefined,
   floor: number | null | undefined,

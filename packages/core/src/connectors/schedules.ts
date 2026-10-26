@@ -3,7 +3,7 @@ import type { ItemType, Money } from "../domain/types";
 import type { PayPurpose } from "./sdk";
 
 /**
- * Pay links beyond orders (ADR-032): an item type whose price is paid on a schedule — a stay's deposit
+ * Pay links beyond orders (ADR-036): an item type whose price is paid on a schedule — a stay's deposit
  * and its balance, a salon's deposit, a trade's stages — tells the payments side which entries want a
  * link now, and hears back what the platform says was paid. Orders keep their own path, unchanged
  * (`PaymentLinks.ensure`): one link for what the order comes to.

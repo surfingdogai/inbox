@@ -26,10 +26,11 @@ import vectors from "../vectors/doors-elsewhere.json";
  * the vectors read as `readDoorsElsewhere`, `doorPlatformOf`, `doorPlace`, `doorTrackingParams` and `cleanDoorUrl` say.
  */
 describe("the door platforms vocabulary", () => {
-  it("is what its schema says, and the spec is 0.10.0", () => {
+  it("is what its schema says, and the spec is 0.10.0 or later", () => {
     expect(doorPlatformsVocabSchema.parse(DOOR_PLATFORMS_VOCABULARY)).toEqual(DOOR_PLATFORMS_VOCABULARY);
     expect(DOOR_PLATFORMS_VOCABULARY.version).toBe(1);
-    expect(pkg.version).toBe("0.10.0");
+    const [major, minor] = pkg.version.split(".").map(Number) as [number, number];
+    expect(major > 0 || minor >= 10, pkg.version).toBe(true);
     const schema = jsonSchemaOf("door-platforms") as { $id: string };
     expect(schema.$id).toBe("https://surfingdog.ai/spec/schemas/door-platforms.json");
   });

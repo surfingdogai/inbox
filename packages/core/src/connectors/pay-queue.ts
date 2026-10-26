@@ -40,7 +40,7 @@ export async function hasPayLinks(db: Db): Promise<boolean> {
 /**
  * Whether a link is on its way for an order as it stands after an event, by the rules the payments
  * side makes one by (`PaymentLinks.ensure`): a connection of the order's mode makes links, the order
- * comes to something in a currency whose minor unit is known (ADR-032), no change to it waits, it names no link of
+ * comes to something in a currency whose minor unit is known (ADR-036), no change to it waits, it names no link of
  * the owner's own, and it was accepted once that connection was there (or has a link of ours). The
  * customer's email waits for it only then.
  */

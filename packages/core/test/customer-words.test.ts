@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { customerCopyProblems, customerWordsIn } from "../src/i18n/customer-words";
 
-/** The customer copy lint (ADR-032): what a business's customers read never names the plumbing. */
+/** The customer copy lint (ADR-036): what a business's customers read never names the plumbing. */
 describe("words customers never read", () => {
   it("finds the plumbing's names as whole words, in any case", () => {
     expect(customerWordsIn("Powered by Surfing Dog")).toEqual(["surfing dog"]);

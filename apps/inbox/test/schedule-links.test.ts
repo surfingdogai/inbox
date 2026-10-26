@@ -14,7 +14,7 @@ import { freshDb } from "./harness";
 import { molliePlatform, stripePlatform } from "./pay-platforms";
 
 /**
- * Pay links on a payment schedule (ADR-032), through the payments side an order uses: an item type
+ * Pay links on a payment schedule (ADR-036), through the payments side an order uses: an item type
  * whose price is paid in parts says which entries want a link now (`ScheduleSource`), and gets one live
  * link per entry, for its amount and window, on the business's own account; the platform's word, read
  * back, is handed to the item's source; a link whose window closes is switched off on the platform; a

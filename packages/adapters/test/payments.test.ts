@@ -152,7 +152,7 @@ async function signedStripe(body: string, opts: { at?: number; secret?: string; 
 /* --- money ------------------------------------------------------------------- */
 
 describe("amounts as platforms write them", () => {
-  it("writes each currency in its own minor unit, as every amount here is kept, and reads it back (ADR-032)", () => {
+  it("writes each currency in its own minor unit, as every amount here is kept, and reads it back (ADR-036)", () => {
     expect(decimalAmount({ value: 4500, currency: "EUR" })).toBe("45.00");
     expect(decimalAmount({ value: 5, currency: "EUR" })).toBe("0.05");
     expect(decimalAmount({ value: 123_456, currency: "USD" })).toBe("1234.56");
@@ -173,7 +173,7 @@ describe("amounts as platforms write them", () => {
 });
 
 /**
- * Every currency each platform takes, one test each (ADR-032): the inbox's ISO 4217 minor units go to
+ * Every currency each platform takes, one test each (ADR-036): the inbox's ISO 4217 minor units go to
  * the platform in the platform's own count and come back the same, or the currency is refused with
  * the reason. https://docs.stripe.com/currencies and https://docs.mollie.com/docs/multicurrency.
  */

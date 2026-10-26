@@ -168,7 +168,7 @@ export function channelWord(channel: string): string {
   return CHANNEL_WORDS[channel] ?? channel;
 }
 
-/** An amount in its currency's own minor unit (ADR-032): `€45.00`, `¥4,500`, `KWD 4.500`. */
+/** An amount in its currency's own minor unit (ADR-036): `€45.00`, `¥4,500`, `KWD 4.500`. */
 export function formatMoney(m: Money | null | undefined, locale?: string): string {
   if (!m) return "";
   const e = minorUnitsOf(m.currency);

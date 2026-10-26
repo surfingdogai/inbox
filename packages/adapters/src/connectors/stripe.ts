@@ -236,7 +236,7 @@ export function fromStripeAmount(value: number, currency: string): number | null
 }
 
 /**
- * What a key needs beyond `STRIPE_PERMISSIONS` to hold a card for a booking (ADR-032), asked only when
+ * What a key needs beyond `STRIPE_PERMISSIONS` to hold a card for a booking (ADR-036), asked only when
  * the owner switches card holds on: a Checkout Session in `mode=setup` that makes a Customer.
  */
 export const STRIPE_GUARANTEE_PERMISSIONS = {
@@ -610,7 +610,7 @@ async function createLink(ctx: RunContext, req: PayLinkRequest) {
         ["line_items[0][quantity]", 1],
         // Good for one payment: once paid, Stripe deactivates it.
         ["restrictions[completed_sessions][limit]", 1],
-        // A booking's deposit or balance says "Book" on Stripe's button (ADR-032).
+        // A booking's deposit or balance says "Book" on Stripe's button (ADR-036).
         ["submit_type", req.purpose && req.purpose !== "pay" ? "book" : "pay"],
         ["metadata[sdi_ref]", req.ref],
         ["metadata[sdi_item]", req.itemId],
@@ -635,7 +635,7 @@ async function createLink(ctx: RunContext, req: PayLinkRequest) {
 }
 
 /**
- * A card held for a booking (ADR-032): a Checkout Session in `mode=setup` on the business's own account,
+ * A card held for a booking (ADR-036): a Checkout Session in `mode=setup` on the business's own account,
  * which saves the card to a Customer and charges nothing
  * (https://docs.stripe.com/api/checkout/sessions/create: `currency` is required in setup mode,
  * `customer_creation` may be set in setup mode, `expires_at` is 30 minutes to 24 hours away;
@@ -743,7 +743,7 @@ function factOf(session: Record<string, unknown>, failed: boolean): PaymentFact 
   const meta = (session.metadata ?? {}) as Record<string, unknown>;
   const pi = typeof session.payment_intent === "string" ? session.payment_intent : null;
   const currency = typeof session.currency === "string" ? session.currency.toUpperCase() : "";
-  // Back in the inbox's minor units: Stripe writes ISK as hundredths (ADR-032).
+  // Back in the inbox's minor units: Stripe writes ISK as hundredths (ADR-036).
   const total = currency.length === 3 ? fromStripeAmount(Number(session.amount_total), currency) : null;
   const status = session.payment_status;
   return {

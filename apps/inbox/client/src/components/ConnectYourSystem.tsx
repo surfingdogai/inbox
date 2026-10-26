@@ -17,7 +17,7 @@ const ICONS: Readonly<Record<ConnectorGroup, typeof CalendarDays>> = {
 };
 
 /**
- * "Connect your system" (ADR-032): the systems a kind of business runs its days in, first, as cards —
+ * "Connect your system" (ADR-036): the systems a kind of business runs its days in, first, as cards —
  * the ones that work today to press, the ones that need setup or are on their way said so, with nothing
  * to press — and a way out for a business that uses none. A ready card opens Settings → Integrations,
  * where it connects; a kind may pass its own `onOpen` (a property system's own connect sheet).

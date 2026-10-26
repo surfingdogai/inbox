@@ -4,7 +4,7 @@ import { formatMinor } from "../util/money";
 import { knownZone } from "../util/zoned";
 
 /**
- * A dated policy read back in a sentence, in the business's voice and the customer's language (ADR-032):
+ * A dated policy read back in a sentence, in the business's voice and the customer's language (ADR-036):
  * "Free cancellation until 9 Dec 2026, 23:59 Kyoto time. After that: ¥25,800. No-show: the full stay."
  * Six languages, the ones the templates ship in; any other reads in English. The words never name
  * the inbox, a network or anything but the business's own terms.

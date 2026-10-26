@@ -99,7 +99,7 @@ export function wizardDoorsDoc(d: WizardDoors): { doors: Record<string, boolean 
 }
 
 /**
- * What a business runs, as the setup's first question asks it (ADR-032): each kind sets the rules to
+ * What a business runs, as the setup's first question asks it (ADR-036): each kind sets the rules to
  * start from, what agents can do to begin with, and which systems "Connect your system" shows first.
  * A later kind (a place to stay) is one more entry here.
  */

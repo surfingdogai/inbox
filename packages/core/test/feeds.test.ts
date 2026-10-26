@@ -28,7 +28,7 @@ describe("parsePrice", () => {
   });
 
   it("reads a currency not counted in hundredths in its own minor unit, never a hundred times the amount", () => {
-    // Yen, won, pesos: no minor unit. Dinars: thousandths, so 12.500 is twelve and a half, not 12,500 (ADR-032).
+    // Yen, won, pesos: no minor unit. Dinars: thousandths, so 12.500 is twelve and a half, not 12,500 (ADR-036).
     for (const [raw, value, currency] of [
       ["500 JPY", 500, "JPY"],
       ["¥4,980", 4_980, "JPY"],
@@ -110,7 +110,7 @@ describe("parsePrice", () => {
 
   it("gives a zero-decimal currency no minor units", () => {
     expect(parsePrice("500 JPY", "EUR")).toEqual({ value: 500, currency: "JPY" });
-    // ISO 4217 counts forints in hundredths: 2500 HUF is 250 000 fillér (ADR-032).
+    // ISO 4217 counts forints in hundredths: 2500 HUF is 250 000 fillér (ADR-036).
     expect(parsePrice("2500 HUF", "EUR")).toEqual({ value: 250_000, currency: "HUF" });
     expect(parsePrice("KSh 4,500", "EUR")).toEqual({ value: 450_000, currency: "KES" });
     expect(parsePrice("4.500 KWD", "EUR")).toEqual({ value: 4_500, currency: "KWD" });
@@ -144,7 +144,7 @@ describe("a row priced in no currency a price is set in, or at nothing", () => {
     expect(csv.map((p) => [p.externalId, p.price, p.available])).toEqual([
       // A fund code is no currency a price is set in: kept off sale.
       ["U1", null, false],
-      // Dinars and yen are each counted in their own minor unit (ADR-032).
+      // Dinars and yen are each counted in their own minor unit (ADR-036).
       ["K1", { value: 12_500, currency: "KWD" }, null],
       ["J1", { value: 4_980, currency: "JPY" }, null],
       // Nothing is a price, but none to sell at: kept off sale, at the price it last had.

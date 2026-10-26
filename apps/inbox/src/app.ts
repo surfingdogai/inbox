@@ -335,7 +335,7 @@ export function createInbox(deps: AppDeps): Inbox {
     .register(PAY_LINK_KIND, payLinkHandler(caps.connectors), { lane: payLane })
     .register(PAY_NOTICE_KIND, payNoticeHandler(caps.connectors, mailOut, { baseUrl: deps.baseUrl }))
     .register(PAY_CLOSE_KIND, payCloseHandler(caps.connectors), { lane: connectorLane })
-    // Write first (ADR-032): a write to a business's own system whose answer never came is looked for
+    // Write first (ADR-036): a write to a business's own system whose answer never came is looked for
     // again until it is found or its few minutes are up. An inbox with no such system enqueues none.
     .register(CONNECTOR_WRITE_RESOLVE_KIND, writeResolveHandler());
   if (demo) {

@@ -1,4 +1,4 @@
--- Payment schedules (ADR-032). An item may now have a link per entry of its payment schedule — a
+-- Payment schedules (ADR-036). An item may now have a link per entry of its payment schedule — a
 -- deposit and a balance open at once — not only one for an order's whole total. `schedule_id` names
 -- the entry ('' for an order's own link, as every link before this was), `purpose` says what it is for
 -- (`pay` | `deposit` | `balance` | `guarantee` | `difference`), and `expires_at` when it stops taking
@@ -19,7 +19,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS `connector_payments_live` ON `connector_paymen
 -- Links whose window closes, found by the reconciliation that closes them.
 CREATE INDEX IF NOT EXISTS `connector_payments_expiry` ON `connector_payments` (`state`, `expires_at`) WHERE `expires_at` IS NOT NULL;
 --> statement-breakpoint
--- Write first (ADR-032): every attempt at writing to a business's own system (a property system, a
+-- Write first (ADR-036): every attempt at writing to a business's own system (a property system, a
 -- booking system) before anything is promised, journalled. `idem_key` is the key the system is sent and
 -- the marker a write is found by after a timeout; `request_sha` the fingerprint of what was written,
 -- never the request (it may name the guest); `outcome` is `pending` | `written` | `refused` | `unknown`

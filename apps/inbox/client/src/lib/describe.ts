@@ -73,7 +73,7 @@ export function describeTrigger(trigger: string): string {
   return `an item is ${EVENT_WORDS[event] ?? event.replace(/_/g, " ")}`;
 }
 
-/** `exponent`: the business currency's minor unit (ADR-032), for the amounts a rule compares with. */
+/** `exponent`: the business currency's minor unit (ADR-036), for the amounts a rule compares with. */
 export function describeCondition(c: Condition, top = false, exponent = 2): string {
   if ("all" in c) {
     const parts = c.all.map((x) => describeCondition(x, false, exponent)).filter(Boolean);

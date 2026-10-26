@@ -1,6 +1,6 @@
-# ADR-032 — Money in every currency, policies and payment schedules as data, write first
+# ADR-036 — Money in every currency, policies and payment schedules as data, write first
 
-**Status:** proposed, 20 October 2026. The shared ground the industry tracks build on: stays (ADR-033),
+**Status:** proposed, 20 October 2026. The shared ground the industry tracks build on: stays (ADR-037),
 then trades, salons and food. Amends ADR-023 (pay links beyond orders) and ADR-014 (the groups and
 capabilities connectors may name). Numbered provisionally; renumbering at merge is fine.
 
@@ -109,5 +109,5 @@ not have, and building each four times would make four versions of them:
 
 ## Not decided here
 
-The stay item type, its machine and its tools (ADR-033). Payment providers beyond Stripe and Mollie for
+The stay item type, its machine and its tools (ADR-037). Payment providers beyond Stripe and Mollie for
 properties where neither operates (a later payments track).

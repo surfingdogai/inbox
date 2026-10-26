@@ -157,7 +157,7 @@ export interface RuleForm {
   readonly actions: readonly ActionRow[];
   readonly stop: boolean;
   readonly maxRuns: string;
-  /** Places in the business currency's minor unit (ADR-032): amounts are typed and shown in them. */
+  /** Places in the business currency's minor unit (ADR-036): amounts are typed and shown in them. */
   readonly exponent?: number | undefined;
 }
 

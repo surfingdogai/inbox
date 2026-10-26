@@ -8,7 +8,7 @@ import { trades } from "./trades";
 export type { Preset, PresetSpec } from "./common";
 
 /**
- * Every kind of business's starting rules, one per file (ADR-032): a later track adds its preset with
+ * Every kind of business's starting rules, one per file (ADR-036): a later track adds its preset with
  * one import and one entry here, and the key schema, the owner app's choice, the plan and the hosted
  * sign-up all follow from this list.
  */

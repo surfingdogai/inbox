@@ -41,7 +41,7 @@ export type ConnectorCapability =
    */
   | "shop_orders"
   /**
-   * The names every industry track codes against (ADR-032), each defined with its track: a property
+   * The names every industry track codes against (ADR-036), each defined with its track: a property
    * system's rooms, rates and availability read into the inbox (`stay_inventory`), stays written to it
    * before they are confirmed (`write_stays`), and its word that one changed, as a hint to read again
    * (`stay_events`); a job tool that takes the requests an owner accepts (`requests_out`); services,
@@ -60,7 +60,7 @@ export type ConnectorCapability =
 
 /**
  * Where a card sits in Settings → Integrations: calendars, payments, shops; and, for the industry
- * tracks (ADR-032), property systems (`lodging`), job tools (`work`), points of sale and ordering
+ * tracks (ADR-036), property systems (`lodging`), job tools (`work`), points of sale and ordering
  * (`pos`) and booking systems (`booking`).
  */
 export type ConnectorGroup = "calendars" | "payments" | "shops" | "lodging" | "work" | "pos" | "booking";
@@ -469,7 +469,7 @@ export interface BusyRead {
   readonly until: number;
   /**
    * Whose busy times these are, for a connection tied to one resource (a member of staff's own
-   * calendar, ADR-032): the inbox's resource id. Absent: the whole business's.
+   * calendar, ADR-036): the inbox's resource id. Absent: the whole business's.
    */
   readonly resourceId?: string | undefined;
 }
@@ -488,7 +488,7 @@ export interface OutboundBooking {
   readonly serviceName: string;
   readonly customerName: string | null;
   readonly durationMin: number;
-  /** The resource it is with (a member of staff), for a system that books per person (ADR-032). */
+  /** The resource it is with (a member of staff), for a system that books per person (ADR-036). */
   readonly resourceId?: string | undefined;
 }
 
@@ -522,7 +522,7 @@ export interface BookingWriter {
 
 /**
  * Money in minor units of its currency's own ISO 4217 exponent (4500 is 45.00 KES, ¥4,500 JPY), with
- * its code in capitals (ADR-032).
+ * its code in capitals (ADR-036).
  */
 export interface PayAmount {
   readonly value: number;
@@ -557,7 +557,7 @@ export interface PayLinkRequest {
   readonly order?: ShopOrder | undefined;
 
   /**
-   * What the link is for (ADR-032): the whole of an order (`pay`, the default), or one entry of an
+   * What the link is for (ADR-036): the whole of an order (`pay`, the default), or one entry of an
    * item's payment schedule — a deposit, the balance, the difference after a change. A booking's
    * links say "book" on the platform's button where it has one.
    */
@@ -575,7 +575,7 @@ export interface PayLinkRequest {
 export type PayPurpose = "pay" | "deposit" | "balance" | "guarantee" | "difference";
 
 /**
- * A card saved to hold a booking (ADR-032), asked for on the business's own payment platform with
+ * A card saved to hold a booking (ADR-036), asked for on the business's own payment platform with
  * nothing charged now: the business charges a no-show or a late cancellation itself, in its own
  * dashboard, under the policy the customer saw. Made when the customer opens the inbox's own link,
  * so it never expires unseen.
@@ -745,7 +745,7 @@ export interface RefundFact {
 
 export interface PaymentsHandler {
   /**
-   * Why the platform cannot be asked for this amount in its currency, or null when it can (ADR-032):
+   * Why the platform cannot be asked for this amount in its currency, or null when it can (ADR-036):
    * the adapter converts the inbox's ISO 4217 minor units to the platform's own, from a table with a
    * test per currency, and names the reason for one it has none for. Absent: only currencies counted
    * in hundredths are asked for, as before.
@@ -755,7 +755,7 @@ export interface PaymentsHandler {
   createLink(ctx: RunContext, request: PayLinkRequest): Promise<PayLink>;
   /**
    * A page on the platform where the customer saves a card to hold a booking, nothing charged
-   * (ADR-032). Only where the platform can (Stripe Checkout in `mode=setup`), and only once the owner
+   * (ADR-036). Only where the platform can (Stripe Checkout in `mode=setup`), and only once the owner
    * switched card holds on, which asks the key for what it needs then (`guaranteePermissions`).
    */
   createGuarantee?(
@@ -1139,7 +1139,7 @@ export function subtractIntervals(busy: readonly Interval[], spans: readonly Int
 /* --- money ---------------------------------------------------------------- */
 
 /**
- * Every amount in this inbox is an integer count of its currency's own ISO 4217 minor unit (ADR-032):
+ * Every amount in this inbox is an integer count of its currency's own ISO 4217 minor unit (ADR-036):
  * 4500 KES is 45.00, 4500 JPY is ¥4,500, 4500 KWD is 4.500. A platform that counts a currency
  * otherwise (Stripe's ISK, written as hundredths) converts in its own adapter, from a table with a
  * test per currency, and refuses a currency it has no test for (`PaymentsHandler.currencyProblem`):

@@ -1,7 +1,7 @@
 import { decimalOf, minorUnits } from "@surfingdog/spec";
 
 /**
- * An amount in minor units as a business writes it, in the currency's own exponent (ADR-032):
+ * An amount in minor units as a business writes it, in the currency's own exponent (ADR-036):
  * `KSh 4,500.00`, `¥4,500`, `KWD 4.500`, in the given locale's way. A currency whose exponent is not
  * known is written as its minor units and code, never guessed into a decimal.
  */

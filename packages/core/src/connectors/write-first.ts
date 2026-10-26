@@ -6,7 +6,7 @@ import { hashJson } from "../util/canonical";
 import { ConnectorError } from "./sdk";
 
 /**
- * Write first (ADR-032): when a business's own system (a property system, a salon's booking system, a
+ * Write first (ADR-036): when a business's own system (a property system, a salon's booking system, a
  * till) is the authority for what can be sold, the inbox promises nothing until that system has taken
  * the write. One caller at a time writes for an item (a compare-and-set claim on `connector_links`),
  * every attempt is journalled (`connector_writes`), a retry sends the same idempotency key, and a

@@ -152,7 +152,7 @@ function SetupWizard() {
 
   const [step, setStep] = useState(0);
   const at: StepId = STEPS[step]?.id ?? "kind";
-  // What the business runs (ADR-032): it sets the rules to start from and what agents can do to begin with.
+  // What the business runs (ADR-036): it sets the rules to start from and what agents can do to begin with.
   const [kindKey, setKindKey] = useState<string | null>(null);
   const kind = kindOf(kindKey);
   const [tz] = useState(guessTimezone);

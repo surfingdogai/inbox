@@ -6,7 +6,7 @@ import { currencyProblem, isMoneyCurrency } from "../src/util/locale";
 import { formatMinor, moneyText } from "../src/util/money";
 
 /**
- * Money in every currency's own minor unit (ADR-032): the ten currencies the plan names, from no
+ * Money in every currency's own minor unit (ADR-036): the ten currencies the plan names, from no
  * minor unit to thousandths, each taken, counted, written and read back in its own places.
  */
 const CASES = [

@@ -951,7 +951,7 @@ export const connectorPayments = sqliteTable(
     shopTotal: integer("shop_total"),
     shopCurrency: text("shop_currency"),
     /**
-     * The entry of the item's payment schedule it is for (0025, ADR-032): '' for an order's own link,
+     * The entry of the item's payment schedule it is for (0028, ADR-036): '' for an order's own link,
      * else `deposit`, `balance`, `difference-…`. One live link per item and entry.
      */
     scheduleId: text("schedule_id").notNull().default(""),
@@ -968,7 +968,7 @@ export const connectorPayments = sqliteTable(
 );
 
 /**
- * Every attempt at writing to a business's own system before anything is promised (0025, ADR-032):
+ * Every attempt at writing to a business's own system before anything is promised (0028, ADR-036):
  * what was tried, under which key, and what came of it. Never the request itself: it may name the guest.
  */
 export const connectorWrites = sqliteTable(

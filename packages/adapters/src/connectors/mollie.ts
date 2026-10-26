@@ -235,7 +235,7 @@ async function createLink(ctx: RunContext, req: PayLinkRequest) {
     idempotency: `sdi-${req.ref}`,
     body: {
       description: req.title.slice(0, 255),
-      // In Mollie's own decimals for the currency (ADR-032): 4500 EUR is "45.00", 4500 JPY is "4500".
+      // In Mollie's own decimals for the currency (ADR-036): 4500 EUR is "45.00", 4500 JPY is "4500".
       amount: {
         currency: req.amount.currency.toUpperCase(),
         value: decimalAmount(req.amount, MOLLIE_DECIMALS[req.amount.currency.toUpperCase()] ?? 2),

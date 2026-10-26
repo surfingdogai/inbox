@@ -39,7 +39,7 @@ export const weeklySchema = z
     'Opening windows per weekday, e.g. {"mon": [["09:00","13:00"],["14:00","18:00"]]}; ["00:00","24:00"] is open all day. Missing days are closed.',
   );
 
-/** A currency a price here can be in (`util/locale.ts`): an ISO 4217 currency, amounts in its own minor unit (ADR-032). */
+/** A currency a price here can be in (`util/locale.ts`): an ISO 4217 currency, amounts in its own minor unit (ADR-036). */
 export const currencySchema = z
   .string()
   .trim()

@@ -3196,7 +3196,7 @@ pre.found-code {
     animation: none;
   }
 }
-/* Connect your system (ADR-032): the systems a kind of business runs its days in, then a quiet way out. */
+/* Connect your system (ADR-036): the systems a kind of business runs its days in, then a quiet way out. */
 .connect-system .connect-skip {
   justify-self: start;
   font-size: 13px;

@@ -122,7 +122,7 @@ export const GROUP_LABELS: Readonly<Record<ConnectorGroup, string>> = {
   calendars: "Calendars",
   payments: "Payments",
   shops: "Shops and checkouts",
-  // The industry tracks' groups (ADR-032).
+  // The industry tracks' groups (ADR-036).
   lodging: "Property systems",
   work: "Job tools",
   pos: "Point of sale and ordering",

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { moneySchema } from "./base";
 
 /**
- * Cancellation policies and payment schedules as data (spec 0.10, ADR-032). A business states its
+ * Cancellation policies and payment schedules as data (spec 0.11, ADR-036). A business states its
  * policy once, as steps before the start of what it sells (an arrival date, an appointment's time);
  * for each booking the inbox turns them into dated steps in the business's own zone, which agents and
  * customers read and confirm before they are bound. Nothing here is stored by the spec: each item type

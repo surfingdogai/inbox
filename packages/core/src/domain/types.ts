@@ -50,7 +50,7 @@ export const actorSchema = z.object({
 });
 export type Actor = z.infer<typeof actorSchema>;
 
-/** Minor units of the currency's own ISO 4217 exponent (ADR-032: ¥4500 is 4500, KSh 45 is 4500) and its code. */
+/** Minor units of the currency's own ISO 4217 exponent (ADR-036: ¥4500 is 4500, KSh 45 is 4500) and its code. */
 export const moneySchema = z.object({ value: z.number().int().min(0), currency: z.string().length(3).toUpperCase() });
 export type Money = z.infer<typeof moneySchema>;
 

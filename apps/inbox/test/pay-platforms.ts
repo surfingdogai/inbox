@@ -27,7 +27,7 @@ export interface StripeLink {
   name: string;
   thanks: string;
   inactive: string;
-  /** The words on Stripe's button: pay, or book for a booking's deposit (ADR-032). */
+  /** The words on Stripe's button: pay, or book for a booking's deposit (ADR-036). */
   submit: string;
 }
 
@@ -47,7 +47,7 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
   const calls: string[] = [];
   /** What making a price answers for now: Stripe down (500), or a refusal (400); and switching a link off. */
   const outage: { prices: number | null; close: number | null } = { prices: null, close: null };
-  /** Whether the key may make card-hold pages and customers (ADR-032): asked only when holds are switched on. */
+  /** Whether the key may make card-hold pages and customers (ADR-036): asked only when holds are switched on. */
   const holds: { allowed: boolean } = { allowed: true };
   let n = 0;
   const json = (body: unknown, status = 200) =>
@@ -172,7 +172,7 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
       if (f.get("active") === "false") link.active = false;
       return json({ id: link.id, object: "payment_link", active: link.active });
     }
-    // Card holds (ADR-032): a Checkout Session in setup mode, and a customer probe that makes nothing.
+    // Card holds (ADR-036): a Checkout Session in setup mode, and a customer probe that makes nothing.
     if (route === "POST /v1/checkout/sessions") {
       if (holds.allowed === false) return json(STRIPE_PERMISSION_ERROR, 403);
       if (!body) return json(STRIPE_MISSING_PARAM("mode"), 400);

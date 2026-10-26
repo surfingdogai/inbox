@@ -14,7 +14,7 @@ import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { makeClient, resetTables } from "./harness";
 
 /**
- * Write first (ADR-032): nothing is promised until the business's own system took the write. One
+ * Write first (ADR-036): nothing is promised until the business's own system took the write. One
  * caller writes for an item at a time; every attempt is journalled; a retry under the same key is never
  * written twice; a timeout is looked for by its key before anything is decided, and settled by the
  * resolver within minutes; a system that takes an oversold write has ours taken back.

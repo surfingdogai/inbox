@@ -1,5 +1,5 @@
 /**
- * What a business's own tool says about it, brought in to start from (ADR-032, capability
+ * What a business's own tool says about it, brought in to start from (ADR-036, capability
  * `setup_in`): its services, staff, hours and menu sections, each with where it came from. The owner
  * keeps what they want, one press each; nothing here is published or booked until they do. Allergens
  * always arrive unconfirmed: only the owner or their staff, in person, confirm one.

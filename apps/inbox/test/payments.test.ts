@@ -835,7 +835,7 @@ describe("only money this inbox counts right", () => {
     expect(sentTo(s, "ana@salon.example").filter((m) => m.subject.endsWith("has no payment link"))).toHaveLength(2);
   });
 
-  it("makes a yen link on Stripe for exactly the yen: 50 000 is ¥50,000, never ¥500 (ADR-032)", async () => {
+  it("makes a yen link on Stripe for exactly the yen: 50 000 is ¥50,000, never ¥500 (ADR-036)", async () => {
     const s = await setup();
     await connectStripe(s);
     const yen = await orderIn(s, 50_000, "JPY");

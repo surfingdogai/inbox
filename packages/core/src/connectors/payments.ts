@@ -44,7 +44,7 @@ import { shopOrderOf } from "./shop";
  *   total changes, the link is closed on the platform and a new one sent; when the order ends
  *   without a payment, it is closed.
  * - **Only money this inbox counts right.** Every amount is in its currency's own minor unit
- *   (ADR-032), converted to the platform's by its adapter from a table with a test per currency; an
+ *   (ADR-036), converted to the platform's by its adapter from a table with a test per currency; an
  *   order in a currency the platform has no test for (KWD on Stripe) gets no link, and the owner is
  *   told, never a link for a hundred times the order.
  * - **Nothing the request says is believed.** A webhook is checked by its signature (Stripe) or not
@@ -79,7 +79,7 @@ const NUDGE_EVERY_MS = 15_000;
 const NOT_HUNDREDTHS = "This currency is not counted in hundredths here, so no link was made.";
 
 /**
- * Why no link can be made in this amount's currency on this platform, or null (ADR-032): the
+ * Why no link can be made in this amount's currency on this platform, or null (ADR-036): the
  * platform's own word (`currencyProblem`, a table with a test per currency), or, for one that says
  * nothing of currencies, every currency but those counted in hundredths.
  */
@@ -123,7 +123,7 @@ interface PayRow {
   /** What a shop said it comes to (ADR-030 §2), when it said. */
   readonly shopTotal: number | null;
   readonly shopCurrency: string | null;
-  /** The entry of the item's payment schedule (ADR-032): '' for an order's own link. */
+  /** The entry of the item's payment schedule (ADR-036): '' for an order's own link. */
   readonly scheduleId: string;
   readonly purpose: PayPurpose;
   readonly expiresAt: number | null;
@@ -495,7 +495,7 @@ export class PaymentLinks {
         return `no link: ${last.lastError ?? "the platform would not make it"}`;
       }
     }
-    // Every amount is in its currency's own minor unit (ADR-032), and the platform's adapter converts it
+    // Every amount is in its currency's own minor unit (ADR-036), and the platform's adapter converts it
     // from a table with a test per currency: one it has no test for gets no link, said with the reason.
     const currencyWhy = linkCurrencyProblem(conn.payments, want);
     if (currencyWhy) return this.refuse(order, conn, want, currencyWhy, now);
@@ -866,7 +866,7 @@ export class PaymentLinks {
     });
   }
 
-  /* --- links on a payment schedule (ADR-032) ------------------------------------ */
+  /* --- links on a payment schedule (ADR-036) ------------------------------------ */
 
   /** The item's type, or null when there is no such item. */
   private async itemType(itemId: string): Promise<ItemType | null> {
@@ -1232,7 +1232,7 @@ export class PaymentLinks {
     return calls;
   }
 
-  /* --- a card to hold a booking (ADR-032) ------------------------------------------ */
+  /* --- a card to hold a booking (ADR-036) ------------------------------------------ */
 
   /**
    * Whether card holds are on for a connection: the owner switched them on in person, once the key
@@ -1963,7 +1963,7 @@ export class PaymentLinks {
     if (conn.payments.orderState && calls < CHECKS_PER_RUN) {
       calls += await this.orderStates(conn, now, CHECKS_PER_RUN - calls);
     }
-    // Schedule links whose pay window closed, and card-hold pages still waiting (ADR-032).
+    // Schedule links whose pay window closed, and card-hold pages still waiting (ADR-036).
     if (calls < CHECKS_PER_RUN) calls += await this.lapse(conn, now, CHECKS_PER_RUN - calls);
     if (calls < CHECKS_PER_RUN && conn.payments.guaranteeFact) {
       calls += await this.guarantees(conn, now, CHECKS_PER_RUN - calls);
