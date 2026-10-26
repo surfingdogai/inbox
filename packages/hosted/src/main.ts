@@ -97,6 +97,7 @@ async function runShard(c: HostedConfig, index: number): Promise<void> {
     fetchImpl: pinnedFetch({ deny: [...c.deny] }),
     clientDir: c.clientDir,
     oauth: { google: c.google },
+    googleTesting: c.googleTesting,
     oauthRedirect: relayRedirect(c.oauthRelayHost),
     maxOpen: c.openPerShard,
     maxTenantBytes: c.maxTenantBytes,

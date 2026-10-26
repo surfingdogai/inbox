@@ -35,6 +35,8 @@ import { parseMasterKeys } from "./keys";
  * - `INBOX_STATIC`: the owner app's build; `INBOX_OUTBOUND_DENY`: more addresses no call reaches.
  * - `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` (the shards'): the Google client every inbox
  *   signs owners in to Google Calendar with; without both, Google shows as "Soon" (ADR-022).
+ *   `GOOGLE_OAUTH_TESTING=1` while that client is in Google's Testing mode: Google shows as "Soon"
+ *   too, since only its test users could sign in.
  * - `HOSTED_OAUTH_RELAY_HOST` (router and shards): the one name Google sends every owner back to,
  *   `https://<it>/oauth/google/callback`, registered once on the Google client; the router passes
  *   the owner on to their own inbox from there. Unset, each inbox uses its own callback.
@@ -71,6 +73,8 @@ export interface HostedConfig {
   readonly clientDir: string | undefined;
   readonly deny: readonly AddressRange[];
   readonly google: { readonly clientId: string; readonly clientSecret: string } | null;
+  /** The Google client is still in Testing mode (`GOOGLE_OAUTH_TESTING`): Google says "Soon". */
+  readonly googleTesting: boolean;
   readonly oauthRelayHost: string | undefined;
   readonly inboundHost: string | undefined;
   readonly inboundKey: string | undefined;
@@ -195,6 +199,7 @@ export function readConfig(env: Record<string, string | undefined>, role: Role =
     clientDir: env.INBOX_STATIC?.trim() || undefined,
     deny: deny.ranges,
     google: googleId && googleSecret ? { clientId: googleId, clientSecret: googleSecret } : null,
+    googleTesting: /^(1|true|yes|on)$/i.test((env.GOOGLE_OAUTH_TESTING ?? "").trim()),
     oauthRelayHost,
     inboundHost,
     inboundKey,

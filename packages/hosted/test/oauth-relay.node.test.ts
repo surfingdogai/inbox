@@ -89,5 +89,9 @@ describe("the Google sign-in relay", () => {
     expect(c.google).toEqual({ clientId: "id.apps.googleusercontent.com", clientSecret: "GOCSPX-x" });
     expect(c.oauthRelayHost).toBe("connect.example.org");
     expect(() => readConfig({ ...base, GOOGLE_OAUTH_CLIENT_ID: "id" }, "shard")).toThrow(/go together/);
+    // While Google's client is in Testing mode, every hosted inbox says "Soon" rather than offer a
+    // sign-in that only Google's test users could finish.
+    expect(c.googleTesting).toBe(false);
+    expect(readConfig({ ...base, GOOGLE_OAUTH_TESTING: "1" }, "shard").googleTesting).toBe(true);
   });
 });

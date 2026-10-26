@@ -86,6 +86,7 @@ export interface ShardOptions {
   /** The OAuth clients every inbox signs owners in to platforms with, and the one address they come back to. */
   readonly oauth?: BuildDeps["oauth"];
   readonly oauthRedirect?: BuildDeps["oauthRedirect"];
+  readonly googleTesting?: BuildDeps["googleTesting"];
   /** Inboxes kept open at once (default 64). */
   readonly maxOpen?: number | undefined;
   /** What an inbox's database holds (its pages in use), past which it takes no new writes (default 200 MB). */
@@ -243,6 +244,7 @@ export class Shard {
         clientDir: this.o.clientDir,
         oauth: this.o.oauth,
         oauthRedirect: this.o.oauthRedirect,
+        googleTesting: this.o.googleTesting,
         // The tenant's phones are registered through the control plane, which vouches for the tenant.
         pushRegistrar: this.o.controlPlane.pushRegister
           ? (body: unknown) =>
