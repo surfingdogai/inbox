@@ -259,6 +259,26 @@ describe("a request for a price with its job and photos", () => {
     });
     expect(await count(s.db, "SELECT COUNT(*) FROM attachment_chunks")).toBe(0);
     expect(await count(s.db, "SELECT COUNT(*) FROM blobs WHERE deleted_at IS NULL")).toBe(0);
+    // Where the work was goes with them: the street, the point and how to find the way. The job's
+    // urgency, its windows and the area's band stay.
+    const after = await s.db.client.query({
+      sql: "SELECT payload FROM items WHERE id = ?",
+      params: [r.view.item.id],
+      method: "all",
+    });
+    const payload = String(after.rows[0]?.[0]);
+    expect(payload).not.toMatch(/Mpaka|00800|caretaker|-1\.2676|36\.8108/);
+    expect(JSON.parse(payload).job).toMatchObject({
+      urgency: "this_week",
+      visit: "needed",
+      areaCheck: { status: "inside" },
+    });
+    const history = await s.db.client.query({
+      sql: "SELECT COALESCE(diff, '') || COALESCE(meta, '') FROM item_events WHERE item_id = ?",
+      params: [r.view.item.id],
+      method: "all",
+    });
+    expect(history.rows.map((x) => String(x[0])).join("\n")).not.toMatch(/Mpaka|caretaker|-1\.2676/);
   });
 });
 

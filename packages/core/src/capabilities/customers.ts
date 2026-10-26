@@ -48,6 +48,9 @@ const OFF_CATALOGUE = "NOT EXISTS (SELECT 1 FROM products pr WHERE pr.id = json_
 const erasedLines = (src: string) =>
   `json((SELECT json_group_array(CASE WHEN ${OFF_CATALOGUE} THEN json_set(e.value, '$.name', '${ERASED}') ELSE json(e.value) END)
       FROM json_each(${src}) e))`;
+/** A stay's rooms at `src` (a list), each without the children's ages: the room, its adults and extras stay. */
+const roomsWithoutAges = (src: string) =>
+  `json((SELECT json_group_array(json_remove(json(r.value), '$.childrenAges')) FROM json_each(${src}) r))`;
 /** A side of a `[before, after]` diff kept as it was: a list or an object stays JSON, not text. */
 const SIDE_AS_IS = "CASE WHEN side.type IN ('object', 'array') THEN json(side.value) ELSE side.value END";
 /** What an event's diff may hold of a customer's own words or address (each is `[before, after]`). */
@@ -63,6 +66,12 @@ const DIFF_PERSONAL = [
   "$.payload.billingAddress",
   "$.payload.shippingAddress",
   "$.payload.fulfil",
+  // A trade's job: where the work is, its point and how to find the way (ADR-039).
+  "$.payload.job",
+  // A stay's guests, their requests in their own words and when they arrive (ADR-037).
+  "$.payload.guests",
+  "$.payload.requests",
+  "$.payload.arrival",
   "$.payload.paymentRef",
   "$.payload.paymentUrl",
   "$.payload.quote[0].notes",
@@ -492,6 +501,7 @@ export function eraseStatements(parties: readonly string[], now: number): Statem
   for (const part of inChunks(parties)) {
     const inParties = `(${marks(part.length)})`;
     const theirItems = `(SELECT id FROM items WHERE party_id IN ${inParties})`;
+    const theirStays = `(SELECT id FROM items WHERE type = 'stay' AND party_id IN ${inParties})`;
     const run = (sql: string, params: readonly (string | number)[] = part): Statement => ({
       sql,
       params,
@@ -522,8 +532,10 @@ export function eraseStatements(parties: readonly string[], now: number): Statem
           WHERE type = 'message' AND party_id IN ${inParties}`,
         [ERASED, ERASED, ...part],
       ),
+      // A trade's job site goes with it (ADR-039): its address, its point and how to find the way.
       run(
-        `UPDATE items SET payload = json_remove(json_set(payload, '$.description', ?), '$.deliveryAddress', '$.quote.notes'), subject = ?
+        `UPDATE items SET payload = json_remove(json_set(payload, '$.description', ?), '$.deliveryAddress', '$.quote.notes',
+                '$.job.site.address', '$.job.site.geo', '$.job.site.accessNotes'), subject = ?
           WHERE type = 'quote_request' AND party_id IN ${inParties}`,
         [ERASED, ERASED, ...part],
       ),
@@ -543,6 +555,18 @@ export function eraseStatements(parties: readonly string[], now: number): Statem
       ),
       run(
         `UPDATE items SET payload = json_remove(payload, '$.notes', '$.paymentRef') WHERE type = 'booking' AND party_id IN ${inParties}`,
+      ),
+      // A stay (ADR-037): who was coming, their requests in their own words (which may be about their
+      // health), when they arrive, and the children's ages, a minor's data, here and in a change asked
+      // for. Its dates, rooms, adults, quote and payments stay.
+      run(
+        `UPDATE items SET payload = json_set(json_remove(payload, '$.guests', '$.requests', '$.arrival'),
+                '$.rooms', ${roomsWithoutAges("items.payload, '$.rooms'")})
+          WHERE type = 'stay' AND party_id IN ${inParties}`,
+      ),
+      run(
+        `UPDATE items SET payload = json_set(payload, '$.change.rooms', ${roomsWithoutAges("items.payload, '$.change.rooms'")})
+          WHERE type = 'stay' AND party_id IN ${inParties} AND json_type(payload, '$.change.rooms') = 'array'`,
       ),
       run(
         `UPDATE items SET payload = json_remove(payload, '$.notes', '$.billingAddress', '$.shippingAddress', '$.paymentRef', '$.paymentUrl', '$.fulfil.geo')
@@ -645,6 +669,23 @@ export function eraseStatements(parties: readonly string[], now: number): Statem
                 THEN json_set(side.value, '$.orderedItem', ${erasedLines("side.value, '$.orderedItem'")}) ELSE ${SIDE_AS_IS} END)
               FROM json_each(diff, '$.payload.proposed') side)))
           WHERE item_id IN ${theirItems} AND json_type(diff, '$.payload.proposed') = 'array'`,
+        [...part],
+      ),
+      // A stay's history holds its rooms before and after each change, and the change asked for: the
+      // children's ages go there too.
+      run(
+        `UPDATE item_events SET diff = json_set(diff, '$.payload.rooms', json((
+            SELECT json_group_array(CASE WHEN side.type = 'array' THEN ${roomsWithoutAges("side.value")} ELSE ${SIDE_AS_IS} END)
+              FROM json_each(diff, '$.payload.rooms') side)))
+          WHERE item_id IN ${theirStays} AND json_type(diff, '$.payload.rooms') = 'array'`,
+        [...part],
+      ),
+      run(
+        `UPDATE item_events SET diff = json_set(diff, '$.payload.change', json((
+            SELECT json_group_array(CASE WHEN side.type = 'object' AND json_type(side.value, '$.rooms') = 'array'
+                THEN json_set(side.value, '$.rooms', ${roomsWithoutAges("side.value, '$.rooms'")}) ELSE ${SIDE_AS_IS} END)
+              FROM json_each(diff, '$.payload.change') side)))
+          WHERE item_id IN ${theirStays} AND json_type(diff, '$.payload.change') = 'array'`,
         [...part],
       ),
       // The history keeps its sequence, states, actors, times and the changes to times and amounts;

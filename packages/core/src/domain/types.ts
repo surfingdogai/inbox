@@ -600,13 +600,19 @@ export const itemSchema = z.discriminatedUnion("type", [
 export type Item = z.infer<typeof itemSchema>;
 export type ItemOf<T extends ItemType> = Extract<Item, { type: T }>;
 
-/** JSON-pointer-ish paths holding personal data, rewritten on erasure (GDPR). */
+/**
+ * JSON-pointer-ish paths holding personal data, rewritten on erasure (GDPR). What rewrites them is
+ * `eraseStatements` (`capabilities/customers.ts`), by hand per item type: a type or path added here
+ * is added there, with a test that erases it.
+ */
 export const PII_PATHS: Record<ItemType, readonly string[]> = {
   message: ["text", "subject"],
-  quote_request: ["description", "deliveryAddress"],
+  // A trade's job site: its address, its point and how to find the way (ADR-039).
+  quote_request: ["description", "deliveryAddress", "job.site"],
   booking: ["notes"],
   order: ["billingAddress", "shippingAddress", "notes"],
   refund: ["reason", "disputed"],
-  // Guests' names, their requests and their arrival window; children's ages are a minor's data too.
-  stay: ["guests", "requests", "arrival", "rooms"],
+  // Guests' names, their requests and their arrival window; children's ages are a minor's data too
+  // (the rooms stay, without them).
+  stay: ["guests", "requests", "arrival", "rooms.childrenAges"],
 };
