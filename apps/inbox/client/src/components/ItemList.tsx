@@ -24,7 +24,7 @@ export function ItemList({
   sandbox: boolean;
   selected: string | undefined;
   tz: string | undefined;
-  /** Above the search: a kitchen's pause on a phone (ADR-036). */
+  /** Above the search: a kitchen's pause on a phone (ADR-040). */
   head?: ReactNode;
 }) {
   const pages = useItemPages(paramsFor(filter, q, sandbox));
@@ -121,7 +121,7 @@ function Row({ view, selected, tz }: { view: ItemView; selected: boolean; tz: st
             {party?.kind === "agent" && <Bot className="icon-xs glyph" role="img" aria-label="Agent" />}
             {party?.verified && <BadgeCheck className="icon-xs glyph verified" role="img" aria-label="Verified" />}
             {" · "}
-            {/* An order for a time says when, with its day unless it is today (ADR-036). */}
+            {/* An order for a time says when, with its day unless it is today (ADR-040). */}
             {item.type === "order" && item.payload.fulfil?.slot && (
               <span className="row-slot">{slotShort(item.payload.fulfil.slot.start, tz)} · </span>
             )}

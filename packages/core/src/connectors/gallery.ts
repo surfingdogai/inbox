@@ -273,7 +273,7 @@ export const GALLERY: readonly CardSpec[] = [
       { kind: "servicem8", preset: "oauth", label: "Sign in with ServiceM8", advanced: true },
     ],
   },
-  // A kitchen's own systems (ADR-036): its menu in from the ordering system or till it runs, and the
+  // A kitchen's own systems (ADR-040): its menu in from the ordering system or till it runs, and the
   // orders it accepts here out to its till. GloriaFood and Flipdish with what the owner makes in their
   // own account; Toast, Lightspeed, Clover and Deliverect say "set up" until our partner app is on the
   // server.
@@ -316,7 +316,7 @@ export function leanOf(counts: {
   readonly rooms?: number | undefined;
   /** A trade (ADR-039): it set where it works or how it takes work, or has a job tool. */
   readonly trade?: boolean | undefined;
-  /** A kitchen (ADR-036): it takes orders for a time, has a menu, or has an ordering system connected. */
+  /** A kitchen (ADR-040): it takes orders for a time, has a menu, or has an ordering system connected. */
   readonly food?: boolean | undefined;
 }): Lean {
   if ((counts.rooms ?? 0) > 0) return "stays";

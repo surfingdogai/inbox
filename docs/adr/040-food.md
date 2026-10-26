@@ -1,8 +1,8 @@
-# ADR-036 — Restaurants, takeaways, bakeries and cafés: the menu, allergens, orders for a time, tills
+# ADR-040 — Restaurants, takeaways, bakeries and cafés: the menu, allergens, orders for a time, tills
 
-**Status:** proposed, 21 October 2026. Builds on ADR-032 (money in each currency's own minor unit, write
-first, slot claims), ADR-034 (the area matcher, files on a request) and ADR-026 (the connectors' shared
-base). Spec 0.11.0, migration 0029. Numbered provisionally; renumbering at merge is fine.
+**Status:** proposed, 21 October 2026. Builds on ADR-036 (money in each currency's own minor unit, write
+first, slot claims), ADR-039 (the area matcher, files on a request) and ADR-030 (the connectors' shared
+base). Spec 0.12.0, migration 0032. Numbered provisionally; renumbering at merge is fine.
 
 ## Context
 

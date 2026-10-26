@@ -348,7 +348,7 @@ describe("MCP doors", () => {
       "get_today",
       "map_calendar",
       "property_sync_now",
-      // A kitchen's (ADR-036).
+      // A kitchen's (ADR-040).
       "set_order_progress",
       "set_sold_out",
     ]);

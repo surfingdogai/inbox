@@ -83,11 +83,11 @@ export const services = sqliteTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     /**
-     * What one place of the service is (0029, ADR-036): a booking (`bookings`, as always) or a person
+     * What one place of the service is (0032, ADR-040): a booking (`bookings`, as always) or a person
      * (`people`): a table service's covers per sitting.
      */
     capacityUnit: text("capacity_unit").notNull().default("bookings"),
-    /** A table service's rules (0029, ADR-036; `menu/tables.ts`): JSON, null for every other service. */
+    /** A table service's rules (0032, ADR-040; `menu/tables.ts`): JSON, null for every other service. */
     tableRules: text("table_rules", { mode: "json" }),
   },
   (t) => [index("services_active_sort").on(t.active, t.sort)],
@@ -164,7 +164,7 @@ export const products = sqliteTable(
      */
     seenAt: integer("seen_at"),
     /**
-     * Its place on a menu (0029, ADR-036; `menu/schema.ts`): section, options, allergens and whether a
+     * Its place on a menu (0032, ADR-040; `menu/schema.ts`): section, options, allergens and whether a
      * person confirmed them, dietary tags, an age limit, dayparts, notice, a daily cap. JSON, null for a
      * product that is not on a menu.
      */
@@ -187,7 +187,7 @@ export const products = sqliteTable(
  * `kind` is `product` or `service`; `floor_minor` is per unit (a product) or per booking (a service).
  */
 /**
- * Orders a restaurant took in its own ordering system (0029, ADR-036): GloriaFood's accepted orders, read
+ * Orders a restaurant took in its own ordering system (0032, ADR-040): GloriaFood's accepted orders, read
  * only while the owner switched the view on, kept two days. What is shown: lines, how and when, the
  * total. Never a customer's details; never an item, never a receipt.
  */

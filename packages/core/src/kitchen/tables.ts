@@ -7,14 +7,14 @@ import { kitchenContext } from "./context";
 import { kitchenMoney, kitchenWords } from "./words";
 
 /**
- * Tables (ADR-036): a service whose places are people (`capacity_unit: people`): covers per sitting,
+ * Tables (ADR-040): a service whose places are people (`capacity_unit: people`): covers per sitting,
  * its duration the turn time. Its rules (`table_rules`) are the business's:
  *
  * - `maxParty`: the largest party booked online; above it, or above `quoteAbove` when that is set, the
  *   request becomes a request for a price (an event, a private room), which the business answers with a
  *   quote. Between the two, the customer is asked to get in touch.
  * - `deposit`: an amount per person from a party size, held as the booking's deposit (the same field a
- *   salon's deposit uses, ADR-035), with the policy dated for the booking.
+ *   salon's deposit uses in the salons track), with the policy dated for the booking.
  * - `setAside`: the covers a sitting keeps for direct bookings. A party that fits in what is left of them
  *   confirms at once (the service's capacity is set to them, and nothing more); a larger party, and every
  *   table when none are set aside, is confirmed by a person, who seats it from the whole room.

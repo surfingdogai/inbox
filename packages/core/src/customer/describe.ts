@@ -272,7 +272,7 @@ export function orderLinesText(
     readonly name: string;
     readonly quantity: number;
     readonly price: { value: number; currency: string };
-    /** A menu item's choices (ADR-036), named as the business's menu names them. */
+    /** A menu item's choices (ADR-040), named as the business's menu names them. */
     readonly options?:
       | readonly {
           readonly name?: string | undefined;

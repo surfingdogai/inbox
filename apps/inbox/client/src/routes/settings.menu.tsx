@@ -51,7 +51,7 @@ const FREE_FROM = new Set(["gluten_free", "dairy_free", "nut_free"]);
 const MENU_SOURCES = new Set(["gloriafood", "flipdish", "toast", "lightspeed", "clover"]);
 
 /**
- * Settings → Menu (ADR-036): what agents read with `get_menu`. Sections, each item's options and what
+ * Settings → Menu (ADR-040): what agents read with `get_menu`. Sections, each item's options and what
  * they add, when it is made and how far ahead, and its allergens: stated by the business, confirmed
  * here by the owner or staff in person, item by item, exactly as shown. Nothing confirms them on its own.
  */

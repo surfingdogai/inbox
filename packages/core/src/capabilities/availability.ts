@@ -131,7 +131,7 @@ export async function findSlots(
   const weekly = weeklyFor(rules, service.id);
   const closures = await readClosures(db, service.id);
   const localDate = dateLocaliser(input.timezone);
-  // A service whose places are people (a table's covers, ADR-036): a slot is free for a party that fits.
+  // A service whose places are people (a table's covers, ADR-040): a slot is free for a party that fits.
   const units = service.capacityUnit === "people" ? Math.max(1, input.partySize ?? 1) : undefined;
   const spec: SlotSpec = { ...service, resourceKey: `service:${service.id}`, ...(units ? { units } : {}) };
   const step = service.granularityMin * 60_000;

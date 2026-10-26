@@ -12,13 +12,13 @@ import { transitionItem } from "../write/transition";
 import { rowToItem } from "../write/views";
 
 /**
- * A table's deposit (ADR-036, ADR-032 §3): one link on the business's own payment platform for the
+ * A table's deposit (ADR-040, ADR-036 §3): one link on the business's own payment platform for the
  * deposit the table rules ask (so much a person, from a party size), made once the booking is confirmed
  * and open until the sitting starts. Paid, it is recorded on the booking; not paid in time, the link
  * closes and a person decides: nothing is cancelled for them. A payment after the booking ended is the
  * business's to refund in its own dashboard. The title is the service's name and the reference.
  *
- * It reads the same `payload.deposit` a salon's deposit does (ADR-035), and is registered only where no
+ * It reads the same `payload.deposit` the salons track's deposit does, and is registered only where no
  * booking schedule source is: the two are one at merge.
  */
 

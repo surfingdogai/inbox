@@ -1,7 +1,7 @@
 {
   "version": 1,
   "as_of": "2026-10-21",
-  "description": "The allergens a menu names (spec 0.11, ADR-036): the union of the lists the law makes a food business declare, keyed by code, with labels in English, Spanish, French, German, Italian, Portuguese and Japanese, and the jurisdictions where each must be declared (mandatory_in) or is asked for (recommended_in). A code with a parent is a part of it: a dish that contains walnut contains tree nuts, and one that contains wheat contains cereals with gluten. Allergens are never inferred: a business states them, and only a person at the business confirms them. A code is never removed or renamed.",
+  "description": "The allergens a menu names (spec 0.12, ADR-040): the union of the lists the law makes a food business declare, keyed by code, with labels in English, Spanish, French, German, Italian, Portuguese and Japanese, and the jurisdictions where each must be declared (mandatory_in) or is asked for (recommended_in). A code with a parent is a part of it: a dish that contains walnut contains tree nuts, and one that contains wheat contains cereals with gluten. Allergens are never inferred: a business states them, and only a person at the business confirms them. A code is never removed or renamed.",
   "languages": ["en", "es", "fr", "de", "it", "pt", "ja"],
   "jurisdictions": {
     "EU": {

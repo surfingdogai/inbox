@@ -1,5 +1,5 @@
 /**
- * Restaurants, takeaways, bakeries and cafés (ADR-036): orders for a time and the places they take,
+ * Restaurants, takeaways, bakeries and cafés (ADR-040): orders for a time and the places they take,
  * delivery zones and their fees, tips, the pause, the kitchen's progress, tables by covers, and the
  * kitchen's own systems.
  */

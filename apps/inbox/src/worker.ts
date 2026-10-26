@@ -67,7 +67,7 @@ type Bindings = Env & {
   /** The Jobber API version the app was checked against, and the job tools whose terms are cleared here. */
   JOBBER_API_VERSION?: string;
   JOB_TOOLS_CLEARED?: string;
-  /** A kitchen's partner tills (ADR-036): without them, each says "Needs setup". */
+  /** A kitchen's partner tills (ADR-040): without them, each says "Needs setup". */
   TOAST_CLIENT_ID?: string;
   TOAST_CLIENT_SECRET?: string;
   TOAST_API_HOST?: string;

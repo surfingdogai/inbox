@@ -3,7 +3,7 @@ import type { Item } from "../domain/types";
 import { WriteError } from "../write/errors";
 
 /**
- * What only a person at the business says yes to (ADR-036): an order the kitchen marked as not instant
+ * What only a person at the business says yes to (ADR-040): an order the kitchen marked as not instant
  * (an allergen nobody confirmed, more than was set aside, made to order, a kitchen that accepts each
  * order by hand), and a table booking at a service that keeps no covers aside for direct bookings, or
  * for a party larger than the covers it keeps.

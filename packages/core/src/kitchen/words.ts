@@ -1,7 +1,7 @@
 import { formatMinor } from "../util/money";
 
 /**
- * What a kitchen tells a customer's agent (ADR-036), in the business's name and voice, in English,
+ * What a kitchen tells a customer's agent (ADR-040), in the business's name and voice, in English,
  * Spanish, French, German, Italian, Portuguese or Japanese: why an order cannot be taken as it is, and
  * what to do instead. Never the software's name, a network or a receipt (the copy lint holds these to it).
  */

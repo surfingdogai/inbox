@@ -548,7 +548,7 @@ export function eraseStatements(parties: readonly string[], now: number): Statem
         `UPDATE items SET payload = json_remove(payload, '$.notes', '$.billingAddress', '$.shippingAddress', '$.paymentRef', '$.paymentUrl', '$.fulfil.geo')
           WHERE type = 'order' AND party_id IN ${inParties}`,
       ),
-      // A line's word for the kitchen and the writing on a cake are in their own words (ADR-036): they go,
+      // A line's word for the kitchen and the writing on a cake are in their own words (ADR-040): they go,
       // the line stays. json() around the subquery, as below.
       run(
         `UPDATE items SET payload = json_set(payload, '$.orderedItem', json((

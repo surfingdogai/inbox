@@ -852,9 +852,9 @@ const sections = {
   area: areaSettingsSchema,
   /** How a trade takes work (ADR-039 §4): call-out, out of hours, emergencies, visits, its job tool. */
   work: workSettingsSchema,
-  /** How a kitchen takes orders for a time (ADR-036): slots, places, delivery, tips, pause. */
+  /** How a kitchen takes orders for a time (ADR-040): slots, places, delivery, tips, pause. */
   kitchen: kitchenSettingsSchema,
-  /** The menu's sections and the dayparts items are served in (ADR-036). */
+  /** The menu's sections and the dayparts items are served in (ADR-040). */
   menu: menuSettingsSchema,
   testMode: z.boolean().default(false),
 };

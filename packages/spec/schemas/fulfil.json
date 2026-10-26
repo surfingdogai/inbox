@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://surfingdog.ai/spec/schemas/fulfil.json",
-  "title": "How an order is fulfilled: method, slot, zone and fee (spec 0.11)",
+  "title": "How an order is fulfilled: method, slot, zone and fee (spec 0.12)",
   "type": "object",
   "properties": {
     "method": {

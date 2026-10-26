@@ -118,7 +118,7 @@ export function jobToolsFrom(env: {
   };
 }
 
-/** The environment a kitchen's partner tills read (ADR-036). */
+/** The environment a kitchen's partner tills read (ADR-040). */
 export interface PosEnv {
   readonly TOAST_CLIENT_ID?: string | undefined;
   readonly TOAST_CLIENT_SECRET?: string | undefined;
@@ -134,7 +134,7 @@ export interface PosEnv {
 }
 
 /**
- * The partner apps of the food tills whoever runs the server holds (ADR-036): each one only when all of
+ * The partner apps of the food tills whoever runs the server holds (ADR-040): each one only when all of
  * its values are set, else that till says "Needs setup". A host is https only.
  */
 export function posFrom(env: PosEnv): {

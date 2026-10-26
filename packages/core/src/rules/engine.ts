@@ -229,7 +229,7 @@ export async function runRulesForEvent(
               ? "outside_limits"
               : error.details?.guard
             : undefined;
-        // An order or a table the kitchen keeps for a person (ADR-036): the rule asks one, as above.
+        // An order or a table the kitchen keeps for a person (ADR-040): the rule asks one, as above.
         if (
           guard === "business_priced" ||
           guard === "not_too_soon" ||
@@ -437,7 +437,7 @@ async function bookingFacts(db: Db, item: Item, timezone: string): Promise<RuleC
   const spec = {
     ...service,
     resourceKey: item.payload.resourceId ? `resource:${item.payload.resourceId}` : `service:${service.id}`,
-    // A table's places are people (ADR-036): free only when the whole party fits.
+    // A table's places are people (ADR-040): free only when the whole party fits.
     ...(service.capacityUnit === "people" ? { units: Math.max(1, Number(item.payload.partySize ?? 1)) } : {}),
   };
   let slotIsFree = false;

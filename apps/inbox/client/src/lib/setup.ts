@@ -249,7 +249,7 @@ export function kindOf(key: string | null | undefined): SetupKind | undefined {
 
 const KITCHENS = new Set(["food", "bakery", "cafe"]);
 
-/** A kitchen (ADR-036): a restaurant or takeaway, a bakery, a café. Its wizard asks for dishes, not services. */
+/** A kitchen (ADR-040): a restaurant or takeaway, a bakery, a café. Its wizard asks for dishes, not services. */
 export function isKitchen(kind: SetupKind | string | null | undefined): boolean {
   const key = typeof kind === "string" ? kind : kind?.key;
   return key !== undefined && key !== null && KITCHENS.has(key);

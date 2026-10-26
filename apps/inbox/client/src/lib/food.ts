@@ -6,7 +6,7 @@ import { formatClock, formatMoney, localDateKey, slotShort, slotWhen } from "./f
 import type { ItemOf, ItemView, Money } from "./types";
 
 /**
- * Restaurants, takeaways, bakeries and cafés (ADR-036), as the owner sees them: the menu and its
+ * Restaurants, takeaways, bakeries and cafés (ADR-040), as the owner sees them: the menu and its
  * allergens, the kitchen's settings, the pause, an order's progress. The calls, the query hooks, and the
  * few words the screens share, kept here so they are tested once. Type-only imports from core.
  */

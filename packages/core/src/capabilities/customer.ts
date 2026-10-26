@@ -453,7 +453,7 @@ export class CustomerDoors {
         ? words.lineGoods(vars({ days }))
         : `${words.lineService(vars({ days }))}${start - now < settings.returns.days * 86_400_000 ? ` ${words.startsEarly}` : ""}`;
     // An order for a time says how and when, the delivery fee and the tip; a table its deposit and its
-    // cancellation policy (ADR-036): all of it before the customer is bound.
+    // cancellation policy (ADR-040): all of it before the customer is bound.
     const kitchen =
       type === "order"
         ? fulfilWords(payload as PayloadOf<"order">, kitchenWords(a.lang, settings.business.name), a.timezone, a.lang)

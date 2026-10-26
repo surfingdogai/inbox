@@ -133,7 +133,7 @@ or network:
   customer pays with its tax; a line's `quoteLineKindSchema`); and how a trade takes work
   (`workProfileSchema`, `get_business_profile`'s `work`). Schemas: `attachment-ref`, `area-summary`,
   `job`, `trade-quote`, `work-profile`, `mcp-check-area-input`, `mcp-check-area-output`.
-- 0.11 ([ADR-036](../../docs/adr/036-food.md)): restaurants, takeaways, bakeries and cafés. The allergen
+- 0.12 ([ADR-040](../../docs/adr/040-food.md)): restaurants, takeaways, bakeries and cafés. The allergen
   vocabulary (`vocab/allergens.json`: 46 codes in seven languages, with the lists the EU, the UK, the US,
   Canada, Australia, New Zealand and Japan name and their sources; `expandAllergens` reads a part as its
   whole, `jurisdictionOf` gives a country's list) and a dish's allergens with whether the business

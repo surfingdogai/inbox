@@ -48,7 +48,7 @@ export interface SnapshotMenuSection {
   readonly items: readonly SnapshotMenuItem[];
 }
 
-/** One item of a tool's menu, as read from it (ADR-036): what the owner may keep, one press each. */
+/** One item of a tool's menu, as read from it (ADR-040): what the owner may keep, one press each. */
 export interface SnapshotMenuItem {
   readonly externalId: string;
   /** The tool's own id for the group the item sits in, where its orders must name it (a Toast menu group). */
@@ -64,7 +64,7 @@ export interface SnapshotMenuItem {
         readonly status: "unconfirmed";
       }
     | undefined;
-  /** The tool's option groups, each choice with what it adds in minor units (ADR-036). */
+  /** The tool's option groups, each choice with what it adds in minor units (ADR-040). */
   readonly optionGroups?: readonly SnapshotOptionGroup[] | undefined;
   /** Dietary tags the tool holds (vegan, halal…), in the menu vocabulary; claims about allergens arrive unconfirmed too. */
   readonly dietary?: readonly string[] | undefined;

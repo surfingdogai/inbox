@@ -2,7 +2,7 @@ import { OFFER_A_CODE, type PresetSpec } from "./common";
 import { KITCHEN_INSTANT, KITCHEN_WAITS } from "./food";
 
 /**
- * Bakeries (ADR-036): pre-orders with their notice, inside each item's daily cap, are accepted at once
+ * Bakeries (ADR-040): pre-orders with their notice, inside each item's daily cap, are accepted at once
  * when the bakery chose so; custom cakes are made to order and always wait for a person, and a request
  * for a price (a wedding cake, a picture of what it should look like) goes to a person, the soonest
  * first. Nothing here refuses anybody.

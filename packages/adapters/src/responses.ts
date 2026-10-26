@@ -496,7 +496,7 @@ export const businessProfileSchema = profileSchema.extend({
   kitchen: kitchenProfileSchema
     .optional()
     .describe(
-      "How a kitchen takes orders (spec 0.11): collection, delivery and eating in, its time to prepare, slots, whether orders confirm at once within what it set aside, a pause, tips, delivery zones, tables, and how allergens are answered.",
+      "How a kitchen takes orders (spec 0.12): collection, delivery and eating in, its time to prepare, slots, whether orders confirm at once within what it set aside, a pause, tips, delivery zones, tables, and how allergens are answered.",
     ),
 });
 

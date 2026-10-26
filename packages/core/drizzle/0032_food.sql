@@ -1,4 +1,4 @@
--- Restaurants, takeaways, bakeries and cafés (ADR-036). A product's menu is JSON beside its catalogue
+-- Restaurants, takeaways, bakeries and cafés (ADR-040). A product's menu is JSON beside its catalogue
 -- columns (`menu`): its section and place in it, its option groups, its allergens (what it contains and
 -- may contain, and whether a person at the business confirmed them), its dietary tags, an age limit,
 -- the dayparts it is served in, a deal's groups, the notice it needs, how many the inbox may take a day,

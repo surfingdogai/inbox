@@ -20,7 +20,7 @@ import { formatClock, partyName } from "../lib/format";
 import { StatePill } from "./Pills";
 
 /**
- * The kitchen on the inbox's home (ADR-036): whether orders are coming in, the pause (15, 30, 60
+ * The kitchen on the inbox's home (ADR-040): whether orders are coming in, the pause (15, 30, 60
  * minutes or the rest of the day, any person at the business), and today's orders for a time, earliest
  * first, each with the next press for the kitchen: Start preparing, Mark ready, Out for delivery. With
  * none left today, the next day that has orders (a bakery takes them days ahead).

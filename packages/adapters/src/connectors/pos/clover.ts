@@ -23,7 +23,7 @@ import {
 } from "./common";
 
 /**
- * Clover (ADR-036), built and switched off: a Clover app needs a production developer account per region
+ * Clover (ADR-040), built and switched off: a Clover app needs a production developer account per region
  * and Clover's App Market approval before it can be used, and its v2/OAuth client (`CLOVER_CLIENT_ID`,
  * `CLOVER_CLIENT_SECRET`) is the server's. Until then the card says "Needs setup".
  *

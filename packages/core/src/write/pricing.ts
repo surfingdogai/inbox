@@ -118,7 +118,7 @@ export interface LinePricing {
 /**
  * For each line, what the catalogue says of its product (by `productId`, else `sku`); null for a line
  * naming none. A menu item's line is priced with what its options add, from the menu as it is now
- * (ADR-036), the choices a group takes by default included when none were sent: its list, its price for
+ * (ADR-040), the choices a group takes by default included when none were sent: its list, its price for
  * this customer and its floor all carry them, so a pizza with a larger size is at its list price, never
  * above it. `options: false` prices the products alone (the order's own pricing adds them itself).
  */
@@ -267,7 +267,7 @@ async function priceOrder(db: Db, payload: PayloadOf<"order">, pricing?: Pricing
       offSale.push({ path: `payload.orderedItem.${i}`, problem: "invalid", message: "not on sale" });
       return;
     }
-    // A menu item's options are priced from the business's menu (ADR-036): what each adds, per unit,
+    // A menu item's options are priced from the business's menu (ADR-040): what each adds, per unit,
     // goes on the list price and on the customer's price alike.
     const menu = menuOf(product.menu);
     const opts = menu
@@ -351,7 +351,7 @@ async function priceOrder(db: Db, payload: PayloadOf<"order">, pricing?: Pricing
   if (problems.length) {
     throw new WriteError("invalid_input", "The order's total is too large: order fewer.", { fields: problems });
   }
-  // An order for a time adds its delivery fee and a tip, as the business prices them (ADR-036).
+  // An order for a time adds its delivery fee and a tip, as the business prices them (ADR-040).
   const extras = await orderExtras(db, asked, { value: total, currency });
   if (extras.problems.length) {
     throw new WriteError("invalid_input", "The order's delivery or tip is not one we can take.", {
@@ -513,7 +513,7 @@ interface CatalogueProduct {
   readonly active: number;
   /** Units in stock, when the business counts them. */
   readonly stock: number | null;
-  /** Its menu, when it is on one (ADR-036): what each option adds is priced from it. */
+  /** Its menu, when it is on one (ADR-040): what each option adds is priced from it. */
   readonly menu: unknown;
 }
 

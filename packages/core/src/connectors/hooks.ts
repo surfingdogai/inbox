@@ -38,7 +38,7 @@ import {
  *   everything on its next sync.
  */
 
-/** Who applies a channel's signed word on an order (ADR-036): the kitchen's, registered once. */
+/** Who applies a channel's signed word on an order (ADR-040): the kitchen's, registered once. */
 const POS_ORDER_APPLIER: {
   fn?: (db: Db, connectorId: string, externalId: string, state: PosOrderState, now: number) => Promise<void>;
 } = {};

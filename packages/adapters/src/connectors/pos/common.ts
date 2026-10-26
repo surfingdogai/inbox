@@ -9,7 +9,7 @@ import {
 import { retryAfterMs } from "../http";
 
 /**
- * What the food connectors share (ADR-036): a till's decimal prices in the business's minor units, the
+ * What the food connectors share (ADR-040): a till's decimal prices in the business's minor units, the
  * allergen names tools send read as the menu's codes (always unconfirmed), JSON calls answered alike,
  * and the last few words of a refusal. Web APIs only.
  */

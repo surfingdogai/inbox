@@ -16,7 +16,7 @@ import { capKey, dayBucket, daySlots, freePlaces, orderSlotKey, slotAt, takenPla
 import { kitchenMoney, kitchenWords, type Words } from "./words";
 
 /**
- * An order for a time, as the kitchen takes it (ADR-036). Before the customer confirms anything the
+ * An order for a time, as the kitchen takes it (ADR-040). Before the customer confirms anything the
  * order is checked (`checkOrder`): the kitchen is not paused, the slot is one it offers and has room,
  * delivery reaches the address and the order is over the zone's minimum, each item is served then, is
  * not sold out today and is ordered with its notice, and a tip is one the business takes. Once they
@@ -364,7 +364,7 @@ export async function overCapClaims(
 }
 
 /**
- * What an order for a time adds to its lines' total, priced as the business prices it (ADR-036): the
+ * What an order for a time adds to its lines' total, priced as the business prices it (ADR-040): the
  * fee of the zone its address falls in, and a tip as a share of the food or an amount, never more than
  * the food. The slot's end and the zone are written on the fulfilment. Nothing here refuses: the check
  * did, before the customer was asked to confirm.

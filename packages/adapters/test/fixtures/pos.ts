@@ -1,5 +1,5 @@
 /**
- * Answers of the food connectors' platforms (ADR-036), transcribed from what each publishes, trimmed to
+ * Answers of the food connectors' platforms (ADR-040), transcribed from what each publishes, trimmed to
  * the fields the connectors read. Ids and keys are made up (or the documents' own examples); no test
  * calls a real account.
  *

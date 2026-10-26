@@ -13,7 +13,7 @@ import { jobStatement } from "../write/common";
 import { markForPerson, setOrderProgress } from "./progress";
 
 /**
- * The kitchen's own systems (ADR-036). Three seams, each the owner's choice:
+ * The kitchen's own systems (ADR-040). Three seams, each the owner's choice:
  *
  * - **Orders into a till or a channel** (`orders_out`: Toast, Lightspeed, Clover, Deliverect): an order
  *   the business accepted here is written into its till, first and once (`writeFirst`, op `order`), under

@@ -223,7 +223,7 @@ export const bookingPayloadSchema = z.object({
   personalised: personalisedSchema.optional(),
   resourceId: z.string().optional(),
   /**
-   * What holds a table (ADR-036; the same shape as a salon's deposit, ADR-035): a deposit for each
+   * What holds a table (ADR-040; the same shape the salons track gives a deposit): a deposit for each
    * person from the party size the business set, and the cancellation policy dated for this booking in
    * the business's zone, as the customer confirmed them. Only the inbox writes them.
    */
@@ -276,13 +276,13 @@ export const orderLineSchema = z.object({
   /** The catalogue's unit price, where this line's is the customer's own (a reward, a discount). Only the inbox writes it. */
   listPrice: moneySchema.optional(),
   /**
-   * A menu item's options (ADR-036): the choices by group, a half for half-and-half. Their names and
+   * A menu item's options (ADR-040): the choices by group, a half for half-and-half. Their names and
    * what each adds are the business's, written by the inbox from its menu; the unit price includes them.
    */
   options: z.array(lineOptionSchema).max(40).optional(),
   /** A word for the kitchen: "no onions". */
   note: z.string().max(140).optional(),
-  /** A custom order's brief: how many it serves, its flavour, the writing on it (ADR-036). */
+  /** A custom order's brief: how many it serves, its flavour, the writing on it (ADR-040). */
   brief: lineBriefSchema.optional(),
 });
 
@@ -305,15 +305,15 @@ export const orderPayloadSchema = z.object({
   /** Files the customer sent with it (ADR-039 §2): a cake's picture, a plan. Checked and cleaned by the inbox. */
   attachments: attachmentsSchema.optional(),
   /**
-   * How it is fulfilled (ADR-036): collected, delivered or eaten in, at a slot the kitchen offers. The
+   * How it is fulfilled (ADR-040): collected, delivered or eaten in, at a slot the kitchen offers. The
    * inbox writes the slot's end, the delivery zone the address fell in, its fee and the time it takes.
    */
   fulfil: fulfilSchema.optional(),
   /** A tip the customer added, where the business takes them: on its own pay link, part of the total. */
   tip: tipSchema.optional(),
-  /** The kitchen's word inside fulfilling: preparing, ready, out for delivery (ADR-036). Only the business writes it. */
+  /** The kitchen's word inside fulfilling: preparing, ready, out for delivery (ADR-040). Only the business writes it. */
   progress: orderProgressSchema.optional(),
-  /** Whether it may confirm at once, and why not (ADR-036). Only the inbox writes it. */
+  /** Whether it may confirm at once, and why not (ADR-040). Only the inbox writes it. */
   kitchen: kitchenMarkSchema.optional(),
   /**
    * The stages it is paid in, from the trade's quote it came from (ADR-039 §4): the business asks for

@@ -6,7 +6,7 @@ import { readSettings, type Settings } from "../settings/schema";
 import { premisesOf } from "../trades/job";
 
 /**
- * What every kitchen read starts from (ADR-036): the business's zone, currency, name and opening hours,
+ * What every kitchen read starts from (ADR-040): the business's zone, currency, name and opening hours,
  * its closures, its settings, and where its premises are (the base delivery rings are measured from,
  * never published).
  */

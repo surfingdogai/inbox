@@ -319,10 +319,10 @@ export const JSON_SCHEMAS: Record<string, { schema: z.ZodType; title: string }> 
   "work-profile": { schema: workProfileSchema, title: "get_business_profile's work: area, emergencies, call-out" },
   "mcp-check-area-input": { schema: checkAreaInputSchema, title: "MCP check_area: arguments" },
   "mcp-check-area-output": { schema: checkAreaOutputSchema, title: "MCP check_area: structuredContent" },
-  // Restaurants, takeaways, bakeries and cafés (spec 0.11, ADR-036).
+  // Restaurants, takeaways, bakeries and cafés (spec 0.12, ADR-040).
   "allergen-info": { schema: allergenInfoSchema, title: "A dish's allergens and whether a person confirmed them" },
-  fulfil: { schema: fulfilSchema, title: "How an order is fulfilled: method, slot, zone and fee (spec 0.11)" },
-  "order-progress": { schema: orderProgressSchema, title: "A kitchen's progress inside fulfilling (spec 0.11)" },
+  fulfil: { schema: fulfilSchema, title: "How an order is fulfilled: method, slot, zone and fee (spec 0.12)" },
+  "order-progress": { schema: orderProgressSchema, title: "A kitchen's progress inside fulfilling (spec 0.12)" },
   "kitchen-profile": { schema: kitchenProfileSchema, title: "get_business_profile's kitchen: how orders are taken" },
   "table-rules": { schema: tableRulesSchema, title: "A table service's party sizes, deposit and covers set aside" },
   "mcp-get-menu-input": { schema: getMenuInputSchema, title: "MCP get_menu: arguments" },

@@ -177,7 +177,7 @@ export interface BusinessProfile {
   readonly payments?: readonly string[] | undefined;
   /** How a trade takes work (ADR-039, spec `workProfileSchema`): absent for a business that set none of it. */
   readonly work?: WorkProfile | undefined;
-  /** How a kitchen takes orders and tables (ADR-036, spec `kitchenProfileSchema`): absent when it does not. */
+  /** How a kitchen takes orders and tables (ADR-040, spec `kitchenProfileSchema`): absent when it does not. */
   readonly kitchen?: KitchenProfile | undefined;
 }
 
@@ -392,7 +392,7 @@ export class Capabilities {
 
   /** Trades and projects (ADR-039): files on a request, where the business works, its job tool. */
   readonly trades: TradeCapabilities;
-  /** Restaurants, takeaways, bakeries and cafés (ADR-036): the menu, orders for a time, tables. */
+  /** Restaurants, takeaways, bakeries and cafés (ADR-040): the menu, orders for a time, tables. */
   readonly food: FoodCapabilities;
 
   private readonly baseUrl: string | undefined;
@@ -590,7 +590,7 @@ export class Capabilities {
     registerWorkResolver(this.connectors);
     this.food = new FoodCapabilities(db, {
       connectors: this.connectors,
-      // A person's pause is the inbox's write: any person at the business may press it (ADR-036).
+      // A person's pause is the inbox's write: any person at the business may press it (ADR-040).
       writeSettings: async (doc, now) => {
         await this.writeSettings(
           {
@@ -607,8 +607,8 @@ export class Capabilities {
     // An order written into a till whose answer never came, the till's word back, orders taken elsewhere.
     registerFoodResolver(this.connectors);
     registerPosOrderApplier(async (...a) => void (await applyPosState(...a)));
-    // A table's deposit gets its link through the payments side (ADR-036), where no other booking
-    // source is registered (a salon's, ADR-035, reads the same deposit).
+    // A table's deposit gets its link through the payments side (ADR-040), where no other booking
+    // source is registered (the salons track's, not merged yet, reads the same deposit).
     if (!scheduleSourceOf("booking")) registerScheduleSource("booking", tableDeposits);
     registerSyncStep(posStatusStep);
     registerSyncStep(elsewhereStep);
@@ -793,7 +793,7 @@ export class Capabilities {
     };
   }
 
-  /** The profile's `kitchen`, when the business takes orders for a time or books tables (ADR-036). */
+  /** The profile's `kitchen`, when the business takes orders for a time or books tables (ADR-040). */
   private async kitchenProfileOf(): Promise<{ kitchen?: KitchenProfile }> {
     const kitchen = await this.food.profile(Date.now());
     return kitchen ? { kitchen } : {};
@@ -1025,7 +1025,7 @@ export class Capabilities {
     await this.refuseShut(caller, "booking");
     await this.refuseUnbookable(caller, input.payload?.reservationFor?.serviceId, { booking: true });
     const c = withIdempotencyKey(caller, input.idempotency_key);
-    // A table (ADR-036): a party above the size the business books online becomes a request for a price;
+    // A table (ADR-040): a party above the size the business books online becomes a request for a price;
     // one it books carries its deposit and policy, which the customer confirms with it.
     const replay = c.idempotency ? await findIdempotent(this.db, c.idempotency) : null;
     const table = replay
@@ -1041,7 +1041,7 @@ export class Capabilities {
     // A site visit names the request for a price it is for, which this customer made (ADR-039 §4).
     const visitFor = input.visit_for ? await this.visitRequest(c, input.visit_for) : null;
     const files = await this.trades.prepareFiles(c, input.attachments);
-    // A table's deposit and policy, dated for this booking, as the customer confirmed them (ADR-036).
+    // A table's deposit and policy, dated for this booking, as the customer confirmed them (ADR-040).
     const inboxAdds =
       table?.kind === "booking" ? mergeAdds(files, { payload: table.adds, claims: [], flags: {} }) : files;
     const made = await this.people.create(
@@ -1062,7 +1062,7 @@ export class Capabilities {
   }
 
   /**
-   * A table for more than the business books online, asked for as a request for a price (ADR-036): the
+   * A table for more than the business books online, asked for as a request for a price (ADR-040): the
    * business answers with a quote for the event or the private room. The agent is told so.
    */
   private async tableQuote(c: Caller, input: T.CreateBookingInput, words: string): Promise<CreateResult> {
@@ -1100,7 +1100,7 @@ export class Capabilities {
   async createOrder(caller: Caller, input: T.CreateOrderInput): Promise<CreateResult> {
     await this.refuseElsewhere(caller, "order");
     const c = withIdempotencyKey(caller, input.idempotency_key);
-    // An order for a time is checked by the kitchen before anything is asked or promised (ADR-036): the
+    // An order for a time is checked by the kitchen before anything is asked or promised (ADR-040): the
     // pause, the slot, delivery, what is served then; a retry of one already made is answered as it was.
     const replay = c.idempotency ? await findIdempotent(this.db, c.idempotency) : null;
     const lang = input.contact?.locale ?? caller.locale ?? "en";
@@ -2528,7 +2528,7 @@ function hostCaller(now: number): Caller {
 }
 
 /**
- * What the inbox adds to a customer's create from two places at once (ADR-034's files, ADR-036's
+ * What the inbox adds to a customer's create from two places at once (ADR-039's files, ADR-040's
  * kitchen): their payload fields, files, claims and flags together, and a hash that stands for both.
  */
 function mergeAdds(

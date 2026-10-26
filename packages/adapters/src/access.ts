@@ -147,7 +147,7 @@ export const ROUTE_SCOPES: Readonly<Record<string, readonly string[]>> = {
   "GET /work": [READ_SETUP],
   // What a connected tool says about the business, to start from: read like a connection.
   "GET /integrations/:id/setup": [READ_SETUP, "integrations:write"],
-  // A kitchen (ADR-036): the menu reads and writes like the catalogue; confirming allergens, importing a
+  // A kitchen (ADR-040): the menu reads and writes like the catalogue; confirming allergens, importing a
   // menu and a table's rules are a person's, checked by the capability whatever the scopes; progress and
   // pausing are the inbox's work.
   "GET /menu": [READ_SETUP, "catalogue:write"],
@@ -167,7 +167,7 @@ export const ROUTE_SCOPES: Readonly<Record<string, readonly string[]>> = {
 };
 
 export const TOOL_SCOPES: Readonly<Record<string, readonly string[]>> = {
-  // A kitchen's (ADR-036): how far an order is, and what is sold out today.
+  // A kitchen's (ADR-040): how far an order is, and what is sold out today.
   set_order_progress: ["inbox:write"],
   set_sold_out: ["catalogue:write"],
   list_items: ["inbox:read"],

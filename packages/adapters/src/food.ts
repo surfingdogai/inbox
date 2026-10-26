@@ -19,7 +19,7 @@ import { problemFrom } from "./problem";
 import type { CallerEnv } from "./rest";
 
 /**
- * The food doors (ADR-036): `get_menu` and `list_order_slots` for a customer's agent (MCP and REST), and
+ * The food doors (ADR-040): `get_menu` and `list_order_slots` for a customer's agent (MCP and REST), and
  * the owner's menu, allergens, sold out today, tables, pause and progress. Generated from the same Zod
  * schemas on every door; what an agent is told speaks as the business.
  */

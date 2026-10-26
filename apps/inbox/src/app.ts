@@ -206,7 +206,7 @@ export interface AppDeps {
   readonly googleTesting?: boolean | undefined;
   /** What the server switched on of the job tools (JOBBER_API_VERSION, JOB_TOOLS_CLEARED; ADR-039 §5). */
   readonly jobTools?: JobToolSwitches | undefined;
-  /** The food tills' partner apps the server holds (TOAST_*, LIGHTSPEED_*, CLOVER_*, DELIVERECT_*; ADR-036). */
+  /** The food tills' partner apps the server holds (TOAST_*, LIGHTSPEED_*, CLOVER_*, DELIVERECT_*; ADR-040). */
   readonly pos?: PosPartners | undefined;
   /**
    * Connectors of the host's own, offered beside the ones this release ships (ADR-014): anyone can
@@ -380,7 +380,7 @@ export function createInbox(deps: AppDeps): Inbox {
     // and the sweep that removes files no request took within the hour. An inbox with neither enqueues none.
     .register(WORK_PUSH_KIND, workPushHandler(caps.connectors), { lane: payLane })
     .register(ATTACHMENT_SWEEP_KIND, attachmentSweepHandler())
-    // A kitchen (ADR-036): an order the business accepted, written into its till, one order at a time;
+    // A kitchen (ADR-040): an order the business accepted, written into its till, one order at a time;
     // and one cancelled here after it went in, marked for a person to cancel it there too. An inbox with
     // no till connected enqueues neither.
     .register(POS_PUSH_KIND, posPushHandler(caps.connectors), { lane: payLane })

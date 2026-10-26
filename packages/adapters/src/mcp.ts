@@ -274,7 +274,7 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
     // A place to stay (ADR-037) says how its stays are asked for, held and booked, and has the tools.
     const stays = await takesStays(caps);
     // A trade (ADR-039) says how a job is asked for, with its photos, and where it works; a kitchen
-    // (ADR-036) how its menu reads, allergens included, and how an order for a time is made.
+    // (ADR-040) how its menu reads, allergens included, and how an order for a time is made.
     const work = await takesWork(caps);
     const menu = await hasMenuDoors(caps);
     const instructions = [
@@ -416,7 +416,7 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
       async (args) => {
         try {
           const r = await caps.createBooking(caller, args);
-          // A table for more than the business books online is a request for a price (ADR-036).
+          // A table for more than the business books online is a request for a price (ADR-040).
           return ok(`${r.note ? `${r.note} ` : ""}${humanOf(r)}${identityText(r.identity, args.contact?.name)}`, r);
         } catch (error) {
           return confirmOrFailed(error);
@@ -1814,7 +1814,7 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
     // A place to stay's setup (ADR-037 §6.2): rooms, rates, fees and extras the AI may fill in; how the
     // property confirms, its policies, deposits, card holds and allotments are the owner's in person.
     registerOwnerStayTools(server, caps, caller, guarded);
-    // A kitchen's progress and sold out today (ADR-036).
+    // A kitchen's progress and sold out today (ADR-040).
     registerOwnerFoodTools(server, caps, caller, guarded);
     return server;
   });

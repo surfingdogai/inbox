@@ -26,7 +26,7 @@ import {
 } from "./fixtures/pos";
 
 /**
- * The food connectors (ADR-036) against local fakes of their published references: GloriaFood and
+ * The food connectors (ADR-040) against local fakes of their published references: GloriaFood and
  * Flipdish with what the owner makes in their own account (switched on); Toast, Lightspeed, Clover and
  * Deliverect built and switched off until the server holds their partner apps, each with a fake that
  * has a menu and takes an order, accepts it and rejects it. Prices arrive in the minor unit of their

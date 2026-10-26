@@ -40,7 +40,7 @@ import { rowToItem } from "../src/write/views";
 import { confirming, makeClient, resetTables } from "./harness";
 
 /**
- * Restaurants, takeaways, bakeries and cafés (ADR-036), end to end on the capabilities: the allergen
+ * Restaurants, takeaways, bakeries and cafés (ADR-040), end to end on the capabilities: the allergen
  * vocabulary and who may confirm a dish's allergens; a menu's options priced from the menu; an order
  * with an allergen nobody confirmed waiting for a person everywhere; the last place in a slot going to
  * one order; daily caps set aside; delivery zones, their fees and minimums; the pause; sold out today;

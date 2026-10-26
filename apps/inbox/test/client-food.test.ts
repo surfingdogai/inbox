@@ -36,7 +36,7 @@ import {
 import type { ItemView } from "../client/src/lib/types";
 
 /**
- * The owner's kitchen screens (ADR-036), the parts that decide something: the allergen grid (a dish
+ * The owner's kitchen screens (ADR-040), the parts that decide something: the allergen grid (a dish
  * contains a thing or may contain it, never both; the law's list first), what an option adds in each
  * currency's own places (won and yen have none, pesos two), the next press for the kitchen, today's
  * orders in slot order in the business's own zone, the pause in words, and a table's rules. Fixtures

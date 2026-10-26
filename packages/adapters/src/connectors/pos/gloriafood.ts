@@ -14,7 +14,7 @@ import { constantTimeEqual } from "../pay-sign";
 import { allergenCodesOf, failOn, jsonOf, minorOf, short, snapshotItem } from "./common";
 
 /**
- * GloriaFood (ADR-036), with the keys a restaurant makes in its own admin panel: Others → 3rd party
+ * GloriaFood (ADR-040), with the keys a restaurant makes in its own admin panel: Others → 3rd party
  * integrations → Enabled integrations, one template each. The **Fetch Menu** key reads the menu, which
  * the owner keeps item by item, its allergens unconfirmed (`GET https://pos.globalfoodsoft.com/pos/menu`,
  * `Glf-Api-Version: 2`). The **Poll Accepted Order v2** key, given only if the owner wants it, reads the

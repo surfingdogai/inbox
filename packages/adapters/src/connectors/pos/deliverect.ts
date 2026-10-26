@@ -13,7 +13,7 @@ import { uuidFrom } from "../work/common";
 import { clientToken, failOn, jsonOf, type PartnerClient, refuseUnknownChoices, short } from "./common";
 
 /**
- * Deliverect (ADR-036), built and switched off: one channel integration reaches every till Deliverect
+ * Deliverect (ADR-040), built and switched off: one channel integration reaches every till Deliverect
  * connects, once Deliverect certified it (a partner application, staging keys, certification calls). The
  * channel's client and name are the server's (`DELIVERECT_CLIENT_ID`, `DELIVERECT_CLIENT_SECRET`,
  * `DELIVERECT_CHANNEL`); until then the card says "Needs setup".

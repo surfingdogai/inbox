@@ -11,7 +11,7 @@ import { freshDb } from "./harness";
 import { stripePlatform } from "./pay-platforms";
 
 /**
- * The food doors (ADR-036) as an agent and the owner meet them, on both runtimes: get_menu and
+ * The food doors (ADR-040) as an agent and the owner meet them, on both runtimes: get_menu and
  * list_order_slots over MCP, an order for a time with its options, delivery and tip confirmed at the
  * confirm step and written; its pay link on the business's own Stripe in won and in yen, whole units;
  * the owner's menu and allergen confirm, and the pause; an accepted order written into Toast and Toast's

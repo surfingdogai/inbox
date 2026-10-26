@@ -33,7 +33,7 @@ function SettingsLayout() {
     (doors !== undefined && doors.quoteRequest !== false && doors.booking === false) ||
     path === "/settings/area" ||
     path === "/settings/work";
-  // A kitchen has Menu and Kitchen (ADR-036): it takes orders for a time, or its rules are a kitchen's.
+  // A kitchen has Menu and Kitchen (ADR-040): it takes orders for a time, or its rules are a kitchen's.
   const food = foodKind(settings.data?.doc) || path === "/settings/menu" || path === "/settings/kitchen";
   // The tab you are on is always in view, on a phone too, where the row scrolls: again once the
   // Property tab, a trade's Area and Work or a kitchen's Menu and Kitchen appear, which move the tabs

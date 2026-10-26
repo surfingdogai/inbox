@@ -4,7 +4,7 @@ import { type Caller, isPerson } from "../write/caller";
 import type { MenuFields, StoredAllergens } from "./schema";
 
 /**
- * Allergens are never inferred (ADR-036). What a business states is kept as it states it; what an import
+ * Allergens are never inferred (ADR-040). What a business states is kept as it states it; what an import
  * or the owner's AI filled in is `unconfirmed`; and only a person at the business, in the owner app,
  * confirms it, by pressing confirm on exactly the lists they were shown (their fingerprint). Any change
  * to a dish's allergens afterwards, by anyone, makes it unconfirmed again until a person confirms it.

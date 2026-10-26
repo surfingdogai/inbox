@@ -17,7 +17,7 @@ export interface SlotSpec {
   readonly bufferBeforeMin: number;
   readonly bufferAfterMin: number;
   /**
-   * How many places one booking takes in each bucket (ADR-036): 1, or the party's size for a service
+   * How many places one booking takes in each bucket (ADR-040): 1, or the party's size for a service
    * that counts its places in people (a table's covers). Absent: 1.
    */
   readonly units?: number | undefined;

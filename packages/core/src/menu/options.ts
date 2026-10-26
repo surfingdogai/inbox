@@ -3,7 +3,7 @@ import type { FieldProblem } from "../write/errors";
 import type { MenuFields, OptionGroup } from "./schema";
 
 /**
- * A line's options against the business's menu (ADR-036): each choice by its group, a half only where
+ * A line's options against the business's menu (ADR-040): each choice by its group, a half only where
  * the group takes halves, every group the line shows within its min and max, a group opened by a choice
  * only once that choice is taken (one level), and the defaults taken for a group the agent left out.
  * What each choice adds is the business's, never the agent's: the line's unit price is the item's plus

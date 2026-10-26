@@ -1,4 +1,4 @@
-/* A kitchen (ADR-036): Settings → Menu and Kitchen, the order's kitchen block, the pause on the home.
+/* A kitchen (ADR-040): Settings → Menu and Kitchen, the order's kitchen block, the pause on the home.
    Thin and quiet: hairlines, small type, one accent for what a person must check (allergens). */
 
 .menu-unconfirmed,
@@ -297,7 +297,7 @@
   margin-bottom: 4px;
 }
 
-/* An order's time on its list row (ADR-036): the kitchen reads when before what. */
+/* An order's time on its list row (ADR-040): the kitchen reads when before what. */
 .row-slot {
   font-weight: 600;
   color: var(--ink);

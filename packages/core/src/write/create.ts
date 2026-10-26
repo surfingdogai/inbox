@@ -93,7 +93,7 @@ export interface CreateInput {
         readonly flags?: Partial<ItemFlags> | undefined;
         readonly hash: unknown;
         /**
-         * Places the request takes in the same batch (ADR-036): an order's pickup or delivery slot and
+         * Places the request takes in the same batch (ADR-040): an order's pickup or delivery slot and
          * the daily caps of what it orders, each a resource key and its (bucket, ordinal) pairs. Two
          * requests for the last place: the primary key lets one in, and the other is told `slot_taken`.
          */
@@ -117,7 +117,7 @@ const BUSINESS_FIELDS = [
   "deliveredAt",
   "change",
   "schedule",
-  // A kitchen's word on the order, and whether it may confirm at once (ADR-036); a table's deposit and
+  // A kitchen's word on the order, and whether it may confirm at once (ADR-040); a table's deposit and
   // its dated policy: the inbox's and the business's, never the customer's.
   "progress",
   "kitchen",
@@ -141,7 +141,7 @@ export interface CreateResult {
   readonly replayed: boolean;
   /**
    * What the door says beside the item, in the business's words, when it made another kind than was
-   * asked for: a table for more than the business books online is a request for a price (ADR-036).
+   * asked for: a table for more than the business books online is a request for a price (ADR-040).
    */
   readonly note?: string | undefined;
   /** Who the inbox takes the customer for (ADR-017 §8.4); the public doors add it. */

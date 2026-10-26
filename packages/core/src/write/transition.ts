@@ -312,7 +312,7 @@ async function attempt_(
       { details: { guard: "in_stock", draft_for_owner: true } },
     );
   }
-  // An order the kitchen marked for a person (ADR-036: an allergen nobody confirmed, more than was set
+  // An order the kitchen marked for a person (ADR-040: an allergen nobody confirmed, more than was set
   // aside, made to order, a kitchen that accepts by hand), and a table no covers were set aside for, are a
   // person's to say yes to: never a rule's, the owner's AI's or another system's key, whatever it holds.
   if (!isPerson(caller)) await assertKitchenClears(db, item, input.event);
@@ -949,7 +949,7 @@ async function attempt_(
         }
         if (item.type !== "booking") break;
         // A person at the business seats a table from the whole room, not only the covers set aside
-        // for direct bookings (ADR-036): the places are still taken, so automation sees them as used.
+        // for direct bookings (ADR-040): the places are still taken, so automation sees them as used.
         const spec = await slotSpecFor(db, payload, { seatsTheRoom: isPerson(caller) });
         const buckets = bucketsFor(spec, String(payload.startTime), String(payload.endTime));
         const taken = await readClaims(db, spec, buckets, item.id);
@@ -1216,11 +1216,11 @@ async function attempt_(
   }
   statements.push(...refundMade);
   if (effects.has("release_slot")) statements.push(releaseStatement(item.id));
-  // An order that ends without being made gives back its slot and the daily places it took (ADR-036);
+  // An order that ends without being made gives back its slot and the daily places it took (ADR-040);
   // one that was made keeps them, as it was made that day.
   if (item.type === "order" && (t.to === "declined" || t.to === "cancelled" || t.to === "expired")) {
     statements.push(releaseStatement(item.id));
-    // One that went into a till already is cancelled there by a person too (ADR-036).
+    // One that went into a till already is cancelled there by a person too (ADR-040).
     statements.push(...(await posCancelStatements(db, item.id, now)));
   }
   if (effects.has("release_hold")) statements.push(releaseHoldStatement(item.id));
@@ -1361,10 +1361,10 @@ async function attempt_(
   if (item.type === "quote_request" && t.event === "quote") {
     statements.push(...(await workPushStatements(db, item.id, "quoted", now)));
   }
-  // An order the business accepted goes into its till, when one is connected (ADR-036): at once when
+  // An order the business accepted goes into its till, when one is connected (ADR-040): at once when
   // it is paid at the handover, once paid when its pay link is on its way, so the till never takes an
   // order paid by link as one to pay at the door, nor makes one whose link is still open.
-  // A person who accepts an order over a daily cap gives it what was left of the cap (ADR-036).
+  // A person who accepts an order over a daily cap gives it what was left of the cap (ADR-040).
   if (item.type === "order" && t.to === "accepted" && item.state !== "accepted") {
     statements.push(...(await overCapClaims(db, item, now)));
   }
@@ -1846,7 +1846,7 @@ function lateChange(
  * against the owner's limits (`write/limits.ts`), not here.
  */
 /**
- * What an order for a time adds beyond its lines (ADR-036): its delivery fee and the customer's tip, in
+ * What an order for a time adds beyond its lines (ADR-040): its delivery fee and the customer's tip, in
  * the order's currency. Changes the business suggests keep them: the total is the lines and these.
  */
 function extrasOf(p: PayloadOf<"order">): number {
@@ -2093,7 +2093,7 @@ function assertNoMoney(event: string, data: Record<string, unknown>, assistant: 
 
 /**
  * How many people a person may seat in one sitting of a table service, whatever was set aside for direct
- * bookings (ADR-036): they know the room; the inbox only counts the places, so automation sees them taken.
+ * bookings (ADR-040): they know the room; the inbox only counts the places, so automation sees them taken.
  */
 const ROOM_SEATS = 1000;
 
@@ -2113,7 +2113,7 @@ async function slotSpecFor(
     })
     .from(services)
     .where(eq(services.id, reservationFor.serviceId));
-  // A service whose places are people (a table's covers, ADR-036): a booking takes one per person.
+  // A service whose places are people (a table's covers, ADR-040): a booking takes one per person.
   const { capacityUnit, ...stored } = row ?? ({} as NonNullable<typeof row>);
   const units = capacityUnit === "people" ? Math.max(1, Number(payload.partySize ?? 1)) : undefined;
   const service =

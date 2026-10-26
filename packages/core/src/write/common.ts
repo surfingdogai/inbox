@@ -204,7 +204,7 @@ export async function diagnoseFailure(
     expectedVersion?: number | undefined;
     claims?:
       | { resourceKey: string; claims: readonly [number, number][] }
-      /** Several places at once (an order's slot and its daily caps, ADR-036): the first one taken is said. */
+      /** Several places at once (an order's slot and its daily caps, ADR-040): the first one taken is said. */
       | readonly { resourceKey: string; claims: readonly [number, number][] }[]
       | undefined;
   },

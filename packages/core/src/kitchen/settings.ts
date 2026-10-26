@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * Settings → Kitchen (ADR-036): how a restaurant, a takeaway, a bakery or a café takes orders for a time.
+ * Settings → Kitchen (ADR-040): how a restaurant, a takeaway, a bakery or a café takes orders for a time.
  * Each is a choice, never a typed code:
  *
  * - `enabled`: orders are taken for a slot (pickup, delivery, eating in); off, orders are as a shop's.

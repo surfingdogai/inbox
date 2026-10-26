@@ -664,7 +664,7 @@ export function publicRest(caps: Capabilities, opts: { readonly baseUrl?: string
   stayPublicRoutes(app, caps, hook as never);
   // Trades (ADR-039): whether a site is inside the area, a request's files uploaded first, the business's links to them.
   tradesPublicRoutes(app, caps, hook as never);
-  // A kitchen (ADR-036): the menu, and the slots an order can have.
+  // A kitchen (ADR-040): the menu, and the slots an order can have.
   foodPublicRoutes(app, caps, hook as never);
   return app;
 }
@@ -1978,7 +1978,7 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
   stayOwnerRoutes(app, caps);
   // Trades (ADR-039): a request's files and its job tool.
   tradesOwnerRoutes(app, caps);
-  // A kitchen (ADR-036): the menu, allergens, sold out, tables, pause, progress, orders taken elsewhere.
+  // A kitchen (ADR-040): the menu, allergens, sold out, tables, pause, progress, orders taken elsewhere.
   foodOwnerRoutes(app, caps);
   return app;
 }

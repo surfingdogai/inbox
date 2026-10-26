@@ -215,7 +215,7 @@ function SetupWizard() {
   const [doors, setDoors] = useState<WizardDoors>({ booking: true, quoteRequest: true, message: true });
   const [offers, setOffers] = useState<Offer[]>([{ id: 1, name: "", minutes: "60", price: "" }]);
   const [nextId, setNextId] = useState(2);
-  // A kitchen's first dishes (ADR-036): on the menu in a section, their allergens for Settings → Menu.
+  // A kitchen's first dishes (ADR-040): on the menu in a section, their allergens for Settings → Menu.
   const kitchen = isKitchen(kind);
   const sectionChoices = DISH_SECTIONS[kind?.key ?? ""] ?? ["Menu"];
   const [dishes, setDishes] = useState<Dish[]>([{ id: 1, name: "", price: "", section: "" }]);

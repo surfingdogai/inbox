@@ -24,7 +24,7 @@ import {
 } from "./common";
 
 /**
- * Lightspeed Restaurant (K-Series), built and switched off (ADR-036): Lightspeed's API is for partners,
+ * Lightspeed Restaurant (K-Series), built and switched off (ADR-040): Lightspeed's API is for partners,
  * through its partner programme, with an OAuth 2.0 authorization-code client
  * (`https://auth.lsk-prod.app/realms/k-series/protocol/openid-connect/…`, scopes `orders-api` and
  * `offline-access`). Until whoever runs the server holds that client (`LIGHTSPEED_CLIENT_ID`,

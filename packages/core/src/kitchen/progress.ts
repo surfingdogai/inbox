@@ -18,7 +18,7 @@ import { transitionItem } from "../write/transition";
 import { rowToItem } from "../write/views";
 
 /**
- * A kitchen's progress inside fulfilling (ADR-036): preparing, ready, out for delivery, and when it
+ * A kitchen's progress inside fulfilling (ADR-040): preparing, ready, out for delivery, and when it
  * expects it. Fields on the order (`payload.progress`), never states: the order machine is unchanged.
  * An accepted or paid order starts fulfilment first, as `start_fulfilment` does, then takes the
  * progress, which the customer's agent reads on `get_item_status` and a webhook carries as
@@ -107,7 +107,7 @@ export async function setOrderProgress(
 }
 
 /**
- * An order a person must look at again (ADR-036): a till refused or cancelled what the inbox wrote to
+ * An order a person must look at again (ADR-040): a till refused or cancelled what the inbox wrote to
  * it, or never answered. A note in the order's thread, in the till's words, and the order marked for a
  * person, with whatever the caller records of it (`also`): one batch. Another write that took the
  * order's version first is read again, and the mark made once more on top of it.

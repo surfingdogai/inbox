@@ -454,7 +454,7 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
           code: c.req.query("code"),
           // WooCommerce says the owner declined with `success=0` and no error of its own.
           error: c.req.query("error") ?? (c.req.query("success") === "0" ? "access_denied" : undefined),
-          // What a platform names beside the code (Clover's merchant_id, ADR-036), and nothing else.
+          // What a platform names beside the code (Clover's merchant_id, ADR-040), and nothing else.
           returned: Object.fromEntries(
             RETURNED_PARAMS.flatMap((name) => {
               const v = c.req.query(name);

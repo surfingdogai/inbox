@@ -4,7 +4,7 @@ import { moneySchema } from "./base";
 import { postalPrefixSchema } from "./trades";
 
 /**
- * Restaurants, takeaways, bakeries and cafés (spec 0.11, ADR-036): the menu, its allergens, ordering
+ * Restaurants, takeaways, bakeries and cafés (spec 0.12, ADR-040): the menu, its allergens, ordering
  * for a time, and a kitchen's progress.
  *
  * - **Allergens.** `vocab/allergens.json` names the allergens the law makes a food business declare in
@@ -163,7 +163,7 @@ const ANIMAL = [
 ];
 
 /**
- * The allergens a dietary tag cannot sit beside on one dish (ADR-036), in what it contains and in what
+ * The allergens a dietary tag cannot sit beside on one dish (ADR-040), in what it contains and in what
  * it may contain: a gluten-free dish that contains wheat, or may; a vegan dish that contains milk. A menu
  * write holding both is refused, so an agent is never told a coeliac may eat it. What a dish may contain
  * from a shared kitchen does not make it less vegan or vegetarian, so those are held to what it contains.

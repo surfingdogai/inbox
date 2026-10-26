@@ -34,7 +34,7 @@ const RING_CHIPS = [1, 2, 3, 5, 8, 12] as const;
 const ETA_CHIPS = [20, 30, 45, 60] as const;
 
 /**
- * Settings → Kitchen (ADR-036): how orders are taken for a time. Collection, delivery in zones, eating
+ * Settings → Kitchen (ADR-040): how orders are taken for a time. Collection, delivery in zones, eating
  * in; how long the kitchen needs; slots and how many each takes here; who accepts; tips on the
  * business's own pay link; and tables booked by covers. Every one a choice, never a code.
  */
@@ -83,7 +83,7 @@ function KitchenForm({ data, onReload }: { data: SettingsDoc; onReload: () => vo
   const [accept, setAccept] = useState(k.accept);
   const [tips, setTips] = useState(k.tips);
   const [pausePos, setPausePos] = useState(k.pausePos);
-  // Only Flipdish can be paused from here (ADR-036): the switch is for those who have it connected.
+  // Only Flipdish can be paused from here (ADR-040): the switch is for those who have it connected.
   const integrations = useIntegrations();
   const flipdish = (integrations.data?.connections ?? []).some((c) => c.kind === "flipdish" && c.status !== "disabled");
   const [problem, setProblem] = useState<ApiProblem | null>(null);

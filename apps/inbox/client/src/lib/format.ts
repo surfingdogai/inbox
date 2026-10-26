@@ -224,7 +224,7 @@ export function formatDateTime(iso: string, tz?: string, locale?: string): strin
 }
 
 /**
- * When an order is for, with its day unless it is today in the business's zone (ADR-036): "Today,
+ * When an order is for, with its day unless it is today in the business's zone (ADR-040): "Today,
  * 10:00", "Tomorrow, 08:00", "Fri 23 Oct, 10:00". A bakery that bakes on the wrong day reads this.
  */
 export function slotWhen(iso: string, tz?: string, now: number = Date.now(), locale?: string): string {

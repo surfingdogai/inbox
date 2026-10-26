@@ -19,7 +19,7 @@ import type { FakePlatform, FakeRequest } from "./platform";
 import { json } from "./platform";
 
 /**
- * The food platforms as local fakes (ADR-036), each answering as its published reference says, with the
+ * The food platforms as local fakes (ADR-040), each answering as its published reference says, with the
  * shapes in `fixtures/pos.ts`. Every one keeps what it was sent, checks the credentials it was given,
  * and has a menu, and the tills take an order and accept or reject it. No real platform is ever called.
  */

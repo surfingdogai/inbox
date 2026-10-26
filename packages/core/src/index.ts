@@ -4,7 +4,7 @@
  */
 
 // Trades and projects (spec 0.12, ADR-039).
-// Restaurants, takeaways, bakeries and cafés (spec 0.11, ADR-036).
+// Restaurants, takeaways, bakeries and cafés (spec 0.12, ADR-040).
 export type {
   AllergenEntry,
   AllergenInfo,

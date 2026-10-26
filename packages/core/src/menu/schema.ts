@@ -2,7 +2,7 @@ import { allergenCodeSchema, DIETARY_TAGS, daypartSchema, WEEKDAYS } from "@surf
 import { z } from "zod";
 
 /**
- * The menu (ADR-036): what a product holds once it is on a menu (`products.menu`), and the menu's own
+ * The menu (ADR-040): what a product holds once it is on a menu (`products.menu`), and the menu's own
  * settings (`settings.menu`): its sections and dayparts. Everything here is the business's: prices and
  * what each option adds are its own, and allergens are what it states, confirmed only by a person at the
  * business (`menu/allergens.ts`).
@@ -32,7 +32,7 @@ export const menuChoiceSchema = z.object({
   opens: id.optional(),
   /** For a deal: the product this choice is (two pizzas and a drink, each chosen from the menu). */
   productId: z.string().min(1).max(64).optional(),
-  /** The till's or ordering system's own id for it, when the menu came from there (ADR-036). */
+  /** The till's or ordering system's own id for it, when the menu came from there (ADR-040). */
   externalId: z.string().min(1).max(100).optional(),
 });
 export type MenuChoice = z.infer<typeof menuChoiceSchema>;

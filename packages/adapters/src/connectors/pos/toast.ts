@@ -14,7 +14,7 @@ import { uuidFrom } from "../work/common";
 import { failOn, jsonOf, minorOf, short, snapshotItem, tillCurrency } from "./common";
 
 /**
- * Toast (ADR-036), built and switched off: Toast gives API access only to approved partners, after an
+ * Toast (ADR-040), built and switched off: Toast gives API access only to approved partners, after an
  * application and a certification, as client credentials and the API hostname to call. Until whoever runs
  * the server holds them (`TOAST_CLIENT_ID`, `TOAST_CLIENT_SECRET`, `TOAST_API_HOST`), the card says "Needs
  * setup" and has nothing to press.

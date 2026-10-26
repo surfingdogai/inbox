@@ -14,7 +14,7 @@ import {
 import { formatClock } from "../lib/format";
 
 /**
- * A kitchen's order (ADR-036): each line's options and note, how and when it is collected or delivered,
+ * A kitchen's order (ADR-040): each line's options and note, how and when it is collected or delivered,
  * the tip, why it waits for a person (allergens not confirmed come first), and the kitchen's progress:
  * Start preparing, Mark ready, Out for delivery. Progress lives inside fulfilling; the order's own actions are the
  * buttons below as for any order.

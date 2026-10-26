@@ -183,7 +183,7 @@ export interface PropertyPartners {
 }
 
 /**
- * The partner apps of the food tills whoever runs the server holds (ADR-036): Toast's client and API
+ * The partner apps of the food tills whoever runs the server holds (ADR-040): Toast's client and API
  * host (`TOAST_CLIENT_ID`, `TOAST_CLIENT_SECRET`, `TOAST_API_HOST`), Lightspeed's and Clover's OAuth
  * clients (`LIGHTSPEED_CLIENT_ID`/`_SECRET`, `CLOVER_CLIENT_ID`/`_SECRET`), and Deliverect's channel
  * (`DELIVERECT_CLIENT_ID`, `DELIVERECT_CLIENT_SECRET`, `DELIVERECT_CHANNEL`, `DELIVERECT_STAGING=1`). Absent,
@@ -252,7 +252,7 @@ export function builtInConnectors(opts: ConnectorHostOptions = {}): ConnectorDef
     housecallproConnector({ cleared: opts.jobTools?.cleared?.includes("housecallpro") }),
     fergusConnector({ cleared: opts.jobTools?.cleared?.includes("fergus") }),
     jobberConnector(opts.oauth?.jobber ?? null, { apiVersion: opts.jobTools?.jobberApiVersion }),
-    // A kitchen's own systems (ADR-036): GloriaFood and Flipdish with what the owner makes in their own
+    // A kitchen's own systems (ADR-040): GloriaFood and Flipdish with what the owner makes in their own
     // account; Toast, Lightspeed, Clover and Deliverect only through the server's partner apps.
     gloriafoodConnector(),
     flipdishConnector(),

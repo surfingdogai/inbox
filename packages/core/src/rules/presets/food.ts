@@ -1,7 +1,7 @@
 import { OFFER_A_CODE, type Preset, type PresetSpec } from "./common";
 
 /**
- * Restaurants, pizzerias and takeaways (ADR-036): an order inside what the kitchen set aside (its slot
+ * Restaurants, pizzerias and takeaways (ADR-040): an order inside what the kitchen set aside (its slot
  * had room, each item within its daily cap, every allergen confirmed by a person, and the kitchen chose
  * "at once within my caps") is accepted at once; every other order, every table and every request for a
  * price (an event, catering) waits for a person. A table books at once only for covers set aside: the

@@ -37,7 +37,7 @@ import { planTable, type TablePlan, tableServiceOf } from "./tables";
 import { kitchenWords } from "./words";
 
 /**
- * Restaurants, takeaways, bakeries and cafés (ADR-036): the doors that read the menu and the slots, the
+ * Restaurants, takeaways, bakeries and cafés (ADR-040): the doors that read the menu and the slots, the
  * checks an order for a time and a table pass on the way in, and the owner's menu, allergens, sold out
  * today, tables, pause and progress. What a customer's agent is told speaks as the business.
  */

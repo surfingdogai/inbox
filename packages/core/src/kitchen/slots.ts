@@ -6,7 +6,7 @@ import type { KitchenContext } from "./context";
 import { pausedUntil } from "./settings";
 
 /**
- * Slots for orders and the places they hold (ADR-036). A kitchen's slots run inside the business's
+ * Slots for orders and the places they hold (ADR-040). A kitchen's slots run inside the business's
  * opening hours, every `slotMin` minutes, each taking `perSlot` orders through the inbox. An order
  * claims its slot as `order-slot:<location>:<start>` in `slot_claims` (the row's resource key is
  * `order-slot:<location>`, its bucket the slot's start), and the daily cap of each item it orders as

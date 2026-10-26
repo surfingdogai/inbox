@@ -1080,7 +1080,7 @@ function cutoffLines(input: CustomerMailInput, item: Extract<Item, { type: "book
 
 /**
  * An order's lines, one each with the choices made on it and its note, then (an order for a time,
- * ADR-036) how and when, the delivery fee and the tip, then the total: so the lines add up to it. A line
+ * ADR-040) how and when, the delivery fee and the tip, then the total: so the lines add up to it. A line
  * whose price is ours to set says so.
  */
 function orderLines(input: CustomerMailInput, item: Extract<Item, { type: "order" }>): string[] {

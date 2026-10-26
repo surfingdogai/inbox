@@ -82,4 +82,4 @@ Nothing to press shows a button that goes nowhere: a system that needs its partn
 
 ## Building one
 
-Every ordering system is built from its published reference and checked against a local fake of it (`packages/adapters/test/fakes/pos.ts`), never with a business's real account. Decisions: [ADR-036](https://github.com/surfingdogai/inbox/blob/main/docs/adr/036-food.md).
+Every ordering system is built from its published reference and checked against a local fake of it (`packages/adapters/test/fakes/pos.ts`), never with a business's real account. Decisions: [ADR-040](https://github.com/surfingdogai/inbox/blob/main/docs/adr/040-food.md).

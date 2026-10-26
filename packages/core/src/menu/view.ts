@@ -17,7 +17,7 @@ import { allergenView, allergenWords } from "./allergens";
 import type { MenuFields } from "./schema";
 
 /**
- * The menu as an agent reads it (`get_menu`, ADR-036): sections in the business's order, each item with
+ * The menu as an agent reads it (`get_menu`, ADR-040): sections in the business's order, each item with
  * its price, its options and what each adds, its allergens with whether a person confirmed them, its
  * dietary tags (the ones about allergens only as sure as its allergens), an age limit, the dayparts it
  * is served in, whether it is available now and whether it is sold out today. Prices are the business's.

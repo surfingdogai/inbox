@@ -37,7 +37,7 @@ export interface OfferLine {
   readonly name: string;
   readonly quantity: number;
   readonly price: Money;
-  /** A menu item's choices (ADR-036): which, by group, and the half they are on. */
+  /** A menu item's choices (ADR-040): which, by group, and the half they are on. */
   readonly options?: readonly {
     readonly groupId: string;
     readonly choiceId: string;
@@ -70,12 +70,12 @@ export interface OfferTerms {
   readonly callOutFee?: TradeTerms["callOutFee"];
   readonly visitFee?: TradeTerms["visitFee"];
   readonly tax?: TradeTerms["tax"];
-  /** An order for a time (ADR-036): how and when, the zone's fee, the tip. */
+  /** An order for a time (ADR-040): how and when, the zone's fee, the tip. */
   readonly fulfil?:
     | { readonly method: string; readonly slot?: string | undefined; readonly fee?: Money | undefined }
     | undefined;
   readonly tip?: Money | undefined;
-  /** A table's deposit (ADR-036), part of what the customer confirms. */
+  /** A table's deposit (ADR-040), part of what the customer confirms. */
   readonly deposit?: Money | undefined;
 }
 

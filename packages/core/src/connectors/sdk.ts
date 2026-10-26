@@ -426,7 +426,7 @@ export interface InboxIdentity {
   readonly name: string;
   readonly timezone: string;
   readonly language: string;
-  /** The business's currency (ISO 4217), for a till whose prices name none (ADR-036). */
+  /** The business's currency (ISO 4217), for a till whose prices name none (ADR-040). */
   readonly currency?: string | undefined;
 }
 
@@ -843,7 +843,7 @@ export interface PaymentsHandler {
   orderState?(ctx: RunContext, link: KnownLink): Promise<OrderFact | null>;
 }
 
-/** The names a platform's way back may carry beside the code, handed to `OAuthFlow.exchange` (ADR-036). */
+/** The names a platform's way back may carry beside the code, handed to `OAuthFlow.exchange` (ADR-040). */
 export const RETURNED_PARAMS = ["merchant_id"] as const;
 
 export interface OAuthClient {
@@ -884,7 +884,7 @@ export interface OAuthFlow {
       readonly input?: Readonly<Record<string, string>> | undefined;
       /**
        * What the platform named on the way back beside the code, for one whose token says nothing of
-       * the account it is for (Clover's `merchant_id`, ADR-036). Only names in `RETURNED_PARAMS`.
+       * the account it is for (Clover's `merchant_id`, ADR-040). Only names in `RETURNED_PARAMS`.
        */
       readonly returned?: Readonly<Record<string, string>> | undefined;
     },
@@ -972,12 +972,12 @@ export type HookFact =
   /** Read busy times again now. */
   | { readonly kind: "busy" }
   /**
-   * Read the connection again now (ADR-036): a till's word that an order moved, an ordering system's
+   * Read the connection again now (ADR-040): a till's word that an order moved, an ordering system's
    * that an order came in. The sync reads it back with the business's key; the body is never kept.
    */
   | { readonly kind: "sync" }
   /**
-   * A channel's signed word that an order it was given moved (ADR-036: Deliverect's order status, its
+   * A channel's signed word that an order it was given moved (ADR-040: Deliverect's order status, its
    * HMAC checked over the exact bytes): the order's id there, as `OrdersWriter.put` answered it, and
    * where it stands. Only for a platform that offers no read-back; the order must be one this
    * connection was written.
@@ -1131,7 +1131,7 @@ export interface SetupReader {
   read(ctx: RunContext): Promise<SetupSnapshot>;
 }
 
-/* --- points of sale and ordering (ADR-036) ---------------------------------- */
+/* --- points of sale and ordering (ADR-040) ---------------------------------- */
 
 /**
  * An accepted order as a till or an ordering channel takes it (`orders_out`): what the kitchen needs and
@@ -1350,11 +1350,11 @@ export interface ConnectorDefinition {
   readonly requests?: RequestsWriter | undefined;
   /** Services, staff and hours to start from (`setup_in`; a job tool's opening hours, ADR-039). */
   readonly setup?: SetupReader | undefined;
-  /** Accepted orders into a till or a channel, and their word back (`orders_out`, `status_in`; ADR-036). */
+  /** Accepted orders into a till or a channel, and their word back (`orders_out`, `status_in`; ADR-040). */
   readonly orders?: OrdersWriter | undefined;
-  /** Orders taken in the business's own ordering system, for the owner's view only (ADR-036). */
+  /** Orders taken in the business's own ordering system, for the owner's view only (ADR-040). */
   readonly elsewhere?: ElsewhereOrdersReader | undefined;
-  /** Pausing the business's ordering system with the kitchen (ADR-036). */
+  /** Pausing the business's ordering system with the kitchen (ADR-040). */
   readonly pause?: PauseWriter | undefined;
 }
 

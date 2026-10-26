@@ -12,7 +12,7 @@ import { z } from "zod";
 import { clientToken, failOn, jsonOf, minorOf, short, snapshotItem } from "./common";
 
 /**
- * Flipdish (ADR-036), with an OAuth app the restaurant makes in its own Flipdish account: portal →
+ * Flipdish (ADR-040), with an OAuth app the restaurant makes in its own Flipdish account: portal →
  * Developer tools → OAuth apps → Add New; its Client ID and Secret Key are pasted here, and the inbox
  * asks Flipdish for a token with them each time (`client_credentials`, scope `api`), keeping no token.
  *

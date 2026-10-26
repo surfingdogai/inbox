@@ -187,7 +187,7 @@ describe("Settings → Integrations", () => {
       ["shopify", "ready"],
       // A trade's job tool (ADR-039): ServiceM8 with the owner's own key.
       ["job_tool", "ready"],
-      // A kitchen's ordering system and till (ADR-036): GloriaFood and Flipdish with the owner's own keys.
+      // A kitchen's ordering system and till (ADR-040): GloriaFood and Flipdish with the owner's own keys.
       ["pos", "ready"],
     ]);
     const tools = body.cards.find((c) => c.id === "job_tool");
