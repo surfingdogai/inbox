@@ -416,9 +416,9 @@ export const MIGRATIONS: readonly Migration[] = [
   },
   {
     version: 28,
-    name: "0024_connectors_base",
+    name: "0027_connectors_base",
     statements: [
-      "-- Connectors: the shared base (ADR-026). The columns the shop, booking and calendar-link connectors\n-- share; nothing that exists changes meaning, and an inbox that connects none of them writes nothing\n-- new here.\n--\n-- A connection's own address: `connectors.inbound_token` (since 0003) keeps the SHA-256 of the\n-- unguessable segment of `POST /v1/hooks/<kind>/<token>` and `GET /v1/feeds/<kind>/<token>`, so a\n-- request reaches one connection and the database never holds what opens it; `inbound_enc` keeps the\n-- segment sealed by the secret box, for the connector to name its address with and the owner to see\n-- a link again.\nALTER TABLE `connectors` ADD `inbound_enc` text;",
+      "-- Connectors: the shared base (ADR-030). The columns the shop, booking and calendar-link connectors\n-- share; nothing that exists changes meaning, and an inbox that connects none of them writes nothing\n-- new here.\n--\n-- A connection's own address: `connectors.inbound_token` (since 0003) keeps the SHA-256 of the\n-- unguessable segment of `POST /v1/hooks/<kind>/<token>` and `GET /v1/feeds/<kind>/<token>`, so a\n-- request reaches one connection and the database never holds what opens it; `inbound_enc` keeps the\n-- segment sealed by the secret box, for the connector to name its address with and the owner to see\n-- a link again.\nALTER TABLE `connectors` ADD `inbound_enc` text;",
       "-- A sign-in that asks something first (a store's address) keeps it for the way back, and a platform\n-- that POSTs the key itself (WooCommerce's authorize endpoint) leaves the connection it made, or what\n-- went wrong, for the owner's browser to find when it returns.\nALTER TABLE `connector_auth` ADD `input` text;",
       "ALTER TABLE `connector_auth` ADD `connector_id` text;",
       "ALTER TABLE `connector_auth` ADD `message` text;",

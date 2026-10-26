@@ -4,7 +4,7 @@ import { builtInConnectors, hmacSha256Base64, verifyBase64Hmac, verifyHexHmac } 
 import { fakePlatform, json } from "./fakes/platform";
 
 /**
- * What every connector track leans on in this package (ADR-026): the webhook signature helpers, the
+ * What every connector track leans on in this package (ADR-030): the webhook signature helpers, the
  * fake platform tests run against (the inbox's own connector client over it, every production check
  * on), and the host's options for the connectors it offers.
  */

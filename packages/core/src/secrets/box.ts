@@ -25,7 +25,7 @@ const decoder = new TextDecoder();
 /** One derived key per purpose, so a connector config is never opened as a webhook secret. */
 export type SecretPurpose =
   | "connector-config"
-  /** A connection's own address segment (ADR-026 §4, §5): its webhooks' address, the link it serves. */
+  /** A connection's own address segment (ADR-030 §4, §5): its webhooks' address, the link it serves. */
   | "connector-inbound"
   | "webhook-secret"
   | "webhook-headers"

@@ -15,7 +15,7 @@ import { z } from "zod";
 import { type FakePlatform, fakePlatform, json } from "../../../packages/adapters/test/fakes/platform";
 
 /**
- * A made-up shop platform for the shared base's tests (ADR-026): a store with an API key, a paged
+ * A made-up shop platform for the shared base's tests (ADR-030): a store with an API key, a paged
  * catalogue, orders paid at its own checkout, signed webhooks and a key it can hand over itself. It is
  * no real platform and copies none: each track proves its own platform against fixtures written from
  * that platform's documentation. This one proves what every shop connector leans on: the catalogue

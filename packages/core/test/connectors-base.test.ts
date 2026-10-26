@@ -18,7 +18,7 @@ import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { makeClient, resetTables } from "./harness";
 
 /**
- * The connectors' shared base (ADR-026), piece by piece: the one catalogue upsert feeds and shops
+ * The connectors' shared base (ADR-030), piece by piece: the one catalogue upsert feeds and shops
  * share, the honest gallery, the order as a shop is told it, and a connection's own address. The end
  * to end is in apps/inbox/test/connectors-base.test.ts.
  */

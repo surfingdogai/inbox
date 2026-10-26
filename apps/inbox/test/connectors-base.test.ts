@@ -9,7 +9,7 @@ import { confirmed, freshDb } from "./harness";
 import { stripePlatform } from "./pay-platforms";
 
 /**
- * The connectors' shared base (ADR-026), end to end through the doors an owner, a customer's agent and
+ * The connectors' shared base (ADR-030), end to end through the doors an owner, a customer's agent and
  * a shop use, with a made-up shop (`fake-shop.ts`): a bakery in Nairobi that sells in shillings.
  * Connected with its key, its catalogue comes in by the one upsert feeds share; an order the owner
  * accepts is written into the shop and paid at the shop's own checkout, but only when the shop's total

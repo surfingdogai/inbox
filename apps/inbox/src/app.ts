@@ -179,7 +179,7 @@ export interface AppDeps {
   readonly pushRegistrar?: RelayRegistrar | undefined;
   /**
    * The Google client is still in Google's Testing mode (GOOGLE_OAUTH_TESTING=1): only its test users
-   * can sign in, so Google says "Soon" rather than offering a sign-in that fails (ADR-026 §6).
+   * can sign in, so Google says "Soon" rather than offering a sign-in that fails (ADR-030 §6).
    */
   readonly googleTesting?: boolean | undefined;
   /**
@@ -323,7 +323,7 @@ export function createInbox(deps: AppDeps): Inbox {
     .register(CONNECTOR_SYNC_KIND, connectorSyncHandler(caps.connectors), { lane: connectorLane })
     .register(CONNECTOR_PUSH_KIND, connectorPushHandler(caps.connectors), { lane: connectorLane })
     .register(CONNECTOR_NOTICE_KIND, connectorNoticeHandler(caps.connectors, mailOut, { baseUrl: deps.baseUrl }))
-    // What a platform's webhook named, read back with the business's key (ADR-026 §4), and a shop's
+    // What a platform's webhook named, read back with the business's key (ADR-030 §4), and a shop's
     // catalogue read on its own: in the connection's lane, so neither meets its sync.
     .register(CONNECTOR_HOOK_KIND, connectorHookHandler(caps.connectors.hooks), { lane: connectorLane })
     .register(CONNECTOR_CATALOGUE_KIND, connectorCatalogueHandler(caps.connectors), { lane: connectorLane })

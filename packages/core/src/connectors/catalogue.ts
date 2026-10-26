@@ -13,7 +13,7 @@ import { ulid } from "../ids";
 import { products } from "../schema/tables";
 
 /**
- * The catalogue a feed or a shop sends in (ADR-015 §7.3, ADR-026 §3), written by one function so a
+ * The catalogue a feed or a shop sends in (ADR-015 §7.3, ADR-030 §3), written by one function so a
  * product feed and a shop connector keep the same rules:
  *
  * - **Upsert on `(source, external_id)`.** A source is the account the products come from (a feed's
@@ -59,7 +59,7 @@ export const MAX_CATALOGUE = 5_000;
 
 /**
  * The SKU the inbox puts on an order line that is the shop's own charges (tax, delivery as the shop
- * counts them), which the customer accepted with the shop's total (ADR-026 §2). No source writes it.
+ * counts them), which the customer accepted with the shop's total (ADR-030 §2). No source writes it.
  */
 export const SHOP_CHARGES_SKU = "_shop_charges";
 

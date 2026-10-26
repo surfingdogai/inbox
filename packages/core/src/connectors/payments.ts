@@ -56,7 +56,7 @@ import { shopOrderOf } from "./shop";
  *   asked for again on every event, nor told to the owner twice; a new total, connection or currency,
  *   or the owner asking for payment, tries again.
  * - **The owner's own link stays theirs**: an order whose payment link the owner set is left alone.
- * - **A shop's total is the customer's, or nothing is sent** (ADR-026 §2): an order written into the
+ * - **A shop's total is the customer's, or nothing is sent** (ADR-030 §2): an order written into the
  *   business's own shop whose total the shop makes another (tax or delivery it adds itself) is held,
  *   never sent, and the owner is offered to propose the shop's total, which the customer accepts or
  *   not. Nobody is ever charged more than they accepted without a word.
@@ -104,7 +104,7 @@ interface PayRow {
   readonly createdAt: number;
   readonly paidAt: number | null;
   readonly closedAt: number | null;
-  /** What a shop said it comes to (ADR-026 §2), when it said. */
+  /** What a shop said it comes to (ADR-030 §2), when it said. */
   readonly shopTotal: number | null;
   readonly shopCurrency: string | null;
 }
@@ -161,7 +161,7 @@ export interface PayConnection {
   readonly payments: PaymentsHandler;
   readonly ctx: RunContext;
   /**
-   * A shop or till (capability `shop_orders`, ADR-026 §2): its orders are written into it, told the
+   * A shop or till (capability `shop_orders`, ADR-030 §2): its orders are written into it, told the
    * order (`PayLinkRequest.order`), and what it says the order comes to is checked. `source` is where
    * its products come from, so a line names the shop's own product.
    */
@@ -211,7 +211,7 @@ export interface PaymentView {
   readonly created_at: number;
   readonly closed_at: number | null;
   /**
-   * What the shop says the order comes to, when it is not what the customer accepted (ADR-026 §2): the
+   * What the shop says the order comes to, when it is not what the customer accepted (ADR-030 §2): the
    * link is held, and `propose` says whether the owner can propose it (it is more; a lower one is for
    * the owner to look into in the shop).
    */
@@ -611,7 +611,7 @@ export class PaymentLinks {
         hookUrl,
         ...(shopOrder ? { order: shopOrder } : {}),
       });
-      // The shop's total is the customer's, or the link is not sent (ADR-026 §2): the tax or delivery a
+      // The shop's total is the customer's, or the link is not sent (ADR-030 §2): the tax or delivery a
       // shop adds itself is the owner's to propose, never a higher charge the customer did not accept.
       const shopTotal = link.total;
       if (shopTotal && (shopTotal.value !== row.amount || shopTotal.currency.toUpperCase() !== row.currency)) {
@@ -1122,7 +1122,7 @@ export class PaymentLinks {
     return { done: true, itemId: row.itemId };
   }
 
-  /* --- what a shop says became of an order (ADR-026 §2) -------------------------------- */
+  /* --- what a shop says became of an order (ADR-030 §2) -------------------------------- */
 
   /**
    * A shop's word on an order it made for the inbox, read back with the business's key: fulfilled
@@ -1226,7 +1226,7 @@ export class PaymentLinks {
   }
 
   /**
-   * What "Propose the shop's total" proposes (ADR-026 §2): the order's lines as they are, and one line
+   * What "Propose the shop's total" proposes (ADR-030 §2): the order's lines as they are, and one line
    * for what the shop adds (its tax or delivery), so the total is the shop's. The owner sends it as a
    * change the customer accepts or not (ADR-018 §3.2); the shop is told only the product lines, and adds
    * the rest itself. Null when the order has no held link the owner can propose a total for.
@@ -1376,7 +1376,7 @@ export class PaymentLinks {
         await this.checked(r.id, now);
       }
     }
-    // A shop's orders (ADR-026 §2): what became of the ones waiting, and of the paid ones until they end.
+    // A shop's orders (ADR-030 §2): what became of the ones waiting, and of the paid ones until they end.
     if (conn.payments.orderState && calls < CHECKS_PER_RUN) {
       calls += await this.orderStates(conn, now, CHECKS_PER_RUN - calls);
     }
@@ -1804,7 +1804,7 @@ export type PayNoticeReason =
   | "amount_differs"
   | "link_failed"
   | "disconnected"
-  /** A shop counts another total than the customer accepted: the link was not sent (ADR-026 §2). */
+  /** A shop counts another total than the customer accepted: the link was not sent (ADR-030 §2). */
   | "shop_total"
   /** A shop cancelled an order it made for the inbox, unpaid: the link is closed, the order is the owner's. */
   | "shop_cancelled";

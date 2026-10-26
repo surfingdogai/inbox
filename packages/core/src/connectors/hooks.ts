@@ -16,7 +16,7 @@ import {
 } from "./sdk";
 
 /**
- * What platforms send a connection at its own address (ADR-026 §4), and the links a connection serves
+ * What platforms send a connection at its own address (ADR-030 §4), and the links a connection serves
  * (§5). The rules that shape it:
  *
  * - **One connection per address.** `POST /v1/hooks/<kind>/<token>` names one connection by the hash of
@@ -258,7 +258,7 @@ function eventOf(eventId: string, raw: unknown): HookEvent {
 
 const NOT_FOUND: HookAnswer = { status: 404, body: { error: "not_found" } };
 
-/* --- links a connection serves (ADR-026 §5) -------------------------------------------------- */
+/* --- links a connection serves (ADR-030 §5) -------------------------------------------------- */
 
 /**
  * Confirmed bookings overlapping a window, as a link may show them: times and the service's name,

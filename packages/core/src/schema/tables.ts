@@ -151,7 +151,7 @@ export const products = sqliteTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     /**
-     * When its source last sent it in (0024, ADR-026 §3): a complete pass of a feed or a shop takes off
+     * When its source last sent it in (0027, ADR-030 §3): a complete pass of a feed or a shop takes off
      * sale what it did not see. Null for a product somebody typed in.
      */
     seenAt: integer("seen_at"),
@@ -792,11 +792,11 @@ export const connectors = sqliteTable(
     /** Where the last sync got to. Written only by sync jobs, so one never overwrites an owner edit. */
     cursor: text("cursor"),
     /**
-     * The SHA-256 of the unguessable path segment of this connector's own address (ADR-026 §4, §5):
+     * The SHA-256 of the unguessable path segment of this connector's own address (ADR-030 §4, §5):
      * `POST /v1/hooks/<kind>/<token>` for its webhooks, `GET /v1/feeds/<kind>/<token>` for a link it serves.
      */
     inboundToken: text("inbound_token"),
-    /** That segment, sealed by the secret box (0024): the connector names its address with it, the owner sees a link again. */
+    /** That segment, sealed by the secret box (0027): the connector names its address with it, the owner sees a link again. */
     inboundEnc: text("inbound_enc"),
     /** `configured` | `active` | `error` | `disabled`. */
     status: text("status").notNull().default("configured"),
@@ -893,7 +893,7 @@ export const connectorAuth = sqliteTable("connector_auth", {
   createdAt: createdAt(),
   expiresAt: integer("expires_at").notNull(),
   usedAt: integer("used_at"),
-  /** What was asked before the owner went to the platform (0024, ADR-026 §5): a store's address, as JSON. */
+  /** What was asked before the owner went to the platform (0027, ADR-030 §5): a store's address, as JSON. */
   input: text("input"),
   /** For a platform that POSTs the key itself: the connection it made, and what went wrong if it did not. */
   connectorId: text("connector_id"),
@@ -902,7 +902,7 @@ export const connectorAuth = sqliteTable("connector_auth", {
 
 /**
  * A link an order was given to pay in the business's own Stripe or Mollie account, or its own shop's
- * checkout (0023, ADR-023, ADR-026): what it asks for, where the customer pays, and what the platform
+ * checkout (0023, ADR-023, ADR-030): what it asks for, where the customer pays, and what the platform
  * said. At most one per order is live (`creating`, `open`, `held`: made in the shop, not sent, its
  * total not the one the customer accepted); `paid`, `failed` and `closed` are history, kept after a
  * disconnect, since a paid one is where the money went and where it is refunded. `state`: `creating` |
@@ -945,7 +945,7 @@ export const connectorPayments = sqliteTable(
     paidAt: integer("paid_at"),
     closedAt: integer("closed_at"),
     /**
-     * What a shop said the order comes to, with the tax or delivery it adds itself (0024, ADR-026 §2):
+     * What a shop said the order comes to, with the tax or delivery it adds itself (0027, ADR-030 §2):
      * a link whose shop total is not what the customer accepted is `held`, never sent.
      */
     shopTotal: integer("shop_total"),

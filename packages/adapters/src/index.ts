@@ -295,7 +295,7 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
         }),
       );
     }
-    // What a payment platform or a shop sends (ADR-023, ADR-026) is checked by its own signature, or
+    // What a payment platform or a shop sends (ADR-023, ADR-030) is checked by its own signature, or
     // read back from the platform, and a link a connection serves is opened by its token alone: neither
     // is anybody's caller. Each takes a token from the flood guard and goes straight on.
     if (c.req.path.startsWith("/v1/hooks/") || c.req.path.startsWith("/v1/feeds/")) {
@@ -515,7 +515,7 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
   // 503 when the platform could not be asked back, or the link was asked about a moment ago (it
   // sends it again).
   // A platform that POSTs the owner's key itself, server to server (WooCommerce's authorize endpoint,
-  // ADR-026 §5): the state it carries is the proof, used once; the key is checked against the platform
+  // ADR-030 §5): the state it carries is the proof, used once; the key is checked against the platform
   // before it is kept. Registered before the connection addresses below, which it would otherwise match.
   app.post("/v1/hooks/:kind/authorized", async (c) => {
     const kind = String(c.req.param("kind"));
@@ -529,7 +529,7 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
     );
     return c.json(r.body, r.status, { "cache-control": "no-store" });
   });
-  // What a platform tells one connection at its own address (ADR-026 §4): the token names the
+  // What a platform tells one connection at its own address (ADR-030 §4): the token names the
   // connection, its signature is checked over the exact bytes, and only ids are kept; the platform is
   // answered at once, and what the event names is read back with the business's key by a job.
   app.post("/v1/hooks/:kind/:token", async (c) => {
@@ -547,7 +547,7 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
     );
     return c.json(r.body, r.status, { "cache-control": "no-store" });
   });
-  // A link a connection serves (ADR-026 §5): a calendar of confirmed bookings another platform imports.
+  // A link a connection serves (ADR-030 §5): a calendar of confirmed bookings another platform imports.
   // Opened by its token alone, never indexed, and it shows only what the connector says a link may.
   app.get("/v1/feeds/:kind/:file", async (c) => {
     const kind = String(c.req.param("kind"));

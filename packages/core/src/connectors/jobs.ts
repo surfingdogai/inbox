@@ -33,7 +33,7 @@ export function connectorSyncHandler(connectors: ConnectorCapabilities): JobHand
 }
 
 /**
- * A shop's catalogue read on its own (ADR-026 §3): after a webhook said products changed, and to go on
+ * A shop's catalogue read on its own (ADR-030 §3): after a webhook said products changed, and to go on
  * with a pass that has more pages. In its connection's lane, so it never meets a sync reading the same.
  */
 export function connectorCatalogueHandler(connectors: ConnectorCapabilities): JobHandler {
@@ -73,7 +73,7 @@ export function connectorNoticeHandler(
     const facts = await businessFacts(db, settings);
     const sender = senderOf(settings, { transport: mailOut, publicUrl, business: facts.name });
     let logged = await mailByJob(db, job.id);
-    // A shop with more products than one connection takes (ADR-026 §3): said once.
+    // A shop with more products than one connection takes (ADR-030 §3): said once.
     if (!logged && payload?.reason === "catalogue_cap") {
       const shop = await connectors.cappedNotice(id);
       if (!shop) return { note: `connection ${id}: nothing to tell` };

@@ -27,14 +27,14 @@ export type ConnectorCapability =
    */
   | "pay_links"
   /**
-   * The platform's products come into the inbox's catalogue (ADR-026 §3): read in pages, a full pass
+   * The platform's products come into the inbox's catalogue (ADR-030 §3): read in pages, a full pass
    * every six hours and what changed every five minutes, deactivated (never deleted) when a full pass
    * no longer sees them. The owner's own fields (withdrawal, negotiable) are never written.
    */
   | "catalogue"
   /**
    * Orders the inbox accepts are written into the business's own shop or till and paid at its own
-   * checkout (ADR-026 §2): the connector is the payment platform for its orders, so it rides on
+   * checkout (ADR-030 §2): the connector is the payment platform for its orders, so it rides on
    * `pay_links`, and its `createLink` is given the order (`PayLinkRequest.order`).
    */
   | "shop_orders";
@@ -42,7 +42,7 @@ export type ConnectorCapability =
 export type ConnectorGroup = "calendars" | "payments" | "shops";
 
 /**
- * How the owner connects (ADR-026 §5): `form`, they fill in `form` (a key, an app password); `oauth`,
+ * How the owner connects (ADR-030 §5): `form`, they fill in `form` (a key, an app password); `oauth`,
  * they approve a page on the platform, or on their own store (`OAuthFlow.delivery`); `link`, nothing
  * to sign in to: the inbox makes a private link the owner pastes into another platform.
  */
@@ -125,7 +125,7 @@ export interface ConnectorPreset {
   readonly fields?: Readonly<Record<string, Partial<FieldHints>>> | undefined;
   readonly note?: string | undefined;
   /**
-   * A way that connects otherwise than the definition (ADR-026 §5): a shop connected by approving a
+   * A way that connects otherwise than the definition (ADR-030 §5): a shop connected by approving a
    * page on the store, with a way to paste its keys instead (`form`), or a key with a one-click
    * sign-in beside it (`oauth`) that needs the platform app of whoever runs the server.
    */
@@ -305,7 +305,7 @@ export interface Connected {
    */
   readonly settle?: ((kept: boolean) => Promise<void>) | undefined;
   /**
-   * What else the owner chooses once connected (ADR-026 §5), each drawn by the owner app as a chooser,
+   * What else the owner chooses once connected (ADR-030 §5), each drawn by the owner app as a chooser,
    * never a typed id: a till's location, a team member bookings go to. `value` is the default until
    * the owner chooses; a sync's `refresh` may send the options again, and a value still among them
    * is kept.
@@ -350,7 +350,7 @@ export interface ConnectContext {
   /**
    * Where the platform sends what it tells this inbox, on the inbox's own public address; null when
    * the inbox does not know its address (no INBOX_PUBLIC_URL, nor an Inbox address in Settings). A
-   * connector with `hooks` (ADR-026 §4) is given its connection's own address,
+   * connector with `hooks` (ADR-030 §4) is given its connection's own address,
    * `POST /v1/hooks/<kind>/<token>`, made for it when it is first connected and kept after; a payment
    * platform without, the kind's (`POST /v1/hooks/<kind>`, ADR-023).
    */
@@ -480,7 +480,7 @@ export interface PayLinkRequest {
   /** Where the platform says a payment changed, for platforms told per link (Mollie). */
   readonly hookUrl: string;
   /**
-   * For a connector with `shop_orders` only (ADR-026 §2): the order as the shop needs it to make and
+   * For a connector with `shop_orders` only (ADR-030 §2): the order as the shop needs it to make and
    * fulfil it. Absent for a payment platform, which is told only what to ask for.
    */
   readonly order?: ShopOrder | undefined;
@@ -492,7 +492,7 @@ export interface PayLink {
   /** Where the customer pays. */
   readonly url: string;
   /**
-   * What the shop says the order comes to, with the tax or delivery it adds itself (ADR-026 §2). When it
+   * What the shop says the order comes to, with the tax or delivery it adds itself (ADR-030 §2). When it
    * is not what the customer accepted (`PayLinkRequest.amount`), the link is held, never sent: the
    * owner is offered to propose the shop's total, which the customer then accepts or not.
    */
@@ -523,7 +523,7 @@ export interface ShopOrderLine {
 }
 
 /**
- * What a shop needs to make and fulfil an order the inbox accepted (ADR-026 §2), given to `createLink`
+ * What a shop needs to make and fulfil an order the inbox accepted (ADR-030 §2), given to `createLink`
  * of a connector with `shop_orders`. The customer's details go to the business's own shop, which is the
  * same business, and to no one else; only what fulfilling needs.
  */
@@ -669,7 +669,7 @@ export interface OAuthClient {
 
 export interface OAuthFlow {
   /**
-   * What is asked before the owner goes to the platform (ADR-026 §5): a store's address, prefilled
+   * What is asked before the owner goes to the platform (ADR-030 §5): a store's address, prefilled
    * from the business's website (`FieldHints.prefill`). Drawn like a form; its values are `input`.
    */
   readonly before?: z.ZodObject | undefined;
@@ -716,7 +716,7 @@ export interface OAuthFlow {
   ): Promise<Connected>;
 }
 
-/* --- the catalogue (ADR-026 §3) -------------------------------------------- */
+/* --- the catalogue (ADR-030 §3) -------------------------------------------- */
 
 /** One sellable unit as a shop sends it in: a simple product, or one variation of a product. */
 export interface CatalogueProduct {
@@ -745,7 +745,7 @@ export interface CatalogueReader {
   ): Promise<{ readonly products: readonly CatalogueProduct[]; readonly cursor: string | null }>;
 }
 
-/* --- webhooks a platform sends (ADR-026 §4) -------------------------------- */
+/* --- webhooks a platform sends (ADR-030 §4) -------------------------------- */
 
 /** What a platform's signed request named, once its signature checked out: ids and a topic, never the body. */
 export interface HookEvent {
@@ -784,7 +784,7 @@ export interface HooksHandler {
   read(ctx: RunContext, event: HookEvent): Promise<readonly HookFact[]>;
 }
 
-/* --- links the inbox serves (ADR-026 §5) ----------------------------------- */
+/* --- links the inbox serves (ADR-030 §5) ----------------------------------- */
 
 /** A confirmed booking as a feed may show it: times and the service's name, never who booked. */
 export interface FeedBooking {
@@ -901,11 +901,11 @@ export interface ConnectorDefinition {
   readonly hookEvents?: readonly string[] | undefined;
   /** Gives the access back on the platform, as the connection goes (best effort). */
   disconnect?(ctx: RunContext): Promise<void>;
-  /** Products into the inbox's catalogue (capability `catalogue`, ADR-026 §3). */
+  /** Products into the inbox's catalogue (capability `catalogue`, ADR-030 §3). */
   readonly catalogue?: CatalogueReader | undefined;
-  /** Webhooks the platform sends to the connection's own address (ADR-026 §4). */
+  /** Webhooks the platform sends to the connection's own address (ADR-030 §4). */
   readonly hooks?: HooksHandler | undefined;
-  /** A link the inbox serves for the connection (`auth: "link"`, ADR-026 §5). */
+  /** A link the inbox serves for the connection (`auth: "link"`, ADR-030 §5). */
   readonly feed?: FeedServer | undefined;
 }
 

@@ -88,7 +88,7 @@ export const CONNECTOR_SYNC_KIND = "connector_sync";
 export const CONNECTOR_PUSH_KIND = "connector_push";
 /** The one email to the owner that a connection stopped syncing. */
 export const CONNECTOR_NOTICE_KIND = "connector_notice";
-/** A shop's catalogue read on its own (ADR-026 §3): on a webhook, and to go on with a pass that has more. */
+/** A shop's catalogue read on its own (ADR-030 §3): on a webhook, and to go on with a pass that has more. */
 export const CONNECTOR_CATALOGUE_KIND = "connector_catalogue";
 /** Busy times are read this often; a booking event writes out at once. */
 export const CONNECTOR_SYNC_INTERVAL_MS = 5 * 60_000;
@@ -122,7 +122,7 @@ const CATALOGUE_PAGES_PER_RUN = 10;
 const CATALOGUE_LOOKBACK_MS = 2 * 60_000;
 
 /**
- * Where a connection's catalogue reading is (ADR-026 §3): a full pass under way (its page, when it
+ * Where a connection's catalogue reading is (ADR-030 §3): a full pass under way (its page, when it
  * began, how many it saw), when the last one ended, and from when what changed is read next.
  */
 export interface CatalogueState {
@@ -167,9 +167,9 @@ export interface PublicConfig {
    */
   readonly disconnectingAt: number | null;
   readonly disconnectTries: number;
-  /** What else the owner chooses (a till's location), with what is chosen (ADR-026 §5). */
+  /** What else the owner chooses (a till's location), with what is chosen (ADR-030 §5). */
   readonly choices: readonly ConnectionChoice[];
-  /** A shop's catalogue reading (ADR-026 §3); null for a connection that sends none. */
+  /** A shop's catalogue reading (ADR-030 §3); null for a connection that sends none. */
   readonly catalogue: CatalogueState | null;
 }
 
@@ -228,7 +228,7 @@ export interface ConnectionView {
     /** Being disconnected: its links are being switched off, and how many are left. */
     readonly disconnecting: boolean;
     readonly closing: number;
-    /** A shop's orders made but not sent, since it counts another total (ADR-026 §2). */
+    /** A shop's orders made but not sent, since it counts another total (ADR-030 §2). */
     readonly held: number;
   } | null;
   /** The gallery card it belongs to. */
@@ -318,7 +318,7 @@ interface ConnectorRow {
   readonly failingSince: number | null;
   readonly failures: number;
   readonly notifiedAt: number | null;
-  /** The connection's own address segment, sealed (ADR-026 §4): null for one that has none. */
+  /** The connection's own address segment, sealed (ADR-030 §4): null for one that has none. */
   readonly inboundEnc: string | null;
 }
 
@@ -345,7 +345,7 @@ export class ConnectorCapabilities {
    * answers only its owner (its host says so through the policy).
    */
   private hooksLive = true;
-  /** What platforms send a connection at its own address (ADR-026 §4). */
+  /** What platforms send a connection at its own address (ADR-030 §4). */
   readonly hooks: ConnectorHooks;
 
   constructor(
@@ -757,7 +757,7 @@ export class ConnectorCapabilities {
   }
 
   /**
-   * A platform that POSTs the key itself, server to server (WooCommerce's authorize endpoint, ADR-026
+   * A platform that POSTs the key itself, server to server (WooCommerce's authorize endpoint, ADR-030
    * §5): `POST /v1/hooks/<kind>/authorized`. The state it carries is the proof, as on a way back: minted
    * for this inbox, used once, gone in ten minutes. The key is checked against the platform before it is
    * kept, and the connection it makes waits on the sign-in for the owner's browser to find.
@@ -826,13 +826,13 @@ export class ConnectorCapabilities {
     }
   }
 
-  /** What a platform sent a connection at its own address (ADR-026 §4): checked, kept, read back later. */
+  /** What a platform sent a connection at its own address (ADR-030 §4): checked, kept, read back later. */
   receiveHook(kind: string, token: string, request: InboundRequest, now: number): Promise<HookAnswer> {
     return this.hooks.receive(kind, token, request, now);
   }
 
   /**
-   * A link a connection serves (ADR-026 §5): `GET /v1/feeds/<kind>/<token><extension>`. Whoever holds
+   * A link a connection serves (ADR-030 §5): `GET /v1/feeds/<kind>/<token><extension>`. Whoever holds
    * the link reads it, so the token is all it takes, and it shows only what the connector says a link
    * may (dates and service names for a calendar). Null when the address names nothing here.
    */
@@ -890,7 +890,7 @@ export class ConnectorCapabilities {
   }
 
   /**
-   * "Propose the shop's total" (ADR-026 §2): an order whose link is held, since the shop counts its
+   * "Propose the shop's total" (ADR-030 §2): an order whose link is held, since the shop counts its
    * tax or delivery on top, is offered to the customer at the shop's total, as a change they accept or
    * not (ADR-018 §3.2). Money is the owner's: in person only.
    */
@@ -1246,7 +1246,7 @@ export class ConnectorCapabilities {
         // Switched off while a sync was reading: whatever it left is taken away again.
         await this.db.batch(clearBusyStatements(row.id));
       }
-      // A shop's products (ADR-026 §3): a full pass now and then, what changed on every sync.
+      // A shop's products (ADR-030 §3): a full pass now and then, what changed on every sync.
       if (def.catalogue && def.capabilities.includes("catalogue") && row.externalId) {
         const read = await this.readCatalogue(row, def, ctx, now);
         catalogueNote = `, ${read.read} product${read.read === 1 ? "" : "s"} read${read.more ? " (more next time)" : ""}`;
@@ -1344,7 +1344,7 @@ export class ConnectorCapabilities {
   }
 
   /**
-   * One reading of a shop's catalogue (ADR-026 §3), within a budget of pages: a full pass every six
+   * One reading of a shop's catalogue (ADR-030 §3), within a budget of pages: a full pass every six
    * hours (or first), what changed since the last read otherwise. Each page is written as it comes, by
    * the one upsert feeds share; a full pass that ends takes off sale what it did not see, unless it
    * stopped at `MAX_CATALOGUE`, when the owner is told once. Where it got to is kept on the connection,
@@ -1736,7 +1736,7 @@ export class ConnectorCapabilities {
   }
 
   /**
-   * The address segment a connection is reached at (ADR-026 §4, §5), for a connector told by webhook at
+   * The address segment a connection is reached at (ADR-030 §4, §5), for a connector told by webhook at
    * its own address or one that serves a link: the one it has, when it is connected again in place, or a
    * new one. Null for a connector that needs none.
    */
@@ -1807,7 +1807,7 @@ export class ConnectorCapabilities {
       inputs: inputs ?? {},
       payOn: def.capabilities.includes("pay_links"),
       // A connection that takes payments has a mode: a shop that says none takes real orders, and is
-      // then the one connection that makes their links (ADR-023 §1, ADR-026 §2).
+      // then the one connection that makes their links (ADR-023 §1, ADR-030 §2).
       mode: connected.mode ?? (def.capabilities.includes("pay_links") ? "live" : null),
       disconnectingAt: null,
       disconnectTries: 0,

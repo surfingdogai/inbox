@@ -104,7 +104,7 @@ async function idOf(url: string): Promise<string> {
 }
 
 /**
- * Outlook, as the calendar card names it (ADR-026 §6): the link Outlook publishes for a calendar, with
+ * Outlook, as the calendar card names it (ADR-030 §6): the link Outlook publishes for a calendar, with
  * Outlook's own steps. Busy times only, which is what Outlook offers without a Microsoft app of ours.
  */
 export const ICS_PRESETS: NonNullable<ConnectorDefinition["presets"]> = [

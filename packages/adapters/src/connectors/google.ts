@@ -101,7 +101,7 @@ export interface GoogleOptions {
   /**
    * The client is still in Google's Testing mode (`GOOGLE_OAUTH_TESTING=1`): Google lets only its test
    * users sign in, so for everyone else the button would end on Google's "access blocked". "Soon" until
-   * Google has verified the app (ADR-026 §6).
+   * Google has verified the app (ADR-030 §6).
    */
   readonly testing?: boolean | undefined;
 }

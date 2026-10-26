@@ -370,7 +370,7 @@ export interface ConnectionPatch {
   readonly paused?: boolean;
   /** A payment platform: accepted orders get a link to pay (ADR-023). */
   readonly pay_on?: boolean;
-  /** What the owner chose of the connection's choosers (a till's location), by key (ADR-026). */
+  /** What the owner chose of the connection's choosers (a till's location), by key (ADR-030). */
   readonly choices?: Readonly<Record<string, string | null>>;
 }
 

@@ -3,7 +3,7 @@ import { SHOP_CHARGES_SKU } from "./catalogue";
 import type { PayAmount, PostalAddress, ShopOrder, ShopOrderLine } from "./sdk";
 
 /**
- * An order as the business's own shop needs it (ADR-026 §2): its lines at the prices the customer
+ * An order as the business's own shop needs it (ADR-030 §2): its lines at the prices the customer
  * accepted, the shop's own id for each product it sent in, and only the customer details fulfilling
  * needs. The shop is the business's own, the same controller: these go nowhere else.
  *

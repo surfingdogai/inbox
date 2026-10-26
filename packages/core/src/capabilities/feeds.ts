@@ -302,7 +302,7 @@ export class FeedCapabilities {
   /* --- writing the catalogue ------------------------------------------- */
 
   /**
-   * The feed's products, written by the one catalogue upsert feeds and shops share (ADR-026 §3): the
+   * The feed's products, written by the one catalogue upsert feeds and shops share (ADR-030 §3): the
    * same keys, the same SKU rule, a missing price kept from last time and a product with none never
    * on sale. What the feed no longer carries is deactivated, unless the read was cut short.
    */

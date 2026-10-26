@@ -1,4 +1,4 @@
--- Connectors: the shared base (ADR-026). The columns the shop, booking and calendar-link connectors
+-- Connectors: the shared base (ADR-030). The columns the shop, booking and calendar-link connectors
 -- share; nothing that exists changes meaning, and an inbox that connects none of them writes nothing
 -- new here.
 --

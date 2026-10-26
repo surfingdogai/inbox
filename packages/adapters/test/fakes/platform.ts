@@ -2,7 +2,7 @@ import type { ConnectorHttp } from "@surfingdog/core";
 import { connectorHttp } from "../../src/connectors/http";
 
 /**
- * A fake platform for connector tests (ADR-026 §8): no real platform is ever called. Routes answer by
+ * A fake platform for connector tests (ADR-030 §8): no real platform is ever called. Routes answer by
  * method and URL with what a test hands them (fixtures written from each platform's documented
  * examples), every request is kept with its headers and body (to check auth, idempotency keys and what
  * was sent), and a route can be made to fail the way platforms do: 401, 429 with Retry-After, 5xx, a

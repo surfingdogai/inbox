@@ -1,7 +1,7 @@
 import { constantTimeEqual, hmacSha256Hex } from "./pay-sign";
 
 /**
- * Webhook signatures for every connector told by webhook at its own address (ADR-026 §4), with Web
+ * Webhook signatures for every connector told by webhook at its own address (ADR-030 §4), with Web
  * Crypto only: an HMAC-SHA-256 over the exact bytes received, as hex or as base64, compared in
  * constant time. Shopify signs with `X-Shopify-Hmac-Sha256` (base64), Square with
  * `x-square-hmacsha256-signature` (base64, over the notification URL and the body), WooCommerce with

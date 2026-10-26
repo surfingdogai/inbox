@@ -9,7 +9,7 @@ import {
 } from "./sdk";
 
 /**
- * Settings → Integrations, as cards (ADR-022, ADR-026 §6). A card is what the owner recognises (their
+ * Settings → Integrations, as cards (ADR-022, ADR-030 §6). A card is what the owner recognises (their
  * calendar, Cal.com, Stripe, their shop); a way is how it connects (iCloud, Google, an API key, a page
  * on their own store). The rules that keep it honest:
  *
@@ -103,7 +103,7 @@ interface CardSpec {
   readonly group: ConnectorGroup;
   readonly industries: readonly Industry[];
   /**
-   * Being built now (ADR-026 §1): until its connector is registered, the card says "Soon". Removed
+   * Being built now (ADR-030 §1): until its connector is registered, the card says "Soon". Removed
    * from the card once it is; a card without it and without a registered way is not shown.
    */
   readonly building?: true;

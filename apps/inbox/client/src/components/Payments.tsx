@@ -12,7 +12,7 @@ import type { PaymentView } from "../lib/types";
  * owner refunds it: the payment's own page in their dashboard. A link that is closed is never shown;
  * earlier links (the total changed, a payment failed) fold into one quiet count. An order that could
  * have a link and has none says why, in one quiet line. A link held because the business's own shop
- * counts another total (ADR-026) says so, with the one thing to do: propose the shop's total.
+ * counts another total (ADR-030) says so, with the one thing to do: propose the shop's total.
  */
 export function Payments({
   itemId,

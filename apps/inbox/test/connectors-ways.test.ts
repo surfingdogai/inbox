@@ -18,7 +18,7 @@ import { fakeShop, fakeShopConnector } from "./fake-shop";
 import { confirmed, freshDb, futureDay, openWeekdays } from "./harness";
 
 /**
- * The ways in the shared base adds (ADR-026 §5), end to end, each with a connector written for the
+ * The ways in the shared base adds (ADR-030 §5), end to end, each with a connector written for the
  * test against the SDK: a link the inbox makes and serves (a B&B in Oaxaca sharing its bookings), a
  * key a store hands over itself after the owner approves it there (a café in Melbourne), choosers once
  * connected (a salon in Toronto with two locations), a catalogue past the limit one connection takes,

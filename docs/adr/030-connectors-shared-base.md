@@ -1,8 +1,8 @@
-# ADR-026 — Connectors: the shared base for shops, tills, bookings and links
+# ADR-030 — Connectors: the shared base for shops, tills, bookings and links
 
 **Status:** proposed, 20 October 2026. Builds on ADR-014 (connectors strategy), ADR-015 (webhooks),
-ADR-022 (calendars) and ADR-023 (pay links). The base that WooCommerce (ADR-027), Shopify (ADR-028),
-Square (ADR-029), Calendly and the calendar link to share (ADR-030) and the doors elsewhere (ADR-031)
+ADR-022 (calendars) and ADR-023 (pay links). The base that WooCommerce (ADR-032), Shopify (ADR-031),
+Square (ADR-034), Calendly and the calendar link to share (ADR-033) and the doors elsewhere (ADR-035)
 build on. It holds no platform's code.
 
 ## Context
@@ -43,7 +43,7 @@ are the owner's in person; the owner's AI and integration keys list and sync.
   not. Accepted, the held order is closed in the shop and a new one made; the shop is told the product
   lines and the charges it adds itself (`ShopOrder.charges`), so its total is the customer's. When the
   shop counts less, the owner looks into the shop's prices. Nobody is ever charged more without a word.
-  A held link is live: the one-live-link index takes it in (migration 0024).
+  A held link is live: the one-live-link index takes it in (migration 0027).
 - What a shop says became of an order (`PaymentsHandler.orderState`, or a webhook's `order` fact):
   fulfilled and delivered move the order on, by the connector; refunded marks done a refund the inbox
   owes, when it covers it. **Cancelled before it was paid closes the link and leaves the order to the
@@ -62,7 +62,7 @@ are the owner's in person; the owner's AI and integration keys list and sync.
   the SKU the inbox keeps for itself is never written.
 - A missing price keeps the last one; **a product with no price ever is kept off sale**, in the business's
   own currency, never a currency guessed. This removes the feed import's EUR default.
-- A complete pass marks what it saw (`products.seen_at`, migration 0024) and takes off sale what it did not
+- A complete pass marks what it saw (`products.seen_at`, migration 0027) and takes off sale what it did not
   (`deactivateUnseen`). A pass cut short (a feed at its size, a shop past 5,000 products) takes nothing
   off sale. Deactivated, never deleted: an order may name a product.
 - Cadence: a full pass every six hours (and first), what changed since the last read on every sync, and at
@@ -141,7 +141,7 @@ listed by the sidebar on its own.
 
 ## Consequences
 
-- Migration 0024: `connectors.inbound_enc`; `connector_auth.input`, `connector_id`, `message`;
+- Migration 0027: `connectors.inbound_enc`; `connector_auth.input`, `connector_id`, `message`;
   `products.seen_at` and its index; `connector_payments.shop_total`, `shop_currency`; the one-live-link
   index takes `held` in. Nothing that exists changes meaning.
 - REST: `POST /v1/owner/integrations/{id}/link`, `POST /v1/owner/items/{id}/payments/shop-total`;

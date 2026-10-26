@@ -40,7 +40,7 @@ export {
  * The OAuth clients an instance may hold, from its environment: each platform's id and secret
  * (`GOOGLE_OAUTH_CLIENT_ID`/`_SECRET`, `SHOPIFY_CLIENT_ID`/`_SECRET`, `SQUARE_CLIENT_ID`/`_SECRET`,
  * `CALENDLY_CLIENT_ID`/`_SECRET`). Each is the app of whoever runs the server, for a one-click sign-in
- * beside the way that needs none (ADR-026 §5): without it, that way says "set up" on one's own server
+ * beside the way that needs none (ADR-030 §5): without it, that way says "set up" on one's own server
  * and "Soon" on a hosted inbox.
  */
 export interface OAuthClients {
@@ -68,7 +68,7 @@ export interface ConnectorHostOptions {
  * says "Soon" on a hosted inbox (ours is on its way) and "set up" on one's own server. Stripe and
  * Mollie take the business's own key and need nothing of the host but its public address (ADR-023).
  *
- * A connector added here takes one import, one export line and one entry below (ADR-026 §7), in the
+ * A connector added here takes one import, one export line and one entry below (ADR-030 §7), in the
  * order WooCommerce, Shopify, Square, Calendly, the calendar link to share.
  */
 export function builtInConnectors(opts: ConnectorHostOptions = {}): ConnectorDefinition[] {

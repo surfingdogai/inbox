@@ -112,7 +112,7 @@ type OAuthEnv = { readonly [K in (typeof OAUTH_ENV)[keyof typeof OAUTH_ENV][numb
  * The OAuth clients this inbox signs owners in to platforms with, each from its id and secret (both,
  * or neither: one alone is said and left out): GOOGLE_OAUTH_CLIENT_ID/_SECRET, SHOPIFY_CLIENT_ID/_SECRET,
  * SQUARE_CLIENT_ID/_SECRET, CALENDLY_CLIENT_ID/_SECRET. Each is a one-click sign-in beside a way that
- * needs no app of the server's (ADR-026 §5); without it, that way shows as "set up" in Settings →
+ * needs no app of the server's (ADR-030 §5); without it, that way shows as "set up" in Settings →
  * Integrations ("Soon" on a hosted inbox). GOOGLE_OAUTH_REDIRECT_URI when the host keeps one redirect
  * address for all its inboxes; GOOGLE_OAUTH_TESTING=1 while Google's client is in Testing mode, so
  * Google says "Soon" rather than a sign-in that fails for anyone but its test users.

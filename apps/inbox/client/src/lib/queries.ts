@@ -435,7 +435,7 @@ export function useIntegrationWrite() {
 }
 
 /**
- * "Propose the shop's total" on an order whose link is held (ADR-026): the change goes to the
+ * "Propose the shop's total" on an order whose link is held (ADR-030): the change goes to the
  * customer, and the order and its payments are read again.
  */
 export function useProposeShopTotal(itemId: string) {

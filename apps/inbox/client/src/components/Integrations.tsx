@@ -18,7 +18,7 @@ import { ErrorState, Toast } from "./Feedback";
 import { Field, SectionHead, Switch } from "./Form";
 
 /**
- * Settings → Integrations, the gallery (ADR-022, ADR-026): what is connected first, then the cards in
+ * Settings → Integrations, the gallery (ADR-022, ADR-030): what is connected first, then the cards in
  * their groups (Calendars, Payments, Shops and tills), each one thing an owner recognises, with its
  * ways in. Everything here is drawn from what the server says: the form from the connector's own
  * schema, a sign-in's words and what it asks first, a link to make, the choosers once connected, so a
@@ -79,7 +79,7 @@ export function IntegrationsCard() {
   const card = data?.cards.find((c) => c.id === open) ?? null;
   const soon = (data?.cards ?? []).filter((c) => c.status === "soon");
   // Payments (ADR-023): one platform sends an order's links per mode; the one that does is named. A shop
-  // that takes its orders at its own checkout is one of them (ADR-026).
+  // that takes its orders at its own checkout is one of them (ADR-030).
   const sending = connections.filter((c) => c.payments && c.pay_on && !c.payments.disconnecting);
   const insteadOf = (cardId: string): string | null => {
     const other = sending.find((c) => cardOf(c) !== cardId);

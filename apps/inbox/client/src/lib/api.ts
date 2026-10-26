@@ -370,10 +370,10 @@ export const api = {
     call<{ authorize_url: string }>("POST", "/v1/owner/integrations/authorize", {
       body: { ...body, return_to: "/settings/integrations" },
     }),
-  /** A new link for a connection that serves one: the old one stops at once (ADR-026). */
+  /** A new link for a connection that serves one: the old one stops at once (ADR-030). */
   newConnectionLink: (id: string) =>
     call<ConnectionView>("POST", `/v1/owner/integrations/${encodeURIComponent(id)}/link`, { idempotent: true }),
-  /** Propose the shop's total to the customer, for an order whose link is held (ADR-026). */
+  /** Propose the shop's total to the customer, for an order whose link is held (ADR-030). */
   proposeShopTotal: (id: string) =>
     call<TransitionResult>("POST", `/v1/owner/items/${encodeURIComponent(id)}/payments/shop-total`, {
       idempotent: true,
