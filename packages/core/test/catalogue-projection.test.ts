@@ -42,6 +42,7 @@ const row = (over: Partial<Row> = {}): Row => ({
   catalogueSeq: 7,
   createdAt: T0 - 86_400_000,
   updatedAt: T0,
+  seenAt: T0,
   ...over,
 });
 const ctx = { sites: siteDomains({ domain: "loja.example", website: "" }) };

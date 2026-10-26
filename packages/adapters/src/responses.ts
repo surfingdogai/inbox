@@ -803,14 +803,28 @@ const formFieldSchema = z.looseObject({
   help: z.string().optional(),
   link: z.object({ href: z.string(), text: z.string() }).optional(),
   placeholder: z.string().optional(),
+  steps: z.array(z.string()).optional().describe("Steps on the platform, one per line"),
+  value: z.string().optional().describe("Filled in from what the inbox knows (its website), to keep or change"),
+});
+
+const choiceSchema = z.looseObject({
+  key: z.string(),
+  label: z.string(),
+  options: z.array(z.object({ id: z.string(), name: z.string() })),
+  value: z.string().nullable().describe("The option chosen; null for none"),
 });
 
 export const connectionSchema = z.looseObject({
   id: z.string(),
   kind: z
     .string()
-    .describe("caldav, google_calendar, ics (a calendar's private link: busy times only), calcom, stripe or mollie"),
-  preset: z.string().nullable().describe("icloud, fastmail, nextcloud or other, for a CalDAV calendar"),
+    .describe(
+      "caldav, google_calendar, ics (a calendar's private link: busy times only), calcom, stripe or mollie; more as this release adds them",
+    ),
+  preset: z
+    .string()
+    .nullable()
+    .describe("icloud, fastmail, nextcloud or other, for a CalDAV calendar; outlook for a calendar link"),
   title: z.string(),
   name: z.string(),
   account: z.string(),
@@ -865,8 +879,29 @@ export const connectionSchema = z.looseObject({
         .boolean()
         .describe("Being disconnected: it makes no new link, and its links are being switched off on the platform"),
       closing: z.number().int().describe("Links still to be switched off on the platform"),
+      held: z
+        .number()
+        .int()
+        .optional()
+        .describe("A shop's orders made but not sent: the shop counts another total than the customer accepted"),
     })
     .nullable(),
+  card: z.string().nullable().optional().describe("The gallery card it belongs to"),
+  choices: z.array(choiceSchema).optional().describe("What else the owner chooses: a till's location, a team member"),
+  catalogue: z
+    .looseObject({
+      products: z.number().int().describe("Products on sale from it"),
+      read_at: z.number().int().nullable(),
+      truncated: z.boolean().describe("Cut at the limit one connection brings in"),
+    })
+    .nullable()
+    .optional(),
+  link: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("A link the connection serves (a calendar to import elsewhere), to the owner in person only"),
+  disconnect_note: z.string().nullable().optional().describe("What the owner removes by hand once it is disconnected"),
 });
 
 const paymentSchema = z.looseObject({
@@ -874,8 +909,10 @@ const paymentSchema = z.looseObject({
   kind: z.string().describe("stripe or mollie"),
   provider: z.string(),
   state: z
-    .enum(["creating", "open", "paid", "failed", "closed", "error"])
-    .describe("error: the platform would not make it (error says why); closed: the order changed or ended"),
+    .enum(["creating", "open", "held", "paid", "failed", "closed", "error"])
+    .describe(
+      "error: the platform would not make it (error says why); closed: the order changed or ended; held: made in your shop and not sent, since it counts another total (shop_total)",
+    ),
   amount: money,
   url: z.string().nullable().describe("Where the customer pays, while the link is open; never a closed link"),
   livemode: z.boolean(),
@@ -893,6 +930,11 @@ const paymentSchema = z.looseObject({
   note: z.string().nullable(),
   created_at: z.number().int(),
   closed_at: z.number().int().nullable(),
+  shop_total: money.nullable().optional().describe("What your shop counts, when it is not what the customer accepted"),
+  propose_shop_total: z
+    .boolean()
+    .optional()
+    .describe("The shop's total can be proposed to the customer: POST /items/{id}/payments/shop-total"),
 });
 
 export const itemPaymentsSchema = z.object({
@@ -910,13 +952,18 @@ export const itemPaymentsSchema = z.object({
 });
 
 export const integrationsSchema = z.object({
+  groups: z
+    .array(z.object({ id: z.enum(["calendars", "payments", "shops"]), label: z.string() }))
+    .optional()
+    .describe("The groups, in the order this inbox sees them"),
   cards: z.array(
     z.looseObject({
       id: z.string(),
       title: z.string(),
       line: z.string(),
       group: z.enum(["calendars", "payments", "shops"]),
-      status: z.enum(["ready", "soon"]),
+      industries: z.array(z.string()).optional(),
+      status: z.enum(["ready", "soon"]).describe("soon: being built now; nothing else that is not ready is listed"),
       ways: z.array(
         z.looseObject({
           kind: z.string(),
@@ -925,8 +972,15 @@ export const integrationsSchema = z.object({
           status: z
             .enum(["ready", "soon", "setup"])
             .describe("setup: it needs something on the server first, said in hint and explained at href"),
-          auth: z.enum(["form", "oauth"]),
+          auth: z
+            .enum(["form", "oauth", "link"])
+            .describe("form: fill in form; oauth: sign in or approve on the platform; link: the inbox makes a link"),
           form: z.array(formFieldSchema),
+          before: z.array(formFieldSchema).optional().describe("What a sign-in asks first: a store's address"),
+          advanced: z.boolean().optional().describe("A way most people never need, under More options"),
+          action: z.string().optional().describe("The words on its button"),
+          consent: z.string().optional().describe("What the platform will ask"),
+          steps: z.array(z.string()).optional(),
           note: z.string().optional(),
           hint: z.string().optional(),
           href: z.string().optional(),

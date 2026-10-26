@@ -1,6 +1,7 @@
 import { type Statement, sha256Hex } from "@surfingdog/platform";
 import { z } from "zod";
 import { businessFacts } from "../customer/audience";
+import { moneyIn } from "../customer/format";
 import type { Db } from "../db";
 import { randomToken, ulid } from "../ids";
 import { ensureJob } from "../jobs/schedule";
@@ -9,19 +10,42 @@ import { readSettings } from "../settings/schema";
 import { type Caller, isCustomer, isOwnerAssistant, isPerson, nowOf } from "../write/caller";
 import { jobStatement } from "../write/common";
 import { fromZod, WriteError } from "../write/errors";
-import { type GalleryCard, gallery } from "./gallery";
+import { type TransitionResult, transitionItem } from "../write/transition";
+import {
+  activeProducts,
+  connectorSource,
+  deactivateSource,
+  deactivateUnseen,
+  MAX_CATALOGUE,
+  upsertCatalogue,
+} from "./catalogue";
+import { cardOf, type GalleryCard, type GalleryGroup, gallery, galleryGroups, leanOf, readiness } from "./gallery";
+import {
+  ConnectorHooks,
+  feedBookings,
+  type HookAnswer,
+  type HookHost,
+  inboundHash,
+  isInboundToken,
+  newInboundToken,
+} from "./hooks";
 import { PAY_CLOSE_KIND } from "./pay-queue";
 import { type PayConnection, type PayHost, PaymentLinks, type PaymentView } from "./payments";
 import {
   type CalendarChoice,
   type Connected,
+  type ConnectionChoice,
+  type ConnectorAuth,
   type ConnectorDefinition,
   ConnectorError,
   type ConnectorErrorCode,
   type ConnectorGroup,
   type ConnectorHttp,
+  type ConnectorPreset,
   calendarName,
   describeForm,
+  type FeedResponse,
+  type InboundRequest,
   type InboxIdentity,
   type LinkState,
   type OutboundBooking,
@@ -64,6 +88,8 @@ export const CONNECTOR_SYNC_KIND = "connector_sync";
 export const CONNECTOR_PUSH_KIND = "connector_push";
 /** The one email to the owner that a connection stopped syncing. */
 export const CONNECTOR_NOTICE_KIND = "connector_notice";
+/** A shop's catalogue read on its own (ADR-026 §3): on a webhook, and to go on with a pass that has more. */
+export const CONNECTOR_CATALOGUE_KIND = "connector_catalogue";
 /** Busy times are read this often; a booking event writes out at once. */
 export const CONNECTOR_SYNC_INTERVAL_MS = 5 * 60_000;
 /** A connection that keeps failing is read less often: at most this far apart for a refused sign-in… */
@@ -88,6 +114,27 @@ const PUSH_PAGE = 200;
 const WRITES_PER_RUN = 25;
 /** A sign-in on the platform's page must come back within this. */
 const AUTH_TTL_MS = 10 * 60_000;
+/** A full pass of a shop's catalogue this often; what changed since the last read on every sync. */
+const CATALOGUE_FULL_EVERY_MS = 6 * 3_600_000;
+/** Pages of a catalogue one sync reads; a pass that has more goes on at the next. */
+const CATALOGUE_PAGES_PER_RUN = 10;
+/** What changed is read from a little before the last read began: a change stamped a moment early is not missed. */
+const CATALOGUE_LOOKBACK_MS = 2 * 60_000;
+
+/**
+ * Where a connection's catalogue reading is (ADR-026 §3): a full pass under way (its page, when it
+ * began, how many it saw), when the last one ended, and from when what changed is read next.
+ */
+export interface CatalogueState {
+  readonly full: { readonly cursor: string | null; readonly startedAt: number; readonly seen: number } | null;
+  readonly lastFullAt: number;
+  /** What changed since this is read next; null before the first full pass ends. */
+  readonly since: number | null;
+  /** An incremental pass under way: its page, and when it began. */
+  readonly partial: { readonly cursor: string | null; readonly startedAt: number } | null;
+  /** The last full pass stopped at `MAX_CATALOGUE`: nothing it did not see was taken off sale. */
+  readonly truncated: boolean;
+}
 
 /** The non-secret half of a connection, as `connectors.config_public` keeps it. */
 export interface PublicConfig {
@@ -120,6 +167,10 @@ export interface PublicConfig {
    */
   readonly disconnectingAt: number | null;
   readonly disconnectTries: number;
+  /** What else the owner chooses (a till's location), with what is chosen (ADR-026 §5). */
+  readonly choices: readonly ConnectionChoice[];
+  /** A shop's catalogue reading (ADR-026 §3); null for a connection that sends none. */
+  readonly catalogue: CatalogueState | null;
 }
 
 /** A connection as every door shows it: never a secret. */
@@ -177,10 +228,31 @@ export interface ConnectionView {
     /** Being disconnected: its links are being switched off, and how many are left. */
     readonly disconnecting: boolean;
     readonly closing: number;
+    /** A shop's orders made but not sent, since it counts another total (ADR-026 §2). */
+    readonly held: number;
   } | null;
+  /** The gallery card it belongs to. */
+  readonly card: string | null;
+  /** What else the owner chooses, drawn as choosers: a till's location, a team member. */
+  readonly choices: readonly ConnectionChoice[];
+  /** A shop's catalogue: products on sale from it, when it was last read, and whether it was cut at the limit. */
+  readonly catalogue: {
+    readonly products: number;
+    readonly read_at: number | null;
+    readonly truncated: boolean;
+  } | null;
+  /**
+   * A link the connection serves (a calendar of bookings to import elsewhere), to the owner in person
+   * only: whoever holds it reads what it shows. Null otherwise, and for the owner's AI and keys.
+   */
+  readonly link: string | null;
+  /** What the owner removes by hand once it is disconnected, when the platform does not let the inbox. */
+  readonly disconnect_note: string | null;
 }
 
 export interface IntegrationsView {
+  /** The groups the cards are in, in the order this inbox sees them. */
+  readonly groups: readonly GalleryGroup[];
   readonly cards: readonly GalleryCard[];
   readonly connections: readonly ConnectionView[];
   /** False without INBOX_SECRET_KEY: nothing can be connected, and the owner is told why. */
@@ -210,11 +282,17 @@ export const updateConnectionInput = z.object({
   paused: z.boolean().optional(),
   /** A payment platform: make pay links for the orders the inbox accepts (ADR-023). */
   pay_on: z.boolean().optional(),
+  /** What the owner chose of the connection's choosers, by key: an option's id, or null for none. */
+  choices: z.record(z.string().max(40), z.string().max(200).nullable()).optional(),
 });
 export type UpdateConnectionInput = z.input<typeof updateConnectionInput>;
 
 export const authorizeInput = z.object({
   kind: z.string().min(1).max(40),
+  /** The way, when the card has more than one: `oauth` for a one-click sign-in beside a key. */
+  preset: z.string().min(1).max(40).optional(),
+  /** What the way asks first (`OAuthFlow.before`): a store's address. */
+  input: z.record(z.string(), z.string().max(2048)).optional(),
   /** A path in the owner app to come back to; never another site. */
   return_to: z.string().max(200).optional(),
 });
@@ -240,6 +318,8 @@ interface ConnectorRow {
   readonly failingSince: number | null;
   readonly failures: number;
   readonly notifiedAt: number | null;
+  /** The connection's own address segment, sealed (ADR-026 §4): null for one that has none. */
+  readonly inboundEnc: string | null;
 }
 
 export interface RunReport {
@@ -265,6 +345,8 @@ export class ConnectorCapabilities {
    * answers only its owner (its host says so through the policy).
    */
   private hooksLive = true;
+  /** What platforms send a connection at its own address (ADR-026 §4). */
+  readonly hooks: ConnectorHooks;
 
   constructor(
     private readonly db: Db,
@@ -272,6 +354,7 @@ export class ConnectorCapabilities {
     private readonly baseUrl: string | undefined,
   ) {
     this.payments = new PaymentLinks(this.payHost());
+    this.hooks = new ConnectorHooks(this.hookHost());
   }
 
   /** What the host says of this inbox's public doors: closed to platforms until it goes live. */
@@ -319,8 +402,15 @@ export class ConnectorCapabilities {
 
   async integrations(caller: Caller): Promise<IntegrationsView> {
     requireOwnerSide(caller);
+    const settings = await readSettings(this.db);
+    const lean = leanOf(await this.holdings());
     return {
-      cards: gallery(this.definitions, { hookBase: await this.hookBase() }),
+      groups: galleryGroups(lean),
+      cards: gallery(this.definitions, {
+        hookBase: await this.hookBase(),
+        prefill: { website: settings.directory.url || undefined },
+        lean,
+      }),
       connections: await this.list(caller),
       can_connect: this.secrets !== null,
     };
@@ -330,13 +420,22 @@ export class ConnectorCapabilities {
     requireOwnerSide(caller);
     const rows = await this.rows();
     const out: ConnectionView[] = [];
-    for (const row of rows) out.push(await this.view(row, nowOf(caller)));
+    for (const row of rows) out.push(await this.view(row, nowOf(caller), isPerson(caller)));
     return out;
   }
 
   async get(caller: Caller, id: string): Promise<ConnectionView> {
     requireOwnerSide(caller);
-    return this.view(await this.row(id), nowOf(caller));
+    return this.view(await this.row(id), nowOf(caller), isPerson(caller));
+  }
+
+  /** What the inbox holds, for the order its cards are shown in: services to book, products to sell. */
+  private async holdings(): Promise<{ services: number; products: number }> {
+    const { rows } = await this.db.client.query({
+      sql: `SELECT (SELECT COUNT(*) FROM services WHERE active = 1), (SELECT COUNT(*) FROM products WHERE active = 1)`,
+      method: "all",
+    });
+    return { services: Number(rows[0]?.[0] ?? 0), products: Number(rows[0]?.[1] ?? 0) };
   }
 
   /**
@@ -375,15 +474,6 @@ export class ConnectorCapabilities {
     const box = requireSecretBox(this.secrets);
     const input = parse(connectInput, raw);
     const def = this.usable(input.kind);
-    if (def.auth !== "form" || !def.form || !def.connect) {
-      throw new WriteError(
-        "invalid_input",
-        `${def.title} is connected by signing in on ${def.title}: use authorize, not a form.`,
-        {
-          details: { reason: "sign_in", kind: def.kind },
-        },
-      );
-    }
     // Connecting again in place: the same account, with what was typed the first time.
     const again = input.connection_id ? await this.row(input.connection_id) : null;
     if (again && again.kind !== def.kind) {
@@ -397,6 +487,23 @@ export class ConnectorCapabilities {
       throw new WriteError("invalid_input", `${def.title} has no way called ${presetId}`, {
         fields: [{ path: "preset", problem: "invalid", message: "unknown preset" }],
       });
+    }
+    this.ready(def, preset);
+    const auth: ConnectorAuth = preset?.auth ?? def.auth;
+    // A link the inbox makes: nothing to fill in, nothing to check on another platform.
+    if (auth === "link") {
+      const made = await this.makeLink(def, presetId ?? null, input.name, nowOf(caller), box);
+      // The owner in person sees the link they just made.
+      return this.view(await this.row(made.id), nowOf(caller), true);
+    }
+    if (auth !== "form" || !def.form || !def.connect) {
+      throw new WriteError(
+        "invalid_input",
+        `${def.title} is connected by signing in on ${def.title}: use authorize, not a form.`,
+        {
+          details: { reason: "sign_in", kind: def.kind },
+        },
+      );
     }
     const secret = new Set(secretKeys(def.form));
     const values: Record<string, string> = {};
@@ -440,8 +547,10 @@ export class ConnectorCapabilities {
       });
     }
     let connected: Connected;
+    // A connector told by webhook at its own address has one from its first connect, kept after.
+    const inbound = await this.inboundFor(def, again);
     try {
-      const ctx = await this.connectContext(now, def.kind);
+      const ctx = await this.connectContext(now, def.kind, inbound?.token);
       connected = await def.connect(
         again ? { ...ctx, previous: { externalId: again.externalId, extra: again.config.extra } } : ctx,
         checked.data as Record<string, string>,
@@ -467,7 +576,7 @@ export class ConnectorCapabilities {
     for (const [k, v] of Object.entries(values)) if (!secret.has(k) && !(k in (preset?.values ?? {}))) inputs[k] = v;
     let view: ConnectionView;
     try {
-      view = await this.store(def, presetId ?? null, connected, input.name, now, box, again !== null, inputs);
+      view = await this.store(def, presetId ?? null, connected, input.name, now, box, again !== null, inputs, inbound);
     } catch (error) {
       // Not kept after all: what the connector made for it on the platform goes again.
       await settle(connected, false);
@@ -485,10 +594,26 @@ export class ConnectorCapabilities {
     const box = requireSecretBox(this.secrets);
     const input = parse(authorizeInput, raw);
     const def = this.usable(input.kind);
-    if (def.auth !== "oauth" || !def.oauth) {
+    const preset = input.preset ? def.presets?.find((p) => p.id === input.preset) : undefined;
+    if (input.preset && !preset) {
+      throw new WriteError("invalid_input", `${def.title} has no way called ${input.preset}`, {
+        fields: [{ path: "preset", problem: "invalid", message: "unknown preset" }],
+      });
+    }
+    this.ready(def, preset);
+    if ((preset?.auth ?? def.auth) !== "oauth" || !def.oauth) {
       throw new WriteError("invalid_input", `${def.title} is connected with a form, not a sign-in.`, {
         details: { reason: "form", kind: def.kind },
       });
+    }
+    // What the way asks first (a store's address): checked here, kept for the way back.
+    let before: Record<string, string> = {};
+    if (def.oauth.before) {
+      const values: Record<string, string> = {};
+      for (const [k, v] of Object.entries(input.input ?? {})) if (v.trim()) values[k] = v.trim();
+      const checked = def.oauth.before.safeParse(values);
+      if (!checked.success) throw fromZod(checked.error, "input");
+      before = checked.data as Record<string, string>;
     }
     const now = nowOf(caller);
     const fixed = this.fixedRedirect?.(def.kind);
@@ -505,8 +630,8 @@ export class ConnectorCapabilities {
     await this.db.batch([
       { sql: "DELETE FROM connector_auth WHERE expires_at < ?", params: [now - 86_400_000], method: "run" },
       {
-        sql: `INSERT INTO connector_auth (state_hash, kind, verifier_enc, redirect_uri, return_to, created_at, expires_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        sql: `INSERT INTO connector_auth (state_hash, kind, verifier_enc, redirect_uri, return_to, created_at, expires_at, input)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         params: [
           stateHash,
           def.kind,
@@ -515,11 +640,21 @@ export class ConnectorCapabilities {
           safeReturnPath(input.return_to),
           now,
           now + AUTH_TTL_MS,
+          JSON.stringify({ preset: preset?.id ?? null, values: before }),
         ],
         method: "run",
       },
     ]);
-    return { authorize_url: def.oauth.authorizeUrl({ redirectUri, state, challenge }) };
+    const posted = def.oauth.delivery === "post";
+    return {
+      authorize_url: def.oauth.authorizeUrl({
+        redirectUri,
+        state,
+        challenge,
+        input: before,
+        ...(posted ? { postUrl: `${cleanOrigin}/v1/hooks/${encodeURIComponent(def.kind)}/authorized` } : {}),
+      }),
+    };
   }
 
   /**
@@ -537,7 +672,7 @@ export class ConnectorCapabilities {
     const fallback = "/settings/integrations";
     const stateHash = await sha256Hex(new TextEncoder().encode(p.state));
     const { rows } = await this.db.client.query({
-      sql: "SELECT kind, verifier_enc, redirect_uri, return_to, expires_at, used_at FROM connector_auth WHERE state_hash = ?",
+      sql: "SELECT kind, verifier_enc, redirect_uri, return_to, expires_at, used_at, input, connector_id, message FROM connector_auth WHERE state_hash = ?",
       params: [stateHash],
       method: "all",
     });
@@ -546,6 +681,26 @@ export class ConnectorCapabilities {
       return { returnTo: fallback, ok: false, message: "That sign-in was not started here. Try again from Settings." };
     }
     const returnTo = String(row[3] || fallback);
+    const started = authInputOf(row[6]);
+    // A platform that POSTs the key itself (WooCommerce) did so before the owner came back: what it made,
+    // or what went wrong, is waiting on the sign-in.
+    const postDef = this.definitions.get(p.kind);
+    if (postDef?.oauth?.delivery === "post") {
+      await this.db.client.query({
+        sql: "UPDATE connector_auth SET used_at = COALESCE(used_at, ?) WHERE state_hash = ?",
+        params: [p.now, stateHash],
+        method: "run",
+      });
+      if (row[7] !== null && row[7] !== undefined) {
+        return { returnTo, ok: true, message: `${postDef.title} is connected.`, id: String(row[7]) };
+      }
+      if (row[8] !== null && row[8] !== undefined) return { returnTo, ok: false, message: String(row[8]) };
+      return {
+        returnTo,
+        ok: false,
+        message: `Nothing was connected: ${postDef.title} did not send this inbox a key. Try again from Settings.`,
+      };
+    }
     const claimed = await this.db.client.query({
       sql: "UPDATE connector_auth SET used_at = ? WHERE state_hash = ? AND used_at IS NULL AND expires_at >= ?",
       params: [p.now, stateHash, p.now],
@@ -570,9 +725,27 @@ export class ConnectorCapabilities {
     }
     try {
       const verifier = await this.secrets.open("connector-config", `auth:${stateHash}`, String(row[1]));
-      const ctx = await this.connectContext(p.now, def.kind);
-      const connected = await def.oauth.exchange(ctx, { code: p.code, verifier, redirectUri: String(row[2]) });
-      const view = await this.store(def, null, connected, undefined, p.now, this.secrets, true);
+      // Which account it is is known only once the platform answers: a sign-in gives the connection a
+      // new address, which the connector names in what it makes there.
+      const inbound = await this.inboundFor(def, null);
+      const ctx = await this.connectContext(p.now, def.kind, inbound?.token);
+      const connected = await def.oauth.exchange(ctx, {
+        code: p.code,
+        verifier,
+        redirectUri: String(row[2]),
+        input: started.values,
+      });
+      const view = await this.store(
+        def,
+        started.preset,
+        connected,
+        undefined,
+        p.now,
+        this.secrets,
+        true,
+        Object.keys(started.values).length > 0 ? started.values : undefined,
+        inbound,
+      );
       return { returnTo, ok: true, message: `${def.title} is connected.`, id: view.id };
     } catch (error) {
       const message =
@@ -581,6 +754,165 @@ export class ConnectorCapabilities {
           : `${def.title} did not finish the sign-in.`;
       return { returnTo, ok: false, message };
     }
+  }
+
+  /**
+   * A platform that POSTs the key itself, server to server (WooCommerce's authorize endpoint, ADR-026
+   * §5): `POST /v1/hooks/<kind>/authorized`. The state it carries is the proof, as on a way back: minted
+   * for this inbox, used once, gone in ten minutes. The key is checked against the platform before it is
+   * kept, and the connection it makes waits on the sign-in for the owner's browser to find.
+   */
+  async receiveAuthorized(kind: string, request: InboundRequest, now: number): Promise<HookAnswer> {
+    const def = this.definitions.get(kind);
+    const flow = def?.oauth;
+    if (!def || flow?.delivery !== "post" || !flow.receivePosted || !flow.postedState) {
+      return { status: 404, body: { error: "not_found" } };
+    }
+    if (request.body.length > 64 * 1024) return { status: 413, body: { error: "too_large" } };
+    if (!this.secrets || !this.http) return { status: 503, body: { error: "unavailable" } };
+    const state = flow.postedState(request);
+    if (!state) return { status: 400, body: { error: "invalid_input", detail: "No sign-in is named." } };
+    const stateHash = await sha256Hex(new TextEncoder().encode(state));
+    const claimed = await this.db.client.query({
+      sql: `UPDATE connector_auth SET used_at = ? WHERE state_hash = ? AND kind = ? AND used_at IS NULL AND expires_at >= ?
+            RETURNING input`,
+      params: [now, stateHash, kind, now],
+      method: "all",
+    });
+    if (claimed.rows.length !== 1) {
+      return { status: 400, body: { error: "invalid_input", detail: "That sign-in had expired or was used already." } };
+    }
+    const started = authInputOf(claimed.rows[0]?.[0]);
+    const fail = async (message: string): Promise<HookAnswer> => {
+      await this.db.client.query({
+        sql: "UPDATE connector_auth SET message = ? WHERE state_hash = ?",
+        params: [message.slice(0, 500), stateHash],
+        method: "run",
+      });
+      return { status: 400, body: { error: "refused", detail: message } };
+    };
+    try {
+      const inbound = await this.inboundFor(def, null);
+      const ctx = await this.connectContext(now, kind, inbound?.token);
+      const connected = await flow.receivePosted(ctx, request, started.values);
+      let view: ConnectionView;
+      try {
+        view = await this.store(
+          def,
+          started.preset,
+          connected,
+          undefined,
+          now,
+          this.secrets,
+          true,
+          started.values,
+          inbound,
+        );
+      } catch (error) {
+        await settle(connected, false);
+        throw error;
+      }
+      await settle(connected, true);
+      await this.db.client.query({
+        sql: "UPDATE connector_auth SET connector_id = ?, message = NULL WHERE state_hash = ?",
+        params: [view.id, stateHash],
+        method: "run",
+      });
+      return { status: 200, body: { ok: true } };
+    } catch (error) {
+      if (error instanceof ConnectorError || error instanceof WriteError) return fail(error.message);
+      await fail(`${def.title} did not finish connecting.`);
+      throw error;
+    }
+  }
+
+  /** What a platform sent a connection at its own address (ADR-026 §4): checked, kept, read back later. */
+  receiveHook(kind: string, token: string, request: InboundRequest, now: number): Promise<HookAnswer> {
+    return this.hooks.receive(kind, token, request, now);
+  }
+
+  /**
+   * A link a connection serves (ADR-026 §5): `GET /v1/feeds/<kind>/<token><extension>`. Whoever holds
+   * the link reads it, so the token is all it takes, and it shows only what the connector says a link
+   * may (dates and service names for a calendar). Null when the address names nothing here.
+   */
+  async serveFeed(
+    kind: string,
+    token: string,
+    extension: string,
+    headers: Headers,
+    now: number,
+  ): Promise<FeedResponse | null> {
+    if (!isInboundToken(token)) return null;
+    const def = this.definitions.get(kind);
+    if (!def?.feed || (extension !== "" && extension !== def.feed.extension)) return null;
+    const { rows } = await this.db.client.query({
+      sql: `SELECT ${ROW_COLUMNS} FROM connectors WHERE kind = ? AND inbound_token = ?`,
+      params: [kind, await inboundHash(token)],
+      method: "all",
+    });
+    const row = rows[0] ? rowOf(rows[0]) : null;
+    if (!row || row.status === "disabled") return null;
+    const db = this.db;
+    const inbox = await this.identity();
+    const answer = await def.feed.serve(
+      { now, inbox, extra: row.config.extra ?? {}, bookings: (window) => feedBookings(db, window) },
+      { headers, extension: def.feed.extension },
+    );
+    await this.db.client.query({
+      sql: `UPDATE connectors SET status = CASE WHEN status = 'configured' THEN 'active' ELSE status END, last_sync_at = ?
+             WHERE id = ?`,
+      params: [now, row.id],
+      method: "run",
+    });
+    return answer;
+  }
+
+  /**
+   * A new link for a connection that serves one: the old one stops at once, for whoever had it. The
+   * owner's, in person: the link is the secret.
+   */
+  async rotateLink(caller: Caller, id: string): Promise<ConnectionView> {
+    requireOwnerSide(caller);
+    requirePerson(caller, "change");
+    const box = requireSecretBox(this.secrets);
+    const row = await this.row(id);
+    if (!this.definitions.get(row.kind)?.feed) {
+      throw new WriteError("invalid_input", "This connection serves no link.", { details: { connection_id: id } });
+    }
+    const token = newInboundToken();
+    await this.db.client.query({
+      sql: "UPDATE connectors SET inbound_token = ?, inbound_enc = ?, updated_at = ? WHERE id = ?",
+      params: [await inboundHash(token), await box.seal("connector-inbound", row.id, token), nowOf(caller), row.id],
+      method: "run",
+    });
+    return this.view(await this.row(id), nowOf(caller), isPerson(caller));
+  }
+
+  /**
+   * "Propose the shop's total" (ADR-026 §2): an order whose link is held, since the shop counts its
+   * tax or delivery on top, is offered to the customer at the shop's total, as a change they accept or
+   * not (ADR-018 §3.2). Money is the owner's: in person only.
+   */
+  async proposeShopTotal(caller: Caller, itemId: string): Promise<TransitionResult> {
+    requireOwnerSide(caller);
+    requirePerson(caller, "propose a price for");
+    const change = await this.payments.shopTotalChange(itemId);
+    if (!change) {
+      throw new WriteError("wrong_state", "This order has no link held for a higher shop total.", {
+        details: { item_id: itemId },
+      });
+    }
+    const total = moneyIn(change.shopTotal, change.lang);
+    const note =
+      change.lang === "pt"
+        ? `Com impostos e encargos, a sua encomenda fica em ${total}.`
+        : `With tax and charges, your order comes to ${total}.`;
+    return transitionItem(this.db, caller, {
+      itemId,
+      event: "propose_change",
+      input: { orderedItem: change.orderedItem, note },
+    });
   }
 
   /* --- choosing, pausing, syncing, disconnecting --------------------------- */
@@ -630,6 +962,25 @@ export class ConnectorCapabilities {
         }
       }
       json.push(["$.services", input.services === null ? null : [...new Set(input.services)]]);
+    }
+    if (input.choices !== undefined) {
+      const next: { key: string; label: string; options: ConnectionChoice["options"]; value: string | null }[] =
+        row.config.choices.map((c) => ({ ...c }));
+      for (const [key, value] of Object.entries(input.choices)) {
+        const choice = next.find((c) => c.key === key);
+        if (!choice) {
+          throw new WriteError("invalid_input", "That is not something this connection lets you choose.", {
+            fields: [{ path: `choices.${key}`, problem: "invalid", message: "unknown choice" }],
+          });
+        }
+        if (value !== null && !choice.options.some((o) => o.id === value)) {
+          throw new WriteError("invalid_input", `That is not one of the ${choice.label.toLowerCase()} options.`, {
+            fields: [{ path: `choices.${key}`, problem: "invalid", message: "not an option" }],
+          });
+        }
+        choice.value = value;
+      }
+      json.push(["$.choices", next]);
     }
     if (input.busy_on !== undefined) json.push(["$.busyOn", input.busy_on]);
     if (input.pay_on !== undefined) {
@@ -743,6 +1094,8 @@ export class ConnectorCapabilities {
         // Giving the access back is a courtesy to the platform: the connection goes either way.
       }
     }
+    // Its products stay for the orders that name them, off sale.
+    if (row.externalId) await deactivateSource(this.db, connectorSource(row.kind, row.externalId), now);
     await this.db.batch(deleteStatements(row.id));
     return { removed: true, left_in_calendar: left };
   }
@@ -797,6 +1150,7 @@ export class ConnectorCapabilities {
     }
     await this.payments.forget(row.id, now);
     if (notice) await this.payments.noticeDisconnected(row.id, notice, now);
+    if (row.externalId) await deactivateSource(this.db, connectorSource(row.kind, row.externalId), now);
     await this.db.batch(deleteStatements(row.id));
   }
 
@@ -850,6 +1204,7 @@ export class ConnectorCapabilities {
     let busy: number | null = null;
     let truncated = false;
     let payNote = "";
+    let catalogueNote = "";
     try {
       // A payment platform with a link waiting to be paid looks at its webhook on every sync: one that was
       // removed or switched off is found within minutes, not hours.
@@ -859,15 +1214,18 @@ export class ConnectorCapabilities {
         (now - (row.config.refreshedAt ?? 0) > REFRESH_EVERY_MS || def.stale?.(ctx, { openLinks }) === true)
       ) {
         const fresh = await def.refresh(ctx);
+        // New options keep what the owner chose, where it is still one of them.
+        const choices = fresh.choices ? mergeChoices(row.config.choices, fresh.choices) : null;
         await this.db.client.query({
           sql: `UPDATE connectors SET config_public = json_set(config_public, '$.account', ?, '$.calendars', json(?),
-                       '$.destinations', json(?), '$.refreshedAt', ?${fresh.extra ? ", '$.extra', json(?)" : ""}), updated_at = ? WHERE id = ?`,
+                       '$.destinations', json(?), '$.refreshedAt', ?${fresh.extra ? ", '$.extra', json(?)" : ""}${choices ? ", '$.choices', json(?)" : ""}), updated_at = ? WHERE id = ?`,
           params: [
             fresh.account,
             JSON.stringify(fresh.calendars),
             JSON.stringify(fresh.destinations),
             now,
             ...(fresh.extra ? [JSON.stringify(fresh.extra)] : []),
+            ...(choices ? [JSON.stringify(choices)] : []),
             now,
             row.id,
           ],
@@ -887,6 +1245,11 @@ export class ConnectorCapabilities {
       } else if (!row.config.busyOn && row.busyGen !== null) {
         // Switched off while a sync was reading: whatever it left is taken away again.
         await this.db.batch(clearBusyStatements(row.id));
+      }
+      // A shop's products (ADR-026 §3): a full pass now and then, what changed on every sync.
+      if (def.catalogue && def.capabilities.includes("catalogue") && row.externalId) {
+        const read = await this.readCatalogue(row, def, ctx, now);
+        catalogueNote = `, ${read.read} product${read.read === 1 ? "" : "s"} read${read.more ? " (more next time)" : ""}`;
       }
       // A payment platform (ADR-023): what a webhook may have missed is asked of the platform.
       if (def.payments && def.capabilities.includes("pay_links")) {
@@ -909,7 +1272,7 @@ export class ConnectorCapabilities {
       ok: true,
       ...push,
       busy,
-      note: `${busy ?? 0} busy${truncated ? " (read only part of the way ahead)" : ""}, ${push.written} written, ${push.removed} removed, ${push.failed} failed${payNote}`,
+      note: `${busy ?? 0} busy${truncated ? " (read only part of the way ahead)" : ""}, ${push.written} written, ${push.removed} removed, ${push.failed} failed${catalogueNote}${payNote}`,
     };
   }
 
@@ -949,6 +1312,133 @@ export class ConnectorCapabilities {
         payload: { connectorId },
       },
     );
+  }
+
+  /**
+   * A shop's catalogue read now, on its own (a webhook said products changed, or a pass has more to
+   * read): what changed since the last read, or the next pages of a full pass. Records a failure on the
+   * connection like a sync does.
+   */
+  async catalogueNow(connectorId: string, now: number): Promise<string> {
+    const row = await this.rowOrNull(connectorId);
+    if (!row) return "gone";
+    if (row.status === "disabled") return "paused";
+    const def = this.definitions.get(row.kind);
+    if (!def?.catalogue || !def.capabilities.includes("catalogue") || !row.externalId || !this.http || !this.secrets) {
+      return "no catalogue here";
+    }
+    let ctx: RunContext;
+    try {
+      ctx = await this.runContext(row, now);
+    } catch {
+      return "credentials do not open";
+    }
+    try {
+      const read = await this.readCatalogue(row, def, ctx, now);
+      return `${read.read} read${read.more ? ", more to come" : ""}`;
+    } catch (error) {
+      if (!(error instanceof ConnectorError)) throw error;
+      await this.markError(row, error, now);
+      return error.message;
+    }
+  }
+
+  /**
+   * One reading of a shop's catalogue (ADR-026 §3), within a budget of pages: a full pass every six
+   * hours (or first), what changed since the last read otherwise. Each page is written as it comes, by
+   * the one upsert feeds share; a full pass that ends takes off sale what it did not see, unless it
+   * stopped at `MAX_CATALOGUE`, when the owner is told once. Where it got to is kept on the connection,
+   * so the next run goes on from there.
+   */
+  private async readCatalogue(
+    row: ConnectorRow,
+    def: ConnectorDefinition,
+    ctx: RunContext,
+    now: number,
+  ): Promise<{ read: number; more: boolean }> {
+    const reader = def.catalogue;
+    if (!reader || !row.externalId) return { read: 0, more: false };
+    const source = connectorSource(row.kind, row.externalId);
+    const before = row.config.catalogue ?? EMPTY_CATALOGUE;
+    const currency = (await readSettings(this.db)).business.currency;
+    let full =
+      before.full ??
+      (before.since === null || now - before.lastFullAt >= CATALOGUE_FULL_EVERY_MS
+        ? { cursor: null, startedAt: now, seen: 0 }
+        : null);
+    let partial = full ? null : (before.partial ?? { cursor: null, startedAt: now });
+    let { lastFullAt, since, truncated } = before;
+    let read = 0;
+    let capped = false;
+    for (let pages = 0; pages < CATALOGUE_PAGES_PER_RUN && (full || partial); pages++) {
+      const cursor = full ? full.cursor : (partial?.cursor ?? null);
+      const page = await reader.page(ctx, {
+        cursor,
+        since: full ? null : Math.max(0, (since ?? 0) - CATALOGUE_LOOKBACK_MS),
+      });
+      let products = page.products;
+      if (full && full.seen + products.length > MAX_CATALOGUE) {
+        products = products.slice(0, Math.max(0, MAX_CATALOGUE - full.seen));
+        capped = true;
+      }
+      await upsertCatalogue(this.db, {
+        source,
+        products: products.map((p) => ({
+          externalId: String(p.externalId).slice(0, 200),
+          name: String(p.name ?? "").slice(0, 300) || "Product",
+          description: p.description === null ? null : String(p.description).slice(0, 5_000),
+          sku: p.sku,
+          price: p.price,
+          stock: p.stock === null || !Number.isFinite(p.stock) ? null : Math.max(0, Math.trunc(p.stock)),
+          available: p.available,
+        })),
+        now,
+        seenAt: now,
+        currency,
+      });
+      read += products.length;
+      if (full) {
+        full = { cursor: page.cursor, startedAt: full.startedAt, seen: full.seen + products.length };
+        if (capped || page.cursor === null) {
+          // A pass cut at the limit is not evidence of absence: nothing it did not see goes off sale.
+          if (!capped) await deactivateUnseen(this.db, source, full.startedAt, now);
+          truncated = capped;
+          lastFullAt = now;
+          since = full.startedAt;
+          full = null;
+        }
+      } else if (partial) {
+        // What changed is read from when this pass began, next time: a change made while it read is not missed.
+        if (page.cursor === null) {
+          since = partial.startedAt;
+          partial = null;
+        } else {
+          partial = { cursor: page.cursor, startedAt: partial.startedAt };
+        }
+      }
+    }
+    const state: CatalogueState = { full, lastFullAt, since, partial, truncated };
+    await this.db.client.query({
+      sql: "UPDATE connectors SET config_public = json_set(config_public, '$.catalogue', json(?)), updated_at = ? WHERE id = ?",
+      params: [JSON.stringify(state), now, row.id],
+      method: "run",
+    });
+    if (capped && !before.truncated) {
+      await this.db.batch([
+        jobStatement(CONNECTOR_NOTICE_KIND, { connectorId: row.id, reason: "catalogue_cap" }, now, {
+          dedupeKey: `cnotice:${row.id}:cap`,
+        }),
+      ]);
+    }
+    const more = full !== null || partial !== null;
+    if (more) {
+      await ensureJob(this.db, CONNECTOR_CATALOGUE_KIND, `ccat:${row.id}:more:${Math.floor(now / 10_000)}`, {
+        now,
+        runAt: now + 1_000,
+        payload: { connectorId: row.id },
+      });
+    }
+    return { read, more };
   }
 
   /**
@@ -1230,14 +1720,65 @@ export class ConnectorCapabilities {
         fields: [{ path: "kind", problem: "invalid", message: "unknown integration" }],
       });
     }
-    const ready = def.ready ? def.ready() : true;
-    if (ready !== true) {
-      throw new WriteError("not_allowed", `${def.title} is not available on this inbox yet: ${ready}`, {
-        details: { reason: "not_ready", kind: def.kind },
-      });
-    }
+    this.ready(def);
     if (!this.http) throw new WriteError("not_allowed", "This inbox cannot reach other services.");
     return def;
+  }
+
+  /** Refuses a way that is not ready here: the definition's readiness, then its preset's own. */
+  private ready(def: ConnectorDefinition, preset?: ConnectorPreset | undefined): void {
+    const ready = readiness(def, preset);
+    if (ready !== true) {
+      throw new WriteError("not_allowed", `${def.title} is not available on this inbox yet: ${ready}`, {
+        details: { reason: "not_ready", kind: def.kind, ...(preset ? { preset: preset.id } : {}) },
+      });
+    }
+  }
+
+  /**
+   * The address segment a connection is reached at (ADR-026 §4, §5), for a connector told by webhook at
+   * its own address or one that serves a link: the one it has, when it is connected again in place, or a
+   * new one. Null for a connector that needs none.
+   */
+  private async inboundFor(
+    def: ConnectorDefinition,
+    again: ConnectorRow | null,
+  ): Promise<{ readonly token: string; readonly fresh: boolean } | null> {
+    if (!def.hooks && !def.feed) return null;
+    if (again?.inboundEnc && this.secrets) {
+      try {
+        return { token: await this.secrets.open("connector-inbound", again.id, again.inboundEnc), fresh: false };
+      } catch {
+        // Sealed under a key this instance no longer holds: a new address, which the connector names again.
+      }
+    }
+    return { token: newInboundToken(), fresh: true };
+  }
+
+  /**
+   * A connection that is a link the inbox makes (`auth: "link"`): nothing asked, nothing checked on
+   * another platform, one per kind. The owner sees the link once it is made, and can make a new one.
+   */
+  private async makeLink(
+    def: ConnectorDefinition,
+    preset: string | null,
+    name: string | undefined,
+    now: number,
+    box: SecretBox,
+  ): Promise<ConnectionView> {
+    if (!def.feed) {
+      throw new WriteError("not_allowed", `${def.title} serves no link here.`, { details: { kind: def.kind } });
+    }
+    const connected: Connected = {
+      account: def.title,
+      externalId: def.kind,
+      secret: {},
+      calendars: [],
+      destinations: [],
+      defaults: { busy: [], destination: null },
+    };
+    const inbound = await this.inboundFor(def, null);
+    return this.store(def, preset, connected, name, now, box, false, undefined, inbound);
   }
 
   private async store(
@@ -1249,6 +1790,7 @@ export class ConnectorCapabilities {
     box: SecretBox,
     reconnect = false,
     inputs?: Readonly<Record<string, string>>,
+    inbound?: { readonly token: string; readonly fresh: boolean } | null,
   ): Promise<ConnectionView> {
     const config: PublicConfig = {
       preset,
@@ -1264,9 +1806,13 @@ export class ConnectorCapabilities {
       refreshedAt: now,
       inputs: inputs ?? {},
       payOn: def.capabilities.includes("pay_links"),
-      mode: connected.mode ?? null,
+      // A connection that takes payments has a mode: a shop that says none takes real orders, and is
+      // then the one connection that makes their links (ADR-023 §1, ADR-026 §2).
+      mode: connected.mode ?? (def.capabilities.includes("pay_links") ? "live" : null),
       disconnectingAt: null,
       disconnectTries: 0,
+      choices: connected.choices ?? [],
+      catalogue: null,
     };
     const presetLabel = preset ? def.presets?.find((p) => p.id === preset)?.label : undefined;
     const title = name?.trim() || presetLabel || def.title;
@@ -1291,6 +1837,11 @@ export class ConnectorCapabilities {
     }
     const id = existingId ?? ulid(now);
     const sealed = await box.seal("connector-config", id, JSON.stringify(connected.secret));
+    // The connection's own address: written for a new one, and again when connecting gave it a new one.
+    const address =
+      inbound && (!existingId || inbound.fresh)
+        ? { hash: await inboundHash(inbound.token), sealed: await box.seal("connector-inbound", id, inbound.token) }
+        : null;
     if (existingId) {
       // Connecting again with the same account: new credentials, the owner's choices kept, and the
       // failing it did forgotten (the sync starts again at its usual pace).
@@ -1300,7 +1851,8 @@ export class ConnectorCapabilities {
                        last_error = NULL, last_error_at = NULL, error_code = NULL, failing_since = NULL, failures = 0,
                        notified_at = NULL,
                        config_public = json_set(config_public, '$.account', ?, '$.calendars', json(?), '$.destinations', json(?),
-                       '$.extra', json(?), '$.refreshedAt', ?, '$.mode', ?${inputs ? ", '$.inputs', json(?)" : ""}), updated_at = ? WHERE id = ?`,
+                       '$.extra', json(?), '$.refreshedAt', ?, '$.mode', ?${inputs ? ", '$.inputs', json(?)" : ""}${connected.choices ? ", '$.choices', json(?)" : ""}),
+                       ${address ? "inbound_token = ?, inbound_enc = ?, " : ""}updated_at = ? WHERE id = ?`,
           params: [
             sealed,
             config.account,
@@ -1310,6 +1862,10 @@ export class ConnectorCapabilities {
             now,
             config.mode,
             ...(inputs ? [JSON.stringify(inputs)] : []),
+            ...(connected.choices
+              ? [JSON.stringify(mergeChoices(await this.choicesOf(existingId), connected.choices))]
+              : []),
+            ...(address ? [address.hash, address.sealed] : []),
             now,
             id,
           ],
@@ -1322,9 +1878,20 @@ export class ConnectorCapabilities {
     try {
       await this.db.batch([
         {
-          sql: `INSERT INTO connectors (id, kind, name, external_id, config_enc, config_public, status, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, 'configured', ?, ?)`,
-          params: [id, def.kind, title, connected.externalId, sealed, JSON.stringify(config), now, now],
+          sql: `INSERT INTO connectors (id, kind, name, external_id, config_enc, config_public, status, inbound_token, inbound_enc, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, 'configured', ?, ?, ?, ?)`,
+          params: [
+            id,
+            def.kind,
+            title,
+            connected.externalId,
+            sealed,
+            JSON.stringify(config),
+            address?.hash ?? null,
+            address?.sealed ?? null,
+            now,
+            now,
+          ],
           method: "run",
         },
         ...replaced.map(
@@ -1334,8 +1901,11 @@ export class ConnectorCapabilities {
             method: "run",
           }),
         ),
-        // The first sync straight away: the owner who just connected is watching the screen.
-        jobStatement(CONNECTOR_SYNC_KIND, { connectorId: id }, now, { dedupeKey: `csync:${id}:first` }),
+        // The first sync straight away: the owner who just connected is watching the screen. A link
+        // the inbox serves has nothing to read or write: no sync at all.
+        ...(def.capabilities.length > 0 || def.refresh
+          ? [jobStatement(CONNECTOR_SYNC_KIND, { connectorId: id }, now, { dedupeKey: `csync:${id}:first` })]
+          : []),
       ]);
     } catch (error) {
       if (String(error).includes("UNIQUE")) {
@@ -1349,10 +1919,16 @@ export class ConnectorCapabilities {
   private async connectContext(
     now: number,
     kind: string,
+    token?: string | undefined,
   ): Promise<{ http: ConnectorHttp; now: number; inbox: InboxIdentity; hookUrl: string | null; hooksLive: boolean }> {
     if (!this.http) throw new WriteError("not_allowed", "This inbox cannot reach other services.");
     const inbox = await this.identity();
-    return { http: this.http, now, inbox, hookUrl: hookUrlOf(inbox.origin, kind), hooksLive: this.hooksLive };
+    return { http: this.http, now, inbox, hookUrl: hookUrlOf(inbox.origin, kind, token), hooksLive: this.hooksLive };
+  }
+
+  /** What a connection's choosers hold now, for connecting it again in place. */
+  private async choicesOf(id: string): Promise<readonly ConnectionChoice[]> {
+    return (await this.rowOrNull(id))?.config.choices ?? [];
   }
 
   /** Where platforms send what they tell this inbox: `<origin>/v1/hooks/<kind>`; null without an https origin. */
@@ -1395,11 +1971,22 @@ export class ConnectorCapabilities {
     const secret = JSON.parse(await box.open("connector-config", row.id, row.configEnc)) as Record<string, string>;
     const db = this.db;
     const inbox = await this.identity();
+    // A connector told by webhook at its own address names it with its token; the rest, the kind's.
+    const hooked = this.definitions.get(row.kind)?.hooks !== undefined;
+    let token: string | undefined;
+    if (row.inboundEnc && hooked) {
+      try {
+        token = await box.open("connector-inbound", row.id, row.inboundEnc);
+      } catch {
+        token = undefined;
+      }
+    }
     return {
       http: this.http,
       now,
       inbox,
-      hookUrl: hookUrlOf(inbox.origin, row.kind),
+      // Without its own address (sealed under a key this instance no longer holds), none: never the kind's.
+      hookUrl: hooked && !token ? null : hookUrlOf(inbox.origin, row.kind, token),
       hooksLive: this.hooksLive,
       secret,
       extra: row.config.extra ?? {},
@@ -1409,6 +1996,7 @@ export class ConnectorCapabilities {
       destination: row.config.destination ?? null,
       own: await this.ownEvents(),
       marker: await markerOf(box, row.kind, row.externalId ?? row.id),
+      choices: Object.fromEntries((row.config.choices ?? []).map((c) => [c.key, c.value])),
       async saveSecret(next) {
         await db.client.query({
           sql: "UPDATE connectors SET config_enc = ? WHERE id = ?",
@@ -1490,6 +2078,13 @@ export class ConnectorCapabilities {
     };
   }
 
+  /** The words of the one email that a shop's catalogue was cut at the limit; null when it no longer is. */
+  async cappedNotice(connectorId: string): Promise<{ readonly title: string; readonly max: number } | null> {
+    const row = await this.rowOrNull(connectorId);
+    if (!row?.config.catalogue?.truncated) return null;
+    return { title: row.name || this.definitions.get(row.kind)?.title || row.kind, max: MAX_CATALOGUE };
+  }
+
   private async rows(): Promise<ConnectorRow[]> {
     const { rows } = await this.db.client.query({
       sql: `SELECT ${ROW_COLUMNS} FROM connectors WHERE kind <> 'feed' ORDER BY created_at`,
@@ -1515,7 +2110,7 @@ export class ConnectorCapabilities {
     return row;
   }
 
-  private async view(row: ConnectorRow, now: number): Promise<ConnectionView> {
+  private async view(row: ConnectorRow, now: number, person = false): Promise<ConnectionView> {
     const def = this.definitions.get(row.kind);
     const [busy, links] = await Promise.all([
       this.db.client.query({
@@ -1582,9 +2177,35 @@ export class ConnectorCapabilities {
               dashboard_url: def.payments.dashboardUrl({ extra: row.config.extra ?? {} }, row.config.mode ?? "live"),
               disconnecting: row.config.disconnectingAt !== null,
               closing: pays.closing,
+              held: pays.held,
             }
           : null,
+      card: cardOf(row.kind, row.config.preset) ?? null,
+      choices: row.config.choices ?? [],
+      catalogue:
+        def?.catalogue && def.capabilities.includes("catalogue") && row.externalId
+          ? {
+              products: await activeProducts(this.db, connectorSource(row.kind, row.externalId)),
+              read_at: row.config.catalogue?.lastFullAt || null,
+              truncated: row.config.catalogue?.truncated === true,
+            }
+          : null,
+      link: person && def?.feed ? await this.linkOf(row, def.feed.extension) : null,
+      disconnect_note: def?.disconnectNote ?? null,
     };
+  }
+
+  /** The link a connection serves, as the owner copies it; null when it cannot be opened here. */
+  private async linkOf(row: ConnectorRow, extension: string): Promise<string | null> {
+    if (!row.inboundEnc || !this.secrets) return null;
+    const origin = (await this.identity()).origin;
+    if (!origin) return null;
+    try {
+      const token = await this.secrets.open("connector-inbound", row.id, row.inboundEnc);
+      return `${origin}/v1/feeds/${encodeURIComponent(row.kind)}/${token}${extension}`;
+    } catch {
+      return null;
+    }
   }
 
   /* --- payments (ADR-023) ------------------------------------------------------ */
@@ -1609,6 +2230,12 @@ export class ConnectorCapabilities {
       disconnecting: row.config.disconnectingAt !== null,
       payments: def.payments,
       ctx,
+      shop:
+        def.capabilities.includes("shop_orders") && row.externalId
+          ? { source: connectorSource(row.kind, row.externalId) }
+          : null,
+      // A connector read back on every sync is told nothing it needs this inbox's address for.
+      needsHookUrl: def.hooks === undefined,
     };
   }
 
@@ -1652,6 +2279,54 @@ export class ConnectorCapabilities {
           method: "run",
         });
       },
+      title: (kind) => this.definitions.get(kind)?.title ?? kind,
+    };
+  }
+
+  /** What the webhook side is given: the connections by address, opened, and how to say a failure. */
+  private hookHost(): HookHost {
+    return {
+      db: this.db,
+      payments: this.payments,
+      definition: (kind) => this.definitions.get(kind),
+      connectionByToken: async (kind, tokenHash) => {
+        const { rows } = await this.db.client.query({
+          sql: "SELECT id, kind FROM connectors WHERE kind = ? AND inbound_token = ?",
+          params: [kind, tokenHash],
+          method: "all",
+        });
+        return rows[0] ? { id: String(rows[0][0]), kind: String(rows[0][1]) } : null;
+      },
+      context: async (id, now) => {
+        const row = await this.rowOrNull(id);
+        if (!row || !this.http || !this.secrets) return null;
+        try {
+          return await this.runContext(row, now);
+        } catch {
+          return null;
+        }
+      },
+      payConnection: async (id, now) => {
+        const row = await this.rowOrNull(id);
+        const def = row ? this.definitions.get(row.kind) : undefined;
+        if (!row || !def?.payments || !def.capabilities.includes("pay_links")) return null;
+        try {
+          return this.payConnectionOf(row, def, await this.runContext(row, now));
+        } catch {
+          return null;
+        }
+      },
+      failed: async (id, error, now) => {
+        const row = await this.rowOrNull(id);
+        if (row) await this.markError(row, error, now);
+      },
+      syncNow: async (id, now, key) => {
+        const row = await this.rowOrNull(id);
+        const def = row ? this.definitions.get(row.kind) : undefined;
+        // Products changed: the catalogue alone, at once. Anything else: a sync.
+        const kind = def?.catalogue ? CONNECTOR_CATALOGUE_KIND : CONNECTOR_SYNC_KIND;
+        await this.db.batch([jobStatement(kind, { connectorId: id }, now, { dedupeKey: `${kind}:${id}:${key}` })]);
+      },
     };
   }
 }
@@ -1679,7 +2354,7 @@ export function connectorLane(payload: unknown): string | undefined {
 }
 
 const ROW_COLUMNS =
-  "id, kind, name, external_id, config_enc, config_public, cursor, status, last_error, last_error_at, last_sync_at, busy_at, created_at, busy_gen, busy_until, error_code, failing_since, failures, notified_at";
+  "id, kind, name, external_id, config_enc, config_public, cursor, status, last_error, last_error_at, last_sync_at, busy_at, created_at, busy_gen, busy_until, error_code, failing_since, failures, notified_at, inbound_enc";
 
 function rowOf(r: readonly unknown[]): ConnectorRow {
   let config: unknown = r[5];
@@ -1711,6 +2386,7 @@ function rowOf(r: readonly unknown[]): ConnectorRow {
     failingSince: n(r[16]),
     failures: Number(r[17] ?? 0),
     notifiedAt: n(r[18]),
+    inboundEnc: r[19] === null || r[19] === undefined ? null : String(r[19]),
   };
 }
 
@@ -1736,7 +2412,71 @@ function normaliseConfig(raw: unknown): PublicConfig {
     mode: c.mode === "live" || c.mode === "test" ? c.mode : null,
     disconnectingAt: typeof c.disconnectingAt === "number" ? c.disconnectingAt : null,
     disconnectTries: typeof c.disconnectTries === "number" ? c.disconnectTries : 0,
+    choices: Array.isArray(c.choices) ? c.choices.filter(isChoice) : [],
+    catalogue: catalogueStateOf(c.catalogue),
   };
+}
+
+function isChoice(v: unknown): v is ConnectionChoice {
+  const c = v as Partial<ConnectionChoice> | null;
+  return (
+    typeof c?.key === "string" &&
+    typeof c.label === "string" &&
+    Array.isArray(c.options) &&
+    (c.value === null || typeof c.value === "string")
+  );
+}
+
+const EMPTY_CATALOGUE: CatalogueState = { full: null, lastFullAt: 0, since: null, partial: null, truncated: false };
+
+function catalogueStateOf(raw: unknown): CatalogueState | null {
+  if (!raw || typeof raw !== "object") return null;
+  const c = raw as Partial<CatalogueState>;
+  const pass = (v: unknown) => {
+    const p = v as { cursor?: unknown; startedAt?: unknown; seen?: unknown } | null;
+    return p && typeof p.startedAt === "number" && (p.cursor === null || typeof p.cursor === "string") ? p : null;
+  };
+  const full = pass(c.full);
+  const partial = pass(c.partial);
+  return {
+    full: full
+      ? {
+          cursor: (full.cursor as string | null) ?? null,
+          startedAt: full.startedAt as number,
+          seen: Number(full.seen ?? 0),
+        }
+      : null,
+    lastFullAt: typeof c.lastFullAt === "number" ? c.lastFullAt : 0,
+    since: typeof c.since === "number" ? c.since : null,
+    partial: partial
+      ? { cursor: (partial.cursor as string | null) ?? null, startedAt: partial.startedAt as number }
+      : null,
+    truncated: c.truncated === true,
+  };
+}
+
+/** Choosers sent again: their options anew, and what the owner chose kept where it is still an option. */
+function mergeChoices(old: readonly ConnectionChoice[], fresh: readonly ConnectionChoice[]): ConnectionChoice[] {
+  return fresh.map((c) => {
+    const before = old.find((o) => o.key === c.key);
+    const kept = before?.value && c.options.some((o) => o.id === before.value) ? before.value : null;
+    return { key: c.key, label: c.label, options: c.options, value: kept ?? c.value };
+  });
+}
+
+/** What a sign-in asked first, as `connector_auth.input` keeps it: the way, and the values. */
+function authInputOf(raw: unknown): { readonly preset: string | null; readonly values: Record<string, string> } {
+  try {
+    const j = (typeof raw === "string" ? JSON.parse(raw) : null) as { preset?: unknown; values?: unknown } | null;
+    const values: Record<string, string> = {};
+    if (j?.values && typeof j.values === "object") {
+      for (const [k, v] of Object.entries(j.values as Record<string, unknown>))
+        if (typeof v === "string") values[k] = v;
+    }
+    return { preset: typeof j?.preset === "string" ? j.preset : null, values };
+  } catch {
+    return { preset: null, values: {} };
+  }
 }
 
 /** Links a disconnect switches off in the owner's request; the rest by its job, more at a time. */
@@ -1759,10 +2499,13 @@ function deleteStatements(connectorId: string): Statement[] {
   ];
 }
 
-/** `<origin>/v1/hooks/<kind>` for an https origin; null for none (a platform cannot reach it). */
-function hookUrlOf(origin: string, kind: string): string | null {
+/**
+ * `<origin>/v1/hooks/<kind>` for an https origin, or a connection's own `<origin>/v1/hooks/<kind>/<token>`;
+ * null for none (a platform cannot reach it).
+ */
+function hookUrlOf(origin: string, kind: string, token?: string | undefined): string | null {
   if (!origin.startsWith("https://")) return null;
-  return `${origin}/v1/hooks/${kind}`;
+  return token ? `${origin}/v1/hooks/${kind}/${token}` : `${origin}/v1/hooks/${kind}`;
 }
 
 /** What the connector made on the platform for a key, kept or taken away again (`Connected.settle`). */

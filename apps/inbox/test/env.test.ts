@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { listFrom, outboundDenyFrom, publicUrlFrom, secretKeyFrom, senderFrom } from "../src/env";
+import { listFrom, oauthFrom, outboundDenyFrom, publicUrlFrom, secretKeyFrom, senderFrom } from "../src/env";
 
 /**
  * The Deploy to Cloudflare button asks for every value in .dev.vars.example, so each can arrive
@@ -87,5 +87,31 @@ describe("the host's settings", () => {
       ["2a01:4f8::/32", 32],
     ]);
     expect(read.bad).toEqual(["10.0.0.0/33", "office"]);
+  });
+
+  it("takes each platform's OAuth client only with both its halves, and says when one is alone", () => {
+    const said: string[] = [];
+    const r = oauthFrom(
+      {
+        GOOGLE_OAUTH_CLIENT_ID: "g-id",
+        GOOGLE_OAUTH_CLIENT_SECRET: "g-secret",
+        SHOPIFY_CLIENT_ID: "shp-id",
+        SQUARE_CLIENT_ID: " sq-id ",
+        SQUARE_CLIENT_SECRET: " sq-secret ",
+        GOOGLE_OAUTH_TESTING: "1",
+      },
+      (line) => said.push(line),
+    );
+    expect(r.oauth).toEqual({
+      google: { clientId: "g-id", clientSecret: "g-secret" },
+      shopify: null,
+      square: { clientId: "sq-id", clientSecret: "sq-secret" },
+      calendly: null,
+    });
+    expect(r.googleTesting).toBe(true);
+    expect(said).toEqual([
+      "SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET go together; with one alone shopify sign-in stays off",
+    ]);
+    expect(oauthFrom({}).googleTesting).toBe(false);
   });
 });

@@ -1,6 +1,7 @@
 import type { Statement } from "@surfingdog/platform";
-import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
-import { identityChanged, mergedIdentity, NEXT_CATALOGUE_SEQ, type StoredIdentity } from "../catalogue/identity";
+import { and, asc, eq, sql } from "drizzle-orm";
+import { NEXT_CATALOGUE_SEQ } from "../catalogue/identity";
+import { deactivateUnseen, upsertCatalogue } from "../connectors/catalogue";
 import type { Db } from "../db";
 import { type FeedParseResult, type FeedPriceChange, type FeedProduct, type FeedSkip, parseFeed } from "../feeds/parse";
 import { ulid } from "../ids";
@@ -300,6 +301,11 @@ export class FeedCapabilities {
 
   /* --- writing the catalogue ------------------------------------------- */
 
+  /**
+   * The feed's products, written by the one catalogue upsert feeds and shops share (ADR-026 §3): the
+   * same keys, the same SKU rule, a missing price kept from last time and a product with none never
+   * on sale. What the feed no longer carries is deactivated, unless the read was cut short.
+   */
   private async apply(
     connectorId: string,
     url: string,
@@ -309,168 +315,44 @@ export class FeedCapabilities {
     now: number,
   ): Promise<FeedImportSummary> {
     const source = feedSource(url);
-    const existing = await this.db.orm
-      .select({
-        id: products.id,
-        externalId: products.externalId,
-        name: products.name,
-        description: products.description,
-        price: products.price,
-        stock: products.stock,
-        active: products.active,
-        sku: products.sku,
-        gtin: products.gtin,
-        gtinGiven: products.gtinGiven,
-        brand: products.brand,
-        mpn: products.mpn,
-        condition: products.condition,
-        url: products.url,
-        imageUrl: products.imageUrl,
-        sourceCategory: products.sourceCategory,
-      })
-      .from(products)
-      .where(eq(products.source, source));
-
-    const byExternal = new Map<string, (typeof existing)[number]>();
-    for (const row of existing) if (row.externalId) byExternal.set(row.externalId, row);
-
-    // A sku is unique across the whole catalogue, so one already spoken for by a product this feed
-    // does not own is simply not written. The product still imports; it just carries no sku.
-    const takenSku = new Map<string, string>();
-    const skuRows = await this.db.orm
-      .select({ id: products.id, sku: products.sku })
-      .from(products)
-      .where(isNotNull(products.sku));
-    for (const row of skuRows) if (row.sku) takenSku.set(row.sku, row.id);
-
-    const statements: Statement[] = [];
-    const seen = new Set<string>();
-    let created = 0;
-    let updated = 0;
-    let unchanged = 0;
-
-    for (const product of parsed.products) {
-      seen.add(product.externalId);
-      const current = byExternal.get(product.externalId);
-      const id = current?.id ?? ulid(now);
-      const sku = this.skuFor(product, id, takenSku);
-      // Kept from the last time it had one: a feed that leaves a price out has not made it free. A
-      // stored price of nothing is the mark of a product that never had one, not a price. With none
-      // at all it is never on sale: it is kept off sale, in `currency` (the feed's, which is the
-      // business's unless the owner named another), until the feed gives it one.
-      const kept = current?.price && current.price.value > 0 ? current.price : null;
-      const price = product.price ?? kept;
-      const active = product.available === false || price === null ? 0 : 1;
-      const stored = price ?? { value: 0, currency: (current?.price?.currency ?? currency).toUpperCase() };
-      // Its barcode, brand, part number, condition and links (ADR-029): what this read gives, and what
-      // it leaves out kept. A source never sets `no_gtin` or `listed`: those are the owner's.
-      const ident = mergedIdentity(current ?? null, product);
-
-      if (!current) {
-        statements.push({
-          // ON CONFLICT, not a plain INSERT: two imports of one connector running at the same
-          // time both read an empty catalogue, and without this both inserted, so sixty products
-          // became a hundred and twenty and both imports reported success. The unique index
-          // added in migration 5 is what this conflicts against; the loser updates.
-          sql: `INSERT INTO products (id, sku, name, description, price, stock, source, external_id, active,
-                                      gtin, gtin_given, brand, mpn, condition, url, image_url, source_category,
-                                      catalogue_seq, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${NEXT_CATALOGUE_SEQ}, ?, ?)
-                ON CONFLICT (source, external_id) WHERE external_id IS NOT NULL
-                DO UPDATE SET name = excluded.name, description = excluded.description,
-                              price = excluded.price, stock = excluded.stock,
-                              active = excluded.active, gtin = excluded.gtin, gtin_given = excluded.gtin_given,
-                              brand = excluded.brand, mpn = excluded.mpn, condition = excluded.condition,
-                              url = excluded.url, image_url = excluded.image_url,
-                              source_category = excluded.source_category, catalogue_seq = excluded.catalogue_seq,
-                              updated_at = excluded.updated_at`,
-          params: [
-            id,
-            sku,
-            product.name,
-            product.description,
-            JSON.stringify(stored),
-            product.stock,
-            source,
-            product.externalId,
-            active,
-            ...identityParams(ident),
-            now,
-            now,
-          ],
-          method: "run",
-        });
-        if (sku) takenSku.set(sku, id);
-        created++;
-        continue;
-      }
-
-      if (!changed(current, product, stored, active, sku) && !identityChanged(current, ident)) {
-        unchanged++;
-        continue;
-      }
-      statements.push({
-        sql: `UPDATE products SET sku = ?, name = ?, description = ?, price = ?, stock = ?, active = ?,
-                gtin = ?, gtin_given = ?, brand = ?, mpn = ?, condition = ?, url = ?, image_url = ?, source_category = ?,
-                catalogue_seq = ${NEXT_CATALOGUE_SEQ}, updated_at = ? WHERE id = ?`,
-        params: [
-          sku,
-          product.name,
-          product.description,
-          JSON.stringify(stored),
-          product.stock,
-          active,
-          ...identityParams(ident),
-          now,
-          id,
-        ],
-        method: "run",
-      });
-      if (sku) takenSku.set(sku, id);
-      updated++;
-    }
-
-    // Gone from the feed. Deactivated, never deleted: an order may point at it, and a deleted row
-    // takes that order's history with it. A truncated read is not evidence of absence, so a feed
-    // that hit the row limit deactivates nothing.
-    let deactivated = 0;
-    if (deactivateMissing && !parsed.truncated) {
-      const missing = existing.filter((row) => row.active === 1 && (!row.externalId || !seen.has(row.externalId)));
-      for (const chunk of chunks(
-        missing.map((row) => row.id),
-        50,
-      )) {
-        statements.push({
-          sql: `UPDATE products SET active = 0, catalogue_seq = ${NEXT_CATALOGUE_SEQ}, updated_at = ? WHERE id IN (${chunk.map(() => "?").join(", ")})`,
-          params: [now, ...chunk],
-          method: "run",
-        });
-      }
-      deactivated = missing.length;
-    }
-
-    // D1 counts every statement in a batch against one invocation's query budget, so the writes go
-    // in slices rather than one batch of five thousand.
-    for (const slice of chunks(statements, 40)) await this.db.batch(slice);
-
+    const written = await upsertCatalogue(this.db, {
+      source,
+      products: parsed.products.map((product: FeedProduct) => ({
+        externalId: product.externalId,
+        name: product.name,
+        description: product.description,
+        sku: product.sku,
+        price: product.price,
+        stock: product.stock,
+        available: product.available,
+        // Its barcode, brand, part number, condition and links (ADR-029), each only when the row says it.
+        gtin: product.gtin,
+        brand: product.brand,
+        mpn: product.mpn,
+        condition: product.condition,
+        url: product.url,
+        imageUrl: product.imageUrl,
+        sourceCategory: product.sourceCategory,
+      })),
+      now,
+      seenAt: now,
+      currency,
+    });
+    // Gone from the feed. A truncated read is not evidence of absence, so a feed that hit the row limit
+    // deactivates nothing.
+    const deactivated = deactivateMissing && !parsed.truncated ? await deactivateUnseen(this.db, source, now, now) : 0;
     return {
       connector_id: connectorId,
       format: parsed.format,
       read: parsed.products.length,
-      created,
-      updated,
-      unchanged,
+      created: written.created,
+      updated: written.updated,
+      unchanged: written.unchanged,
       deactivated,
       skipped: parsed.skipped,
       truncated: parsed.truncated,
       mapped: parsed.mapped,
     };
-  }
-
-  private skuFor(product: FeedProduct, id: string, taken: Map<string, string>): string | null {
-    if (!product.sku) return null;
-    const owner = taken.get(product.sku);
-    return owner === undefined || owner === id ? product.sku : null;
   }
 
   private view(row: typeof connectors.$inferSelect, productCount: number, currency: string): FeedConnector {
@@ -608,39 +490,6 @@ function hostOf(url: string): string {
   } catch {
     return "Feed";
   }
-}
-
-function changed(
-  current: {
-    name: string;
-    description: string | null;
-    price: unknown;
-    stock: number | null;
-    active: number;
-    sku: string | null;
-  },
-  product: FeedProduct,
-  price: unknown,
-  active: number,
-  sku: string | null,
-): boolean {
-  return (
-    (current.sku ?? null) !== sku ||
-    current.name !== product.name ||
-    (current.description ?? null) !== product.description ||
-    JSON.stringify(current.price ?? null) !== JSON.stringify(price ?? null) ||
-    (current.stock ?? null) !== product.stock ||
-    current.active !== active
-  );
-}
-
-/** The identity columns in the order the statements above name them. */
-function identityParams(i: StoredIdentity): (string | null)[] {
-  return [i.gtin, i.gtinGiven, i.brand, i.mpn, i.condition, i.url, i.imageUrl, i.sourceCategory];
-}
-
-function* chunks<T>(values: readonly T[], size: number): Generator<T[]> {
-  for (let i = 0; i < values.length; i += size) yield values.slice(i, i + size);
 }
 
 function requireOwner(caller: Caller): void {

@@ -25,9 +25,28 @@ export type ConnectorCapability =
    * Orders the inbox accepts get a link to pay in the business's own account on the platform, and the
    * platform's signed word that it was paid marks them paid (ADR-023). The money never passes the inbox.
    */
-  | "pay_links";
+  | "pay_links"
+  /**
+   * The platform's products come into the inbox's catalogue (ADR-026 §3): read in pages, a full pass
+   * every six hours and what changed every five minutes, deactivated (never deleted) when a full pass
+   * no longer sees them. The owner's own fields (withdrawal, negotiable) are never written.
+   */
+  | "catalogue"
+  /**
+   * Orders the inbox accepts are written into the business's own shop or till and paid at its own
+   * checkout (ADR-026 §2): the connector is the payment platform for its orders, so it rides on
+   * `pay_links`, and its `createLink` is given the order (`PayLinkRequest.order`).
+   */
+  | "shop_orders";
 
 export type ConnectorGroup = "calendars" | "payments" | "shops";
+
+/**
+ * How the owner connects (ADR-026 §5): `form`, they fill in `form` (a key, an app password); `oauth`,
+ * they approve a page on the platform, or on their own store (`OAuthFlow.delivery`); `link`, nothing
+ * to sign in to: the inbox makes a private link the owner pastes into another platform.
+ */
+export type ConnectorAuth = "form" | "oauth" | "link";
 
 /* --- the form ------------------------------------------------------------ */
 
@@ -52,6 +71,11 @@ export interface FieldHints {
   readonly hidden?: boolean | undefined;
   /** A key's placeholder for each mode, for a second connection of the other one ("rk_test_…"). */
   readonly byMode?: { readonly live: string; readonly test: string } | undefined;
+  /**
+   * Filled in from what the inbox knows, editable: `website` is the business's own website (Settings →
+   * Business), the address a shop is most often at. Never a format the owner has to guess.
+   */
+  readonly prefill?: "website" | undefined;
 }
 
 /** Where field hints live: a registry of their own, so nothing else in the schema is touched. */
@@ -86,6 +110,8 @@ export interface FormField {
   readonly autocomplete?: string | undefined;
   readonly steps?: readonly string[] | undefined;
   readonly byMode?: { readonly live: string; readonly test: string } | undefined;
+  /** What the inbox filled in already (`FieldHints.prefill`), for the owner to keep or change. */
+  readonly value?: string | undefined;
 }
 
 /**
@@ -98,10 +124,32 @@ export interface ConnectorPreset {
   readonly values: Readonly<Record<string, string>>;
   readonly fields?: Readonly<Record<string, Partial<FieldHints>>> | undefined;
   readonly note?: string | undefined;
+  /**
+   * A way that connects otherwise than the definition (ADR-026 §5): a shop connected by approving a
+   * page on the store, with a way to paste its keys instead (`form`), or a key with a one-click
+   * sign-in beside it (`oauth`) that needs the platform app of whoever runs the server.
+   */
+  readonly auth?: ConnectorAuth | undefined;
+  /** This way's own readiness, when it needs something the others do not (an OAuth client). */
+  ready?(): true | string;
+  readonly whenNotReady?: ConnectorDefinition["whenNotReady"];
+  /** The words on its one button, when they are not the definition's (`ConnectorDefinition.action`). */
+  readonly action?: string | undefined;
+  /** What the platform will ask, said before the owner goes there (an OAuth consent page). */
+  readonly consent?: string | undefined;
+}
+
+/** What `FieldHints.prefill` names, as the inbox knows it. */
+export interface Prefill {
+  readonly website?: string | undefined;
 }
 
 /** The form for a connector's schema, as a preset fills it: every field the owner still has to give. */
-export function describeForm(schema: z.ZodObject, preset?: ConnectorPreset | undefined): FormField[] {
+export function describeForm(
+  schema: z.ZodObject,
+  preset?: ConnectorPreset | undefined,
+  prefill: Prefill = {},
+): FormField[] {
   const out: FormField[] = [];
   for (const [key, raw] of Object.entries(schema.shape)) {
     if (preset && key in preset.values) continue;
@@ -121,6 +169,7 @@ export function describeForm(schema: z.ZodObject, preset?: ConnectorPreset | und
       ...(hints.autocomplete ? { autocomplete: hints.autocomplete } : {}),
       ...(hints.steps?.length ? { steps: hints.steps } : {}),
       ...(hints.byMode ? { byMode: hints.byMode } : {}),
+      ...(hints.prefill && prefill[hints.prefill] ? { value: prefill[hints.prefill] } : {}),
     });
   }
   return out;
@@ -255,6 +304,21 @@ export interface Connected {
    * payment platform's webhook endpoints). Best effort; never throws.
    */
   readonly settle?: ((kept: boolean) => Promise<void>) | undefined;
+  /**
+   * What else the owner chooses once connected (ADR-026 §5), each drawn by the owner app as a chooser,
+   * never a typed id: a till's location, a team member bookings go to. `value` is the default until
+   * the owner chooses; a sync's `refresh` may send the options again, and a value still among them
+   * is kept.
+   */
+  readonly choices?: readonly ConnectionChoice[] | undefined;
+}
+
+/** One chooser the owner app draws for a connection: a till's location, a team member. */
+export interface ConnectionChoice {
+  readonly key: string;
+  readonly label: string;
+  readonly options: readonly { readonly id: string; readonly name: string }[];
+  readonly value: string | null;
 }
 
 /**
@@ -284,8 +348,11 @@ export interface ConnectContext {
     | { readonly externalId: string | null; readonly extra: Readonly<Record<string, unknown>> }
     | undefined;
   /**
-   * Where the platform sends what it tells this inbox (`POST /v1/hooks/<kind>`), on the inbox's own
-   * public address; null when the inbox does not know its address (no INBOX_PUBLIC_URL, nor an Inbox address in Settings).
+   * Where the platform sends what it tells this inbox, on the inbox's own public address; null when
+   * the inbox does not know its address (no INBOX_PUBLIC_URL, nor an Inbox address in Settings). A
+   * connector with `hooks` (ADR-026 §4) is given its connection's own address,
+   * `POST /v1/hooks/<kind>/<token>`, made for it when it is first connected and kept after; a payment
+   * platform without, the kind's (`POST /v1/hooks/<kind>`, ADR-023).
    */
   readonly hookUrl?: string | null | undefined;
   /**
@@ -321,6 +388,8 @@ export interface RunContext extends ConnectContext {
   readonly marker: string;
   /** Keeps a changed secret (a refreshed access token) sealed, for the next run. */
   saveSecret(next: Readonly<Record<string, string>>): Promise<void>;
+  /** What the owner chose of the connection's `Connected.choices`, by key; null where they chose nothing. */
+  readonly choices?: Readonly<Record<string, string | null>> | undefined;
 }
 
 /** Milliseconds since the epoch, start inclusive, end exclusive. */
@@ -410,13 +479,99 @@ export interface PayLinkRequest {
   readonly inactive: string;
   /** Where the platform says a payment changed, for platforms told per link (Mollie). */
   readonly hookUrl: string;
+  /**
+   * For a connector with `shop_orders` only (ADR-026 §2): the order as the shop needs it to make and
+   * fulfil it. Absent for a payment platform, which is told only what to ask for.
+   */
+  readonly order?: ShopOrder | undefined;
 }
 
 export interface PayLink {
-  /** The platform's id for the link: `plink_…` (Stripe), `pl_…` (Mollie). */
+  /** The platform's id for the link: `plink_…` (Stripe), `pl_…` (Mollie), a shop's order or draft id. */
   readonly externalId: string;
   /** Where the customer pays. */
   readonly url: string;
+  /**
+   * What the shop says the order comes to, with the tax or delivery it adds itself (ADR-026 §2). When it
+   * is not what the customer accepted (`PayLinkRequest.amount`), the link is held, never sent: the
+   * owner is offered to propose the shop's total, which the customer then accepts or not.
+   */
+  readonly total?: PayAmount | undefined;
+  /** The order in the business's own shop dashboard: "Open in Shopify". */
+  readonly dashboardUrl?: string | undefined;
+}
+
+/** A postal address as the inbox holds it (schema.org `PostalAddress`). */
+export interface PostalAddress {
+  readonly streetAddress?: string | undefined;
+  readonly addressLocality?: string | undefined;
+  readonly addressRegion?: string | undefined;
+  readonly postalCode?: string | undefined;
+  /** ISO 3166-1 alpha-2, in capitals. */
+  readonly addressCountry?: string | undefined;
+}
+
+/** One line of a shop order: a product of the shop's own catalogue (`externalId`), or one of the inbox's. */
+export interface ShopOrderLine {
+  /** The shop's id for the product (`CatalogueProduct.externalId`), when the line is one it sent in. */
+  readonly externalId: string | null;
+  readonly sku: string | null;
+  readonly name: string;
+  readonly quantity: number;
+  /** The price per unit the customer accepted, in hundredths. */
+  readonly unit: PayAmount;
+}
+
+/**
+ * What a shop needs to make and fulfil an order the inbox accepted (ADR-026 §2), given to `createLink`
+ * of a connector with `shop_orders`. The customer's details go to the business's own shop, which is the
+ * same business, and to no one else; only what fulfilling needs.
+ */
+export interface ShopOrder {
+  /** The lines to write into the shop, at the inbox's prices. */
+  readonly lines: readonly ShopOrderLine[];
+  /**
+   * The part of `total` the shop adds itself (tax, delivery, as it counts them), which the customer
+   * accepted when the owner proposed the shop's total: never written as a line, since the shop adds it.
+   * Null when there is none.
+   */
+  readonly charges: PayAmount | null;
+  /** What the customer accepted: the lines plus `charges`. The shop's own total must come to it. */
+  readonly total: PayAmount;
+  readonly delivery: "pickup" | "delivery" | "digital" | null;
+  /** When it is due, ISO 8601, when the order says. */
+  readonly when: string | null;
+  /** The business's own shop: the same controller. Never sent to any other platform. */
+  readonly customer: {
+    readonly name: string | null;
+    readonly email: string | null;
+    readonly phone: string | null;
+    readonly language: string;
+  };
+  readonly shipping: PostalAddress | null;
+  readonly billing: PostalAddress | null;
+  /** The customer's own note, as they wrote it: untrusted text, to be shown as theirs and nothing else. */
+  readonly note: string | null;
+}
+
+/** What a shop says became of an order it made for the inbox, read back with the business's key. */
+export interface OrderFact {
+  /** The order as the shop names it (`PayLink.externalId`), and the inbox's own (`ref`) when it kept it. */
+  readonly linkId: string | null;
+  readonly ref: string | null;
+  /**
+   * `fulfilled`: sent or ready; `delivered`: it reached the customer; `cancelled`: cancelled in the shop
+   * (an unpaid one closes the link, and the owner decides about the order); `refunded`: money given back.
+   */
+  readonly state: "fulfilled" | "delivered" | "cancelled" | "refunded";
+  /** When, in milliseconds since the epoch. */
+  readonly at: number;
+  /** For `refunded`: how much, in all. */
+  readonly refunded?: PayAmount | undefined;
+  /** For `fulfilled`: where it can be followed, when the shop says. */
+  readonly tracking?:
+    | { readonly url?: string | undefined; readonly number?: string | undefined; readonly carrier?: string | undefined }
+    | undefined;
 }
 
 /** A payment as the platform confirmed it, read back with the business's own key. */
@@ -498,6 +653,13 @@ export interface PaymentsHandler {
   ): Promise<InboundResult | null>;
   /** The business's own dashboard, for the owner app's "Open Stripe" link. */
   dashboardUrl(ctx: Pick<RunContext, "extra">, mode: "live" | "test"): string;
+  /**
+   * For a connector with `shop_orders`: what became of an order it made, asked of the shop (a webhook
+   * that never came): fulfilled, delivered, cancelled or refunded; null while nothing happened that the
+   * inbox follows. Asked for open links on each reconciliation, and for paid ones hourly until the order
+   * ends.
+   */
+  orderState?(ctx: RunContext, link: KnownLink): Promise<OrderFact | null>;
 }
 
 export interface OAuthClient {
@@ -506,13 +668,163 @@ export interface OAuthClient {
 }
 
 export interface OAuthFlow {
-  /** The platform's consent page for this sign-in. */
-  authorizeUrl(p: { readonly redirectUri: string; readonly state: string; readonly challenge: string }): string;
+  /**
+   * What is asked before the owner goes to the platform (ADR-026 §5): a store's address, prefilled
+   * from the business's website (`FieldHints.prefill`). Drawn like a form; its values are `input`.
+   */
+  readonly before?: z.ZodObject | undefined;
+  /**
+   * How the platform hands the inbox its key: `redirect` (the default), a code on the owner's way
+   * back, exchanged by `exchange`; `post`, the platform POSTs the key to `postUrl` itself, server to
+   * server, before the owner comes back (WooCommerce's authorize endpoint), taken by `receivePosted`.
+   */
+  readonly delivery?: "redirect" | "post" | undefined;
+  /**
+   * The platform's consent page for this sign-in. `input` holds the `before` values; `postUrl`, for a
+   * `post` flow, where the platform sends the key (`POST /v1/hooks/<kind>/authorized`).
+   */
+  authorizeUrl(p: {
+    readonly redirectUri: string;
+    readonly state: string;
+    readonly challenge: string;
+    readonly input?: Readonly<Record<string, string>> | undefined;
+    readonly postUrl?: string | undefined;
+  }): string;
   /** Turns the code the platform sent back into a connection. */
   exchange(
     ctx: ConnectContext,
-    p: { readonly code: string; readonly verifier: string; readonly redirectUri: string },
+    p: {
+      readonly code: string;
+      readonly verifier: string;
+      readonly redirectUri: string;
+      readonly input?: Readonly<Record<string, string>> | undefined;
+    },
   ): Promise<Connected>;
+  /**
+   * For a `post` flow: the state the platform's POST carries (WooCommerce's `user_id`), so the inbox
+   * finds the sign-in it belongs to before anything else is read. Null when it carries none.
+   */
+  postedState?(request: InboundRequest): string | null;
+  /**
+   * For a `post` flow: the key the platform POSTed, checked against the platform (the store at the
+   * address the owner gave) before it is kept. Throws `ConnectorError` when it does not check out.
+   */
+  receivePosted?(
+    ctx: ConnectContext,
+    request: InboundRequest,
+    input: Readonly<Record<string, string>>,
+  ): Promise<Connected>;
+}
+
+/* --- the catalogue (ADR-026 §3) -------------------------------------------- */
+
+/** One sellable unit as a shop sends it in: a simple product, or one variation of a product. */
+export interface CatalogueProduct {
+  /** The shop's own id for it, stable: what the inbox keys it on (`p:<id>`, `v:<id>`, a GID). */
+  readonly externalId: string;
+  readonly name: string;
+  readonly description: string | null;
+  readonly sku: string | null;
+  /** Its price in hundredths; null when the shop gives none (the last one is kept, or it is not sold). */
+  readonly price: PayAmount | null;
+  /** How many are in stock, when the shop counts them; null when it does not. */
+  readonly stock: number | null;
+  /** On sale now (published, purchasable). False takes it off what agents are offered. */
+  readonly available: boolean;
+}
+
+export interface CatalogueReader {
+  /**
+   * One page of products. `cursor: null` asks for the first page, and an answer with `cursor: null` is
+   * the last. `since` (milliseconds) reads only what changed after it; null reads everything (a full
+   * pass, after which what it did not see is deactivated).
+   */
+  page(
+    ctx: RunContext,
+    p: { readonly cursor: string | null; readonly since: number | null },
+  ): Promise<{ readonly products: readonly CatalogueProduct[]; readonly cursor: string | null }>;
+}
+
+/* --- webhooks a platform sends (ADR-026 §4) -------------------------------- */
+
+/** What a platform's signed request named, once its signature checked out: ids and a topic, never the body. */
+export interface HookEvent {
+  /** The platform's id for the delivery, so one sent twice is counted once. */
+  readonly eventId: string;
+  readonly topic: string;
+  /** The ids of what it is about (an order, a product, a payment), to read back with the business's key. */
+  readonly refs: readonly string[];
+}
+
+/** What reading back an event found, as the inbox applies it. */
+export type HookFact =
+  | { readonly kind: "payment"; readonly fact: PaymentFact }
+  | { readonly kind: "order"; readonly fact: OrderFact }
+  /** Products changed: read the catalogue again now (what changed since the last read). */
+  | { readonly kind: "catalogue"; readonly externalIds: readonly string[] | "all" }
+  /** Read busy times again now. */
+  | { readonly kind: "busy" }
+  /** The access was withdrawn on the platform (the app uninstalled, the key deleted): connect again. */
+  | { readonly kind: "revoked" };
+
+export interface HooksHandler {
+  /** The topics the connector asks the platform for, when it makes its webhooks in `connect`. */
+  readonly topics: readonly string[];
+  /**
+   * Checks the request's signature over the exact bytes received, in constant time (`hook-sign.ts` in
+   * adapters), and answers what it names. Throws `ConnectorError("refused")` when the signature does
+   * not check out, so nothing is written; null for a ping (a platform's test delivery). Calls nothing.
+   */
+  verify(ctx: RunContext, request: InboundRequest): Promise<HookEvent | null>;
+  /**
+   * Reads back from the platform, with the business's own key, what the event names: never what the
+   * body said. Runs in a job after the platform was answered, so it may take its time; a
+   * `ConnectorError` that is worth trying again (`unreachable`, `rate_limited`) is tried again.
+   */
+  read(ctx: RunContext, event: HookEvent): Promise<readonly HookFact[]>;
+}
+
+/* --- links the inbox serves (ADR-026 §5) ----------------------------------- */
+
+/** A confirmed booking as a feed may show it: times and the service's name, never who booked. */
+export interface FeedBooking {
+  readonly itemId: string;
+  readonly start: number;
+  readonly end: number;
+  readonly serviceName: string;
+  /** Goes up whenever the booking changes (a move): an iCalendar `SEQUENCE`. */
+  readonly sequence: number;
+  readonly updatedAt: number;
+}
+
+export interface FeedContext {
+  readonly now: number;
+  readonly inbox: InboxIdentity;
+  readonly extra: Readonly<Record<string, unknown>>;
+  /** Confirmed bookings overlapping the window, test ones left out. Never a customer's name or address. */
+  bookings(window: Interval): Promise<readonly FeedBooking[]>;
+}
+
+/** A request for a link the inbox serves, as it arrived: the part after the token (`.ics`) and its headers. */
+export interface FeedRequest {
+  readonly headers: Headers;
+  readonly extension: string;
+}
+
+export interface FeedResponse {
+  readonly status: number;
+  readonly headers: Readonly<Record<string, string>>;
+  readonly body: string;
+}
+
+/**
+ * A link a connection serves (`GET /v1/feeds/<kind>/<token><extension>`): a calendar of confirmed
+ * bookings for another platform to import. The token is the secret; making a new link stops the old.
+ */
+export interface FeedServer {
+  /** What the link ends in, as the owner copies it (`.ics`). */
+  readonly extension: string;
+  serve(ctx: FeedContext, request: FeedRequest): Promise<FeedResponse>;
 }
 
 export interface ConnectorDefinition {
@@ -520,12 +832,27 @@ export interface ConnectorDefinition {
   readonly title: string;
   readonly group: ConnectorGroup;
   readonly capabilities: readonly ConnectorCapability[];
-  /** `form`: the owner fills in `form`; `oauth`: the owner signs in on the platform. */
-  readonly auth: "form" | "oauth";
+  /**
+   * `form`: the owner fills in `form`; `oauth`: the owner signs in on the platform, or approves a page
+   * on their own store; `link`: the inbox makes a private link (`feed`). A preset may connect another
+   * way (`ConnectorPreset.auth`).
+   */
+  readonly auth: ConnectorAuth;
   readonly form?: z.ZodObject | undefined;
   readonly presets?: readonly ConnectorPreset[] | undefined;
   /** A few words shown above its form, when it does less than others (busy times only). */
   readonly note?: string | undefined;
+  /** The words on its one button: "Connect your shop". Default: Connect, Continue with <title>, Make a link. */
+  readonly action?: string | undefined;
+  /** What the platform will ask, said before the owner goes there: "Google will ask to let this inbox…". */
+  readonly consent?: string | undefined;
+  /** Steps on the platform after connecting, one per line: where to paste a link the inbox made. */
+  readonly steps?: readonly string[] | undefined;
+  /**
+   * What the owner removes by hand once it is disconnected, in a line, when the platform does not let
+   * the inbox remove it: "Remove the key in WooCommerce → Settings → Advanced → REST API".
+   */
+  readonly disconnectNote?: string | undefined;
   /** True when this instance can offer it; otherwise why not (an OAuth app with no client set). */
   ready?(): true | string;
   /**
@@ -543,7 +870,7 @@ export interface ConnectorDefinition {
    * what the connector keeps about itself (a payment platform's webhook moved to a new address).
    */
   refresh?(ctx: RunContext): Promise<
-    Pick<Connected, "account" | "calendars" | "destinations"> & {
+    Pick<Connected, "account" | "calendars" | "destinations" | "choices"> & {
       readonly extra?: Readonly<Record<string, unknown>> | undefined;
     }
   >;
@@ -574,6 +901,12 @@ export interface ConnectorDefinition {
   readonly hookEvents?: readonly string[] | undefined;
   /** Gives the access back on the platform, as the connection goes (best effort). */
   disconnect?(ctx: RunContext): Promise<void>;
+  /** Products into the inbox's catalogue (capability `catalogue`, ADR-026 §3). */
+  readonly catalogue?: CatalogueReader | undefined;
+  /** Webhooks the platform sends to the connection's own address (ADR-026 §4). */
+  readonly hooks?: HooksHandler | undefined;
+  /** A link the inbox serves for the connection (`auth: "link"`, ADR-026 §5). */
+  readonly feed?: FeedServer | undefined;
 }
 
 /** How the owner is told of a connection by name: "iCloud" → "iCloud calendar"; "Google Calendar" stays. */

@@ -400,7 +400,9 @@ export function useIntegrations() {
     queryKey: qk.integrations,
     queryFn: api.integrations,
     staleTime: 10_000,
-    refetchInterval: (q) => (q.state.data?.connections.some((c) => c.status === "configured") ? 3_000 : 60_000),
+    // A link the inbox serves stays unread until another platform opens it: nothing to wait for there.
+    refetchInterval: (q) =>
+      q.state.data?.connections.some((c) => c.status === "configured" && c.capabilities.length > 0) ? 3_000 : 60_000,
   });
 }
 
@@ -413,6 +415,7 @@ export function useIntegrationWrite() {
         | { readonly connect: ConnectBody }
         | { readonly id: string; readonly patch: ConnectionPatch }
         | { readonly id: string; readonly sync: true }
+        | { readonly id: string; readonly link: true }
         | { readonly id: string; readonly remove: true },
     ): Promise<unknown> =>
       "connect" in op
@@ -421,10 +424,27 @@ export function useIntegrationWrite() {
           ? api.updateConnection(op.id, op.patch)
           : "sync" in op
             ? api.syncConnection(op.id)
-            : api.removeConnection(op.id),
+            : "link" in op
+              ? api.newConnectionLink(op.id)
+              : api.removeConnection(op.id),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: qk.integrations });
       void qc.invalidateQueries({ queryKey: qk.availability });
+    },
+  });
+}
+
+/**
+ * "Propose the shop's total" on an order whose link is held (ADR-026): the change goes to the
+ * customer, and the order and its payments are read again.
+ */
+export function useProposeShopTotal(itemId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.proposeShopTotal(itemId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.item(itemId) });
+      void qc.invalidateQueries({ queryKey: qk.payments(itemId) });
     },
   });
 }

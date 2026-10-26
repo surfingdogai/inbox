@@ -1,6 +1,8 @@
 export {
   type AuthorizeInput,
   authorizeInput,
+  type CatalogueState as ConnectorCatalogueState,
+  CONNECTOR_CATALOGUE_KIND,
   CONNECTOR_NOTICE_KIND,
   CONNECTOR_PUSH_KIND,
   CONNECTOR_SYNC_INTERVAL_MS,
@@ -19,8 +21,45 @@ export {
   type UpdateConnectionInput,
   updateConnectionInput,
 } from "./capability";
-export { cardOf, GALLERY, type GalleryCard, type GalleryWay, gallery } from "./gallery";
 export {
+  activeProducts,
+  type CatalogueRow,
+  type CatalogueWrite,
+  connectorSource,
+  deactivateSource,
+  deactivateUnseen,
+  MAX_CATALOGUE,
+  SHOP_CHARGES_SKU,
+  upsertCatalogue,
+} from "./catalogue";
+export {
+  cardOf,
+  GALLERY,
+  type GalleryCard,
+  type GalleryGroup,
+  type GalleryWay,
+  GROUP_LABELS,
+  gallery,
+  galleryGroups,
+  type Industry,
+  type Lean,
+  leanOf,
+  readiness,
+} from "./gallery";
+export {
+  CONNECTOR_HOOK_KIND,
+  ConnectorHooks,
+  connectorHookHandler,
+  feedBookings,
+  type HookAnswer,
+  type HookHost,
+  inboundHash,
+  isInboundToken,
+  MAX_HOOK_BYTES,
+  newInboundToken,
+} from "./hooks";
+export {
+  connectorCatalogueHandler,
   connectorNoticeHandler,
   connectorPushHandler,
   connectorSyncHandler,
@@ -51,6 +90,7 @@ export {
   providerOf,
 } from "./payments";
 export * from "./sdk";
+export { shopOrderOf } from "./shop";
 export {
   BUSY_HORIZON_MS,
   type BusyDetail,

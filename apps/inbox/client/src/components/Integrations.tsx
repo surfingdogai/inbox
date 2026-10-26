@@ -18,10 +18,12 @@ import { ErrorState, Toast } from "./Feedback";
 import { Field, SectionHead, Switch } from "./Form";
 
 /**
- * Settings → Integrations, the gallery (ADR-022): what is connected first, then one card per thing
- * an owner recognises, its ways in. The form for each way is drawn from the connector's own schema,
- * so a connector added later needs no screen of its own. A card that is not built yet says "Soon"
- * and has nothing to press; on a phone those are one quiet line.
+ * Settings → Integrations, the gallery (ADR-022, ADR-026): what is connected first, then the cards in
+ * their groups (Calendars, Payments, Shops and tills), each one thing an owner recognises, with its
+ * ways in. Everything here is drawn from what the server says: the form from the connector's own
+ * schema, a sign-in's words and what it asks first, a link to make, the choosers once connected, so a
+ * connector added later needs no screen of its own and no change to this file. A card being built says
+ * "Soon" and has nothing to press; on a phone those are one quiet line.
  */
 
 interface Notice {
@@ -31,15 +33,8 @@ interface Notice {
 
 const ICONS = { calendars: CalendarDays, payments: CreditCard, shops: ShoppingBag } as const;
 
-/** The card a connection belongs to. */
-const CARD_OF: Readonly<Record<string, string>> = {
-  caldav: "calendar",
-  google_calendar: "calendar",
-  ics: "calendar",
-  outlook: "calendar",
-  calcom: "calcom",
-};
-const cardOf = (kind: string) => CARD_OF[kind] ?? kind;
+/** The card a connection belongs to, as the server says. */
+const cardOf = (c: ConnectionView) => c.card ?? c.kind;
 
 /** The address the owner signs in with: a way in is picked from it, and its email field filled. */
 function useOwnerEmail(): string | null {
@@ -80,15 +75,24 @@ export function IntegrationsCard() {
 
   const connections = data?.connections ?? [];
   const byCard = new Map<string, ConnectionView[]>();
-  for (const c of connections) byCard.set(cardOf(c.kind), [...(byCard.get(cardOf(c.kind)) ?? []), c]);
+  for (const c of connections) byCard.set(cardOf(c), [...(byCard.get(cardOf(c)) ?? []), c]);
   const card = data?.cards.find((c) => c.id === open) ?? null;
   const soon = (data?.cards ?? []).filter((c) => c.status === "soon");
-  // Payments (ADR-023): one platform sends an order's links per mode; the one that does is named.
+  // Payments (ADR-023): one platform sends an order's links per mode; the one that does is named. A shop
+  // that takes its orders at its own checkout is one of them (ADR-026).
   const sending = connections.filter((c) => c.payments && c.pay_on && !c.payments.disconnecting);
   const insteadOf = (cardId: string): string | null => {
-    const other = sending.find((c) => cardOf(c.kind) !== cardId);
+    const other = sending.find((c) => cardOf(c) !== cardId);
     return other ? other.title : null;
   };
+  const pays = (c: GalleryCard) => c.group === "payments" || c.group === "shops";
+  const groups = data?.groups?.length
+    ? data.groups
+    : [
+        { id: "calendars" as const, label: "Calendars" },
+        { id: "payments" as const, label: "Payments" },
+        { id: "shops" as const, label: "Shops and tills" },
+      ];
   // Cal.com adds the bookings it is given to the calendar it checks, so with both adding them each
   // booking would show twice there.
   const calcom = connections.find((c) => c.kind === "calcom" && c.bookings_on && c.status !== "disabled");
@@ -145,71 +149,83 @@ export function IntegrationsCard() {
         </p>
       )}
       {data && (
-        <div className="int-grid">
-          {data.cards.map((c) => (
-            <Tile
-              key={c.id}
-              card={c}
-              connections={byCard.get(c.id) ?? []}
-              instead={c.group === "payments" && !(byCard.get(c.id) ?? []).length ? insteadOf(c.id) : null}
-              open={open === c.id}
-              disabled={!data.can_connect}
-              onOpen={() => {
-                write.reset();
-                setNotice(null);
-                setOpen(open === c.id ? null : c.id);
-              }}
-            />
-          ))}
+        <div className="int-groups">
+          {groups.map((g) => {
+            const cards = data.cards.filter((c) => c.group === g.id);
+            if (cards.length === 0) return null;
+            const here = card && card.group === g.id ? card : null;
+            const keyPanel = here && here.group === "payments" && (byCard.get(here.id) ?? []).length > 0;
+            return (
+              <div key={g.id} className="int-group stack-xs">
+                <h3 className="int-group-head">{g.label}</h3>
+                <div className="int-grid">
+                  {cards.map((c) => (
+                    <Tile
+                      key={c.id}
+                      card={c}
+                      connections={byCard.get(c.id) ?? []}
+                      instead={pays(c) && !(byCard.get(c.id) ?? []).length ? insteadOf(c.id) : null}
+                      open={open === c.id}
+                      disabled={!data.can_connect}
+                      onOpen={() => {
+                        write.reset();
+                        setNotice(null);
+                        setOpen(open === c.id ? null : c.id);
+                      }}
+                    />
+                  ))}
+                </div>
+                {here && keyPanel && data.can_connect && (
+                  <PayKeyPanel
+                    key={here.id}
+                    card={here}
+                    connections={byCard.get(here.id) ?? []}
+                    onCancel={() => setOpen(null)}
+                    onNotice={(n) => {
+                      if (n.tone === "success") setOpen(null);
+                      setNotice(n);
+                    }}
+                  />
+                )}
+                {here && here.status === "ready" && !keyPanel && data.can_connect && (
+                  <ConnectPanel
+                    key={here.id}
+                    card={here}
+                    email={email}
+                    instead={pays(here) ? insteadOf(here.id) : null}
+                    pending={write.isPending}
+                    error={write.error ? problemOf(write.error) : null}
+                    onCancel={() => setOpen(null)}
+                    onConnect={(body, way) =>
+                      write.mutate(
+                        { connect: body },
+                        {
+                          onSuccess: () => {
+                            setOpen(null);
+                            setNotice({ tone: "success", text: connectedText(here, way) });
+                          },
+                        },
+                      )
+                    }
+                    onError={(text) => setNotice({ tone: "danger", text })}
+                  />
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
-      {card && card.group === "payments" && (byCard.get(card.id) ?? []).length > 0 && data?.can_connect && (
-        <PayKeyPanel
-          key={card.id}
-          card={card}
-          connections={byCard.get(card.id) ?? []}
-          onCancel={() => setOpen(null)}
-          onNotice={(n) => {
-            if (n.tone === "success") setOpen(null);
-            setNotice(n);
-          }}
-        />
-      )}
-      {card &&
-        card.status === "ready" &&
-        !(card.group === "payments" && (byCard.get(card.id) ?? []).length > 0) &&
-        data?.can_connect && (
-          <ConnectPanel
-            key={card.id}
-            card={card}
-            email={email}
-            instead={card.group === "payments" ? insteadOf(card.id) : null}
-            pending={write.isPending}
-            error={write.error ? problemOf(write.error) : null}
-            onCancel={() => setOpen(null)}
-            onConnect={(body) =>
-              write.mutate(
-                { connect: body },
-                {
-                  onSuccess: () => {
-                    setOpen(null);
-                    setNotice({
-                      tone: "success",
-                      text:
-                        card.group === "payments"
-                          ? `${card.title} is connected. Orders you accept get a link to pay.`
-                          : "Connected. Reading your calendar now.",
-                    });
-                  },
-                },
-              )
-            }
-            onError={(text) => setNotice({ tone: "danger", text })}
-          />
-        )}
       {soon.length > 0 && <p className="int-soon-line">Soon: {soon.map((c) => c.title).join(" · ")}</p>}
     </section>
   );
+}
+
+/** What the owner is told once a way connected, in the words of what it does. */
+function connectedText(card: GalleryCard, way: GalleryWay): string {
+  if (way.auth === "link") return "Your link is made. Copy it from its line above.";
+  if (card.group === "shops") return `${card.title} is connected. Reading your catalogue now.`;
+  if (card.group === "payments") return `${card.title} is connected. Orders you accept get a link to pay.`;
+  return "Connected. Reading your calendar now.";
 }
 
 /** What a card's tag says: the worst of its connections. */
@@ -304,10 +320,9 @@ function preferredWay(card: GalleryCard, email: string | null): { way: GalleryWa
       };
     }
   }
-  if (MICROSOFT.test(domain) && link?.status === "ready") {
-    return { way: link, hint: "Outlook cannot connect here yet. Its published calendar link blocks your busy times." };
-  }
-  return { way: ready[0] };
+  const outlook = find("ics", "outlook");
+  if (MICROSOFT.test(domain) && outlook?.status === "ready") return { way: outlook };
+  return { way: ready.find((w) => !w.advanced) ?? ready[0] };
 }
 
 function ConnectPanel({
@@ -326,7 +341,7 @@ function ConnectPanel({
   instead?: string | null;
   pending: boolean;
   error: ApiProblem | null;
-  onConnect: (body: { kind: string; preset?: string; values: Record<string, string> }) => void;
+  onConnect: (body: { kind: string; preset?: string; values: Record<string, string> }, way: GalleryWay) => void;
   onCancel: () => void;
   onError: (text: string) => void;
 }) {
@@ -334,13 +349,20 @@ function ConnectPanel({
   const preferred = preferredWay(card, email);
   const way = card.ways.find((w) => keyOf(w) === (picked ?? keyOf(preferred.way))) ?? preferred.way;
   const setup = card.ways.filter((w) => w.status === "setup");
+  const main = card.ways.filter((w) => !w.advanced);
+  const others = card.ways.filter((w) => w.advanced && w.status === "ready" && keyOf(w) !== keyOf(way));
+  const body = (w: GalleryWay, values: Record<string, string>) => ({
+    kind: w.kind,
+    ...(w.preset ? { preset: w.preset } : {}),
+    values,
+  });
   if (!way) return null;
   return (
     <div className="confirm row-glass stack int-panel">
-      {card.ways.length > 1 && (
+      {main.length > 1 && !way.advanced && (
         <fieldset className="seg">
           <legend className="sr-only">Which {card.title.toLowerCase()}</legend>
-          {card.ways.map((w) => (
+          {main.map((w) => (
             <button
               key={keyOf(w)}
               type="button"
@@ -381,7 +403,21 @@ function ConnectPanel({
           </div>
         </>
       ) : way.auth === "oauth" ? (
-        <SignIn way={way} onCancel={onCancel} onError={onError} />
+        <SignIn
+          key={keyOf(way)}
+          way={way}
+          question={instead ? `Orders paid at ${card.title} instead of ${instead}.` : undefined}
+          onCancel={onCancel}
+          onError={onError}
+        />
+      ) : way.auth === "link" ? (
+        <MakeLink
+          way={way}
+          pending={pending}
+          error={error}
+          onCancel={onCancel}
+          onMake={() => onConnect(body(way, {}), way)}
+        />
       ) : (
         <WayForm
           key={keyOf(way)}
@@ -389,11 +425,79 @@ function ConnectPanel({
           email={email}
           pending={pending}
           error={error}
-          question={instead ? `Send links from ${card.title} instead of ${instead}?` : undefined}
+          question={
+            instead
+              ? card.group === "shops"
+                ? `Orders paid at ${card.title} instead of ${instead}?`
+                : `Send links from ${card.title} instead of ${instead}?`
+              : undefined
+          }
           onCancel={onCancel}
-          onSubmit={(values) => onConnect({ kind: way.kind, ...(way.preset ? { preset: way.preset } : {}), values })}
+          onSubmit={(values) => onConnect(body(way, values), way)}
         />
       )}
+      {(others.length > 0 || way.advanced) && (
+        <details className="advanced">
+          <summary className="disclosure">
+            <ChevronRight className="icon-sm disclosure-icon" aria-hidden="true" />
+            <span className="disclosure-open">Fewer options</span>
+            <span className="disclosure-closed">More options</span>
+          </summary>
+          <div className="advanced-body stack-xs">
+            {way.advanced && preferred.way && (
+              <button type="button" className="int-inline" onClick={() => setPicked(null)}>
+                Back to {preferred.way.label}
+              </button>
+            )}
+            {others.map((w) => (
+              <button key={keyOf(w)} type="button" className="int-inline" onClick={() => setPicked(keyOf(w))}>
+                {w.label}
+              </button>
+            ))}
+          </div>
+        </details>
+      )}
+    </div>
+  );
+}
+
+/** A link the inbox makes (a calendar of your bookings for another platform): one press. */
+function MakeLink({
+  way,
+  pending,
+  error,
+  onMake,
+  onCancel,
+}: {
+  way: GalleryWay;
+  pending: boolean;
+  error: ApiProblem | null;
+  onMake: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="stack">
+      {way.note && <p className="hint">{way.note}</p>}
+      {way.steps && way.steps.length > 0 && (
+        <ol className="int-steps">
+          {way.steps.map((step) => (
+            <li key={step}>{step}</li>
+          ))}
+        </ol>
+      )}
+      {error && (
+        <p className="hint error" role="alert">
+          {error.detail}
+        </p>
+      )}
+      <div className="rowx">
+        <button type="button" className="btn btn-primary" disabled={pending} onClick={onMake}>
+          {pending ? "Making…" : way.action}
+        </button>
+        <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={pending}>
+          Cancel
+        </button>
+      </div>
     </div>
   );
 }
@@ -402,33 +506,65 @@ function keyOf(w: GalleryWay | undefined): string {
   return w ? `${w.kind}:${w.preset ?? ""}` : "";
 }
 
+/**
+ * A sign-in on the platform, or an approval on the owner's own store: what it will ask, what it needs
+ * first (the store's address, filled in from the business's website), and one button.
+ */
 function SignIn({
   way,
   again,
+  question,
   onCancel,
   onError,
 }: {
   way: GalleryWay;
   again?: boolean;
+  question?: string | undefined;
   onCancel: () => void;
   onError: (t: string) => void;
 }) {
   const [going, setGoing] = useState(false);
+  const before = way.before ?? [];
+  const [values, setValues] = useState<Record<string, string>>(() =>
+    Object.fromEntries(before.filter((f) => f.value).map((f) => [f.key, f.value ?? ""])),
+  );
+  const missing = before.some((f) => f.required && !(values[f.key] ?? "").trim());
   return (
     <div className="stack">
-      <p className="hint">
-        Google will ask to let this inbox see when you are busy and edit your calendar. It only touches the bookings it
-        adds.
-      </p>
+      {way.consent && <p className="hint">{way.consent}</p>}
+      {before.map((f) => (
+        <div key={f.key} className="int-field">
+          <Field id={`int-before-${f.key}`} label={f.label} hint={f.help} optional={!f.required}>
+            <input
+              id={`int-before-${f.key}`}
+              className="input"
+              type="text"
+              inputMode={f.input === "url" ? "url" : undefined}
+              autoComplete="off"
+              spellCheck={false}
+              placeholder={f.placeholder}
+              value={values[f.key] ?? ""}
+              onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}
+            />
+          </Field>
+        </div>
+      ))}
+      {question && <p className="hint int-question">{question}</p>}
       <div className="rowx">
         <button
           type="button"
           className="btn btn-primary"
-          disabled={going}
+          disabled={going || missing}
           onClick={async () => {
             setGoing(true);
             try {
-              const { authorize_url } = await api.authorizeIntegration(way.kind);
+              const { authorize_url } = await api.authorizeIntegration({
+                kind: way.kind,
+                ...(way.preset ? { preset: way.preset } : {}),
+                ...(before.length > 0
+                  ? { input: Object.fromEntries(Object.entries(values).map(([k, v]) => [k, v.trim()])) }
+                  : {}),
+              });
               window.location.assign(authorize_url);
             } catch (e) {
               setGoing(false);
@@ -436,7 +572,7 @@ function SignIn({
             }
           }}
         >
-          {going ? "Opening…" : `${again ? "Connect again with" : "Continue with"} ${way.label}`}
+          {going ? "Opening…" : again ? `Connect again with ${way.label}` : way.action}
         </button>
         <button type="button" className="btn btn-ghost" onClick={onCancel}>
           Cancel
@@ -653,46 +789,61 @@ function ConnectionLine({
   const destination = c.destinations.find((d) => d.id === c.destination);
   const writes = c.capabilities.includes("write_bookings");
   const way = cards
-    .find((card) => card.id === cardOf(c.kind))
+    .find((card) => card.id === cardOf(c))
     ?.ways.find((w) => w.kind === c.kind && (w.preset ?? null) === (c.preset ?? null));
   const pays = c.payments;
   const disconnecting = pays?.disconnecting === true;
+  // A connection that is a link the inbox serves (a calendar to import elsewhere): nothing to sync.
+  const serves = c.capabilities.length === 0;
+  const products = c.catalogue
+    ? `${c.catalogue.products} ${c.catalogue.products === 1 ? "product" : "products"}${c.catalogue.truncated ? " (the first ones)" : ""}`
+    : null;
   // Which platform sends an order's links, said only where there is a choice: the default is not news.
   const sender = connections.find(
     (o) => o.id !== c.id && o.payments && o.pay_on && o.mode === c.mode && !o.payments.disconnecting,
   );
   const several = connections.filter((o) => o.payments).length > 1;
-  const meta = pays
+  const meta = serves
     ? [
-        c.mode === "test" ? "test key · links only for orders made in Test mode" : null,
-        disconnecting
-          ? `switching off ${pays.closing} ${pays.closing === 1 ? "link" : "links"}`
-          : !c.pay_on
-            ? sender
-              ? `not used: ${sender.title} sends your links`
-              : "links off"
-            : several
-              ? "sends your links"
-              : null,
-        pays.open > 0 ? `${pays.open} waiting` : null,
-        pays.paid > 0 ? `${pays.paid} paid` : null,
-        c.last_sync_at && !disconnecting ? syncedAgo(c.last_sync_at, Date.now()) : null,
+        c.status === "configured"
+          ? "not opened yet"
+          : c.last_sync_at
+            ? `opened ${syncedAgo(c.last_sync_at, Date.now()).replace(/^synced /, "")}`
+            : null,
       ].filter(Boolean)
-    : [
-        c.busy_on
-          ? c.status === "configured"
-            ? "reading busy times"
-            : `${c.busy_times} busy ${c.busy_times === 1 ? "time" : "times"} ahead`
-          : "busy times off",
-        writes
-          ? c.bookings_on
-            ? destination && c.kind !== "calcom"
-              ? `bookings go to ${destination.name}`
-              : "bookings go out"
-            : "bookings off"
-          : null,
-        c.last_sync_at ? syncedAgo(c.last_sync_at, Date.now()) : null,
-      ].filter(Boolean);
+    : pays
+      ? [
+          products,
+          c.mode === "test" ? "test key · links only for orders made in Test mode" : null,
+          disconnecting
+            ? `switching off ${pays.closing} ${pays.closing === 1 ? "link" : "links"}`
+            : !c.pay_on
+              ? sender
+                ? `not used: ${sender.title} sends your links`
+                : "links off"
+              : several
+                ? "sends your links"
+                : null,
+          pays.open > 0 ? `${pays.open} waiting` : null,
+          pays.held && pays.held > 0 ? `${pays.held} not sent: the shop counts another total` : null,
+          pays.paid > 0 ? `${pays.paid} paid` : null,
+          c.last_sync_at && !disconnecting ? syncedAgo(c.last_sync_at, Date.now()) : null,
+        ].filter(Boolean)
+      : [
+          c.busy_on
+            ? c.status === "configured"
+              ? "reading busy times"
+              : `${c.busy_times} busy ${c.busy_times === 1 ? "time" : "times"} ahead`
+            : "busy times off",
+          writes
+            ? c.bookings_on
+              ? destination && c.kind !== "calcom"
+                ? `bookings go to ${destination.name}`
+                : "bookings go out"
+              : "bookings off"
+            : null,
+          c.last_sync_at ? syncedAgo(c.last_sync_at, Date.now()) : null,
+        ].filter(Boolean);
   const problem = write.error ? problemOf(write.error) : null;
   const failing = c.status === "error";
   return (
@@ -702,7 +853,11 @@ function ConnectionLine({
           <span className="int-title">{c.title}</span>
           <span className="int-account">{c.account}</span>
           <span className={clsx("pill pill-xs", failing && "is-warn")}>
-            {disconnecting ? "Disconnecting" : (STATUS[c.status] ?? c.status)}
+            {disconnecting
+              ? "Disconnecting"
+              : serves && c.status === "configured"
+                ? "Made"
+                : (STATUS[c.status] ?? c.status)}
           </span>
         </div>
         <div className="int-meta">
@@ -714,6 +869,7 @@ function ConnectionLine({
             </a>
           )}
         </div>
+        {serves && c.link && <LinkLine link={c.link} />}
         {pays?.webhook === "pending" && !disconnecting && (
           <div className="hint">
             {c.title} tells this inbox of payments once it is live; until then the inbox asks {c.title} on each sync.
@@ -750,7 +906,7 @@ function ConnectionLine({
       </div>
       {!disconnecting && (
         <div className="rowx int-actions">
-          {failing && way?.status === "ready" ? (
+          {serves ? null : failing && way?.status === "ready" ? (
             <button
               type="button"
               className="btn btn-secondary btn-sm"
@@ -793,7 +949,7 @@ function ConnectionLine({
             aria-expanded={panel === "change"}
             onClick={() => setPanel(panel === "change" ? null : "change")}
           >
-            Change
+            {serves ? "New link" : "Change"}
           </button>
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirming(true)}>
             Disconnect
@@ -846,7 +1002,9 @@ function ConnectionLine({
         </div>
       )}
       {panel === "change" &&
-        (pays ? (
+        (serves ? (
+          <NewLink connection={c} onDone={() => setPanel(null)} onNotice={onNotice} />
+        ) : pays ? (
           <PayChoices connection={c} onNewKey={() => setPanel("again")} onNotice={onNotice} />
         ) : (
           <Choices connection={c} onDone={() => setPanel(null)} onNotice={onNotice} />
@@ -855,10 +1013,13 @@ function ConnectionLine({
         <div className="confirm row-glass wide">
           <h3>Disconnect {c.title}</h3>
           <p className="hint">
-            {pays
-              ? `Links still waiting to be paid stop working. Payments already made stay in your ${c.title} account.`
-              : "Its busy times stop blocking at once. Bookings already added stay in the calendar."}
+            {serves
+              ? "The link stops working at once, wherever it was pasted."
+              : pays
+                ? `Links still waiting to be paid stop working. Payments already made stay in your ${c.title} account.${c.catalogue ? " Its products go off sale here." : ""}`
+                : "Its busy times stop blocking at once. Bookings already added stay in the calendar."}
           </p>
+          {c.disconnect_note && <p className="hint">{c.disconnect_note}</p>}
           <div className="rowx">
             <button
               type="button"
@@ -925,6 +1086,7 @@ function PayChoices({
       >
         Send a link to pay when you accept an order
       </Switch>
+      <ChoiceFields connection={c} onNotice={onNotice} />
       <p className="hint">Refunds are made in {c.title}, from the payment's own page.</p>
       <div className="rowx">
         <button type="button" className="btn btn-ghost btn-sm" onClick={onNewKey}>
@@ -1133,6 +1295,7 @@ function Choices({
           Add confirmed bookings
         </Switch>
       )}
+      <ChoiceFields connection={c} onNotice={onNotice} />
       {bookingsOn && writable.length > 1 && (
         <Field id={`dest-${c.id}`} label={c.kind === "calcom" ? "Event type" : "To"}>
           <select
@@ -1176,6 +1339,108 @@ function Choices({
           }
         >
           Save
+        </button>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onDone}>
+          Close
+        </button>
+      </div>
+      {write.error && (
+        <p className="hint error" role="alert">
+          {problemOf(write.error).detail}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * What else a connection lets the owner choose (a till's location, a team member), drawn from what the
+ * server says: a chooser each, saved as soon as it changes. Never a typed id.
+ */
+function ChoiceFields({ connection: c, onNotice }: { connection: ConnectionView; onNotice: (n: Notice) => void }) {
+  const write = useIntegrationWrite();
+  if (!c.choices || c.choices.length === 0) return null;
+  return (
+    <>
+      {c.choices.map((choice) => (
+        <Field key={choice.key} id={`choice-${c.id}-${choice.key}`} label={choice.label}>
+          <select
+            id={`choice-${c.id}-${choice.key}`}
+            className="input"
+            value={choice.value ?? ""}
+            disabled={write.isPending}
+            onChange={(e) =>
+              write.mutate(
+                { id: c.id, patch: { choices: { [choice.key]: e.target.value || null } } },
+                { onSuccess: () => onNotice({ tone: "success", text: "Saved." }) },
+              )
+            }
+          >
+            <option value="">None</option>
+            {choice.options.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+      ))}
+    </>
+  );
+}
+
+/** A link a connection serves, read-only, with Copy: the owner pastes it into another platform. */
+function LinkLine({ link }: { link: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="int-hook stack-xs">
+      <span className="int-hook-row">
+        <code className="int-hook-url">{link}</code>
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm btn-icon"
+          aria-label={copied ? "Link copied" : "Copy the link"}
+          onClick={() => void navigator.clipboard.writeText(link).then(() => setCopied(true))}
+        >
+          {copied ? <Check className="icon-xs" aria-hidden="true" /> : <Copy className="icon-xs" aria-hidden="true" />}
+        </button>
+      </span>
+    </div>
+  );
+}
+
+/** A new link in place of the old one, which stops at once wherever it was pasted. */
+function NewLink({
+  connection: c,
+  onDone,
+  onNotice,
+}: {
+  connection: ConnectionView;
+  onDone: () => void;
+  onNotice: (n: Notice) => void;
+}) {
+  const write = useIntegrationWrite();
+  return (
+    <div className="confirm row-glass wide stack">
+      <p className="hint">The old link stops working at once. Paste the new one where the old one was.</p>
+      <div className="rowx">
+        <button
+          type="button"
+          className="btn btn-primary btn-sm"
+          disabled={write.isPending}
+          onClick={() =>
+            write.mutate(
+              { id: c.id, link: true },
+              {
+                onSuccess: () => {
+                  onDone();
+                  onNotice({ tone: "success", text: "A new link is made. Copy it from its line." });
+                },
+              },
+            )
+          }
+        >
+          Make a new link
         </button>
         <button type="button" className="btn btn-ghost btn-sm" onClick={onDone}>
           Close

@@ -1,7 +1,9 @@
 import clsx from "clsx";
 import { Check, Copy, CreditCard, ExternalLink } from "lucide-react";
 import { useState } from "react";
+import { problemOf } from "../lib/api";
 import { formatDateTime, formatMoney, methodName } from "../lib/format";
+import { useProposeShopTotal } from "../lib/queries";
 import type { PaymentView } from "../lib/types";
 
 /**
@@ -9,18 +11,22 @@ import type { PaymentView } from "../lib/types";
  * shows: the link it was sent and what the platform said, in a line or two. Where the money is, the
  * owner refunds it: the payment's own page in their dashboard. A link that is closed is never shown;
  * earlier links (the total changed, a payment failed) fold into one quiet count. An order that could
- * have a link and has none says why, in one quiet line.
+ * have a link and has none says why, in one quiet line. A link held because the business's own shop
+ * counts another total (ADR-026) says so, with the one thing to do: propose the shop's total.
  */
 export function Payments({
+  itemId,
   payments,
   none,
   tz,
 }: {
+  itemId: string;
   payments: readonly PaymentView[];
   none: string | null;
   tz: string | undefined;
 }) {
   const [copied, setCopied] = useState(false);
+  const propose = useProposeShopTotal(itemId);
   if (payments.length === 0 && !none) return null;
   const shown = payments.filter((p) => p.state !== "closed" && p.state !== "failed");
   const earlier = payments.length - shown.length;
@@ -64,12 +70,34 @@ export function Payments({
                   <ExternalLink className="icon-xs" aria-hidden="true" />
                 </a>
               )}
-              {(p.error || p.note) && (
+              {(p.error || p.note) && p.state !== "held" && (
                 <span
                   className={clsx("hint", p.state === "error" && "error")}
                   role={p.state === "error" ? "alert" : undefined}
                 >
                   {p.error ?? p.note}
+                </span>
+              )}
+              {p.state === "held" && (
+                <span className="hint">
+                  {p.propose_shop_total
+                    ? "The customer accepted less. Propose the shop's total; the link goes once they accept."
+                    : `Check the order's prices and taxes in ${p.provider}, then ask for payment again.`}
+                </span>
+              )}
+              {p.state === "held" && p.propose_shop_total && (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  disabled={propose.isPending || propose.isSuccess}
+                  onClick={() => propose.mutate()}
+                >
+                  {propose.isSuccess ? "Proposed" : propose.isPending ? "Proposing…" : "Propose the shop's total"}
+                </button>
+              )}
+              {p.state === "held" && propose.error && (
+                <span className="hint error" role="alert">
+                  {problemOf(propose.error).detail}
                 </span>
               )}
             </li>
@@ -107,6 +135,8 @@ function wordsOf(p: PaymentView): string {
       return `paid ${formatMoney(p.paid_amount ?? p.amount)}${p.method ? ` by ${methodName(p.method)}` : ""}`;
     case "open":
       return `waiting for ${formatMoney(p.amount)}`;
+    case "held":
+      return `not sent: it counts ${formatMoney(p.shop_total ?? p.amount)}, not ${formatMoney(p.amount)}`;
     case "creating":
       return p.error ? "making the link again soon" : "making the link";
     case "error":

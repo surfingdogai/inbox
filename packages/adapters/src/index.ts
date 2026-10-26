@@ -1,5 +1,13 @@
 import type { McpHttpHandler } from "@modelcontextprotocol/server";
-import { type Caller, type Capabilities, copyFor, type Db, safeReturnPath, WriteError } from "@surfingdog/core";
+import {
+  type Caller,
+  type Capabilities,
+  copyFor,
+  type Db,
+  MAX_HOOK_BYTES,
+  safeReturnPath,
+  WriteError,
+} from "@surfingdog/core";
 import type { MailOut, SqliteSnapshot } from "@surfingdog/platform";
 import type { Context, Hono } from "hono";
 import { openAPIRouteHandler } from "hono-openapi";
@@ -287,9 +295,10 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
         }),
       );
     }
-    // What a payment platform sends (ADR-023) is checked by its own signature, or read back from the
-    // platform, and is nobody's caller: it takes a token from the flood guard and goes straight on.
-    if (c.req.path.startsWith("/v1/hooks/")) {
+    // What a payment platform or a shop sends (ADR-023, ADR-026) is checked by its own signature, or
+    // read back from the platform, and a link a connection serves is opened by its token alone: neither
+    // is anybody's caller. Each takes a token from the flood guard and goes straight on.
+    if (c.req.path.startsWith("/v1/hooks/") || c.req.path.startsWith("/v1/feeds/")) {
       const refused = await limited(c, ["public"]);
       if (refused) return refused;
       await next();
@@ -505,6 +514,55 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
   // paid. 200 once read (or when it is not about a link here), 400 when no signature checks out,
   // 503 when the platform could not be asked back, or the link was asked about a moment ago (it
   // sends it again).
+  // A platform that POSTs the owner's key itself, server to server (WooCommerce's authorize endpoint,
+  // ADR-026 §5): the state it carries is the proof, used once; the key is checked against the platform
+  // before it is kept. Registered before the connection addresses below, which it would otherwise match.
+  app.post("/v1/hooks/:kind/authorized", async (c) => {
+    const kind = String(c.req.param("kind"));
+    if (!/^[a-z][a-z0-9_]{1,39}$/.test(kind)) return c.json({ error: "not_found" }, 404);
+    if (Number(c.req.header("content-length") ?? 0) > 64 * 1024) return c.json({ error: "too_large" }, 413);
+    const body = await c.req.text();
+    const r = await deps.caps.connectors.receiveAuthorized(
+      kind,
+      { headers: c.req.raw.headers, body, query: new URL(c.req.url).searchParams },
+      clock(),
+    );
+    return c.json(r.body, r.status, { "cache-control": "no-store" });
+  });
+  // What a platform tells one connection at its own address (ADR-026 §4): the token names the
+  // connection, its signature is checked over the exact bytes, and only ids are kept; the platform is
+  // answered at once, and what the event names is read back with the business's key by a job.
+  app.post("/v1/hooks/:kind/:token", async (c) => {
+    const kind = String(c.req.param("kind"));
+    if (!/^[a-z][a-z0-9_]{1,39}$/.test(kind)) return c.json({ error: "not_found" }, 404);
+    if (Number(c.req.header("content-length") ?? 0) > MAX_HOOK_BYTES) {
+      return c.json({ error: "too_large", detail: "This address takes requests up to 1 MB." }, 413);
+    }
+    const body = await c.req.text();
+    const r = await deps.caps.connectors.receiveHook(
+      kind,
+      String(c.req.param("token")),
+      { headers: c.req.raw.headers, body, query: new URL(c.req.url).searchParams },
+      clock(),
+    );
+    return c.json(r.body, r.status, { "cache-control": "no-store" });
+  });
+  // A link a connection serves (ADR-026 §5): a calendar of confirmed bookings another platform imports.
+  // Opened by its token alone, never indexed, and it shows only what the connector says a link may.
+  app.get("/v1/feeds/:kind/:file", async (c) => {
+    const kind = String(c.req.param("kind"));
+    const m = /^([A-Za-z0-9_-]{43})(\.[a-z0-9]{1,8})?$/.exec(String(c.req.param("file")));
+    const answer =
+      /^[a-z][a-z0-9_]{1,39}$/.test(kind) && m
+        ? await deps.caps.connectors.serveFeed(kind, m[1] ?? "", m[2] ?? "", c.req.raw.headers, clock())
+        : null;
+    const quiet = { "x-robots-tag": "noindex, nofollow", "referrer-policy": "no-referrer" };
+    if (!answer) return c.text("Not found", 404, { ...quiet, "cache-control": "no-store" });
+    return new Response(answer.status === 304 || answer.status === 204 ? null : answer.body, {
+      status: answer.status,
+      headers: { "cache-control": "private, max-age=300", ...answer.headers, ...quiet },
+    });
+  });
   app.post("/v1/hooks/:kind", async (c) => {
     const kind = String(c.req.param("kind"));
     if (!/^[a-z][a-z0-9_]{1,39}$/.test(kind)) return c.json({ error: "not_found" }, 404);

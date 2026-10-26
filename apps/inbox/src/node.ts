@@ -273,11 +273,19 @@ const { app, runner, prepare } = createInbox({
   secretKey: secretKeyFrom(process.env.INBOX_SECRET_KEY),
   demo: demo ? { ownerEmails, from } : undefined,
   fetchImpl: pinnedFetch({ deny: deny.ranges }),
-  // Google Calendar's OAuth client (GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET): "set up" without it.
+  // The platforms' OAuth clients of whoever runs this server (Google's, and a one-click sign-in beside a
+  // shop's own keys): "set up" without one.
   ...oauthFrom({
     GOOGLE_OAUTH_CLIENT_ID: process.env.GOOGLE_OAUTH_CLIENT_ID,
     GOOGLE_OAUTH_CLIENT_SECRET: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
     GOOGLE_OAUTH_REDIRECT_URI: process.env.GOOGLE_OAUTH_REDIRECT_URI,
+    GOOGLE_OAUTH_TESTING: process.env.GOOGLE_OAUTH_TESTING,
+    SHOPIFY_CLIENT_ID: process.env.SHOPIFY_CLIENT_ID,
+    SHOPIFY_CLIENT_SECRET: process.env.SHOPIFY_CLIENT_SECRET,
+    SQUARE_CLIENT_ID: process.env.SQUARE_CLIENT_ID,
+    SQUARE_CLIENT_SECRET: process.env.SQUARE_CLIENT_SECRET,
+    CALENDLY_CLIENT_ID: process.env.CALENDLY_CLIENT_ID,
+    CALENDLY_CLIENT_SECRET: process.env.CALENDLY_CLIENT_SECRET,
   }),
   // Only for a webhook the owner allowed onto a private address; the ranges above still hold.
   privateFetchImpl: pinnedFetch({ deny: deny.ranges, allowPrivate: true }),

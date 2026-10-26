@@ -789,6 +789,21 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
     }),
     async (c) => c.json(await caps.connectors.itemPayments(c.get("caller"), String(c.req.param("id")))),
   );
+  app.post(
+    "/items/:id/payments/shop-total",
+    owner({
+      tags: ["owner"],
+      summary: "Propose the shop's total: the order at what your own shop counts, with its tax or delivery",
+      description:
+        "For an order whose link is held (state held, shop_total on its payment): your shop counts its tax or delivery on top of what the customer accepted, so the link was not sent. This proposes the shop's total to the customer as a change they accept or not (propose_change, with one line for what the shop adds); once they accept, the link goes. The owner's, in person: the owner's AI and an integration key are refused (403).",
+      responses: json("Item", R.transitionResultSchema),
+      write: true,
+    }),
+    async (c) => {
+      const id = String(c.req.param("id"));
+      return once(c, "payments.shop_total", { item_id: id }, (caller) => caps.connectors.proposeShopTotal(caller, id));
+    },
+  );
 
   app.post(
     "/items/:id/offers",
@@ -1679,9 +1694,10 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
     "/integrations",
     owner({
       tags: ["integrations"],
-      summary: "What can be connected (calendars, Cal.com, Stripe, Mollie; shops marked soon) and what is connected",
+      summary:
+        "What can be connected (calendars, Cal.com, Stripe, Mollie; what is being built marked soon) and what is connected",
       description:
-        "Each card lists its ways in, with the form to fill in (secret fields marked) or a sign-in on the platform; a payment platform's way names the webhook address and events (hook) for an owner who adds the webhook by hand. Connections never carry a secret.",
+        "Groups (Calendars, Payments, Shops and tills) in the order this inbox sees them, then each card with its ways in: the form to fill in (secret fields marked), a sign-in on the platform (with what it asks first, before), or a link the inbox makes (auth: link). A payment platform's way names the webhook address and events (hook) for an owner who adds the webhook by hand. Only what this release can connect says ready; what is being built says soon; nothing else is listed. Connections never carry a secret; a link a connection serves is shown to the owner in person only.",
       responses: json("Integrations", R.integrationsSchema),
     }),
     async (c) => c.json(await caps.connectors.integrations(c.get("caller"))),
@@ -1714,9 +1730,9 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
     "/integrations/authorize",
     owner({
       tags: ["integrations"],
-      summary: "Start a sign-in on the platform (Google): the address to open in the owner's browser",
+      summary: "Start a sign-in on the platform (Google), or an approval on the owner's own store: the address to open",
       description:
-        "OAuth 2.0 with PKCE and offline access, valid for ten minutes. The platform sends the owner back to /oauth/connect/{kind}/callback, which connects (or connects again, for the same account, keeping its choices) and returns to the owner app. The owner's, in person: the owner's AI and an integration key are refused (403).",
+        "OAuth 2.0 with PKCE and offline access, valid for ten minutes. `preset` names the way when a card has more than one; `input` holds what the way asks first (`before`: a store's address). The platform sends the owner back to /oauth/connect/{kind}/callback, which connects (or connects again, for the same account, keeping its choices) and returns to the owner app; a store that sends the key itself POSTs it to /v1/hooks/{kind}/authorized first. The owner's, in person: the owner's AI and an integration key are refused (403).",
       responses: json("Where to sign in", R.authorizeSchema),
       write: true,
     }),
@@ -1760,6 +1776,21 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
     async (c) => {
       const id = String(c.req.param("id"));
       return once(c, "integrations.sync", { id }, (caller) => caps.connectors.syncNow(caller, id));
+    },
+  );
+  app.post(
+    "/integrations/:id/link",
+    owner({
+      tags: ["integrations"],
+      summary: "Make a new link for a connection that serves one: the old link stops at once",
+      description:
+        "For a calendar link to share (a connection with auth: link): whoever holds the old link can no longer read it. The owner's, in person: the owner's AI and an integration key are refused (403).",
+      responses: json("Connection", R.connectionSchema),
+      write: true,
+    }),
+    async (c) => {
+      const id = String(c.req.param("id"));
+      return once(c, "integrations.link", { id }, (caller) => caps.connectors.rotateLink(caller, id));
     },
   );
   app.delete(

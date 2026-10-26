@@ -103,6 +103,30 @@ async function idOf(url: string): Promise<string> {
   return [...digest.slice(0, 16)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+/**
+ * Outlook, as the calendar card names it (ADR-026 §6): the link Outlook publishes for a calendar, with
+ * Outlook's own steps. Busy times only, which is what Outlook offers without a Microsoft app of ours.
+ */
+export const ICS_PRESETS: NonNullable<ConnectorDefinition["presets"]> = [
+  {
+    id: "outlook",
+    label: "Outlook",
+    values: {},
+    fields: {
+      url: {
+        label: "Outlook calendar link",
+        help: "The ICS link Outlook gives when you publish your calendar.",
+        steps: [
+          "In Outlook on the web: Settings → Calendar → Shared calendars.",
+          "Under Publish a calendar, choose your calendar and Can view when I'm busy.",
+          "Press Publish, then copy the ICS link.",
+        ],
+      },
+    },
+    note: "Busy times only: bookings are not added to Outlook.",
+  },
+];
+
 export function icsConnector(): ConnectorDefinition {
   return {
     kind: "ics",
@@ -112,6 +136,7 @@ export function icsConnector(): ConnectorDefinition {
     auth: "form",
     form: icsForm,
     note: "Busy times only: bookings are not added here.",
+    presets: ICS_PRESETS,
 
     async connect(ctx, input) {
       const url = normalise(input.url ?? "");
