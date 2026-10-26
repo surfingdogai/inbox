@@ -525,6 +525,35 @@ describe("an accepted order, paid by the customer's assistant into the business'
     expect((await itemOf(s.db, next)).state).toBe("paid");
   });
 
+  it("a charge Stripe made but whose answer was lost is found by the sync; one never made frees the order", async () => {
+    const s = await setup();
+    const conn = await ready(s);
+    const id = await order(s);
+    s.stripe.agent.lost = true;
+    const cut = await pay(s, id, s.stripe.grantToken({ maxAmount: 18900, currency: "nok" }));
+    expect(cut.status).toBe(503);
+    s.stripe.agent.lost = false;
+    // While nobody knows, no other token is charged for the order.
+    const meanwhile = await pay(s, id, s.stripe.grantToken({ maxAmount: 18900, currency: "nok" }));
+    expect(meanwhile.status).toBe(409);
+    expect(((await meanwhile.json()) as { code: string }).code).toBe("in_progress");
+    expect((await status(s, id)).payment?.state).toBe("processing");
+    await s.inbox.caps.connectors.run(conn, Date.now() + 5 * 60_000, "sync");
+    await drain(s, 60_000);
+    expect((await itemOf(s.db, id)).state).toBe("paid");
+    expect([...s.stripe.intents.values()].filter((p) => p.status === "succeeded")).toHaveLength(1);
+
+    // Stripe down, nothing made: once it is clear nothing was, another token may pay.
+    const next = await order(s);
+    s.stripe.agent.down = 500;
+    expect((await pay(s, next, s.stripe.grantToken({ maxAmount: 18900, currency: "nok" }))).status).toBe(503);
+    s.stripe.agent.down = null;
+    await s.inbox.caps.connectors.run(conn, Date.now() + 20 * 60_000, "sync");
+    const again = await pay(s, next, s.stripe.grantToken({ maxAmount: 18900, currency: "nok" }));
+    expect(again.status, await again.clone().text()).toBe(200);
+    expect((await itemOf(s.db, next)).state).toBe("paid");
+  });
+
   it("a payment that settles later is on its way until the sync hears it went through", async () => {
     const s = await setup();
     const conn = await ready(s);

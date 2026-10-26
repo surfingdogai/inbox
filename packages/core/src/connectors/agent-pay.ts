@@ -60,6 +60,13 @@ const DAY_MS = 86_400_000;
  */
 const LOST_CREATING_MS = 2 * 3_600_000;
 const LOST_PROCESSING_MS = DAY_MS;
+/**
+ * An attempt the platform never answered is looked up by the inbox's own id once this long has passed
+ * (its search trails a new payment by up to a minute). Not found by `NEVER_MADE_MS`, it was never made:
+ * the order is free for another token, and a retry with the same one asks again under the same key.
+ */
+const LOOK_AFTER_MS = 3 * 60_000;
+const NEVER_MADE_MS = 15 * 60_000;
 /** A processing payment is asked about at most this often. */
 const CHECK_EVERY_MS = 4 * 60_000;
 /** Calls one settling run makes. */
@@ -663,6 +670,29 @@ export class AgentPayments {
         if (taken.changes !== 1) throw inProgress();
         return this.charge(row, req.token, order, conn, claim, now);
       }
+      case "failed": {
+        // Never made (the platform did not answer, and has no charge of ours under its id): asked again
+        // under the same key, so a charge the platform made after all is answered, never made twice.
+        if (row.failure !== "lost" || row.connectorId !== conn.id || row.termsSha !== req.termsSha) {
+          throw this.failureError((row.failure ?? "declined") as AgentChargeFailure, order, await this.voice(order));
+        }
+        const claim = randomToken(12);
+        let taken: { changes: number };
+        try {
+          taken = await this.db.client.query({
+            sql: `UPDATE agent_payments SET state = 'creating', failure = NULL, claim_until = ?, claimed_by = ?, updated_at = ?
+                   WHERE id = ? AND state = 'failed' AND failure = 'lost'`,
+            params: [now + CLAIM_MS, claim, now, row.id],
+            method: "run",
+          });
+        } catch (error) {
+          // Another attempt holds the order now (`agent_payments_live`).
+          if (String(error).includes("UNIQUE")) throw inProgress();
+          throw error;
+        }
+        if (taken.changes !== 1) throw inProgress();
+        return this.charge(row, req.token, order, conn, claim, now);
+      }
       default:
         throw this.failureError((row.failure ?? "declined") as AgentChargeFailure, order, await this.voice(order));
     }
@@ -1001,6 +1031,23 @@ export class AgentPayments {
       else if (charge.status === "failed" || charge.status === "canceled") await this.failedLater(r, conn, charge, now);
       else await this.checkedAt(r.id, now);
     }
+    // An attempt the platform never answered: looked up by our own id, then settled as it stands, or
+    // let go as never made, so the order is free for another token.
+    if (conn.payments.findCharge) {
+      const { rows: unanswered } = await this.db.client.query({
+        sql: `SELECT ${COLUMNS} FROM agent_payments
+               WHERE connector_id = ? AND state = 'creating' AND external_id IS NULL
+                 AND (claim_until IS NULL OR claim_until < ?) AND created_at < ?
+                 AND (checked_at IS NULL OR checked_at < ?) ORDER BY created_at LIMIT ?`,
+        params: [conn.id, now, now - LOOK_AFTER_MS, now - CHECK_EVERY_MS, SETTLE_PER_RUN],
+        method: "all",
+      });
+      for (const r of unanswered.map(rowOf)) {
+        if (calls >= SETTLE_PER_RUN) break;
+        calls++;
+        await this.lookUp(conn, r, now);
+      }
+    }
     // An attempt nobody heard back about: unknown, and the owner told where to look.
     const { rows: lost } = await this.db.client.query({
       sql: `SELECT ${COLUMNS} FROM agent_payments WHERE connector_id = ?
@@ -1028,6 +1075,63 @@ export class AgentPayments {
       }
     }
     return calls;
+  }
+
+  /** An attempt the platform never answered, looked up by the inbox's own id for it. */
+  private async lookUp(conn: PayConnection, row: AgentRow, now: number): Promise<void> {
+    let found: AgentCharge | null;
+    try {
+      found = (await conn.payments.findCharge?.(conn.ctx, { ref: row.id })) ?? null;
+    } catch (error) {
+      if (!(error instanceof ConnectorError)) throw error;
+      await this.checkedAt(row.id, now);
+      return;
+    }
+    if (!found || found.livemode !== row.livemode) {
+      if (now - row.createdAt < NEVER_MADE_MS) {
+        await this.checkedAt(row.id, now);
+        return;
+      }
+      await this.db.client.query({
+        sql: `UPDATE agent_payments SET state = 'failed', failure = 'lost', last_error = ?, last_error_at = ?, checked_at = ?,
+                     updated_at = ? WHERE id = ? AND state = 'creating' AND external_id IS NULL`,
+        params: [`${providerOf(row.kind)} made no payment for this attempt`, now, now, now, row.id],
+        method: "run",
+      });
+      return;
+    }
+    switch (found.status) {
+      case "succeeded":
+        await this.paid(row, conn, found, now);
+        return;
+      case "processing":
+        await this.settleRow(row.id, null, now, {
+          state: "processing",
+          externalId: found.externalId,
+          dashboardUrl: found.dashboardUrl ?? null,
+        });
+        return;
+      case "requires_action":
+        if (found.externalId) {
+          await conn.payments.cancelCharge?.(conn.ctx, { externalId: found.externalId }).catch(() => undefined);
+        }
+        await this.settleRow(row.id, null, now, {
+          state: "cancelled",
+          externalId: found.externalId,
+          failure: "authentication_required",
+          lastError: "the card asked its holder to confirm the payment",
+        });
+        return;
+      default: {
+        const code = found.failure?.code ?? "declined";
+        await this.settleRow(row.id, null, now, {
+          state: code === "declined" || code === "authentication_required" ? "declined" : "failed",
+          externalId: found.externalId,
+          failure: code,
+          lastError: [found.failure?.platformCode, found.failure?.message].filter(Boolean).join(": ") || null,
+        });
+      }
+    }
   }
 
   /** A payment that was processing and did not go through: the order says so, as a link's failure does. */

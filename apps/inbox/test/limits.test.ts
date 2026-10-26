@@ -58,6 +58,24 @@ const booking = (svc: string, ip: string, headers: Record<string, string> = {}) 
   });
 
 describe("rate limits", () => {
+  it("paying an order directly has a class of its own: each attempt is a charge asked of the business's Stripe", async () => {
+    const { app } = await setup();
+    const pay = (ip: string) =>
+      app.request(
+        new Request("https://inbox.test/v1/items/01JC0NOSUCHORDER0000000001/pay", {
+          method: "POST",
+          headers: { "content-type": "application/json", "cf-connecting-ip": ip, "idempotency-key": ulid() },
+          body: JSON.stringify({}),
+        }),
+      );
+    for (let i = 0; i < LIMITS.pay.capacity; i++) expect((await pay("203.0.113.40")).status).not.toBe(429);
+    const shut = await pay("203.0.113.40");
+    expect(shut.status).toBe(429);
+    expect(shut.headers.get("retry-after")).toBeTruthy();
+    // Another address is not held to it.
+    expect((await pay("203.0.113.41")).status).not.toBe(429);
+  });
+
   it("let a burst of new items through, then refuse with Retry-After, per address", async () => {
     const { app, svc } = await setup();
     for (let i = 0; i < LIMITS.create.capacity; i++) {

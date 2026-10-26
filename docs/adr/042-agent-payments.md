@@ -95,7 +95,9 @@ this order, each refusing before Stripe is asked anything:
 6. An echoed allowance (ACP's `credential.allowance`) is in the same currency, at least the total, and
    not expired. It can only refuse: Stripe holds the token to its own limits, whatever is echoed.
 7. A token seen before is answered as it went (below). Otherwise, at most five declined attempts per
-   order and thirty per inbox in a day (`too_many_attempts`), which blunts card testing.
+   order and thirty per inbox in a day (`too_many_attempts`), which blunts card testing. The doors give
+   paying its own rate class too (`pay`: thirty at once and sixty an hour per address), so a script
+   trying cards is shut before it reaches those.
 
 Then the attempt is claimed, charged and recorded. A charge that went through is recorded on the order
 as a link's payment is: `record_payment` by the connector, with the PaymentIntent's id and the amount
@@ -116,8 +118,13 @@ link follow from the existing paths.
 - **One per request.** The caller's `idempotency_key` replays the stored answer; the stored request
   holds the token's hash, never the token.
 
-An attempt left `creating` for two hours (past a token's own life), or `processing` for a day, becomes
-`unknown`, and the owner is told on the order to check it in Stripe.
+An attempt Stripe never answered is looked up by the sync a few minutes later, by the inbox's own id
+for it, which every PaymentIntent it makes carries (`metadata[sdi_pay]`, with Stripe's search). Found,
+it is settled as it stands, so a charge whose answer was lost is recorded, never made twice. Not found
+after a quarter of an hour, it was never made: the order is free for another token, and a retry with
+the same token still asks under the same key. Until then no other token is charged for the order. An
+attempt still `processing` after a day becomes `unknown`, and the owner is told on the order to check
+it in Stripe.
 
 ### 5. Test keys for test orders
 

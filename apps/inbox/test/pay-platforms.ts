@@ -71,10 +71,12 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
    * Assistants' payments (ADR-042): the account's profile, whether the key may write PaymentIntents, the
    * tokens platforms got for the profile, the PaymentIntents made from them, and outages.
    */
-  const agent: { allowed: boolean; profile: string; down: number | null } = {
+  /** `lost`: Stripe makes the charge, and the answer never reaches the inbox (a cut connection). */
+  const agent: { allowed: boolean; profile: string; down: number | null; lost: boolean } = {
     allowed: true,
     profile: live ? "profile_1FjordLive00001" : "profile_test_1Fjord0001",
     down: null,
+    lost: false,
   };
   const tokens = new Map<string, GrantedToken>();
   const intents = new Map<string, ReturnType<typeof stripePaymentIntent>>();
@@ -213,6 +215,12 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
       }
       if (agent.down !== null) return json({ error: { type: "api_error", message: "An error occurred." } }, agent.down);
       const [, , , id, verb] = url.pathname.split("/");
+      if (method === "GET" && id === "search") {
+        // Stripe's search, for the one query the inbox asks: its own id for an attempt.
+        const ref = /metadata\['sdi_pay'\]:'([^']+)'/.exec(url.searchParams.get("query") ?? "")?.[1];
+        const data = [...intents.values()].filter((pi) => ref && pi.metadata.sdi_pay === ref);
+        return json({ object: "search_result", data, has_more: false, url: "/v1/payment_intents/search" });
+      }
       if (method === "GET" && id) {
         const pi = intents.get(id);
         return pi ? json(pi) : json({ error: { type: "invalid_request_error", code: "resource_missing" } }, 404);
@@ -231,6 +239,7 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
       if (seen) return json(seen.body, seen.status);
       const answer = chargeToken(f);
       if (k) answered.set(k, answer);
+      if (agent.lost) return json({ error: { type: "api_error", message: "An error occurred." } }, 502);
       return json(answer.body, answer.status);
     }
     // Card holds (ADR-036): a Checkout Session in setup mode, and a customer probe that makes nothing.

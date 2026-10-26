@@ -26,6 +26,7 @@ import {
   isAreaRoute,
   isCreateRoute,
   isNegotiateRoute,
+  isPayRoute,
   isUploadRoute,
   isVerifyRoute,
   LIMITS,
@@ -372,7 +373,9 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
               ? ["public", "verify"]
               : isNegotiateRoute(c.req.method, c.req.path)
                 ? ["public", "negotiate"]
-                : ["public"],
+                : isPayRoute(c.req.method, c.req.path)
+                  ? ["public", "pay"]
+                  : ["public"],
         caller.auth?.id,
       );
       if (refused) return refused;
@@ -791,7 +794,7 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
       if (refused) return refused;
     }
     if (counted) {
-      const classes = (["public", "create", "verify", "negotiate", "area"] as const).filter((cls) => costs[cls]);
+      const classes = (["public", "create", "verify", "negotiate", "area", "pay"] as const).filter((cls) => costs[cls]);
       const refused = classes.length ? await limited(c, classes, caller.auth?.id, costs) : null;
       if (refused) return refused;
     }

@@ -927,6 +927,33 @@ async function agentCharge(ctx: RunContext, charge: { readonly externalId: strin
   return chargeOf(json, key);
 }
 
+/**
+ * A charge the inbox asked for and never heard back about, found by the inbox's own id for the attempt,
+ * which every one of its PaymentIntents carries (`metadata[sdi_pay]`), with Stripe's search
+ * (https://docs.stripe.com/search). Search can trail a new payment by up to a minute, so the inbox asks
+ * only some minutes after the request it never heard back about.
+ */
+async function findCharge(ctx: RunContext, charge: { readonly ref: string }): Promise<AgentCharge | null> {
+  const key = keyOf(ctx);
+  if (!/^[A-Za-z0-9]+$/.test(charge.ref)) return null;
+  const query = encodeURIComponent(`metadata['sdi_pay']:'${charge.ref}'`);
+  const { res, json } = await call(ctx, key, "GET", `/v1/payment_intents/search?query=${query}&limit=1`, {
+    version: STRIPE_AGENT_VERSION,
+  });
+  if (res.status === 403) {
+    throw new ConnectorError(
+      "config",
+      `The Stripe key cannot read payments from assistants: give it ${STRIPE_AGENT_PERMISSIONS.intents} on Stripe's key page.`,
+      { field: "api_key" },
+    );
+  }
+  if (res.status >= 400) throw new ConnectorError("refused", refusalOf(json, res.status));
+  const [found] = arrayOf(json.data).filter(
+    (pi) => ((pi.metadata ?? {}) as Record<string, unknown>).sdi_pay === charge.ref,
+  );
+  return found ? chargeOf(found, key) : null;
+}
+
 /** Stops a charge that waits on its card holder, so it is never taken later: one already stopped is let be. */
 async function cancelCharge(ctx: RunContext, charge: { readonly externalId: string }): Promise<void> {
   const { res, json } = await call(
@@ -1147,6 +1174,7 @@ export function stripeConnector(): ConnectorDefinition {
       agentPayPermissions,
       chargeToken,
       agentCharge,
+      findCharge,
       cancelCharge,
       platformAmount: (amount) => {
         const converted = stripeAmount(amount);

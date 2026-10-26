@@ -878,6 +878,12 @@ export interface PaymentsHandler {
   chargeToken?(ctx: RunContext, request: AgentChargeRequest): Promise<AgentCharge>;
   /** A charge as the platform holds it now, read with the key: one that was processing, settled since. */
   agentCharge?(ctx: RunContext, charge: { readonly externalId: string }): Promise<AgentCharge | null>;
+  /**
+   * A charge made under the inbox's own id for the attempt (`AgentChargeRequest.ref`), looked up when the
+   * platform never answered the request that made it (it was down, or the answer was lost): the charge
+   * as it stands, or null when there is none.
+   */
+  findCharge?(ctx: RunContext, charge: { readonly ref: string }): Promise<AgentCharge | null>;
   /** Stops a charge that waits on its card holder (`requires_action`), so it is never taken later. */
   cancelCharge?(ctx: RunContext, charge: { readonly externalId: string }): Promise<void>;
   /**

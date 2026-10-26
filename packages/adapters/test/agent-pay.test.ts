@@ -94,10 +94,16 @@ const CHARGE: AgentChargeRequest = {
 
 const stripe = stripeConnector();
 const payments = stripe.payments;
-if (!payments?.chargeToken || !payments.agentPayPermissions || !payments.agentCharge || !payments.cancelCharge) {
+if (
+  !payments?.chargeToken ||
+  !payments.agentPayPermissions ||
+  !payments.agentCharge ||
+  !payments.cancelCharge ||
+  !payments.findCharge
+) {
   throw new Error("Stripe takes assistants' payments");
 }
-const { chargeToken, agentPayPermissions, agentCharge, cancelCharge } = payments;
+const { chargeToken, agentPayPermissions, agentCharge, cancelCharge, findCharge } = payments;
 const form = (body: string) => Object.fromEntries(new URLSearchParams(body));
 
 describe("Stripe: an assistant's shared payment token, charged once on the business's own account", () => {
@@ -244,6 +250,32 @@ describe("Stripe: an assistant's shared payment token, charged once on the busin
     expect(charge).toMatchObject({ status: "succeeded", livemode: false, amount: { value: 18900, currency: "NOK" } });
     expect(charge?.dashboardUrl).toBe("https://dashboard.stripe.com/test/payments/pi_1Later");
     expect([p.seen[0]?.method, p.seen[0]?.headers.get("stripe-version")]).toEqual(["GET", STRIPE_AGENT_VERSION]);
+  });
+
+  it("finds a charge it never heard back about by the inbox's own id for the attempt, and nothing else", async () => {
+    const p = fakeStripe(() =>
+      json({
+        object: "search_result",
+        data: [
+          stripePaymentIntent({ id: "pi_1Other", metadata: { sdi_pay: "01JC0SOMEONEELSE00000000001" } }),
+          stripePaymentIntent({ id: "pi_1Ours", amount: 18900, currency: "nok", metadata: { sdi_pay: CHARGE.ref } }),
+        ],
+        has_more: false,
+      }),
+    );
+    const found = await findCharge(ctx(p.http), { ref: CHARGE.ref });
+    expect(found).toMatchObject({ status: "succeeded", externalId: "pi_1Ours" });
+    const [asked] = p.seen;
+    expect(asked?.method).toBe("GET");
+    expect(decodeURIComponent(new URL(asked?.url ?? "").searchParams.get("query") ?? "")).toBe(
+      `metadata['sdi_pay']:'${CHARGE.ref}'`,
+    );
+    expect(asked?.headers.get("stripe-version")).toBe(STRIPE_AGENT_VERSION);
+    const none = fakeStripe(() => json({ object: "search_result", data: [], has_more: false }));
+    expect(await findCharge(ctx(none.http), { ref: CHARGE.ref })).toBeNull();
+    // Only an id of the inbox's own is ever put in the query.
+    expect(await findCharge(ctx(none.http), { ref: "x' OR status:'succeeded" })).toBeNull();
+    expect(none.seen).toHaveLength(1);
   });
 
   it("asks whether the key may charge with a request that makes nothing: 400 it may, 403 it may not", async () => {

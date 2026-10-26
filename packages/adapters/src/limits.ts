@@ -72,6 +72,12 @@ export const LIMITS = {
    * owner and puts the item back on their desk, so ten an hour per address, which no real customer meets.
    */
   negotiate: { capacity: 10, perMs: 10 / 3_600_000 } satisfies Limit,
+  /**
+   * A customer's assistant paying an order directly (ADR-042): thirty at once and sixty an hour per
+   * address. Each attempt is a charge asked of the business's Stripe, so a script trying cards stays
+   * shut here before the inbox's own caps (five declines per order, thirty per inbox, a day) are met.
+   */
+  pay: { capacity: 30, perMs: 60 / 3_600_000 } satisfies Limit,
   /** A POST from the page a link in the business's email opens: thirty an hour per address. */
   link: { capacity: 30, perMs: 30 / 3_600_000 } satisfies Limit,
   /**
@@ -273,6 +279,11 @@ export function isCreateRoute(method: string, path: string): boolean {
  * (`POST /v1/items/{id}/counter`), or anything else (`POST /v1/items/{id}/offers`); and withdrawing
  * or asking for a return (`/withdraw`, `/returns`), each of which puts the item on the owner's desk.
  */
+/** Paying an order directly (ADR-042): `POST /v1/items/{id}/pay`. */
+export function isPayRoute(method: string, path: string): boolean {
+  return method === "POST" && /^\/v1\/items\/[^/]+\/pay\/?$/.test(path);
+}
+
 export function isNegotiateRoute(method: string, path: string): boolean {
   return (
     method === "POST" &&
@@ -344,6 +355,7 @@ export function mcpCosts(body: unknown): Partial<Record<LimitClass, number>> {
     verify: count((n) => n === "verify_customer"),
     negotiate: count((n) => NEGOTIATE_TOOLS.has(n)),
     area: count((n) => n === "check_area"),
+    pay: count((n) => n === "pay_order"),
     public: Math.max(0, messages - 1),
   };
   for (const k of Object.keys(costs) as LimitClass[]) if (!costs[k]) delete costs[k];
