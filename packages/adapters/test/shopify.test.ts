@@ -509,8 +509,11 @@ describe("Shopify's rate limit", () => {
     s.bucket = { maximum: 2000, available: 100, restoreRate: 100 };
     const page = await def.catalogue?.page(ctx(), { cursor: null, since: null });
     expect(page?.products.length).toBeGreaterThan(0);
-    // 502 points requested, 100 there, 100 a second: about four seconds.
-    expect(slept).toEqual([4020]);
+    // 502 points requested, 100 there, 100 a second: about four seconds, less what refilled meanwhile
+    // (a millisecond on the clock between the answer and the wait is a tenth of a point).
+    expect(slept).toHaveLength(1);
+    expect(slept[0]).toBeGreaterThan(3_900);
+    expect(slept[0]).toBeLessThanOrEqual(4_020);
   });
 
   it("waits before a call the bucket would not hold, and comes back later rather than wait long", async () => {
