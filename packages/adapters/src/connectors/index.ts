@@ -6,6 +6,7 @@ import { googleCalendarConnector } from "./google";
 import { icsConnector } from "./ics";
 import { icsFeedConnector } from "./ics-feed";
 import { mollieConnector } from "./mollie";
+import { beds24Connector } from "./property/beds24";
 import { shopifyConnector } from "./shopify/index";
 import { squareConnector } from "./square/index";
 import { stripeConnector } from "./stripe";
@@ -137,5 +138,6 @@ export function builtInConnectors(opts: ConnectorHostOptions = {}): ConnectorDef
     calendlyConnector(opts.oauth?.calendly ?? null, { hosted: opts.hosted }),
     icsFeedConnector(),
     squareConnector(opts.oauth?.square ?? null, { hosted: opts.hosted }),
+    beds24Connector(),
   ];
 }

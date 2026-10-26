@@ -18,6 +18,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { type ApiProblem, api, problemOf } from "../lib/api";
 import { session } from "../lib/auth";
 import { accountOf, bookedTwice, isBookingPlatform, lengthGaps, servesLink, tagOf } from "../lib/integrations";
+import { type PropertyView, useProperty } from "../lib/property";
 import { useIntegrations, useIntegrationWrite, useServices } from "../lib/queries";
 import type { ConnectionView, FormField, GalleryCard, GalleryWay } from "../lib/types";
 import { ErrorState, Toast } from "./Feedback";
@@ -35,6 +36,17 @@ import { Field, SectionHead, Switch } from "./Form";
 interface Notice {
   readonly tone: "success" | "danger";
   readonly text: string;
+}
+
+/** A connection that holds a place to stay's rooms: a property system. */
+const isLodging = (c: ConnectionView) => c.capabilities.includes("stay_inventory");
+
+/** Which property and how many rooms a property system is matched to here; null while it is not. */
+type Matched = { readonly name: string; readonly rooms: number } | null;
+
+function matchedOf(setup: PropertyView | null | undefined, c: ConnectionView): Matched {
+  if (!setup || setup.property.connectorId !== c.id) return null;
+  return { name: setup.property.name, rooms: setup.rooms.filter((r) => r.active && r.externalId).length };
 }
 
 const ICONS = {
@@ -136,6 +148,9 @@ export function IntegrationsCard({ skip = [] }: { skip?: readonly string[] } = {
   }, [open]);
 
   const connections = data?.connections ?? [];
+  // A property system is only half set up once connected: until it is matched to a property, it says so.
+  const property = useProperty(connections.some(isLodging));
+  const matched = (c: ConnectionView) => matchedOf(property.data?.setup, c);
   const byCard = new Map<string, ConnectionView[]>();
   for (const c of connections) byCard.set(cardOf(c), [...(byCard.get(cardOf(c)) ?? []), c]);
   const card = data?.cards.find((c) => c.id === open) ?? null;
@@ -184,6 +199,7 @@ export function IntegrationsCard({ skip = [] }: { skip?: readonly string[] } = {
               connection={c}
               connections={connections}
               cards={data?.cards ?? []}
+              matched={isLodging(c) ? matched(c) : null}
               onNotice={setNotice}
             />
           ))}
@@ -227,6 +243,9 @@ export function IntegrationsCard({ skip = [] }: { skip?: readonly string[] } = {
                       key={c.id}
                       card={c}
                       connections={byCard.get(c.id) ?? []}
+                      unmatched={(byCard.get(c.id) ?? []).some(
+                        (x) => isLodging(x) && x.status !== "disabled" && !property.isPending && !matched(x),
+                      )}
                       instead={pays(c) && !(byCard.get(c.id) ?? []).length ? insteadOf(c.id) : null}
                       open={open === c.id}
                       disabled={!data.can_connect}
@@ -315,12 +334,14 @@ function connectedText(card: GalleryCard, way: GalleryWay): string {
   if (way.auth === "link") return LINK_MADE;
   if (card.group === "shops") return `${card.title} is connected. Reading your catalogue now.`;
   if (card.group === "payments") return `${card.title} is connected. Orders you accept get a link to pay.`;
+  if (card.group === "lodging") return `Connected. Now choose which ${way.label} property this is.`;
   return "Connected. Reading your calendar now.";
 }
 
 function Tile({
   card,
   connections,
+  unmatched = false,
   instead,
   open,
   disabled,
@@ -328,6 +349,8 @@ function Tile({
 }: {
   card: GalleryCard;
   connections: readonly ConnectionView[];
+  /** A property system connected and not matched to a property yet. */
+  unmatched?: boolean;
   /** A payment platform not connected while another takes the payments: "WooCommerce takes payment now". */
   instead?: string | null;
   open: boolean;
@@ -336,7 +359,7 @@ function Tile({
 }) {
   const Icon = ICONS[card.group];
   const soon = card.status === "soon";
-  const tag = tagOf(connections);
+  const tag = tagOf(connections, unmatched);
   const body = (
     <>
       <Icon className="icon int-icon" aria-hidden="true" />
@@ -463,6 +486,7 @@ function ConnectPanel({
               onClick={() => setPicked(keyOf(w))}
             >
               {w.label}
+              {w.status === "ready" && w.fresh && <span className="opt"> · new</span>}
               {w.status === "soon" && <span className="opt"> · soon</span>}
               {w.status === "setup" && <span className="opt"> · set up</span>}
             </button>
@@ -736,6 +760,14 @@ function WayForm({
   const advanced = fields.filter((f) => f.advanced);
   const missing = main.some((f) => f.required && !(values[f.key] ?? "").trim());
   const fieldError = (f: FormField) => error?.field(`values.${f.key}`);
+  // A value that works once (an invite code) is spent when the platform refuses it: emptied, and the
+  // field ready for a new one, so pressing Connect again never asks for the same refusal.
+  useEffect(() => {
+    const spent = way.form.filter((f) => f.once && error?.field(`values.${f.key}`));
+    if (spent.length === 0) return;
+    setValues((v) => Object.fromEntries(Object.entries(v).filter(([k]) => !spent.some((f) => f.key === k))));
+    document.getElementById(`int-${spent[0]?.key}`)?.focus();
+  }, [error, way.form]);
   const shown = new Set(fields.map((f) => `values.${f.key}`));
   const general = error && !(error.fields ?? []).some((f) => shown.has(f.path));
   const input = (f: FormField) => (
@@ -756,9 +788,20 @@ function WayForm({
       </Field>
       {f.steps && f.steps.length > 0 && (
         <ol className="int-steps">
-          {f.steps.map((step) => (
-            <li key={step}>{step}</li>
-          ))}
+          {f.steps.map((step) =>
+            typeof step === "string" ? (
+              <li key={step}>{step}</li>
+            ) : (
+              <li key={step.text}>
+                {step.text}
+                <ul className="int-choices">
+                  {step.items.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </li>
+            ),
+          )}
         </ol>
       )}
       {f.link && (
@@ -879,13 +922,17 @@ function ConnectionLine({
   connection: c,
   connections,
   cards,
+  matched = null,
   onNotice,
 }: {
   connection: ConnectionView;
   connections: readonly ConnectionView[];
   cards: readonly GalleryCard[];
+  /** A property system: which property and rooms it is matched to here, or null while it is not. */
+  matched?: Matched;
   onNotice: (n: Notice) => void;
 }) {
+  const lodging = isLodging(c);
   const write = useIntegrationWrite();
   const [panel, setPanel] = useState<"change" | "again" | null>(null);
   const [confirming, setConfirming] = useState(false);
@@ -959,6 +1006,15 @@ function ConnectionLine({
           c.last_sync_at && !disconnecting ? syncedAgo(c.last_sync_at, Date.now()) : null,
         ].filter(Boolean)
       : [...booking, c.last_sync_at ? syncedAgo(c.last_sync_at, Date.now()) : null].filter(Boolean);
+  // A property system says which property and rooms it is matched to, never busy times or a calendar.
+  const lines = lodging
+    ? [
+        matched
+          ? `${matched.name} · ${matched.rooms} ${matched.rooms === 1 ? "room" : "rooms"} matched`
+          : "Not matched to a property yet",
+        c.last_sync_at ? syncedAgo(c.last_sync_at, Date.now()).replace(/^synced /, "read ") : null,
+      ].filter(Boolean)
+    : meta;
   const problem = write.error ? problemOf(write.error) : null;
   const failing = c.status === "error";
   return (
@@ -966,7 +1022,8 @@ function ConnectionLine({
       <div className="int-conn-main">
         <div className="int-conn-head">
           <span className="int-title">{c.title}</span>
-          {account && <span className="int-account">{account}</span>}
+          {/* Matched, a property system is the property it is matched to, said on the line below. */}
+          {!(lodging && matched) && account && <span className="int-account">{account}</span>}
           <span className={clsx("pill pill-xs", failing && "is-warn")}>
             {disconnecting
               ? "Disconnecting"
@@ -976,7 +1033,7 @@ function ConnectionLine({
           </span>
         </div>
         <div className="int-meta">
-          {meta.join(" · ")}
+          {lines.join(" · ")}
           {pays?.dashboard_url && !disconnecting && (
             <a className="int-link int-open-link" href={pays.dashboard_url} target="_blank" rel="noopener noreferrer">
               Open {c.title}
@@ -1049,7 +1106,7 @@ function ConnectionLine({
             >
               Connect again
             </button>
-          ) : (
+          ) : lodging && !matched ? null : (
             <button
               type="button"
               className="btn btn-ghost btn-sm"
@@ -1077,14 +1134,20 @@ function ConnectionLine({
               <ExternalLink className="icon-xs" aria-hidden="true" />
             </a>
           )}
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            aria-expanded={panel === "change"}
-            onClick={() => setPanel(panel === "change" ? null : "change")}
-          >
-            {serves ? "New link" : "Change"}
-          </button>
+          {lodging ? (
+            <Link to="/settings/property" className={clsx("btn btn-sm", matched ? "btn-ghost" : "btn-secondary")}>
+              {matched ? "Rooms" : "Choose the property"}
+            </Link>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              aria-expanded={panel === "change"}
+              onClick={() => setPanel(panel === "change" ? null : "change")}
+            >
+              {serves ? "New link" : "Change"}
+            </button>
+          )}
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirming(true)}>
             Disconnect
           </button>
@@ -1140,7 +1203,11 @@ function ConnectionLine({
                       setPanel(null);
                       onNotice({
                         tone: "success",
-                        text: pays ? `${c.title} uses the new key.` : "Connected again. Reading your calendar now.",
+                        text: pays
+                          ? `${c.title} uses the new key.`
+                          : lodging
+                            ? `${c.title} is connected again.`
+                            : "Connected again. Reading your calendar now.",
                       });
                     },
                   },
@@ -1182,11 +1249,13 @@ function ConnectionLine({
           <p className="hint">
             {serves
               ? "The link stops working at once, wherever it was pasted."
-              : pays && (shop || c.catalogue)
-                ? `Unpaid orders this inbox made are cancelled in ${c.title}. Paid orders stay there. Your products leave this inbox.${books ? ` Bookings already added stay in ${c.title}.` : ""}`
-                : pays
-                  ? `Links still waiting to be paid stop working. Payments already made stay in your ${c.title} account.${books ? ` Bookings already added stay in ${c.title}.` : ""}`
-                  : "Its busy times stop blocking at once. Bookings already added stay in the calendar."}
+              : lodging
+                ? `Nothing is read from ${c.title} or written to it after this. Bookings already written stay in ${c.title}: they are yours.`
+                : pays && (shop || c.catalogue)
+                  ? `Unpaid orders this inbox made are cancelled in ${c.title}. Paid orders stay there. Your products leave this inbox.${books ? ` Bookings already added stay in ${c.title}.` : ""}`
+                  : pays
+                    ? `Links still waiting to be paid stop working. Payments already made stay in your ${c.title} account.${books ? ` Bookings already added stay in ${c.title}.` : ""}`
+                    : "Its busy times stop blocking at once. Bookings already added stay in the calendar."}
           </p>
           {c.disconnect_note && <p className="hint">{c.disconnect_note}</p>}
           <div className="rowx">

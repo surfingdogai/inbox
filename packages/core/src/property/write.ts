@@ -15,7 +15,7 @@ import type { Item, Money, PayloadOf } from "../domain/types";
 import type { JobHandler } from "../jobs/runner";
 import { items, parties } from "../schema/tables";
 import { type PropertySetup, readSetup } from "../stays/store";
-import { STAY_WRITE_KIND, type StayWriteJob } from "../stays/transition";
+import { paidOf, STAY_WRITE_KIND, type StayWriteJob } from "../stays/transition";
 import { addDays } from "../util/zoned";
 import type { Caller } from "../write/caller";
 import { WriteError } from "../write/errors";
@@ -113,6 +113,11 @@ export async function outboundOf(
         ...(contact.phone ? { phone: contact.phone } : {}),
       };
   }
+  // What is paid and what is left for the property, said only with the guest: amounts, never a card.
+  const paid = paidOf(p);
+  const atProperty = (p.payments?.schedules ?? [])
+    .filter((s) => s.status === "at_property" && s.amount.currency === total.currency)
+    .reduce((a, s) => a + s.amount.value, 0);
   return {
     itemId: item.id,
     reference: shortRef(item.id),
@@ -133,7 +138,27 @@ export async function outboundOf(
     }),
     ...(guest ? { guest } : {}),
     ...(p.requests ? { notes: p.requests } : {}),
+    ...(guest && paid.currency === total.currency
+      ? { amounts: { paid, atProperty: { value: atProperty, currency: total.currency } } }
+      : {}),
   };
+}
+
+/**
+ * Puts a change taken back as it was: the system's own way of restoring a stay where it has one, its
+ * nights a moment ago counted as its own. Answers whether those nights read back oversold now (another
+ * channel took one meanwhile), for the owner to be told; null when it could not say.
+ */
+async function putBack(ctx: RunContext, writer: StayWriter, previous: OutboundStay, link: LinkState) {
+  const back = writer.restore
+    ? await writer.restore(ctx, previous, link)
+    : await writer.put(ctx, previous, link, "confirmed");
+  if (!writer.oversold) return false;
+  try {
+    return await writer.oversold(ctx, previous, back.externalId ? back : link);
+  } catch {
+    return null;
+  }
 }
 
 /** The stay as an agreed change would make it, while the change waits to be written. */
@@ -371,7 +396,9 @@ export async function runStayWrite(
   const stay = await outboundOf(db, setup, item, key, confirmed, shape);
   // A change taken back is put back as it was: the stay as it stands, never cancelled.
   const previous = purpose === "change" ? await outboundOf(db, setup, item, key, true) : null;
-  const { guest: _guest, ...request } = stay;
+  const { guest: _guest, amounts: _amounts, ...request } = stay;
+  // Set when a change taken back leaves its old nights oversold, or unknown: the owner is told.
+  const back: { oversold: boolean | null } = { oversold: false };
   const r = await writeFirst(db, {
     connectorId,
     itemId: item.id,
@@ -398,7 +425,7 @@ export async function runStayWrite(
       if (job.op === "reserve") {
         await writer.cancel(conn.ctx, { externalId: written.externalId, etag: null, calendar: null });
       } else if (previous && link) {
-        await writer.put(conn.ctx, previous, link, "confirmed");
+        back.oversold = await putBack(conn.ctx, writer, previous, link);
       }
     },
   });
@@ -407,6 +434,18 @@ export async function runStayWrite(
     if (r.status === "pending") return `modify (${purpose}): no answer yet, looked for again shortly`;
     if (purpose === "change") {
       if (r.status === "written") return settleChange(db, item, connectorId, "written", now, null);
+      if (r.status === "conflict" && back.oversold !== false) {
+        return settleChange(
+          db,
+          item,
+          connectorId,
+          "refused",
+          now,
+          back.oversold
+            ? `Your system took the new dates only to show them oversold, so stay ${ref} was put back on its own dates. Another booking took some of those nights meanwhile, so they are oversold now: fix it in your system.`
+            : `Your system took the new dates only to show them oversold, so stay ${ref} was put back on its own dates, but your system did not say whether those are still free: check it there.`,
+        );
+      }
       const why =
         r.status === "conflict"
           ? "Your system took the new dates only to show them oversold, so they were put back."
@@ -496,12 +535,21 @@ export function registerStayResolver(connectors: ConnectorCapabilities): void {
         await w.writer.cancel(w.conn.ctx, { externalId: ref.externalId, etag: null, calendar: null });
       } else if (w.purpose === "change") {
         const previous = await outboundOf(db, w.setup, w.item, row.idemKey, true);
-        await w.writer.put(
-          w.conn.ctx,
-          previous,
-          { externalId: ref.externalId, etag: null, calendar: null },
-          "confirmed",
-        );
+        const oversold = await putBack(w.conn.ctx, w.writer, previous, {
+          externalId: ref.externalId,
+          etag: null,
+          calendar: null,
+        });
+        if (oversold !== false) {
+          await tellOwner(
+            db,
+            w.item,
+            oversold
+              ? `Stay ${shortRef(w.item.id)} was put back on its own dates in your system, and another booking took some of those nights meanwhile: they are oversold now. Fix it there.`
+              : `Stay ${shortRef(w.item.id)} was put back on its own dates in your system, which did not say whether those are still free: check it there.`,
+            now,
+          );
+        }
       }
     },
     async settled(db: Db, row: WriteRow, outcome, ref, now) {

@@ -36,16 +36,20 @@ export function bookedTwice(
 }
 
 /**
- * What a card's tag says: the worst of its connections, when one is not simply connected; "Made" for a
- * link made and nothing else.
+ * What a card's tag says: the worst of its connections, when one is not simply connected, or what is
+ * still to do with one (`unmatched`); "Made" for a link made and nothing else.
  */
 export function tagOf(
   connections: readonly ConnectionView[],
+  unmatched = false,
 ): { readonly text: string; readonly tone: "on" | "warn" | "quiet" } | null {
   if (connections.length === 0) return null;
   if (connections.every((c) => c.payments?.disconnecting)) return { text: "Disconnecting", tone: "quiet" };
   if (connections.some((c) => c.status === "error")) return { text: "Failing", tone: "warn" };
   if (connections.every((c) => c.status === "disabled")) return { text: "Paused", tone: "quiet" };
+  // A property system connected and not matched yet: one step left, said in few words; the row below
+  // has the one button for it.
+  if (unmatched) return { text: "1 step left", tone: "warn" };
   if (connections.every(servesLink)) return { text: "Made", tone: "on" };
   // Connected and well: its row above already says so.
   return null;

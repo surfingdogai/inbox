@@ -139,3 +139,13 @@
   padding: 12px 14px;
   border-radius: var(--radius-md);
 }
+
+/* A property system's row: on a narrow phone its buttons go under its name, as the Integrations rows do. */
+@media (max-width: 479px) {
+  .system-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .system-row > .rowx {
+    justify-content: flex-start;
+  }
+}

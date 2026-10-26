@@ -11,13 +11,14 @@ Settings → **Property** → **Connect your system**.
 
 **Calendar links, one per room.** Each listing on Airbnb, Booking.com or Vrbo has a calendar link. Add it in Settings → Property → **Calendar links**, choosing which room it is in the same sheet. The nights it shows as taken appear as hints: in the Nights grid, to guests' assistants as *likely taken*, and as a request for you to look. A link lags hours behind, so a hint never confirms or refuses a stay on its own.
 
+**Beds24** (new): [connect with an invite code](/docs/connectors/beds24/).
+
 ## Coming
 
 Each of these is shown as **Soon** until its connection is built and released, and none is described as working before then:
 
 | System | Its developer documentation |
 | --- | --- |
-| Beds24 | <https://wiki.beds24.com/index.php/API_V2.0> |
 | Hostaway | <https://api.hostaway.com/documentation> |
 | Smoobu | <https://docs.smoobu.com/> |
 | Guesty | <https://open-api-docs.guesty.com/> |

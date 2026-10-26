@@ -17,6 +17,7 @@ import {
 import { Sheet } from "../components/Sheet";
 import { ownerCall, problemOf } from "../lib/api";
 import {
+  chargeWords,
   KIND_WORDS,
   type OwnerSetup,
   type PropertyView,
@@ -103,17 +104,22 @@ function PropertyPage() {
   );
 }
 
-const MODES = [
-  { value: "request", label: "I confirm each one" },
-  { value: "allotment", label: "At once, in rooms I keep for direct guests" },
-  { value: "connected", label: "At once, by my property system" },
-] as const;
+/** How a stay can be confirmed: the third named after the property's own system when it is known ("From Beds24"). */
+function modesOf(system: string | null) {
+  return [
+    { value: "request", label: "I confirm each one" },
+    { value: "allotment", label: "At once, in rooms I keep for direct guests" },
+    { value: "connected", label: system ? `From ${system}` : "From my property system" },
+  ] as const;
+}
 
 /** S1: how a stay confirms here, said as the guests' assistants are told it, and the owner's to change. */
 function HowItConfirms({ setup }: { setup: PropertyView }) {
   const p = setup.property;
   const save = usePropertyWrite(propertyApi.save);
   const connected = p.connectorId !== null;
+  // The system adds charges besides its prices: switched on once the owner says they are covered here.
+  const charges = save.isError && problemOf(save.error).details?.reason === "system_charges";
   return (
     <section className="card glass stack">
       <SectionHead title={p.name}>
@@ -123,7 +129,7 @@ function HowItConfirms({ setup }: { setup: PropertyView }) {
       <Chips
         legend="How a stay is confirmed"
         value={p.mode}
-        options={MODES.filter((m) => m.value !== "connected" || connected)}
+        options={modesOf(setup.system?.title ?? null).filter((m) => m.value !== "connected" || connected)}
         onChange={(mode) => save.mutate({ id: p.id, mode })}
       />
       {p.mode === "allotment" && (
@@ -155,8 +161,26 @@ function HowItConfirms({ setup }: { setup: PropertyView }) {
         </>
       )}
       {save.isError && <p className="hint error">{problemOf(save.error).detail}</p>}
+      {charges && (
+        <div>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            disabled={save.isPending}
+            onClick={() => save.mutate({ id: p.id, instant: true, charges_covered: true })}
+          >
+            They are covered here: switch it on
+          </button>
+        </div>
+      )}
     </section>
   );
+}
+
+/** "Riad Zitoun · 2 rooms matched": the same words as on the connection's own row in Integrations. */
+function matchedWords(setup: PropertyView): string {
+  const n = setup.rooms.filter((r) => r.active && r.externalId).length;
+  return `${setup.property.name} · ${n} ${n === 1 ? "room" : "rooms"} matched`;
 }
 
 /**
@@ -178,15 +202,14 @@ function YourSystem({ data, setup }: { data: OwnerSetup; setup: PropertyView }) 
         <>
           <SectionHead title="Your system" />
           {systems.map((c) => (
-            <div key={c.id} className="catalogue-row row-glass">
+            <div key={c.id} className="catalogue-row row-glass system-row">
               <div className="catalogue-main">
                 <div className="t">
-                  <b>{c.title}</b> · {c.account}
+                  <b>{c.title}</b>
+                  {setup.property.connectorId === c.id ? "" : ` · ${c.account}`}
                 </div>
                 <div className="s">
-                  {setup.property.connectorId === c.id
-                    ? `${setup.property.name}, its rooms matched`
-                    : "Not matched to this property yet"}
+                  {setup.property.connectorId === c.id ? matchedWords(setup) : "Not matched to this property yet"}
                 </div>
               </div>
               <div className="rowx">
@@ -255,7 +278,14 @@ function YourSystem({ data, setup }: { data: OwnerSetup; setup: PropertyView }) 
       {(sync.isError || calendar.isError) && (
         <p className="hint error">{problemOf(sync.error ?? calendar.error).detail}</p>
       )}
-      {mapping && <SystemSheet setup={setup} connection={mapping} onClose={() => setMapping(null)} />}
+      {mapping && (
+        <SystemSheet
+          setup={setup}
+          connection={mapping}
+          mapped={setup.property.connectorId === mapping.id}
+          onClose={() => setMapping(null)}
+        />
+      )}
     </section>
   );
 }
@@ -333,16 +363,23 @@ function CalendarLinkSheet({ rooms, onClose }: { rooms: PropertyView["rooms"]; o
 function SystemSheet({
   setup,
   connection,
+  mapped,
   onClose,
 }: {
   setup: PropertyView;
   connection: { id: string; title: string };
+  /** Matched already: the sheet is its rooms, saved again. */
+  mapped: boolean;
   onClose: () => void;
 }) {
   const props = useSystemProperties(connection.id);
   const list = props.data?.properties ?? [];
+  const pricesAt = props.data?.prices_at ?? null;
   const [chosen, setChosen] = useState<string | null>(setup.property.externalId);
-  const ext = list.find((p) => p.id === chosen) ?? (list.length === 1 ? list[0] : undefined);
+  // The property of the same name as this one is the likely one: chosen until the owner picks another.
+  const sameName = list.find((p) => p.name.trim().toLowerCase() === setup.property.name.trim().toLowerCase());
+  const ext =
+    list.find((p) => p.id === chosen) ?? (list.length === 1 ? list[0] : chosen === null ? sameName : undefined);
   const ours = setup.rooms.filter((r) => r.active);
   const guess = (name: string, id: string) =>
     ours.find((r) => r.externalId === id)?.id ??
@@ -352,8 +389,12 @@ function SystemSheet({
   const pick = (id: string, name: string) => rooms[id] ?? guess(name, id);
   const save = usePropertyWrite(propertyApi.mapSystem);
   const made = ext ? ext.rooms.filter((r) => pick(r.id, r.name) === "new").length : 0;
+  // The rooms here that none of the system's is matched to: no stay of theirs could be written there.
+  const picked = new Set(ext ? ext.rooms.map((r) => pick(r.id, r.name)) : []);
+  const unmatched = ext ? ours.filter((o) => !picked.has(o.id)) : [];
+  const t = connection.title;
   return (
-    <Sheet title={`Connect ${connection.title}`} onClose={onClose}>
+    <Sheet title={mapped ? `${connection.title} rooms` : `Connect ${connection.title}`} onClose={onClose}>
       <div className="stack">
         {props.isPending && <div className="skeleton sk-line" />}
         {props.isError && <p className="hint error">{problemOf(props.error).detail}</p>}
@@ -364,7 +405,7 @@ function SystemSheet({
               <button
                 key={p.id}
                 type="button"
-                className={chosen === p.id ? "pick is-picked" : "pick"}
+                className={ext?.id === p.id ? "pick is-picked" : "pick"}
                 onClick={() => setChosen(p.id)}
               >
                 <b>{p.name}</b>
@@ -377,29 +418,57 @@ function SystemSheet({
         )}
         {ext && (
           <>
-            <div className="label">Its rooms</div>
-            {ext.rooms.map((r) => (
-              <Field key={r.id} id={`m-${r.id}`} label={`${r.name} · ${r.units}`}>
-                <select
-                  id={`m-${r.id}`}
-                  className="input"
-                  value={pick(r.id, r.name)}
-                  onChange={(e) => setRooms({ ...rooms, [r.id]: e.target.value })}
-                >
-                  <option value="new">A new room type, as your system has it</option>
-                  {ours.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.name}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            ))}
+            <div className="label">Match its rooms</div>
+            {ext.rooms.map((r) => {
+              const here = ours.find((o) => o.id === pick(r.id, r.name));
+              return (
+                <div key={r.id} className="stack-xs">
+                  <Field id={`m-${r.id}`} label={`${r.name} · ${r.units} ${r.units === 1 ? "room" : "rooms"}`}>
+                    <select
+                      id={`m-${r.id}`}
+                      className="input"
+                      value={pick(r.id, r.name)}
+                      onChange={(e) => setRooms({ ...rooms, [r.id]: e.target.value })}
+                    >
+                      <option value="new">A new room type, as your system has it</option>
+                      {ours.map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.name}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  {r.unpriced === true && (
+                    <p className="hint">
+                      No price for this room in {t}
+                      {pricesAt ? ` (${pricesAt})` : ""} in the next two months: guests won't see it until it has one.
+                    </p>
+                  )}
+                  {r.unpriced === "rules" && (
+                    <p className="hint">
+                      {t} prices this room by the number of guests or the length of a stay
+                      {pricesAt ? ` (${pricesAt})` : ""}: guests ask first, and you confirm each one with its price.
+                    </p>
+                  )}
+                  <ChargesHint title={t} charges={r.charges ?? []} />
+                  {here && here.units !== r.units && (
+                    <p className="hint">
+                      {connection.title} has {r.units}, here {here.units}: what is free comes from {connection.title}.
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+            {unmatched.length > 0 && (
+              <p className="hint">
+                Here, not in {t}: {unmatched.map((o) => o.name).join(", ")}. Guests stop seeing{" "}
+                {unmatched.length === 1 ? "it" : "them"} once you connect: match{" "}
+                {unmatched.length === 1 ? "it" : "them"} above to keep {unmatched.length === 1 ? "it" : "them"}.
+              </p>
+            )}
             <p className="reads-as">
-              This inbox is {ext.name} in {connection.title}, with {ext.rooms.length} room type
-              {ext.rooms.length === 1 ? "" : "s"}
-              {made ? `, ${made} of them new here` : ""}. Stays are written there first. Nothing confirms on its own
-              until you say so, after a first stay is written and read back.
+              {ext.name} in {t}.{made ? ` ${made} room type${made === 1 ? "" : "s"} will be added here.` : ""} Each stay
+              goes into {t} first; you confirm each one, and after the first you can let them confirm at once.
             </p>
           </>
         )}
@@ -420,15 +489,43 @@ function SystemSheet({
                   external_property_id: ext.id,
                   property_id: setup.property.id,
                   rooms: ext.rooms.map((r) => ({ external_id: r.id, room_type_id: pick(r.id, r.name) })),
+                  ...(unmatched.length ? { stop_offering: unmatched.map((o) => o.id) } : {}),
                 },
                 { onSuccess: onClose },
               )
             }
           >
-            Connect
+            {mapped ? "Save" : "Connect"}
           </button>
         </FormActions>
       </div>
     </Sheet>
+  );
+}
+
+/**
+ * What the system adds to a room besides its price, said where the owner can act on it: a fee or a tax
+ * goes into Taxes & fees here too, so guests are quoted the same total; a security deposit is said apart.
+ */
+function ChargesHint({
+  title,
+  charges,
+}: {
+  title: string;
+  charges: readonly ("cleaning" | "tax" | "deposit" | "extra")[];
+}) {
+  const fees = charges.filter((c) => c !== "deposit");
+  return (
+    <>
+      {fees.length > 0 && (
+        <p className="hint">
+          {title} adds {chargeWords(fees)} to this room on its other channels. Add {fees.length === 1 ? "it" : "them"}{" "}
+          in Taxes & fees here too, so guests are quoted the same total.
+        </p>
+      )}
+      {charges.includes("deposit") && (
+        <p className="hint">{title} asks a security deposit for this room; your inbox asks none.</p>
+      )}
+    </>
   );
 }

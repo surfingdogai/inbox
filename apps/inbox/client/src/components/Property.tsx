@@ -546,11 +546,22 @@ export function RatesTab({ setup }: { setup: PropertyView }) {
   const currency = setup.property.currency;
   const locale = useOwnerLocale();
   const start = usePropertyWrite(propertyApi.plan);
+  const connectorId = setup.property.mode === "connected" ? setup.property.connectorId : null;
+  const system = connectorId ? (setup.system?.title ?? null) : null;
+  const pricesAt = setup.system?.prices_at ?? null;
   if (rooms.length === 0) return <p className="hint">Add your rooms first, then their prices.</p>;
   if (plans.length === 0) {
     return (
       <div className="state state-left">
-        <p>Set a price a night for each room. Breakfast or non-refundable plans can come later, in Policies.</p>
+        {connectorId && system ? (
+          // Priced by the property's own system: no price to type in again, only the terms to set here.
+          <p>
+            Prices come from your {system} calendar{pricesAt ? ` (${pricesAt})` : ""}: change them there. Here you set
+            the terms: when guests can cancel, and any deposit.
+          </p>
+        ) : (
+          <p>Set a price a night for each room. Breakfast or non-refundable plans can come later, in Policies.</p>
+        )}
         <div>
           <button
             type="button"
@@ -563,7 +574,7 @@ export function RatesTab({ setup }: { setup: PropertyView }) {
               )
             }
           >
-            Add your prices
+            {connectorId && system ? "Set the terms" : "Add your prices"}
           </button>
         </div>
         <Problem error={start.error} />

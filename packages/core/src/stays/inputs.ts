@@ -172,6 +172,12 @@ export const upsertPropertyInput = z.object({
   // The owner's alone, in person (ADR-037 D10): how it confirms, and the register it is in.
   mode: z.enum(["request", "allotment", "connected"]).optional(),
   instant: z.boolean().optional(),
+  /**
+   * With `instant`: the owner's word that the charges their system adds to its rooms besides the price
+   * (a cleaning fee, a tax) are covered here, in Taxes & fees or in the system's prices. Asked for only
+   * when the system says it adds some; kept nowhere.
+   */
+  charges_covered: z.boolean().optional(),
   fresh_minutes: z.union([z.literal(5), z.literal(15), z.literal(60)]).optional(),
   registration: z
     .object({ required: z.boolean(), number: z.string().trim().max(60).optional() })
@@ -353,6 +359,8 @@ export const mapSystemInput = z.object({
   rooms: z
     .array(z.object({ external_id: z.string().min(1).max(120), room_type_id: z.union([id, z.literal("new")]) }))
     .max(200),
+  /** Rooms here that are none of the system's: no longer offered, since no stay of theirs could be written there. */
+  stop_offering: z.array(id).max(200).optional(),
 });
 
 export const sendQuoteInput = z.object({

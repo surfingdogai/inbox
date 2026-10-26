@@ -154,7 +154,11 @@ export async function ariCovers(db: Db, setup: PropertySetup, want: WantedNights
   return [...verdict.values()].every((v) => v === "free");
 }
 
-/** The prices the cache holds for a room night by night on one rate, when every night has one. */
+/**
+ * The prices the cache holds for a room night by night on one rate, when every night has one. With no
+ * rate mapped, the first night's first price (`price1` before `price2`) is the one for every night: a
+ * stay is never quoted one price on one night and another on the next; a night without it is no quote.
+ */
 export function cachedNights(
   cells: readonly AriCell[],
   roomExtId: string,
@@ -162,10 +166,15 @@ export function cachedNights(
   nights: readonly string[],
 ): { night: string; amount: number }[] | null {
   const out: { night: string; amount: number }[] = [];
+  const cellOf = (night: string) => cells.find((x) => x.roomExtId === roomExtId && x.night === night);
+  const first = nights[0] ? cellOf(nights[0]) : undefined;
+  const slot =
+    rateExtId ??
+    Object.keys(first?.prices ?? {}).sort((a, b) => a.localeCompare(b, "en", { numeric: true }))[0] ??
+    null;
+  if (slot === null) return null;
   for (const night of nights) {
-    const c = cells.find((x) => x.roomExtId === roomExtId && x.night === night);
-    const values = c ? Object.entries(c.prices) : [];
-    const price = rateExtId ? c?.prices[rateExtId] : values[0]?.[1];
+    const price = cellOf(night)?.prices[slot];
     if (price === undefined) return null;
     out.push({ night, amount: price });
   }
