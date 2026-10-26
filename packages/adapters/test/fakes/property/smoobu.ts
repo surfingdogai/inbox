@@ -20,7 +20,7 @@ import {
 import { type FakePlatform, type FakeRequest, fakePlatform } from "../platform";
 
 /**
- * Smoobu, as a fake (ADR-033 §8): a small in-memory account speaking the documented paths of
+ * Smoobu, as a fake (ADR-037 §8): a small in-memory account speaking the documented paths of
  * <https://docs.smoobu.com/> (see the fixtures' headers for each excerpt), and never the real API.
  *
  * It checks every request the way the documentation says Smoobu does, with its own implementation of

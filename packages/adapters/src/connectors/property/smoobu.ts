@@ -23,7 +23,7 @@ import { hmacSha256Base64 } from "../hook-sign";
 import { constantTimeEqual } from "../pay-sign";
 
 /**
- * Smoobu (ADR-033 §8), a vacation-rental property management system and channel manager, over its
+ * Smoobu (ADR-037 §8), a vacation-rental property management system and channel manager, over its
  * REST API with the owner's own HMAC API key and secret. Built from <https://docs.smoobu.com/> as it
  * read on 20 October 2026 (the excerpt behind each fixture is kept in its header); never called from
  * here with a real account, and Smoobu is never contacted by this code.
@@ -91,7 +91,7 @@ export const SMOOBU_READY = false;
 export const SMOOBU_API = "https://login.smoobu.com";
 /** The only hosts this adapter calls: constants, never from input or from an answer (SSRF). */
 export const SMOOBU_HOSTS: readonly string[] = ["login.smoobu.com"];
-/** How this adapter guards a write and holds a stay, as ADR-033 names them. */
+/** How this adapter guards a write and holds a stay, as ADR-037 names them. */
 export const SMOOBU_GUARDS = { writeGuard: "check_then_write", hold: "none" } as const;
 /** The one rate an apartment's calendar prices: its nightly price. */
 export const SMOOBU_RATE = "nightly";

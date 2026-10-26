@@ -64,7 +64,7 @@ import {
 import { propertyContract, runContext } from "./contract";
 
 /**
- * Smoobu's adapter (ADR-033 §8) against its fake, built from Smoobu's own documentation (the fixtures'
+ * Smoobu's adapter (ADR-037 §8) against its fake, built from Smoobu's own documentation (the fixtures'
  * headers keep each excerpt): the property system contract for three places, then what is Smoobu's
  * own: the HMAC signature pinned by the documentation's two examples, the nonce and the timestamp
  * (our clock corrected once from Smoobu's), never the legacy `Api-Key`; apartments grouped into
