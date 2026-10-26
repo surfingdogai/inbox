@@ -1,10 +1,10 @@
-# ADR-033 — Stays: a place to stay in its own inbox, and property systems
+# ADR-037 — Stays: a place to stay in its own inbox, and property systems
 
-**Status:** proposed, 20 October 2026. Builds on ADR-032 (money in every currency, policies and
-payment schedules as data, write first) and on the connectors base (ADR-026). Amends ADR-023 (pay
+**Status:** proposed, 20 October 2026. Builds on ADR-036 (money in every currency, policies and
+payment schedules as data, write first) and on the connectors base (ADR-030). Amends ADR-023 (pay
 links for deposits, balances and a card to hold a stay), ADR-018 (changes and the confirmed fee of a
 cancellation, for stays), ADR-022 (calendar links per room, as hints) and ADR-014 (the `lodging`
-group). Spec 0.10.0, migration 0026. Numbered provisionally; renumbering at merge is fine.
+group). Spec 0.11.0, migration 0029.
 
 ## Context
 
@@ -56,7 +56,7 @@ Kijani House (Nairobi, KES), Maple Hollow B&B (Nova Scotia, CAD) and Dar Al Bahr
 
 ## 2. Data
 
-### 2.1 Tables (migration 0026)
+### 2.1 Tables (migration 0029)
 
 `properties`, `room_types`, `rate_plans`, `stay_policies`, `rates` (a base price per plan and room
 type, and seasons with weekdays), `stay_fees`, `stay_extras`, `allotments`, `night_closures`,
@@ -163,7 +163,7 @@ at the property. Every one is in the total.
 ### 5.3 Policies
 
 Presets in (free until 1, 2, 3, 7, 14 or 30 days before, then the first night, half or everything;
-non-refundable; or custom steps), dated steps out (ADR-032 §2). A step's until is the last second of
+non-refundable; or custom steps), dated steps out (ADR-036 §2). A step's until is the last second of
 its local day. A cancellation the property writes down is judged as of when the guest asked, and can
 only lower the fee; lower than the policy only by a person.
 
@@ -262,7 +262,7 @@ code-complete but switched off, saying "Needs setup", with a checklist for the f
 `ConnectorDefinition.stays` (`PropertySystem`): `writeGuard`, `hold`, `pricing`, `hosts`, and
 `properties`, `rooms`, `ratePlans`, `ari`, `quote`, `reserve`, `release`, `modify`, `cancel`, `get`,
 `find`, `receive`, `subscribe`, `budget`; capabilities `stay_inventory`, `write_stays`,
-`stay_events`. Writes go through the write journal (ADR-032 §4) with our reference, so a retry finds
+`stay_events`. Writes go through the write journal (ADR-036 §4) with our reference, so a retry finds
 its own write. A system that takes a stay on a night it has no room for says so itself, definitely
 (`StayWriter.oversold`: its overbooking flag, or its count of bookings against its rooms, as its
 documentation gives it); after our write the inbox reads that back, and a conflict takes our own write

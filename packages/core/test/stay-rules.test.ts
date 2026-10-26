@@ -7,7 +7,7 @@ import { mapCalendar } from "../src/property/hints";
 import { clock, contact, guest, kijaniHouse, mapleHollow, owner } from "./stay-fixtures";
 
 /**
- * The stays rules (ADR-033 §7): a quote from the rates is drafted for a person and never sent by a
+ * The stays rules (ADR-037 §7): a quote from the rates is drafted for a person and never sent by a
  * rule (R1); one goes at once only where the rooms cannot be sold twice (R2); a request is declined
  * only when the property is full by its own word (R3), never on another calendar's hint, which asks a
  * person instead (R4).

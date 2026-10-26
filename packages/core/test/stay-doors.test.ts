@@ -5,7 +5,7 @@ import type { WriteError } from "../src/write/index";
 import { clock, contact, guest, kijaniHouse, mapleHollow, owner } from "./stay-fixtures";
 
 /**
- * The stays doors as a guest's assistant meets them (ADR-033 §6): at most two holds open per assistant;
+ * The stays doors as a guest's assistant meets them (ADR-037 §6): at most two holds open per assistant;
  * a change and a cancellation each answered with what they cost first, and taken only with that
  * fingerprint; a property that takes stays at its own booking engine sending assistants there with
  * the dates filled in; and schema.org's reading of the place, with an offer only where a stay is

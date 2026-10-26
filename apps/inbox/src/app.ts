@@ -347,7 +347,7 @@ export function createInbox(deps: AppDeps): Inbox {
     // Write first (ADR-036): a write to a business's own system whose answer never came is looked for
     // again until it is found or its few minutes are up. An inbox with no such system enqueues none.
     .register(CONNECTOR_WRITE_RESOLVE_KIND, writeResolveHandler())
-    // Stays (ADR-033): the minute sweep while any stay is open, the guest's scheduled messages, and a
+    // Stays (ADR-037): the minute sweep while any stay is open, the guest's scheduled messages, and a
     // property's own system — written to first, one stay's writes one after another, and read into the
     // availability cache. An inbox that is not a place to stay enqueues none of them.
     .register(STAY_SWEEP_KIND, staySweepHandler())
@@ -586,7 +586,7 @@ export function createInbox(deps: AppDeps): Inbox {
       // Where a network reads the business's products, while it lists them and this inbox can sign
       // the feed (ADR-029): a business out of every directory lists none.
       catalogue: !unlisted && caps.catalogue.served(settings) && caps.catalogue.canSign(),
-      // A place to stay's door (ADR-033): how it confirms, how soon it answers, how a stay is secured.
+      // A place to stay's door (ADR-037): how it confirms, how soon it answers, how a stay is secured.
       stay: await stayDoorOf(deps.db),
     });
     // A minute: a network reads it again within five, and an owner's switch must not wait on a cache.

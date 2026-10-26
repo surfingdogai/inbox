@@ -43,7 +43,7 @@ export const FN_NAMES = [
   "person_tier_on",
   "customer_known",
   "within_customer_limit",
-  // A place to stay (ADR-033 §7): the property's rates price every night; the nights are free where
+  // A place to stay (ADR-037 §7): the property's rates price every night; the nights are free where
   // nothing can be sold twice (rooms kept for direct guests, or a fresh read of its system); every room
   // asked for is closed or full on some night, by the owner or its system (never a calendar hint
   // alone); another calendar shows some of the nights as taken; cancelling is still free; and the new
@@ -105,7 +105,7 @@ export const actionSchema = z.discriminatedUnion("action", [
   }),
   z.object({ action: z.literal("stop") }),
   /**
-   * A stay's quote worked out and kept for a person (ADR-033 §7, R1): never sent. The owner sends it as
+   * A stay's quote worked out and kept for a person (ADR-037 §7, R1): never sent. The owner sends it as
    * it is in one tap, edits it, or drops it, as any draft (ADR-018 §4).
    */
   z.object({

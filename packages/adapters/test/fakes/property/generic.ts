@@ -13,7 +13,7 @@ import { hmacSha256Hex, verifyHexHmac } from "../../../src/connectors/hook-sign"
 import { type FakePlatform, fakePlatform } from "../platform";
 
 /**
- * A generic property system, as a fake (ADR-033 §8): no real channel manager or property management
+ * A generic property system, as a fake (ADR-037 §8): no real channel manager or property management
  * system is ever called, and nothing here is any vendor's API. It is the shape every one of them has —
  * properties, rooms, rates, availability night by night, bookings written with our own reference and
  * found again by it, cancelled by status, never deleted — so the stays layer and the contract kit can

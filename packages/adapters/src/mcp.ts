@@ -269,7 +269,7 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
     // The customer's assistant is speaking to the business: the server is the business's (N20).
     const profile = await caps.getBusinessProfile();
     const name = profile.name.trim() || profile.domain || "Inbox";
-    // A place to stay (ADR-033) says how its stays are asked for, held and booked, and has the tools.
+    // A place to stay (ADR-037) says how its stays are asked for, held and booked, and has the tools.
     const stays = await takesStays(caps);
     const server = new McpServer(
       { name, version },
@@ -1797,7 +1797,7 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
           return { text: `Key "${r.result.name}" revoked.${again(r.replayed)}`, structured: r.result };
         }),
     );
-    // A place to stay's setup (ADR-033 §6.2): rooms, rates, fees and extras the AI may fill in; how the
+    // A place to stay's setup (ADR-037 §6.2): rooms, rates, fees and extras the AI may fill in; how the
     // property confirms, its policies, deposits, card holds and allotments are the owner's in person.
     registerOwnerStayTools(server, caps, caller, guarded);
     return server;

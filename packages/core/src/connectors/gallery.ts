@@ -233,7 +233,7 @@ export const GALLERY: readonly CardSpec[] = [
       { kind: "square", preset: null, label: "Access token" },
     ],
   },
-  // A place to stay's own system (ADR-033 §8.1): each way is "Soon" until its connector is registered
+  // A place to stay's own system (ADR-037 §8.1): each way is "Soon" until its connector is registered
   // here, and one that needs a partner account says "Needs setup" once it is. Calendar links per room
   // are the calendar card's own way.
   {
@@ -270,7 +270,7 @@ export type Lean = "appointments" | "shop" | "stays" | null;
 export function leanOf(counts: {
   readonly services: number;
   readonly products: number;
-  /** A place to stay (ADR-033): it leans to stays, with its property system first. */
+  /** A place to stay (ADR-037): it leans to stays, with its property system first. */
   readonly rooms?: number | undefined;
 }): Lean {
   if ((counts.rooms ?? 0) > 0) return "stays";
@@ -308,7 +308,7 @@ export function gallery(
   const out: GalleryCard[] = [];
   for (const card of GALLERY) {
     // A place to stay's own systems are shown to a place to stay only, each "Soon" until its connector is
-    // registered here (ADR-033 §8.1): the hotel connectors track builds them.
+    // registered here (ADR-037 §8.1): the hotel connectors track builds them.
     const staysOnly = card.industries.length > 0 && card.industries.every((i) => i === "stays");
     if (staysOnly && opts.lean !== "stays") continue;
     const spec: CardSpec = staysOnly ? { ...card, building: true } : card;

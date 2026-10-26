@@ -97,7 +97,7 @@ export type GuardId =
    * the customer keep them by dropping it. A refund with nothing to send back is money owed, as it is.
    */
   | "goods_expected"
-  // Stays (ADR-033), checked by the stays layer (`stays/transition.ts`) in the same write.
+  // Stays (ADR-037), checked by the stays layer (`stays/transition.ts`) in the same write.
   /** The quote holds together: its lines and schedule add up to its total, its policy is dated before arrival. */
   | "stay_quote_complete"
   /** Each room holds its guests: adults, children and the total within the room type's capacity. */
@@ -182,7 +182,7 @@ export type EffectId =
   | "notify_customer"
   | "notify_owner"
   | "close"
-  // Stays (ADR-033), written by the stays layer in the same batch.
+  // Stays (ADR-037), written by the stays layer in the same batch.
   /** The stay's nights claimed for good, or held until a deposit or a write settles. */
   | "claim_nights"
   | "claim_nights:hold"

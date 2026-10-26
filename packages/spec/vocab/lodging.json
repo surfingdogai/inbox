@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "Words for a place to stay (spec 0.10, ADR-033): property kinds, bed types, amenities, meal plans, house rules, how a tax or fee is charged, and the extras a guest may add, each with labels in English, Spanish, French, German, Italian and Portuguese. Extras are on-property items only: transfers, tours and car hire are never on this list, so an inbox never bundles another trader's travel service (Directive 2015/2302 Art. 3(5)). A token is never removed or renamed.",
+  "description": "Words for a place to stay (spec 0.11, ADR-037): property kinds, bed types, amenities, meal plans, house rules, how a tax or fee is charged, and the extras a guest may add, each with labels in English, Spanish, French, German, Italian and Portuguese. Extras are on-property items only: transfers, tours and car hire are never on this list, so an inbox never bundles another trader's travel service (Directive 2015/2302 Art. 3(5)). A token is never removed or renamed.",
   "kinds": {
     "hotel": { "en": "Hotel", "es": "Hotel", "fr": "Hôtel", "de": "Hotel", "it": "Hotel", "pt": "Hotel" },
     "bnb": { "en": "B&B", "es": "B&B", "fr": "Chambre d'hôtes", "de": "Pension", "it": "B&B", "pt": "B&B" },

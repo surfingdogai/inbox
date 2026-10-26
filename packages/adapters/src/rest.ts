@@ -658,7 +658,7 @@ export function publicRest(caps: Capabilities, opts: { readonly baseUrl?: string
     },
   );
 
-  // A place to stay (ADR-033 §6.1): what is free, a quote, a request, a hold, a booking, a change.
+  // A place to stay (ADR-037 §6.1): what is free, a quote, a request, a hold, a booking, a change.
   stayPublicRoutes(app, caps, hook as never);
   return app;
 }
@@ -1968,7 +1968,7 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
     },
   );
 
-  // A place to stay's setup (ADR-033 §6.2).
+  // A place to stay's setup (ADR-037 §6.2).
   stayOwnerRoutes(app, caps);
   return app;
 }

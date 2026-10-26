@@ -137,7 +137,7 @@ export interface CustomerItemView extends ItemView {
     readonly human: string;
   }[];
   /**
-   * For a stay (ADR-033): its quote and fingerprint, the payments with their links and deadlines, the
+   * For a stay (ADR-037): its quote and fingerprint, the payments with their links and deadlines, the
    * policy in words, what cancelling costs now (with `fee_sha`), the hold or the change open.
    */
   readonly stay?: StayTerms | null | undefined;
@@ -198,7 +198,7 @@ interface Deps {
   readonly people: IdentityCapabilities;
   readonly receipts: ReceiptCapabilities;
   readonly secrets: SecretBox | null;
-  /** A stay's terms as its guest reads them, and its pages (ADR-033). */
+  /** A stay's terms as its guest reads them, and its pages (ADR-037). */
   readonly stays?:
     | {
         terms(item: Item, lang: string, now: number): Promise<StayTerms | null>;
@@ -707,7 +707,7 @@ export class CustomerDoors {
     for (let attempt = 1; ; attempt++) {
       const row = await this.loadOwned(c, input.item_id);
       const item = rowToItem(row);
-      // A stay's quote, hold or the property's change is taken on its own terms' fingerprint (ADR-033):
+      // A stay's quote, hold or the property's change is taken on its own terms' fingerprint (ADR-037):
       // without it, or with one for other terms, the answer gives the terms as they are now.
       if (item.type === "stay") {
         const change = item.payload.change;
@@ -1329,7 +1329,7 @@ export class CustomerDoors {
     const ctx = await this.linkContext(token, opts.acceptLanguage ?? null);
     if ("page" in ctx) return ctx.page;
     if (ctx.row.action === "networks_off") return this.networksPage(ctx, opts.now);
-    // A stay's links (ADR-033): its own pages, in the guest's language among six.
+    // A stay's links (ADR-037): its own pages, in the guest's language among six.
     if (isStayAction(ctx.row.action)) return stayLinkView({ db: this.db, ...this.deps.stays?.page }, ctx, opts.now);
     return this.pageFor(ctx, opts.now, { from: opts.from });
   }

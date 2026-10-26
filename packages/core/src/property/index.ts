@@ -1,5 +1,5 @@
 /**
- * A place to stay's own system (ADR-033 §4.5, §8): the availability cache, its polls and credit budget,
+ * A place to stay's own system (ADR-037 §4.5, §8): the availability cache, its polls and credit budget,
  * calendar links as night hints, and stays written to the system first.
  */
 export { type AriCell, ariCells, ariCovers, ariStatements, ariVerdict, cachedNights, staleStatement } from "./ari";

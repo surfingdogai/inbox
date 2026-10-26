@@ -14,7 +14,7 @@ import { addDays, dateIn } from "../util/zoned";
 import { ariStatements } from "./ari";
 
 /**
- * The stays cache kept fresh (ADR-033 §4.5): the next 60 nights every 15 minutes and the next 365
+ * The stays cache kept fresh (ADR-037 §4.5): the next 60 nights every 15 minutes and the next 365
  * every 6 hours, for each property whose own system is connected. A system that counts credits (Beds24
  * shares 100 per 5 minutes) is never polled below a reserve of 30, so a hold or a booking always has
  * credits left; a call it refuses for its limits waits until the system says.

@@ -1,7 +1,7 @@
 import type { PresetSpec } from "./common";
 
 /**
- * A place to stay (ADR-033 §7): rules that only speed things up or ask a person (R25). None reads a
+ * A place to stay (ADR-037 §7): rules that only speed things up or ask a person (R25). None reads a
  * guest's standing to refuse anyone, none declines on another calendar's hint alone, and nothing is
  * sent at a price the property's own rates did not give.
  */

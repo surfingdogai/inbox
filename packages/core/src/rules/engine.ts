@@ -183,7 +183,7 @@ export async function runRulesForEvent(
             stop = true;
             break;
           case "draft": {
-            // A stay's quote from the rates, kept for a person (ADR-033 R1): never sent by a rule.
+            // A stay's quote from the rates, kept for a person (ADR-037 R1): never sent by a rule.
             const terms = await draftTerms(db, current, now);
             if (!terms) break;
             await db.batch([
@@ -360,7 +360,7 @@ export async function buildRuleContext(
   const [profile] = await db.orm.select({ timezone: business.timezone }).from(business).limit(1);
   const facts = {
     ...(await bookingFacts(db, item, profile?.timezone ?? settings.business.timezone)),
-    // A stay's (ADR-033 §7): its rates, its nights, its calendars, its change.
+    // A stay's (ADR-037 §7): its rates, its nights, its calendars, its change.
     ...(item.type === "stay" ? { stay: await stayFacts(db, item, now) } : {}),
   };
   const who = await identityContext(db, item, settings);

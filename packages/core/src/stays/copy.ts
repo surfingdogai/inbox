@@ -2,7 +2,7 @@ import { LODGING_VOCABULARY } from "@surfingdog/spec";
 import { type PolicyLang, policyLang } from "../policy/words";
 
 /**
- * What a place to stay says to its guests (ADR-033), in its own name and the guest's language: the
+ * What a place to stay says to its guests (ADR-037), in its own name and the guest's language: the
  * lines of a quote, the schedule's words, the pay-link titles, the guest pages and the emails G1–G6.
  * Six languages ship (English, Spanish, French, German, Italian, Portuguese); any other reads in
  * English, and the owner may write their own pre-arrival text in any. Nothing here names the inbox, a

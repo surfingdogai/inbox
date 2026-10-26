@@ -6,7 +6,7 @@ import { transitionItem, type WriteError } from "../src/write/index";
 import { clock, contact, guest, mapleHollow, owner, ownerAi } from "./stay-fixtures";
 
 /**
- * A stay's cancellation policy (ADR-033 §5.3): every preset as steps, the fee at each moment, what is
+ * A stay's cancellation policy (ADR-037 §5.3): every preset as steps, the fee at each moment, what is
  * owed back of what was paid, and a cancellation the property writes down judged as of when the guest
  * asked, which can only make the fee lower; lower still only by a person.
  */

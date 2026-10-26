@@ -824,7 +824,7 @@ const sections = {
     })
     .prefault({}),
   /**
-   * A place to stay (ADR-033): what is not per property. A request nobody answered lapses after
+   * A place to stay (ADR-037): what is not per property. A request nobody answered lapses after
    * `requestExpiresHours`; a stay counts as stayed `autoCompleteHours` after check-out unless marked a
    * no-show; the message before arrival goes `preArrivalDays` before, the private arrival details
    * `arrivalDetailsHours` before; guests are written to in `languages` (the business's when empty).
@@ -861,7 +861,7 @@ export function isDoorElsewhereUrl(url: string): boolean {
 
 /**
  * One door elsewhere as a write sets it (ADR-035): the kind, the page, and the platform the owner picked it on from
- * `vocab/door-platforms.json`, if any; for a stay (ADR-033), the booking engine's deep link too. A page is the business's own: on the platform it names, past the platform's
+ * `vocab/door-platforms.json`, if any; for a stay (ADR-037), the booking engine's deep link too. A page is the business's own: on the platform it names, past the platform's
  * own pages, and with no tracking or affiliate parameter in it. A platform that also serves the business's own domain
  * (Shopify, Wix, SimplyBook.me…) takes a page there too, which the write checks against the business's domain
  * (`doorElsewhereDomainProblems`). Only a write is held to this: a stored door is read by
@@ -882,7 +882,7 @@ export function doorElsewhereSettingSchema() {
         })
         .describe("Where customers go for it: an https address."),
       /**
-       * For a stay (ADR-033): the booking engine's deep link, with {check_in}, {check_out}, {adults},
+       * For a stay (ADR-037): the booking engine's deep link, with {check_in}, {check_out}, {adults},
        * {children} and {rooms} to fill in, on the same host as `url`.
        */
       urlTemplate: z
@@ -941,7 +941,7 @@ export function doorElsewhereStoredSchema() {
       if (!isPlainObject(raw)) return raw;
       const door: Record<string, unknown> = { ...raw };
       if (typeof door.url === "string") door.url = cleanDoorUrl(door.url);
-      // A stay's deep link (ADR-033) is dropped alone when it no longer reads, as a reader drops it.
+      // A stay's deep link (ADR-037) is dropped alone when it no longer reads, as a reader drops it.
       if ("urlTemplate" in door) {
         const t = door.urlTemplate;
         if (door.itemType !== "stay" || typeof t !== "string" || t.length > 2048 || !isStayTemplate(t)) {
@@ -1039,7 +1039,7 @@ export function publishedDoorsElsewhere(
       item_type: d.itemType,
       url: d.url,
       ...(platform ? { platform } : {}),
-      // A stay's deep link into the property's own booking engine (ADR-033 §6.4).
+      // A stay's deep link into the property's own booking engine (ADR-037 §6.4).
       ...(d.urlTemplate ? { url_template: d.urlTemplate } : {}),
     };
   });

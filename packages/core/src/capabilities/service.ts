@@ -332,7 +332,7 @@ export class Capabilities {
   /** The signed catalogue feed networks read (ADR-029). */
   readonly catalogue: CatalogueCapabilities;
 
-  /** A place to stay (ADR-033): the property, its rooms and rates, and the stays doors. */
+  /** A place to stay (ADR-037): the property, its rooms and rates, and the stays doors. */
   readonly stays: StayCapabilities;
 
   /** Keys and scopes (ADR-004): integration keys, and the one scope check every owner door calls. */

@@ -17,7 +17,7 @@ import { cancellationTerms, datesWords, dueNow, feeSha, stayTermsSha, whenWords 
 import { paidOf } from "./transition";
 
 /**
- * A stay's pages behind the links in its emails (ADR-033 §12 G1–G5): the quote to accept, other dates
+ * A stay's pages behind the links in its emails (ADR-037 §12 G1–G5): the quote to accept, other dates
  * to ask for, a no thanks, the cancellation at the fee shown, a card to hold the stay, and the property's
  * change. Opening one only shows the terms (mail scanners fetch links); only its POST acts, bound to the
  * terms the page showed. In the guest's language, in the property's name; never a word of ours.

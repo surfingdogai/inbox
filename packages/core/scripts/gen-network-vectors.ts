@@ -28,7 +28,7 @@ write(path.join(spec, "vectors/signatures.json"), v.signatures);
 write(path.join(spec, "vectors/passes.json"), v.passes);
 write(path.join(spec, "vectors/receipts-v2.json"), v.receiptsV2);
 write(path.join(spec, "vectors/receipts-v6.json"), v.receiptsV6);
-// Stays (spec 0.10, ADR-033): `test/stay-vectors.test.ts` rebuilds these.
+// Stays (spec 0.11, ADR-037): `test/stay-vectors.test.ts` rebuilds these.
 const stays = buildStayVectors();
 write(path.join(spec, "vectors/stay-totals.json"), stays.totals);
 write(path.join(spec, "vectors/stay-policy.json"), stays.policy);

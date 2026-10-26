@@ -92,7 +92,7 @@ const STEPS = [
   { id: "hours", label: "Hours" },
   { id: "answering", label: "Answering" },
 ] as const;
-/** A place to stay (ADR-033): the place and its rooms instead of doors, offers and hours, a night's price with each. */
+/** A place to stay (ADR-037): the place and its rooms instead of doors, offers and hours, a night's price with each. */
 const STAY_STEPS = [
   { id: "kind", label: "Kind" },
   { id: "you", label: "You" },

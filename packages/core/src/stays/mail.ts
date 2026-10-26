@@ -15,7 +15,7 @@ import { datesWords, whenWords } from "./terms";
 import { paidOf } from "./transition";
 
 /**
- * A stay's emails to its guest (ADR-033 §12 G1–G6, §10): in the property's name and the guest's
+ * A stay's emails to its guest (ADR-037 §12 G1–G6, §10): in the property's name and the guest's
  * language, from the stay as it stands when the email goes. The confirmation says it is not an invoice;
  * an automatic one says so; every one says who the booking is with. Private arrival details are never
  * written into the email as it is kept: the kept text holds a placeholder, filled only as it is sent.

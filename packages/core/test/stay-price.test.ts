@@ -4,7 +4,7 @@ import { quoteFromRates } from "../src/stays/price";
 import type { FeeRow, PropertySetup, RatePlanRow, RoomTypeRow } from "../src/stays/store";
 
 /**
- * A stay's price from the property's own rates (ADR-033 §5.1–§5.2), pure: seasons, weekends, extra
+ * A stay's price from the property's own rates (ADR-037 §5.1–§5.2), pure: seasons, weekends, extra
  * guests, children free under an age, a derived plan's discount, extras, every fee basis with tiers,
  * caps and child exemptions, prices that include a tax, each line rounded half up to the currency's own
  * minor unit, the lines adding up to the total and the schedule too. Real tax rates are the property's

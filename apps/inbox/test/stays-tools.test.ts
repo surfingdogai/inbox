@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { BASE, ok, type Setup, setup } from "./stay-harness";
 
 /**
- * A place to stay's doors in the whole app (ADR-033 §6): its tools listed to guests' assistants once
+ * A place to stay's doors in the whole app (ADR-037 §6): its tools listed to guests' assistants once
  * it has a room to offer, and never before; the business's own page carrying the place as schema.org
  * reads it, in a data block nothing runs; and the owner told of each stay's moments in their words.
  */

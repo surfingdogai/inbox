@@ -2,7 +2,7 @@ import type { Db } from "../db";
 import { addDays, instantOf } from "../util/zoned";
 
 /**
- * Calendar links as night hints (ADR-033 §4.4): an iCal link mapped to a room type (one per listing,
+ * Calendar links as night hints (ADR-037 §4.4): an iCal link mapped to a room type (one per listing,
  * from Airbnb, Booking.com or Vrbo) says which nights another channel took. They lag hours to a day, so
  * they never confirm, never decline and never count in claims: a hint shows the owner a hatched night,
  * tells an agent `likely_taken`, and asks a person (rule R4). The mapping is the connection's own

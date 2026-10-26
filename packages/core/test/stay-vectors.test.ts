@@ -9,7 +9,7 @@ import { datePolicy, feeAt } from "../src/policy/index";
 import { nightsOf, stayTimes } from "../src/stays/nights";
 
 /**
- * The stays vectors (spec 0.10, ADR-033): what any implementation must answer for a stay's totals, its
+ * The stays vectors (spec 0.11, ADR-037): what any implementation must answer for a stay's totals, its
  * policy dated across zones and clock changes, its nights and times, and a stay taken elsewhere. Read
  * case by case here, and rebuilt whole to catch a committed file that drifted from the code.
  */

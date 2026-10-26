@@ -107,7 +107,7 @@ export const requestBookingInputSchema = z.object({
 export type RequestBookingInput = z.infer<typeof requestBookingInputSchema>;
 
 /**
- * `request_stay` (spec 0.10, ADR-033): a request for a stay, carried to a place to stay's own inbox, as
+ * `request_stay` (spec 0.11, ADR-037): a request for a stay, carried to a place to stay's own inbox, as
  * the inbox's own `request_stay` takes it. The property answers with its own quote, or, where it
  * confirms at once, with its terms first (`confirm`) and the same call again with `terms_sha` books.
  * Networks carry it later; it falls under the carried requests ADR-025 allows.

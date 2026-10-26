@@ -1364,7 +1364,7 @@ export class ConnectorCapabilities {
 
   /**
    * A connection's definition and what it runs with, for a caller outside this class that drives one
-   * (a property system's stays, ADR-033); null when it is gone, paused, or cannot run here.
+   * (a property system's stays, ADR-037); null when it is gone, paused, or cannot run here.
    */
   async contextFor(
     connectorId: string,

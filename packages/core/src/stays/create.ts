@@ -8,7 +8,7 @@ import { readSetup } from "./store";
 import { checkGuestPlan, STAY_SWEEP_KIND } from "./transition";
 
 /**
- * What only the property, or the inbox for it, writes on a stay (ADR-033 §2.2): a request never
+ * What only the property, or the inbox for it, writes on a stay (ADR-037 §2.2): a request never
  * arrives holding a price, a payment, a hold, an outcome or the property's own booking, whoever sends
  * it. The inbox adds what it works out itself (the times, an estimate from the rates) afterwards.
  */

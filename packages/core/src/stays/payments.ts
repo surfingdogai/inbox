@@ -21,7 +21,7 @@ import { propertyLocale } from "./price";
 import { readProperty } from "./store";
 
 /**
- * Stays' pay links (ADR-033 §5.4, ADR-032 schedules): a link per entry due now (the deposit, the
+ * Stays' pay links (ADR-037 §5.4, ADR-036 schedules): a link per entry due now (the deposit, the
  * difference a change added), the balance's own link in the days before it is due, a card saved to
  * hold the stay, and what the platform says was paid. A payment that lands after the stay lapsed takes
  * its nights again when they are still free; otherwise it is owed back, for the property to refund in its

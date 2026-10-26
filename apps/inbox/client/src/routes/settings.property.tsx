@@ -41,7 +41,7 @@ export const Route = createFileRoute("/settings/property")({
 });
 
 /**
- * A place to stay (ADR-033 §11, S1–S9): how it confirms, in one sentence; its own system, connected
+ * A place to stay (ADR-037 §11, S1–S9): how it confirms, in one sentence; its own system, connected
  * and its rooms matched; then the property, rooms, rates, policies, taxes and fees, house rules and
  * arrival, a tab each. Prices and policies are the owner's, set here in person.
  */

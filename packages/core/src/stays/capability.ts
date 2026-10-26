@@ -60,7 +60,7 @@ function _roomByWords(setup: PropertySetup, words: string | undefined): string |
   );
 }
 
-/** A place to stay's doors (ADR-033 §6): the guest's assistant's, and the owner's. */
+/** A place to stay's doors (ADR-037 §6): the guest's assistant's, and the owner's. */
 export class StayCapabilities {
   private readonly offers: OfferMaker;
 

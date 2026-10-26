@@ -31,7 +31,7 @@ export function orderActions<T extends { readonly event: string }>(transitions: 
 }
 
 /**
- * A stay's actions as its owner needs them (ADR-033 S12): the quote goes from the composer, so its
+ * A stay's actions as its owner needs them (ADR-037 S12): the quote goes from the composer, so its
  * generic form is never offered; a request is asked about or declined, never cancelled (nothing is
  * booked yet); a cancellation is offered once something is agreed.
  */

@@ -350,7 +350,7 @@
           }
         },
         "lodging": {
-          "description": "A place to stay (spec 0.10): its kind, how it confirms, how soon it answers.",
+          "description": "A place to stay (spec 0.11): its kind, how it confirms, how soon it answers.",
           "type": "object",
           "properties": {
             "kind": {
@@ -517,7 +517,7 @@
             "pattern": "^[a-z0-9][a-z0-9-]{0,39}$"
           },
           "url_template": {
-            "description": "Spec 0.10, for a stay: the same booking engine's deep link, with {check_in}, {check_out}, {adults}, {children} and {rooms} to fill in. A reader fills those and drops any other {…}.",
+            "description": "Spec 0.11, for a stay: the same booking engine's deep link, with {check_in}, {check_out}, {adults}, {children} and {rooms} to fill in. A reader fills those and drops any other {…}.",
             "type": "string",
             "maxLength": 2048
           }

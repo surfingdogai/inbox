@@ -3,7 +3,7 @@ import { API_KEY, genericPropertySystem, signedHint } from "./fakes/property/gen
 import { propertyContract, runContext } from "./property/contract";
 
 /**
- * The generic fake property system (ADR-033 §8) against the property system contract, in both of the
+ * The generic fake property system (ADR-037 §8) against the property system contract, in both of the
  * ways a system guards a write: refusing a full night, and taking it and going below none.
  */
 const make = (oversell: boolean) => () => {

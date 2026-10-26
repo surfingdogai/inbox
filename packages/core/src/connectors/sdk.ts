@@ -923,7 +923,7 @@ export type HookFact =
   /** The access was withdrawn on the platform (the app uninstalled, the key deleted): connect again. */
   | { readonly kind: "revoked" }
   /**
-   * A property system says some nights changed (ADR-033 §4.5): they are read again before anything is
+   * A property system says some nights changed (ADR-037 §4.5): they are read again before anything is
    * believed. Rooms by the system's own ids; all of them when absent. `to` is excluded.
    */
   | {
@@ -1075,9 +1075,9 @@ export interface ConnectorDefinition {
   readonly bookings?: BookingWriter | undefined;
   /** Pay links in the business's own account, and the platform's word that they were paid (ADR-023). */
   readonly payments?: PaymentsHandler | undefined;
-  /** A property system's rooms, rates and what is free (ADR-033): read into the stays cache. */
+  /** A property system's rooms, rates and what is free (ADR-037): read into the stays cache. */
   readonly stays?: StayInventory | undefined;
-  /** A property system that takes stays, written to it before anything is promised (ADR-033). */
+  /** A property system that takes stays, written to it before anything is promised (ADR-037). */
   readonly stayWriter?: StayWriter | undefined;
   /**
    * For a payment platform: the mode a key is for, read from the form before the platform is asked
@@ -1188,7 +1188,7 @@ export function minorAmount(value: string, exponent = 2): number | null {
   return exponent === 0 ? whole : whole + Number(fraction.padEnd(exponent, "0").slice(0, exponent));
 }
 
-/* --- property systems (ADR-033) ------------------------------------------- */
+/* --- property systems (ADR-037) ------------------------------------------- */
 
 /**
  * A place to stay's own system (a channel manager or a property management system): what it says is

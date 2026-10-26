@@ -1,7 +1,7 @@
--- Stays (ADR-033): a place to stay in its own inbox. Ten new tables, nothing that exists changes, and
+-- Stays (ADR-037): a place to stay in its own inbox. Ten new tables, nothing that exists changes, and
 -- an inbox that is not a place to stay writes no row here. Conventions as ever (ADR-011): text ULIDs,
 -- integer milliseconds, JSON as text, 0/1 booleans. Amounts are minor units of the property's
--- currency (ADR-032). Dates are the property's local dates (`YYYY-MM-DD`): a night is the date it
+-- currency (ADR-036). Dates are the property's local dates (`YYYY-MM-DD`): a night is the date it
 -- starts on, never a span of milliseconds.
 --
 -- A place to stay: one per location (most inboxes have one; a rental manager up to twenty). `mode` is
@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS `room_types` (
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS `room_types_property` ON `room_types` (`property_id`, `active`, `sort`);
 --> statement-breakpoint
--- A cancellation policy, as the owner chose it (`preset`) and as data (ADR-032 `policySchema`).
+-- A cancellation policy, as the owner chose it (`preset`) and as data (ADR-036 `policySchema`).
 CREATE TABLE IF NOT EXISTS `stay_policies` (
 	`id` text PRIMARY KEY NOT NULL,
 	`property_id` text NOT NULL,

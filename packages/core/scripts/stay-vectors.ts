@@ -10,7 +10,7 @@ import { datePolicy, feeAt } from "../src/policy/index";
 import { nightsOf, stayTimes } from "../src/stays/nights";
 
 /**
- * The stays vectors (spec 0.10, ADR-033), built from the code that keeps them so a second
+ * The stays vectors (spec 0.11, ADR-037), built from the code that keeps them so a second
  * implementation can be checked against the same answers:
  *
  *   vectors/stay-totals.json           quotes that hold together, and ones that do not, and why (JPY, KWD, CAD)
@@ -405,7 +405,7 @@ function doorsElsewhere() {
   ];
   return {
     description:
-      "Since spec 0.10 a manifest's doors_elsewhere may name `stay`, with an optional url_template: kept when, filled in, it is an https URL on the same host as the entry's url, and dropped alone otherwise. A reader fills {check_in}, {check_out}, {adults}, {children} and {rooms} and drops any other {…}. `filled` is the kept template filled with `values`. Read by packages/core/test/stay-vectors.test.ts.",
+      "Since spec 0.11 a manifest's doors_elsewhere may name `stay`, with an optional url_template: kept when, filled in, it is an https URL on the same host as the entry's url, and dropped alone otherwise. A reader fills {check_in}, {check_out}, {adults}, {children} and {rooms} and drops any other {…}. `filled` is the kept template filled with `values`. Read by packages/core/test/stay-vectors.test.ts.",
     values,
     cases: cases.map((c) => {
       const kept = readDoorsElsewhere(c.manifest);

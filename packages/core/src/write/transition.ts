@@ -214,7 +214,7 @@ async function attempt_(
   // A paid contract's cancellation the business records, asked while the customer could withdraw: their
   // withdrawal (ADR-018 §7, §8), never late and never a refund left to our say.
   const instead = late ? null : await withdrawalInstead(db, item, input, settings, now);
-  // A stay's acceptance, booking or payment leads where its terms say (ADR-033 D2): one of twin events.
+  // A stay's acceptance, booking or payment leads where its terms say (ADR-037 D2): one of twin events.
   const asked = late?.event ?? instead ?? input.event;
   const eventName = item.type === "stay" ? await stayEventFor(db, item, asked, input.input) : asked;
   const eventInput = late ? late.input : input.input;
@@ -241,7 +241,7 @@ async function attempt_(
   // A yes the customer gave a person is recorded by a person (ADR-018 N13): not the owner's AI, not a
   // rule, not a key handed to another system.
   if (t.byPerson && !isPerson(caller)) {
-    // A stay's promise made, waived or broken on a person's word (ADR-033 §3): never automation's.
+    // A stay's promise made, waived or broken on a person's word (ADR-037 §3): never automation's.
     if (item.type === "stay") {
       throw new WriteError(
         "not_allowed",
@@ -424,7 +424,7 @@ async function attempt_(
       );
     }
   }
-  // A stay's own guards and effects (ADR-033): judged here, before anything is written, and written in
+  // A stay's own guards and effects (ADR-037): judged here, before anything is written, and written in
   // this transition's batch.
   const stay: StayPlan | undefined =
     item.type === "stay" ? await planStay({ db, caller, item, t, payload, data, settings, now, audience }) : undefined;
@@ -1183,7 +1183,7 @@ async function attempt_(
           method: "run",
         },
   );
-  // A stay that waits for a person now, or no longer (ADR-033): its flag, in the same batch.
+  // A stay that waits for a person now, or no longer (ADR-037): its flag, in the same batch.
   if (stay?.needsHuman !== undefined) {
     statements.push({
       sql: "UPDATE items SET flags = json_set(COALESCE(flags, '{}'), '$.needsHuman', json(?)) WHERE id = ? AND version = ?",
@@ -1250,7 +1250,7 @@ async function attempt_(
   // is: an order the payments side makes none for (a test order with only a live key, nothing to pay,
   // the owner's own link, a change still open) is told at once.
   const linkWait =
-    // A stay agreed with a deposit due (ADR-033): its email waits a moment for the link too.
+    // A stay agreed with a deposit due (ADR-037): its email waits a moment for the link too.
     (item.type === "stay" && effects.has("queue_pay_links") && (await hasPayLinks(db))) ||
     (payLinks &&
       item.type === "order" &&

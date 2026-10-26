@@ -5,7 +5,7 @@ import { transitionItem, type WriteError } from "../src/write/index";
 import { clock, contact, guest, kijaniHouse, mapleHollow, owner } from "./stay-fixtures";
 
 /**
- * Night claims (ADR-033 §4.2, §4.3): one unit per room per night under a primary key, so the last room
+ * Night claims (ADR-037 §4.2, §4.3): one unit per room per night under a primary key, so the last room
  * goes once whoever asks at the same moment; holds lapse and let go; a booking makes its claims the
  * stay's for good.
  */

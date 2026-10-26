@@ -7,7 +7,7 @@ import { problemFrom } from "./problem";
 import type { CallerEnv } from "./rest";
 
 /**
- * The stays doors (ADR-033 §6): the guest's assistant's tools on the public MCP and REST, and the
+ * The stays doors (ADR-037 §6): the guest's assistant's tools on the public MCP and REST, and the
  * owner's on the owner MCP and REST. Generated from the same Zod schemas, so an agent gets the same
  * answer whichever door it takes. Every answer speaks as the property; nothing names another travel
  * service. Registered only on an inbox that is a place to stay.

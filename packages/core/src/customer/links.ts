@@ -41,7 +41,7 @@ export type LinkAction =
    */
   | "withdraw"
   /**
-   * A stay (ADR-033): the property's quote accepted, declined, or other dates asked for; a confirmed
+   * A stay (ADR-037): the property's quote accepted, declined, or other dates asked for; a confirmed
    * stay cancelled at the fee the page shows; a card added to hold it; the property's change taken or
    * left. Each page shows the terms first, and only its POST acts.
    */
@@ -85,7 +85,7 @@ export interface LinkRow {
   /** The fingerprint of the terms the email carried; for a details link, the question it answers (`detailsSha`). */
   readonly termsSha: string;
   readonly lang: CustomerLang;
-  /** The language the link was minted in, as kept: one of a stay's six (ADR-033), where `lang` keeps en or pt. */
+  /** The language the link was minted in, as kept: one of a stay's six (ADR-037), where `lang` keeps en or pt. */
   readonly langTag: string;
   /** The email the link went out in: its siblings share it. */
   readonly mailKey: string | null;

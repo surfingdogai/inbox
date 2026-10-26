@@ -9,7 +9,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 /**
- * The contract every property system's adapter keeps (ADR-033 §8.5), as tests any adapter runs with
+ * The contract every property system's adapter keeps (ADR-037 §8.5), as tests any adapter runs with
  * its own fake or recorded fixtures: it reads the properties, rooms, rates and what is free night by
  * night; writes a stay under our own key and finds it again by that key; writes the same key once,
  * however often it is sent; refuses (never takes quietly) a stay on a night it has no room for, or

@@ -9,7 +9,7 @@ import { covers, nightsOf, stayTimes } from "./nights";
 import type { PropertySetup, RatePlanRow, RateRow, RoomTypeRow } from "./store";
 
 /**
- * A stay's price from the property's own rates (ADR-033 §5.1–§5.2): night by night from the rate plan's
+ * A stay's price from the property's own rates (ADR-037 §5.1–§5.2): night by night from the rate plan's
  * season that covers it (else its base, by weekday), extra guests above the base occupancy, children
  * under the property's age free in existing beds, a derived plan's percent off, then extras, then every
  * tax and fee, whoever collects it. Each line is rounded to the currency's minor unit, half up; the total

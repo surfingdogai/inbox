@@ -36,7 +36,7 @@ export type SecretPurpose =
   | "person-secret"
   /** What push to a phone needs (ADR-028): the relay's secret for it, and the phone's push keys. */
   | "phone-push"
-  /** A place to stay's private arrival details (door codes, wifi), opened only to send them (ADR-033 §10). */
+  /** A place to stay's private arrival details (door codes, wifi), opened only to send them (ADR-037 §10). */
   | "arrival-details";
 
 /**
@@ -45,7 +45,7 @@ export type SecretPurpose =
  * so one cannot be replayed as another.
  */
 export type MacPurpose =
-  /** A stay's offer id (ADR-033 §6.1): only this inbox can make one, so an agent cannot pass off its own. */
+  /** A stay's offer id (ADR-037 §6.1): only this inbox can make one, so an agent cannot pass off its own. */
   | "stay-offer"
   | "receipt-subject"
   /**

@@ -9,7 +9,7 @@ import { freshDb } from "./harness";
 import { stripePlatform } from "./pay-platforms";
 
 /**
- * A place to stay's inbox for the stays tests (ADR-033): the whole app over a fresh database, Stripe
+ * A place to stay's inbox for the stays tests (ADR-037): the whole app over a fresh database, Stripe
  * as a fake, a property system as a fake when asked for, an owner key, and a clock the test moves.
  */
 export const BASE = "https://inbox.example.com";

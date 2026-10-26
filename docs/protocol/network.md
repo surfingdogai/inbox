@@ -1817,9 +1817,9 @@ barcode, and are never published. A magazine's issue (`977`) is `serial`, a book
 indicator digits 1 to 8 a case or pack of several. Two offers are one product only when their barcodes
 are the same 14 digits; a product with no barcode is its business's own.
 
-### 4.18 Stays (spec 0.10, MAY)
+### 4.19 Stays (spec 0.11, MAY)
 
-A place to stay's inbox ([ADR-033](../adr/033-stays.md)) lists `stay` in its `item_types` once it has
+A place to stay's inbox ([ADR-037](../adr/037-stays.md)) lists `stay` in its `item_types` once it has
 a room to offer, and, where its area requires one, its short-term rental registration number. Its
 manifest's `profile` MAY carry `lodging` (`schemas/profile-lodging.json`):
 

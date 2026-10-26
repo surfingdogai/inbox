@@ -3,7 +3,7 @@ import { WriteError } from "../write/errors";
 import type { PropertyRow } from "./store";
 
 /**
- * A stay's nights (ADR-033): local dates, the night that starts on each, from check-in up to the day
+ * A stay's nights (ADR-037): local dates, the night that starts on each, from check-in up to the day
  * before check-out. Never minutes: a change of clocks or a zone across the date line cannot move one.
  */
 

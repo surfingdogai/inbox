@@ -4,7 +4,7 @@ import { lodgingKindSchema, moneySchema } from "./base";
 import { datedPolicySchema, type Policy, type PolicyFee } from "./policy";
 
 /**
- * Stays (spec 0.10, ADR-033): a place to stay in its own inbox. The guest's assistant asks for dates,
+ * Stays (spec 0.11, ADR-037): a place to stay in its own inbox. The guest's assistant asks for dates,
  * rooms and guests; the property answers with its own total, its policy as dated steps, a payment
  * schedule and an expiry (a binding quote), or, where it cannot sell a room twice, confirms at once.
  * These are the shapes shared with agents and networks; the inbox keeps them on its `stay` items.

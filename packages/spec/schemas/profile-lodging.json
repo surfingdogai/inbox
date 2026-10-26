@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://surfingdog.ai/spec/schemas/profile-lodging.json",
-  "title": "A profile's lodging (spec 0.10)",
+  "title": "A profile's lodging (spec 0.11)",
   "type": "object",
   "properties": {
     "kind": {

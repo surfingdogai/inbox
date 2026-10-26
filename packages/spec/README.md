@@ -121,12 +121,12 @@ or network:
   `none`, `percent`, `amount`, `units` or `full`, a no-show fee and whether a deposit is refundable; a
   dated policy, `datedPolicySchema`), and payment schedules in UCP's `payment.terms` shape
   (`paymentScheduleSchema`: `immediate`, `deferred` or `at_property`; `scheduleProblem`, the invariant
-  that the schedules add up to the total). Stays ([ADR-033](../../docs/adr/033-stays.md)), below.
+  that the schedules add up to the total). Stays ([ADR-037](../../docs/adr/037-stays.md)), below.
 
-## Stays (0.10)
+## Stays (0.11)
 
 A place to stay answers in its own inbox (`src/stays.ts`). Everything here is additive: a reader on
-0.9 ignores what it does not know.
+0.10 ignores what it does not know.
 
 - **The item type `stay`.** A stay's dates are the property's local dates (`YYYY-MM-DD`); its nights
   are their difference, never minutes, so no change of clocks moves one. Its start and end are the
@@ -182,13 +182,13 @@ implementations:
 | `passes.json` | key, pass and pass-reference strings, `ppid`, `email_mac`, and 43 email normalisation cases |
 | `scoring.json` | the network's scores (ADR-017 §5): every worked example, the R5 grid, ageing, hold and release |
 | `ordering.json` | the network's order (ADR-017 §6): shuffles above 2^53, one snapshot's order, cursors |
-| `profile.json` | what the network keeps from a manifest's profile (ADR-017 A2.5): each field checked and dropped alone, hours, categories and tags, and a place to stay's `lodging` (0.10) |
+| `profile.json` | what the network keeps from a manifest's profile (ADR-017 A2.5): each field checked and dropped alone, hours, categories and tags, and a place to stay's `lodging` (0.11) |
 | `doors-elsewhere.json` | what a reader keeps of a manifest's `doors_elsewhere` (`readDoorsElsewhere`): the kinds of request a business takes somewhere else, and where, each entry checked and dropped alone, and since 0.10 the platform each names; `detect` and `clean`, the platform a URL is on and the tracking it carries |
 | `mcp.json` | what an assistant reads from the network's tools (ADR-017 A2.7): the card derived from each listing, today's hours in the business's zone, and one answer of each tool |
 | `score.json` | the agentic score, rules version 2 (§4.13): for each case a profile and every capability's state, and the score, grade, numerator and fixes the published formula gives; `score-v1.json` the same under version 1 |
 | `door-reports.json` | door reports (§4.15): how a network reads a call (strict JSON, the limits, each report taken or ignored and why), what each report can do by its proof and source, how the network's own reads move a door (§4.8), and what earns a reporter points and who is a contributor (`contributors`, §4.15) |
 | `gtin.json` | barcodes (§4.18): how one is read, checked and classified, each input with its hint and what it reads as, the UPC-E expansion for each sixth digit, and the GS1 prefixes pinned; written by hand, the check digits worked out apart from both implementations |
-| `stay-totals.json` | a stay's quote (0.10): when it holds together and why not, in currencies with no minor unit and with three |
+| `stay-totals.json` | a stay's quote (0.11): when it holds together and why not, in currencies with no minor unit and with three |
 | `stay-policy.json` | a stay's cancellation preset dated for its arrival in zones across clock changes, and the fee at given instants |
 | `stay-nights.json` | a stay's nights, and its start and end with the zone's offset |
 | `doors-elsewhere-stay.json` | a stay taken elsewhere, its deep link kept or dropped, and filled in |

@@ -73,7 +73,7 @@ export interface CreateInput {
    */
   readonly pricing?: PricingFor | undefined;
   /**
-   * What the inbox itself adds to a stay it makes (an estimate from the property's rates, ADR-033):
+   * What the inbox itself adds to a stay it makes (an estimate from the property's rates, ADR-037):
    * written after everything the request carried of the kind is dropped. Internal only; never hashed.
    */
   readonly stayExtra?: Readonly<Record<string, unknown>> | undefined;
@@ -166,7 +166,7 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
   // Nor what only the business records: a payment, the goods' delivery, a change to a promise. (A price
   // chosen for them is the pricing's alone: it drops one the request carried.)
   if (isCustomer(caller)) for (const field of BUSINESS_FIELDS) delete payload[field];
-  // A stay is checked against its property and written with its times (ADR-033), whoever makes it.
+  // A stay is checked against its property and written with its times (ADR-037), whoever makes it.
   const stay =
     input.type === "stay"
       ? await prepareStay(db, payload, input.stayExtra, {

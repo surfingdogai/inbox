@@ -1,7 +1,7 @@
 import { type StayLang, stayLang } from "./copy";
 
 /**
- * Why a guest's step on a stay did not go through, in their language (ADR-033 §12): what a guest's
+ * Why a guest's step on a stay did not go through, in their language (ADR-037 §12): what a guest's
  * assistant or the guest's own page reads. In the property's voice, never the inbox's, and never a
  * word from the customer copy lint. The owner and the owner's AI read the English reasons the write
  * gives them instead.

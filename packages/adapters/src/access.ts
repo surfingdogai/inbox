@@ -120,7 +120,7 @@ export const ROUTE_SCOPES: Readonly<Record<string, readonly string[]>> = {
   "POST /phones/pairings/:id/refuse": ["*"],
   "POST /phones/:id/test": ["*"],
   "DELETE /phones/:id": ["*"],
-  // A place to stay (ADR-033): its setup reads like the catalogue's; how it confirms, its policies,
+  // A place to stay (ADR-037): its setup reads like the catalogue's; how it confirms, its policies,
   // deposits, card holds, allotments and its system are the owner's in person, checked by the capability.
   "GET /property": [READ_SETUP, "catalogue:write"],
   "PUT /property": ["catalogue:write"],

@@ -26,7 +26,7 @@ const ITEM_TYPES: readonly ItemType[] = ["message", "quote_request", "booking", 
 
 /**
  * A place to stay takes stays once it has a room to offer, and its registration where its area
- * requires one (ADR-033): a rental without its number is not bookable. A row when it does; a setup
+ * requires one (ADR-037): a rental without its number is not bookable. A row when it does; a setup
  * plan's dry run reads the same.
  */
 export const STAY_ROOM_OFFERED_SQL = `SELECT 1 FROM room_types r JOIN properties p ON p.id = r.property_id
@@ -160,7 +160,7 @@ export async function directoryProfile(
   if (services.length) fields.services = services;
   const payments = publishedPayments(input.payments ?? []);
   if (payments.length) fields.payments = payments;
-  // A place to stay that takes stays here (ADR-033 §6.3): its kind, how it confirms, how soon it answers.
+  // A place to stay that takes stays here (ADR-037 §6.3): its kind, how it confirms, how soon it answers.
   const types = await offeredItemTypes(db);
   if (types.includes("stay")) {
     const property = (await listProperties(db, { active: true }))[0];

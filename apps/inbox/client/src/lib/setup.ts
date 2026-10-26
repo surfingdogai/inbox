@@ -142,7 +142,7 @@ export const KINDS: readonly SetupKind[] = [
     connect: ["shops", "payments"],
   },
   {
-    // A place to stay (ADR-033): stays have their own door, opened by the property it sets up; times
+    // A place to stay (ADR-037): stays have their own door, opened by the property it sets up; times
     // and prices for a request are not how a room is let, so those doors start closed.
     key: "stays",
     label: "A place to stay",

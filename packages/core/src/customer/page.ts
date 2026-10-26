@@ -7,7 +7,7 @@
 export interface CustomerPage {
   /** The HTTP status to answer with. */
   readonly status: 200 | 404 | 409 | 410 | 422 | 429 | 500;
-  /** A stay's page (ADR-033) may be in any of its six languages; every other page is in English or Portuguese. */
+  /** A stay's page (ADR-037) may be in any of its six languages; every other page is in English or Portuguese. */
   readonly lang: "en" | "pt" | "es" | "fr" | "de" | "it";
   /** The business's name: the header and the page title. Empty when it has none. */
   readonly business: string;
@@ -31,7 +31,7 @@ export interface CustomerPage {
   readonly footer: string;
   readonly help: string;
   /**
-   * What the page is, as schema.org reads it (a place to stay's LodgingBusiness, ADR-033 §6.4):
+   * What the page is, as schema.org reads it (a place to stay's LodgingBusiness, ADR-037 §6.4):
    * written as a JSON-LD data block, which nothing runs.
    */
   readonly jsonLd?: Readonly<Record<string, unknown>> | undefined;

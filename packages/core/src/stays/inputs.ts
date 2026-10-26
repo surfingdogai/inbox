@@ -3,7 +3,7 @@ import { z } from "zod";
 import { contactSchema, moneySchema } from "../domain/types";
 
 /**
- * The inputs of the stays doors (ADR-033 §6): the guest's assistant's tools, and the owner's. Every
+ * The inputs of the stays doors (ADR-037 §6): the guest's assistant's tools, and the owner's. Every
  * door validates against these, so an agent gets the same field-level error whichever way it comes in.
  * Top-level fields are snake_case, as every other door's.
  */
@@ -169,7 +169,7 @@ export const upsertPropertyInput = z.object({
     .object({ name: z.string().min(1).max(40), rate_bp: z.int().min(1).max(10_000) })
     .nullable()
     .optional(),
-  // The owner's alone, in person (ADR-033 D10): how it confirms, and the register it is in.
+  // The owner's alone, in person (ADR-037 D10): how it confirms, and the register it is in.
   mode: z.enum(["request", "allotment", "connected"]).optional(),
   instant: z.boolean().optional(),
   fresh_minutes: z.union([z.literal(5), z.literal(15), z.literal(60)]).optional(),

@@ -38,7 +38,7 @@ import { ensureJob } from "./schedule";
 export { senderOf } from "./mail-log";
 
 /**
- * A stay's private arrival details (ADR-033 §10), opened from their seal only as the email goes: the
+ * A stay's private arrival details (ADR-037 §10), opened from their seal only as the email goes: the
  * kept copy holds the email's own marker, never the codes. Only the arrival-details email the inbox wrote
  * itself carries them, and only while the stay is confirmed or under way: a reply, whoever asked for it
  * and whatever it says, never does.
@@ -308,7 +308,7 @@ async function customerMail(
           : !o.canSend
             ? ("no_sender" as const)
             : undefined;
-  // A stay's emails (ADR-033 §12): in the guest's language among six, from the stay as it stands.
+  // A stay's emails (ADR-037 §12): in the guest's language among six, from the stay as it stands.
   if (item.type === "stay") {
     const stayLangOf = stayLang(o.contact?.locale ?? o.settings.stays.languages[0] ?? facts.languages[0]);
     const links = skip
@@ -524,7 +524,7 @@ function ownerMail(
     readonly byEmail: boolean;
     readonly business: string;
   } = { words: null, byEmail: false, business: "" },
-  /** A stay's own words for the owner (ADR-033 S16), when it has them for this event. */
+  /** A stay's own words for the owner (ADR-037 S16), when it has them for this event. */
   stay: { readonly subject: string; readonly lines: readonly string[] } | null = null,
 ): ComposedMail {
   const appUrl = settings.notifications.appUrl ?? "";

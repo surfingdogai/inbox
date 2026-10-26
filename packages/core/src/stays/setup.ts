@@ -21,7 +21,7 @@ import { businessZoneAndCurrency } from "./lang";
 import { listProperties, propertyFor, readProperty, readSetup } from "./store";
 
 /**
- * The owner's writes to a place to stay (ADR-033 §6.2): the property, its rooms, rates, policies, taxes
+ * The owner's writes to a place to stay (ADR-037 §6.2): the property, its rooms, rates, policies, taxes
  * and fees, extras, the rooms it keeps for direct guests and the nights it closes. The owner's AI may
  * fill in rooms, rates, fees and extras from the property's own website and its system while nothing is
  * offered yet; how the property confirms (`mode`, `instant`), its policies, deposits, card holds,

@@ -11,7 +11,7 @@ import { propertyLocale } from "./price";
 import type { PropertySetup } from "./store";
 
 /**
- * What a guest is shown and confirms before they are bound (ADR-033 §11): the total, the schedule, the
+ * What a guest is shown and confirms before they are bound (ADR-037 §11): the total, the schedule, the
  * policy's dated steps, the rate plan, the rooms and the dates, as one fingerprint (`terms_sha`) — and,
  * before a confirmed stay is cancelled, the fee and what is owed back as of now (`fee_sha`). A request
  * with a stale fingerprint is answered with the terms as they are now, never taken on the old ones.

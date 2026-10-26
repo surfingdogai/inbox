@@ -5,7 +5,7 @@ import type { WantedNights } from "../stays/claims";
 import type { PropertySetup } from "../stays/store";
 
 /**
- * What a property's own system says is free (ADR-033 §4.5), kept as the `stay_ari` cache: agents are
+ * What a property's own system says is free (ADR-037 §4.5), kept as the `stay_ari` cache: agents are
  * answered from it, never from the system on every question. A row is believed only while it is fresh
  * (the property's `fresh_minutes`, 15 by default) and not marked stale by a hint; a webhook body is
  * never believed, it only marks a range to read again.

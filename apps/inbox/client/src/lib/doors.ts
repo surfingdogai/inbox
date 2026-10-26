@@ -113,7 +113,7 @@ export type ElsewhereKind = DoorElsewhereKind;
 
 /** The kinds a door elsewhere can take, in the order the card shows them. */
 export const ELSEWHERE_KINDS: readonly ElsewhereKind[] = ["booking", "order"];
-/** Every kind a stored door elsewhere may have, in the order they are kept: a stay's (ADR-033) last. */
+/** Every kind a stored door elsewhere may have, in the order they are kept: a stay's (ADR-037) last. */
 const ELSEWHERE_ORDER: readonly string[] = [...ELSEWHERE_KINDS, "stay"];
 
 /** What a door elsewhere is called, as agents and the business's page say it: "Fresha", or the page's host. */

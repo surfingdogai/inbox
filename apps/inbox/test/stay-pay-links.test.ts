@@ -5,7 +5,7 @@ import type { stripePlatform } from "./pay-platforms";
 import { at, HOUR, OWNER, ok, type Setup, setup } from "./stay-harness";
 
 /**
- * Stays' pay links (ADR-033 §5.4) on the property's own Stripe: one live link per stay and entry, the
+ * Stays' pay links (ADR-037 §5.4) on the property's own Stripe: one live link per stay and entry, the
  * deposit's closed when its window closes; a payment landing after that takes the nights again only
  * where nothing can have sold them since (rooms kept for direct guests, still inside them) and is owed
  * back anywhere else, never refunded here; the balance's own link

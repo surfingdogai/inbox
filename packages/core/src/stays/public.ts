@@ -17,7 +17,7 @@ import { listProperties, type PropertySetup, type RatePlanRow, type RoomTypeRow,
 import { stayTermsSha, whenWords } from "./terms";
 
 /**
- * What a guest's assistant reads of a place to stay (ADR-033 §6.1): the property as it presents itself,
+ * What a guest's assistant reads of a place to stay (ADR-037 §6.1): the property as it presents itself,
  * what is free for some dates and guests, and at what price. Every answer speaks as the property, gives
  * the full price with every tax and fee in it, and never names another travel service. An instant room
  * comes with an offer the inbox made and can recognise again; a room on request comes with an estimate
@@ -477,7 +477,7 @@ export async function termsSummary(
   return { summary: parts.join(" "), terms_sha: await stayTermsSha(stay, quote) };
 }
 
-/** A place to stay's manifest door (ADR-033 §6.3): how it confirms, how soon it answers, how a stay is secured. */
+/** A place to stay's manifest door (ADR-037 §6.3): how it confirms, how soon it answers, how a stay is secured. */
 export function stayDoor(setup: PropertySetup): {
   mode: "request" | "instant_with_connector";
   answers_within_h: number;
@@ -500,7 +500,7 @@ export async function stayDoorOf(db: Db): Promise<ReturnType<typeof stayDoor> | 
   return setup ? stayDoor(setup) : undefined;
 }
 
-/** A place to stay's profile `lodging` (spec 0.10): what a network may show of it. */
+/** A place to stay's profile `lodging` (spec 0.11): what a network may show of it. */
 export function lodgingProfile(setup: PropertySetup): {
   kind: string;
   rooms?: number;
@@ -559,7 +559,7 @@ const AMENITY_WORDS: Readonly<Record<string, string>> = {
 };
 
 /**
- * The place to stay as schema.org reads it, for the business's own page (ADR-033 §6.4): a
+ * The place to stay as schema.org reads it, for the business's own page (ADR-037 §6.4): a
  * LodgingBusiness of its kind with its check-in and check-out times and each room offered as a
  * HotelRoom (an Apartment or an Accommodation for a rental), with its beds, occupancy and amenities.
  * An Offer with a price only where a stay is booked at once — rooms kept for direct guests, or a

@@ -8,7 +8,7 @@ import type { Caller } from "../src/write/caller";
 import { makeClient, resetTables } from "./harness";
 
 /**
- * Places to stay for the stays tests (ADR-033), in their own zones and currencies, never one country's
+ * Places to stay for the stays tests (ADR-037), in their own zones and currencies, never one country's
  * by default: Ryokan Hoshi (Kyoto, JPY, exponent 0), Kijani House (Nairobi, KES, pay at the property),
  * Maple Hollow B&B (Nova Scotia, CAD, rooms kept for direct guests, DST), Haveli Rang (Jaipur, INR,
  * +5:30), Alpenrose Hostel (Innsbruck, EUR, dorm beds), Harbourlight Apartments (Hobart, AUD) and

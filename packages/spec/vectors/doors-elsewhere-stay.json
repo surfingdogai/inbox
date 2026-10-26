@@ -1,5 +1,5 @@
 {
-  "description": "Since spec 0.10 a manifest's doors_elsewhere may name `stay`, with an optional url_template: kept when, filled in, it is an https URL on the same host as the entry's url, and dropped alone otherwise. A reader fills {check_in}, {check_out}, {adults}, {children} and {rooms} and drops any other {…}. `filled` is the kept template filled with `values`. Read by packages/core/test/stay-vectors.test.ts.",
+  "description": "Since spec 0.11 a manifest's doors_elsewhere may name `stay`, with an optional url_template: kept when, filled in, it is an https URL on the same host as the entry's url, and dropped alone otherwise. A reader fills {check_in}, {check_out}, {adults}, {children} and {rooms} and drops any other {…}. `filled` is the kept template filled with `values`. Read by packages/core/test/stay-vectors.test.ts.",
   "values": {
     "check_in": "2027-05-14",
     "check_out": "2027-05-17",

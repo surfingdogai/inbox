@@ -15,7 +15,7 @@ import { type PropertySetup, readSetup } from "./store";
 import { wantOf } from "./transition";
 
 /**
- * What the stays rules read (ADR-033 §7), worked out once before they run: whether the rates price the
+ * What the stays rules read (ADR-037 §7), worked out once before they run: whether the rates price the
  * stay, whether its nights are free where nothing can be sold twice, whether the property is full or
  * closed on them by its own word or its system's (never a calendar hint alone), whether another calendar
  * shows them taken, and for a change, whether cancelling is still free and the new nights are free.

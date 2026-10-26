@@ -206,10 +206,10 @@
       "breakpoints": true
     },
     {
-      "idx": 26,
+      "idx": 29,
       "version": "6",
-      "when": 1792200000000,
-      "tag": "0026_stays",
+      "when": 1792500000000,
+      "tag": "0029_stays",
       "breakpoints": true
     }
   ]

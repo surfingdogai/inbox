@@ -5,7 +5,7 @@ import { formatMoney } from "./format";
 import type { Item } from "./types";
 
 /**
- * A place to stay, as its owner sets it up and runs it (ADR-033 §11, S1–S16): the calls, the query
+ * A place to stay, as its owner sets it up and runs it (ADR-037 §11, S1–S16): the calls, the query
  * hooks, and the few words and sums the screens share, kept here so they are tested once.
  */
 

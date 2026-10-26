@@ -114,7 +114,7 @@ export const DOWNLOAD_TABLES: Readonly<Record<string, DownloadTable>> = {
   connector_writes: {
     note: "Each time this inbox wrote to a system of yours (a property system) before confirming: when, what came of it and the system's id for it. Never what was written.",
   },
-  // A place to stay (ADR-033).
+  // A place to stay (ADR-037).
   properties: {
     leftOut:
       "The private arrival details (door codes, wifi), which are sealed: write them again where you open the copy.",

@@ -1,5 +1,5 @@
 {
-  "description": "What a network keeps from a manifest's profile (ADR-017 Amendment 2, A2.5): each case's profile, read at now, gives kept. Every field is checked alone and dropped alone; categories use vocab/categories.json at vocabulary_version. Hours are kept only with a zone the network knows and at least one good window (a window may close at 24:00); closures that ended before now in that zone are dropped. Protocol 0.2: place_category keeps an Overture place category id this network knows and does not exclude, with at most two alternates none of which is an ancestor or descendant of another; attributes keeps keys of vocab/attributes.json with a value of their type that apply to its categories (applies_to: group slugs, place category ids on its path, or *), never one that needs a proof or is derived; price_band a whole number from 1 to 4; currencies up to five ISO 4217 codes; each absent when nothing is kept. payments keeps up to 64 tokens of vocab/payments.json (a synonym read as its token, any capitals and accents), with card for a card brand, each once, in the vocabulary's order; absent when none is kept. Spec 0.10: lodging is kept when its kind (vocab/lodging.json, any capitals), check_in_from and check_out_until (HH:MM), confirmation (request, instant_some or instant) and answer_hours (1 to 168) are good, and dropped whole otherwise; within it rooms (1 to 5,000) and a registration (at most 60 characters once cleaned, never cut) are dropped alone. From the network.",
+  "description": "What a network keeps from a manifest's profile (ADR-017 Amendment 2, A2.5): each case's profile, read at now, gives kept. Every field is checked alone and dropped alone; categories use vocab/categories.json at vocabulary_version. Hours are kept only with a zone the network knows and at least one good window (a window may close at 24:00); closures that ended before now in that zone are dropped. Protocol 0.2: place_category keeps an Overture place category id this network knows and does not exclude, with at most two alternates none of which is an ancestor or descendant of another; attributes keeps keys of vocab/attributes.json with a value of their type that apply to its categories (applies_to: group slugs, place category ids on its path, or *), never one that needs a proof or is derived; price_band a whole number from 1 to 4; currencies up to five ISO 4217 codes; each absent when nothing is kept. payments keeps up to 64 tokens of vocab/payments.json (a synonym read as its token, any capitals and accents), with card for a card brand, each once, in the vocabulary's order; absent when none is kept. Spec 0.11: lodging is kept when its kind (vocab/lodging.json, any capitals), check_in_from and check_out_until (HH:MM), confirmation (request, instant_some or instant) and answer_hours (1 to 168) are good, and dropped whole otherwise; within it rooms (1 to 5,000) and a registration (at most 60 characters once cleaned, never cut) are dropped alone. From the network.",
   "vocabulary_version": 4,
   "cases": [
     {
@@ -744,7 +744,7 @@
       }
     },
     {
-      "name": "0.10: a place to stay's lodging, every field",
+      "name": "0.11: a place to stay's lodging, every field",
       "now": "2026-12-01T10:00:00Z",
       "profile": {
         "name": "Kijani House",
@@ -780,7 +780,7 @@
       }
     },
     {
-      "name": "0.10: lodging's rooms and registration are dropped alone; its kind is read in any capitals",
+      "name": "0.11: lodging's rooms and registration are dropped alone; its kind is read in any capitals",
       "now": "2026-12-01T10:00:00Z",
       "profile": {
         "name": "Ryokan Hoshi",
@@ -814,7 +814,7 @@
       }
     },
     {
-      "name": "0.10: lodging without how it confirms, or with a time that is not HH:MM, is dropped whole; the profile stays",
+      "name": "0.11: lodging without how it confirms, or with a time that is not HH:MM, is dropped whole; the profile stays",
       "now": "2026-12-01T10:00:00Z",
       "profile": {
         "name": "Maple Hollow B&B",
@@ -839,7 +839,7 @@
       }
     },
     {
-      "name": "0.10: lodging of a kind the vocabulary does not have, or answering in more than a week, is dropped whole",
+      "name": "0.11: lodging of a kind the vocabulary does not have, or answering in more than a week, is dropped whole",
       "now": "2026-12-01T10:00:00Z",
       "profile": {
         "name": "Harbourlight",

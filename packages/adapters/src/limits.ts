@@ -290,7 +290,7 @@ const CREATE_TOOLS = new Set([
   "create_order",
   "request_quote",
   "send_message",
-  // A place to stay (ADR-033): a request, a hold and a booking each put a stay on the property's desk.
+  // A place to stay (ADR-037): a request, a hold and a booking each put a stay on the property's desk.
   "request_stay",
   "hold_stay",
   "book_stay",

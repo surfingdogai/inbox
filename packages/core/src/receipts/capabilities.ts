@@ -263,7 +263,7 @@ export class ReceiptCapabilities {
       nonce,
     };
     // Which networks it goes to: decided before the claims, since a promise's `trm` depends on them.
-    // A stay's receipts are signed and kept by both sides only, until networks take stays (ADR-033, F3).
+    // A stay's receipts are signed and kept by both sides only, until networks take stays (ADR-037, F3).
     const targets = item.type === "stay" ? [] : await this.networksFor(settings, item.id, kind, v2);
     let payload: ReceiptPayload | ReceiptPayloadV2;
     if (!v2) {

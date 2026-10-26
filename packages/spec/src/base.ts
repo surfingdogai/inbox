@@ -73,11 +73,11 @@ export const profileServiceSchema = z.object({
 
 const hhmmTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "use HH:MM");
 
-/** A kind of place to stay, from `vocab/lodging.json` (spec 0.10). */
+/** A kind of place to stay, from `vocab/lodging.json` (spec 0.11). */
 export const lodgingKindSchema = z.enum(Object.keys(lodging.kinds) as [string, ...string[]]);
 
 /**
- * A profile's `lodging` (spec 0.10, ADR-033): what a network may show of a place to stay — its kind,
+ * A profile's `lodging` (spec 0.11, ADR-037): what a network may show of a place to stay — its kind,
  * how many rooms, check-in and check-out, how it confirms stays (each on request, some at once, all
  * at once) and how soon it answers, and a short-term rental registration number where one is required.
  * Checked and dropped alone, as every profile field is.
@@ -148,7 +148,7 @@ export const profileSchema = z.object({
     ),
   lodging: profileLodgingSchema
     .optional()
-    .describe("A place to stay (spec 0.10): its kind, how it confirms, how soon it answers."),
+    .describe("A place to stay (spec 0.11): its kind, how it confirms, how soon it answers."),
 });
 export type Profile = z.infer<typeof profileSchema>;
 
@@ -276,7 +276,7 @@ export const doorElsewhereSchema = z.object({
     .max(2048)
     .optional()
     .describe(
-      "Spec 0.10, for a stay: the same booking engine's deep link, with {check_in}, {check_out}, {adults}, {children} and {rooms} to fill in. A reader fills those and drops any other {…}.",
+      "Spec 0.11, for a stay: the same booking engine's deep link, with {check_in}, {check_out}, {adults}, {children} and {rooms} to fill in. A reader fills those and drops any other {…}.",
     ),
 });
 export type DoorElsewhere = z.infer<typeof doorElsewhereSchema>;
@@ -295,7 +295,7 @@ export type DoorElsewhere = z.infer<typeof doorElsewhereSchema>;
  * `profile.url`. A reader never trusts an `own_site` token on any other host: anyone can call a stranger's
  * shop theirs. Otherwise the platform alone is dropped and the entry is kept: a door is never lost for its name.
  *
- * Since spec 0.10 a stay's entry may carry a `url_template`, kept when, filled in, it is such a URL on
+ * Since spec 0.11 a stay's entry may carry a `url_template`, kept when, filled in, it is such a URL on
  * the same host as `url`, and dropped alone otherwise.
  */
 export function readDoorsElsewhere(manifest: unknown): DoorElsewhere[] {
@@ -467,7 +467,7 @@ export const manifestSchema = z.object({
    */
   catalogue: z.object({ feed: z.url({ protocol: /^https$/ }), items: z.url({ protocol: /^https$/ }) }).optional(),
   /**
-   * Spec 0.10 (ADR-033): a place to stay's door, present when `item_types` lists `stay`: whether stays
+   * Spec 0.11 (ADR-037): a place to stay's door, present when `item_types` lists `stay`: whether stays
    * are on request (the property answers each with a quote) or some confirm at once from a system it
    * writes to first, how soon it answers, how a stay is secured, and in which currencies. The name of
    * the property's system is never here: it is its private setup.

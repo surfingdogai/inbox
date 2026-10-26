@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { validatePlan } from "../src/plan";
 
 /**
- * A hosted inbox for a place to stay (ADR-033): the control plane takes its plan before it sends
+ * A hosted inbox for a place to stay (ADR-037): the control plane takes its plan before it sends
  * anyone a code — the stays rules, the owner confirming each stay, the stay door expected, and stays
  * kept at the property's own booking engine with its deep link — and refuses a deep link on any other door.
  */

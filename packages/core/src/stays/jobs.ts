@@ -16,7 +16,7 @@ import { readProperty } from "./store";
 import { STAY_CORRECTION_MS, STAY_SWEEP_KIND, type StayMessageJob } from "./transition";
 
 /**
- * The stays sweep (ADR-033 §4.2, §4.3), every minute while any stay is open: holds, quotes, requests
+ * The stays sweep (ADR-037 §4.2, §4.3), every minute while any stay is open: holds, quotes, requests
  * and pay windows that lapsed are closed, changes nobody answered lapse, stays whose check-out passed
  * are completed, and claims whose hold lapsed are let go. Each is a transition like any other, judged by
  * its guard, so a sweep that runs late or twice changes nothing it should not.

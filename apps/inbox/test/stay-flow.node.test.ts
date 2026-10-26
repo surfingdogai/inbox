@@ -5,7 +5,7 @@ import { STRIPE_LIVE_KEY } from "../../../packages/adapters/test/fixtures/paymen
 import { at, GUEST, HOUR, OWNER, ok, setup } from "./stay-harness";
 
 /**
- * Three places to stay, end to end through the inbox's own doors (ADR-033 §14): Kijani House in
+ * Three places to stay, end to end through the inbox's own doors (ADR-037 §14): Kijani House in
  * Nairobi takes requests and is paid at the property (KES); Ryokan Hoshi in Kyoto writes every stay to
  * its own system first and takes a first-night deposit by Stripe (JPY); Maple Hollow B&B in Nova Scotia
  * keeps a room for direct guests, which confirms at once (CAD). Every figure is the example property's.

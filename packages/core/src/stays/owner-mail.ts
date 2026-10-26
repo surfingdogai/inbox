@@ -6,7 +6,7 @@ import { readSetup } from "./store";
 import { datesWords } from "./terms";
 
 /**
- * A stay's moments in its owner's emails (ADR-033 S16), in the owner's own words: who, which dates,
+ * A stay's moments in its owner's emails (ADR-037 S16), in the owner's own words: who, which dates,
  * how many nights and guests, which rooms, what the guest wrote, and by when the owner answers —
  * "you", never "the business", and the short reference the guest's own emails carry. Dates as English
  * writes them where the property is.

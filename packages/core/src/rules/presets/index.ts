@@ -42,7 +42,7 @@ export type PresetConfirm = "owner" | "rules";
 
 /** Whether a rule says yes on its own: it confirms a booking or accepts an order. */
 export function saysYesOnItsOwn(definition: RuleDefinition): boolean {
-  // A stay's quote sent from the rates is binding once sent (ADR-033 §7, R2): a yes too.
+  // A stay's quote sent from the rates is binding once sent (ADR-037 §7, R2): a yes too.
   return definition.actions.some(
     (a) => a.action === "transition" && (a.event === "confirm" || a.event === "accept" || a.event === "quote"),
   );

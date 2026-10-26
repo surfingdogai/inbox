@@ -25,7 +25,7 @@ import { transitionItem } from "../write/transition";
 import { rowToItem } from "../write/views";
 
 /**
- * Stays written to the property's own system first (ADR-033 §4.3, ADR-032 write first): the job between
+ * Stays written to the property's own system first (ADR-037 §4.3, ADR-036 write first): the job between
  * two batches. The stay is `booking` while the write is in flight, and becomes confirmed, or waits for
  * its deposit, only once the system answered with its own booking id; refused, or never found once the
  * resolver has looked, it lapses and nothing is promised. A stay is never written twice: the same key

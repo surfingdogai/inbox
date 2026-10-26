@@ -371,7 +371,7 @@ export const refundPayloadSchema = z.object({
 
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "use HH:MM");
 
-/** One room of a stay: which, for how many, and what extras (ADR-033). */
+/** One room of a stay: which, for how many, and what extras (ADR-037). */
 export const stayRoomSchema = z.object({
   /** Absent: "any room for two", the property picks in its quote. */
   roomTypeId: z.string().max(64).optional(),
@@ -399,7 +399,7 @@ export const stayPaymentSchema = z.object({
 });
 
 /**
- * A stay (ADR-033): local dates (nights are their difference, never minutes), rooms as lines, the
+ * A stay (ADR-037): local dates (nights are their difference, never minutes), rooms as lines, the
  * property's binding quote with its breakdown, schedule and dated policy, and where it stands with the
  * property's own system. `startTime`, `endTime` and `totalPrice` are written by the inbox, so the
  * generated columns, the indexes and the auto-complete sweep work as for a booking. Only the property

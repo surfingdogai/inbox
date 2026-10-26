@@ -4,7 +4,7 @@ import type { Db } from "../db";
 import { readSettings } from "../settings/schema";
 
 /**
- * A place to stay as the inbox keeps it (ADR-033, migration 0026): the property, its room types, rate
+ * A place to stay as the inbox keeps it (ADR-037, migration 0029): the property, its room types, rate
  * plans, policies, prices, taxes and fees, extras and the rooms it keeps for direct guests, read as
  * plain objects. Writes are the owner's (`stays/setup.ts`); everything here reads.
  */

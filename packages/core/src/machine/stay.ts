@@ -4,7 +4,7 @@ import { BUSINESS_ACTORS, CUSTOMER_ACTORS, isoDateTime, moneySchema, stayRoomSch
 import type { Machine, Transition } from "./machine";
 
 /**
- * A stay's state machine (ADR-033), as data: the write algorithm interprets it, and the stays layer
+ * A stay's state machine (ADR-037), as data: the write algorithm interprets it, and the stays layer
  * (`stays/transition.ts`) checks its guards and writes its effects in the same batch. Fourteen states:
  * a request the property answers with a quote, or a hold an agent books at once where the inbox cannot
  * sell a room twice; `booking` while a write to the property's own system is in flight, which never

@@ -35,7 +35,7 @@ import { type PropertySetup, readSetup } from "./store";
 import { cancellationTerms, dueNow, feeSha, quoteProblems, stayTermsSha } from "./terms";
 
 /**
- * The stays layer of the write algorithm (ADR-033 §3): the machine says which transition a stay may
+ * The stays layer of the write algorithm (ADR-037 §3): the machine says which transition a stay may
  * take; this checks its stay guards and writes its stay effects in the same batch as the item — night
  * claims, the quote, the payment schedule, the jobs that write to the property's own system and send
  * the guest's messages. It reads everything first and throws before anything is written.
@@ -115,7 +115,7 @@ export function dueOnAgreement(p: Pick<StayPayload, "payments" | "quote">): bool
 }
 
 /**
- * Whether the inbox cannot sell these nights twice (ADR-033 §4.1): inside the rooms the owner keeps for
+ * Whether the inbox cannot sell these nights twice (ADR-037 §4.1): inside the rooms the owner keeps for
  * direct guests, closed elsewhere, or on a connected system that confirms at once and was looked at fresh.
  * Anything else is a person's to confirm.
  */
@@ -133,7 +133,7 @@ export async function instantSafe(
 }
 
 /**
- * The event a stay takes for what was asked (ADR-033 D2): an acceptance or a booking leads to the
+ * The event a stay takes for what was asked (ADR-037 D2): an acceptance or a booking leads to the
  * property's own system first when it has one, else to the deposit when one is due now, else straight
  * to confirmed; a payment confirms when it is the last one due now, and lands on a lapsed stay as a
  * late payment.
@@ -930,7 +930,7 @@ export function checkGuestPlan(
 }
 
 /**
- * What automation would send where a person must look first (ADR-033 §4.1): kept as a draft for a person
+ * What automation would send where a person must look first (ADR-037 §4.1): kept as a draft for a person
  * to send in one tap, the stay marked for them, and the write refused with why.
  */
 async function draftForPerson(ctx: PlanCtx, quote: StayQuote | undefined, why: string): Promise<never> {

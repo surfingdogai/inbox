@@ -4,7 +4,7 @@ import { instantOf } from "../src/util/zoned";
 import { clock, guest, kijaniHouse, owner } from "./stay-fixtures";
 
 /**
- * Calendar links as night hints (ADR-033 §4.4): a night is noon on its date to the midnight after, in
+ * Calendar links as night hints (ADR-037 §4.4): a night is noon on its date to the midnight after, in
  * the property's zone, so an all-day event from check-in to check-out covers exactly its nights and a
  * morning's cleaning covers none; a calendar not mapped to the room, or switched off, says nothing;
  * and a hint is shown to the owner and an agent, never counted as a room taken.

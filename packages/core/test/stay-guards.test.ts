@@ -20,7 +20,7 @@ import {
 } from "./stay-fixtures";
 
 /**
- * The stays layer's guards where money and nights meet (ADR-033 §4–§5): a platform's payment in another
+ * The stays layer's guards where money and nights meet (ADR-037 §4–§5): a platform's payment in another
  * currency, or naming no amount, is never counted; a part paid before a window closes is owed back; the
  * sweep finds what is due however many stays wait months ahead; automation sends no promise on nights a
  * person must check elsewhere; a plan kept from guests is never theirs to name; a change of nights comes

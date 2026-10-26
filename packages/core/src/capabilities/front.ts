@@ -133,7 +133,7 @@ export async function frontHome(caps: Capabilities, lang: CustomerLang): Promise
         ]
       : []),
   ];
-  // A place to stay that takes stays here says so as schema.org reads it (ADR-033 §6.4).
+  // A place to stay that takes stays here says so as schema.org reads it (ADR-037 §6.4).
   const jsonLd = profile.item_types.includes("stay")
     ? await caps.stays.frontJsonLd(profile.domain ? `https://${profile.domain}/` : null)
     : null;

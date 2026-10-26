@@ -45,7 +45,7 @@ export function buildManifest(input: {
    * signed feed and its products by id (`catalogue`), where a network reads them. Absent, it lists none.
    */
   catalogue?: boolean | undefined;
-  /** A place to stay's door (ADR-033), published while `item_types` lists `stay`. */
+  /** A place to stay's door (ADR-037), published while `item_types` lists `stay`. */
   stay?: Manifest["stay"] | undefined;
 }): Manifest {
   const origin = input.instanceUrl.replace(/\/$/, "");

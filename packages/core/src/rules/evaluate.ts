@@ -87,7 +87,7 @@ export interface RuleContext {
   readonly facts: {
     readonly slotIsFree: boolean | null;
     readonly withinBusinessHours: boolean | null;
-    /** A stay's (ADR-033 §7): read once, before any rule runs. */
+    /** A stay's (ADR-037 §7): read once, before any rule runs. */
     readonly stay?: StayFacts | undefined;
   };
 }

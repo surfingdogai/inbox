@@ -30,7 +30,7 @@ async function expectCode(p: Promise<unknown>, code: string): Promise<WriteError
   throw new Error(`expected ${code}`);
 }
 
-describe("the stay machine (ADR-033)", () => {
+describe("the stay machine (ADR-037)", () => {
   it("is data: fourteen states, six terminal, every event from somewhere", () => {
     expect(stayMachine.states).toHaveLength(14);
     expect(stayMachine.terminal).toEqual([

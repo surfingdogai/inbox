@@ -9,7 +9,7 @@ import { transitionItem } from "../src/write/index";
 import { clock, contact, guest, owner, ryokanHoshi } from "./stay-fixtures";
 
 /**
- * What a guest reads, in each of the six languages (ADR-033 §10, §12): never a word of ours — not
+ * What a guest reads, in each of the six languages (ADR-037 §10, §12): never a word of ours — not
  * "Surfing Dog", "network", "receipt", "pass", "key", "reputation" or "inbox" — in any template, page,
  * problem or email; every template in every language; and extras that are on-property items only, so a
  * stay never bundles another trader's travel service.

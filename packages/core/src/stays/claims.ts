@@ -4,7 +4,7 @@ import { covers } from "./nights";
 import type { AllotmentRow, PropertySetup } from "./store";
 
 /**
- * Night claims (ADR-033 §4.2): one ordinal per unit per night, so two stays never hold the same room on
+ * Night claims (ADR-037 §4.2): one ordinal per unit per night, so two stays never hold the same room on
  * the same night through the inbox. The primary key arbitrates the last room as `slot_claims` does for
  * minutes: claims go in the write's own batch with a plain INSERT, and two writes that meet make one
  * claim and one failed batch, which is judged again. A held claim (`hold_until`) lapses on its own; the
