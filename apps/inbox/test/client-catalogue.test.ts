@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   catalogueBlockedWords,
   catalogueStatusLine,
+  catalogueSwitchLocked,
   catalogueToast,
   productListingBody,
   skuOfferWords,
@@ -58,9 +59,22 @@ describe("Your products on networks", () => {
     expect(catalogueBlockedWords(null)).toBeNull();
   });
 
+  it("lets the owner switch it off whatever blocks it, and on only once nothing does", () => {
+    for (const blocked of ["no_network", "out_of_directory", "cannot_sign"] as const) {
+      expect(catalogueSwitchLocked({ on: true, blocked, pending: false })).toBe(false);
+      expect(catalogueSwitchLocked({ on: false, blocked, pending: false })).toBe(true);
+    }
+    expect(catalogueSwitchLocked({ on: false, blocked: null, pending: false })).toBe(false);
+    expect(catalogueSwitchLocked({ on: true, blocked: null, pending: true })).toBe(true);
+  });
+
   it("toasts what switching on and off does", () => {
+    // Products with a note can be among those listed: the two counts are not added up.
     expect(catalogueToast(true, status())).toBe(
-      "On. Within an hour, networks show your 212 products that are ready. 3 need a look first.",
+      "On. Within an hour, networks show your 212 products that are ready. 3 have a note to look at in Products.",
+    );
+    expect(catalogueToast(true, status({ counts: { listed: 10, needs_look: 1, kept_off: 0, off_sale: 0 } }))).toBe(
+      "On. Within an hour, networks show your 10 products that are ready. 1 has a note to look at in Products.",
     );
     expect(catalogueToast(true, status({ counts: { listed: 1, needs_look: 0, kept_off: 0, off_sale: 0 } }))).toBe(
       "On. Within an hour, networks show your 1 product that is ready.",
@@ -70,9 +84,9 @@ describe("Your products on networks", () => {
     );
   });
 
-  it("offers product codes that are barcodes once", () => {
-    expect(skuOfferWords(412)).toBe("412 of your product codes are barcodes. Use them as barcodes too?");
-    expect(skuOfferWords(1)).toBe("1 of your product codes is a barcode. Use it as its barcode too?");
+  it("offers product codes that look like barcodes once", () => {
+    expect(skuOfferWords(412)).toBe("412 of your product codes look like barcodes. Use them as barcodes too?");
+    expect(skuOfferWords(1)).toBe("1 of your product codes looks like a barcode. Use it as its barcode too?");
   });
 });
 

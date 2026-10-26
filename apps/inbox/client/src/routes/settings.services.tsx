@@ -413,7 +413,7 @@ function ProductsCard({ currency }: { currency: string }) {
                   )
                 }
               >
-                Use them
+                {offer.count === 1 ? "Use it" : "Use them"}
               </button>
               <button
                 type="button"
@@ -532,7 +532,6 @@ function ProductLine({
           {!archived && p.listed === 0 && <span className="pill pill-xs">Off networks</span>}
         </div>
         <div className="s">{meta}</div>
-        <ProductNotes notes={notes} pending={fixing} onConfirmBarcode={onConfirmBarcode} />
       </div>
       <div className="rowx">
         {!archived && (
@@ -550,6 +549,12 @@ function ProductLine({
           </button>
         )}
       </div>
+      {/* The full width of the row, under its buttons, so a note reads in a line or two on a phone. */}
+      {notes.length > 0 && (
+        <div className="wide">
+          <ProductNotes notes={notes} pending={fixing} onConfirmBarcode={onConfirmBarcode} />
+        </div>
+      )}
       {editing && (
         <div className="wide">
           <ProductEditor

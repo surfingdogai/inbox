@@ -796,6 +796,10 @@ a {
   padding: 10px 0 12px;
   border-bottom: 1px solid var(--hairline);
 }
+/* The tax chooser under the switch's hint, with room between them. */
+.net-tax {
+  margin-top: 8px;
+}
 /* How agents got on: folded under the network, a few quiet lines per door. */
 .net-doors {
   margin-top: 8px;

@@ -6,7 +6,7 @@ import { type FormEvent, useState } from "react";
 import { ErrorState, Toast } from "../components/Feedback";
 import { Field, SectionHead, Switch } from "../components/Form";
 import { type ApiProblem, api, problemOf } from "../lib/api";
-import { catalogueBlockedWords, catalogueStatusLine, catalogueToast } from "../lib/catalogue";
+import { catalogueBlockedWords, catalogueStatusLine, catalogueSwitchLocked, catalogueToast } from "../lib/catalogue";
 import {
   carriedWords,
   type DoorPanel,
@@ -335,7 +335,11 @@ function ProductsOnNetworks({
   const blocked = catalogueBlockedWords(status?.blocked ?? null);
   return (
     <div className="net-carried">
-      <Switch checked={on} onChange={onSwitch} disabled={pending || blocked !== null}>
+      <Switch
+        checked={on}
+        onChange={onSwitch}
+        disabled={catalogueSwitchLocked({ on, blocked: status?.blocked ?? null, pending })}
+      >
         Your products on networks
       </Switch>
       <div className="hint">
@@ -345,7 +349,7 @@ function ProductsOnNetworks({
       {blocked && <div className="hint">{blocked}</div>}
       {on && !blocked && (
         <>
-          <div className="chips" role="radiogroup" aria-label="Your prices and tax">
+          <div className="chips net-tax" role="radiogroup" aria-label="Your prices and tax">
             <label className="chip">
               <input
                 type="radio"
@@ -450,7 +454,7 @@ function NetworkLine({
             </div>
           </div>
         )}
-        {n.enabled && productsOn && n.share.listing && (
+        {productsOn && n.share.listing && (
           <details className="net-sent">
             <summary className="hint">More</summary>
             <Switch checked={n.share.catalogue} onChange={onProducts} disabled={pending}>

@@ -175,20 +175,37 @@ export function catalogueBlockedWords(blocked: CatalogueStatus["blocked"]): stri
   }
 }
 
-/** What the toast says when the owner switches it on or off. */
+/**
+ * Whether "Your products on networks" cannot be switched now. Off can always be had, whatever blocks
+ * it, so a product never lists the moment the block lifts without the owner having had the say; on
+ * waits for nothing to block it.
+ */
+export function catalogueSwitchLocked(s: {
+  readonly on: boolean;
+  readonly blocked: CatalogueStatus["blocked"];
+  readonly pending: boolean;
+}): boolean {
+  return s.pending || (s.blocked !== null && !s.on);
+}
+
+/**
+ * What the toast says when the owner switches it on or off. A product with a note can be among those
+ * listed (a barcode that did not pass lists it without one), so the two counts are not set apart.
+ */
 export function catalogueToast(on: boolean, s: CatalogueStatus | undefined): string {
   if (!on) return "Off. Networks stop showing your products now. Your own doors still take orders.";
   const n = s?.counts.listed ?? 0;
   const m = s?.counts.needs_look ?? 0;
   const ready = n === 1 ? "1 product that is ready" : `${n} products that are ready`;
-  return `On. Within an hour, networks show your ${ready}.${m ? ` ${m} need${m === 1 ? "s" : ""} a look first.` : ""}`;
+  const look = m ? ` ${m} ${m === 1 ? "has" : "have"} a note to look at in Products.` : "";
+  return `On. Within an hour, networks show your ${ready}.${look}`;
 }
 
-/** The one-time offer to use imported products' codes that are barcodes as their barcodes. */
+/** The one-time offer to use imported products' codes that look like barcodes as their barcodes. */
 export function skuOfferWords(n: number): string {
   return n === 1
-    ? "1 of your product codes is a barcode. Use it as its barcode too?"
-    : `${n} of your product codes are barcodes. Use them as barcodes too?`;
+    ? "1 of your product codes looks like a barcode. Use it as its barcode too?"
+    : `${n} of your product codes look like barcodes. Use them as barcodes too?`;
 }
 
 /** The product editor's listing fields as the owner typed them. */
