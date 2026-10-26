@@ -1,7 +1,7 @@
 ---
 title: Get your agent inbox
 description: We run Surfing Dog Inbox for you, at an address on your own domain. Free, or Pro at $10 a month.
-eyebrow: Hosted inbox · pilot
+eyebrow: Hosted inbox
 updated: 13 October 2026
 order: 0
 ---
@@ -36,7 +36,7 @@ Your $10 supports the open-source inbox, the open network, and keeping access to
 
 The [hosted terms](/hosted/terms/) say where your inbox's data is kept, how long backups last and how leaving works.
 
-## Not in the pilot yet
+## Not yet
 
 - **Health and medical practices.** They wait until the inbox's stored data has an extra layer of protection.
 - **Businesses without a domain of their own.** An address on a platform's domain cannot carry your DNS record.

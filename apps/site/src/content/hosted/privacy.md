@@ -1,7 +1,7 @@
 ---
 title: Hosted inbox privacy notice
 description: What we keep about you, the business owner, when you set up a hosted inbox, and why.
-eyebrow: Privacy · hosted pilot
+eyebrow: Privacy · hosted inbox
 updated: 27 October 2026
 order: 3
 ---
@@ -14,7 +14,8 @@ This notice is about you, the person who sets up a hosted inbox, and about your 
 - **Your domain and the hostname you chose**, and what our checks see in its DNS (the record you added, your DNS provider's name servers, whether the certificate was issued). Basis: our contract with you.
 - **What we read from your public website** to fill in your inbox's starting details: your kind of business, hours, services and other facts your site publishes, each with where and when we read it. You check them before anything is used. Basis: our contract with you, and our legitimate interest in saving you the typing.
 - **The steps you took and when**: that a card was shown, a code sent, a record seen, the inbox gone live. Counts and times, nothing more, kept by us, with no analytics company involved. Basis: our legitimate interest in knowing where setup gets stuck.
-- **Usage counts**: confirmed items, items, emails sent and the size of your inbox, per month. Basis: our contract with you (the pilot is free; the counts are what a future price would follow).
+- **Usage counts**: confirmed items, items, emails sent and the size of your inbox, per month. Basis: our contract with you.
+- **If you choose Pro**: your inbox's customer and subscription at Stripe, whether Pro runs and until when, and who in your account chose it and when. Stripe holds your card and payment details; we never see them. Basis: our contract with you.
 - **Security signals**: the bot check on the sign-up form, your address's network for rate limits, and failed code attempts. Kept briefly, and used to stop abuse and for nothing else. Basis: our legitimate interest in keeping the service safe.
 - **Google Calendar, if you connect it**: what your inbox reads from Google (which account it is, when you are busy, the events it adds for the bookings you confirm) is kept in your inbox with the rest of its data, which we process for you under the [processing agreement](/hosted/processing/). Google's access is kept encrypted; a disconnect asks Google to take it back and deletes it. What the inbox asks Google for, and why, is on our [privacy page](/privacy/#google-h). Basis: our contract with you; you ask for it by connecting.
 - **Your listing on network.surfingdog.ai**: from the day your inbox goes live, your business is listed in its directory, where AI agents search, with your products on sale unless you switch them off, and the receipts your inbox signs are kept there ([what it gets](/privacy/#network-h)). Basis: our contract with you. Switch it off in Settings → Networks.
@@ -40,6 +41,8 @@ The company that rents us our servers holds the database, in the European Union,
 When your website's own data does not say what your business is, a language-model company may read a short digest of its public pages, with contact details taken out, to help fill in your starting details. It can be outside the European Union. You check every value before it is used.
 
 Public DNS resolvers answer our checks of your hostname. A certificate authority issues the certificate for it, and, as for every certificate, your hostname is then listed in public certificate logs.
+
+If you choose Pro, Stripe gets your email address and your domain, to make your inbox its customer, and takes your payment through Link as the merchant of record, under its own privacy policy. It can be outside the European Union.
 
 Mail you write to our addresses is kept in our mailbox at an email company, which may store it outside the European Union.
 

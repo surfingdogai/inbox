@@ -233,12 +233,15 @@ describe("the hosted pilot's words", () => {
     ]);
   });
 
-  it("carry the pilot's promises: free, counted, notice before a charge, one DNS record, download and close", () => {
-    const terms = body(`${HOSTED_DIR}/terms.md`);
+  it("carry the promises: Free with no end date, Pro by choice, notice before a price change, one DNS record, download and close", () => {
+    const terms = body(`${HOSTED_DIR}/terms.md`).replace(/\s+/g, " ");
     for (const promise of [
-      "free during the pilot",
-      "at least 30 days before any charge",
+      "Free costs nothing, with no end date",
+      "$10 a month, taxes included",
       "Nothing is charged without your agreement",
+      "Pro runs to the end of the month you paid for",
+      "Closing your inbox stops Pro from renewing",
+      "at least 30 days before any change to Pro's price",
       "one DNS record (a CNAME)",
       "at least 15 days before",
       "at most one hour earlier",
@@ -635,6 +638,26 @@ describe("the price: Free, and Pro at $10", () => {
     expect(vs).not.toContain("no price is set");
   });
 
+  it("the hosted terms and privacy notice say Free and Pro, with no pilot that ends, and who takes Pro's payment", () => {
+    const terms = flat(body(`${HOSTED_DIR}/terms.md`));
+    expect(terms).not.toMatch(/pilot/i);
+    expect(terms).toContain(`Pro is optional, for each inbox: ${PRO}.`);
+    expect(terms).toContain("Pro is sold through Link: Stripe is the merchant of record.");
+    expect(terms).toContain("you can choose US dollars there and pay $10");
+    expect(terms).toContain("**Ending the service.**");
+    expect(terms).toContain("or what you paid for Pro in the 12 months before the claim, if that is more");
+    const privacy = flat(body(`${HOSTED_DIR}/privacy.md`));
+    expect(privacy).not.toMatch(/pilot|future price/i);
+    expect(privacy).toContain("**If you choose Pro**");
+    expect(privacy).toContain("Stripe gets your email address and your domain");
+    for (const page of ["index.md", "terms.md", "privacy.md"]) {
+      expect(front(`${HOSTED_DIR}/${page}`).eyebrow, page).not.toMatch(/pilot/i);
+    }
+    for (const page of ["terms.md", "privacy.md"])
+      expect(front(`${HOSTED_DIR}/${page}`).updated, page).toBe("26 October 2026");
+    expect(front(`${HOSTED_DIR}/terms.md`).description).not.toMatch(/pilot/i);
+  });
+
   it("leaves no pilot on a price anywhere a business reads one", () => {
     const files = [
       "src/lib/hosted.ts",
@@ -646,8 +669,18 @@ describe("the price: Free, and Pro at $10", () => {
       DOCS_PAGE,
       `${HOSTED_DIR}/index.md`,
     ];
+    files.push(
+      "src/components/Run.astro",
+      "src/pages/terms.astro",
+      "src/content/blog/surfing-dog-inbox-is-open.md",
+      `${HOSTED_DIR}/terms.md`,
+      `${HOSTED_DIR}/privacy.md`,
+    );
     for (const path of files)
-      expect(read(path), path).not.toMatch(/free during the pilot|nothing during the pilot|no price is set/i);
+      expect(flat(read(path)), path).not.toMatch(
+        /free during (the|its) pilot|nothing during the pilot|no price is set|a future price|Ending the pilot/i,
+      );
+    expect(read("src/content/docs/docs/self-hosted-vs-hosted.md")).not.toContain("Hosted by us (pilot");
     expect(readFileSync(repo("README.md"), "utf8")).not.toMatch(/free during the pilot/i);
     expect(read("src/pages/technical.astro")).toContain(
       '"We run it for you, at an address on your own domain. Free, or Pro at $10 a month."',
@@ -720,9 +753,9 @@ describe("the docs, in both states", () => {
     expect(version(VS, true)).toContain("Hosted is free, with Pro at $10 a month if you want it.");
     expect(version(VS, true)).toContain("| Free; Pro, if you want it: $10 a month, taxes included |");
     expect(version(VS, false)).not.toMatch(/\$10|\bPro\b/);
-    expect(version(VS, true)).toContain("| Hosted by us (pilot) |");
+    expect(version(VS, true)).toContain("| Hosted by us |");
     expect(version(VS, false)).toContain("Hosted is not open yet; until it is, self-host.");
-    expect(version(VS, false)).toContain("| Hosted by us (pilot, not open yet) |");
+    expect(version(VS, false)).toContain("| Hosted by us (not open yet) |");
     expect(version(OVERVIEW, true)).toContain("Still to come: connectors (coming) and customer records");
     expect(version(OVERVIEW, true)).toContain("let us host it, deploy to Cloudflare, or run it on your own server");
     expect(version(OVERVIEW, false)).toContain(

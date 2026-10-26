@@ -1,12 +1,12 @@
 ---
 title: Hosted inbox terms
-description: The terms for an inbox we run for you during the pilot, on your own domain.
-eyebrow: Terms · hosted pilot
+description: The terms for an inbox we run for you on your own domain, on Free or Pro.
+eyebrow: Terms · hosted inbox
 updated: 27 October 2026
 order: 1
 ---
 
-These terms are between Surfing Dog, Lda, a company registered in Portugal with NIPC 517113325 ("we"), and the business that sets up a hosted inbox ("you"). They cover the hosted inbox during its pilot. The software itself is MIT-licensed, and this website and our other free services have their own [terms](/terms/).
+These terms are between Surfing Dog, Lda, a company registered in Portugal with NIPC 517113325 ("we"), and the business that sets up a hosted inbox ("you"). They cover the hosted inbox, on Free and on Pro. The software itself is MIT-licensed, and this website and our other free services have their own [terms](/terms/).
 
 ## 1. What you get
 
@@ -26,9 +26,13 @@ These terms are between Surfing Dog, Lda, a company registered in Portugal with 
 
 ## 3. Price
 
-- The hosted inbox is free during the pilot.
-- From the start we count confirmed items: a booking your inbox confirmed or an order it accepted, counted once, when it happens. Test items never count. Ask us, and we tell you your count.
-- We will tell you by email at least 30 days before any charge, with the price. Nothing is charged without your agreement, and if you do not want to continue you can download everything and close before that date.
+- Free costs nothing, with no end date: the whole inbox, its connectors, your listing on the network and the catalogue, with basic spam protection. It never asks for a card.
+- Pro is optional, for each inbox: $10 a month, taxes included. It adds AI spam filters, which are coming; until they ship, Pro changes nothing in your inbox, and your $10 supports the open-source inbox and the open network.
+- You choose Pro on your inbox's Plan page and pay at Stripe's checkout. Pro is sold through Link: Stripe is the merchant of record. It takes the payment, works out and pays the tax, and sends your receipts and invoices. Its own terms apply to the payment. Checkout may show the price in your own currency, converted by Stripe with its fee in it; you can choose US dollars there and pay $10.
+- Pro renews every month. Cancel it at any time on the Plan page: Pro runs to the end of the month you paid for, then your inbox is Free again. Closing your inbox stops Pro from renewing. If a renewal can't be paid, your inbox goes back to Free.
+- Nothing is charged without your agreement: Free is never charged, and Pro is charged from the day you choose it and pay at checkout.
+- We tell you by email at least 30 days before any change to Pro's price. It applies from the renewal after that, and you can cancel before it does.
+- We count confirmed items: a booking your inbox confirmed or an order it accepted, counted once, when it happens. Test items never count. Your Plan page shows the count.
 
 ## 4. Where your data is, and backups
 
@@ -36,7 +40,7 @@ These terms are between Surfing Dog, Lda, a company registered in Portugal with 
 - Requests to your inbox pass through our edge network on their way. It ends the encrypted connection at one of its locations near the sender, which can be outside the European Union, and forwards each request to our servers over a new encrypted connection. To run and protect its network, it also keeps its own records of requests (addresses, times and the pages asked for), which can be kept outside the European Union.
 - The email your inbox sends is delivered by the same provider, through the same network. It keeps a record of each email (sender, recipient, subject and whether it arrived) for about a month, and a list of addresses that bounced or reported mail as spam; these can be kept outside the European Union. The [processing agreement](/hosted/processing/) lists who processes what, and where.
 - We back up every inbox every hour. Backups are encrypted on our servers, then stored in the European Union. If we have to restore your inbox, it goes back to its state at the last backup, at most one hour earlier; requests that arrived after it may be lost, and we tell you which hour it went back to.
-- During the pilot we promise no uptime figure. We watch the service, tell you about outages that affect you, and say what happened.
+- We promise no uptime figure. We watch the service, tell you about outages that affect you, and say what happened.
 
 ## 5. Changes to how your inbox behaves
 
@@ -49,7 +53,7 @@ These terms are between Surfing Dog, Lda, a company registered in Portugal with 
 - **Download.** At any time, with a code sent to your address, you can download everything your inbox holds as one SQLite file that the open-source inbox opens: your items, messages, customers, services, hours, rules and settings. It can include the key that signs your receipts, in a file of its own, so an inbox you run yourself keeps signing as yours; keep that file as safe as a password. It leaves out sign-in sessions, API keys and the secrets your connections use; you set those up again where you go. Receipts your inbox already sent to a network stay with that network.
 - **Switching.** To move to your own server, another provider or back to us, point your hostname at the new place. You can do it at any time, without notice. We charge nothing for downloading or switching, and we answer your questions about it.
 - **Closing.** You can close your inbox at any time, with a code sent to your address. It then stays read-only for 30 days, and you can still download it. After that we delete it; copies in our backups are gone within 30 more days. The DNS record is yours: we tell you which one you may remove.
-- **Ending the pilot.** We may end the pilot for everyone with 30 days' notice by email. You keep the download and the 30 days in every case.
+- **Ending the service.** We may stop running the hosted inbox for everyone with 30 days' notice by email. Pro then stops renewing, and nothing more is charged. You keep the download and the 30 days in every case.
 
 ## 7. Fair use, suspension and reports
 
@@ -64,7 +68,7 @@ These terms are between Surfing Dog, Lda, a company registered in Portugal with 
 
 ## 9. Liability
 
-- As far as the law allows, our total liability during the free pilot is at most €100, and neither of us is liable for indirect loss or lost profit.
+- As far as the law allows, our total liability is at most €100, or what you paid for Pro in the 12 months before the claim, if that is more, and neither of us is liable for indirect loss or lost profit.
 - Nothing here limits liability that the law does not let us limit, such as for intent, gross negligence, death or personal injury.
 
 ## 10. Law
