@@ -17,6 +17,7 @@ import {
 } from "@surfingdog/spec";
 import { z } from "zod";
 import { basePoint, matchZone } from "../area/index";
+import { NEXT_CATALOGUE_SEQ } from "../catalogue/identity";
 import type { ConnectorCapabilities } from "../connectors/capability";
 import type { SnapshotMenuItem } from "../connectors/setup-snapshot";
 import type { Db } from "../db";
@@ -24,6 +25,7 @@ import { ulid } from "../ids";
 import { afterEdit, allergenFingerprint, confirmedBy, mayConfirmAllergens } from "../menu/allergens";
 import { type MenuFields, type MenuSettings, menuFieldsSchema, menuOf, optionGroupsProblem } from "../menu/schema";
 import { kitchenProfile, menuView } from "../menu/view";
+import { publishedDoorsElsewhere, type Settings } from "../settings/schema";
 import { addDays, dateIn, instantOf } from "../util/zoned";
 import { type Caller, isCustomer, isPerson, nowOf } from "../write/caller";
 import { WriteError } from "../write/errors";
@@ -160,6 +162,26 @@ export class FoodCapabilities {
     return rows.length > 0;
   }
 
+  /**
+   * Where the business takes orders instead of here (`settings.doorsElsewhere`, ADR-035), as it is
+   * published, or null: the menu still reads here, but no slot is offered for an order create_order
+   * would refuse.
+   */
+  async orderDoorElsewhere(settings?: Settings): Promise<string | null> {
+    const s = settings ?? (await kitchenContext(this.db)).settings;
+    if (!s.doorsElsewhere.some((d) => d.itemType === "order")) return null;
+    const { rows } = await this.db.client.query({
+      sql: "SELECT domain FROM business LIMIT 1",
+      params: [],
+      method: "all",
+    });
+    const domain = rows[0]?.[0] === null || rows[0]?.[0] === undefined ? null : String(rows[0][0]);
+    const door = publishedDoorsElsewhere(s.doorsElsewhere, [domain, s.directory.url]).find(
+      (d) => d.item_type === "order",
+    );
+    return door?.url ?? null;
+  }
+
   getMenu(input: GetMenuInput, now: number): Promise<GetMenuOutput> {
     return menuView(this.db, input, now);
   }
@@ -172,6 +194,8 @@ export class FoodCapabilities {
     const method = input.method ?? "pickup";
     const base = { date: input.date, method, slots: [] as ListOrderSlotsOutput["slots"] };
     if (!k.enabled) return { ...base, answer: "closed", words: w.notForATime };
+    const there = await this.orderDoorElsewhere(ctx.settings);
+    if (there) return { ...base, answer: "closed", words: w.takenElsewhere(there) };
     const methods = methodsOf(k, ctx.settings.area.zones.length);
     if (!methods.includes(method)) {
       return {
@@ -552,7 +576,9 @@ export class FoodCapabilities {
           const before = menuOf(rows[0][1]);
           const next = mergeImported(before, menu, item, caller, kind);
           await this.db.client.query({
-            sql: `UPDATE products SET name = ?, description = ?, ${price ? "price = ?, " : ""}menu = ?, updated_at = ? WHERE id = ?`,
+            // What the signed feed shows of it may change: it moves to the feed's end (ADR-029).
+            sql: `UPDATE products SET name = ?, description = ?, ${price ? "price = ?, " : ""}menu = ?,
+                    catalogue_seq = ${NEXT_CATALOGUE_SEQ}, updated_at = ? WHERE id = ?`,
             params: [
               item.name.slice(0, 200),
               item.description ?? null,
@@ -568,8 +594,8 @@ export class FoodCapabilities {
           if (!price) continue;
           const next: MenuFields = { ...menu, allergens: { ...menu.allergens, status: "unconfirmed", source: kind } };
           await this.db.client.query({
-            sql: `INSERT INTO products (id, name, description, price, source, external_id, active, menu, created_at, updated_at)
-                  VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
+            sql: `INSERT INTO products (id, name, description, price, source, external_id, active, menu, catalogue_seq, created_at, updated_at)
+                  VALUES (?, ?, ?, ?, ?, ?, 1, ?, ${NEXT_CATALOGUE_SEQ}, ?, ?)`,
             params: [
               ulid(),
               item.name.slice(0, 200),

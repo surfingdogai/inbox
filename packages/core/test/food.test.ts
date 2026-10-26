@@ -3,6 +3,8 @@ import {
   ALLERGEN_CODES,
   ALLERGENS_VOCABULARY,
   allergenLabel,
+  type CataloguePage,
+  cataloguePageSchema,
   expandAllergens,
   JURISDICTIONS,
   jurisdictionOf,
@@ -14,6 +16,7 @@ import { Capabilities } from "../src/capabilities/service";
 import type { CreateOrderInput } from "../src/capabilities/types";
 import type { ConnectorCapabilities } from "../src/connectors/capability";
 import { ConnectorError, type OrdersWriter, type PosOrderRef, type RunContext } from "../src/connectors/sdk";
+import type { SetupSnapshot } from "../src/connectors/setup-snapshot";
 import { resolveWrite } from "../src/connectors/write-first";
 import { renderCustomerMail } from "../src/customer/mail";
 import { createDb, type Db } from "../src/db";
@@ -1581,6 +1584,89 @@ describe("a till that never answers: written once more where it can be, else a p
   });
 });
 
+describe("a menu brought in from a till, in the signed catalogue feed (ADR-029)", () => {
+  it("reaches a network already reading the feed: a dish brought in, or repriced, moves to the feed's end", async () => {
+    const t = Date.parse("2026-10-26T09:00:00Z");
+    const domain = "inbox.trattoria.example";
+    const s = await shop({ name: "Trattoria Sole", currency: "EUR", timezone: "Europe/Rome", language: "it", t });
+    const snapshot = (price: number, more = false): SetupSnapshot => ({
+      source: { kind: "flipdish", account: "acct-1", readAt: t },
+      menu: [
+        {
+          name: "Pizze",
+          items: [
+            { externalId: "m-1", name: "Margherita", price: EUR(price) },
+            ...(more ? [{ externalId: "m-2", name: "Diavola", price: EUR(1300) }] : []),
+          ],
+        },
+      ],
+    });
+    const read = async (after?: string) => {
+      const out: CataloguePage["items"][number][] = [];
+      let cursor = after;
+      for (let n = 0; n < 50; n++) {
+        const r = await s.caps.catalogue.changes(
+          { ...(cursor ? { after: cursor } : {}), limit: 1 },
+          { domain, url: `https://${domain}/v1/catalogue/changes?limit=1${cursor ? `&after=${cursor}` : ""}`, now: t },
+        );
+        if (r.status !== 200) throw new Error(`the feed answered ${r.status}`);
+        const page = cataloguePageSchema.parse(JSON.parse(r.body));
+        out.push(...page.items);
+        if (page.next_cursor === null) return { items: out, cursor };
+        cursor = page.next_cursor;
+      }
+      throw new Error("the feed never ended");
+    };
+    const shown = (items: CataloguePage["items"]) =>
+      items.map((i) => (i.state === "listed" ? `${i.name}@${i.price.value}` : i.id));
+    const snap = vi.spyOn(s.caps.connectors, "setupSnapshot");
+    snap.mockResolvedValue(snapshot(1100));
+    await s.caps.food.importMenu(person(t), { connection_id: "c1", items: ["m-1", "m-2"] });
+    // Two dishes the owner typed in after it, so a network's cursor is past the import.
+    await s.caps.setup.createProduct(person(t), { name: "Tiramisù", price: EUR(600), active: true });
+    await s.caps.setup.createProduct(person(t), { name: "Espresso", price: EUR(200), active: true });
+    const first = await read();
+    expect(shown(first.items)).toEqual(expect.arrayContaining(["Margherita@1100", "Tiramisù@600", "Espresso@200"]));
+
+    // The till reprices the Margherita and adds the Diavola; the owner keeps both.
+    snap.mockResolvedValue(snapshot(1250, true));
+    expect(await s.caps.food.importMenu(person(t), { connection_id: "c1", items: ["m-1", "m-2"] })).toEqual({
+      kept: 1,
+      updated: 1,
+    });
+    // The network asks again from where it stopped, as the protocol says.
+    const next = await read(first.cursor);
+    expect(shown(next.items)).toEqual(expect.arrayContaining(["Margherita@1250", "Diavola@1300"]));
+  });
+});
+
+describe("a restaurant that takes its orders on its own site (doors elsewhere, ADR-035)", () => {
+  it("offers no slot an order could not be made for here, and says where orders go", async () => {
+    const s = await volcan();
+    await s.db.client.query({ sql: "UPDATE business SET domain = 'pizzeriavolcan.mx'", params: [], method: "run" });
+    const pizza = await dish(s, VOLCAN_T, { name: "Pizza al pastor", price: 18900, currency: "MXN", menu: PIZZA });
+    const before = await firstSlot(s, VOLCAN_T, "2026-11-04");
+    await s.caps.updateSettings(person(VOLCAN_T), {
+      doc: { doorsElsewhere: [{ itemType: "order", url: "https://pizzeriavolcan.mx/pedidos" }] },
+    });
+    expect((await s.caps.getBusinessProfile()).item_types).not.toContain("order");
+    const slots = await s.caps.food.listOrderSlots({ date: "2026-11-04", method: "pickup" }, VOLCAN_T, "es");
+    expect(slots).toMatchObject({ answer: "closed", slots: [] });
+    expect(slots.words).toContain("https://pizzeriavolcan.mx/pedidos");
+    // What list_order_slots no longer offers, create_order refuses too, naming the same place.
+    const no = await refused(
+      s.caps.createOrder(
+        customer(VOLCAN_T),
+        order([line(pizza.product.id, "Pizza", 1, MXN(1))], { method: "pickup", slot: { start: before } }),
+      ),
+    );
+    expect(no.message).toContain("https://pizzeriavolcan.mx/pedidos");
+    // The menu still reads here: what is in a dish is asked about here too.
+    expect(await s.caps.food.offered()).toBe(true);
+    expect(await s.caps.food.orderDoorElsewhere()).toBe("https://pizzeriavolcan.mx/pedidos");
+  });
+});
+
 describe("what customers read, in the business's words (the copy lint)", () => {
   it("names no software, network, receipt, pass, key or inbox, in any of the seven languages", () => {
     for (const lang of ["en", "es", "fr", "de", "it", "pt", "ja"]) {
@@ -1609,6 +1695,7 @@ describe("what customers read, in the business's words (the copy lint)", () => {
         w.closedThatDay,
         w.noDelivery,
         w.addressUnknown,
+        w.takenElsewhere("https://tavernakyma.gr/order"),
         w.tableQuote(14),
         w.tableTooLarge(8),
         allergenWords("Taverna Kyma", lang),

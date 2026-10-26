@@ -64,7 +64,7 @@ import {
 } from "@surfingdog/core";
 import { z } from "zod";
 import { TOOL_SCOPES } from "./access";
-import { FOOD_INSTRUCTIONS, hasMenuDoors, registerOwnerFoodTools, registerPublicFoodTools } from "./food";
+import { foodInstructions, hasMenuDoors, registerOwnerFoodTools, registerPublicFoodTools } from "./food";
 import { problemFrom } from "./problem";
 import { registerOwnerStayTools, registerPublicStayTools, STAY_INSTRUCTIONS, takesStays } from "./stays";
 import { registerPublicTradesTools, TRADES_INSTRUCTIONS, takesWork } from "./trades";
@@ -277,16 +277,18 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
     // (ADR-040) how its menu reads, allergens included, and how an order for a time is made.
     const work = await takesWork(caps);
     const menu = await hasMenuDoors(caps);
+    // A kitchen that takes its orders on its own site (ADR-035): its menu reads here, orders go there.
+    const ordersAt = menu ? await caps.food.orderDoorElsewhere() : null;
     const instructions = [
       PUBLIC_INSTRUCTIONS,
       ...(stays ? [STAY_INSTRUCTIONS] : []),
       ...(work ? [TRADES_INSTRUCTIONS] : []),
-      ...(menu ? [FOOD_INSTRUCTIONS] : []),
+      ...(menu ? [foodInstructions(ordersAt)] : []),
     ];
     const server = new McpServer({ name, version }, { instructions: instructions.join(" ") });
     if (stays) registerPublicStayTools(server, caps, caller);
     if (work) registerPublicTradesTools(server, caps, caller);
-    if (menu) registerPublicFoodTools(server, caps, caller);
+    if (menu) registerPublicFoodTools(server, caps, caller, { ordersAt });
 
     server.registerTool(
       "get_business_profile",

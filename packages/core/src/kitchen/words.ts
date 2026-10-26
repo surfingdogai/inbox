@@ -86,6 +86,8 @@ export interface Words {
   readonly closedThatDay: string;
   readonly noDelivery: string;
   readonly addressUnknown: string;
+  /** The business takes its orders on its own site (doors elsewhere): where. */
+  takenElsewhere(url: string): string;
   tableQuote(size: number): string;
   tableTooLarge(max: number): string;
 }
@@ -137,6 +139,7 @@ export function kitchenWords(tag: string | null | undefined, business: string): 
         closedThatDay: `${b} no acepta pedidos ese día.`,
         noDelivery: `${b} no hace entregas.`,
         addressUnknown: `${b} no puede situar esa dirección: envía su código postal y país, o su punto; si no, ${b} decide.`,
+        takenElsewhere: (u) => `${b} acepta pedidos en ${u}, no aquí.`,
         tableQuote: (s) => `Para ${s} personas, ${b} prepara una propuesta: queda como solicitud de presupuesto.`,
         tableTooLarge: (x) => `${b} reserva mesas en línea hasta ${x} personas: para más, contacta directamente.`,
       };
@@ -171,6 +174,7 @@ export function kitchenWords(tag: string | null | undefined, business: string): 
         closedThatDay: `${b} ne prend pas de commandes ce jour-là.`,
         noDelivery: `${b} ne livre pas.`,
         addressUnknown: `${b} ne peut pas situer cette adresse : envoyez son code postal et son pays, ou son point ; sinon ${b} décide.`,
+        takenElsewhere: (u) => `${b} prend les commandes sur ${u}, pas ici.`,
         tableQuote: (s) => `Pour ${s} personnes, ${b} prépare une proposition : c'est une demande de devis.`,
         tableTooLarge: (x) => `${b} réserve en ligne jusqu'à ${x} personnes : au-delà, contactez directement.`,
       };
@@ -205,6 +209,7 @@ export function kitchenWords(tag: string | null | undefined, business: string): 
         closedThatDay: `${b} nimmt an diesem Tag keine Bestellungen an.`,
         noDelivery: `${b} liefert nicht.`,
         addressUnknown: `${b} kann diese Adresse nicht zuordnen: schick ihre Postleitzahl und ihr Land oder ihren Punkt; sonst entscheidet ${b}.`,
+        takenElsewhere: (u) => `${b} nimmt Bestellungen auf ${u} an, nicht hier.`,
         tableQuote: (s) => `Für ${s} Personen macht ${b} ein Angebot: es ist eine Anfrage.`,
         tableTooLarge: (x) => `${b} reserviert online bis ${x} Personen: für mehr bitte direkt melden.`,
       };
@@ -237,6 +242,7 @@ export function kitchenWords(tag: string | null | undefined, business: string): 
         closedThatDay: `${b} non prende ordini quel giorno.`,
         noDelivery: `${b} non fa consegne.`,
         addressUnknown: `${b} non riesce a collocare quell'indirizzo: invia CAP e paese, o il punto; altrimenti decide ${b}.`,
+        takenElsewhere: (u) => `${b} prende gli ordini su ${u}, non qui.`,
         tableQuote: (s) => `Per ${s} persone ${b} prepara una proposta: resta come richiesta di preventivo.`,
         tableTooLarge: (x) => `${b} prenota tavoli online fino a ${x} persone: per di più, contatta direttamente.`,
       };
@@ -269,6 +275,7 @@ export function kitchenWords(tag: string | null | undefined, business: string): 
         closedThatDay: `${b} não aceita pedidos nesse dia.`,
         noDelivery: `${b} não faz entregas.`,
         addressUnknown: `${b} não consegue situar essa morada: envia o código postal e o país, ou o ponto; senão ${b} decide.`,
+        takenElsewhere: (u) => `${b} recebe encomendas em ${u}, não aqui.`,
         tableQuote: (s) => `Para ${s} pessoas, ${b} prepara uma proposta: fica como pedido de orçamento.`,
         tableTooLarge: (x) => `${b} reserva mesas online até ${x} pessoas: para mais, contacta diretamente.`,
       };
@@ -304,6 +311,7 @@ export function kitchenWords(tag: string | null | undefined, business: string): 
         closedThatDay: `${j}はその日はご注文を受け付けていません。`,
         noDelivery: `${j}は配達を行っていません。`,
         addressUnknown: `${j}ではその住所の場所がわかりません。郵便番号と国、または地点を送ってください。わからない場合は${j}が判断します。`,
+        takenElsewhere: (u) => `${j}のご注文は${u}で承っています。こちらでは承っていません。`,
         tableQuote: (s) => `${s}名様のご予約は、${j}からご提案をお送りします。お見積りのご依頼として承ります。`,
         tableTooLarge: (x) =>
           `${j}のオンラインでの席のご予約は${x}名様までです。それ以上の場合は直接お問い合わせください。`,
@@ -336,6 +344,7 @@ export function kitchenWords(tag: string | null | undefined, business: string): 
         closedThatDay: `${b} does not take orders that day.`,
         noDelivery: `${b} does not deliver.`,
         addressUnknown: `${b} cannot place that address: send its postal code and country, or its point; otherwise ${b} decides.`,
+        takenElsewhere: (u) => `${b} takes orders at ${u}, not here.`,
         tableQuote: (s) => `For ${s} people, ${b} puts together an offer: this is a request for a price.`,
         tableTooLarge: (x) => `${b} books tables online for up to ${x} people: for more, get in touch directly.`,
       };

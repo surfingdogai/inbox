@@ -252,6 +252,37 @@ describe("get_menu and list_order_slots over MCP, and an order for a time", () =
   });
 });
 
+describe("a restaurant that takes its orders on its own site (doors elsewhere)", () => {
+  it("still shows its menu to agents, and sends them to its site to order, with no slot offered here", async () => {
+    const s = await crunch();
+    await s.db.client.query({ sql: "UPDATE business SET domain = 'seoulcrunch.kr'", params: [], method: "run" });
+    await dish(s, "Yangnyeom chicken", { value: 19000, currency: "KRW" }, { section: "chicken" });
+    const saved = await s.call(
+      "PUT",
+      "/v1/owner/settings",
+      { doc: { doorsElsewhere: [{ itemType: "order", url: "https://seoulcrunch.kr/order" }] } },
+      s.owner,
+    );
+    expect(saved.status, await saved.clone().text()).toBe(200);
+    const client = await mcp(s);
+    const names = (await client.listTools()).tools.map((t) => t.name);
+    expect(names).toContain("get_menu");
+    expect(names).not.toContain("list_order_slots");
+    const said = client.getInstructions() ?? "";
+    expect(said).toContain("get_menu");
+    expect(said).toContain("https://seoulcrunch.kr/order");
+    expect(said).not.toContain("list_order_slots");
+    expect(said).not.toContain("payload.fulfil");
+    await client.close();
+    // REST answers the same: no slot for an order the business takes elsewhere.
+    const r = await s.call("GET", `/v1/order-slots?date=${tomorrowIn("Asia/Seoul")}&method=pickup`);
+    expect(r.status, await r.clone().text()).toBe(200);
+    const body = (await r.json()) as { answer: string; slots: unknown[]; words: string };
+    expect(body).toMatchObject({ answer: "closed", slots: [] });
+    expect(body.words).toContain("https://seoulcrunch.kr/order");
+  });
+});
+
 describe("pay links in won and in yen", () => {
   for (const c of [
     { name: "Seoul Crunch Chicken", currency: "KRW", zone: "Asia/Seoul", dish: "Fried chicken", price: 18000, qty: 1 },

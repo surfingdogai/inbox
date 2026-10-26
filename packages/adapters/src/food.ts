@@ -41,11 +41,36 @@ const failed = (error: unknown): CallToolResult => {
 
 const nowOf = (caller: Caller) => (caller.now ? caller.now() : Date.now());
 
+const MENU_WORDS =
+  "This business has a menu. get_menu lists it by section: each item's price, its options (option groups, min and max, what each choice adds, halves for half-and-half), its allergens with a status, dietary tags, an age limit, when it is served and whether it is sold out today.";
+const ALLERGEN_WORDS =
+  "Allergens marked unconfirmed have not been checked by the business: tell your person to ask the business, never that a dish is free from anything";
+const ORDER_WORDS =
+  "To order for a time, list_order_slots gives the slots of a day (and for delivery the zone, its fee and minimum); then create_order with payload.fulfil {method, slot.start}, each line's options [{groupId, choiceId, portion}] and a note, and a tip {percent} where get_business_profile's kitchen lists tips.";
+const TABLE_WORDS =
+  "Tables are bookings of the table service with partySize; a large party becomes a request for a price.";
+
 export const FOOD_INSTRUCTIONS = [
-  "This business has a menu. get_menu lists it by section: each item's price, its options (option groups, min and max, what each choice adds, halves for half-and-half), its allergens with a status, dietary tags, an age limit, when it is served and whether it is sold out today.",
-  "Allergens marked unconfirmed have not been checked by the business: tell your person to ask the business, never that a dish is free from anything; an order with such a dish waits for a person at the business.",
-  "To order for a time, list_order_slots gives the slots of a day (and for delivery the zone, its fee and minimum); then create_order with payload.fulfil {method, slot.start}, each line's options [{groupId, choiceId, portion}] and a note, and a tip {percent} where get_business_profile's kitchen lists tips. Tables are bookings of the table service with partySize; a large party becomes a request for a price.",
+  MENU_WORDS,
+  `${ALLERGEN_WORDS}; an order with such a dish waits for a person at the business.`,
+  ORDER_WORDS,
+  TABLE_WORDS,
 ].join(" ");
+
+/**
+ * What an agent is told of the menu doors. A business that takes its orders on its own site
+ * (`settings.doorsElsewhere`, ADR-035) still shows its menu here, and the agent is sent there to order:
+ * never told of slots or an order create_order would refuse.
+ */
+export function foodInstructions(ordersAt: string | null): string {
+  if (!ordersAt) return FOOD_INSTRUCTIONS;
+  return [
+    MENU_WORDS,
+    `${ALLERGEN_WORDS}.`,
+    `This business takes orders at ${ordersAt}, not here: send your person there to order.`,
+    TABLE_WORDS,
+  ].join(" ");
+}
 
 const sectionsText = (r: Awaited<ReturnType<Capabilities["food"]["getMenu"]>>) =>
   r.sections
@@ -54,7 +79,12 @@ const sectionsText = (r: Awaited<ReturnType<Capabilities["food"]["getMenu"]>>) =
     )
     .join(". ") || "Nothing on the menu now.";
 
-export function registerPublicFoodTools(server: McpServer, caps: Capabilities, caller: Caller): void {
+export function registerPublicFoodTools(
+  server: McpServer,
+  caps: Capabilities,
+  caller: Caller,
+  opts: { readonly ordersAt?: string | null } = {},
+): void {
   server.registerTool(
     "get_menu",
     {
@@ -73,6 +103,8 @@ export function registerPublicFoodTools(server: McpServer, caps: Capabilities, c
       }
     },
   );
+  // Orders taken on the business's own site: no slot is offered here for one (foodInstructions).
+  if (opts.ordersAt) return;
   server.registerTool(
     "list_order_slots",
     {
