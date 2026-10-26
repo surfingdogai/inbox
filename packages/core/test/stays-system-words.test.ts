@@ -4,7 +4,7 @@ import { confirmationSentence } from "../src/stays/public";
 import type { PropertySetup } from "../src/stays/store";
 
 /**
- * A place to stay connected to its own system (ADR-033 §4.1, §6.1): guests read how it confirms in the
+ * A place to stay connected to its own system (ADR-037 §4.1, §6.1): guests read how it confirms in the
  * business's own words, never the name of the software behind it; and a stay priced from the system's
  * calendar is priced on one of its prices every night, never one night on one and the next on another.
  */

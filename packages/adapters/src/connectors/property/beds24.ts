@@ -24,7 +24,7 @@ import {
 import { z } from "zod";
 
 /**
- * Beds24 (ADR-033 §8.2): a place to stay's own channel manager and property system, over its API V2
+ * Beds24 (ADR-037 §8.2): a place to stay's own channel manager and property system, over its API V2
  * with an invite code the owner makes in Beds24. Rooms and what is free come in; stays are written to
  * Beds24 before the inbox promises anything; Beds24's word that a booking changed is a hint to read
  * again, never a fact.

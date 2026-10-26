@@ -3,7 +3,7 @@ import { type FixtureProperty, propertyAnswer } from "../../fixtures/property/be
 import { type FakePlatform, type FakeRequest, fakePlatform } from "../platform";
 
 /**
- * A local Beds24, as a fake (ADR-033 §8): Beds24 is never called. It speaks the paths, fields and
+ * A local Beds24, as a fake (ADR-037 §8): Beds24 is never called. It speaks the paths, fields and
  * headers of Beds24's API V2 as its own documentation gives them (https://beds24.com/api/v2/apiV2.yaml,
  * https://wiki.beds24.com/index.php/API_V2.0), over the inbox's own connector client, so every request
  * the adapter makes passes the same https, host and size checks as in production.

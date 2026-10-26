@@ -48,7 +48,7 @@ import { bookingWebhook, usageLimitAnswer, wikiHeaders, yamlHeaders } from "../f
 import { propertyContract, runContext } from "./contract";
 
 /**
- * Beds24 (ADR-033 §8.2) against a local Beds24 built from its own documentation: the property-system
+ * Beds24 (ADR-037 §8.2) against a local Beds24 built from its own documentation: the property-system
  * contract, then what is Beds24's own — its invite code, its tokens, its credits, its webhook, its
  * hosts, and a stay written once, read back as written, cancelled by status and never deleted. No
  * request ever leaves for Beds24 itself: the fake answers every one, and nothing else is reachable.

@@ -1337,13 +1337,13 @@ export type StayWriteStatus = "hold" | "provisional" | "confirmed";
 
 export interface StayWriter {
   /**
-   * What the system's documentation says of a normal write (ADR-033 §5.3): it refuses a night it has no
+   * What the system's documentation says of a normal write (ADR-037 §5.3): it refuses a night it has no
    * room for (`refuses_unavailable`), or nothing says it does, so the inbox checks live, writes, and reads
    * back (`check_then_write`, with `oversold`). Absent: `check_then_write` when `oversold` is given.
    */
   readonly writeGuard?: "refuses_unavailable" | "check_then_write" | undefined;
   /**
-   * How a stay waiting for what is due now keeps its room off sale on the system (ADR-033 D6): a hold
+   * How a stay waiting for what is due now keeps its room off sale on the system (ADR-037 D6): a hold
    * the system releases itself (`native_release`), a status it documents as blocking
    * (`provisional_status`), or none known yet (`none`). With `none` the adapter writes such a stay as
    * confirmed, marked as waiting, for the inbox to cancel if it is not paid; declared so the stays layer
