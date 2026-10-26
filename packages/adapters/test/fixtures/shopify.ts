@@ -2,7 +2,7 @@ import { hmacSha256Base64 } from "../../src/connectors/hook-sign";
 import { type FakePlatform, fakePlatform, json } from "../fakes/platform";
 
 /**
- * A made-up Shopify shop for the Shopify connector's tests (ADR-028), answering as the Admin API
+ * A made-up Shopify shop for the Shopify connector's tests (ADR-031), answering as the Admin API
  * 2026-10 documents it, over the base's fake platform (so the inbox's own connector client, with its
  * https-only, public-host and redirect checks, is the one used). No real shop is ever called; ids,
  * names and keys are made up, and keys are put together at run time so no file holds a string shaped

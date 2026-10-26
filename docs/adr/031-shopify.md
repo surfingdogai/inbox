@@ -1,7 +1,7 @@
-# ADR-028 — Shopify: messages, quotes and receipts beside Shopify's own checkout
+# ADR-031 — Shopify: messages, quotes and receipts beside Shopify's own checkout
 
 **Status:** proposed, 20 October 2026. Builds on ADR-014 (connectors strategy), ADR-023 (pay links) and
-ADR-026 (the shared base for shops). The docs cited are the ones Shopify published on 20 October 2026.
+ADR-030 (the shared base for shops). The docs cited are the ones Shopify published on 20 October 2026.
 
 ## Context
 
@@ -18,12 +18,12 @@ adds messages, quotes and receipts, and sends every cart to Shopify.
 - The inbox does not serve a Shopify shop's products to agents as a checkout of its own. The order door is
   meant to point at the shop (`doors_elsewhere`, `item_type: "order"`, the shop's own address), so the
   manifest sends agents to Shopify to buy and to the inbox for messages and quote requests. The connection
-  keeps the shop's primary domain (`extra.storefront`) for the doors chooser of ADR-031 to offer as
+  keeps the shop's primary domain (`extra.storefront`) for the doors chooser of ADR-035 to offer as
   "Order at your Shopify checkout"; until that chooser is in, the owner sets it in `doorsElsewhere`.
   Whether connecting Shopify sets that door by itself (orders to the shop's checkout; questions and quotes to
   the inbox), shown on the connected row as "Agents buy at your Shopify checkout · Change", is the founder's
   decision; the recommendation is yes, once the chooser lands. The docs say "soon" until then.
-- The catalogue still comes in (ADR-026 §3): agents asking for a quote, and the owner quoting, name the
+- The catalogue still comes in (ADR-030 §3): agents asking for a quote, and the owner quoting, name the
   shop's own products, at the shop's prices.
 
 ### 2. The owner's own app, and its two keys
@@ -99,7 +99,7 @@ adds messages, quotes and receipts, and sends every cart to Shopify.
 
 ### 4. An accepted quote or order becomes a draft order
 
-- `createLink` (ADR-026 §2) writes a **draft order** (`draftOrderCreate`): a line the shop sent in is its
+- `createLink` (ADR-030 §2) writes a **draft order** (`draftOrderCreate`): a line the shop sent in is its
   variant at the price the customer accepted (`priceOverride`); any other line is a custom one at its price
   (`originalUnitPriceWithCurrency`), taxable, shipped only when the order is delivered. The draft is in the
   order's currency (`presentmentCurrencyCode`), with the customer's email, a phone only when it is E.164,
@@ -110,7 +110,7 @@ adds messages, quotes and receipts, and sends every cart to Shopify.
 - **The shop's total is read, never assumed.** A draft is `ready` once Shopify has worked out its tax; the
   inbox reads it again a moment apart until it is, and otherwise comes back in half a minute. Its
   `totalPriceSet.presentmentMoney` is the shop's total: when the shop adds tax the customer did not accept,
-  the link is held and the owner may propose the shop's total (ADR-026 §2).
+  the link is held and the owner may propose the shop's total (ADR-030 §2).
 - **Nothing is added at the checkout either.** A delivered or collected order gets a shipping line of
   nothing, named in the customer's language (over thirty languages, English last), so Shopify's checkout
   asks no rate on top; automatic discounts and discount codes are off for the draft. The customer pays what
@@ -135,7 +135,7 @@ adds messages, quotes and receipts, and sends every cart to Shopify.
   for a test order (Shopify's Bogus Gateway), "card" for Shopify Payments.
 - Fulfilled (with the first tracking number, carrier and https link), delivered (every successful
   fulfilment delivered), refunded (`totalRefundedSet`), and a draft deleted before it was paid (cancelled:
-  the link closes and the order is the owner's, ADR-026 §2). Polled, these come one at a time; when Shopify
+  the link closes and the order is the owner's, ADR-030 §2). Polled, these come one at a time; when Shopify
   holds several, each is offered in turn an hour apart, and the inbox takes the ones it can.
 - An order's draft is found by the tag it kept from the draft: Shopify carries a draft's tags over to its
   order (https://help.shopify.com/en/manual/shopify-flow/reference/actions/add-draft-order-tags). An order
@@ -207,7 +207,7 @@ adds messages, quotes and receipts, and sends every cart to Shopify.
 - One connector, `shopify`, in `packages/adapters/src/connectors/shopify/` (`admin.ts`, `queries.ts`,
   `index.ts`); the gallery's Shopify card is no longer "being built", and says "Catalogue in, paid at your
   checkout". No migration, no spec change, no new dependency.
-- Small additions to the shared base (ADR-026), each optional and with the old behaviour as its default:
+- Small additions to the shared base (ADR-030), each optional and with the old behaviour as its default:
   `KnownLink.paidAt` (so a connector can stop following an order a platform no longer shows);
   `ConnectorDefinition.testLabel` (a connection's row in test mode says "development store" rather than
   "test key"); the owner app's steps are numbered, the change panel says "Refunds are made in Shopify."
@@ -220,5 +220,5 @@ adds messages, quotes and receipts, and sends every cart to Shopify.
   (`packages/adapters/test/shopify.test.ts`) and the whole inbox around it
   (`apps/inbox/test/connector-shopify.test.ts`).
 - Not in this connector: Shopify's own invoice email; orders placed at the shop's checkout copied into the
-  inbox (ADR-026: not now); a Shopify POS; the compliance webhooks of a public app, which come with the
+  inbox (ADR-030: not now); a Shopify POS; the compliance webhooks of a public app, which come with the
   founder's app; currencies not counted in hundredths.

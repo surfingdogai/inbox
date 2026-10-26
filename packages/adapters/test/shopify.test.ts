@@ -34,7 +34,7 @@ import {
 } from "./fixtures/shopify";
 
 /**
- * Contract tests for the Shopify connector (ADR-028) against a made-up shop answering as Shopify's
+ * Contract tests for the Shopify connector (ADR-031) against a made-up shop answering as Shopify's
  * Admin API 2026-10 documents it (`fixtures/shopify.ts`), through the inbox's own connector client:
  * what is asked of Shopify, with which token and variables, and what the inbox makes of the answer.
  * Above all: the keys go to the shop's own `.myshopify.com` address and nowhere else, a webhook is

@@ -15,7 +15,7 @@ import { createInbox } from "../src/app";
 import { freshDb } from "./harness";
 
 /**
- * The Shopify connector (ADR-028) end to end, through the doors an owner, a customer's agent and
+ * The Shopify connector (ADR-031) end to end, through the doors an owner, a customer's agent and
  * Shopify use, with a made-up shop answering as Shopify documents it (`fixtures/shopify.ts`): a florist
  * in Oaxaca who sells in pesos. Agents are sent to the shop's own checkout to buy from the cart, and
  * come to the inbox for questions and quotes; a quote the customer accepts becomes a draft order in

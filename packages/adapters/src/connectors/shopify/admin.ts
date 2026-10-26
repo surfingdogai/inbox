@@ -2,7 +2,7 @@ import { ConnectorError, type ConnectorHttp, type ConnectorHttpResponse, type OA
 import { retryAfterMs } from "../http";
 
 /**
- * Talking to one Shopify shop (ADR-028): its address, the access token, and the GraphQL Admin API with
+ * Talking to one Shopify shop (ADR-031): its address, the access token, and the GraphQL Admin API with
  * its cost-based rate limit. Every call goes to `https://<handle>.myshopify.com`, a host Shopify owns
  * and the shop's own address there; a custom domain is never called with a key.
  *

@@ -59,18 +59,18 @@ import {
 export { forgetBuckets, MAX_WAIT_MS, SHOPIFY_API_VERSION, SHOPIFY_SCOPES, shopDomainOf } from "./admin";
 
 /**
- * Shopify (ADR-028): messages, quotes and receipts for a Shopify shop, beside the checkout Shopify
+ * Shopify (ADR-031): messages, quotes and receipts for a Shopify shop, beside the checkout Shopify
  * already gives it. The shop's own Storefront MCP and checkout (UCP) stay Shopify's: agents are sent
  * there to buy what is in the cart, and come to the inbox for a question, a quote, a booking and the
  * signed receipt. What the connector adds:
  *
  * - **The catalogue comes in**: every variant, priced in the shop's currency, in stock when Shopify
- *   counts it, on sale when its product is active and the variant can be sold (ADR-026 §3).
+ *   counts it, on sale when its product is active and the variant can be sold (ADR-030 §3).
  * - **An accepted order or quote becomes a draft order** in the shop, at the prices the customer
  *   accepted, and the draft's own checkout (`invoiceUrl`) is the link to pay: the customer pays on
  *   Shopify, to the business, with the shop's own payment methods. The inbox never calls
  *   `draftOrderInvoiceSend`: the business's own email from the inbox carries the link, so the
- *   customer is told once, in the business's words (ADR-026 §1).
+ *   customer is told once, in the business's words (ADR-030 §1).
  * - **What Shopify says became of it** (paid, fulfilled, delivered, refunded, a draft deleted) reaches
  *   the inbox by webhook at the connection's own address, signed (`X-Shopify-Hmac-Sha256`, base64
  *   HMAC-SHA-256 of the body under the app's client secret), and is always read back with the key
@@ -552,7 +552,7 @@ export function shopifyConnector(
 
   /**
    * The webhooks the inbox made, by id and topic. Never their address: it holds the connection's own
-   * token, which the inbox keeps only sealed (ADR-026 §4). Where they point is known by its origin.
+   * token, which the inbox keeps only sealed (ADR-030 §4). Where they point is known by its origin.
    */
   function hooksOf(extra: Readonly<Record<string, unknown>>): { id: string; topic: string }[] {
     const raw = Array.isArray(extra.hooks) ? (extra.hooks as unknown[]) : [];
@@ -803,7 +803,7 @@ export function shopifyConnector(
    * and a shipping line of nothing for an order to deliver or collect, so the shop's checkout adds no
    * rate the customer did not accept (a delivery fee is one of the order's own lines). Discounts are
    * not added at checkout either: the customer pays what they accepted. Tax is the shop's to add;
-   * when it does, the shop's total differs and the link is held (ADR-026 §2).
+   * when it does, the shop's total differs and the link is held (ADR-030 §2).
    */
   function draftInput(request: PayLinkRequest, order: ShopOrder) {
     const currency = order.total.currency;
