@@ -61,6 +61,9 @@ export const ROUTE_SCOPES: Readonly<Record<string, readonly string[]>> = {
   "POST /products": ["catalogue:write"],
   "PATCH /products/:id": ["catalogue:write"],
   "DELETE /products/:id": ["catalogue:write"],
+  "POST /products/:id/barcode": ["catalogue:write"],
+  "GET /catalogue": [READ_SETUP, "catalogue:write"],
+  "POST /catalogue/sku-barcodes": ["catalogue:write"],
   // The owner's in person, checked by the capability whatever the scopes: never the AI, never a key.
   "GET /catalogue/floors": ["*"],
   "PUT /catalogue/floors": ["*"],

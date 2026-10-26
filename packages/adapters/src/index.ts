@@ -537,7 +537,7 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
   app.route("/v1/owner", ownerPhoneRoutes(phoneDeps));
   // The phone's own door: pairing, the sign-in link, tokens, and what it hears about (ADR-028).
   app.route("/v1/phone", phoneRoutes(phoneDeps));
-  app.route("/v1", publicRest(deps.caps));
+  app.route("/v1", publicRest(deps.caps, { baseUrl: deps.baseUrl }));
   // What a QR code or a sign-in link opens in a browser; the secret stays in the fragment.
   app.get("/phone", (c) =>
     c.html(phonePage(), 200, {

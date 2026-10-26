@@ -48,7 +48,26 @@ async function setup() {
   return { db, app: createApp({ db }) };
 }
 
-const PUBLIC_FIELDS = ["active", "description", "id", "name", "negotiable", "price", "sku", "stock", "withdrawal"];
+const PUBLIC_FIELDS = [
+  "active",
+  "availability",
+  "brand",
+  "condition",
+  "description",
+  "gtin",
+  "id",
+  "image_url",
+  "mpn",
+  "name",
+  "negotiable",
+  "no_gtin",
+  "price",
+  "sku",
+  "stock",
+  "updated_at",
+  "url",
+  "withdrawal",
+];
 
 describe("products at the public doors", () => {
   it("REST answers each product with its public fields only", async () => {
@@ -70,6 +89,30 @@ describe("products at the public doors", () => {
     const page = r.structuredContent as { items: Record<string, unknown>[] };
     expect(Object.keys(page.items[0] ?? {}).sort()).toEqual(PUBLIC_FIELDS);
     expect(JSON.stringify(r)).not.toMatch(/feed-secret|ext-1001|feed:/);
+  });
+});
+
+describe("list_products by id and by barcode (ADR-029)", () => {
+  it("answers the products a network showed, by their ids or their barcode, and refuses one that is no barcode", async () => {
+    const { db, app } = await setup();
+    const id = ulid();
+    await db.orm.insert(schema.products).values({
+      id,
+      name: "Moka pot",
+      price: { value: 1890, currency: "EUR" },
+      gtin: "04006381333931",
+      createdAt: T0,
+      updatedAt: T0,
+    });
+    const client = await connect(app, "/mcp");
+    const byIds = await client.callTool({ name: "list_products", arguments: { ids: [id] } });
+    expect((byIds.structuredContent as { items: { id: string }[] }).items.map((p) => p.id)).toEqual([id]);
+    const byGtin = await client.callTool({ name: "list_products", arguments: { gtin: "4006381333931" } });
+    expect((byGtin.structuredContent as { items: { gtin: string }[] }).items).toEqual([
+      expect.objectContaining({ id, gtin: "04006381333931", availability: "on_sale" }),
+    ]);
+    const bad = await client.callTool({ name: "list_products", arguments: { gtin: "4006381333932" } });
+    expect(bad.isError).toBe(true);
   });
 });
 

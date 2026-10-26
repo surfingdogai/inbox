@@ -11,11 +11,13 @@ import {
   hasOwnerSession,
   identityIssueHandler,
   mountDoors,
+  NETWORK_CATALOGUE_KIND,
   NETWORK_LISTING_KIND,
   NETWORK_PING_KIND,
   NETWORK_PING_ONE_KIND,
   NETWORK_PUBLISH_KIND,
   NETWORK_RECEIPT_KIND,
+  networkCatalogueHandler,
   networkListingHandler,
   networkPingHandler,
   networkPingOneHandler,
@@ -63,6 +65,7 @@ import {
   type RelayRegistrar,
   readSettings,
   relayAddress,
+  type Settings,
   VERSION,
 } from "@surfingdog/core";
 import { ensureMigrated, logMailOut, type MailOut, type SqliteSnapshot } from "@surfingdog/platform";
@@ -225,6 +228,9 @@ export function createInbox(deps: AppDeps): Inbox {
       if (!res.ok) throw new Error(`the manifest answered ${res.status}`);
       return res.text();
     },
+    // What the signed ping says of the business's products (ADR-029): their count and rev, so a
+    // network that holds another reads the signed feed again.
+    catalogue: (settings: Settings) => caps.catalogue.pingMember(settings),
   };
   // People (ADR-017 §2, §8): the network calls a create makes about its customer, and the mail a
   // one-time code goes out by. Without INBOX_SECRET_KEY the port cannot sign, and nothing is asked.
@@ -271,6 +277,7 @@ export function createInbox(deps: AppDeps): Inbox {
     .register(NETWORK_PING_KIND, networkPingHandler(network))
     .register(NETWORK_PING_ONE_KIND, networkPingOneHandler(network), { lane: networkLane })
     .register(NETWORK_LISTING_KIND, networkListingHandler(network), { lane: networkLane })
+    .register(NETWORK_CATALOGUE_KIND, networkCatalogueHandler(network), { lane: networkLane })
     .register(NETWORK_PUBLISH_KIND, networkPublishHandler(network), { lane: networkLane })
     .register(NETWORK_RECEIPT_KIND, networkReceiptHandler(network), { lane: networkLane })
     // A first contact the request could not finish is asked again, in that network's lane.
@@ -306,6 +313,7 @@ export function createInbox(deps: AppDeps): Inbox {
     for (const kind of [
       NETWORK_PING_ONE_KIND,
       NETWORK_LISTING_KIND,
+      NETWORK_CATALOGUE_KIND,
       NETWORK_PUBLISH_KIND,
       NETWORK_RECEIPT_KIND,
       IDENTITY_ISSUE_KIND,
@@ -525,6 +533,9 @@ export function createInbox(deps: AppDeps): Inbox {
       // Whether a network may carry an assistant's request here: said either way, so the owner's
       // switch reaches every network within minutes.
       carried: settings.carried,
+      // Where a network reads the business's products, while it lists them and this inbox can sign
+      // the feed (ADR-029): a business out of every directory lists none.
+      catalogue: !unlisted && caps.catalogue.served(settings) && caps.catalogue.canSign(),
     });
     // A minute: a network reads it again within five, and an owner's switch must not wait on a cache.
     return c.json(manifest, 200, { "Cache-Control": "public, max-age=60" });

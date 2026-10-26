@@ -362,7 +362,7 @@ describe("upgrading the live instance to several networks", () => {
     const { doc, version } = await s.get<{ doc: Settings; version: number }>("/v1/owner/settings");
     expect(version).toBe(LIVE_VERSION);
     expect(doc.networks).toEqual({
-      [NET]: { enabled: true, issue: true, share: { listing: true, counts: true, receipts: true } },
+      [NET]: { enabled: true, issue: true, share: { listing: true, counts: true, receipts: true, catalogue: true } },
     });
     expect(doc.booking.cancellationWindowMin).toBe(60);
     expect(doc.business.languages).toEqual(["en", "pt"]);

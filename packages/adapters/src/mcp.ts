@@ -311,7 +311,8 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
       "list_products",
       {
         title: "Products",
-        description: "Orderable products with prices in minor units.",
+        description:
+          "Orderable products with prices in minor units, each with its barcode (gtin, 14 digits) where it has one and whether it is in stock. ids: read the live price of products a network showed you, before your person agrees; gtin: the products with that barcode, in any of its lengths. The price here is the one that counts.",
         inputSchema: listProductsInput,
         annotations: readOnly,
       },
@@ -927,7 +928,7 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
       {
         title: "Add or change a product",
         description:
-          "Without product_id: creates a product (name and price required, price in minor units). With product_id: changes only the fields you pass. Prices are the owner's: a product you add is saved unpublished for the owner to check and publish, and a change to its price, or publishing it, is refused; so is changing withdrawal or negotiable. Send an idempotency_key so a retry does not create it twice.",
+          "Without product_id: creates a product (name and price required, price in minor units). With product_id: changes only the fields you pass. Prices are the owner's: a product you add is saved unpublished for the owner to check and publish, and a change to its price, or publishing it, is refused; so is changing withdrawal or negotiable. You may set its brand, condition, page and picture link. A barcode (gtin) you send is only proposed: the owner confirms it with one tap in the app; one that does not read as a product's barcode is refused. The part number (mpn), keeping it off networks (listed) and saying it has no barcode (no_gtin) are the owner's. Send an idempotency_key so a retry does not create it twice.",
         inputSchema: patchOf(productInput).extend({
           product_id: z.string().optional(),
           idempotency_key: idempotencyKey,

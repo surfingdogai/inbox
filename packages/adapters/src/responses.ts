@@ -534,6 +534,39 @@ export const publicProductSchema = z.object({
     .number()
     .int()
     .describe("1: a customer may suggest a price of their own for it where the business takes one; 0: never."),
+  availability: z
+    .enum(["in_stock", "out_of_stock", "on_sale"])
+    .describe("in_stock or out_of_stock where the stock is counted; on_sale where it is not."),
+  gtin: nullableString.describe("Its barcode as 14 digits, check digit verified, or null."),
+  no_gtin: z.boolean().describe("The business says it has no barcode."),
+  brand: nullableString,
+  mpn: nullableString.describe("The maker's part number."),
+  condition: z.string().describe("new, used or refurbished."),
+  url: nullableString.describe("Its page on the business's own site, or null."),
+  image_url: nullableString.describe("A link to its picture, or null."),
+  updated_at: z.string().describe("When it last changed, ISO 8601."),
+});
+
+/** The owner's view of their products on networks (`GET /v1/owner/catalogue`, ADR-029). */
+export const catalogueStatusSchema = z.looseObject({
+  listed: z.boolean(),
+  tax_included: z.boolean().nullable(),
+  blocked: z.enum(["out_of_directory", "cannot_sign", "no_network"]).nullable(),
+  counts: z.looseObject({
+    listed: z.number().int(),
+    needs_look: z.number().int(),
+    kept_off: z.number().int(),
+    off_sale: z.number().int(),
+  }),
+  products: z.array(
+    z.looseObject({
+      id: z.string(),
+      name: z.string(),
+      notes: z.array(z.looseObject({ code: z.string(), words: z.string(), action: z.string().optional() })),
+    }),
+  ),
+  sku_offer: z.looseObject({ count: z.number().int() }).nullable(),
+  networks: z.array(z.looseObject({ origin: z.string(), wants: z.boolean(), told: z.boolean().nullable() })),
 });
 
 export const pageOf = <T extends z.ZodType>(item: T) => z.object({ items: z.array(item), next_cursor: nullableString });

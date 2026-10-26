@@ -2,6 +2,8 @@ import {
   amendmentsSendable,
   appliesV6,
   canonicalNetworkOrigin,
+  catalogueJobStatement,
+  catalogueOwed,
   type Db,
   enabledNetworks,
   ensureJob,
@@ -14,6 +16,7 @@ import {
   type JobRow,
   listingJobStatement,
   listingOwed,
+  NETWORK_CATALOGUE_KIND,
   NETWORK_LISTING_KIND,
   NETWORK_PING_KIND,
   NETWORK_PING_ONE_KIND,
@@ -22,6 +25,9 @@ import {
   type NetworkJobPayload,
   type NetworkReceiptPayload,
   networkCarriedStatement,
+  networkCatalogueAnswerStatement,
+  networkCatalogueErrorStatement,
+  networkCatalogueToldStatement,
   networkDoorsStatement,
   networkFailureStatement,
   networkListedStatement,
@@ -32,6 +38,7 @@ import {
   networkStartStatements,
   networkSuccessStatement,
   PING_PERIOD_MS,
+  type PingCatalogue,
   type PingSignature,
   type PublishPayload,
   pingDedupeKey,
@@ -48,6 +55,7 @@ import {
   type Registration,
   readNetworkStatus,
   readPingCarried,
+  readPingCatalogue,
   readPingDoors,
   readSettings,
   reportableDomain,
@@ -58,6 +66,7 @@ import {
   takesV2,
   takesV6,
   V2_ONLY_KINDS,
+  wantsCatalogue,
   wantsListed,
 } from "@surfingdog/core";
 import { type Statement, sha256Hex } from "@surfingdog/platform";
@@ -81,6 +90,7 @@ import { pruneWebhookDeliveries, webhookSettings } from "./webhooks/deliver";
  * ever thrown into a request.
  */
 export {
+  NETWORK_CATALOGUE_KIND,
   NETWORK_LISTING_KIND,
   NETWORK_PING_KIND,
   NETWORK_PING_ONE_KIND,
@@ -135,7 +145,17 @@ export interface NetworkDeps {
    * it at once, so a changed profile shows within minutes rather than at the next regular read.
    */
   readonly manifest?: ((origin: string) => Promise<string>) | undefined;
+  /**
+   * What the signed ping says of the business's products (ADR-029, protocol §4.18): listed, with the
+   * count and rev a network compares to know whether to read the feed again. Absent, no ping carries
+   * `catalogue`.
+   */
+  readonly catalogue?: ((settings: Settings) => Promise<PingCatalogue>) | undefined;
 }
+
+/** What a network that lists no products answers the switch with (404): asked again a day later. */
+const NO_CATALOGUE = "lists no products (HTTP 404)";
+const NO_CATALOGUE_AGAIN_MS = 24 * 3_600_000;
 
 export interface PingCounts {
   bookings: number;
@@ -194,7 +214,7 @@ export function runtimeName(db: Db): string {
  * The tick: schedules its successor first, does the instance's housekeeping once, then queues one
  * ping and one publisher for every network that is switched on. It calls no network itself.
  */
-export function networkPingHandler(_deps?: NetworkDeps): JobHandler {
+export function networkPingHandler(deps?: NetworkDeps): JobHandler {
   return async (job, { db, now }) => {
     await ensureJob(db, NETWORK_PING_KIND, pingDedupeKey(now + PING_PERIOD_MS), {
       now,
@@ -233,6 +253,23 @@ export function networkPingHandler(_deps?: NetworkDeps): JobHandler {
       if (listingOwed(status.listed, wantsListed(settings, origin))) owedListing.push(origin);
     }
     if (owedListing.length) await db.batch(owedListing.map((origin) => listingJobStatement(origin, now)));
+    // The same for the business's products (ADR-029), from an inbox that can sign the switch: a network
+    // never told lists none, so one that should is owed a yes. One that lists no products at all (404)
+    // is asked again a day later.
+    if (deps && (await signingKey(deps))) {
+      const owedCatalogue: string[] = [];
+      for (const origin of Object.keys(settings.networks)) {
+        const status = await readNetworkStatus(db, origin);
+        if (status?.registration !== "registered") continue;
+        const waiting =
+          status.catalogueError === NO_CATALOGUE &&
+          status.catalogueAt !== null &&
+          now - status.catalogueAt < NO_CATALOGUE_AGAIN_MS;
+        if (!waiting && catalogueOwed(status.catalogueListed, wantsCatalogue(settings, origin)))
+          owedCatalogue.push(origin);
+      }
+      if (owedCatalogue.length) await db.batch(owedCatalogue.map((origin) => catalogueJobStatement(origin, now)));
+    }
     const on = Object.entries(settings.networks).filter(([, entry]) => reportsTo(entry));
     if (on.length === 0) return { note: "no network is switched on; add or switch one on in Settings → Networks" };
     // A network that no longer takes receipts may still be owed the outcomes of promises it has.
@@ -278,11 +315,13 @@ export function networkPingOneHandler(deps: NetworkDeps): JobHandler {
     // The key first: an inbox's first receipt key is made on first use, and the manifest publishes it.
     const key = await signingKey(deps);
     const manifestSha = await manifestDigest(deps, `https://${domain}`);
+    const catalogue = await pingCatalogue(deps, db, settings, network, key);
     const body = JSON.stringify({
       version: deps.version,
       runtime: runtimeName(db),
       ...(entry.share.counts ? { counts: await countLast24h(db, now) } : {}),
       ...(manifestSha ? { manifest_sha256: manifestSha } : {}),
+      ...(catalogue ? { catalogue } : {}),
     });
     const pingUrl = `${network}/v1/instances/${encodeURIComponent(domain)}/ping`;
     const ping = () => signedPing(deps, pingUrl, body, domain, key);
@@ -292,6 +331,7 @@ export function networkPingOneHandler(deps: NetworkDeps): JobHandler {
       await db.batch([
         networkSuccessStatement(network, now, { registration: "registered", pinged: true }),
         ...pingAnswerStatements(network, now, first),
+        ...catalogueToldStatements(network, now, first, catalogue),
       ]);
       // Which rules it applies, once a day: what decides whether it is sent claims v2 (§2.5). A
       // signed ping's answer has just said it, and then nothing more is asked today.
@@ -327,6 +367,96 @@ export function networkPingOneHandler(deps: NetworkDeps): JobHandler {
     return {
       note: `registered ${domain} at ${host}; verification pending (ping ${"status" in res ? `HTTP ${res.status}` : res.error})`,
     };
+  };
+}
+
+/**
+ * The ping's `catalogue` (ADR-029): only on a signed ping, from an inbox given a way to read its
+ * catalogue. Listed, with its count and rev, while the products are listed at this network; else
+ * `{"listed": false}` to a network last told they were, so a network that missed the switch hears it
+ * within the hour; else nothing.
+ */
+async function pingCatalogue(
+  deps: NetworkDeps,
+  db: Db,
+  settings: Settings,
+  network: string,
+  key: InstanceSigningKey | null,
+): Promise<PingCatalogue | null> {
+  if (!key || !deps.catalogue) return null;
+  if (wantsCatalogue(settings, network)) {
+    try {
+      return await deps.catalogue(settings);
+    } catch {
+      return null;
+    }
+  }
+  return (await readNetworkStatus(db, network))?.catalogueListed === 1 ? { listed: false } : null;
+}
+
+/** A verified ping that said the products are not listed told the network so, as the switch would. */
+function catalogueToldStatements(
+  network: string,
+  now: number,
+  ping: PingResult,
+  catalogue: PingCatalogue | null,
+): Statement[] {
+  if (!catalogue || catalogue.listed || ping.signature !== "verified") return [];
+  return [networkCatalogueToldStatement(network, now, false)];
+}
+
+// ---- one network's catalogue ---------------------------------------------------------------
+
+/**
+ * Tells one network whether it may list the business's products (ADR-029): the signed
+ * `POST /v1/instances/{domain}/catalogue` with `{"listed": …}`, as `wantsCatalogue` says when the job
+ * runs. Only a network that verified this inbox, and only from an inbox that can sign, since the feed
+ * it would read is signed with the same key. A 200 is recorded with how many it lists, so nothing is
+ * sent again until the answer changes; a 429 waits for the hourly tick; a 404 is a network that lists
+ * no products, asked again a day later.
+ */
+export function networkCatalogueHandler(deps: NetworkDeps): JobHandler {
+  return async (job, { db, now }) => {
+    const { network } = job.payload as NetworkJobPayload;
+    if (canonicalNetworkOrigin(network) !== network) return { note: `${network} is not a network origin` };
+    const host = hostOf(network);
+    const settings = await readSettings(db);
+    const want = wantsCatalogue(settings, network);
+    const status = await readNetworkStatus(db, network);
+    const word = want ? "listed" : "not listed";
+    if (!catalogueOwed(status?.catalogueListed, want)) return { note: `${host} already has the products ${word}` };
+    if (status?.registration !== "registered") return { note: `${host}: not registered; it lists no products yet` };
+    const key = await signingKey(deps);
+    if (!key) return { note: `${host}: cannot sign; it lists no products` };
+    const instance = instanceDomain(deps, settings);
+    if ("problem" in instance) return { note: instance.problem };
+    const domain = instance.domain;
+    const url = `${network}/v1/instances/${encodeURIComponent(domain)}/catalogue`;
+    const body = JSON.stringify({ listed: want });
+    const signed = await signInstanceRequest({ method: "POST", url, body, instance: `https://${domain}`, key });
+    const res = await call(deps, url, body, MAX_BODY, signed.headers);
+    if ("status" in res && res.status === 200) {
+      let live: number | null = null;
+      try {
+        const v = (JSON.parse(res.text) as { offers_live?: unknown }).offers_live;
+        live = Number.isInteger(v) && (v as number) >= 0 ? (v as number) : null;
+      } catch {
+        live = null;
+      }
+      await db.client.query(networkCatalogueToldStatement(network, now, want, live));
+      return { note: `told ${host} the products are ${word}` };
+    }
+    if ("status" in res && res.status === 404) {
+      await db.client.query(networkCatalogueErrorStatement(network, now, NO_CATALOGUE));
+      return { note: `${host} ${NO_CATALOGUE}; asked again in a day` };
+    }
+    if ("status" in res && res.status === 429) {
+      return { note: `${host} asked to wait (HTTP 429); the hourly tick asks again` };
+    }
+    await db.client.query(
+      networkCatalogueErrorStatement(network, now, `catalogue: ${"status" in res ? `HTTP ${res.status}` : res.error}`),
+    );
+    return fail(db, job, network, now, "catalogue", res);
   };
 }
 
@@ -446,6 +576,8 @@ function pingAnswerStatements(network: string, now: number, ping: PingResult): S
     ...(answer.doors ? [networkDoorsStatement(network, now, answer.doors)] : []),
     // What it carried here for people's AI assistants (ADR-025): for the owner alone.
     ...(answer.carried ? [networkCarriedStatement(network, now, answer.carried)] : []),
+    // What it lists of the business's products, and what it holds back and why (ADR-029): for the owner.
+    ...(answer.catalogue ? [networkCatalogueAnswerStatement(network, now, answer.catalogue)] : []),
   ];
 }
 
@@ -472,6 +604,7 @@ const signedPingAnswerSchema = z.looseObject({
     .optional(),
   doors: z.unknown().optional(),
   carried: z.unknown().optional(),
+  catalogue: z.unknown().optional(),
 });
 
 function signedPingAnswer(text: string): {
@@ -479,6 +612,7 @@ function signedPingAnswer(text: string): {
   rules: { version: number; next: number | null; nextAt: number | null };
   doors: ReturnType<typeof readPingDoors>;
   carried: ReturnType<typeof readPingCarried>;
+  catalogue: ReturnType<typeof readPingCatalogue>;
 } | null {
   let parsed: unknown;
   try {
@@ -499,6 +633,7 @@ function signedPingAnswer(text: string): {
     },
     doors: readPingDoors(doc.data.doors),
     carried: readPingCarried(doc.data.carried),
+    catalogue: readPingCatalogue(doc.data.catalogue),
   };
 }
 
@@ -1071,7 +1206,7 @@ async function fail(
   job: JobRow,
   network: string,
   now: number,
-  what: "ping" | "register" | "listing",
+  what: "ping" | "register" | "listing" | "catalogue",
   res: CallResult,
 ): Promise<{ note: string }> {
   const down =

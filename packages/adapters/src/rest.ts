@@ -4,8 +4,12 @@ import {
   addFeedInput,
   applyPresetInput,
   authorizeInput,
+  CATALOGUE_ITEMS_MAX,
+  CATALOGUE_PAGE_MAX,
+  CATALOGUE_SIGNATURE_HEADER,
   type Caller,
   type Capabilities,
+  type CatalogueResponse,
   cancelItemInput,
   checkAvailabilityInput,
   connectInput,
@@ -153,7 +157,20 @@ const listQuery = <T extends z.ZodType>(item: T) =>
   );
 
 export const listServicesQuery = listServicesInput.extend({ limit: limitQuery });
-export const listProductsQuery = listProductsInput.extend({ limit: limitQuery });
+export const listProductsQuery = listProductsInput.extend({
+  limit: limitQuery,
+  ids: listQuery(z.string().min(1).max(64))
+    .optional()
+    .describe("Only these products, by id: `ids=a,b`, at most 50. Read the live price of what a network showed you."),
+});
+/** `GET /v1/catalogue/changes`: where to start, and how many. */
+export const catalogueChangesQuery = z.object({
+  after: z.string().min(1).max(200).optional().describe("The next_cursor of the page before; leave it out to start."),
+  limit: z.coerce.number().int().min(1).max(CATALOGUE_PAGE_MAX).default(CATALOGUE_PAGE_MAX),
+});
+export const catalogueItemsQuery = z.object({
+  ids: listQuery(z.string().min(1).max(64)).describe(`At most ${CATALOGUE_ITEMS_MAX} product ids: ids=a,b.`),
+});
 export const listItemsQuery = listItemsInput.extend({
   needs_human: boolQuery.optional(),
   mail_failed: boolQuery.optional().describe("Only items with an email that could not be sent."),
@@ -179,9 +196,50 @@ const created = <T extends { replayed: boolean }>(
   r: T,
 ) => c.json(r, r.replayed ? 200 : 201, r.replayed ? { "Idempotent-Replayed": "true" } : {});
 
-export function publicRest(caps: Capabilities): Hono<CallerEnv> {
+/** A catalogue page as the inbox's door answers it: signed, cached as it says, or a 304 or a 404. */
+function catalogueAnswer(c: Context, r: CatalogueResponse): Response {
+  if (r.status === 304) return new Response(null, { status: 304, headers: { ETag: r.etag } });
+  if (r.status === 404) {
+    return c.json(
+      {
+        type: "https://surfingdog.ai/problems/not_listed",
+        title: "Not listed",
+        status: 404,
+        code: "not_listed",
+        detail:
+          r.why === "cannot_sign"
+            ? "This inbox cannot sign its catalogue, so it lists no products on networks. Its own doors list them: GET /v1/products."
+            : "This business does not list its products on networks now. Its own doors list them: GET /v1/products.",
+      },
+      404,
+      { "Content-Type": "application/problem+json", "Cache-Control": "public, max-age=60" },
+    );
+  }
+  return new Response(r.body, {
+    status: 200,
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": r.cacheControl,
+      ETag: r.etag,
+      [CATALOGUE_SIGNATURE_HEADER]: r.signature,
+    },
+  });
+}
+
+export function publicRest(caps: Capabilities, opts: { readonly baseUrl?: string | undefined } = {}): Hono<CallerEnv> {
   const app = new Hono<CallerEnv>();
   app.onError((error, c) => problemResponse(c, error));
+  /** Who is asking for a catalogue page, as its signature names it: this inbox's domain, and the address asked. */
+  const catalogueRequest = (c: Context) => {
+    const origin = publicOrigin(c.req.raw, opts.baseUrl);
+    const asked = new URL(c.req.url);
+    return {
+      domain: new URL(origin).hostname,
+      url: `${origin}${asked.pathname}${asked.search}`,
+      now: Date.now(),
+      ifNoneMatch: c.req.header("if-none-match"),
+    };
+  };
 
   app.get(
     "/business",
@@ -220,6 +278,44 @@ export function publicRest(caps: Capabilities): Hono<CallerEnv> {
     async (c) => {
       return c.json(await caps.listProducts(c.req.valid("query")), 200, { "Cache-Control": "public, max-age=60" });
     },
+  );
+
+  app.get(
+    "/catalogue/changes",
+    describeRoute({
+      tags: ["public"],
+      summary: "The business's products for networks, signed: what changed, page by page",
+      description:
+        "For a network that lists the business's products (protocol §4.18). Every product in the order it last changed, listed (its public fields, a barcode only when it is a product's barcode, availability as in stock, out of stock or on sale, never a count) or withdrawn. Pass next_cursor as after for the next page; at next_cursor null the reader has it all, and asks from the after of that last page next time. Signed in the Catalogue-Signature header: a compact JWS (typ sdi-catalogue+jws) by a key the manifest publishes under receipt_keys, over iss (this inbox's domain), url (the address asked), body_sha256, as_of and rev. 404 not_listed while the business keeps its products off networks.",
+      responses: {
+        200: {
+          description: "One page, signed",
+          headers: {
+            [CATALOGUE_SIGNATURE_HEADER]: { description: "Compact JWS over the page", schema: { type: "string" } },
+          },
+        },
+        304: { description: "The page the reader holds (If-None-Match)" },
+        404: { description: "not_listed: the business lists no products on networks now" },
+        422: { description: "A cursor this feed did not give, or a limit past 500" },
+      },
+    }),
+    validator("query", catalogueChangesQuery, hook),
+    async (c) => catalogueAnswer(c, await caps.catalogue.changes(c.req.valid("query"), catalogueRequest(c))),
+  );
+
+  app.get(
+    "/catalogue/items",
+    describeRoute({
+      tags: ["public"],
+      summary: "Products for networks by id, signed",
+      description: `At most ${CATALOGUE_ITEMS_MAX} products by id, as the feed has them, and the ids this inbox has no product for (missing). Signed as GET /v1/catalogue/changes is; never cached.`,
+      responses: {
+        200: { description: "The products, signed" },
+        404: { description: "not_listed: the business lists no products on networks now" },
+      },
+    }),
+    validator("query", catalogueItemsQuery, hook),
+    async (c) => catalogueAnswer(c, await caps.catalogue.items(c.req.valid("query").ids, catalogueRequest(c))),
   );
 
   app.get(
@@ -1236,6 +1332,49 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
     async (c) => {
       const input = { product_id: String(c.req.param("id")) };
       return once(c, "products.archive", input, (caller) => caps.setup.archiveProduct(caller, input));
+    },
+  );
+  app.post(
+    "/products/:id/barcode",
+    owner({
+      tags: ["setup"],
+      summary: "Use the barcode your AI proposed for a product",
+      description:
+        "The owner's one tap on a barcode their AI proposed (gtinGiven, ADR-029): it becomes the product's barcode. The owner in person only (403 not_allowed for the owner's AI and integration keys); 409 wrong_state when there is no proposed barcode.",
+      responses: json("Product", R.productSchema),
+      write: true,
+    }),
+    async (c) => {
+      const input = { product_id: String(c.req.param("id")) };
+      return once(c, "products.barcode", input, (caller) => caps.setup.confirmBarcode(caller, input));
+    },
+  );
+
+  app.get(
+    "/catalogue",
+    owner({
+      tags: ["setup"],
+      summary: "Your products on networks: the switch, what is listed, and what needs a look",
+      description:
+        "ADR-029. listed: the switch (Settings: catalogue.listed), on unless you switch it off; blocked: why it cannot work now (out_of_directory, cannot_sign, no_network) or null. counts: products listed, needing a look, kept off networks, off sale. products: only those with something to say, each note in plain words, with action confirm_barcode where one tap fixes it. sku_offer: imported products whose own code is a valid barcode and that have none, while the one-time offer stands. networks: each network switched on, whether it wants the products, whether it was told, how many it lists and holds back, and when it last checked.",
+      responses: json("Catalogue", R.catalogueStatusSchema),
+    }),
+    async (c) => c.json(await caps.catalogueStatus(c.get("caller"))),
+  );
+  app.post(
+    "/catalogue/sku-barcodes",
+    owner({
+      tags: ["setup"],
+      summary: "Use imported products' codes that are barcodes as their barcodes, or not now",
+      description:
+        "The owner's answer to the one-time offer (ADR-029): use true gives each imported product whose own code reads as a barcode, and that has none, that barcode; use false says not now. Either way the offer is not made again. The owner in person only.",
+      responses: json("How many products got a barcode", z.object({ used: z.number().int() })),
+      write: true,
+    }),
+    validator("json", z.object({ use: z.boolean() }), hook),
+    async (c) => {
+      const input = c.req.valid("json");
+      return once(c, "catalogue.sku_barcodes", input, (caller) => caps.useSkusAsBarcodes(caller, input));
     },
   );
 

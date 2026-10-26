@@ -181,7 +181,7 @@ describe("the manifest", () => {
           enabled: false,
           held: null,
           issue: true,
-          share: { listing: true, counts: true, receipts: true },
+          share: { listing: true, counts: true, receipts: true, catalogue: true },
           registration: "unregistered",
           // The default network is the one that gets customers' addresses before it has verified us.
           receives_emails: true,
@@ -196,6 +196,8 @@ describe("the manifest", () => {
           ping_signature: null,
           doors: null,
           carried: null,
+          // Switched off, it is sent no products, and was never told anything of them.
+          catalogue: { wants: false, told: null, offers_live: null, held: [], checked_at: null, at: null, error: null },
           receipts: { published: 0, queued: 0, refused: 0, held: 0, withheld: 0 },
         },
       ],

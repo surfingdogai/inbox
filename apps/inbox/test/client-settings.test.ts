@@ -205,7 +205,7 @@ describe("Settings → Networks", () => {
     enabled: true,
     held: null,
     issue: true,
-    share: { listing: true, counts: true, receipts: true },
+    share: { listing: true, counts: true, receipts: true, catalogue: true },
     registration: "registered",
     receives_emails: true,
     registered_at: null,
@@ -219,6 +219,7 @@ describe("Settings → Networks", () => {
     ping_signature: null,
     doors: null,
     carried: null,
+    catalogue: { wants: true, told: null, offers_live: null, held: [], checked_at: null, at: null, error: null },
     receipts: { published: 0, queued: 0, refused: 0, held: 0, withheld: 0 },
   };
   const now = Date.parse("2026-09-23T14:30:00Z");
