@@ -477,6 +477,20 @@
         },
         "required": ["item_type", "url"]
       }
+    },
+    "catalogue": {
+      "type": "object",
+      "properties": {
+        "feed": {
+          "type": "string",
+          "format": "uri"
+        },
+        "items": {
+          "type": "string",
+          "format": "uri"
+        }
+      },
+      "required": ["feed", "items"]
     }
   },
   "required": ["spec", "instance", "item_types", "protocols", "agent_policy", "receipt_keys", "review_services"]

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://surfingdog.ai/spec/schemas/catalogue-switch-response.json",
+  "title": "POST /v1/instances/{domain}/catalogue: 200",
+  "type": "object",
+  "properties": {
+    "listed": {
+      "type": "boolean"
+    },
+    "offers_live": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    }
+  },
+  "required": ["listed", "offers_live"]
+}

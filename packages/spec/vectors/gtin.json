@@ -1,0 +1,260 @@
+{
+  "version": 1,
+  "about": "Barcodes (protocol §4.18, ADR-029): how a barcode a feed, a connector or a person gives is read, normaliseGtin(input, hint) in packages/spec/src/gtin.ts. Each case gives the input, the field it came from (hint) and what it reads as: ok with its 14 digits, the form it was given in, its kind and its level and what was put right, or the problem. Check digits were worked out apart from both implementations (GS1 mod 10, weights 3 and 1 from the right). upc_e expands one UPC-E for each sixth digit, 0 to 9, to its UPC-A. prefixes pins the GS1 prefix ranges each kind and problem is read by, as of the GS1 General Specifications this version was written against: a later edition that moves one changes this file and both sides with it. Written by hand; checked on Node and workerd by packages/spec/test/gtin.test.ts, and by the network's own tests.",
+  "hints": ["barcode", "upc", "isbn", "any"],
+  "prefixes": {
+    "restricted": ["02", "04", "2"],
+    "coupon": ["05", "980", "981", "982", "983", "984", "99"],
+    "serial": ["977"],
+    "book": ["978", "979"],
+    "restricted_gtin8": ["0", "2"],
+    "restricted_indicator": ["9"],
+    "read_on": "Each prefix is of the 13 digits after a 14-digit barcode's indicator digit (its first). A barcode whose 14 digits start with six zeros is a GTIN-8, read on its own 8 digits by restricted_gtin8. An indicator digit of 1 to 8 is a case or pack of several (level case)."
+  },
+  "cases": [
+    {
+      "name": "an EAN-13",
+      "input": "4006381333931",
+      "hint": "any",
+      "expect": { "ok": { "gtin14": "04006381333931", "form": "gtin13", "kind": "global", "level": "unit" } }
+    },
+    {
+      "name": "an EAN-13 with its last digit wrong",
+      "input": "4006381333932",
+      "hint": "any",
+      "expect": { "problem": "check_digit", "expected": 1 }
+    },
+    {
+      "name": "a UPC-A",
+      "input": "036000291452",
+      "hint": "any",
+      "expect": { "ok": { "gtin14": "00036000291452", "form": "gtin12", "kind": "global", "level": "unit" } }
+    },
+    {
+      "name": "a UPC-A whose leading 0 a spreadsheet dropped, from a barcode column",
+      "input": "36000291452",
+      "hint": "barcode",
+      "expect": {
+        "ok": {
+          "gtin14": "00036000291452",
+          "form": "gtin12",
+          "kind": "global",
+          "level": "unit",
+          "repaired": "leading_zero"
+        }
+      }
+    },
+    {
+      "name": "the same from a UPC column",
+      "input": "36000291452",
+      "hint": "upc",
+      "expect": {
+        "ok": {
+          "gtin14": "00036000291452",
+          "form": "gtin12",
+          "kind": "global",
+          "level": "unit",
+          "repaired": "leading_zero"
+        }
+      }
+    },
+    {
+      "name": "eleven digits from a field that said nothing about barcodes",
+      "input": "36000291452",
+      "hint": "any",
+      "expect": { "problem": "length" }
+    },
+    {
+      "name": "an EAN-8",
+      "input": "96385074",
+      "hint": "any",
+      "expect": { "ok": { "gtin14": "00000096385074", "form": "gtin8", "kind": "global", "level": "unit" } }
+    },
+    {
+      "name": "a UPC-E from a UPC column, expanded to its UPC-A",
+      "input": "01234565",
+      "hint": "upc",
+      "expect": {
+        "ok": { "gtin14": "00012345000065", "form": "gtin12", "kind": "global", "level": "unit", "repaired": "upc_e" }
+      }
+    },
+    {
+      "name": "the same eight digits as an EAN-8: a restricted circulation number (RCN-8)",
+      "input": "01234565",
+      "hint": "any",
+      "expect": { "problem": "restricted" }
+    },
+    {
+      "name": "an EAN-8 starting with 2 (RCN-8)",
+      "input": "20123451",
+      "hint": "any",
+      "expect": { "problem": "restricted" }
+    },
+    {
+      "name": "an ISBN-10 with hyphens, as the book's barcode",
+      "input": "0-306-40615-2",
+      "hint": "any",
+      "expect": {
+        "ok": { "gtin14": "09780306406157", "form": "gtin13", "kind": "book", "level": "unit", "repaired": "isbn10" }
+      }
+    },
+    {
+      "name": "an ISBN-10 ending in X, from an ISBN column",
+      "input": "080442957X",
+      "hint": "isbn",
+      "expect": {
+        "ok": { "gtin14": "09780804429573", "form": "gtin13", "kind": "book", "level": "unit", "repaired": "isbn10" }
+      }
+    },
+    {
+      "name": "an ISBN-13 (979)",
+      "input": "9790123456785",
+      "hint": "isbn",
+      "expect": { "ok": { "gtin14": "09790123456785", "form": "gtin13", "kind": "book", "level": "unit" } }
+    },
+    {
+      "name": "an ISSN: a magazine's issue, never matched across businesses",
+      "input": "9771234567003",
+      "hint": "any",
+      "expect": { "ok": { "gtin14": "09771234567003", "form": "gtin13", "kind": "serial", "level": "unit" } }
+    },
+    {
+      "name": "a made-up number in the Kenyan prefix range",
+      "input": "6161234567890",
+      "hint": "any",
+      "expect": { "ok": { "gtin14": "06161234567890", "form": "gtin13", "kind": "global", "level": "unit" } }
+    },
+    {
+      "name": "a made-up number in the Japanese prefix range",
+      "input": "4901234567894",
+      "hint": "any",
+      "expect": { "ok": { "gtin14": "04901234567894", "form": "gtin13", "kind": "global", "level": "unit" } }
+    },
+    {
+      "name": "GS1's own example GTIN-14",
+      "input": "09506000134352",
+      "hint": "any",
+      "expect": { "ok": { "gtin14": "09506000134352", "form": "gtin14", "kind": "global", "level": "unit" } }
+    },
+    {
+      "name": "a case or pack of several (indicator 1)",
+      "input": "10616123456784",
+      "hint": "any",
+      "expect": { "ok": { "gtin14": "10616123456784", "form": "gtin14", "kind": "global", "level": "case" } }
+    },
+    {
+      "name": "a case of books",
+      "input": "19780306406154",
+      "hint": "any",
+      "expect": { "ok": { "gtin14": "19780306406154", "form": "gtin14", "kind": "book", "level": "case" } }
+    },
+    {
+      "name": "a variable-measure trade item (indicator 9)",
+      "input": "90616123456780",
+      "hint": "any",
+      "expect": { "problem": "restricted" }
+    },
+    {
+      "name": "the GS1 application identifier (01) in front",
+      "input": "(01)04006381333931",
+      "hint": "any",
+      "expect": { "ok": { "gtin14": "04006381333931", "form": "gtin14", "kind": "global", "level": "unit" } }
+    },
+    {
+      "name": "a 16-digit GS1-128 or DataMatrix scan, its 01 in front",
+      "input": "0104006381333931",
+      "hint": "barcode",
+      "expect": { "ok": { "gtin14": "04006381333931", "form": "gtin14", "kind": "global", "level": "unit" } }
+    },
+    {
+      "name": "spaces and full stops between the digits",
+      "input": " 4006 381.333 931 ",
+      "hint": "barcode",
+      "expect": { "ok": { "gtin14": "04006381333931", "form": "gtin13", "kind": "global", "level": "unit" } }
+    },
+    {
+      "name": "an in-store code (200-299)",
+      "input": "2001234567893",
+      "hint": "any",
+      "expect": { "problem": "restricted" }
+    },
+    {
+      "name": "a restricted circulation code (02)",
+      "input": "0212345678909",
+      "hint": "any",
+      "expect": { "problem": "restricted" }
+    },
+    {
+      "name": "a company's internal number (04)",
+      "input": "0412345678903",
+      "hint": "any",
+      "expect": { "problem": "restricted" }
+    },
+    {
+      "name": "a coupon (981)",
+      "input": "9811234567891",
+      "hint": "any",
+      "expect": { "problem": "coupon" }
+    },
+    {
+      "name": "a coupon (05)",
+      "input": "0512345678900",
+      "hint": "any",
+      "expect": { "problem": "coupon" }
+    },
+    {
+      "name": "a coupon (99)",
+      "input": "9912345678909",
+      "hint": "any",
+      "expect": { "problem": "coupon" }
+    },
+    {
+      "name": "a number a spreadsheet turned into a power of ten",
+      "input": "4.00638E+12",
+      "hint": "any",
+      "expect": { "problem": "spreadsheet_number" }
+    },
+    {
+      "name": "the same with a decimal comma",
+      "input": "4,00638E+12",
+      "hint": "barcode",
+      "expect": { "problem": "spreadsheet_number" }
+    },
+    {
+      "name": "all zeros",
+      "input": "0000000000000",
+      "hint": "any",
+      "expect": { "problem": "all_zero" }
+    },
+    {
+      "name": "too short",
+      "input": "12345",
+      "hint": "any",
+      "expect": { "problem": "length" }
+    },
+    {
+      "name": "letters in it",
+      "input": "40063813339A1",
+      "hint": "any",
+      "expect": { "problem": "not_digits" }
+    },
+    {
+      "name": "nothing",
+      "input": "   ",
+      "hint": "any",
+      "expect": { "problem": "empty" }
+    }
+  ],
+  "upc_e": [
+    { "upc_e": "01234505", "upc_a": "012000003455" },
+    { "upc_e": "01234514", "upc_a": "012100003454" },
+    { "upc_e": "01234523", "upc_a": "012200003453" },
+    { "upc_e": "01234531", "upc_a": "012300000451" },
+    { "upc_e": "01234543", "upc_a": "012340000053" },
+    { "upc_e": "01234558", "upc_a": "012345000058" },
+    { "upc_e": "01234565", "upc_a": "012345000065" },
+    { "upc_e": "01234572", "upc_a": "012345000072" },
+    { "upc_e": "01234589", "upc_a": "012345000089" },
+    { "upc_e": "01234596", "upc_a": "012345000096" }
+  ]
+}

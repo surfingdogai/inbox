@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { pingCarriedSchema } from "./carry";
+import { pingCatalogueAnswerSchema, pingCatalogueSchema } from "./catalogue";
 import {
   nextRulesSchema,
   passRefSchema,
@@ -77,6 +78,11 @@ export const pingRequestSchema = z.object({
     .optional()
     .describe(
       "SHA-256 of the manifest as the inbox serves it, lowercase hex. Read on a signed ping only: when it is not what the network holds, the network fetches the manifest at once (A2.5).",
+    ),
+  catalogue: pingCatalogueSchema
+    .optional()
+    .describe(
+      'The business\'s products on networks (§4.18, spec 0.9): listed, with the count and rev a network compares to know whether to read the feed again, or {"listed": false} once to a network last told they were. Signed pings only.',
     ),
 });
 export type PingRequest = z.infer<typeof pingRequestSchema>;
@@ -183,6 +189,11 @@ export const signedPingResponseSchema = z.object({
     .optional()
     .describe(
       "The requests this network carried to the inbox for assistants, and tried to, over the last 30 days (§4.17): counts only. Absent from a network that carries none.",
+    ),
+  catalogue: pingCatalogueAnswerSchema
+    .optional()
+    .describe(
+      "What this network lists of the business's products, what it holds back and why, and when it last checked (§4.18). Absent from a network that lists no products.",
     ),
 });
 

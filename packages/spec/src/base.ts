@@ -311,5 +311,10 @@ export const manifestSchema = z.object({
    * "https://…"}]`. Absent or empty, the inbox's own doors are all there is.
    */
   doors_elsewhere: z.array(doorElsewhereSchema).max(5).optional(),
+  /**
+   * Where a network reads the business's products (network.md §4.18, spec 0.9), while its owner lists
+   * them on networks: the signed feed of changes, and products by id. Absent, it lists none.
+   */
+  catalogue: z.object({ feed: z.url({ protocol: /^https$/ }), items: z.url({ protocol: /^https$/ }) }).optional(),
 });
 export type Manifest = z.infer<typeof manifestSchema>;

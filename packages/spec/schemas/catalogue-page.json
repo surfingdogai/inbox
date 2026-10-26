@@ -1,0 +1,254 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://surfingdog.ai/spec/schemas/catalogue-page.json",
+  "title": "GET /v1/catalogue/changes (on the inbox): 200",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "number",
+      "const": 1
+    },
+    "domain": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253
+    },
+    "as_of": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+    },
+    "catalogue": {
+      "type": "object",
+      "properties": {
+        "count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Products listed now."
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The latest change to any product, listed or not; null with none."
+        },
+        "tax_included": {
+          "description": "Whether the prices include tax; null when the business has not said.",
+          "type": ["boolean", "null"]
+        },
+        "rev": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{16}$",
+          "description": "Changes whenever count, updated_at or anything else the items are read with changes."
+        }
+      },
+      "required": ["count", "updated_at", "tax_included", "rev"]
+    },
+    "items": {
+      "maxItems": 500,
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "description": "The inbox's own id for the product: what an order names."
+              },
+              "state": {
+                "type": "string",
+                "const": "listed"
+              },
+              "sku": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 64
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 150
+              },
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 1000
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "price": {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991,
+                    "description": "Minor units: 4500 is €45.00. Never 0: a product with no price is not listed."
+                  },
+                  "currency": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{3}$"
+                  }
+                },
+                "required": ["value", "currency"]
+              },
+              "availability": {
+                "type": "string",
+                "enum": ["in_stock", "out_of_stock", "on_sale"]
+              },
+              "gtin": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^\\d{14}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Its barcode as 14 digits, check digit verified and never a shop's own code or a coupon (vectors/gtin.json), or null."
+              },
+              "no_gtin": {
+                "type": "boolean",
+                "description": "The owner says it has no barcode (bread, a print, a repair)."
+              },
+              "brand": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 70
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "mpn": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 70
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The maker's part number, as the business gave it."
+              },
+              "condition": {
+                "type": "string",
+                "enum": ["new", "used", "refurbished"]
+              },
+              "url": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Its page, only when it is on the business's own site."
+              },
+              "image_url": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "A link to its picture; the picture is never copied."
+              },
+              "updated_at": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+              },
+              "hash": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{16}$",
+                "description": "The first 16 hex digits of SHA-256 over the item's canonical JSON, without updated_at and hash."
+              }
+            },
+            "required": [
+              "id",
+              "state",
+              "sku",
+              "name",
+              "description",
+              "price",
+              "availability",
+              "gtin",
+              "no_gtin",
+              "brand",
+              "mpn",
+              "condition",
+              "url",
+              "image_url",
+              "updated_at",
+              "hash"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "state": {
+                "type": "string",
+                "const": "withdrawn"
+              },
+              "updated_at": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+              }
+            },
+            "required": ["id", "state", "updated_at"]
+          }
+        ]
+      }
+    },
+    "next_cursor": {
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 200
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Pass it as after for the next page; null at the end."
+    }
+  },
+  "required": ["version", "domain", "as_of", "catalogue", "items", "next_cursor"]
+}

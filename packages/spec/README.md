@@ -89,6 +89,17 @@ or network:
   leaderboard row's `real_business`, `order_by`'s `real_business` and the home-page list `scope.real` (`?real=1`); and
   `/v1/stats` `directory.real_businesses_verified`, given only while the rules are applied. A row without
   `real_business` reads as before.
+- 0.9 (optional for a network and for an inbox): the catalogue (protocol §4.18,
+  [ADR-029](../../docs/adr/029-catalogue.md)). An inbox whose owner lists its products on networks serves a
+  signed feed of them, `GET /v1/catalogue/changes` and `GET /v1/catalogue/items` (`cataloguePageSchema`,
+  `catalogueItemsSchema`, `schemas/catalogue-page.json`, `schemas/catalogue-items.json`), signed in
+  `Catalogue-Signature` (`CATALOGUE_SIGNATURE_TYP`, `catalogueSignatureSchema`); its manifest names them
+  (`catalogue {feed, items}`); its signed ping carries `catalogue` (`pingCatalogueSchema`) and a signed ping's
+  answer may carry the network's (`pingCatalogueAnswerSchema`); the owner's switch is
+  `POST /v1/instances/{domain}/catalogue` (`schemas/catalogue-switch-request.json`). One barcode check for
+  both sides: `normaliseGtin`, `gtinCheckDigit`, `expandUpcE`, `gtinDisplay` and `GTIN_PREFIXES`, held to
+  `vectors/gtin.json`; and the names a template gives its sample products (`vocab/placeholder-titles.json`,
+  `isPlaceholderTitle`). A ping, an answer or a manifest without `catalogue` reads as before.
 
 Everything here is published, byte for byte, at https://surfingdog.ai/spec/ (the files under
 `/spec/schemas/`, `/spec/vectors/` and `/spec/vocab/`, the vocabulary's versions at
@@ -113,6 +124,7 @@ implementations:
 | `mcp.json` | what an assistant reads from the network's tools (ADR-017 A2.7): the card derived from each listing, today's hours in the business's zone, and one answer of each tool |
 | `score.json` | the agentic score, rules version 2 (§4.13): for each case a profile and every capability's state, and the score, grade, numerator and fixes the published formula gives; `score-v1.json` the same under version 1 |
 | `door-reports.json` | door reports (§4.15): how a network reads a call (strict JSON, the limits, each report taken or ignored and why), what each report can do by its proof and source, how the network's own reads move a door (§4.8), and what earns a reporter points and who is a contributor (`contributors`, §4.15) |
+| `gtin.json` | barcodes (§4.18): how one is read, checked and classified, each input with its hint and what it reads as, the UPC-E expansion for each sixth digit, and the GS1 prefixes pinned; written by hand, the check digits worked out apart from both implementations |
 | `door-history.json` | a door's history (§4.8): the days seen answering, days checked, answered and refused, the floored share from 14 days, the last 90 days as a line, since or from…to, and the door types never shown; `summary` is informative |
 
 `vocab/categories.json` is the categories list a profile names its categories from: each slug with
