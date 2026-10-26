@@ -350,6 +350,32 @@ describe("a pinned sender", () => {
     expect(pinnedMailOut(log, { from, fromTakesReplies: true }).replies).toBe(true);
     // A transport that pins nothing says nothing: a reply is taken to reach the business.
     expect(log.replies).toBeUndefined();
+    // The business's connected domain alone reaches nobody: no conversation address is written
+    // without an inbound address of its own, and Settings may not name one there yet.
+    expect(pinnedMailOut(log, { from, replyDomains: ["bikeworkshop.example"] }).replies).toBe(false);
+    expect(pinnedMailOut(log, { from, inbound: "bike-workshop@in.example.net" }).replies).toBe(true);
+  });
+
+  it("keeps a Reply-To on the business's own domain, and drops one anywhere else", async () => {
+    const log = logMailOut();
+    const out = pinnedMailOut(log, {
+      from: { address: "bike-workshop@mail.example.net" },
+      ownDomain: "BikeWorkshop.example",
+    });
+    expect(out.replyOwnDomain).toBe("bikeworkshop.example");
+    const base = { from: { address: "x@example.org" }, to: ["rider@example.org"], subject: "Hi", text: "Hi" };
+    await out.send({ ...base, replyTo: "Hello@BikeWorkshop.example" });
+    await out.send({ ...base, replyTo: "hello@attacker.example" });
+    await out.send({ ...base, replyTo: "hello@shop.bikeworkshop.example" });
+    await out.send({ ...base, replyTo: "a@bikeworkshop.example, b@attacker.example" });
+    expect(log.sent.map((m) => m.replyTo)).toEqual(["hello@bikeworkshop.example", undefined, undefined, undefined]);
+    // Without a domain of its own, nothing from Settings is kept.
+    const bare = logMailOut();
+    await pinnedMailOut(bare, { from: { address: "bike-workshop@mail.example.net" } }).send({
+      ...base,
+      replyTo: "hello@bikeworkshop.example",
+    });
+    expect(bare.sent[0]?.replyTo).toBeUndefined();
   });
 
   // The name the message carries is the business's, which the owner, or a key with settings:write,

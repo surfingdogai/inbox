@@ -523,7 +523,8 @@ describe("a hosted sender", () => {
       from: { address: "oficina-mare@mail.example.net", name: "Oficina Maré" },
       replyDomains: ["in.example.net", "oficinamare.example"],
     });
-    expect(pinned.replies).toBe(true);
+    // Domains alone promise no reply: only an inbound address of its own writes conversation addresses.
+    expect(pinned.replies).toBe(false);
     const send = (replyTo: string) =>
       pinned.send({ from: { address: "x@y.example" }, to: ["rita@example.com"], subject: "s", text: "t", replyTo });
     await send("oficina-mare+tabcdefghijklmnop@in.example.net");

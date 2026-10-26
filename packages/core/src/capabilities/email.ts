@@ -117,6 +117,10 @@ export interface EmailChannelView {
   };
   /** Where customers' replies go: their conversation's own address, the address Settings name, or nowhere. */
   readonly replies: "conversation" | "settings" | "none";
+  /** The address customers' replies go to when Settings name it (`replies` is `settings`), if known. */
+  readonly reply_to: string | null;
+  /** The only domain Customers reply to may be on, when the host restricts it (a hosted inbox's own). */
+  readonly reply_domain: string | null;
   /** The owner can answer an alert by replying to it. */
   readonly owner_replies: boolean;
   readonly forwards: readonly ForwardView[];
@@ -196,6 +200,8 @@ export class EmailChannelCapabilities {
         : null,
       sending: { from, name: sender?.from.name ?? facts.name, mode, own },
       replies: inbound ? "conversation" : sender?.replyTo || transport?.replies !== false ? "settings" : "none",
+      reply_to: inbound ? null : (sender?.replyTo ?? null),
+      reply_domain: transport?.pinned ? (transport.replyOwnDomain ?? null) : null,
       owner_replies: inbound !== null,
       forwards: (await listForwards(this.db)).map((f) => view(f, now)),
       providers: MAIL_PROVIDERS.map((id) => ({ id, name: MAIL_PROVIDER_NAMES[id] })),

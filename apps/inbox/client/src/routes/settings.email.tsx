@@ -408,7 +408,13 @@ function SendingCard({ view }: { view: EmailChannelView }) {
         {s.mode === "own"
           ? "Your own address, signed for your domain."
           : s.mode === "host"
-            ? "In your name. Customers' replies come back here."
+            ? view.replies === "none"
+              ? view.reply_domain
+                ? `In your name. Customers can't reply to these yet: set Customers reply to in Settings to an address at ${view.reply_domain}.`
+                : "In your name. Customers can't reply to these yet: they reach you through your inbox's page."
+              : view.reply_to
+                ? `In your name. Customers' replies go to ${view.reply_to}.`
+                : "In your name. Customers' replies come back here."
             : s.mode === "settings"
               ? "As your server's mail service sends it."
               : ""}

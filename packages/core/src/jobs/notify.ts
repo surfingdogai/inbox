@@ -29,6 +29,7 @@ import {
   mailDomain,
   senderOf,
   sendLogged,
+  settingsReplyTo,
   storeMail,
   threadHeaders,
 } from "./mail-log";
@@ -325,7 +326,7 @@ async function customerMail(
       lang: stayLangOf,
       words: cause.words,
       automated: isAutomated(cause.actorKind, cause.channel, cause.writtenBy),
-      replies: o.mailOut.replies !== false,
+      replies: o.mailOut.replies !== false || settingsReplyTo(o.settings, o.mailOut) !== undefined,
       links,
       pay: open.map((r) => ({
         scheduleId: String(r[0]),
@@ -391,8 +392,12 @@ async function customerMail(
     name: o.contact?.name ?? null,
     links,
     // A reply reaches the business unless the transport says it reaches nobody (a hosted inbox's
-    // pinned sender with no Reply-To): then the email asks for none.
-    replies: o.mailOut.replies !== false || inboundOf(o.settings) !== null,
+    // pinned sender with no Reply-To): then the email asks for none. Customers reply to on the
+    // business's own domain, or a conversation's address, reaches it.
+    replies:
+      o.mailOut.replies !== false ||
+      inboundOf(o.settings) !== null ||
+      settingsReplyTo(o.settings, o.mailOut) !== undefined,
     linked: linkedRow ? rowToItem(linkedRow) : null,
     unpriced: (p.event === "create" || item.state === "proposed") && (await createdUnpriced(db, item.id)),
     cancellationWindowMin: o.settings.booking.cancellationWindowMin,

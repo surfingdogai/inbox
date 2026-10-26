@@ -1,4 +1,5 @@
 import type { CustomerMailKind, MailAbout, MailHold, MailOut, OutboundMail, Statement } from "@surfingdog/platform";
+import { onDomain } from "@surfingdog/platform";
 import type { Db } from "../db";
 import { LOOP_HEADER, loopMark } from "../email/channel";
 import { ulid } from "../ids";
@@ -379,13 +380,14 @@ async function raiseNotSent(db: Db, itemId: string, now: number): Promise<void> 
 /**
  * The sender every customer email is from, and where a reply goes; null when there is no address to
  * send from. A pinned transport (`pinnedMailOut`) is who the email is from whatever Settings say:
- * its address, its name when it has one, and no Reply-To from Settings (it sets its own).
+ * its address, its name when it has one, and a Reply-To from Settings only on the business's own
+ * domain (`settingsReplyTo`).
  */
 export function senderOf(
   settings: Settings,
   opts: {
     /** How email goes out: its own address (MAIL_FROM), and whether every message goes from it. */
-    readonly transport?: Pick<MailOut, "sender" | "pinned"> | null | undefined;
+    readonly transport?: Pick<MailOut, "sender" | "pinned" | "replyOwnDomain"> | null | undefined;
     readonly publicUrl?: string | undefined;
     /** The business's name as its profile gives it (`businessFacts`), which the setup wizard writes. */
     readonly business?: string | undefined;
@@ -403,10 +405,24 @@ export function senderOf(
       settings.business.name.trim() ||
       own?.name ||
       hostOf(opts.publicUrl);
+  const replyTo = settingsReplyTo(settings, opts.transport);
   return {
     from: { address, ...(name ? { name } : {}) },
-    ...(!pinned && settings.email.replyTo ? { replyTo: settings.email.replyTo } : {}),
+    ...(replyTo ? { replyTo } : {}),
   };
+}
+
+/**
+ * Customers reply to from Settings, when the transport sends it: always, unless it is pinned; a
+ * pinned one (a hosted inbox) keeps only an address on the business's own domain, which DNS proved.
+ */
+export function settingsReplyTo(
+  settings: Settings,
+  transport: Pick<MailOut, "pinned" | "replyOwnDomain"> | null | undefined,
+): string | undefined {
+  const replyTo = settings.email.replyTo;
+  if (!replyTo) return undefined;
+  return transport?.pinned === true ? onDomain(replyTo, transport.replyOwnDomain) : replyTo;
 }
 
 /** The domain our msg-ids carry: the sender's. */

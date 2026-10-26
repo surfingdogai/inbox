@@ -33,7 +33,7 @@ Your own address is never shown to a customer.
 
 ## Who replies go out from
 
-- **Hosted:** in your business's name, from the inbox's sending address. Customers' replies come back to the conversation.
+- **Hosted:** in your business's name, from the inbox's sending address. When your inbox has an address of its own, customers' replies come back to the conversation. Until then, set *Customers reply to* in Settings to a mailbox at your own domain (such as `hello@yourshop.com`) and their replies go there; without one, emails to customers don't ask for a reply.
 - **Hosted, from your own address** (when your host offers it): once an address of yours forwards here and passed its check, choose it under *Replies go out from*. The page shows the DNS records to add — three that sign your email and two for a subdomain that takes returned email; your domain's own SPF record is left as it is, and none of them changes where your email goes — with your DNS provider's steps, *Copy all* and *Send to my web person*, and checks them. Email goes from your address once they check out, and from the inbox's sending address until then.
 - **Your own server:** from `MAIL_FROM`, through the mail service you set up. That service's own records sign for your domain.
 

@@ -109,6 +109,9 @@ export function tenantMailOut(d: BuildDeps): MailOut {
     replyTo: p.mail.reply_to ?? undefined,
     replyDomains,
     inbound: p.mail.inbound ?? undefined,
+    // Once DNS has proved the business's domain (level 2), Customers reply to may name an address
+    // there, so a customer's reply reaches the business even with no inbound address of its own.
+    ownDomain: p.level === 2 ? p.domain : undefined,
   });
 }
 

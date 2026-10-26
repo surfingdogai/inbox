@@ -307,15 +307,24 @@ export function pinnedMailOut(
     readonly replyDomains?: readonly string[] | undefined;
     /** The inbox's own address: a conversation's address on a domain not allowed is moved onto it. */
     readonly inbound?: string | undefined;
+    /**
+     * The business's own domain: a message's Reply-To on it (Customers reply to in Settings, such as
+     * `hello@shop.example`) is kept, so a customer's reply reaches the business's own mailbox.
+     */
+    readonly ownDomain?: string | undefined;
   },
 ): MailOut {
   const sender = pin.from.name ? { address: pin.from.address, name: pin.from.name } : { address: pin.from.address };
   const domains = (pin.replyDomains ?? []).map((d) => d.trim().toLowerCase()).filter(Boolean);
+  const ownDomain = pin.ownDomain?.trim().toLowerCase() || undefined;
   return {
     sender,
     pinned: true,
-    replies: Boolean(pin.replyTo) || pin.fromTakesReplies === true || domains.length > 0,
+    // Conversation addresses exist only with an inbound address of its own; a Reply-To on the
+    // business's domain is a per-message matter, which `settingsReplyTo` answers.
+    replies: Boolean(pin.replyTo) || pin.fromTakesReplies === true || Boolean(pin.inbound),
     ...(domains.length ? { replyDomains: domains } : {}),
+    ...(ownDomain ? { replyOwnDomain: ownDomain } : {}),
     ...(inner.delivers === false ? { delivers: false } : {}),
     ...(inner.allowCustomerMail ? { allowCustomerMail: inner.allowCustomerMail } : {}),
     ...(inner.beforeSend ? { beforeSend: inner.beforeSend } : {}),
@@ -331,7 +340,7 @@ export function pinnedMailOut(
       );
       const conversation =
         conversationAddress(mail.replyTo, domains) ?? movedConversation(mail.replyTo, pin.inbound, domains);
-      const replyTo = conversation ?? pin.replyTo;
+      const replyTo = conversation ?? onDomain(mail.replyTo, ownDomain) ?? pin.replyTo;
       const replyName = conversation
         ? oneLine(mail.replyToName ?? "")
             .replace(/[<>]/g, " ")
@@ -349,6 +358,16 @@ export function pinnedMailOut(
       });
     },
   };
+}
+
+/**
+ * `address` when it is one plain address on exactly `domain` (not a subdomain), lowercased, else
+ * undefined: the only Reply-To from Settings a pinned sender keeps.
+ */
+export function onDomain(address: string | undefined, domain: string | undefined): string | undefined {
+  if (!address || !domain) return undefined;
+  const m = /^([a-z0-9._+-]{1,64})@([a-z0-9.-]{1,253})$/.exec(address.trim().toLowerCase());
+  return m && m[2] === domain.trim().toLowerCase() ? m[0] : undefined;
 }
 
 /**

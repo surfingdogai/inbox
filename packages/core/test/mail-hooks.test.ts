@@ -145,6 +145,38 @@ describe("a pinned sender", () => {
     expect(s.to("rita@example.com")[0]?.headers?.References).toMatch(/@mail\.example\.net>$/);
     expect((await s.caps.getMailStatus(owner())).sender).toBe(true);
   });
+
+  it("sends a customer's reply to Customers reply to on the business's own domain, and asks for none without one", async () => {
+    // A hosted inbox with its domain connected and no inbound address: Settings name the mailbox.
+    const log = logMailOut();
+    const pinned = pinnedMailOut(log, { from: PIN, ownDomain: "oficinamare.pt" });
+    const s = await setup(Object.assign(pinned, { sent: log.sent }), {
+      email: { replyTo: "ola@oficinamare.pt" },
+    });
+    const b = await s.book();
+    await s.drain(T0 + 2 * MIN);
+    await s.caps.reply(owner(T0 + 3 * MIN), { item_id: b.view.item.id, body: "See you there.", internal: false });
+    await s.drain(T0 + 4 * MIN);
+    const toRita = s.to("rita@example.com");
+    expect(toRita).toHaveLength(2);
+    for (const mail of toRita) expect(mail.replyTo).toBe("ola@oficinamare.pt");
+    expect(toRita.some((m) => m.text.includes("Reply to this email"))).toBe(true);
+
+    // The same inbox with no Customers reply to: nothing reaches anyone, so no email invites a reply.
+    const bare = logMailOut();
+    const t = await setup(
+      Object.assign(pinnedMailOut(bare, { from: PIN, ownDomain: "oficinamare.pt" }), { sent: bare.sent }),
+      {},
+    );
+    const c = await t.book();
+    await t.drain(T0 + 2 * MIN);
+    await t.caps.reply(owner(T0 + 3 * MIN), { item_id: c.view.item.id, body: "See you there.", internal: false });
+    await t.drain(T0 + 4 * MIN);
+    for (const mail of t.to("rita@example.com")) {
+      expect(mail.replyTo).toBeUndefined();
+      expect(mail.text).not.toContain("Reply to this email");
+    }
+  });
 });
 
 describe("the kinds of customer email a host allows", () => {

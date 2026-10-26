@@ -149,6 +149,12 @@ describe("mail", () => {
       // With an address of its own, every conversation has one: a reply always reaches the inbox.
       const withInbound = { ...policy(null), mail: { ...policy(null).mail, inbound: "bike-workshop@in.example.net" } };
       expect(tenantMailOut(deps(withInbound)).replies).toBe(true);
+      // A connected domain at level 2 lets Customers reply to name an address there; alone it
+      // promises no reply. Below level 2 the domain is not proved yet, so nothing is let through.
+      const connected = { ...policy(null), domain: "bikeworkshop.example" };
+      expect(tenantMailOut(deps(connected)).replies).toBe(false);
+      expect(tenantMailOut(deps(connected)).replyOwnDomain).toBe("bikeworkshop.example");
+      expect(tenantMailOut(deps({ ...connected, level: 1 })).replyOwnDomain).toBeUndefined();
     } finally {
       ledger.close();
       rmSync(dir, { recursive: true, force: true });

@@ -75,6 +75,12 @@ export interface MailOut {
    */
   readonly replyDomains?: readonly string[] | undefined;
   /**
+   * The business's own domain, when this transport lets Customers reply to in Settings name an
+   * address there (a hosted inbox's pinned sender, once its domain is connected). Absent, a pinned
+   * transport takes no Reply-To from Settings.
+   */
+  readonly replyOwnDomain?: string | undefined;
+  /**
    * Whether this kind of email to a customer may go at all. Asked before each one is written and
    * again before it is sent; one that may not is kept on its item as not sent (`host_policy`).
    * Absent, every kind goes.
