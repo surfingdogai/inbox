@@ -39,7 +39,7 @@ import { unifiedLogObject } from "../fixtures/property/hostaway/webhooks";
 import { propertyContract, runContext } from "./contract";
 
 /**
- * Hostaway's adapter (ADR-033 §8) against its fake, built from Hostaway's own documentation (the
+ * Hostaway's adapter (ADR-037 §8) against its fake, built from Hostaway's own documentation (the
  * fixtures' headers keep each excerpt): the property system contract for three places, then what is
  * Hostaway's own: a token fetched again on a 403 at most once a run and used 1.5 s after it is issued,
  * a 403 on a fresh token read as a refusal, the wait read as a Unix time and doubled for a 429 close

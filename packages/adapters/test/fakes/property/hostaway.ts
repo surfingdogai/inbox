@@ -14,7 +14,7 @@ import { deliveryBody, RATE_LIMITED, rateLimitHeaders } from "../../fixtures/pro
 import { type FakePlatform, type FakeRequest, fakePlatform } from "../platform";
 
 /**
- * Hostaway, as a fake (ADR-033 §8): a small in-memory account speaking the documented paths of
+ * Hostaway, as a fake (ADR-037 §8): a small in-memory account speaking the documented paths of
  * <https://api.hostaway.com/documentation> (see the fixtures' headers for each excerpt), and never the
  * real API. It issues tokens that work a second after they are issued and stop working when told
  * (403), counts requests in a sliding 10-second window and answers 429 with the documented headers,

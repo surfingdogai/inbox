@@ -24,7 +24,7 @@ import { z } from "zod";
 import { constantTimeEqual } from "../pay-sign";
 
 /**
- * Hostaway (ADR-033 §8), a vacation-rental property management system, over its Public API v1 with
+ * Hostaway (ADR-037 §8), a vacation-rental property management system, over its Public API v1 with
  * the owner's own account ID and API key. Built from <https://api.hostaway.com/documentation> as it
  * read on 20 October 2026 (the excerpt behind each fixture is kept in its header); never called from
  * here with a real account.
