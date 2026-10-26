@@ -21,15 +21,15 @@ import {
 import vectors from "../vectors/doors-elsewhere.json";
 
 /**
- * vocab/door-platforms.json (0.9.0, ADR-031): the platforms a door elsewhere may name. Every platform once, in a
+ * vocab/door-platforms.json (0.10.0, ADR-035): the platforms a door elsewhere may name. Every platform once, in a
  * group, taking bookings or orders; hosts are registrable names; no delivery app or stay marketplace; and
  * the vectors read as `readDoorsElsewhere`, `doorPlatformOf`, `doorPlace`, `doorTrackingParams` and `cleanDoorUrl` say.
  */
 describe("the door platforms vocabulary", () => {
-  it("is what its schema says, and the spec is 0.9.0", () => {
+  it("is what its schema says, and the spec is 0.10.0", () => {
     expect(doorPlatformsVocabSchema.parse(DOOR_PLATFORMS_VOCABULARY)).toEqual(DOOR_PLATFORMS_VOCABULARY);
     expect(DOOR_PLATFORMS_VOCABULARY.version).toBe(1);
-    expect(pkg.version).toBe("0.9.0");
+    expect(pkg.version).toBe("0.10.0");
     const schema = jsonSchemaOf("door-platforms") as { $id: string };
     expect(schema.$id).toBe("https://surfingdog.ai/spec/schemas/door-platforms.json");
   });

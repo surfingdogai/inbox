@@ -1,5 +1,5 @@
 {
-  "description": "What a reader keeps of a manifest's doors_elsewhere: each case's manifest gives kept. Every entry is checked alone and dropped alone: an item type of the five, not one the manifest lists in item_types and not one an entry kept before it names; a URL kept as written, https, at most 2048 characters, with no user or password, on a host of two labels or more whose last label starts with a letter. Since 0.9.0 an entry's platform is kept when vocab/door-platforms.json knows the token, the platform takes that kind and the URL is the business's own page there (one of its pages, or past its home and reserved names), or the platform serves pages on the business's own domain and the URL's host is on the website the manifest's profile.url names; otherwise the platform alone is dropped. detect gives, for a URL and a kind, the platform doorPlatformOf finds (null for none) and the name doorPlace gives the door; clean gives the tracking and affiliate parameters doorTrackingParams finds and the URL cleanDoorUrl leaves, every other parameter exactly as written; generic names a platform may use on its own direct link, like ref, are kept. Read by packages/core/test/doors-elsewhere.test.ts and packages/spec/test/door-platforms.test.ts.",
+  "description": "What a reader keeps of a manifest's doors_elsewhere: each case's manifest gives kept. Every entry is checked alone and dropped alone: an item type of the five, not one the manifest lists in item_types and not one an entry kept before it names; a URL kept as written, https, at most 2048 characters, with no user or password, on a host of two labels or more whose last label starts with a letter. Since 0.10.0 an entry's platform is kept when vocab/door-platforms.json knows the token, the platform takes that kind and the URL is the business's own page there (one of its pages, or past its home and reserved names), or the platform serves pages on the business's own domain and the URL's host is on the website the manifest's profile.url names; otherwise the platform alone is dropped. detect gives, for a URL and a kind, the platform doorPlatformOf finds (null for none) and the name doorPlace gives the door; clean gives the tracking and affiliate parameters doorTrackingParams finds and the URL cleanDoorUrl leaves, every other parameter exactly as written; generic names a platform may use on its own direct link, like ref, are kept. Read by packages/core/test/doors-elsewhere.test.ts and packages/spec/test/door-platforms.test.ts.",
   "cases": [
     {
       "name": "a salon whose bookings are taken at a booking platform",
@@ -291,7 +291,7 @@
       ]
     },
     {
-      "name": "0.9.0: a salon whose bookings are at Fresha, named by its platform",
+      "name": "0.10.0: a salon whose bookings are at Fresha, named by its platform",
       "manifest": {
         "item_types": ["message", "quote_request"],
         "doors_elsewhere": [
@@ -311,7 +311,7 @@
       ]
     },
     {
-      "name": "0.9.0: a restaurant with its tables at TableCheck and its takeaway at Toast",
+      "name": "0.10.0: a restaurant with its tables at TableCheck and its takeaway at Toast",
       "manifest": {
         "item_types": ["message"],
         "doors_elsewhere": [
@@ -341,7 +341,7 @@
       ]
     },
     {
-      "name": "0.9.0: a platform the reader's vocabulary does not know: the platform is dropped, the door kept",
+      "name": "0.10.0: a platform the reader's vocabulary does not know: the platform is dropped, the door kept",
       "manifest": {
         "item_types": ["message"],
         "doors_elsewhere": [
@@ -360,7 +360,7 @@
       ]
     },
     {
-      "name": "0.9.0: a platform that takes no such request: the platform is dropped, the door kept",
+      "name": "0.10.0: a platform that takes no such request: the platform is dropped, the door kept",
       "manifest": {
         "item_types": ["message"],
         "doors_elsewhere": [
@@ -379,7 +379,7 @@
       ]
     },
     {
-      "name": "0.9.0: a page that is not on the platform it names: the platform is dropped",
+      "name": "0.10.0: a page that is not on the platform it names: the platform is dropped",
       "manifest": {
         "item_types": ["message"],
         "doors_elsewhere": [
@@ -398,7 +398,7 @@
       ]
     },
     {
-      "name": "0.9.0: a host that only ends like the platform's is not on it",
+      "name": "0.10.0: a host that only ends like the platform's is not on it",
       "manifest": {
         "item_types": ["message"],
         "doors_elsewhere": [
@@ -417,7 +417,7 @@
       ]
     },
     {
-      "name": "0.9.0: the platform's own home page is not the business's page there",
+      "name": "0.10.0: the platform's own home page is not the business's page there",
       "manifest": {
         "item_types": ["message"],
         "doors_elsewhere": [
@@ -436,7 +436,7 @@
       ]
     },
     {
-      "name": "0.9.0: a platform whose pages are a name under its host, one per business",
+      "name": "0.10.0: a platform whose pages are a name under its host, one per business",
       "manifest": {
         "item_types": ["message"],
         "doors_elsewhere": [
@@ -456,7 +456,7 @@
       ]
     },
     {
-      "name": "0.9.0: www is the platform's own name, not a business's",
+      "name": "0.10.0: www is the platform's own name, not a business's",
       "manifest": {
         "item_types": ["message"],
         "doors_elsewhere": [
@@ -475,7 +475,7 @@
       ]
     },
     {
-      "name": "0.9.0: a shop's own checkout on its own website, run on a platform that serves it there",
+      "name": "0.10.0: a shop's own checkout on its own website, run on a platform that serves it there",
       "manifest": {
         "item_types": ["message", "quote_request"],
         "profile": {
@@ -499,7 +499,7 @@
       ]
     },
     {
-      "name": "0.9.0: not a token: capitals, a number, too long",
+      "name": "0.10.0: not a token: capitals, a number, too long",
       "manifest": {
         "item_types": ["message"],
         "doors_elsewhere": [
@@ -527,7 +527,7 @@
       ]
     },
     {
-      "name": "0.9.0: a platform that serves the business's own domain, on a host its website is not: the platform is dropped",
+      "name": "0.10.0: a platform that serves the business's own domain, on a host its website is not: the platform is dropped",
       "manifest": {
         "item_types": ["message"],
         "profile": {
@@ -550,7 +550,7 @@
       ]
     },
     {
-      "name": "0.9.0: a platform that serves the business's own domain, with no website in the manifest to check it against: the platform is dropped",
+      "name": "0.10.0: a platform that serves the business's own domain, with no website in the manifest to check it against: the platform is dropped",
       "manifest": {
         "item_types": ["message"],
         "doors_elsewhere": [
@@ -569,7 +569,7 @@
       ]
     },
     {
-      "name": "0.9.0: the platform's own pages past its home (for business, sign-in, help) are not the business's page there",
+      "name": "0.10.0: the platform's own pages past its home (for business, sign-in, help) are not the business's page there",
       "manifest": {
         "item_types": ["message"],
         "doors_elsewhere": [

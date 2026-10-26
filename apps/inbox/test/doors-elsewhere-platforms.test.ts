@@ -6,7 +6,7 @@ import { createInbox } from "../src/app";
 import { freshDb } from "./harness";
 
 /**
- * Doors elsewhere that name their platform (spec 0.9.0, ADR-031), through the whole app: a hair studio in Toronto
+ * Doors elsewhere that name their platform (spec 0.10.0, ADR-035), through the whole app: a hair studio in Toronto
  * whose bookings are at Fresha, and a pizzeria in São Paulo whose orders are in its own WooCommerce checkout. The
  * manifest, the profile over REST and MCP, the refusals and the business's own page all say where, by name. The
  * owner sets them with an owner key (`PUT /v1/owner/settings`) or in the owner app. Nothing calls a platform: a door

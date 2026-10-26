@@ -186,7 +186,7 @@ function Loading() {
 /**
  * Three switches, one line each, saved as they are pressed. A booking switched on that cannot open
  * yet shows as waiting, says for what, and links the way there. Bookings taken at another site
- * (ADR-031) take the booking switch's row: no switch, where agents send them, Change and Take
+ * (ADR-035) take the booking switch's row: no switch, where agents send them, Change and Take
  * bookings here. Orders, which have no switch, get their own line under the switches.
  */
 function DoorsCard({ doc, pending, onPatch }: { doc: SettingsDoc["doc"]; pending: boolean; onPatch: PatchSettings }) {

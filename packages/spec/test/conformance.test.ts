@@ -184,7 +184,7 @@ describe("the manifest", () => {
     }
   });
 
-  it("warns of a platform a reader drops, and of a door that carries tracking (0.9.0)", async () => {
+  it("warns of a platform a reader drops, and of a door that carries tracking (0.10.0)", async () => {
     const fresha = "https://www.fresha.com/a/studio-lumiere-toronto-k3f8q2";
     const named = await broken((m) => {
       m.item_types = ["message", "quote_request"];

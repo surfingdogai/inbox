@@ -27,7 +27,7 @@ export function buildManifest(input: {
   directory?: { readonly listed: boolean } | undefined;
   /**
    * Kinds of request the business takes somewhere else, and where (`settings.doorsElsewhere`), each with
-   * the platform it is on when there is one (spec 0.9.0, ADR-031). A kind named here is left out of
+   * the platform it is on when there is one (spec 0.10.0, ADR-035). A kind named here is left out of
    * `item_types`, so the document never says both. A platform is published only where a reader keeps
    * it (`readDoorsElsewhere`): one that serves the business's own domain, only for a page on the website
    * the profile names.

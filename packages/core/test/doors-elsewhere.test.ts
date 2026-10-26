@@ -220,7 +220,7 @@ describe("the business's own page", () => {
 });
 
 /**
- * 0.9.0 (ADR-031): a door elsewhere names its platform, from `vocab/door-platforms.json`. A salon in Toronto books at
+ * 0.10.0 (ADR-035): a door elsewhere names its platform, from `vocab/door-platforms.json`. A salon in Toronto books at
  * Fresha, a restaurant in Osaka at TableCheck, a bakery in Nairobi sells in its own Shopify checkout. Fixtures are
  * hand-written in each platform's public page format; nothing is fetched.
  */

@@ -592,7 +592,7 @@ export class Capabilities {
     return (await this.doorElsewhereEntry(kind))?.url ?? null;
   }
 
-  /** The door elsewhere for `kind` as it is published, with its platform (ADR-031), or null. */
+  /** The door elsewhere for `kind` as it is published, with its platform (ADR-035), or null. */
   async doorElsewhereEntry(kind: "booking" | "order"): Promise<DoorElsewhere | null> {
     const [[row], s] = await Promise.all([
       this.db.orm.select({ domain: business.domain }).from(business).limit(1),
@@ -1796,7 +1796,7 @@ export class Capabilities {
       }
     }
     // A door elsewhere on a platform that also serves the business's own domain is checked against that
-    // domain when it is written (ADR-031): never a stranger's shop named as this business's checkout,
+    // domain when it is written (ADR-035): never a stranger's shop named as this business's checkout,
     // and none at all until the business has a website of its own to check it against.
     if ((patch as { doorsElsewhere?: unknown }).doorsElsewhere !== undefined) {
       const [b] = await this.db.orm.select({ domain: business.domain }).from(business).limit(1);

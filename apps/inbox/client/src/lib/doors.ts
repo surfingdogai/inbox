@@ -106,7 +106,7 @@ export function waitWords(needs: DoorView["needs"]): string {
   return "";
 }
 
-// ---- booked or ordered elsewhere (ADR-031) ---------------------------------------------------------
+// ---- booked or ordered elsewhere (ADR-035) ---------------------------------------------------------
 
 export type ElsewhereEntry = Settings["doorsElsewhere"][number];
 export type ElsewhereKind = DoorElsewhereKind;

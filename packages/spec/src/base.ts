@@ -229,7 +229,7 @@ export type ReceiptPublishResult = z.infer<typeof receiptPublishResultSchema>;
  * A writer names a kind once, and never a kind it lists in `item_types`; a reader holds every
  * manifest to that with `readDoorsElsewhere` (`vectors/doors-elsewhere.json`).
  *
- * `platform` (0.9.0, ADR-031) names the platform the page is on, from `vocab/door-platforms.json`, so an
+ * `platform` (0.10.0, ADR-035) names the platform the page is on, from `vocab/door-platforms.json`, so an
  * agent can say "Book at Fresha". A reader that does not know it, or the token it names, goes by the URL.
  */
 export const doorElsewhereSchema = z.object({
@@ -256,7 +256,7 @@ export type DoorElsewhere = z.infer<typeof doorElsewhereSchema>;
  * last label starts with a letter, so never an IP address. Anything else about the manifest is
  * not this function's to judge.
  *
- * Since 0.9.0 an entry's `platform` is kept with it when the vocabulary knows the token, the platform takes
+ * Since 0.10.0 an entry's `platform` is kept with it when the vocabulary knows the token, the platform takes
  * that kind of request, and the URL is the business's own page there; or the platform serves pages on the
  * business's own domain (`own_site`) and the URL's host is on the business's own website, the manifest's
  * `profile.url`. A reader never trusts an `own_site` token on any other host: anyone can call a stranger's
@@ -302,7 +302,7 @@ function elsewhereUrl(value: unknown): string | null {
   return value;
 }
 
-/** `vocab/door-platforms.json` (0.9.0): the platforms a door elsewhere may name, as a JSON Schema checks it. */
+/** `vocab/door-platforms.json` (0.10.0): the platforms a door elsewhere may name, as a JSON Schema checks it. */
 export const doorPlatformsVocabSchema = z.object({
   version: z.int().min(1),
   description: z.string(),

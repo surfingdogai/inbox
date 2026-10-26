@@ -1,8 +1,8 @@
 import vocabulary from "../vocab/door-platforms.json" with { type: "json" };
 
 /**
- * The platforms a business takes bookings or orders at instead of its inbox (`vocab/door-platforms.json`, spec 0.9.0,
- * ADR-031): the `platform` a manifest's `doors_elsewhere` entry may name, so an agent and a person read "Book at
+ * The platforms a business takes bookings or orders at instead of its inbox (`vocab/door-platforms.json`, spec 0.10.0,
+ * ADR-035): the `platform` a manifest's `doors_elsewhere` entry may name, so an agent and a person read "Book at
  * Fresha" rather than a host name. Nothing here signs in anywhere or calls a platform: it only tells, from a URL alone,
  * whether that URL is a business's own page on a platform.
  *

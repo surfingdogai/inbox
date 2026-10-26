@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import vocabulary from "../../../packages/spec/vocab/door-platforms.json";
 
 /**
- * Docs → Booked or ordered elsewhere (ADR-031): the page lists every platform the owner app's chooser offers, by the
+ * Docs → Booked or ordered elsewhere (ADR-035): the page lists every platform the owner app's chooser offers, by the
  * vocabulary's own names and groups, and never words a door as a connection or an integration.
  */
 const page = readFileSync(

@@ -15,7 +15,7 @@ import {
 } from "../client/src/lib/doors";
 
 /**
- * The owner app's "Booked or ordered elsewhere" (ADR-031), as Settings → General shows it: the chooser for each kind,
+ * The owner app's "Booked or ordered elsewhere" (ADR-035), as Settings → General shows it: the chooser for each kind,
  * the link it starts from, what it says of a link before saving, and the settings write it makes. The same rules as
  * the server's, from the spec's own module. Fixtures in each platform's public page format; nothing is fetched.
  */

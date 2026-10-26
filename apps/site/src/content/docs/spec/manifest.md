@@ -56,7 +56,7 @@ New fields are added, and only as optional ones, so a reader of an older manifes
 
 ## Changelog
 
-- **20 October 2026** (`@surfingdog/spec` 0.9): in `doors_elsewhere`, `platform`: the platform a door's page is on, a token of `vocab/door-platforms.json`, so an agent says "Book at Fresha". A reader keeps it only when it knows the token, the platform takes that kind of request and the page is the business's own there; otherwise it drops the platform alone and keeps the door. A reader before 0.9 ignores it.
+- **20 October 2026** (`@surfingdog/spec` 0.10): in `doors_elsewhere`, `platform`: the platform a door's page is on, a token of `vocab/door-platforms.json`, so an agent says "Book at Fresha". A reader keeps it only when it knows the token, the platform takes that kind of request and the page is the business's own there; otherwise it drops the platform alone and keeps the door. A reader before 0.10 ignores it.
 - **18 October 2026**: in `profile`, `payments`: how customers and their agents can pay, at most 64 tokens of `vocab/payments.json`. A reader keeps the tokens it knows and drops the rest alone; a card brand says `card` too.
 - **15 October 2026**: in `profile.hours`, a day may close at `24:00`: open until midnight, or all the time from `00:00`. A reader written before this day (`@surfingdog/spec` before 0.5) refuses `24:00` in that one day's hours, and keeps the rest of the profile.
 - **12 October 2026**: `doors_elsewhere`, the kinds of request a business takes somewhere else, and where.

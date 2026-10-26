@@ -1674,7 +1674,7 @@ could not say no (outcome `no_inbox`). A network reads the manifest at most five
 carries, and an inbox serves it for a minute at most, so an owner's switch holds within minutes. A kind the inbox does not list in
 `item_types`, or lists in `doors_elsewhere`, is not carried: the answer says where the business takes it.
 
-**Doors elsewhere** (spec 0.9.0, [ADR-031](../adr/031-doors-elsewhere-platforms.md)). A manifest's `doors_elsewhere`
+**Doors elsewhere** (spec 0.10.0, [ADR-035](../adr/035-doors-elsewhere-platforms.md)). A manifest's `doors_elsewhere`
 names the kinds of request a business takes somewhere else and the page for each, read entry by entry with
 `readDoorsElsewhere`. An entry may name its `platform`, a token of `vocab/door-platforms.json`, kept only when the
 page is the business's own page on that platform. For a platform that serves pages on the business's own domain

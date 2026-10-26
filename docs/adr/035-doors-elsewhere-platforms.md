@@ -1,8 +1,8 @@
-# ADR-031 — Booked or ordered elsewhere: doors that name their platform
+# ADR-035 — Booked or ordered elsewhere: doors that name their platform
 
 **Status:** proposed, 20 October 2026. Builds on ADR-024 (owners in control), ADR-025 (carried requests) and
-ADR-026 (the connectors' shared base, `026-connectors-shared-base.md`, which leaves this track no base API of its
-own; if that ADR takes another number when it lands, this reference follows it). Spec 0.9.0.
+ADR-030 (the connectors' shared base, `030-connectors-shared-base.md`, which leaves this track no base API of its
+own; if that ADR takes another number when it lands, this reference follows it). Spec 0.10.0.
 
 ## Context
 
@@ -58,7 +58,7 @@ A business's own page is told apart in one of two ways:
   `platform:<id>` (network protocol §4.8), so a door a crawler reads on the business's site matches the one the
   business declares.
 
-### 3. Spec 0.9.0: `platform` on a door elsewhere
+### 3. Spec 0.10.0: `platform` on a door elsewhere
 
 `doors_elsewhere[].platform` is optional. `readDoorsElsewhere` keeps it only when the vocabulary knows the token, the
 platform takes that kind of request, and the URL is the business's own page there; or, for an `own_site` platform,

@@ -834,7 +834,7 @@ export function isDoorElsewhereUrl(url: string): boolean {
 }
 
 /**
- * One door elsewhere as a write sets it (ADR-031): the kind, the page, and the platform the owner picked it on from
+ * One door elsewhere as a write sets it (ADR-035): the kind, the page, and the platform the owner picked it on from
  * `vocab/door-platforms.json`, if any. A page is the business's own: on the platform it names, past the platform's
  * own pages, and with no tracking or affiliate parameter in it. A platform that also serves the business's own domain
  * (Shopify, Wix, SimplyBook.me…) takes a page there too, which the write checks against the business's domain
@@ -887,7 +887,7 @@ export function doorElsewhereSettingSchema() {
 /**
  * One door elsewhere as a stored document is read: as leniently as `readDoorsElsewhere` reads a manifest. The link is
  * cleaned of tracking (`cleanDoorUrl`) and a platform that no longer fits it, or that this vocabulary no longer knows,
- * is dropped, but the door stands. A door saved before 0.9.0 with `?utm_source=` on it, or one on a host a later
+ * is dropped, but the door stands. A door saved before 0.10.0 with `?utm_source=` on it, or one on a host a later
  * vocabulary narrows away, is never lost: losing it would put bookings back here while the platform still takes them.
  * What a write may set is `doorElsewhereSettingSchema`'s.
  */

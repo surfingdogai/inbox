@@ -149,7 +149,7 @@ const planElsewhereSchema = z.object({
 });
 
 /**
- * A door elsewhere a plan read, as the settings keep it (ADR-031): the address without its tracking, and the platform
+ * A door elsewhere a plan read, as the settings keep it (ADR-035): the address without its tracking, and the platform
  * the plan named only when the page is the business's own page there; otherwise the platform the address is plainly on,
  * or none. A plan is read from a site, so it is put right, never refused, for either.
  */
