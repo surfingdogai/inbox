@@ -1,4 +1,5 @@
 import { hmacSha256Base64 } from "../../src/connectors/hook-sign";
+import * as QUERIES from "../../src/connectors/shopify/queries";
 import { type FakePlatform, fakePlatform, json } from "../fakes/platform";
 
 /**
@@ -55,6 +56,10 @@ export interface FakeVariant {
   tracked: boolean;
   policy: "DENY" | "CONTINUE";
   updatedAt: number;
+  /** The variant's barcode as the merchant typed it (ISBN, UPC, GTIN…); Shopify checks nothing. */
+  barcode?: string | null;
+  /** The variant's own picture, when it has one. */
+  imageUrl?: string | null;
 }
 
 export interface FakeProduct {
@@ -63,6 +68,12 @@ export interface FakeProduct {
   status: "ACTIVE" | "DRAFT" | "ARCHIVED";
   description: string;
   updatedAt: number;
+  /** Shopify's `vendor`: never null, an empty string when the merchant named none. */
+  vendor?: string;
+  /** Its page on the online store; null when the product is not published there. */
+  onlineStoreUrl?: string | null;
+  /** The product's featured picture. */
+  imageUrl?: string | null;
 }
 
 export interface FakeDraft {
@@ -321,12 +332,17 @@ export function fakeShopify(
     inventoryQuantity: v.inventoryQuantity,
     inventoryPolicy: v.policy,
     inventoryItem: { tracked: v.tracked },
+    barcode: v.barcode ?? null,
+    image: v.imageUrl ? { url: v.imageUrl } : null,
   });
   const productNode = (p: FakeProduct) => ({
     id: toGid("Product", p.id),
     title: p.title,
     status: p.status,
     description: p.description,
+    vendor: p.vendor ?? "",
+    onlineStoreUrl: p.onlineStoreUrl ?? null,
+    featuredImage: p.imageUrl ? { url: p.imageUrl } : null,
   });
   const orderNode = (o: FakeOrder) => ({
     id: toGid("Order", o.id),
@@ -556,7 +572,8 @@ export function fakeShopify(
     s.operations.push({ name, variables: variables ?? {}, token: req.headers.get("x-shopify-access-token") ?? "" });
     const extensions = {
       cost: {
-        requestedQueryCost: 302,
+        // What Shopify works the document out to cost: the connector's own figure for it.
+        requestedQueryCost: COSTS.get(name) ?? 302,
         actualQueryCost: 12,
         throttleStatus: {
           maximumAvailable: s.bucket.maximum,
@@ -601,6 +618,9 @@ export function fakeShopify(
 
   return s;
 }
+
+/** Each document's cost by its operation's name, as the connector states it (`queries.ts`). */
+const COSTS: ReadonlyMap<string, number> = new Map(Object.values(QUERIES).map((d) => [d.name, d.cost]));
 
 /** A florist's catalogue: two products, one with two variants, one tracked, one a draft, one priced in whole pesos. */
 export function stockFlorist(s: FakeShopify, at = Date.parse("2026-10-19T09:00:00Z")): void {

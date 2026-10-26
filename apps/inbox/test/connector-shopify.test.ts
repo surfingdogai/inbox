@@ -245,6 +245,38 @@ describe("a Shopify shop, connected with its own app's keys", () => {
     expect(s.shop.hooks.size).toBe(0);
     expect((await productsOf(s.db)).every((p) => !p.active)).toBe(true);
   });
+  it("keeps each variant's barcode checked: a good one as its 14 digits, one that fails the check for the owner only", async () => {
+    const s = await setup();
+    stockFlorist(s.shop);
+    Object.assign(s.shop.products.get(7_001) ?? {}, {
+      vendor: "Flores de Oaxaca",
+      onlineStoreUrl: `${STOREFRONT}/products/ramo-de-cempasuchil`,
+      imageUrl: "https://cdn.xochitl.example.mx/files/ramo.jpg",
+    });
+    Object.assign(s.shop.variants.find((v) => v.id === 41_001) ?? {}, { barcode: "7501031311309" });
+    // One digit off: Shopify takes any barcode as typed, the inbox does not publish it.
+    Object.assign(s.shop.variants.find((v) => v.id === 41_002) ?? {}, { barcode: "7501031311308" });
+    await connected(s);
+    const { rows } = await s.db.client.query({
+      sql: `SELECT external_id, gtin, gtin_given, brand, url, image_url, catalogue_seq FROM products
+            WHERE external_id IN ('gid://shopify/ProductVariant/41001', 'gid://shopify/ProductVariant/41002')
+            ORDER BY external_id`,
+      method: "all",
+    });
+    expect(rows.map((r) => r.slice(0, 6))).toEqual([
+      [
+        "gid://shopify/ProductVariant/41001",
+        "07501031311309",
+        null,
+        "Flores de Oaxaca",
+        `${STOREFRONT}/products/ramo-de-cempasuchil`,
+        "https://cdn.xochitl.example.mx/files/ramo.jpg",
+      ],
+      ["gid://shopify/ProductVariant/41002", null, "7501031311308", null, null, null],
+    ]);
+    // Each write moved its place in the signed catalogue feed.
+    expect(rows.every((r) => Number(r[6]) > 0)).toBe(true);
+  });
 });
 
 describe("the shop's checkout for the cart, the inbox for quotes", () => {

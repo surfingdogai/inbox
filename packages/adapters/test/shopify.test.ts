@@ -509,8 +509,8 @@ describe("Shopify's rate limit", () => {
     s.bucket = { maximum: 2000, available: 100, restoreRate: 100 };
     const page = await def.catalogue?.page(ctx(), { cursor: null, since: null });
     expect(page?.products.length).toBeGreaterThan(0);
-    // 302 points requested, 100 there, 100 a second: about two seconds.
-    expect(slept).toEqual([2020]);
+    // 502 points requested, 100 there, 100 a second: about four seconds.
+    expect(slept).toEqual([4020]);
   });
 
   it("waits before a call the bucket would not hold, and comes back later rather than wait long", async () => {
@@ -518,7 +518,7 @@ describe("Shopify's rate limit", () => {
     stockFlorist(s);
     const { def, ctx } = await connected(s, {}, recordSleep);
     s.bucket = { maximum: 1000, available: 0, restoreRate: 50 };
-    // The last answer said the bucket is empty: the next page (302 points) waits about six seconds.
+    // The last answer said the bucket is empty: the next page (502 points) waits about ten seconds.
     await def.catalogue?.page(ctx(), { cursor: null, since: null });
     const e = await refusal(def.catalogue?.page(ctx(), { cursor: null, since: null }) as Promise<unknown>);
     expect(e.code).toBe("rate_limited");
@@ -622,6 +622,41 @@ describe("the catalogue", () => {
     expect(products?.products.every((p) => p.available === false)).toBe(true);
     expect(products?.products).toHaveLength(25);
     expect(products?.cursor).toBeNull();
+  });
+
+  it("reads what each one is: the variant's barcode, the vendor as its brand, its page, its picture or else the product's", async () => {
+    const s = fakeShopify();
+    stockFlorist(s);
+    Object.assign(s.products.get(7_001) ?? {}, {
+      vendor: "Flores de Oaxaca",
+      onlineStoreUrl: "https://xochitl.example.mx/products/ramo-de-cempasuchil",
+      imageUrl: "https://cdn.shopify.example/files/ramo.jpg",
+    });
+    Object.assign(s.products.get(7_002) ?? {}, { imageUrl: "https://cdn.shopify.example/files/mesa.jpg" });
+    Object.assign(s.variants.find((v) => v.id === 41_001) ?? {}, { barcode: " 7501031311309 " });
+    Object.assign(s.variants.find((v) => v.id === 41_002) ?? {}, {
+      barcode: "7501031311308",
+      imageUrl: "https://cdn.shopify.example/files/mesa-chico.jpg",
+    });
+    const { def, ctx } = await connected(s);
+    const page = await def.catalogue?.page(ctx(), { cursor: null, since: null });
+    const byId = new Map(page?.products.map((p) => [p.externalId.split("/").at(-1), p]));
+    // As Shopify gives it, with the kind of field it came from: the inbox checks it as it stores it.
+    expect(byId.get("41001")).toMatchObject({
+      gtin: { raw: "7501031311309", hint: "barcode" },
+      brand: "Flores de Oaxaca",
+      url: "https://xochitl.example.mx/products/ramo-de-cempasuchil",
+      imageUrl: "https://cdn.shopify.example/files/ramo.jpg",
+    });
+    // The variant's own picture before its product's; a vendor left empty and no page say nothing.
+    expect(byId.get("41002")).toMatchObject({
+      gtin: { raw: "7501031311308", hint: "barcode" },
+      imageUrl: "https://cdn.shopify.example/files/mesa-chico.jpg",
+    });
+    expect(byId.get("41002")).not.toHaveProperty("brand");
+    expect(byId.get("41002")).not.toHaveProperty("url");
+    expect(byId.get("41003")).toMatchObject({ imageUrl: "https://cdn.shopify.example/files/mesa.jpg" });
+    expect(byId.get("41003")).not.toHaveProperty("gtin");
   });
 });
 

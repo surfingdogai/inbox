@@ -258,11 +258,13 @@ interface VariantNode {
   readonly id?: unknown;
   readonly title?: unknown;
   readonly sku?: unknown;
+  readonly barcode?: unknown;
   readonly price?: unknown;
   readonly availableForSale?: unknown;
   readonly inventoryQuantity?: unknown;
   readonly inventoryPolicy?: unknown;
   readonly inventoryItem?: { readonly tracked?: unknown } | null;
+  readonly image?: { readonly url?: unknown } | null;
   readonly product?: ProductNode | null;
 }
 interface ProductNode {
@@ -270,6 +272,9 @@ interface ProductNode {
   readonly title?: unknown;
   readonly status?: unknown;
   readonly description?: unknown;
+  readonly vendor?: unknown;
+  readonly onlineStoreUrl?: unknown;
+  readonly featuredImage?: { readonly url?: unknown } | null;
   readonly variants?: { readonly nodes?: readonly VariantNode[] } | null;
 }
 interface ShopAnswer {
@@ -656,6 +661,12 @@ export function shopifyConnector(
     const tracked = v.inventoryItem?.tracked === true;
     const quantity = Number(v.inventoryQuantity);
     const value = minorAmount(str(v.price));
+    // What it is beside its price (ADR-029), each only when Shopify says it: the variant's barcode, the
+    // product's vendor as its brand, its page on the online store, the variant's picture or else the product's.
+    const barcode = str(v.barcode).trim();
+    const brand = str(product.vendor).trim();
+    const url = str(product.onlineStoreUrl).trim();
+    const imageUrl = str(v.image?.url).trim() || str(product.featuredImage?.url).trim();
     return {
       externalId: id,
       // A product with one variant has "Default Title" as its variant's.
@@ -666,6 +677,10 @@ export function shopifyConnector(
       // Counted only when Shopify tracks it and stops selling at none; a variant sold past none is not counted.
       stock: tracked && v.inventoryPolicy === "DENY" && Number.isFinite(quantity) ? Math.max(0, quantity) : null,
       available: product.status === "ACTIVE" && v.availableForSale === true,
+      ...(barcode ? { gtin: { raw: barcode, hint: "barcode" as const } } : {}),
+      ...(brand ? { brand } : {}),
+      ...(url ? { url } : {}),
+      ...(imageUrl ? { imageUrl } : {}),
     };
   }
 

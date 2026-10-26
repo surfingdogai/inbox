@@ -27,15 +27,25 @@ export const SHOP: Doc = {
 }`,
 };
 
-const VARIANT = `id title sku price availableForSale inventoryQuantity inventoryPolicy inventoryItem { tracked }`;
+/**
+ * A variant as the catalogue reads it, with its barcode and its own picture (ADR-029). `barcode` and
+ * `image` are deprecated in 2026-10 for `barcodes` and `media`, and still answered.
+ */
+const VARIANT = `id title sku barcode price availableForSale inventoryQuantity inventoryPolicy inventoryItem { tracked } image { url }`;
 
-/** One page of variants: every one (a full pass), or those changed since (`updated_at:>…`). */
+/** A product as the catalogue reads it: its maker (`vendor`), its page on the shop and its picture. */
+const PRODUCT = `id title status description(truncateAt: 500) vendor onlineStoreUrl featuredImage { url }`;
+
+/**
+ * One page of variants: every one (a full pass), or those changed since (`updated_at:>…`). 100 at 5
+ * each (the variant, its inventory item and picture, its product and the product's picture), plus 2.
+ */
 export const VARIANTS: Doc = {
   name: "InboxVariants",
-  cost: 302,
+  cost: 502,
   text: `query InboxVariants($first: Int!, $after: String, $query: String) {
   productVariants(first: $first, after: $after, query: $query, sortKey: ID) {
-    nodes { ${VARIANT} product { id title status description(truncateAt: 500) } }
+    nodes { ${VARIANT} product { ${PRODUCT} } }
     pageInfo { hasNextPage endCursor }
   }
 }`,
@@ -43,14 +53,15 @@ export const VARIANTS: Doc = {
 
 /**
  * Products changed since, with their variants: a product's own change (taken off sale, renamed) is
- * not always a change of its variants. At most 25 variants each here; a full pass reads the rest.
+ * not always a change of its variants. At most 25 variants each here; a full pass reads the rest. 10
+ * products at 79 each (the product, its picture, and 25 variants at 3 with their connection's 2), plus 2.
  */
 export const PRODUCTS_CHANGED: Doc = {
   name: "InboxProductsChanged",
-  cost: 532,
+  cost: 792,
   text: `query InboxProductsChanged($first: Int!, $after: String, $query: String!) {
   products(first: $first, after: $after, query: $query, sortKey: ID) {
-    nodes { id title status description(truncateAt: 500) variants(first: 25) { nodes { ${VARIANT} } } }
+    nodes { ${PRODUCT} variants(first: 25) { nodes { ${VARIANT} } } }
     pageInfo { hasNextPage endCursor }
   }
 }`,

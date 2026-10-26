@@ -47,7 +47,7 @@ Your shop's checkout is where carts are bought. Once your Inbox names it for ord
 
 | | |
 | --- | --- |
-| Reads | your shop's name, currency and whether prices include tax; products and variants (name, SKU, price, stock, on sale); the draft orders it made and the orders they became (paid, fulfilled, refunded) |
+| Reads | your shop's name, currency and whether prices include tax; products and variants (name, SKU, barcode, vendor, price, stock, on sale, the product's page on your online store and its picture's link); the draft orders it made and the orders they became (paid, fulfilled, refunded) |
 | Writes | draft orders, tagged `inbox`; the webhooks below, at your connection's own address |
 | Never keeps | your customers, or any order it did not make. Shopify tells your Inbox when any order changes, with its id and tags only; your Inbox looks only at orders made from its own drafts, and keeps their ids, nothing else. |
 
