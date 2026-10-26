@@ -342,6 +342,20 @@ export interface ConnectionChoice {
   readonly label: string;
   readonly options: readonly { readonly id: string; readonly name: string }[];
   readonly value: string | null;
+  /**
+   * A choice about bookings only (who takes them): a till that also takes payments draws it with its
+   * booking choices, and its other choices (the location) with its payments.
+   */
+  readonly bookings?: boolean | undefined;
+}
+
+/**
+ * What a connection cannot do for its account now, a line each saying why, in the owner's words: a
+ * till whose plan takes no bookings from this way of connecting keeps its busy times and writes none.
+ */
+export interface Withheld {
+  readonly busy_times?: string | undefined;
+  readonly write_bookings?: string | undefined;
 }
 
 /**
@@ -899,6 +913,14 @@ export interface ConnectorDefinition {
    * words, never a secret; `href` where the owner does it.
    */
   notes?(view: { readonly extra: Readonly<Record<string, unknown>>; readonly now: number }): readonly ConnectionNote[];
+  /**
+   * What this account cannot do now (`Withheld`), read from what the connection keeps about itself
+   * (`extra`): left out of what the owner app offers, said in a line, and never run. Read again with
+   * every refresh, so an account that changes plan gets it back.
+   */
+  withheld?(view: { readonly extra: Readonly<Record<string, unknown>> }): Withheld;
+  /** A line under "Add confirmed bookings": what the platform does with them, when the owner should know. */
+  readonly bookingsNote?: string | undefined;
   /** True when this instance can offer it; otherwise why not (an OAuth app with no client set). */
   ready?(): true | string;
   /**

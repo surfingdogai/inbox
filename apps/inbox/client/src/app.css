@@ -2515,11 +2515,14 @@ legend.label-line {
 .int-steps {
   margin: 0;
   padding: 0 0 0 18px;
+  /* Numbered: the reset takes every list's markers away, and a grid's items draw none. */
   list-style: decimal;
-  display: grid;
-  gap: 1px;
+  display: block;
   font-size: 12.5px;
   color: var(--ink-2);
+}
+.int-steps li {
+  margin-top: 1px;
 }
 .int-steps li::marker {
   color: var(--ink-3);

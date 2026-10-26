@@ -7,6 +7,7 @@ import { icsConnector } from "./ics";
 import { icsFeedConnector } from "./ics-feed";
 import { mollieConnector } from "./mollie";
 import { shopifyConnector } from "./shopify/index";
+import { squareConnector } from "./square/index";
 import { stripeConnector } from "./stripe";
 import { woocommerceConnector } from "./woocommerce/index";
 
@@ -53,6 +54,15 @@ export {
   shopifyConnector,
   shopifyForm,
 } from "./shopify/index";
+export {
+  SQUARE_API,
+  SQUARE_SANDBOX_API,
+  SQUARE_SCOPES,
+  SQUARE_TOPICS,
+  SQUARE_VERSION,
+  squareConnector,
+  squareForm,
+} from "./square/index";
 export {
   STRIPE_API,
   STRIPE_EVENTS,
@@ -114,5 +124,6 @@ export function builtInConnectors(opts: ConnectorHostOptions = {}): ConnectorDef
     woocommerceConnector(),
     calendlyConnector(opts.oauth?.calendly ?? null, { hosted: opts.hosted }),
     icsFeedConnector(),
+    squareConnector(opts.oauth?.square ?? null, { hosted: opts.hosted }),
   ];
 }

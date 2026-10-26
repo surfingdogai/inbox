@@ -182,14 +182,14 @@ const def = (kind: string, over: Partial<ConnectorDefinition> = {}): ConnectorDe
 describe("the gallery says only what is true", () => {
   it("lists no card for a connector nobody is building, and says soon only for what is", () => {
     const cards = gallery(new Map());
-    // Nothing registered: only the cards being built show, each soon, with nothing to press.
-    expect(cards.map((c) => c.id)).toEqual(["square"]);
+    // Nothing registered, and every track built: no card, and none says soon.
+    expect(cards).toEqual([]);
     expect(
       cards.every((c) => c.status === "soon" && c.ways.every((w) => w.status === "soon" && w.form.length === 0)),
     ).toBe(true);
-    // Every card being built belongs to a track of this workflow; every other one has a connector today.
+    // A card is marked as being built only while its track is; every card has a connector today.
     const building = GALLERY.filter((c) => c.building).map((c) => c.id);
-    expect(building).toEqual(["square"]);
+    expect(building).toEqual([]);
   });
 
   it("turns a card from soon to ready the moment its connector registers, a way at a time", () => {
@@ -220,8 +220,8 @@ describe("the gallery says only what is true", () => {
       action: "Connect your shop",
       before: [{ key: "store_url", label: "Shop address", value: "https://pizzaria-sp.example.com" }],
     });
-    // Square, not registered, still says soon.
-    expect(cards.find((c) => c.id === "square")?.status).toBe("soon");
+    // Square, built now and not registered here, has no card.
+    expect(cards.find((c) => c.id === "square")).toBeUndefined();
   });
 
   it("offers a store that POSTs its key only once it can reach this inbox, the keys meanwhile", () => {
@@ -297,8 +297,11 @@ describe("the gallery says only what is true", () => {
     expect(leanOf({ services: 1, products: 30 })).toBe("shop");
     expect(galleryGroups("shop").map((g) => g.label)).toEqual(["Shops and checkouts", "Payments", "Calendars"]);
     expect(galleryGroups(null).map((g) => g.label)).toEqual(["Calendars", "Payments", "Shops and checkouts"]);
-    // Built tracks show only once registered: a registered shop stands beside the till being built.
-    const shops = new Map([["shopify", def("shopify")]]);
+    // A card shows once its connector is registered: two of them, ordered by what the inbox holds.
+    const shops = new Map([
+      ["shopify", def("shopify")],
+      ["square", def("square")],
+    ]);
     const forSalon = gallery(shops, { lean: "appointments" }).filter((c) => c.group === "shops");
     expect(forSalon.map((c) => c.id)).toEqual(["square", "shopify"]);
     const forBakery = gallery(shops, { lean: "shop" }).filter((c) => c.group === "shops");

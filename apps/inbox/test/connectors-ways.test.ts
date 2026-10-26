@@ -464,6 +464,138 @@ describe("what the owner chooses once connected", () => {
   });
 });
 
+/* --- what an account cannot do now ------------------------------------------------------------------ */
+
+describe("what a connection cannot do for its account now", () => {
+  it("is left out of what is offered, said in a line, never run, and given back when the account changes", async () => {
+    // A barber in Nairobi whose booking platform takes no bookings from an app on its free plan.
+    let plan = "free";
+    const written: string[] = [];
+    const busyRead: number[] = [];
+    const team = {
+      key: "team",
+      label: "Bookings go to",
+      options: [{ id: "any", name: "Whoever is free" }],
+      value: "any",
+    };
+    const why = "This plan takes no bookings from an app: they stay in your inbox.";
+    const barber: ConnectorDefinition = {
+      kind: "chair",
+      title: "Chair",
+      group: "calendars",
+      capabilities: ["busy_times", "write_bookings"],
+      auth: "form",
+      form: z.object({ token: secretField(z.string().min(4), { label: "Token" }) }),
+      bookingsNote: "Chair texts its reminders to your own number.",
+      withheld: ({ extra }) => (extra.plan === "free" ? { write_bookings: why } : {}),
+      async connect() {
+        return {
+          account: "Kinyozi Bora",
+          externalId: "chair_ke_01",
+          secret: { token: "tok" },
+          extra: { plan },
+          calendars: [],
+          destinations: [{ id: "auto", name: "Matched by name", writable: true }],
+          defaults: { busy: [], destination: "auto" },
+          choices: [{ ...team, bookings: true }],
+        };
+      },
+      async refresh() {
+        return {
+          account: "Kinyozi Bora",
+          calendars: [],
+          destinations: [{ id: "auto", name: "Matched by name", writable: true }],
+          choices: [{ ...team, bookings: true }],
+          extra: { plan },
+        };
+      },
+      async busy(ctx) {
+        busyRead.push(ctx.now);
+        return [];
+      },
+      bookings: {
+        async put(_ctx, booking) {
+          written.push(booking.itemId);
+          return { externalId: `chair-${booking.itemId}`, etag: null, calendar: "auto" };
+        },
+        async remove() {},
+      },
+    };
+    const base = "https://inbox.kinyozi-bora.example.co.ke";
+    const s = await inboxWith({
+      base,
+      connectors: [barber],
+      business: { name: "Kinyozi Bora", currency: "KES", timezone: "Africa/Nairobi", languages: ["sw", "en"] },
+    });
+    const serviceId = ulid();
+    const now = Date.now();
+    await s.db.orm.insert(schema.services).values({
+      id: serviceId,
+      name: "Fade",
+      durationMin: 30,
+      capacity: 1,
+      granularityMin: 30,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await openWeekdays(s.db);
+    const day = futureDay(5);
+    const asked = await confirmed(
+      (r) => s.inbox.app.request(r),
+      new Request(`${base}/v1/bookings`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          payload: {
+            reservationFor: { serviceId, name: "Fade" },
+            startTime: `${day}T10:00:00Z`,
+            endTime: `${day}T10:30:00Z`,
+          },
+          contact: { name: "Wanjiru Kamau", email: "wanjiru@example.com", locale: "sw" },
+        }),
+      }),
+    );
+    expect(asked.status, await asked.clone().text()).toBe(201);
+    const itemId = ((await asked.json()) as { view: { item: { id: string } } }).view.item.id;
+    expect((await s.call("POST", `/v1/owner/items/${itemId}/transitions`, { event: "confirm" }, s.owner)).status).toBe(
+      200,
+    );
+
+    const made = await s.call("POST", "/v1/owner/integrations", { kind: "chair", values: { token: "tok-1" } }, s.owner);
+    expect(made.status, await made.clone().text()).toBe(201);
+    const view = (await made.json()) as {
+      id: string;
+      capabilities: string[];
+      withheld: Record<string, string>;
+      bookings_note: string | null;
+      choices: ConnectionChoice[];
+    };
+    expect(view.capabilities).toEqual(["busy_times"]);
+    expect(view.withheld).toEqual({ write_bookings: why });
+    expect(view.bookings_note).toBe("Chair texts its reminders to your own number.");
+    expect(view.choices).toEqual([{ ...team, bookings: true }]);
+    await s.drain();
+    // Busy times still read; the confirmed booking never written.
+    expect(busyRead.length).toBeGreaterThan(0);
+    expect(written).toEqual([]);
+
+    // The account moves to a plan that takes them: the next refresh gives bookings back, and they go.
+    plan = "plus";
+    await s.inbox.caps.connectors.run(view.id, Date.now() + 7 * 3_600_000, "sync");
+    const again = (await (await s.call("GET", `/v1/owner/integrations/${view.id}`, undefined, s.owner)).json()) as {
+      capabilities: string[];
+      withheld: Record<string, string>;
+      choices: ConnectionChoice[];
+    };
+    expect(again.capabilities).toEqual(["busy_times", "write_bookings"]);
+    expect(again.withheld).toEqual({});
+    // A choice about bookings stays one across a refresh.
+    expect(again.choices[0]?.bookings).toBe(true);
+    await s.inbox.caps.connectors.run(view.id, Date.now() + 7 * 3_600_000, "sync");
+    expect(written).toEqual([itemId]);
+  });
+});
+
 /* --- the catalogue's limit --------------------------------------------------------------------------- */
 
 describe("a catalogue past what one connection takes", () => {

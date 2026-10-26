@@ -413,15 +413,15 @@ describe("connecting", () => {
     const { caps } = await setup();
     const { cards } = await caps.connectors.integrations(owner());
     const byId = Object.fromEntries(cards.map((c) => [c.id, c]));
-    // Being built now: on its way, and nothing to press.
-    expect(byId.square).toMatchObject({ status: "soon", ways: [{ status: "soon", form: [] }, { status: "soon" }] });
-    // Shopify and WooCommerce have their connectors now: a release without them registered shows no card for them.
+    // Every track has its connector now: a release without one registered shows no card for it.
+    expect(byId.square).toBeUndefined();
     expect(byId.shopify).toBeUndefined();
     expect(byId.woocommerce).toBeUndefined();
+    expect(byId.calendly).toBeUndefined();
     // This test registers no Stripe, Cal.com, CalDAV or Google, and nobody is building them here: no card.
     expect(byId.stripe).toBeUndefined();
     expect(byId.calcom).toBeUndefined();
-    expect(cards.every((c) => c.status === "soon")).toBe(true);
+    expect(cards.some((c) => c.status === "soon")).toBe(false);
   });
 });
 
@@ -1294,10 +1294,10 @@ describe("the gallery", () => {
       http: noHttp,
     });
     const { cards } = await caps.connectors.integrations(owner());
-    // What is registered here, and what is being built; Cal.com, Calendly, the calendar link to share,
-    // Shopify, WooCommerce, Stripe and Mollie are not registered in this test, and nobody is building
-    // them here, so they have no card.
-    expect(cards.map((c) => c.id)).toEqual(["calendar", "square"]);
+    // What is registered here; Cal.com, Calendly, the calendar link to share, Shopify, WooCommerce,
+    // Square, Stripe and Mollie are not registered in this test, and nobody is building them, so they
+    // have no card.
+    expect(cards.map((c) => c.id)).toEqual(["calendar"]);
     const calendar = cards[0];
     expect(calendar?.line).toBe("iCloud, Fastmail, Nextcloud and more");
     // The calendar link is not registered in this test: its ways (and Outlook's) are not shown.
