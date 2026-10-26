@@ -1,4 +1,12 @@
-import { type DoorElsewhere, type Manifest, manifestSchema, type Profile } from "@surfingdog/spec";
+import {
+  type DoorElsewhere,
+  doorPlatform,
+  doorPlatformHolds,
+  type Manifest,
+  manifestSchema,
+  ownSiteDomain,
+  type Profile,
+} from "@surfingdog/spec";
 import { AGENT_GUIDE_URL } from "./identity/types";
 
 /** The discovery manifest: what this instance accepts and where each door is. */
@@ -18,8 +26,11 @@ export function buildManifest(input: {
    */
   directory?: { readonly listed: boolean } | undefined;
   /**
-   * Kinds of request the business takes somewhere else, and where (`settings.doorsElsewhere`). A
-   * kind named here is left out of `item_types`, so the document never says both.
+   * Kinds of request the business takes somewhere else, and where (`settings.doorsElsewhere`), each with
+   * the platform it is on when there is one (spec 0.9.0, ADR-031). A kind named here is left out of
+   * `item_types`, so the document never says both. A platform is published only where a reader keeps
+   * it (`readDoorsElsewhere`): one that serves the business's own domain, only for a page on the website
+   * the profile names.
    */
   doorsElsewhere?: readonly DoorElsewhere[] | undefined;
   /**
@@ -37,6 +48,11 @@ export function buildManifest(input: {
 }): Manifest {
   const origin = input.instanceUrl.replace(/\/$/, "");
   const elsewhere = input.doorsElsewhere ?? [];
+  const site = ownSiteDomain(input.profile?.url);
+  const kept = (d: DoorElsewhere) => {
+    const p = doorPlatform(d.platform);
+    return p && doorPlatformHolds(d.url, p, d.item_type, [site]) ? p.id : undefined;
+  };
   return manifestSchema.parse({
     spec: "surfingdog-inbox/0",
     instance: origin,
@@ -62,7 +78,15 @@ export function buildManifest(input: {
     review_services: input.reviewServices ?? [],
     ...(input.directory ? { directory: { listed: input.directory.listed } } : {}),
     ...(input.carried ? { carried_requests: { accepted: input.carried.accepted } } : {}),
-    ...(elsewhere.length ? { doors_elsewhere: elsewhere.map((d) => ({ item_type: d.item_type, url: d.url })) } : {}),
+    ...(elsewhere.length
+      ? {
+          doors_elsewhere: elsewhere.map((d) => ({
+            item_type: d.item_type,
+            url: d.url,
+            ...(kept(d) ? { platform: kept(d) } : {}),
+          })),
+        }
+      : {}),
     ...(input.catalogue
       ? { catalogue: { feed: `${origin}/v1/catalogue/changes`, items: `${origin}/v1/catalogue/items` } }
       : {}),

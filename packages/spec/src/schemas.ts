@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  doorPlatformsVocabSchema,
   manifestSchema,
   receiptAckPayloadSchema,
   receiptPayloadSchema,
@@ -263,6 +264,10 @@ export const JSON_SCHEMAS: Record<string, { schema: z.ZodType; title: string }> 
   "door-report-classes": {
     schema: doorReportClassesVocabSchema,
     title: "The door report classes (vocab/door-report-classes.json)",
+  },
+  "door-platforms": {
+    schema: doorPlatformsVocabSchema,
+    title: "The platforms a door elsewhere may name (vocab/door-platforms.json)",
   },
   capabilities: { schema: capabilitiesVocabSchema, title: "The capability vocabulary (vocab/capabilities.json)" },
   "score-rules": { schema: scoreRulesSchema, title: "GET /v1/score-rules: the agentic score's rules" },

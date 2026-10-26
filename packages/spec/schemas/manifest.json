@@ -97,7 +97,7 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 64,
-              "description": "IANA zone, e.g. Europe/Lisbon: every time and date in hours is in it."
+              "description": "IANA zone, e.g. America/Toronto, Africa/Nairobi or Asia/Kolkata: every time and date in hours is in it."
             },
             "weekly": {
               "type": "object",
@@ -473,6 +473,11 @@
             "maxLength": 2048,
             "format": "uri",
             "description": "Where to go for it: an https page on a named host, with no user or password in it."
+          },
+          "platform": {
+            "description": "The platform the page is on, from vocab/door-platforms.json (fresha, opentable, shopify…), only when the page is the business's own page there. Absent for any other page.",
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,39}$"
           }
         },
         "required": ["item_type", "url"]

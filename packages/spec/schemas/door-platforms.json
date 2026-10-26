@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://surfingdog.ai/spec/schemas/door-platforms.json",
+  "title": "The platforms a door elsewhere may name (vocab/door-platforms.json)",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "description": {
+      "type": "string"
+    },
+    "groups": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,39}$"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          }
+        },
+        "required": ["id", "label"]
+      }
+    },
+    "tracking_params": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9_]+\\*?$"
+      }
+    },
+    "reserved_subdomains": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9-]+$"
+      },
+      "description": "Names under a platform's host that are the platform's own (help, app, admin…), never a business's."
+    },
+    "reserved_paths": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9-]+$"
+      },
+      "description": "First path segments that are a platform's own pages (login, pricing, blog…), never a business's."
+    },
+    "platforms": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,39}$",
+            "description": "The token a doors_elsewhere entry names, and a door type platform:<id>."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "group": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,39}$"
+          },
+          "item_types": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["booking", "order"]
+            }
+          },
+          "hosts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^([a-z0-9-]+\\.)+[a-z][a-z0-9-]*$"
+            },
+            "description": "Registrable names: a host is on the platform when it is one of these or a name under one."
+          },
+          "page": {
+            "type": "string",
+            "enum": ["path", "subdomain", "any"],
+            "description": "How the business's own page is told apart on a platform with no pages: a path other than / whose first segment is not reserved, a name under the host other than www and the reserved names, or either."
+          },
+          "pages": {
+            "description": "Where the platform's pages for a business are known to sit: patterns, matched without regard to case against the host without www. followed by the path. With them, a page there is the business's own only when one matches.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 200
+            }
+          },
+          "own_site": {
+            "description": "The platform also serves the business's pages on the business's own domain, named there by their host.",
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string",
+            "format": "uri",
+            "description": "The platform's own public page or help the hosts were read from."
+          }
+        },
+        "required": ["id", "name", "group", "item_types", "hosts", "page", "source"]
+      }
+    }
+  },
+  "required": [
+    "version",
+    "description",
+    "groups",
+    "tracking_params",
+    "reserved_subdomains",
+    "reserved_paths",
+    "platforms"
+  ]
+}

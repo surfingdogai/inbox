@@ -1,4 +1,10 @@
 import {
+  cleanDoorUrl,
+  DOOR_PLATFORM_ID,
+  doorPlace,
+  doorPlatform,
+  doorPlatformFit,
+  doorPlatformOf,
   isPaymentToken,
   MAX_PROFILE_PAYMENTS,
   PAYMENTS_VOCABULARY,
@@ -133,7 +139,27 @@ const planElsewhereSchema = z.object({
     .refine(isDoorElsewhereUrl, "an https address on a public host, with no user or password in it")
     .describe("Where customers go for it."),
   name: z.string().max(120).optional().describe("What the place is called, for the sentences; not kept."),
+  platform: z
+    .string()
+    .regex(DOOR_PLATFORM_ID)
+    .optional()
+    .describe(
+      "The platform the page is on, from vocab/door-platforms.json (fresha, opentable, toast…): kept when the page is the business's own page there, and otherwise read from the address.",
+    ),
 });
+
+/**
+ * A door elsewhere a plan read, as the settings keep it (ADR-031): the address without its tracking, and the platform
+ * the plan named only when the page is the business's own page there; otherwise the platform the address is plainly on,
+ * or none. A plan is read from a site, so it is put right, never refused, for either.
+ */
+function plannedElsewhere(d: z.infer<typeof planElsewhereSchema>) {
+  const url = cleanDoorUrl(d.url);
+  const named = doorPlatform(d.platform);
+  const platform =
+    named && doorPlatformFit(url, named, d.door) === "on_platform" ? named.id : doorPlatformOf(url, d.door)?.id;
+  return { itemType: d.door, url, name: d.name, ...(platform ? { platform } : {}) };
+}
 
 /** The ways a person pays (the vocabulary's methods and wallets): what a plan may tick for the owner. */
 const PERSON_PAYMENTS = new Set([...PAYMENTS_VOCABULARY.methods, ...PAYMENTS_VOCABULARY.wallets]);
@@ -551,12 +577,19 @@ export async function applySetupPlan(
     }
   }
   // ---- bookings or orders taken somewhere else ----
-  const elsewhereNow = state.settings.doorsElsewhere.map((d) => ({ itemType: d.itemType, url: d.url }));
-  const elsewhere = plan.doors_elsewhere
-    ? plan.doors_elsewhere.map((d) => ({ itemType: d.door, url: d.url, name: d.name }))
-    : elsewhereNow;
+  const elsewhereNow = state.settings.doorsElsewhere.map((d) => ({
+    itemType: d.itemType,
+    url: d.url,
+    ...(d.platform ? { platform: d.platform } : {}),
+  }));
+  const elsewhere: { itemType: "booking" | "order"; url: string; name?: string | undefined; platform?: string }[] =
+    plan.doors_elsewhere ? plan.doors_elsewhere.map(plannedElsewhere) : elsewhereNow;
   if (plan.doors_elsewhere) {
-    const wanted = elsewhere.map((d) => ({ itemType: d.itemType, url: d.url }));
+    const wanted = elsewhere.map((d) => ({
+      itemType: d.itemType,
+      url: d.url,
+      ...(d.platform ? { platform: d.platform } : {}),
+    }));
     if (!same(byDoor(wanted), byDoor(elsewhereNow))) {
       settingsPatch.doorsElsewhere = wanted;
       for (const d of byDoor(elsewhere)) said.push(elsewhereWords(d));
@@ -958,9 +991,15 @@ function nameKey(name: string): string {
 }
 
 /** A door taken somewhere else, said: "Bookings stay at Fresha." or "Orders stay in your own checkout." */
-function elsewhereWords(d: { readonly itemType: string; readonly url: string; readonly name?: string | undefined }) {
+function elsewhereWords(d: {
+  readonly itemType: string;
+  readonly url: string;
+  readonly name?: string | undefined;
+  readonly platform?: string | undefined;
+}) {
   if (d.itemType === "order") return "Orders stay in your own checkout.";
-  return `Bookings stay at ${d.name?.trim() || new URL(d.url).hostname}.`;
+  const named = doorPlatform(d.platform) ? doorPlace(d) : undefined;
+  return `Bookings stay at ${named ?? (d.name?.trim() || new URL(d.url).hostname)}.`;
 }
 
 /** Doors elsewhere in one order, booking first, so the same list compares the same. */

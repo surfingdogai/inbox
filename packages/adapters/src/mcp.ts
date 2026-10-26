@@ -19,6 +19,7 @@ import {
   decimalAmount,
   declineOfferInput,
   deliveryIdInput,
+  doorPlace,
   getItemInput,
   getItemStatusInput,
   type IdentityAnswer,
@@ -274,14 +275,19 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
       {
         title: "Business profile",
         description:
-          "Name, time zone, currency, languages and the item types this business accepts, and where it takes any other kind instead (doors_elsewhere).",
+          "Name, time zone, currency, languages and the item types this business accepts, and where it takes any other kind instead (doors_elsewhere: each with its URL, and the platform it is on when there is one).",
         inputSchema: z.object({}),
         annotations: readOnly,
       },
       () =>
         run(async () => {
           const p = await caps.getBusinessProfile();
-          const away = (p.doors_elsewhere ?? []).map((d) => `${d.item_type} at ${d.url}`);
+          const away = (p.doors_elsewhere ?? []).map((d) => {
+            const place = doorPlace(d);
+            return place === new URL(d.url).host
+              ? `${d.item_type} at ${d.url}`
+              : `${d.item_type} at ${place}, ${d.url}`;
+          });
           return {
             text: `${p.name} (${p.timezone}, ${p.currency}) accepts: ${p.item_types.join(", ")}.${
               away.length ? ` Taken elsewhere: ${away.join("; ")}.` : ""

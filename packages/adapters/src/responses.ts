@@ -473,7 +473,16 @@ export const businessProfileSchema = profileSchema.extend({
     .optional()
     .describe("Who the business is, as the law asks before a contract: only what it filled in."),
   doors_elsewhere: z
-    .array(z.object({ item_type: z.string(), url: z.string() }))
+    .array(
+      z.object({
+        item_type: z.string(),
+        url: z.string(),
+        platform: z
+          .string()
+          .optional()
+          .describe("The platform the page is on (vocab/door-platforms.json): Book at Fresha, Order at Toast."),
+      }),
+    )
     .optional()
     .describe(
       "Kinds of request the business takes somewhere else, and where: a booking platform, its own checkout. None of them is in item_types.",

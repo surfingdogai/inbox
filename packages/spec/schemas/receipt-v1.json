@@ -43,7 +43,7 @@
           "type": "integer",
           "minimum": -9007199254740991,
           "maximum": 9007199254740991,
-          "description": "Minor units: 4500 is €45.00."
+          "description": "Minor units in the currency's ISO 4217 exponent: 4500 is CA$45.00 or ₹45.00, ¥4,500 in JPY, 4.500 in KWD."
         },
         "currency": {
           "type": "string",
