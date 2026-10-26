@@ -27,6 +27,9 @@ interface Notice {
 }
 
 export const Route = createFileRoute("/settings/integrations")({
+  // Which card to open on: Settings → Property's "Property system" opens its own.
+  validateSearch: (search: Record<string, unknown>): { open?: string } =>
+    typeof search.open === "string" && /^[a-z0-9_-]{1,40}$/.test(search.open) ? { open: search.open } : {},
   component: IntegrationsPage,
 });
 
@@ -39,9 +42,10 @@ function IntegrationsPage() {
   // A place to stay lets nights, not minutes or products: no booking calendars, no product feeds.
   const property = useProperty();
   const stays = (property.data?.properties.length ?? 0) > 0;
+  const { open } = Route.useSearch();
   return (
     <>
-      <IntegrationsCard skip={stays ? STAY_SKIP : []} />
+      <IntegrationsCard skip={stays ? STAY_SKIP : []} initialOpen={open} />
       {!stays && <FeedsCard />}
       <WebhooksCard />
     </>

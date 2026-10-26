@@ -7,6 +7,7 @@ import { icsConnector } from "./ics";
 import { icsFeedConnector } from "./ics-feed";
 import { mollieConnector } from "./mollie";
 import { beds24Connector } from "./property/beds24";
+import { hostawayConnector } from "./property/hostaway";
 import { shopifyConnector } from "./shopify/index";
 import { squareConnector } from "./square/index";
 import { stripeConnector } from "./stripe";
@@ -139,5 +140,6 @@ export function builtInConnectors(opts: ConnectorHostOptions = {}): ConnectorDef
     icsFeedConnector(),
     squareConnector(opts.oauth?.square ?? null, { hosted: opts.hosted }),
     beds24Connector(),
+    hostawayConnector(),
   ];
 }

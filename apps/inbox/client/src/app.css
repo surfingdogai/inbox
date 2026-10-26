@@ -2695,9 +2695,9 @@ legend.label-line {
 .int-note {
   margin-top: 4px;
 }
-/* The rows to tick on a platform's key page, under the field that asks for the key. */
+/* The steps on a platform's key page, numbered, between a field's label and its input. */
 .int-steps {
-  margin: 0;
+  margin: 0 0 6px;
   padding: 0 0 0 18px;
   /* Numbered: the reset takes every list's markers away, and a grid's items draw none. */
   list-style: decimal outside;

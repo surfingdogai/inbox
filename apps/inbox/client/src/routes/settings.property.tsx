@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { ConnectYourSystem } from "../components/ConnectYourSystem";
@@ -189,6 +189,7 @@ function matchedWords(setup: PropertyView): string {
  */
 function YourSystem({ data, setup }: { data: OwnerSetup; setup: PropertyView }) {
   const integrations = useIntegrations();
+  const navigate = useNavigate();
   const systems = (integrations.data?.connections ?? []).filter((c) => c.capabilities.includes("stay_inventory"));
   const [mapping, setMapping] = useState<{ id: string; title: string } | null>(null);
   const [hidden, setHidden] = useState(false);
@@ -242,7 +243,12 @@ function YourSystem({ data, setup }: { data: OwnerSetup; setup: PropertyView }) 
           skip={["calcom", "calendly", "ics_feed"]}
           lodging
           lede="Calendar links from your other channels show the nights that are likely taken. A property system, once connected, takes each stay first."
-          onOpen={(card) => (card.id === "calendar" ? setLinking(true) : undefined)}
+          // A calendar link is added here; any other system connects in Integrations, its card open.
+          onOpen={(card) =>
+            card.id === "calendar"
+              ? setLinking(true)
+              : void navigate({ to: "/settings/integrations", search: { open: card.id } })
+          }
           onSkip={() => setHidden(true)}
         />
       )}

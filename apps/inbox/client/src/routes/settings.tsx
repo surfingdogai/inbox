@@ -19,11 +19,12 @@ function SettingsLayout() {
   // A place to stay has its own tab; another business never sees it.
   const property = useProperty();
   const stays = (property.data?.properties.length ?? 0) > 0 || path === "/settings/property";
-  // The tab you are on is always in view, on a phone too, where the row scrolls.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the path is what moves the current tab
+  // The tab you are on is always in view, on a phone too, where the row scrolls: again once the
+  // Property tab appears, which moves every tab after it.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the path and the Property tab are what move the current tab
   useEffect(() => {
     tabs.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [path]);
+  }, [path, stays]);
   return (
     <main className="page page-narrow">
       <div className="page-head">
