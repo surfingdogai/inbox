@@ -39,7 +39,7 @@ export type SecretPurpose =
   /** A place to stay's private arrival details (door codes, wifi), opened only to send them (ADR-037 §10). */
   | "arrival-details"
   /**
-   * A UCP Lodging booking session's last request (ADR-035): who is coming and the ids the platform gave
+   * A UCP Lodging booking session's last request (ADR-038): who is coming and the ids the platform gave
    * each guest, opened only to answer that session.
    */
   | "ucp-session";

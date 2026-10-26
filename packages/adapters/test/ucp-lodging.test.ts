@@ -34,7 +34,7 @@ import docs from "./fixtures/ucp-lodging/ucp-docs-examples.json" with { type: "j
 import { partsOf, setupOf, VECTORS, type Vector } from "./fixtures/ucp-lodging/vectors";
 
 /**
- * UCP Lodging's mapping (ADR-035) against its vectors and the draft's own examples, pinned at commit
+ * UCP Lodging's mapping (ADR-038) against its vectors and the draft's own examples, pinned at commit
  * f2626c28b8288976eee5bda77f3a9b1ddc0132b1: a quote becomes a booking session and reads back as the same
  * money; the addends sum to the one total and the selected term's schedules to it too; the local tax
  * disclosure points at the at_property schedule; and the checks catch what UCP forbids.

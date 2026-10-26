@@ -12,7 +12,7 @@ import { STRIPE_LIVE_KEY } from "../../../packages/adapters/test/fixtures/paymen
 import { BASE, ok, type Setup, setup } from "./stay-harness";
 
 /**
- * UCP Lodging's booking sessions in the whole app (ADR-035), switched on as INBOX_UCP_LODGING does:
+ * UCP Lodging's booking sessions in the whole app (ADR-038), switched on as INBOX_UCP_LODGING does:
  * nothing answers without the switch; a room kept for direct guests is priced, held once the lead is
  * named, and booked, or handed to the property's own page when a deposit or a card is due; the hold
  * stands while only names and ways to reach the lead are added, and a change of dates is priced before

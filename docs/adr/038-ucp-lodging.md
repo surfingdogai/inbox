@@ -1,7 +1,7 @@
-# ADR-035 — UCP Lodging: a place to stay's instant rooms as booking sessions, off by default
+# ADR-038 — UCP Lodging: a place to stay's instant rooms as booking sessions, off by default
 
-**Status:** proposed, 21 October 2026. Builds on ADR-033 (stays), and takes the line ADR-033 left under
-"Not decided here". Migration 0027 (`ucp_sessions`). No spec version: this is an optional binding to a
+**Status:** proposed, 21 October 2026. Builds on ADR-037 (stays), and takes the line ADR-037 left under
+"Not decided here". Migration 0030 (`ucp_sessions`). No spec version: this is an optional binding to a
 third-party draft, not part of the inbox's own spec (§7). Numbered provisionally; renumbering at merge
 is fine.
 
@@ -28,7 +28,7 @@ Without `INBOX_SECRET_KEY` it stays off, and the server says so once on stderr. 
 off while the protocol is a draft. When it is on, `/.well-known/ucp` and the REST booking sessions
 under `/v1/ucp/lodging` answer only while the inbox has a property that confirms some rooms at once:
 rooms kept for direct guests and closed elsewhere, or a connected system that confirms at once and is
-written to first (ADR-033 D4).
+written to first (ADR-037 D4).
 
 A property that answers each stay itself is not served. UCP needs one authoritative total in every
 session, and before the property answers there is only an estimate. A session for one is refused
@@ -145,7 +145,7 @@ ships in a dated release; the version moves then. In the profile, `dev.ucp.commo
 the cancellation policy `extend` `dev.ucp.lodging.booking`, so negotiation reads them as extensions.
 
 No spec version of the inbox's own moves: nothing in `@surfingdog/spec` changes, the binding answers
-in UCP's own schemas, and it ships off. Protocol §4.18 describes it as an optional binding to a
+in UCP's own schemas, and it ships off. Protocol §4.19 describes it as an optional binding to a
 third-party draft. In this version a network does not read an inbox's UCP profile; it reads the inbox
 through its manifest (§4.8).
 

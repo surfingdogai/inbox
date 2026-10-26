@@ -553,7 +553,7 @@ export class StayCapabilities {
 
   /**
    * At most two open holds per person, agent and address, and ten per platform: nobody parks rooms by
-   * asking (§6.1, ADR-035 §5).
+   * asking (§6.1, ADR-038 §5).
    */
   private async limitHolds(caller: Caller, email: string | undefined): Promise<void> {
     const n = await this.holdsOf(caller, email);

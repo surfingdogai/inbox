@@ -162,7 +162,7 @@ export function oauthFrom(
 }
 
 /**
- * INBOX_UCP_LODGING (ADR-035), read as every switch is (`1`, `true`, `yes`, `on`). Booking sessions are
+ * INBOX_UCP_LODGING (ADR-038), read as every switch is (`1`, `true`, `yes`, `on`). Booking sessions are
  * sealed with the instance's secret, so without INBOX_SECRET_KEY they stay off, and that is said once
  * rather than left for a platform to find.
  */

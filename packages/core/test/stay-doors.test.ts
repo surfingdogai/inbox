@@ -79,7 +79,7 @@ describe("the stays doors", () => {
     expect(other.view.item.state).toBe("held");
   });
 
-  it("counts a platform's guests one by one, and the platform on its own, ten at once (ADR-035 §5)", async () => {
+  it("counts a platform's guests one by one, and the platform on its own, ten at once (ADR-038 §5)", async () => {
     clock.now = Date.parse("2026-11-02T13:00:00Z");
     const m = await mapleHollow();
     await m.caps.stays.setAllotment(owner, {

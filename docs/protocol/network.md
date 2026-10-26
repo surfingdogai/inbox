@@ -1860,7 +1860,7 @@ What this version does not do:
 
 **UCP Lodging (off; an optional binding to a third-party draft, not part of this spec).** An inbox MAY also
 answer the [UCP Lodging booking draft](https://github.com/Universal-Commerce-Protocol/ucp/blob/f2626c28b8288976eee5bda77f3a9b1ddc0132b1/docs/specification/lodging/booking/index.md)
-(`dev.ucp.lodging.booking`, read at commit `f2626c28`; [ADR-035](../adr/035-ucp-lodging.md)), and it ships switched
+(`dev.ucp.lodging.booking`, read at commit `f2626c28`; [ADR-038](../adr/038-ucp-lodging.md)), and it ships switched
 off: only an inbox whose operator set `INBOX_UCP_LODGING` serves `/.well-known/ucp` and the REST booking sessions
 under `/v1/ucp/lodging`, and only for rooms it confirms at once (rooms kept for direct guests, or a property system
 written to first). The mapping:

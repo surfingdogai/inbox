@@ -38,7 +38,7 @@ import { publicOrigin } from "./origin";
 import type { CallerEnv } from "./rest";
 
 /**
- * UCP Lodging (ADR-035): a place to stay's instant rooms as the Universal Commerce Protocol's draft
+ * UCP Lodging (ADR-038): a place to stay's instant rooms as the Universal Commerce Protocol's draft
  * booking capability shows them, mapped onto the stays doors. Switched off: nothing here is mounted
  * unless whoever runs the inbox sets INBOX_UCP_LODGING, and the profile says so only while the property
  * has a room it can confirm at once.
@@ -87,7 +87,7 @@ export const UCP_LODGING_SOURCE = {
 /**
  * The version every answer names. The lodging draft has no dated release of its own, and 2026-08-25 (the
  * newest dated one) does not define it: until lodging ships in a dated release the schema links point at
- * the draft, and this line moves then (ADR-035 §7).
+ * the draft, and this line moves then (ADR-038 §7).
  */
 export const UCP_VERSION = "2026-08-25";
 const DRAFT = "https://ucp.dev/draft";
@@ -728,7 +728,7 @@ export interface BookingParts {
 /**
  * The cancellation policy as a disclosure, whenever cancelling can cost anything (a step with a fee,
  * a fee after the last, or one for not arriving): UCP obliges a platform to show a policy only when a
- * disclosure names it, and the guest's yes is to these terms (ADR-035 §4). Its path is the booking.
+ * disclosure names it, and the guest's yes is to these terms (ADR-038 §4). Its path is the booking.
  */
 export function cancellationDisclosure(
   quote: StayQuote,
@@ -1543,7 +1543,7 @@ export function mountUcpLodging(app: Hono<CallerEnv>, deps: UcpLodgingDeps): voi
   /**
    * UCP's Idempotency-Key (rest.md): the first answer is kept, sealed, under the key; the same body
    * again gets it again, another body a 409. A Create's answer carries its session's id, so it goes
-   * back only to the key that signed it (ADR-035 §3); anything else is answered to whoever holds the
+   * back only to the key that signed it (ADR-038 §3); anything else is answered to whoever holds the
    * session's id already. Refusals are not kept, so a corrected retry with the same key runs.
    */
   const idempotent = async (
@@ -1830,7 +1830,7 @@ export function mountUcpLodging(app: Hono<CallerEnv>, deps: UcpLodgingDeps): voi
           locale: lang,
         },
         // The platform sent the lead's details in a booking session with this property: that is the
-        // guest sending them to it, as UCP's flow has it (ADR-035 §4).
+        // guest sending them to it, as UCP's flow has it (ADR-038 §4).
         consent: true,
         ...(offer ? { offer_id: offer.offer_id } : {}),
         idempotency_key: key,
@@ -2344,7 +2344,7 @@ export function mountUcpLodging(app: Hono<CallerEnv>, deps: UcpLodgingDeps): voi
     const until = (item.payload as StayPayload).hold?.until;
     if (until && Date.parse(until) <= now) return reply(id, await fromItem(c, row, item, lang), row);
     // The platform showed the guest these terms and the policy disclosed with them, and the guest's yes
-    // comes with Complete: its trusted interface stands in for the fingerprint (ADR-035 §4).
+    // comes with Complete: its trusted interface stands in for the fingerprint (ADR-038 §4).
     const terms = await deps.caps.stays.terms(item, lang, now);
     let messages: UcpMessage[] = [];
     try {

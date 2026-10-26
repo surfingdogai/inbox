@@ -1,4 +1,4 @@
--- UCP Lodging's booking sessions (ADR-035): one row per session a platform opened at a place to stay,
+-- UCP Lodging's booking sessions (ADR-038): one row per session a platform opened at a place to stay,
 -- written only while INBOX_UCP_LODGING is on. Nothing that exists changes. Conventions as ever
 -- (ADR-011): text ULIDs, integer milliseconds.
 --

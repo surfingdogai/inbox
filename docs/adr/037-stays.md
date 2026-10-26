@@ -336,7 +336,7 @@ Maple Hollow (CAD, rooms kept for direct guests).
 - Writes to a property's system are journalled before they are sent; a stay waits in `booking` until
   the system answers or is proved not to have taken it.
 
-UCP Lodging is decided in ADR-035: a binding to the draft, off unless the operator turns it on.
+UCP Lodging is decided in ADR-038: a binding to the draft, off unless the operator turns it on.
 
 ## Not decided here
 

@@ -236,7 +236,7 @@ export function isVerifyRoute(method: string, path: string): boolean {
 const CREATE_PATHS = /^\/v1\/(bookings|orders|quotes|messages|stays|stays\/holds|stays\/book)\/?$/;
 
 /**
- * UCP Lodging's booking sessions (ADR-035): a Create or an Update that names the lead holds a room and
+ * UCP Lodging's booking sessions (ADR-038): a Create or an Update that names the lead holds a room and
  * puts a stay on the property's desk, and a Complete books it, so each spends what a hold does.
  */
 const UCP_SESSION_CREATES = /^\/v1\/ucp\/lodging\/booking-sessions(\/[^/]+\/complete)?\/?$/;
