@@ -29,6 +29,7 @@ export {
   discoverySnippets,
   doorPlace,
   doorPlatform,
+  fillStayTemplate,
   gtinDisplay,
   ISO_4217_FUNDS,
   ISO_4217_MINOR_UNITS,

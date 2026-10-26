@@ -1,3 +1,4 @@
+import { flagOn } from "@surfingdog/adapters";
 import { type AddressRange, parseAddressRange } from "@surfingdog/platform";
 
 /**
@@ -158,4 +159,20 @@ export function oauthFrom(
     oauthRedirect: fixed ? (kind) => (kind === "google_calendar" ? fixed : undefined) : undefined,
     googleTesting: /^(1|true|yes|on)$/i.test((env.GOOGLE_OAUTH_TESTING ?? "").trim()),
   };
+}
+
+/**
+ * INBOX_UCP_LODGING (ADR-035), read as every switch is (`1`, `true`, `yes`, `on`). Booking sessions are
+ * sealed with the instance's secret, so without INBOX_SECRET_KEY they stay off, and that is said once
+ * rather than left for a platform to find.
+ */
+export function ucpLodgingFrom(
+  value: string | undefined,
+  secretKey: string | undefined,
+  log: (line: string) => void = console.error,
+): boolean {
+  if (!flagOn(value)) return false;
+  if (secretKey) return true;
+  log("INBOX_UCP_LODGING is on but INBOX_SECRET_KEY is unset: UCP Lodging stays off.");
+  return false;
 }

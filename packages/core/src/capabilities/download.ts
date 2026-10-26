@@ -130,6 +130,11 @@ export const DOWNLOAD_TABLES: Readonly<Record<string, DownloadTable>> = {
   allotments: { note: "The rooms you keep for direct guests, and who set them aside." },
   stay_ari: { note: "Availability and rates as your property system last said them." },
   stay_closures: {},
+  ucp_sessions: {
+    leftOut:
+      "Booking sessions AI platforms opened through UCP Lodging, which are sealed. The stays they made are in the copy; a platform starts a new session.",
+    strip: empty("ucp_sessions"),
+  },
   connector_auth: {
     leftOut: "Sign-ins with a calendar that were on their way.",
     strip: empty("connector_auth"),

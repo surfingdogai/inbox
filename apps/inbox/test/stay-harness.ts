@@ -31,6 +31,8 @@ export async function setup(opts: {
   timezone: string;
   currency: string;
   property?: ReturnType<typeof genericPropertySystem>;
+  /** UCP Lodging's booking sessions, as INBOX_UCP_LODGING=on opens them. */
+  ucpLodging?: boolean;
 }): Promise<Setup & { stripe: ReturnType<typeof stripePlatform> }> {
   const db = await freshDb();
   const clock = { now: Date.now() };
@@ -51,6 +53,7 @@ export async function setup(opts: {
     background: (work) => void pending.push(work.catch(() => {})),
     fetchImpl,
     now: () => clock.now,
+    ...(opts.ucpLodging ? { ucpLodging: true } : {}),
   });
   if (opts.property) {
     inbox.caps.connectors.attach({

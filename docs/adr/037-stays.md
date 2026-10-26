@@ -336,12 +336,13 @@ Maple Hollow (CAD, rooms kept for direct guests).
 - Writes to a property's system are journalled before they are sent; a stay waits in `booking` until
   the system answers or is proved not to have taken it.
 
+UCP Lodging is decided in ADR-035: a binding to the draft, off unless the operator turns it on.
+
 ## Not decided here
 
 - A network relaying offers for stays (`search_stays`).
 - Stay outcomes on network receipts (rules version 7): until then receipts for stays are signed and
   kept by both sides, and a network does not publish them.
-- UCP Lodging: mapped in its own track, off until it leaves draft.
 - Payment providers beyond Stripe and Mollie, for properties where neither operates.
 - Counsel on travel-intermediary status and short-term-rental rules per jurisdiction, before stays are
   shown as bookable on a network.

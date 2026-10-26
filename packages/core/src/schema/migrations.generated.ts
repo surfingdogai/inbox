@@ -469,4 +469,14 @@ export const MIGRATIONS: readonly Migration[] = [
       "-- Nights the owner closed for a room type (or the whole property, `room_type_id` ''): never sold.\nCREATE TABLE IF NOT EXISTS `stay_closures` (\n\t`property_id` text NOT NULL,\n\t`room_type_id` text DEFAULT '' NOT NULL,\n\t`from_date` text NOT NULL,\n\t`to_date` text NOT NULL,\n\t`note` text,\n\t`created_at` integer NOT NULL,\n\tPRIMARY KEY(`property_id`, `room_type_id`, `from_date`),\n\tFOREIGN KEY (`property_id`) REFERENCES `properties`(`id`) ON UPDATE no action ON DELETE no action\n);",
     ],
   },
+  {
+    version: 31,
+    name: "0027_ucp_sessions",
+    statements: [
+      "-- UCP Lodging's booking sessions (ADR-035): one row per session a platform opened at a place to stay,\n-- written only while INBOX_UCP_LODGING is on. Nothing that exists changes. Conventions as ever\n-- (ADR-011): text ULIDs, integer milliseconds.\n--\n-- The platform holds the session's id (`bks_` and 32 random bytes); the inbox keeps its SHA-256 alone,\n-- as it does an item's access token. `item_id` is the stay the session holds or booked, null until the\n-- lead is named; the row lives as long as that stay and goes with it when its guest is erased. A row\n-- that never held a room goes two days after it was made. `state_enc` is the last request the session\n-- accepted (who is coming, and the ids the platform gave each guest), sealed by the secret box and bound\n-- to the row, so the session answers from it and nothing else keeps those ids. `totals` is the\n-- fingerprint of the money last shown, `holds` how many holds it made (a few at most), and\n-- `canceled_at` when the platform cancelled a session that held nothing.\nCREATE TABLE IF NOT EXISTS `ucp_sessions` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`token_hash` text NOT NULL,\n\t`property_id` text NOT NULL,\n\t`item_id` text,\n\t`state_enc` text NOT NULL,\n\t`totals` text NOT NULL,\n\t`lang` text NOT NULL,\n\t`holds` integer DEFAULT 0 NOT NULL,\n\t`canceled_at` integer,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer NOT NULL\n);",
+      "CREATE UNIQUE INDEX IF NOT EXISTS `ucp_sessions_token` ON `ucp_sessions` (`token_hash`);",
+      "CREATE INDEX IF NOT EXISTS `ucp_sessions_item` ON `ucp_sessions` (`item_id`);",
+      "CREATE INDEX IF NOT EXISTS `ucp_sessions_created` ON `ucp_sessions` (`created_at`) WHERE `item_id` IS NULL;",
+    ],
+  },
 ];

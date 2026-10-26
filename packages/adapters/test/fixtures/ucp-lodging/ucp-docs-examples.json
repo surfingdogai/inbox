@@ -1,0 +1,432 @@
+{
+  "_about": "Booking sessions transcribed from the UCP Lodging draft's own examples (Apache-2.0, the UCP Authors), at the pinned commit, with `{{ ucp_version }}` written as 2026-08-25. They are the reference the inbox's mapping and its checks are held to.",
+  "examples": [
+    {
+      "name": "Property-Collected Taxes & Fees",
+      "source": "https://github.com/Universal-Commerce-Protocol/ucp/blob/f2626c28b8288976eee5bda77f3a9b1ddc0132b1/docs/specification/lodging/booking/index.md#pricing-examples",
+      "booking": {
+        "ucp": {
+          "version": "2026-08-25",
+          "capabilities": {
+            "dev.ucp.lodging.booking": [
+              {
+                "version": "2026-08-25"
+              }
+            ],
+            "dev.ucp.common.payment.terms": [
+              {
+                "version": "2026-08-25"
+              }
+            ]
+          },
+          "payment_handlers": {
+            "com.example.card_handler": [
+              {
+                "id": "card_handler",
+                "version": "2026-08-25",
+                "available_instruments": [
+                  {
+                    "type": "card"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "id": "bks_example_01",
+        "status": "incomplete",
+        "currency": "JPY",
+        "property": {
+          "id": "pp_ginza_hotel",
+          "name": "Ginza Grand Hotel"
+        },
+        "stays": [
+          {
+            "id": "stay_dlx_king_std",
+            "accommodation_type": {
+              "id": "at_dlx_king",
+              "title": "Deluxe King Room"
+            },
+            "rate_plan": {
+              "id": "rp_standard",
+              "title": "Standard Flexible Rate"
+            },
+            "occupancy": {
+              "adults": 2,
+              "total": 2
+            },
+            "stay_dates": {
+              "start_date": "2026-10-01",
+              "end_date": "2026-10-04"
+            },
+            "totals": [
+              {
+                "type": "subtotal",
+                "amount": 64000
+              },
+              {
+                "type": "total",
+                "amount": 64000
+              }
+            ]
+          }
+        ],
+        "totals": [
+          {
+            "type": "subtotal",
+            "display_text": "Room Rate (3 nights for 1 room, includes 10% consumption tax)",
+            "amount": 64000
+          },
+          {
+            "type": "fee",
+            "display_text": "Service Fee (10% prepaid)",
+            "amount": 6400
+          },
+          {
+            "type": "fee",
+            "display_text": "Resort & Facility Amenity Fee (Pay at hotel, ¥2,000/night)",
+            "amount": 6000
+          },
+          {
+            "type": "tax",
+            "display_text": "Tokyo Accommodation Tax (Pay at hotel, ~¥200/guest/night)",
+            "amount": 1200
+          },
+          {
+            "type": "total",
+            "display_text": "Total Stay Cost",
+            "amount": 77600
+          }
+        ],
+        "messages": [
+          {
+            "type": "warning",
+            "code": "local_tax",
+            "path": "$.payment.terms[0].schedules[1]",
+            "presentation": "disclosure",
+            "content": "**Tokyo Accommodation Tax Notice**: In accordance with Tokyo Metropolitan Government regulations, a local accommodation tax of JPY 200 per guest per night applies to room rates of JPY 15,000 or higher. This tax is collected directly by the property upon check-in.",
+            "content_type": "markdown",
+            "url": "https://hotel.example.com/policies/tokyo-accommodation-tax"
+          }
+        ],
+        "links": [
+          {
+            "type": "tax_policy",
+            "title": "Tokyo Local Accommodation Tax Schedule",
+            "url": "https://hotel.example.com/policies/tokyo-accommodation-tax"
+          },
+          {
+            "type": "terms_of_service",
+            "title": "Hotel Booking Terms & Conditions",
+            "url": "https://hotel.example.com/terms"
+          },
+          {
+            "type": "refund_policy",
+            "title": "Cancellation and Refund Policy",
+            "url": "https://hotel.example.com/cancellation-policy"
+          }
+        ],
+        "payment": {
+          "selected_term_id": "pt_standard",
+          "terms": [
+            {
+              "id": "pt_standard",
+              "title": "Standard Settlement",
+              "description": {
+                "plain": "Pay room rate and service fee today; mandatory resort fee and Tokyo Accommodation Tax are paid at check-in."
+              },
+              "schedules": [
+                {
+                  "id": "sched_room",
+                  "type": "immediate",
+                  "description": {
+                    "plain": "Due today when you book (Room rate + service fee)."
+                  },
+                  "amount": 70400
+                },
+                {
+                  "id": "sched_property",
+                  "type": "at_property",
+                  "description": {
+                    "plain": "Due at check-in on October 1, 2026 (Resort fee + Tokyo Accommodation Tax)."
+                  },
+                  "amount": 7200
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Flexible Payment Terms — Deposit & Balance",
+      "source": "https://github.com/Universal-Commerce-Protocol/ucp/blob/f2626c28b8288976eee5bda77f3a9b1ddc0132b1/docs/specification/lodging/booking/index.md#pricing-examples",
+      "booking": {
+        "ucp": {
+          "version": "2026-08-25",
+          "capabilities": {
+            "dev.ucp.lodging.booking": [
+              {
+                "version": "2026-08-25"
+              }
+            ],
+            "dev.ucp.common.payment.terms": [
+              {
+                "version": "2026-08-25"
+              }
+            ]
+          },
+          "payment_handlers": {
+            "com.example.card_handler": [
+              {
+                "id": "card_handler",
+                "version": "2026-08-25",
+                "available_instruments": [
+                  {
+                    "type": "card"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "id": "bks_example_02",
+        "status": "incomplete",
+        "currency": "USD",
+        "property": {
+          "id": "pp_grand_hotel",
+          "name": "Grand Hotel"
+        },
+        "stays": [
+          {
+            "id": "stay_king_std",
+            "accommodation_type": {
+              "id": "at_king",
+              "title": "King Room"
+            },
+            "rate_plan": {
+              "id": "rp_flex",
+              "title": "Flexible Rate"
+            },
+            "occupancy": {
+              "adults": 2,
+              "total": 2
+            },
+            "stay_dates": {
+              "start_date": "2026-09-01",
+              "end_date": "2026-09-04"
+            },
+            "totals": [
+              {
+                "type": "subtotal",
+                "amount": 120000
+              },
+              {
+                "type": "total",
+                "amount": 120000
+              }
+            ]
+          }
+        ],
+        "totals": [
+          {
+            "type": "subtotal",
+            "display_text": "Room Rate (3 nights @ $400)",
+            "amount": 120000,
+            "lines": [
+              {
+                "display_text": "Night 1 (Deposit): Sep 1, 2026",
+                "amount": 40000
+              },
+              {
+                "display_text": "Night 2: Sep 2, 2026",
+                "amount": 40000
+              },
+              {
+                "display_text": "Night 3: Sep 3, 2026",
+                "amount": 40000
+              }
+            ]
+          },
+          {
+            "type": "fee",
+            "display_text": "Service Fee (Prepaid)",
+            "amount": 3000
+          },
+          {
+            "type": "tax",
+            "display_text": "State Lodging Tax (10%)",
+            "amount": 12000
+          },
+          {
+            "type": "total",
+            "display_text": "Total Stay Cost",
+            "amount": 135000
+          }
+        ],
+        "links": [
+          {
+            "type": "terms_of_service",
+            "title": "Terms of Service",
+            "url": "https://example.com/tos"
+          }
+        ],
+        "payment": {
+          "selected_term_id": "pt_deposit_balance",
+          "terms": [
+            {
+              "id": "pt_deposit_balance",
+              "title": "First night now, balance at check-in",
+              "description": {
+                "plain": "Hold your room with one night's rate plus initial taxes & fees."
+              },
+              "schedules": [
+                {
+                  "id": "sched_first_night",
+                  "type": "immediate",
+                  "description": {
+                    "plain": "Due today when you book (Deposit: First night + service fee + tax)."
+                  },
+                  "amount": 47000
+                },
+                {
+                  "id": "sched_balance",
+                  "type": "deferred",
+                  "description": {
+                    "plain": "Due at check-in on September 1, 2026 at 3:00 PM PDT (Remaining 2 nights + remaining tax)."
+                  },
+                  "due_at": "2026-09-01T15:00:00-07:00",
+                  "amount": 88000
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Business Outcomes: occupancy_exceeded_capacity",
+      "source": "https://github.com/Universal-Commerce-Protocol/ucp/blob/f2626c28b8288976eee5bda77f3a9b1ddc0132b1/docs/specification/lodging/booking/rest.md#business-outcomes",
+      "booking": {
+        "ucp": {
+          "version": "2026-08-25",
+          "capabilities": {
+            "dev.ucp.lodging.booking": [
+              {
+                "version": "2026-08-25"
+              }
+            ]
+          },
+          "payment_handlers": {
+            "com.example.vendor.delegate_payment": [
+              {
+                "id": "handler_1",
+                "version": "2026-08-25",
+                "available_instruments": [
+                  {
+                    "type": "card"
+                  }
+                ],
+                "config": {}
+              }
+            ]
+          }
+        },
+        "id": "booking_123",
+        "status": "incomplete",
+        "property": {
+          "id": "hotel_123",
+          "name": "Beautiful Scenery Hotel"
+        },
+        "stays": [
+          {
+            "id": "stay_luxury_queen__rp_avg_base_rate",
+            "accommodation_type": {
+              "id": "rt_luxury_queen",
+              "title": "Luxury Queen Room with Two Queen Beds",
+              "capacity": {
+                "adults": 2,
+                "children": 2,
+                "child_age_ranges": [
+                  {
+                    "ages": {
+                      "min": 0,
+                      "max": 5
+                    },
+                    "limit": 1
+                  },
+                  {
+                    "ages": {
+                      "min": 6,
+                      "max": 17
+                    },
+                    "limit": 1
+                  }
+                ],
+                "total": 4
+              }
+            },
+            "rate_plan": {
+              "id": "rp_avg_base_rate",
+              "title": "Best Available Rate"
+            },
+            "occupancy": {
+              "adults": 6,
+              "total": 6
+            },
+            "stay_dates": {
+              "start_date": "2026-07-15",
+              "end_date": "2026-07-21"
+            },
+            "totals": [
+              {
+                "type": "subtotal",
+                "amount": 350000
+              },
+              {
+                "type": "tax",
+                "amount": 42000
+              },
+              {
+                "type": "total",
+                "amount": 392000
+              }
+            ]
+          }
+        ],
+        "currency": "USD",
+        "totals": [
+          {
+            "type": "subtotal",
+            "amount": 350000
+          },
+          {
+            "type": "tax",
+            "amount": 42000
+          },
+          {
+            "type": "fee",
+            "display_text": "Resort fee",
+            "amount": 32500
+          },
+          {
+            "type": "total",
+            "amount": 424500
+          }
+        ],
+        "links": [],
+        "continue_url": "https://business.example.com/booking-sessions/booking_123",
+        "expires_at": "2026-06-01T18:30:00Z",
+        "messages": [
+          {
+            "type": "error",
+            "code": "occupancy_exceeded_capacity",
+            "content": "Number of additional guests requested surpassed room capacity.",
+            "path": "$.stays[0]",
+            "severity": "recoverable"
+          }
+        ]
+      }
+    }
+  ]
+}

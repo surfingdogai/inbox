@@ -235,8 +235,16 @@ export function isVerifyRoute(method: string, path: string): boolean {
 /** Public REST routes that create an item, and so mail the owner. */
 const CREATE_PATHS = /^\/v1\/(bookings|orders|quotes|messages|stays|stays\/holds|stays\/book)\/?$/;
 
+/**
+ * UCP Lodging's booking sessions (ADR-035): a Create or an Update that names the lead holds a room and
+ * puts a stay on the property's desk, and a Complete books it, so each spends what a hold does.
+ */
+const UCP_SESSION_CREATES = /^\/v1\/ucp\/lodging\/booking-sessions(\/[^/]+\/complete)?\/?$/;
+const UCP_SESSION_UPDATE = /^\/v1\/ucp\/lodging\/booking-sessions\/[^/]+\/?$/;
+
 export function isCreateRoute(method: string, path: string): boolean {
-  return method === "POST" && CREATE_PATHS.test(path);
+  if (method === "PUT") return UCP_SESSION_UPDATE.test(path);
+  return method === "POST" && (CREATE_PATHS.test(path) || UCP_SESSION_CREATES.test(path));
 }
 
 /**

@@ -37,7 +37,12 @@ export type SecretPurpose =
   /** What push to a phone needs (ADR-028): the relay's secret for it, and the phone's push keys. */
   | "phone-push"
   /** A place to stay's private arrival details (door codes, wifi), opened only to send them (ADR-037 §10). */
-  | "arrival-details";
+  | "arrival-details"
+  /**
+   * A UCP Lodging booking session's last request (ADR-035): who is coming and the ids the platform gave
+   * each guest, opened only to answer that session.
+   */
+  | "ucp-session";
 
 /**
  * What a deterministic key is derived for. Sealing is randomised and must be; these are the few

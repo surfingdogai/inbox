@@ -39,6 +39,7 @@ import { type CallerEnv, ownerRest, publicRest } from "./rest";
 import { safeFetchJson } from "./safe-fetch";
 import { authRoutes } from "./session";
 import { stepUpRoutes } from "./step-up";
+import { mountUcpLodging } from "./ucp-lodging";
 
 export * from "./access";
 export * from "./auth";
@@ -48,6 +49,7 @@ export * from "./customer-page";
 export * from "./download";
 export * from "./email";
 export * from "./feeds/index";
+export * from "./flags";
 export * from "./front-page";
 export * from "./identity";
 export * from "./limits";
@@ -104,6 +106,8 @@ export interface DoorDeps {
   readonly snapshot?: SqliteSnapshot | undefined;
   /** The inbox is closing (a hosted inbox its owner is leaving): the download offers the receipt key first. */
   readonly leaving?: boolean | undefined;
+  /** UCP Lodging's booking sessions (INBOX_UCP_LODGING=on, ucp-lodging.ts): a draft, off unless asked for. */
+  readonly ucpLodging?: boolean | undefined;
 }
 
 /**
@@ -597,6 +601,7 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
   // The phone's own door: pairing, the sign-in link, tokens, and what it hears about (ADR-028).
   app.route("/v1/phone", phoneRoutes(phoneDeps));
   app.route("/v1", publicRest(deps.caps, { baseUrl: deps.baseUrl }));
+  if (deps.ucpLodging) mountUcpLodging(app, deps);
   // What a QR code or a sign-in link opens in a browser; the secret stays in the fragment.
   app.get("/phone", (c) =>
     c.html(phonePage(), 200, {

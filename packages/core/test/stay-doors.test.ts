@@ -79,6 +79,44 @@ describe("the stays doors", () => {
     expect(other.view.item.state).toBe("held");
   });
 
+  it("counts a platform's guests one by one, and the platform on its own, ten at once (ADR-035 §5)", async () => {
+    clock.now = Date.parse("2026-11-02T13:00:00Z");
+    const m = await mapleHollow();
+    await m.caps.stays.setAllotment(owner, {
+      room_type_id: m.rooms.harbour,
+      from_date: "2026-11-01",
+      to_date: "2027-03-31",
+      units: 3,
+      closed_elsewhere: true,
+    });
+    // One key for every user of the platform: it tells none of them apart.
+    const platform = () => ({
+      ...guest(),
+      agent: { level: "vouched" as const, thumbprint: "tp-platform", platform: "https://assistant.example" },
+    });
+    const day = (n: number) => new Date(Date.UTC(2026, 11, 3 + n)).toISOString().slice(0, 10);
+    const hold = (n: number, email: string) => {
+      return m.caps.stays.hold(platform(), {
+        check_in: day(n * 3),
+        check_out: day(n * 3 + 2),
+        rooms: [{ room_type_id: m.rooms.harbour, adults: 2 }],
+        contact: { ...contact, email },
+        consent: true,
+      });
+    };
+    // Two guests of the platform hold two stays each: the platform's key is not the guest.
+    for (const [n, email] of ["ama@example.org", "ama@example.org", "bo@example.org", "bo@example.org"].entries())
+      expect((await hold(n, email)).view.item.state).toBe("held");
+    // A guest's third is still refused, by their address.
+    expect(await hold(4, "ama@example.org").catch((e: WriteError) => e)).toMatchObject({
+      details: { guard: "holds", reason: "holds" },
+    });
+    for (let n = 4; n < 10; n++) expect((await hold(n, `guest${n}@example.org`)).view.item.state).toBe("held");
+    // Ten held across the platform's users: the eleventh waits for one of them to book or let go.
+    const eleventh = await hold(10, "kofi@example.org").catch((e: WriteError) => e);
+    expect(eleventh).toMatchObject({ code: "guard_failed", details: { guard: "holds", reason: "platform_holds" } });
+  });
+
   it("answers a change with its new total first, and asks the property only with that fingerprint", async () => {
     const { m, id, token } = await bookedMaple();
     const asked = await m.caps.stays

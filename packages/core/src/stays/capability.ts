@@ -49,6 +49,24 @@ type StayPayload = PayloadOf<"stay">;
 /** The most open holds one guest may have at once. */
 const MAX_HOLDS = 2;
 
+/**
+ * The most open holds one platform's agents may have here at once, all its users together. A platform's
+ * key (Web Bot Auth: a key its directory lists) signs for every user it has and tells none of them apart,
+ * so it is not one guest: each of its guests is counted by their address, and the platform on its own.
+ */
+const MAX_PLATFORM_HOLDS = 10;
+
+/** The hold refused over a limit: the guest's own two, or the platform's ten. */
+function holdsRefused(reason: "holds" | "platform_holds"): WriteError {
+  return new WriteError(
+    "guard_failed",
+    reason === "holds"
+      ? "You hold two stays already: book or let one go first."
+      : `Your platform holds ${MAX_PLATFORM_HOLDS} stays here already: book or let one go first.`,
+    { details: { guard: "holds", reason } },
+  );
+}
+
 /** Room types and rate plans named by id or by a few words of their name (an agent's "double"). */
 function _roomByWords(setup: PropertySetup, words: string | undefined): string | undefined {
   if (!words) return undefined;
@@ -477,13 +495,12 @@ export class StayCapabilities {
     }
     // Two asking at once may both have passed the count before either held: counted again, and a hold
     // over the limit let go at once.
-    if ((await this.holdsOf(caller, email)) > MAX_HOLDS) {
+    const after = await this.holdsOf(caller, email);
+    if (after.own > MAX_HOLDS || after.platform > MAX_PLATFORM_HOLDS) {
       await transitionItem(this.db, withToken(caller, created.accessToken), { itemId, event: "release" }).catch(
         () => undefined,
       );
-      throw new WriteError("guard_failed", "You hold two stays already: book or let one go first.", {
-        details: { guard: "holds", reason: "holds" },
-      });
+      throw holdsRefused(after.own > MAX_HOLDS ? "holds" : "platform_holds");
     }
     const p = held.view.item.payload as StayPayload;
     const terms = p.quote ? await termsSummary(setup, { ...subject }, p.quote, lang) : undefined;
@@ -502,12 +519,14 @@ export class StayCapabilities {
   }
 
   /**
-   * The open holds of whoever asks: by their party, their agent's signature, and the guest's address
-   * (an assistant that signs nothing is still one guest at one address).
+   * The open holds of whoever asks: by their party, their agent's own signature, and the guest's address
+   * (an assistant that signs nothing is still one guest at one address); and, apart, those of the
+   * platform whose key signed, all its users together.
    */
-  private async holdsOf(caller: Caller, email: string | undefined): Promise<number> {
+  private async holdsOf(caller: Caller, email: string | undefined): Promise<{ own: number; platform: number }> {
     const party = caller.actor.partyId;
-    const agent = caller.agent?.thumbprint;
+    const platform = caller.agent?.platform;
+    const agent = platform ? undefined : caller.agent?.thumbprint;
     const mail = email?.trim().toLowerCase();
     const where: string[] = [];
     const params: string[] = [];
@@ -523,22 +542,23 @@ export class StayCapabilities {
       where.push("party_id IN (SELECT id FROM parties WHERE lower(trim(json_extract(contact, '$.email'))) = ?)");
       params.push(mail);
     }
-    if (where.length === 0) return 0;
-    const { rows } = await this.db.client.query({
-      sql: `SELECT COUNT(*) FROM items WHERE type = 'stay' AND state = 'held' AND (${where.join(" OR ")})`,
-      params,
-      method: "all",
-    });
-    return Number(rows[0]?.[0] ?? 0);
+    const count = async (sql: string, args: readonly string[]) =>
+      Number((await this.db.client.query({ sql, params: [...args], method: "all" })).rows[0]?.[0] ?? 0);
+    const held = "SELECT COUNT(*) FROM items WHERE type = 'stay' AND state = 'held'";
+    return {
+      own: where.length ? await count(`${held} AND (${where.join(" OR ")})`, params) : 0,
+      platform: platform ? await count(`${held} AND agent_directory = ?`, [platform]) : 0,
+    };
   }
 
-  /** At most two open holds per person, agent and address: nobody parks rooms by asking (§6.1). */
+  /**
+   * At most two open holds per person, agent and address, and ten per platform: nobody parks rooms by
+   * asking (§6.1, ADR-035 §5).
+   */
   private async limitHolds(caller: Caller, email: string | undefined): Promise<void> {
-    if ((await this.holdsOf(caller, email)) >= MAX_HOLDS) {
-      throw new WriteError("guard_failed", "You hold two stays already: book or let one go first.", {
-        details: { guard: "holds", reason: "holds" },
-      });
-    }
+    const n = await this.holdsOf(caller, email);
+    if (n.own >= MAX_HOLDS) throw holdsRefused("holds");
+    if (n.platform >= MAX_PLATFORM_HOLDS) throw holdsRefused("platform_holds");
   }
 
   /**
