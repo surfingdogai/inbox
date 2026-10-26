@@ -153,7 +153,7 @@ describe("prices in words", () => {
     now: () => T0,
   };
 
-  it("writes each price in its own currency at both doors, and lists no yen it cannot count", async () => {
+  it("writes each price in its own currency at both doors, yen in whole yen", async () => {
     const db = await freshDb();
     await db.orm.insert(schema.business).values({
       id: "self",
@@ -168,7 +168,7 @@ describe("prices in words", () => {
     // The body is handed in below: the import connecting queued would fetch the feed in the
     // background of the calls that follow, after the test has ended.
     await db.client.query({ sql: "DELETE FROM jobs", method: "run" });
-    // A record shop's feed, in three currencies: one of them is not counted in hundredths here.
+    // A record shop's feed, in five currencies: yen have no minor unit, forints are in hundredths.
     await inbox.caps.feeds.importBody(
       feed.id,
       [
@@ -189,8 +189,9 @@ describe("prices in words", () => {
     expect(text).toContain("Record mat £9.50 (id ");
     // Every amount here is in hundredths, forints too: never HUF 2,501.
     expect(text).toMatch(/Record brush HUF\s2,500\.50 \(id /);
-    // Never ¥49.80, nor €4,980.00: a price in yen is no price here, so the record is not on sale.
-    expect(text).not.toContain("Vinyl record");
+    // Never ¥49.80, nor €4,980.00: every amount is in its currency's own minor unit (ADR-036).
+    expect(text).toContain("Vinyl record JP¥4,980 (id ");
+    expect(text).not.toMatch(/¥49\.80|€4,980/);
 
     const key = await createApiKey(db, { kind: "owner", name: "t" });
     const own = await connect(inbox.app, "/mcp/owner", { authorization: `Bearer ${key.key}` });
@@ -199,6 +200,6 @@ describe("prices in words", () => {
     expect(ownText).toContain(": Cleaning cloth €8.50");
     expect(ownText).toContain(": Record sleeve US$12.00");
     expect(ownText).toMatch(/: Record brush HUF\s2,500\.50/);
-    expect(ownText).toMatch(/: Vinyl record €0\.00 \(archived\)/);
+    expect(ownText).toMatch(/: Vinyl record JP¥4,980(?! \(archived\))/);
   });
 });
