@@ -219,9 +219,16 @@ describe("what a reader compares", () => {
     expect(kept.id).toBe(made.id);
     const archived = await when(() => caps.setup.archiveProduct(owner, { product_id: made.id }));
     expect(archived).toEqual({ id: made.id, at: new Date(clock).toISOString() });
+    // Another feed whose products' codes are their barcodes: this shop's codes look like barcodes.
+    const other = await caps.feeds.add(owner, { url: "https://shop.example.com/other.csv" });
+    await caps.feeds.importBody(
+      other.id,
+      "id,title,sku,price,gtin\nO1,Tray,96385074,3.00,96385074\nO2,Bowl,6161234567890,4.00,6161234567890",
+      clock,
+    );
     const feed = await caps.feeds.add(owner, { url: "https://shop.example.com/feed.csv" });
     const fed = await when(() =>
-      caps.feeds.importBody(feed.id, "id,title,sku,price\nF1,Mug,,8.00\nF2,Cup,4006381333931,5.00", clock),
+      caps.feeds.importBody(feed.id, "id,title,sku,price\nF2,Cup,4006381333931,5.00\nF1,Mug,,8.00", clock),
     );
     expect(fed.at).toBe(new Date(clock).toISOString());
     const byName = async (name: string) => (await caps.setup.listProducts(owner)).find((p) => p.name === name)?.id;

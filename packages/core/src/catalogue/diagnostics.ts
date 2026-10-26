@@ -37,6 +37,10 @@ export interface HeldReason {
 
 type NoteRow = Pick<ProductRow, "name" | "price" | "active" | "listed" | "source" | "gtin" | "gtinGiven">;
 
+/** Where a barcode is put right: there is no box to type one in here (ADR-029). */
+const FIX_AT_SOURCE =
+  "Fix it where it came from (your feed or shop) and it updates at the next read, or ask your AI to propose the right one for you to confirm.";
+
 function barcodeNote(given: string): ProductNote | null {
   const r = normaliseGtin(given, "barcode");
   if ("ok" in r) {
@@ -50,7 +54,7 @@ function barcodeNote(given: string): ProductNote | null {
     case "check_digit":
       return {
         code: "gtin_check_digit",
-        words: `The barcode ${given} does not add up: its last digit should be ${r.expected}. One digit is probably wrong; scan the pack to be sure. Listed without a barcode until then.`,
+        words: `The barcode ${given} does not add up: its last digit should be ${r.expected}, so one digit is probably wrong. ${FIX_AT_SOURCE} Listed without a barcode until then.`,
       };
     case "length":
       return {
@@ -60,12 +64,12 @@ function barcodeNote(given: string): ProductNote | null {
     case "spreadsheet_number":
       return {
         code: "gtin_spreadsheet",
-        words: `The barcode came in as ${given}: a spreadsheet turned it into a number and lost its last digits. Set that column to text, export it again and import it. Listed without a barcode until then.`,
+        words: `The barcode came in as ${given}: a spreadsheet turned it into a number, which can lose its digits. Set that column to text, export it again and import it. Listed without a barcode until then.`,
       };
     case "restricted":
       return {
         code: "gtin_restricted",
-        words: `${given} is a shop's own code, which works only where it was printed, so it is not used as a barcode. Use the barcode on the pack if it has one.`,
+        words: `${given} is a shop's own code, which works only where it was printed, so it is not used as a barcode. If the pack has a barcode, put it where this came from (your feed or shop), or ask your AI to propose it for you to confirm.`,
       };
     case "coupon":
       return { code: "gtin_coupon", words: `${given} is a coupon or receipt number, not a product's barcode.` };
@@ -132,7 +136,7 @@ export interface CatalogueStatus {
   };
   /** Only the products with something to say, each with its notes. */
   readonly products: readonly { readonly id: string; readonly name: string; readonly notes: readonly ProductNote[] }[];
-  /** The one-time offer to use imported products' codes that are barcodes as barcodes, while it stands. */
+  /** The one-time offer to use imported products' codes that look like barcodes as barcodes, while it stands. */
   readonly sku_offer: { readonly count: number } | null;
   readonly networks: readonly {
     readonly origin: string;
@@ -145,9 +149,31 @@ export interface CatalogueStatus {
   }[];
 }
 
-/** An imported product whose own code reads as a barcode and that has none yet: what the offer covers. */
-export function skuIsBarcode(row: Pick<ProductRow, "source" | "sku" | "gtin" | "noGtin">): string | null {
-  if (row.source === "builtin" || !row.sku || row.gtin || row.noGtin === 1) return null;
-  const r = normaliseGtin(row.sku, "any");
-  return "ok" in r ? r.ok.gtin14 : null;
+type SkuRow = Pick<ProductRow, "id" | "source" | "sku" | "gtin" | "noGtin">;
+
+/**
+ * The imported products whose own code reads as a barcode and that have none yet: what the one-time
+ * offer covers, or nothing. Any number passes the check digit 1 time in 10, so a shop that numbers its
+ * products 10000001, 10000002, … has some that pass by chance. The offer stands only when the shop's
+ * codes look like barcodes taken together: of its imported codes shaped like one (digits of a
+ * barcode's length), at least three pass the check, and nine in ten do, which chance does not explain.
+ */
+export function skuBarcodes(rows: readonly SkuRow[]): { readonly id: string; readonly gtin14: string }[] {
+  let shaped = 0;
+  let holds = 0;
+  const out: { id: string; gtin14: string }[] = [];
+  for (const row of rows) {
+    if (row.source === "builtin" || !row.sku || row.noGtin === 1) continue;
+    const r = normaliseGtin(row.sku, "any");
+    if ("ok" in r) {
+      shaped++;
+      holds++;
+      if (!row.gtin) out.push({ id: row.id, gtin14: r.ok.gtin14 });
+    } else if (r.problem === "check_digit") shaped++;
+    else if (r.problem === "restricted" || r.problem === "coupon" || r.problem === "all_zero") {
+      shaped++;
+      holds++;
+    }
+  }
+  return holds >= 3 && holds * 10 >= shaped * 9 ? out : [];
 }

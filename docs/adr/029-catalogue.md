@@ -41,8 +41,10 @@ door.
    `vectors/gtin.json`, which the network's Go runs too: a barcode is kept as 14 digits only when its check
    digit holds and it is a product's barcode; a shop's own code or a coupon is kept for the owner to read
    (`gtin_given`) and never published. The owner's AI may only propose a barcode, which the owner confirms
-   with one tap; feeds and connectors set one through the check; a product's code that is a valid barcode
-   becomes its barcode only on the owner's one tap, offered once.
+   with one tap; feeds and connectors set one through the check; imported products' codes that look like
+   barcodes become their barcodes only on the owner's one tap, offered once, and offered only when at least
+   three of them pass the check and nine in ten do: any number passes it 1 time in 10, so a shop's own
+   numbering would otherwise be matched to other businesses' products.
 6. **The feed's order is the order of the writes.** Every statement that inserts a product, or changes
    what the feed shows of one, sets `products.catalogue_seq` to the next number, worked out inside that
    statement (`NEXT_CATALOGUE_SEQ`), and the feed's cursor is that position. A cursor on the time a

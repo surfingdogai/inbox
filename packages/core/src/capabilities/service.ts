@@ -5,7 +5,7 @@ import { z } from "zod";
 import { AccessCapabilities } from "../access/keys";
 import { assertNoLeak, PUBLISHED, stringsIn } from "../access/leaks";
 import { isOwnerOrSystem, mayDirectDataOut, ownerOnlyError } from "../access/outbound";
-import { type CatalogueStatus, type HeldReason, productNotes, skuIsBarcode } from "../catalogue/diagnostics";
+import { type CatalogueStatus, type HeldReason, productNotes, skuBarcodes } from "../catalogue/diagnostics";
 import { CatalogueCapabilities } from "../catalogue/feed";
 import { NEXT_CATALOGUE_SEQ } from "../catalogue/identity";
 import {
@@ -774,12 +774,10 @@ export class Capabilities {
     }
     const counts = { listed: 0, needs_look: 0, kept_off: 0, off_sale: 0 };
     const withNotes: CatalogueStatus["products"][number][] = [];
-    let skus = 0;
     for (const row of rows) {
       if (row.active !== 1) counts.off_sale++;
       else if (row.listed !== 1) counts.kept_off++;
       else if (listableWhy(row) === null) counts.listed++;
-      if (skuIsBarcode(row)) skus++;
       // A product the owner keeps off networks, or archived with a price, has nothing to look at here.
       if (row.listed !== 1 || (row.active !== 1 && row.price.value > 0)) continue;
       const notes = productNotes(row, heldBy.get(row.id) ?? []);
@@ -787,6 +785,7 @@ export class Capabilities {
       counts.needs_look++;
       withNotes.push({ id: row.id, name: row.name, notes });
     }
+    const skus = skuBarcodes(rows);
     const on = Object.keys(settings.networks).filter((o) => settings.networks[o]?.enabled);
     const blocked: CatalogueStatus["blocked"] =
       on.length === 0
@@ -802,7 +801,7 @@ export class Capabilities {
       blocked,
       counts,
       products: withNotes,
-      sku_offer: settings.catalogue.skuBarcodes === "ask" && skus > 0 ? { count: skus } : null,
+      sku_offer: settings.catalogue.skuBarcodes === "ask" && skus.length > 0 ? { count: skus.length } : null,
       networks: views
         .filter((v) => v.enabled)
         .map((v) => ({
@@ -818,9 +817,10 @@ export class Capabilities {
   }
 
   /**
-   * The owner's answer to "your product codes are barcodes; use them as barcodes too?" (ADR-029): each
-   * imported product whose code reads as a barcode, and that has none, gets it as its barcode, and the
-   * offer is not made again; or, not now, it is not made again either. The owner in person only.
+   * The owner's answer to "your product codes look like barcodes; use them as barcodes too?" (ADR-029):
+   * each imported product whose code reads as a barcode, and that has none, gets it as its barcode
+   * while the shop's codes look like barcodes taken together (`skuBarcodes`), and the offer is not made
+   * again; or, not now, it is not made again either. The owner in person only.
    */
   async useSkusAsBarcodes(caller: Caller, input: { readonly use: boolean }): Promise<{ used: number }> {
     if (isCustomer(caller)) throw new WriteError("not_allowed", "this needs the owner");
@@ -834,12 +834,10 @@ export class Capabilities {
     if (input.use) {
       const rows = await this.db.orm.select().from(products);
       const statements: Statement[] = [];
-      for (const row of rows) {
-        const gtin = skuIsBarcode(row);
-        if (!gtin) continue;
+      for (const { id, gtin14 } of skuBarcodes(rows)) {
         statements.push({
           sql: `UPDATE products SET gtin = ?, catalogue_seq = ${NEXT_CATALOGUE_SEQ}, updated_at = ? WHERE id = ? AND gtin IS NULL`,
-          params: [gtin, now, row.id],
+          params: [gtin14, now, id],
           method: "run",
         });
         used++;

@@ -75,16 +75,19 @@ const words = (row: Partial<Row>) =>
 describe("what needs a look", () => {
   it("says what is wrong with a barcode, and why it is listed without one", () => {
     expect(words({ gtinGiven: "4006381333932" })).toEqual([
-      "The barcode 4006381333932 does not add up: its last digit should be 1. One digit is probably wrong; scan the pack to be sure. Listed without a barcode until then.",
+      "The barcode 4006381333932 does not add up: its last digit should be 1, so one digit is probably wrong. Fix it where it came from (your feed or shop) and it updates at the next read, or ask your AI to propose the right one for you to confirm. Listed without a barcode until then.",
     ]);
     expect(words({ gtinGiven: "12345" })).toEqual([
       "A barcode has 8, 12, 13 or 14 digits; 12345 has 5. Listed without a barcode until it is fixed.",
     ]);
     expect(words({ gtinGiven: "4.00638E+12" })).toEqual([
-      "The barcode came in as 4.00638E+12: a spreadsheet turned it into a number and lost its last digits. Set that column to text, export it again and import it. Listed without a barcode until then.",
+      "The barcode came in as 4.00638E+12: a spreadsheet turned it into a number, which can lose its digits. Set that column to text, export it again and import it. Listed without a barcode until then.",
+    ]);
+    expect(words({ gtinGiven: "3017620422003.0" })).toEqual([
+      "The barcode came in as 3017620422003.0: a spreadsheet turned it into a number, which can lose its digits. Set that column to text, export it again and import it. Listed without a barcode until then.",
     ]);
     expect(words({ gtinGiven: "2001234567893" })).toEqual([
-      "2001234567893 is a shop's own code, which works only where it was printed, so it is not used as a barcode. Use the barcode on the pack if it has one.",
+      "2001234567893 is a shop's own code, which works only where it was printed, so it is not used as a barcode. If the pack has a barcode, put it where this came from (your feed or shop), or ask your AI to propose it for you to confirm.",
     ]);
     expect(words({ gtinGiven: "9811234567891" })).toEqual([
       "9811234567891 is a coupon or receipt number, not a product's barcode.",
@@ -197,11 +200,14 @@ describe("the owner's catalogue status", () => {
   });
 });
 
-describe("product codes that are barcodes", () => {
+describe("product codes that look like barcodes", () => {
   it("are offered once, for imported products only, and used only on the owner's tap", async () => {
     const { db, caps } = await setup();
     const feed = "feed:https://shop.example.com/products.csv";
     const a = await add(db, { name: "Kettle", sku: "4006381333931", source: feed, externalId: "1" });
+    // A product whose code is its barcode already tells how this shop numbers its products.
+    await add(db, { name: "Tray", sku: "96385074", gtin: "00000096385074", source: feed, externalId: "3" });
+    await add(db, { name: "Bowl", sku: "6161234567890", gtin: "06161234567890", source: feed, externalId: "4" });
     await add(db, { name: "Mug", sku: "MUG-1", source: feed, externalId: "2" });
     await add(db, { name: "Typed in", sku: "036000291452" });
     expect((await caps.catalogueStatus(owner)).sku_offer).toEqual({ count: 1 });
@@ -213,6 +219,35 @@ describe("product codes that are barcodes", () => {
       .from(products)
       .where((await import("drizzle-orm")).eq(products.id, a));
     expect(kettle).toMatchObject({ gtin: "04006381333931", updatedAt: T0 + 1000 });
+    expect((await caps.catalogueStatus(owner)).sku_offer).toBeNull();
+  });
+
+  it("are not offered when no more of them pass the check than chance would", async () => {
+    const { db, caps } = await setup();
+    // A shop's own numbers: 1 in 10 passes the check digit by chance (10000007 and 10000014 here).
+    for (let n = 10000001; n <= 10000020; n++) {
+      await add(db, {
+        name: `Product ${n}`,
+        sku: String(n),
+        source: "feed:https://shop.example.com/p.csv",
+        externalId: String(n),
+      });
+    }
+    expect((await caps.catalogueStatus(owner)).sku_offer).toBeNull();
+    expect(await caps.useSkusAsBarcodes(owner, { use: true })).toEqual({ used: 0 });
+    const rows = await db.orm.select().from(products);
+    expect(rows.filter((r) => r.gtin !== null)).toEqual([]);
+  });
+
+  it("are not offered on one or two codes, which chance could pass", async () => {
+    const { db, caps } = await setup();
+    await add(db, {
+      name: "Kettle",
+      sku: "4006381333931",
+      source: "feed:https://shop.example.com/p.csv",
+      externalId: "1",
+    });
+    await add(db, { name: "Cup", sku: "10000007", source: "feed:https://shop.example.com/p.csv", externalId: "2" });
     expect((await caps.catalogueStatus(owner)).sku_offer).toBeNull();
   });
 

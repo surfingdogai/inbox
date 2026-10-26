@@ -1356,7 +1356,7 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
       tags: ["setup"],
       summary: "Your products on networks: the switch, what is listed, and what needs a look",
       description:
-        "ADR-029. listed: the switch (Settings: catalogue.listed), on unless you switch it off; blocked: why it cannot work now (out_of_directory, cannot_sign, no_network) or null. counts: products listed, needing a look, kept off networks, off sale. products: only those with something to say, each note in plain words, with action confirm_barcode where one tap fixes it. sku_offer: imported products whose own code is a valid barcode and that have none, while the one-time offer stands. networks: each network switched on, whether it wants the products, whether it was told, how many it lists and holds back, and when it last checked.",
+        "ADR-029. listed: the switch (Settings: catalogue.listed), on unless you switch it off; blocked: why it cannot work now (out_of_directory, cannot_sign, no_network) or null. counts: products listed, needing a look, kept off networks, off sale. products: only those with something to say, each note in plain words, with action confirm_barcode where one tap fixes it. sku_offer: imported products whose own code reads as a barcode and that have none, while the one-time offer stands; it is made only when the business's imported codes look like barcodes taken together (at least three pass the check digit, and nine in ten do). networks: each network switched on, whether it wants the products, whether it was told, how many it lists and holds back, and when it last checked.",
       responses: json("Catalogue", R.catalogueStatusSchema),
     }),
     async (c) => c.json(await caps.catalogueStatus(c.get("caller"))),
@@ -1365,7 +1365,7 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
     "/catalogue/sku-barcodes",
     owner({
       tags: ["setup"],
-      summary: "Use imported products' codes that are barcodes as their barcodes, or not now",
+      summary: "Use imported products' codes that look like barcodes as their barcodes, or not now",
       description:
         "The owner's answer to the one-time offer (ADR-029): use true gives each imported product whose own code reads as a barcode, and that has none, that barcode; use false says not now. Either way the offer is not made again. The owner in person only.",
       responses: json("How many products got a barcode", z.object({ used: z.number().int() })),

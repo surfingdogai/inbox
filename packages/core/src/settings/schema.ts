@@ -797,7 +797,7 @@ const sections = {
         .enum(["ask", "used", "not_now"])
         .default("ask")
         .describe(
-          "The one-time offer to use product codes that are valid barcodes as barcodes: ask, used, or not_now once the owner said not now.",
+          "The one-time offer to use product codes that look like barcodes as barcodes: ask, used, or not_now once the owner said not now.",
         ),
     })
     .prefault({})
