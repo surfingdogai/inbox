@@ -15,7 +15,11 @@ import { freshDb, openWeekdays } from "./harness";
 
 const BASE = "https://inbox.example.org";
 const SECRET = "front-spam-test-secret-0123456789abcdef";
-const clock = { t: Date.parse("2026-10-26T09:00:00Z") };
+/**
+ * The inbox's clock, a day ahead of the real one: ids are made in time order, so a form key drawn on a
+ * clock behind the real one would carry the real time, and the form would never look hurried.
+ */
+const clock = { t: Date.now() + 86_400_000 };
 
 async function setup(o: { secretKey?: string; db?: Db } = {}) {
   const db = o.db ?? (await freshDb());

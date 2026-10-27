@@ -13,7 +13,11 @@ import { freshDb, openWeekdays } from "./harness";
  */
 
 const BASE = "https://inbox.example.org";
-const clock = { t: Date.parse("2026-10-26T09:00:00Z") };
+/**
+ * The inbox's clock, a day ahead of the real one: ids are made in time order, and a clock behind the
+ * real one would write what it queues at the real time, past what the test runs.
+ */
+const clock = { t: Date.now() + 86_400_000 };
 
 async function setup() {
   const db = await freshDb();
@@ -74,8 +78,15 @@ async function setup() {
 }
 type S = Awaited<ReturnType<typeof setup>>;
 
-const start = new Date(Date.parse("2026-10-29T02:00:00Z")).toISOString();
-const end = new Date(Date.parse("2026-10-29T03:00:00Z")).toISOString();
+/** A weekday at 02:00 UTC (10:00 in Makassar), more than two days after the clock. */
+const slot = (() => {
+  const d = new Date(clock.t + 3 * 86_400_000);
+  d.setUTCHours(2, 0, 0, 0);
+  while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() + 1);
+  return d.getTime();
+})();
+const start = new Date(slot).toISOString();
+const end = new Date(slot + 3_600_000).toISOString();
 
 async function book(s: S, email: string, i: number, message?: string) {
   const r = await s.app.request(
