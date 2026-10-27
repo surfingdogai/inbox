@@ -259,7 +259,9 @@ export function stripeEvent(
 /**
  * A PaymentIntent as Stripe answers it (https://docs.stripe.com/api/payment_intents/object), made from
  * a Shared Payment Token: Stripe clones the customer's card into a new PaymentMethod on confirm
- * (https://docs.stripe.com/agentic-commerce/concepts/shared-payment-tokens, read 26 October 2026).
+ * (https://docs.stripe.com/agentic-commerce/concepts/shared-payment-tokens, read 26 October 2026). A card
+ * that asks its holder waits in `requires_action` with `next_action.type` `shared_payment_token_action`,
+ * the agent's platform's to show them, as a sandbox answered on 27 October 2026 (ADR-042).
  */
 export function stripePaymentIntent(
   o: {
@@ -269,6 +271,7 @@ export function stripePaymentIntent(
     status?: "succeeded" | "processing" | "requires_action" | "requires_payment_method" | "canceled";
     livemode?: boolean;
     metadata?: Record<string, string>;
+    token?: string;
   } = {},
 ) {
   const status = o.status ?? "succeeded";
@@ -288,19 +291,26 @@ export function stripePaymentIntent(
     latest_charge: status === "succeeded" ? "ch_3QFjordbrodCharge001" : null,
     livemode: o.livemode ?? true,
     metadata: o.metadata ?? {},
-    next_action: status === "requires_action" ? { type: "use_stripe_sdk", use_stripe_sdk: {} } : null,
+    next_action:
+      status === "requires_action" ? { shared_payment_token_action: {}, type: "shared_payment_token_action" } : null,
     payment_method: "pm_1QFjordbrodCloned0001",
     payment_method_types: ["card"],
+    shared_payment_granted_token: o.token ?? "spt_1QFjordbrodGranted0001",
     status,
   };
 }
 
-/** A card Stripe declined on confirm: 402 with the PaymentIntent in the error (https://docs.stripe.com/declines/codes). */
+/**
+ * A card Stripe declined on confirm: 402 with the PaymentIntent in the error (https://docs.stripe.com/declines/codes),
+ * as a sandbox answered for a shared payment token on 27 October 2026. The token stays active after it.
+ */
 export function stripeCardDeclined(declineCode: string, intent = "pi_3QFjordbrodDeclined1") {
   const auth = declineCode === "authentication_required";
   return {
     error: {
       type: "card_error",
+      advice_code: "try_again_later",
+      charge: "ch_3QFjordbrodDeclined1",
       code: auth ? "authentication_required" : "card_declined",
       decline_code: declineCode,
       doc_url: `https://docs.stripe.com/error-codes/${auth ? "authentication-required" : "card-declined"}`,
@@ -312,29 +322,39 @@ export function stripeCardDeclined(declineCode: string, intent = "pi_3QFjordbrod
 }
 
 /**
- * A token Stripe refused. Its exact error codes are not documented for shared payment tokens (ADR-042
- * names this among what is still to check in a sandbox), so these are in the shape of its other
- * refusals, and the adapter reads the parameter and the words as much as the code.
+ * A token Stripe refused, exactly as a sandbox answered on 27 October 2026 (ADR-042, "Checked in a
+ * Stripe sandbox"): a 400 `invalid_request_error` every time; only an unknown token has a code and a
+ * parameter, the rest Stripe's words alone. Expired, spent and revoked tokens are answered alike
+ * (`deactivated`); `in_use` is a token held by another payment that waits on its card holder.
  */
-export function stripeTokenRefused(why: "missing" | "expired" | "consumed" | "revoked" | "limit", token: string) {
-  const param = "payment_method_data[shared_payment_granted_token]";
+export function stripeTokenRefused(
+  why: "missing" | "deactivated" | "in_use" | "limit" | "currency",
+  token: string,
+  currency = "nok",
+) {
+  const log = { request_log_url: "https://dashboard.stripe.com/acct_1QFjordbrod/test/workbench/logs?object=req_1" };
   const said = {
-    missing: { code: "resource_missing", message: `No such shared_payment.granted_token: '${token}'` },
-    expired: { code: "shared_payment_granted_token_expired", message: "This shared payment token has expired." },
-    consumed: {
-      code: "shared_payment_granted_token_deactivated",
-      message: "This shared payment token was deactivated: consumed.",
+    missing: {
+      code: "resource_missing",
+      doc_url: "https://stripe.com/docs/error-codes/resource-missing",
+      message: `No such shared_payment_token: '${token}'`,
+      param: "payment_method_data[shared_payment_granted_token]",
     },
-    revoked: {
-      code: "shared_payment_granted_token_deactivated",
-      message: "This shared payment token was deactivated: revoked.",
+    deactivated: {
+      message: "The shared payment granted token cannot be used because it is already in a deactivated state.",
+    },
+    in_use: {
+      message: "The provided shared payment granted token is currently being used for another payment intent.",
     },
     limit: {
-      code: "shared_payment_granted_token_usage_limit_exceeded",
-      message: "The amount exceeds the usage limits of this shared payment token.",
+      message:
+        "The requested amount is greater than the remaining amount capturable with this shared payment granted token.",
+    },
+    currency: {
+      message: `This shared payment granted token can only be used to process payments in \`${currency}\`.`,
     },
   }[why];
-  return { error: { type: "invalid_request_error", param, ...said } };
+  return { error: { ...said, ...log, type: "invalid_request_error" } };
 }
 
 /**

@@ -991,7 +991,10 @@ export class AgentPayments {
       case "token_expired":
         return new WriteError("token_expired", "The token has expired: get a new one for this order.");
       case "token_used":
-        return new WriteError("token_used", "The token was used or revoked: get a new one for this order.");
+        return new WriteError(
+          "token_used",
+          "The token has expired, was used or was revoked: get a new one for this order.",
+        );
       case "token_limit":
         return new WriteError(
           "token_limit",

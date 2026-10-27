@@ -516,7 +516,7 @@ describe("an accepted order, paid by the customer's assistant into the business'
     expect(await tablesHolding(s.db, token)).toEqual([]);
   });
 
-  it("a token Stripe will not take says why: another mode's or another business's, expired, used, below the total", async () => {
+  it("a token Stripe will not take says why: another mode's or another business's, expired or used, below the total", async () => {
     const s = await setup();
     await ready(s);
     const id = await order(s);
@@ -531,9 +531,10 @@ describe("an accepted order, paid by the customer's assistant into the business'
       422,
       "token_invalid",
     ]);
+    // Stripe answers an expired token as it does a spent or revoked one: deactivated.
     expect(
       await codeOf(s.stripe.grantToken({ maxAmount: 18900, currency: "nok", expiresAt: Date.now() - 1 }), "c"),
-    ).toEqual([422, "token_expired"]);
+    ).toEqual([422, "token_used"]);
     expect(
       await codeOf(s.stripe.grantToken({ maxAmount: 18900, currency: "nok", deactivated: "revoked" }), "d"),
     ).toEqual([422, "token_used"]);

@@ -252,6 +252,13 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
       if (method === "POST" && id && verb === "cancel") {
         const pi = intents.get(id);
         if (!pi) return json({ error: { type: "invalid_request_error", code: "resource_missing" } }, 404);
+        if (pi.status === "canceled" || pi.status === "succeeded") {
+          const message = `You cannot cancel this PaymentIntent because it has a status of ${pi.status}.`;
+          return json(
+            { error: { type: "invalid_request_error", code: "payment_intent_unexpected_state", message } },
+            400,
+          );
+        }
         pi.status = "canceled";
         return json(pi);
       }
@@ -328,14 +335,17 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
     if (!token || token.profile !== agent.profile || token.livemode !== live) {
       return { status: 400, body: stripeTokenRefused("missing", spt) };
     }
-    if (token.deactivated === "consumed") return { status: 400, body: stripeTokenRefused("consumed", spt) };
-    if (token.deactivated === "revoked") return { status: 400, body: stripeTokenRefused("revoked", spt) };
-    if (token.deactivated === "expired" || token.expiresAt <= Date.now()) {
-      return { status: 400, body: stripeTokenRefused("expired", spt) };
+    // Expired, spent and revoked alike, as Stripe answers them (a sandbox, 27 October 2026).
+    if (token.deactivated !== null || token.expiresAt <= Date.now()) {
+      return { status: 400, body: stripeTokenRefused("deactivated", spt) };
     }
-    if (token.currency !== currency || amount > token.maxAmount) {
-      return { status: 400, body: stripeTokenRefused("limit", spt) };
-    }
+    if (token.currency !== currency) return { status: 400, body: stripeTokenRefused("currency", spt, token.currency) };
+    if (amount > token.maxAmount) return { status: 400, body: stripeTokenRefused("limit", spt) };
+    // A payment waiting on its card holder holds the token; cancelled, it lets it go.
+    const holding = [...intents.values()].some(
+      (pi) => pi.shared_payment_granted_token === spt && pi.status === "requires_action",
+    );
+    if (holding) return { status: 400, body: stripeTokenRefused("in_use", spt) };
     const id = `pi_${live ? "" : "test_"}${++n}`;
     const metadata: Record<string, string> = {};
     for (const [k, v] of f) if (k.startsWith("metadata[")) metadata[k.slice(9, -1)] = v;
@@ -349,8 +359,16 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
       });
       return { status: 402, body: declined };
     }
-    token.deactivated = "consumed";
-    const pi = stripePaymentIntent({ id, amount, currency, status: token.outcome, livemode: live, metadata });
+    if (token.outcome !== "requires_action") token.deactivated = "consumed";
+    const pi = stripePaymentIntent({
+      id,
+      amount,
+      currency,
+      status: token.outcome,
+      livemode: live,
+      metadata,
+      token: spt,
+    });
     intents.set(id, pi);
     return { status: 200, body: pi };
   }
@@ -375,6 +393,8 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
     if (!pi) throw new Error(`no payment intent ${id}`);
     pi.status = status;
     pi.amount_received = status === "succeeded" ? pi.amount : 0;
+    const token = tokens.get(pi.shared_payment_granted_token);
+    if (token && status === "succeeded") token.deactivated = "consumed";
   }
 
   /** The customer saves a card on a hold's page: the session completes with a SetupIntent and a Customer. */

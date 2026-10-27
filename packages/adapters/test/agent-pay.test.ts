@@ -206,13 +206,15 @@ describe("Stripe: an assistant's shared payment token, charged once on the busin
     ]);
   });
 
-  it("a token Stripe refuses says why, as the assistant can act on it", async () => {
+  it("a token Stripe refuses says why, as the assistant can act on it, in Stripe's words as a sandbox gave them", async () => {
     for (const [said, code] of [
       ["missing", "token_invalid"],
-      ["expired", "token_expired"],
-      ["consumed", "token_used"],
-      ["revoked", "token_used"],
+      // Expired, spent and revoked: Stripe answers them alike, with no code.
+      ["deactivated", "token_used"],
+      ["in_use", "token_used"],
       ["limit", "token_limit"],
+      // "can only be used to process payments in": another currency, not a spent token.
+      ["currency", "token_limit"],
     ] as const) {
       const p = fakeStripe(() => json(stripeTokenRefused(said, TOKEN), 400));
       const charge = await chargeToken(ctx(p.http), CHARGE);
@@ -220,6 +222,17 @@ describe("Stripe: an assistant's shared payment token, charged once on the busin
       // Stripe's words may name the token: never passed on with them.
       expect(JSON.stringify(charge)).not.toContain(TOKEN);
     }
+    // Words Stripe may yet use for an expired one are read too; a token's own characters never decide.
+    const expired = fakeStripe(() =>
+      json(
+        { error: { type: "invalid_request_error", message: "This shared payment granted token has expired." } },
+        400,
+      ),
+    );
+    expect((await chargeToken(ctx(expired.http), CHARGE)).failure?.code).toBe("token_expired");
+    const odd = "spt_1Expired0usedLimit0currency";
+    const unknown = fakeStripe(() => json(stripeTokenRefused("missing", odd), 400));
+    expect((await chargeToken(ctx(unknown.http), { ...CHARGE, token: odd })).failure?.code).toBe("token_invalid");
     const named = fakeStripe(() =>
       json({ error: { type: "invalid_request_error", message: `Something about '${TOKEN}' is wrong.` } }, 400),
     );

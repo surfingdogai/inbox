@@ -849,7 +849,7 @@ async function chargeToken(ctx: RunContext, req: AgentChargeRequest): Promise<Ag
     };
   }
   if (res.status >= 400) {
-    const refused = tokenRefusal(error);
+    const refused = tokenRefusal(error, req.token);
     if (refused) {
       return {
         status: "failed",
@@ -882,22 +882,33 @@ async function chargeToken(ctx: RunContext, req: AgentChargeRequest): Promise<Ag
 }
 
 /**
- * Which of the inbox's reasons a refused token is (ADR-042 §6). Stripe does not document the codes it
- * gives a shared payment token it will not charge, so the parameter it names and its words are read as
- * well as the code: expired, spent or revoked, over its limit, or none it knows (another business's,
- * another mode's). Null for a refusal about something else.
+ * Which of the inbox's reasons a refused token is (ADR-042 §6), read as Stripe answered them in a
+ * sandbox on 27 October 2026. Each is a 400 `invalid_request_error`, and only an unknown token carries a
+ * code (`resource_missing`, with the parameter); the others have Stripe's words alone:
+ *
+ * - "No such shared_payment_token: '…'": none this account knows (another business's, another mode's).
+ * - "… cannot be used because it is already in a deactivated state.": expired, spent or revoked, which
+ *   Stripe answers alike.
+ * - "… is currently being used for another payment intent.": held by a payment waiting on its holder.
+ * - "The requested amount is greater than the remaining amount capturable with this …": over its limit.
+ * - "This … can only be used to process payments in `eur`.": another currency.
+ *
+ * The token is taken out of the words first, so its own characters never decide. Null for a refusal
+ * about something else.
  */
-function tokenRefusal(error: Record<string, unknown> | null): AgentChargeFailure | null {
+function tokenRefusal(error: Record<string, unknown> | null, token: string): AgentChargeFailure | null {
   if (!error) return null;
   const code = typeof error.code === "string" ? error.code : "";
   const param = typeof error.param === "string" ? error.param : "";
-  const message = typeof error.message === "string" ? error.message : "";
-  const about = /shared_payment|granted_token/i.test(`${param} ${code} ${message}`);
+  const message = withoutToken(typeof error.message === "string" ? error.message : "", token);
+  const about = /shared[ _.]?payment|granted[ _]token/i.test(`${param} ${code} ${message}`);
   if (!about) return null;
   const words = `${code} ${message}`;
+  // Before "used": a token for another currency "can only be used to process payments in" its own.
+  if (/greater than the remaining|capturable|exceed|max_amount|\blimit/i.test(words)) return "token_limit";
+  if (/only be used to process payments in|currency/i.test(words)) return "token_limit";
   if (/expire/i.test(words)) return "token_expired";
-  if (/consumed|revoked|deactivated|\bused\b/i.test(words)) return "token_used";
-  if (/limit|exceed|max_amount|currency/i.test(words)) return "token_limit";
+  if (/deactivated|consumed|revoked|resolved|being used|already used/i.test(words)) return "token_used";
   return "token_invalid";
 }
 
