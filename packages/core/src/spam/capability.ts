@@ -59,9 +59,11 @@ import {
   type SpamDeps,
   type SpamHostPolicy,
   screenAtDoor,
+  screenedWords,
   wordsOf,
 } from "./screen";
-import { dayOf, FILTERS, type Filter, type FilterChoice, isFilter } from "./types";
+import { reportedKind, type SharedSpamPort, sharedPrintOf, sureAside } from "./shared";
+import { dayOf, FILTERS, type Filter, type FilterChoice, isFilter, type Signal } from "./types";
 
 /**
  * The spam filter's capabilities (ADR-041): the door's screening, the job's, and what the owner does
@@ -104,6 +106,12 @@ export interface SpamStatus {
    * `free` keeps basic protection, with no AI. `self_hosted`: one's own server, where nothing is billed.
    */
   readonly plan: "free" | "pro" | "self_hosted";
+  /**
+   * Known spam shared between the inboxes the host runs (ADR-041 §16): `reads_and_shares`, what other
+   * businesses marked counts here and this inbox's marks count for them (Pro, live at the business's
+   * own address); `reads`, it counts here only; `off`, one's own server, where nothing is shared.
+   */
+  readonly shared: "off" | "reads" | "reads_and_shares";
   readonly this_month: { readonly aside: number; readonly held: number; readonly brought_back: number };
   readonly held_now: number;
   /** Put aside in the last seven days, by anyone: the Spam list's "This week". */
@@ -124,6 +132,7 @@ export class SpamCapabilities implements SpamDeps {
   private port: JudgePort | null = null;
   private policy: SpamHostPolicy | null = null;
   private resolver: ((domain: string) => Promise<boolean | null>) | null = null;
+  private sharedPort: SharedSpamPort | null = null;
   private modelInfo: ModelInfo | null = null;
   private judgeOptions: JudgeOptions = {};
   /** How the host reaches an owner's own model provider (own server only). */
@@ -150,6 +159,8 @@ export class SpamCapabilities implements SpamDeps {
     readonly judgeOptions?: JudgeOptions | undefined;
     /** How the owner's own model is reached, on their own server (Settings → Integrations → Your AI model). */
     readonly kit?: ModelKit | null | undefined;
+    /** The host's shared list of known spam (ADR-041 §16): hosted inboxes only. */
+    readonly shared?: SharedSpamPort | null | undefined;
   }): void {
     if (o.judgeOptions !== undefined) this.judgeOptions = o.judgeOptions;
     if (o.kit !== undefined) this.kit = o.kit;
@@ -157,6 +168,7 @@ export class SpamCapabilities implements SpamDeps {
     if (o.host !== undefined) this.policy = o.host;
     if (o.resolveMail !== undefined) this.resolver = o.resolveMail;
     if (o.model !== undefined) this.modelInfo = o.model;
+    if (o.shared !== undefined) this.sharedPort = o.shared;
   }
 
   judge(): JudgePort | null {
@@ -202,6 +214,20 @@ export class SpamCapabilities implements SpamDeps {
 
   resolveMail(): ((domain: string) => Promise<boolean | null>) | null {
     return this.resolver;
+  }
+
+  shared(): SharedSpamPort | null {
+    return this.sharedPort;
+  }
+
+  /** Whether this inbox's marks count on its host's shared list. */
+  private sharing(): boolean {
+    return this.sharedPort?.contributes === true;
+  }
+
+  /** Whether the host's shared list of known spam reads for this inbox: its privacy page says so. */
+  sharesSpam(): boolean {
+    return this.sharedPort !== null;
   }
 
   /**
@@ -325,6 +351,7 @@ export class SpamCapabilities implements SpamDeps {
         tokens_this_month: usage.tokens_in + usage.tokens_out,
       },
       plan: host ? host.plan : "self_hosted",
+      shared: !this.sharedPort ? "off" : this.sharedPort.contributes ? "reads_and_shares" : "reads",
       this_month: { aside: usage.aside, held: usage.held, brought_back: usage.brought_back },
       held_now: Number(heldRows[0]?.[0] ?? 0),
       this_week: { aside: Number(weekRows[0]?.[0] ?? 0) },
@@ -729,6 +756,7 @@ export class SpamCapabilities implements SpamDeps {
         byUser: byUserOf(caller),
         releasedBy: caller.actor.kind === "staff" ? "staff" : "owner",
         now,
+        share: this.sharing(),
       })),
       countStatement("released", now),
     );
@@ -756,6 +784,7 @@ export class SpamCapabilities implements SpamDeps {
         byUser: byUserOf(caller),
         releasedBy: caller.actor.kind === "staff" ? "staff" : "owner",
         now,
+        share: this.sharing(),
       })),
     ];
     // The rules that could only flag it run again, now that a person said it is fine.
@@ -805,6 +834,7 @@ export class SpamCapabilities implements SpamDeps {
         byUser: byUserOf(caller),
         releasedBy: null,
         now,
+        share: this.sharing(),
       })),
     ]);
     return { block: await blockChoiceOf(this.db, input.item_id) };
@@ -827,6 +857,7 @@ export class SpamCapabilities implements SpamDeps {
         byUser: byUserOf(caller),
         releasedBy: event === "unspam" ? (caller.actor.kind === "staff" ? "staff" : "owner") : null,
         now,
+        share: this.sharing(),
       })),
     ];
     if (event === "unspam" && item.screen === "aside") {
@@ -838,6 +869,77 @@ export class SpamCapabilities implements SpamDeps {
         );
     }
     await this.db.batch(statements);
+  }
+
+  /**
+   * The `spam_share` job (ADR-041 §16): what this inbox now says of one item, told to the host's shared
+   * list. A person's Spam, or what the filter put aside on its own and is sure of, is known spam; a
+   * person's Not spam, Let it in or Looks fine on what a shared match labelled is a word against it;
+   * anything else takes back whatever was said. It reads the item as it is when it runs, so the last
+   * word a person gave is the one that counts, and an item erased or gone is taken back.
+   */
+  async share(itemId: string, now: number): Promise<{ readonly note: string }> {
+    const port = this.sharedPort;
+    if (!port) return { note: "no shared list here" };
+    const { rows } = await this.db.client.query({
+      sql: `SELECT v.verdict, v.cause, v.certain, v.learning, v.answer, v.quotes, v.signals, v.owner_verdict, i.screen,
+                   COALESCE(i.sandbox, 0)
+              FROM spam_verdicts v JOIN items i ON i.id = v.item_id WHERE v.item_id = ?`,
+      params: [itemId],
+      method: "all",
+    });
+    const r = rows[0];
+    // A test item is nobody's spam.
+    const words = r && Number(r[9]) !== 1 ? await screenedWords(this.db, itemId) : null;
+    if (!r || !words) {
+      await port.withdraw(itemId);
+      return { note: "taken back" };
+    }
+    const json = <T>(v: unknown, fallback: T): T => {
+      if (v === null || v === undefined) return fallback;
+      try {
+        return JSON.parse(String(v)) as T;
+      } catch {
+        return fallback;
+      }
+    };
+    const signals = json<Signal[]>(r[6], []);
+    const answer = json<{ kind?: string; certainty?: string; customer_intent?: boolean } | null>(r[4], null);
+    const quotes = json<unknown[]>(r[5], []);
+    const cause = r[1] === null || r[1] === undefined ? null : String(r[1]);
+    const said = r[7] === null || r[7] === undefined ? null : String(r[7]);
+    // A sender's domain only where a mail server vouched for the address: anyone can type one at a form.
+    const vouched = signals.some((s) => s.c === "aligned");
+    const print = sharedPrintOf(words.text, vouched ? words.email : null);
+    const kind = reportedKind(cause, answer?.kind);
+    if (print && said === "spam") {
+      await port.report(itemId, print, { vote: 1, kind, now });
+      return { note: "known spam: a person's Spam" };
+    }
+    if (print && said !== null && said !== "spam" && signals.some((s) => s.c === "shared_spam")) {
+      await port.report(itemId, print, { vote: -1, kind: null, now });
+      return { note: "a person's Not spam on a shared match" };
+    }
+    const sure = sureAside({
+      verdict: String(r[0]),
+      cause,
+      certain: Number(r[2]) === 1,
+      learning: Number(r[3]) === 1,
+      answer: answer
+        ? {
+            kind: String(answer.kind ?? ""),
+            certainty: String(answer.certainty ?? ""),
+            customerIntent: answer.customer_intent === true,
+            quotes: quotes.length,
+          }
+        : null,
+    });
+    if (print && said === null && r[8] === "aside" && sure) {
+      await port.report(itemId, print, { vote: 1, kind, now });
+      return { note: "known spam: put aside, and sure" };
+    }
+    await port.withdraw(itemId);
+    return { note: "nothing to share" };
   }
 
   /**

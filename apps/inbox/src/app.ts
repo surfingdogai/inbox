@@ -86,6 +86,7 @@ import {
   readSettings,
   relayAddress,
   type Settings,
+  type SharedSpamPort,
   type SpamHostPolicy,
   STAY_ARI_SYNC_KIND,
   STAY_MESSAGE_KIND,
@@ -228,12 +229,14 @@ export interface AppDeps {
    * The spam filter's AI check (ADR-041 §7.2): the model that reads for the filters an owner switched
    * on, and on a hosted inbox the host's policy for it (which filters, its caps, whether its AI may be
    * used). Absent, the filters look for known phrases only; the free protection works either way.
+   * `shared`: the host's shared list of known spam, fingerprints only (ADR-041 §16); hosted inboxes only.
    */
   readonly spam?:
     | {
         readonly judge?: JudgePort | null | undefined;
         readonly host?: SpamHostPolicy | null | undefined;
         readonly model?: ModelInfo | null | undefined;
+        readonly shared?: SharedSpamPort | null | undefined;
       }
     | undefined;
 }
@@ -343,6 +346,8 @@ export function createInbox(deps: AppDeps): Inbox {
     judge: demo ? null : (deps.spam?.judge ?? null),
     host: deps.spam?.host ?? null,
     model: demo ? null : (deps.spam?.model ?? null),
+    // A demo shares nothing with anyone, and reads nothing others shared.
+    shared: demo ? null : (deps.spam?.shared ?? null),
     resolveMail: demo ? null : (domain) => takesMail(connectorHttp({ fetchImpl: deps.fetchImpl }), domain),
     // An owner's own model on their own server (Settings → Integrations → Your AI model): never in a
     // demo, and never where the host or the operator already reads.

@@ -35,6 +35,15 @@ import {
 } from "./normalise";
 import { asksBankChange, foundWords, isGibberish, phraseHits } from "./phrases";
 import { hamming, NEAR_BITS, NO_REPEATS, type Print, printOf, printStatement, repeatsOf, sha256Hex } from "./prints";
+import {
+  lookupShared,
+  NO_MATCH,
+  type SharedSpamPort,
+  sharedPrintOf,
+  sharedSignals,
+  shareJobStatement,
+  sureAside,
+} from "./shared";
 import { agentSignals } from "./signals/agent";
 import { contentSignals, looksLike, PROVIDER_DOMAINS, talksToFilter } from "./signals/content";
 import { emailAuthenticated, emailSignals } from "./signals/email";
@@ -90,6 +99,8 @@ export interface SpamDeps {
   judge(): JudgePort | null;
   host(): SpamHostPolicy | null;
   resolveMail(): ((domain: string) => Promise<boolean | null>) | null;
+  /** The host's shared list of known spam (ADR-041 §16); null on one's own server, where nothing is shared. */
+  shared(): SharedSpamPort | null;
 }
 
 /** What a create hands the filter. */
@@ -592,6 +603,11 @@ export async function screenAtDoor(deps: SpamDeps, ctx: DoorContext): Promise<Do
   // count as points there, never as a wave on their own.
   const templated = ctx.type === "booking" || ctx.type === "order";
   const repeats = templated ? { ...found, same: Math.min(found.same, 3) } : found;
+  // Known spam elsewhere (ADR-041 §16): what other businesses' inboxes on this host marked, compared by
+  // a keyed fingerprint only, for the same senders the repeats are counted for.
+  const sharedPort = deps.shared();
+  const sharedPrint = sharedPort && !vouchedFor ? sharedPrintOf(reading.text, reading.email) : null;
+  const sharedMatch = sharedPort && sharedPrint ? await lookupShared(sharedPort, sharedPrint, now) : NO_MATCH;
   const mailDomain = emailDomain(reading.email);
   const noMail =
     mailDomain && !SHARED_MAIL_PROVIDERS.has(mailDomain)
@@ -612,6 +628,7 @@ export async function screenAtDoor(deps: SpamDeps, ctx: DoorContext): Promise<Do
   signals.push(
     ...(templated ? content.map((s) => (s.c === "like_marked" ? { c: s.c, w: s.w, f: s.f, v: s.v } : s)) : content),
   );
+  signals.push(...sharedSignals(sharedMatch, { on: run.on, templated, domain: sharedPrint?.domain ?? null }));
   // The sender's name is read by the AI check too: words aimed at it there are heard as in the text.
   const named = [ctx.contact?.name, ctx.screen.email?.displayName].filter((n): n is string => Boolean(n?.trim()));
   if (!signals.some((x) => x.c === "talks_to_filter") && named.some(talksToFilter)) {
@@ -669,7 +686,15 @@ export async function screenAtDoor(deps: SpamDeps, ctx: DoorContext): Promise<Do
     learning: run.learning,
     answer,
   });
-  return verdictRow(ctx, decision, signals, { ai, learning: decision.learning, reading, sender, answer, known: false });
+  return verdictRow(ctx, decision, signals, {
+    ai,
+    learning: decision.learning,
+    reading,
+    sender,
+    answer,
+    known: false,
+    share: sharedPort?.contributes === true && !ctx.sandbox,
+  });
 }
 
 /** "We have had many new requests from you. Please try again later." in the sender's language. */
@@ -754,6 +779,24 @@ function strangerStatements(
   return out;
 }
 
+/** What a decision says of whether what it put aside is known spam. */
+function asideFacts(decision: Decision, answer: CheckedAnswer | null) {
+  return {
+    verdict: decision.verdict,
+    cause: decision.cause,
+    certain: decision.certain,
+    learning: decision.learning,
+    answer: answer
+      ? {
+          kind: answer.kind,
+          certainty: answer.certainty,
+          customerIntent: answer.customerIntent,
+          quotes: answer.quotes.length,
+        }
+      : null,
+  };
+}
+
 function verdictRow(
   ctx: DoorContext,
   decision: Decision,
@@ -765,6 +808,8 @@ function verdictRow(
     readonly reading?: Reading;
     readonly sender?: SenderHandles;
     readonly answer?: CheckedAnswer | null;
+    /** Whether this inbox reports what it is sure of to the host's shared list. */
+    readonly share?: boolean;
   },
 ): DoorScreen {
   const verdict = decision.verdict;
@@ -824,6 +869,7 @@ function verdictRow(
           })
         : []),
       ...(verdict === "hold" ? heldSoonStatements(itemId, ctx.type, ctx.payload, ctx.now) : []),
+      ...(o.share && sureAside(asideFacts(decision, o.answer ?? null)) ? [shareJobStatement(itemId, ctx.now)] : []),
       ...(counter ? [countStatement(counter, ctx.now)] : []),
       ...(o.ai === "reused" ? [countStatement("reused", ctx.now)] : []),
       ...(o.ai === "capped" ? [countStatement("capped", ctx.now)] : []),
@@ -922,6 +968,23 @@ async function storedItem(db: Db, itemId: string) {
     displayName: r[10] === null || r[10] === undefined ? null : String(r[10]),
     attachments: Number(r[11] ?? 0),
   };
+}
+
+/** The words an item was screened on, read back as its job reads them, and its sender's email: for the shared list. */
+export async function screenedWords(
+  db: Db,
+  itemId: string,
+): Promise<{ readonly text: string; readonly email: string | undefined } | null> {
+  const item = await storedItem(db, itemId);
+  if (!item) return null;
+  const reading = await readingOf(
+    item.type,
+    item.payload,
+    item.type === "message" ? undefined : item.firstMessage,
+    item.type === "message" && item.channel === "email" ? item.subject : undefined,
+    item.email ? { email: item.email } : undefined,
+  );
+  return { text: reading.text, email: item.email };
 }
 
 /** How long the AI check may take, and how it waits: shorter in a test. */
@@ -1125,6 +1188,10 @@ export async function runScreenJob(
   ];
   const counter = verdict === "aside" ? "aside" : verdict === "hold" ? "held" : verdict === "warn" ? "warned" : null;
   if (counter) statements.push(countStatement(counter, now));
+  // What it is sure of goes to the host's shared list, once this batch is written.
+  if (deps.shared()?.contributes && sureAside(asideFacts(decision, answer))) {
+    statements.push(shareJobStatement(input.itemId, now));
+  }
   const casScreen = (to: Screen) => ({
     sql: "UPDATE items SET screen = ?, screen_at = ? WHERE id = ? AND screen = 'pending'",
     params: [to, now, input.itemId],

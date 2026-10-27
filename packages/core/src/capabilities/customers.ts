@@ -558,7 +558,14 @@ export function eraseStatements(parties: readonly string[], now: number): Statem
       run(`DELETE FROM reviews_outbox WHERE item_id IN ${theirItems}`),
       // What the spam filter kept about them (ADR-041): its verdicts and prints on their items, the AI
       // check's answers for their words (which quote them), the owner's list rows that came from them,
-      // and the handles it knew them by.
+      // and the handles it knew them by. Whatever the inbox told its host's shared list of known spam
+      // about their items is taken back by a job (ADR-041 §16), which finds no verdict left.
+      run(
+        `INSERT OR IGNORE INTO jobs (id, kind, payload, run_at, status, attempts, max_attempts, dedupe_key, created_at)
+         SELECT 'spam_share:erased:' || v.item_id || ':' || ?, 'spam_share', json_object('itemId', v.item_id), ?, 'queued', 0, 8, NULL, ?
+           FROM spam_verdicts v WHERE v.item_id IN ${theirItems} AND (v.owner_verdict IS NOT NULL OR v.verdict = 'aside')`,
+        [now, now, now, ...part],
+      ),
       run(`DELETE FROM spam_verdicts WHERE item_id IN ${theirItems}`),
       run(`DELETE FROM spam_cache WHERE sha IN (SELECT sha FROM spam_prints WHERE item_id IN ${theirItems})`),
       run(`DELETE FROM spam_prints WHERE item_id IN ${theirItems}`),

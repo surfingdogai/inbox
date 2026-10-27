@@ -21,6 +21,7 @@ import {
   spamWeeklyHandler,
 } from "../spam/emails";
 import { gateOf, holdsBack, SPAM_SCREEN_KIND, stillScreening } from "../spam/screen";
+import { SPAM_SHARE_KIND } from "../spam/shared";
 import { SCREEN_DEADLINE_MS } from "../spam/types";
 import { LIFECYCLE_SWEEP_KIND, lifecycleSweepHandler } from "./lifecycle";
 import { type NotifyPayload, notifyHandler, OWNER_DIGEST_KIND, ownerDigestHandler } from "./notify";
@@ -145,6 +146,11 @@ export function createRunner(deps: {
         const r = await spam.screen({ itemId: p.itemId, eventId: p.eventId, now });
         return { note: r.note, rerun: true };
       })
+      // What this inbox says of one item, told to its host's shared list of known spam (ADR-041 §16).
+      .register(SPAM_SHARE_KIND, async (job, { now }) => {
+        const p = job.payload as { itemId: string };
+        return spam.share(p.itemId, now);
+      })
       .register(SPAM_DAILY_KIND, async (_job, { now }) => {
         const r = await spam.daily(now);
         return { note: `${r.removed} put-aside item${r.removed === 1 ? "" : "s"} past their time removed` };
@@ -185,6 +191,7 @@ export interface SpamJobs {
     readonly now: number;
   }): Promise<{ readonly note: string }>;
   daily(now: number): Promise<{ readonly removed: number }>;
+  share(itemId: string, now: number): Promise<{ readonly note: string }>;
 }
 
 /** The spam filter's daily housekeeping (ADR-041 §9.4): one a day, each run queueing the next. */

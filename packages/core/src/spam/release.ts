@@ -8,6 +8,7 @@ import { addToListStatements } from "./lists";
 import { countStatement } from "./meter";
 import { emailDomain, foldAddress } from "./normalise";
 import { markPrintStatement } from "./prints";
+import { shareJobStatement } from "./shared";
 
 /**
  * Letting something in, and what a person teaches by it (ADR-041 §3.1, §8). A release runs each
@@ -80,7 +81,8 @@ export type OwnerVerdict = "not_spam" | "let_in" | "looks_fine" | "spam";
 /**
  * What a person teaches with Not spam, Let it in or Looks fine: the sender on Let through (their
  * address, or their app's key), the print kept, their handles trusted. With Spam: the print marked
- * and the handles' trust gone; never a list on its own (the owner chooses "Always put aside").
+ * and the handles' trust gone; never a list on its own (the owner chooses "Always put aside"). Where
+ * the inbox's marks count on its host's shared list (`share`), either word is told to it by a job.
  */
 export async function teachStatements(
   db: Db,
@@ -91,6 +93,8 @@ export async function teachStatements(
     readonly byUser: string;
     readonly releasedBy: "owner" | "staff" | null;
     readonly now: number;
+    /** The inbox reports to its host's shared list of known spam (ADR-041 §16). */
+    readonly share?: boolean | undefined;
   },
 ): Promise<Statement[]> {
   const { itemId, now } = input;
@@ -119,6 +123,7 @@ export async function teachStatements(
       method: "run",
     },
   ];
+  if (input.share) out.push(shareJobStatement(itemId, now));
   if (input.verdict === "spam") {
     out.push(markPrintStatement(itemId, 1), ...markHandleStatements(handles, now), countStatement("marked", now));
     return out;

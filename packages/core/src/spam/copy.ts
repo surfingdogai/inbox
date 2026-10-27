@@ -63,6 +63,8 @@ export const CHIPS: Readonly<Record<string, string>> = {
   near_same: "Sent many times",
   same_link_domain: "Same link, many senders",
   like_marked: "Like one you marked",
+  shared_spam: "Known spam",
+  shared_domain: "Sender known for spam",
   many_new: "Many new requests",
   blocked: "You put this sender aside",
   pitches: "Sales pitch",
@@ -79,6 +81,7 @@ export const WARN_CHIPS: Readonly<Record<string, string>> = {
   junk: "May be junk",
   learning: "Would have been put aside",
   bank_change_known: "Check before paying",
+  shared_spam: "Marked spam elsewhere",
 };
 
 export function chipOf(cause: string | null, warned = false): string {
@@ -169,6 +172,10 @@ export function sentenceOf(
       return `${n} senders this week linked to ${s.d ?? "the same site"}.`;
     case "like_marked":
       return `It reads like a message you marked as spam on ${dayWords(n, ctx.tz)}.`;
+    case "shared_spam":
+      return `${n} other businesses marked the same message as spam.`;
+    case "shared_domain":
+      return `Other businesses marked mail from ${s.d ?? "this sender's domain"} as spam.`;
     case "many_new":
       return `This sender made ${n} new requests today.`;
     case "blocked":
