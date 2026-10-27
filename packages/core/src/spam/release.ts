@@ -1,6 +1,7 @@
 import type { Statement } from "@surfingdog/platform";
 import type { Db } from "../db";
 import type { SecretBox } from "../secrets/box";
+import { workPushStatements } from "../trades/job-tool";
 import { hasEventListeners, jobStatement, WEBHOOK_FANOUT_KIND } from "../write/common";
 import { isPlatformKey, itemHandles, markHandleStatements, trustHandleStatements } from "./handles";
 import { addToListStatements } from "./lists";
@@ -59,6 +60,9 @@ export async function releasedEffects(
       }),
     );
   }
+  // A request for a price goes to the owner's job tool now, as it would have when it came (ADR-039 §5).
+  if (input.type === "quote_request")
+    out.push(...(await workPushStatements(db, itemId, "created", now, { key: "released" })));
   return out;
 }
 

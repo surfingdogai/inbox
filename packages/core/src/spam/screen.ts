@@ -835,17 +835,29 @@ function verdictRow(
 
 export const SPAM_SCREEN_KIND = "spam_screen";
 
-/** The dedupe keys of a create's effects: what the screening pulls forward or cancels. */
-export function effectKeys(eventId: string): { readonly owner: string[]; readonly customer: string[] } {
+/**
+ * The dedupe keys of a create's effects: what the screening pulls forward or cancels. With the item,
+ * its push into the owner's job tool too (ADR-039 §5), which waits for the verdict like the rest.
+ */
+export function effectKeys(
+  eventId: string,
+  itemId?: string,
+): { readonly owner: string[]; readonly customer: string[] } {
   return {
-    owner: [`notify:${eventId}:owner`, `rules:${eventId}`, `rules:${eventId}:wait`, `fanout:${eventId}`],
+    owner: [
+      `notify:${eventId}:owner`,
+      `rules:${eventId}`,
+      `rules:${eventId}:wait`,
+      `fanout:${eventId}`,
+      ...(itemId ? [`work_push:${itemId}:created`] : []),
+    ],
     customer: [`notify:${eventId}:customer`],
   };
 }
 
 /** Moves the create's effects to run now (deliver, warn): the screening is done. */
-export function pullForwardStatement(eventId: string, now: number): Statement {
-  const keys = effectKeys(eventId).owner;
+export function pullForwardStatement(eventId: string, now: number, itemId?: string): Statement {
+  const keys = effectKeys(eventId, itemId).owner;
   return {
     sql: `UPDATE jobs SET run_at = ? WHERE dedupe_key IN (${keys.map(() => "?").join(", ")}) AND status = 'queued' AND run_at > ?`,
     params: [now, ...keys, now],
@@ -854,8 +866,8 @@ export function pullForwardStatement(eventId: string, now: number): Statement {
 }
 
 /** Cancels the create's effects (hold: the owner's alert, the rules, the webhooks; aside: the acknowledgement too). */
-export function cancelEffectsStatement(eventId: string, now: number, withAck: boolean): Statement {
-  const keys = [...effectKeys(eventId).owner, ...(withAck ? effectKeys(eventId).customer : [])];
+export function cancelEffectsStatement(eventId: string, now: number, withAck: boolean, itemId?: string): Statement {
+  const keys = [...effectKeys(eventId, itemId).owner, ...(withAck ? effectKeys(eventId).customer : [])];
   return {
     sql: `UPDATE jobs SET status = 'done', done_at = ?, last_error = 'screened', lease_until = NULL
            WHERE dedupe_key IN (${keys.map(() => "?").join(", ")}) AND status = 'queued'`,
@@ -1128,7 +1140,7 @@ export async function runScreenJob(
     method: "run",
   });
   if (verdict === "deliver" || verdict === "warn") {
-    statements.push(casScreen(SCREEN_OF[verdict]), pullForwardStatement(input.eventId, now));
+    statements.push(casScreen(SCREEN_OF[verdict]), pullForwardStatement(input.eventId, now, input.itemId));
     // The label, in the same batch: the item's flags merged.
     statements.push(
       moved(flags || untrusted ? { ...(flags ?? {}), ...(untrusted ? { untrustedInstructions: true } : {}) } : null),
@@ -1136,19 +1148,33 @@ export async function runScreenJob(
   } else if (verdict === "hold") {
     statements.push(
       casScreen("held"),
-      cancelEffectsStatement(input.eventId, now, decision.noProof),
+      cancelEffectsStatement(input.eventId, now, decision.noProof, input.itemId),
       ...heldSoonStatements(input.itemId, item.type, item.payload, now),
+      releaseHeldPlaces(input.itemId),
       moved(null),
     );
   } else {
     // Put aside: a message or a quote request goes to its spam state, as the system, and nothing it
     // started runs.
-    statements.push(cancelEffectsStatement(input.eventId, now, true));
+    statements.push(cancelEffectsStatement(input.eventId, now, true, input.itemId));
     statements.push(...asideStatements(input.itemId, item.state, item.version, now));
-    statements.push(casScreen("aside"));
+    statements.push(casScreen("aside"), releaseHeldPlaces(input.itemId));
   }
   await db.batch(statements);
   return { note: `screened: ${verdict}${ai !== "none" ? ` (${ai})` : ""}`, verdict };
+}
+
+/**
+ * An order for a time takes its kitchen's place as it is written (ADR-040): held or put aside by the
+ * screening, it gives the place back, so what the filter doubts holds no time (ADR-041 §2).
+ */
+function releaseHeldPlaces(itemId: string): Statement {
+  return {
+    sql: `DELETE FROM slot_claims WHERE item_id = ?
+           AND EXISTS (SELECT 1 FROM items WHERE id = ? AND type = 'order' AND screen IN ('held', 'aside'))`,
+    params: [itemId, itemId],
+    method: "run",
+  };
 }
 
 /** An item put aside by the system once it was written: its event and its state, compare-and-set on its version. */

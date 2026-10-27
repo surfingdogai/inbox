@@ -376,7 +376,9 @@ export async function createItem(
   statements.push(...party.statements);
   // The files kept for this request are handed to it in its own batch (ADR-039 §2).
   if (adds?.files.length) statements.push(...attachStatements(adds.files, id, party.partyId, now));
-  for (const group of adds?.claims ?? []) statements.push(...claimStatements(group.resourceKey, id, group.claims));
+  // What the spam filter holds or puts aside takes no place (ADR-041): no time, stock or pay link.
+  if (!held && !aside)
+    for (const group of adds?.claims ?? []) statements.push(...claimStatements(group.resourceKey, id, group.claims));
   statements.push({
     sql: `INSERT INTO items (id, type, state, version, party_id, location_id, channel, subject, linked_item_id, access_token_hash, payload, flags,
             agent_thumbprint, agent_level, agent_directory, customer_match, possible_party_id, created_at, updated_at, closed_at, request_expires_at,
@@ -541,9 +543,10 @@ export async function createItem(
       );
     }
   }
-  // A customer's request for a price goes to the owner's job tool when the owner sends every one (ADR-039 §5).
-  if (input.type === "quote_request" && isCustomer(caller)) {
-    statements.push(...(await workPushStatements(db, id, "created", now)));
+  // A customer's request for a price goes to the owner's job tool when the owner sends every one (ADR-039 §5):
+  // never while the spam filter holds it, and after its verdict while it is read (ADR-041).
+  if (input.type === "quote_request" && isCustomer(caller) && !held) {
+    statements.push(...(await workPushStatements(db, id, "created", now, { runAt: deadline })));
   }
 
   try {

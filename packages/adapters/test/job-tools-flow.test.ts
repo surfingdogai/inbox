@@ -2,10 +2,12 @@ import {
   type Caller,
   Capabilities,
   createSecretBox,
+  type JudgePort,
   pushRequest,
   transitionItem,
   ulid,
   WORK_PUSH_KIND,
+  workPushHandler,
 } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
 import { servicem8Connector } from "../src/index";
@@ -164,5 +166,107 @@ describe("requests into the job tool", () => {
     const q = await request(s.caps);
     expect(await pushRequest(s.db, s.caps.connectors, q.view.item.id, "created", T0)).toEqual([]);
     expect(jobs(s.sm8)).toHaveLength(0);
+  });
+});
+
+describe("requests the spam filter doubts (ADR-041)", () => {
+  const visitor = (t = T0): Caller => ({
+    actor: { kind: "customer_human", id: `anon:${ulid(t)}`, channel: "form" },
+    tier: "anonymous",
+    sandbox: false,
+    now: () => t,
+  });
+  const pushJobs = async (db: Awaited<ReturnType<typeof setup>>["db"], id: string) =>
+    (
+      await db.client.query({
+        sql: "SELECT dedupe_key, status FROM jobs WHERE kind = ? AND json_extract(payload, '$.itemId') = ?",
+        params: [WORK_PUSH_KIND, id],
+        method: "all",
+      })
+    ).rows.map((r) => [String(r[0]), String(r[1])]);
+  const runPush = (s: Awaited<ReturnType<typeof setup>>, id: string) =>
+    workPushHandler(s.caps.connectors)(
+      { id: ulid(), kind: WORK_PUSH_KIND, payload: { itemId: id, reason: "created" }, attempts: 1 } as never,
+      { db: s.db, now: T0 + 60_000 } as never,
+    );
+
+  it("wait for the AI check's verdict, and never go in when it holds them", async () => {
+    const s = await setup("every");
+    // Our model reads it as a sales pitch, surely, with the Sales pitches filter on and past its week.
+    const judge: JudgePort = {
+      async judge(req) {
+        const check = /Put this value in check, exactly as written: (\S+)/.exec(req.system)?.[1] ?? "";
+        const answer = {
+          check,
+          kind: "sales_pitch",
+          certainty: "high",
+          customer_intent: false,
+          talks_to_filter: false,
+          topic: "seo",
+          quotes: ["first page of Google"],
+        };
+        return { ok: true, answer, tokensIn: 100, tokensOut: 10, ms: 5 };
+      },
+    };
+    s.caps.spam.attach({ judge });
+    await s.caps.spam.setFilter(owner(), { filter: "pitches", on: true }, T0);
+    await s.caps.spam.startNow(owner(), { filter: "pitches" }, T0);
+    const pitch = await s.caps.requestQuote(anon(), {
+      payload: {
+        itemOffered: { name: "SEO" },
+        description:
+          "Hello, we will get your business to the first page of Google within 30 days, guaranteed. Our SEO agency also sells guest posts and backlinks. Shall I send a free audit of your website?",
+      },
+      contact: { name: "Growth Team", email: "growth@agency.example" },
+    });
+    const id = pitch.view.item.id;
+    const [push] = (
+      await s.db.client.query({
+        sql: "SELECT run_at FROM jobs WHERE kind = ? AND json_extract(payload, '$.itemId') = ?",
+        params: [WORK_PUSH_KIND, id],
+        method: "all",
+      })
+    ).rows;
+    // Queued for after the screening's deadline, not at once.
+    expect(Number(push?.[0])).toBeGreaterThan(T0);
+    const event = (
+      await s.db.client.query({
+        sql: "SELECT id FROM item_events WHERE item_id = ? AND event = 'create'",
+        params: [id],
+        method: "all",
+      })
+    ).rows[0]?.[0];
+    await s.caps.spam.screen({ itemId: id, eventId: String(event), now: T0 + 5_000 });
+    expect(
+      (await s.db.client.query({ sql: "SELECT screen FROM items WHERE id = ?", params: [id], method: "all" })).rows,
+    ).toEqual([["held"]]);
+    expect(await pushJobs(s.db, id)).toEqual([[`work_push:${id}:created`, "done"]]);
+    expect(jobs(s.sm8)).toHaveLength(0);
+  });
+
+  it("never reach the job tool while put aside, and go in once a person says Not spam", async () => {
+    const s = await setup("every");
+    // A bot's form, its hidden field filled in: put aside as it arrives.
+    const aside = await s.caps.requestQuote(
+      visitor(),
+      {
+        payload: { itemOffered: { name: "Blocked drain" }, description: "The kitchen drain is blocked." },
+        contact: { name: "Achieng Otieno", email: "achieng@example.com" },
+      },
+      { screen: { door: "form", form: { key: "valid", trap: true, drawnAt: T0 - 30_000 } } },
+    );
+    const id = aside.view.item.id;
+    expect(
+      (await s.db.client.query({ sql: "SELECT screen FROM items WHERE id = ?", params: [id], method: "all" })).rows,
+    ).toEqual([["aside"]]);
+    expect(await pushJobs(s.db, id)).toEqual([]);
+    // Even asked directly, the push sends nothing while it is put aside.
+    expect(await runPush(s, id)).toEqual({ note: "not sent: held by the spam filter" });
+    expect(jobs(s.sm8)).toHaveLength(0);
+    // Not spam: it goes to the job tool as it would have when it came.
+    await s.caps.transitionItem(owner(T0 + 60_000), { item_id: id, event: "unspam" });
+    expect(await pushJobs(s.db, id)).toEqual([[`work_push:${id}:released`, "queued"]]);
+    await runPush(s, id);
+    expect(jobs(s.sm8)).toHaveLength(1);
   });
 });

@@ -594,6 +594,46 @@ describe("slots: the last place goes to one order", () => {
     await ask();
   });
 
+  it("an order the spam filter holds takes no place: the slot stays free for the next customer (ADR-041)", async () => {
+    const s = await shop({
+      name: "Pizzería Volcán",
+      currency: "MXN",
+      timezone: "America/Mexico_City",
+      language: "es",
+      t: VOLCAN_T,
+      kitchen: { perSlot: 1 },
+    });
+    const pizza = await dish(s, VOLCAN_T, { name: "Pizza al pastor", price: 18900, currency: "MXN", menu: PIZZA });
+    const slot = await firstSlot(s, VOLCAN_T, "2026-11-04");
+    const form: Caller = {
+      actor: { kind: "customer_human", id: `anon:${ulid()}`, channel: "form" },
+      tier: "anonymous",
+      sandbox: false,
+      now: () => VOLCAN_T,
+    };
+    // A form the page never drew: a bot's, held for proof as it arrives.
+    const held = await s.caps.createOrder(
+      form,
+      order([line(pizza.product.id, "Pizza", 1, MXN(1))], { method: "pickup", slot: { start: slot } }),
+      { screen: { door: "form", form: { key: "none", trap: false } } },
+    );
+    const { rows } = await s.db.client.query({
+      sql: "SELECT screen FROM items WHERE id = ?",
+      params: [held.view.item.id],
+      method: "all",
+    });
+    expect(rows).toEqual([["held"]]);
+    expect(await claims(s.db, "order-slot:")).toBe(0);
+    const after = await s.caps.food.listOrderSlots({ date: "2026-11-04", method: "pickup" }, VOLCAN_T, "es");
+    expect(after.slots.some((x) => x.start === slot)).toBe(true);
+    // A customer then takes the last place.
+    await s.caps.createOrder(
+      customer(VOLCAN_T),
+      order([line(pizza.product.id, "Pizza", 1, MXN(1))], { method: "pickup", slot: { start: slot } }),
+    );
+    expect(await claims(s.db, "order-slot:")).toBe(1);
+  });
+
   it("offers no slot before the kitchen's time, nor one past how far ahead it takes orders", async () => {
     const s = await volcan();
     const r = await s.caps.food.listOrderSlots({ date: "2026-11-04", method: "pickup" }, VOLCAN_T, "en");

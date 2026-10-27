@@ -7,6 +7,7 @@ import { shortRef } from "../customer/format";
 import type { Db } from "../db";
 import type { JobHandler } from "../jobs/runner";
 import { readSettings } from "../settings/schema";
+import { gateOf, holdsBack } from "../spam/screen";
 import { jobStatement } from "../write/common";
 import type { JobToolMode } from "./settings";
 
@@ -53,16 +54,24 @@ export function sends(mode: JobToolMode, reason: PushReason): boolean {
 
 /**
  * The job that sends a request to the job tool, queued in the batch that wrote the event it follows:
- * none when no job tool is connected, so an inbox without one writes nothing more.
+ * none when no job tool is connected, so an inbox without one writes nothing more. A request the spam
+ * filter is still reading waits for its verdict (`runAt`); one it let in later is pushed under a key
+ * of its own (`key`), since the first was not sent.
  */
 export async function workPushStatements(
   db: Db,
   itemId: string,
   reason: PushReason,
   now: number,
+  opts: { readonly runAt?: number | undefined; readonly key?: string | undefined } = {},
 ): Promise<Statement[]> {
   if ((await jobToolConnections(db)).length === 0) return [];
-  return [jobStatement(WORK_PUSH_KIND, { itemId, reason }, now, { dedupeKey: `work_push:${itemId}:${reason}` })];
+  return [
+    jobStatement(WORK_PUSH_KIND, { itemId, reason }, now, {
+      dedupeKey: `work_push:${itemId}:${opts.key ?? reason}`,
+      ...(opts.runAt ? { runAt: opts.runAt } : {}),
+    }),
+  ];
 }
 
 interface RequestRow {
@@ -310,6 +319,8 @@ export function workPushHandler(connectors: ConnectorCapabilities): JobHandler {
     const itemId = typeof p?.itemId === "string" ? p.itemId : null;
     const reason = p?.reason === "created" || p?.reason === "quoted" || p?.reason === "sent" ? p.reason : null;
     if (!itemId || !reason) return { note: "no item" };
+    // What the spam filter holds or put aside goes nowhere (ADR-041): let in, it is pushed then.
+    if (holdsBack(await gateOf(db, itemId))) return { note: "not sent: held by the spam filter" };
     const outcomes = await pushRequest(db, connectors, itemId, reason, now);
     return { note: outcomes.map((o) => `${o.kind}: ${o.status} (${o.note})`).join("; ") || "no job tool" };
   };
