@@ -8,8 +8,12 @@ import { dayOf, FILTERS, type Filter, type FilterChoice, LEARNING_KEPT_MS, LEARN
  * at any time (a filter-day is a UTC day the filter was on at any moment). A filter switched on for the
  * first time learns for a week (it labels what it would put aside, and puts nothing aside); switched off
  * and on again within thirty days, it carries on where it was. The free protection's own point-based
- * part learns for a week from the day the filter arrived (`basic`).
+ * part learns for a week from the day the filter arrived (`basic`). On a Pro a host gave for free, the
+ * owner's own choice of the host's AI check is kept the same way (`ai`): who turned it on, and when.
  */
+
+/** The span row that keeps the owner's choice of the host's AI check, on a Pro given for free (ADR-041 §15.3). */
+export const OWNER_AI = "ai";
 
 export interface FilterState {
   readonly filter: Filter;
@@ -185,7 +189,7 @@ export async function closeWithdrawnStatements(
 ): Promise<Statement[]> {
   const out: Statement[] = [];
   for (const s of await spans(db)) {
-    if (s.toAt !== null || s.filter === "basic") continue;
+    if (s.toAt !== null || s.filter === "basic" || s.filter === OWNER_AI) continue;
     if (allowed.has(s.filter as Filter)) continue;
     out.push({
       sql: "UPDATE spam_filter_spans SET to_at = ?, by_kind = 'system', by_id = 'host' WHERE id = ? AND to_at IS NULL",
@@ -212,4 +216,41 @@ export async function defaultOnStatements(db: Db, allowed: readonly Filter[], no
     out.push(...(await switchFilterStatements(db, { filter, on: true, byKind: "system", byId: "host", now })));
   }
   return out;
+}
+
+/**
+ * The owner's choice of the host's AI check, on a Pro given for free: on, and since when, or off, and
+ * since when (null when they never chose).
+ */
+export async function ownerAiChoice(db: Db): Promise<{ readonly on: boolean; readonly at: number } | null> {
+  const [last] = await spans(db, OWNER_AI);
+  if (!last) return null;
+  return last.toAt === null ? { on: true, at: last.fromAt } : { on: false, at: last.toAt };
+}
+
+/** The statements that keep the owner's choice of the host's AI check: a span opened, or closed. */
+export async function ownerAiStatements(
+  db: Db,
+  input: { readonly on: boolean; readonly byKind: string; readonly byId: string; readonly now: number },
+): Promise<Statement[]> {
+  const open = (await spans(db, OWNER_AI)).find((s) => s.toAt === null);
+  if (input.on === (open !== undefined)) return [];
+  if (open) {
+    return [
+      {
+        sql: "UPDATE spam_filter_spans SET to_at = ?, by_kind = ?, by_id = ? WHERE id = ? AND to_at IS NULL",
+        params: [input.now, input.byKind, input.byId.slice(0, 200), open.id],
+        method: "run",
+      },
+    ];
+  }
+  return [
+    {
+      sql: `INSERT INTO spam_filter_spans (id, filter, choice, from_at, to_at, learning_until, by_kind, by_id)
+            SELECT ?, ?, 'aside', ?, NULL, NULL, ?, ?
+             WHERE NOT EXISTS (SELECT 1 FROM spam_filter_spans WHERE filter = ? AND to_at IS NULL)`,
+      params: [ulid(input.now), OWNER_AI, input.now, input.byKind, input.byId.slice(0, 200), OWNER_AI],
+      method: "run",
+    },
+  ];
 }

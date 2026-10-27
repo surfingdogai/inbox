@@ -450,6 +450,7 @@ export const api = {
   spam: () => call<SpamStatus>("GET", "/v1/owner/spam"),
   setSpamFilter: (filter: "pitches" | "scams" | "junk", body: { on: boolean; choice?: "aside" | "label" }) =>
     call<SpamStatus>("PUT", `/v1/owner/spam/filters/${filter}`, { body }),
+  setSpamAi: (on: boolean) => call<SpamStatus>("PUT", "/v1/owner/spam/ai", { body: { on } }),
   startSpamFilter: (filter: "basic" | "pitches" | "scams" | "junk") =>
     call<SpamStatus>("POST", `/v1/owner/spam/filters/${filter}/start`, { body: {} }),
   removeSpamListEntry: (body: { list: "allow" | "block"; kind: string; value: string }) =>

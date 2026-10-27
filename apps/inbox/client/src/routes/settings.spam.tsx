@@ -6,6 +6,8 @@ import { Sheet } from "../components/Sheet";
 import { problemOf } from "../lib/api";
 import { useBusiness, useSaveSettings, useSettings, useSpam, useSpamWrite } from "../lib/queries";
 import {
+  aiOnSheet,
+  aiTurning,
   BASIC_LINE,
   basicFree,
   basicMonth,
@@ -13,12 +15,15 @@ import {
   FILTER_COPY,
   FILTERS_LINE,
   filterMonth,
+  giftLine,
   KEEP_CHOICES,
   KEEP_NOTE,
   learningLine,
   MONTHLY_CHECKS,
   notIncluded,
   ONLY_YOU,
+  OWNER_AI_ONLY,
+  ownerAiLine,
   priceLine,
   readerLine,
   SETTINGS_INTRO,
@@ -48,6 +53,7 @@ function SpamPage() {
   const write = useSpamWrite();
   const save = useSaveSettings();
   const [asking, setAsking] = useState<FilterName | null>(null);
+  const [askingAi, setAskingAi] = useState(false);
   const [notice, setNotice] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
   const tz = business.data?.timezone ?? settings.data?.doc.business.timezone;
 
@@ -90,6 +96,16 @@ function SpamPage() {
     save.mutate({ doc: { spam: patch }, expected_version: settings.data.version }, { onError: failed });
   };
   const sheet = asking ? turnOnSheet(asking, s, tz) : null;
+  // On a Pro given for free, the AI check waits for the owner: turning it on says first what it sends.
+  const switchAi = (on: boolean) => {
+    setNotice(null);
+    if (on) {
+      setAskingAi(true);
+      return;
+    }
+    write.mutate({ ai: false }, { onError: failed });
+  };
+  const turning = aiTurning(s, Date.now());
 
   return (
     <>
@@ -129,6 +145,7 @@ function SpamPage() {
         <div className="spam-block">
           <h4 className="spam-block-title">Filters</h4>
           <p>{FILTERS_LINE}</p>
+          {s.gift_until && <p className="fine">{giftLine(s.gift_until)}</p>}
           <div>
             {s.filters.map((f) => (
               <FilterRow
@@ -154,6 +171,20 @@ function SpamPage() {
               </>
             )}
           </p>
+          {s.owner_ai && (
+            <div className="spam-filter">
+              <div className="switch-cell">
+                <Switch checked={s.owner_ai.chosen} disabled={!s.owner_ai.can_switch || turning} onChange={switchAi}>
+                  <span className="sr-only">AI check</span>
+                </Switch>
+              </div>
+              <div className="body">
+                <span className="title">AI check</span>
+                <p>{ownerAiLine(s, Date.now())}</p>
+                {!s.owner_ai.can_switch && <p className="fine">{OWNER_AI_ONLY}</p>}
+              </div>
+            </div>
+          )}
           {/* On one's own server with no model there is nothing to count, cap or pay for. */}
           {(hosted || showsModelUse(s)) && <p className="fine">{priceLine(s, currency)}</p>}
           {showsModelUse(s) && (
@@ -226,6 +257,26 @@ function SpamPage() {
           <p className="fine">{KEEP_NOTE}</p>
         </div>
       </section>
+      {askingAi && (
+        <Sheet title={aiOnSheet(s).title} onClose={() => setAskingAi(false)}>
+          <p className="lede small">{aiOnSheet(s).text}</p>
+          <div className="form-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => setAskingAi(false)}>
+              Not now
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => {
+                setAskingAi(false);
+                write.mutate({ ai: true }, { onError: failed });
+              }}
+            >
+              Turn on
+            </button>
+          </div>
+        </Sheet>
+      )}
       {asking && sheet && (
         <Sheet title={sheet.title} onClose={() => setAsking(null)}>
           <p className="lede small">{sheet.text}</p>

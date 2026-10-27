@@ -540,6 +540,11 @@ export const setSpamFilterInput = z.object({
     .describe("Put aside (the default), or just label it and leave it on the desk."),
 });
 
+/** Settings → Spam on a Pro the host gave for free (ADR-041 §15.3): the owner turns its AI check on or off. */
+export const setSpamAiInput = z.object({
+  on: z.boolean().describe("On: new senders' masked messages the filters can't decide are read by the host's AI."),
+});
+
 export const startSpamFilterInput = z.object({
   filter: z.enum(["basic", "pitches", "scams", "junk"]).describe("The filter, or basic for the free protection."),
 });
@@ -576,6 +581,7 @@ export type SpamModelsInput = z.infer<typeof spamModelsInput>;
 export type SetSpamModelInput = z.infer<typeof setSpamModelInput>;
 export type SetSpamFilterInput = z.infer<typeof setSpamFilterInput>;
 export type StartSpamFilterInput = z.infer<typeof startSpamFilterInput>;
+export type SetSpamAiInput = z.infer<typeof setSpamAiInput>;
 export type LetDomainThroughInput = z.infer<typeof letDomainThroughInput>;
 export type RemoveSpamListEntryInput = z.infer<typeof removeSpamListEntryInput>;
 

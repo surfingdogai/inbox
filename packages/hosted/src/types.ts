@@ -180,13 +180,24 @@ export const policyPayloadSchema = z.looseObject({
     .optional()
     .catch(undefined),
   /**
+   * Pro given for free, with no card (a beta tester's month, ADR-041 §15.3): until when, the moment it
+   * ends. Absent while Pro is paid for, or on Free. One that does not read reads as absent.
+   */
+  gift: z
+    .looseObject({ until: z.iso.datetime({ offset: true }) })
+    .optional()
+    .catch(undefined),
+  /**
    * The spam filter's limits on our AI (ADR-041 §15.3), when the control plane sets them: `ai: false`
    * stops our AI reading for this inbox whatever its plan; the AI check's caps a day and a month.
+   * `ai_owner: true` (a Pro given for free): the owner switches our AI in Settings → Spam, and `ai` is
+   * what they last chose, as the control plane has it; their switch goes to it as a `spam_ai` event.
    * Absent: our AI reads for Pro inboxes, at most 150 checks a day and 1,500 a month.
    */
   spam: z
     .looseObject({
       ai: z.boolean().optional(),
+      ai_owner: z.boolean().optional().catch(undefined),
       day_cap: z.number().int().min(0).max(10_000).optional(),
       month_cap: z.number().int().min(0).max(100_000).optional(),
     })

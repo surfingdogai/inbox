@@ -256,6 +256,7 @@ export class Shard {
         onOwnerEmailChange: (change: OwnerEmailChange) =>
           this.event(id, change.how === "undone" ? "owner_email_undone" : "owner_email_changed", { to: change.to }),
         onMailSender: (type, data) => this.event(id, type, data),
+        onSpamAi: (on: boolean) => this.event(id, "spam_ai", { on }),
         spamModel: this.o.spamModel ?? null,
         now: this.o.now,
       });

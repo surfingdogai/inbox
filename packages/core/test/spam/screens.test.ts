@@ -275,3 +275,96 @@ describe("the owner's own AI model, on their own server", () => {
     });
   });
 });
+
+/**
+ * The AI check on a Pro the host gave for free (ADR-041 §15.3): off until the owner turns it on in
+ * Settings → Spam. The owner's own act, signed in, in person, since it decides whether new senders'
+ * messages go to the host's AI; kept as a span (who, when) and told to the host, which decides.
+ */
+describe("the AI check on a Pro given for free", () => {
+  const staff: Caller = {
+    actor: { kind: "staff", id: "user_2", channel: "owner_ui" },
+    tier: "verified_principal",
+    sandbox: false,
+    principal: { via: "session", id: "sess_2", name: "staff@kopisenja.example", scopes: ["*"], userId: "user_2" },
+    now: () => T0,
+  };
+
+  it("is the owner's alone to switch, kept with who and when, and told to the host every time", async () => {
+    const told: boolean[] = [];
+    const s = await spamSetup({
+      filters: ["pitches"],
+      judge: fakeJudge(),
+      host: hostPolicy({
+        ai: false,
+        aiByOwner: true,
+        ownerReader: "Claude Haiku, by Anthropic",
+        giftUntil: "2026-11-27T00:00:00.000Z",
+      }),
+    });
+    s.caps.spam.attach({ tellAi: (on) => told.push(on) });
+    const first = await s.caps.spam.status(staff, T0);
+    expect(first.gift_until).toBe("2026-11-27T00:00:00.000Z");
+    expect(first.owner_ai).toEqual({
+      on: false,
+      chosen: false,
+      chosen_at: null,
+      can_switch: false,
+      reader: "Claude Haiku, by Anthropic",
+    });
+    expect(await s.caps.spam.aiReader(T0)).toBeNull();
+    for (const who of [staff, ownerAi(T0)]) {
+      await expect(s.caps.spam.setHostedAi(who, { on: true }, T0)).rejects.toMatchObject({
+        code: "not_allowed",
+        details: { reason: "owner_in_person" },
+      });
+    }
+    expect(told).toEqual([]);
+    const on = await s.caps.spam.setHostedAi(owner(T0), { on: true }, T0 + MIN);
+    expect(on.owner_ai).toMatchObject({
+      on: false,
+      chosen: true,
+      chosen_at: new Date(T0 + MIN).toISOString(),
+      can_switch: true,
+    });
+    // Asked again, nothing more is kept, and the host is told again.
+    await s.caps.spam.setHostedAi(owner(T0), { on: true }, T0 + 2 * MIN);
+    expect(told).toEqual([true, true]);
+    expect(await s.q("SELECT by_kind, by_id, from_at, to_at FROM spam_filter_spans WHERE filter = 'ai'")).toEqual([
+      ["owner", "user_1", T0 + MIN, null],
+    ]);
+    // Until the host's policy says so, nothing is read.
+    expect(await s.caps.spam.aiReader(T0 + 2 * MIN)).toBeNull();
+    // A plan that withdraws the filters leaves the owner's choice as it is; it is no filter.
+    s.caps.spam.attach({ host: hostPolicy({ plan: "free", ai: false, filters: [] }) });
+    await s.caps.spam.applyHost(T0 + HOUR);
+    expect(await s.q("SELECT to_at FROM spam_filter_spans WHERE filter = 'ai'")).toEqual([[null]]);
+    expect((await s.caps.spam.status(owner(T0), T0 + HOUR)).filters.map((f) => f.filter)).toEqual([
+      "pitches",
+      "scams",
+      "junk",
+    ]);
+    await expect(s.caps.spam.setHostedAi(owner(T0), { on: false }, T0 + HOUR)).rejects.toMatchObject({
+      code: "not_allowed",
+      details: { reason: "plan" },
+    });
+    // Back on the gift, with the filters back and the host having it on: off is the owner's to choose again.
+    s.caps.spam.attach({
+      host: hostPolicy({ ai: true, defaultOn: true, aiByOwner: true, ownerReader: "Claude Haiku, by Anthropic" }),
+    });
+    await s.caps.spam.applyHost(T0 + HOUR);
+    expect(await s.caps.spam.aiReader(T0 + HOUR)).toBe("host");
+    const off = await s.caps.spam.setHostedAi(owner(T0), { on: false }, T0 + 2 * HOUR);
+    expect(off.owner_ai).toMatchObject({ on: true, chosen: false, chosen_at: new Date(T0 + 2 * HOUR).toISOString() });
+    expect(told).toEqual([true, true, false]);
+  });
+
+  it("isn't offered on paid Pro, on Free, or on one's own server", async () => {
+    for (const host of [hostPolicy(), hostPolicy({ plan: "free", ai: false, filters: [] }), null]) {
+      const s = await spamSetup({ host });
+      s.caps.spam.attach({ tellAi: () => undefined });
+      expect((await s.caps.spam.status(owner(T0), T0)).owner_ai).toBeNull();
+      await expect(s.caps.spam.setHostedAi(owner(T0), { on: true }, T0)).rejects.toMatchObject({ code: "not_allowed" });
+    }
+  });
+});

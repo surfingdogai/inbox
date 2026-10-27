@@ -14,6 +14,8 @@ import {
   defaultOnStatements,
   endLearningStatement,
   filterStates,
+  ownerAiChoice,
+  ownerAiStatements,
   switchFilterStatements,
 } from "./filters";
 import { isPlatformKey, itemHandles, pruneHandlesStatement, trustHandleStatements } from "./handles";
@@ -112,6 +114,23 @@ export interface SpamStatus {
    * own address); `reads`, it counts here only; `off`, one's own server, where nothing is shared.
    */
   readonly shared: "off" | "reads" | "reads_and_shares";
+  /** Until when the host gives this inbox Pro for free (ADR-041 §15.3); null when it doesn't. */
+  readonly gift_until: string | null;
+  /**
+   * The AI check on a Pro the host gave for free, which waits for the owner (ADR-041 §15.3): `on`, whether
+   * the host's AI reads now, as the host has it; `chosen`, what the owner last chose here, and when, which
+   * the host follows a moment later; `can_switch`, whether this caller may switch it (the owner, signed
+   * in, in person: it decides whether new senders' messages go to the host's AI). Null where the plan
+   * decides alone.
+   */
+  readonly owner_ai: {
+    readonly on: boolean;
+    readonly chosen: boolean;
+    readonly chosen_at: string | null;
+    readonly can_switch: boolean;
+    /** Who reads once it is on ("Claude Haiku, by Anthropic"). */
+    readonly reader: string | null;
+  } | null;
   readonly this_month: { readonly aside: number; readonly held: number; readonly brought_back: number };
   readonly held_now: number;
   /** Put aside in the last seven days, by anyone: the Spam list's "This week". */
@@ -133,6 +152,8 @@ export class SpamCapabilities implements SpamDeps {
   private policy: SpamHostPolicy | null = null;
   private resolver: ((domain: string) => Promise<boolean | null>) | null = null;
   private sharedPort: SharedSpamPort | null = null;
+  /** How the owner's choice of the host's AI check, on a Pro given for free, reaches the host. */
+  private tellAi: ((on: boolean) => unknown) | null = null;
   private modelInfo: ModelInfo | null = null;
   private judgeOptions: JudgeOptions = {};
   /** How the host reaches an owner's own model provider (own server only). */
@@ -161,6 +182,8 @@ export class SpamCapabilities implements SpamDeps {
     readonly kit?: ModelKit | null | undefined;
     /** The host's shared list of known spam (ADR-041 §16): hosted inboxes only. */
     readonly shared?: SharedSpamPort | null | undefined;
+    /** Tells the host the owner switched its AI check, on a Pro it gave for free (`host.aiByOwner`). */
+    readonly tellAi?: ((on: boolean) => unknown) | null | undefined;
   }): void {
     if (o.judgeOptions !== undefined) this.judgeOptions = o.judgeOptions;
     if (o.kit !== undefined) this.kit = o.kit;
@@ -169,6 +192,7 @@ export class SpamCapabilities implements SpamDeps {
     if (o.resolveMail !== undefined) this.resolver = o.resolveMail;
     if (o.model !== undefined) this.modelInfo = o.model;
     if (o.shared !== undefined) this.sharedPort = o.shared;
+    if (o.tellAi !== undefined) this.tellAi = o.tellAi;
   }
 
   judge(): JudgePort | null {
@@ -325,6 +349,7 @@ export class SpamCapabilities implements SpamDeps {
     });
     const lists = await listEntries(db);
     const basic = await basicLearningUntil(db, now);
+    const ownerAi = host?.aiByOwner ? await ownerAiChoice(db) : null;
     const port = this.judge();
     const reader: Reader = host ? (host.ai && port ? "hosted_ai" : "hosted_phrases") : port ? "own_model" : "no_model";
     const modelInfo = this.port ? this.modelInfo : (this.own?.info ?? null);
@@ -361,6 +386,16 @@ export class SpamCapabilities implements SpamDeps {
       },
       plan: host ? host.plan : "self_hosted",
       shared: !this.sharedPort ? "off" : this.sharedPort.contributes ? "reads_and_shares" : "reads",
+      gift_until: host?.giftUntil ?? null,
+      owner_ai: host?.aiByOwner
+        ? {
+            on: host.ai,
+            chosen: ownerAi?.on === true,
+            chosen_at: ownerAi ? new Date(ownerAi.at).toISOString() : null,
+            can_switch: canChangeModel(caller),
+            reader: host.ownerReader ?? null,
+          }
+        : null,
       this_month: { aside: usage.aside, held: usage.held, brought_back: usage.brought_back },
       held_now: Number(heldRows[0]?.[0] ?? 0),
       this_week: { aside: Number(weekRows[0]?.[0] ?? 0) },
@@ -646,6 +681,39 @@ export class SpamCapabilities implements SpamDeps {
       now,
     });
     if (statements.length) await this.db.batch(statements);
+    return this.status(caller, now);
+  }
+
+  /**
+   * The AI check on a Pro the host gave for free (ADR-041 §15.3): it stays off until the owner turns it
+   * on here, since it sends new senders' masked messages to the host's AI. Their choice is kept (who,
+   * when) and told to the host, which reads from the moment it has it; off again the same way. The
+   * owner's own act, signed in, in person: never staff's, their AI's, a rule's or a key's.
+   */
+  async setHostedAi(caller: Caller, input: { readonly on: boolean }, now: number): Promise<SpamStatus> {
+    if (!canChangeModel(caller)) {
+      throw new WriteError("not_allowed", "Only the owner can switch the AI check, signed in.", {
+        details: { reason: "owner_in_person" },
+      });
+    }
+    if (!this.policy?.aiByOwner || !this.tellAi) {
+      throw new WriteError(
+        "not_allowed",
+        this.policy?.plan === "pro" || !this.policy
+          ? "The AI check isn't yours to switch here: it comes with the plan."
+          : "The AI check comes with Pro.",
+        { details: { reason: this.policy?.plan === "free" ? "plan" : "not_offered" } },
+      );
+    }
+    const statements = await ownerAiStatements(this.db, {
+      on: input.on,
+      byKind: caller.actor.kind,
+      byId: byUserOf(caller),
+      now,
+    });
+    if (statements.length) await this.db.batch(statements);
+    // Told every time, so a word the host never got can be given again.
+    await this.tellAi(input.on);
     return this.status(caller, now);
   }
 

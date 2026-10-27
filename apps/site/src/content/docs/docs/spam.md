@@ -90,6 +90,8 @@ It runs on a stranger's opening message, with a filter on, when nothing certain 
 
 The $10 supports the open-source inbox, the open network, and keeping access to AI agents from being locked in a connector store. There is no price for each filter.
 
+**A Pro we give for free**, such as a beta tester's month, says so in Settings → Spam, with until when. Its filters are on and look for known phrases, and its AI check stays off until the owner turns it on there: turning it on says what it sends. The owner switches it, signed in, and nobody else.
+
 Settings → Spam names who reads. Anthropic does not use what it is sent to train its models, and deletes it within 30 days, unless its safety checks flag it for breaking its usage policy (then it may keep it up to two years, and the checks' scores up to seven) or the law requires keeping it. That is Anthropic's standard commercial retention, not a zero-retention arrangement. Until the AI check is switched on for hosted inboxes, Settings says so, and the filters look for known phrases.
 
 ## Known spam, shared between hosted inboxes

@@ -50,6 +50,7 @@ import {
   serviceInput,
   setClosuresInput,
   setFloorsInput,
+  setSpamAiInput,
   setSpamFilterInput,
   setSpamModelInput,
   setupPlanSchema,
@@ -762,6 +763,18 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
           filter: setSpamFilterInput.shape.filter.parse(c.req.param("filter")),
         }),
       ),
+  );
+
+  app.put(
+    "/spam/ai",
+    owner({
+      tags: ["owner"],
+      summary: "Turn the AI check on or off, on a Pro the host gave for free (the owner in person only)",
+      responses: json("Spam filter", z.looseObject({})),
+      write: true,
+    }),
+    validator("json", setSpamAiInput, hook),
+    async (c) => c.json(await caps.setSpamAi(c.get("caller"), c.req.valid("json"))),
   );
 
   app.post(

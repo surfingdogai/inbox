@@ -48,6 +48,8 @@ export const EVENT_TYPES = [
   // runtime's own daily budget stopped every inbox's checks (ADR-041 §15.3).
   "spam_cap_reached",
   "spam_breaker",
+  // The owner turned the AI check on or off (`data.on`), on a Pro given for free (ADR-041 §15.3).
+  "spam_ai",
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 

@@ -275,11 +275,11 @@ export function learningLine(until: string, tz?: string, locale?: string): strin
  * only when its safety checks flag it or the law requires it.
  */
 export const HOSTED_DATA =
-  "Anthropic doesn't use it to train its models, and deletes it within 30 days, unless its safety checks flag it (then it may keep it for up to two years) or the law requires keeping it.";
+  "Anthropic doesn't use it to train its models, and deletes it within 30 days, unless its safety checks flag it (then it may keep it for up to two years, and the checks' scores for up to seven) or the law requires keeping it.";
 
 /** Who reads for the filters, as Settings says it (§11.4). */
 export function readerLine(
-  s: Pick<SpamStatus, "plan" | "reader" | "model" | "reader_name" | "checks">,
+  s: Pick<SpamStatus, "plan" | "reader" | "model" | "reader_name" | "checks"> & Partial<Pick<SpamStatus, "owner_ai">>,
   tz?: string,
   locale?: string,
 ): string {
@@ -292,7 +292,9 @@ export function readerLine(
     case "hosted_phrases":
       return s.plan === "free"
         ? "On Free, basic protection works without AI."
-        : "The AI check isn't on yet, so for now the filters look for known phrases only.";
+        : s.owner_ai
+          ? "The AI check is off until you turn it on, so for now the filters look for known phrases only."
+          : "The AI check isn't on yet, so for now the filters look for known phrases only.";
     case "own_model":
       return s.model
         ? `Read by ${s.model.model} from ${s.model.provider}, set up for this inbox.`
@@ -333,9 +335,14 @@ export function proPrice(currency?: string): string {
   return c === "EUR" ? "€10" : c === "GBP" ? "£9" : "$10";
 }
 
-/** What Pro's price pays for, in the founder's words. */
-export const PRO_WHY =
-  "It supports the open-source inbox, the open network, and keeping access to AI agents from being locked in a connector store.";
+/**
+ * What Pro's price pays for, in the founder's words: "The $10 supports …", and "Your €10 …" or "Your £9
+ * …" where the price is shown in euros or pounds.
+ */
+export function proWhy(currency?: string): string {
+  const price = proPrice(currency);
+  return `${price === "$10" ? "The" : "Your"} ${price} supports the open-source inbox, the open network, and keeping access to AI agents from being locked in a connector store.`;
+}
 
 /** What the filters cost here (§11.4); own server: what the owner's model was used for this month. */
 export function priceLine(s: Pick<SpamStatus, "plan" | "checks">, currency?: string): string {
@@ -344,7 +351,48 @@ export function priceLine(s: Pick<SpamStatus, "plan" | "checks">, currency?: str
     return `${s.checks.this_month.toLocaleString("en")} checked by your model this month · ${words.toLocaleString("en")} words of model time.`;
   }
   if (s.plan === "pro") return `Included in Pro, ${proPrice(currency)} a month, taxes included.`;
-  return `The three filters come with Pro: ${proPrice(currency)} a month, taxes included. ${PRO_WHY}`;
+  return `The three filters come with Pro: ${proPrice(currency)} a month, taxes included. ${proWhy(currency)}`;
+}
+
+/**
+ * A Pro the host gave for free (ADR-041 §15.3), as Settings → Spam says it: its last day, the day before
+ * the moment it ends (midnight UTC, as the host keeps it).
+ */
+export function giftLine(until: string, locale?: string): string {
+  const end = Date.parse(until);
+  const last = Number.isNaN(end) ? until : new Date(end - 1_000).toISOString();
+  return `Pro is free for you until ${formatDay(last, "UTC", locale)}. Nothing is charged, and then your inbox is Free again.`;
+}
+
+/** How long Settings waits for the host to follow the owner's switch of the AI check, before showing it as the host has it. */
+const TURNING_MS = 10 * 60_000;
+
+/** Whether the owner's switch of the AI check, on a Pro given for free, is on its way to the host. */
+export function aiTurning(s: Pick<SpamStatus, "owner_ai"> | undefined, now: number): boolean {
+  const o = s?.owner_ai;
+  if (!o || o.chosen === o.on || !o.chosen_at) return false;
+  return now - Date.parse(o.chosen_at) < TURNING_MS;
+}
+
+/** The AI check's own line on a Pro given for free, which waits for the owner (ADR-041 §15.3). */
+export function ownerAiLine(s: Pick<SpamStatus, "owner_ai">, now: number): string {
+  const o = s.owner_ai;
+  if (!o) return "";
+  if (aiTurning(s, now)) return o.chosen ? "Turning it on…" : "Turning it off…";
+  if (o.on) return "On, as you chose. Turn it off here at any time.";
+  return `Off until you turn it on. Then ${o.reader ?? "an AI model"} reads new senders' messages the filters can't decide, with email addresses, phone numbers and bank details taken out.`;
+}
+
+/** Under the AI check, for anyone but the owner. */
+export const OWNER_AI_ONLY = "Only the owner can switch it, signed in.";
+
+/** The sheet that opens when the owner turns the AI check on, on a Pro given for free. */
+export function aiOnSheet(s: Pick<SpamStatus, "owner_ai">): { title: string; text: string } {
+  const reader = s.owner_ai?.reader ?? "an AI model";
+  return {
+    title: "Turn on the AI check?",
+    text: `New senders' messages the filters can't decide are read by ${reader}, which we pay for, with email addresses, phone numbers and bank details taken out. ${HOSTED_DATA} Turn it off here at any time.`,
+  };
 }
 
 /** Under a filter the plan doesn't include. */
@@ -355,7 +403,7 @@ export function notIncluded(plan: SpamStatus["plan"]): string {
 /** The sheet that opens when a filter is switched on, on a hosted inbox. */
 export function turnOnSheet(
   filter: "pitches" | "scams" | "junk",
-  s: Pick<SpamStatus, "plan" | "reader" | "model" | "reader_name" | "checks">,
+  s: Pick<SpamStatus, "plan" | "reader" | "model" | "reader_name" | "checks"> & Partial<Pick<SpamStatus, "owner_ai">>,
   tz?: string,
 ): { title: string; text: string } {
   const title = FILTER_COPY[filter].title;

@@ -20,6 +20,7 @@ export const ROUTE_SCOPES: Readonly<Record<string, readonly string[]>> = {
   "GET /spam": [READ_SETUP],
   "PUT /spam/filters/:filter": ["*"],
   "POST /spam/filters/:filter/start": ["*"],
+  "PUT /spam/ai": ["*"],
   "POST /spam/lists/domains": ["*"],
   "DELETE /spam/lists": ["*"],
   "GET /spam/model": [READ_SETUP],

@@ -132,7 +132,13 @@ each filter.*
    file, settings, policy, download, answers or logs, and a model key is redacted from every log line.
    Without it no model is asked, and Settings says the AI check isn't on yet. The policy's `spam` block
    keeps what the control plane may still set: `ai: false` stops our AI for an inbox, and the day and
-   month caps (150 and 1,500 unless it says otherwise). Every check is reserved in the shared ledger
+   month caps (150 and 1,500 unless it says otherwise). A Pro the control plane gave for free (D14)
+   carries `gift.until` and `spam.ai_owner: true`: our AI then reads only once the owner turned it on in
+   Settings → Spam, as the control plane has it in `spam.ai`, and `ai` left out is no. The owner's switch
+   (the owner, signed in, in person, as for a model key) is kept as a span (`filter = 'ai'`: who, when)
+   and told to the control plane as a `spam_ai` event; the control plane keeps it and decides, and the
+   inbox reads from the policy that says so. A runtime that does not know `ai_owner` reads `ai: false`
+   and keeps it off. The filters' known phrases and the shared list work meanwhile. Every check is reserved in the shared ledger
    before it is made: the inbox's day and month across every shard, and the runtime's own token budget
    for the day across every inbox; what a copied tenant file says it spent changes nothing. A hosted
    inbox takes no owner's own key; a filter its plan no longer includes is switched off by the system
@@ -303,8 +309,8 @@ brings it back.
 
 | # | Question | The founder's decision, and how it ships |
 |---|---|---|
-| D1 | The price per filter, a bundle, a free first month | No price per filter. Free keeps basic protection; Pro ($10, €10 or £9 a month, taxes included) includes the three filters. The policy's `plan`; Settings, the docs and the site say so, with what the $10 supports. The hosted terms' price section ("free during the pilot") is the billing change's to rewrite to Free and Pro; this one leaves it as it is, and the site ships with both. |
-| D2 | Our AI for hosted inboxes: provider and model, where it runs, retention, the terms | Claude Haiku (`claude-haiku-5-5`) through Anthropic's API on our own key, `HOSTED_SPAM_ANTHROPIC_KEY`: off, and said so, until it is set. Anthropic's standard commercial retention applies (no training; deleted within 30 days unless flagged under its usage policy, then up to two years, or kept by law); never "keeps nothing". The processing agreement names Anthropic as a sub-processor. |
+| D1 | The price per filter, a bundle, a free first month | No price per filter. Free keeps basic protection; Pro ($10, €10 or £9 a month, taxes included) includes the three filters. The policy's `plan`; Settings, the docs and the site say so, with what the $10 supports in the founder's words ("The $10 supports…", "Your €10…", "Your £9…"). The hosted terms' price section says Free and Pro (the billing change). |
+| D2 | Our AI for hosted inboxes: provider and model, where it runs, retention, the terms | Claude Haiku (`claude-haiku-5-5`) through Anthropic's API on our own key, `HOSTED_SPAM_ANTHROPIC_KEY`: off, and said so, until it is set. Anthropic's standard commercial retention applies (no training by default; deleted within 30 days unless flagged under its usage policy, then inputs and outputs up to two years and the safety checks' scores up to seven, or kept by law); never "keeps nothing". The processing agreement names Anthropic as a sub-processor. |
 | D3 | Filters on by default for new hosted inboxes | On for Pro, each starting with its learning week (labels only, then puts aside). Nothing is deleted automatically; Not spam is one tap. A filter a person switched off stays off. |
 | D4 | Caps: 150 a day and 1,500 a month per inbox, 50 million tokens a day per runtime, the budgets above | Kept, in the policy's `spam` block. |
 | D5 | Deleting put-aside items after 30 or 90 days | Kept ("Keep them") unless the owner chooses 90 or 30 days. Nothing is deleted on its own (27 October 2026): a bot's form messages, once gone after seven days, are kept like the rest. |
@@ -316,6 +322,6 @@ brings it back.
 | D11 | A browser challenge, operator link lists, a DNS blocklist feed | not built |
 | D12 | Hosted owners bringing their own model key | later; off |
 | D13 | Switching off filters of owners who do not agree to billing | Gone with the per-filter price: Free has no filters, and the plan switches them off as the system. |
-| D14 | Beta testers | Pro free for a month with no card: the control plane's admin setting per inbox, with an end date. The inbox reads only `plan`, `pro` until the control plane says `free`. |
+| D14 | Beta testers | Pro free for a month with no card: the control plane's admin setting per inbox, with an end date. The owner is told by email, and Settings → Spam says until when. Its filters are on as on any Pro, and its AI check stays off until the owner turns it on in Settings → Spam (§9): nothing goes to Anthropic before. Paid Pro keeps D3's default, the AI on. |
 | D15 | A shared match deciding on its own | Never: it labels ("Seen as spam at other businesses"), and adds its points only beside a signal of the inbox's own or the AI's; it never holds a booking or an order. A known spam domain counts only for mail a mail server vouched for (§16.5). |
 | D16 | Free inboxes' Not spam on a shared match | Counts against the match, like any inbox's (§16.6). |

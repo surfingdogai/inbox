@@ -237,6 +237,8 @@ export interface AppDeps {
         readonly host?: SpamHostPolicy | null | undefined;
         readonly model?: ModelInfo | null | undefined;
         readonly shared?: SharedSpamPort | null | undefined;
+        /** Tells the host the owner switched its AI check, on a Pro it gave for free. */
+        readonly tellAi?: ((on: boolean) => unknown) | null | undefined;
       }
     | undefined;
 }
@@ -348,6 +350,7 @@ export function createInbox(deps: AppDeps): Inbox {
     model: demo ? null : (deps.spam?.model ?? null),
     // A demo shares nothing with anyone, and reads nothing others shared.
     shared: demo ? null : (deps.spam?.shared ?? null),
+    tellAi: demo ? null : (deps.spam?.tellAi ?? null),
     resolveMail: demo ? null : (domain) => takesMail(connectorHttp({ fetchImpl: deps.fetchImpl }), domain),
     // An owner's own model on their own server (Settings → Integrations → Your AI model): never in a
     // demo, and never where the host or the operator already reads.

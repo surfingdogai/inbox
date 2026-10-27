@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { countFor, countsFrom, paramsFor, parseFilter, showHeld } from "../client/src/lib/filters";
 import {
   actsFor,
+  aiOnSheet,
+  aiTurning,
   alreadyDone,
   BASIC_FREE,
   basicFree,
@@ -12,6 +14,7 @@ import {
   deskChip,
   filterMonth,
   followDone,
+  giftLine,
   HELD_TOP,
   heldOrder,
   heldWhat,
@@ -22,7 +25,10 @@ import {
   learningLine,
   MAY_BE_CUSTOMER,
   notIncluded,
+  OWNER_AI_ONLY,
+  ownerAiLine,
   priceLine,
+  proWhy,
   quoteLine,
   readerLine,
   rowTag,
@@ -317,6 +323,8 @@ function status(o: Partial<SpamStatus> & { reader?: SpamStatus["reader"] } = {})
     },
     plan: "self_hosted",
     shared: "off",
+    gift_until: null,
+    owner_ai: null,
     this_month: { aside: 20, held: 4, brought_back: 2 },
     held_now: 1,
     this_week: { aside: 6 },
@@ -331,7 +339,7 @@ describe("Settings → Spam, in every state", () => {
     const pro = status({ plan: "pro", reader: "hosted_ai", reader_name: "Claude Haiku, by Anthropic" });
     // The provider named plainly, and what its API does with what it is sent, as its terms say.
     expect(readerLine(pro)).toBe(
-      "Read by Claude Haiku, by Anthropic, which we pay for, only for new senders, with email addresses, phone numbers and bank details taken out. Anthropic doesn't use it to train its models, and deletes it within 30 days, unless its safety checks flag it (then it may keep it for up to two years) or the law requires keeping it.",
+      "Read by Claude Haiku, by Anthropic, which we pay for, only for new senders, with email addresses, phone numbers and bank details taken out. Anthropic doesn't use it to train its models, and deletes it within 30 days, unless its safety checks flag it (then it may keep it for up to two years, and the checks' scores for up to seven) or the law requires keeping it.",
     );
     expect(readerLine(pro)).not.toMatch(/keeps nothing|zero retention|never stored/i);
     // Pro before our key is set: nothing says an AI reads.
@@ -373,8 +381,16 @@ describe("Settings → Spam, in every state", () => {
     expect(priceLine(status({ plan: "pro" }), "EUR")).toBe("Included in Pro, €10 a month, taxes included.");
     expect(priceLine(status({ plan: "pro" }), "GBP")).toBe("Included in Pro, £9 a month, taxes included.");
     expect(priceLine(status({ plan: "free" }), "JPY")).toBe(
-      "The three filters come with Pro: $10 a month, taxes included. It supports the open-source inbox, the open network, and keeping access to AI agents from being locked in a connector store.",
+      "The three filters come with Pro: $10 a month, taxes included. The $10 supports the open-source inbox, the open network, and keeping access to AI agents from being locked in a connector store.",
     );
+    // The founder's words, in the currency the price is shown in.
+    expect(priceLine(status({ plan: "free" }), "EUR")).toBe(
+      "The three filters come with Pro: €10 a month, taxes included. Your €10 supports the open-source inbox, the open network, and keeping access to AI agents from being locked in a connector store.",
+    );
+    expect(proWhy("GBP")).toBe(
+      "Your £9 supports the open-source inbox, the open network, and keeping access to AI agents from being locked in a connector store.",
+    );
+    expect(proWhy()).toMatch(/^The \$10 supports /);
     // No price for each filter, and none counted by the day.
     for (const plan of ["pro", "free"] as const)
       expect(priceLine(status({ plan }))).not.toMatch(/each filter|by the day/);
@@ -469,5 +485,61 @@ describe("Settings → Spam, in every state", () => {
     );
     expect(testFailed("auth")).toBe("The provider didn't accept the key. Paste it again.");
     expect(testFailed("timeout")).toContain("took too long");
+  });
+});
+
+describe("Settings → Spam on a Pro given for free", () => {
+  const gifted = (o: Partial<NonNullable<SpamStatus["owner_ai"]>> = {}) =>
+    status({
+      plan: "pro",
+      reader: "hosted_phrases",
+      gift_until: "2026-11-27T00:00:00.000Z",
+      owner_ai: {
+        on: false,
+        chosen: false,
+        chosen_at: null,
+        can_switch: true,
+        reader: "Claude Haiku, by Anthropic",
+        ...o,
+      },
+    });
+  const now = Date.parse("2026-10-28T10:00:00Z");
+
+  it("says until when, by its last day, and that nothing is charged", () => {
+    expect(giftLine("2026-11-27T00:00:00.000Z", "en-GB")).toBe(
+      "Pro is free for you until Thu 26 Nov. Nothing is charged, and then your inbox is Free again.",
+    );
+  });
+
+  it("keeps the AI check off until the owner turns it on, and says what turning it on sends", () => {
+    expect(readerLine(gifted())).toBe(
+      "The AI check is off until you turn it on, so for now the filters look for known phrases only.",
+    );
+    expect(ownerAiLine(gifted(), now)).toBe(
+      "Off until you turn it on. Then Claude Haiku, by Anthropic reads new senders' messages the filters can't decide, with email addresses, phone numbers and bank details taken out.",
+    );
+    const sheet = aiOnSheet(gifted());
+    expect(sheet.title).toBe("Turn on the AI check?");
+    expect(sheet.text).toContain("read by Claude Haiku, by Anthropic, which we pay for");
+    expect(sheet.text).toContain("and the checks' scores for up to seven");
+    expect(sheet.text).toMatch(/Turn it off here at any time\.$/);
+    expect(OWNER_AI_ONLY).toBe("Only the owner can switch it, signed in.");
+  });
+
+  it("says it is on its way while the host follows, for ten minutes at most", () => {
+    const asked = gifted({ chosen: true, chosen_at: new Date(now - 30_000).toISOString() });
+    expect(aiTurning(asked, now)).toBe(true);
+    expect(ownerAiLine(asked, now)).toBe("Turning it on…");
+    expect(aiTurning(gifted({ chosen: false, on: true, chosen_at: new Date(now).toISOString() }), now)).toBe(true);
+    expect(ownerAiLine(gifted({ chosen: false, on: true, chosen_at: new Date(now).toISOString() }), now)).toBe(
+      "Turning it off…",
+    );
+    // Long after, it is shown as the host has it, to be pressed again.
+    expect(aiTurning(asked, now + 11 * 60_000)).toBe(false);
+    expect(ownerAiLine(asked, now + 11 * 60_000)).toMatch(/^Off until you turn it on/);
+    expect(ownerAiLine(gifted({ on: true, chosen: true, chosen_at: new Date(now).toISOString() }), now)).toBe(
+      "On, as you chose. Turn it off here at any time.",
+    );
+    expect(aiTurning(status(), now)).toBe(false);
   });
 });

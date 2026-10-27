@@ -187,6 +187,9 @@ describe("our model", () => {
       dayCap: 150,
       monthCap: 1_500,
       reader: null,
+      aiByOwner: false,
+      ownerReader: null,
+      giftUntil: null,
     });
     expect(spamHostPolicy(PRO as PolicyPayload, ours)).toEqual({
       plan: "pro",
@@ -196,6 +199,9 @@ describe("our model", () => {
       dayCap: 150,
       monthCap: 1_500,
       reader: "Claude Haiku, by Anthropic",
+      aiByOwner: false,
+      ownerReader: null,
+      giftUntil: null,
     });
     // Without our key the filters are Pro's all the same, and nothing says an AI reads.
     expect(spamHostPolicy(PRO as PolicyPayload, null)).toMatchObject({ plan: "pro", ai: false, reader: null });
@@ -496,5 +502,136 @@ describe("a hosted inbox's spam filter", () => {
     expect(lines.join("\n")).not.toContain(KEY);
     // Every check our model was sent named only domains, never a sender's address.
     for (const call of model.calls) expect(call.body).not.toMatch(/growth@agency/);
+  });
+});
+
+/**
+ * A Pro given for free (a beta tester's month, ADR-041 §15.3): the filters' known phrases and the shared
+ * list work from the start, and our AI reads only once the owner turned it on in Settings → Spam. The
+ * owner's switch is kept in the inbox (who, when) and told to the control plane, which decides: the AI
+ * reads from the policy that says so, and a runtime that does not know `ai_owner` keeps it off.
+ */
+describe("a Pro given for free", () => {
+  const UNTIL = "2026-11-27T00:00:00.000Z";
+  const GIFT = { plan: "pro", gift: { until: UNTIL } } as const;
+
+  it("keeps our AI off until the control plane says the owner chose it, and says until when Pro is free", () => {
+    const ours = hostedModelFrom(ENV, model.fetch);
+    const waiting = spamHostPolicy({ ...GIFT, spam: { ai: false, ai_owner: true } } as PolicyPayload, ours);
+    expect(waiting).toMatchObject({
+      plan: "pro",
+      ai: false,
+      filters: ["pitches", "scams", "junk"],
+      defaultOn: true,
+      reader: null,
+      aiByOwner: true,
+      ownerReader: "Claude Haiku, by Anthropic",
+      giftUntil: UNTIL,
+    });
+    // Waiting for the owner, an `ai` left out is no.
+    expect(spamHostPolicy({ ...GIFT, spam: { ai_owner: true } } as PolicyPayload, ours).ai).toBe(false);
+    expect(spamHostPolicy({ ...GIFT, spam: { ai: true, ai_owner: true } } as PolicyPayload, ours)).toMatchObject({
+      ai: true,
+      reader: "Claude Haiku, by Anthropic",
+      aiByOwner: true,
+    });
+    // Without our key there is nothing to switch on.
+    expect(spamHostPolicy({ ...GIFT, spam: { ai: false, ai_owner: true } } as PolicyPayload, null)).toMatchObject({
+      ai: false,
+      aiByOwner: false,
+      giftUntil: UNTIL,
+    });
+    // On Free, no gift is read and nothing is switched.
+    expect(spamHostPolicy({ gift: { until: UNTIL }, spam: { ai_owner: true } } as PolicyPayload, ours)).toMatchObject({
+      plan: "free",
+      ai: false,
+      aiByOwner: false,
+      giftUntil: null,
+    });
+    expect(policyPayloadSchema.shape.gift.parse({ until: "soon" })).toBeUndefined();
+    const judge = tenantJudge({
+      model: ours,
+      ledger: new Ledger(join(mkdtempSync(join(tmpdir(), "sdh-spam-")), "ledger.db"), { hashKey: "k" }),
+      tenantId: "tn_a",
+      policy: waiting,
+    });
+    expect(judge).toBeNull();
+  });
+
+  it("asks no model until the owner turns it on; their switch is kept and told, and the policy decides", async () => {
+    const { t, host, owner, cookie } = await liveInbox("pro", { ai: false, ai_owner: true });
+    t.gift = { until: UNTIL };
+    await rt.setState(t, "live", { ownResolves: true });
+    type Gifted = Status & {
+      gift_until: string | null;
+      owner_ai: { on: boolean; chosen: boolean; chosen_at: string | null; can_switch: boolean; reader: string | null };
+    };
+    const status = async () => (await statusOf(host, cookie)) as Gifted;
+    const first = await status();
+    expect(first.gift_until).toBe(UNTIL);
+    expect(first.reader).toBe("hosted_phrases");
+    expect(first.owner_ai).toEqual({
+      on: false,
+      chosen: false,
+      chosen_at: null,
+      can_switch: true,
+      reader: "Claude Haiku, by Anthropic",
+    });
+    // The filters are on, and read known phrases: no model is asked.
+    expect(first.filters.every((f) => f.on)).toBe(true);
+    await switchOn(host, owner, "pitches");
+    const before = model.calls.length;
+    expect((await send(host, PITCHES[0] as string)).status).toBe(201);
+    await settle(t);
+    expect(model.calls.length).toBe(before);
+
+    // The owner turns it on: kept here, told to the control plane, and nothing read yet.
+    const on = await rt.http(host, "PUT", "/v1/owner/spam/ai", { headers: owner, body: JSON.stringify({ on: true }) });
+    expect(on.status, on.text).toBe(200);
+    expect((on.json as Gifted).owner_ai).toMatchObject({ on: false, chosen: true, can_switch: true });
+    const spans = new DatabaseSync(rt.shardOf(t).dbPath(t.tenantId));
+    const kept = spans.prepare("SELECT by_kind, to_at FROM spam_filter_spans WHERE filter = 'ai'").all();
+    spans.close();
+    expect(kept).toEqual([{ by_kind: "owner", to_at: null }]);
+    const told = () => rt.cp.events.filter((e) => e.tenant_id === t.tenantId && e.type === "spam_ai");
+    for (let i = 0; i < 50 && told().length === 0; i++) {
+      await rt.shardOf(t).tick();
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    expect(told().map((e) => e.data)).toEqual([{ on: true }]);
+    expect((await send(host, PITCHES[1] as string)).status).toBe(201);
+    await settle(t);
+    expect(model.calls.length).toBe(before);
+
+    // The control plane takes it: from its policy on, our AI reads.
+    t.spam = { ai: true, ai_owner: true };
+    await rt.setState(t, "live", { ownResolves: true });
+    const after = await status();
+    expect(after.reader).toBe("hosted_ai");
+    expect(after.owner_ai).toMatchObject({ on: true, chosen: true });
+    expect((await send(host, PITCHES[2] as string)).status).toBe(201);
+    await settle(t);
+    expect(model.calls.length - before).toBe(1);
+
+    // Off again the same way.
+    const off = await rt.http(host, "PUT", "/v1/owner/spam/ai", {
+      headers: owner,
+      body: JSON.stringify({ on: false }),
+    });
+    expect(off.status, off.text).toBe(200);
+    expect((off.json as Gifted).owner_ai).toMatchObject({ on: true, chosen: false });
+  });
+
+  it("is not switched where the plan decides: paid Pro, Free, or a control plane that keeps it off", async () => {
+    for (const [plan, spam] of [
+      ["pro", undefined],
+      [undefined, undefined],
+      ["pro", { ai: false }],
+    ] as const) {
+      const { host, owner, cookie } = await liveInbox(plan, spam);
+      expect(((await statusOf(host, cookie)) as Status & { owner_ai: unknown }).owner_ai).toBeNull();
+      const r = await rt.http(host, "PUT", "/v1/owner/spam/ai", { headers: owner, body: JSON.stringify({ on: true }) });
+      expect(r.status).toBe(403);
+    }
   });
 });

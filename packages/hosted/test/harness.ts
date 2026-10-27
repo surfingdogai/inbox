@@ -71,6 +71,8 @@ export interface FakeTenant {
   plan?: PolicyPayload["plan"];
   /** The policy's `spam` block (ADR-041 §15.3), when the test names one. */
   spam?: PolicyPayload["spam"];
+  /** Pro given for free, until when (ADR-041 §15.3), when the test names it. */
+  gift?: PolicyPayload["gift"];
   /** The account that owns the inbox (ADR-041 §16), when the test names one; absent, the payload leaves it out. */
   ownerAccount?: PolicyPayload["owner_account"];
 }
@@ -114,6 +116,7 @@ export function policyOf(t: FakeTenant): PolicyPayload {
     ...(t.joinNetworks ? { join_networks: t.joinNetworks } : {}),
     ...(t.plan ? { plan: t.plan } : {}),
     ...(t.spam ? { spam: t.spam } : {}),
+    ...(t.gift ? { gift: t.gift } : {}),
     ...(t.ownerAccount ? { owner_account: t.ownerAccount } : {}),
   };
 }

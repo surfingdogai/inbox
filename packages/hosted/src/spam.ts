@@ -59,11 +59,15 @@ export function modelName(model: string): string {
 /**
  * The policy's plan and `spam` limits, as the inbox's spam filter reads them. Pro: the three filters,
  * on unless a person switched one off, read by our AI when the model is set up and the policy does not
- * stop it. Free: no filters and no AI; basic protection works the same on both.
+ * stop it. Free: no filters and no AI; basic protection works the same on both. A Pro given for free
+ * (`ai_owner`): our AI reads only once the owner turned it on in Settings → Spam, as the control plane
+ * has it in `ai`; the filters' known phrases and the shared list work meanwhile.
  */
 export function spamHostPolicy(p: PolicyPayload, model: HostedModel | null): SpamHostPolicy {
   const pro = planOf(p) === "pro";
-  const ai = pro && model !== null && p.spam?.ai !== false;
+  const byOwner = pro && p.spam?.ai_owner === true;
+  // Waiting for the owner, our AI stays off unless the control plane says, in so many words, they chose it.
+  const ai = pro && model !== null && (byOwner ? p.spam?.ai === true : p.spam?.ai !== false);
   return {
     plan: pro ? "pro" : "free",
     ai,
@@ -72,6 +76,10 @@ export function spamHostPolicy(p: PolicyPayload, model: HostedModel | null): Spa
     dayCap: p.spam?.day_cap ?? HOSTED_DAY_CAP,
     monthCap: p.spam?.month_cap ?? HOSTED_MONTH_CAP,
     reader: ai && model ? model.name : null,
+    // The switch only where there is an AI to switch on.
+    aiByOwner: byOwner && model !== null,
+    ownerReader: byOwner && model ? model.name : null,
+    giftUntil: pro ? (p.gift?.until ?? null) : null,
   };
 }
 

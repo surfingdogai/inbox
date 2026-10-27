@@ -2,6 +2,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import { api } from "./api";
 import { countsFrom } from "./filters";
 import { ownerLocale } from "./geo";
+import { aiTurning } from "./spam";
 import type {
   AddFeedBody,
   Closure,
@@ -557,7 +558,13 @@ export function useRevokeKey() {
 // ---- the spam filter (ADR-041) ---------------------------------------------------------------
 
 export function useSpam() {
-  return useQuery({ queryKey: qk.spam, queryFn: api.spam, staleTime: 15_000 });
+  return useQuery({
+    queryKey: qk.spam,
+    queryFn: api.spam,
+    staleTime: 15_000,
+    // The owner switched the AI check on a Pro given for free: read again until the host follows.
+    refetchInterval: (q) => (aiTurning(q.state.data, Date.now()) ? 2_000 : false),
+  });
 }
 
 /** A filter switched, a learning week ended, a list row removed: the status is read again. */
@@ -568,13 +575,16 @@ export function useSpamWrite() {
       op:
         | { readonly filter: "pitches" | "scams" | "junk"; readonly on: boolean; readonly choice?: "aside" | "label" }
         | { readonly start: "basic" | "pitches" | "scams" | "junk" }
+        | { readonly ai: boolean }
         | { readonly remove: { list: "allow" | "block"; kind: string; value: string } },
     ): Promise<unknown> =>
       "start" in op
         ? api.startSpamFilter(op.start)
-        : "remove" in op
-          ? api.removeSpamListEntry(op.remove)
-          : api.setSpamFilter(op.filter, { on: op.on, ...(op.choice ? { choice: op.choice } : {}) }),
+        : "ai" in op
+          ? api.setSpamAi(op.ai)
+          : "remove" in op
+            ? api.removeSpamListEntry(op.remove)
+            : api.setSpamFilter(op.filter, { on: op.on, ...(op.choice ? { choice: op.choice } : {}) }),
     onSuccess: (data) => {
       if (data && typeof data === "object" && "filters" in data) qc.setQueryData(qk.spam, data);
       void qc.invalidateQueries({ queryKey: qk.spam });

@@ -73,6 +73,8 @@ export interface BuildDeps {
   readonly onOwnerEmailChange?: ((change: OwnerEmailChange) => unknown) | undefined;
   /** Tells the control plane what the owner asked of sending from the business's own address (ADR-026 §3). */
   readonly onMailSender?: ((type: MailSenderEvent, data: Record<string, unknown>) => unknown) | undefined;
+  /** Tells the control plane the owner switched our AI check, on a Pro given for free (ADR-041 §15.3). */
+  readonly onSpamAi?: ((on: boolean) => unknown) | undefined;
   /** The OAuth clients every inbox signs owners in to platforms with (Google Calendar). */
   readonly oauth?: OAuthClients | undefined;
   /** The one redirect address a platform sends every owner back to, through the router (ADR-022). */
@@ -207,6 +209,8 @@ export function buildInbox(d: BuildDeps): Inbox {
       host: spam,
       judge: tenantJudge({ model: d.spamModel ?? null, ledger: d.ledger, tenantId: d.tenantId, policy: spam }),
       shared: tenantShare({ prints: d.ledger.shared, tenantId: d.tenantId, policy: p, now: (d.now ?? Date.now)() }),
+      // On a Pro given for free, the owner's switch of our AI goes to the control plane, which decides.
+      tellAi: d.onSpamAi ?? null,
     },
   });
   inbox.caps.email.attachHost(tenantEmailHost(p, d.onMailSender), Boolean(p.mail.inbound));

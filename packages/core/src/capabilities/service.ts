@@ -1733,6 +1733,12 @@ export class Capabilities {
     return this.spam.setFilter(caller, { filter: input.filter, on: input.on, choice: input.choice }, nowOf(caller));
   }
 
+  /** The AI check on a Pro the host gave for free: the owner turns it on or off, signed in, in person. */
+  async setSpamAi(caller: Caller, input: T.SetSpamAiInput): Promise<SpamStatus> {
+    requireBusiness(caller);
+    return this.spam.setHostedAi(caller, input, nowOf(caller));
+  }
+
   /** "Start now": a filter in its learning week starts putting aside. */
   async startSpamFilterNow(caller: Caller, input: T.StartSpamFilterInput): Promise<SpamStatus> {
     requireBusiness(caller);

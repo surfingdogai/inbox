@@ -90,6 +90,16 @@ export interface SpamHostPolicy {
   readonly monthCap: number;
   /** Who reads, as Settings names them ("Claude Haiku, by Anthropic"); null while no AI reads. */
   readonly reader: string | null;
+  /**
+   * On a Pro the host gave for free (a beta tester's month), the host's AI reads only once the owner
+   * turned it on in Settings → Spam: `ai` is then what they last chose, as the host has it, and their
+   * switch is told to the host (`SpamCapabilities.attach({ tell })`). Absent or false: the plan decides.
+   */
+  readonly aiByOwner?: boolean | undefined;
+  /** Who reads once the owner turns it on there, as Settings names them. */
+  readonly ownerReader?: string | null | undefined;
+  /** Until when the host gives this inbox Pro for free (ISO 8601); null or absent when it doesn't. */
+  readonly giftUntil?: string | null | undefined;
 }
 
 /** What the filter is plugged into: the database, the secret box, and what the host attached. */
