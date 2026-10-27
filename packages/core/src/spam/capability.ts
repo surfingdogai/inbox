@@ -220,14 +220,23 @@ export class SpamCapabilities implements SpamDeps {
     return this.sharedPort;
   }
 
-  /** Whether this inbox's marks count on its host's shared list. */
+  /**
+   * Whether a person's word on an item may be told to the host's shared list: their Spam where the
+   * inbox's marks count for others, their Not spam on a match from any inbox that can be written to.
+   * The `spam_share` job decides which, as it runs.
+   */
   private sharing(): boolean {
-    return this.sharedPort?.contributes === true;
+    return this.sharedPort?.contributes === true || this.sharedPort?.disputes === true;
   }
 
-  /** Whether the host's shared list of known spam reads for this inbox: its privacy page says so. */
-  sharesSpam(): boolean {
-    return this.sharedPort !== null;
+  /**
+   * How this inbox takes part in its host's shared list of known spam, for its privacy page: `reads`,
+   * it compares new messages with fingerprints others marked; `reads_and_shares`, it also shares the
+   * fingerprints of what it marks as spam; null on one's own server, where nothing is shared.
+   */
+  sharesSpam(): "reads" | "reads_and_shares" | null {
+    if (!this.sharedPort) return null;
+    return this.sharedPort.contributes ? "reads_and_shares" : "reads";
   }
 
   /**
@@ -873,10 +882,11 @@ export class SpamCapabilities implements SpamDeps {
 
   /**
    * The `spam_share` job (ADR-041 §16): what this inbox now says of one item, told to the host's shared
-   * list. A person's Spam, or what the filter put aside on its own and is sure of, is known spam; a
-   * person's Not spam, Let it in or Looks fine on what a shared match labelled is a word against it;
-   * anything else takes back whatever was said. It reads the item as it is when it runs, so the last
-   * word a person gave is the one that counts, and an item erased or gone is taken back.
+   * list. A person's Spam, or what the filter put aside on its own and is sure of, is known spam, where
+   * the inbox's marks count for others (Pro, live); a person's Not spam, Let it in or Looks fine on what
+   * a shared match labelled is a word against it, from any inbox, Free too; anything else takes back
+   * whatever was said. It reads the item as it is when it runs, so the last word a person gave is the
+   * one that counts, and an item erased or gone is taken back.
    */
   async share(itemId: string, now: number): Promise<{ readonly note: string }> {
     const port = this.sharedPort;
@@ -911,12 +921,15 @@ export class SpamCapabilities implements SpamDeps {
     // A sender's domain only where a mail server vouched for the address: anyone can type one at a form.
     const vouched = signals.some((s) => s.c === "aligned");
     const print = sharedPrintOf(words.text, vouched ? words.email : null);
-    const kind = reportedKind(cause, answer?.kind);
-    if (print && said === "spam") {
+    // A match names itself as the cause: the filter it counted under says what kind it was.
+    const under = signals.find((s) => s.c === "shared_spam")?.f;
+    const kind = reportedKind(cause, answer?.kind) ?? (isFilter(under) ? under : null);
+    if (print && said === "spam" && port.contributes) {
       await port.report(itemId, print, { vote: 1, kind, now });
       return { note: "known spam: a person's Spam" };
     }
-    if (print && said !== null && said !== "spam" && signals.some((s) => s.c === "shared_spam")) {
+    const matched = signals.some((s) => s.c === "shared_spam");
+    if (print && said !== null && said !== "spam" && matched && (port.disputes || port.contributes)) {
       await port.report(itemId, print, { vote: -1, kind: null, now });
       return { note: "a person's Not spam on a shared match" };
     }
@@ -934,7 +947,7 @@ export class SpamCapabilities implements SpamDeps {
           }
         : null,
     });
-    if (print && said === null && r[8] === "aside" && sure) {
+    if (port.contributes && print && said === null && r[8] === "aside" && sure) {
       await port.report(itemId, print, { vote: 1, kind, now });
       return { note: "known spam: put aside, and sure" };
     }

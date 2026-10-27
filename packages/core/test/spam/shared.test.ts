@@ -1,15 +1,19 @@
 import { describe, expect, it } from "vitest";
+import { chipOf } from "../../src/spam/copy";
+import { decide } from "../../src/spam/decide";
 import {
   companyDomain,
   NO_MATCH,
   reportedKind,
   SHARE_BANDS,
+  SHARED_DOMAIN_POINTS,
+  SHARED_POINTS,
   sharedPrintOf,
   sharedSignals,
   sharedText,
   sureAside,
 } from "../../src/spam/shared";
-import type { Filter } from "../../src/spam/types";
+import { ASIDE_AT, type Filter, type Signal, WARN_AT } from "../../src/spam/types";
 
 /**
  * The fingerprint a hosted inbox shares of known spam (ADR-041 §16): MinHash bands of the text with its
@@ -79,39 +83,139 @@ describe("the fingerprint", () => {
 
 describe("a shared match as points", () => {
   const known = { known: true, owners: 4, kind: "pitches" as Filter | null, domain: false };
+  const match = (f: Filter | "basic") => ({ c: "shared_spam", w: SHARED_POINTS, f, v: 4 });
 
-  it("on Free, or with the filter it is under off, labels and never decides alone", () => {
-    expect(sharedSignals(known, { on: new Set(), templated: false, domain: null })).toEqual([
-      { c: "shared_spam", w: 4, f: "basic", v: 4 },
-    ]);
+  it("is worth a label: under the free protection on Free, or with the filter it is under off", () => {
+    expect(SHARED_POINTS).toBe(WARN_AT);
+    expect(sharedSignals(known, { on: new Set(), templated: false, domain: null })).toEqual([match("basic")]);
     expect(sharedSignals(known, { on: new Set(["scams", "junk"]), templated: false, domain: null })).toEqual([
-      { c: "shared_spam", w: 4, f: "basic", v: 4 },
+      match("basic"),
     ]);
   });
 
-  it("goes under the filter its reporters named when it is on, which then does as it is set to", () => {
+  it("goes under the filter its reporters named when it is on, so its learning week and Just label apply", () => {
     expect(sharedSignals(known, { on: new Set(["pitches"]), templated: false, domain: null })).toEqual([
-      { c: "shared_spam", w: 6, f: "pitches", v: 4 },
+      match("pitches"),
     ]);
     // Nobody named a kind: Junk's.
     expect(sharedSignals({ ...known, kind: null }, { on: new Set(["junk"]), templated: false, domain: null })).toEqual([
-      { c: "shared_spam", w: 6, f: "junk", v: 4 },
+      match("junk"),
     ]);
   });
 
   it("only labels a booking's or an order's note: assistants write those alike for many people", () => {
-    expect(sharedSignals(known, { on: new Set(["pitches"]), templated: true, domain: null })).toEqual([
-      { c: "shared_spam", w: 4, f: "basic", v: 4 },
-    ]);
+    expect(sharedSignals(known, { on: new Set(["pitches"]), templated: true, domain: null })).toEqual([match("basic")]);
   });
 
   it("adds points for a sender's domain known for spam, too few to label alone, and nothing for no match", () => {
+    expect(SHARED_POINTS + SHARED_DOMAIN_POINTS).toBeLessThan(ASIDE_AT);
     expect(
       sharedSignals({ ...NO_MATCH, domain: true }, { on: new Set(), templated: false, domain: "agency.example" }),
-    ).toEqual([{ c: "shared_domain", w: 2, f: "basic", d: "agency.example" }]);
+    ).toEqual([{ c: "shared_domain", w: SHARED_DOMAIN_POINTS, f: "basic", d: "agency.example" }]);
+    // No domain from the message (none vouched for): nothing, whatever the list says of one.
+    expect(sharedSignals({ ...NO_MATCH, domain: true }, { on: new Set(), templated: false, domain: null })).toEqual([]);
     expect(sharedSignals(NO_MATCH, { on: new Set(["pitches"]), templated: false, domain: "agency.example" })).toEqual(
       [],
     );
+  });
+});
+
+/**
+ * The rule the founder set (ADR-041 §16.5): a match on the shared list never puts a message aside, nor
+ * holds a booking or an order, on its own. It labels ("Seen as spam at other businesses"); with a signal
+ * of this inbox's own checks or of the AI beside it, it adds its points.
+ */
+describe("what a shared match decides", () => {
+  const known = { known: true, owners: 5, kind: "pitches" as Filter | null, domain: true };
+  const shared = (on: readonly Filter[], templated = false) =>
+    sharedSignals(known, { on: new Set(on), templated, domain: "agency.example" });
+  const asideChoices = (on: readonly Filter[]) => new Map(on.map((f) => [f, "aside" as const]));
+  const plans: { name: string; on: readonly Filter[] }[] = [
+    { name: "Free", on: [] },
+    { name: "Pro, the named filter off", on: ["scams", "junk"] },
+    { name: "Pro, the named filter on", on: ["pitches", "scams", "junk"] },
+  ];
+
+  for (const plan of plans) {
+    it(`alone, with the sender's domain known too, only labels a message, on ${plan.name}`, () => {
+      const d = decide({ type: "message", signals: shared(plan.on), choices: asideChoices(plan.on) });
+      expect(d).toMatchObject({ verdict: "warn", cause: "shared_spam", label: "shared_spam", learning: false });
+      expect(chipOf(d.label, true)).toBe("Seen as spam at other businesses");
+    });
+
+    it(`alone never holds a booking, an order or a quote request, on ${plan.name}`, () => {
+      for (const type of ["booking", "order"] as const) {
+        const d = decide({ type, signals: shared(plan.on, true), choices: asideChoices(plan.on) });
+        expect(d.verdict, type).toBe("warn");
+      }
+      const quote = decide({ type: "quote_request", signals: shared(plan.on), choices: asideChoices(plan.on) });
+      expect(quote.verdict).toBe("warn");
+    });
+
+    it(`adds to a signal of this inbox's own, and together they put a message aside, on ${plan.name}`, () => {
+      const own: Signal = { c: "link_only", w: 3, f: "basic" };
+      const d = decide({ type: "message", signals: [own, ...shared(plan.on)], choices: asideChoices(plan.on) });
+      expect(d.verdict).toBe("aside");
+      // Without the match, the same message is only labelled: the match added its weight.
+      expect(decide({ type: "message", signals: [own], choices: asideChoices(plan.on) }).verdict).toBe("warn");
+    });
+
+    it(`with a signal of the inbox's own, still never holds a booking's or an order's note on it, on ${plan.name}`, () => {
+      const own: Signal = { c: "many_links", w: 2, f: "basic" };
+      for (const type of ["booking", "order"] as const) {
+        const d = decide({ type, signals: [own, ...shared(plan.on, true)], choices: asideChoices(plan.on) });
+        expect(d.verdict, type).toBe("warn");
+      }
+      // A quote request, which the sender confirms, is held for proof.
+      const quote = decide({
+        type: "quote_request",
+        signals: [{ c: "link_only", w: 3, f: "basic" }, ...shared(plan.on)],
+        choices: asideChoices(plan.on),
+      });
+      expect(quote.verdict).toBe("hold");
+    });
+  }
+
+  it("adds to what the AI check found, and a customer in the AI's answer takes it off again", () => {
+    const on: Filter[] = ["pitches"];
+    const medium: Signal = { c: "ai_kind", w: 3, f: "pitches" };
+    const answer = {
+      kind: "sales_pitch" as const,
+      certainty: "high" as const,
+      customerIntent: false,
+      talksToFilter: false,
+      topic: "seo",
+      quotes: ["reach the first page of Google"],
+    };
+    expect(
+      decide({ type: "message", signals: [medium, ...shared(on)], answer, choices: asideChoices(on) }).verdict,
+    ).toBe("aside");
+    // The AI found a customer: the match counts no more than what a filter found.
+    const customer: Signal = { c: "ai_customer", w: -4, f: "ai" };
+    const said = { ...answer, kind: "customer" as const, customerIntent: true, quotes: [] };
+    const lowered = decide({
+      type: "message",
+      signals: [{ c: "link_only", w: 3, f: "basic" }, ...shared(on), customer],
+      answer: said,
+      choices: asideChoices(on),
+    });
+    expect(lowered.verdict).toBe("warn");
+  });
+
+  it("is lowered by the business's own offer named, and by a filter still learning or set to Just label", () => {
+    const on: Filter[] = ["pitches"];
+    const own: Signal = { c: "pitch_phrases", w: 3, f: "pitches" };
+    expect(decide({ type: "message", signals: [own, ...shared(on)], veto: true }).verdict).toBe("warn");
+    const learning = decide({ type: "message", signals: [own, ...shared(on)], learning: new Set(["pitches"]) });
+    expect(learning).toMatchObject({ verdict: "warn", learning: true });
+    const label = decide({ type: "message", signals: [own, ...shared(on)], choices: new Map([["pitches", "label"]]) });
+    expect(label.verdict).toBe("warn");
+  });
+
+  it("takes nothing of a negative signal for one of the inbox's own", () => {
+    const aligned: Signal = { c: "aligned", w: -1, f: "basic" };
+    const big = { c: "shared_spam", w: 9, f: "basic" } as Signal;
+    expect(decide({ type: "message", signals: [aligned, big] }).verdict).toBe("warn");
   });
 });
 

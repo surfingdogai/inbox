@@ -9,11 +9,13 @@ import { type PolicyPayload, planOf } from "./types";
  * its sender's company domain); everything is keyed here with the runtime's own secret (HMAC) before it
  * is kept or compared, so the store holds no words, no address and no name, and nothing in it can be
  * turned back into a message or matched without the runtime's key. Who reported is a keyed hash of the
- * owner's account; which item, a keyed hash of the inbox and the item.
+ * owner's account (the control plane's account id, else the inbox's own tenant id: never an address,
+ * which an owner can change) and of the inbox; which item, a keyed hash of the inbox and the item.
  *
- * A fingerprint counts for an inbox only once three owners other than its own reported one like it
- * within a fortnight, from accounts at least a week old when they reported, less every owner whose
- * person said Not spam on a match of it. Everything is forgotten thirty days after it was reported.
+ * A fingerprint counts for an inbox only once three inboxes of three owners, none of them its own,
+ * reported one like it within a fortnight, from accounts at least a week old when they reported, less
+ * every inbox of another owner whose person said Not spam on a match of it. Everything is forgotten
+ * thirty days after it was reported.
  */
 
 const DAY = 86_400_000;
@@ -21,7 +23,7 @@ const DAY = 86_400_000;
 export const SHARE_KEEP_MS = 30 * DAY;
 /** The window three owners' reports must fall within for a fingerprint to count. */
 export const SHARE_WINDOW_MS = 14 * DAY;
-/** Owners, other than the reading inbox's own, whose reports make a fingerprint known spam. */
+/** Inboxes of distinct owners, other than the reading inbox's own, whose reports make a fingerprint known spam. */
 export const SHARE_OWNERS = 3;
 /** How old an owner's account must be for its reports to count: one made yesterday counts for nothing. */
 export const SHARE_ACCOUNT_AGE_MS = 7 * DAY;
@@ -30,7 +32,7 @@ export const SHARE_MATCH_BANDS = 2;
 
 export const SHARE_SCHEMA = `
 CREATE TABLE IF NOT EXISTS spam_share_owners (owner TEXT PRIMARY KEY, since INTEGER NOT NULL);
-CREATE TABLE IF NOT EXISTS spam_share_reports (item TEXT PRIMARY KEY, owner TEXT NOT NULL, vote INTEGER NOT NULL, kind TEXT, domain TEXT, at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS spam_share_reports (item TEXT PRIMARY KEY, owner TEXT NOT NULL, tenant TEXT NOT NULL DEFAULT '', vote INTEGER NOT NULL, kind TEXT, domain TEXT, at INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS spam_share_reports_at ON spam_share_reports (at);
 CREATE INDEX IF NOT EXISTS spam_share_reports_domain ON spam_share_reports (domain, at) WHERE domain IS NOT NULL;
 CREATE TABLE IF NOT EXISTS spam_share_bands (band TEXT NOT NULL, item TEXT NOT NULL, PRIMARY KEY (band, item));
@@ -44,35 +46,59 @@ const KINDS = new Set<string>(["pitches", "scams", "junk"]);
 
 interface Report {
   readonly owner: string;
+  /** The reporting inbox, keyed. */
+  readonly tenant: string;
   readonly vote: number;
   readonly kind: string | null;
   readonly at: number;
 }
 
+/** The reading inbox: its owner and its own tenant, both keyed. */
+export interface Reader {
+  readonly owner: string;
+  readonly tenant: string;
+}
+
+/** How many reporters a set of reports is: distinct owners and distinct inboxes both, the fewer of the two. */
+function reporters(reports: readonly Report[]): number {
+  return Math.min(new Set(reports.map((r) => r.owner)).size, new Set(reports.map((r) => r.tenant)).size);
+}
+
+/** Adds one to a multiset's count, or takes one off it. */
+function bump(m: Map<string, number>, key: string, by: 1 | -1): void {
+  const n = (m.get(key) ?? 0) + by;
+  if (n <= 0) m.delete(key);
+  else m.set(key, n);
+}
+
 /**
- * What a set of reports says, for one reading owner: the most owners other than it whose reports of
- * spam fall within one fortnight, less the owners who said Not spam; and the kind most of them named.
+ * What a set of reports says, for one reading inbox: the most reporters (inboxes of distinct owners,
+ * none of them the reader's) whose reports of spam fall within one fortnight, less the reporters of
+ * other owners who said Not spam; and the kind most of them named.
  */
 export function tally(
   reports: readonly Report[],
-  reader: string,
+  reader: Reader,
 ): { readonly known: boolean; readonly owners: number; readonly kind: Filter | null } {
-  const spam = reports.filter((r) => r.vote === 1 && r.owner !== reader).sort((a, b) => a.at - b.at);
-  const inWindow = new Map<string, number>();
+  const theirs = (r: Report) => r.owner !== reader.owner && r.tenant !== reader.tenant;
+  const spam = reports.filter((r) => r.vote === 1 && theirs(r)).sort((a, b) => a.at - b.at);
+  const owners = new Map<string, number>();
+  const tenants = new Map<string, number>();
   let best = 0;
   for (let i = 0, j = 0; j < spam.length; j++) {
     const right = spam[j] as Report;
-    inWindow.set(right.owner, (inWindow.get(right.owner) ?? 0) + 1);
+    bump(owners, right.owner, 1);
+    bump(tenants, right.tenant, 1);
     for (; i < j && right.at - (spam[i] as Report).at > SHARE_WINDOW_MS; i++) {
-      const left = (spam[i] as Report).owner;
-      const n = (inWindow.get(left) ?? 1) - 1;
-      if (n === 0) inWindow.delete(left);
-      else inWindow.set(left, n);
+      const left = spam[i] as Report;
+      bump(owners, left.owner, -1);
+      bump(tenants, left.tenant, -1);
     }
-    best = Math.max(best, inWindow.size);
+    best = Math.max(best, Math.min(owners.size, tenants.size));
   }
-  const against = new Set(reports.filter((r) => r.vote === -1).map((r) => r.owner)).size;
-  const owners = Math.max(0, best - against);
+  // A Not spam from any inbox lowers it, the reader's own included: the list errs toward delivering.
+  const against = reporters(reports.filter((r) => r.vote === -1));
+  const count = Math.max(0, best - against);
   const named = new Map<string, Set<string>>();
   for (const r of spam) {
     if (!r.kind || !KINDS.has(r.kind)) continue;
@@ -88,7 +114,7 @@ export function tally(
       kind = k as Filter;
     }
   }
-  return { known: owners >= SHARE_OWNERS, owners, kind };
+  return { known: count >= SHARE_OWNERS, owners: count, kind };
 }
 
 export class SharedPrints {
@@ -99,18 +125,36 @@ export class SharedPrints {
     key: string | Buffer,
   ) {
     this.key = Buffer.isBuffer(key) ? key : Buffer.from(key, "utf8");
+    // A ledger made before reports named their inbox: its rows count as one inbox, never as more.
+    const columns = this.db.prepare("PRAGMA table_info(spam_share_reports)").all() as { name: string }[];
+    if (!columns.some((c) => c.name === "tenant")) {
+      try {
+        this.db.exec("ALTER TABLE spam_share_reports ADD COLUMN tenant TEXT NOT NULL DEFAULT ''");
+      } catch {
+        // another shard added it first
+      }
+    }
   }
 
   /** A keyed hash for one purpose (128 bits, hex): nothing kept here is a value as an inbox knew it. */
-  hash(purpose: "owner" | "item" | "band" | "domain", value: string): string {
+  hash(purpose: "owner" | "tenant" | "item" | "band" | "domain", value: string): string {
     return createHmac("sha256", this.key).update(`${purpose}\u0000${value}`).digest("hex").slice(0, 32);
   }
 
-  /** The owner an inbox belongs to: the control plane's account when the policy names it, else its owner's address. */
-  ownerOf(p: Pick<PolicyPayload, "owner_email" | "owner_account">): string {
+  /**
+   * The owner an inbox belongs to: the control plane's account when the policy names it, else the inbox
+   * itself, by its tenant id. Never the owner's address: an owner can change it, and each new one would
+   * be a new reporter.
+   */
+  ownerOf(p: Pick<PolicyPayload, "owner_account">, tenantId: string): string {
     return p.owner_account?.id
       ? this.hash("owner", `account:${p.owner_account.id}`)
-      : this.hash("owner", `email:${p.owner_email.trim().toLowerCase()}`);
+      : this.hash("owner", `tenant:${tenantId}`);
+  }
+
+  /** An inbox, keyed. */
+  tenantOf(tenantId: string): string {
+    return this.hash("tenant", tenantId);
   }
 
   /** Since when an owner is known here: the earliest of their account's creation and the first time it was seen. */
@@ -157,6 +201,7 @@ export class SharedPrints {
     readonly now: number;
   }): boolean {
     const item = this.hash("item", `${r.tenantId}:${r.itemId}`);
+    const tenant = this.tenantOf(r.tenantId);
     const bands = this.bandsOf(r.print);
     return this.tx(() => {
       this.db.prepare("DELETE FROM spam_share_bands WHERE item = ?").run(item);
@@ -166,10 +211,13 @@ export class SharedPrints {
         | undefined;
       if (!owner || r.now - owner.since < SHARE_ACCOUNT_AGE_MS || bands.length === 0) return false;
       this.db
-        .prepare("INSERT INTO spam_share_reports (item, owner, vote, kind, domain, at) VALUES (?, ?, ?, ?, ?, ?)")
+        .prepare(
+          "INSERT INTO spam_share_reports (item, owner, tenant, vote, kind, domain, at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        )
         .run(
           item,
           r.owner,
+          tenant,
           r.vote,
           r.vote === 1 ? r.kind : null,
           r.print.domain ? this.hash("domain", r.print.domain) : null,
@@ -190,29 +238,35 @@ export class SharedPrints {
     });
   }
 
-  /** What the shared list says of a fingerprint, for an inbox of `owner`: a read, nothing is kept. */
-  lookup(q: { readonly print: SharedPrint; readonly owner: string; readonly now: number }): SharedMatch {
+  /** What the shared list says of a fingerprint, for one inbox (`tenantId`) of `owner`: a read, nothing is kept. */
+  lookup(q: {
+    readonly print: SharedPrint;
+    readonly owner: string;
+    readonly tenantId: string;
+    readonly now: number;
+  }): SharedMatch {
+    const reader: Reader = { owner: q.owner, tenant: this.tenantOf(q.tenantId) };
     const bands = this.bandsOf(q.print);
     if (bands.length === 0) return NO_MATCH;
     const since = q.now - SHARE_KEEP_MS;
     const rows = this.db
       .prepare(
-        `SELECT r.owner, r.vote, r.kind, r.at FROM spam_share_reports r
+        `SELECT r.owner, r.tenant, r.vote, r.kind, r.at FROM spam_share_reports r
           WHERE r.at >= ? AND r.item IN (
             SELECT item FROM spam_share_bands WHERE band IN (${bands.map(() => "?").join(", ")})
              GROUP BY item HAVING COUNT(*) >= ?)
           ORDER BY r.at DESC LIMIT 2000`,
       )
       .all(since, ...bands, SHARE_MATCH_BANDS) as unknown as Report[];
-    const text = tally(rows, q.owner);
+    const text = tally(rows, reader);
     let domain = false;
     if (q.print.domain) {
       const byDomain = this.db
         .prepare(
-          "SELECT owner, vote, kind, at FROM spam_share_reports WHERE domain = ? AND at >= ? ORDER BY at DESC LIMIT 2000",
+          "SELECT owner, tenant, vote, kind, at FROM spam_share_reports WHERE domain = ? AND at >= ? ORDER BY at DESC LIMIT 2000",
         )
         .all(this.hash("domain", q.print.domain), since) as unknown as Report[];
-      domain = tally(byDomain, q.owner).known;
+      domain = tally(byDomain, reader).known;
     }
     return { known: text.known, owners: text.owners, kind: text.kind, domain };
   }
@@ -227,10 +281,11 @@ export class SharedPrints {
 }
 
 /**
- * The shared list as one inbox reaches it. Every hosted inbox reads it: a lookup costs no AI, and Free
- * keeps only labels from it. Only an inbox whose marks are hard to fake by the dozen counts for others:
- * on Pro, and live at the business's own domain. The owner is first seen as the inbox opens, or as old
- * as the control plane says their account is.
+ * The shared list as one inbox reaches it. Every hosted inbox reads it: a lookup costs no AI, and a
+ * match alone only labels. Only an inbox whose marks are hard to fake by the dozen reports known spam:
+ * on Pro, and live at the business's own domain. Any inbox that can be written to, Free too, says Not
+ * spam on a match: that only ever lowers it. The owner is first seen as the inbox opens, or as old as
+ * the control plane says their account is.
  */
 export function tenantShare(o: {
   readonly prints: SharedPrints;
@@ -239,15 +294,17 @@ export function tenantShare(o: {
   readonly now: number;
 }): SharedSpamPort {
   const p = o.policy;
-  const owner = o.prints.ownerOf(p);
+  const owner = o.prints.ownerOf(p, o.tenantId);
   const created = Date.parse(p.owner_account?.created_at ?? "");
   o.prints.seen(owner, Number.isFinite(created) ? Math.min(created, o.now) : o.now);
   const contributes = planOf(p) === "pro" && p.state === "live" && !p.read_only;
+  const disputes = !p.read_only;
   return {
     contributes,
-    lookup: (print, now) => o.prints.lookup({ print, owner, now }),
+    disputes,
+    lookup: (print, now) => o.prints.lookup({ print, owner, tenantId: o.tenantId, now }),
     report: (itemId, print, r) =>
-      contributes
+      (r.vote === 1 ? contributes : disputes)
         ? o.prints.report({ tenantId: o.tenantId, itemId, owner, print, vote: r.vote, kind: r.kind, now: r.now })
         : false,
     withdraw: (itemId) => o.prints.withdraw(o.tenantId, itemId),

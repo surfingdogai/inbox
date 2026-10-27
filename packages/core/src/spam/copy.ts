@@ -63,7 +63,7 @@ export const CHIPS: Readonly<Record<string, string>> = {
   near_same: "Sent many times",
   same_link_domain: "Same link, many senders",
   like_marked: "Like one you marked",
-  shared_spam: "Known spam",
+  shared_spam: "Seen as spam at other businesses",
   shared_domain: "Sender known for spam",
   many_new: "Many new requests",
   blocked: "You put this sender aside",
@@ -81,7 +81,7 @@ export const WARN_CHIPS: Readonly<Record<string, string>> = {
   junk: "May be junk",
   learning: "Would have been put aside",
   bank_change_known: "Check before paying",
-  shared_spam: "Marked spam elsewhere",
+  shared_spam: "Seen as spam at other businesses",
 };
 
 export function chipOf(cause: string | null, warned = false): string {

@@ -171,8 +171,9 @@ export const policyPayloadSchema = z.looseObject({
   /**
    * The account that owns the inbox, as the control plane keeps it (ADR-041 §16): its id, so two inboxes
    * of one owner count as one owner on the shared list of known spam, and when it was made, so a new
-   * account's marks wait their week. Absent: the owner is told apart by `owner_email`, and their age is
-   * counted from when this runtime first opened one of their inboxes. One that does not read reads as absent.
+   * account's marks wait their week. Absent: the inbox is its own owner, by its tenant id (never by
+   * `owner_email`, which an owner can change), and its age is counted from when this runtime first opened
+   * it. One that does not read reads as absent.
    */
   owner_account: z
     .looseObject({ id: z.string().min(1).max(128), created_at: z.iso.datetime({ offset: true }) })

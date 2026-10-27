@@ -28,6 +28,7 @@ import {
   rowTag,
   SETTINGS_INTRO,
   SHARED_FINGERPRINTS,
+  SHARED_MATCH,
   SPAM_TOP,
   sharedLine,
   showsModelUse,
@@ -443,11 +444,15 @@ describe("Settings → Spam, in every state", () => {
       "Free, and no word it reads leaves your inbox: new messages are compared with known spam by fingerprint only. A new sender's mail domain is looked up in DNS with an AI check, never without one.",
     );
     expect(sharedLine(status({ plan: "pro", shared: "reads_and_shares" }))).toBe(
-      "Messages three other businesses marked as spam are caught here too, and your Spam marks help them. Inboxes here share fingerprints of spam, never messages, and a fingerprint can't be turned back into one.",
+      "Messages three other businesses marked as spam are labelled here, and put aside only if this inbox's own checks find something too. Your Spam marks help them. Inboxes here share fingerprints of spam, never messages, and a fingerprint can't be turned back into one.",
     );
     expect(sharedLine(status({ plan: "free", shared: "reads" }))).toBe(
-      "Messages three other businesses marked as spam are labelled here. With Pro, your Spam marks help them too. Inboxes here share fingerprints of spam, never messages, and a fingerprint can't be turned back into one.",
+      "Messages three other businesses marked as spam are labelled here, and put aside only if this inbox's own checks find something too. Your Not spam counts for them; with Pro, your Spam marks do too. Inboxes here share fingerprints of spam, never messages, and a fingerprint can't be turned back into one.",
     );
+    // On every plan, the match alone only labels.
+    for (const shared of ["reads", "reads_and_shares"] as const) {
+      for (const plan of ["free", "pro"] as const) expect(sharedLine(status({ plan, shared }))).toContain(SHARED_MATCH);
+    }
     expect(sharedLine(status({ plan: "pro", shared: "reads" }))).toContain("once you're live at your own address");
     for (const shared of ["reads", "reads_and_shares"] as const) {
       expect(sharedLine(status({ plan: "pro", shared }))).toContain(SHARED_FINGERPRINTS);

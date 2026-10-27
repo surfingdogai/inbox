@@ -227,19 +227,24 @@ export function basicFree(s: Pick<SpamStatus, "shared">): string {
 export const SHARED_FINGERPRINTS =
   "Inboxes here share fingerprints of spam, never messages, and a fingerprint can't be turned back into one.";
 
+/** What a match on the shared list does here, on every plan (ADR-041 §16.5). */
+export const SHARED_MATCH =
+  "Messages three other businesses marked as spam are labelled here, and put aside only if this inbox's own checks find something too.";
+
 /**
- * Known spam from other businesses, under Basic protection: what it does here, and whether this inbox's
- * own marks count for them (Pro, live at the business's own address). Null on one's own server.
+ * Known spam from other businesses, under Basic protection: what it does here, and what this inbox's
+ * own marks do for them: its Spam marks count on Pro, live at the business's own address; its Not spam
+ * on a match counts on Free too. Null on one's own server.
  */
 export function sharedLine(s: Pick<SpamStatus, "shared" | "plan">): string | null {
   if (s.shared === "off") return null;
   const mine =
     s.shared === "reads_and_shares"
-      ? "Messages three other businesses marked as spam are caught here too, and your Spam marks help them."
+      ? "Your Spam marks help them."
       : s.plan === "pro"
-        ? "Messages three other businesses marked as spam are caught here too. Your Spam marks help them once you're live at your own address."
-        : "Messages three other businesses marked as spam are labelled here. With Pro, your Spam marks help them too.";
-  return `${mine} ${SHARED_FINGERPRINTS}`;
+        ? "Your Spam marks help them once you're live at your own address."
+        : "Your Not spam counts for them; with Pro, your Spam marks do too.";
+  return `${SHARED_MATCH} ${mine} ${SHARED_FINGERPRINTS}`;
 }
 export const ONLY_YOU = "Only you can change this, signed in.";
 

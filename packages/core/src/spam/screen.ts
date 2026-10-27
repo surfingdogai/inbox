@@ -605,8 +605,15 @@ export async function screenAtDoor(deps: SpamDeps, ctx: DoorContext): Promise<Do
   const repeats = templated ? { ...found, same: Math.min(found.same, 3) } : found;
   // Known spam elsewhere (ADR-041 §16): what other businesses' inboxes on this host marked, compared by
   // a keyed fingerprint only, for the same senders the repeats are counted for.
+  // A sender's domain is looked up only where a mail server vouched for the address: one typed at a
+  // form or given by an assistant may be anyone's.
   const sharedPort = deps.shared();
-  const sharedPrint = sharedPort && !vouchedFor ? sharedPrintOf(reading.text, reading.email) : null;
+  const mailVouched =
+    ctx.screen.email !== undefined &&
+    reading.email !== undefined &&
+    emailAuthenticated(ctx.screen.email, reading.email);
+  const sharedPrint =
+    sharedPort && !vouchedFor ? sharedPrintOf(reading.text, mailVouched ? reading.email : null) : null;
   const sharedMatch = sharedPort && sharedPrint ? await lookupShared(sharedPort, sharedPrint, now) : NO_MATCH;
   const mailDomain = emailDomain(reading.email);
   const noMail =

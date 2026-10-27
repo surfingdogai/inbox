@@ -5,6 +5,7 @@ import {
   type Filter,
   type FilterChoice,
   NO_PROOF,
+  SHARED_CODES,
   type Signal,
   type Source,
   type Verdict,
@@ -15,10 +16,10 @@ import {
  * Deciding (ADR-041 §6). The points add up; under 3 the request is delivered, from 3 it is labelled,
  * from 6 — or with any certain signal — it reaches the aside band. Then caps, each of which can only
  * lower the outcome: a sender the business knows, a request that names the business's own offer, a
- * network pass, a filter set to label only, a filter still learning, an AI answer without proof, an
- * owner already alerted. Last, the band becomes the verdict its type allows: a message is put aside;
- * a booking or an order is held for proof, never put aside; a quote request is held, and put aside
- * only for what is certain.
+ * network pass, a filter set to label only, a filter still learning, an AI answer without proof, the
+ * host's shared list with nothing of this inbox's own beside it, an owner already alerted. Last, the
+ * band becomes the verdict its type allows: a message is put aside; a booking or an order is held for
+ * proof, never put aside; a quote request is held, and put aside only for what is certain.
  */
 
 export interface DecideInput {
@@ -77,10 +78,15 @@ export const DOOR_CODES: ReadonlySet<string> = new Set([
   "blocked",
 ]);
 
+/** Points that the AI check finding a customer may take off: the filters', and the host's shared list's. */
+const lowerable = (s: Signal): boolean =>
+  s.f === "pitches" || s.f === "scams" || s.f === "junk" || SHARED_CODES.has(s.c);
+
 /**
  * The points, as they add up. The AI check finding a customer takes points off what the filters
- * found, never off the free protection's: switching a filter on can only ever put more aside, so a
- * model fooled into "customer" returns a message at most to where it would be with the filters off.
+ * found, and off what other businesses marked, never off the free protection's own: switching a filter
+ * on can only ever put more aside, so a model fooled into "customer" returns a message at most to where
+ * it would be with the filters off.
  */
 function sum(signals: readonly Signal[]): number {
   let basic = 0;
@@ -88,7 +94,7 @@ function sum(signals: readonly Signal[]): number {
   let customer = 0;
   for (const s of signals) {
     if (s.c === "ai_customer") customer += s.w;
-    else if (s.f === "pitches" || s.f === "scams" || s.f === "junk") filters += s.w;
+    else if (lowerable(s)) filters += s.w;
     else basic += s.w;
   }
   return basic + Math.max(0, filters + customer);
@@ -103,14 +109,18 @@ export const decidedAtDoor = (signals: readonly Signal[]): boolean =>
 const positive = (signals: readonly Signal[], source: Source) =>
   signals.filter((s) => s.f === source && s.w > 0).reduce((n, s) => n + s.w, 0);
 
-/** The cause the owner reads first: a certain signal, else the filter or signal that weighed most. */
+/**
+ * The cause the owner reads first: a certain signal, else the filter or signal that weighed most. A
+ * match on the shared list is named as itself ("Seen as spam at other businesses"), under whatever
+ * filter it counts.
+ */
 function causeOf(signals: readonly Signal[]): string | null {
   const certain = signals.find((s) => s.x === 1);
   if (certain) return certain.c;
   const bySource = new Map<string, number>();
   for (const s of signals) {
     if (s.w <= 0) continue;
-    const key = s.f === "basic" ? s.c : s.f;
+    const key = s.f === "basic" || SHARED_CODES.has(s.c) ? s.c : s.f;
     bySource.set(key, (bySource.get(key) ?? 0) + s.w);
   }
   let best: [string, number] | null = null;
@@ -145,10 +155,17 @@ export function decide(input: DecideInput): Decision {
     if (content && signals.some((s) => s.c === "pass")) atMostWarn();
     // The AI finding it asks for what the business offers lowers only what the filters found: a model
     // told "customer" never brings back what the free protection puts aside alone.
-    const filtered = (s: Signal) => s.f === "pitches" || s.f === "scams" || s.f === "junk" || s.f === "ai";
+    const filtered = (s: Signal) => lowerable(s) || s.f === "ai";
     const filtersNeeded =
       signals.some((s) => filtered(s) && s.w > 0) && sum(signals.filter((s) => !filtered(s))) < ASIDE_AT;
     if (input.answer?.customerIntent && filtersNeeded) atMostWarn();
+    // The host's shared list never decides alone (ADR-041 §16.5): what other businesses marked adds to
+    // what this inbox's own checks or the AI found, and without one of those it labels at most. A
+    // booking's or an order's note, which assistants write alike for many people, it only labels.
+    const own = signals.filter((s) => !SHARED_CODES.has(s.c));
+    if (signals.some((s) => SHARED_CODES.has(s.c) && s.w > 0) && sum(own) < ASIDE_AT) {
+      if (!own.some((s) => s.w > 0) || input.type === "booking" || input.type === "order") atMostWarn();
+    }
     for (const [filter, choice] of input.choices ?? []) if (choice === "label" && needs(filter)) atMostWarn();
     for (const source of input.learning ?? []) {
       if (band === "aside" && needs(source)) {

@@ -94,7 +94,11 @@ export function minhashBands(pieces: Iterable<string>): string[] {
   );
 }
 
-/** A message's fingerprint; null when it is too short to tell one message from another. */
+/**
+ * A message's fingerprint; null when it is too short to tell one message from another. `email` only
+ * where a mail server vouched for the address (DMARC or aligned DKIM): one typed at a form or given by an
+ * assistant may be anyone's, so it names no domain to look up or report.
+ */
 export function sharedPrintOf(text: string, email?: string | null): SharedPrint | null {
   const normalised = sharedText(text);
   if ([...normalised].length < SHARE_MIN_CHARS) return null;
@@ -119,10 +123,13 @@ export const NO_MATCH: SharedMatch = { known: false, owners: 0, kind: null, doma
 
 /**
  * The host's shared list, as one inbox reaches it. Every hosted inbox reads it; only those whose marks
- * count for others (`contributes`: Pro, live at the business's own address) report to it.
+ * count for others (`contributes`: Pro, live at the business's own address) report known spam to it,
+ * and every inbox that can be written to (`disputes`: Free too) tells it when a person says Not spam on
+ * a match (ADR-041 §16.6).
  */
 export interface SharedSpamPort {
   readonly contributes: boolean;
+  readonly disputes: boolean;
   /** What other inboxes reported of a fingerprint like this one: a read, nothing is kept. */
   lookup(print: SharedPrint, now: number): SharedMatch | Promise<SharedMatch>;
   /**
@@ -147,12 +154,18 @@ export async function lookupShared(port: SharedSpamPort, print: SharedPrint, now
   }
 }
 
+/** What a match on the shared list is worth: enough to label on its own, never to put aside or hold. */
+export const SHARED_POINTS = 3;
+/** What a sender's domain known for spam adds, from mail a server vouched for: it labels nothing alone. */
+export const SHARED_DOMAIN_POINTS = 2;
+
 /**
- * A shared match as points. Known spam goes under the filter its reporters named, when it is on, and
- * then does what that filter does: labels in its learning week or on Just label, puts aside after.
- * Anywhere else — Free, that filter off, a booking or an order note, which assistants write alike for
- * many people — it only labels, never decides alone. A sender's domain known for spam adds points, and
- * labels nothing alone.
+ * A shared match as points (ADR-041 §16.5). Known spam is worth a label ("Seen as spam at other
+ * businesses"), under the filter its reporters named when that filter is on, so its learning week, Just
+ * label and the AI check's customer answer apply, else under the free protection; a sender's domain known
+ * for spam adds a little, and only where a mail server vouched for the address (the caller passes no
+ * domain otherwise). Neither, nor both together, puts anything aside or holds it without a signal of this
+ * inbox's own or the AI's beside them (`decide`), and on a booking's or an order's note they only label.
  */
 export function sharedSignals(
   m: SharedMatch,
@@ -161,12 +174,10 @@ export function sharedSignals(
   const out: Signal[] = [];
   if (m.known) {
     const named = m.kind ?? "junk";
-    const filter = !o.templated && o.on.has(named) ? named : null;
-    out.push(
-      filter ? { c: "shared_spam", w: 6, f: filter, v: m.owners } : { c: "shared_spam", w: 4, f: "basic", v: m.owners },
-    );
+    const f = !o.templated && o.on.has(named) ? named : "basic";
+    out.push({ c: "shared_spam", w: SHARED_POINTS, f, v: m.owners });
   }
-  if (m.domain && o.domain) out.push({ c: "shared_domain", w: 2, f: "basic", d: o.domain });
+  if (m.domain && o.domain) out.push({ c: "shared_domain", w: SHARED_DOMAIN_POINTS, f: "basic", d: o.domain });
   return out;
 }
 

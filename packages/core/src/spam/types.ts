@@ -127,6 +127,12 @@ export const CERTAIN = new Set(["trap", "no_key", "server_marked", "blocked", "w
 /** Certain signals a sender's own confirmation does not undo, and whose request gets no acknowledgement. */
 export const NO_PROOF = new Set(["trap", "no_key", "server_marked", "blocked", "wave", "like_marked"]);
 
+/**
+ * What the host's shared list of known spam gives (ADR-041 §16.5): never enough on its own to put
+ * anything aside or hold it. It labels, and adds to what this inbox's own checks or the AI found.
+ */
+export const SHARED_CODES: ReadonlySet<string> = new Set(["shared_spam", "shared_domain"]);
+
 /** The item types the filter screens; a refund is a customer's about their own order, never screened. */
 export const SCREENED_TYPES = new Set(["message", "quote_request", "booking", "order"]);
 

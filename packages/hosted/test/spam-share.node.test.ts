@@ -17,10 +17,11 @@ import { type FakeTenant, type Runtime, startRuntime } from "./harness";
 
 /**
  * Known spam shared between the inboxes one runtime hosts (ADR-041 §16), in the ledger every shard
- * opens. A fingerprint counts for an inbox only once three other owners, with accounts a week old,
- * reported one like it within a fortnight; a person's Not spam on a match lowers it; everything is
- * forgotten after thirty days; and nothing kept is a word, an address or a value an inbox could match
- * without the runtime's key.
+ * opens. A fingerprint counts for an inbox only once three inboxes of three other owners (the control
+ * plane's account, else the inbox itself: never an address an owner can change), with accounts a week
+ * old, reported one like it within a fortnight; a person's Not spam on a match lowers it, from Free
+ * too; everything is forgotten after thirty days; and nothing kept is a word, an address or a value an
+ * inbox could match without the runtime's key.
  */
 
 const DAY = 86_400_000;
@@ -45,74 +46,114 @@ function ledgerAt(o: { key?: string; dir?: string } = {}) {
   return { dir, ledger, prints: ledger.shared };
 }
 
-/** Owners whose accounts are a month old, each with one inbox, unless a test says otherwise. */
-function owners(prints: SharedPrints, n: number, since = T0 - 30 * DAY) {
-  return Array.from({ length: n }, (_, i) => {
-    const owner = prints.ownerOf({ owner_email: `owner${i}@business${i}.example` });
+/** An inbox: its tenant id, and its owner as the runtime keys it. */
+interface Inbox {
+  readonly tenant: string;
+  readonly owner: string;
+}
+
+let made = 0;
+/** Inboxes of owners whose accounts are a month old, one inbox each (the owner is the inbox), unless a test says otherwise. */
+function owners(prints: SharedPrints, n: number, since = T0 - 30 * DAY): Inbox[] {
+  return Array.from({ length: n }, () => {
+    const tenant = `tn_${String(++made).padStart(4, "0")}`;
+    const owner = prints.ownerOf({}, tenant);
     prints.seen(owner, since);
-    return owner;
+    return { tenant, owner };
   });
 }
 
 const report = (
   prints: SharedPrints,
-  owner: string,
+  who: Inbox,
   o: { tenant?: string; item?: string; text?: string; at?: number; vote?: 1 | -1; domain?: string | null } = {},
 ) =>
   prints.report({
-    tenantId: o.tenant ?? `tn_${owner.slice(0, 6)}`,
+    tenantId: o.tenant ?? who.tenant,
     itemId: o.item ?? `it_${Math.random().toString(36).slice(2)}`,
-    owner,
+    owner: who.owner,
     print: print(o.text ?? PITCH, o.domain ?? null),
     vote: o.vote ?? 1,
     kind: "pitches",
     now: o.at ?? T0,
   });
 
+const lookup = (prints: SharedPrints, reader: Inbox, at: number, p: SharedPrint = print(PITCH)) =>
+  prints.lookup({ print: p, owner: reader.owner, tenantId: reader.tenant, now: at });
+
 describe("the threshold", () => {
   it("is three owners other than the reader's: two are not enough, and a fourth owner reads it known", () => {
     const { prints, ledger } = ledgerAt();
-    const [a, b, c, reader] = owners(prints, 4) as [string, string, string, string];
+    const [a, b, c, reader] = owners(prints, 4) as [Inbox, Inbox, Inbox, Inbox];
     report(prints, a);
     report(prints, b, { at: T0 + DAY });
-    const look = (at: number, who = reader) => prints.lookup({ print: print(RESENT), owner: who, now: at });
+    const look = (at: number, who = reader) => lookup(prints, who, at, print(RESENT));
     expect(look(T0 + 2 * DAY)).toMatchObject({ known: false, owners: 2 });
     report(prints, c, { at: T0 + 2 * DAY });
     expect(look(T0 + 3 * DAY)).toEqual({ known: true, owners: 3, kind: "pitches", domain: false });
     // A reporter's own inbox counts the others only.
     expect(look(T0 + 3 * DAY, a)).toMatchObject({ known: false, owners: 2 });
     // A text that is not the same message is no match.
-    expect(prints.lookup({ print: print(OTHER), owner: reader, now: T0 + 3 * DAY }).known).toBe(false);
+    expect(lookup(prints, reader, T0 + 3 * DAY, print(OTHER)).known).toBe(false);
     ledger.close();
   });
 
-  it("counts an owner once, however many of their inboxes reported it", () => {
+  it("counts an account once, however many of its inboxes reported it", () => {
     const { prints, ledger } = ledgerAt();
-    const [a, b, reader] = owners(prints, 3) as [string, string, string];
+    const [b, reader] = owners(prints, 2) as [Inbox, Inbox];
+    // Three inboxes the control plane says are one account's are one owner, whatever their addresses.
+    const account = { id: "acc_1", created_at: "2026-01-02T00:00:00Z" };
+    const a = { tenant: "tn_a1", owner: prints.ownerOf({ owner_account: account }, "tn_a1") };
+    expect(prints.ownerOf({ owner_account: account }, "tn_a2")).toBe(a.owner);
+    prints.seen(a.owner, T0 - 30 * DAY);
     report(prints, a, { tenant: "tn_a1" });
     report(prints, a, { tenant: "tn_a2" });
     report(prints, a, { tenant: "tn_a3" });
     report(prints, b);
-    expect(prints.lookup({ print: print(PITCH), owner: reader, now: T0 + DAY })).toMatchObject({
-      known: false,
-      owners: 2,
-    });
-    // Two inboxes the control plane says are one account's are one owner, whatever their addresses.
-    const one = prints.ownerOf({ owner_email: "x@one.example", owner_account: { id: "acc_1", created_at: "x" } });
-    const same = prints.ownerOf({ owner_email: "y@two.example", owner_account: { id: "acc_1", created_at: "x" } });
-    expect(one).toBe(same);
+    expect(lookup(prints, reader, T0 + DAY)).toMatchObject({ known: false, owners: 2 });
+    ledger.close();
+  });
+
+  it("counts an inbox once, however many owners it names: an owner's new address mints no reporter", () => {
+    const { prints, ledger } = ledgerAt();
+    const [b, c, reader] = owners(prints, 3) as [Inbox, Inbox, Inbox];
+    const policy = (email: string, o: Partial<PolicyPayload> = {}) =>
+      ({ owner_email: email, plan: "pro", state: "live", read_only: false, ...o }) as PolicyPayload;
+    // With no account from the control plane, the owner is the inbox: three addresses, one reporter.
+    const before = T0 - 30 * DAY;
+    const ports = ["first@salon.example", "second@salon.example", "third@salon.example"].map((email) =>
+      tenantShare({ prints, tenantId: "tn_changes", policy: policy(email), now: before }),
+    );
+    for (const [i, port] of ports.entries()) port.report(`it_${i}`, print(PITCH), { vote: 1, kind: null, now: T0 });
+    expect(ledger.db.prepare("SELECT COUNT(*) AS n FROM spam_share_reports").get()).toEqual({ n: 3 });
+    expect(lookup(prints, reader, T0 + DAY)).toMatchObject({ known: false, owners: 1 });
+    // Nor does a control plane that names a new account for the same inbox each time.
+    const renamed = [1, 2].map((n) =>
+      tenantShare({
+        prints,
+        tenantId: "tn_renamed",
+        policy: policy("o@biz.example", { owner_account: { id: `acc_${n}`, created_at: "2026-01-02T00:00:00Z" } }),
+        now: T0,
+      }),
+    );
+    for (const [i, port] of renamed.entries()) port.report(`it_r${i}`, print(PITCH), { vote: 1, kind: null, now: T0 });
+    expect(lookup(prints, reader, T0 + DAY)).toMatchObject({ known: false, owners: 2 });
+    // Two more inboxes of their own owners make it known.
+    report(prints, b);
+    report(prints, c);
+    expect(lookup(prints, reader, T0 + DAY)).toMatchObject({ known: true, owners: 4 });
     ledger.close();
   });
 
   it("needs the three within one fortnight", () => {
     const { prints, ledger } = ledgerAt();
-    const [a, b, c, reader] = owners(prints, 4) as [string, string, string, string];
+    const [a, b, c, reader] = owners(prints, 4) as [Inbox, Inbox, Inbox, Inbox];
     report(prints, a, { at: T0 });
     report(prints, b, { at: T0 + 8 * DAY });
     report(prints, c, { at: T0 + 8 * DAY + SHARE_WINDOW_MS / 2 + DAY });
-    expect(prints.lookup({ print: print(PITCH), owner: reader, now: T0 + 20 * DAY }).known).toBe(false);
+    expect(lookup(prints, reader, T0 + 20 * DAY).known).toBe(false);
     report(prints, a, { at: T0 + 21 * DAY, item: "it_again" });
-    expect(prints.lookup({ print: print(PITCH), owner: reader, now: T0 + 21 * DAY }).known).toBe(true);
+    expect(lookup(prints, reader, T0 + 21 * DAY).known).toBe(true);
     ledger.close();
   });
 });
@@ -120,18 +161,17 @@ describe("the threshold", () => {
 describe("abuse", () => {
   it("counts nothing from an account younger than a week, and keeps nothing of it", () => {
     const { prints, ledger } = ledgerAt();
-    const [a, b] = owners(prints, 2);
-    const fresh = owners(prints, 3, T0 - 6 * DAY).slice(2) as [string];
-    const [young] = fresh;
+    const [a, b] = owners(prints, 2) as [Inbox, Inbox];
+    const [young] = owners(prints, 1, T0 - 6 * DAY) as [Inbox];
     expect(report(prints, young)).toBe(false);
     expect(ledger.db.prepare("SELECT COUNT(*) AS n FROM spam_share_reports").get()).toEqual({ n: 0 });
-    report(prints, a as string);
-    report(prints, b as string);
-    const reader = owners(prints, 5).at(-1) as string;
-    expect(prints.lookup({ print: print(PITCH), owner: reader, now: T0 }).known).toBe(false);
+    report(prints, a);
+    report(prints, b);
+    const [reader] = owners(prints, 1) as [Inbox];
+    expect(lookup(prints, reader, T0).known).toBe(false);
     // A week on, the same owner counts.
     expect(report(prints, young, { at: T0 - 6 * DAY + SHARE_ACCOUNT_AGE_MS })).toBe(true);
-    expect(prints.lookup({ print: print(PITCH), owner: reader, now: T0 + DAY }).known).toBe(true);
+    expect(lookup(prints, reader, T0 + DAY).known).toBe(true);
     ledger.close();
   });
 
@@ -159,20 +199,20 @@ describe("abuse", () => {
 
   it("lowers a fingerprint by every owner whose person said Not spam on a match of it", () => {
     const { prints, ledger } = ledgerAt();
-    const [a, b, c, d, reader] = owners(prints, 5) as [string, string, string, string, string];
+    const [a, b, c, d, reader] = owners(prints, 5) as [Inbox, Inbox, Inbox, Inbox, Inbox];
     for (const o of [a, b, c]) report(prints, o);
-    expect(prints.lookup({ print: print(PITCH), owner: reader, now: T0 }).known).toBe(true);
+    expect(lookup(prints, reader, T0).known).toBe(true);
     report(prints, d, { vote: -1, text: RESENT });
-    expect(prints.lookup({ print: print(PITCH), owner: reader, now: T0 })).toMatchObject({ known: false, owners: 2 });
+    expect(lookup(prints, reader, T0)).toMatchObject({ known: false, owners: 2 });
     ledger.close();
   });
 
-  it("only labels on a Free inbox, and only a Pro inbox live at its own domain counts for others", () => {
+  it("takes known spam only from a Pro inbox live at its own domain, and Not spam from any that can be written to", () => {
     const { prints, ledger } = ledgerAt();
-    const port = (o: Partial<PolicyPayload>) =>
+    const port = (o: Partial<PolicyPayload>, tenantId = "tn_x") =>
       tenantShare({
         prints,
-        tenantId: "tn_x",
+        tenantId,
         policy: { owner_email: "o@biz.example", state: "live", read_only: false, ...o } as PolicyPayload,
         now: T0,
       });
@@ -181,9 +221,39 @@ describe("abuse", () => {
     expect(port({ plan: "pro", state: "dns_pending" }).contributes).toBe(false);
     expect(port({ plan: "pro", state: "closing", read_only: true }).contributes).toBe(false);
     expect(port({ plan: "pro" }).contributes).toBe(true);
-    // A Free inbox's word is not kept, whatever it says.
+    expect(port({ plan: "free" }).disputes).toBe(true);
+    expect(port({ plan: "free", state: "dns_pending" }).disputes).toBe(true);
+    expect(port({ plan: "pro", state: "closing", read_only: true }).disputes).toBe(false);
+    const count = (vote: number) =>
+      ledger.db.prepare("SELECT COUNT(*) AS n FROM spam_share_reports WHERE vote = ?").get(vote);
+    // A Free inbox's Spam is not kept; its Not spam on a match is, once its first week is over.
     port({ plan: "free" }).report("it_1", print(PITCH), { vote: 1, kind: null, now: T0 + 30 * DAY });
-    expect(ledger.db.prepare("SELECT COUNT(*) AS n FROM spam_share_reports").get()).toEqual({ n: 0 });
+    expect(count(1)).toEqual({ n: 0 });
+    port({ plan: "free" }).report("it_2", print(PITCH), { vote: -1, kind: null, now: T0 + 30 * DAY });
+    expect(count(-1)).toEqual({ n: 1 });
+    // A read-only inbox's word is not kept, whatever it says.
+    port({ plan: "pro", state: "closing", read_only: true }, "tn_ro").report("it_3", print(PITCH), {
+      vote: -1,
+      kind: null,
+      now: T0 + 30 * DAY,
+    });
+    expect(count(-1)).toEqual({ n: 1 });
+    ledger.close();
+  });
+
+  it("lowers a match by a Free inbox's Not spam as by any other", () => {
+    const { prints, ledger } = ledgerAt();
+    const [a, b, c, reader] = owners(prints, 4) as [Inbox, Inbox, Inbox, Inbox];
+    for (const o of [a, b, c]) report(prints, o);
+    expect(lookup(prints, reader, T0 + 10 * DAY).known).toBe(true);
+    const free = tenantShare({
+      prints,
+      tenantId: "tn_free",
+      policy: { owner_email: "f@cafe.example", plan: "free", state: "live", read_only: false } as PolicyPayload,
+      now: T0,
+    });
+    free.report("it_f", print(RESENT), { vote: -1, kind: null, now: T0 + 8 * DAY });
+    expect(lookup(prints, reader, T0 + 10 * DAY)).toMatchObject({ known: false, owners: 2 });
     ledger.close();
   });
 });
@@ -191,10 +261,10 @@ describe("abuse", () => {
 describe("what is kept", () => {
   it("forgets a fingerprint thirty days after it was reported", () => {
     const { prints, ledger } = ledgerAt();
-    const [a, b, c, reader] = owners(prints, 4) as [string, string, string, string];
+    const [a, b, c, reader] = owners(prints, 4) as [Inbox, Inbox, Inbox, Inbox];
     for (const o of [a, b, c]) report(prints, o);
-    expect(prints.lookup({ print: print(PITCH), owner: reader, now: T0 + SHARE_KEEP_MS - DAY }).known).toBe(true);
-    expect(prints.lookup({ print: print(PITCH), owner: reader, now: T0 + SHARE_KEEP_MS + DAY }).known).toBe(false);
+    expect(lookup(prints, reader, T0 + SHARE_KEEP_MS - DAY).known).toBe(true);
+    expect(lookup(prints, reader, T0 + SHARE_KEEP_MS + DAY).known).toBe(false);
     prints.prune(T0 + SHARE_KEEP_MS + DAY);
     for (const table of ["spam_share_reports", "spam_share_bands"]) {
       expect(ledger.db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get(), table).toEqual({ n: 0 });
@@ -204,13 +274,13 @@ describe("what is kept", () => {
 
   it("is keyed hashes only: no word, address, band, domain, inbox or item as an inbox knew it", () => {
     const { dir, prints, ledger } = ledgerAt();
-    const [a, b, c] = owners(prints, 3) as [string, string, string];
+    const [a, b, c] = owners(prints, 3) as [Inbox, Inbox, Inbox];
     const p = print(PITCH, "growth-agency.example");
-    for (const o of [a, b, c]) {
+    for (const [i, o] of [a, b, c].entries()) {
       prints.report({
-        tenantId: "tn_visible",
-        itemId: `it_visible_${o.slice(0, 4)}`,
-        owner: o,
+        tenantId: `tn_visible${i}`,
+        itemId: `it_visible_${i}`,
+        owner: o.owner,
         print: p,
         vote: 1,
         kind: "pitches",
@@ -220,42 +290,42 @@ describe("what is kept", () => {
     const dump = ["spam_share_owners", "spam_share_reports", "spam_share_bands"]
       .map((t) => JSON.stringify(ledger.db.prepare(`SELECT * FROM ${t}`).all()))
       .join("\n");
-    expect(dump).not.toMatch(/google|audit|cafés|growth|owner\d@|business\d|tn_visible|it_visible/i);
+    expect(dump).not.toMatch(/google|audit|cafés|growth|tn_visible|it_visible|tn_0/i);
     for (const band of p.bands) expect(dump).not.toContain(band.slice(2));
     expect(LEDGER_TABLES).toEqual(expect.arrayContaining(["spam_share_reports", "spam_share_bands"]));
     // Another runtime's key matches nothing here, so no copy of the store can be matched without ours.
     ledger.close();
     const other = new Ledger(join(dir, "ledger.db"), { hashKey: "another-runtime-key" });
-    const reader = other.shared.ownerOf({ owner_email: "reader@biz.example" });
-    expect(other.shared.lookup({ print: p, owner: reader, now: T0 }).known).toBe(false);
+    const reader = other.shared.ownerOf({}, "tn_reader");
+    expect(other.shared.lookup({ print: p, owner: reader, tenantId: "tn_reader", now: T0 }).known).toBe(false);
     other.close();
   });
 
   it("takes back an inbox's word on an item, and a new word replaces the old", () => {
     const { prints, ledger } = ledgerAt();
-    const [a, b, c, reader] = owners(prints, 4) as [string, string, string, string];
+    const [a, b, c, reader] = owners(prints, 4) as [Inbox, Inbox, Inbox, Inbox];
     for (const o of [a, b]) report(prints, o);
-    report(prints, c, { tenant: "tn_c", item: "it_c" });
-    expect(prints.lookup({ print: print(PITCH), owner: reader, now: T0 }).known).toBe(true);
-    prints.withdraw("tn_c", "it_c");
-    expect(prints.lookup({ print: print(PITCH), owner: reader, now: T0 }).known).toBe(false);
-    report(prints, c, { tenant: "tn_c", item: "it_c" });
-    report(prints, c, { tenant: "tn_c", item: "it_c", vote: -1 });
-    expect(prints.lookup({ print: print(PITCH), owner: reader, now: T0 })).toMatchObject({ known: false, owners: 1 });
+    report(prints, c, { item: "it_c" });
+    expect(lookup(prints, reader, T0).known).toBe(true);
+    prints.withdraw(c.tenant, "it_c");
+    expect(lookup(prints, reader, T0).known).toBe(false);
+    report(prints, c, { item: "it_c" });
+    report(prints, c, { item: "it_c", vote: -1 });
+    expect(lookup(prints, reader, T0)).toMatchObject({ known: false, owners: 1 });
     ledger.close();
   });
 
   it("knows a sender's company domain three owners reported, whatever the words", () => {
     const { prints, ledger } = ledgerAt();
-    const [a, b, c, reader] = owners(prints, 4) as [string, string, string, string];
+    const [a, b, c, reader] = owners(prints, 4) as [Inbox, Inbox, Inbox, Inbox];
     for (const o of [a, b, c]) report(prints, o, { domain: "growth-agency.example" });
-    expect(prints.lookup({ print: print(OTHER, "growth-agency.example"), owner: reader, now: T0 })).toEqual({
+    expect(lookup(prints, reader, T0, print(OTHER, "growth-agency.example"))).toEqual({
       known: false,
       owners: 0,
       kind: null,
       domain: true,
     });
-    expect(prints.lookup({ print: print(OTHER, "bistro.example"), owner: reader, now: T0 }).domain).toBe(false);
+    expect(lookup(prints, reader, T0, print(OTHER, "bistro.example")).domain).toBe(false);
     ledger.close();
   });
 });

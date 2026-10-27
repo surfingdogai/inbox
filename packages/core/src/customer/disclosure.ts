@@ -50,9 +50,12 @@ export interface DisclosureCopy {
     spam: string;
     spamOwn: string;
     /**
-     * While the inbox's host shares fingerprints of known spam between the inboxes it runs (ADR-041
-     * §16): that it does, and that a fingerprint can't be turned back into the message.
+     * While the inbox's host keeps a shared list of known spam for the inboxes it runs (ADR-041 §16):
+     * that each new stranger's message is compared by its fingerprint, what this business shares
+     * (`spamSharedReads`: only a word that a match wasn't spam; `spamShared`: the fingerprints of what it
+     * marks as spam too), and that a fingerprint can't be turned back into the message.
      */
+    spamSharedReads: string;
     spamShared: string;
   }>;
 }
@@ -89,8 +92,10 @@ const EN: DisclosureCopy = {
     spam: "We check new messages from people we haven't heard from before, to keep unwanted messages away from our team. The check can include a reading by an automated service, which sees the message without email addresses, phone numbers or bank details. That service does not use it to train AI models, and deletes it within 30 days, unless its safety checks flag it (it may then keep it for up to two years) or the law requires keeping it. A person here can see and bring back any message the check set aside while it is kept.",
     spamOwn:
       "We check new messages from people we haven't heard from before, to keep unwanted messages away from our team. The check can include a reading by an automated service, which sees the message without email addresses, phone numbers or bank details. A person here can see and bring back any message the check set aside while it is kept.",
+    spamSharedReads:
+      "To keep out spam, the provider that handles our messages compares a fingerprint of each new message from someone we haven't heard from before with the fingerprints of messages the other businesses it serves marked as spam. We don't share the fingerprints of messages we mark as spam; when one that matched turns out not to be spam, we say so, by its fingerprint. A fingerprint can't be turned back into the message.",
     spamShared:
-      "To keep out spam, the provider that handles our messages shares fingerprints of messages marked as spam with the other businesses it serves; a fingerprint can't be turned back into the message.",
+      "To keep out spam, the provider that handles our messages compares a fingerprint of each new message from someone we haven't heard from before with the fingerprints of messages the other businesses it serves marked as spam, and shares with them the fingerprints of messages we mark as spam, or of ones that matched but weren't. A fingerprint can't be turned back into the message.",
   },
 };
 
@@ -130,8 +135,10 @@ const PT: DisclosureCopy = {
     spam: "Verificamos as mensagens novas de quem ainda não nos contactou, para manter as mensagens indesejadas longe da nossa equipa. A verificação pode incluir uma leitura por um serviço automático, que vê a mensagem sem endereços de email, números de telefone ou dados bancários. Esse serviço não a usa para treinar modelos de IA e apaga-a no prazo de 30 dias, a menos que os seus controlos de segurança a assinalem (podendo então guardá-la até dois anos) ou que a lei obrigue a guardá-la. Alguém da nossa equipa pode ver e recuperar qualquer mensagem posta de parte enquanto for guardada.",
     spamOwn:
       "Verificamos as mensagens novas de quem ainda não nos contactou, para manter as mensagens indesejadas longe da nossa equipa. A verificação pode incluir uma leitura por um serviço automático, que vê a mensagem sem endereços de email, números de telefone ou dados bancários. Alguém da nossa equipa pode ver e recuperar qualquer mensagem posta de parte enquanto for guardada.",
+    spamSharedReads:
+      "Para manter o spam afastado, o fornecedor que trata as nossas mensagens compara uma impressão digital de cada mensagem nova de quem ainda não nos contactou com as impressões digitais de mensagens que as outras empresas que serve marcaram como spam. Não partilhamos as impressões digitais das mensagens que marcamos como spam; quando uma que coincidiu afinal não é spam, dizemo-lo, pela sua impressão digital. Uma impressão digital não permite reconstituir a mensagem.",
     spamShared:
-      "Para manter o spam afastado, o fornecedor que trata as nossas mensagens partilha impressões digitais de mensagens marcadas como spam com as outras empresas que serve; uma impressão digital não permite reconstituir a mensagem.",
+      "Para manter o spam afastado, o fornecedor que trata as nossas mensagens compara uma impressão digital de cada mensagem nova de quem ainda não nos contactou com as impressões digitais de mensagens que as outras empresas que serve marcaram como spam, e partilha com elas as impressões digitais das mensagens que marcamos como spam, ou das que coincidiram mas não eram. Uma impressão digital não permite reconstituir a mensagem.",
   },
 };
 
@@ -188,8 +195,11 @@ export function privacyPage(input: {
    * the host's, whose retention the page states, or one the business set up itself; null while none may.
    */
   readonly spamReading?: "host" | "own" | null | undefined;
-  /** Whether the inbox's host shares fingerprints of known spam between its inboxes (ADR-041 §16). */
-  readonly spamShared?: boolean | undefined;
+  /**
+   * How the inbox takes part in its host's shared list of known spam (ADR-041 §16): it compares new
+   * messages (`reads`), and shares what it marks as spam too (`reads_and_shares`); null when it doesn't.
+   */
+  readonly spamShared?: "reads" | "reads_and_shares" | null | undefined;
 }): CustomerPage {
   const d = DISCLOSURE[input.lang].privacy;
   const host = (origin: string) => {
@@ -223,7 +233,7 @@ export function privacyPage(input: {
             heading: d.spamHeading,
             paragraphs: [
               ...(input.spamReading ? [input.spamReading === "host" ? d.spam : d.spamOwn] : []),
-              ...(input.spamShared ? [d.spamShared] : []),
+              ...(input.spamShared ? [input.spamShared === "reads_and_shares" ? d.spamShared : d.spamSharedReads] : []),
             ],
           },
         ]
