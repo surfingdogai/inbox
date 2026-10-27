@@ -104,7 +104,7 @@ describe("inbox update", { timeout: 60_000 }, () => {
     expect(r.err).toBe("");
     expect(r.code).toBe(0);
     // The stand-in's /healthz says 0.1.0 whatever runs, so the line says so too.
-    expect(r.out).toContain("Updated: 0.1.0 → 0.2.0 (it reports 0.1.0). The data as it was before is in");
+    expect(r.out).toContain("Updated: 0.1.0 → 0.2.0. The data as it was before is in");
     expect(version()).toBe("0.2.0");
     const before = backups().find((f) => f.endsWith("-before-0.2.0.db"));
     expect(before).toBeDefined();
@@ -167,6 +167,19 @@ describe("inbox update", { timeout: 60_000 }, () => {
     installed("0.3.0");
     expect((await inbox("update", "0.2.9", "--force")).code).toBe(0);
     expect(version()).toBe("0.2.9");
+  });
+
+  it("takes a release after its own pre-release, and refuses the pre-release after the release", async () => {
+    installed("0.2.0-rc.1");
+    expect((await inbox("update", "0.2.0")).code).toBe(0);
+    expect(version()).toBe("0.2.0");
+    installed("0.2.0-rc.1");
+    expect((await inbox("update", "0.2.0-rc.2")).code).toBe(0);
+    installed("0.2.0");
+    const r = await inbox("update", "0.2.0-rc.1");
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("0.2.0-rc.1 is older than 0.2.0");
+    expect(version()).toBe("0.2.0");
   });
 
   it("brings the kit up to date from the release, checked, and puts the old one back on a rollback", async () => {
@@ -384,6 +397,12 @@ describe("inbox sign-in, owner-key and status", { timeout: 60_000 }, () => {
     expect(status.out).toContain("Running 0.1.0 (image ghcr.io/surfingdogai/inbox:0.1.0), and its database answers.");
     expect(status.out).toContain("The newest release is 0.2.0: sudo inbox update");
     expect(status.out).toContain("Email    not set up: sudo inbox email");
+    // A pre-release of the next version is newer than the last release: nothing older is suggested.
+    installed("0.2.0-rc.1");
+    s.set("latest", "0.1.0");
+    expect((await inbox("status")).out).not.toContain("The newest release is");
+    s.set("latest", "0.2.0");
+    expect((await inbox("status")).out).toContain("The newest release is 0.2.0: sudo inbox update");
   });
 
   it("lists the Cloudflare accounts a token can use, so nobody types an account ID", () => {

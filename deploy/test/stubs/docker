@@ -121,7 +121,7 @@ node_e() {
       ;;
     *healthz*)
       broken && exit 1
-      echo '{"ok":true,"version":"0.1.0","db":"ok"}'
+      printf '{"ok":true,"version":"%s","db":"ok"}\n' "$(version)"
       ;;
     *) exec "$STUB_NODE" -e "$1" ;;
   esac

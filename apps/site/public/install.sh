@@ -1116,7 +1116,13 @@ cmd_restore() {
 is_release() { case "$1" in [0-9]*.[0-9]*) return 0 ;; *) return 1 ;; esac }
 
 # older A B: A is an older version than B.
-older() { [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -n 1)" = "$1" ]; }
+# A pre-release comes before its release: 0.2.0-rc.1 is older than 0.2.0 (sort -V puts a '~' first).
+older() {
+  local a b
+  a=$(printf '%s' "$1" | sed 's/-/~/')
+  b=$(printf '%s' "$2" | sed 's/-/~/')
+  [ "$a" != "$b" ] && [ "$(printf '%s\n%s\n' "$a" "$b" | sort -V | head -n 1)" = "$a" ]
+}
 
 # fetch_kit VERSION INTO: that release's kit (the Compose file, Caddy's file and this command) in
 # INTO/inbox-selfhost, checked against the release's SHA256SUMS. Non-zero when the release has no kit
@@ -1294,7 +1300,7 @@ cmd_status() {
     warn "It does not answer. sudo inbox logs says why."
   fi
   latest=$(latest_version)
-  if [ -n "$latest" ] && [ -n "${version:-}" ] && [ "$latest" != "$version" ]; then
+  if [ -n "$latest" ] && [ -n "${version:-}" ] && older "$version" "$latest"; then
     say "  The newest release is $latest: sudo inbox update"
   fi
   say "  Data     $DATA ($(human_size "$DATA"))"
