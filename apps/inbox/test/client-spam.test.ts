@@ -4,6 +4,7 @@ import {
   actsFor,
   alreadyDone,
   BASIC_FREE,
+  basicFree,
   basicMonth,
   byWords,
   CONNECT_MODEL,
@@ -26,7 +27,9 @@ import {
   readerLine,
   rowTag,
   SETTINGS_INTRO,
+  SHARED_FINGERPRINTS,
   SPAM_TOP,
+  sharedLine,
   showsModelUse,
   testFailed,
   testLine,
@@ -312,6 +315,7 @@ function status(o: Partial<SpamStatus> & { reader?: SpamStatus["reader"] } = {})
       tokens_this_month: 20_000,
     },
     plan: "self_hosted",
+    shared: "off",
     this_month: { aside: 20, held: 4, brought_back: 2 },
     held_now: 1,
     this_week: { aside: 6 },
@@ -428,6 +432,27 @@ describe("Settings → Spam, in every state", () => {
     );
     // The Spam list says how to bring one back, and nothing of deleting.
     expect(SPAM_TOP).toBe("Put aside. Not spam moves one back.");
+  });
+
+  it("says what is shared with other businesses, and whether this inbox's marks count for them", () => {
+    // One's own server shares nothing, and says nothing of it.
+    expect(sharedLine(status())).toBeNull();
+    expect(basicFree(status())).toBe(BASIC_FREE);
+    // Hosted: the words stay; new messages are compared by fingerprint only.
+    expect(basicFree(status({ plan: "free", shared: "reads" }))).toBe(
+      "Free, and no word it reads leaves your inbox: new messages are compared with known spam by fingerprint only. A new sender's mail domain is looked up in DNS with an AI check, never without one.",
+    );
+    expect(sharedLine(status({ plan: "pro", shared: "reads_and_shares" }))).toBe(
+      "Messages three other businesses marked as spam are caught here too, and your Spam marks help them. Inboxes here share fingerprints of spam, never messages, and a fingerprint can't be turned back into one.",
+    );
+    expect(sharedLine(status({ plan: "free", shared: "reads" }))).toBe(
+      "Messages three other businesses marked as spam are labelled here. With Pro, your Spam marks help them too. Inboxes here share fingerprints of spam, never messages, and a fingerprint can't be turned back into one.",
+    );
+    expect(sharedLine(status({ plan: "pro", shared: "reads" }))).toContain("once you're live at your own address");
+    for (const shared of ["reads", "reads_and_shares"] as const) {
+      expect(sharedLine(status({ plan: "pro", shared }))).toContain(SHARED_FINGERPRINTS);
+      expect(sharedLine(status({ plan: "pro", shared }))).not.toMatch(/delete|block|rank/i);
+    }
   });
 
   it("says what the model's Test found, or why it could not", () => {

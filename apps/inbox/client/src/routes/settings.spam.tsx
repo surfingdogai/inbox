@@ -6,8 +6,8 @@ import { Sheet } from "../components/Sheet";
 import { problemOf } from "../lib/api";
 import { useBusiness, useSaveSettings, useSettings, useSpam, useSpamWrite } from "../lib/queries";
 import {
-  BASIC_FREE,
   BASIC_LINE,
+  basicFree,
   basicMonth,
   CONNECT_MODEL,
   FILTER_COPY,
@@ -22,6 +22,7 @@ import {
   priceLine,
   readerLine,
   SETTINGS_INTRO,
+  sharedLine,
   showsModelUse,
   turnOnSheet,
 } from "../lib/spam";
@@ -112,7 +113,8 @@ function SpamPage() {
             <span className="spam-always">Always on</span>
           </div>
           <p>{BASIC_LINE}</p>
-          <p className="fine">{BASIC_FREE}</p>
+          <p className="fine">{basicFree(s)}</p>
+          {sharedLine(s) && <p className="fine">{sharedLine(s)}</p>}
           {s.basic.learning_until && (
             <LearningLine
               until={s.basic.learning_until}

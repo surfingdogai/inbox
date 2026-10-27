@@ -212,6 +212,35 @@ export const BASIC_LINE =
 export const BASIC_FREE =
   "Free, and nothing it reads leaves your inbox. A new sender's mail domain is looked up in DNS with an AI check, never without one.";
 export const FILTERS_LINE = "Each one reads new messages from people you haven't dealt with before.";
+
+/**
+ * Basic protection's privacy line: on one's own server nothing it reads leaves the inbox; on a hosted
+ * inbox new messages are also compared with known spam, by fingerprint only (ADR-041 §16).
+ */
+export function basicFree(s: Pick<SpamStatus, "shared">): string {
+  return s.shared === "off"
+    ? BASIC_FREE
+    : "Free, and no word it reads leaves your inbox: new messages are compared with known spam by fingerprint only. A new sender's mail domain is looked up in DNS with an AI check, never without one.";
+}
+
+/** What is shared between hosted inboxes, said wherever the shared list is (ADR-041 §16). */
+export const SHARED_FINGERPRINTS =
+  "Inboxes here share fingerprints of spam, never messages, and a fingerprint can't be turned back into one.";
+
+/**
+ * Known spam from other businesses, under Basic protection: what it does here, and whether this inbox's
+ * own marks count for them (Pro, live at the business's own address). Null on one's own server.
+ */
+export function sharedLine(s: Pick<SpamStatus, "shared" | "plan">): string | null {
+  if (s.shared === "off") return null;
+  const mine =
+    s.shared === "reads_and_shares"
+      ? "Messages three other businesses marked as spam are caught here too, and your Spam marks help them."
+      : s.plan === "pro"
+        ? "Messages three other businesses marked as spam are caught here too. Your Spam marks help them once you're live at your own address."
+        : "Messages three other businesses marked as spam are labelled here. With Pro, your Spam marks help them too.";
+  return `${mine} ${SHARED_FINGERPRINTS}`;
+}
 export const ONLY_YOU = "Only you can change this, signed in.";
 
 export const FILTER_COPY: Readonly<Record<"pitches" | "scams" | "junk", { title: string; line: string }>> = {
