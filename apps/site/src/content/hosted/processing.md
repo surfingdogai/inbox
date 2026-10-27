@@ -1,7 +1,7 @@
 ---
 title: Processing agreement
 description: How we process your customers' personal data for you when we run your inbox (GDPR article 28).
-eyebrow: Terms · hosted pilot
+eyebrow: Terms · hosted inbox
 updated: 27 October 2026
 order: 2
 ---
@@ -13,7 +13,7 @@ This agreement is part of the [hosted inbox terms](/hosted/terms/). It applies t
 - **Subject:** running your inbox: receiving, storing and answering the requests, messages, bookings, orders and quotes that people and their agents send it, and the emails it sends about them.
 - **Duration:** while you use the service, then the 30 days of read-only after you close it, then deletion (section 7).
 - **Personal data:** what your customers send: names, email addresses, phone numbers, addresses, messages, what they book or order, amounts; the addresses of the people who sign in to your inbox; anything you type in.
-- **Special categories:** not accepted during the pilot. Health and medical practices cannot use the hosted inbox yet. If a customer sends such data anyway, tell us, and do not ask for it.
+- **Special categories:** not accepted yet. Health and medical practices cannot use the hosted inbox yet. If a customer sends such data anyway, tell us, and do not ask for it.
 - **People concerned:** your customers and the people who contact you, and your staff.
 
 ## 2. Your instructions
@@ -33,7 +33,7 @@ What is in place today, as it is:
 - Secrets your inbox stores (connection credentials, webhook secrets, the key that signs receipts) are sealed with a key unique to your inbox, kept outside its database. Sign-in sessions, API keys and tokens are stored as hashes, never as they are.
 - Outbound calls from your inbox (webhooks, for example) reach public addresses and never our own servers or private networks.
 - Hourly backups, encrypted on our servers before they are stored anywhere else, and stored in the European Union.
-- The servers' disks are not encrypted during the pilot. That is why health and other special-category businesses wait.
+- The servers' disks are not encrypted yet. That is why health and other special-category businesses wait.
 
 ## 5. Sub-processors
 

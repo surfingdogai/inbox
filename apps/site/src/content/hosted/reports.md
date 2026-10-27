@@ -1,7 +1,7 @@
 ---
 title: Report a hosted inbox
 description: How to tell us about a hosted inbox that is unlawful or breaks our rules, and what happens next.
-eyebrow: Reports · hosted pilot
+eyebrow: Reports · hosted inbox
 updated: 13 October 2026
 order: 5
 ---

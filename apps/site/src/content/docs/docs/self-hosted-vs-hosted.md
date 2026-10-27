@@ -21,7 +21,7 @@ The inbox is one codebase with two self-hosting targets and one hosted edition. 
 
 <!-- hosted: open -->
 
-Pro adds AI spam filters (coming). Your $10 supports the open-source inbox, the open network, and keeping access to AI agents out of any one company's connector store.
+Pro adds the three AI spam filters ([spam](/docs/spam/)). The $10 supports the open-source inbox, the open network, and keeping access to AI agents from being locked in a connector store.
 
 <!-- hosted: end -->
 

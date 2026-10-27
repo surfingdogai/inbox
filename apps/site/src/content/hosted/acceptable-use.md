@@ -1,8 +1,8 @@
 ---
 title: Acceptable use
-description: What a hosted inbox may not be used for during the pilot, and what we do when one is.
-eyebrow: Terms · hosted pilot
-updated: 13 October 2026
+description: What a hosted inbox may not be used for, and what we do when one is.
+eyebrow: Terms · hosted inbox
+updated: 27 October 2026
 order: 4
 ---
 
@@ -13,7 +13,7 @@ These rules are part of the [hosted inbox terms](/hosted/terms/). They keep the 
 - **Pretend to be someone else.** Set up an inbox for your own business and no other, on a domain you control or are allowed to use for it, under your business's real name.
 - **Send spam,** or write to people who did not contact you.
 - **Offer or arrange anything unlawful,** or break consumer, data protection or tax law.
-- **Collect what does not belong in it:** card numbers, passwords or government ID numbers in messages, or health and other special-category data. During the pilot, health and medical practices cannot use the hosted inbox at all.
+- **Collect what does not belong in it:** card numbers, passwords or government ID numbers in messages, or health and other special-category data. For now, health and medical practices cannot use the hosted inbox at all.
 - **Invent** receipts, customers, bookings or reports, or pay or pressure anyone to make them.
 - **Attack or overload** the service, probe other inboxes, or get around its limits.
 - **Store content** that is unlawful, or that you have no right to store.

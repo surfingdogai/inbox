@@ -20,7 +20,7 @@ address and a code we send to it.
    where that is, but changing DNS is theirs to approve.
 
 Their inbox and its backups are stored in the European Union, and they can download everything it
-holds and leave whenever they like. Health and medical practices cannot join during the pilot. If
+holds and leave whenever they like. Health and medical practices cannot join yet. If
 the person would rather run the inbox themselves, or the hosted inbox does not fit, follow the rest
 of this file.
 

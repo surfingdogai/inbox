@@ -608,12 +608,12 @@ describe("hosted first, once the pilot is open", () => {
 /**
  * The price (the founder's decisions, 26 and 27 Oct 2026): the hosted inbox is Free, with no end
  * date, and Pro is $10, €10 or £9 a month, taxes included, for an owner who wants it: the AI spam
- * filters, nothing else. Said short, the same way wherever a price is, with what the $10 supports;
- * no "during the pilot" left on a price, nor "no price is set".
+ * filters, nothing else. Said short, the same way wherever a price is, with what the $10 supports in
+ * the founder's own words; no "during the pilot" left on a price, nor "no price is set".
  */
 const PRO = "$10, €10 or £9 a month, taxes included";
 const SUPPORT =
-  "Your $10 supports the open-source inbox, the open network, and keeping access to AI agents out of any one company's connector store.";
+  "The $10 supports the open-source inbox, the open network, and keeping access to AI agents from being locked in a connector store.";
 
 describe("the price: Free, and Pro at $10", () => {
   const flat = (t: string) => t.replace(/\s+/g, " ");
@@ -624,7 +624,7 @@ describe("the price: Free, and Pro at $10", () => {
       "Free: the whole inbox, its connectors, your listing on the network and the catalogue, with basic spam protection. No card, and no end date.",
     );
     expect(page).toContain(
-      `Pro, if you want it: ${PRO}, for each inbox. It adds AI spam filters for sales pitches, scams and junk, coming soon.`,
+      `Pro, if you want it: ${PRO}, for each inbox. It adds the three AI spam filters, for sales pitches, scams and junk, on from the start.`,
     );
     expect(page).toContain(
       "They put messages aside and never delete them, and ask Claude Haiku, an AI model from Anthropic",
@@ -638,11 +638,11 @@ describe("the price: Free, and Pro at $10", () => {
   it("the guide's question, the comparison and the quickstart say the same", () => {
     const guide = flat(body(DOCS_PAGE));
     expect(guide).toContain(
-      `**What does it cost?** Nothing. Pro is optional: ${PRO}, for AI spam filters (coming). ${SUPPORT}`,
+      `**What does it cost?** Nothing. Pro is optional: ${PRO}, for the three AI spam filters ([spam](/docs/spam/)). ${SUPPORT}`,
     );
     expect(guide).toContain(`It is free; Pro is ${PRO}, if you want it ([terms](/hosted/terms/)).`);
     const vs = flat(version(read("src/content/docs/docs/self-hosted-vs-hosted.md"), true));
-    expect(vs).toContain(`Pro adds AI spam filters (coming). ${SUPPORT}`);
+    expect(vs).toContain(`Pro adds the three AI spam filters ([spam](/docs/spam/)). ${SUPPORT}`);
     expect(vs).not.toContain("no price is set");
   });
 
@@ -663,33 +663,61 @@ describe("the price: Free, and Pro at $10", () => {
     expect(privacy).not.toMatch(/pilot|future price/i);
     expect(privacy).toContain("**If you choose Pro**");
     expect(privacy).toContain("Stripe gets your email address and your domain");
-    for (const page of ["index.md", "terms.md", "privacy.md"]) {
+    for (const page of ["index.md", "terms.md", "privacy.md", "processing.md", "acceptable-use.md", "reports.md"]) {
       expect(front(`${HOSTED_DIR}/${page}`).eyebrow, page).not.toMatch(/pilot/i);
+      expect(flat(read(`${HOSTED_DIR}/${page}`)), page).not.toMatch(/pilot/i);
     }
     expect(privacy).toContain(
-      "On Pro, the AI spam filters send Anthropic masked copies of messages your inbox receives",
+      "On Pro, with its AI check on, the spam filters send Anthropic the masked text of new senders' messages they cannot decide by themselves",
     );
+    expect(privacy).toContain("whether and when you turned its AI check on or off");
+    // A Pro we give: the owner is told, and its AI check waits for them.
+    expect(terms).toContain("We tell you by email, and Settings → Spam says until when.");
+    expect(terms).toContain(
+      "Its filters are on, but its AI check stays off until you turn it on in Settings → Spam: until then nothing goes to Anthropic.",
+    );
+    // The filters ship with Pro: nothing says they are coming, or that Pro changes nothing.
+    expect(terms).not.toMatch(/which are coming|filters \(coming\)|Pro changes nothing/);
+    expect(terms).toContain(
+      "Until that AI check is switched on for hosted inboxes, the filters look for known phrases, and Settings → Spam says so.",
+    );
+    expect(terms).toContain(SUPPORT);
     for (const page of ["terms.md", "privacy.md", "processing.md"])
       expect(front(`${HOSTED_DIR}/${page}`).updated, page).toBe("27 October 2026");
     expect(front(`${HOSTED_DIR}/terms.md`).description).not.toMatch(/pilot/i);
   });
 
-  it("the processing agreement names Pro's AI model, what each check sends, and what its maker keeps", () => {
+  it("the processing agreement names Pro's AI model once, what each check sends, and what its maker keeps", () => {
     const dpa = flat(body(`${HOSTED_DIR}/processing.md`));
+    // One entry for Anthropic, one transfer paragraph, and the confidentiality section says it too.
+    expect(dpa.match(/\*\*Anthropic/g)).toHaveLength(1);
+    expect(dpa.match(/Anthropic is in the United States|to Anthropic \(section 5\) is processed/g)).toHaveLength(1);
     expect(dpa).toContain(
-      "**Anthropic, if you choose Pro.** Pro's AI spam filters ask Anthropic's AI model, Claude Haiku",
+      "On Pro, the spam filters' AI check has Anthropic's AI model read the masked text of a new sender's message that the filters cannot decide by themselves (section 5).",
     );
-    expect(dpa).toContain("at most 150 times a day and 1,500 times a month for your inbox");
-    expect(dpa).toContain("with every email address, phone number, card or bank account number and link taken out");
+    expect(dpa).toContain(
+      "**Anthropic, for Pro's AI spam filters.** When the filters cannot decide by themselves a message from someone your inbox has not dealt with before, they ask Anthropic's AI model, Claude Haiku, at most 150 times a day and 1,500 times a month for your inbox.",
+    );
+    expect(dpa).toContain(
+      "Each check sends the message's masked text: earlier mail quoted in it cut, at most 2,000 characters, with every email address, phone number, payment address, bank account and card number taken out and each link cut to its domain.",
+    );
     expect(dpa).toContain("the sender's domain, never their address");
-    // Anthropic's own words (privacy.claude.com, articles 7996866 and 7996868, read 27 Oct 2026).
+    expect(dpa).toContain("how many files it has, never the files");
     expect(dpa).toContain(
-      "it does not train its models on what it is sent, and it deletes it from its systems within 30 days",
+      "The answer is a verdict from a fixed list, with at most three short passages copied from the message.",
     );
-    expect(dpa).toContain("then it can be kept for up to two years");
-    expect(dpa).toContain("On Free, nothing is sent to it.");
-    expect(dpa).toContain("transfers to it rely on the standard contractual clauses in its data processing addendum");
-    expect(dpa).not.toMatch(/zero (data )?retention/i);
+    // Anthropic's own words (privacy.claude.com, articles 7996866 and 7996868, read 27 Oct 2026): no
+    // training by default, 30 days, flagged inputs and outputs up to two years, the scores up to seven.
+    expect(dpa).toContain("By default, Anthropic does not use what it is sent to train its models.");
+    expect(dpa).toContain("It deletes it within 30 days");
+    expect(dpa).toContain(
+      "it may keep what was sent and answered for up to two years and the checks' scores for up to seven",
+    );
+    expect(dpa).toContain(
+      "On a Pro you pay for, the AI check is on from the start; on a Pro we give you for free, it stays off until you turn it on in Settings → Spam. On Free, nothing is sent to it.",
+    );
+    expect(dpa).toContain("relies on the standard contractual clauses in Anthropic's data processing addendum");
+    expect(dpa).not.toMatch(/zero (data )?retention|pilot/i);
   });
 
   it("leaves no pilot on a price anywhere a business reads one", () => {
@@ -715,6 +743,13 @@ describe("the price: Free, and Pro at $10", () => {
         /free during (the|its) pilot|nothing during the pilot|no price is set|a future price|Ending the pilot/i,
       );
     expect(read("src/content/docs/docs/self-hosted-vs-hosted.md")).not.toContain("Hosted by us (pilot");
+    // No pilot left where a business reads about joining: the card's pill, and who cannot join yet.
+    expect(read("src/components/Run.astro")).not.toContain('<span class="pill">Pilot</span>');
+    for (const path of ["public/install.md", DOCS_PAGE])
+      expect(flat(read(path)), path).not.toMatch(/during the pilot|cannot join during/);
+    // Nor "coming" on Pro's filters, now they ship with it.
+    for (const path of [`${HOSTED_DIR}/index.md`, DOCS_PAGE, "src/content/docs/docs/self-hosted-vs-hosted.md"])
+      expect(flat(read(path)), path).not.toMatch(/filters \(coming\)|coming soon/);
     expect(readFileSync(repo("README.md"), "utf8")).not.toMatch(/free during the pilot/i);
     expect(read("src/pages/technical.astro")).toContain(
       '"We run it for you, at an address on your own domain. Free, or Pro at $10, €10 or £9 a month."',
