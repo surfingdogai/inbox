@@ -51,8 +51,10 @@ import {
   setClosuresInput,
   setFloorsInput,
   setSpamFilterInput,
+  setSpamModelInput,
   setupPlanSchema,
   setWeeklyInput,
+  spamModelsInput,
   splitAddress,
   startSpamFilterInput,
   suggestTimeInput,
@@ -798,6 +800,64 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
     }),
     validator("json", removeSpamListEntryInput, hook),
     async (c) => c.json(await caps.removeSpamListEntry(c.get("caller"), c.req.valid("json"))),
+  );
+
+  // ---- Your AI model, on one's own server (ADR-029 §11.5): the key is the owner's, pasted in person ----
+
+  app.get(
+    "/spam/model",
+    owner({
+      tags: ["owner"],
+      summary: "Your AI model: what reads for the spam filters here, and whether you may bring your own",
+      responses: json("Your AI model", z.looseObject({})),
+    }),
+    async (c) => c.json(await caps.spamModel(c.get("caller"))),
+  );
+
+  app.post(
+    "/spam/model/models",
+    owner({
+      tags: ["owner"],
+      summary: "The provider's own list of models for a key (the key is used for the call, not kept)",
+      responses: json("Models", z.looseObject({})),
+      write: true,
+    }),
+    validator("json", spamModelsInput, hook),
+    async (c) => c.json(await caps.spamModels(c.get("caller"), c.req.valid("json"))),
+  );
+
+  app.put(
+    "/spam/model",
+    owner({
+      tags: ["owner"],
+      summary: "Keep your own AI model and its key, sealed (a person in person only)",
+      responses: json("Your AI model", z.looseObject({})),
+      write: true,
+    }),
+    validator("json", setSpamModelInput, hook),
+    async (c) => c.json(await caps.setSpamModel(c.get("caller"), c.req.valid("json"))),
+  );
+
+  app.post(
+    "/spam/model/test",
+    owner({
+      tags: ["owner"],
+      summary: "Two samples through your model: a sales pitch spotted, a customer asking a price let through",
+      responses: json("Test", z.looseObject({})),
+      write: true,
+    }),
+    async (c) => c.json(await caps.testSpamModel(c.get("caller"))),
+  );
+
+  app.delete(
+    "/spam/model",
+    owner({
+      tags: ["owner"],
+      summary: "Remove your AI model and its key",
+      responses: json("Your AI model", z.looseObject({})),
+      write: true,
+    }),
+    async (c) => c.json(await caps.removeSpamModel(c.get("caller"))),
   );
 
   app.post(

@@ -44,6 +44,7 @@ const TITLES: Record<string, string> = {
   draft_stale: "The draft is out of date",
   geo_terms: "A price may not depend on where someone is",
   too_many_requests: "Too many requests",
+  unavailable: "Not available just now",
   unauthorized: "Authentication required",
   internal: "Something went wrong",
 };

@@ -5,7 +5,7 @@ import type { ItemType, ItemView, ListParams, Page } from "./types";
  * email to the customer that could not be sent, and messages put aside as spam (by the owner, or as
  * they arrived: ADR-026 §7).
  */
-export type Filter = "needs" | "all" | "done" | "unsent" | "spam" | ItemType;
+export type Filter = "needs" | "all" | "done" | "unsent" | "held" | "spam" | ItemType;
 
 export const FILTERS: readonly { readonly key: Filter; readonly label: string; readonly type?: ItemType }[] = [
   { key: "needs", label: "Needs you" },
@@ -18,6 +18,9 @@ export const FILTERS: readonly { readonly key: Filter; readonly label: string; r
   { key: "refund", label: "Refunds", type: "refund" },
   { key: "done", label: "Done" },
   { key: "unsent", label: "Email not sent" },
+  // What the spam filter holds until the sender confirms or a person lets it in (ADR-029): shown only
+  // while something is held.
+  { key: "held", label: "Held" },
   { key: "spam", label: "Spam" },
 ];
 
@@ -41,7 +44,10 @@ export function paramsFor(filter: Filter, q: string | undefined, sandbox: boolea
       return { ...base, open_only: false, limit: 50 };
     case "unsent":
       return { ...base, mail_failed: true, open_only: false };
+    case "held":
+      return { ...base, screen: "held", open_only: false };
     case "spam":
+      // Everything put aside: by you, by a mail server as it arrived, and by the spam filter.
       return { ...base, state: "spam", open_only: false };
     default:
       return { ...base, type: filter, open_only: true };
@@ -69,9 +75,12 @@ export interface Counts {
   /** More open items exist than were counted. */
   readonly openMore: boolean;
   readonly doneMore: boolean;
+  /** What the spam filter holds for the sender or a person (ADR-029): the rail shows Held only then. */
+  readonly held: number;
+  readonly heldMore: boolean;
 }
 
-export function countsFrom(open: Page<ItemView>, everything: Page<ItemView>): Counts {
+export function countsFrom(open: Page<ItemView>, everything: Page<ItemView>, held?: Page<ItemView>): Counts {
   const byType: Record<ItemType, number> = { message: 0, quote_request: 0, booking: 0, order: 0, refund: 0, stay: 0 };
   const needsByType: Record<ItemType, number> = {
     message: 0,
@@ -97,7 +106,14 @@ export function countsFrom(open: Page<ItemView>, everything: Page<ItemView>): Co
     needsByType,
     openMore: open.next_cursor !== null,
     doneMore: everything.next_cursor !== null,
+    held: held?.items.length ?? 0,
+    heldMore: (held?.next_cursor ?? null) !== null,
   };
+}
+
+/** Whether the rail shows Held: only while something is held, or while the owner is looking at it. */
+export function showHeld(counts: Counts | undefined, current: Filter): boolean {
+  return current === "held" || (counts?.held ?? 0) > 0;
 }
 
 export function countFor(counts: Counts | undefined, filter: Filter): string {
@@ -110,9 +126,11 @@ export function countFor(counts: Counts | undefined, filter: Filter): string {
       return suffix(counts.all, counts.openMore);
     case "done":
       return suffix(counts.done, counts.doneMore);
+    case "held":
+      return counts.held > 0 ? suffix(counts.held, counts.heldMore) : "";
     case "unsent":
     case "spam":
-      // Not counted: the rail's counts come from the open items.
+      // Not counted: the rail's counts come from the open items, and Spam shouts nothing.
       return "";
     default:
       return suffix(counts.byType[filter], counts.openMore && counts.byType[filter] > 0);

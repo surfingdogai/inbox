@@ -25,6 +25,19 @@ export {
 export { judgeText, luhn, mask } from "./mask";
 export { monthCharge, type SpamUsage, spamUsage } from "./meter";
 export {
+  isModelProvider,
+  MODEL_PROVIDERS,
+  type ModelCard,
+  type ModelChoice,
+  type ModelKit,
+  ModelKitError,
+  type ModelProvider,
+  type ModelTest,
+  PROVIDER_NAMES,
+  TEST_SAMPLES,
+  testModel,
+} from "./model";
+export {
   foldConfusables,
   hasDisguisedWord,
   hasInvisibleInLatin,
@@ -35,6 +48,7 @@ export {
 export { asksBankChange, isGibberish, phraseHits } from "./phrases";
 export { bandsOf, hamming, printOf, simhash } from "./prints";
 export {
+  asideStatements,
   type DoorContext,
   type DoorScreen,
   gateOf,

@@ -35,6 +35,35 @@ export interface ItemView {
     | undefined;
   /** For the owner, in lists: the last thing that happened to it was done by one of their rules. */
   readonly by_rules?: boolean | undefined;
+  /** For the owner, in lists: what the spam filter made of it (ADR-029 §11.1). Absent when it never saw it. */
+  readonly spam?: ItemSpamSummary | undefined;
+}
+
+/** A row's line from the spam filter: where it waits, its chip, and whether it may be a customer after all. */
+export interface ItemSpamSummary {
+  /** `items.screen`: held, aside, warned, released, delivered, pending; null for one a person marked spam. */
+  readonly screen: string | null;
+  /** The few words on the row ("Sales pitch", "Filled by a bot"); empty when a person put it aside. */
+  readonly chip: string;
+  /** The strongest cause's code (`pitches`, `trap`, `many_new`…), or `learning`; null when a person put it aside. */
+  readonly cause: string | null;
+  /**
+   * Listed first under Held: the AI check found a customer or wasn't sure, it was held only for many
+   * new requests, or it asks for something the business offers and nothing certain held it.
+   */
+  readonly may_be_customer: boolean;
+  /** A certain signal decided it (a bot's hidden field, a form never drawn, a mail server's mark…). */
+  readonly certain: boolean;
+  /**
+   * Who sent it, as the owner's choices name them: the address ("Messages from {address} won't be put
+   * aside again"), its domain when it is a company's and not a provider many share ("Let everyone at
+   * {domain} through"), and `app` when it came from an app with no address ("…from this app").
+   */
+  readonly sender: {
+    readonly address: string | null;
+    readonly company_domain: string | null;
+    readonly app: boolean;
+  };
 }
 
 export interface PartyView {

@@ -555,6 +555,25 @@ export const removeSpamListEntryInput = z.object({
   value: z.string().min(1).max(320),
 });
 
+/** Settings → Integrations → Your AI model (own server): a provider, the key pasted once, a model from its list. */
+export const spamModelsInput = z.object({
+  provider: z.enum(["anthropic", "openai", "gemini"]),
+  key: z
+    .string()
+    .min(8)
+    .max(500)
+    .optional()
+    .describe("The key just pasted; without it, the one kept for this provider."),
+});
+
+export const setSpamModelInput = z.object({
+  provider: z.enum(["anthropic", "openai", "gemini"]),
+  model: z.string().min(1).max(120),
+  key: z.string().min(8).max(500).optional(),
+});
+
+export type SpamModelsInput = z.infer<typeof spamModelsInput>;
+export type SetSpamModelInput = z.infer<typeof setSpamModelInput>;
 export type SetSpamFilterInput = z.infer<typeof setSpamFilterInput>;
 export type StartSpamFilterInput = z.infer<typeof startSpamFilterInput>;
 export type LetDomainThroughInput = z.infer<typeof letDomainThroughInput>;

@@ -148,6 +148,19 @@ CREATE TABLE IF NOT EXISTS `spam_domains` (
 	`checked_at` integer NOT NULL
 );
 --> statement-breakpoint
+-- The owner's own AI model on their own server (Settings → Integrations → Your AI model): which
+-- provider and model, and the key they pasted once, sealed (`model-key`). One row; never downloaded.
+CREATE TABLE IF NOT EXISTS `spam_model` (
+	`id` text PRIMARY KEY NOT NULL,
+	`provider` text NOT NULL,          -- 'anthropic' | 'openai' | 'gemini'
+	`model` text NOT NULL,
+	`key_enc` text NOT NULL,
+	`by_user` text NOT NULL,
+	`set_at` integer NOT NULL,
+	`tested_at` integer,
+	`test` text                        -- JSON {"pitch":true,"customer":true}: what the last Test found
+);
+--> statement-breakpoint
 -- A held request is nobody's event yet: the developer event stream (and so a webhook replay) leaves
 -- out what happened to an item while it is held, and shows it once a person or the sender lets it in.
 -- Otherwise the view of 0009, unchanged.

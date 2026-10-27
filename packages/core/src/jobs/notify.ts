@@ -14,11 +14,11 @@ import { lawOf } from "../negotiation/holidays";
 import { items, parties } from "../schema/tables";
 import type { SecretBox } from "../secrets/box";
 import { readSettings, type Settings } from "../settings/schema";
+import { gateOf, holdsBack } from "../spam/screen";
 import { stayLang } from "../stays/copy";
 import { ARRIVAL_MARKER, ARRIVAL_STATES, ARRIVAL_TEMPLATE, renderStayMail, stayLinks } from "../stays/mail";
 import { ownerStayMail } from "../stays/owner-mail";
 import { openArrival } from "../stays/setup";
-import { gateOf, holdsBack } from "../spam/screen";
 import { withdrawalOf } from "../write/returns";
 import { describe, rowToItem } from "../write/views";
 import {

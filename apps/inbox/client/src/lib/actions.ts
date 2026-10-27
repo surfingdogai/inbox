@@ -12,7 +12,6 @@ const DANGER_EVENTS = new Set([
   "reject",
   "dispute_goods",
   "record_withdrawal",
-  "mark_spam",
   "no_show",
   "payment_failed",
   "charge_back",
@@ -25,9 +24,16 @@ export function isDanger(event: string): boolean {
   return DANGER_EVENTS.has(event) || event.startsWith("cancel");
 }
 
+/**
+ * Spam is never a warning sign (ADR-029 §11): Mark as spam sits with the last actions, in ink, never
+ * red — nothing is lost by it, and one tap brings it back.
+ */
+const QUIET_LAST = new Set(["mark_spam"]);
+const goesLast = (event: string) => isDanger(event) || QUIET_LAST.has(event);
+
 /** The API ranks the happy path first; whatever the ranking, destructive actions come last. */
 export function orderActions<T extends { readonly event: string }>(transitions: readonly T[]): T[] {
-  return [...transitions.filter((t) => !isDanger(t.event)), ...transitions.filter((t) => isDanger(t.event))];
+  return [...transitions.filter((t) => !goesLast(t.event)), ...transitions.filter((t) => goesLast(t.event))];
 }
 
 /**
@@ -52,6 +58,7 @@ export function tonesFor(transitions: readonly { readonly event: string }[]): Bu
   let primaryGiven = false;
   return transitions.map((t) => {
     if (isDanger(t.event)) return "danger";
+    if (QUIET_LAST.has(t.event)) return "secondary";
     if (!primaryGiven) {
       primaryGiven = true;
       return "primary";

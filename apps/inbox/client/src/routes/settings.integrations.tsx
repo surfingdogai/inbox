@@ -5,6 +5,7 @@ import { useState } from "react";
 import { ErrorState, Toast } from "../components/Feedback";
 import { Field, SectionHead, Switch } from "../components/Form";
 import { IntegrationsCard } from "../components/Integrations";
+import { ModelCard } from "../components/ModelCard";
 import { type ApiProblem, problemOf } from "../lib/api";
 import { relativeTime } from "../lib/format";
 import { useProperty } from "../lib/property";
@@ -46,6 +47,7 @@ function IntegrationsPage() {
   return (
     <>
       <IntegrationsCard skip={stays ? STAY_SKIP : []} initialOpen={open} />
+      <ModelCard />
       {!stays && <FeedsCard />}
       <WebhooksCard />
     </>

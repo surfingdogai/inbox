@@ -1478,6 +1478,18 @@ export const spamDomains = sqliteTable("spam_domains", {
   checkedAt: integer("checked_at").notNull(),
 });
 
+/** The owner's own AI model on their own server: provider, model, and the key, sealed. Never downloaded. */
+export const spamModel = sqliteTable("spam_model", {
+  id: text("id").primaryKey(),
+  provider: text("provider").notNull(),
+  model: text("model").notNull(),
+  keyEnc: text("key_enc").notNull(),
+  byUser: text("by_user").notNull(),
+  setAt: integer("set_at").notNull(),
+  testedAt: integer("tested_at"),
+  test: text("test"),
+});
+
 export const jobs = sqliteTable(
   "jobs",
   {

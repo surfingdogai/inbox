@@ -31,6 +31,9 @@ import type {
   ListParams,
   MailProvider,
   MailStatus,
+  ModelCard,
+  ModelChoice,
+  ModelTest,
   NetworkView,
   Page,
   PatchWebhookBody,
@@ -54,6 +57,7 @@ import type {
   ServiceRow,
   SettingsBody,
   SettingsDoc,
+  SpamStatus,
   TestEventResult,
   TransitionBody,
   TransitionResult,
@@ -115,6 +119,8 @@ interface CallOptions {
   /** Send a fresh Idempotency-Key so a retried write is answered, not repeated. */
   readonly idempotent?: boolean;
   readonly public?: boolean;
+  /** Let the request finish after the page goes away (an act sent as the owner leaves, before its Undo ran out). */
+  readonly keepalive?: boolean;
 }
 
 async function problemFrom(res: Response): Promise<Problem> {
@@ -157,6 +163,7 @@ async function call<T>(method: string, path: string, opts: CallOptions = {}): Pr
       method,
       headers,
       credentials: "include",
+      ...(opts.keepalive ? { keepalive: true } : {}),
       ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
     });
   } catch {
@@ -438,6 +445,47 @@ export const api = {
   testPhone: (id: string) =>
     call<{ sent: boolean; note: string }>("POST", `/v1/owner/phones/${encodeURIComponent(id)}/test`),
   removePhone: (id: string) => call<{ removed: true }>("DELETE", `/v1/owner/phones/${encodeURIComponent(id)}`),
+
+  // ---- the spam filter (ADR-029) ----
+  spam: () => call<SpamStatus>("GET", "/v1/owner/spam"),
+  setSpamFilter: (filter: "pitches" | "scams" | "junk", body: { on: boolean; choice?: "aside" | "label" }) =>
+    call<SpamStatus>("PUT", `/v1/owner/spam/filters/${filter}`, { body }),
+  startSpamFilter: (filter: "basic" | "pitches" | "scams" | "junk") =>
+    call<SpamStatus>("POST", `/v1/owner/spam/filters/${filter}/start`, { body: {} }),
+  removeSpamListEntry: (body: { list: "allow" | "block"; kind: string; value: string }) =>
+    call<{ removed: boolean }>("DELETE", "/v1/owner/spam/lists", { body }),
+  letDomainThrough: (domain: string, itemId?: string) =>
+    call<{ added: boolean }>("POST", "/v1/owner/spam/lists/domains", {
+      body: { domain, ...(itemId ? { item_id: itemId } : {}) },
+    }),
+  letIn: (id: string, keepalive = false) =>
+    call<{ released: boolean; time_passed: boolean }>("POST", `${item(id)}/let-in`, {
+      body: {},
+      idempotent: true,
+      keepalive,
+    }),
+  looksFine: (id: string, keepalive = false) =>
+    call<{ released: boolean }>("POST", `${item(id)}/looks-fine`, { body: {}, idempotent: true, keepalive }),
+  markHeldSpam: (id: string, keepalive = false) =>
+    call<{ block: { kind: string; value: string } | null }>("POST", `${item(id)}/spam`, {
+      body: {},
+      idempotent: true,
+      keepalive,
+    }),
+  alwaysPutAside: (id: string) => call<{ added: boolean }>("POST", `${item(id)}/always-put-aside`, { body: {} }),
+  /** A transition sent as the owner leaves the page, before its Undo ran out. */
+  transitionKeepalive: (id: string, body: TransitionBody) =>
+    call<TransitionResult>("POST", `${item(id)}/transitions`, { body, idempotent: true, keepalive: true }),
+  // Your AI model, on one's own server (ADR-029 §11.5): the key goes to the inbox once, never back.
+  spamModel: () => call<ModelCard>("GET", "/v1/owner/spam/model"),
+  spamModels: (provider: string, key?: string) =>
+    call<{ models: ModelChoice[] }>("POST", "/v1/owner/spam/model/models", {
+      body: { provider, ...(key ? { key } : {}) },
+    }),
+  setSpamModel: (body: { provider: string; model: string; key?: string }) =>
+    call<ModelCard>("PUT", "/v1/owner/spam/model", { body }),
+  testSpamModel: () => call<ModelTest>("POST", "/v1/owner/spam/model/test", { body: {} }),
+  removeSpamModel: () => call<ModelCard>("DELETE", "/v1/owner/spam/model"),
 
   // ---- keys: one named, scoped, revocable key per system that connects ----
   keys: () => call<KeyList>("GET", "/v1/owner/api-keys"),

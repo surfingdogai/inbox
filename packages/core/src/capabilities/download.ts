@@ -212,6 +212,7 @@ export const DOWNLOAD_TABLES: Readonly<Record<string, DownloadTable>> = {
     strip: empty("spam_cache"),
   },
   spam_domains: { leftOut: "Which mail domains take mail, as last looked up.", strip: empty("spam_domains") },
+  spam_model: { leftOut: "Your AI model's key, which only this inbox can open.", strip: empty("spam_model") },
 };
 
 /** The search index, which SQLite keeps in a table and several of its own: kept as it is. */

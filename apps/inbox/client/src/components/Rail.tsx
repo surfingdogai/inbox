@@ -4,6 +4,7 @@ import {
   CalendarX,
   CheckCheck,
   CircleAlert,
+  Hourglass,
   Inbox,
   LogOut,
   type LucideIcon,
@@ -13,7 +14,7 @@ import {
 } from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
 import { signOut } from "../lib/auth";
-import { type Counts, countFor, FILTERS, type Filter } from "../lib/filters";
+import { type Counts, countFor, FILTERS, type Filter, showHeld } from "../lib/filters";
 import { TYPE_CLASS } from "../lib/format";
 import { ThemeSwitch } from "./ThemeSwitch";
 
@@ -23,6 +24,7 @@ const ICONS: Partial<Record<Filter, LucideIcon>> = {
   all: Inbox,
   done: CheckCheck,
   unsent: MailX,
+  held: Hourglass,
   spam: ShieldOff,
 };
 
@@ -58,6 +60,8 @@ export function Rail({
         if (f.key === "refund" && !(counts && counts.byType.refund > 0)) return null;
         // Stays only in a place to stay's inbox, once one has come in.
         if (f.key === "stay" && !(counts && counts.byType.stay > 0)) return null;
+        // Held shows only while the spam filter holds something (ADR-029 §11.1).
+        if (f.key === "held" && !showHeld(counts, filter)) return null;
         const Icon = ICONS[f.key];
         const n = countFor(counts, f.key);
         return (

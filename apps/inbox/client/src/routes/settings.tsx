@@ -8,7 +8,7 @@ import { useProperty } from "../lib/property";
 import { useSettings } from "../lib/queries";
 import { useWork } from "../lib/trades";
 
-/** Settings: who the business is, how it is emailed, what it offers, when it is open, how it is paid, what runs on its own, who it reports to. */
+/** Settings: who the business is, how it is emailed, what is kept off the desk, what it offers, when it is open, how it is paid, what runs on its own, who it reports to. */
 export const Route = createFileRoute("/settings")({
   beforeLoad: async ({ location }) => {
     if (!(await ensureSignedIn())) throw redirect({ to: "/login", search: { redirect: location.href } });
@@ -59,6 +59,9 @@ function SettingsLayout() {
         </Link>
         <Link to="/settings/email" className="tab">
           Email
+        </Link>
+        <Link to="/settings/spam" className="tab">
+          Spam
         </Link>
         <Link to="/settings/services" className="tab">
           Services

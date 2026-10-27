@@ -1,7 +1,7 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import clsx from "clsx";
 import { ArrowLeft, BadgeCheck, Bot, Check, Copy, UserRound } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { orderActions, stayActions, tonesFor, waitingLine } from "../lib/actions";
 import { problemOf } from "../lib/api";
 import {
@@ -18,6 +18,7 @@ import {
 import { ownerLocale } from "../lib/geo";
 import { usePhone } from "../lib/media";
 import { useItem, useItemPayments, useReply, useSettings, useTransition } from "../lib/queries";
+import { actsFor } from "../lib/spam";
 import type { Party, Transition } from "../lib/types";
 import { ActionBar } from "./ActionBar";
 import { ActionConfirm } from "./ActionConfirm";
@@ -35,6 +36,8 @@ import { Payments, RefundAt } from "./Payments";
 import { StatePill, TypePill } from "./Pills";
 import { Receipts } from "./Receipts";
 import { Sheet } from "./Sheet";
+import { useSpamActions } from "./SpamActions";
+import { WhyHere } from "./SpamWhy";
 import { Timeline } from "./Timeline";
 
 /** The order states in which a link may be on its way, so its payment is looked for now and then. */
@@ -69,6 +72,24 @@ export function ItemDetailView({
   const reply = useReply(id);
   const phone = usePhone();
   const [pending, setPending] = useState<Transition | null>(null);
+  const spam = useSpamActions();
+  const search = useSearch({ strict: false }) as { do?: string };
+  const navigate = useNavigate();
+  // Let in after its time passed: "Suggest another time" opens Propose here, once.
+  const proposeAsked = search.do === "propose";
+  const canPropose = query.data?.transitions.find((t) => t.event === "propose");
+  useEffect(() => {
+    if (!proposeAsked || !canPropose) return;
+    setPending(canPropose);
+    void navigate({
+      to: ".",
+      search: (prev) => {
+        const { do: _done, ...rest } = prev as { do?: string } & Record<string, unknown>;
+        return rest;
+      },
+      replace: true,
+    });
+  }, [proposeAsked, canPropose, navigate]);
   const [notice, setNotice] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
   const replyRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -99,8 +120,16 @@ export function ItemDetailView({
     item.type === "refund" && paidBy?.payment_id
       ? { provider: paidBy.provider, paymentRef: paidBy.payment_id, amount: item.payload.amount }
       : undefined;
+  // What the spam filter decided (ADR-029 §11.2): its acts replace the item's own Mark as spam and Not spam.
+  const spamActs = actsFor(query.data);
   const offered = item.type === "stay" ? stayActions(item.state, query.data.transitions) : query.data.transitions;
-  const transitions = orderActions(offered).map((t) =>
+  const transitions = orderActions(
+    offered.filter(
+      (t) =>
+        !(t.event === "mark_spam" && spamActs.includes("spam")) &&
+        !(t.event === "unspam" && spamActs.includes("not_spam")),
+    ),
+  ).map((t) =>
     openLink && t.event === "record_payment"
       ? { ...t, label: "Paid another way…" }
       : refundBy && t.event === "refund"
@@ -117,6 +146,11 @@ export function ItemDetailView({
   const pick = (t: Transition) => {
     setNotice(null);
     transition.reset();
+    // Mark as spam and Not spam are one press with Undo, as everywhere (ADR-029 §11.3).
+    if (t.event === "mark_spam" || t.event === "unspam") {
+      spam.act(query.data, t.event === "mark_spam" ? "spam" : "not_spam");
+      return;
+    }
     if (t.event === "answer") {
       replyRef.current?.focus();
       replyRef.current?.scrollIntoView({ block: "center" });
@@ -187,6 +221,9 @@ export function ItemDetailView({
         </div>
         <span className={clsx("rule card-rule", `rule-${TYPE_CLASS[item.type]}`)} aria-hidden="true" />
         <WhoLine party={party} channel={item.channel} />
+        {query.data.spam && (
+          <WhyHere view={query.data} tz={tz} acts={spamActs} onAct={(a) => spam.act(query.data, a)} />
+        )}
         <CustomerBlock customer={query.data.customer} currency={money} tz={tz} />
         <Fields
           item={item}

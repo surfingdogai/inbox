@@ -1,5 +1,6 @@
 import {
   appendThreadEntry,
+  asideStatements,
   type Caller,
   Capabilities,
   type Channel,
@@ -799,7 +800,449 @@ export async function seedShowcase(
     count++;
   }
 
+  // 15. The spam filter (ADR-029): what it held, what it put aside, what it labelled, with its reasons.
+  if (!opts.demo) count += await seedSpam(db, now, { person, agent, settle, svc });
+
   return { seeded: true, items: count };
+}
+
+/** A signal as `spam_verdicts.signals` keeps it: a code, its points, what it measured, where from. */
+interface SeedSignal {
+  readonly c: string;
+  readonly w: number;
+  readonly v?: number;
+  readonly f: string;
+  readonly x?: 1;
+  readonly d?: string;
+}
+
+/**
+ * The showcase's spam filter, as it would stand after a fortnight with Sales pitches and Scams on:
+ * four requests held (one that may be a customer after all), four messages put aside, two delivered
+ * with a label, one brought back, and the two lists. Names and places from many countries; the
+ * passages quoted are the senders' own words, as the AI check found them.
+ */
+async function seedSpam(
+  db: Db,
+  now: number,
+  o: {
+    readonly person: (t: number, channel?: Channel, partyId?: string) => Caller;
+    readonly agent: (t: number, partyId?: string) => Caller;
+    readonly settle: (t: number) => Promise<void>;
+    readonly svc: { readonly full: string; readonly truing: string; readonly puncture: string };
+  },
+): Promise<number> {
+  const day = new Date(now).toISOString().slice(0, 10);
+  await db.batch([
+    // The free protection's learning week, long over; Sales pitches on for twelve days, Scams for four.
+    {
+      sql: "UPDATE spam_filter_spans SET from_at = ?, learning_until = ? WHERE id = 'basic'",
+      params: [now - 30 * DAY, now - 23 * DAY],
+      method: "run",
+    },
+    {
+      sql: `INSERT OR IGNORE INTO spam_filter_spans (id, filter, choice, from_at, to_at, learning_until, by_kind, by_id)
+            VALUES (?, 'pitches', 'aside', ?, NULL, ?, 'owner', 'owner'), (?, 'scams', 'aside', ?, NULL, ?, 'owner', 'owner')`,
+      params: [ulid(), now - 12 * DAY, now - 5 * DAY, ulid(), now - 4 * DAY, now + 3 * DAY],
+      method: "run",
+    },
+  ]);
+  const verdict = (
+    itemId: string,
+    v: {
+      readonly door: string;
+      readonly verdict: string;
+      readonly cause: string;
+      readonly certain?: boolean;
+      readonly signals: readonly SeedSignal[];
+      readonly ai?: string;
+      readonly answer?: Record<string, unknown>;
+      readonly quotes?: readonly string[];
+      readonly learning?: boolean;
+      readonly owner?: string;
+      readonly at: number;
+    },
+  ) => ({
+    sql: `INSERT OR IGNORE INTO spam_verdicts (item_id, door, verdict, cause, certain, score, signals, ai, answer, quotes, learning,
+            owner_verdict, owner_at, created_at, decided_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    params: [
+      itemId,
+      v.door,
+      v.verdict,
+      v.cause,
+      v.certain ? 1 : 0,
+      v.signals.reduce((n, x) => n + x.w, 0),
+      JSON.stringify(v.signals),
+      v.ai ?? "none",
+      v.answer ? JSON.stringify(v.answer) : null,
+      v.quotes?.length ? JSON.stringify(v.quotes) : null,
+      v.learning ? 1 : 0,
+      v.owner ?? null,
+      v.owner ? v.at + HOUR : null,
+      v.at,
+      v.at,
+    ],
+    method: "run" as const,
+  });
+  const screen = (itemId: string, to: string, at: number) => ({
+    sql: "UPDATE items SET screen = ?, screen_at = ? WHERE id = ?",
+    params: [to, at, itemId],
+    method: "run" as const,
+  });
+  const ai = (kind: string, certainty: string, topic: string, intent = false) => ({
+    kind,
+    certainty,
+    customer_intent: intent,
+    talks_to_filter: false,
+    topic,
+  });
+  let n = 0;
+
+  // Held: a booking from someone who made six requests today. It may well be a customer.
+  {
+    const t = now - 3 * HOUR;
+    const start = localTime(now, TZ, 1, 15, 0);
+    const r = await createItem(db, o.person(t), {
+      type: "booking",
+      payload: {
+        reservationFor: { serviceId: o.svc.full, name: "Full service" },
+        startTime: iso(start),
+        endTime: iso(start + 90 * MIN),
+        totalPrice: EUR(4500),
+      },
+      contact: { name: "Kwame Asante", email: "kwame.asante@example.com" },
+      message: "Booking for my whole cycling club, one bike at a time. This is the first.",
+    });
+    await db.batch([
+      screen(r.view.item.id, "held", t),
+      verdict(r.view.item.id, {
+        door: "form",
+        verdict: "hold",
+        cause: "many_new",
+        certain: true,
+        signals: [{ c: "many_new", w: 6, v: 6, f: "basic", x: 1 }],
+        at: t,
+      }),
+    ]);
+    await o.settle(t);
+    n++;
+  }
+  // Held: a quote request filled in in three seconds from a throwaway address; the AI check wasn't sure.
+  {
+    const t = now - 5 * HOUR;
+    const r = await createItem(db, o.person(t), {
+      type: "quote_request",
+      payload: {
+        itemOffered: { name: "Wheel truing", serviceId: o.svc.truing },
+        description: "Front wheel of a folding bike rubs the brake pad. How much to true it?",
+      },
+      contact: { name: "Aiko Tanaka", email: "aiko.t@mailbox-temp.example" },
+    });
+    await db.batch([
+      screen(r.view.item.id, "held", t),
+      verdict(r.view.item.id, {
+        door: "form",
+        verdict: "hold",
+        cause: "too_fast",
+        signals: [
+          { c: "too_fast", w: 4, v: 3, f: "basic" },
+          { c: "disposable", w: 2, f: "basic" },
+        ],
+        ai: "judged",
+        answer: ai("unclear", "low", "none", true),
+        at: t,
+      }),
+    ]);
+    await o.settle(t);
+    n++;
+  }
+  // Held: an order whose very words came from fourteen senders this week.
+  {
+    const t = now - 7 * HOUR;
+    const r = await createItem(db, o.agent(t), {
+      type: "order",
+      payload: {
+        orderedItem: [{ sku: "CH-9", name: "Chain, 9-speed", quantity: 40, price: EUR(1850) }],
+        totalPrice: EUR(74000),
+        delivery: { method: "delivery" },
+        paymentMethod: "card",
+      },
+      contact: { email: "orders@bulk-supply.example" },
+      message: "Urgent bulk order, pay by card on delivery, send tracking.",
+    });
+    await db.batch([
+      screen(r.view.item.id, "held", t),
+      verdict(r.view.item.id, {
+        door: "agent",
+        verdict: "hold",
+        cause: "wave",
+        certain: true,
+        signals: [{ c: "wave", w: 6, v: 14, f: "basic", x: 1 }],
+        at: t,
+      }),
+    ]);
+    await o.settle(t);
+    n++;
+  }
+  // Held: a booking from a form a bot filled in, hidden field and all.
+  {
+    const t = now - 26 * HOUR;
+    const start = localTime(now, TZ, 3, 9, 0);
+    const r = await createItem(db, o.person(t), {
+      type: "booking",
+      payload: {
+        reservationFor: { serviceId: o.svc.puncture, name: "Puncture repair" },
+        startTime: iso(start),
+        endTime: iso(start + 30 * MIN),
+        totalPrice: EUR(1200),
+      },
+      contact: { name: "Best Bonus Online", email: "win@bonus-spin.example" },
+      message: "Claim your 500% welcome bonus today.",
+    });
+    await db.batch([
+      screen(r.view.item.id, "held", t),
+      verdict(r.view.item.id, {
+        door: "form",
+        verdict: "hold",
+        cause: "trap",
+        certain: true,
+        signals: [{ c: "trap", w: 6, f: "basic", x: 1 }],
+        at: t,
+      }),
+    ]);
+    await o.settle(t);
+    n++;
+  }
+
+  /** A message put aside as it arrived, as the system: its state, its screen, its reasons. */
+  const aside = async (
+    t: number,
+    channel: Channel,
+    payload: { subject: string; text: string },
+    contact: { name: string; email: string },
+    v: Parameters<typeof verdict>[1],
+  ) => {
+    const r = await createItem(db, o.person(t, channel), { type: "message", payload, contact });
+    await db.batch([
+      ...asideStatements(r.view.item.id, r.view.item.state, r.view.item.version, t),
+      screen(r.view.item.id, "aside", t),
+      verdict(r.view.item.id, v),
+    ]);
+    await o.settle(t);
+    return r.view.item.id;
+  };
+
+  // Put aside: a search-ranking pitch the AI check was sure of, in the sender's own words.
+  {
+    const t = now - 2 * HOUR;
+    await aside(
+      t,
+      "form",
+      {
+        subject: "Your website and Google",
+        text: "Hi there! I noticed your shop isn't on the first page of Google. We guarantee top 3 rankings in 30 days with our backlink package. Can I send you a free audit?",
+      },
+      { name: "Daniel Brooks", email: "daniel@rankboost.example" },
+      {
+        door: "form",
+        verdict: "aside",
+        cause: "pitches",
+        signals: [
+          { c: "ai_kind", w: 6, f: "pitches" },
+          { c: "pitch_phrases", w: 2, f: "pitches" },
+        ],
+        ai: "judged",
+        answer: ai("sales_pitch", "high", "seo"),
+        quotes: ["We guarantee top 3 rankings in 30 days with our backlink package"],
+        at: t,
+      },
+    );
+    n++;
+  }
+  // Put aside: a domain "final notice" asking for money today.
+  {
+    const t = now - 9 * HOUR;
+    await aside(
+      t,
+      "email",
+      {
+        subject: "Final notice: your domain listing expires today",
+        text: "Your domain listing will be suspended unless the renewal fee of €89 is received today. Pay now at domain-notice.example/pay to keep your website online.",
+      },
+      { name: "Domain Renewal Desk", email: "billing@domain-notice.example" },
+      {
+        door: "email",
+        verdict: "aside",
+        cause: "scams",
+        signals: [
+          { c: "ai_kind", w: 6, f: "scams" },
+          { c: "scam_phrases", w: 3, f: "scams" },
+        ],
+        ai: "judged",
+        answer: ai("scam", "high", "domain_listing"),
+        quotes: ["will be suspended unless the renewal fee of €89 is received today"],
+        at: t,
+      },
+    );
+    n++;
+  }
+  // Put aside: what a bot sent through the form, its hidden field filled.
+  {
+    const t = now - 30 * HOUR;
+    await aside(
+      t,
+      "form",
+      { subject: "Bonus", text: "500% casino welcome bonus, spin now, free credits every day" },
+      { name: "Lucky Spin", email: "promo@lucky-spin.example" },
+      {
+        door: "form",
+        verdict: "aside",
+        cause: "trap",
+        certain: true,
+        signals: [{ c: "trap", w: 6, f: "basic", x: 1 }],
+        at: t,
+      },
+    );
+    n++;
+  }
+  // Put aside: an email a mail server it passed through had marked as spam.
+  {
+    const t = now - 2 * DAY;
+    await aside(
+      t,
+      "email",
+      {
+        subject: "Grow your followers by 10k this month",
+        text: "Real followers, real likes, delivered in days. Reply YES to start.",
+      },
+      { name: "Social Boost", email: "hello@socialboost.example" },
+      {
+        door: "email",
+        verdict: "aside",
+        cause: "server_marked",
+        certain: true,
+        signals: [{ c: "server_marked", w: 6, f: "basic", x: 1 }],
+        at: t,
+      },
+    );
+    n++;
+  }
+  // Brought back: a customer writing in Spanish, put aside a week ago, Not spam since: on Let through.
+  {
+    const t = now - 6 * DAY;
+    const r = await createItem(db, o.person(t), {
+      type: "message",
+      payload: {
+        subject: "Revisión de bici de carretera",
+        text: "Hola, ¿hacéis revisiones completas de bicis de carretera? Tengo una Orbea de 2018 y quisiera saber el precio y cuánto tardáis.",
+      },
+      contact: { name: "Lucía Fernández", email: "lucia.fernandez@example.com" },
+    });
+    await db.batch([
+      screen(r.view.item.id, "released", t + HOUR),
+      verdict(r.view.item.id, {
+        door: "form",
+        verdict: "aside",
+        cause: "pitches",
+        signals: [{ c: "pitch_phrases", w: 6, f: "pitches" }],
+        owner: "not_spam",
+        at: t,
+      }),
+      {
+        sql: `INSERT OR IGNORE INTO spam_lists (list, kind, value, party_id, item_id, by_user, created_at)
+              VALUES ('allow', 'address', 'lucia.fernandez@example.com', ?, ?, 'owner', ?),
+                     ('block', 'address', 'offers@rankboost.example', NULL, NULL, 'owner', ?)`,
+        params: [r.view.item.partyId, r.view.item.id, t + HOUR, now - 3 * DAY],
+        method: "run",
+      },
+    ]);
+    await o.settle(t);
+    n++;
+  }
+
+  /** Delivered with a label: on the desk, needing a person, its rules only flagging. */
+  const warned = async (
+    t: number,
+    payload: { subject: string; text: string },
+    contact: { name: string; email: string },
+    label: string,
+    v: Parameters<typeof verdict>[1],
+  ) => {
+    const r = await createItem(db, o.person(t, v.door === "email" ? "email" : "form"), {
+      type: "message",
+      payload,
+      contact,
+    });
+    await db.batch([
+      screen(r.view.item.id, "warned", t),
+      {
+        sql: "UPDATE items SET flags = json_patch(flags, ?) WHERE id = ?",
+        params: [JSON.stringify({ needsHuman: true, spamLabel: label }), r.view.item.id],
+        method: "run",
+      },
+      verdict(r.view.item.id, v),
+    ]);
+    await o.settle(t);
+  };
+  // Labelled: a web designer selling, who also wants their own bike serviced. It came to the desk.
+  await warned(
+    now - 70 * MIN,
+    {
+      subject: "Websites for small shops (and my bike)",
+      text: "Hello! I build websites for small shops and would love to show you some ideas. Also, my own bike needs a service: do you have time on Friday?",
+    },
+    { name: "Sofía Herrera", email: "sofia@studiocanela.example" },
+    "pitches",
+    {
+      door: "form",
+      verdict: "warn",
+      cause: "pitches",
+      signals: [
+        { c: "ai_kind", w: 3, f: "pitches" },
+        { c: "pitch_phrases", w: 1, f: "pitches" },
+      ],
+      ai: "judged",
+      answer: ai("sales_pitch", "medium", "web_design", true),
+      quotes: ["I build websites for small shops"],
+      at: now - 70 * MIN,
+    },
+  );
+  // Labelled while Scams is still learning: what it would have put aside.
+  await warned(
+    now - 4 * HOUR,
+    {
+      subject: "New bank details for your parts order",
+      text: "Please note our bank details have changed. Send the payment for the parts order to the new account from today and confirm by return.",
+    },
+    { name: "Arjun Mehta", email: "accounts@partsdirect-billing.example" },
+    "learning",
+    {
+      door: "email",
+      verdict: "warn",
+      cause: "scams",
+      signals: [
+        { c: "ai_kind", w: 6, f: "scams" },
+        { c: "scam_phrases", w: 3, f: "scams" },
+      ],
+      ai: "judged",
+      answer: ai("scam", "high", "bank_details"),
+      quotes: ["our bank details have changed"],
+      learning: true,
+      at: now - 4 * HOUR,
+    },
+  );
+  n += 2;
+
+  // This month's counts, as the filter keeps them by day.
+  await db.client.query({
+    sql: `INSERT INTO spam_days (day, key, n) VALUES (?, 'aside', 4), (?, 'held', 4), (?, 'warned', 2), (?, 'brought_back', 1),
+            (?, 'judged', 6), (?, 'tokens_in', 5400), (?, 'tokens_out', 420)
+          ON CONFLICT (day, key) DO UPDATE SET n = excluded.n`,
+    params: [day, day, day, day, day, day, day],
+    method: "run",
+  });
+  return n;
 }
 
 async function confirmIfNeeded(db: Db, deps: SeedDeps, caller: Caller, itemId: string): Promise<void> {

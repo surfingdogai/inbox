@@ -56,6 +56,8 @@ export type WriteErrorCode =
    * says when to come back (`details.retry_after_s`), never why.
    */
   | "too_many_requests"
+  /** Something the inbox depends on did not answer just now (an owner's own AI provider): try again later. */
+  | "unavailable"
   | "internal";
 
 export interface FieldProblem {
@@ -91,6 +93,7 @@ const STATUS: Record<WriteErrorCode, number> = {
   draft_stale: 409,
   geo_terms: 422,
   too_many_requests: 429,
+  unavailable: 503,
   internal: 500,
 };
 

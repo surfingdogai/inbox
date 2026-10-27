@@ -29,6 +29,7 @@ import { Route as SettingsPhoneRouteImport } from "./routes/settings.phone";
 import { Route as SettingsPropertyRouteImport } from "./routes/settings.property";
 import { Route as SettingsRulesRouteImport } from "./routes/settings.rules";
 import { Route as SettingsServicesRouteImport } from "./routes/settings.services";
+import { Route as SettingsSpamRouteImport } from "./routes/settings.spam";
 import { Route as SettingsWorkRouteImport } from "./routes/settings.work";
 import { Route as InboxItemsIdRouteImport } from "./routes/_inbox.items.$id";
 
@@ -131,6 +132,11 @@ const SettingsServicesRoute = SettingsServicesRouteImport.update({
   path: "/services",
   getParentRoute: () => SettingsRoute,
 } as any);
+const SettingsSpamRoute = SettingsSpamRouteImport.update({
+  id: "/spam",
+  path: "/spam",
+  getParentRoute: () => SettingsRoute,
+} as any);
 const SettingsWorkRoute = SettingsWorkRouteImport.update({
   id: "/work",
   path: "/work",
@@ -161,6 +167,7 @@ export interface FileRoutesByFullPath {
   "/settings/property": typeof SettingsPropertyRoute;
   "/settings/rules": typeof SettingsRulesRoute;
   "/settings/services": typeof SettingsServicesRoute;
+  "/settings/spam": typeof SettingsSpamRoute;
   "/settings/work": typeof SettingsWorkRoute;
   "/settings/": typeof SettingsIndexRoute;
   "/items/$id": typeof InboxItemsIdRoute;
@@ -182,6 +189,7 @@ export interface FileRoutesByTo {
   "/settings/property": typeof SettingsPropertyRoute;
   "/settings/rules": typeof SettingsRulesRoute;
   "/settings/services": typeof SettingsServicesRoute;
+  "/settings/spam": typeof SettingsSpamRoute;
   "/settings/work": typeof SettingsWorkRoute;
   "/": typeof InboxIndexRoute;
   "/settings": typeof SettingsIndexRoute;
@@ -207,6 +215,7 @@ export interface FileRoutesById {
   "/settings/property": typeof SettingsPropertyRoute;
   "/settings/rules": typeof SettingsRulesRoute;
   "/settings/services": typeof SettingsServicesRoute;
+  "/settings/spam": typeof SettingsSpamRoute;
   "/settings/work": typeof SettingsWorkRoute;
   "/_inbox/": typeof InboxIndexRoute;
   "/settings/": typeof SettingsIndexRoute;
@@ -233,6 +242,7 @@ export interface FileRouteTypes {
     | "/settings/property"
     | "/settings/rules"
     | "/settings/services"
+    | "/settings/spam"
     | "/settings/work"
     | "/settings/"
     | "/items/$id";
@@ -254,6 +264,7 @@ export interface FileRouteTypes {
     | "/settings/property"
     | "/settings/rules"
     | "/settings/services"
+    | "/settings/spam"
     | "/settings/work"
     | "/"
     | "/settings"
@@ -278,6 +289,7 @@ export interface FileRouteTypes {
     | "/settings/property"
     | "/settings/rules"
     | "/settings/services"
+    | "/settings/spam"
     | "/settings/work"
     | "/_inbox/"
     | "/settings/"
@@ -433,6 +445,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof SettingsServicesRouteImport;
       parentRoute: typeof SettingsRoute;
     };
+    "/settings/spam": {
+      id: "/settings/spam";
+      path: "/spam";
+      fullPath: "/settings/spam";
+      preLoaderRoute: typeof SettingsSpamRouteImport;
+      parentRoute: typeof SettingsRoute;
+    };
     "/settings/work": {
       id: "/settings/work";
       path: "/work";
@@ -477,6 +496,7 @@ interface SettingsRouteChildren {
   SettingsPropertyRoute: typeof SettingsPropertyRoute;
   SettingsRulesRoute: typeof SettingsRulesRoute;
   SettingsServicesRoute: typeof SettingsServicesRoute;
+  SettingsSpamRoute: typeof SettingsSpamRoute;
   SettingsWorkRoute: typeof SettingsWorkRoute;
   SettingsIndexRoute: typeof SettingsIndexRoute;
 }
@@ -496,6 +516,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsPropertyRoute: SettingsPropertyRoute,
   SettingsRulesRoute: SettingsRulesRoute,
   SettingsServicesRoute: SettingsServicesRoute,
+  SettingsSpamRoute: SettingsSpamRoute,
   SettingsWorkRoute: SettingsWorkRoute,
   SettingsIndexRoute: SettingsIndexRoute,
 };

@@ -19,11 +19,11 @@ import { machines } from "../machine/tables";
 import { insertOfferStatement, pointerOf } from "../negotiation/offers";
 import { secretHash } from "../protocol/credentials";
 import { readSettings } from "../settings/schema";
-import { prepareStay } from "../stays/create";
-import { workPushStatements } from "../trades/job-tool";
 import type { DoorContext, DoorScreen } from "../spam/screen";
 import { deadlineOf, SPAM_SCREEN_KIND } from "../spam/screen";
 import type { ScreenInput } from "../spam/types";
+import { prepareStay } from "../stays/create";
+import { workPushStatements } from "../trades/job-tool";
 import { hashJson, hashText } from "../util/canonical";
 import { actorMeta, type Caller, isCustomer, isOwnerAssistant, nowOf, permissionKind } from "./caller";
 import {

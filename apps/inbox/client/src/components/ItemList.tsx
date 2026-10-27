@@ -5,10 +5,25 @@ import { problemOf } from "../lib/api";
 import { type Filter, filterLabel, paramsFor, visibleIn, withQuery } from "../lib/filters";
 import { partyName, relativeTime, slotShort, snippetFor, TYPE_CLASS, titleFor } from "../lib/format";
 import { ownerLocale } from "../lib/geo";
-import { useEmailChannel, useItemPages } from "../lib/queries";
+import { useEmailChannel, useItemPages, useSettings, useSpam } from "../lib/queries";
+import {
+  ACT_LABEL,
+  deskChip,
+  HELD_EMPTY,
+  HELD_TOP,
+  heldOrder,
+  heldWhat,
+  heldWho,
+  keepLine,
+  MAY_BE_CUSTOMER,
+  rowTag,
+  SPAM_EMPTY,
+  SPAM_TOP,
+} from "../lib/spam";
 import type { ItemView } from "../lib/types";
 import { ErrorState, SkeletonRows, Sun } from "./Feedback";
 import { StatePill } from "./Pills";
+import { useSpamActions } from "./SpamActions";
 
 /** The item list: rows for the current filter, a search box, and "load more" over the API's cursor. */
 export function ItemList({
@@ -45,8 +60,14 @@ export function ItemList({
     return () => clearTimeout(timer);
   }, [draft, q, navigate]);
 
-  const views = (pages.data?.pages ?? []).flatMap((p) => p.items).filter((v) => visibleIn(filter, v));
+  const { hidden } = useSpamActions();
+  const listed = (pages.data?.pages ?? [])
+    .flatMap((p) => p.items)
+    .filter((v) => visibleIn(filter, v) && !hidden.has(v.item.id));
+  // Under Held, what may be a customer after all comes first (ADR-029 §11.1).
+  const views = filter === "held" ? heldOrder(listed) : listed;
   const label = filterLabel(filter);
+  const screened = filter === "held" || filter === "spam";
 
   return (
     <section className="list" aria-label={label}>
@@ -61,6 +82,7 @@ export function ItemList({
       )}
       <ForwardConfirm />
       {head}
+      {screened && <ScreenTop filter={filter} />}
       <div className="search">
         <Search className="icon" aria-hidden="true" />
         <input
@@ -82,9 +104,13 @@ export function ItemList({
           />
         )}
         {pages.isSuccess && views.length === 0 && <Empty filter={filter} q={q} label={label} />}
-        {views.map((v) => (
-          <Row key={v.item.id} view={v} selected={v.item.id === selected} tz={tz} />
-        ))}
+        {views.map((v) =>
+          screened ? (
+            <ScreenRow key={v.item.id} view={v} filter={filter} selected={v.item.id === selected} tz={tz} />
+          ) : (
+            <Row key={v.item.id} view={v} selected={v.item.id === selected} tz={tz} />
+          ),
+        )}
         {pages.hasNextPage && (
           <button
             type="button"
@@ -105,6 +131,8 @@ export function ItemList({
 function Row({ view, selected, tz }: { view: ItemView; selected: boolean; tz: string | undefined }) {
   const { item, party } = view;
   const locale = ownerLocale(tz);
+  // Delivered with a label by the spam filter (ADR-029 §11.1): a small chip before the subject.
+  const warned = deskChip(view);
   return (
     <Link
       to="/items/$id"
@@ -125,6 +153,7 @@ function Row({ view, selected, tz }: { view: ItemView; selected: boolean; tz: st
             {item.type === "order" && item.payload.fulfil?.slot && (
               <span className="row-slot">{slotShort(item.payload.fulfil.slot.start, tz)} · </span>
             )}
+            {warned && <span className="spam-chip">{warned}</span>}
             {titleFor(item, locale)}
           </span>
           <span className="s"> {snippetFor(item, tz, locale)}</span>
@@ -190,10 +219,11 @@ function Empty({ filter, q, label }: { filter: Filter; q: string | undefined; la
       </div>
     );
   }
-  if (filter === "spam") {
+  if (filter === "spam") return <SpamEmpty />;
+  if (filter === "held") {
     return (
       <div className="state">
-        <h3>Nothing put aside.</h3>
+        <h3>{HELD_EMPTY}</h3>
       </div>
     );
   }
@@ -226,5 +256,82 @@ function ForwardConfirm() {
       {waiting.confirmation?.provider || waiting.provider_name} asks you to confirm forwarding from {waiting.address}.{" "}
       <Link to="/settings/email">Open it</Link>
     </p>
+  );
+}
+
+/** The line above Held and Spam: what they are, and for Spam how many this week (ADR-029 §11.1). */
+function ScreenTop({ filter }: { filter: Filter }) {
+  const spam = useSpam();
+  if (filter === "held") return <p className="screen-top">{HELD_TOP}</p>;
+  const week = spam.data?.this_week.aside;
+  return (
+    <p className="screen-top">
+      {SPAM_TOP}
+      {week !== undefined && <small className="screen-week">This week: {week}</small>}
+    </p>
+  );
+}
+
+function SpamEmpty() {
+  const settings = useSettings();
+  const keep = settings.data?.doc.spam?.keepDays ?? 0;
+  return (
+    <div className="state">
+      <h3>{SPAM_EMPTY}</h3>
+      <p className="fine">{keepLine(keep)}</p>
+    </div>
+  );
+}
+
+/**
+ * A row under Held or Spam: who, what and one chip, with the act a person most likely means on the
+ * row itself — Let it in · Spam under Held, Not spam under Spam.
+ */
+function ScreenRow({
+  view,
+  filter,
+  selected,
+  tz,
+}: {
+  view: ItemView;
+  filter: Filter;
+  selected: boolean;
+  tz: string | undefined;
+}) {
+  const { act } = useSpamActions();
+  const { item } = view;
+  const tag = rowTag(view.spam);
+  const acts = filter === "held" ? (["let_in", "spam"] as const) : (["not_spam"] as const);
+  const customer = tag === MAY_BE_CUSTOMER;
+  return (
+    <div className="row screen-row" data-selected={selected ? "true" : undefined}>
+      <i className={`dot dot-${TYPE_CLASS[item.type]}`} />
+      <Link to="/items/$id" params={{ id: item.id }} search={(prev) => prev} className="row-text screen-open">
+        <div className="row-line">
+          {filter === "held" ? (
+            <>
+              <span className="who">{heldWho(view)}</span>
+              <span className="s"> · {heldWhat(view, tz)}</span>
+            </>
+          ) : (
+            <>
+              <span className="who">{partyName(view.party)}</span>
+              <span className="s"> · {snippetFor(item, tz)}</span>
+            </>
+          )}
+        </div>
+        {tag && <span className={customer ? "spam-chip is-customer" : "spam-chip"}>{tag}</span>}
+      </Link>
+      <time className="row-time" dateTime={item.createdAt} title={item.createdAt}>
+        {relativeTime(item.createdAt)}
+      </time>
+      <div className="screen-acts">
+        {acts.map((a) => (
+          <button key={a} type="button" className="btn btn-ghost btn-xs" onClick={() => act(view, a)}>
+            {ACT_LABEL[a]}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }

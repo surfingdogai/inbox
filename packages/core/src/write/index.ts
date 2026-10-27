@@ -7,4 +7,4 @@ export { IDEMPOTENCY_TTL_MS, type OnceOptions, type OnceResult, once, pruneIdemp
 export { bucketsFor, MAX_BUCKETS } from "./slots";
 export { appendThreadEntry } from "./thread";
 export { type TransitionInput, type TransitionResult, transitionItem } from "./transition";
-export { describe, type ItemView, rowToItem, viewFor } from "./views";
+export { describe, type ItemSpamSummary, type ItemView, rowToItem, viewFor } from "./views";

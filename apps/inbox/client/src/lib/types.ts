@@ -26,11 +26,16 @@ import type {
   IntegrationsView,
   Item,
   ItemDetail,
+  ItemSpamSummary,
+  ItemSpamView,
   ItemType,
   ItemView,
   KeyList,
   KeyView,
   MailProvider,
+  ModelCard,
+  ModelChoice,
+  ModelTest,
   Money,
   NetworkView,
   Page,
@@ -44,6 +49,7 @@ import type {
   RuleDefinition,
   RuleView,
   Settings,
+  SpamStatus,
   TestEventResult,
   TransitionResult,
   WebhookView,
@@ -82,11 +88,16 @@ export type {
   IntegrationsView,
   Item,
   ItemDetail,
+  ItemSpamSummary,
+  ItemSpamView,
   ItemType,
   ItemView,
   KeyList,
   KeyView,
   MailProvider,
+  ModelCard,
+  ModelChoice,
+  ModelTest,
   Money,
   NetworkView,
   Page,
@@ -100,6 +111,7 @@ export type {
   RuleDefinition,
   RuleView,
   Settings,
+  SpamStatus,
   TestEventResult,
   TransitionResult,
   WebhookView,
@@ -159,6 +171,8 @@ export interface ListParams {
   readonly needs_human?: boolean | undefined;
   /** Only items with an email that could not be sent. */
   readonly mail_failed?: boolean | undefined;
+  /** What the spam filter made so: `held` lists what waits for the sender or a person (ADR-029). */
+  readonly screen?: "held" | "aside" | "warned" | undefined;
   readonly open_only?: boolean | undefined;
   readonly sandbox?: boolean | undefined;
   readonly q?: string | undefined;

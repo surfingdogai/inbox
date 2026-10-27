@@ -26,6 +26,7 @@ import {
   networkReceiptHandler,
   type OAuthClients,
   type OwnerEmailChange,
+  ownModelKit,
   type PosPartners,
   publicOrigin,
   takesMail,
@@ -343,6 +344,9 @@ export function createInbox(deps: AppDeps): Inbox {
     host: deps.spam?.host ?? null,
     model: demo ? null : (deps.spam?.model ?? null),
     resolveMail: demo ? null : (domain) => takesMail(connectorHttp({ fetchImpl: deps.fetchImpl }), domain),
+    // An owner's own model on their own server (Settings → Integrations → Your AI model): never in a
+    // demo, and never where the host or the operator already reads.
+    kit: demo ? null : ownModelKit(deps.fetchImpl),
   });
   const runner = createRunner({
     mailOut,

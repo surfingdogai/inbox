@@ -164,6 +164,17 @@ const ownerHumanOf = (r: {
     : `${ownerSentence(r.view.human, r.view.item.subject)}${r.replayed ? " (Same request as before; nothing new was created.)" : ""}`;
 
 /**
+ * What the spam filter did with an item, before its sentence (ADR-029 §11.7): our own words and our
+ * reason, never the sender's, and never a model's.
+ */
+function spamLine(screen: string | null | undefined, why: string | undefined): string {
+  const reason = why?.trim().replace(/\.$/, "");
+  if (screen === "held") return `Held by the spam filter${reason ? `: ${reason}` : ""}. Only a person lets it in. `;
+  if (screen === "aside") return `Put aside by the spam filter${reason ? `: ${reason}` : ""}. `;
+  return "";
+}
+
+/**
  * The end of a create or status text (ADR-017 §8.4): many assistants read only a tool result's
  * text, so the pass to keep, and what to do on a weak match, are said in words there too. It is
  * said to the assistant: the person asked a business for something, and nothing here is theirs to
@@ -711,8 +722,12 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
         guarded("list_items", async () => {
           const page = await caps.listItems(caller, args);
           const text =
-            page.items.map((v) => `${v.item.id}: ${ownerSentence(v.human, v.item.subject)}`).join("\n") ||
-            "Nothing needs you.";
+            page.items
+              .map(
+                (v) =>
+                  `${v.item.id}: ${spamLine(v.spam?.screen, v.spam?.chip)}${ownerSentence(v.human, v.item.subject)}`,
+              )
+              .join("\n") || "Nothing needs you.";
           return withUntrusted(
             text,
             page,
@@ -752,7 +767,7 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
               (m.status === "failed" || (m.status === "skipped" && m.skip_reason !== "test_item")),
           );
           const why = unsent.at(-1);
-          const text = `${ownerSentence(d.human, d.item.subject)}${who ? ` Customer: ${who}` : ""}${unsent.length ? ` ${unsent.length} email(s) to the customer were not sent (${why?.last_error ?? why?.skip_reason ?? "no reason given"}).` : ""} Next: ${d.transitions.map((t) => `${t.event} (${t.label})`).join(", ") || "nothing"}.`;
+          const text = `${spamLine(d.spam?.screen, d.spam?.reasons[0] ?? d.spam?.chip)}${ownerSentence(d.human, d.item.subject)}${who ? ` Customer: ${who}` : ""}${unsent.length ? ` ${unsent.length} email(s) to the customer were not sent (${why?.last_error ?? why?.skip_reason ?? "no reason given"}).` : ""} Next: ${d.transitions.map((t) => `${t.event} (${t.label})`).join(", ") || "nothing"}.`;
           // Everything a customer, or their mailbox, wrote: quoted after the sentence, never in it.
           const fromOutside = (actor: string) => actor.startsWith("customer_") || actor.startsWith("system:");
           return withUntrusted(

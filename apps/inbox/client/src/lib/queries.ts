@@ -46,6 +46,8 @@ export const qk = {
   integrations: ["integrations"] as const,
   webhooks: ["webhooks"] as const,
   keys: ["keys"] as const,
+  spam: ["spam"] as const,
+  spamModel: ["spam", "model"] as const,
   deliveries: (id: string) => ["deliveries", id] as const,
 };
 
@@ -140,11 +142,15 @@ export function useCounts(sandbox: boolean) {
   return useQuery({
     queryKey: qk.counts(sandbox),
     queryFn: async () => {
-      const [open, everything] = await Promise.all([
+      const [open, everything, held] = await Promise.all([
         api.listItems({ open_only: true, sandbox, limit: 100 }),
         api.listItems({ open_only: false, sandbox, limit: 100 }),
+        // What the spam filter holds (ADR-029): an older server without it answers as for everything.
+        api
+          .listItems({ screen: "held", open_only: false, sandbox, limit: 100 })
+          .catch(() => ({ items: [], next_cursor: null })),
       ]);
-      return countsFrom(open, everything);
+      return countsFrom(open, everything, held);
     },
     staleTime: 15_000,
   });
@@ -546,4 +552,36 @@ export function useRevokeKey() {
     mutationFn: (id: string) => api.revokeKey(id),
     onSuccess: () => void qc.invalidateQueries({ queryKey: qk.keys }),
   });
+}
+
+// ---- the spam filter (ADR-029) ---------------------------------------------------------------
+
+export function useSpam() {
+  return useQuery({ queryKey: qk.spam, queryFn: api.spam, staleTime: 15_000 });
+}
+
+/** A filter switched, a learning week ended, a list row removed: the status is read again. */
+export function useSpamWrite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (
+      op:
+        | { readonly filter: "pitches" | "scams" | "junk"; readonly on: boolean; readonly choice?: "aside" | "label" }
+        | { readonly start: "basic" | "pitches" | "scams" | "junk" }
+        | { readonly remove: { list: "allow" | "block"; kind: string; value: string } },
+    ): Promise<unknown> =>
+      "start" in op
+        ? api.startSpamFilter(op.start)
+        : "remove" in op
+          ? api.removeSpamListEntry(op.remove)
+          : api.setSpamFilter(op.filter, { on: op.on, ...(op.choice ? { choice: op.choice } : {}) }),
+    onSuccess: (data) => {
+      if (data && typeof data === "object" && "filters" in data) qc.setQueryData(qk.spam, data);
+      void qc.invalidateQueries({ queryKey: qk.spam });
+    },
+  });
+}
+
+export function useSpamModel() {
+  return useQuery({ queryKey: qk.spamModel, queryFn: api.spamModel, staleTime: 30_000 });
 }

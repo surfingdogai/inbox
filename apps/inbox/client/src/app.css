@@ -211,6 +211,9 @@ a {
   min-height: 0;
 }
 .rail {
+  /* The containing block of what it holds: a screen reader's hidden label inside it scrolls with it,
+     instead of widening the page on a phone (the row of filters scrolls sideways there). */
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -3258,4 +3261,326 @@ pre.found-code {
   justify-self: start;
   font-size: 13px;
   color: var(--ink-3);
+}
+
+/* ------------------------------------------------------------------ */
+/*  The spam filter (ADR-029): Held, Spam, why, and Settings → Spam.    */
+/*  Thin and quiet: ink and greys, hairlines, no red anywhere.          */
+/* ------------------------------------------------------------------ */
+.screen-top {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 2px 4px 4px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+.screen-week {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.row-time {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.screen-acts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 2px;
+}
+.screen-row {
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  align-items: start;
+  row-gap: 4px;
+  cursor: default;
+}
+.screen-row > .dot {
+  margin-top: 6px;
+}
+.screen-row > .row-time {
+  padding-top: 2px;
+}
+.screen-row > .screen-acts {
+  grid-column: 2 / -1;
+  margin: 0 -9px -6px 0;
+}
+.screen-open {
+  display: grid;
+  gap: 5px;
+  justify-items: start;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+.screen-open:hover .who {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+.btn-xs {
+  height: 26px;
+  padding: 0 9px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.spam-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  height: 18px;
+  margin-right: 6px;
+  padding: 0 7px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: 1px;
+}
+.spam-chip.is-customer {
+  border-color: color-mix(in srgb, var(--palm-ink) 35%, transparent);
+  color: var(--palm-ink);
+}
+.link-button {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.link-button:hover {
+  color: var(--ink);
+}
+.toast .x .link-button {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.fine {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+/* Why it's here, on the item */
+.spam-why {
+  display: grid;
+  gap: 6px;
+  margin: 2px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--ink) 2.5%, transparent);
+}
+.spam-why-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.spam-why-head .sec {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-2);
+}
+.spam-why-first,
+.spam-why-rest,
+.spam-quote,
+.spam-by {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.spam-why-rest {
+  display: grid;
+  gap: 2px;
+  padding-left: 1.1rem;
+  color: var(--ink-2);
+}
+.spam-quote {
+  padding-left: 10px;
+  border-left: 1px solid var(--hairline-strong);
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.spam-by {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.spam-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+/* The toast that waits six seconds for Undo */
+.spam-toasts {
+  position: fixed;
+  right: 0;
+  bottom: calc(18px + env(safe-area-inset-bottom));
+  left: 0;
+  z-index: 40;
+  display: flex;
+  justify-content: center;
+  padding: 0 16px;
+  pointer-events: none;
+}
+.spam-toast {
+  width: min(520px, 100%);
+  pointer-events: auto;
+  animation: spam-toast-in 0.18s ease-out;
+}
+@keyframes spam-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (max-width: 899px) {
+  .spam-toasts {
+    bottom: calc(86px + env(safe-area-inset-bottom));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spam-toast {
+    animation: none;
+  }
+}
+
+/* Settings → Spam */
+.spam-settings {
+  display: grid;
+  gap: 14px;
+}
+.spam-block {
+  display: grid;
+  gap: 6px;
+}
+.spam-block + .spam-block {
+  padding-top: 14px;
+  border-top: 1px solid var(--hairline);
+}
+.spam-block-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+.spam-block-head h4,
+.spam-block-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.spam-filter .body > .seg {
+  justify-self: start;
+}
+.spam-block p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.spam-block .fine {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.spam-always {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.spam-filter {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 12px;
+  padding: 10px 0;
+}
+.spam-filter + .spam-filter {
+  border-top: 1px dashed var(--hairline);
+}
+.spam-filter > .switch-cell {
+  padding-top: 1px;
+}
+.spam-filter .body {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.spam-filter .title {
+  font-size: 14px;
+  font-weight: 600;
+}
+.spam-filter .learning {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+.spam-lists {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px 20px;
+}
+.spam-list {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+}
+.spam-list h4 {
+  margin: 0 0 2px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.spam-list ul {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.spam-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+}
+.spam-list-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.seg-wrap {
+  flex-wrap: wrap;
+  border-radius: 16px;
+}
+.model-steps {
+  display: grid;
+  gap: 12px;
+  max-width: 520px;
 }

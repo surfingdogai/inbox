@@ -2,6 +2,7 @@ import { createFileRoute, Outlet, redirect, useParams } from "@tanstack/react-ro
 import { ItemList } from "../components/ItemList";
 import { KitchenStrip } from "../components/KitchenToday";
 import { Rail } from "../components/Rail";
+import { SpamActionsProvider } from "../components/SpamActions";
 import { ensureSignedIn } from "../lib/auth";
 import { type Filter, parseFilter } from "../lib/filters";
 import { usePhone } from "../lib/media";
@@ -10,6 +11,8 @@ import { useBusiness, useCounts, useIntegrations, useSettings } from "../lib/que
 export interface InboxSearch {
   readonly f?: Filter;
   readonly q?: string;
+  /** An act to open on the item: `propose`, after letting in a booking whose time has passed. */
+  readonly do?: "propose";
 }
 
 /** The three panes. Children render into the detail pane; phones show either the list or the detail. */
@@ -17,7 +20,11 @@ export const Route = createFileRoute("/_inbox")({
   validateSearch: (search: Record<string, unknown>): InboxSearch => {
     const f = parseFilter(search.f);
     const q = typeof search.q === "string" ? search.q.trim() : "";
-    return { ...(f && f !== "all" ? { f } : {}), ...(q ? { q } : {}) };
+    return {
+      ...(f && f !== "all" ? { f } : {}),
+      ...(q ? { q } : {}),
+      ...(search.do === "propose" ? { do: "propose" as const } : {}),
+    };
   },
   beforeLoad: async ({ location }) => {
     if (!(await ensureSignedIn())) throw redirect({ to: "/login", search: { redirect: location.href } });
@@ -42,19 +49,21 @@ function InboxLayout() {
   const phone = usePhone();
 
   return (
-    <div className="inbox glass" data-view={id ? "detail" : "list"}>
-      <Rail name={name} filter={filter} q={q} counts={counts.data} testMode={testMode} failing={failing} />
-      <ItemList
-        filter={filter}
-        q={q}
-        sandbox={testMode}
-        selected={id}
-        tz={tz}
-        head={phone && settings.data?.doc.kitchen.enabled ? <KitchenStrip tz={tz} /> : undefined}
-      />
-      <section className="detail" aria-label="Item">
-        <Outlet />
-      </section>
-    </div>
+    <SpamActionsProvider>
+      <div className="inbox glass" data-view={id ? "detail" : "list"}>
+        <Rail name={name} filter={filter} q={q} counts={counts.data} testMode={testMode} failing={failing} />
+        <ItemList
+          filter={filter}
+          q={q}
+          sandbox={testMode}
+          selected={id}
+          tz={tz}
+          head={phone && settings.data?.doc.kitchen.enabled ? <KitchenStrip tz={tz} /> : undefined}
+        />
+        <section className="detail" aria-label="Item">
+          <Outlet />
+        </section>
+      </div>
+    </SpamActionsProvider>
   );
 }

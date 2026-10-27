@@ -101,6 +101,10 @@ import {
   type Settings,
   settingsWriteSchema,
 } from "../settings/schema";
+import { SpamCapabilities, type SpamStatus, type SpamVerdictView } from "../spam/capability";
+import { chipOf, kindSentence, reasons } from "../spam/copy";
+import type { ModelCard, ModelChoice, ModelTest } from "../spam/model";
+import type { ScreenInput } from "../spam/types";
 import { StayCapabilities } from "../stays/capability";
 import { stayLang } from "../stays/copy";
 import { staySchedules } from "../stays/payments";
@@ -108,9 +112,6 @@ import { TradeCapabilities } from "../trades/capability";
 import { workProfile } from "../trades/job";
 import { registerWorkResolver } from "../trades/job-tool";
 import { linkVisit } from "../trades/visit";
-import { SpamCapabilities, type SpamStatus, type SpamVerdictView } from "../spam/capability";
-import { chipOf, kindSentence, reasons } from "../spam/copy";
-import type { ScreenInput } from "../spam/types";
 import { hashText } from "../util/canonical";
 import {
   type Caller,
@@ -134,7 +135,7 @@ import { isAutomation } from "../write/offers";
 import { withdrawalOf } from "../write/returns";
 import { appendThreadEntry } from "../write/thread";
 import { type TransitionResult, transitionItem } from "../write/transition";
-import { customerItem, type ItemView, type PartyView, rowToItem, viewFor } from "../write/views";
+import { customerItem, type ItemSpamSummary, type ItemView, type PartyView, rowToItem, viewFor } from "../write/views";
 import { askedForAPrice, calendarFit, findSlots, quoteNotBookable, type Slot, unknownService } from "./availability";
 import { CustomerDoors, type CustomerItemView } from "./customer";
 import { CustomerData } from "./customers";
@@ -317,12 +318,8 @@ export interface ItemDetail extends ItemView {
 }
 
 /** "Why it's here": the filter's verdict in our sentences, and passages the code found in the message. */
-export interface ItemSpamView {
-  /** `items.screen`: held, aside, warned, released, delivered, pending. */
-  readonly screen: string | null;
+export interface ItemSpamView extends ItemSpamSummary {
   readonly verdict: string;
-  /** The chip on its row. */
-  readonly chip: string;
   /** The strongest cause first. */
   readonly reasons: readonly string[];
   /** Passages of the sender's own (masked) words the code found word for word. */
@@ -1428,13 +1425,17 @@ export class Capabilities {
   async listItems(caller: Caller, input: T.ListItemsInput): Promise<Page<ItemView>> {
     requireBusiness(caller);
     const conditions = [eq(items.sandbox, input.sandbox ? 1 : 0)];
+    // Spam is everything put aside (ADR-029 §11.1): by a person, by the email door as it arrived, and by
+    // the spam filter — a held booking a person sent to Spam keeps its own state.
+    const spamList = input.state === "spam" && !input.screen;
     if (input.type) conditions.push(eq(items.type, input.type));
-    if (input.state) conditions.push(eq(items.state, input.state));
+    if (input.state && !spamList) conditions.push(eq(items.state, input.state));
     if (input.needs_human !== undefined) conditions.push(eq(items.needsHuman, input.needs_human ? 1 : 0));
     if (input.open_only && !input.state) conditions.push(sql`${items.closedAt} IS NULL`);
     // What the spam filter holds or is still screening waits under Held (ADR-029), not on the desk:
     // listed only when asked for by its screen.
-    if (input.screen) conditions.push(eq(items.screen, input.screen));
+    if (spamList) conditions.push(sql`(${items.state} = 'spam' OR ${items.screen} = 'aside')`);
+    else if (input.screen) conditions.push(eq(items.screen, input.screen));
     else conditions.push(sql`COALESCE(${items.screen}, '') NOT IN ('pending', 'held', 'aside')`);
     // "Email not sent": one that failed for good, or one to the customer that was never sent (no
     // address, nothing to send from, no mail service, the day's acknowledgements used) — but a test
@@ -1489,13 +1490,23 @@ export class Capabilities {
       });
       for (const r of byRules) ruled.add(String((r as unknown[])[0]));
     }
+    // What the spam filter made of each row it saw (ADR-029 §11.1): its chip, and whether it may be a customer.
+    const screened = await this.spam.summaries(
+      rows
+        .slice(0, input.limit)
+        .flatMap((r) =>
+          r.screen !== null || r.state === "spam" ? [{ id: r.id, screen: r.screen, type: r.type }] : [],
+        ),
+    );
     const views = listed.map(({ item }) => {
       const view = viewFor(item, permissionKind(caller), partyViews.get(item.partyId), hidden.get(item.id));
       const calendar = fits.get(item.id);
+      const spam = screened.get(item.id);
       return {
         ...view,
         ...(calendar ? { calendar } : {}),
         ...(ruled.has(item.id) ? { by_rules: true } : {}),
+        ...(spam ? { spam } : {}),
       };
     });
     const last = rows[input.limit - 1];
@@ -1568,6 +1579,9 @@ export class Capabilities {
     const draft = await draftRow(this.db, item.id);
     const calendar = await calendarFit(this.db, item, await this.timezone());
     const verdict = await this.spam.verdictOf(item.id);
+    const summary = verdict
+      ? (await this.spam.summaries([{ id: item.id, screen: row.screen, type: item.type }])).get(item.id)
+      : undefined;
     const delivery = new Map<string, EntryDelivery>();
     for (const m of mail) {
       if (m.entryId && m.recipient === "customer") {
@@ -1579,10 +1593,16 @@ export class Capabilities {
         });
       }
     }
+    const { spam: _listed, ...base } = viewFor(
+      item,
+      permissionKind(caller),
+      partyViews.get(row.partyId),
+      hidden.get(item.id),
+    );
     return {
-      ...viewFor(item, permissionKind(caller), partyViews.get(row.partyId), hidden.get(item.id)),
+      ...base,
       ...(calendar ? { calendar } : {}),
-      ...(verdict ? { spam: spamView(verdict, row.screen) } : {}),
+      ...(verdict && summary ? { spam: spamView(verdict, summary) } : {}),
       receipts,
       customer: await this.people.customerView(row),
       events: events.map((e) => ({
@@ -1756,6 +1776,36 @@ export class Capabilities {
   async removeSpamListEntry(caller: Caller, input: T.RemoveSpamListEntryInput): Promise<{ removed: boolean }> {
     requireBusiness(caller);
     return this.spam.removeListEntry(caller, input);
+  }
+
+  /** Settings → Integrations → Your AI model: what reads for the filters on this server, and whether the owner may bring one. */
+  async spamModel(caller: Caller): Promise<ModelCard> {
+    requireBusiness(caller);
+    return this.spam.modelCard(caller);
+  }
+
+  /** The provider's own list of models for a key (the owner in person; the key is not kept). */
+  async spamModels(caller: Caller, input: T.SpamModelsInput): Promise<{ readonly models: readonly ModelChoice[] }> {
+    requireBusiness(caller);
+    return this.spam.listModels(caller, input);
+  }
+
+  /** Saves the owner's own model and key, sealed (the owner in person). */
+  async setSpamModel(caller: Caller, input: T.SetSpamModelInput): Promise<ModelCard> {
+    requireBusiness(caller);
+    return this.spam.setModel(caller, input, nowOf(caller));
+  }
+
+  /** Two samples through the owner's model: a sales pitch spotted, a customer asking a price let through. */
+  async testSpamModel(caller: Caller): Promise<ModelTest> {
+    requireBusiness(caller);
+    return this.spam.testOwnModel(caller, nowOf(caller));
+  }
+
+  /** Removes the owner's model and its key. */
+  async removeSpamModel(caller: Caller): Promise<ModelCard> {
+    requireBusiness(caller);
+    return this.spam.removeOwnModel(caller);
   }
 
   /**
@@ -2706,16 +2756,19 @@ function mergeAdds(
 }
 
 /** The filter's verdict as the owner reads it (ADR-029 §11.2): our sentences, never a model's. */
-function spamView(v: SpamVerdictView, screen: string | null): ItemSpamView {
+function spamView(v: SpamVerdictView, summary: ItemSpamSummary): ItemSpamView {
   const topic = v.answer?.topic;
   const lines = reasons(v.signals as never, { topic, learning: v.learning });
   const ai = v.signals.some((s) => s.c === "ai_kind" && s.w > 0);
-  const kind = v.cause === "pitches" || v.cause === "scams" || v.cause === "junk" ? kindSentence(v.cause, topic) : "";
+  const sentence =
+    v.cause === "pitches" || v.cause === "scams" || v.cause === "junk" ? kindSentence(v.cause, topic) : "";
+  // In a learning week the strongest line says what it would have done (§11.2), once.
+  const kind = sentence && v.learning ? `Would have been put aside: ${sentence}` : sentence;
   return {
-    screen,
+    ...summary,
     verdict: v.verdict,
     chip: chipOf(v.learning ? "learning" : v.cause, v.verdict === "warn"),
-    reasons: kind && !lines.includes(kind) ? [kind, ...lines] : lines,
+    reasons: kind && !lines.includes(kind) ? [kind, ...lines.filter((l) => !l.endsWith(sentence))] : lines,
     quotes: v.quotes,
     by: v.owner_verdict ? "you" : v.cause === "server_marked" ? "mail_server" : ai ? "ai_check" : "spam_filter",
     learning: v.learning,

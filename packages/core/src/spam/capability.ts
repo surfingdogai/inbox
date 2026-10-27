@@ -1,9 +1,13 @@
 import type { Statement } from "@surfingdog/platform";
 import type { Db } from "../db";
+import type { ItemType } from "../domain/types";
 import type { SecretBox } from "../secrets/box";
 import { readSettings } from "../settings/schema";
 import { type Caller, isOwnerInPerson, isPerson } from "../write/caller";
 import { WriteError } from "../write/errors";
+import type { ItemSpamSummary } from "../write/views";
+import { chipOf } from "./copy";
+import { DISPOSABLE_MAIL, SHARED_MAIL_PROVIDERS } from "./data";
 import {
   basicLearningUntil,
   closeWithdrawnStatements,
@@ -22,18 +26,39 @@ import {
   removeFromListStatement,
 } from "./lists";
 import { checksSoFar, countStatement, type SpamUsage, spamUsage } from "./meter";
+import {
+  isModelProvider,
+  kitProblem,
+  MODEL_PROVIDERS,
+  type ModelCard,
+  type ModelChoice,
+  type ModelKit,
+  type ModelProvider,
+  type ModelTest,
+  openKey,
+  PROVIDER_NAMES,
+  recordTest,
+  removeModel,
+  saveModel,
+  storedModel,
+  testModel,
+} from "./model";
+import { emailDomain, foldAddress, normalise, registrableDomain } from "./normalise";
 import { prunePrintsStatement } from "./prints";
 import { blockChoiceOf, createEventOf, releasedEffects, releaseScreenStatement, teachStatements } from "./release";
 import {
   aiRoom,
+  businessContext,
   type DoorContext,
   type DoorScreen,
   type JudgeOptions,
+  namesOwnOffer,
   runScreenJob,
   type ScreenJobResult,
   type SpamDeps,
   type SpamHostPolicy,
   screenAtDoor,
+  wordsOf,
 } from "./screen";
 import { dayOf, FILTERS, type Filter, type FilterChoice, isFilter } from "./types";
 
@@ -70,6 +95,8 @@ export interface SpamStatus {
     readonly month_cap: number | null;
     /** Until when the AI check rests because a cap was reached; null while it has room. */
     readonly resting_until: string | null;
+    /** The model's tokens this month, read and written: what an owner's own key paid for. */
+    readonly tokens_this_month: number;
   };
   readonly billing: {
     readonly state: "off" | "shadow" | "on" | "self_hosted";
@@ -77,6 +104,8 @@ export interface SpamStatus {
   };
   readonly this_month: { readonly aside: number; readonly held: number; readonly brought_back: number };
   readonly held_now: number;
+  /** Put aside in the last seven days, by anyone: the Spam list's "This week". */
+  readonly this_week: { readonly aside: number };
   readonly lists: { readonly allow: readonly ListEntry[]; readonly block: readonly ListEntry[] };
   /** Whether this caller may change any of it: the owner or staff, signed in, in person. */
   readonly can_change: boolean;
@@ -95,6 +124,10 @@ export class SpamCapabilities implements SpamDeps {
   private resolver: ((domain: string) => Promise<boolean | null>) | null = null;
   private modelInfo: ModelInfo | null = null;
   private judgeOptions: JudgeOptions = {};
+  /** How the host reaches an owner's own model provider (own server only). */
+  private kit: ModelKit | null = null;
+  /** The owner's own model as last read, and the port made from it. */
+  private own: { readonly setAt: number; readonly port: JudgePort; readonly info: ModelInfo } | null = null;
 
   constructor(
     readonly db: Db,
@@ -113,8 +146,11 @@ export class SpamCapabilities implements SpamDeps {
     readonly model?: ModelInfo | null | undefined;
     /** How long a check may take: shorter in a test. */
     readonly judgeOptions?: JudgeOptions | undefined;
+    /** How the owner's own model is reached, on their own server (Settings → Integrations → Your AI model). */
+    readonly kit?: ModelKit | null | undefined;
   }): void {
     if (o.judgeOptions !== undefined) this.judgeOptions = o.judgeOptions;
+    if (o.kit !== undefined) this.kit = o.kit;
     if (o.judge !== undefined) this.port = o.judge;
     if (o.host !== undefined) this.policy = o.host;
     if (o.resolveMail !== undefined) this.resolver = o.resolveMail;
@@ -122,7 +158,40 @@ export class SpamCapabilities implements SpamDeps {
   }
 
   judge(): JudgePort | null {
-    return this.port;
+    return this.port ?? this.own?.port ?? null;
+  }
+
+  /** Whether the owner may bring their own model: their own server, a key box, nothing set by the server. */
+  private ownOffered(): boolean {
+    return this.policy === null && this.port === null && this.kit !== null && this.secrets !== null;
+  }
+
+  /**
+   * The owner's own model, read again when it changed (another isolate or process may have saved one):
+   * one small read before each screening and each status.
+   */
+  private async refreshOwn(): Promise<void> {
+    if (!this.ownOffered() || !this.kit || !this.secrets) {
+      this.own = null;
+      return;
+    }
+    const row = await storedModel(this.db).catch(() => null);
+    if (!row) {
+      this.own = null;
+      return;
+    }
+    if (this.own?.setAt === row.setAt) return;
+    try {
+      const key = await openKey(this.secrets, row.keyEnc);
+      this.own = {
+        setAt: row.setAt,
+        port: this.kit.judge({ provider: row.provider, model: row.model, key }),
+        info: { provider: PROVIDER_NAMES[row.provider], model: row.model, setByServer: false },
+      };
+    } catch {
+      // A key sealed under a secret this server no longer holds: as if none were set.
+      this.own = null;
+    }
   }
 
   host(): SpamHostPolicy | null {
@@ -138,7 +207,8 @@ export class SpamCapabilities implements SpamDeps {
    * a filter on. The business's privacy page says so while it is (ADR-029 §14).
    */
   async readsWithAi(now: number): Promise<boolean> {
-    if (!this.port || (this.policy && !this.policy.ai)) return false;
+    await this.refreshOwn();
+    if (!this.judge() || (this.policy && !this.policy.ai)) return false;
     const allowed = this.policy ? new Set<string>(this.policy.filters) : null;
     for (const s of (await filterStates(this.db, now)).values())
       if (s.on && (!allowed || allowed.has(s.filter))) return true;
@@ -146,12 +216,18 @@ export class SpamCapabilities implements SpamDeps {
   }
 
   /** Screens a create at its door (`createItem` calls this). */
-  atDoor(ctx: DoorContext): Promise<DoorScreen> {
+  async atDoor(ctx: DoorContext): Promise<DoorScreen> {
+    await this.refreshOwn();
     return screenAtDoor(this, ctx);
   }
 
   /** The `spam_screen` job. */
-  screen(input: { readonly itemId: string; readonly eventId: string; readonly now: number }): Promise<ScreenJobResult> {
+  async screen(input: {
+    readonly itemId: string;
+    readonly eventId: string;
+    readonly now: number;
+  }): Promise<ScreenJobResult> {
+    await this.refreshOwn();
     return runScreenJob(this, input, this.judgeOptions);
   }
 
@@ -166,6 +242,7 @@ export class SpamCapabilities implements SpamDeps {
   // ---- what the owner sees ----------------------------------------------------------------------
 
   async status(caller: Caller, now: number): Promise<SpamStatus> {
+    await this.refreshOwn();
     const db = this.db;
     const states = await filterStates(db, now);
     const host = this.policy;
@@ -197,15 +274,17 @@ export class SpamCapabilities implements SpamDeps {
       params: [],
       method: "all",
     });
+    const { rows: weekRows } = await db.client.query({
+      sql: `SELECT COUNT(*) FROM items WHERE COALESCE(sandbox, 0) = 0 AND (state = 'spam' OR screen = 'aside')
+              AND COALESCE(screen_at, closed_at, updated_at) >= ?`,
+      params: [now - 7 * 86_400_000],
+      method: "all",
+    });
     const lists = await listEntries(db);
     const basic = await basicLearningUntil(db, now);
-    const reader: Reader = host
-      ? host.ai && this.port
-        ? "hosted_ai"
-        : "hosted_phrases"
-      : this.port
-        ? "own_model"
-        : "no_model";
+    const port = this.judge();
+    const reader: Reader = host ? (host.ai && port ? "hosted_ai" : "hosted_phrases") : port ? "own_model" : "no_model";
+    const modelInfo = this.port ? this.modelInfo : (this.own?.info ?? null);
     return {
       basic: { learning_until: basic ? new Date(basic).toISOString() : null },
       filters: FILTERS.map((filter) => {
@@ -221,15 +300,22 @@ export class SpamCapabilities implements SpamDeps {
       }),
       reader,
       model:
-        !host && this.modelInfo
+        !host && modelInfo
           ? {
-              provider: this.modelInfo.provider,
-              model: this.modelInfo.model,
-              set_by_server: this.modelInfo.setByServer,
+              provider: modelInfo.provider,
+              model: modelInfo.model,
+              set_by_server: modelInfo.setByServer,
             }
           : null,
       reader_name: host?.reader ?? null,
-      checks: { today: so.day, this_month: so.month, day_cap: dayCap, month_cap: monthCap, resting_until: resting },
+      checks: {
+        today: so.day,
+        this_month: so.month,
+        day_cap: dayCap,
+        month_cap: monthCap,
+        resting_until: resting,
+        tokens_this_month: usage.tokens_in + usage.tokens_out,
+      },
       billing: host
         ? {
             state: host.billing,
@@ -240,9 +326,239 @@ export class SpamCapabilities implements SpamDeps {
         : { state: "self_hosted", price: null },
       this_month: { aside: usage.aside, held: usage.held, brought_back: usage.brought_back },
       held_now: Number(heldRows[0]?.[0] ?? 0),
+      this_week: { aside: Number(weekRows[0]?.[0] ?? 0) },
       lists: { allow: lists.filter((l) => l.list === "allow"), block: lists.filter((l) => l.list === "block") },
       can_change: canChange(caller),
     };
+  }
+
+  /**
+   * What the rows of a list say about the spam filter (ADR-029 §11.1): each one's chip, whether a
+   * certain signal decided it, and whether it may be a customer after all — the AI check found one or
+   * wasn't sure, it was held only for many new requests, or its words name something the business
+   * offers and nothing certain held it. Those are listed first under Held.
+   */
+  async summaries(
+    rows: readonly {
+      readonly id: string;
+      readonly screen: string | null;
+      readonly type: string;
+    }[],
+  ): Promise<Map<string, ItemSpamSummary>> {
+    const out = new Map<string, ItemSpamSummary>();
+    if (rows.length === 0) return out;
+    const marks = rows.map(() => "?").join(",");
+    const ids = rows.map((r) => r.id);
+    const { rows: found } = await this.db.client.query({
+      sql: `SELECT item_id, verdict, cause, certain, answer, learning FROM spam_verdicts WHERE item_id IN (${marks})`,
+      params: ids,
+      method: "all",
+    });
+    const verdicts = new Map(found.map((r) => [String(r[0]), r]));
+    const { rows: who } = await this.db.client.query({
+      sql: `SELECT i.id, i.agent_thumbprint,
+                   (SELECT value FROM party_contacts c WHERE c.party_id = i.party_id AND c.kind = 'email' ORDER BY c.created_at LIMIT 1)
+              FROM items i WHERE i.id IN (${marks})`,
+      params: ids,
+      method: "all",
+    });
+    const senders = new Map(
+      who.map((r) => {
+        const address = r[2] === null || r[2] === undefined ? null : foldAddress(String(r[2]));
+        const domain = address ? emailDomain(address) : null;
+        const company = domain ? registrableDomain(domain) : null;
+        return [
+          String(r[0]),
+          {
+            address,
+            company_domain:
+              company && !SHARED_MAIL_PROVIDERS.has(company) && !DISPOSABLE_MAIL.has(company) ? company : null,
+            app: !address && r[1] !== null && r[1] !== undefined,
+          },
+        ] as const;
+      }),
+    );
+    const nobody = { address: null, company_domain: null, app: false } as const;
+    // Words that name the business's own offer, for what was held on uncertain grounds.
+    const unsure = rows.filter((r) => {
+      const v = verdicts.get(r.id);
+      return r.screen === "held" && v !== undefined && Number(v[3]) !== 1;
+    });
+    const named = new Set<string>();
+    if (unsure.length > 0) {
+      const business = await businessContext(this.db);
+      const { rows: firsts } = await this.db.client.query({
+        sql: `SELECT t.item_id, t.body_text, i.type, i.payload FROM thread_entries t JOIN items i ON i.id = t.item_id
+               WHERE t.item_id IN (${unsure.map(() => "?").join(",")}) AND t.direction = 'in'
+               ORDER BY t.created_at, t.id`,
+        params: unsure.map((r) => r.id),
+        method: "all",
+      });
+      const seen = new Set<string>();
+      for (const f of firsts) {
+        const id = String(f[0]);
+        if (seen.has(id)) continue;
+        seen.add(id);
+        let payload: Record<string, unknown> = {};
+        try {
+          payload = JSON.parse(String(f[3] ?? "{}")) as Record<string, unknown>;
+        } catch {
+          payload = {};
+        }
+        const words = wordsOf(String(f[2]) as ItemType, payload, typeof f[1] === "string" ? f[1] : undefined).text;
+        if (namesOwnOffer(normalise(words), business.offers)) named.add(id);
+      }
+    }
+    for (const r of rows) {
+      const v = verdicts.get(r.id);
+      if (!v) {
+        // A person put it aside: no chip, nothing to doubt.
+        out.set(r.id, {
+          screen: r.screen,
+          chip: "",
+          cause: null,
+          may_be_customer: false,
+          certain: false,
+          sender: senders.get(r.id) ?? nobody,
+        });
+        continue;
+      }
+      const cause = v[2] === null || v[2] === undefined ? null : String(v[2]);
+      const certain = Number(v[3]) === 1;
+      const learning = Number(v[5]) === 1;
+      type Answer = { readonly kind?: string; readonly customer_intent?: boolean };
+      let answer: Answer | null = null;
+      try {
+        answer = v[4] ? (JSON.parse(String(v[4])) as Answer) : null;
+      } catch {
+        answer = null;
+      }
+      const warned = r.screen === "warned" || String(v[1]) === "warn";
+      const doubts =
+        answer !== null && (answer.kind === "customer" || answer.kind === "unclear" || answer.customer_intent === true);
+      out.set(r.id, {
+        screen: r.screen,
+        chip: chipOf(learning ? "learning" : cause, warned),
+        cause: learning ? "learning" : cause,
+        may_be_customer: cause === "many_new" || (!certain && (doubts || named.has(r.id))),
+        certain,
+        sender: senders.get(r.id) ?? nobody,
+      });
+    }
+    return out;
+  }
+
+  // ---- the owner's own AI model (own server) -----------------------------------------------------
+
+  /** Settings → Integrations → Your AI model. */
+  async modelCard(caller: Caller): Promise<ModelCard> {
+    await this.refreshOwn();
+    const row = this.ownOffered() ? await storedModel(this.db) : null;
+    return {
+      offered: this.ownOffered(),
+      not_offered: this.policy ? "hosted" : this.port ? null : !this.secrets ? "no_secret" : null,
+      set_by_server:
+        this.port && !this.policy && this.modelInfo
+          ? { provider: this.modelInfo.provider, model: this.modelInfo.model }
+          : null,
+      own: row
+        ? {
+            provider: row.provider,
+            provider_name: PROVIDER_NAMES[row.provider],
+            model: row.model,
+            set_at: new Date(row.setAt).toISOString(),
+            tested:
+              row.testedAt !== null && row.test
+                ? { at: new Date(row.testedAt).toISOString(), pitch: row.test.pitch, customer: row.test.customer }
+                : null,
+          }
+        : null,
+      providers: MODEL_PROVIDERS.map((id) => ({ id, name: PROVIDER_NAMES[id] })),
+      can_change: canChange(caller) && this.ownOffered(),
+    };
+  }
+
+  private requireOwnModel(caller: Caller): { kit: ModelKit; secrets: SecretBox } {
+    requirePerson(caller);
+    if (!this.ownOffered() || !this.kit || !this.secrets) {
+      throw new WriteError(
+        "not_allowed",
+        this.policy
+          ? "This inbox reads with its host's model; there is no key to add here."
+          : this.port
+            ? "Set by your server: nothing to change here."
+            : "This server can't keep a key: set INBOX_SECRET_KEY first.",
+        { details: { reason: this.policy ? "hosted" : this.port ? "set_by_server" : "no_secret" } },
+      );
+    }
+    return { kit: this.kit, secrets: this.secrets };
+  }
+
+  /**
+   * The provider's own list of models for a key the owner just pasted, or the one kept when none is
+   * given for the same provider. The key is only used for the call: nothing is kept.
+   */
+  async listModels(
+    caller: Caller,
+    input: { readonly provider: string; readonly key?: string | undefined },
+  ): Promise<{ readonly models: readonly ModelChoice[] }> {
+    const { kit, secrets } = this.requireOwnModel(caller);
+    const provider = providerOf(input.provider);
+    const key = input.key?.trim() || (await this.keptKey(secrets, provider));
+    try {
+      return { models: await kit.models({ provider, key }) };
+    } catch (error) {
+      throw kitProblem(error, provider);
+    }
+  }
+
+  /** Saves the owner's model: the key sealed, shown again to nobody. Without a key, the kept one stays. */
+  async setModel(
+    caller: Caller,
+    input: { readonly provider: string; readonly model: string; readonly key?: string | undefined },
+    now: number,
+  ): Promise<ModelCard> {
+    const { secrets } = this.requireOwnModel(caller);
+    const provider = providerOf(input.provider);
+    const model = input.model.trim();
+    if (!model || model.length > 120) {
+      throw new WriteError("invalid_input", "Choose a model from the list.", {
+        fields: [{ path: "model", problem: "invalid", message: "Choose a model from the list." }],
+      });
+    }
+    const key = input.key?.trim() || (await this.keptKey(secrets, provider));
+    await saveModel(this.db, secrets, { provider, model, key, byUser: byUserOf(caller), now });
+    this.own = null;
+    return this.modelCard(caller);
+  }
+
+  /** Test: two samples through the model, as the filter would send them; what it found is kept. */
+  async testOwnModel(caller: Caller, now: number): Promise<ModelTest> {
+    this.requireOwnModel(caller);
+    await this.refreshOwn();
+    const port = this.own?.port;
+    if (!port) throw new WriteError("wrong_state", "Save a model first, then test it.");
+    const r = await testModel(port, await businessContext(this.db), this.judgeOptions);
+    if (r.ok) await recordTest(this.db, { pitch: r.pitch, customer: r.customer }, now);
+    return r;
+  }
+
+  /** Remove: the key is deleted, and the filters look for known phrases only again. */
+  async removeOwnModel(caller: Caller): Promise<ModelCard> {
+    this.requireOwnModel(caller);
+    await removeModel(this.db);
+    this.own = null;
+    return this.modelCard(caller);
+  }
+
+  private async keptKey(secrets: SecretBox, provider: ModelProvider): Promise<string> {
+    const row = await storedModel(this.db);
+    if (!row || row.provider !== provider) {
+      throw new WriteError("invalid_input", "Paste the key from your account.", {
+        fields: [{ path: "key", problem: "missing", message: "Paste the key from your account." }],
+      });
+    }
+    return openKey(secrets, row.keyEnc);
   }
 
   usage(range: { readonly from: number; readonly to: number }, now: number): Promise<SpamUsage> {
@@ -679,6 +995,13 @@ function requirePerson(caller: Caller): void {
       details: { reason: "owner_in_person" },
     });
   }
+}
+
+function providerOf(value: string): ModelProvider {
+  if (isModelProvider(value)) return value;
+  throw new WriteError("invalid_input", "Choose Anthropic, OpenAI or Google Gemini.", {
+    fields: [{ path: "provider", problem: "invalid", message: "Choose Anthropic, OpenAI or Google Gemini." }],
+  });
 }
 
 function byUserOf(caller: Caller): string {

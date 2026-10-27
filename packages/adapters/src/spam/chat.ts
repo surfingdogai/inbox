@@ -91,6 +91,8 @@ export function chatJudge(o: ChatJudgeOptions): JudgePort {
  * too), `SPAM_MODEL_KEY`, `SPAM_MODEL` (the model's id) and `SPAM_MODEL_NAME` (how Settings names it).
  * Null when none is set up: the filters then look for known phrases only.
  */
+const LOOPBACK = /^(localhost|127\.\d+\.\d+\.\d+|\[::1\])$/i;
+
 export function judgeFromEnv(
   env: Readonly<Record<string, string | undefined>>,
   fetchImpl?: typeof fetch,
@@ -113,7 +115,8 @@ export function judgeFromEnv(
     if (!url || !/^https?:\/\//.test(url)) return null;
     return {
       judge: chatJudge({ url, apiKey: env.SPAM_MODEL_KEY?.trim() || undefined, model, fetch: fetchImpl }),
-      provider: new URL(url).hostname,
+      // A model on this very machine is named as such, not by an address the owner would not recognise.
+      provider: LOOPBACK.test(new URL(url).hostname) ? "this server" : new URL(url).hostname,
       model: name,
     };
   }
