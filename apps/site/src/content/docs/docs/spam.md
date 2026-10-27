@@ -82,8 +82,8 @@ It runs on a stranger's opening message, with a filter on, when nothing certain 
 | | Free | Pro: $10, €10 or £9 a month, taxes included |
 | --- | --- | --- |
 | Basic protection, Held and Spam, the lists, the emails | yes | yes |
-| The three filters | | on from the start, each with its learning week |
-| The AI check | | Claude Haiku from Anthropic, which we pay for |
+| The three filters | no | on from the start, each with its learning week |
+| The AI check | no | Claude Haiku from Anthropic, which we pay for |
 
 The $10 supports the open-source inbox, the open network, and keeping access to AI agents from being locked in a connector store. There is no price for each filter.
 
