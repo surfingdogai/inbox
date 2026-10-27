@@ -185,7 +185,7 @@ inbox writes to customers in), and passes the customer-copy check.
 | Other terms | 409 | `terms_changed` (`terms_sha`) | Ask its person again; a new token for the new total. |
 | Another attempt on its way, or one Stripe has not yet said the outcome of | 409 | `in_progress` (`retry_after_s`) | Retry with the same token and key after `retry_after_s`. |
 | Not this business's token, nor this mode's | 422 | `token_invalid` | A new token for `business_profile` and `environment`. |
-| Expired, used or revoked | 422 | `token_expired`, `token_used` | A new token. |
+| Expired, used or revoked (Stripe answers the three alike), or held by another payment | 422 | `token_used`; `token_expired` when the echoed allowance has expired, before Stripe is asked | A new token. |
 | Below the total, or another currency | 422 | `token_limit` | A token for `platform_amount`. |
 | Declined | 402 | `payment_declined` (`attempts_left`) | Nothing was charged: another card, a new token. |
 | Declined because the card needs its holder, and the PaymentIntent cannot ask them | 402 | `authentication_required` (`payment_url`) | Send its person to the link. |
@@ -200,7 +200,9 @@ for an attempt the person never left. A payment that was processing and then fai
 
 A PaymentIntent in `requires_action` waits for its card holder, as Stripe's flow for these tokens has it:
 the agent's platform is told and shows its person the step (a 3D Secure challenge, a redirect for Klarna
-or Affirm), and Stripe goes on once they do. The inbox answers `202 processing` and reads it back on each
+or Affirm), and Stripe goes on once they do. A sandbox answers it with `next_action.type`
+`shared_payment_token_action` and asks the seller for no `return_url`; the token is held by that payment
+meanwhile, and let go if it is cancelled. The inbox answers `202 processing` and reads it back on each
 sync until Stripe says. Strong customer authentication applies in the UK and the EEA, so this is the
 common case there, not an edge. One its holder has not confirmed an hour after the ask (past a token's
 own life) is cancelled, so it is never taken later, and read again: one confirmed meanwhile is paid;
@@ -208,9 +210,10 @@ one stopped is `cancelled` (`authentication_required`), and the order is due aga
 `authentication_required` checkout status and delegated authentication belong to the ACP door (Not
 decided here).
 
-Stripe does not document the error codes it gives a token it will not charge. The adapter reads the
-parameter it names and its words as well as its code (expired; consumed, revoked or deactivated; over a
-limit or another currency; else unknown), and a sandbox check is listed below.
+Stripe does not document the error codes it gives a token it will not charge, and a sandbox gives a
+code only for an unknown one (below): the adapter reads the parameter it names and its words as well as
+its code, with the token taken out of them (over the limit or another currency; expired; deactivated or
+held by another payment; else unknown).
 
 ### 7. The owner's switch, in person
 
@@ -279,20 +282,79 @@ subscribing would send every payment of the business's account to the inbox.
   never charged twice; a payment on the link that crosses the assistant's is the "paid twice" notice
   ADR-023 already sends the owner.
 
-## Not checked against a real account
+## Checked in a Stripe sandbox
 
-To verify in a Stripe sandbox before a business uses it:
+On 27 October 2026, against a Stripe sandbox with its secret test key (`sk_test_…`), in
+`2026-09-30.preview`, with tokens from Stripe's seller test helper (`POST
+/v1/test_helpers/shared_payment/granted_tokens` with `payment_method`, `usage_limits[currency]`,
+`usage_limits[max_amount]` and `usage_limits[expires_at]`, between now and 90 days ahead). Tokens, ids
+and log links are left out below. What a sandbox's secret key cannot show is said as not checked.
 
-1. Stripe answers 403 before 400 for the empty PaymentIntent probe on a key without the permission.
-2. A restricted key with PaymentIntents: Write can confirm with `shared_payment_granted_token` in
-   `2026-09-30.preview`, and Stripe does not ask for a `return_url` for a card that needs no redirect.
-3. The error codes for an expired, revoked, consumed, over-limit or foreign token.
-4. Whether test profile IDs always start `profile_test_`; until then, mode is enforced by the key.
-5. What ChatGPT's ACP handler expects in `config.merchant_id` (`profile_…` or `acct_…`).
-6. That a spent token is refused on a second PaymentIntent under a new idempotency key: asking again
-   under a new key after a 500 rests on it.
-7. Which `requires_action` cases a restricted key's PaymentIntent reaches with these tokens, and whether
-   Stripe asks for a `return_url` for a redirect method.
+1. **The probe.** An empty `POST /v1/payment_intents` answers `400 invalid_request_error`
+   `parameter_missing` (`param: "amount"`) for a key that may write PaymentIntents, and makes nothing. An
+   unknown version answers `400` "Invalid Stripe API version: …" with no code, which the probe reads as
+   the version refused. **Not checked:** that a restricted key without PaymentIntents: Write gets 403
+   before that 400. It needs such a key, made in the Dashboard. If Stripe answered 400 first, the switch
+   would come on, and the first charge's 403 would switch it off again and tell the owner (§7), so
+   nothing is charged either way.
+2. **The charge.** `amount`, `currency`, `confirm=true`,
+   `payment_method_data[shared_payment_granted_token]`, `description`, `metadata[sdi_pay]` and an
+   `Idempotency-Key` answer `200` with `object: "payment_intent"`, `status: "succeeded"`,
+   `amount_received` the amount, `capture_method: "automatic_async"`, `payment_method_types: ["card"]`, a
+   new `payment_method` and the token in `shared_payment_granted_token`. No `return_url` was asked, for a
+   card that needs no step nor for one that does (7). The token reads back `deactivated_reason:
+   "consumed"` with `usage_details.amount_captured` the amount. The same request under the same key
+   answers the same PaymentIntent. **Not checked:** the same with a restricted key holding only
+   PaymentIntents: Write.
+3. **Refusals.** Every one is `400 invalid_request_error`. Only an unknown token has a code:
+   - none this account knows (another account's, a made-up one): `code: "resource_missing"`, `param:
+     "payment_method_data[shared_payment_granted_token]"`, "No such shared_payment_token: '…'";
+   - expired, consumed and revoked alike, no code: "The shared payment granted token cannot be used
+     because it is already in a deactivated state." The token's own `deactivated_reason` says which
+     (`expired`, `consumed`, `revoked`), but the charge's answer does not, so the inbox says `token_used`
+     for all three;
+   - held by a payment waiting on its holder, no code: "The provided shared payment granted token is
+     currently being used for another payment intent.";
+   - over its limit, no code: "The requested amount is greater than the remaining amount capturable with
+     this shared payment granted token." (an amount under the limit is charged);
+   - another currency, no code: "This shared payment granted token can only be used to process payments
+     in `eur`."
+
+   This found a bug, fixed with tests: the adapter looked for `shared_payment` or `granted_token` with an
+   underscore, and Stripe's words have spaces, so each of the last four was taken for a refusal about
+   something else (`agent_pay_unavailable`, `refused`), and the assistant was sent to the link instead of
+   being told to get a new token; and "can only be used" would have been read as a spent token.
+   The fake Stripe of the tests now answers in these words.
+4. **Profile IDs.** Not answered: Stripe has no API that reads an account's own profile (`GET
+   /v1/profiles` is an unknown URL), and its docs give no rule. Every test profile Stripe shows starts
+   `profile_test_` (the sandbox seller profile in its agent docs; the test helper's
+   `agent_details.network_business_profile`), and its live examples `profile_`. The inbox takes any
+   `profile_…` and relies on the key for the mode, so nothing waits on it.
+5. **ChatGPT's `config.merchant_id`.** Not answerable in a sandbox, and no public document says it. ACP's
+   payment-handler RFC shows a Stripe `acct_…` there; Stripe's own handlers name a `profile_…`
+   (`business_profile` for UCP); OpenAI's commerce docs say neither. It matters only to the ACP door,
+   which is not built (Not decided here).
+6. **A spent token under a new key.** After the charge in 2, the same token in the same request under
+   a new `Idempotency-Key` answers `400` "… already in a deactivated state." and makes no second
+   PaymentIntent (a search by `metadata['sdi_pay']` finds only the first, so the search the inbox uses
+   works in this version too). Asking again under a new key after a 500 charges nothing twice.
+7. **Cards that ask their holder.** `pm_card_threeDSecure2Required`, `pm_card_authenticationRequired`,
+   `pm_card_authenticationRequiredOnSetup` and
+   `pm_card_authenticationRequiredChargeDeclinedInsufficientFunds` answer `200` `status:
+   "requires_action"`, `next_action: {type: "shared_payment_token_action"}`, no `return_url` asked;
+   `pm_card_threeDSecureOptional` is charged at once. The token stays active and held: another
+   PaymentIntent with it is refused as being used for another payment; once the waiting one is cancelled
+   (`200 canceled`; cancelling again is `400 payment_intent_unexpected_state`, which the inbox lets be),
+   the token is free again. A declined card (`402 card_error`, `card_declined` with a `decline_code`, the
+   PaymentIntent in `requires_payment_method` in the error) leaves the token active too. **Not checked:**
+   redirect methods. The seller test helper refuses a Klarna payment method ("A `return_url` is required
+   when creating a shared payment token") and refuses `return_url` as an unknown parameter, so the
+   `return_url` is the token's, given by the agent's platform when it makes it, and a seller sandbox
+   cannot make one; nor, without a restricted key, which of these a restricted key reaches.
+
+Still to check before a real business uses it, with a restricted sandbox key the owner makes in the
+Dashboard: 1 (403 before 400, with the permission set to None) and 2 and 7 (the same requests with only
+PaymentIntents: Write). A redirect method needs an agent's platform to make the token.
 
 ## Not decided here
 
