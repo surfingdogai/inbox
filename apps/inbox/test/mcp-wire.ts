@@ -207,12 +207,14 @@ export const WIRE_CASES: readonly WireCase[] = [
     },
   },
   {
+    // SEP-2243: a modern request names its revision in the MCP-Protocol-Version header as well as in
+    // its envelope, and the SDK refuses one without it (since 2.3.0).
     name: "tools/list at 2026-07-28 with Mcp-Method and no MCP-Protocol-Version header",
     headers: { "mcp-method": "tools/list" },
     body: JSON.stringify(modern(13, "tools/list")),
     check: (status, [m]) => {
-      expect(status).toBe(200);
-      expect(listIn(m, "tools").length).toBeGreaterThan(0);
+      expect(status).toBe(400);
+      expect(errorCode(m)).toBe(-32020);
     },
   },
   {

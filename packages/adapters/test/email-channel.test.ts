@@ -1011,7 +1011,7 @@ describe("attachments", () => {
       method: "all",
     });
     expect(Number(rows[0]?.[0])).toBe(0);
-  });
+  }, 20_000); // a dozen emails with files, each parsed and kept: slow in workerd
 
   it("a person at the business deletes a kept file; the conversation says it was removed", async () => {
     const { db, caps, ingest } = await setUp();
@@ -1024,5 +1024,5 @@ describe("attachments", () => {
     const [after] = await db.orm.select().from(schema.threadEntries).where(eq(schema.threadEntries.itemId, id));
     expect((after?.attachments as { state: string }[] | undefined)?.[0]?.state).toBe("removed");
     await expect(caps.email.removeAttachment(owner, fileId)).rejects.toThrow(/not kept/);
-  });
+  }, 20_000);
 });

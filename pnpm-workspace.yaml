@@ -10,12 +10,24 @@ allowBuilds:
 
 # One version of the shared libraries for the whole monorepo.
 catalog:
-  hono: ^4.13.8
-  zod: ^4.6.5
+  hono: ^4.13.11
+  zod: ^4.6.6
   vitest: ^4.1.11
   typescript: ^5.9.3
   "@types/node": ^26.6.2
   drizzle-orm: ^0.45.3
+
+# Fixed versions of what the site's build pulls in, for known advisories (pnpm audit), until its
+# own dependencies move past them.
+overrides:
+  http-cache-semantics@<4.2.1: ^4.2.1
+  source-map-js@<1.2.2: ^1.2.2
+  smol-toml@<1.8.1: ^1.8.1
+  postcss-selector-parser@<6.1.5: ^6.1.5
+  undici@>=8.0.0 <8.12.2: ^8.12.2
+  sharp@<0.35.5: ^0.35.5
+  vite@>=8.3.0 <8.3.3: ^8.3.3
+  zod@>=4.0.0 <4.6.6: ^4.6.6
 
 minimumReleaseAgeExclude:
   - '@cloudflare/vitest-plugin@1.2.0'
