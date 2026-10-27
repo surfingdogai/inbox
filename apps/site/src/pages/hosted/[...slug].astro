@@ -4,6 +4,7 @@
 // an offer before the service works; `astro dev` still shows them, for review.
 import { type CollectionEntry, getCollection, render } from "astro:content";
 import Layout from "../../layouts/Layout.astro";
+import { COMPANY_LINE } from "../../lib/company";
 import { HOSTED_CTA, HOSTED_PILOT_OPEN } from "../../lib/hosted";
 
 export async function getStaticPaths() {
@@ -40,7 +41,7 @@ const isTerms = page.id !== "index";
     }
     {
       isTerms && (
-        <p class="fine">Last updated {page.data.updated}. Surfing Dog Lda, Portugal. Questions: hello@surfingdog.ai</p>
+        <p class="fine">Last updated {page.data.updated}. {COMPANY_LINE} Questions: hello@surfingdog.ai</p>
       )
     }
   </section>
@@ -48,17 +49,6 @@ const isTerms = page.id !== "index";
   <section class="section" aria-label={page.data.title}>
     <div class="wrap wrap-read prose">
       <Content />
-
-      {
-        isTerms && !page.data.reviewed && (
-          <div class="glass card" style="margin-top: var(--sp-6)">
-            <h3 class="h-card">Where this stands</h3>
-            <p class="card-text">
-              We wrote this ourselves, and a lawyer has not reviewed it yet. This note comes off the page once one has.
-            </p>
-          </div>
-        )
-      }
 
       <nav class="hosted-nav" aria-label="The hosted pilot">
         <ul>

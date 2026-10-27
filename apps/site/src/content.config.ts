@@ -33,8 +33,7 @@ export const collections = {
   }),
   /**
    * The hosted pilot: its page (index.md, at /hosted/) and its terms, one Markdown file each. None is
-   * generated while HOSTED_PILOT_OPEN is false. A page whose `reviewed` is false says that a lawyer
-   * has not reviewed it yet.
+   * generated while HOSTED_PILOT_OPEN is false.
    */
   hosted: defineCollection({
     loader: glob({ pattern: "*.md", base: "./src/content/hosted" }),
@@ -47,8 +46,6 @@ export const collections = {
         updated: z.string(),
         /** Where the page sits in the list of hosted pages. */
         order: z.number().int(),
-        /** True only once a lawyer has read this text. */
-        reviewed: z.boolean().default(false),
       })
       .strict(),
   }),

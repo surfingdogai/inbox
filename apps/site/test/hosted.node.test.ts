@@ -209,10 +209,20 @@ describe("the hosted pilot's words", () => {
     }
   });
 
-  it("say on every legal page that a lawyer has not reviewed it, until one has", () => {
-    const route = read("src/pages/hosted/[...slug].astro");
-    expect(route).toContain("a lawyer has not reviewed it yet");
-    expect(route).toContain("isTerms && !page.data.reviewed");
+  it("name the company and its number on every legal page, with no postal address and no review note", () => {
+    const pages = [
+      read("src/pages/hosted/[...slug].astro"),
+      read("src/pages/terms.astro"),
+      read("src/pages/privacy.astro"),
+    ];
+    for (const page of pages) {
+      expect(page).toContain("{COMPANY_LINE}");
+      expect(page).not.toMatch(/lawyer/i);
+    }
+    const company = read("src/lib/company.ts");
+    expect(company).toContain('name: "Surfing Dog, Lda"');
+    expect(company).toContain('nipc: "517113325"');
+    expect(company).not.toMatch(/\brua\b|\bavenida\b|\b\d{4}-\d{3}\b/i);
     for (const path of LEGAL) expect(front(path).reviewed, path).toBeUndefined();
     expect(LEGAL.map((p) => p.replace(`${HOSTED_DIR}/`, "")).sort()).toEqual([
       "acceptable-use.md",

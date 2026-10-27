@@ -2,9 +2,10 @@
 // The terms. Two different things are covered and they are kept apart on purpose: the software,
 // which is MIT and carries the licence's terms, and the services we run, which are ours.
 import Layout from "../layouts/Layout.astro";
+import { COMPANY_LINE } from "../lib/company";
 import { HOSTED_PILOT_OPEN } from "../lib/hosted";
 
-const UPDATED = "8 October 2026";
+const UPDATED = "27 October 2026";
 ---
 
 <Layout
@@ -17,7 +18,7 @@ const UPDATED = "8 October 2026";
     <p class="lede">
       The software is open source and yours to run. The services we run, like this website, have the terms below.
     </p>
-    <p class="fine">Last updated {UPDATED}. Surfing Dog Lda, Portugal. Questions: hello@surfingdog.ai</p>
+    <p class="fine">Last updated {UPDATED}. {COMPANY_LINE} Questions: hello@surfingdog.ai</p>
   </section>
 
   <section class="section" aria-labelledby="sw-h">
@@ -112,13 +113,6 @@ const UPDATED = "8 October 2026";
         protection of the law where you live and can bring a claim there.
       </p>
 
-      <div class="glass card" style="margin-top: var(--sp-6)">
-        <h3 class="h-card">Where this stands</h3>
-        <p class="card-text">
-          We wrote this ourselves, and a lawyer has not reviewed it yet. That review will happen before we sell
-          anything, and this note comes off the page once it has.
-        </p>
-      </div>
     </div>
   </section>
 </Layout>

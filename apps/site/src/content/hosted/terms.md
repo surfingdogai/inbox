@@ -2,11 +2,11 @@
 title: Hosted inbox terms
 description: The terms for an inbox we run for you during the pilot, on your own domain.
 eyebrow: Terms · hosted pilot
-updated: 18 October 2026
+updated: 27 October 2026
 order: 1
 ---
 
-These terms are between Surfing Dog Lda, a company registered in Portugal ("we"), and the business that sets up a hosted inbox ("you"). They cover the hosted inbox during its pilot. The software itself is MIT-licensed, and this website and our other free services have their own [terms](/terms/).
+These terms are between Surfing Dog, Lda, a company registered in Portugal with NIPC 517113325 ("we"), and the business that sets up a hosted inbox ("you"). They cover the hosted inbox during its pilot. The software itself is MIT-licensed, and this website and our other free services have their own [terms](/terms/).
 
 ## 1. What you get
 

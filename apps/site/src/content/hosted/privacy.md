@@ -2,11 +2,11 @@
 title: Hosted inbox privacy notice
 description: What we keep about you, the business owner, when you set up a hosted inbox, and why.
 eyebrow: Privacy · hosted pilot
-updated: 18 October 2026
+updated: 27 October 2026
 order: 3
 ---
 
-This notice is about you, the person who sets up a hosted inbox, and about your business. For this data Surfing Dog Lda, Portugal, is the controller. Your customers' data inside your inbox is yours to control, and we process it for you under the [processing agreement](/hosted/processing/). Our general [privacy page](/privacy/) covers the website and the network.
+This notice is about you, the person who sets up a hosted inbox, and about your business. For this data Surfing Dog, Lda, Portugal (NIPC 517113325), is the controller. Your customers' data inside your inbox is yours to control, and we process it for you under the [processing agreement](/hosted/processing/). Our general [privacy page](/privacy/) covers the website and the network.
 
 ## What we keep, and why
 

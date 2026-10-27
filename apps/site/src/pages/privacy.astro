@@ -12,10 +12,10 @@
 // record of each is kept (when, which business, which kind, the outcome), 400 days. The phone app
 // (ADR-028): what the inbox, the push relay (docs/protocol/push-relay.md) and Google see, the update
 // check against /phone/latest.json, and what stays on the phone.
-// It is a draft for a lawyer to review before the hosted service opens, and it says so.
 import Layout from "../layouts/Layout.astro";
 import { DOOR_SHARE_SHOWN, doorHistoryPublic } from "../lib/door-history";
 import { CARRY_PROMISE, HOSTED_KEEPS } from "../lib/gateway";
+import { COMPANY_LINE } from "../lib/company";
 import { HOSTED_PILOT_OPEN } from "../lib/hosted";
 
 const UPDATED = "27 October 2026";
@@ -33,7 +33,7 @@ const UPDATED = "27 October 2026";
       sign-in and does not keep your searches; the one exception, an error log, is explained below. This page lists
       exactly what we do see.
     </p>
-    <p class="fine">Last updated {UPDATED}. Surfing Dog Lda, Portugal. Questions: privacy@surfingdog.ai</p>
+    <p class="fine">Last updated {UPDATED}. {COMPANY_LINE} Questions: privacy@surfingdog.ai</p>
   </section>
 
   <section class="section" aria-labelledby="self-h">
@@ -323,13 +323,6 @@ const UPDATED = "27 October 2026";
         public commit. We will announce material changes on the blog.
       </p>
 
-      <div class="glass card" style="margin-top: var(--sp-6)">
-        <h3 class="h-card">Where this stands</h3>
-        <p class="card-text">
-          We wrote this from what the software does today and checked it against the code. A lawyer has not reviewed
-          it yet. That happens before hosting opens to anyone but us, and this note comes off the page once it has.
-        </p>
-      </div>
     </div>
   </section>
 </Layout>
