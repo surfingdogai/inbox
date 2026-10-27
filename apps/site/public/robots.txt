@@ -5,3 +5,6 @@ Disallow: /b/*/live
 
 Sitemap: https://surfingdog.ai/sitemap-index.xml
 Sitemap: https://surfingdog.ai/sitemap-checks.xml
+Sitemap: https://surfingdog.ai/sitemap-checks-2.xml
+Sitemap: https://surfingdog.ai/sitemap-checks-3.xml
+Sitemap: https://surfingdog.ai/sitemap-checks-4.xml

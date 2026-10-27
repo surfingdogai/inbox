@@ -362,9 +362,11 @@ describe("the owners' pages", () => {
     const config = read("astro.config.mjs");
     expect(config).toContain('import sitemap from "@astrojs/sitemap";');
     expect(config).toContain('const NETWORK_SITEMAP = "https://surfingdog.ai/sitemap-checks.xml";');
-    expect(config).toMatch(/sitemap\(\{\s*customSitemaps: \[NETWORK_SITEMAP\],/);
+    expect(config).toMatch(/sitemap\(\{\s*customSitemaps: \[NETWORK_SITEMAP, \.\.\.NETWORK_SITEMAP_PARTS\],/);
+    expect(config).toContain("const NETWORK_SITEMAP_PARTS = [2, 3, 4].map(");
     const pkg = JSON.parse(read("package.json")) as { dependencies: Record<string, string> };
     expect(pkg.dependencies["@astrojs/sitemap"]).toBeDefined();
     expect(read("public/robots.txt")).toContain("Sitemap: https://surfingdog.ai/sitemap-checks.xml");
+    for (const n of [2, 3, 4]) expect(read("public/robots.txt")).toContain(`Sitemap: https://surfingdog.ai/sitemap-checks-${n}.xml`);
   });
 });

@@ -15,9 +15,12 @@ const GITHUB = "https://github.com/surfingdogai/inbox";
 
 /**
  * The network's own sitemap: the checker, the leaderboards and the result pages it serves on this
- * address. robots.txt names it, and the sitemap index lists it beside this site's pages.
+ * address. robots.txt names it, and the sitemap index lists it beside this site's pages; the result
+ * pages past its first 40,000 run on in NETWORK_SITEMAP_PARTS, 50,000 a file (the network's
+ * discovery.go, sitemapParts).
  */
 const NETWORK_SITEMAP = "https://surfingdog.ai/sitemap-checks.xml";
+const NETWORK_SITEMAP_PARTS = [2, 3, 4].map((n) => `https://surfingdog.ai/sitemap-checks-${n}.xml`);
 
 /**
  * surfingdog.ai: a static Astro site. The home page, the three product pages (/search, /inbox, /trust) and the blog are plain Astro pages on the
@@ -39,7 +42,7 @@ export default defineConfig({
     // network's sitemap in sitemap-index.xml. A translated page (src/lib/i18n.ts) carries every
     // version of itself, x-default included, as the same hreflang links its head has.
     sitemap({
-      customSitemaps: [NETWORK_SITEMAP],
+      customSitemaps: [NETWORK_SITEMAP, ...NETWORK_SITEMAP_PARTS],
       serialize(item) {
         const page = pageAt(new URL(item.url).pathname);
         if (page) item.links = alternates(page.id).map((a) => ({ url: a.href, lang: a.hreflang }));
