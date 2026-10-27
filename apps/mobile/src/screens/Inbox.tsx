@@ -40,7 +40,7 @@ export function Inbox() {
   }, [app.views, query, tz]);
 
   const shown = tab === "needs" ? needs : open;
-  // What the spam filter holds and put aside, a quiet line under the list (ADR-029 §12).
+  // What the spam filter holds and put aside, a quiet line under the list (ADR-041 §12).
   const foot = spamFoot(app.spam);
   return (
     <div className="screen">

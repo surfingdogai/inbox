@@ -1,5 +1,5 @@
 /**
- * The spam filter's vocabulary (ADR-029). A request from a stranger is screened once, as it arrives,
+ * The spam filter's vocabulary (ADR-041). A request from a stranger is screened once, as it arrives,
  * into one of four verdicts; what decided it is kept as codes and numbers, never as words.
  */
 

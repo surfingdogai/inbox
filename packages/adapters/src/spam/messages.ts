@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { JudgePort, JudgeRequest, JudgeResult } from "@surfingdog/core";
 
 /**
- * The spam filter's AI check over the Messages API (ADR-029 §7.5), with the provider's own SDK: one
+ * The spam filter's AI check over the Messages API (ADR-041 §7.5), with the provider's own SDK: one
  * system prompt, one user message, the answer held to the JSON schema core gives, thinking off, low
  * effort, at most 300 tokens. Core keeps the time, the one retry and every check on the answer; this
  * only says what came back, or why nothing usable did. The model and the key come from whoever runs the

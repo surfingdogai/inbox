@@ -1,7 +1,7 @@
 import type { Signal } from "./types";
 
 /**
- * Why something is under Spam or Held, or carries a label, in the owner's words (ADR-029 §11.2).
+ * Why something is under Spam or Held, or carries a label, in the owner's words (ADR-041 §11.2).
  * Built from codes, numbers and host names only: the owner reads our sentences and the passages the
  * code found in the message, never a model's prose. Each cause has a chip (a few words on the row)
  * and a sentence (on the item).

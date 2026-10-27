@@ -3,7 +3,7 @@ import { DOWNLOAD_TABLES } from "../../src/capabilities/download";
 import { agent, DAY, fakeJudge, MIN, owner, spamSetup, T0 } from "./harness";
 
 /**
- * Erasing a customer erases what the spam filter kept about them (ADR-029 §9.4): its verdicts and
+ * Erasing a customer erases what the spam filter kept about them (ADR-041 §9.4): its verdicts and
  * prints on their items, the owner's list rows that came from them, and the handle it trusted their
  * mailbox by. The owner's download carries the verdicts, the lists, the filters and the counts — not
  * the prints, the handles or the caches, which mean something only here.

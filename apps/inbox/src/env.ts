@@ -253,7 +253,7 @@ export function ucpLodgingFrom(
 }
 
 /**
- * The spam filter's AI check with the operator's own model (ADR-029 §7.2): SPAM_MODEL_API (`messages`
+ * The spam filter's AI check with the operator's own model (ADR-041 §7.2): SPAM_MODEL_API (`messages`
  * or `chat`), SPAM_MODEL_URL (a chat API's base, or a model on the operator's own server), SPAM_MODEL_KEY,
  * SPAM_MODEL and SPAM_MODEL_NAME. Settings then says "Set by your server". Nothing set, nothing asked:
  * the filters look for known phrases only.

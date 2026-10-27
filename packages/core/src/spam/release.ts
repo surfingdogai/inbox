@@ -9,7 +9,7 @@ import { emailDomain, foldAddress } from "./normalise";
 import { markPrintStatement } from "./prints";
 
 /**
- * Letting something in, and what a person teaches by it (ADR-029 §3.1, §8). A release runs each
+ * Letting something in, and what a person teaches by it (ADR-041 §3.1, §8). A release runs each
  * effect the screening held back once — the rules, the webhooks, and the owner's alert when it was the
  * sender who confirmed — with dedupe keys of their own, so a second release, or a release racing
  * another, runs nothing twice. Only a person at the business teaches: what the owner's AI, a rule or

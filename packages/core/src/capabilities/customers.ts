@@ -126,7 +126,7 @@ const iso = (v: unknown) => (v === null || v === undefined ? null : new Date(Num
 export class CustomerData {
   constructor(
     private readonly db: Db,
-    /** For the spam filter's keyed handles on their addresses (ADR-029), which go with them. */
+    /** For the spam filter's keyed handles on their addresses (ADR-041), which go with them. */
     private readonly secrets: SecretBox | null = null,
   ) {}
 
@@ -406,7 +406,7 @@ export class CustomerData {
 
   // ---- helpers ---------------------------------------------------------------
 
-  /** The spam filter's handles on the customer's mailboxes (ADR-029): keyed hashes of their addresses, erased with them. */
+  /** The spam filter's handles on the customer's mailboxes (ADR-041): keyed hashes of their addresses, erased with them. */
   private async spamHandleStatements(parties: readonly string[]): Promise<Statement[]> {
     const out: Statement[] = [];
     for (const part of inChunks(parties)) {
@@ -556,7 +556,7 @@ export function eraseStatements(parties: readonly string[], now: number): Statem
       // was coming goes whole with them.
       run(`DELETE FROM ucp_sessions WHERE item_id IN ${theirItems}`),
       run(`DELETE FROM reviews_outbox WHERE item_id IN ${theirItems}`),
-      // What the spam filter kept about them (ADR-029): its verdicts and prints on their items, the AI
+      // What the spam filter kept about them (ADR-041): its verdicts and prints on their items, the AI
       // check's answers for their words (which quote them), the owner's list rows that came from them,
       // and the handles it knew them by.
       run(`DELETE FROM spam_verdicts WHERE item_id IN ${theirItems}`),

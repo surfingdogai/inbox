@@ -39,7 +39,7 @@ import {
 import type { ItemSpamSummary, ItemView, SpamStatus } from "../client/src/lib/types";
 
 /**
- * The owner app's spam filter screens (ADR-029 §11), their pure parts: the rail's Held, the rows and
+ * The owner app's spam filter screens (ADR-041 §11), their pure parts: the rail's Held, the rows and
  * chips, the order under Held, what each press says and offers, and Settings → Spam in every state.
  */
 

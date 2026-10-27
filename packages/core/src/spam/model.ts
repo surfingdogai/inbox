@@ -6,7 +6,7 @@ import { judgeText } from "./mask";
 import type { BusinessContext } from "./screen";
 
 /**
- * The owner's own AI model, on their own server (ADR-029 §11.5): one of three providers, a model from
+ * The owner's own AI model, on their own server (ADR-041 §11.5): one of three providers, a model from
  * that provider's own list, and the key they paste once, sealed and never shown again. It reads for
  * the spam filters the owner switched on, as a model the operator set up does. A hosted inbox never
  * takes one (D12): its host pays for the reading. The provider calls themselves are the host's
@@ -149,7 +149,7 @@ export async function recordTest(db: Db, test: { pitch: boolean; customer: boole
 }
 
 /**
- * The two samples Test sends (ADR-029 §11.5): a sales pitch the filter should spot, and a customer
+ * The two samples Test sends (ADR-041 §11.5): a sales pitch the filter should spot, and a customer
  * asking a price in Japanese, who should come through. Nothing of the inbox's own messages is sent.
  */
 export const TEST_SAMPLES = {

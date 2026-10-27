@@ -397,7 +397,7 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
     }
     // A network that carried the request for a person's AI assistant says so (network protocol §4.17).
     const viaNetwork = c.req.header(CARRIED_HEADER) === "1";
-    // Its code for the sender, the same for a day: the spam filter's day count is kept by it (ADR-029 §4.4).
+    // Its code for the sender, the same for a day: the spam filter's day count is kept by it (ADR-041 §4.4).
     const carriedFor = viaNetwork ? c.req.header(CARRIED_FOR_HEADER)?.trim().slice(0, 128) : undefined;
     c.set(
       "caller",
@@ -649,7 +649,7 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
   app.route("/v1/owner", ownerPhoneRoutes(phoneDeps));
   // The phone's own door: pairing, the sign-in link, tokens, and what it hears about (ADR-028).
   app.route("/v1/phone", phoneRoutes(phoneDeps));
-  // A website's own forms, brought in by its key (ADR-029 §4.2).
+  // A website's own forms, brought in by its key (ADR-041 §4.2).
   app.route("/v1/forms", formsSubmitRoutes({ caps: deps.caps, now: deps.now }));
   app.route("/v1", publicRest(deps.caps, { baseUrl: deps.baseUrl }));
   if (deps.ucpLodging) mountUcpLodging(app, deps);

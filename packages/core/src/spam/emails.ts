@@ -20,7 +20,7 @@ import { chipOf } from "./copy";
 import { mask } from "./mask";
 
 /**
- * The spam filter's two emails to the owner (ADR-029 §11.6), each only when there is something to say:
+ * The spam filter's two emails to the owner (ADR-041 §11.6), each only when there is something to say:
  * a short one in the morning naming what was held since the day before, and a summary on Mondays of
  * what was put aside, with the three that looked most like customers. Both go through the mail log like
  * every owner alert, count toward the alerts an hour, and fold into the hour's digest past it. Their
@@ -142,7 +142,7 @@ export function firstLine(text: string, max = 80): string {
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
 }
 
-/** The digest's subject and body (ADR-029 §11.6), from its lines; null with nothing new held. */
+/** The digest's subject and body (ADR-041 §11.6), from its lines; null with nothing new held. */
 export function heldDigestMail(
   lines: readonly { readonly who: string; readonly what: string; readonly chip: string }[],
   total: number,
@@ -164,7 +164,7 @@ export function heldDigestMail(
   };
 }
 
-/** The Monday summary's subject and body (ADR-029 §11.6); null when nothing was put aside. */
+/** The Monday summary's subject and body (ADR-041 §11.6); null when nothing was put aside. */
 export function weeklyMail(
   aside: number,
   held: number,

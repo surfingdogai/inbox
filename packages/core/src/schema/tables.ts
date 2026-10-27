@@ -471,7 +471,7 @@ export const items = sqliteTable(
      */
     requestExpiresAt: integer("request_expires_at"),
     /**
-     * What the spam filter made of it (0026, ADR-029): `pending` while it is screened, then
+     * What the spam filter made of it (0033, ADR-041): `pending` while it is screened, then
      * `delivered`, `warned`, `held`, `aside` or `released`. NULL: never screened (the business's own,
      * a customer it knows, or an item from before the filter).
      */
@@ -1348,7 +1348,7 @@ export const phoneTokens = sqliteTable(
   (t) => [index("phone_tokens_device").on(t.deviceId, t.kind)],
 );
 
-// ---- the spam filter (0026, ADR-029) -------------------------------------------------------
+// ---- the spam filter (0033, ADR-041) -------------------------------------------------------
 
 /** What screening found for one item: codes and numbers, never words. */
 export const spamVerdicts = sqliteTable(

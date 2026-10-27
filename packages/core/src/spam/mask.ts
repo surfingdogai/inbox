@@ -1,7 +1,7 @@
 import { hostOf, registrableDomain, withoutInvisible } from "./normalise";
 
 /**
- * What the AI check is sent of a message (ADR-029 §7.3): the words, with every email address, phone
+ * What the AI check is sent of a message (ADR-041 §7.3): the words, with every email address, phone
  * number, bank account, card number and full link taken out. The check still reads "send the payment
  * to [bank account]", and none of the data. Masking runs before anything leaves the inbox.
  */

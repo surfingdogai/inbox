@@ -3,7 +3,7 @@ import type { JudgeRequest } from "../../src/spam/judge";
 import { agent, BASE, classPayload, DAY, fakeJudge, idOf, MIN, nonceOf, spamSetup, T0 } from "./harness";
 
 /**
- * Nobody learns their request was held (ADR-029 §10.2, §14): its create answer, every later read and
+ * Nobody learns their request was held (ADR-041 §10.2, §14): its create answer, every later read and
  * the confirm page read exactly as a delivered one's, once ids, references and times are taken out.
  * And everyone new is asked to confirm, held or not, so being asked tells them nothing.
  */

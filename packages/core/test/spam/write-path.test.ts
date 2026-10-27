@@ -21,7 +21,7 @@ import {
 } from "./harness";
 
 /**
- * The write path (ADR-029 §4.0): every effect of a stranger's request waits for its screening, until
+ * The write path (ADR-041 §4.0): every effect of a stranger's request waits for its screening, until
  * a deadline; a verdict pulls them forward or cancels them; a held booking claims nothing; a release
  * runs each effect once; and a screening that never finishes loses nobody's request.
  */

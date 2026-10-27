@@ -4,7 +4,7 @@ import { withoutInvisible } from "./normalise";
 import type { CheckedAnswer } from "./types";
 
 /**
- * The AI check (ADR-029 §7): one call reads a stranger's first contact for the kinds of unwanted
+ * The AI check (ADR-041 §7): one call reads a stranger's first contact for the kinds of unwanted
  * message the owner switched filters on for. Core writes the prompt and checks the answer; the host
  * plugs in the model (`JudgePort`): its own on a hosted inbox, the owner's on their own server, none
  * at all and the filters look for known phrases only. The model never acts and nothing it writes in
@@ -119,7 +119,7 @@ function randomChars(n: number): string {
   return Array.from(bytes, (b) => BASE64URL[b & 63]).join("");
 }
 
-/** The prompt (ADR-029 §7.4), exactly, with a fresh boundary and a fresh check value. */
+/** The prompt (ADR-041 §7.4), exactly, with a fresh boundary and a fresh check value. */
 export function buildPrompt(
   business: JudgeBusiness,
   message: JudgeMessage,
@@ -225,7 +225,7 @@ const answerShape = z.object({
 
 /** Text as quotes are compared to it: NFKC, one space, lower case, no surrounding quote marks. */
 /**
- * An answer given for one text, lent to another a few words from it (ADR-029 §7.3): only the quotes
+ * An answer given for one text, lent to another a few words from it (ADR-041 §7.3): only the quotes
  * this text holds word for word still count, and a high certainty with none left is medium.
  */
 export function lendAnswer(answer: CheckedAnswer, sentText: string): CheckedAnswer {
@@ -248,7 +248,7 @@ function forQuote(text: string): string {
 }
 
 /**
- * The model's answer as the code believes it (ADR-029 §7.6), or why not: the schema, the check value,
+ * The model's answer as the code believes it (ADR-041 §7.6), or why not: the schema, the check value,
  * the quotes found word for word (one not found is dropped; two dropped make the answer `unclear`; a
  * sure answer that is not `customer` with nothing quoted is only `medium`).
  */

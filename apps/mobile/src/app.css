@@ -1011,7 +1011,7 @@ fieldset.group legend {
   color: var(--warn-ink);
 }
 
-/* ---- the spam filter (ADR-029 §12): quiet, ink and greys, never red ---- */
+/* ---- the spam filter (ADR-041 §12): quiet, ink and greys, never red ---- */
 .spam-foot {
   display: flex;
   flex-wrap: wrap;

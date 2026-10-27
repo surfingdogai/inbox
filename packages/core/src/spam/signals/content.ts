@@ -17,7 +17,7 @@ import type { Repeats } from "../prints";
 import type { Signal } from "../types";
 
 /**
- * What any door's words tell (ADR-029 §5.2): disguised links and letters, a message that is only
+ * What any door's words tell (ADR-041 §5.2): disguised links and letters, a message that is only
  * links, words aimed at an AI or a filter, an address that looks like the business's own, and the
  * same words or the same link domain arriving from many senders. Language, script, spelling, length,
  * country and email provider are never signals: only disguise and repetition are.

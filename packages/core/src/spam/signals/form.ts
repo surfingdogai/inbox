@@ -1,7 +1,7 @@
 import type { Door, FormFacts, Signal } from "../types";
 
 /**
- * What the business's own form tells (ADR-029 §5): a hidden field only bots fill, a form that was
+ * What the business's own form tells (ADR-041 §5): a hidden field only bots fill, a form that was
  * never drawn, one drawn under a key this inbox did not sign, one filled faster than anyone types,
  * the same key with other words, links where a name goes. The visitor sees the same page whatever
  * this finds.

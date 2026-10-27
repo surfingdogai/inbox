@@ -197,7 +197,7 @@ export class Ledger {
   }
 
   /**
-   * Whether this inbox may make one more AI check for the spam filter now (ADR-029 §15.3), and if so,
+   * Whether this inbox may make one more AI check for the spam filter now (ADR-041 §15.3), and if so,
    * counted before the call: within its day's and its month's caps, and the runtime's own token budget
    * for the day across every inbox here. What a copied tenant file says it spent changes nothing here.
    * `tenant` and `breaker` say which cap refused it, told to the control plane once a day each.

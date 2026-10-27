@@ -15,7 +15,7 @@ import { formSignals } from "../../src/spam/signals/form";
 import type { Signal } from "../../src/spam/types";
 
 /**
- * Every signal of ADR-029 §5 fires on what it is about, and never on what it is not: disguise and
+ * Every signal of ADR-041 §5 fires on what it is about, and never on what it is not: disguise and
  * repetition only, never a language, a script, a provider or a style.
  */
 

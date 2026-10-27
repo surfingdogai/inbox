@@ -77,7 +77,7 @@ describe("client format", () => {
     expect(stateWord("requested")).toBe("Requested");
     expect(stateTone("confirmed")).toBe("success");
     expect(stateTone("needs_info")).toBe("warning");
-    // Spam is kept and comes back in one tap: never red (ADR-029 §11).
+    // Spam is kept and comes back in one tap: never red (ADR-041 §11).
     expect(stateTone("spam")).toBe("neutral");
     expect(stateTone("declined")).toBe("danger");
     expect(stateWord("payment_failed")).toBe("Payment failed");

@@ -97,7 +97,7 @@ export const itemFlagsSchema = z.object({
    */
   carried: z.boolean().optional(),
   /**
-   * The spam filter delivered it with a label (ADR-029): the cause's code (`pitches`, `scams`,
+   * The spam filter delivered it with a label (ADR-041): the cause's code (`pitches`, `scams`,
    * `junk`, `learning`, …), shown as a small chip. Absent on everything it was sure of, or never saw.
    */
   spamLabel: z.string().max(40).optional(),

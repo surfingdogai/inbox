@@ -63,7 +63,7 @@ const DANGER_STATES = new Set([
   "cancelled_by_customer",
   "cancelled_by_business",
   "rejected",
-  // Not "spam": what is put aside is kept and comes back in one tap, so it is never shown in red (ADR-029 §11).
+  // Not "spam": what is put aside is kept and comes back in one tap, so it is never shown in red (ADR-041 §11).
   "no_show",
   "expired",
 ]);

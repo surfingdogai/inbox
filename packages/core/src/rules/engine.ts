@@ -51,7 +51,7 @@ export async function runRulesForEvent(
     trigger: string;
     now?: number;
     /**
-     * The spam filter delivered it with a label (ADR-029 §3.1): a rule may flag it, never answer,
+     * The spam filter delivered it with a label (ADR-041 §3.1): a rule may flag it, never answer,
      * confirm, quote, reply or ask for anything; a person decides.
      */
     onlyFlags?: boolean;

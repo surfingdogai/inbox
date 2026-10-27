@@ -78,7 +78,7 @@ export const KEY_PRESETS = [
     scopes: ["inbox:read", "events:read", "settings:read"],
   },
   {
-    // ADR-029 §4.2: a website keeps its own forms and brings what visitors send into the inbox,
+    // ADR-041 §4.2: a website keeps its own forms and brings what visitors send into the inbox,
     // screened like the inbox's own form. It can do nothing else.
     key: "website_forms",
     name: "Website forms",

@@ -10,7 +10,7 @@ import { type PolicyPayload, policyPayloadSchema } from "../src/types";
 import { type FakeTenant, type Runtime, startRuntime } from "./harness";
 
 /**
- * The spam filter on hosted inboxes (ADR-029 §7.2, §15.3). We pay for the AI: the model is ours, its
+ * The spam filter on hosted inboxes (ADR-041 §7.2, §15.3). We pay for the AI: the model is ours, its
  * key lives in the shard's environment only — never in a tenant's settings, status, download or a log
  * line — and every check an inbox makes is reserved in the shared ledger before it is made, within the
  * inbox's caps and the runtime's own daily budget, whatever the inbox's own file says it spent. A

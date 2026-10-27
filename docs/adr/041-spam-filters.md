@@ -1,4 +1,4 @@
-# ADR-029 — Spam filters
+# ADR-041 — Spam filters
 
 **Status:** proposed, 24 October 2026. The core pipeline, its signals, the AI check behind a port, every
 door, the hosted plumbing, the metering, the owner app's screens, the owner's two emails, the phone app
@@ -196,7 +196,7 @@ brings it back.
 - A held request reads exactly as a delivered one, at the door, on every read and on the confirm page.
 - Hosted inboxes can offer filters at a cost bounded per inbox and per runtime before any is charged.
 - New tables: `spam_verdicts`, `spam_lists`, `spam_prints`, `spam_handles`, `spam_filter_spans`,
-  `spam_days`, `spam_cache`, `spam_domains` (migration 0026), and the ledger's `judge_day`,
+  `spam_days`, `spam_cache`, `spam_domains` (migration 0033), and the ledger's `judge_day`,
   `judge_total_day` and `judge_told` (the control plane is told once per cap, inbox and day). Erasing a
   customer removes their verdicts, prints (every screened request has one, whoever it names), the AI
   check's cached answers for their words, list rows and handles; handles nobody trusted are pruned

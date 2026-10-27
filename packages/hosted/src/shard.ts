@@ -95,7 +95,7 @@ export interface ShardOptions {
   readonly watchdog?: Watchdog | undefined;
   readonly now?: (() => number) | undefined;
   readonly log?: ((line: string) => void) | undefined;
-  /** Our model for the spam filter's AI check, from the shard's environment (ADR-029 §7.2). */
+  /** Our model for the spam filter's AI check, from the shard's environment (ADR-041 §7.2). */
   readonly spamModel?: HostedModel | null | undefined;
 }
 

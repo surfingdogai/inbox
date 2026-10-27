@@ -43,7 +43,7 @@ export type SecretPurpose =
    * each guest, opened only to answer that session.
    */
   | "ucp-session"
-  /** The owner's own AI model key (ADR-029), pasted once in Settings and never shown again. */
+  /** The owner's own AI model key (ADR-041), pasted once in Settings and never shown again. */
   | "model-key";
 
 /**
@@ -79,12 +79,12 @@ export type MacPurpose =
    */
   | "attachment-link"
   /**
-   * The business's own form (ADR-029): the signature on the key each form is drawn with, and the
+   * The business's own form (ADR-041): the signature on the key each form is drawn with, and the
    * name its hidden field takes. A key drawn before a rotation no longer verifies, which is why a bad
    * signature only counts against a request, never decides alone.
    */
   | "form-key"
-  /** The spam filter's handles on mailboxes and mail domains (ADR-029): stable here, meaningless anywhere else. */
+  /** The spam filter's handles on mailboxes and mail domains (ADR-041): stable here, meaningless anywhere else. */
   | "spam-handle";
 
 export interface SecretBox {

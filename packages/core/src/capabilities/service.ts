@@ -207,7 +207,7 @@ export interface Trader {
   readonly complaints_url?: string | undefined;
 }
 
-/** What a door saw of a request, beyond the request itself (ADR-029): handed to the spam filter. */
+/** What a door saw of a request, beyond the request itself (ADR-041): handed to the spam filter. */
 export interface DoorFacts {
   readonly screen?: ScreenInput | undefined;
 }
@@ -313,7 +313,7 @@ export interface ItemDetail extends ItemView {
    * (ADR-018 §4), waiting for the owner to send or drop; null when there is none.
    */
   readonly draft: DraftView | null;
-  /** What the spam filter made of it and why, in the owner's words (ADR-029 §11.2); absent when it never saw it. */
+  /** What the spam filter made of it and why, in the owner's words (ADR-041 §11.2); absent when it never saw it. */
   readonly spam?: ItemSpamView | undefined;
 }
 
@@ -422,7 +422,7 @@ export class Capabilities {
   /** Restaurants, takeaways, bakeries and cafés (ADR-040): the menu, orders for a time, tables. */
   readonly food: FoodCapabilities;
   /**
-   * The spam filter (ADR-029): every stranger's request is screened as it is written. The host attaches
+   * The spam filter (ADR-041): every stranger's request is screened as it is written. The host attaches
    * the model that reads for the filters the owner switched on (`spam.attach`); without one they look
    * for known phrases only.
    */
@@ -1310,7 +1310,7 @@ export class Capabilities {
       readonly automatic?: boolean;
       /** A new message the email door puts aside as spam as it arrives, with why (ADR-026 §7). */
       readonly spam?: string | undefined;
-      /** What the door saw, for the spam filter (ADR-029): a form's key and timing, an email's authentication. */
+      /** What the door saw, for the spam filter (ADR-041): a form's key and timing, an email's authentication. */
       readonly screen?: ScreenInput | undefined;
     } = {},
   ): Promise<CreateResult | TransitionResult | ItemView> {
@@ -1425,14 +1425,14 @@ export class Capabilities {
   async listItems(caller: Caller, input: T.ListItemsInput): Promise<Page<ItemView>> {
     requireBusiness(caller);
     const conditions = [eq(items.sandbox, input.sandbox ? 1 : 0)];
-    // Spam is everything put aside (ADR-029 §11.1): by a person, by the email door as it arrived, and by
+    // Spam is everything put aside (ADR-041 §11.1): by a person, by the email door as it arrived, and by
     // the spam filter — a held booking a person sent to Spam keeps its own state.
     const spamList = input.state === "spam" && !input.screen;
     if (input.type) conditions.push(eq(items.type, input.type));
     if (input.state && !spamList) conditions.push(eq(items.state, input.state));
     if (input.needs_human !== undefined) conditions.push(eq(items.needsHuman, input.needs_human ? 1 : 0));
     if (input.open_only && !input.state) conditions.push(sql`${items.closedAt} IS NULL`);
-    // What the spam filter holds or is still screening waits under Held (ADR-029), not on the desk:
+    // What the spam filter holds or is still screening waits under Held (ADR-041), not on the desk:
     // listed only when asked for by its screen.
     if (spamList) conditions.push(sql`(${items.state} = 'spam' OR ${items.screen} = 'aside')`);
     else if (input.screen) conditions.push(eq(items.screen, input.screen));
@@ -1490,7 +1490,7 @@ export class Capabilities {
       });
       for (const r of byRules) ruled.add(String((r as unknown[])[0]));
     }
-    // What the spam filter made of each row it saw (ADR-029 §11.1): its chip, and whether it may be a customer.
+    // What the spam filter made of each row it saw (ADR-041 §11.1): its chip, and whether it may be a customer.
     const screened = await this.spam.summaries(
       rows
         .slice(0, input.limit)
@@ -1654,7 +1654,7 @@ export class Capabilities {
    */
   async transitionItem(caller: Caller, input: T.TransitionItemInput): Promise<TransitionResult> {
     requireBusiness(caller);
-    // Held by the spam filter (ADR-029): a person acting on it lets it in first; nobody else acts on it.
+    // Held by the spam filter (ADR-041): a person acting on it lets it in first; nobody else acts on it.
     await this.releaseForPerson(caller, input.item_id, input.event);
     // The owner's AI's words on a transition can reach the customer: none of another's (`access/leaks.ts`).
     if (isOwnerAssistant(caller)) {
@@ -1697,7 +1697,7 @@ export class Capabilities {
   }
 
   /**
-   * A request the spam filter holds (ADR-029) is a person's to let in: one who acts on it — confirms
+   * A request the spam filter holds (ADR-041) is a person's to let in: one who acts on it — confirms
    * it, answers it, quotes it — lets it in as they do, and its held-back effects run. The owner's AI,
    * a rule or a key never acts on something held: they are told it waits for a person. Marking it as
    * spam, or a note, changes nothing about the hold.
@@ -1719,7 +1719,7 @@ export class Capabilities {
     });
   }
 
-  // ---- the spam filter (ADR-029) ------------------------------------------------------------
+  // ---- the spam filter (ADR-041) ------------------------------------------------------------
 
   /** The filters, the lists, the counts and the AI check's room, as Settings → Spam shows them. */
   async spamStatus(caller: Caller): Promise<SpamStatus> {
@@ -2755,7 +2755,7 @@ function mergeAdds(
   };
 }
 
-/** The filter's verdict as the owner reads it (ADR-029 §11.2): our sentences, never a model's. */
+/** The filter's verdict as the owner reads it (ADR-041 §11.2): our sentences, never a model's. */
 function spamView(v: SpamVerdictView, summary: ItemSpamSummary, tz: string): ItemSpamView {
   const topic = v.answer?.topic;
   const lines = reasons(v.signals as never, { topic, learning: v.learning, tz });

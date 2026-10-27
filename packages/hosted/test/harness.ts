@@ -67,7 +67,7 @@ export interface FakeTenant {
   noInbound?: boolean;
   /** Sending from the business's own address, as the control plane says it stands (ADR-026 §3). */
   own?: PolicyPayload["mail"]["own"];
-  /** The policy's `spam` block (ADR-029 §15.3), when the test names one. */
+  /** The policy's `spam` block (ADR-041 §15.3), when the test names one. */
   spam?: PolicyPayload["spam"];
 }
 
@@ -228,7 +228,7 @@ export async function startRuntime(
     maxTenantBytes?: number;
     client?: boolean;
     oauthRelayHost?: string;
-    /** Our model for the spam filter's AI check (ADR-029 §7.2); none by default. */
+    /** Our model for the spam filter's AI check (ADR-041 §7.2); none by default. */
     spamModel?: HostedModel | null;
     /** Where the shards' log lines go; nowhere by default. */
     log?: (line: string) => void;

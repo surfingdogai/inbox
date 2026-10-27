@@ -60,7 +60,7 @@ export function Rail({
         if (f.key === "refund" && !(counts && counts.byType.refund > 0)) return null;
         // Stays only in a place to stay's inbox, once one has come in.
         if (f.key === "stay" && !(counts && counts.byType.stay > 0)) return null;
-        // Held shows only while the spam filter holds something (ADR-029 §11.1).
+        // Held shows only while the spam filter holds something (ADR-041 §11.1).
         if (f.key === "held" && !showHeld(counts, filter)) return null;
         const Icon = ICONS[f.key];
         const n = countFor(counts, f.key);

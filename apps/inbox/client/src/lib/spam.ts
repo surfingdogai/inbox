@@ -2,7 +2,7 @@ import { formatDateTime, formatDay, formatMoney, partyName } from "./format";
 import type { ItemSpamSummary, ItemView, SpamStatus } from "./types";
 
 /**
- * The spam filter's words in the owner app (ADR-029 §11), pure so they are tested on both runtimes.
+ * The spam filter's words in the owner app (ADR-041 §11), pure so they are tested on both runtimes.
  * Our own sentences only: the owner never reads a model's prose, only what the code found.
  */
 
@@ -97,7 +97,7 @@ export function timePassed(view: ItemView, now: number = Date.now()): boolean {
   return view.item.type === "booking" && Date.parse(view.item.payload.startTime) <= now;
 }
 
-/** The toast for each act (ADR-029 §11.3), with its one follow-up. */
+/** The toast for each act (ADR-041 §11.3), with its one follow-up. */
 export function toastFor(act: SpamAct, view: ItemView, now: number = Date.now()): ToastCopy {
   const sender = view.spam?.sender;
   const address = sender?.address ?? view.party?.email ?? null;

@@ -72,7 +72,7 @@ function when(iso: string, tz: string, locale: string): { day: string; time: str
   };
 }
 
-/** The event of the one notification a held booking request for a time within 48 hours gets (ADR-029 §12). */
+/** The event of the one notification a held booking request for a time within 48 hours gets (ADR-041 §12). */
 export const HELD_SOON_EVENT = "held_soon";
 
 const NEW: Record<PushKind, string> = {
@@ -187,7 +187,7 @@ export function buildPushPayload(ctx: PayloadContext): PushPayload {
   if (isNew && item.type === "stay" && ctx.kind !== "handled") title = "New stay request";
   if (isNew && item.type === "order" && ctx.kind !== "handled")
     title = `${title} · ${moneyText(item.payload.totalPrice)}`;
-  // A booking request the spam filter holds, for a time close at hand (ADR-029 §12): said once, with no name.
+  // A booking request the spam filter holds, for a time close at hand (ADR-041 §12): said once, with no name.
   const heldSoon = ctx.event === HELD_SOON_EVENT;
   if (heldSoon && item.type === "booking")
     title = `A booking request for ${when(item.payload.startTime, ctx.timezone, locale).day} is waiting in Held`;

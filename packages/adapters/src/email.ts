@@ -370,7 +370,7 @@ export async function ingestEmail(
     }
   }
 
-  // A new message from someone the business has not dealt with is screened as it arrives (ADR-029
+  // A new message from someone the business has not dealt with is screened as it arrives (ADR-041
   // §4.3): what a server it passed through said of it, what the receiving server found of its sender,
   // its display name, where answers would go, its links. Put aside, it is made in the spam state, so
   // it tells nobody, moves no rule and keeps none of its files; the owner finds it under Spam. A

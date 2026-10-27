@@ -164,7 +164,7 @@ const ownerHumanOf = (r: {
     : `${ownerSentence(r.view.human, r.view.item.subject)}${r.replayed ? " (Same request as before; nothing new was created.)" : ""}`;
 
 /**
- * What the spam filter did with an item, before its sentence (ADR-029 §11.7): our own words and our
+ * What the spam filter did with an item, before its sentence (ADR-041 §11.7): our own words and our
  * reason, never the sender's, and never a model's.
  */
 function spamLine(screen: string | null | undefined, why: string | undefined): string {
@@ -188,7 +188,7 @@ export function identityText(
   if (!identity) return "";
   const who = name?.trim() || "this person";
   const lines: string[] = [];
-  // Every new person with an email is asked to confirm (ADR-029 §3.3): said once, as the request is made.
+  // Every new person with an email is asked to confirm (ADR-041 §3.3): said once, as the request is made.
   if (o.created && identity.confirm)
     lines.push(`We emailed a link to ${identity.confirm.sent_to} to confirm it's you.`);
   for (const n of identity.networks) {

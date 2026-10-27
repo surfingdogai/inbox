@@ -17,7 +17,7 @@ import { ago, KIND_WORD } from "../lib/view";
 import { ChevronLeft } from "./icons";
 
 /**
- * Held and Spam on the phone (ADR-029 §12): the same rows and chips as on the computer, each opening
+ * Held and Spam on the phone (ADR-041 §12): the same rows and chips as on the computer, each opening
  * its item, where Let it in, Not spam and Spam are one press each.
  */
 export function Screened({ which }: { which: "held" | "spam" }) {

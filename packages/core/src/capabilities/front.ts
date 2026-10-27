@@ -180,7 +180,7 @@ function personFields(lang: CustomerLang, form: FrontForm): PageField[] {
 }
 
 /**
- * A once-per-form key, signed (ADR-029 §4.1): the same form sent twice (a double click, a reload)
+ * A once-per-form key, signed (ADR-041 §4.1): the same form sent twice (a double click, a reload)
  * makes one request, and the hidden field takes a name drawn from it. A form shown again (an error,
  * the confirm step) keeps the key it was drawn with.
  */
@@ -334,7 +334,7 @@ export async function frontAskView(
 
 /**
  * The page after a request: what happens next, the same whatever the spam filter made of it, with a
- * way to reach the business if nobody answers when it shows a public address or phone (ADR-029 §14).
+ * way to reach the business if nobody answers when it shows a public address or phone (ADR-041 §14).
  */
 export async function frontSent(
   caps: Capabilities,
@@ -379,7 +379,7 @@ function person(lang: CustomerLang, form: FrontForm): { name: string; email: str
 }
 
 /**
- * What the form says of itself, for the spam filter (ADR-029 §4.1): its key, when it was drawn, its
+ * What the form says of itself, for the spam filter (ADR-041 §4.1): its key, when it was drawn, its
  * hidden field. Null when its hidden field came back filled and today's room for bots' requests is
  * used up: the visitor is thanked, and nothing more is kept.
  */
@@ -544,7 +544,7 @@ export async function frontAskAct(
 }
 
 /**
- * The origins that may frame the business's form on their pages (ADR-029 §4.1): the business's own
+ * The origins that may frame the business's form on their pages (ADR-041 §4.1): the business's own
  * website, with and without `www.`, and its own domain; on a hosted inbox, the site its host names.
  * Empty: nobody may.
  */

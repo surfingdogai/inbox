@@ -4,7 +4,7 @@ import { filterDays } from "./filters";
 import { dayOf, type Filter } from "./types";
 
 /**
- * What the spam filter did, counted by UTC day (ADR-029 §15): AI checks made, reused, refused by a cap,
+ * What the spam filter did, counted by UTC day (ADR-041 §15): AI checks made, reused, refused by a cap,
  * failed, their tokens; what was put aside, held, labelled, let in and brought back. Counts only, never
  * content or addresses, and never purged with items: a hosted inbox is charged per filter-day once
  * billing is on, and its AI checks are what it costs to run.
@@ -100,7 +100,7 @@ export async function spamUsage(
 }
 
 /**
- * What a month would cost once billing is on (ADR-029 §15.3, the founder's decision: per inbox ×
+ * What a month would cost once billing is on (ADR-041 §15.3, the founder's decision: per inbox ×
  * filters switched on): each filter's days, at most thirty, at a day's price — the month's price
  * divided by thirty, rounded up to a cent — and never more than the month's price.
  */

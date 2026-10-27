@@ -207,7 +207,7 @@ function formHtml(form: NonNullable<CustomerPage["form"]>): string {
   const fields = form.fields.map(fieldHtml).join("\n");
   const action = form.action ? ` action="${esc(form.action)}"` : "";
   // Hidden from people, from screen readers and from password managers; a bot filling every field
-  // fills this one too. Its name is drawn for each form (ADR-029 §4.1), so no bot learns it once.
+  // fills this one too. Its name is drawn for each form (ADR-041 §4.1), so no bot learns it once.
   const trapName = typeof form.trap === "string" ? form.trap : "website";
   const trap = form.trap
     ? `<div class="hp" aria-hidden="true"><label for="${esc(trapName)}">Website</label><input id="${esc(trapName)}" name="${esc(trapName)}" tabindex="-1" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other"></div>`

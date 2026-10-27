@@ -6,7 +6,7 @@ import { createInbox } from "../src/app";
 import { freshDb } from "./harness";
 
 /**
- * `POST /v1/forms/submit` (ADR-029 §4.2), through the whole app: the business's own website brings
+ * `POST /v1/forms/submit` (ADR-041 §4.2), through the whole app: the business's own website brings
  * what visitors send through its own forms, with a key that may do this and nothing else. What it sends
  * arrives as a message, screened like one sent through the inbox's own form; each visitor is limited
  * by their own address; one submission is one message however often the site sends it; and the site's

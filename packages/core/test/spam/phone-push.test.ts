@@ -5,7 +5,7 @@ import { buildPushPayload, HELD_SOON_EVENT } from "../../src/phones/payload";
 import { classPayload, DAY, HOUR, MIN, owner, spamSetup, T0, visitor } from "./harness";
 
 /**
- * What the owner's phones hear of the spam filter (ADR-029 §12): nothing about what it holds or puts
+ * What the owner's phones hear of the spam filter (ADR-041 §12): nothing about what it holds or puts
  * aside, but once, without a name, of a booking request it holds for a time within 48 hours; and a
  * labelled request's title says what it may be, on a phone that shows details.
  */

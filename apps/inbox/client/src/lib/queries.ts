@@ -145,7 +145,7 @@ export function useCounts(sandbox: boolean) {
       const [open, everything, held] = await Promise.all([
         api.listItems({ open_only: true, sandbox, limit: 100 }),
         api.listItems({ open_only: false, sandbox, limit: 100 }),
-        // What the spam filter holds (ADR-029): an older server without it answers as for everything.
+        // What the spam filter holds (ADR-041): an older server without it answers as for everything.
         api
           .listItems({ screen: "held", open_only: false, sandbox, limit: 100 })
           .catch(() => ({ items: [], next_cursor: null })),
@@ -554,7 +554,7 @@ export function useRevokeKey() {
   });
 }
 
-// ---- the spam filter (ADR-029) ---------------------------------------------------------------
+// ---- the spam filter (ADR-041) ---------------------------------------------------------------
 
 export function useSpam() {
   return useQuery({ queryKey: qk.spam, queryFn: api.spam, staleTime: 15_000 });

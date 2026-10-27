@@ -53,7 +53,7 @@ export type LinkAction =
   | "stay_change_yes"
   | "stay_change_no"
   /**
-   * "Confirm it's me" (ADR-029 §3.3), in the acknowledgement to someone the business has not dealt
+   * "Confirm it's me" (ADR-041 §3.3), in the acknowledgement to someone the business has not dealt
    * with before: the page, then one button that proves their address.
    */
   | "confirm_me";
@@ -349,7 +349,7 @@ export async function networksLink(
 }
 
 /**
- * "Confirm it's me" (ADR-029 §3.3): one per acknowledgement, two weeks long, bound to the item. Null
+ * "Confirm it's me" (ADR-041 §3.3): one per acknowledgement, two weeks long, bound to the item. Null
  * without a secret to sign it or a public address.
  */
 export async function confirmLink(

@@ -4,7 +4,7 @@ import { monthCharge } from "../../src/spam/meter";
 import { agent, DAY, fakeJudge, HOUR, idOf, MIN, owner, ownerAi, spamSetup, T0, visitor } from "./harness";
 
 /**
- * Metering (ADR-029 §15, the founder's decision: a cost per inbox × number of filters): a filter-day
+ * Metering (ADR-041 §15, the founder's decision: a cost per inbox × number of filters): a filter-day
  * is a UTC day a filter was on at any moment; a month's charge, once billing is on, is each filter's
  * days (at most thirty) at a day's price, never more than its month's price. AI checks are counted per
  * inbox for what they cost to run, and capped. Only a person switches a filter; a host may withdraw one.

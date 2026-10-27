@@ -1,7 +1,7 @@
 import type { Filter } from "./types";
 
 /**
- * Each filter's part that needs no AI (ADR-029 §5.3): families of phrases that only unwanted
+ * Each filter's part that needs no AI (ADR-041 §5.3): families of phrases that only unwanted
  * messages use, in many languages. They count only while their filter is on, and only on what a
  * stranger sent. A language with no family yet means less caught, never more: nothing here reads
  * which language a message is in. Phrases are matched on normalised text (`normalise`), whole words

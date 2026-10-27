@@ -120,7 +120,7 @@ export function ItemDetailView({
     item.type === "refund" && paidBy?.payment_id
       ? { provider: paidBy.provider, paymentRef: paidBy.payment_id, amount: item.payload.amount }
       : undefined;
-  // What the spam filter decided (ADR-029 §11.2): its acts replace the item's own Mark as spam and Not spam.
+  // What the spam filter decided (ADR-041 §11.2): its acts replace the item's own Mark as spam and Not spam.
   const spamActs = actsFor(query.data);
   const offered = item.type === "stay" ? stayActions(item.state, query.data.transitions) : query.data.transitions;
   const transitions = orderActions(
@@ -146,7 +146,7 @@ export function ItemDetailView({
   const pick = (t: Transition) => {
     setNotice(null);
     transition.reset();
-    // Mark as spam and Not spam are one press with Undo, as everywhere (ADR-029 §11.3).
+    // Mark as spam and Not spam are one press with Undo, as everywhere (ADR-041 §11.3).
     if (t.event === "mark_spam" || t.event === "unspam") {
       spam.act(query.data, t.event === "mark_spam" ? "spam" : "not_spam");
       return;

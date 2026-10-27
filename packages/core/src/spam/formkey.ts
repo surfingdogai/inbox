@@ -5,7 +5,7 @@ import { countStatement } from "./meter";
 import { dayOf, type FormFacts } from "./types";
 
 /**
- * The business's own form, signed (ADR-029 §4.1). Each form is drawn with a key: a ULID (when it was
+ * The business's own form, signed (ADR-041 §4.1). Each form is drawn with a key: a ULID (when it was
  * drawn) and ten characters of an HMAC over it, the page and the kind of request — 36 characters, the
  * idempotency key all the same, so a double click is one request. Its hidden field takes a name drawn
  * from the same key, so no bot learns one name for every form. A key that does not verify is a forged

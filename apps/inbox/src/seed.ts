@@ -800,7 +800,7 @@ export async function seedShowcase(
     count++;
   }
 
-  // 15. The spam filter (ADR-029): what it held, what it put aside, what it labelled, with its reasons.
+  // 15. The spam filter (ADR-041): what it held, what it put aside, what it labelled, with its reasons.
   if (!opts.demo) count += await seedSpam(db, now, { person, agent, settle, svc });
 
   return { seeded: true, items: count };

@@ -5,7 +5,7 @@ import { bandsOf, hamming, printOf, simhash } from "../../src/spam/prints";
 import { agent, classPayload, DAY, idOf, MIN, owner, spamSetup, T0 } from "./harness";
 
 /**
- * Prints (ADR-029 §8): the same message is the same print whatever its spacing, case, invisible
+ * Prints (ADR-041 §8): the same message is the same print whatever its spacing, case, invisible
  * characters or look-alike letters, in every script; a reworded one lands within a few bits; and only
  * other senders count. Hashes and domains are kept, never words.
  */

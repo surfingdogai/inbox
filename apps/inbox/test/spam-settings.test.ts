@@ -6,7 +6,7 @@ import { createInbox } from "../src/app";
 import { freshDb } from "./harness";
 
 /**
- * Settings → Spam and Your AI model through the whole app (ADR-029 §11.4, §11.5): who may change what,
+ * Settings → Spam and Your AI model through the whole app (ADR-041 §11.4, §11.5): who may change what,
  * removing a list entry, and an owner's own model on their own server — the provider's list, the key
  * kept sealed and never sent back, and Test with two samples — against recorded provider answers. No
  * test reaches a real provider. Runs on Node and in workerd.

@@ -167,7 +167,7 @@ function views() {
   ].map(said);
 }
 
-/** What the spam filter held and put aside (ADR-029), as the inbox lists them for the owner. */
+/** What the spam filter held and put aside (ADR-041), as the inbox lists them for the owner. */
 function screenedViews() {
   const sender = (address: string) => ({ address, company_domain: null, app: false });
   const held = [

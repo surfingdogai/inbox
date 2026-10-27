@@ -3,7 +3,7 @@ import { emailDomain, foldConfusables, registrableDomain } from "../normalise";
 import type { EmailFacts, Signal } from "../types";
 
 /**
- * What a new email tells (ADR-029 §5): a server that marked it, what the receiving server found of
+ * What a new email tells (ADR-041 §5): a server that marked it, what the receiving server found of
  * its sender, a display name that names someone else, the business's own name used from outside, and
  * answers that would go elsewhere. Signed-in mail is not trust: an email that passes DMARC can still
  * be a pitch, so authentication only ever takes a point off, and never waves anything through.

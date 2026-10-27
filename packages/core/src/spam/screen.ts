@@ -58,7 +58,7 @@ import {
 } from "./types";
 
 /**
- * The spam filter's door (ADR-029 §4): what a stranger's new request is, decided as it is written.
+ * The spam filter's door (ADR-041 §4): what a stranger's new request is, decided as it is written.
  * What can be decided at once is: certain signals, budgets, everything local, a cached AI answer.
  * Only what waits on another server — the AI check, a mail domain's DNS — makes the item `pending`,
  * and then every effect of the create is written with a deadline, so if the screening never finishes
@@ -1173,7 +1173,7 @@ export function asideStatements(itemId: string, state: string, version: number, 
   ];
 }
 
-/** How near a held booking request's time must be for the owner's phones to hear of it once (ADR-029 §12). */
+/** How near a held booking request's time must be for the owner's phones to hear of it once (ADR-041 §12). */
 export const HELD_SOON_MS = 48 * 3_600_000;
 
 /**

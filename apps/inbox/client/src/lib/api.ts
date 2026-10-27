@@ -446,7 +446,7 @@ export const api = {
     call<{ sent: boolean; note: string }>("POST", `/v1/owner/phones/${encodeURIComponent(id)}/test`),
   removePhone: (id: string) => call<{ removed: true }>("DELETE", `/v1/owner/phones/${encodeURIComponent(id)}`),
 
-  // ---- the spam filter (ADR-029) ----
+  // ---- the spam filter (ADR-041) ----
   spam: () => call<SpamStatus>("GET", "/v1/owner/spam"),
   setSpamFilter: (filter: "pitches" | "scams" | "junk", body: { on: boolean; choice?: "aside" | "label" }) =>
     call<SpamStatus>("PUT", `/v1/owner/spam/filters/${filter}`, { body }),
@@ -476,7 +476,7 @@ export const api = {
   /** A transition sent as the owner leaves the page, before its Undo ran out. */
   transitionKeepalive: (id: string, body: TransitionBody) =>
     call<TransitionResult>("POST", `${item(id)}/transitions`, { body, idempotent: true, keepalive: true }),
-  // Your AI model, on one's own server (ADR-029 §11.5): the key goes to the inbox once, never back.
+  // Your AI model, on one's own server (ADR-041 §11.5): the key goes to the inbox once, never back.
   spamModel: () => call<ModelCard>("GET", "/v1/owner/spam/model"),
   spamModels: (provider: string, key?: string) =>
     call<{ models: ModelChoice[] }>("POST", "/v1/owner/spam/model/models", {

@@ -389,7 +389,7 @@ export function Item({
           onClose={() => setSheet(null)}
           onPick={(t) => {
             setSheet(null);
-            // Spam is one press with Undo, as on the computer (ADR-029 §12).
+            // Spam is one press with Undo, as on the computer (ADR-041 §12).
             if (t.event === "mark_spam" || t.event === "unspam") {
               spamAct(t.event === "mark_spam" ? "spam" : "not_spam");
               return;
@@ -674,7 +674,7 @@ function Propose(p: {
 }
 
 /**
- * Why it's here (ADR-029 §11.2, §12): the filter's reason in our words, the passages it found, who
+ * Why it's here (ADR-041 §11.2, §12): the filter's reason in our words, the passages it found, who
  * decided, and its one-press answers. Nothing a model wrote is ever shown.
  */
 function SpamWhy({

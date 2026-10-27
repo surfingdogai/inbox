@@ -7,7 +7,7 @@ import { sha256Hex } from "./prints";
 import { dayOf, type Handle, type HandleKind } from "./types";
 
 /**
- * Who asks, as handles this inbox keeps its own history on (ADR-029 §4.4): an agent's own key, a
+ * Who asks, as handles this inbox keeps its own history on (ADR-041 §4.4): an agent's own key, a
  * network pass, a mailbox, a mail domain, the code a network carries a request under. Never a client's
  * network address: many people share one. Nor a platform's key (Web Bot Auth's `Signature-Agent`): a
  * platform signs every one of its users' requests with the same key, so it is only a flood bucket,

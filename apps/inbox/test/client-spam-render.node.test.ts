@@ -5,7 +5,7 @@ import { WhyHere } from "../client/src/components/SpamWhy";
 import type { ItemDetail } from "../client/src/lib/types";
 
 /**
- * Why it's here, rendered (ADR-029 §11.2): the passages the code found in a message are the sender's
+ * Why it's here, rendered (ADR-041 §11.2): the passages the code found in a message are the sender's
  * words, and they reach the page as text, whatever they hold.
  */
 function detail(spam: Partial<NonNullable<ItemDetail["spam"]>>): ItemDetail {

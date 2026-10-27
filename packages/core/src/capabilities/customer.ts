@@ -210,7 +210,7 @@ interface Deps {
         readonly page: Omit<StayPageDeps, "db">;
       }
     | undefined;
-  /** "Confirm it's me" (ADR-029 §3.3): the sender proves their address, and a held request goes on. */
+  /** "Confirm it's me" (ADR-041 §3.3): the sender proves their address, and a held request goes on. */
   readonly spam?:
     | {
         confirmFromSender(itemId: string, now: number): Promise<"released" | "confirmed">;
@@ -234,7 +234,7 @@ export class CustomerDoors {
   async present(item: Item, audience: Audience, now: number): Promise<CustomerItemView> {
     // A request put aside as spam reads as one nobody answered yet, all of it: its words, its buttons,
     // who we wait on, what comes next — a message open, a quote request received and then expired
-    // (`customerSees`, ADR-029).
+    // (`customerSees`, ADR-041).
     const seen = customerSees(item, now);
     const view = viewFor(seen, "customer_agent", undefined, undefined, audience);
     const offer = await openOffer(item, { minNoticeMin: audience.minNoticeMin });
@@ -1563,7 +1563,7 @@ export class CustomerDoors {
   }
 
   /**
-   * "Confirm it's me" (ADR-029 §3.3): one button, then a thank-you. Both pages read the same whatever
+   * "Confirm it's me" (ADR-041 §3.3): one button, then a thank-you. Both pages read the same whatever
    * became of the request — held, delivered, let in, lapsed — so pressing it tells nobody anything.
    */
   private confirmPage(ctx: LinkContext, now: number, opts: { readonly error?: string } = {}): CustomerPage {

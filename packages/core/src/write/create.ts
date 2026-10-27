@@ -61,7 +61,7 @@ export interface CreateInput {
    */
   readonly spam?: string | undefined;
   /**
-   * What the door saw, for the spam filter (ADR-029 §4): which door, and its facts (a form's key and
+   * What the door saw, for the spam filter (ADR-041 §4): which door, and its facts (a form's key and
    * timing, an email's authentication). A customer's create carries it; the business's own never does.
    * Never part of the idempotency hash: a double click is one request, however fast the second was.
    */
@@ -293,7 +293,7 @@ export async function createItem(
   const who = identityColumns(match, identity);
   const machine = machines[input.type];
   const spam = input.type === "message" && input.spam ? input.spam : null;
-  // A stranger's request is screened as it is written (ADR-029): what the filter decides goes into
+  // A stranger's request is screened as it is written (ADR-041): what the filter decides goes into
   // this batch. A filter that fails lets the request through as if there were none; only a sender
   // past an agent's ceiling is refused, and told to come back later.
   let door: DoorScreen | null = null;
@@ -459,7 +459,7 @@ export async function createItem(
         ...(payload.personalised ? { personalised: true } : {}),
         // Put aside as it arrived (ADR-026 §7): why, for the owner who looks under Spam.
         ...(spam ? { spam } : {}),
-        // Put aside by the spam filter (ADR-029): its cause's code; the owner reads why under Spam.
+        // Put aside by the spam filter (ADR-041): its cause's code; the owner reads why under Spam.
         ...(aside ? { spam_filter: door?.decision?.cause ?? "spam" } : {}),
         ...actorMeta(caller),
       },
@@ -484,7 +484,7 @@ export async function createItem(
     );
   }
   // A message put aside as spam as it arrived tells nobody and moves nothing: no alert, no rule, no
-  // webhook. It waits under Spam for the owner. So does what the spam filter put aside (ADR-029).
+  // webhook. It waits under Spam for the owner. So does what the spam filter put aside (ADR-041).
   if (spam || aside) {
     try {
       await db.batch(statements);
@@ -495,7 +495,7 @@ export async function createItem(
     return { view, accessToken, replayed: false };
   }
   // While it is screened, every effect waits for the verdict, until its deadline: then it runs anyway,
-  // so a screening that never finishes loses nobody's request (ADR-029 §4.0).
+  // so a screening that never finishes loses nobody's request (ADR-041 §4.0).
   const deadline = pending ? deadlineOf(now) : undefined;
   if (pending) {
     statements.push(jobStatement(SPAM_SCREEN_KIND, { itemId: id, eventId }, now, { dedupeKey: `spam_screen:${id}` }));

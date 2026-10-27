@@ -76,7 +76,7 @@ export function yourNoun(type: ItemType, lang: CustomerLang): string {
 
 /**
  * The state a customer reads their item in. A message the business put aside reads as open, one
- * nobody has answered yet; a quote request it put aside (ADR-029) as received, and as expired once its
+ * nobody has answered yet; a quote request it put aside (ADR-041) as received, and as expired once its
  * request lapsed, as it would have had nobody answered it: nobody learns their request was put aside,
  * and nothing they read changes with what the filter thought of their words.
  */

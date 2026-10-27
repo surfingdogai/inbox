@@ -5,7 +5,7 @@ import { ACT_LABEL, byWords, quoteLine, type SpamAct, warnSentence } from "../li
 import type { ItemDetail } from "../lib/types";
 
 /**
- * Why it's here (ADR-029 §11.2): the strongest cause in our words, the rest a tap away, the passages
+ * Why it's here (ADR-041 §11.2): the strongest cause in our words, the rest a tap away, the passages
  * the code found in the message (escaped like every text here), who decided and when, and the acts.
  */
 export function WhyHere({

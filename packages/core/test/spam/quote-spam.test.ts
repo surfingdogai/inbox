@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { agent, DAY, MIN, owner, spamSetup, T0, visitor } from "./harness";
 
 /**
- * A quote request put aside (ADR-029 §9.4): the business sees it under Spam; its customer reads it as
+ * A quote request put aside (ADR-041 §9.4): the business sees it under Spam; its customer reads it as
  * received, then as expired once its request lapsed, exactly as one nobody answered. Not spam brings it
  * back with its clock wound again, so it does not lapse at once.
  */

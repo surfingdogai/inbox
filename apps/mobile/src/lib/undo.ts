@@ -1,5 +1,5 @@
 /**
- * One press waiting for Undo (ADR-029 §12): Let it in, Not spam or Spam is sent when its six seconds
+ * One press waiting for Undo (ADR-041 §12): Let it in, Not spam or Spam is sent when its six seconds
  * end, when it is sent now (the item closes, the app goes to the background, another press takes its
  * place), or never, when Undo is pressed. Nothing else sends it: a screen drawing itself again, a
  * refresh, a toast, the network coming back.

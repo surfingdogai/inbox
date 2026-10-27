@@ -76,7 +76,7 @@ export async function lookupMx(http: ConnectorHttp, domain: string): Promise<str
 }
 
 /**
- * Whether a mail domain takes mail at all (ADR-029 §5.2, `no_mail`): it names a mail server (MX), or
+ * Whether a mail domain takes mail at all (ADR-041 §5.2, `no_mail`): it names a mail server (MX), or
  * has an address (A) a server may deliver to. False only when the resolver answered and neither is
  * there (the name does not exist, or holds neither); null when it could not say. Only the domain is
  * asked about, never an address.

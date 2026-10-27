@@ -6,7 +6,7 @@ import { transitionItem } from "../../src/write/transition";
 import { agent, classPayload, DAY, fakeJudge, HOUR, MIN, owner, ownerAi, spamSetup, T0, visitor } from "./harness";
 
 /**
- * What the owner's screens read (ADR-029 §11, §12): Held and Spam as lists with their chips, who may
+ * What the owner's screens read (ADR-041 §11, §12): Held and Spam as lists with their chips, who may
  * be a customer after all, the counts Settings shows, the one notification a held booking for a time
  * close at hand gets, and the owner's own AI model on their own server.
  */

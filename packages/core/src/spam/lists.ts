@@ -4,7 +4,7 @@ import { SHARED_MAIL_PROVIDERS } from "./data";
 import { emailDomain, foldAddress } from "./normalise";
 
 /**
- * The owner's two lists (ADR-029 §8): Let through, and Always put aside. Only a person at the
+ * The owner's two lists (ADR-041 §8): Let through, and Always put aside. Only a person at the
  * business adds to them, by what they do with an item (Not spam, Let it in, "Always put aside this
  * sender"); each row can be removed in Settings. A domain is never blocked by inference, and a mail
  * provider many people share is never a domain on either list.

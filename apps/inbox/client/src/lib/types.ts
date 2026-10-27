@@ -171,7 +171,7 @@ export interface ListParams {
   readonly needs_human?: boolean | undefined;
   /** Only items with an email that could not be sent. */
   readonly mail_failed?: boolean | undefined;
-  /** What the spam filter made so: `held` lists what waits for the sender or a person (ADR-029). */
+  /** What the spam filter made so: `held` lists what waits for the sender or a person (ADR-041). */
   readonly screen?: "held" | "aside" | "warned" | undefined;
   readonly open_only?: boolean | undefined;
   readonly sandbox?: boolean | undefined;

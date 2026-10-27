@@ -3,7 +3,7 @@ import { answerSignals, decide } from "../../src/spam/decide";
 import type { CheckedAnswer, Filter, Signal } from "../../src/spam/types";
 
 /**
- * Deciding (ADR-029 §6): the thresholds, what is certain, every cap and floor, learning, Just label,
+ * Deciding (ADR-041 §6): the thresholds, what is certain, every cap and floor, learning, Just label,
  * the type mapping (bookings and orders are never put aside), a known sender only labelled, and an
  * AI answer that puts a message aside only with proof.
  */

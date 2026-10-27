@@ -215,7 +215,7 @@ describe("the customer's words", () => {
     expect(copyFor("pt").page.acceptTime.buttonPriced).toBe("Encomenda com obrigação de pagar");
   });
 
-  it("says nothing of a spam filter to the sender, in either language (ADR-029 §14)", () => {
+  it("says nothing of a spam filter to the sender, in either language (ADR-041 §14)", () => {
     // What a sender may read because of the filter: the line under the Sent page, the confirm line and
     // its page, the answer past a day's ceiling, and the privacy page's paragraph.
     const said = {

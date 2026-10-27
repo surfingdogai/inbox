@@ -63,7 +63,7 @@ import {
 import { dayOf, FILTERS, type Filter, type FilterChoice, isFilter } from "./types";
 
 /**
- * The spam filter's capabilities (ADR-029): the door's screening, the job's, and what the owner does
+ * The spam filter's capabilities (ADR-041): the door's screening, the job's, and what the owner does
  * with it — the filters, the lists, Let it in, Not spam, Spam. The host attaches the model it pays
  * for (hosted) or the owner's own (self-hosted), the DNS lookup, and its policy; without a model the
  * filters look for known phrases only, and the free protection works the same either way.
@@ -204,7 +204,7 @@ export class SpamCapabilities implements SpamDeps {
 
   /**
    * Whether new messages may be read by the AI check now, and whose model reads: a model to ask, a host
-   * that lets it read, and a filter on. The business's privacy page says so while it is (ADR-029 §14):
+   * that lets it read, and a filter on. The business's privacy page says so while it is (ADR-041 §14):
    * the host's (`host`, which keeps nothing, D2) or one this server's operator or owner set up (`own`,
    * whose provider's terms are theirs to know).
    */
@@ -335,7 +335,7 @@ export class SpamCapabilities implements SpamDeps {
   }
 
   /**
-   * What the rows of a list say about the spam filter (ADR-029 §11.1): each one's chip, whether a
+   * What the rows of a list say about the spam filter (ADR-041 §11.1): each one's chip, whether a
    * certain signal decided it, and whether it may be a customer after all — the AI check found one or
    * wasn't sure, it was held only for many new requests, or its words name something the business
    * offers and nothing certain held it. Those are listed first under Held.

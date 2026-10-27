@@ -52,7 +52,7 @@ export type WriteErrorCode =
   /** ADR-018 §4: a rule that reads where a customer lives or comes from may not set a price or terms. */
   | "geo_terms"
   /**
-   * ADR-029 §4.4: one sender started more new conversations today than any person does; the answer
+   * ADR-041 §4.4: one sender started more new conversations today than any person does; the answer
    * says when to come back (`details.retry_after_s`), never why.
    */
   | "too_many_requests"

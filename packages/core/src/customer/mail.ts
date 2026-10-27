@@ -204,7 +204,7 @@ export function renderCustomerMail(input: CustomerMailInput): RenderedMail {
   if (words && !body.wordsUsed) blocks.push([words]);
   blocks.push(...withdrawalBlocks(input, body.template));
   if (answer.length) blocks.push(answer);
-  // Someone the business has not dealt with before confirms the request is theirs (ADR-029 §3.3).
+  // Someone the business has not dealt with before confirms the request is theirs (ADR-041 §3.3).
   const confirm = input.event === "create" ? input.links?.get("confirm_me") : undefined;
   if (confirm) blocks.push([c.mail.confirmMe, `${c.mail.confirmMeButton}: ${confirm}`]);
   const ref = shortRef(input.item.id);

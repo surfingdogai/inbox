@@ -194,7 +194,7 @@ export function phoneRoutes(deps: PhoneDoorDeps): Hono<CallerEnv> {
     return c.json({ notify: await phones.setNotify(id, await body(c)) }, 200, noStore);
   });
 
-  // The spam filter, as the phone shows it (ADR-029 §12): which filters are on (changed on the web,
+  // The spam filter, as the phone shows it (ADR-041 §12): which filters are on (changed on the web,
   // since one may carry a price), what waits, and the owner's two emails from it, which carry none.
   const spamView = async (c: Context<CallerEnv>) => {
     const status = await deps.caps.spamStatus(c.get("caller"));

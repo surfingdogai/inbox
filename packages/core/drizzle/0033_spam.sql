@@ -1,4 +1,4 @@
--- The spam filter (ADR-029). A request from a sender this business has no history with is screened
+-- The spam filter (ADR-041). A request from a sender this business has no history with is screened
 -- once, as it arrives: delivered, delivered with a label, held until the sender confirms or a person
 -- lets it in, or put aside. `screen` sits beside `state`, so no machine, receipt or network rule
 -- changes for a hold. NULL: never screened (the business's own, a known customer, a reply, or an item

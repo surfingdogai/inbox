@@ -18,7 +18,7 @@ export const FILTERS: readonly { readonly key: Filter; readonly label: string; r
   { key: "refund", label: "Refunds", type: "refund" },
   { key: "done", label: "Done" },
   { key: "unsent", label: "Email not sent" },
-  // What the spam filter holds until the sender confirms or a person lets it in (ADR-029): shown only
+  // What the spam filter holds until the sender confirms or a person lets it in (ADR-041): shown only
   // while something is held.
   { key: "held", label: "Held" },
   { key: "spam", label: "Spam" },
@@ -75,7 +75,7 @@ export interface Counts {
   /** More open items exist than were counted. */
   readonly openMore: boolean;
   readonly doneMore: boolean;
-  /** What the spam filter holds for the sender or a person (ADR-029): the rail shows Held only then. */
+  /** What the spam filter holds for the sender or a person (ADR-041): the rail shows Held only then. */
   readonly held: number;
   readonly heldMore: boolean;
 }

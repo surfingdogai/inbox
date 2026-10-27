@@ -157,7 +157,7 @@ export const policyPayloadSchema = z.looseObject({
    */
   join_networks: z.array(httpsOrigin).max(8).optional(),
   /**
-   * The spam filter (ADR-029 §15.3): whether our AI may read for this inbox's filters (false until it
+   * The spam filter (ADR-041 §15.3): whether our AI may read for this inbox's filters (false until it
    * is decided), which filters it may switch on, the caps on its AI checks, how Settings names who
    * reads (null: in general words), and billing — off while hosted inboxes are free. Absent: every
    * filter looks for known phrases only, and no AI is asked.

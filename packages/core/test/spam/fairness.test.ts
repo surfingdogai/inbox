@@ -3,7 +3,7 @@ import customers from "../fixtures/spam-customers.json";
 import { agent, classPayload, DAY, fakeJudge, HOUR, MIN, spamSetup, T0 } from "./harness";
 
 /**
- * Fairness (ADR-029 §1.4, §5.5): real customers write in every language and script, short and long,
+ * Fairness (ADR-041 §1.4, §5.5): real customers write in every language and script, short and long,
  * rude, misspelled, machine-translated, from every mail provider, and through their assistants. With
  * every filter on, none of them scores even a label on the filter's own signals; and with an AI check
  * that only says "probably a customer", none is labelled either. A language with no phrase family yet

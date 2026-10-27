@@ -41,7 +41,7 @@ export interface DisclosureCopy {
     stopButton: string;
     stopped: (date: string) => string;
     /**
-     * While new messages may be read by an automated check (ADR-029 §14): what it sees and keeps, when
+     * While new messages may be read by an automated check (ADR-041 §14): what it sees and keeps, when
      * the host's service reads (`spam`, which keeps nothing), or a service the business set up itself
      * (`spamOwn`, which says nothing of what it keeps).
      */
@@ -174,7 +174,7 @@ export function privacyPage(input: {
   /** For one customer, from their code email: the date they stopped it (in their words), or null while they have not. */
   readonly mine?: { readonly stopped: string | null; readonly form: CustomerPage["form"] } | undefined;
   /**
-   * Whether new messages may be read by the spam filter's AI check now, and whose model (ADR-029 §14):
+   * Whether new messages may be read by the spam filter's AI check now, and whose model (ADR-041 §14):
    * the host's, which keeps nothing, or one the business set up itself; null while none may.
    */
   readonly spamReading?: "host" | "own" | null | undefined;

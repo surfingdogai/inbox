@@ -6,7 +6,7 @@ import { forbidden, problemResponse, tooManyRequests, unauthorized } from "./pro
 import type { CallerEnv } from "./rest";
 
 /**
- * `POST /v1/forms/submit` (ADR-029 §4.2): the business keeps its own website's forms — a contact form
+ * `POST /v1/forms/submit` (ADR-041 §4.2): the business keeps its own website's forms — a contact form
  * plugin, a site builder's form — and what visitors send there arrives here as a message, screened
  * like one sent through the inbox's own form. Its caller is the website, with a key that may do this
  * and nothing else (`forms:submit`); the visitor is anonymous. The site says what it saw of the

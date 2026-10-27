@@ -92,7 +92,7 @@ export function notifyHandler(
     const item = rowToItem(row);
     // A message put aside as spam (by the owner, or as it arrived: ADR-026 §7) tells nobody.
     if (row.state === "spam") return { note: "not sent: spam" };
-    // Held by the spam filter, or put aside (ADR-029): the business is told nothing, and the sender
+    // Held by the spam filter, or put aside (ADR-041): the business is told nothing, and the sender
     // only that their request arrived — unless a bot sent it, when nobody is written to at all.
     const gate = row.screen ? await gateOf(db, item.id) : null;
     if (holdsBack(gate)) {
@@ -271,7 +271,7 @@ async function customerMail(
     readonly settings: Settings;
     readonly facts: BusinessFacts;
     readonly now: number;
-    /** The spam filter screened it (ADR-029): its sender is someone the business has no history with. */
+    /** The spam filter screened it (ADR-041): its sender is someone the business has no history with. */
     readonly screened?: boolean | undefined;
   },
 ): Promise<ComposedMail | { note: string }> {
@@ -389,7 +389,7 @@ async function customerMail(
         ...(right?.available && CONFIRMING.has(p.event) ? { withdraw: { until: right.until } } : {}),
       });
   // The acknowledgement to someone the business has no history with asks them to confirm it is them
-  // (ADR-029 §3.3), whatever the spam filter made of their request, so it gives nothing away.
+  // (ADR-041 §3.3), whatever the spam filter made of their request, so it gives nothing away.
   const confirm =
     !skip && p.event === "create" && o.screened
       ? await confirmLink(db, o.secrets, { itemId: item.id, mailKey: o.jobKey, lang, base: o.base, now: o.now })

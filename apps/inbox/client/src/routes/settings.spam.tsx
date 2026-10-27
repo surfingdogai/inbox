@@ -33,7 +33,7 @@ export const Route = createFileRoute("/settings/spam")({
 type FilterName = "pitches" | "scams" | "junk";
 
 /**
- * Settings → Spam (ADR-029 §11.4): the free protection, the three filters with their choice and
+ * Settings → Spam (ADR-041 §11.4): the free protection, the three filters with their choice and
  * learning week, who reads for them and what they cost, the two lists, the two emails and how long
  * what is put aside is kept. Choosers and switches only: nothing to type. The filters may carry a
  * price, so only the owner or staff, signed in, switch them; anyone else reads the page as it is.

@@ -2,7 +2,7 @@ import type { JudgePort, JudgeRequest, JudgeResult } from "@surfingdog/core";
 import { messagesJudge } from "./messages";
 
 /**
- * The spam filter's AI check over a chat-completions API (ADR-029 §7.5), the shape many providers and
+ * The spam filter's AI check over a chat-completions API (ADR-041 §7.5), the shape many providers and
  * local model servers speak: `POST {url}/chat/completions`, the answer held to the JSON schema core
  * gives (`response_format: json_schema`, strict), at most 300 tokens, temperature 0 — dropped once
  * for a model that refuses it. Only what came back is reported; core keeps the time and the checks.
@@ -86,7 +86,7 @@ export function chatJudge(o: ChatJudgeOptions): JudgePort {
 }
 
 /**
- * The model the operator set up for the spam filter, from the inbox's environment (ADR-029 §7.2):
+ * The model the operator set up for the spam filter, from the inbox's environment (ADR-041 §7.2):
  * `SPAM_MODEL_API` (`messages` or `chat`), `SPAM_MODEL_URL` (a chat API's base, a local model server's
  * too), `SPAM_MODEL_KEY`, `SPAM_MODEL` (the model's id) and `SPAM_MODEL_NAME` (how Settings names it).
  * Null when none is set up: the filters then look for known phrases only.

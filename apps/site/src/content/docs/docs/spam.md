@@ -5,7 +5,7 @@ description: How the inbox keeps sales pitches, scams and junk off your desk wit
 
 The inbox screens every request from someone new as it arrives, on every door: email, your own website, and AI agents. What is not from a customer waits under **Spam** or **Held** instead of on your desk, kept for as long as you choose, one tap back. You aren't alerted, except once on your phone for a booking held for the next two days.
 
-Settings → **Spam**. The design is ADR-029 in the repository's `docs/adr`.
+Settings → **Spam**. The design is ADR-041 in the repository's `docs/adr`.
 
 ## What it never does
 

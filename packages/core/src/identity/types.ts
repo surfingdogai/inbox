@@ -135,7 +135,7 @@ export interface IdentityAnswer {
   readonly networks: readonly { readonly network: string; readonly state: string }[];
   /**
    * For a booking, an order or a quote request from someone the business has no history with
-   * (ADR-029 §3.3): the masked address the acknowledgement's "Confirm it's me" link goes to. The same
+   * (ADR-041 §3.3): the masked address the acknowledgement's "Confirm it's me" link goes to. The same
    * whatever the spam filter made of the request, so it tells nobody anything. Null otherwise.
    */
   readonly confirm?: { readonly sent_to: string } | null | undefined;

@@ -1,7 +1,7 @@
 import type { HandleKind, Signal } from "../types";
 
 /**
- * What an agent's request tells (ADR-029 §4.4, §5.2): a network pass presented, a platform that
+ * What an agent's request tells (ADR-041 §4.4, §5.2): a network pass presented, a platform that
  * vouches for its key, and how many new conversations its handles started today. Only lifts come
  * from who someone is (R25): a pass or a vouched key takes points off and widens budgets; nothing
  * about a person's standing anywhere ever adds one.

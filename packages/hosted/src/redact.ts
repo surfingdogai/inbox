@@ -6,7 +6,7 @@
 const RULES: readonly [RegExp, string | ((match: string, ...groups: string[]) => string)][] = [
   // API keys and their kin: sdi_own_…, sdi_int_…, sdi_agt_…
   [/\bsdi_[a-z]{2,8}_[A-Za-z0-9_-]{8,}/g, "sdi_[redacted]"],
-  // A model provider's key, the spam filter's AI check's (ADR-029 §7.2): never in a line.
+  // A model provider's key, the spam filter's AI check's (ADR-041 §7.2): never in a line.
   [/\b(sk|sk-ant|sk-proj|gsk)[-_][A-Za-z0-9_-]{16,}/g, "[redacted key]"],
   [/\bAIza[A-Za-z0-9_-]{30,}/g, "[redacted key]"],
   [/((?:x-api-key|api[_-]?key)["']?\s*[:=]\s*["']?)[A-Za-z0-9._-]{12,}/gi, "$1[redacted]"],

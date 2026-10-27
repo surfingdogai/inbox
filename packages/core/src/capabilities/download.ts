@@ -194,7 +194,7 @@ export const DOWNLOAD_TABLES: Readonly<Record<string, DownloadTable>> = {
     strip: empty("jobs"),
   },
   migrations: { note: "The version of the database, so the inbox that opens it knows it." },
-  // The spam filter (ADR-029): what it decided and why, the owner's lists and filters, its counts.
+  // The spam filter (ADR-041): what it decided and why, the owner's lists and filters, its counts.
   spam_verdicts: { note: "What the spam filter made of each request from someone new, and why: codes, never words." },
   spam_lists: { note: "Let through, and Always put aside." },
   spam_filter_spans: { note: "When each spam filter was on." },

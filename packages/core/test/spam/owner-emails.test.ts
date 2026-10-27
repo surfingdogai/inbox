@@ -12,7 +12,7 @@ import {
 import { agent, classPayload, DAY, HOUR, MIN, owner, spamSetup, T0, visitor } from "./harness";
 
 /**
- * The spam filter's two emails to the owner (ADR-029 §11.6): the morning digest of what was held,
+ * The spam filter's two emails to the owner (ADR-041 §11.6): the morning digest of what was held,
  * and Monday's summary of what was put aside, each only when there is something to say, worded as
  * the plan has them, with links that only open the owner app.
  */

@@ -4,7 +4,7 @@ import customers from "../fixtures/spam-customers.json";
 import { agent, fakeJudge, idOf, MIN, nonceOf, owner, sentText, spamSetup, T0 } from "./harness";
 
 /**
- * Prompt injection (ADR-029 §7.7), against a model that obeys every instruction it is sent: fooling
+ * Prompt injection (ADR-041 §7.7), against a model that obeys every instruction it is sent: fooling
  * it into "customer" only ever returns a message to where it would be with the filter off, and words
  * aimed at an assistant are labelled whatever it says. Nothing the model writes in its own words
  * reaches the owner. Forty messages, in many languages and disguises.

@@ -148,7 +148,7 @@ describe("booking from the page", () => {
     const html = await page.text();
     expect(html).toContain("Book: Tyre check");
     expect(html).toContain('type="email" name="email"');
-    // The hidden field takes a name drawn for this form (ADR-029 §4.1), and password managers leave it be.
+    // The hidden field takes a name drawn for this form (ADR-041 §4.1), and password managers leave it be.
     expect(html).toMatch(/name="(f_[a-z0-9]{6}|website)" tabindex="-1" autocomplete="off" data-1p-ignore/);
     const start = /name="start" value="([^"]+)"/.exec(html)?.[1];
     expect(start).toBeTruthy();

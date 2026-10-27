@@ -27,7 +27,7 @@ describe("client actions", () => {
     ]);
     expect(tonesFor([{ event: "decline" }])).toEqual(["danger"]);
     expect(tonesFor([{ event: "cancel_by_business" }, { event: "complete" }])).toEqual(["danger", "primary"]);
-    // Spam is never red (ADR-029 §11): Mark as spam is in ink, with the last actions.
+    // Spam is never red (ADR-041 §11): Mark as spam is in ink, with the last actions.
     expect(tonesFor([{ event: "answer" }, { event: "close" }, { event: "mark_spam" }])).toEqual([
       "primary",
       "secondary",

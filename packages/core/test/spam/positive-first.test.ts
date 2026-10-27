@@ -4,7 +4,7 @@ import type { Signal, Verdict } from "../../src/spam/types";
 import { agent, spamSetup, T0 } from "./harness";
 
 /**
- * Trust only lifts (ADR-029 §1.3, R25): what speaks for a sender — a network pass, a vouched platform,
+ * Trust only lifts (ADR-041 §1.3, R25): what speaks for a sender — a network pass, a vouched platform,
  * authenticated mail, a message the owner kept — only ever lowers the score and softens the verdict.
  * Nothing about a person's standing anywhere adds a point, and a request with no identity at all is
  * never worse off than the anonymous baseline.

@@ -4,7 +4,7 @@ import { chatJudge } from "./chat";
 import { messagesJudge } from "./messages";
 
 /**
- * How an owner's own AI model is reached on their own server (ADR-029 §11.5): Anthropic through its own
+ * How an owner's own AI model is reached on their own server (ADR-041 §11.5): Anthropic through its own
  * SDK, OpenAI and Google Gemini through their chat-completions APIs. The models come from each
  * provider's own list for the key, so no model is ever named here; only the ones that answer in text
  * are offered. The key travels only to its provider, through the host's outbound fetch.

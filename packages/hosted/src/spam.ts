@@ -4,7 +4,7 @@ import type { Ledger } from "./ledger";
 import type { PolicyPayload } from "./types";
 
 /**
- * The spam filter on a hosted inbox (ADR-029 §7.2, §15.3). The founder's decision: we pay for the AI,
+ * The spam filter on a hosted inbox (ADR-041 §7.2, §15.3). The founder's decision: we pay for the AI,
  * and the filters are a cost per inbox × filters switched on. So the model is ours — its key lives in
  * the shard's environment only, never in a tenant's file, settings, policy, download, answers or logs —
  * and every check an inbox makes is reserved in the shared ledger before it is made: within the
@@ -45,7 +45,7 @@ export function hostedModelFrom(
 /**
  * A hosted inbox whose policy carries no `spam` block yet: hosted all the same. Our AI does not read,
  * the filters look for known phrases only, nothing is billed, and no owner's own key is asked for (a
- * hosted inbox takes none, ADR-029). Never treated as one's own server.
+ * hosted inbox takes none, ADR-041). Never treated as one's own server.
  */
 export const PHRASES_ONLY: SpamHostPolicy = {
   ai: false,

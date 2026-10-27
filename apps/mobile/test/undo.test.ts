@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Waiting } from "../src/lib/undo";
 
 /**
- * A press on the phone waits for Undo (ADR-029 §12): sent once when its time ends, sent at once when
+ * A press on the phone waits for Undo (ADR-041 §12): sent once when its time ends, sent at once when
  * the item closes or the app goes to the background, never when Undo is pressed, and never because
  * anything else happened meanwhile (a refresh, a toast, the network coming back, the screen drawn
  * again). The screen keeps one of these for its whole life.

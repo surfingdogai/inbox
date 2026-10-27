@@ -25,7 +25,7 @@ export function isDanger(event: string): boolean {
 }
 
 /**
- * Spam is never a warning sign (ADR-029 §11): Mark as spam sits with the last actions, in ink, never
+ * Spam is never a warning sign (ADR-041 §11): Mark as spam sits with the last actions, in ink, never
  * red — nothing is lost by it, and one tap brings it back.
  */
 const QUIET_LAST = new Set(["mark_spam"]);

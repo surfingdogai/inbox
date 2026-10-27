@@ -70,7 +70,7 @@ export class IdentityCapabilities {
     this.mail = mail;
   }
 
-  /** The spam filter every customer's create passes through (ADR-029). */
+  /** The spam filter every customer's create passes through (ADR-041). */
   attachSpam(spam: CreateScreener | null): void {
     this.spam = spam;
   }
@@ -125,7 +125,7 @@ export class IdentityCapabilities {
       tier === caller.tier ? caller : { ...caller, tier },
       {
         ...input,
-        // Every customer's request is screened (ADR-029); the door says which it came through.
+        // Every customer's request is screened (ADR-041); the door says which it came through.
         ...(isCustomer(caller) ? { screen: input.screen ?? { door: doorOf(caller) } } : {}),
         identity: {
           agent,
@@ -297,7 +297,7 @@ export class IdentityCapabilities {
   }
 
   /**
-   * Where "Confirm it's me" goes (ADR-029 §3.3): a booking, an order or a quote request a stranger
+   * Where "Confirm it's me" goes (ADR-041 §3.3): a booking, an order or a quote request a stranger
    * sent with an email, whatever the filter made of it, when links can be signed. Null otherwise.
    */
   private async confirmOf(itemId: string): Promise<{ sent_to: string } | null> {

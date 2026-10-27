@@ -15,7 +15,7 @@ import {
 import { DESK, LOOP, PIECES, pose, REST, ROWS, SLOT_Y, SLOTS, TRAY, tap, VIEW } from "../src/lib/spam-flow";
 
 /**
- * The spam filter's pages (ADR-029 §13): /inbox/spam/, the guide on contact form spam and the docs
+ * The spam filter's pages (ADR-041 §13): /inbox/spam/, the guide on contact form spam and the docs
  * page. They exist and are linked, their words are plain (no claim of rank, nothing of where we run),
  * the screenshots they show are on disk, the drawing holds still for reduced motion and fits its
  * frame, and nothing on them is red. Checked from the sources the build reads; with a build on disk,

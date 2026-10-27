@@ -4,7 +4,7 @@ import { judgeText, luhn, mask } from "../../src/spam/mask";
 import { agent, DAY, fakeJudge, MIN, nonceOf, sentText, spamSetup, T0 } from "./harness";
 
 /**
- * The AI check (ADR-029 §7): what it is sent and what it never is, how its answer is believed, and
+ * The AI check (ADR-041 §7): what it is sent and what it never is, how its answer is believed, and
  * that every way it can fail lets the request through. No test here calls a real model.
  */
 

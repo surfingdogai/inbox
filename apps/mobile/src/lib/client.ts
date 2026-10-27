@@ -14,7 +14,7 @@ export interface PhoneMe {
   readonly push_available: boolean;
 }
 
-/** The spam filter, as the phone shows it (ADR-029 §12): which filters are on, what waits, the two emails. */
+/** The spam filter, as the phone shows it (ADR-041 §12): which filters are on, what waits, the two emails. */
 export interface PhoneSpam {
   readonly filters: readonly ("pitches" | "scams" | "junk")[];
   readonly held_now: number;
@@ -87,7 +87,7 @@ export class InboxClient {
     return this.call("GET", `/v1/owner/items?${q}`);
   }
 
-  /** What the spam filter holds, or everything put aside (ADR-029 §12). */
+  /** What the spam filter holds, or everything put aside (ADR-041 §12). */
   screened(which: "held" | "spam"): Promise<Page<ItemView>> {
     const q = new URLSearchParams({ open_only: "false", limit: "40" });
     if (which === "held") q.set("screen", "held");

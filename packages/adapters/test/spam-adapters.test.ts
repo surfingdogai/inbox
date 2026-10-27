@@ -4,7 +4,7 @@ import { chatJudge, judgeFromEnv, messagesJudge } from "../src/spam";
 import { ownModelKit, smallFirst } from "../src/spam/kit";
 
 /**
- * The spam filter's two model adapters (ADR-029 §7.5), against recorded answers: what each sends,
+ * The spam filter's two model adapters (ADR-041 §7.5), against recorded answers: what each sends,
  * how each reads what comes back, and how each says why nothing usable did. Nothing here reaches a
  * network; the fetch each is given answers from a list.
  */

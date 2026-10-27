@@ -16,7 +16,7 @@ import {
 } from "./harness";
 
 /**
- * Attacks on the spam filter as a whole (ADR-029 §16): a run of five hundred requests from agents
+ * Attacks on the spam filter as a whole (ADR-041 §16): a run of five hundred requests from agents
  * that change address, name and link with every one; a flood of held bookings aimed at the class's
  * places; and through both, the real customer who keeps getting through. Nothing is dropped: every
  * request is kept or refused with a time to come back.

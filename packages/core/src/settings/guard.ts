@@ -74,7 +74,7 @@ export const OWNER_ONLY_SETTINGS: readonly Watched[] = [
   // How a kitchen confirms and charges (ADR-040): whether orders confirm at once, the places set aside,
   // tips, and pausing another platform. Pausing itself has a door of its own, open to every person.
   { path: ["kitchen"] },
-  // What the spam filter keeps and how much of the owner's own model it may use (ADR-029): a
+  // What the spam filter keeps and how much of the owner's own model it may use (ADR-041): a
   // message put aside must never get the owner's AI to change how long the evidence is kept.
   { path: ["spam"] },
 ];

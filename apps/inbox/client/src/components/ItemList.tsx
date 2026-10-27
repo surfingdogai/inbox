@@ -64,7 +64,7 @@ export function ItemList({
   const listed = (pages.data?.pages ?? [])
     .flatMap((p) => p.items)
     .filter((v) => visibleIn(filter, v) && !hidden.has(v.item.id));
-  // Under Held, what may be a customer after all comes first (ADR-029 §11.1).
+  // Under Held, what may be a customer after all comes first (ADR-041 §11.1).
   const views = filter === "held" ? heldOrder(listed) : listed;
   const label = filterLabel(filter);
   const screened = filter === "held" || filter === "spam";
@@ -131,7 +131,7 @@ export function ItemList({
 function Row({ view, selected, tz }: { view: ItemView; selected: boolean; tz: string | undefined }) {
   const { item, party } = view;
   const locale = ownerLocale(tz);
-  // Delivered with a label by the spam filter (ADR-029 §11.1): a small chip before the subject.
+  // Delivered with a label by the spam filter (ADR-041 §11.1): a small chip before the subject.
   const warned = deskChip(view);
   return (
     <Link
@@ -259,7 +259,7 @@ function ForwardConfirm() {
   );
 }
 
-/** The line above Held and Spam: what they are, and for Spam how many this week (ADR-029 §11.1). */
+/** The line above Held and Spam: what they are, and for Spam how many this week (ADR-041 §11.1). */
 function ScreenTop({ filter }: { filter: Filter }) {
   const spam = useSpam();
   if (filter === "held") return <p className="screen-top">{HELD_TOP}</p>;

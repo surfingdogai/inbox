@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * Trust only lifts (ADR-029 §1.3, R25), read in the code itself: no part of the spam filter reads
+ * Trust only lifts (ADR-041 §1.3, R25), read in the code itself: no part of the spam filter reads
  * a person's standing at a network, their receipts, or the tier a rule could judge them by — only a
  * sender the business already knows (`reputed_principal`) skips the screening.
  */

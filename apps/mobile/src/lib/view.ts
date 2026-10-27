@@ -232,7 +232,7 @@ export function calendarWords(
 
 /** The event the owner most likely means, first: accepting it as it is. */
 const PRIMARY = ["confirm", "accept", "accept_change", "approve", "answer", "quote", "fulfil", "complete"];
-// Not mark_spam: what is put aside comes back in one press, so it is never a warning (ADR-029 §12).
+// Not mark_spam: what is put aside comes back in one press, so it is never a warning (ADR-041 §12).
 const DANGER = new Set(["decline", "reject", "cancel", "decline_change", "no_show"]);
 
 export interface Actions {
@@ -339,7 +339,7 @@ export function today(
   return { rows, bookings: todays.length, toConfirm, orders };
 }
 
-/** The foot of the inbox screen (ADR-029 §12): "Held · 2", then "Spam · 23 this week". Held only while something is. */
+/** The foot of the inbox screen (ADR-041 §12): "Held · 2", then "Spam · 23 this week". Held only while something is. */
 export function spamFoot(spam: { readonly held_now: number; readonly this_week: { readonly aside: number } } | null): {
   readonly held: string | null;
   readonly spam: string;

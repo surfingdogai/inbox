@@ -187,7 +187,7 @@ describe("inbound email", () => {
         raw: mime({ from: `Ana <${from}>`, subject: `Question ${i}`, id: `q-${from}-${i}` }),
         envelopeFrom: from,
       });
-    // Kept, every one (past five new conversations a day, a stranger's wait under Spam: ADR-029).
+    // Kept, every one (past five new conversations a day, a stranger's wait under Spam: ADR-041).
     for (let i = 0; i < LIMITS.emailSender.capacity; i++) {
       expect(["created", "spam"], `email ${i}`).toContain((await one(i)).outcome);
     }
@@ -263,7 +263,7 @@ describe("the owner's alerts", () => {
         json(
           "/v1/messages",
           // Thirty people from thirty places: one company's domain starting more new conversations than
-          // that in a day would wait for the owner (ADR-029), which is not what this is about.
+          // that in a day would wait for the owner (ADR-041), which is not what this is about.
           {
             body: `Question ${i}`,
             subject: `Question ${i}`,

@@ -4,7 +4,7 @@ import { ulid } from "../ids";
 import { dayOf, FILTERS, type Filter, type FilterChoice, LEARNING_KEPT_MS, LEARNING_MS } from "./types";
 
 /**
- * When each filter is on (ADR-029 §2), kept as spans so a hosted inbox's filter-days can be recounted
+ * When each filter is on (ADR-041 §2), kept as spans so a hosted inbox's filter-days can be recounted
  * at any time: a filter-day is a UTC day the filter was on at any moment. A filter switched on for the
  * first time learns for a week (it labels what it would put aside, and puts nothing aside); switched off
  * and on again within thirty days, it carries on where it was. The free protection's own point-based

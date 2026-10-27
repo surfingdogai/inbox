@@ -530,7 +530,7 @@ export const updateSettingsInput = z.object({
     ),
 });
 
-/** Settings → Spam (ADR-029): a filter switched on or off, or what it does with what it is sure of. */
+/** Settings → Spam (ADR-041): a filter switched on or off, or what it does with what it is sure of. */
 export const setSpamFilterInput = z.object({
   filter: z.enum(["pitches", "scams", "junk"]).describe("Sales pitches, scams or junk."),
   on: z.boolean(),

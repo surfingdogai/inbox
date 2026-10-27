@@ -50,7 +50,7 @@ export interface FrontCopy {
     readonly quote: string;
     readonly message: string;
     /**
-     * Under every Sent page when the business shows a public address or phone (ADR-029 §14): what to
+     * Under every Sent page when the business shows a public address or phone (ADR-041 §14): what to
      * do if nobody answers, whatever became of the request.
      */
     readonly safety: (v: { readonly email?: string | undefined; readonly phone?: string | undefined }) => string;

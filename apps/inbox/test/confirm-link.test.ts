@@ -6,7 +6,7 @@ import { createInbox } from "../src/app";
 import { freshDb, openWeekdays } from "./harness";
 
 /**
- * "Confirm it's me" (ADR-029 §3.3), through the whole app: every acknowledgement to someone new
+ * "Confirm it's me" (ADR-041 §3.3), through the whole app: every acknowledgement to someone new
  * carries it; opening the link changes nothing; pressing its button proves the address and lets a
  * request held for an uncertain reason go on; and a bot's request gets no acknowledgement at all, so
  * a forged address is never written to. Runs on Node and in workerd.
@@ -168,7 +168,7 @@ describe("confirm it's me", () => {
     await s.drain();
     expect(toOwner(s)).toHaveLength(1);
     // Proving the address let that one request go on. The sender's next one is screened as before,
-    // with wider budgets: its look-alike address labels it, as it would anyone's (ADR-029 §5).
+    // with wider budgets: its look-alike address labels it, as it would anyone's (ADR-041 §5).
     const next = await book(s, "rudi@bengkelsarl.example", 2, "Could you also check the brakes?");
     expect(await screenOf(s, next.view.item.id)).toBe("warned");
   });

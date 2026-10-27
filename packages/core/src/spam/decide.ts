@@ -12,7 +12,7 @@ import {
 } from "./types";
 
 /**
- * Deciding (ADR-029 §6). The points add up; under 3 the request is delivered, from 3 it is labelled,
+ * Deciding (ADR-041 §6). The points add up; under 3 the request is delivered, from 3 it is labelled,
  * from 6 — or with any certain signal — it reaches the aside band. Then caps, each of which can only
  * lower the outcome: a sender the business knows, a request that names the business's own offer, a
  * network pass, a filter set to label only, a filter still learning, an AI answer without proof, an
@@ -181,7 +181,7 @@ export function decide(input: DecideInput): Decision {
   return { verdict, cause, score, certain: certain && verdict !== "warn", learning, label, noProof };
 }
 
-/** The AI check's answer as points (ADR-029 §5.4), for the filters that are on. */
+/** The AI check's answer as points (ADR-041 §5.4), for the filters that are on. */
 export function answerSignals(answer: CheckedAnswer, on: ReadonlySet<Filter>): Signal[] {
   const out: Signal[] = [];
   const filter: Filter | null =

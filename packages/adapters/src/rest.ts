@@ -732,7 +732,7 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
     async (c) => c.json(await caps.getItem(c.get("caller"), getItemInput.parse({ item_id: c.req.param("id") }))),
   );
 
-  // ---- the spam filter (ADR-029) ----------------------------------------------------------
+  // ---- the spam filter (ADR-041) ----------------------------------------------------------
   // What it is, and what the owner does with it. Switching a filter, letting something in and the lists
   // are a person's, signed in: the capability says "Only you can change this, signed in." to anyone else.
 
@@ -802,7 +802,7 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
     async (c) => c.json(await caps.removeSpamListEntry(c.get("caller"), c.req.valid("json"))),
   );
 
-  // ---- Your AI model, on one's own server (ADR-029 §11.5): the key is the owner's, pasted in person ----
+  // ---- Your AI model, on one's own server (ADR-041 §11.5): the key is the owner's, pasted in person ----
 
   app.get(
     "/spam/model",

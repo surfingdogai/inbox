@@ -857,7 +857,7 @@ const sections = {
   /** The menu's sections and the dayparts items are served in (ADR-040). */
   menu: menuSettingsSchema,
   /**
-   * The spam filter's choices (ADR-029), the owner's in person (`OWNER_ONLY_SETTINGS`). The filters
+   * The spam filter's choices (ADR-041), the owner's in person (`OWNER_ONLY_SETTINGS`). The filters
    * themselves are not settings: they are switched by a person with `set_spam_filter`, since one
    * may carry a price, so no key, rule or the owner's AI switches one on or off.
    */

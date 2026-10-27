@@ -3,7 +3,7 @@ import type { Db } from "../db";
 import { shingles } from "./normalise";
 
 /**
- * Prints of what strangers sent (ADR-029 §8): a SHA-256 of the normalised text and a 64-bit SimHash
+ * Prints of what strangers sent (ADR-041 §8): a SHA-256 of the normalised text and a 64-bit SimHash
  * of its pieces, kept as eight 8-bit bands, with the domains it linked to and a keyed hash of who
  * sent it. Hashes and domains only, never words: enough to see the same message arriving from many
  * senders, or one like a message the owner marked, and nothing to read.

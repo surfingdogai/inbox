@@ -225,7 +225,7 @@ export interface AppDeps {
    */
   readonly ucpLodging?: boolean | undefined;
   /**
-   * The spam filter's AI check (ADR-029 §7.2): the model that reads for the filters an owner switched
+   * The spam filter's AI check (ADR-041 §7.2): the model that reads for the filters an owner switched
    * on, and on a hosted inbox the host's policy for it (which filters, its caps, whether its AI may be
    * used). Absent, the filters look for known phrases only; the free protection works either way.
    */
@@ -336,7 +336,7 @@ export function createInbox(deps: AppDeps): Inbox {
   );
   // Throws here, as the inbox is built, on a policy that names something that is not a setting.
   caps.attachPolicy(deps.policy ?? null);
-  // The spam filter (ADR-029): the model that reads for the filters an owner switched on — the host's
+  // The spam filter (ADR-041): the model that reads for the filters an owner switched on — the host's
   // on a hosted inbox, the operator's or the owner's on their own server, none at all in a demo — and
   // whether a mail domain takes mail, asked of the same public resolver the calendars use.
   caps.spam.attach({
@@ -473,7 +473,7 @@ export function createInbox(deps: AppDeps): Inbox {
   let policyApplied = !deps.policy;
   const applyPolicy = async (): Promise<void> => {
     await caps.applyHostPolicy(deps.now ? deps.now() : Date.now());
-    // A filter the host no longer offers is switched off, as the system (ADR-029 §15.3).
+    // A filter the host no longer offers is switched off, as the system (ADR-041 §15.3).
     await caps.spam.applyHost(deps.now ? deps.now() : Date.now());
     policyApplied = true;
   };
@@ -560,7 +560,7 @@ export function createInbox(deps: AppDeps): Inbox {
     path.startsWith("/p/") ||
     path.startsWith("/oauth/connect/") ||
     (path === "/" && !hasOwnerSession(request));
-  // The business's form inside its own website (`/p/…?embed=1`, ADR-029 §4.1): only the business's own
+  // The business's form inside its own website (`/p/…?embed=1`, ADR-041 §4.1): only the business's own
   // site may frame it, and nobody when it has none. Set after the page's own headers, over them.
   app.use("/p/*", async (c, next) => {
     await next();

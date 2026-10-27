@@ -1,5 +1,5 @@
 /**
- * The spam filter's small data files (ADR-029), kept as code so every runtime ships them: mail
+ * The spam filter's small data files (ADR-041), kept as code so every runtime ships them: mail
  * providers many people share, disposable-mail domains, link shorteners, and hosts many honest
  * people link to. Global, never one country's: a provider here is neither better nor worse than any
  * other, it is only never treated as one company's own domain.

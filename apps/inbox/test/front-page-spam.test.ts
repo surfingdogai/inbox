@@ -6,7 +6,7 @@ import { createInbox } from "../src/app";
 import { freshDb, openWeekdays } from "./harness";
 
 /**
- * The business's own form and the spam filter (ADR-029 §4.1), through the whole app: each form is
+ * The business's own form and the spam filter (ADR-041 §4.1), through the whole app: each form is
  * drawn with a signed key and a hidden field named for it; a bot's request is kept aside or held,
  * never dropped; a key from before a change of secret only counts against a request; the visitor sees
  * the same page whatever was decided, with a way to reach the business; and the form can sit inside

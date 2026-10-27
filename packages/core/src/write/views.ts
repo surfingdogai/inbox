@@ -35,7 +35,7 @@ export interface ItemView {
     | undefined;
   /** For the owner, in lists: the last thing that happened to it was done by one of their rules. */
   readonly by_rules?: boolean | undefined;
-  /** For the owner, in lists: what the spam filter made of it (ADR-029 §11.1). Absent when it never saw it. */
+  /** For the owner, in lists: what the spam filter made of it (ADR-041 §11.1). Absent when it never saw it. */
   readonly spam?: ItemSpamSummary | undefined;
 }
 

@@ -9,7 +9,7 @@ import { SectionHead } from "./Form";
 type Provider = Card["providers"][number]["id"];
 
 /**
- * Settings → Integrations → Your AI model (ADR-029 §11.5), on one's own server: a provider chosen,
+ * Settings → Integrations → Your AI model (ADR-041 §11.5), on one's own server: a provider chosen,
  * the key pasted once (it goes to the inbox, sealed, and is never shown again), a model from that
  * provider's own list, and Test with two samples. Set up by the server instead, it says so and
  * offers nothing to change. A hosted inbox shows no card: its host reads for it.

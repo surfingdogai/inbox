@@ -6,7 +6,7 @@ import { alreadyDone, followDone, type SpamAct, type ToastCopy, toastFor, toastL
 import type { ItemView } from "../lib/types";
 
 /**
- * Let it in, Not spam, Looks fine and Spam (ADR-029 §11.3): one press each, a toast saying what it did,
+ * Let it in, Not spam, Looks fine and Spam (ADR-041 §11.3): one press each, a toast saying what it did,
  * and Undo for six seconds. Nothing is sent until the six seconds are up, so Undo leaves no trace
  * anywhere: no list changed, nothing taught, no rule run. Another press, an answer to the item,
  * leaving the inbox or closing the page sends what waits at once. The toast sits above an item's

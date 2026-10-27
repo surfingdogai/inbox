@@ -12,7 +12,7 @@ export type Route =
   | { readonly name: "settings" }
   | { readonly name: "inboxes" }
   | { readonly name: "connect" }
-  /** What the spam filter holds, or everything put aside (ADR-029 §12). */
+  /** What the spam filter holds, or everything put aside (ADR-041 §12). */
   | { readonly name: "screened"; readonly which: "held" | "spam" }
   | {
       readonly name: "item";

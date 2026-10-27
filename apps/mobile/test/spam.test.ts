@@ -13,7 +13,7 @@ import { type Fetch, InboxError, Sessions } from "../src/lib/session";
 import { actionsFor, spamFiltersLine, spamFoot } from "../src/lib/view";
 
 /**
- * The spam filter on the phone (ADR-029 §12), against a real inbox: the foot line, Held and Spam as
+ * The spam filter on the phone (ADR-041 §12), against a real inbox: the foot line, Held and Spam as
  * the computer lists them, Let it in and Spam from the phone, the read-only line about the filters and
  * the two emails it may switch — and Spam never styled as a warning.
  */

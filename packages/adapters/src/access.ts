@@ -15,7 +15,7 @@ const READ_SETUP = "settings:read";
 export const ROUTE_SCOPES: Readonly<Record<string, readonly string[]>> = {
   "GET /items": ["inbox:read"],
   "GET /items/:id": ["inbox:read"],
-  // The spam filter (ADR-029): its status is setup's to read; what changes it is a person's in person,
+  // The spam filter (ADR-041): its status is setup's to read; what changes it is a person's in person,
   // checked by the capability whatever the scopes.
   "GET /spam": [READ_SETUP],
   "PUT /spam/filters/:filter": ["*"],
@@ -269,7 +269,7 @@ export const PHONE_OPERATIONS: ReadonlySet<string> = new Set([
   "POST /items/:id/offers/draft/send",
   "DELETE /items/:id/offers/draft",
   "GET /items/:id/payments",
-  // Let it in, Spam and Looks fine: one press each on the phone (ADR-029 §12).
+  // Let it in, Spam and Looks fine: one press each on the phone (ADR-041 §12).
   "POST /items/:id/let-in",
   "POST /items/:id/looks-fine",
   "POST /items/:id/spam",

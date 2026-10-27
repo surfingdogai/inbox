@@ -164,7 +164,7 @@ export interface Copy {
     /** A change we asked for to a promise, answered by replying. */
     replyToAnswerChange: string;
     /**
-     * In the acknowledgement to someone the business has not dealt with before (ADR-029 §3.3): the
+     * In the acknowledgement to someone the business has not dealt with before (ADR-041 §3.3): the
      * line, and the button's words, that let them confirm the request is theirs.
      */
     confirmMe: string;

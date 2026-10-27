@@ -1209,7 +1209,7 @@ export const quoteMachine: Machine<QuoteState> = {
   terminal: ["accepted", "declined", "expired"],
   transitions: [
     {
-      // Put aside (ADR-029): by the business, or by the spam filter as it arrived. Its customer still
+      // Put aside (ADR-041): by the business, or by the spam filter as it arrived. Its customer still
       // reads it as received, then expired once its request lapsed: nobody is told it was put aside.
       event: "mark_spam",
       label: "Mark as spam",

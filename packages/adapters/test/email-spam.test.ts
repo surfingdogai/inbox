@@ -5,7 +5,7 @@ import { ingestEmail } from "../src/email";
 import { freshDb } from "./db";
 
 /**
- * The email door and the spam filter (ADR-029 §4.3, §5): what a server the email passed through said
+ * The email door and the spam filter (ADR-041 §4.3, §5): what a server the email passed through said
  * of it, what the receiving server found of its sender, a display name that names someone else, the
  * business's own name used from outside, a look-alike of its domain, answers that would go elsewhere.
  * A sender the business knows is only ever labelled; a reply on a thread is never screened; and what

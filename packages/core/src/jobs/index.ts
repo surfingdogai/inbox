@@ -47,7 +47,7 @@ export function createRunner(deps: {
   secrets?: SecretBox | null | undefined;
   /** The owner's phones (ADR-028): with them, a notification to each phone that wants one. */
   phones?: PhoneCapabilities | undefined;
-  /** The spam filter (ADR-029): the screening that waits on an AI check, and its daily housekeeping. */
+  /** The spam filter (ADR-041): the screening that waits on an AI check, and its daily housekeeping. */
   spam?: SpamJobs | undefined;
 }): JobRunner {
   const runner = new JobRunner()
@@ -67,7 +67,7 @@ export function createRunner(deps: {
     .register(EMAIL_CHECK_KIND, emailCheckHandler(deps.mailOut, { baseUrl: deps.baseUrl }))
     .register("rules", async (job, { db, now }) => {
       const p = job.payload as { itemId: string; eventId: string; trigger: string };
-      // Held or put aside by the spam filter (ADR-029): no rule runs. Still being screened, inside its
+      // Held or put aside by the spam filter (ADR-041): no rule runs. Still being screened, inside its
       // deadline: it waits for the verdict, or for the deadline, whichever comes first.
       const gate = await gateOf(db, p.itemId);
       if (holdsBack(gate)) return { note: "held by the spam filter: no rule runs" };
@@ -149,7 +149,7 @@ export function createRunner(deps: {
         const r = await spam.daily(now);
         return { note: `${r.removed} put-aside item${r.removed === 1 ? "" : "s"} past their time removed` };
       })
-      // The owner's two emails from the filter (ADR-029 §11.6): only when there is something to say.
+      // The owner's two emails from the filter (ADR-041 §11.6): only when there is something to say.
       .register(SPAM_HELD_DIGEST_KIND, spamHeldDigestHandler(deps.mailOut, { baseUrl: deps.baseUrl }))
       .register(SPAM_WEEKLY_KIND, spamWeeklyHandler(deps.mailOut, { baseUrl: deps.baseUrl }));
   }
@@ -187,11 +187,11 @@ export interface SpamJobs {
   daily(now: number): Promise<{ readonly removed: number }>;
 }
 
-/** The spam filter's daily housekeeping (ADR-029 §9.4): one a day, each run queueing the next. */
+/** The spam filter's daily housekeeping (ADR-041 §9.4): one a day, each run queueing the next. */
 export const SPAM_DAILY_KIND = "spam_daily";
 
 /**
- * The sweep makes sure the spam filter's housekeeping is due once a day (ADR-029): only where the
+ * The sweep makes sure the spam filter's housekeeping is due once a day (ADR-041): only where the
  * runner has a spam filter to run it.
  */
 function withSpamDaily(spam: SpamJobs | undefined, sweep: JobHandler): JobHandler {

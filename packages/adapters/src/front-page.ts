@@ -23,7 +23,7 @@ import { HOST_SESSION_COOKIE, SESSION_COOKIE } from "./session";
  * font, nothing fetched from anywhere else. A GET never writes; a POST writes once, then sends the
  * browser on (303). The app spends every POST from the same `create` limit as the API's creates
  * (index.ts). A form whose hidden field came back filled is thanked like any other and kept aside for
- * the owner, never dropped (ADR-029 §4.1). With `?embed=1` the same pages sit inside the business's
+ * the owner, never dropped (ADR-041 §4.1). With `?embed=1` the same pages sit inside the business's
  * own website: the form alone, and only its own site may frame it (app.ts).
  */
 export interface FrontPageDeps {
@@ -106,7 +106,7 @@ export function frontPage(deps: FrontPageDeps): Hono {
       const lang = await langOf(c);
       const form = await readForm(c);
       if (form === null) return c.body(null, 413);
-      // A filled hidden field is the spam filter's to decide (ADR-029 §4.1): thanked like anyone, never dropped.
+      // A filled hidden field is the spam filter's to decide (ADR-041 §4.1): thanked like anyone, never dropped.
       const result = await run(lang, form, embedOf(c));
       return "redirect" in result ? c.redirect(result.redirect, 303) : renderCustomerPage(c, result.page);
     };

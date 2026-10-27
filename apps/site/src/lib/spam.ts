@@ -2,7 +2,7 @@ import type { Faq, Source } from "./faq";
 import type { GuideOption } from "./guides";
 
 /**
- * The spam filter's pages (ADR-029 §13): /inbox/spam/, the guide on contact form spam, and the words
+ * The spam filter's pages (ADR-041 §13): /inbox/spam/, the guide on contact form spam, and the words
  * both share with the owner app's Settings → Spam. Plain words with no claim of rank, examples from
  * many countries, and what another company's product does dated and sourced.
  */

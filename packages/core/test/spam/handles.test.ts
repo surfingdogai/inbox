@@ -4,7 +4,7 @@ import { WriteError } from "../../src/write/errors";
 import { agent, DAY, fakeJudge, idOf, MIN, owner, sentText, spamSetup, T0, visitor } from "./harness";
 
 /**
- * Budgets per handle (ADR-029 §4.4): a stranger starts a few conversations a day under each of its
+ * Budgets per handle (ADR-041 §4.4): a stranger starts a few conversations a day under each of its
  * handles; past that the next waits and costs no AI check; past a ceiling an agent comes back later.
  * Never a client's address; a sender the business knows never counts.
  */

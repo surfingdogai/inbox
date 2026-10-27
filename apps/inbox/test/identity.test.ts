@@ -162,7 +162,7 @@ describe("people at the doors", () => {
     const text = r.content[0]?.text ?? "";
     const pass = r.structuredContent.identity.passes[0]?.pass as string;
     expect(text.endsWith(`Keep this pass for Rita: ${pass} (network ${HOST}).`)).toBe(true);
-    // Rita is new here: the assistant is told where the link to confirm it is her went (ADR-029 §3.3).
+    // Rita is new here: the assistant is told where the link to confirm it is her went (ADR-041 §3.3).
     expect(text).toContain(
       `We emailed a link to ${r.structuredContent.identity.confirm?.sent_to} to confirm it's you.`,
     );

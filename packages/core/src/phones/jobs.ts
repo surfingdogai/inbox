@@ -87,7 +87,7 @@ export function phonePushFanoutHandler(phones: PhoneCapabilities): JobHandler {
     if (!row) return { note: "item gone" };
     const item = rowToItem(row);
     if (item.flags.sandbox) return { note: "test item: no notification" };
-    // Held or put aside by the spam filter (ADR-029): no phone is told — but once, of a booking request
+    // Held or put aside by the spam filter (ADR-041): no phone is told — but once, of a booking request
     // it holds for a time within 48 hours, while it is still held.
     const gate = await gateOf(db, item.id);
     if (p.event === HELD_SOON_EVENT) {

@@ -81,7 +81,7 @@ type Bindings = Env & {
   DELIVERECT_CHANNEL?: string;
   DELIVERECT_STAGING?: string;
   /**
-   * The model the spam filter's AI check uses (ADR-029 §7.2), the operator's own: `messages` or
+   * The model the spam filter's AI check uses (ADR-041 §7.2), the operator's own: `messages` or
    * `chat`, the API's address, its key, the model's id and the name Settings shows. Unset, the filters
    * look for known phrases only.
    */

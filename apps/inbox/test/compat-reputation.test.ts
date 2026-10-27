@@ -174,7 +174,7 @@ describe("an existing integration after ADR-017", () => {
       passes: [],
       verify: { available: false, sent_to: null },
       networks: [],
-      // Added by ADR-029: someone new is asked to confirm it's them, in the acknowledgement.
+      // Added by ADR-041: someone new is asked to confirm it's them, in the acknowledgement.
       confirm: { sent_to: "r•••@e•••.com" },
       guide: "https://surfingdog.ai/for-agents.md",
     });

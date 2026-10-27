@@ -1,7 +1,7 @@
 import { ACCOUNT_PATHS, SECOND_LEVEL, SHARED_BRAND_DOMAINS, SHARED_HOSTS } from "./data";
 
 /**
- * Text as the spam filter compares it (ADR-029 §5): the same message twice is the same text, whatever
+ * Text as the spam filter compares it (ADR-041 §5): the same message twice is the same text, whatever
  * its spacing, its case, a zero-width character or a look-alike letter slipped into it. Normalised
  * text is for comparing and counting only; nobody reads it, and it is never stored.
  */
