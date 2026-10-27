@@ -95,6 +95,9 @@ jobs:
           mkdir -p ~/.android
           if [ -n "$DEBUG_KEYSTORE_BASE64" ]; then
             printf '%s' "$DEBUG_KEYSTORE_BASE64" | base64 -d > ~/.android/debug.keystore
+            # Handed to the build by path (app/build.gradle): AGP did not read its debug key from here
+            # on the runners, so every build was signed with a new key of its own.
+            echo "ANDROID_TEST_KEYSTORE=$HOME/.android/debug.keystore" >> "$GITHUB_ENV"
             echo "signing: the repository's key"
           else
             echo "signing: a one-off key for this run"
@@ -118,8 +121,8 @@ jobs:
           echo "name=${name}" >> "$GITHUB_OUTPUT"
           sha256sum "${name}.apk"
           echo "- APK: \`${name}.apk\`, sha256 \`$(sha256sum "${name}.apk" | cut -d' ' -f1)\`" >> "$GITHUB_STEP_SUMMARY"
-      # Signed by the test key alone (the keystore the build read, ~/.android/debug.keystore), never by
-      # the release certificate of workflow android-release; the package ours, not debuggable. The
+      # Signed by the test key alone (the repository's, in ANDROID_TEST_KEYSTORE, when it is set), never
+      # by the release certificate of workflow android-release; the package ours, not debuggable. The
       # outputs go to the log first, so a failed check shows what the tools said. apksigner's lines
       # differ by version ("Signer #1 certificate SHA-256 digest: …" up to build-tools 36, "V2 Signer:
       # certificate SHA-256 digest: …" from 37), so the certificates are read from either.
@@ -143,10 +146,14 @@ jobs:
           got="$(sed -n 's/^.* certificate SHA-256 digest: //p' "$checks/signers.txt" | tr 'A-F' 'a-f' | sort -u)"
           [ -n "$got" ] && [ "$(printf '%s\n' "$got" | wc -l)" -eq 1 ] || { echo "::error::expected exactly one signing certificate, got: ${got:-none}"; exit 1; }
           [ "$got" != "$RELEASE_CERT_SHA256" ] || { echo "::error::a test build is signed with the release key"; exit 1; }
-          [ -f ~/.android/debug.keystore ] || { echo "::error::no test key at ~/.android/debug.keystore"; exit 1; }
-          # AGP's debug keystore password, the same for every debug keystore (apps/mobile/README.md).
-          want="$(keytool -list -v -keystore ~/.android/debug.keystore -storepass android | sed -n 's/^[[:space:]]*SHA256: //p' | head -1 | tr -d ':' | tr 'A-F' 'a-f')"
-          [ -n "$want" ] && [ "$got" = "$want" ] || { echo "::error::signed by $got, not the test key ($want)"; exit 1; }
+          if [ -n "${ANDROID_TEST_KEYSTORE:-}" ]; then
+            # A debug keystore's password, the same for every one (apps/mobile/README.md).
+            want="$(keytool -list -v -alias androiddebugkey -keystore "$ANDROID_TEST_KEYSTORE" -storepass android | sed -n 's/^[[:space:]]*SHA256: //p' | head -1 | tr -d ':' | tr 'A-F' 'a-f')"
+            [ -n "$want" ] && [ "$got" = "$want" ] || { echo "::error::signed by $got, not the repository's test key ($want)"; exit 1; }
+            echo "signed by the repository's test key"
+          else
+            echo "signed by a one-off key (no DEBUG_KEYSTORE_BASE64)"
+          fi
           grep -q "^package: name='$APP_ID'" "$checks/badging.txt" || { echo "::error::the package is not $APP_ID"; exit 1; }
           if grep -q '^application-debuggable' "$checks/badging.txt"; then echo "::error::the test APK is debuggable"; exit 1; fi
           {

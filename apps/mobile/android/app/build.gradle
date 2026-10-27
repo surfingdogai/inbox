@@ -25,7 +25,19 @@ android {
     // ANDROID_RELEASE_KEYSTORE_PASSWORD and ANDROID_RELEASE_KEY_ALIAS. Without them a release build is
     // unsigned, and nothing can install it.
     def releaseKeystore = System.getenv("ANDROID_RELEASE_KEYSTORE")
+    // The test key: AGP's own debug key, unless ANDROID_TEST_KEYSTORE names a debug keystore (password
+    // android, alias androiddebugkey). Workflow android hands over the repository's DEBUG_KEYSTORE_BASE64
+    // that way, by path, since where AGP keeps its debug key depends on the machine.
+    def testKeystore = System.getenv("ANDROID_TEST_KEYSTORE")
     signingConfigs {
+        debug {
+            if (testKeystore) {
+                storeFile = file(testKeystore)
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
         release {
             if (releaseKeystore) {
                 storeFile = file(releaseKeystore)
@@ -48,10 +60,10 @@ android {
         }
         // The test build a person installs by hand (ADR-028): built as the release is, so not debuggable
         // (no `run-as`, no debugger reading tokens from memory) and shrunk, but signed with the test key
-        // (in CI the repository's DEBUG_KEYSTORE_BASE64, so each test build installs over the last). The
-        // test key is not the release key, so a test build can never install over the public app, nor
-        // the public app over a test build: remove one before installing the other. The debug build is
-        // for the emulator's tests only.
+        // (in CI the repository's DEBUG_KEYSTORE_BASE64, in ANDROID_TEST_KEYSTORE, so each test build
+        // installs over the last). The test key is not the release key, so a test build can never
+        // install over the public app, nor the public app over a test build: remove one before
+        // installing the other. The debug build is for the emulator's tests only.
         internal {
             initWith release
             debuggable false
