@@ -41,7 +41,7 @@ behind a proxy with TLS that drops a `CF-Connecting-IP` the caller sent:
 docker run -d --name inbox --restart unless-stopped -p 127.0.0.1:8787:8787 \
   -v inbox-data:/opt/inbox/data --env-file inbox.env \
   -e INBOX_OWNER_EMAIL=you@yourbusiness.com -e INBOX_PUBLIC_URL=https://inbox.yourbusiness.com \
-  ghcr.io/surfingdogai/inbox:0.1.0
+  ghcr.io/surfingdogai/inbox:0.2.0-rc.1
 ```
 
 **Cloudflare Workers**, with D1, a queue and a cron. Press

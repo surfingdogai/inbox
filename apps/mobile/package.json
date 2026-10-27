@@ -1,7 +1,7 @@
 {
   "name": "@surfingdog/mobile",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0-rc.1",
   "type": "module",
   "license": "MIT",
   "description": "The owner's phone app for a Surfing Dog Inbox: Android first, one Capacitor app with the screens bundled in it.",

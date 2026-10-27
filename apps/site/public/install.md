@@ -195,7 +195,7 @@ Migrations run by themselves on the first request. Verify:
 curl -s https://surfingdog-inbox.<their-subdomain>.workers.dev/healthz
 ```
 
-Expect `{"ok":true,"version":"0.1.0"}`. Anything else: stop, show them the output.
+Expect `{"ok":true,"version":"0.2.0-rc.1"}`. Anything else: stop, show them the output.
 
 ### A6. Their own subdomain
 

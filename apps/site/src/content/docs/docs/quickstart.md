@@ -102,7 +102,7 @@ Open `/login`: enter an address from `INBOX_OWNER_EMAIL`, then open the link you
 The image is `ghcr.io/surfingdogai/inbox`, for amd64 and arm64, published on every release. It does the same build and runs the one file as an unprivileged user (uid 10001):
 
 ```bash
-docker run -d --name inbox -p 127.0.0.1:8787:8787 -v inbox-data:/opt/inbox/data ghcr.io/surfingdogai/inbox:0.1.0
+docker run -d --name inbox -p 127.0.0.1:8787:8787 -v inbox-data:/opt/inbox/data ghcr.io/surfingdogai/inbox:0.2.0-rc.1
 curl -s localhost:8787/healthz
 ```
 
@@ -113,7 +113,7 @@ The SQLite file lives in the `inbox-data` volume, so the container can be replac
 docker run -d --name inbox --restart unless-stopped -p 127.0.0.1:8787:8787 \
   -v inbox-data:/opt/inbox/data --env-file inbox.env \
   -e INBOX_OWNER_EMAIL=you@yourbusiness.com -e INBOX_PUBLIC_URL=https://inbox.yourbusiness.com \
-  ghcr.io/surfingdogai/inbox:0.1.0
+  ghcr.io/surfingdogai/inbox:0.2.0-rc.1
 ```
 
 The commands above run inside the container, for example `docker exec inbox node /opt/inbox/server.mjs create-owner-key laptop`, and two more for backups: `backup <file>` and `check-db <file>` ([Backups](/docs/backups/)). A folder of the host mounted as the data folder must belong to uid 10001 (`sudo chown 10001:10001 <folder>`); started with `--user 0`, the image gives it to that user itself, then runs as it. [deploy/docker-compose.yml](https://github.com/surfingdogai/inbox/blob/main/deploy/docker-compose.yml) adds Caddy with HTTPS in front. `docker build -t surfingdog-inbox .` builds the same image from the repository.
