@@ -23,7 +23,9 @@ Settings → **Spam**. The design is ADR-041 in the repository's `docs/adr`.
 | **Held** (bookings, orders, quote requests) | listed under Held; a morning email if you want one | nothing runs; no time, stock or pay link is taken | as usual ("we have your request"), or nothing when a certain signal held it |
 | **Put aside** (messages; a quote request for a certain reason, never otherwise) | listed under Spam with why | nothing runs | a message reads as open, one nobody answered yet; a quote request as received |
 
-A booking or an order is never put aside, at most held. A held booking holds no time: another customer can book and be confirmed for the same slot. A held request lapses by its own clock, silently.
+A booking or an order is never put aside, at most held. A held booking holds no time: another customer can book and be confirmed for the same slot. A held kitchen order takes no place in its slot or its dishes' daily count; let in, it takes them then, as a new order would, and where they are full by then it waits for a person instead of being accepted at once. A held request lapses by its own clock, silently.
+
+Requests for a stay (rooms and nights) are not screened yet: they arrive as they would without a filter.
 
 **Let it in** (Held) and **Not spam** (Spam) run what was held back, once: the rules and the webhooks. A request held for a bot's signal got no acknowledgement, and gets none after Let it in either. **Looks fine** takes a label off. Each is one press, with **Undo** for six seconds, and teaches the filter: that sender comes straight in from then on.
 
@@ -84,7 +86,7 @@ It runs on a stranger's opening message, with a filter on, when nothing certain 
 | Basic protection, Held and Spam, the lists, the emails | yes | yes |
 | The three filters | no | on from the start, each with its learning week |
 | The AI check | no | Claude Haiku from Anthropic, which we pay for |
-| [Known spam](#known-spam-shared-between-hosted-inboxes) from other businesses | labelled | caught as your filters say, and your marks help them |
+| [Known spam](#known-spam-shared-between-hosted-inboxes) from other businesses | labelled; your Not spam counts for them | labelled; your Spam and Not spam count for them |
 
 The $10 supports the open-source inbox, the open network, and keeping access to AI agents from being locked in a connector store. There is no price for each filter.
 
@@ -94,14 +96,16 @@ Settings → Spam names who reads. Anthropic does not use what it is sent to tra
 
 Hosted inboxes share fingerprints of known spam with each other, never messages. A fingerprint is a set of hash values made from a message's text with its links, email addresses, phone numbers, bank and card numbers and every digit taken out, and the sender's company mail domain where a mail server vouched for the address (never a provider many people share). The host keys each value with a secret of its own before keeping or comparing one: a fingerprint can't be turned back into the message, and nobody without that secret can match one.
 
-- **Known spam** is a message like one that three or more other businesses marked as Spam within a fortnight, or that their inboxes put aside on their own and were sure of: a bot's form, a server's mark, the same words from many senders, or the AI check sure of it with a passage it quotes. An owner counts once, however many inboxes they have, and not before their account is a week old.
-- **A match labels** it ("Marked spam elsewhere"). On Pro, under the filter the reporters named, it does what that filter is set to: labels in its learning week or on Just label, puts aside after. It never deletes, never holds a booking or an order on its own, never blocks a sender, and never counts in receipts, standing or ranking. A sender's domain known for spam adds a few points and labels nothing alone.
-- **Not spam** on a match counts against it for everyone. What a match alone put aside is never reported again, so the list never feeds itself.
-- **Free and Pro.** Every hosted inbox reads the list: it costs no AI, and on Free a match just labels. Pro inboxes live at the business's own domain report to it, and Free inboxes' marks stay their own: marks that can't be faked by the dozen keep the list honest.
+- **Compared.** Each new message from someone you haven't dealt with is compared, by its fingerprint, as it arrives. Senders you know, and requests a network's pass speaks for, are not looked up.
+- **Known spam** is a message like one that inboxes of three or more other businesses marked as Spam within a fortnight, or put aside on their own and were sure of: a bot's form, a server's mark, the same words from many senders, or the AI check sure of it with a passage it quotes. A business counts once, however many inboxes it has, and an inbox once, however often its owner changes their email address; none counts before its account is a week old.
+- **A match labels** it ("Seen as spam at other businesses"), on Free and on Pro, with your filters on or off, and on its own does nothing more. It helps put a message aside when this inbox's own checks or its AI check found something too, adding its points to theirs; your filters' learning week, Just label, and the AI check finding a customer still lower it. It never holds a booking or an order, never deletes, never blocks a sender, and never counts in receipts, standing or ranking.
+- **A sender's domain** known for spam counts for mail a mail server vouched came from it, never for an address typed at a form or given by an assistant, and adds a few points, labelling nothing alone.
+- **Not spam**, Let it in or Looks fine on a match counts against it for everyone, from any hosted inbox, Free included. What a person marked, or what an inbox was sure of on its own, is reported; never what a match labelled or helped put aside, so the list never feeds itself.
+- **Free and Pro.** Every hosted inbox reads the list: it costs no AI. Pro inboxes live at the business's own domain report spam to it, and no others, so marks can't be faked by the dozen. A Free inbox's Spam marks stay its own; its Not spam on a match counts, since that can never do more than let a message through.
 - **Forgotten** thirty days after it was reported. Erasing a customer takes back what your inbox said of their messages.
 - **On your own server** nothing is shared, and nothing others shared is read. A shared list may be offered for your own server later.
 
-Settings → Spam says which of these your inbox does, and your privacy page says, in your name, that fingerprints of spam are shared and can't be turned back into the message.
+Settings → Spam says which of these your inbox does. Your privacy page says, in your name, that each new message is compared by its fingerprint, whether your inbox shares the fingerprints of what you mark as spam, and that a fingerprint can't be turned back into the message.
 
 ## Connecting a model
 
@@ -126,7 +130,7 @@ Without a model, the filters look for known phrases, and the free protection wor
 
 ## Caps, on a hosted inbox
 
-On Pro, each inbox has a day's and a month's room for AI checks (150 and 1,500 unless your host says otherwise), counted across every server, and the host has a daily ceiling for all inboxes together. When room runs out, Settings says until when the AI check rests, and the filters look for known phrases until then.
+On Pro, each inbox has a day's and a month's room for AI checks (150 and 1,500 unless your host says otherwise), counted wherever your inbox runs, and the host has a daily ceiling for all the inboxes it runs together. When room runs out, Settings says until when the AI check rests, and the filters look for known phrases until then.
 
 ## The lists
 

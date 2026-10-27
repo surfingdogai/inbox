@@ -33,12 +33,20 @@ Many inboxes on one machine, for whoever runs Surfing Dog Inbox for other people
   which the ledger keeps across every shard.
 - **Known spam, shared.** The ledger also keeps the fingerprints of known spam the inboxes share,
   keyed with a key derived from its own: never a message, an address or a name. Every inbox reads
-  them; Pro inboxes live at their own domain report to them. A fingerprint counts once three other
-  owners, with accounts a week old, reported one like it within a fortnight; Not spam on a match
-  lowers it; all is forgotten after 30 days. The policy may name the owner's account
-  (`owner_account`: `id`, `created_at`) so one owner's inboxes count once and the account's age is
-  the control plane's; without it the owner is told apart by `owner_email` and dated from when this
-  runtime first opened one of their inboxes.
+  them, and a match alone only labels. Pro inboxes live at their own domain report spam to them; any
+  inbox that is not read-only, Free too, reports a Not spam on a match, which only ever lowers it. A
+  fingerprint counts once inboxes of three other owners, with accounts a week old, reported one like
+  it within a fortnight (distinct owners and distinct inboxes both); all is forgotten after 30 days.
+  The owner is the policy's `owner_account.id` when the control plane sends one, so one account's
+  inboxes count once, else the inbox's own tenant id: never `owner_email`, which an owner can change,
+  and each new address would be a new reporter. `owner_account.created_at` dates the account; without
+  it the owner is dated from when this runtime first opened the inbox.
+- **Per machine, for now.** The ledger is one file on the machine the shards run on. The runtime's
+  daily token ceiling (`HOSTED_SPAM_DAILY_TOKENS`) and the shared list are therefore per runtime:
+  with a second machine, each has its own ceiling (the service-wide ceiling is that many times the
+  setting) and its own list, and inboxes on different machines share nothing. An inbox's day and
+  month caps hold because an inbox runs on one machine at a time. Moving both to the control plane
+  is the step before a second machine.
 
 Every name, socket, key and directory comes from the environment; see `src/config.ts`.
 
