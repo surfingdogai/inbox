@@ -79,6 +79,9 @@ pnpm test              # every test, on Node and on Workers
 ./scripts/verify.sh    # everything CI runs
 ```
 
+How to send a change, ask for an integration or report a security problem: [CONTRIBUTING.md](CONTRIBUTING.md)
+and [SECURITY.md](SECURITY.md).
+
 - `apps/inbox`: the server and the owner app, one codebase for Workers and Node
 - `deploy`: the self-host kit: the one-command installer, the Compose file, the `inbox` command, platform templates
 - `apps/site`: surfingdog.ai, with the docs. It counts visits with Cloudflare Web Analytics only when built with

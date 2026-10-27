@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security problem
+    url: https://github.com/surfingdogai/inbox/blob/main/SECURITY.md
+    about: Please report it privately by email, not in an issue.
+  - name: Help with a hosted inbox
+    url: https://surfingdog.ai/support
+    about: Questions about an inbox we host for you.
