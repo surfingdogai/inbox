@@ -3,7 +3,7 @@ title: Self-hosted vs hosted
 description: The same software either way. What you run, what we run, and what each one includes.
 ---
 
-The inbox is one codebase with two self-hosting targets and one hosted edition. The core never knows which it is running on. <!-- hosted: open -->Hosted is free, with Pro at $10 a month if you want it.<!-- hosted: closed -->Hosted is not open yet; until it is, self-host.<!-- hosted: end -->
+The inbox is one codebase with two self-hosting targets and one hosted edition. The core never knows which it is running on. <!-- hosted: open -->Hosted is free, with Pro at $10, €10 or £9 a month if you want it.<!-- hosted: closed -->Hosted is not open yet; until it is, self-host.<!-- hosted: end -->
 
 | | Deploy to Cloudflare | Your own server | Hosted by us<!-- hosted: closed --> (not open yet)<!-- hosted: end --> |
 | --- | --- | --- | --- |
@@ -16,7 +16,7 @@ The inbox is one codebase with two self-hosting targets and one hosted edition. 
 | Backups | Yours (D1 time travel) | Yours: the installer backs up every night; Litestream optional ([Backups](/docs/backups/)) | Done by us: every hour, encrypted |
 | Network | Join any network, or none, from settings; the setup suggests network.surfingdog.ai | Same | On network.surfingdog.ai from the day it goes live; switch it off, or add others, from settings |
 | Domain | Your Worker route or custom domain | Yours | A hostname on your own domain, such as `inbox.yourbusiness.com`, by one DNS record |
-| Cost | Cloudflare's plan; the free plan starts, sending email needs Workers Paid | Your machine | <!-- hosted: open -->Free; Pro, if you want it: $10 a month, taxes included<!-- hosted: closed -->Free<!-- hosted: end --> |
+| Cost | Cloudflare's plan; the free plan starts, sending email needs Workers Paid | Your machine | <!-- hosted: open -->Free; Pro, if you want it: $10, €10 or £9 a month, taxes included<!-- hosted: closed -->Free<!-- hosted: end --> |
 | Licence | MIT | MIT | Same software, same licence |
 
 <!-- hosted: open -->

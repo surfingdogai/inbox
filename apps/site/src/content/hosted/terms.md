@@ -27,9 +27,11 @@ These terms are between Surfing Dog, Lda, a company registered in Portugal with 
 ## 3. Price
 
 - Free costs nothing, with no end date: the whole inbox, its connectors, your listing on the network and the catalogue, with basic spam protection. It never asks for a card.
-- Pro is optional, for each inbox: $10 a month, taxes included. It adds AI spam filters, which are coming; until they ship, Pro changes nothing in your inbox, and your $10 supports the open-source inbox and the open network.
-- You choose Pro on your inbox's Plan page and pay at Stripe's checkout. Pro is sold through Link: Stripe is the merchant of record. It takes the payment, works out and pays the tax, and sends your receipts and invoices. Its own terms apply to the payment. Checkout may show the price in your own currency, converted by Stripe with its fee in it; you can choose US dollars there and pay $10.
-- Pro renews every month. Cancel it at any time on the Plan page: Pro runs to the end of the month you paid for, then your inbox is Free again. Closing your inbox stops Pro from renewing. If a renewal can't be paid, your inbox goes back to Free.
+- Pro is optional, for each inbox: $10, €10 or £9 a month, taxes included. It adds AI spam filters for sales pitches, scams and junk, which are coming; until they are on, Pro changes nothing in your inbox, and your $10 supports the open-source inbox and the open network.
+- You choose Pro on your inbox's Plan page and pay at Stripe's checkout. Pro is sold through Link: Stripe is the merchant of record. It takes the payment, works out and pays the tax, and sends your receipts and invoices. Its own terms apply to the payment. Checkout charges €10 if you pay in euros and £9 if you pay in pounds. For other currencies it may show the price converted by Stripe, with its fee in it; you can choose US dollars there and pay $10.
+- Pro renews every month. Cancel it at any time on the Plan page: Pro runs to the end of the month you paid for, then your inbox is Free again. Closing your inbox stops Pro from renewing.
+- If a renewal can't be paid, Stripe tries again over the following days, and Pro carries on meanwhile. If it still can't be paid, Pro ends and your inbox is Free again. Nothing in your inbox is deleted.
+- We may give an inbox Pro for free until a date, for example to people trying the beta. No card is asked for and nothing is charged. It ends by itself on that date, and your inbox is Free again unless you choose Pro.
 - Nothing is charged without your agreement: Free is never charged, and Pro is charged from the day you choose it and pay at checkout.
 - We tell you by email at least 30 days before any change to Pro's price. It applies from the renewal after that, and you can cancel before it does.
 - We count confirmed items: a booking your inbox confirmed or an order it accepted, counted once, when it happens. Test items never count. Your Plan page shows the count.

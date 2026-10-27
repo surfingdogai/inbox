@@ -237,7 +237,7 @@ describe("the hosted pilot's words", () => {
     const terms = body(`${HOSTED_DIR}/terms.md`).replace(/\s+/g, " ");
     for (const promise of [
       "Free costs nothing, with no end date",
-      "$10 a month, taxes included",
+      "$10, €10 or £9 a month, taxes included",
       "Nothing is charged without your agreement",
       "Pro runs to the end of the month you paid for",
       "Closing your inbox stops Pro from renewing",
@@ -385,7 +385,9 @@ describe("hosted first, once the pilot is open", () => {
     // The lede says we host it; the fine line carries only the terms.
     expect(open.lede).toContain("We host Surfing Dog Inbox for you at your own address, like inbox.yourbusiness.com");
     expect(open.lede).not.toMatch(/you run/);
-    expect(open.note).toBe("Free, or Pro at $10 a month. Your inbox and its backups are stored in the European Union.");
+    expect(open.note).toBe(
+      "Free, or Pro at $10, €10 or £9 a month. Your inbox and its backups are stored in the European Union.",
+    );
     const closed = hostedHero(false);
     expect(closed.primary).toEqual({ label: "Deploy to Cloudflare", href: DEPLOY_URL, rel: "noopener" });
     expect(closed.also).toBeNull();
@@ -486,7 +488,7 @@ describe("hosted first, once the pilot is open", () => {
       "Get the inbox at your own address, and agents write to you there. We host it for free, or your AI sets it up from one line.",
     );
     expect(read("src/components/ForBusinesses.astro")).toContain("{pills[1] && <StatusPill");
-    expect(door.price).toBe("Hosted inbox: free, Pro $10 a month · Self-host: free");
+    expect(door.price).toBe("Hosted inbox: free, Pro $10, €10 or £9 a month · Self-host: free");
     const shut = hostedNoDoor(false);
     expect(shut.pills).toEqual([
       { id: "inbox", text: "Live: self-host" },
@@ -604,11 +606,12 @@ describe("hosted first, once the pilot is open", () => {
 });
 
 /**
- * The price (the founder's decision, 26 Oct 2026): the hosted inbox is Free, with no end date, and
- * Pro is $10 a month, taxes included, for an owner who wants it. Said short, the same way wherever a
- * price is, with what the $10 supports; no "during the pilot" left on a price, nor "no price is set".
+ * The price (the founder's decisions, 26 and 27 Oct 2026): the hosted inbox is Free, with no end
+ * date, and Pro is $10, €10 or £9 a month, taxes included, for an owner who wants it: the AI spam
+ * filters, nothing else. Said short, the same way wherever a price is, with what the $10 supports;
+ * no "during the pilot" left on a price, nor "no price is set".
  */
-const PRO = "$10 a month, taxes included";
+const PRO = "$10, €10 or £9 a month, taxes included";
 const SUPPORT =
   "Your $10 supports the open-source inbox, the open network, and keeping access to AI agents out of any one company's connector store.";
 
@@ -620,11 +623,16 @@ describe("the price: Free, and Pro at $10", () => {
     expect(page).toContain(
       "Free: the whole inbox, its connectors, your listing on the network and the catalogue, with basic spam protection. No card, and no end date.",
     );
-    expect(page).toContain(`Pro, if you want it: ${PRO}, for each inbox. It adds AI spam filters, coming soon.`);
+    expect(page).toContain(
+      `Pro, if you want it: ${PRO}, for each inbox. It adds AI spam filters for sales pitches, scams and junk, coming soon.`,
+    );
+    expect(page).toContain(
+      "They put messages aside and never delete them, and ask Claude Haiku, an AI model from Anthropic",
+    );
     expect(page).toContain("Cancel at any time; Pro runs to the end of the month you paid for.");
     expect(page).toContain(SUPPORT);
     expect(page).not.toMatch(/during the pilot|30 days before|a price, when there is one/);
-    expect(read(`${HOSTED_DIR}/index.md`)).toMatch(/^description: .*Free, or Pro at \$10 a month\.$/m);
+    expect(read(`${HOSTED_DIR}/index.md`)).toMatch(/^description: .*Free, or Pro at \$10, €10 or £9 a month\.$/m);
   });
 
   it("the guide's question, the comparison and the quickstart say the same", () => {
@@ -644,6 +652,11 @@ describe("the price: Free, and Pro at $10", () => {
     expect(terms).toContain(`Pro is optional, for each inbox: ${PRO}.`);
     expect(terms).toContain("Pro is sold through Link: Stripe is the merchant of record.");
     expect(terms).toContain("you can choose US dollars there and pay $10");
+    expect(terms).toContain("Checkout charges €10 if you pay in euros and £9 if you pay in pounds.");
+    expect(terms).toContain(
+      "If it still can't be paid, Pro ends and your inbox is Free again. Nothing in your inbox is deleted.",
+    );
+    expect(terms).toContain("We may give an inbox Pro for free until a date");
     expect(terms).toContain("**Ending the service.**");
     expect(terms).toContain("or what you paid for Pro in the 12 months before the claim, if that is more");
     const privacy = flat(body(`${HOSTED_DIR}/privacy.md`));
@@ -654,7 +667,7 @@ describe("the price: Free, and Pro at $10", () => {
       expect(front(`${HOSTED_DIR}/${page}`).eyebrow, page).not.toMatch(/pilot/i);
     }
     for (const page of ["terms.md", "privacy.md"])
-      expect(front(`${HOSTED_DIR}/${page}`).updated, page).toBe("26 October 2026");
+      expect(front(`${HOSTED_DIR}/${page}`).updated, page).toBe("27 October 2026");
     expect(front(`${HOSTED_DIR}/terms.md`).description).not.toMatch(/pilot/i);
   });
 
@@ -683,7 +696,7 @@ describe("the price: Free, and Pro at $10", () => {
     expect(read("src/content/docs/docs/self-hosted-vs-hosted.md")).not.toContain("Hosted by us (pilot");
     expect(readFileSync(repo("README.md"), "utf8")).not.toMatch(/free during the pilot/i);
     expect(read("src/pages/technical.astro")).toContain(
-      '"We run it for you, at an address on your own domain. Free, or Pro at $10 a month."',
+      '"We run it for you, at an address on your own domain. Free, or Pro at $10, €10 or £9 a month."',
     );
   });
 });
@@ -750,8 +763,8 @@ describe("the docs, in both states", () => {
   });
 
   it("self-hosted vs hosted and the overview: no 'not open yet' or waitlist while open", () => {
-    expect(version(VS, true)).toContain("Hosted is free, with Pro at $10 a month if you want it.");
-    expect(version(VS, true)).toContain("| Free; Pro, if you want it: $10 a month, taxes included |");
+    expect(version(VS, true)).toContain("Hosted is free, with Pro at $10, €10 or £9 a month if you want it.");
+    expect(version(VS, true)).toContain("| Free; Pro, if you want it: $10, €10 or £9 a month, taxes included |");
     expect(version(VS, false)).not.toMatch(/\$10|\bPro\b/);
     expect(version(VS, true)).toContain("| Hosted by us |");
     expect(version(VS, false)).toContain("Hosted is not open yet; until it is, self-host.");
