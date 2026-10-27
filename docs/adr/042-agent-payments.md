@@ -3,7 +3,7 @@
 **Status:** proposed, 26 October 2026. Builds on ADR-023 (pay links), ADR-036 (money in each currency's
 own minor unit, extra key permissions asked for on demand) and ADR-018 §5 (the confirm step and
 `terms_sha`). Migration 0034 (`agent_payments`). No spec version: `pay_order` is a door of the inbox, not
-a schema of the spec, and the token it reads is already in the payments vocabulary (`acp_delegated`).
+a schema of the spec, and the business profile's payments do not change (§1).
 
 ## Context
 
@@ -22,9 +22,23 @@ Specifications read on 26 October 2026:
   `POST /v1/payment_intents` (`amount`, `currency`, `payment_method_data[shared_payment_granted_token]`,
   `confirm=true`) in API version `2026-09-30.preview`. On confirm, Stripe clones the card into a new
   PaymentMethod on the seller's account, so refunds and reporting work as for any payment. Its
-  `deactivated_reason` is `consumed`, `expired`, `resolved` or `revoked`. Stripe's agentic-commerce
-  seller terms apply. Offered in the US, Canada, the UK, Switzerland, Norway, Liechtenstein and most of
-  the EU and EEA.
+  `deactivated_reason` is `consumed`, `expired`, `resolved` or `revoked`. "By using SPTs, you agree to
+  the terms of service": nothing to accept first. Offered in the US, Canada, the UK, Switzerland, Norway,
+  Liechtenstein and most of the EU and EEA. Its agent side ("Handle next actions",
+  https://docs.stripe.com/agentic-commerce/concepts/shared-payment-tokens?agent-seller=agent): a token
+  "can transition to the requires_action state when a payment created by the seller needs additional
+  customer action", the agent's platform handles it with its person, and Stripe then continues
+  processing; it "usually happens for redirect payment methods such as Klarna and Affirm, and it might
+  happen when card payments require 3D Secure".
+- **Stripe's idempotent requests** (https://docs.stripe.com/api/idempotent_requests): Stripe saves the
+  status and body of the first request with a key once the endpoint has begun, "including 500 errors",
+  and answers every retry with it. A request that conflicted with one still running under the key (409
+  `idempotency_error`) keeps nothing; a key sent again with other parameters is refused (400
+  `idempotency_error`).
+- **Orchestrated Commerce Agreements**
+  (https://docs.stripe.com/agentic-commerce/agents/embedded, "Manage seller relationships"): "An OCA is a
+  required connection between your agent and a seller that enables agentic commerce flows. Only a
+  seller can initiate an OCA request." The agent approves it.
 - **Stripe's UCP payment handler**
   (https://docs.stripe.com/agentic-commerce/protocols/ucp/stripe-payments-handler, handler version
   `2026-06-25`): the seller charges with "a restricted API key that has the PaymentIntents write
@@ -63,8 +77,12 @@ The doors are the ones agents already order through:
   directly now: `handler: "stripe_spt"`, `psp`, `business_profile`, `environment` (`livemode` or
   `testmode`), `amount`, `platform_amount` (the total as Stripe counts it, which is the token's limit),
   `terms_sha` and `binding_id`. `next` then starts with `pay_order`.
-- The business profile's `payments` adds `acp_delegated` while the switch is on. Nobody types it: it
-  follows the switch, so a network's "assistants can pay here" filter is true.
+- The business profile's `payments` adds nothing. `acp_delegated` names ACP's delegated payment, whose
+  token is minted against a checkout session (`allowance.checkout_session_id` is required) and handed
+  over only in `POST /checkout_sessions/{id}/complete`, after discovery at `/.well-known/acp.json`; an ACP
+  platform that trusted the listing would find no such door here and could not pay. A token for this
+  door (a Stripe SPT at `pay_order`) waits for a version of the payments vocabulary; until then the doors
+  say it themselves: the MCP server lists `pay_order`, and the status door `payment.agent`.
 
 An ACP checkout door and a UCP shopping door are not built here (§9). When they are, their complete
 step calls the same `payOrder`.
@@ -92,8 +110,10 @@ this order, each refusing before Stripe is asked anything:
 3. A Stripe connection of the order's mode with the switch on and a profile (`agent_pay_unavailable`).
 4. `terms_sha` is the agreed one (`terms_changed`, with the order's current fingerprint).
 5. Stripe takes the currency (ADR-036's table).
-6. An echoed allowance (ACP's `credential.allowance`) is in the same currency, at least the total, and
-   not expired. It can only refuse: Stripe holds the token to its own limits, whatever is echoed.
+6. An echoed allowance (the token's `usage_limits` as Stripe gave them to the platform: `max_amount`,
+   `currency`, and `expires_at` in seconds since 1970, or a date and time) is in the same currency, at
+   least the total, and not expired. It can only refuse: Stripe holds the token to its own limits,
+   whatever is echoed. ACP passes no allowance to a seller, so none is expected.
 7. A token seen before is answered as it went (below). Otherwise, at most five declined attempts per
    order and thirty per inbox in a day (`too_many_attempts`), which blunts card testing. The doors give
    paying its own rate class too (`pay`: thirty at once and sixty an hour per address), so a script
@@ -107,24 +127,41 @@ link follow from the existing paths.
 ### 4. Once
 
 - **One per order.** `agent_payments_live` is unique on `item_id` while an attempt is `creating`,
-  `processing` or `paid`. Two assistants paying at once, or one paying again after the first went
-  through, make one charge: the second is told `in_progress` or `already_paid`.
+  `processing`, `unknown` or `paid`. Two assistants paying at once, one paying again after the first went
+  through, or another token while nobody knows what the first did, make one charge: the second is told
+  `in_progress` or `already_paid`. The status door says `processing` for an attempt that holds the order
+  and `paid` for one paid but not yet on the order, and offers neither the link nor `agent` then.
 - **One per token.** The token is never kept: only `SHA-256("spt:" + token)`, unique. The same token
   sent again is answered as it went, never charged again.
-- **One per attempt.** The PaymentIntent is made with `Idempotency-Key: sdi-<row id>-pi`. When Stripe
-  does not answer (5xx, 429, a timeout) the attempt stays `creating`, unclaimed, and the assistant is
-  told `platform_unavailable` with `Retry-After`. Its retry with the same token asks Stripe again under
-  the same key, so Stripe answers what it did with the first.
+- **One per attempt.** The PaymentIntent is made with `Idempotency-Key: sdi-<row id>-pi`, and carries
+  `metadata[sdi_pay]` (the row's id) whatever the key. When Stripe does not say what it did, the attempt
+  stays `creating`, holding the order, and the assistant is told `platform_unavailable` with
+  `Retry-After`: retry with the same token and key, never a new token. Which key the retry goes under
+  follows from what Stripe keeps:
+  - **No answer** (a timeout, a cut connection), an edge's 502, 503 or 504, or a 409 `idempotency_error`
+    (the first request still runs): the same key, which Stripe answers as it did the first. The claim
+    is kept until it ends (two minutes from the ask), so no retry reaches Stripe while the first may
+    still run.
+  - **A 500**, or a 400 `idempotency_error`: Stripe answers the same to every retry with the key, so the
+    retry goes under a new one (`sdi-<row id>-pi-<n>`, `agent_payments.retry_key`), after the inbox
+    looks for a charge of the attempt's (Stripe's search, by `metadata[sdi_pay]`). It sends the same
+    token, which pays once: if the first ask spent it, Stripe refuses it, and nothing is charged twice.
+  - **A 429**: nothing was done, and the same key asks again after `Retry-After`.
+  - **A refusal of a retry** (the token spent, unknown, an answer that cannot be read, the key refused)
+    may be about what the first ask did, so it is never a failure: the attempt holds the order
+    (`in_progress`) for three minutes, past the search's lag, and is looked for again.
 - **One per request.** The caller's `idempotency_key` replays the stored answer; the stored request
   holds the token's hash, never the token.
 
-An attempt Stripe never answered is looked up by the sync a few minutes later, by the inbox's own id
-for it, which every PaymentIntent it makes carries (`metadata[sdi_pay]`, with Stripe's search). Found,
-it is settled as it stands, so a charge whose answer was lost is recorded, never made twice. Not found
-after a quarter of an hour, it was never made: the order is free for another token, and a retry with
-the same token still asks under the same key. Until then no other token is charged for the order. An
-attempt still `processing` after a day becomes `unknown`, and the owner is told on the order to check
-it in Stripe.
+An attempt Stripe never answered is looked up by the sync a few minutes after it was last asked
+(`asked_at`), by the inbox's own id for it. Found, it is settled as it stands, so a charge whose answer
+was lost is recorded, never made twice. Not found a quarter of an hour after the last ask, it was never
+made: the order is free for another token, and a retry with the same token asks under a new key. Until
+then no other token is charged for the order. An attempt still `creating` two hours after its last ask,
+or still `processing` after a day, becomes `unknown` and the owner is told on the order to check it in
+Stripe; `unknown` still holds the order, and the sync still reads it back hourly, so a payment that goes
+through later is recorded, and one never made frees the order. The owner can settle it on the order
+too (record the payment, or cancel).
 
 ### 5. Test keys for test orders
 
@@ -146,22 +183,30 @@ inbox writes to customers in), and passes the customer-copy check.
 | Declined, cancelled, expired | 409 | `wrong_state` | Nothing to pay. |
 | A change waits | 409 | `change_pending` | Wait for the answer. |
 | Other terms | 409 | `terms_changed` (`terms_sha`) | Ask its person again; a new token for the new total. |
-| Another attempt on its way | 409 | `in_progress` (`retry_after_s`) | Retry with the same key. |
+| Another attempt on its way, or one Stripe has not yet said the outcome of | 409 | `in_progress` (`retry_after_s`) | Retry with the same token and key after `retry_after_s`. |
 | Not this business's token, nor this mode's | 422 | `token_invalid` | A new token for `business_profile` and `environment`. |
 | Expired, used or revoked | 422 | `token_expired`, `token_used` | A new token. |
 | Below the total, or another currency | 422 | `token_limit` | A token for `platform_amount`. |
 | Declined | 402 | `payment_declined` (`attempts_left`) | Nothing was charged: another card, a new token. |
-| The card asks its holder to confirm | 402 | `authentication_required` (`payment_url`) | Send its person to the link. |
+| Declined because the card needs its holder, and the PaymentIntent cannot ask them | 402 | `authentication_required` (`payment_url`) | Send its person to the link. |
 | Too many declines today | 429 | `too_many_attempts` | Give its person `payment_url`. |
-| Stripe did not answer | 503 | `platform_unavailable` (`Retry-After`) | Retry with the same token and key. |
-| Processing | 202 | `state: "processing"` | Read the status until it is paid. |
+| Stripe did not say what it did | 503 | `platform_unavailable` (`Retry-After`) | Retry with the same token and key, never a new token. |
+| Processing, or the card asks its holder to confirm (3D Secure, a redirect) | 202 | `state: "processing"` | Its platform shows its person the step Stripe asks for; read the status until it is paid. |
 
 Stripe's own decline codes (`insufficient_funds`, `fraudulent`, …) are kept on the attempt for the owner
 and never told to the assistant. A synchronous decline does not move the order, so no failure email goes
 for an attempt the person never left. A payment that was processing and then failed moves the order to
-`payment_failed`, as a link's does. `requires_action` is not taken here: the PaymentIntent is cancelled so
-it can never be taken later, and the person is sent to the link. Delegated authentication waits for a
-platform that documents it.
+`payment_failed`, as a link's does.
+
+A PaymentIntent in `requires_action` waits for its card holder, as Stripe's flow for these tokens has it:
+the agent's platform is told and shows its person the step (a 3D Secure challenge, a redirect for Klarna
+or Affirm), and Stripe goes on once they do. The inbox answers `202 processing` and reads it back on each
+sync until Stripe says. Strong customer authentication applies in the UK and the EEA, so this is the
+common case there, not an edge. One its holder has not confirmed an hour after the ask (past a token's
+own life) is cancelled, so it is never taken later, and read again: one confirmed meanwhile is paid;
+one stopped is `cancelled` (`authentication_required`), and the order is due again. ACP's own
+`authentication_required` checkout status and delegated authentication belong to the ACP door (Not
+decided here).
 
 Stripe does not document the error codes it gives a token it will not charge. The adapter reads the
 parameter it names and its words as well as its code (expired; consumed, revoked or deactivated; over a
@@ -185,9 +230,11 @@ connection, is the owner's in person (`requirePerson`): the owner's AI and integ
 - The connection shows how many orders assistants paid. The order's payments show each attempt
   (`agent_payments` on `GET /v1/owner/items/{id}/payments`), with the payment's page in Stripe.
 
-What only the owner can do, outside the inbox, and the switch's copy says: create a Stripe profile,
-accept Stripe's agentic-commerce seller terms, add the permission to the key, and confirm each agent
-platform's commerce relationship in Stripe in the same mode.
+What only the owner can do, outside the inbox, and the switch's copy says: create a Stripe profile, add
+the permission to the key, and start an Orchestrated Commerce Agreement with each AI platform they want
+to be paid through, in Stripe and in the same mode. The seller starts it and the platform approves it;
+a platform cannot ask for one, so an owner who waits for a request never gets one, and that platform's
+tokens for the business fail. Stripe's terms for SPTs are accepted by using them.
 
 ### 8. Data model
 
@@ -196,7 +243,9 @@ it on writes no row. One row per attempt: the order, the connection (not a forei
 outlives a disconnect), the door, the amount and currency (the inbox's minor units), the mode, the
 `terms_sha` it was charged for, the token's hash, the state (`creating`, `processing`, `paid`, `declined`,
 `failed`, `cancelled`, `unknown`), Stripe's id, method, amount taken and dashboard page, our failure code
-and Stripe's words, a note for the owner, the claim, and when it went on the order. No row holds a
+and Stripe's words (with any token they name taken out), a note for the owner, which idempotency key it
+is asked under (`retry_key`) and when it was last asked (`asked_at`), the claim, and when it went on the
+order. No row holds a
 customer's name, email or address, so erasure leaves them, as it leaves paid links; a download carries
 them. The connection's switch is in `connectors.config_public`: `$.agentPay`, `$.agentProfile`,
 `$.agentPayAt`, `$.agentPayStopped`.
@@ -240,6 +289,10 @@ To verify in a Stripe sandbox before a business uses it:
 3. The error codes for an expired, revoked, consumed, over-limit or foreign token.
 4. Whether test profile IDs always start `profile_test_`; until then, mode is enforced by the key.
 5. What ChatGPT's ACP handler expects in `config.merchant_id` (`profile_…` or `acct_…`).
+6. That a spent token is refused on a second PaymentIntent under a new idempotency key: asking again
+   under a new key after a 500 rests on it.
+7. Which `requires_action` cases a restricted key's PaymentIntent reaches with these tokens, and whether
+   Stripe asks for a `return_url` for a redirect method.
 
 ## Not decided here
 
@@ -269,16 +322,26 @@ mandate is that, signed. When built:
 2. The confirm answer (and a UCP checkout response) gains `checkout_jwt`, a JWS over the same canonical
    order terms `terms_sha` hashes, so the two agree by construction; for UCP,
    `ap2.merchant_authorization`, a detached JWS over the JCS checkout without `ap2`.
-3. `create_order` and `pay_order` take `mandate: {checkout: "<sd-jwt+kb>"}` in place of `terms_sha`:
-   the SD-JWT's signature, key binding (`aud`, `nonce`, `sd_hash`) and `exp` are verified, then our own
+3. `create_order` takes `mandate: {checkout: "<sd-jwt+kb>"}` in place of `terms_sha`: the SD-JWT's
+   signature, key binding (`aud`, `nonce`, `sd_hash`) and `exp` are verified, then our own
    `merchant_authorization` by `kid`, then that the terms are the order's. Errors map to UCP's
    `mandate_required`, `mandate_invalid_signature`, `mandate_expired`, `mandate_scope_mismatch` and
-   `merchant_authorization_invalid`.
+   `merchant_authorization_invalid`. The checkout mandate is the business's to verify; the payment
+   mandate is not (item 5).
 4. The closed mandate's hash is kept as evidence (`agent_payments.mandate_sha`); the receipt's claims do
    not change (`trm` binds the terms already). The answer carries an AP2 checkout receipt signed with the
    P-256 key.
-5. The payment mandate is for the credential provider, network and processor. For a Stripe business
-   today, AP2's money leg is still a credential Stripe takes (an SPT), charged as here.
+5. The payment mandate is not ours to verify, nor something Stripe takes today. UCP's AP2 extension
+   carries it in `payment.instruments[*].credential.token` as a composite token, and "the business
+   passes the token (composite object) to their Payment Handler / PSP", which verifies it; AP2 has it
+   verified by the credential provider, the network and the merchant's processor. Stripe documents no
+   PaymentIntent parameter that takes or checks a payment mandate: `com.stripe.payments` takes a
+   credential of type `stripe_payment_token` or `pk_payment_token` only. So `pay_order` cannot charge an
+   AP2 composite as `payment_method_data[shared_payment_granted_token]`, and a bare SPT in its place
+   drops the payment mandate and does not conform. AP2 payments for a Stripe business wait for Stripe
+   (or a processor the business uses) to verify payment mandates; until then the inbox can take AP2's
+   checkout mandate on `create_order` and be paid as here, with an SPT, saying it is not AP2's payment
+   leg.
 6. Only closed mandates first. Open ones (a person's limits set in advance) only where the owner's rules
    accept at once, with the amount range checked against the exact total.
 

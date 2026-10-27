@@ -1533,9 +1533,9 @@ function AgentPayChoice({ connection: c, onNotice }: { connection: ConnectionVie
           {test
             ? "Test key: only test orders can be paid this way, with Stripe's test tokens."
             : `Assistants can pay you directly. ${agent.paid} ${agent.paid === 1 ? "order" : "orders"} paid this way.`}{" "}
-          Before an assistant can pay you, Stripe may ask you to accept its terms for agent payments and to confirm each
-          assistant's app in your Stripe dashboard. Available where Stripe offers it: the US, Canada, the UK and most of
-          Europe.
+          Before an AI platform can pay you, start an agreement with it in your Stripe dashboard (an Orchestrated
+          Commerce Agreement), in the same mode as this key: only you can start it, and the platform approves it.
+          Available where Stripe offers it: the US, Canada, the UK and most of Europe.
         </p>
       )}
     </div>
