@@ -50,7 +50,9 @@ Its point-based outcomes started with a learning week of their own, from the day
 
 Each filter looks for known phrases on its own, in many languages, and reads with an AI model where one is set up (one reading judges all three). For each, choose **Put aside** or **Just label**.
 
-**Learning week.** For seven days from the day you switch a filter on, it labels what it would have put aside and puts nothing aside ("Would have been put aside"). **Start now** ends it. Switching off and on within thirty days does not start it again.
+On a hosted inbox the three filters come with **Pro**, and start on. On **Free**, basic protection keeps working, with no filters and no AI. On your own server you switch on the ones you want.
+
+**Learning week.** For seven days from the day a filter is switched on (on Pro, the day Pro starts), it labels what it would have put aside and puts nothing aside ("Would have been put aside"). **Start now** ends it. Switching off and on within thirty days does not start it again. A filter you switch off stays off; one switched off because Pro ended comes back as it was when Pro does.
 
 ## How it decides
 
@@ -75,9 +77,21 @@ It runs on a stranger's opening message, with a filter on, when nothing certain 
 - Eight seconds an attempt, one retry after two, twenty seconds in all; any failure lets the request through.
 - The same text from another sender this week reuses the answer instead of asking again.
 
+## Hosted: Free and Pro
+
+| | Free | Pro: $10, €10 or £9 a month, taxes included |
+| --- | --- | --- |
+| Basic protection, Held and Spam, the lists, the emails | yes | yes |
+| The three filters | | on from the start, each with its learning week |
+| The AI check | | Claude Haiku from Anthropic, which we pay for |
+
+The $10 supports the open-source inbox, the open network, and keeping access to AI agents from being locked in a connector store. There is no price for each filter.
+
+Settings → Spam names who reads. Anthropic does not use what it is sent to train its models, and deletes it within 30 days, unless its safety checks flag it for breaking its usage policy (then it may keep it up to two years) or the law requires keeping it. That is Anthropic's standard commercial retention, not a zero-retention arrangement. Until the AI check is switched on for hosted inboxes, Settings says so, and the filters look for known phrases.
+
 ## Connecting a model
 
-On a **hosted** inbox, the host pays for the model and you connect nothing. Until reading by AI is switched on there, the filters look for known phrases, and you'll be told before it changes.
+On a **hosted** inbox you connect nothing: on Pro the host's model reads, and you cannot bring your own key there yet.
 
 On **your own server**, either:
 
@@ -98,7 +112,7 @@ Without a model, the filters look for known phrases, and the free protection wor
 
 ## Caps, on a hosted inbox
 
-Each inbox has a day's and a month's room for AI checks (150 and 1,500 unless your host says otherwise), counted across every server, and the host has a daily ceiling for all inboxes together. When room runs out, Settings says until when the AI check rests, and the filters look for known phrases until then.
+On Pro, each inbox has a day's and a month's room for AI checks (150 and 1,500 unless your host says otherwise), counted across every server, and the host has a daily ceiling for all inboxes together. When room runs out, Settings says until when the AI check rests, and the filters look for known phrases until then.
 
 ## The lists
 

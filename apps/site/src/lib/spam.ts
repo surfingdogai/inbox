@@ -42,7 +42,7 @@ export const SPAM_LINES = {
   form: "Put our form on any site, with no script and no puzzle for your customers. Or let your own website's forms pass what they receive to your inbox, with a key that can do nothing else.",
   yours:
     "No spam company's cloud, no sharing between businesses. Before anything is read by AI, email addresses, phone numbers and bank details are taken out.",
-  cost: "Run it yourself: free, with your own AI model or none. Hosted: free for now; later, a small price for each filter you switch on, and we'll ask you beforehand.",
+  cost: "Run it yourself: free, with your own AI model or none. Hosted: basic protection is free; the three filters come with Pro, $10, €10 or £9 a month, taxes included, read by Claude Haiku from Anthropic, which we pay for. The $10 supports the open-source inbox, the open network, and keeping access to AI agents from being locked in a connector store.",
 } as const;
 
 export const SPAM_FAQS: readonly Faq[] = [
@@ -60,7 +60,7 @@ export const SPAM_FAQS: readonly Faq[] = [
   },
   {
     q: "Which AI models can I use?",
-    a: "On your own server, your own key from Anthropic, OpenAI or Google Gemini, or a model on your own server through a chat-completions API. Without one, the filters look for known phrases, nothing more. On a hosted inbox we pay for the model, and the filters look for phrases until reading by AI is switched on.",
+    a: "On your own server: a key from Anthropic, OpenAI or Google Gemini, or a model you run; without one, the filters look for known phrases. Hosted, with Pro: Claude Haiku from Anthropic, which we pay for. Anthropic doesn't train on what it's sent, and deletes it within 30 days unless its safety checks flag it or the law requires otherwise.",
   },
   {
     q: "Can an AI assistant still ask me for a price?",
@@ -124,7 +124,7 @@ export const SPAM_GUIDE_OPTIONS: readonly GuideOption[] = [
   },
   {
     way: "Filtering in your inbox (Surfing Dog Inbox, ours)",
-    what: "Free protection on every door, three filters you switch on, and what it catches waits under Spam or Held with its reason, kept for as long as you choose, one tap back. Open source; on your own server it is free, with your own AI model or none.",
+    what: "Free protection on every door, and three filters: on your own server free, with your own AI model or none; hosted, with Pro at $10 a month. What it catches waits under Spam or Held with its reason, kept for as long as you choose, one tap back. Open source.",
     links: [
       { label: "The spam filter", href: "/inbox/spam/" },
       { label: "How it decides", href: "/docs/spam/" },
@@ -149,6 +149,6 @@ export const SPAM_GUIDE_FAQS: readonly Faq[] = [
   },
   {
     q: "Can I filter with AI without sending my customers' details away?",
-    a: "Yes: take out email addresses, phone numbers and bank or card numbers before anything leaves, send just what the message says, and use a service that keeps nothing. Check the model's answer in code, so a message cannot talk it into anything.",
+    a: "Yes: take out email addresses, phone numbers and bank or card numbers before anything leaves, send just what the message says, and read the service's terms for how long it keeps what it's sent and whether it trains on it. Check the model's answer in code, so a message cannot talk it into anything.",
   },
 ];
