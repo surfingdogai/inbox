@@ -41,7 +41,7 @@ export const SPAM_LINES = {
   lost: "Bookings it doubts wait for the sender to confirm, and hold no time. Messages it puts aside are kept for as long as you choose, and one tap brings them back.",
   form: "Put our form on any site, with no script and no puzzle for your customers. Or let your own website's forms pass what they receive to your inbox, with a key that can do nothing else.",
   yours:
-    "No spam company's cloud, no sharing between businesses. Before anything is read by AI, email addresses, phone numbers and bank details are taken out.",
+    "No spam company's cloud, no sharing between businesses. Before anything is read by AI (with Pro, Claude Haiku from Anthropic), email addresses, phone numbers and bank details are taken out.",
   cost: "Run it yourself: free, with your own AI model or none. Hosted: basic protection is free; the three filters come with Pro, $10, €10 or £9 a month, taxes included, read by Claude Haiku from Anthropic, which we pay for. The $10 supports the open-source inbox, the open network, and keeping access to AI agents from being locked in a connector store.",
 } as const;
 
