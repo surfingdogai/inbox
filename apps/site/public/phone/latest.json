@@ -3,8 +3,8 @@
   "versionName": "1.0.0",
   "minSupported": 1,
   "url": "https://github.com/surfingdogai/inbox/releases/download/android-v1.0.0/surfingdog-inbox-1.0.0.apk",
-  "sha256": null,
-  "size": null,
+  "sha256": "8590493080b82a6e284d8a59be65e83c2823a4999613d1832bd872a17a85236d",
+  "size": 1911794,
   "certSha256": "98:94:60:20:92:35:DB:AD:49:62:3F:5F:C2:11:69:C3:47:F9:8A:90:02:5A:92:36:E8:99:88:1A:E4:75:27:BF",
-  "published": null
+  "published": "2026-10-27"
 }
