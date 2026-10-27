@@ -40,7 +40,7 @@ export const capabilities: readonly Capability[] = [
   { id: "search", label: "Search it from your AI: MCP, REST or llms.txt", state: "live" },
   {
     id: "ranking",
-    label: "Ordered by kept promises under published, versioned rules; nobody can pay to rank",
+    label: "Published, versioned ranking rules: kept promises move a business up, and nobody can pay to rank",
     state: "live",
   },
   { id: "pings", label: "Signed hourly pings: an inbox that checks in is answering", state: "live" },

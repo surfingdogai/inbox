@@ -88,7 +88,7 @@ const ld = [
     name: "Surfing Dog Trust network",
     url: new URL("/trust/", site).toString(),
     description:
-      "Optional for a business, and separate from its inbox: the network lists it and records the receipts its inbox signs, never its messages. The directory's order is made of kept promises: inboxes check in with signed pings, both sides sign receipts, and the rules are published and versioned. Nobody can pay for a place.",
+      "Optional for a business, and separate from its inbox: the network lists it and records the receipts its inbox signs, never its messages. The directory's published, versioned rules reward kept promises: inboxes check in with signed pings, and both sides sign receipts. Nobody can pay for a place.",
     provider: { "@id": org },
   },
 ];
@@ -96,7 +96,7 @@ const ld = [
 
 <Layout
   title="Surfing Dog · Agent-ready businesses, listed and tracked"
-  description={`${WHAT} Search them, check a website, or install your own open-source inbox, where agents write to you directly. Ranked by kept promises, never by payment.`}
+  description={`${WHAT} Search them, check a website, or install your own open-source inbox, where agents write to you directly. Ranked by published rules that reward kept promises, never by payment.`}
   image="/art/og-network-v1.png"
   ld={ld}
   minimalFooter
