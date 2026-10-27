@@ -1,74 +1,77 @@
-import { chatJudge, messagesJudge } from "@surfingdog/adapters";
-import type { JudgePort, SpamHostPolicy } from "@surfingdog/core";
+import { messagesJudge } from "@surfingdog/adapters";
+import { FILTERS, type JudgePort, type SpamHostPolicy } from "@surfingdog/core";
 import type { Ledger } from "./ledger";
-import type { PolicyPayload } from "./types";
+import { type PolicyPayload, planOf } from "./types";
 
 /**
- * The spam filter on a hosted inbox (ADR-041 §7.2, §15.3). The founder's decision: we pay for the AI,
- * and the filters are a cost per inbox × filters switched on. So the model is ours — its key lives in
- * the shard's environment only, never in a tenant's file, settings, policy, download, answers or logs —
- * and every check an inbox makes is reserved in the shared ledger before it is made: within the
- * inbox's day's and month's caps, and within the runtime's own token budget for the day across every
- * inbox here. Over any of them the check is not made, and the filters look for known phrases only.
- * What a policy does not allow (no `spam` block, `ai: false`) asks no model at all.
+ * The spam filter on a hosted inbox (ADR-041 §7.2, §15.3). The founder's decisions: Pro includes the
+ * three filters, read by our AI, Claude Haiku from Anthropic, on our own Anthropic key; Free keeps basic
+ * protection, with no AI. The key lives in the shard's environment only, never in a tenant's file,
+ * settings, policy, download, answers or logs, and every check an inbox makes is reserved in the shared
+ * ledger before it is made: within the inbox's day's and month's caps, and within the runtime's own
+ * token budget for the day across every inbox here. Over any of them the check is not made, and the
+ * filters look for known phrases only. Without the key no model is asked, and Settings says so.
  */
+
+/** The model our AI check uses: Claude Haiku. */
+export const HOSTED_SPAM_MODEL = "claude-haiku-5-5";
+
+/** The caps on our AI check per inbox, unless the policy sets others. */
+export const HOSTED_DAY_CAP = 150;
+export const HOSTED_MONTH_CAP = 1_500;
 
 /** The model's settings, from the shard's environment. */
 export interface HostedModel {
   readonly judge: JudgePort;
   /** The runtime's token budget for a day, every inbox together. */
   readonly dailyTokens: number;
+  /** Who reads, as Settings names them. */
+  readonly name: string;
 }
 
 /**
- * `HOSTED_SPAM_MODEL_API` (`messages` or `chat`), `HOSTED_SPAM_MODEL_URL`, `HOSTED_SPAM_MODEL`,
- * `HOSTED_SPAM_MODEL_KEY` and `HOSTED_SPAM_DAILY_TOKENS` (50 million by default). Null when the model is
- * not set up: no hosted inbox's filter asks one.
+ * `HOSTED_SPAM_ANTHROPIC_KEY` (our Anthropic key; unset, no model is asked), `HOSTED_SPAM_MODEL` (the
+ * model's id, `claude-haiku-5-5` unless set) and `HOSTED_SPAM_DAILY_TOKENS` (50 million by default).
+ * Null when the key is not set: no hosted inbox's filter asks a model, and the AI check is off.
  */
 export function hostedModelFrom(
   env: Readonly<Record<string, string | undefined>>,
   fetchImpl?: typeof fetch,
 ): HostedModel | null {
-  const api = env.HOSTED_SPAM_MODEL_API?.trim();
-  const model = env.HOSTED_SPAM_MODEL?.trim();
-  const key = env.HOSTED_SPAM_MODEL_KEY?.trim();
-  const url = env.HOSTED_SPAM_MODEL_URL?.trim() || undefined;
-  if (!api || !model || !key) return null;
+  const key = env.HOSTED_SPAM_ANTHROPIC_KEY?.trim();
+  if (!key) return null;
+  const model = env.HOSTED_SPAM_MODEL?.trim() || HOSTED_SPAM_MODEL;
   const tokens = Number(env.HOSTED_SPAM_DAILY_TOKENS?.trim() || 50_000_000);
   const dailyTokens = Number.isInteger(tokens) && tokens > 0 ? tokens : 50_000_000;
-  if (api === "messages")
-    return { judge: messagesJudge({ apiKey: key, model, baseURL: url, fetch: fetchImpl }), dailyTokens };
-  if (api === "chat" && url) return { judge: chatJudge({ url, apiKey: key, model, fetch: fetchImpl }), dailyTokens };
-  return null;
+  return {
+    judge: messagesJudge({ apiKey: key, model, fetch: fetchImpl }),
+    dailyTokens,
+    name: modelName(model),
+  };
+}
+
+/** "Claude Haiku, by Anthropic": the model as an owner reads it, its provider named plainly. */
+export function modelName(model: string): string {
+  const family = /haiku/i.test(model) ? "Claude Haiku" : /sonnet/i.test(model) ? "Claude Sonnet" : "Claude";
+  return `${family}, by Anthropic`;
 }
 
 /**
- * A hosted inbox whose policy carries no `spam` block yet: hosted all the same. Our AI does not read,
- * the filters look for known phrases only, nothing is billed, and no owner's own key is asked for (a
- * hosted inbox takes none, ADR-041). Never treated as one's own server.
+ * The policy's plan and `spam` limits, as the inbox's spam filter reads them. Pro: the three filters,
+ * on unless a person switched one off, read by our AI when the model is set up and the policy does not
+ * stop it. Free: no filters and no AI; basic protection works the same on both.
  */
-export const PHRASES_ONLY: SpamHostPolicy = {
-  ai: false,
-  filters: ["pitches", "scams", "junk"],
-  dayCap: 0,
-  monthCap: 0,
-  reader: null,
-  billing: "off",
-  price: null,
-};
-
-/** The policy's `spam` block, as the inbox's spam filter reads it; phrases only when the policy has none. */
-export function spamHostPolicy(p: PolicyPayload): SpamHostPolicy {
-  const s = p.spam;
-  if (!s) return PHRASES_ONLY;
+export function spamHostPolicy(p: PolicyPayload, model: HostedModel | null): SpamHostPolicy {
+  const pro = planOf(p) === "pro";
+  const ai = pro && model !== null && p.spam?.ai !== false;
   return {
-    ai: s.ai,
-    filters: s.filters,
-    dayCap: s.day_cap,
-    monthCap: s.month_cap,
-    reader: s.reader,
-    billing: s.billing,
-    price: s.price ? { currency: s.price.currency, perFilterMonthMinor: s.price.per_filter_month_minor } : null,
+    plan: pro ? "pro" : "free",
+    ai,
+    filters: pro ? FILTERS : [],
+    defaultOn: pro,
+    dayCap: p.spam?.day_cap ?? HOSTED_DAY_CAP,
+    monthCap: p.spam?.month_cap ?? HOSTED_MONTH_CAP,
+    reader: ai && model ? model.name : null,
   };
 }
 

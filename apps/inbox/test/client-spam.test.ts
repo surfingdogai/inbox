@@ -20,6 +20,7 @@ import {
   keepLine,
   learningLine,
   MAY_BE_CUSTOMER,
+  notIncluded,
   priceLine,
   quoteLine,
   readerLine,
@@ -310,7 +311,7 @@ function status(o: Partial<SpamStatus> & { reader?: SpamStatus["reader"] } = {})
       resting_until: null,
       tokens_this_month: 20_000,
     },
-    billing: { state: "self_hosted", price: null },
+    plan: "self_hosted",
     this_month: { aside: 20, held: 4, brought_back: 2 },
     held_now: 1,
     this_week: { aside: 6 },
@@ -321,15 +322,19 @@ function status(o: Partial<SpamStatus> & { reader?: SpamStatus["reader"] } = {})
 }
 
 describe("Settings → Spam, in every state", () => {
-  it("says who reads: hosted with our AI, hosted on phrases, own model, no model, resting", () => {
-    expect(readerLine(status({ reader: "hosted_ai" }))).toBe(
-      "Read by an AI service we pay for, only for new senders, with email addresses, phone numbers and bank details taken out. It keeps nothing.",
+  it("says who reads: Claude Haiku on Pro, no AI yet, Free, own model, no model, resting", () => {
+    const pro = status({ plan: "pro", reader: "hosted_ai", reader_name: "Claude Haiku, by Anthropic" });
+    // The provider named plainly, and what its API does with what it is sent, as its terms say.
+    expect(readerLine(pro)).toBe(
+      "Read by Claude Haiku, by Anthropic, which we pay for, only for new senders, with email addresses, phone numbers and bank details taken out. Anthropic doesn't use it to train its models, and deletes it within 30 days, unless its safety checks flag it (then it may keep it for up to two years) or the law requires keeping it.",
     );
-    expect(readerLine(status({ reader: "hosted_ai", reader_name: "Example Models Co" }))).toContain(
-      "Read by Example Models Co, an AI service we pay for",
+    expect(readerLine(pro)).not.toMatch(/keeps nothing|zero retention|never stored/i);
+    // Pro before our key is set: nothing says an AI reads.
+    expect(readerLine(status({ plan: "pro", reader: "hosted_phrases" }))).toBe(
+      "The AI check isn't on yet, so for now the filters look for known phrases only.",
     );
-    expect(readerLine(status({ reader: "hosted_phrases" }))).toBe(
-      "For now the filters look for known phrases only. Reading by AI comes later, and you'll be told first.",
+    expect(readerLine(status({ plan: "free", reader: "hosted_phrases" }))).toBe(
+      "On Free, basic protection works without AI.",
     );
     expect(
       readerLine(
@@ -358,17 +363,18 @@ describe("Settings → Spam, in every state", () => {
     );
   });
 
-  it("says what it costs: free while hosted is free, the price once billing is on, model time on one's own server", () => {
-    expect(priceLine(status({ billing: { state: "off", price: null } }))).toBe(
-      "Free while hosted inboxes are free. If that changes, you'll be told 30 days ahead and asked first.",
+  it("says what it costs: included in Pro, Pro's price on Free, model time on one's own server", () => {
+    expect(priceLine(status({ plan: "pro" }), "USD")).toBe("Included in Pro, $10 a month, taxes included.");
+    expect(priceLine(status({ plan: "pro" }), "EUR")).toBe("Included in Pro, €10 a month, taxes included.");
+    expect(priceLine(status({ plan: "pro" }), "GBP")).toBe("Included in Pro, £9 a month, taxes included.");
+    expect(priceLine(status({ plan: "free" }), "JPY")).toBe(
+      "The three filters come with Pro: $10 a month, taxes included. It supports the open-source inbox, the open network, and keeping access to AI agents from being locked in a connector store.",
     );
-    expect(priceLine(status({ billing: { state: "shadow", price: null } }))).toContain(
-      "Free while hosted inboxes are free",
-    );
-    expect(
-      priceLine(status({ billing: { state: "on", price: { currency: "eur", per_filter_month_minor: 100 } } })),
-    ).toBe("€1.00 a month for each filter that's on, counted by the day.");
+    // No price for each filter, and none counted by the day.
+    for (const plan of ["pro", "free"] as const)
+      expect(priceLine(status({ plan }))).not.toMatch(/each filter|by the day/);
     expect(priceLine(status())).toBe("41 checked by your model this month · 15,000 words of model time.");
+    expect(notIncluded("free")).toBe("Comes with Pro.");
   });
 
   it("speaks of the model's checks, its cap and its charges only where one's own server has a model", () => {
@@ -377,7 +383,7 @@ describe("Settings → Spam, in every state", () => {
     expect(
       showsModelUse(status({ reader: "own_model", model: { provider: "OpenAI", model: "m", set_by_server: true } })),
     ).toBe(true);
-    expect(showsModelUse(status({ reader: "hosted_ai", billing: { state: "off", price: null } }))).toBe(false);
+    expect(showsModelUse(status({ reader: "hosted_ai", plan: "pro" }))).toBe(false);
   });
 
   it("starts the model chooser on a small model, or on none: the owner pays for each check", () => {
@@ -386,11 +392,14 @@ describe("Settings → Spam, in every state", () => {
     expect(defaultModel([])).toBe("");
   });
 
-  it("asks before switching a filter on, on a hosted inbox, and never asks for money while it is free", () => {
-    const sheet = turnOnSheet("pitches", status({ reader: "hosted_phrases", billing: { state: "off", price: null } }));
+  it("says who reads before switching a filter on again on Pro, and asks for no money: Pro includes it", () => {
+    const sheet = turnOnSheet(
+      "pitches",
+      status({ plan: "pro", reader: "hosted_ai", reader_name: "Claude Haiku, by Anthropic" }),
+    );
     expect(sheet.title).toBe("Turn on Sales pitches?");
-    expect(sheet.text).toBe(
-      "It reads new messages from people you haven't dealt with before. For now the filters look for known phrases only. Reading by AI comes later, and you'll be told first. Free while hosted inboxes are free; we'll ask before charging anything.",
+    expect(sheet.text).toMatch(
+      /^It reads new messages from people you haven't dealt with before\. Read by Claude Haiku, by Anthropic, .* Included in Pro\.$/,
     );
   });
 

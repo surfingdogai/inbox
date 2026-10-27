@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildPrompt, checkAnswer, type JudgeMessage, type JudgeResult, runJudge } from "../../src/spam/judge";
 import { judgeText, luhn, mask } from "../../src/spam/mask";
-import { agent, DAY, fakeJudge, MIN, nonceOf, sentText, spamSetup, T0 } from "./harness";
+import { agent, DAY, fakeJudge, hostPolicy, MIN, nonceOf, sentText, spamSetup, T0 } from "./harness";
 
 /**
  * The AI check (ADR-041 §7): what it is sent and what it never is, how its answer is believed, and
@@ -416,15 +416,7 @@ describe("cost", () => {
     const s = await spamSetup({
       filters: ["pitches"],
       judge,
-      host: {
-        ai: true,
-        filters: ["pitches", "scams", "junk"],
-        dayCap: 2,
-        monthCap: 1_500,
-        reader: null,
-        billing: "off",
-        price: null,
-      },
+      host: hostPolicy({ dayCap: 2 }),
     });
     for (let i = 0; i < 4; i++) {
       await s.caps.sendMessage(agent(T0 + i * MIN), {

@@ -107,8 +107,9 @@ CREATE TABLE IF NOT EXISTS `spam_handles` (
 	PRIMARY KEY(`kind`, `ref`)
 );
 --> statement-breakpoint
--- When each filter was on, and how: the filter-days a hosted inbox would be charged by are recounted
--- from these. 'basic' is the free protection's own learning week, from the day this migration ran.
+-- When each filter was on, and how, and who switched it last (a person, or the system for a plan):
+-- each filter's days on are recounted from these. 'basic' is the free protection's own learning week,
+-- from the day this migration ran.
 CREATE TABLE IF NOT EXISTS `spam_filter_spans` (
 	`id` text PRIMARY KEY NOT NULL,
 	`filter` text NOT NULL,

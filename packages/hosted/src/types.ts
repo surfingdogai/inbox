@@ -82,6 +82,10 @@ const httpsOrigin = z.string().refine(
 const tenantId = z.string().refine(isTenantId, { message: "tn_ and a ULID" });
 const state = z.enum(TENANT_STATES);
 
+/** The plans a hosted inbox is on (ADR-041 §15.3). */
+export const PLANS = ["free", "pro"] as const;
+export type Plan = (typeof PLANS)[number];
+
 /**
  * What the control plane says an inbox may do (its policy), pushed on every change and pulled on
  * every rebuild. `policy_version` only grows. Whatever the payload says, a shard never opens the
@@ -157,29 +161,32 @@ export const policyPayloadSchema = z.looseObject({
    */
   join_networks: z.array(httpsOrigin).max(8).optional(),
   /**
-   * The spam filter (ADR-041 §15.3): whether our AI may read for this inbox's filters (false until it
-   * is decided), which filters it may switch on, the caps on its AI checks, how Settings names who
-   * reads (null: in general words), and billing — off while hosted inboxes are free. Absent: every
-   * filter looks for known phrases only, and no AI is asked.
+   * The inbox's plan, as the control plane's billing says (ADR-041 §15.3): `pro` includes the spam
+   * filters (Sales pitches, Scams, Junk), read by our AI and on from the start; `free` keeps basic
+   * protection, with no AI. Absent: free (`planOf`). A beta tester's free month is `pro` for as long
+   * as the control plane says so, and `free` again after it.
+   */
+  // A plan this runtime does not know reads as Free, never as a broken policy.
+  plan: z.enum(PLANS).optional().catch(undefined),
+  /**
+   * The spam filter's limits on our AI (ADR-041 §15.3), when the control plane sets them: `ai: false`
+   * stops our AI reading for this inbox whatever its plan; the AI check's caps a day and a month.
+   * Absent: our AI reads for Pro inboxes, at most 150 checks a day and 1,500 a month.
    */
   spam: z
     .looseObject({
-      ai: z.boolean(),
-      filters: z.array(z.enum(["pitches", "scams", "junk"])).max(3),
-      day_cap: z.number().int().min(0).max(10_000),
-      month_cap: z.number().int().min(0).max(100_000),
-      reader: z.string().max(80).nullable(),
-      billing: z.enum(["off", "shadow", "on"]),
-      price: z
-        .looseObject({
-          currency: z.enum(["eur", "usd"]),
-          per_filter_month_minor: z.number().int().min(0),
-        })
-        .nullable(),
+      ai: z.boolean().optional(),
+      day_cap: z.number().int().min(0).max(10_000).optional(),
+      month_cap: z.number().int().min(0).max(100_000).optional(),
     })
     .optional(),
 });
 export type PolicyPayload = z.infer<typeof policyPayloadSchema>;
+
+/** The inbox's plan: what the policy says, and Free when it says nothing. */
+export function planOf(p: Pick<PolicyPayload, "plan">): Plan {
+  return p.plan === "pro" ? "pro" : "free";
+}
 
 /**
  * A policy as a shard applies it: the agents' doors open only while the tenant is live (and, for

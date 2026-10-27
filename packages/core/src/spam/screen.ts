@@ -65,16 +65,22 @@ import {
  * the request arrives anyway. The doors pass facts; this decides.
  */
 
-/** How a host runs the filter: whether its AI may be used, which filters an inbox may switch on, its caps. */
+/**
+ * How a host runs the filter (ADR-041 §15.3): the inbox's plan, whether the host's AI reads for it,
+ * which filters it may switch on, whether they start on, and the AI check's caps. Pro includes the
+ * three filters, read by the host's AI, on from the start; Free keeps basic protection, with no AI.
+ */
 export interface SpamHostPolicy {
+  readonly plan: "free" | "pro";
+  /** Whether the host's AI reads now: Pro, and a model set up on the host. */
   readonly ai: boolean;
   readonly filters: readonly Filter[];
+  /** Whether a filter nobody has switched starts on, learning for a week (Pro). */
+  readonly defaultOn: boolean;
   readonly dayCap: number;
   readonly monthCap: number;
-  /** How Settings names who reads; null for the generic line. */
+  /** Who reads, as Settings names them ("Claude Haiku, by Anthropic"); null while no AI reads. */
   readonly reader: string | null;
-  readonly billing: "off" | "shadow" | "on";
-  readonly price: { readonly currency: string; readonly perFilterMonthMinor: number } | null;
 }
 
 /** What the filter is plugged into: the database, the secret box, and what the host attached. */

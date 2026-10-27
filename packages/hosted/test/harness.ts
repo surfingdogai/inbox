@@ -67,6 +67,8 @@ export interface FakeTenant {
   noInbound?: boolean;
   /** Sending from the business's own address, as the control plane says it stands (ADR-026 §3). */
   own?: PolicyPayload["mail"]["own"];
+  /** The policy's plan (ADR-041 §15.3), when the test names one; absent, the payload leaves it out (Free). */
+  plan?: PolicyPayload["plan"];
   /** The policy's `spam` block (ADR-041 §15.3), when the test names one. */
   spam?: PolicyPayload["spam"];
 }
@@ -108,6 +110,7 @@ export function policyOf(t: FakeTenant): PolicyPayload {
     read_only: t.state === "closing" || t.state === "closed",
     suspended_reason: t.state === "suspended" ? "a test" : null,
     ...(t.joinNetworks ? { join_networks: t.joinNetworks } : {}),
+    ...(t.plan ? { plan: t.plan } : {}),
     ...(t.spam ? { spam: t.spam } : {}),
   };
 }

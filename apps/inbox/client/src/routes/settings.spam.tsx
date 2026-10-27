@@ -17,6 +17,7 @@ import {
   KEEP_CHOICES,
   learningLine,
   MONTHLY_CHECKS,
+  notIncluded,
   ONLY_YOU,
   priceLine,
   readerLine,
@@ -34,9 +35,10 @@ type FilterName = "pitches" | "scams" | "junk";
 
 /**
  * Settings → Spam (ADR-041 §11.4): the free protection, the three filters with their choice and
- * learning week, who reads for them and what they cost, the two lists, the two emails and how long
- * what is put aside is kept. Choosers and switches only: nothing to type. The filters may carry a
- * price, so only the owner or staff, signed in, switch them; anyone else reads the page as it is.
+ * learning week, who reads for them and what they cost (on a hosted inbox, Pro includes them; Free
+ * keeps basic protection), the two lists, the two emails and how long what is put aside is kept.
+ * Choosers and switches only: nothing to type. What reads a stranger's words is the owner's choice, so
+ * only the owner or staff, signed in, switch them; anyone else reads the page as it is.
  */
 function SpamPage() {
   const spam = useSpam();
@@ -69,12 +71,13 @@ function SpamPage() {
   const s = spam.data;
   const doc = settings.data.doc.spam;
   const locked = !s.can_change;
-  const hosted = s.billing.state !== "self_hosted";
+  const hosted = s.plan !== "self_hosted";
+  const currency = settings.data.doc.business.currency;
   const failed = (e: unknown) => setNotice({ tone: "danger", text: problemOf(e).detail });
 
   const switchFilter = (filter: FilterName, on: boolean) => {
     setNotice(null);
-    // On a hosted inbox, switching one on says first who reads and what it costs.
+    // On a hosted inbox, switching one on says first who reads it.
     if (on && hosted) {
       setAsking(filter);
       return;
@@ -129,6 +132,7 @@ function SpamPage() {
               <FilterRow
                 key={f.filter}
                 f={f}
+                plan={s.plan}
                 tz={tz}
                 locked={locked}
                 onSwitch={(on) => switchFilter(f.filter, on)}
@@ -149,7 +153,7 @@ function SpamPage() {
             )}
           </p>
           {/* On one's own server with no model there is nothing to count, cap or pay for. */}
-          {(hosted || showsModelUse(s)) && <p className="fine">{priceLine(s)}</p>}
+          {(hosted || showsModelUse(s)) && <p className="fine">{priceLine(s, currency)}</p>}
           {showsModelUse(s) && (
             <div className="spam-block-head">
               <span className="fine">Most checks a month</span>
@@ -270,6 +274,7 @@ function LearningLine({
 
 function FilterRow({
   f,
+  plan,
   tz,
   locked,
   onSwitch,
@@ -277,6 +282,7 @@ function FilterRow({
   onStart,
 }: {
   f: SpamStatus["filters"][number];
+  plan: SpamStatus["plan"];
   tz: string | undefined;
   locked: boolean;
   onSwitch: (on: boolean) => void;
@@ -294,7 +300,7 @@ function FilterRow({
       <div className="body">
         <span className="title">{copy.title}</span>
         <p>{copy.line}</p>
-        {!f.allowed && <p className="fine">Not offered on this inbox yet.</p>}
+        {!f.allowed && <p className="fine">{notIncluded(plan)}</p>}
         {f.on && (
           <fieldset className="seg" disabled={locked} aria-label={`What ${copy.title} does`}>
             <button type="button" aria-pressed={f.choice === "aside"} onClick={() => onChoice("aside")}>

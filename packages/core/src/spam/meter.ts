@@ -6,8 +6,8 @@ import { dayOf, type Filter } from "./types";
 /**
  * What the spam filter did, counted by UTC day (ADR-041 §15): AI checks made, reused, refused by a cap,
  * failed, their tokens; what was put aside, held, labelled, let in and brought back. Counts only, never
- * content or addresses, and never purged with items: a hosted inbox is charged per filter-day once
- * billing is on, and its AI checks are what it costs to run.
+ * content or addresses, and never purged with items: a hosted inbox's AI checks are what its plan costs
+ * to run. Nothing is charged by them: Pro includes the filters (ADR-041 §15.3).
  */
 
 export type MeterKey =
@@ -97,16 +97,4 @@ export async function spamUsage(
     released: get("released"),
     brought_back: get("brought_back"),
   };
-}
-
-/**
- * What a month would cost once billing is on (ADR-041 §15.3, the founder's decision: per inbox ×
- * filters switched on): each filter's days, at most thirty, at a day's price — the month's price
- * divided by thirty, rounded up to a cent — and never more than the month's price.
- */
-export function monthCharge(days: Readonly<Record<Filter, number>>, perFilterMonthMinor: number): number {
-  const dayPrice = Math.ceil(perFilterMonthMinor / 30);
-  let total = 0;
-  for (const d of Object.values(days)) total += Math.min(Math.min(d, 30) * dayPrice, perFilterMonthMinor);
-  return total;
 }

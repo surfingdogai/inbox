@@ -1443,7 +1443,7 @@ export const spamHandles = sqliteTable(
   (t) => [primaryKey({ columns: [t.kind, t.ref] })],
 );
 
-/** When each filter was on, and how: filter-days are recounted from these. */
+/** When each filter was on, and how, and who switched it last: each filter's days on are recounted from these. */
 export const spamFilterSpans = sqliteTable(
   "spam_filter_spans",
   {

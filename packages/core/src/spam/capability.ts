@@ -11,6 +11,7 @@ import { DISPOSABLE_MAIL, SHARED_MAIL_PROVIDERS } from "./data";
 import {
   basicLearningUntil,
   closeWithdrawnStatements,
+  defaultOnStatements,
   endLearningStatement,
   filterStates,
   switchFilterStatements,
@@ -86,7 +87,7 @@ export interface SpamStatus {
   readonly reader: Reader;
   /** The model on one's own server, as the operator or the owner set it up. */
   readonly model: { readonly provider: string; readonly model: string; readonly set_by_server: boolean } | null;
-  /** How Settings names who reads on a hosted inbox; null for the generic line. */
+  /** Who reads on a hosted inbox, as Settings names them ("Claude Haiku, by Anthropic"); null while none does. */
   readonly reader_name: string | null;
   readonly checks: {
     readonly today: number;
@@ -98,10 +99,11 @@ export interface SpamStatus {
     /** The model's tokens this month, read and written: what an owner's own key paid for. */
     readonly tokens_this_month: number;
   };
-  readonly billing: {
-    readonly state: "off" | "shadow" | "on" | "self_hosted";
-    readonly price: { readonly currency: string; readonly per_filter_month_minor: number } | null;
-  };
+  /**
+   * The hosted inbox's plan (ADR-041 §15.3): `pro` includes the three filters, read by the host's AI;
+   * `free` keeps basic protection, with no AI. `self_hosted`: one's own server, where nothing is billed.
+   */
+  readonly plan: "free" | "pro" | "self_hosted";
   readonly this_month: { readonly aside: number; readonly held: number; readonly brought_back: number };
   readonly held_now: number;
   /** Put aside in the last seven days, by anyone: the Spam list's "This week". */
@@ -205,8 +207,8 @@ export class SpamCapabilities implements SpamDeps {
   /**
    * Whether new messages may be read by the AI check now, and whose model reads: a model to ask, a host
    * that lets it read, and a filter on. The business's privacy page says so while it is (ADR-041 §14):
-   * the host's (`host`, which keeps nothing, D2) or one this server's operator or owner set up (`own`,
-   * whose provider's terms are theirs to know).
+   * the host's (`host`, whose provider's retention it states) or one this server's operator or owner set
+   * up (`own`, whose provider's terms are theirs to know).
    */
   async aiReader(now: number): Promise<"host" | "own" | null> {
     await this.refreshOwn();
@@ -233,11 +235,15 @@ export class SpamCapabilities implements SpamDeps {
     return runScreenJob(this, input, this.judgeOptions);
   }
 
-  /** The filters a host withdrew are switched off, as the system: run as the inbox starts. */
+  /**
+   * What the host's plan says of the filters, as the system, run as the inbox starts: a filter the plan
+   * no longer includes is switched off; on Pro, a filter nobody switched starts on, learning for a week.
+   */
   async applyHost(now: number): Promise<void> {
     const host = this.policy;
     if (!host) return;
     const statements = await closeWithdrawnStatements(this.db, new Set(host.filters), now);
+    if (host.defaultOn) statements.push(...(await defaultOnStatements(this.db, host.filters, now)));
     if (statements.length) await this.db.batch(statements);
   }
 
@@ -309,7 +315,7 @@ export class SpamCapabilities implements SpamDeps {
               set_by_server: modelInfo.setByServer,
             }
           : null,
-      reader_name: host?.reader ?? null,
+      reader_name: reader === "hosted_ai" ? (host?.reader ?? null) : null,
       checks: {
         today: so.day,
         this_month: so.month,
@@ -318,14 +324,7 @@ export class SpamCapabilities implements SpamDeps {
         resting_until: resting,
         tokens_this_month: usage.tokens_in + usage.tokens_out,
       },
-      billing: host
-        ? {
-            state: host.billing,
-            price: host.price
-              ? { currency: host.price.currency, per_filter_month_minor: host.price.perFilterMonthMinor }
-              : null,
-          }
-        : { state: "self_hosted", price: null },
+      plan: host ? host.plan : "self_hosted",
       this_month: { aside: usage.aside, held: usage.held, brought_back: usage.brought_back },
       held_now: Number(heldRows[0]?.[0] ?? 0),
       this_week: { aside: Number(weekRows[0]?.[0] ?? 0) },
@@ -581,8 +580,8 @@ export class SpamCapabilities implements SpamDeps {
   // ---- what the owner changes, in person ---------------------------------------------------------
 
   /**
-   * Switches a filter on or off, or changes what it does. Filters may carry a price: only the owner or
-   * staff, signed in, in person, switch them — never their AI, a rule or a key.
+   * Switches a filter on or off, or changes what it does. What reads a stranger's words is the owner's
+   * choice: only the owner or staff, signed in, in person, switch them — never their AI, a rule or a key.
    */
   async setFilter(
     caller: Caller,
@@ -596,9 +595,11 @@ export class SpamCapabilities implements SpamDeps {
       });
     }
     if (input.on && this.policy && !this.policy.filters.includes(input.filter)) {
-      throw new WriteError("not_allowed", "This filter isn't offered on this inbox yet.", {
-        details: { reason: "not_offered" },
-      });
+      throw new WriteError(
+        "not_allowed",
+        this.policy.plan === "free" ? "The filters come with Pro." : "This filter isn't offered on this inbox yet.",
+        { details: { reason: this.policy.plan === "free" ? "plan" : "not_offered" } },
+      );
     }
     const statements = await switchFilterStatements(this.db, {
       filter: input.filter,

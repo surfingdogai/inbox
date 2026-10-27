@@ -1,4 +1,4 @@
-import { formatDateTime, formatDay, formatMoney, partyName } from "./format";
+import { formatDateTime, formatDay, partyName } from "./format";
 import type { ItemSpamSummary, ItemView, SpamStatus } from "./types";
 
 /**
@@ -235,9 +235,17 @@ export function learningLine(until: string, tz?: string, locale?: string): strin
   return `Learning until ${formatDay(until, tz, locale)}: it labels what it would put aside, and puts nothing aside yet.`;
 }
 
+/**
+ * What Anthropic's API does with what our AI check sends it, as Anthropic's commercial terms and data
+ * retention pages say (read 27 October 2026): no training on it, deleted within 30 days, kept longer
+ * only when its safety checks flag it or the law requires it.
+ */
+export const HOSTED_DATA =
+  "Anthropic doesn't use it to train its models, and deletes it within 30 days, unless its safety checks flag it (then it may keep it for up to two years) or the law requires keeping it.";
+
 /** Who reads for the filters, as Settings says it (§11.4). */
 export function readerLine(
-  s: Pick<SpamStatus, "reader" | "model" | "reader_name" | "checks">,
+  s: Pick<SpamStatus, "plan" | "reader" | "model" | "reader_name" | "checks">,
   tz?: string,
   locale?: string,
 ): string {
@@ -246,11 +254,11 @@ export function readerLine(
   }
   switch (s.reader) {
     case "hosted_ai":
-      return s.reader_name
-        ? `Read by ${s.reader_name}, an AI service we pay for, only for new senders, with email addresses, phone numbers and bank details taken out. It keeps nothing.`
-        : "Read by an AI service we pay for, only for new senders, with email addresses, phone numbers and bank details taken out. It keeps nothing.";
+      return `Read by ${s.reader_name ?? "an AI model"}, which we pay for, only for new senders, with email addresses, phone numbers and bank details taken out. ${HOSTED_DATA}`;
     case "hosted_phrases":
-      return "For now the filters look for known phrases only. Reading by AI comes later, and you'll be told first.";
+      return s.plan === "free"
+        ? "On Free, basic protection works without AI."
+        : "The AI check isn't on yet, so for now the filters look for known phrases only.";
     case "own_model":
       return s.model
         ? `Read by ${s.model.model} from ${s.model.provider}, set up for this inbox.`
@@ -267,8 +275,8 @@ export const CONNECT_MODEL = "Connect one in Settings → Integrations";
  * Whether Settings → Spam speaks of the owner's own model's use (the month's checks, the cap, what the
  * provider charges): on their own server, with a model connected. Without one there is nothing to count.
  */
-export function showsModelUse(s: Pick<SpamStatus, "reader" | "billing">): boolean {
-  return s.billing.state === "self_hosted" && s.reader === "own_model";
+export function showsModelUse(s: Pick<SpamStatus, "reader" | "plan">): boolean {
+  return s.plan === "self_hosted" && s.reader === "own_model";
 }
 
 /** Model ids that name a provider's smaller, cheaper models: what the spam check needs. */
@@ -282,37 +290,44 @@ export function defaultModel(models: readonly { readonly id: string }[]): string
   return models.find((m) => SMALL_MODEL.test(m.id))?.id ?? "";
 }
 
-/** A month's price for one filter, in the currency the host bills. */
-export function priceText(price: { currency: string; per_filter_month_minor: number }): string {
-  return formatMoney({ value: price.per_filter_month_minor, currency: price.currency.toUpperCase() });
+/**
+ * Pro's price a month, taxes included (ADR-041 §15.3): in the business's own currency where Pro has a
+ * price in it (euros, pounds), else in dollars.
+ */
+export function proPrice(currency?: string): string {
+  const c = (currency ?? "").toUpperCase();
+  return c === "EUR" ? "€10" : c === "GBP" ? "£9" : "$10";
 }
 
+/** What Pro's price pays for, in the founder's words. */
+export const PRO_WHY =
+  "It supports the open-source inbox, the open network, and keeping access to AI agents from being locked in a connector store.";
+
 /** What the filters cost here (§11.4); own server: what the owner's model was used for this month. */
-export function priceLine(s: Pick<SpamStatus, "billing" | "checks">): string {
-  if (s.billing.state === "self_hosted") {
+export function priceLine(s: Pick<SpamStatus, "plan" | "checks">, currency?: string): string {
+  if (s.plan === "self_hosted") {
     const words = Math.round((s.checks.tokens_this_month * 3) / 4);
     return `${s.checks.this_month.toLocaleString("en")} checked by your model this month · ${words.toLocaleString("en")} words of model time.`;
   }
-  if (s.billing.state === "on" && s.billing.price) {
-    return `${priceText(s.billing.price)} a month for each filter that's on, counted by the day.`;
-  }
-  return "Free while hosted inboxes are free. If that changes, you'll be told 30 days ahead and asked first.";
+  if (s.plan === "pro") return `Included in Pro, ${proPrice(currency)} a month, taxes included.`;
+  return `The three filters come with Pro: ${proPrice(currency)} a month, taxes included. ${PRO_WHY}`;
+}
+
+/** Under a filter the plan doesn't include. */
+export function notIncluded(plan: SpamStatus["plan"]): string {
+  return plan === "free" ? "Comes with Pro." : "Not offered on this inbox yet.";
 }
 
 /** The sheet that opens when a filter is switched on, on a hosted inbox. */
 export function turnOnSheet(
   filter: "pitches" | "scams" | "junk",
-  s: Pick<SpamStatus, "reader" | "model" | "reader_name" | "checks" | "billing">,
+  s: Pick<SpamStatus, "plan" | "reader" | "model" | "reader_name" | "checks">,
   tz?: string,
 ): { title: string; text: string } {
   const title = FILTER_COPY[filter].title;
-  const money =
-    s.billing.state === "on" && s.billing.price
-      ? `${priceText(s.billing.price)} a month while it's on, counted by the day.`
-      : "Free while hosted inboxes are free; we'll ask before charging anything.";
   return {
     title: `Turn on ${title}?`,
-    text: `It reads new messages from people you haven't dealt with before. ${readerLine(s, tz)} ${money}`,
+    text: `It reads new messages from people you haven't dealt with before. ${readerLine(s, tz)}${s.plan === "pro" ? " Included in Pro." : ""}`,
   };
 }
 

@@ -15,10 +15,10 @@ import { type Db, PROMISE_STATES, type SpamUsage, spamUsage } from "@surfingdog/
  *   confirmed, an order accepted);
  * - `mail_sent`: emails the ledger let go in the month;
  * - `db_bytes`: the inbox's file now, its write-ahead log included;
- * - `spam`: the spam filter's month (ADR-041 §15.3): each filter's days on (what a hosted inbox is
- *   charged by once billing is on: per inbox × filters switched on), its AI checks and their tokens
- *   (what it costs to run), and what it put aside, held, labelled, let in and brought back. A request
- *   held or put aside is not in `items` until a person or its sender lets it in.
+ * - `spam`: the spam filter's month (ADR-041 §15.3): each filter's days on, its AI checks and their
+ *   tokens (what Pro costs to run; nothing is charged by them, Pro includes the filters), and what it
+ *   put aside, held, labelled, let in and brought back. A request held or put aside is not in `items`
+ *   until a person or its sender lets it in.
  */
 export interface Usage {
   readonly confirmed_items: number;

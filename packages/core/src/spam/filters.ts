@@ -4,8 +4,8 @@ import { ulid } from "../ids";
 import { dayOf, FILTERS, type Filter, type FilterChoice, LEARNING_KEPT_MS, LEARNING_MS } from "./types";
 
 /**
- * When each filter is on (ADR-041 §2), kept as spans so a hosted inbox's filter-days can be recounted
- * at any time: a filter-day is a UTC day the filter was on at any moment. A filter switched on for the
+ * When each filter is on (ADR-041 §2), kept as spans: who switched it, and its days on can be recounted
+ * at any time (a filter-day is a UTC day the filter was on at any moment). A filter switched on for the
  * first time learns for a week (it labels what it would put aside, and puts nothing aside); switched off
  * and on again within thirty days, it carries on where it was. The free protection's own point-based
  * part learns for a week from the day the filter arrived (`basic`).
@@ -97,10 +97,11 @@ export async function switchFilterStatements(
   const open = mine.find((s) => s.toAt === null);
   if (!input.on) {
     if (!open) return [];
+    // Who switched it off is kept: a filter a person switched off is never switched on again by a plan.
     return [
       {
-        sql: "UPDATE spam_filter_spans SET to_at = ? WHERE id = ? AND to_at IS NULL",
-        params: [input.now, open.id],
+        sql: "UPDATE spam_filter_spans SET to_at = ?, by_kind = ?, by_id = ? WHERE id = ? AND to_at IS NULL",
+        params: [input.now, input.byKind, input.byId.slice(0, 200), open.id],
         method: "run",
       },
     ];
@@ -149,7 +150,7 @@ export function endLearningStatement(filter: Filter | "basic", now: number): Sta
   };
 }
 
-/** Per filter, the UTC days of a range it was on at any moment: what a hosted inbox would be counted by. */
+/** Per filter, the UTC days of a range it was on at any moment: how long each was used, in the month's usage. */
 export async function filterDays(
   db: Db,
   range: { readonly from: number; readonly to: number },
@@ -191,6 +192,24 @@ export async function closeWithdrawnStatements(
       params: [now, s.id],
       method: "run",
     });
+  }
+  return out;
+}
+
+/**
+ * The filters a plan includes from the start (Pro, ADR-041 §15.3): each allowed filter nobody has
+ * switched is switched on by the system, learning for a week first; one the host itself switched off
+ * (a plan that lapsed) comes back as it was. A filter a person switched off stays off.
+ */
+export async function defaultOnStatements(db: Db, allowed: readonly Filter[], now: number): Promise<Statement[]> {
+  const all = await spans(db);
+  const out: Statement[] = [];
+  for (const filter of allowed) {
+    const mine = all.filter((s) => s.filter === filter);
+    if (mine.some((s) => s.toAt === null)) continue;
+    const last = mine[0];
+    if (last && last.byKind !== "system") continue;
+    out.push(...(await switchFilterStatements(db, { filter, on: true, byKind: "system", byId: "host", now })));
   }
   return out;
 }

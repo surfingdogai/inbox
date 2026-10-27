@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { JudgeRequest } from "../../src/spam/judge";
-import { agent, BASE, classPayload, DAY, fakeJudge, idOf, MIN, nonceOf, spamSetup, T0 } from "./harness";
+import { agent, BASE, classPayload, DAY, fakeJudge, hostPolicy, idOf, MIN, nonceOf, spamSetup, T0 } from "./harness";
 
 /**
  * Nobody learns their request was held (ADR-041 §10.2, §14): its create answer, every later read and
@@ -166,21 +166,13 @@ describe("the business's privacy page", () => {
     expect(await line("pt", "Proteção contra spam")).not.toContain("não guarda nada");
     // The host's model, which keeps nothing (D2): then it says so.
     reading.caps.spam.attach({
-      host: { ai: true, filters: ["pitches"], dayCap: 150, monthCap: 1_500, reader: null, billing: "off", price: null },
+      host: hostPolicy({ filters: ["pitches"], reader: "Claude Haiku, by Anthropic" }),
     });
     expect(await line("en", "Keeping out spam")).toContain("keeps nothing");
     expect(await line("pt", "Proteção contra spam")).toContain("não guarda nada");
     // A host that does not let its AI read: nothing to say.
     reading.caps.spam.attach({
-      host: {
-        ai: false,
-        filters: ["pitches"],
-        dayCap: 150,
-        monthCap: 1_500,
-        reader: null,
-        billing: "off",
-        price: null,
-      },
+      host: hostPolicy({ ai: false, filters: ["pitches"] }),
     });
     expect(await headings(reading)).not.toContain("Keeping out spam");
   });

@@ -5,16 +5,17 @@ import { DatabaseSync } from "node:sqlite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Ledger } from "../src/ledger";
 import { redact } from "../src/redact";
-import { hostedModelFrom, PHRASES_ONLY, spamHostPolicy, tenantJudge } from "../src/spam";
-import { type PolicyPayload, policyPayloadSchema } from "../src/types";
+import { HOSTED_SPAM_MODEL, hostedModelFrom, modelName, spamHostPolicy, tenantJudge } from "../src/spam";
+import { type PolicyPayload, planOf, policyPayloadSchema } from "../src/types";
 import { type FakeTenant, type Runtime, startRuntime } from "./harness";
 
 /**
- * The spam filter on hosted inboxes (ADR-041 §7.2, §15.3). We pay for the AI: the model is ours, its
- * key lives in the shard's environment only — never in a tenant's settings, status, download or a log
- * line — and every check an inbox makes is reserved in the shared ledger before it is made, within the
- * inbox's caps and the runtime's own daily budget, whatever the inbox's own file says it spent. A
- * policy without a `spam` block asks no model at all, and a filter its host withdraws is switched off.
+ * The spam filter on hosted inboxes (ADR-041 §7.2, §15.3). Pro includes the three filters, on from the
+ * start, read by our AI: Claude Haiku, on our own Anthropic key, which lives in the shard's environment
+ * only — never in a tenant's settings, status, download or a log line. Every check an inbox makes is
+ * reserved in the shared ledger before it is made, within the inbox's caps and the runtime's own daily
+ * budget, whatever the inbox's own file says it spent. Free keeps basic protection, with no filters and
+ * no AI; without our key no model is asked at all.
  */
 
 const KEY = "sk-ant-hosted-test-key-0123456789abcdefghij";
@@ -54,21 +55,12 @@ const model = {
 };
 
 const ENV = {
-  HOSTED_SPAM_MODEL_API: "messages",
-  HOSTED_SPAM_MODEL: "our-model",
-  HOSTED_SPAM_MODEL_KEY: KEY,
+  HOSTED_SPAM_ANTHROPIC_KEY: KEY,
   HOSTED_SPAM_DAILY_TOKENS: "1000000",
 };
 
-const SPAM: NonNullable<PolicyPayload["spam"]> = {
-  ai: true,
-  filters: ["pitches", "scams"],
-  day_cap: 2,
-  month_cap: 100,
-  reader: null,
-  billing: "off",
-  price: null,
-};
+const PRO = { plan: "pro" } as const;
+const SPAM: NonNullable<PolicyPayload["spam"]> = { day_cap: 2, month_cap: 100 };
 
 /** Pitches in different words, so none is counted as a wave of the same text. */
 const PITCHES = [
@@ -86,8 +78,9 @@ afterAll(async () => {
   await rt.close();
 });
 
-async function liveInbox(spam: PolicyPayload["spam"] | undefined) {
+async function liveInbox(plan: PolicyPayload["plan"] | undefined, spam?: PolicyPayload["spam"]) {
   const t = await rt.createTenant();
+  t.plan = plan;
   t.spam = spam;
   await rt.setState(t, "live", { ownResolves: true });
   const host = t.ownHost ?? "";
@@ -95,6 +88,17 @@ async function liveInbox(spam: PolicyPayload["spam"] | undefined) {
   const owner = { cookie, "content-type": "application/json", origin: `https://${host}` };
   return { t, host, cookie, owner };
 }
+
+interface Status {
+  plan: string;
+  reader: string;
+  reader_name: string | null;
+  filters: { filter: string; on: boolean; allowed: boolean; learning_until: string | null }[];
+  checks: { day_cap: number | null; month_cap: number | null };
+}
+
+const statusOf = async (host: string, cookie: string) =>
+  (await rt.http(host, "GET", "/v1/owner/spam", { headers: { cookie } })).json as Status;
 
 async function switchOn(host: string, owner: Record<string, string>, filter: string) {
   const r = await rt.http(host, "PUT", `/v1/owner/spam/filters/${filter}`, {
@@ -139,56 +143,69 @@ async function settle(t: FakeTenant) {
 }
 
 describe("our model", () => {
-  it("is read from the shard's environment, and is none until it is complete", () => {
+  it("is Claude Haiku on our Anthropic key, read from the shard's environment, and none without the key", () => {
     expect(hostedModelFrom({})).toBeNull();
-    expect(hostedModelFrom({ ...ENV, HOSTED_SPAM_MODEL_KEY: "" })).toBeNull();
-    expect(hostedModelFrom({ ...ENV, HOSTED_SPAM_MODEL_API: "chat" })).toBeNull();
+    expect(hostedModelFrom({ ...ENV, HOSTED_SPAM_ANTHROPIC_KEY: " " })).toBeNull();
+    expect(HOSTED_SPAM_MODEL).toBe("claude-haiku-5-5");
+    expect(hostedModelFrom(ENV)?.name).toBe("Claude Haiku, by Anthropic");
+    expect(modelName("claude-sonnet-5-5")).toBe("Claude Sonnet, by Anthropic");
     expect(hostedModelFrom({ ...ENV, HOSTED_SPAM_DAILY_TOKENS: "lots" })?.dailyTokens).toBe(50_000_000);
     // What is kept of it says nothing of its key.
     expect(JSON.stringify(hostedModelFrom(ENV))).not.toContain(KEY);
   });
 
-  it("is asked only where the policy lets our AI read for the inbox", () => {
+  it("is asked only where the plan lets our AI read for the inbox", () => {
     const ledger = new Ledger(join(mkdtempSync(join(tmpdir(), "sdh-spam-")), "ledger.db"), { hashKey: "k" });
     const ours = hostedModelFrom(ENV, model.fetch);
+    const judgeFor = (p: Partial<PolicyPayload>, m = ours) =>
+      tenantJudge({ model: m, ledger, tenantId: "tn_a", policy: spamHostPolicy(p as PolicyPayload, m) });
     expect(tenantJudge({ model: ours, ledger, tenantId: "tn_a", policy: null })).toBeNull();
-    expect(
-      tenantJudge({
-        model: ours,
-        ledger,
-        tenantId: "tn_a",
-        policy: spamHostPolicy({ spam: { ...SPAM, ai: false } } as PolicyPayload),
-      }),
-    ).toBeNull();
-    expect(
-      tenantJudge({ model: null, ledger, tenantId: "tn_a", policy: spamHostPolicy({ spam: SPAM } as PolicyPayload) }),
-    ).toBeNull();
-    expect(
-      tenantJudge({ model: ours, ledger, tenantId: "tn_a", policy: spamHostPolicy({ spam: SPAM } as PolicyPayload) }),
-    ).not.toBeNull();
+    expect(judgeFor({})).toBeNull();
+    expect(judgeFor({ plan: "free" })).toBeNull();
+    expect(judgeFor({ ...PRO, spam: { ai: false } })).toBeNull();
+    expect(judgeFor(PRO, null)).toBeNull();
+    expect(judgeFor(PRO)).not.toBeNull();
     ledger.close();
   });
 
-  it("is a policy's to give: the block is checked, and an inbox without one is hosted on phrases only", () => {
-    expect(policyPayloadSchema.shape.spam.safeParse({ ...SPAM, filters: ["everything"] }).success).toBe(false);
-    expect(policyPayloadSchema.shape.spam.safeParse({ ...SPAM, day_cap: -1 }).success).toBe(false);
-    expect(spamHostPolicy({ spam: SPAM } as PolicyPayload)).toEqual({
-      ai: true,
-      filters: ["pitches", "scams"],
-      dayCap: 2,
-      monthCap: 100,
+  it("reads the plan from the policy: Free unless it says Pro, and a plan it does not know as Free", () => {
+    expect(planOf({})).toBe("free");
+    expect(planOf({ plan: "free" })).toBe("free");
+    expect(planOf({ plan: "pro" })).toBe("pro");
+    expect(policyPayloadSchema.shape.plan.parse("pro")).toBe("pro");
+    expect(policyPayloadSchema.shape.plan.parse("team")).toBeUndefined();
+    expect(policyPayloadSchema.shape.spam.safeParse({ day_cap: -1 }).success).toBe(false);
+  });
+
+  it("gives Pro the three filters, on from the start, read by Claude Haiku; Free none of them, and no AI", () => {
+    const ours = hostedModelFrom(ENV, model.fetch);
+    expect(spamHostPolicy({} as PolicyPayload, ours)).toEqual({
+      plan: "free",
+      ai: false,
+      filters: [],
+      defaultOn: false,
+      dayCap: 150,
+      monthCap: 1_500,
       reader: null,
-      billing: "off",
-      price: null,
     });
-    expect(spamHostPolicy({} as PolicyPayload)).toEqual(PHRASES_ONLY);
-    expect(PHRASES_ONLY).toMatchObject({ ai: false, billing: "off", price: null });
+    expect(spamHostPolicy(PRO as PolicyPayload, ours)).toEqual({
+      plan: "pro",
+      ai: true,
+      filters: ["pitches", "scams", "junk"],
+      defaultOn: true,
+      dayCap: 150,
+      monthCap: 1_500,
+      reader: "Claude Haiku, by Anthropic",
+    });
+    // Without our key the filters are Pro's all the same, and nothing says an AI reads.
+    expect(spamHostPolicy(PRO as PolicyPayload, null)).toMatchObject({ plan: "pro", ai: false, reader: null });
+    expect(spamHostPolicy({ ...PRO, spam: SPAM } as PolicyPayload, ours)).toMatchObject({ dayCap: 2, monthCap: 100 });
   });
 
   it("never writes a model key into a log line", () => {
     for (const line of [
       `judge failed: 401 {"error":"invalid x-api-key ${KEY}"}`,
-      "config HOSTED_SPAM_MODEL_KEY=gsk_abcdefghijklmnopqrstuvwx",
+      "config HOSTED_SPAM_ANTHROPIC_KEY=gsk_abcdefghijklmnopqrstuvwx",
       'request headers {"x-api-key": "abcdefghijklmnop0123"}',
       "key AIzaSyA-abcdefghijklmnopqrstuvwxyz012345",
     ]) {
@@ -285,12 +302,13 @@ describe("checks that time out", () => {
         },
       },
       dailyTokens: 4_000,
+      name: "Claude Haiku, by Anthropic",
     };
     const judge = tenantJudge({
       model: slow,
       ledger,
       tenantId: "tn_1",
-      policy: spamHostPolicy({ spam: { ...SPAM, day_cap: 1_000 } } as PolicyPayload),
+      policy: spamHostPolicy({ ...PRO, spam: { day_cap: 1_000 } } as PolicyPayload, slow),
     });
     const request = { system: "s".repeat(3_000), user: "u".repeat(3_000), schema: {}, maxTokens: 300 };
     const outcomes: string[] = [];
@@ -309,38 +327,91 @@ describe("checks that time out", () => {
 });
 
 describe("a hosted inbox's spam filter", () => {
-  it("asks no model where the policy has no spam block: the filters look for known phrases only", async () => {
-    const { t, host, owner } = await liveInbox(undefined);
-    await switchOn(host, owner, "pitches");
-    const before = model.calls.length;
-    expect((await send(host, PITCHES[0] as string)).status).toBe(201);
-    await settle(t);
-    expect(model.calls.length).toBe(before);
-    expect(verdictsOf(t).map((v) => v.ai)).toEqual(["skipped"]);
-  });
-
-  it("is hosted all the same without a spam block: no owner's own key, and Settings speaks as a hosted inbox", async () => {
-    const { host, owner, cookie } = await liveInbox(undefined);
+  it("on Free keeps basic protection: no filters to switch on, no AI and no owner's own key", async () => {
+    const { t, host, owner, cookie } = await liveInbox(undefined);
+    const status = await statusOf(host, cookie);
+    expect(status.plan).toBe("free");
+    expect(status.reader).toBe("hosted_phrases");
+    expect(status.reader_name).toBeNull();
+    expect(status.filters.map((f) => [f.filter, f.on, f.allowed])).toEqual([
+      ["pitches", false, false],
+      ["scams", false, false],
+      ["junk", false, false],
+    ]);
+    const on = await rt.http(host, "PUT", "/v1/owner/spam/filters/pitches", {
+      headers: owner,
+      body: JSON.stringify({ on: true }),
+    });
+    expect(on.status).toBe(403);
+    expect(on.text).toContain("The filters come with Pro.");
     const card = await rt.http(host, "GET", "/v1/owner/spam/model", { headers: { cookie } });
-    expect(card.status).toBe(200);
     expect(card.json).toMatchObject({ offered: false, not_offered: "hosted", own: null, can_change: false });
     const put = await rt.http(host, "PUT", "/v1/owner/spam/model", {
       headers: owner,
       body: JSON.stringify({ provider: "openai", model: "gpt-x", key: "sk-proj-hosted-tenant-0123456789" }),
     });
     expect(put.status).toBe(403);
-    const status = (await rt.http(host, "GET", "/v1/owner/spam", { headers: { cookie } })).json as {
-      reader: string;
-      billing: { state: string };
-      checks: { month_cap: number | null };
-    };
-    expect(status.reader).toBe("hosted_phrases");
-    expect(status.billing.state).toBe("off");
-    expect(status.checks.month_cap).not.toBe(2_000);
+    // A pitch from a stranger is screened by basic protection alone: no model is asked.
+    const before = model.calls.length;
+    expect((await send(host, PITCHES[0] as string)).status).toBe(201);
+    await settle(t);
+    expect(model.calls.length).toBe(before);
+  });
+
+  it("on Pro has the three filters on from the start, learning for a week, read by Claude Haiku", async () => {
+    const { t, host, cookie } = await liveInbox("pro");
+    const status = await statusOf(host, cookie);
+    expect(status.plan).toBe("pro");
+    expect(status.reader).toBe("hosted_ai");
+    expect(status.reader_name).toBe("Claude Haiku, by Anthropic");
+    expect(status.checks).toMatchObject({ day_cap: 150, month_cap: 1_500 });
+    for (const f of status.filters) {
+      expect(f).toMatchObject({ on: true, allowed: true });
+      const week = Date.parse(f.learning_until ?? "") - Date.now();
+      expect(week).toBeGreaterThan(6.9 * 86_400_000);
+      expect(week).toBeLessThanOrEqual(7 * 86_400_000);
+    }
+    // In its learning week a filter labels what it would put aside, and puts nothing aside.
+    const before = model.calls.length;
+    expect((await send(host, PITCHES[0] as string)).status).toBe(201);
+    await settle(t);
+    expect(model.calls.length - before).toBe(1);
+    expect(verdictsOf(t).map((v) => [v.ai, v.verdict])).toEqual([["judged", "warn"]]);
+    // What our AI is sent: Claude Haiku, thinking off, the answer held to the schema, no sampling settings.
+    const sent = JSON.parse(model.calls.at(-1)?.body ?? "{}") as Record<string, unknown>;
+    expect(sent).toMatchObject({
+      model: "claude-haiku-5-5",
+      thinking: { type: "disabled" },
+      output_config: { effort: "low", format: { type: "json_schema" } },
+    });
+    expect(sent).not.toHaveProperty("temperature");
+    expect(sent).not.toHaveProperty("top_p");
+    expect(sent).not.toHaveProperty("top_k");
+  });
+
+  it("keeps a filter a person switched off off, and brings back what a lapsed plan switched off", async () => {
+    const { t, host, owner, cookie } = await liveInbox("pro");
+    const off = await rt.http(host, "PUT", "/v1/owner/spam/filters/junk", {
+      headers: owner,
+      body: JSON.stringify({ on: false }),
+    });
+    expect(off.status, off.text).toBe(200);
+    // The plan lapses: every filter is switched off, by the system.
+    t.plan = "free";
+    await rt.setState(t, "live", { ownResolves: true });
+    expect((await statusOf(host, cookie)).filters.map((f) => f.on)).toEqual([false, false, false]);
+    // Pro again: the two the plan switched off come back; the one the owner switched off stays off.
+    t.plan = "pro";
+    await rt.setState(t, "live", { ownResolves: true });
+    expect((await statusOf(host, cookie)).filters.map((f) => [f.filter, f.on])).toEqual([
+      ["pitches", true],
+      ["scams", true],
+      ["junk", false],
+    ]);
   });
 
   it("counts each check in the ledger before it is made, within the inbox's caps, whatever its own file says", async () => {
-    const { t, host, owner } = await liveInbox(SPAM);
+    const { t, host, owner } = await liveInbox("pro", SPAM);
     await switchOn(host, owner, "pitches");
     const before = model.calls.length;
     for (const text of PITCHES.slice(0, 2)) {
@@ -373,28 +444,24 @@ describe("a hosted inbox's spam filter", () => {
     expect(told()).toHaveLength(1);
   });
 
-  it("switches a filter off when its host withdraws it", async () => {
-    const { t, host, owner, cookie } = await liveInbox(SPAM);
+  it("asks no model where the control plane stops our AI for the inbox", async () => {
+    const { t, host, owner, cookie } = await liveInbox("pro", { ai: false });
     await switchOn(host, owner, "pitches");
-    t.spam = { ...SPAM, filters: ["scams"] };
-    await rt.setState(t, "live", { ownResolves: true });
-    // Read again as the inbox opens with the new policy.
-    const status = (await rt.http(host, "GET", "/v1/owner/spam", { headers: { cookie } })).json as {
-      filters: { filter: string; on: boolean; allowed: boolean }[];
-    };
-    expect(status.filters.find((f) => f.filter === "pitches")).toMatchObject({ on: false, allowed: false });
-    expect(
-      (
-        await rt.http(host, "PUT", "/v1/owner/spam/filters/pitches", {
-          headers: owner,
-          body: JSON.stringify({ on: true }),
-        })
-      ).status,
-    ).toBe(403);
+    expect((await statusOf(host, cookie)).reader).toBe("hosted_phrases");
+    const before = model.calls.length;
+    expect((await send(host, PITCHES[1] as string)).status).toBe(201);
+    await settle(t);
+    expect(model.calls.length).toBe(before);
+    expect(verdictsOf(t).map((v) => v.ai)).toEqual(["skipped"]);
   });
 
   it("reports the month's filter-days, checks and tokens in usage", async () => {
-    const { t, host, owner } = await liveInbox(SPAM);
+    const { t, host, owner } = await liveInbox("pro", SPAM);
+    const off = await rt.http(host, "PUT", "/v1/owner/spam/filters/junk", {
+      headers: owner,
+      body: JSON.stringify({ on: false }),
+    });
+    expect(off.status).toBe(200);
     await switchOn(host, owner, "pitches");
     await switchOn(host, owner, "scams");
     await send(host, PITCHES[0] as string);
@@ -410,18 +477,17 @@ describe("a hosted inbox's spam filter", () => {
         aside: number;
       };
     };
-    expect(usage.spam.filter_days).toMatchObject({ pitches: 1, scams: 1, junk: 0 });
+    expect(usage.spam.filter_days).toMatchObject({ pitches: 1, scams: 1, junk: 1 });
     expect(usage.spam).toMatchObject({ judged: 1, tokens_in: 700, tokens_out: 50, aside: 1 });
     // What was put aside is not a request.
     expect(usage.items).toBe(0);
   });
 
   it("keeps our key out of everything an inbox shows, keeps or logs", async () => {
-    const { host, cookie } = await liveInbox(SPAM);
+    const { host, cookie } = await liveInbox("pro", SPAM);
     for (const path of ["/v1/owner/settings", "/v1/owner/spam", "/v1/owner/download"]) {
       const r = await rt.http(host, "GET", path, { headers: { cookie } });
       expect(r.text, path).not.toContain(KEY);
-      expect(r.text, path).not.toContain("our-model");
     }
     for (const call of model.calls) {
       expect(call.headers.get("x-api-key")).toBe(KEY);

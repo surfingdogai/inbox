@@ -82,7 +82,7 @@ export interface BuildDeps {
   readonly pushRegistrar?: RelayRegistrar | undefined;
   /** For the internal test as an agent only: the doors open whatever the policy says. Never served. */
   readonly agentsOpen?: boolean | undefined;
-  /** Our model for the spam filter's AI check (ADR-041 §7.2), from the shard's environment; null for none. */
+  /** Our model for the spam filter's AI check (ADR-041 §7.2), Claude Haiku from the shard's environment; null for none. */
   readonly spamModel?: HostedModel | null | undefined;
   readonly now?: (() => number) | undefined;
 }
@@ -179,6 +179,8 @@ export function buildInbox(d: BuildDeps): Inbox {
     hooksLive: open.agents === "open",
     attachmentsQuotaBytes: HOSTED_ATTACHMENTS_QUOTA_BYTES,
   };
+  // The plan's spam filters (ADR-041 §15.3): Pro's three, read by our model when it is set up; Free's none.
+  const spam = spamHostPolicy(p, d.spamModel ?? null);
   const inbox = createInbox({
     db: d.db,
     mailOut: tenantMailOut(d),
@@ -198,15 +200,10 @@ export function buildInbox(d: BuildDeps): Inbox {
     googleTesting: d.googleTesting,
     pushRegistrar: d.pushRegistrar,
     now: d.now,
-    // The spam filter: our model, behind the ledger's caps, only where the policy lets our AI read.
+    // The spam filter: the plan's filters, and our model behind the ledger's caps where the plan lets it read.
     spam: {
-      host: spamHostPolicy(p),
-      judge: tenantJudge({
-        model: d.spamModel ?? null,
-        ledger: d.ledger,
-        tenantId: d.tenantId,
-        policy: spamHostPolicy(p),
-      }),
+      host: spam,
+      judge: tenantJudge({ model: d.spamModel ?? null, ledger: d.ledger, tenantId: d.tenantId, policy: spam }),
     },
   });
   inbox.caps.email.attachHost(tenantEmailHost(p, d.onMailSender), Boolean(p.mail.inbound));

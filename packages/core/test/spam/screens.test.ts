@@ -3,7 +3,20 @@ import type { JudgePort } from "../../src/spam/judge";
 import { type ModelKit, ModelKitError, TEST_SAMPLES } from "../../src/spam/model";
 import type { Caller } from "../../src/write/caller";
 import { transitionItem } from "../../src/write/transition";
-import { agent, classPayload, DAY, fakeJudge, HOUR, MIN, owner, ownerAi, spamSetup, T0, visitor } from "./harness";
+import {
+  agent,
+  classPayload,
+  DAY,
+  fakeJudge,
+  HOUR,
+  hostPolicy,
+  MIN,
+  owner,
+  ownerAi,
+  spamSetup,
+  T0,
+  visitor,
+} from "./harness";
 
 /**
  * What the owner's screens read (ADR-041 §11, §12): Held and Spam as lists with their chips, who may
@@ -244,15 +257,7 @@ describe("the owner's own AI model, on their own server", () => {
 
   it("is not offered where the host reads, nor where the server set one", async () => {
     const hosted = await spamSetup({
-      host: {
-        ai: false,
-        filters: ["pitches", "scams", "junk"],
-        dayCap: 150,
-        monthCap: 1500,
-        reader: null,
-        billing: "off",
-        price: null,
-      },
+      host: hostPolicy({ ai: false }),
     });
     hosted.caps.spam.attach({ kit: kit() });
     expect(await hosted.caps.spamModel(owner(T0))).toMatchObject({ offered: false, not_offered: "hosted" });

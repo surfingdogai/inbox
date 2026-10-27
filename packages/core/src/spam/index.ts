@@ -36,7 +36,7 @@ export {
   runJudge,
 } from "./judge";
 export { judgeText, luhn, mask } from "./mask";
-export { monthCharge, type SpamUsage, spamUsage } from "./meter";
+export { type SpamUsage, spamUsage } from "./meter";
 export {
   isModelProvider,
   MODEL_PROVIDERS,

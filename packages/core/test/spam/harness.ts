@@ -145,6 +145,23 @@ export interface SpamSetup {
   readonly q: (sql: string, params?: unknown[]) => Promise<unknown[][]>;
 }
 
+/**
+ * A hosted inbox's spam policy (ADR-041 §15.3): Pro, its three filters, the host's AI reading, 150
+ * checks a day and 1,500 a month, filters not switched on by the plan unless a test says so.
+ */
+export function hostPolicy(over: Partial<SpamHostPolicy> = {}): SpamHostPolicy {
+  return {
+    plan: "pro",
+    ai: true,
+    filters: ["pitches", "scams", "junk"],
+    defaultOn: false,
+    dayCap: 150,
+    monthCap: 1_500,
+    reader: null,
+    ...over,
+  };
+}
+
 export async function spamSetup(
   o: {
     readonly filters?: readonly Filter[];

@@ -1,13 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { filterDays } from "../../src/spam/filters";
-import { monthCharge } from "../../src/spam/meter";
-import { agent, DAY, fakeJudge, HOUR, idOf, MIN, owner, ownerAi, spamSetup, T0, visitor } from "./harness";
+import { agent, DAY, fakeJudge, HOUR, hostPolicy, idOf, MIN, owner, ownerAi, spamSetup, T0, visitor } from "./harness";
 
 /**
- * Metering (ADR-041 §15, the founder's decision: a cost per inbox × number of filters): a filter-day
- * is a UTC day a filter was on at any moment; a month's charge, once billing is on, is each filter's
- * days (at most thirty) at a day's price, never more than its month's price. AI checks are counted per
- * inbox for what they cost to run, and capped. Only a person switches a filter; a host may withdraw one.
+ * Metering and plans (ADR-041 §15, the founder's decisions of 27 October 2026): a filter-day is a UTC
+ * day a filter was on at any moment, counted for usage, never charged by; Pro includes the filters.
+ * AI checks are counted per inbox for what they cost to run, and capped. Only a person switches a
+ * filter; a plan switches on what nobody switched, and switches off what it no longer includes.
  */
 
 const OCT = { from: Date.UTC(2026, 9, 1), to: Date.UTC(2026, 10, 1) };
@@ -29,12 +28,6 @@ describe("filter-days", () => {
     const now = Date.UTC(2026, 10, 10, 12);
     expect(await filterDays(s.db, OCT, now)).toEqual({ pitches: 2, scams: 2, junk: 0 });
     expect(await filterDays(s.db, NOV, now)).toEqual({ pitches: 1, scams: 10, junk: 0 });
-  });
-
-  it("price a month as days at a day's price, each filter never more than a month", () => {
-    expect(monthCharge({ pitches: 31, scams: 12, junk: 0 }, 100)).toBe(100 + 12 * 4);
-    expect(monthCharge({ pitches: 30, scams: 30, junk: 30 }, 300)).toBe(900);
-    expect(monthCharge({ pitches: 1, scams: 0, junk: 0 }, 100)).toBe(4);
   });
 
   it("learn for a week when first switched on, and carry on where they were when switched on again within a month", async () => {
@@ -78,33 +71,101 @@ describe("who switches a filter", () => {
     expect((await s.caps.spamStatus(owner(T0))).can_change).toBe(true);
   });
 
-  it("may only switch on what the host offers, and a filter the host withdraws is switched off by the system", async () => {
-    const s = await spamSetup({
-      host: {
-        ai: false,
-        filters: ["pitches"],
-        dayCap: 150,
-        monthCap: 1_500,
-        reader: null,
-        billing: "off",
-        price: null,
-      },
+  it("may only switch on what the plan includes: Free keeps basic protection, and its filters come with Pro", async () => {
+    const s = await spamSetup({ host: hostPolicy({ plan: "free", ai: false, filters: [] }) });
+    await expect(s.caps.setSpamFilter(owner(T0), { filter: "scams", on: true })).rejects.toMatchObject({
+      code: "not_allowed",
+      message: "The filters come with Pro.",
+      details: { reason: "plan" },
     });
+    const status = await s.caps.spamStatus(owner(T0));
+    expect(status.plan).toBe("free");
+    expect(status.reader).toBe("hosted_phrases");
+    expect(status.reader_name).toBeNull();
+    expect(status.filters.map((f) => [f.on, f.allowed])).toEqual([
+      [false, false],
+      [false, false],
+      [false, false],
+    ]);
+  });
+
+  it("switches off, as the system, what the plan no longer includes", async () => {
+    const s = await spamSetup({ host: hostPolicy({ filters: ["pitches"] }) });
     await s.caps.setSpamFilter(owner(T0), { filter: "pitches", on: true });
     await expect(s.caps.setSpamFilter(owner(T0), { filter: "scams", on: true })).rejects.toMatchObject({
       code: "not_allowed",
+      details: { reason: "not_offered" },
     });
-    s.caps.spam.attach({
-      host: { ai: false, filters: [], dayCap: 150, monthCap: 1_500, reader: null, billing: "off", price: null },
-    });
+    s.caps.spam.attach({ host: hostPolicy({ plan: "free", ai: false, filters: [] }) });
     await s.caps.spam.applyHost(T0 + HOUR);
     expect(await s.q("SELECT filter, by_kind FROM spam_filter_spans WHERE filter = 'pitches'")).toEqual([
       ["pitches", "system"],
     ]);
     const status = await s.caps.spamStatus(owner(T0 + 2 * HOUR));
     expect(status.filters.every((f) => !f.on)).toBe(true);
+    expect(status.plan).toBe("free");
+  });
+});
+
+describe("Pro's filters", () => {
+  const pro = (over = {}) => hostPolicy({ defaultOn: true, reader: "Claude Haiku, by Anthropic", ...over });
+
+  it("start on as the inbox opens, learning for a week: they label, and put nothing aside yet", async () => {
+    const judge = fakeJudge({ kind: "sales_pitch", certainty: "high", topic: "seo", quotes: ["rank your cafe first"] });
+    const s = await spamSetup({ judge, host: pro() });
+    await s.caps.spam.applyHost(T0);
+    const status = await s.caps.spamStatus(owner(T0 + MIN));
+    expect(status.plan).toBe("pro");
+    expect(status.reader).toBe("hosted_ai");
+    expect(status.reader_name).toBe("Claude Haiku, by Anthropic");
+    for (const f of status.filters) {
+      expect(f).toMatchObject({ on: true, allowed: true, choice: "aside" });
+      expect(f.learning_until).toBe(new Date(T0 + 7 * DAY).toISOString());
+    }
+    expect(await s.q("SELECT DISTINCT by_kind, by_id FROM spam_filter_spans WHERE filter <> 'basic'")).toEqual([
+      ["system", "host"],
+    ]);
+    // Opening again changes nothing: one span each.
+    await s.caps.spam.applyHost(T0 + HOUR);
+    expect(await s.q("SELECT COUNT(*) FROM spam_filter_spans WHERE filter <> 'basic'")).toEqual([[3]]);
+    const pitch = await s.caps.sendMessage(agent(T0 + 2 * HOUR), {
+      body: "We will rank your cafe first on every search, guaranteed or your money back.",
+      contact: { name: "Growth Team", email: "growth@pitch.example.net" },
+    });
+    await s.drain(T0 + 2 * HOUR);
+    expect(await s.q("SELECT verdict, learning FROM spam_verdicts WHERE item_id = ?", [idOf(pitch)])).toEqual([
+      ["warn", 1],
+    ]);
+  });
+
+  it("never switch on again a filter a person switched off, and come back after a plan that lapsed", async () => {
+    const s = await spamSetup({ host: pro() });
+    await s.caps.spam.applyHost(T0);
+    await s.caps.setSpamFilter(owner(T0 + HOUR), { filter: "junk", on: false });
+    await s.caps.spam.applyHost(T0 + 2 * HOUR);
+    expect((await s.caps.spamStatus(owner(T0 + 2 * HOUR))).filters.map((f) => f.on)).toEqual([true, true, false]);
+    // Free for a while: the plan switches them off; Pro again: the plan's come back, where they were in
+    // their learning week; the one the owner switched off stays off.
+    s.caps.spam.attach({ host: hostPolicy({ plan: "free", ai: false, filters: [] }) });
+    await s.caps.spam.applyHost(T0 + 3 * HOUR);
+    expect((await s.caps.spamStatus(owner(T0 + 3 * HOUR))).filters.map((f) => f.on)).toEqual([false, false, false]);
+    s.caps.spam.attach({ host: pro() });
+    await s.caps.spam.applyHost(T0 + 2 * DAY);
+    const back = await s.caps.spamStatus(owner(T0 + 2 * DAY));
+    expect(back.filters.map((f) => [f.filter, f.on, f.learning_until])).toEqual([
+      ["pitches", true, new Date(T0 + 7 * DAY).toISOString()],
+      ["scams", true, new Date(T0 + 7 * DAY).toISOString()],
+      ["junk", false, null],
+    ]);
+  });
+
+  it("are read by no AI while the host's model is not set up, and Settings says no AI reads", async () => {
+    const s = await spamSetup({ host: pro({ ai: false, reader: null }) });
+    await s.caps.spam.applyHost(T0);
+    const status = await s.caps.spamStatus(owner(T0));
+    expect(status.filters.every((f) => f.on)).toBe(true);
     expect(status.reader).toBe("hosted_phrases");
-    expect(status.billing).toEqual({ state: "off", price: null });
+    expect(status.reader_name).toBeNull();
   });
 });
 
@@ -190,7 +251,7 @@ describe("a bot's run at the form", () => {
     const s = await spamSetup({
       filters: ["pitches"],
       judge,
-      host: { ai: true, filters: ["pitches"], dayCap: 5, monthCap: 1_500, reader: null, billing: "off", price: null },
+      host: hostPolicy({ filters: ["pitches"], dayCap: 5 }),
     });
     // Twenty posts under forged keys, each sent less than half a second after the form was drawn.
     for (let i = 0; i < 20; i++) {
