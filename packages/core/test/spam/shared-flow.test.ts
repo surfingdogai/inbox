@@ -216,4 +216,18 @@ describe("where the shared list is said", () => {
     reads.caps.spam.attach({ shared: null });
     expect((await reads.caps.spam.status(owner(T0), T0)).shared).toBe("off");
   });
+
+  it("the privacy page says fingerprints are shared, and can't be turned back into the message, only while they are", async () => {
+    const s = await setup({ host: free(), shared: fakeShared({ contributes: false }) });
+    const section = async (lang: "en" | "pt") =>
+      (await s.caps.customer.privacy({ lang })).sections?.find((x) => /spam/i.test(x.heading));
+    expect((await section("en"))?.paragraphs).toEqual([
+      "To keep out spam, the provider that handles our messages shares fingerprints of messages marked as spam with the other businesses it serves; a fingerprint can't be turned back into the message.",
+    ]);
+    expect((await section("pt"))?.paragraphs[0]).toContain("não permite reconstituir a mensagem");
+    // The business's customers are told nothing of whose product it is.
+    expect(JSON.stringify(await section("en"))).not.toMatch(/Surfing Dog|Anthropic/);
+    s.caps.spam.attach({ shared: null });
+    expect(await section("en")).toBeUndefined();
+  });
 });

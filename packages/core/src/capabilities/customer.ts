@@ -215,6 +215,8 @@ interface Deps {
     | {
         confirmFromSender(itemId: string, now: number): Promise<"released" | "confirmed">;
         aiReader(now: number): Promise<"host" | "own" | null>;
+        /** The host shares fingerprints of known spam between its inboxes (ADR-041 §16). */
+        sharesSpam(): boolean;
       }
     | undefined;
 }
@@ -704,6 +706,7 @@ export class CustomerDoors {
       business: facts.name,
       networks: await issuingNetworks(this.db, await readSettings(this.db)),
       spamReading: (await this.deps.spam?.aiReader(Date.now())) ?? null,
+      spamShared: this.deps.spam?.sharesSpam() ?? false,
     });
   }
 
@@ -1543,6 +1546,7 @@ export class CustomerDoors {
       business: ctx.business,
       networks: await issuingNetworks(this.db, await readSettings(this.db)),
       spamReading: (await this.deps.spam?.aiReader(now)) ?? null,
+      spamShared: this.deps.spam?.sharesSpam() ?? false,
       mine: {
         stopped,
         form: {

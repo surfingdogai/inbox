@@ -49,6 +49,11 @@ export interface DisclosureCopy {
     spamHeading: string;
     spam: string;
     spamOwn: string;
+    /**
+     * While the inbox's host shares fingerprints of known spam between the inboxes it runs (ADR-041
+     * §16): that it does, and that a fingerprint can't be turned back into the message.
+     */
+    spamShared: string;
   }>;
 }
 
@@ -84,6 +89,8 @@ const EN: DisclosureCopy = {
     spam: "We check new messages from people we haven't heard from before, to keep unwanted messages away from our team. The check can include a reading by an automated service, which sees the message without email addresses, phone numbers or bank details. That service does not use it to train AI models, and deletes it within 30 days, unless its safety checks flag it (it may then keep it for up to two years) or the law requires keeping it. A person here can see and bring back any message the check set aside while it is kept.",
     spamOwn:
       "We check new messages from people we haven't heard from before, to keep unwanted messages away from our team. The check can include a reading by an automated service, which sees the message without email addresses, phone numbers or bank details. A person here can see and bring back any message the check set aside while it is kept.",
+    spamShared:
+      "To keep out spam, the provider that handles our messages shares fingerprints of messages marked as spam with the other businesses it serves; a fingerprint can't be turned back into the message.",
   },
 };
 
@@ -123,6 +130,8 @@ const PT: DisclosureCopy = {
     spam: "Verificamos as mensagens novas de quem ainda não nos contactou, para manter as mensagens indesejadas longe da nossa equipa. A verificação pode incluir uma leitura por um serviço automático, que vê a mensagem sem endereços de email, números de telefone ou dados bancários. Esse serviço não a usa para treinar modelos de IA e apaga-a no prazo de 30 dias, a menos que os seus controlos de segurança a assinalem (podendo então guardá-la até dois anos) ou que a lei obrigue a guardá-la. Alguém da nossa equipa pode ver e recuperar qualquer mensagem posta de parte enquanto for guardada.",
     spamOwn:
       "Verificamos as mensagens novas de quem ainda não nos contactou, para manter as mensagens indesejadas longe da nossa equipa. A verificação pode incluir uma leitura por um serviço automático, que vê a mensagem sem endereços de email, números de telefone ou dados bancários. Alguém da nossa equipa pode ver e recuperar qualquer mensagem posta de parte enquanto for guardada.",
+    spamShared:
+      "Para manter o spam afastado, o fornecedor que trata as nossas mensagens partilha impressões digitais de mensagens marcadas como spam com as outras empresas que serve; uma impressão digital não permite reconstituir a mensagem.",
   },
 };
 
@@ -179,6 +188,8 @@ export function privacyPage(input: {
    * the host's, whose retention the page states, or one the business set up itself; null while none may.
    */
   readonly spamReading?: "host" | "own" | null | undefined;
+  /** Whether the inbox's host shares fingerprints of known spam between its inboxes (ADR-041 §16). */
+  readonly spamShared?: boolean | undefined;
 }): CustomerPage {
   const d = DISCLOSURE[input.lang].privacy;
   const host = (origin: string) => {
@@ -206,8 +217,16 @@ export function privacyPage(input: {
       // guessed path (`/privacy`) is a dead link on the default network.
       links: input.networks.map((n) => ({ label: host(n), href: n })),
     },
-    ...(input.spamReading
-      ? [{ heading: d.spamHeading, paragraphs: [input.spamReading === "host" ? d.spam : d.spamOwn] }]
+    ...(input.spamReading || input.spamShared
+      ? [
+          {
+            heading: d.spamHeading,
+            paragraphs: [
+              ...(input.spamReading ? [input.spamReading === "host" ? d.spam : d.spamOwn] : []),
+              ...(input.spamShared ? [d.spamShared] : []),
+            ],
+          },
+        ]
       : []),
     { heading: d.questionsHeading, paragraphs: [d.questions] },
   ];
