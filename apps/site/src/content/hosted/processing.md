@@ -22,7 +22,7 @@ We process the data to run your inbox and for nothing else, on your instructions
 
 ## 3. Confidentiality
 
-The people who run the service, and nobody else, can reach your inbox's data, and they are bound to keep it confidential. We do not read, analyse, sell, share or train any model on your customers' data. Your inbox joins network.surfingdog.ai, which lists your business in its directory, the day it goes live; a network gets what Settings → Networks says it is sent and nothing more, and you can switch any network off there at any time, before your inbox goes live too.
+The people who run the service, and nobody else, can reach your inbox's data, and they are bound to keep it confidential. We do not read, analyse, sell, share or train any model on your customers' data. On Pro, the spam filters' AI check reads a new sender's masked message to sort it, for your inbox and for nothing else. Your inbox joins network.surfingdog.ai, which lists your business in its directory, the day it goes live; a network gets what Settings → Networks says it is sent and nothing more, and you can switch any network off there at any time, before your inbox goes live too.
 
 ## 4. Security (article 32)
 
@@ -41,6 +41,7 @@ You authorise these sub-processors. Each is bound by the same duties, and we ans
 
 - **Our edge network.** Carries every request to and from your inbox (it ends the encrypted connection, at one of its locations near the sender), delivers the email your inbox sends, and keeps its own records of both (section 6). It also stores our encrypted backups; those are in the European Union. A company based in the United States, with servers worldwide.
 - **The company that rents us our servers.** Runs the machines that hold your inbox's database. Where they are: see the [hosted terms](/hosted/terms/).
+- **Anthropic, for the spam filters' AI check (Pro).** Reads the opening message of someone your inbox has not dealt with before, with email addresses, phone numbers and bank and card numbers taken out and links cut to their domain, and answers whether it is a sales pitch, a scam or junk. It does not train its models on it, and deletes it within 30 days, unless its safety checks flag it (then it may keep it up to two years) or the law requires keeping it. A company based in the United States.
 
 The companies are named in the copy of this agreement we send you when you confirm your inbox, and on request. We tell you by email at least 30 days before adding or replacing a sub-processor. You may object; if we cannot meet your objection, you may leave before the change, and download everything before you go.
 
@@ -48,7 +49,7 @@ The companies are named in the copy of this agreement we send you when you confi
 
 Your inbox and its backups are stored in the European Union and nowhere else: the database on our servers, and its encrypted backups.
 
-Apart from what you send elsewhere yourself (webhooks, connections and networks you switch on, and the email your inbox writes to your customers), what can pass outside the European Union is what travels through our edge network: requests to and from your inbox, and the email your inbox sends, on their way. Its locations around the world carry them; they are not where your inbox is kept.
+Apart from what you send elsewhere yourself (webhooks, connections and networks you switch on, and the email your inbox writes to your customers) and, on Pro, what the spam filters' AI check reads (below), what can pass outside the European Union is what travels through our edge network: requests to and from your inbox, and the email your inbox sends, on their way. Its locations around the world carry them; they are not where your inbox is kept.
 
 The edge network also keeps its own records, which can be kept outside the European Union:
 
@@ -58,6 +59,8 @@ The edge network also keeps its own records, which can be kept outside the Europ
 Mail you write to our addresses is kept in our mailbox at an email company, which may store it outside the European Union. Do not send us your customers' personal data by email: to ask about one customer, name the item in your inbox, and to hand data over, use your inbox's export.
 
 Our edge network's company is in the United States. Transfers to it rely on the EU–US Data Privacy Framework or on standard contractual clauses in its data processing terms.
+
+With Pro's spam filters on, the masked opening message of someone new goes to Anthropic, in the United States, to be read. That transfer relies on the standard contractual clauses in Anthropic's data processing terms.
 
 ## 7. Helping you, breaches, and the end
 
