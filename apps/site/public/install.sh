@@ -608,7 +608,7 @@ name: inbox
 
 services:
   inbox:
-    image: ${INBOX_IMAGE:-ghcr.io/surfingdogai/inbox}:${INBOX_VERSION:?set INBOX_VERSION in .env, like 0.1.0}
+    image: ${INBOX_IMAGE:-ghcr.io/surfingdogai/inbox}:${INBOX_VERSION:?set INBOX_VERSION in .env, like 0.2.0}
     restart: unless-stopped
     init: true
     env_file: .env

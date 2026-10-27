@@ -9,7 +9,7 @@
 # INBOX_VERSION. Steps, updates and backups: https://surfingdog.ai/docs/platforms/#coolify
 services:
   inbox:
-    image: ghcr.io/surfingdogai/inbox:${INBOX_VERSION:-0.1.0}
+    image: ghcr.io/surfingdogai/inbox:${INBOX_VERSION:-0.2.0}
     restart: unless-stopped
     environment:
       # Coolify routes the address it gives the inbox to the container's port 8787.
