@@ -85,7 +85,7 @@ The installer's Caddy needs ports 80 and 443. If the server already serves websi
 sudo mkdir -p /opt/inbox/data && sudo chown 10001:10001 /opt/inbox/data
 sudo docker run -d --name inbox --restart unless-stopped -p 127.0.0.1:8787:8787 \
   -v /opt/inbox/data:/opt/inbox/data --env-file /opt/inbox/.env \
-  -e INBOX_PUBLIC_URL=https://inbox.yourbusiness.com ghcr.io/surfingdogai/inbox:0.1.0
+  -e INBOX_PUBLIC_URL=https://inbox.yourbusiness.com ghcr.io/surfingdogai/inbox:0.2.0-rc.2
 ```
 
 Have your proxy send `inbox.yourbusiness.com` to `127.0.0.1:8787` and drop any `CF-Connecting-IP` a caller sends, as the [install guide's Caddy block](/install.md) does: the inbox limits callers by it when it is there. Updates are then `docker pull` and a new container, with a backup first ([Backups](/docs/backups/)).
@@ -105,7 +105,7 @@ By hand, it answers on the server itself only, over plain HTTP: put a proxy with
 docker run -d --name inbox --restart unless-stopped -p 127.0.0.1:8787:8787 \
   -v inbox-data:/opt/inbox/data --env-file inbox.env \
   -e INBOX_OWNER_EMAIL=you@yourbusiness.com -e INBOX_PUBLIC_URL=https://inbox.yourbusiness.com \
-  ghcr.io/surfingdogai/inbox:0.1.0
+  ghcr.io/surfingdogai/inbox:0.2.0-rc.2
 ```
 
 Every setting is in the [Quickstart](/docs/quickstart/#your-own-server). Commands run inside the container: `docker exec inbox node /opt/inbox/server.mjs create-owner-key laptop`. Behind a platform's proxy that passes a `CF-Connecting-IP` the caller wrote straight through, `INBOX_CLIENT_ADDRESS_HEADER` names the header that proxy sets itself (`fly-client-ip`, `x-real-ip`), or `socket` for the connection's own address.

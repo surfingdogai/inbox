@@ -5,7 +5,7 @@ description: Surfing Dog Inbox on Coolify, Fly.io, Render, Railway and a Digital
 
 The inbox keeps its data in one SQLite file. A platform runs it well when it gives the container a disk that lasts across deploys and restarts, and runs exactly one copy of it: a second copy would have a database of its own. Each platform below does, in the way described; where one does not, it says so.
 
-All of them run the same image, `ghcr.io/surfingdogai/inbox`, pinned to a version (`0.1.0` here), with the same settings as anywhere ([Quickstart](/docs/quickstart/#your-own-server)): `INBOX_OWNER_EMAIL` and `INBOX_SECRET_KEY` to start, then `INBOX_PUBLIC_URL` once the inbox answers at your own address. Generate the key (`openssl rand -base64 32`) and keep a copy somewhere safe, apart from the platform. And give the inbox an address on your own domain, such as `inbox.yourbusiness.com`: agents and checkers start from the business's domain, and an address on the platform's domain is one they don't credit.
+All of them run the same image, `ghcr.io/surfingdogai/inbox`, pinned to a version (`0.2.0-rc.2` here), with the same settings as anywhere ([Quickstart](/docs/quickstart/#your-own-server)): `INBOX_OWNER_EMAIL` and `INBOX_SECRET_KEY` to start, then `INBOX_PUBLIC_URL` once the inbox answers at your own address. Generate the key (`openssl rand -base64 32`) and keep a copy somewhere safe, apart from the platform. And give the inbox an address on your own domain, such as `inbox.yourbusiness.com`: agents and checkers start from the business's domain, and an address on the platform's domain is one they don't credit.
 
 The inbox limits each caller by their address. Most platforms' proxies pass a `CF-Connecting-IP` header the caller wrote straight through, so each template sets `INBOX_CLIENT_ADDRESS_HEADER` to the header the platform's proxy sets itself.
 
@@ -53,7 +53,7 @@ What to know first: Render gives disks only to paid instances, so the Blueprint 
 
 There is no Railway template to press yet; from the image it takes a minute:
 
-1. **New project → Deploy a Docker image**: `ghcr.io/surfingdogai/inbox:0.1.0`.
+1. **New project → Deploy a Docker image**: `ghcr.io/surfingdogai/inbox:0.2.0-rc.2`.
 2. **Add a volume** to the service, mounted at `/opt/inbox/data`.
 3. **Variables**: `INBOX_OWNER_EMAIL`, `INBOX_SECRET_KEY` (generated, kept), `INBOX_CLIENT_ADDRESS_HEADER=x-real-ip` (the header Railway's edge sets itself), and `RAILWAY_RUN_UID=0`. Railway's volumes belong to root, and this starts the container as root once: the image gives the volume to its own user and runs as that user from then on.
 4. **Settings → Networking**: a custom domain, `inbox.yourbusiness.com`, with the CNAME it names. Then `INBOX_PUBLIC_URL=https://inbox.yourbusiness.com`.

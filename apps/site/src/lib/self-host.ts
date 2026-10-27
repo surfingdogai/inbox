@@ -14,7 +14,7 @@ export const IMAGE = "ghcr.io/surfingdogai/inbox";
  * The version the docs pin, the newest release's: the same as packages/core/src/version.ts, which
  * the tests check, so a release that forgets a page fails them.
  */
-export const IMAGE_VERSION = "0.1.0";
+export const IMAGE_VERSION = "0.2.0-rc.2";
 
 /**
  * The image run by hand, as the docs and the README give it: on the server itself only (a proxy
