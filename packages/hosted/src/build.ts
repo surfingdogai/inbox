@@ -16,6 +16,7 @@ import { type NodeSqliteClient, nodeSnapshot } from "@surfingdog/platform/node";
 import type { SenderFallback } from "./config";
 import type { Ledger } from "./ledger";
 import { type HostedModel, spamHostPolicy, tenantJudge } from "./spam";
+import { tenantShare } from "./spam-share";
 import type { PolicyPayload } from "./types";
 
 /**
@@ -201,9 +202,11 @@ export function buildInbox(d: BuildDeps): Inbox {
     pushRegistrar: d.pushRegistrar,
     now: d.now,
     // The spam filter: the plan's filters, and our model behind the ledger's caps where the plan lets it read.
+    // Known spam shared with the other inboxes here, by keyed fingerprints only (ADR-041 §16).
     spam: {
       host: spam,
       judge: tenantJudge({ model: d.spamModel ?? null, ledger: d.ledger, tenantId: d.tenantId, policy: spam }),
+      shared: tenantShare({ prints: d.ledger.shared, tenantId: d.tenantId, policy: p, now: (d.now ?? Date.now)() }),
     },
   });
   inbox.caps.email.attachHost(tenantEmailHost(p, d.onMailSender), Boolean(p.mail.inbound));

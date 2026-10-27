@@ -169,6 +169,16 @@ export const policyPayloadSchema = z.looseObject({
   // A plan this runtime does not know reads as Free, never as a broken policy.
   plan: z.enum(PLANS).optional().catch(undefined),
   /**
+   * The account that owns the inbox, as the control plane keeps it (ADR-041 §16): its id, so two inboxes
+   * of one owner count as one owner on the shared list of known spam, and when it was made, so a new
+   * account's marks wait their week. Absent: the owner is told apart by `owner_email`, and their age is
+   * counted from when this runtime first opened one of their inboxes. One that does not read reads as absent.
+   */
+  owner_account: z
+    .looseObject({ id: z.string().min(1).max(128), created_at: z.iso.datetime({ offset: true }) })
+    .optional()
+    .catch(undefined),
+  /**
    * The spam filter's limits on our AI (ADR-041 §15.3), when the control plane sets them: `ai: false`
    * stops our AI reading for this inbox whatever its plan; the AI check's caps a day and a month.
    * Absent: our AI reads for Pro inboxes, at most 150 checks a day and 1,500 a month.

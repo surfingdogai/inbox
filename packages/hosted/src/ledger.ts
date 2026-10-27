@@ -1,15 +1,17 @@
 import { createHmac } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import type { MailAbout, MailHold, OutboundMail } from "@surfingdog/platform";
+import { SHARE_SCHEMA, SHARE_TABLES, SharedPrints } from "./spam-share";
 
 /**
  * What no single inbox can see alone, kept for all of them on this machine in one SQLite file that
  * every shard opens: how much email each recipient had today across every inbox, how much each
  * inbox wrote to customers today, the addresses nobody writes to again, which inboxes may not send,
  * the email each inbox sent this month, which inboxes stalled a shard (and those put in maintenance
- * for it), and the events still to be told to the control plane.
+ * for it), the events still to be told to the control plane, and the fingerprints of known spam the
+ * inboxes share (`shared`, ADR-041 §16).
  *
- * Recipients are kept as keyed hashes, never as addresses.
+ * Recipients are kept as keyed hashes, never as addresses; fingerprints, under a key of their own.
  */
 
 /** At most this many emails to one recipient a day, from all the inboxes here together. */
@@ -41,7 +43,7 @@ CREATE INDEX IF NOT EXISTS events_due ON events (next_at);
 CREATE TABLE IF NOT EXISTS judge_day (day TEXT NOT NULL, tenant_id TEXT NOT NULL, n INTEGER NOT NULL, tokens_in INTEGER NOT NULL DEFAULT 0, tokens_out INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, tenant_id));
 CREATE TABLE IF NOT EXISTS judge_total_day (day TEXT PRIMARY KEY, tokens INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS judge_told (day TEXT NOT NULL, tenant_id TEXT NOT NULL, type TEXT NOT NULL, PRIMARY KEY (day, tenant_id, type));
-`;
+${SHARE_SCHEMA}`;
 
 export const LEDGER_TABLES = [
   "recipient_day",
@@ -56,6 +58,7 @@ export const LEDGER_TABLES = [
   "judge_day",
   "judge_total_day",
   "judge_told",
+  ...SHARE_TABLES,
 ] as const;
 
 const dayOf = (now: number) => new Date(now).toISOString().slice(0, 10);
@@ -72,6 +75,8 @@ export interface QueuedEvent {
 
 export class Ledger {
   readonly db: DatabaseSync;
+  /** Known spam the inboxes here share, by keyed fingerprints only (ADR-041 §16). */
+  readonly shared: SharedPrints;
   private readonly key: Buffer;
   private readonly now: () => number;
 
@@ -96,6 +101,8 @@ export class Ledger {
     }
     this.key = Buffer.from(o.hashKey, "utf8");
     this.now = o.now ?? Date.now;
+    // A key of the fingerprints' own, from the ledger's: never a recipient's hash, never in a tenant.
+    this.shared = new SharedPrints(this.db, createHmac("sha256", this.key).update("spam-fingerprints/v1").digest());
   }
 
   close(): void {
@@ -432,5 +439,6 @@ export class Ledger {
     this.db.prepare("DELETE FROM check_day WHERE day < ?").run(before);
     this.db.prepare("DELETE FROM judge_told WHERE day < ?").run(before);
     this.db.prepare("DELETE FROM blames WHERE at < ? AND reported = 1").run(this.now() - 7 * 86_400_000);
+    this.shared.prune(this.now());
   }
 }
