@@ -73,6 +73,22 @@ export {
   stillScreening,
   tooManyWords,
 } from "./screen";
+export {
+  companyDomain,
+  minhashBands,
+  NO_MATCH,
+  SHARE_BANDS,
+  SHARE_MIN_CHARS,
+  SHARE_ROWS,
+  type SharedMatch,
+  type SharedPrint,
+  type SharedSpamPort,
+  SPAM_SHARE_KIND,
+  sharedPrintOf,
+  sharedSignals,
+  sharedText,
+  sureAside,
+} from "./shared";
 export { contentSignals, decodeHost, editDistance, looksLike, talksToFilter } from "./signals/content";
 export { emailSignals } from "./signals/email";
 export { formSignals } from "./signals/form";

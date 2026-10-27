@@ -37,8 +37,8 @@ export async function sha256Hex(text: string): Promise<string> {
   return Array.from(digest, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** A 32-bit hash with a seed (murmur3's finaliser over FNV-1a), for SimHash's pieces. */
-function hash32(text: string, seed: number): number {
+/** A 32-bit hash with a seed (murmur3's finaliser over FNV-1a), for SimHash's and MinHash's pieces. */
+export function hash32(text: string, seed: number): number {
   let h = 0x811c9dc5 ^ seed;
   for (let i = 0; i < text.length; i++) {
     h ^= text.charCodeAt(i);
