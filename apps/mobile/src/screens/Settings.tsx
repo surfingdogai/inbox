@@ -4,7 +4,7 @@ import { useApp } from "../context";
 import type { PhoneRow } from "../lib/client";
 import { setUpPush } from "../lib/push";
 import { versionLine } from "../lib/update";
-import { agoSentence } from "../lib/view";
+import { agoSentence, spamFiltersLine } from "../lib/view";
 import { Nav } from "./Nav";
 
 /** The privacy policy's part about this app. */
@@ -57,6 +57,19 @@ export function Settings() {
       if (r && app.me) app.setMe({ ...app.me, notify: r.notify });
     } catch (e) {
       setPrefs(before);
+      app.toast(e instanceof Error ? e.message : "Not saved.");
+    }
+  };
+
+  /** The spam filter's two emails: not priced, so the phone switches them as the computer does. */
+  const saveEmails = async (k: "held_digest" | "weekly_summary") => {
+    const spam = app.spam;
+    if (!spam || !app.client) return;
+    app.setSpam({ ...spam, emails: { ...spam.emails, [k]: !spam.emails[k] } });
+    try {
+      app.setSpam(await app.client.setSpamEmails({ [k]: !spam.emails[k] }));
+    } catch (e) {
+      app.setSpam(spam);
       app.toast(e instanceof Error ? e.message : "Not saved.");
     }
   };
@@ -218,6 +231,36 @@ export function Settings() {
             </div>
           </div>
         </section>
+        {app.spam && (
+          <section className="group" aria-labelledby="spam-h">
+            <h2 id="spam-h">Spam</h2>
+            <div className="rows">
+              <div>
+                <span className="two">
+                  <small>{spamFiltersLine(app.spam.filters)}</small>
+                </span>
+              </div>
+              {(
+                [
+                  ["held_digest", "A short email in the morning when something new is held"],
+                  ["weekly_summary", "A summary on Mondays when something was put aside"],
+                ] as const
+              ).map(([k, label]) => (
+                <div key={k}>
+                  <span>{label}</span>
+                  <button
+                    type="button"
+                    role="switch"
+                    className="switch"
+                    aria-checked={app.spam?.emails[k] ?? false}
+                    aria-label={label}
+                    onClick={() => void saveEmails(k)}
+                  />
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
         {phones && (
           <section className="group" aria-labelledby="dev-h">
             <h2 id="dev-h">Phones</h2>

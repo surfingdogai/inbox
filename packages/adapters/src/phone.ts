@@ -5,6 +5,7 @@ import {
   type Capabilities,
   type PhoneCapabilities,
   pairingUri,
+  readSettings,
   signInLinkUri,
   WriteError,
 } from "@surfingdog/core";
@@ -191,6 +192,36 @@ export function phoneRoutes(deps: PhoneDoorDeps): Hono<CallerEnv> {
     const id = device(c);
     if (typeof id !== "string") return id;
     return c.json({ notify: await phones.setNotify(id, await body(c)) }, 200, noStore);
+  });
+
+  // The spam filter, as the phone shows it (ADR-029 §12): which filters are on (changed on the web,
+  // since one may carry a price), what waits, and the owner's two emails from it, which carry none.
+  const spamView = async (c: Context<CallerEnv>) => {
+    const status = await deps.caps.spamStatus(c.get("caller"));
+    const settings = await readSettings(deps.caps.db);
+    return {
+      filters: status.filters.filter((f) => f.on).map((f) => f.filter),
+      held_now: status.held_now,
+      this_week: status.this_week,
+      emails: { held_digest: settings.spam.heldDigest, weekly_summary: settings.spam.weeklySummary },
+    };
+  };
+
+  app.get("/spam", async (c) => {
+    const id = device(c);
+    if (typeof id !== "string") return id;
+    return c.json(await spamView(c), 200, noStore);
+  });
+
+  app.put("/spam/emails", async (c) => {
+    const id = device(c);
+    if (typeof id !== "string") return id;
+    const input = await body(c);
+    const spam: Record<string, boolean> = {};
+    if (typeof input.held_digest === "boolean") spam.heldDigest = input.held_digest;
+    if (typeof input.weekly_summary === "boolean") spam.weeklySummary = input.weekly_summary;
+    if (Object.keys(spam).length > 0) await deps.caps.updateSettings(c.get("caller"), { doc: { spam } });
+    return c.json(await spamView(c), 200, noStore);
   });
 
   app.put("/push", async (c) => {

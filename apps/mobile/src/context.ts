@@ -1,6 +1,6 @@
 import { createContext, useContext } from "react";
 import type { ItemDetail, ItemView } from "../../inbox/client/src/lib/types";
-import type { InboxClient, PhoneMe } from "./lib/client";
+import type { InboxClient, PhoneMe, PhoneSpam } from "./lib/client";
 import type { Native } from "./lib/native";
 import type { QueuedAction } from "./lib/offline";
 import type { InboxEntry, Sessions } from "./lib/session";
@@ -12,6 +12,8 @@ export type Route =
   | { readonly name: "settings" }
   | { readonly name: "inboxes" }
   | { readonly name: "connect" }
+  /** What the spam filter holds, or everything put aside (ADR-029 §12). */
+  | { readonly name: "screened"; readonly which: "held" | "spam" }
   | {
       readonly name: "item";
       readonly id: string;
@@ -28,6 +30,8 @@ export interface App {
   readonly active: InboxEntry | null;
   readonly client: InboxClient | null;
   readonly me: PhoneMe | null;
+  /** The spam filter as this inbox has it: null until read, or from an inbox without one. */
+  readonly spam: PhoneSpam | null;
   readonly views: readonly ItemView[];
   readonly loading: boolean;
   /** The active inbox cannot be reached. */
@@ -59,6 +63,7 @@ export interface App {
   readonly update: UpdateState;
   /** Android's back button closes this first while it returns true (an open sheet); returns its removal. */
   onBack(handler: () => boolean): () => void;
+  setSpam(spam: PhoneSpam): void;
 }
 
 export const AppContext = createContext<App | null>(null);

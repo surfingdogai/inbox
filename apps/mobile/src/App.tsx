@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { readItemLink, readPhoneLink } from "../../../packages/core/src/phones/links";
 import type { ItemDetail, ItemView } from "../../inbox/client/src/lib/types";
 import { AppContext, type App as AppValue, type Route } from "./context";
-import { InboxClient, type PhoneMe } from "./lib/client";
+import { InboxClient, type PhoneMe, type PhoneSpam } from "./lib/client";
 import { type Native, native as nativeOf } from "./lib/native";
 import { Box, type KV, Outbox, type QueuedAction } from "./lib/offline";
 import { setUpPush } from "./lib/push";
@@ -16,6 +16,7 @@ import { Inboxes } from "./screens/Inboxes";
 import { Item } from "./screens/Item";
 import { Lock } from "./screens/Lock";
 import { OfflineBanner } from "./screens/Offline";
+import { Screened } from "./screens/Screened";
 import { Settings } from "./screens/Settings";
 import { Today } from "./screens/Today";
 
@@ -93,6 +94,7 @@ export function App({ deps }: { deps: Deps }) {
   const [active, setActive] = useState<InboxEntry | null>(null);
   const [views, setViews] = useState<ItemView[]>([]);
   const [me, setMe] = useState<PhoneMe | null>(null);
+  const [spam, setSpam] = useState<PhoneSpam | null>(null);
   const [loading, setLoading] = useState(false);
   const [offline, setOffline] = useState(false);
   const [cachedAt, setCachedAt] = useState<number | null>(null);
@@ -122,7 +124,10 @@ export function App({ deps }: { deps: Deps }) {
     setToastText(text);
     setTimeout(() => setToastText((t) => (t === text ? null : t)), 3200);
   }, []);
-  const go = useCallback((r: Route) => setStack((s) => (r.name === "item" ? [...s, r] : [r])), []);
+  const go = useCallback(
+    (r: Route) => setStack((s) => (r.name === "item" || r.name === "screened" ? [...s, r] : [r])),
+    [],
+  );
   const back = useCallback(() => setStack((s) => (s.length > 1 ? s.slice(0, -1) : s)), []);
 
   // ---- boot: the stores, the inboxes, the lock ----
@@ -214,6 +219,11 @@ export function App({ deps }: { deps: Deps }) {
           if (m.push_available && m.phone.push !== "on") void setUpPush(native, client, active.alias, false, true);
         })
         .catch(() => undefined);
+      // The spam filter's foot line: an inbox from before it answers nothing, and the line stays away.
+      client
+        .spam()
+        .then(setSpam)
+        .catch(() => setSpam(null));
     } catch (error) {
       if (error instanceof InboxError && error.code === "signed_out") {
         toast(`This phone was removed from ${active.name}. Connect it again from Settings → Phone.`);
@@ -240,6 +250,7 @@ export function App({ deps }: { deps: Deps }) {
     if (!ready || locked || insecure) return;
     setViews([]);
     setMe(null);
+    setSpam(null);
     setListLoaded(false);
     void refresh();
     if (active) deps.kv.setItem(`sdi.${ACTIVE}`, active.alias);
@@ -512,6 +523,7 @@ export function App({ deps }: { deps: Deps }) {
     active,
     client,
     me,
+    spam,
     views,
     loading,
     offline,
@@ -537,6 +549,7 @@ export function App({ deps }: { deps: Deps }) {
     appInfo,
     update,
     onBack,
+    setSpam,
   };
 
   if (!ready) return <div className="shell" />;
@@ -578,6 +591,8 @@ export function App({ deps }: { deps: Deps }) {
       <Today />
     ) : route.name === "settings" ? (
       <Settings />
+    ) : route.name === "screened" ? (
+      <Screened which={route.which} />
     ) : route.name === "inboxes" ? (
       <Inboxes />
     ) : (

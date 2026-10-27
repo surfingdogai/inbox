@@ -8,7 +8,7 @@ import { machines } from "../machine/tables";
 import { business, items, products, services } from "../schema/tables";
 import { gateOf, holdsBack } from "../spam/screen";
 import { rowToItem } from "../write/views";
-import { buildPushPayload, encodePayload } from "./payload";
+import { buildPushPayload, encodePayload, HELD_SOON_EVENT } from "./payload";
 import type { PhoneCapabilities } from "./phones";
 import { deliverAt, pushKindOf, readPrefs } from "./prefs";
 
@@ -87,8 +87,12 @@ export function phonePushFanoutHandler(phones: PhoneCapabilities): JobHandler {
     if (!row) return { note: "item gone" };
     const item = rowToItem(row);
     if (item.flags.sandbox) return { note: "test item: no notification" };
-    // Held or put aside by the spam filter (ADR-029): no phone is told.
-    if (holdsBack(await gateOf(db, item.id))) return { note: "held by the spam filter: no notification" };
+    // Held or put aside by the spam filter (ADR-029): no phone is told — but once, of a booking request
+    // it holds for a time within 48 hours, while it is still held.
+    const gate = await gateOf(db, item.id);
+    if (p.event === HELD_SOON_EVENT) {
+      if (gate?.screen !== "held") return { note: "no longer held: no notification" };
+    } else if (holdsBack(gate)) return { note: "held by the spam filter: no notification" };
     const kind = pushKindOf(item, awaitsOwner(item, p.event));
     const { tz } = await timezoneOf(db);
     let queued = 0;
@@ -161,6 +165,9 @@ export function phonePushOneHandler(phones: PhoneCapabilities): JobHandler {
     const [row] = await db.orm.select().from(items).where(eq(items.id, p.itemId));
     if (!row) return { note: "item gone" };
     const item = rowToItem(row);
+    // A held booking request let in, or sent to Spam, since: nothing to wake anyone for.
+    if (p.event === HELD_SOON_EVENT && (await gateOf(db, item.id))?.screen !== "held")
+      return { note: "no longer held" };
     const awaits = awaitsOwner(item, p.event);
     // Held overnight, and dealt with since (on the computer, or by a rule): nothing to wake anyone for.
     if (p.held && p.event === "create" && (!awaits || item.closedAt !== null)) return { note: "dealt with" };
@@ -198,7 +205,7 @@ export function phonePushOneHandler(phones: PhoneCapabilities): JobHandler {
     // A new booking request's notification lives no longer than until it starts: "Accept 14:00" after
     // 14:00 is no use. Anything later about a booking (a reply) goes as anything else does.
     const startsIn =
-      item.type === "booking" && p.event === "create"
+      item.type === "booking" && (p.event === "create" || p.event === HELD_SOON_EVENT)
         ? Math.floor((Date.parse(item.payload.startTime) - now) / 1000)
         : Number.POSITIVE_INFINITY;
     if (startsIn <= 0) return { note: "already started" };

@@ -167,6 +167,122 @@ function views() {
   ].map(said);
 }
 
+/** What the spam filter held and put aside (ADR-029), as the inbox lists them for the owner. */
+function screenedViews() {
+  const sender = (address: string) => ({ address, company_domain: null, app: false });
+  const held = [
+    {
+      ...view(
+        "amara",
+        "booking",
+        "requested",
+        {
+          reservationFor: { serviceId: "cut", name: "Cut & finish" },
+          startTime: at(1, "11:00"),
+          endTime: at(1, "11:45"),
+          totalPrice: eur(4800),
+        },
+        "Amara Nwosu",
+        "form",
+        40,
+        [
+          { event: "confirm", label: "Confirm booking" },
+          { event: "decline", label: "Decline" },
+        ],
+      ),
+      spam: {
+        screen: "held",
+        chip: "Many new requests",
+        cause: "many_new",
+        may_be_customer: true,
+        certain: true,
+        sender: sender("amara.nwosu@example.com"),
+      },
+    },
+    {
+      ...view(
+        "bulk",
+        "order",
+        "received",
+        {
+          orderedItem: [{ name: "Repair shampoo 250 ml", quantity: 60, price: eur(2400) }],
+          totalPrice: eur(144000),
+          delivery: { method: "delivery" },
+        },
+        null,
+        "mcp_public",
+        300,
+      ),
+      spam: {
+        screen: "held",
+        chip: "Sent many times",
+        cause: "wave",
+        may_be_customer: false,
+        certain: true,
+        sender: sender("orders@bulk-supply.example"),
+      },
+    },
+  ];
+  const aside = [
+    {
+      ...view(
+        "rank",
+        "message",
+        "spam",
+        {
+          text: "We guarantee your salon the top 3 search results in 30 days with our backlink package. Free audit?",
+        },
+        "Ravi Kumar",
+        "form",
+        90,
+        [{ event: "unspam", label: "Not spam" }],
+      ),
+      spam: {
+        screen: "aside",
+        chip: "Sales pitch",
+        cause: "pitches",
+        may_be_customer: false,
+        certain: false,
+        sender: sender("ravi@rankboost.example"),
+      },
+    },
+  ];
+  return { held, aside };
+}
+
+/** What the item screen says about one of them: our reasons, and the passage the AI check found. */
+function why(id: string) {
+  if (id === "amara")
+    return {
+      verdict: "hold",
+      reasons: ["This sender made 6 new requests today."],
+      quotes: [],
+      by: "spam_filter",
+      learning: false,
+      released_by: null,
+      at: ago(40),
+    };
+  if (id === "rank")
+    return {
+      verdict: "aside",
+      reasons: ["Sales pitch: SEO."],
+      quotes: ["We guarantee your salon the top 3 search results in 30 days"],
+      by: "ai_check",
+      learning: false,
+      released_by: null,
+      at: ago(90),
+    };
+  return {
+    verdict: "hold",
+    reasons: ["The same message came from 14 senders this week."],
+    quotes: [],
+    by: "spam_filter",
+    learning: false,
+    released_by: null,
+    at: ago(300),
+  };
+}
+
 function slots() {
   const out: { startTime: string }[] = [];
   const lists = [
@@ -202,6 +318,7 @@ export async function demoDeps(q: URLSearchParams): Promise<Deps> {
     pushStatus: async () => ({ available: true, permission: "granted" }),
   };
   const all = views();
+  const screened = screenedViews();
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
   const fetchImpl = async (input: string, init?: RequestInit): Promise<Response> => {
@@ -237,14 +354,26 @@ export async function demoDeps(q: URLSearchParams): Promise<Deps> {
         this: "d1",
       });
     if (path === "/v1/phone/notify") return json({ notify: JSON.parse(String(init?.body ?? "{}")) });
+    if (path === "/v1/phone/spam" || path === "/v1/phone/spam/emails")
+      return json({
+        filters: ["pitches", "scams"],
+        held_now: screened.held.length,
+        this_week: { aside: 23 },
+        emails: { held_digest: true, weekly_summary: true, ...JSON.parse(String(init?.body ?? "{}")) },
+      });
     if (path === "/v1/availability") return json(slots());
     if (path === "/v1/owner/items") {
+      if (url.searchParams.get("screen") === "held") return json({ items: screened.held, next_cursor: null });
+      if (url.searchParams.get("state") === "spam") return json({ items: screened.aside, next_cursor: null });
       const items = url.host.includes("kiln") ? [] : url.host.includes("cafenorte") ? all.slice(1, 2) : all;
       return json({ items, next_cursor: null });
     }
     const m = /^\/v1\/owner\/items\/([^/]+)$/.exec(path);
     if (m) {
       const v = all.find((x) => x.item.id === m[1]);
+      const s = [...screened.held, ...screened.aside].find((x) => x.item.id === m[1]);
+      if (s)
+        return json({ ...s, spam: { ...s.spam, ...why(s.item.id) }, events: [], thread: [], mail: [], draft: null });
       return v ? json({ ...v, events: [], thread: [], mail: [], draft: null }) : json({ detail: "Not found" }, 404);
     }
     return json({ ok: true });
@@ -255,6 +384,8 @@ export async function demoDeps(q: URLSearchParams): Promise<Deps> {
       ? { name: "item", id: q.get("id") ?? "maya", action: screen === "item" ? undefined : screen }
       : screen === "today" || screen === "settings" || screen === "inboxes" || screen === "connect"
         ? { name: screen }
-        : undefined;
+        : screen === "held" || screen === "spam"
+          ? { name: "screened", which: screen }
+          : undefined;
   return { native, fetch: fetchImpl, kv: localStorage, allowLocal: true, initial };
 }

@@ -1010,3 +1010,112 @@ fieldset.group legend {
   border-color: transparent;
   color: var(--warn-ink);
 }
+
+/* ---- the spam filter (ADR-029 §12): quiet, ink and greys, never red ---- */
+.spam-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 4px 4px;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+.spam-foot button {
+  padding: 6px 4px;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--line-2);
+}
+.screened-top {
+  margin: 4px 8px 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+.spam-chip {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border: 1px solid var(--line-2);
+  border-radius: 9999px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.spam-chip.is-customer {
+  border-color: color-mix(in srgb, var(--palm) 40%, transparent);
+  color: var(--palm);
+}
+.spam-why {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card-soft);
+}
+.spam-why p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.spam-why-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-3);
+}
+.spam-why-head .spam-chip {
+  margin-left: 0;
+}
+.spam-why .spam-quote {
+  padding-left: 10px;
+  border-left: 1px solid var(--line-2);
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.spam-why .spam-by {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.spam-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 4px;
+}
+.btn.ink {
+  border-color: transparent;
+  background: var(--primary);
+  color: var(--on-primary);
+}
+.toast.undo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.toast.undo button {
+  flex: none;
+  padding: 6px 4px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

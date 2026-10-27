@@ -667,6 +667,7 @@ function verdictRow(
         method: "run",
       },
       ...(o.reading && o.sender ? strangerStatements(itemId, ctx, o.reading, o.sender) : []),
+      ...(verdict === "hold" ? heldSoonStatements(itemId, ctx.type, ctx.payload, ctx.now) : []),
       ...(counter ? [countStatement(counter, ctx.now)] : []),
       ...(o.ai === "reused" ? [countStatement("reused", ctx.now)] : []),
       ...(o.ai === "capped" ? [countStatement("capped", ctx.now)] : []),
@@ -964,7 +965,11 @@ export async function runScreenJob(
       });
     }
   } else if (verdict === "hold") {
-    statements.push(casScreen("held"), cancelEffectsStatement(input.eventId, now, decision.noProof));
+    statements.push(
+      casScreen("held"),
+      cancelEffectsStatement(input.eventId, now, decision.noProof),
+      ...heldSoonStatements(input.itemId, item.type, item.payload, now),
+    );
   } else {
     // Put aside: a message or a quote request goes to its spam state, as the system, and nothing it
     // started runs.
@@ -999,6 +1004,34 @@ export function asideStatements(itemId: string, state: string, version: number, 
       sql: `UPDATE items SET state = 'spam', version = version + 1, updated_at = ?, closed_at = COALESCE(closed_at, ?)
              WHERE id = ? AND version = ? AND state IN ('open', 'answered', 'received', 'needs_info')`,
       params: [now, now, itemId, version],
+      method: "run",
+    },
+  ];
+}
+
+/** How near a held booking request's time must be for the owner's phones to hear of it once (ADR-029 §12). */
+export const HELD_SOON_MS = 48 * 3_600_000;
+
+/**
+ * A booking request held for a time within 48 hours: one notification to the owner's phones that one
+ * waits in Held, queued only where a phone listens. Nothing else about a held request reaches a phone.
+ */
+export function heldSoonStatements(itemId: string, type: string, payload: unknown, now: number): Statement[] {
+  if (type !== "booking") return [];
+  const start = Date.parse(String((payload as { startTime?: unknown } | null)?.startTime ?? ""));
+  if (!Number.isFinite(start) || start <= now || start - now > HELD_SOON_MS) return [];
+  return [
+    {
+      sql: `INSERT OR IGNORE INTO jobs (id, kind, payload, run_at, status, attempts, max_attempts, dedupe_key, created_at)
+            SELECT ?, 'phone_push', ?, ?, 'queued', 0, 8, ?, ?
+             WHERE EXISTS (SELECT 1 FROM phone_devices WHERE revoked_at IS NULL AND confirmed_at IS NOT NULL AND push_state = 'on')`,
+      params: [
+        `${itemId}:held_soon`,
+        JSON.stringify({ itemId, event: "held_soon", key: `held_soon:${itemId}` }),
+        now,
+        `phone_push:held_soon:${itemId}`,
+        now,
+      ],
       method: "run",
     },
   ];

@@ -65,6 +65,8 @@ export {
   type DoorContext,
   type DoorScreen,
   gateOf,
+  HELD_SOON_MS,
+  heldSoonStatements,
   holdsBack,
   SPAM_SCREEN_KIND,
   type SpamHostPolicy,

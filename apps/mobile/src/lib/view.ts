@@ -232,7 +232,8 @@ export function calendarWords(
 
 /** The event the owner most likely means, first: accepting it as it is. */
 const PRIMARY = ["confirm", "accept", "accept_change", "approve", "answer", "quote", "fulfil", "complete"];
-const DANGER = new Set(["decline", "reject", "cancel", "decline_change", "mark_spam", "no_show"]);
+// Not mark_spam: what is put aside comes back in one press, so it is never a warning (ADR-029 §12).
+const DANGER = new Set(["decline", "reject", "cancel", "decline_change", "no_show"]);
 
 export interface Actions {
   readonly primary: { readonly event: string; readonly label: string } | null;
@@ -336,4 +337,23 @@ export function today(
       v.item.type === "order" && v.item.closedAt === null && ["accepted", "paid", "fulfilling"].includes(v.item.state),
   );
   return { rows, bookings: todays.length, toConfirm, orders };
+}
+
+/** The foot of the inbox screen (ADR-029 §12): "Held · 2", then "Spam · 23 this week". Held only while something is. */
+export function spamFoot(spam: { readonly held_now: number; readonly this_week: { readonly aside: number } } | null): {
+  readonly held: string | null;
+  readonly spam: string;
+} | null {
+  if (!spam) return null;
+  return {
+    held: spam.held_now > 0 ? `Held · ${spam.held_now}` : null,
+    spam: `Spam · ${spam.this_week.aside} this week`,
+  };
+}
+
+/** The filters on, as Settings says them: "Spam filters: Sales pitches, Scams · Change them on the web." */
+export function spamFiltersLine(filters: readonly string[]): string {
+  const names: Record<string, string> = { pitches: "Sales pitches", scams: "Scams", junk: "Junk" };
+  const on = filters.map((f) => names[f] ?? f);
+  return `Spam filters: ${on.length ? on.join(", ") : "none on"} · Change them on the web.`;
 }

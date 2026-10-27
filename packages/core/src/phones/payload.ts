@@ -1,4 +1,5 @@
 import type { Item } from "../domain/types";
+import { chipOf } from "../spam/copy";
 import { moneyText } from "../util/money";
 import { MAX_PUSH_PLAINTEXT } from "./crypto";
 import type { PushKind } from "./prefs";
@@ -70,6 +71,9 @@ function when(iso: string, tz: string, locale: string): { day: string; time: str
     time: opts({ hour: "2-digit", minute: "2-digit", hourCycle: "h23" }),
   };
 }
+
+/** The event of the one notification a held booking request for a time within 48 hours gets (ADR-029 §12). */
+export const HELD_SOON_EVENT = "held_soon";
 
 const NEW: Record<PushKind, string> = {
   booking: "New booking request",
@@ -183,6 +187,11 @@ export function buildPushPayload(ctx: PayloadContext): PushPayload {
   if (isNew && item.type === "stay" && ctx.kind !== "handled") title = "New stay request";
   if (isNew && item.type === "order" && ctx.kind !== "handled")
     title = `${title} · ${moneyText(item.payload.totalPrice)}`;
+  // A booking request the spam filter holds, for a time close at hand (ADR-029 §12): said once, with no name.
+  if (ctx.event === HELD_SOON_EVENT && item.type === "booking")
+    title = `A booking request for ${when(item.payload.startTime, ctx.timezone, locale).day} is waiting in Held`;
+  // Delivered with a label: what it may be, before what it is, on a phone that shows details.
+  if (ctx.details && item.flags.spamLabel) title = `${chipOf(item.flags.spamLabel, true)}: ${title}`;
   // A booking's price rides in the body, after its time and service, as the approved design has it.
   let body = summary(ctx, ctx.timezone, locale);
   if (isNew && item.type === "booking" && item.payload.totalPrice)

@@ -14,6 +14,14 @@ export interface PhoneMe {
   readonly push_available: boolean;
 }
 
+/** The spam filter, as the phone shows it (ADR-029 §12): which filters are on, what waits, the two emails. */
+export interface PhoneSpam {
+  readonly filters: readonly ("pitches" | "scams" | "junk")[];
+  readonly held_now: number;
+  readonly this_week: { readonly aside: number };
+  readonly emails: { readonly held_digest: boolean; readonly weekly_summary: boolean };
+}
+
 export interface PhoneRow {
   readonly id: string;
   readonly name: string;
@@ -75,6 +83,27 @@ export class InboxClient {
     if (filter === "needs") q.set("needs_human", "true");
     if (cursor) q.set("cursor", cursor);
     return this.call("GET", `/v1/owner/items?${q}`);
+  }
+
+  /** What the spam filter holds, or everything put aside (ADR-029 §12). */
+  screened(which: "held" | "spam"): Promise<Page<ItemView>> {
+    const q = new URLSearchParams({ open_only: "false", limit: "40" });
+    if (which === "held") q.set("screen", "held");
+    else q.set("state", "spam");
+    return this.call("GET", `/v1/owner/items?${q}`);
+  }
+
+  /** Let it in, Looks fine, or Spam on something held: one press each, a person's own. */
+  spamAct(id: string, act: "let-in" | "looks-fine" | "spam", idempotencyKey: string): Promise<unknown> {
+    return this.call("POST", `/v1/owner/items/${encodeURIComponent(id)}/${act}`, { body: {}, idempotencyKey });
+  }
+
+  spam(): Promise<PhoneSpam> {
+    return this.call("GET", "/v1/phone/spam");
+  }
+
+  setSpamEmails(body: { held_digest?: boolean; weekly_summary?: boolean }): Promise<PhoneSpam> {
+    return this.call("PUT", "/v1/phone/spam/emails", { body });
   }
 
   /** Recent items, open or not: the Handled list and Today read from it. */

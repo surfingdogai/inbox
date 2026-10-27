@@ -1,8 +1,19 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatDay, formatWhen, partyName, stateWord } from "../../../inbox/client/src/lib/format";
+import {
+  ACT_LABEL,
+  actsFor,
+  byWords,
+  quoteLine,
+  type SpamAct,
+  toastFor,
+  UNDO_MS,
+  warnSentence,
+} from "../../../inbox/client/src/lib/spam";
 import type { ItemDetail } from "../../../inbox/client/src/lib/types";
 import { useApp } from "../context";
 import type { Slots } from "../lib/client";
+import { InboxError } from "../lib/session";
 import {
   actionsFor,
   agoSentence,
@@ -18,6 +29,7 @@ import { CheckIcon, ChevronLeft, CloseIcon, MoreIcon } from "./icons";
 /** What the "…" menu may do in one press: answers that need no words or times typed. */
 const ONE_PRESS = new Set([
   "mark_spam",
+  "unspam",
   "cancel",
   "no_show",
   "complete",
@@ -84,6 +96,65 @@ export function Item({
     return () => window.removeEventListener("online", again);
   }, [detail, load]);
   const actions = useMemo(() => (detail ? actionsFor(detail, tz) : null), [detail, tz]);
+  const spamActs = useMemo(() => (detail ? actsFor(detail) : []), [detail]);
+  const [undo, setUndo] = useState<{ act: SpamAct; text: string } | null>(null);
+  const waiting = useRef<{ act: SpamAct; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const detailRef = useRef(detail);
+  detailRef.current = detail;
+
+  /** Sends what waited for Undo: the filter's own calls, or the item's transition where it is one. */
+  const commit = useCallback(async () => {
+    const w = waiting.current;
+    const d = detailRef.current;
+    waiting.current = null;
+    setUndo(null);
+    if (!w || !d || !app.client) return;
+    clearTimeout(w.timer);
+    const key = crypto.randomUUID();
+    const screen = d.spam?.screen ?? null;
+    try {
+      if (w.act === "let_in" || (w.act === "not_spam" && d.item.state !== "spam"))
+        await app.client.spamAct(d.item.id, "let-in", key);
+      else if (w.act === "looks_fine") await app.client.spamAct(d.item.id, "looks-fine", key);
+      else if (w.act === "spam" && (screen === "held" || screen === "pending"))
+        await app.client.spamAct(d.item.id, "spam", key);
+      else
+        await app.act(
+          d.item.id,
+          "transition",
+          { event: w.act === "spam" ? "mark_spam" : "unspam", expected_version: d.item.version },
+          ACT_LABEL[w.act],
+        );
+      void app.refresh();
+      setDetail(await app.loadItem(d.item.id));
+    } catch (e) {
+      app.toast(
+        e instanceof InboxError && e.offline
+          ? "You're offline: press it again when you're back."
+          : e instanceof Error
+            ? e.message
+            : "Not done.",
+      );
+    }
+  }, [app]);
+  // Leaving the item sends what waits: Undo is only for the six seconds on this screen.
+  useEffect(
+    () => () => {
+      if (waiting.current) void commit();
+    },
+    [commit],
+  );
+  const spamAct = (act: SpamAct) => {
+    if (!detail) return;
+    if (waiting.current) void commit();
+    waiting.current = { act, timer: setTimeout(() => void commit(), UNDO_MS) };
+    setUndo({ act, text: toastFor(act, detail).text });
+  };
+  const cancelAct = () => {
+    if (waiting.current) clearTimeout(waiting.current.timer);
+    waiting.current = null;
+    setUndo(null);
+  };
   useEffect(() => {
     if (action && actions?.primary?.event === action) setSheet("confirm");
     else if (action === "propose" && actions?.propose) setSheet("propose");
@@ -190,6 +261,7 @@ export function Item({
             {note}
           </p>
         ))}
+        {detail.spam && <SpamWhy detail={detail} tz={tz} acts={spamActs} onAct={spamAct} />}
         <Facts detail={detail} tz={tz} />
         {(words.length > 0 || first) && (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -274,11 +346,22 @@ export function Item({
         <More
           detail={detail}
           origin={app.active?.origin ?? ""}
-          skip={[actions?.primary?.event, actions?.propose?.event, actions?.decline?.event]}
+          skip={[
+            actions?.primary?.event,
+            actions?.propose?.event,
+            actions?.decline?.event,
+            ...(spamActs.includes("spam") ? ["mark_spam"] : []),
+            ...(spamActs.includes("not_spam") ? ["unspam"] : []),
+          ]}
           onClose={() => setSheet(null)}
           onPick={(t) => {
-            setOther(t);
             setSheet(null);
+            // Spam is one press with Undo, as on the computer (ADR-029 §12).
+            if (t.event === "mark_spam" || t.event === "unspam") {
+              spamAct(t.event === "mark_spam" ? "spam" : "not_spam");
+              return;
+            }
+            setOther(t);
           }}
           onCopied={() => {
             setSheet(null);
@@ -299,6 +382,14 @@ export function Item({
           }}
           onNo={() => setOther(null)}
         />
+      )}
+      {undo && (
+        <div className="toast undo" role="status">
+          <span>{undo.text}</span>
+          <button type="button" onClick={cancelAct}>
+            Undo
+          </button>
+        </div>
       )}
       {sheet === "decline" && actions?.decline && (
         <Confirm
@@ -546,5 +637,59 @@ function Propose(p: {
         </button>
       </section>
     </>
+  );
+}
+
+/**
+ * Why it's here (ADR-029 §11.2, §12): the filter's reason in our words, the passages it found, who
+ * decided, and its one-press answers. Nothing a model wrote is ever shown.
+ */
+function SpamWhy({
+  detail,
+  tz,
+  acts,
+  onAct,
+}: {
+  detail: ItemDetail;
+  tz: string | undefined;
+  acts: readonly SpamAct[];
+  onAct: (act: SpamAct) => void;
+}) {
+  const spam = detail.spam;
+  if (!spam) return null;
+  const bySender = spam.released_by === "sender";
+  const screen = spam.screen;
+  if (!(screen === "held" || screen === "aside" || screen === "warned" || screen === "pending" || bySender))
+    if (detail.item.state !== "spam") return null;
+  const warn = screen === "warned" ? warnSentence(spam.cause) : "";
+  const first = bySender
+    ? `The sender confirmed it's them.${spam.reasons[0] ? ` ${spam.reasons[0]}` : ""}`
+    : warn || spam.reasons[0] || "You put it aside.";
+  return (
+    <section className="spam-why" aria-label="Why it's here">
+      <div className="spam-why-head">
+        <span>Why it's here</span>
+        {spam.chip && !bySender && <span className="spam-chip">{spam.chip}</span>}
+        {bySender && <span className="spam-chip">Confirmed by the sender</span>}
+      </div>
+      <p>{first}</p>
+      {spam.quotes.map((q) => (
+        <p key={q} className="spam-quote">
+          {quoteLine(q)}
+        </p>
+      ))}
+      <p className="spam-by">
+        {byWords(spam.by)} · {formatDay(spam.at, tz)}
+      </p>
+      {acts.length > 0 && (
+        <div className="spam-acts">
+          {acts.map((a, i) => (
+            <button key={a} type="button" className={i === 0 ? "btn sm ink" : "btn sm"} onClick={() => onAct(a)}>
+              {ACT_LABEL[a]}
+            </button>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }

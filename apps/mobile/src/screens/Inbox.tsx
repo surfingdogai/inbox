@@ -12,6 +12,7 @@ import {
   channelPhrase,
   KIND_WORD,
   needsYou,
+  spamFoot,
 } from "../lib/view";
 import { CheckIcon, ChevronDown, SearchIcon } from "./icons";
 import { Nav } from "./Nav";
@@ -39,6 +40,8 @@ export function Inbox() {
   }, [app.views, query, tz]);
 
   const shown = tab === "needs" ? needs : open;
+  // What the spam filter holds and put aside, a quiet line under the list (ADR-029 §12).
+  const foot = spamFoot(app.spam);
   return (
     <div className="screen">
       <header className="head">
@@ -109,6 +112,21 @@ export function Inbox() {
               </button>
             ))}
           </>
+        )}
+        {foot && (
+          <div className="spam-foot">
+            {foot.held && (
+              <>
+                <button type="button" onClick={() => app.go({ name: "screened", which: "held" })}>
+                  {foot.held}
+                </button>
+                <span aria-hidden="true">·</span>
+              </>
+            )}
+            <button type="button" onClick={() => app.go({ name: "screened", which: "spam" })}>
+              {foot.spam}
+            </button>
+          </div>
         )}
       </main>
       <Nav current="inbox" />

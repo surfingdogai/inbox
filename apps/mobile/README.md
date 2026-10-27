@@ -112,7 +112,7 @@ cd apps/mobile/android
 Put your own `google-services.json` in `apps/mobile/android/app/` for notifications.
 
 To try the screens in a browser with a made-up business: `pnpm --filter @surfingdog/mobile dev`, then
-open `http://localhost:5174/?demo` (add `&screen=item`, `today`, `settings`, `inboxes`, `connect`,
+open `http://localhost:5174/?demo` (add `&screen=item`, `today`, `settings`, `inboxes`, `connect`, `held`, `spam`,
 `propose` or `confirm`, and `&offline` for the offline banner). The demo never ships in the app.
 
 A debug build (`assembleDebug`, for development) may connect to an inbox on your own computer over plain
