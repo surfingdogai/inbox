@@ -18,6 +18,7 @@ This notice is about you, the person who sets up a hosted inbox, and about your 
 - **Security signals**: the bot check on the sign-up form, your address's network for rate limits, and failed code attempts. Kept briefly, and used to stop abuse and for nothing else. Basis: our legitimate interest in keeping the service safe.
 - **Google Calendar, if you connect it**: what your inbox reads from Google (which account it is, when you are busy, the events it adds for the bookings you confirm) is kept in your inbox with the rest of its data, which we process for you under the [processing agreement](/hosted/processing/). Google's access is kept encrypted; a disconnect asks Google to take it back and deletes it. What the inbox asks Google for, and why, is on our [privacy page](/privacy/#google-h). Basis: our contract with you; you ask for it by connecting.
 - **Your listing on network.surfingdog.ai**: from the day your inbox goes live, your business is listed in its directory, where AI agents search, with your products on sale unless you switch them off, and the receipts your inbox signs are kept there ([what it gets](/privacy/#network-h)). Basis: our contract with you. Switch it off in Settings → Networks.
+- **Your marks on spam**, on Pro: a message you mark as spam, or one your inbox is sure of, puts its fingerprint on the list of known spam the hosted inboxes share, with a keyed hash of your account, so each owner counts once and an account under a week old counts for nothing. Never the message, and nothing that leads back to you or to it. Basis: our legitimate interest in keeping spam out of every inbox here.
 - **Reports and our decisions about them**, if anyone reports your inbox. Basis: our legal duties under the Digital Services Act.
 
 ## How long
@@ -25,6 +26,7 @@ This notice is about you, the person who sets up a hosted inbox, and about your 
 - A sign-up you never confirm: deleted after 24 hours. A code: 10 minutes.
 - Your account: while your inbox exists, and for the 30 days of read-only after you close it; then deleted, with backup copies gone within 30 more days.
 - The step and usage counts: kept without your address once your inbox is closed.
+- Fingerprints of spam: 30 days from the mark.
 - Reports and decisions: as long as the law asks us to keep them.
 
 ## Who else sees it

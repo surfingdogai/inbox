@@ -84,10 +84,24 @@ It runs on a stranger's opening message, with a filter on, when nothing certain 
 | Basic protection, Held and Spam, the lists, the emails | yes | yes |
 | The three filters | no | on from the start, each with its learning week |
 | The AI check | no | Claude Haiku from Anthropic, which we pay for |
+| [Known spam](#known-spam-shared-between-hosted-inboxes) from other businesses | labelled | caught as your filters say, and your marks help them |
 
 The $10 supports the open-source inbox, the open network, and keeping access to AI agents from being locked in a connector store. There is no price for each filter.
 
 Settings → Spam names who reads. Anthropic does not use what it is sent to train its models, and deletes it within 30 days, unless its safety checks flag it for breaking its usage policy (then it may keep it up to two years, and the checks' scores up to seven) or the law requires keeping it. That is Anthropic's standard commercial retention, not a zero-retention arrangement. Until the AI check is switched on for hosted inboxes, Settings says so, and the filters look for known phrases.
+
+## Known spam, shared between hosted inboxes
+
+Hosted inboxes share fingerprints of known spam with each other, never messages. A fingerprint is a set of hash values made from a message's text with its links, email addresses, phone numbers, bank and card numbers and every digit taken out, and the sender's company mail domain where a mail server vouched for the address (never a provider many people share). The host keys each value with a secret of its own before keeping or comparing one: a fingerprint can't be turned back into the message, and nobody without that secret can match one.
+
+- **Known spam** is a message like one that three or more other businesses marked as Spam within a fortnight, or that their inboxes put aside on their own and were sure of: a bot's form, a server's mark, the same words from many senders, or the AI check sure of it with a passage it quotes. An owner counts once, however many inboxes they have, and not before their account is a week old.
+- **A match labels** it ("Marked spam elsewhere"). On Pro, under the filter the reporters named, it does what that filter is set to: labels in its learning week or on Just label, puts aside after. It never deletes, never holds a booking or an order on its own, never blocks a sender, and never counts in receipts, standing or ranking. A sender's domain known for spam adds a few points and labels nothing alone.
+- **Not spam** on a match counts against it for everyone. What a match alone put aside is never reported again, so the list never feeds itself.
+- **Free and Pro.** Every hosted inbox reads the list: it costs no AI, and on Free a match just labels. Pro inboxes live at the business's own domain report to it, and Free inboxes' marks stay their own: marks that can't be faked by the dozen keep the list honest.
+- **Forgotten** thirty days after it was reported. Erasing a customer takes back what your inbox said of their messages.
+- **On your own server** nothing is shared, and nothing others shared is read. A shared list may be offered for your own server later.
+
+Settings → Spam says which of these your inbox does, and your privacy page says, in your name, that fingerprints of spam are shared and can't be turned back into the message.
 
 ## Connecting a model
 
@@ -155,7 +169,7 @@ The same page after sending, the same answers to their assistant and the same st
 - **Confirm it's me.** Every new customer's acknowledgement (bookings, orders, quote requests) carries one more line and a button: "Please confirm it's you, so we know your request reached the right person." Pressing it proves their address and, if their request was held for an uncertain reason, lets it in. Their later requests are screened as before, with more room for new ones in a day; a sender becomes known when you press Let it in or Not spam. A request held for a certain reason (a bot's form, a server's mark, a wave) gets no acknowledgement at all, so a forged address is never written to.
 - **An assistant's answer** says where that email went (`identity.confirm.sent_to`, masked) — see [Getting your person's request seen](/for-agents.md).
 - **Too many new requests** from one agent: `429` with `Retry-After`, and a line in the sender's language, with no reason given.
-- Your **privacy page** gains a short "Keeping out spam" section while a model may read, and loses it when none may.
+- Your **privacy page** gains a short "Keeping out spam" section while a model may read, or while your hosted inbox reads the shared list of known spam, and loses it when neither is so.
 
 ## Your emails and your phone
 
@@ -169,6 +183,6 @@ The owner MCP's `spam_status` reads the filters, this month's counts, who reads,
 
 ## Removing data
 
-Erasing a customer removes the filter's verdicts on their requests, their prints, the AI check's answers about their words, their rows on the lists and their handles' history. A download of your inbox keeps the verdicts, the lists, when each filter was on and the day counts; never the prints, the handles, the cached answers, or your model's key.
+Erasing a customer removes the filter's verdicts on their requests, their prints, the AI check's answers about their words, their rows on the lists and their handles' history, and takes back what your hosted inbox told the shared list of known spam about their messages. A download of your inbox keeps the verdicts, the lists, when each filter was on and the day counts; never the prints, the handles, the cached answers, or your model's key.
 
 **Keep what's put aside**: **Keep them** (the default), 90 days or 30 days. Nothing is deleted on its own, a bot's form messages included; nothing you brought back is ever removed.
