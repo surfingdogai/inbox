@@ -241,27 +241,27 @@ describe("Stripe: an assistant's shared payment token, charged once on the busin
     expect(refused.message).not.toContain(TOKEN);
   });
 
-  it("Stripe not saying what it did is said so, with whether the same key can ever get an answer", async () => {
-    // A 500 is kept under the key, and every retry with it gets the same: only a new key is answered.
+  it("Stripe not saying what it did is said so, with whether the same request under the same key may yet tell", async () => {
+    // A 500 is kept under the key, and every retry with it gets the same: only a lookup can tell.
     const inside = fakeStripe(() => json(STRIPE_API_ERROR, 500));
     expect(await chargeToken(ctx(inside.http), CHARGE)).toMatchObject({
       status: "unknown",
-      rekey: true,
+      resend: false,
       externalId: null,
     });
-    // An edge's 502, 503 or 504 keeps nothing: the same key asks again.
+    // An edge's 502, 503 or 504 keeps nothing: the same request under the same key may yet be answered.
     for (const status of [502, 503, 504]) {
       const edge = fakeStripe(() => json(STRIPE_API_ERROR, status));
       expect([status, await chargeToken(ctx(edge.http), CHARGE)]).toMatchObject([
         status,
-        { status: "unknown", rekey: false },
+        { status: "unknown", resend: true },
       ]);
     }
     // The first request under the key still runs (409); or the key was first used with other parameters (400).
     const running = fakeStripe(() => json(stripeIdempotencyError("running", `sdi-${CHARGE.ref}-pi`), 409));
-    expect(await chargeToken(ctx(running.http), CHARGE)).toMatchObject({ status: "unknown", rekey: false });
+    expect(await chargeToken(ctx(running.http), CHARGE)).toMatchObject({ status: "unknown", resend: true });
     const other = fakeStripe(() => json(stripeIdempotencyError("mismatch", `sdi-${CHARGE.ref}-pi`), 400));
-    expect(await chargeToken(ctx(other.http), CHARGE)).toMatchObject({ status: "unknown", rekey: true });
+    expect(await chargeToken(ctx(other.http), CHARGE)).toMatchObject({ status: "unknown", resend: false });
     // A request that never got an answer is the transport's to say: unreachable, thrown.
     const cut = {
       request: async () => Promise.reject(new ConnectorError("unreachable", "api.stripe.com did not answer in time.")),
@@ -269,12 +269,18 @@ describe("Stripe: an assistant's shared payment token, charged once on the busin
     expect(((await chargeToken(ctx(cut), CHARGE).catch((e) => e)) as ConnectorError).code).toBe("unreachable");
   });
 
-  it("asks again under a new idempotency key when told to, with the same id for the attempt", async () => {
+  it("asks again only as it asked first: the same request, under the attempt's one key", async () => {
     const p = fakeStripe(() => json(stripePaymentIntent({ id: "pi_1Fjord", amount: 18900, currency: "nok" })));
-    await chargeToken(ctx(p.http), { ...CHARGE, retryKey: 2 });
-    expect(p.seen[0]?.headers.get("idempotency-key")).toBe(`sdi-${CHARGE.ref}-pi-2`);
+    await chargeToken(ctx(p.http), CHARGE);
+    await chargeToken(ctx(p.http), CHARGE);
+    expect(p.seen.map((r) => r.headers.get("idempotency-key"))).toEqual([
+      `sdi-${CHARGE.ref}-pi`,
+      `sdi-${CHARGE.ref}-pi`,
+    ]);
+    expect(p.seen[1]?.body).toBe(p.seen[0]?.body);
     expect(form(p.seen[0]?.body ?? "")["metadata[sdi_pay]"]).toBe(CHARGE.ref);
   });
+
 
   it("a refusal about anything else is Stripe's to say; a key without the permission names it; a platform down is tried again", async () => {
     const small = fakeStripe(() =>
@@ -310,30 +316,84 @@ describe("Stripe: an assistant's shared payment token, charged once on the busin
     expect([p.seen[0]?.method, p.seen[0]?.headers.get("stripe-version")]).toEqual(["GET", STRIPE_AGENT_VERSION]);
   });
 
-  it("finds a charge it never heard back about by the inbox's own id for the attempt, and nothing else", async () => {
-    const p = fakeStripe(() =>
-      json({
-        object: "search_result",
-        data: [
-          stripePaymentIntent({ id: "pi_1Other", metadata: { sdi_pay: "01JC0SOMEONEELSE00000000001" } }),
+  it("finds a charge it never heard back about by the inbox's own id, with the list Stripe keeps current, never its search", async () => {
+    const since = NOW - 10 * 60_000;
+    const theirs = (i: number) =>
+      stripePaymentIntent({ id: `pi_1Other${i}`, metadata: { sdi_pay: "01JC0SOMEONEELSE00000000001" } });
+    // The account's payments since the attempt was first asked, newest first, a page at a time.
+    const pages: Record<string, unknown[]> = {
+      "": [theirs(1), theirs(2)],
+      pi_1Other2: [
+        theirs(3),
+        stripePaymentIntent({
+          id: "pi_1Ours",
+          amount: 18900,
+          currency: "nok",
+          status: "processing",
+          metadata: { sdi_pay: CHARGE.ref },
+        }),
+      ],
+    };
+    const p = fakeStripe((req) => {
+      const url = new URL(req.url);
+      if (url.pathname === "/v1/payment_intents") {
+        const after = url.searchParams.get("starting_after") ?? "";
+        return json({ object: "list", data: pages[after] ?? [], has_more: after === "" });
+      }
+      // Read again by its id, as Stripe holds it now: it went through meanwhile.
+      if (url.pathname === "/v1/payment_intents/pi_1Ours") {
+        return json(
           stripePaymentIntent({ id: "pi_1Ours", amount: 18900, currency: "nok", metadata: { sdi_pay: CHARGE.ref } }),
-        ],
-        has_more: false,
-      }),
-    );
-    const found = await findCharge(ctx(p.http), { ref: CHARGE.ref });
+        );
+      }
+      return undefined;
+    });
+    const found = await findCharge(ctx(p.http), { ref: CHARGE.ref, since });
     expect(found).toMatchObject({ status: "succeeded", externalId: "pi_1Ours" });
-    const [asked] = p.seen;
-    expect(asked?.method).toBe("GET");
-    expect(decodeURIComponent(new URL(asked?.url ?? "").searchParams.get("query") ?? "")).toBe(
-      `metadata['sdi_pay']:'${CHARGE.ref}'`,
+    const urls = p.seen.map((r) => new URL(r.url));
+    expect(urls.map((u) => u.pathname)).toEqual([
+      "/v1/payment_intents",
+      "/v1/payment_intents",
+      "/v1/payment_intents/pi_1Ours",
+    ]);
+    // From a little before the first ask, against the clocks' difference; never Stripe's search.
+    expect(urls[0]?.searchParams.get("created[gte]")).toBe(String(Math.floor(since / 1000) - 300));
+    expect(urls[1]?.searchParams.get("starting_after")).toBe("pi_1Other2");
+    expect(p.seen.every((r) => r.method === "GET" && r.headers.get("stripe-version") === STRIPE_AGENT_VERSION)).toBe(
+      true,
     );
-    expect(asked?.headers.get("stripe-version")).toBe(STRIPE_AGENT_VERSION);
-    const none = fakeStripe(() => json({ object: "search_result", data: [], has_more: false }));
-    expect(await findCharge(ctx(none.http), { ref: CHARGE.ref })).toBeNull();
-    // Only an id of the inbox's own is ever put in the query.
-    expect(await findCharge(ctx(none.http), { ref: "x' OR status:'succeeded" })).toBeNull();
+    expect(p.seen.some((r) => r.url.includes("/search"))).toBe(false);
+    // None there: null, which the inbox never takes for none made.
+    const none = fakeStripe(() => json({ object: "list", data: [theirs(1)], has_more: false }));
+    expect(await findCharge(ctx(none.http), { ref: CHARGE.ref, since })).toBeNull();
     expect(none.seen).toHaveLength(1);
+    // A key that may not read them says so.
+    const forbidden = fakeStripe(() => json(STRIPE_PERMISSION_ERROR("rak_payment_intent_read"), 403));
+    expect(
+      ((await findCharge(ctx(forbidden.http), { ref: CHARGE.ref, since }).catch((e) => e)) as ConnectorError).code,
+    ).toBe("config");
+  });
+
+  it("a payment Stripe never tried, or holds authorised, is waiting, never failed; one it declined says why", async () => {
+    const read = async (pi: Record<string, unknown>) =>
+      agentCharge(ctx(fakeStripe(() => json(pi)).http), { externalId: String(pi.id) });
+    const untried = stripePaymentIntent({ id: "pi_1Untried", status: "requires_payment_method" });
+    expect((await read(untried))?.status).toBe("requires_action");
+    expect((await read({ ...untried, id: "pi_1Held", status: "requires_capture" }))?.status).toBe("processing");
+    const declined = {
+      ...untried,
+      id: "pi_1Declined",
+      last_payment_error: {
+        type: "card_error",
+        code: "card_declined",
+        decline_code: "insufficient_funds",
+        message: "Your card was declined.",
+      },
+    };
+    expect(await read(declined)).toMatchObject({
+      status: "failed",
+      failure: { code: "declined", platformCode: "insufficient_funds" },
+    });
   });
 
   it("asks whether the key may charge with a request that makes nothing: 400 it may, 403 it may not", async () => {

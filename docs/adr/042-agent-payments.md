@@ -34,7 +34,18 @@ Specifications read on 26 October 2026:
   status and body of the first request with a key once the endpoint has begun, "including 500 errors",
   and answers every retry with it. A request that conflicted with one still running under the key (409
   `idempotency_error`) keeps nothing; a key sent again with other parameters is refused (400
-  `idempotency_error`).
+  `idempotency_error`). Keys are kept at least 24 hours; one used again after it is pruned runs a new
+  request.
+- **Stripe's advanced error handling** (https://docs.stripe.com/error-low-level, read 27 October 2026):
+  after a network error, "retry with the same idempotency key and parameters within the first 24 hours";
+  "treat the outcome of a request that returns 500 as indeterminate", and "don't retry with a new
+  idempotency key until you've resolved the original outcome", since "during incident recovery, Stripe
+  attempts to reconcile failed operations", and "reconciliation isn't guaranteed to resolve every
+  operation"; past the window, retrieve the object, inspect the request in the Dashboard, and use
+  webhooks.
+- **Stripe's search** (https://docs.stripe.com/search, "Data freshness"): "Don't use search for
+  read-after-write flows"; data is searchable "in under 1 minute" normally, and "could be more delayed
+  during an outage"; the list APIs "aren't subject to the availability delays".
 - **Orchestrated Commerce Agreements**
   (https://docs.stripe.com/agentic-commerce/agents/embedded, "Manage seller relationships"): "An OCA is a
   required connection between your agent and a seller that enables agentic commerce flows. Only a
@@ -133,35 +144,44 @@ link follow from the existing paths.
   and `paid` for one paid but not yet on the order, and offers neither the link nor `agent` then.
 - **One per token.** The token is never kept: only `SHA-256("spt:" + token)`, unique. The same token
   sent again is answered as it went, never charged again.
-- **One per attempt.** The PaymentIntent is made with `Idempotency-Key: sdi-<row id>-pi`, and carries
-  `metadata[sdi_pay]` (the row's id) whatever the key. When Stripe does not say what it did, the attempt
-  stays `creating`, holding the order, and the assistant is told `platform_unavailable` with
-  `Retry-After`: retry with the same token and key, never a new token. Which key the retry goes under
-  follows from what Stripe keeps:
-  - **No answer** (a timeout, a cut connection), an edge's 502, 503 or 504, or a 409 `idempotency_error`
-    (the first request still runs): the same key, which Stripe answers as it did the first. The claim
-    is kept until it ends (two minutes from the ask), so no retry reaches Stripe while the first may
-    still run.
-  - **A 500**, or a 400 `idempotency_error`: Stripe answers the same to every retry with the key, so the
-    retry goes under a new one (`sdi-<row id>-pi-<n>`, `agent_payments.retry_key`), after the inbox
-    looks for a charge of the attempt's (Stripe's search, by `metadata[sdi_pay]`). It sends the same
-    token, which pays once: if the first ask spent it, Stripe refuses it, and nothing is charged twice.
-  - **A 429**: nothing was done, and the same key asks again after `Retry-After`.
-  - **A refusal of a retry** (the token spent, unknown, an answer that cannot be read, the key refused)
-    may be about what the first ask did, so it is never a failure: the attempt holds the order
-    (`in_progress`) for three minutes, past the search's lag, and is looked for again.
+- **One per attempt.** The PaymentIntent is made with `Idempotency-Key: sdi-<row id>-pi`, one key per
+  attempt and never another, with the same request every time (the description it was first sent with
+  is kept, `agent_payments.title`), and carries `metadata[sdi_pay]` (the row's id). When Stripe does not
+  say what it did, the attempt stays `creating`, holding the order, and the assistant is told
+  `platform_unavailable` with `Retry-After`: retry with the same token and key, never a new token. What
+  a retry does follows from what Stripe keeps:
+  - **No answer** (a timeout, a cut connection), an edge's 502, 503 or 504, a 409 `idempotency_error`
+    (the first request still runs), or a 429: the same request under the same key, which Stripe answers
+    as it did the first, or, when the first never ran, runs now, once. The claim is kept until it ends
+    (two minutes from the ask), so no retry reaches Stripe while the first may still run. It is sent
+    again only within 23 hours of the first ask: Stripe keeps a key at least a day, and one it no longer
+    keeps would run the request anew. Its answer is the whole truth of the attempt: a refusal under the
+    key (the token spent, revoked, expired) means the first ask made nothing, so it is settled as one.
+  - **A 500**, or a 400 `idempotency_error`: Stripe answers the same to every retry with the key, so
+    nothing is sent again (`agent_payments.resend` is 0), and never under another key either, as Stripe
+    advises for an outcome it calls indeterminate. The retry looks the attempt up instead.
+  - **A refusal before Stripe ran the request** (the key, its permission) when sending it again, or an
+    answer that cannot be read: it says nothing of what the first ask did, so the attempt holds the
+    order (`in_progress`) and is looked up.
 - **One per request.** The caller's `idempotency_key` replays the stored answer; the stored request
   holds the token's hash, never the token.
+- **Never taken for nothing.** An attempt Stripe never answered is looked up by the inbox's own id for
+  it (`metadata[sdi_pay]`) with Stripe's list of the account's PaymentIntents since a little before the
+  first ask, newest first, which has no lag behind a write, and the one found is read again by its id.
+  Never with Stripe's search: it trails a write by up to a minute, longer in an outage, which is when
+  answers are lost. Found, the attempt is settled as it stands, so a charge whose answer was lost is
+  recorded, never made twice. A PaymentIntent waiting for a payment method with no error on it (never
+  tried) is held as waiting and stopped after an hour, like one waiting on its card holder; one Stripe
+  holds authorised is on its way. **None found is never taken for none made**, since Stripe may still
+  reconcile a charge after an outage: the attempt keeps holding the order, with neither the link nor
+  another token offered, and the sync looks it up again every few minutes, hourly once it is a day
+  old, for a week.
 
-An attempt Stripe never answered is looked up by the sync a few minutes after it was last asked
-(`asked_at`), by the inbox's own id for it. Found, it is settled as it stands, so a charge whose answer
-was lost is recorded, never made twice. Not found a quarter of an hour after the last ask, it was never
-made: the order is free for another token, and a retry with the same token asks under a new key. Until
-then no other token is charged for the order. An attempt still `creating` two hours after its last ask,
-or still `processing` after a day, becomes `unknown` and the owner is told on the order to check it in
-Stripe; `unknown` still holds the order, and the sync still reads it back hourly, so a payment that goes
-through later is recorded, and one never made frees the order. The owner can settle it on the order
-too (record the payment, or cancel).
+A day after its first ask, an attempt still `creating`, or still `processing` after a day, becomes
+`unknown`, and the owner is told on the order, with the id to look for in Stripe (`sdi_pay`); `unknown`
+still holds the order and is still looked up, so a charge Stripe reconciles later is recorded. The owner
+can settle the order themselves (record the payment, or cancel it). Letting the customer pay again once
+the owner finds no charge in Stripe is not a control here yet (Not decided here).
 
 ### 5. Test keys for test orders
 
@@ -246,8 +266,9 @@ it on writes no row. One row per attempt: the order, the connection (not a forei
 outlives a disconnect), the door, the amount and currency (the inbox's minor units), the mode, the
 `terms_sha` it was charged for, the token's hash, the state (`creating`, `processing`, `paid`, `declined`,
 `failed`, `cancelled`, `unknown`), Stripe's id, method, amount taken and dashboard page, our failure code
-and Stripe's words (with any token they name taken out), a note for the owner, which idempotency key it
-is asked under (`retry_key`) and when it was last asked (`asked_at`), the claim, and when it went on the
+and Stripe's words (with any token they name taken out), a note for the owner, the description the
+charge was first sent with (`title`), whether the same request under its key may still tell what the
+first ask did (`resend`), when it was last asked (`asked_at`), the claim, and when it went on the
 order. No row holds a
 customer's name, email or address, so erasure leaves them, as it leaves paid links; a download carries
 them. The connection's switch is in `connectors.config_public`: `$.agentPay`, `$.agentProfile`,
@@ -336,8 +357,8 @@ and log links are left out below. What a sandbox's secret key cannot show is sai
    which is not built (Not decided here).
 6. **A spent token under a new key.** After the charge in 2, the same token in the same request under
    a new `Idempotency-Key` answers `400` "… already in a deactivated state." and makes no second
-   PaymentIntent (a search by `metadata['sdi_pay']` finds only the first, so the search the inbox uses
-   works in this version too). Asking again under a new key after a 500 charges nothing twice.
+   PaymentIntent. The inbox never asks under a new key all the same (§4): Stripe calls a 500's outcome
+   indeterminate, and a token that pays once is Stripe's rule, not the inbox's to lean on.
 7. **Cards that ask their holder.** `pm_card_threeDSecure2Required`, `pm_card_authenticationRequired`,
    `pm_card_authenticationRequiredOnSetup` and
    `pm_card_authenticationRequiredChargeDeclinedInsufficientFunds` answer `200` `status:
@@ -352,11 +373,26 @@ and log links are left out below. What a sandbox's secret key cannot show is sai
    `return_url` is the token's, given by the agent's platform when it makes it, and a seller sandbox
    cannot make one; nor, without a restricted key, which of these a restricted key reaches.
 
+8. **Finding a charge whose answer was lost** (27 October 2026, later). Charged, then at once: the list
+   (`GET /v1/payment_intents` with `created[gte]` five minutes before the ask, `limit=100`) has it, with
+   its `metadata[sdi_pay]`; a search by `metadata['sdi_pay']` finds nothing yet. The same request under
+   the same key, the token now spent, answers `200` with the same PaymentIntent and `Idempotent-Replayed:
+   true`; the same key with another description answers `400 idempotency_error`. A declined
+   PaymentIntent keeps why on itself (`last_payment_error`, `card_error`, `card_declined` and its
+   `decline_code`), so one found by the list reads as declined.
+
 Still to check before a real business uses it, with a restricted sandbox key the owner makes in the
 Dashboard: 1 (403 before 400, with the permission set to None) and 2 and 7 (the same requests with only
 PaymentIntents: Write). A redirect method needs an agent's platform to make the token.
 
 ## Not decided here
+
+**Letting the customer pay again when Stripe never answered.** An attempt Stripe never answered holds its
+order until Stripe has an answer (§4), and the owner is told after a day. A control for an owner who
+finds no charge in Stripe (its request logs show the request under `sdi-<row id>-pi`) to free the order
+for the link or another token would be the owner's in person, and would keep looking the attempt up, a
+charge found late going to the refund note (`paidAfter`), since the order may be paid another way by
+then. Until then the owner records a payment taken another way, or cancels the order.
 
 **An ACP checkout door** (behind its own switch, off; hosted off while programmes are closed). Whether
 ChatGPT's checkout takes new merchants could not be confirmed, so it waits. Its shape:

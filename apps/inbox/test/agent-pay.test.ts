@@ -607,9 +607,9 @@ describe("an accepted order, paid by the customer's assistant into the business'
     expect(succeeded(s)).toHaveLength(1);
   });
 
-  it("Stripe failing inside (a 500, which it answers again to the same key): the retry looks first, then asks under a new key", async () => {
+  it("Stripe failing inside (a 500 it keeps under the key): never asked under another key; the order waits for Stripe's answer, and the owner is told after a day", async () => {
     const s = await setup();
-    await ready(s);
+    const conn = await ready(s);
     const id = await order(s);
     const token = s.stripe.grantToken({ maxAmount: 18900, currency: "nok" });
     s.stripe.agent.down = 500;
@@ -617,38 +617,114 @@ describe("an accepted order, paid by the customer's assistant into the business'
     expect(down.status).toBe(503);
     expect(down.headers.get("retry-after")).toBeTruthy();
     expect(((await down.json()) as { code: string }).code).toBe("platform_unavailable");
-    // Until the retry, nobody knows: no other token is charged for the order.
-    expect((await status(s, id)).payment).toMatchObject({ state: "processing", payment_url: null, agent: null });
     s.stripe.agent.down = null;
+    // Asked again, the same token is looked up by the attempt's id, never charged under another key.
     const retried = await pay(s, id, token, { key: "same" });
-    expect(retried.status, await retried.clone().text()).toBe(200);
+    expect(retried.status).toBe(409);
+    expect(((await retried.json()) as { code: string }).code).toBe("in_progress");
+    expect(intentCalls(s)).toHaveLength(1);
+    // None found is never taken for none made: neither the link nor another token, sync after sync.
+    for (const ahead of [5 * 60_000, 20 * 60_000, 3 * 3_600_000]) {
+      await s.inbox.caps.connectors.run(conn, Date.now() + ahead, "sync");
+      expect((await status(s, id)).payment).toMatchObject({ state: "processing", payment_url: null, agent: null });
+    }
+    const other = await pay(s, id, s.stripe.grantToken({ maxAmount: 18900, currency: "nok" }));
+    expect(((await other.json()) as { code: string }).code).toBe("in_progress");
+    expect(await attempts(s.db, id)).toEqual([["creating"]]);
+    // A day on: still holding the order, and the owner told what to look for in Stripe.
+    await s.inbox.caps.connectors.run(conn, Date.now() + 25 * 3_600_000, "sync");
+    const [ref, state, note] = ((await attempts(s.db, id, "id, state, note"))[0] ?? []).map(String);
+    expect(state).toBe("unknown");
+    expect(note).toContain(`sdi_pay ${ref}`);
+    expect((await status(s, id)).payment).toMatchObject({ state: "processing", payment_url: null, agent: null });
+    // Stripe, recovering, reconciles the charge the failed request made: found, and recorded once.
+    s.stripe.reconcile(ref ?? "", { amount: 18900, currency: "nok" });
+    await s.inbox.caps.connectors.run(conn, Date.now() + 27 * 3_600_000, "sync");
+    await drain(s, 60_000);
     expect((await itemOf(s.db, id)).state).toBe("paid");
-    const [first, second] = s.stripe.chargeKeys.slice(-2);
-    expect(first).not.toBe(second);
     expect(succeeded(s)).toHaveLength(1);
+    expect(new Set(s.stripe.chargeKeys)).toEqual(new Set([`sdi-${ref}-pi`]));
+    expect(s.stripe.calls).not.toContain("GET /v1/payment_intents/search");
   });
 
-  it("Stripe charged and then failed inside: the retry's refusal of the spent token holds the order until the sync finds the charge", async () => {
+  it("Stripe charged and then failed inside: the retry finds the charge at once with the list Stripe keeps current, though its search lags", async () => {
     const s = await setup();
-    const conn = await ready(s);
+    await ready(s);
     const id = await order(s);
     const token = s.stripe.grantToken({ maxAmount: 18900, currency: "nok" });
     s.stripe.agent.broke = true;
     s.stripe.agent.lag = true;
     expect((await pay(s, id, token)).status).toBe(503);
     s.stripe.agent.broke = false;
-    // Stripe's search has not caught up: asked under a new key, the spent token is refused. Not a failure.
     const retried = await pay(s, id, token);
-    expect(retried.status).toBe(409);
-    expect(((await retried.json()) as { code: string }).code).toBe("in_progress");
-    expect(await attempts(s.db, id)).toEqual([["creating"]]);
-    expect((await status(s, id)).payment).toMatchObject({ state: "processing", payment_url: null, agent: null });
-    expect((await pay(s, id, s.stripe.grantToken({ maxAmount: 18900, currency: "nok" }))).status).toBe(409);
-    s.stripe.agent.lag = false;
-    await s.inbox.caps.connectors.run(conn, Date.now() + 20 * 60_000, "sync");
-    await drain(s, 60_000);
+    expect(retried.status, await retried.clone().text()).toBe(200);
     expect((await itemOf(s.db, id)).state).toBe("paid");
     expect(succeeded(s)).toHaveLength(1);
+    expect(intentCalls(s)).toHaveLength(1);
+    expect(s.stripe.calls).not.toContain("GET /v1/payment_intents/search");
+  });
+
+  it("a request that timed out after Stripe charged is sent again, the same, under the same key, and answered with that charge", async () => {
+    const s = await setup();
+    await ready(s);
+    const id = await order(s);
+    const token = s.stripe.grantToken({ maxAmount: 18900, currency: "nok" });
+    s.stripe.agent.cut = "after";
+    s.stripe.agent.lag = true;
+    const cut = await pay(s, id, token);
+    expect(cut.status).toBe(503);
+    expect(((await cut.json()) as { code: string }).code).toBe("platform_unavailable");
+    s.stripe.agent.cut = null;
+    // Stripe made the charge, and the inbox does not know it: the order waits, and no other token pays.
+    expect(succeeded(s)).toHaveLength(1);
+    expect((await status(s, id)).payment).toMatchObject({ state: "processing", payment_url: null, agent: null });
+    const other = await pay(s, id, s.stripe.grantToken({ maxAmount: 18900, currency: "nok" }));
+    expect(((await other.json()) as { code: string }).code).toBe("in_progress");
+    // Once the first can no longer be running, the same request goes under the same key (another
+    // request under it would be refused), and Stripe answers with the charge the first made.
+    later(3 * 60_000);
+    const retried = await pay(s, id, token);
+    expect(retried.status, await retried.clone().text()).toBe(200);
+    expect((await itemOf(s.db, id)).state).toBe("paid");
+    expect(s.stripe.intents.size).toBe(1);
+    const keys = s.stripe.chargeKeys.slice(-2);
+    expect(keys[1]).toBe(keys[0]);
+  });
+
+  it("a request that never reached Stripe is sent again under the same key and charged then; one whose token ran out meanwhile frees the order", async () => {
+    const s = await setup();
+    await ready(s);
+    const id = await order(s);
+    const token = s.stripe.grantToken({ maxAmount: 18900, currency: "nok" });
+    s.stripe.agent.cut = "before";
+    expect((await pay(s, id, token)).status).toBe(503);
+    s.stripe.agent.cut = null;
+    expect(s.stripe.intents.size).toBe(0);
+    later(3 * 60_000);
+    const retried = await pay(s, id, token);
+    expect(retried.status, await retried.clone().text()).toBe(200);
+    expect(succeeded(s)).toHaveLength(1);
+
+    // The request never reached Stripe, and the token was revoked before the retry: under the same key,
+    // Stripe's refusal is the whole truth, since it would answer a request it ran as it did then.
+    const next = await order(s);
+    const revoked = s.stripe.grantToken({ maxAmount: 18900, currency: "nok" });
+    s.stripe.agent.cut = "before";
+    expect((await pay(s, next, revoked)).status).toBe(503);
+    s.stripe.agent.cut = null;
+    const granted = s.stripe.tokens.get(revoked);
+    if (granted) granted.deactivated = "revoked";
+    later(6 * 60_000);
+    const refused = await pay(s, next, revoked);
+    expect(refused.status).toBe(422);
+    expect(((await refused.json()) as { code: string }).code).toBe("token_used");
+    expect(await attempts(s.db, next, "state, failure")).toEqual([["failed", "token_used"]]);
+    const st = await status(s, next);
+    expect(st.payment?.state).toBe("due");
+    expect(st.payment?.agent).not.toBeNull();
+    const fresh = await pay(s, next, s.stripe.grantToken({ maxAmount: 18900, currency: "nok" }));
+    expect(fresh.status, await fresh.clone().text()).toBe(200);
+    expect(succeeded(s)).toHaveLength(2);
   });
 
   it("an edge that did not answer (503): the same key is asked again once the first request can no longer be running", async () => {
@@ -705,11 +781,12 @@ describe("an accepted order, paid by the customer's assistant into the business'
     expect(succeeded(s)).toHaveLength(1);
   });
 
-  it("a charge Stripe made but whose answer was lost is found by the sync; one never made frees the order", async () => {
+  it("a charge Stripe made but whose answer was lost is found by the sync and recorded once", async () => {
     const s = await setup();
     const conn = await ready(s);
     const id = await order(s);
     s.stripe.agent.lost = true;
+    s.stripe.agent.lag = true;
     const cut = await pay(s, id, s.stripe.grantToken({ maxAmount: 18900, currency: "nok" }));
     expect(cut.status).toBe(503);
     s.stripe.agent.lost = false;
@@ -721,29 +798,8 @@ describe("an accepted order, paid by the customer's assistant into the business'
     await s.inbox.caps.connectors.run(conn, Date.now() + 5 * 60_000, "sync");
     await drain(s, 60_000);
     expect((await itemOf(s.db, id)).state).toBe("paid");
-    expect([...s.stripe.intents.values()].filter((p) => p.status === "succeeded")).toHaveLength(1);
-
-    // Stripe down, nothing made: once it is clear nothing was, another token may pay.
-    const next = await order(s);
-    s.stripe.agent.down = 500;
-    expect((await pay(s, next, s.stripe.grantToken({ maxAmount: 18900, currency: "nok" }))).status).toBe(503);
-    s.stripe.agent.down = null;
-    await s.inbox.caps.connectors.run(conn, Date.now() + 20 * 60_000, "sync");
-    const again = await pay(s, next, s.stripe.grantToken({ maxAmount: 18900, currency: "nok" }));
-    expect(again.status, await again.clone().text()).toBe(200);
-    expect((await itemOf(s.db, next)).state).toBe("paid");
-
-    // And the first token again, once nothing was made: asked under a new key, never Stripe's kept 500.
-    const third = await order(s);
-    const token = s.stripe.grantToken({ maxAmount: 18900, currency: "nok" });
-    s.stripe.agent.down = 500;
-    expect((await pay(s, third, token)).status).toBe(503);
-    s.stripe.agent.down = null;
-    await s.inbox.caps.connectors.run(conn, Date.now() + 20 * 60_000, "sync");
-    expect(await attempts(s.db, third, "state, failure")).toEqual([["failed", "lost"]]);
-    const old = await pay(s, third, token);
-    expect(old.status, await old.clone().text()).toBe(200);
-    expect((await itemOf(s.db, third)).state).toBe("paid");
+    expect(succeeded(s)).toHaveLength(1);
+    expect(s.stripe.calls).not.toContain("GET /v1/payment_intents/search");
   });
 
   it("a payment that settles later is on its way until the sync hears it went through", async () => {

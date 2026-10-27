@@ -131,12 +131,15 @@ export function RefundAt({ payment, owed }: { payment: PaymentView; owed: string
 
 /**
  * What customers' assistants paid directly into the business's own Stripe (ADR-042): each payment that
- * went through, with how and where to refund it, and what the owner should know (one that came after
- * the order was cancelled); an attempt that did not go through is one quiet count.
+ * went through, with how and where to refund it, one on its way or still waiting for Stripe's answer
+ * (which holds the order), and what the owner should know (one that came after the order was
+ * cancelled, one Stripe never answered); an attempt that did not go through is one quiet count.
  */
 export function AgentPayments({ payments, tz }: { payments: readonly AgentPaymentView[]; tz: string | undefined }) {
   if (payments.length === 0) return null;
-  const done = payments.filter((p) => p.state === "paid" || p.state === "processing" || p.state === "unknown");
+  const done = payments.filter(
+    (p) => p.state === "paid" || p.state === "processing" || p.state === "creating" || p.state === "unknown",
+  );
   const tried = payments.length - done.length;
   return (
     <div className="stack receipts payments">
@@ -152,7 +155,9 @@ export function AgentPayments({ payments, tz }: { payments: readonly AgentPaymen
                   ? `paid directly ${formatMoney(p.paid_amount ?? p.amount)}${p.method ? ` by ${methodName(p.method)}` : ""}`
                   : p.state === "processing"
                     ? `on its way: ${formatMoney(p.amount)}`
-                    : `not confirmed by ${p.provider}: check it there`}
+                    : p.state === "creating"
+                      ? `waiting for ${p.provider}'s answer: ${formatMoney(p.amount)}`
+                      : `not confirmed by ${p.provider}: check it there`}
                 {!p.livemode && <span className="opt"> · test</span>}
               </span>
               {p.paid_at && (

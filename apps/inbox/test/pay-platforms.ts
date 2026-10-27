@@ -51,6 +51,11 @@ export interface GrantedToken {
   deactivated: null | "consumed" | "revoked" | "expired";
 }
 
+/** A PaymentIntent as the fake keeps it: Stripe's shape, with why it was declined when it was. */
+type Intent = Omit<ReturnType<typeof stripePaymentIntent>, "last_payment_error"> & {
+  last_payment_error: Record<string, unknown> | null;
+};
+
 /** Stripe, as one account: prices, payment links, checkouts and webhook endpoints, by its rules. */
 export function stripePlatform(key: string, base = "https://inbox.example.com") {
   const live = key.includes("_live_");
@@ -77,15 +82,18 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
    * Outages as Stripe has them (https://docs.stripe.com/api/idempotent_requests). `down`: it fails
    * before charging; a 500 is kept under the idempotency key and answered again to every retry with
    * it, an edge's 502, 503 or 504 is not. `lost`: the charge is made and its answer kept, and the answer
-   * never reaches the inbox (a cut connection). `broke`: the charge is made, and Stripe answers, and
-   * keeps, a 500. `running`: with `lost`, the first request under a key has not finished, so another
-   * with it is told so (409) until it does. `lag`: its search does not find the new payments yet.
+   * never reaches the inbox (an edge's 502). `cut`: the request times out, before it reaches Stripe, or
+   * after Stripe made the charge and kept its answer under the key. `broke`: the charge is made, and
+   * Stripe answers, and keeps, a 500. `running`: with `lost` or `cut`, the first request under a key has
+   * not finished, so another with it is told so (409) until it does. `lag`: its search does not find
+   * the new payments yet (its list always does).
    */
   const agent: {
     allowed: boolean;
     profile: string;
     down: number | null;
     lost: boolean;
+    cut: null | "before" | "after";
     broke: boolean;
     running: boolean;
     lag: boolean;
@@ -94,12 +102,13 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
     profile: live ? "profile_1FjordLive00001" : "profile_test_1Fjord0001",
     down: null,
     lost: false,
+    cut: null,
     broke: false,
     running: false,
     lag: false,
   };
   const tokens = new Map<string, GrantedToken>();
-  const intents = new Map<string, ReturnType<typeof stripePaymentIntent>>();
+  const intents = new Map<string, Intent>();
   /** What each idempotency key was first sent with and answered, and whether that request still runs. */
   const answered = new Map<string, { request: string; status: number; body: unknown; running: boolean }>();
   /** The idempotency keys the charges were asked under, in order. */
@@ -239,6 +248,16 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
       const charging = route === "POST /v1/payment_intents" && body !== "";
       if (agent.down !== null && !charging) return json(STRIPE_API_ERROR, agent.down);
       const [, , , id, verb] = url.pathname.split("/");
+      if (method === "GET" && !id) {
+        // Stripe's list, newest first, with no lag behind a write: the account's PaymentIntents since a time.
+        const since = Number(url.searchParams.get("created[gte]") ?? 0);
+        const limit = Number(url.searchParams.get("limit") ?? 10);
+        const after = url.searchParams.get("starting_after");
+        const all = [...intents.values()].filter((pi) => pi.created >= since).reverse();
+        const from = after ? all.findIndex((pi) => pi.id === after) + 1 : 0;
+        const data = all.slice(from, from + limit);
+        return json({ object: "list", data, has_more: from + limit < all.length, url: "/v1/payment_intents" });
+      }
       if (method === "GET" && id === "search") {
         // Stripe's search, for the one query the inbox asks: its own id for an attempt.
         const ref = /metadata\['sdi_pay'\]:'([^']+)'/.exec(url.searchParams.get("query") ?? "")?.[1];
@@ -264,6 +283,8 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
       }
       if (route !== "POST /v1/payment_intents") return new Response("not found", { status: 404 });
       if (!body) return json(STRIPE_MISSING_PARAM("amount"), 400);
+      // The request never reaches Stripe: the inbox's wait runs out, and nothing is kept or made.
+      if (agent.cut === "before") throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
       // An idempotent request is answered as it was the first time, whatever that was: with other
       // parameters it is refused, and while the first still runs it is told so.
       const k = headers.get("idempotency-key");
@@ -283,8 +304,11 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
       }
       const made = chargeToken(f);
       const answer = agent.broke ? { status: 500, body: STRIPE_API_ERROR } : made;
-      if (k) answered.set(k, { request: body, ...answer, running: agent.lost && agent.running });
+      if (k)
+        answered.set(k, { request: body, ...answer, running: (agent.lost || agent.cut !== null) && agent.running });
       if (agent.lost) return json(STRIPE_API_ERROR, 502);
+      // Made and kept, and the answer never reaches the inbox: its wait runs out first.
+      if (agent.cut === "after") throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
       return json(answer.body, answer.status);
     }
     // Card holds (ADR-036): a Checkout Session in setup mode, and a customer probe that makes nothing.
@@ -349,28 +373,60 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
     const id = `pi_${live ? "" : "test_"}${++n}`;
     const metadata: Record<string, string> = {};
     for (const [k, v] of f) if (k.startsWith("metadata[")) metadata[k.slice(9, -1)] = v;
+    const created = Math.floor(Date.now() / 1000);
     if (token.outcome === "declined" || token.outcome === "authentication_required") {
       const declined = stripeCardDeclined(
         token.outcome === "declined" ? "insufficient_funds" : "authentication_required",
         id,
       );
+      // Stripe keeps why on the PaymentIntent too.
+      const { type, code, decline_code, message } = declined.error;
       intents.set(id, {
         ...stripePaymentIntent({ id, amount, currency, status: "requires_payment_method", livemode: live, metadata }),
+        created,
+        last_payment_error: { type, code, decline_code, message },
       });
       return { status: 402, body: declined };
     }
     if (token.outcome !== "requires_action") token.deactivated = "consumed";
-    const pi = stripePaymentIntent({
-      id,
-      amount,
-      currency,
-      status: token.outcome,
-      livemode: live,
-      metadata,
-      token: spt,
-    });
+    const pi = {
+      ...stripePaymentIntent({
+        id,
+        amount,
+        currency,
+        status: token.outcome,
+        livemode: live,
+        metadata,
+        token: spt,
+      }),
+      created,
+    };
     intents.set(id, pi);
     return { status: 200, body: pi };
+  }
+
+  /**
+   * Stripe, recovering from an outage, reconciles a charge a failed request made (https://docs.stripe.com/error-low-level#server-errors):
+   * the PaymentIntent appears, under the attempt's own id, after the request was answered with a 500.
+   */
+  function reconcile(
+    ref: string,
+    o: { amount: number; currency: string; status?: "succeeded" | "requires_payment_method" },
+  ) {
+    const id = `pi_${live ? "" : "test_"}${++n}`;
+    const pi = {
+      ...stripePaymentIntent({
+        id,
+        amount: o.amount,
+        currency: o.currency,
+        status: o.status ?? "succeeded",
+        livemode: live,
+        metadata: { sdi_pay: ref },
+      }),
+      created: Math.floor(Date.now() / 1000),
+    };
+    intents.set(id, pi);
+    return id;
   }
 
   /** An assistant's platform gets a token for the business's profile (Stripe's test helper does the same). */
@@ -455,6 +511,7 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
     chargeKeys,
     grantToken,
     settle,
+    reconcile,
   };
 }
 

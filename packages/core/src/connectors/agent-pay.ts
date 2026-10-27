@@ -31,10 +31,14 @@ import { type AgentCharge, type AgentChargeFailure, ConnectorError } from "./sdk
  *   confirmed (`terms_sha`). Nothing the assistant says widens the token: what it echoes of the token's
  *   limits can only refuse.
  * - **Once.** One attempt in flight, unknown or paid per order; one row per token (its hash); one
- *   PaymentIntent per row (the platform's idempotency key is the row's id, and a new key only for the
- *   same token, which pays once). A retry is answered, never charged again, and two assistants paying
- *   at once make one charge. An attempt the platform never said the outcome of holds the order until it
- *   does: a refusal of a retry may be about what the first ask did.
+ *   PaymentIntent per row, under one idempotency key from the row's id, always with the same request.
+ *   A retry is answered, never charged again, and two assistants paying at once make one charge.
+ * - **Never taken for nothing.** An attempt the platform never said the outcome of (a timeout, a 5xx)
+ *   holds the order, with neither the link nor another token offered, until it is settled: by the same
+ *   request under the same key, which the platform answers as it did the first, or by finding the
+ *   charge by the row's id with a read that has no lag (never its search). Nothing found is never
+ *   taken for nothing made, since the platform may still reconcile one: after a day the owner is told,
+ *   and it is still looked up.
  * - **Test keys for test orders.** A test order is charged only on the test connection, a real one only
  *   on the live one, so a test token never pays a real order.
  * - **Never the token.** It is used for the one call and kept only as its SHA-256; no customer details go
@@ -56,26 +60,30 @@ export const DECLINES_PER_ORDER = 5;
 export const DECLINES_PER_INBOX = 30;
 const DAY_MS = 86_400_000;
 /**
- * An attempt the platform never answered (it was down, or the request was cut) waits for a retry with
- * its token for two hours, past a token's own life (an hour, unless its platform set less), and is then
- * said to the owner, so it holds the order no longer. One that is processing is asked about for a day.
+ * An attempt the platform never said the outcome of holds the order however long that takes, and is
+ * said to the owner a day after its first ask (`unknown`), still holding the order and still looked
+ * up. One that is processing (its payment known) is asked about for a day before the same.
  */
-const LOST_CREATING_MS = 2 * 3_600_000;
-const LOST_PROCESSING_MS = DAY_MS;
+const FLAG_MS = DAY_MS;
+const FLAG_PROCESSING_MS = DAY_MS;
 /**
- * An attempt the platform never answered is looked up by the inbox's own id once this long has passed
- * (its search trails a new payment by up to a minute). Not found by `NEVER_MADE_MS`, it was never made:
- * the order is free for another token, and a retry with the same one asks again under the same key.
+ * The same request under the same idempotency key is answered as the first was while the platform
+ * keeps the key: Stripe keeps one at least a day (https://docs.stripe.com/api/idempotent_requests),
+ * and a key it no longer keeps would run the request anew. A retry with the token is sent again only
+ * within this long of the first ask; after it, the attempt is only looked up.
  */
+const RESEND_MS = 23 * 3_600_000;
+/** An attempt the platform never answered is looked up by the sync once this long has passed since its last ask. */
 const LOOK_AFTER_MS = 3 * 60_000;
-const NEVER_MADE_MS = 15 * 60_000;
+/** ... and for this long after its first: a charge the platform reconciles later is found within it. */
+const LOOK_FOR_MS = 7 * DAY_MS;
 /**
- * A retry the platform refused (the token spent, say) may be refused for what the first ask did: the
- * attempt holds the order this long, past the search's lag, before it is asked or looked up again.
+ * An attempt only a lookup can settle (the platform keeps a 500 under the key, or answered what cannot
+ * be read), or a retry refused before the platform ran it: held, and its retries spaced this far.
  */
-const HOLD_MS = LOOK_AFTER_MS;
-/** After a failure the platform keeps under the key (a 500): when to retry, under a new key, the inbox looking first. */
-const RETRY_NEW_KEY_S = 30;
+const HOLD_MS = 60_000;
+/** After a failure the platform keeps under the key (a 500): when a retry may come, to look it up. */
+const LOOK_AGAIN_S = 30;
 /** A processing payment is asked about at most this often; one nobody heard back about, hourly. */
 const CHECK_EVERY_MS = 4 * 60_000;
 const UNKNOWN_EVERY_MS = 3_600_000;
@@ -121,14 +129,16 @@ interface AgentRow {
   readonly recordedAt: number | null;
   readonly createdAt: number;
   readonly paidAt: number | null;
-  /** Which idempotency key the platform is asked under: 0 the attempt's own, n its nth new one. */
-  readonly retryKey: number;
+  /** What the payment is called in the business's dashboard, as first sent: a resend is the same request. */
+  readonly title: string | null;
+  /** Whether the same request under the same key may yet tell what the first ask did. */
+  readonly resend: boolean;
   /** When the platform was last asked. */
   readonly askedAt: number | null;
 }
 
 const COLUMNS =
-  "id, item_id, connector_id, kind, amount, currency, livemode, terms_sha, state, external_id, method, paid_amount, paid_currency, dashboard_url, failure, last_error, note, claim_until, checked_at, recorded_at, created_at, paid_at, retry_key, asked_at";
+  "id, item_id, connector_id, kind, amount, currency, livemode, terms_sha, state, external_id, method, paid_amount, paid_currency, dashboard_url, failure, last_error, note, claim_until, checked_at, recorded_at, created_at, paid_at, title, resend, asked_at";
 
 function rowOf(r: readonly unknown[]): AgentRow {
   const s = (v: unknown) => (v === null || v === undefined ? null : String(v));
@@ -156,8 +166,9 @@ function rowOf(r: readonly unknown[]): AgentRow {
     recordedAt: n(r[19]),
     createdAt: Number(r[20]),
     paidAt: n(r[21]),
-    retryKey: Number(r[22] ?? 0),
-    askedAt: n(r[23]),
+    title: s(r[22]),
+    resend: Number(r[23] ?? 1) === 1,
+    askedAt: n(r[24]),
   };
 }
 
@@ -563,11 +574,12 @@ export class AgentPayments {
     // The attempt, claimed: one in flight or paid per order (`agent_payments_live`), one per token.
     const id = ulid(now);
     const claim = randomToken(12);
+    const title = ((await this.links.chargeTitle(order.id)) ?? `Order ${id.slice(-6).toUpperCase()}`).slice(0, 500);
     const inserted = await this.db.client.query({
       sql: `INSERT OR IGNORE INTO agent_payments
               (id, item_id, connector_id, kind, handler, door, amount, currency, livemode, terms_sha, credential_sha,
-               state, claim_until, claimed_by, asked_at, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'creating', ?, ?, ?, ?, ?)`,
+               state, title, claim_until, claimed_by, asked_at, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'creating', ?, ?, ?, ?, ?, ?)`,
       params: [
         id,
         order.id,
@@ -580,6 +592,7 @@ export class AgentPayments {
         conn.mode === "live" ? 1 : 0,
         req.termsSha,
         credential,
+        title,
         now + CLAIM_MS,
         claim,
         now,
@@ -685,7 +698,9 @@ export class AgentPayments {
 
   /**
    * A token sent before: answered as it went, or, for an attempt the platform never said the outcome of,
-   * asked again, under the same key while the platform may still answer it, else under a new one.
+   * the same request sent again under the same key while that may still tell what the first did, else
+   * looked up by the inbox's own id. Never under another key: a charge the first may have made is
+   * settled before anything else is asked.
    */
   private async again(
     row: AgentRow,
@@ -715,31 +730,11 @@ export class AgentPayments {
           method: "run",
         });
         if (taken.changes !== 1) throw inProgress();
-        return this.retry(row, req.token, order, conn, claim, now);
-      }
-      case "failed": {
-        // Never made (the platform had no charge of ours under its id): asked again with the same token,
-        // which pays once, under a new key, since the platform may keep a failure under the old one.
-        if (row.failure !== "lost" || row.connectorId !== conn.id || row.termsSha !== req.termsSha) {
-          throw this.failureError((row.failure ?? "declined") as AgentChargeFailure, order, await this.voice(order));
-        }
-        const claim = randomToken(12);
-        let taken: { changes: number };
-        try {
-          taken = await this.db.client.query({
-            sql: `UPDATE agent_payments SET state = 'creating', failure = NULL, retry_key = retry_key + 1, claim_until = ?,
-                         claimed_by = ?, asked_at = ?, updated_at = ?
-                   WHERE id = ? AND state = 'failed' AND failure = 'lost'`,
-            params: [now + CLAIM_MS, claim, now, now, row.id],
-            method: "run",
-          });
-        } catch (error) {
-          // Another attempt holds the order now (`agent_payments_live`).
-          if (String(error).includes("UNIQUE")) throw inProgress();
-          throw error;
-        }
-        if (taken.changes !== 1) throw inProgress();
-        return this.retry((await this.row(row.id)) ?? row, req.token, order, conn, claim, now);
+        // The platform answers the same request under the same key as it did the first, while it keeps
+        // the key: what the first did, or, when it never ran, the charge made now, once.
+        if (row.resend && now - row.createdAt < RESEND_MS)
+          return this.charge(row, req.token, order, conn, claim, now, true);
+        return this.lookFor(row, order, conn, claim, now);
       }
       default:
         throw this.failureError((row.failure ?? "declined") as AgentChargeFailure, order, await this.voice(order));
@@ -747,32 +742,32 @@ export class AgentPayments {
   }
 
   /**
-   * An attempt asked again after the platform never said what the first ask did. Under a new key it is
-   * looked for first, by the inbox's own id, so a charge the first made is answered as it stands.
+   * An attempt the same request can no longer settle (the platform keeps its failure under the key, or
+   * keeps the key no longer), looked up by the inbox's own id: found, it is answered as it stands; not
+   * found, it still holds the order, since the platform may yet reconcile a charge of it.
    */
-  private async retry(
+  private async lookFor(
     row: AgentRow,
-    token: string,
     order: OrderFacts,
     conn: PayConnection,
     claim: string,
     now: number,
   ): Promise<PayOrderOutcome> {
-    if (row.retryKey > 0 && conn.payments.findCharge) {
-      let found: AgentCharge | null;
-      try {
-        found = await conn.payments.findCharge(conn.ctx, { ref: row.id });
-      } catch (error) {
-        if (!(error instanceof ConnectorError)) throw error;
-        // Nothing was asked of the charge: the attempt waits as it was, and the retry may come at once.
-        return this.unanswered(row, claim, now, { rekey: false, holdClaim: false, why: error.message });
-      }
-      if (found && found.livemode === row.livemode) return this.answered(row, found, order, conn, claim, now, true);
+    let found: AgentCharge | null = null;
+    try {
+      found = (await conn.payments.findCharge?.(conn.ctx, { ref: row.id, since: row.createdAt })) ?? null;
+    } catch (error) {
+      if (!(error instanceof ConnectorError)) throw error;
+      return this.held(row, claim, now, error.message);
     }
-    return this.charge(row, token, order, conn, claim, now, true);
+    if (found && found.livemode === row.livemode) return this.answered(row, found, order, conn, claim, now);
+    return this.held(row, claim, now, null);
   }
 
-  /** Asks the platform to charge the token. `retried`: an ask before this one never had its outcome said. */
+  /**
+   * Asks the platform to charge the token: always the same request for the attempt, under its one key,
+   * so a resend is answered as the first ask was. `resent`: an ask before this one never had its outcome said.
+   */
   private async charge(
     row: AgentRow,
     token: string,
@@ -780,30 +775,33 @@ export class AgentPayments {
     conn: PayConnection,
     claim: string,
     now: number,
-    retried: boolean,
+    resent: boolean,
   ): Promise<PayOrderOutcome> {
     const charge = conn.payments.chargeToken;
     if (!charge) throw unavailable("off", "This business takes no payment from assistants.");
-    const title = (await this.links.chargeTitle(order.id)) ?? `Order ${row.id.slice(-6).toUpperCase()}`;
+    const title = row.title ?? (await this.links.chargeTitle(order.id)) ?? `Order ${row.id.slice(-6).toUpperCase()}`;
     let answer: AgentCharge;
     try {
       answer = await charge(conn.ctx, {
         ref: row.id,
-        itemId: order.id,
-        amount: order.total,
+        itemId: row.itemId,
+        amount: { value: row.amount, currency: row.currency },
         token,
         title,
-        reference: order.id.slice(-6).toUpperCase(),
-        ...(row.retryKey > 0 ? { retryKey: row.retryKey } : {}),
+        reference: row.itemId.slice(-6).toUpperCase(),
       });
     } catch (error) {
       if (!(error instanceof ConnectorError)) throw error;
-      return this.platformFailed(row, conn, claim, error, now, retried);
+      return this.platformFailed(row, conn, claim, error, now, resent);
     }
-    return this.answered(row, answer, order, conn, claim, now, retried);
+    return this.answered(row, answer, order, conn, claim, now);
   }
 
-  /** What the platform said of a charge, made now or found: recorded, and said to the assistant. */
+  /**
+   * What the platform said of a charge, made now, answered again under its key, or found: recorded, and
+   * said to the assistant. A refusal under the attempt's one key is the whole truth of it, since the
+   * platform answers a request it ran with what it answered then.
+   */
   private async answered(
     row: AgentRow,
     answer: AgentCharge,
@@ -811,7 +809,6 @@ export class AgentPayments {
     conn: PayConnection,
     claim: string,
     now: number,
-    retried: boolean,
   ): Promise<PayOrderOutcome> {
     switch (answer.status) {
       case "succeeded":
@@ -828,16 +825,16 @@ export class AgentPayments {
         });
         return { state: "processing", amount: order.total };
       case "unknown":
+        // The first request may still run there (an edge kept nothing, or it is not finished): the claim
+        // holds until it cannot. A 500 kept under the key is answered so to every resend: looked up instead.
         return this.unanswered(row, claim, now, {
-          rekey: answer.rekey === true,
-          holdClaim: answer.rekey !== true,
+          resend: answer.resend === true,
+          holdClaim: answer.resend === true,
           why: "the payment platform did not say whether it took the payment",
         });
       default: {
         const code = answer.failure?.code ?? "declined";
         const words = [answer.failure?.platformCode, answer.failure?.message].filter(Boolean).join(": ") || null;
-        // A refusal of the token on a retry may be about what the first ask did (it spent the token).
-        if (retried && answer.externalId === null) return this.held(row, claim, now, words ?? code);
         await this.settleRow(row.id, claim, now, {
           state: code === "declined" || code === "authentication_required" ? "declined" : "failed",
           externalId: answer.externalId,
@@ -856,24 +853,28 @@ export class AgentPayments {
     claim: string,
     error: ConnectorError,
     now: number,
-    retried: boolean,
+    resent: boolean,
   ): Promise<never> {
-    // No answer: the request may still be running there, so the attempt stays claimed until it cannot be.
+    // No answer (a timeout, a cut connection): the request may still be running there, so the attempt
+    // stays claimed until it cannot be, and is then sent again, the same, under the same key.
     if (error.code === "unreachable") {
-      return this.unanswered(row, claim, now, { rekey: false, holdClaim: true, why: error.message });
+      return this.unanswered(row, claim, now, { resend: true, holdClaim: true, why: error.message });
     }
     // Turned away before anything was done: asked again under the same key once the platform allows.
     if (error.code === "rate_limited") {
       return this.unanswered(row, claim, now, {
-        rekey: false,
+        resend: true,
         holdClaim: false,
         why: error.message,
         ...(error.retryAfterMs !== undefined ? { retryAfterMs: error.retryAfterMs } : {}),
       });
     }
     if (error.code === "config" || error.code === "auth") await this.switchedOff(conn, error, now);
-    // A refusal of a retry, or an answer that cannot be read, may hide a charge: the attempt holds the order.
-    if (retried || error.code === "bad_response") return this.held(row, claim, now, error.message);
+    // An answer that cannot be read is the one kept under the key: only a lookup tells what it made.
+    if (error.code === "bad_response") return this.held(row, claim, now, error.message, { resend: false });
+    // Sent again, a refusal before the platform ran it (the key, its permission) says nothing of what the
+    // first ask did: the attempt holds the order.
+    if (resent) return this.held(row, claim, now, error.message);
     await this.settleRow(row.id, claim, now, { state: "failed", failure: "connection", lastError: error.message });
     if (error.code === "config" || error.code === "auth") {
       throw unavailable(
@@ -905,24 +906,29 @@ export class AgentPayments {
   /**
    * The platform did not say what it did: the attempt stays `creating`, holding the order, until a retry
    * or the sync hears. `holdClaim`: the request may still be running there, so nobody asks again before
-   * the claim ends. `rekey`: the platform keeps its failure under the key, so the next ask is under a new
-   * one (with the same token, which pays once), looked for first.
+   * the claim ends. `resend` false: the platform keeps its failure under the key and answers it to every
+   * resend (a 500), so the attempt is only looked up from now on, never asked again under another key.
    */
   private async unanswered(
     row: AgentRow,
     claim: string,
     now: number,
-    how: { readonly rekey: boolean; readonly holdClaim: boolean; readonly why: string; readonly retryAfterMs?: number },
+    how: {
+      readonly resend: boolean;
+      readonly holdClaim: boolean;
+      readonly why: string;
+      readonly retryAfterMs?: number;
+    },
   ): Promise<never> {
     await this.db.client.query({
-      sql: `UPDATE agent_payments SET last_error = ?, last_error_at = ?, retry_key = retry_key + ?,
+      sql: `UPDATE agent_payments SET last_error = ?, last_error_at = ?, resend = CASE WHEN ? = 1 THEN resend ELSE 0 END,
                    claim_until = CASE WHEN ? = 1 THEN claim_until ELSE NULL END,
                    claimed_by = CASE WHEN ? = 1 THEN claimed_by ELSE NULL END, updated_at = ?
              WHERE id = ? AND claimed_by = ?`,
       params: [
         withoutToken(how.why).slice(0, 500),
         now,
-        how.rekey ? 1 : 0,
+        how.resend ? 1 : 0,
         how.holdClaim ? 1 : 0,
         how.holdClaim ? 1 : 0,
         now,
@@ -933,8 +939,8 @@ export class AgentPayments {
     });
     const after = how.holdClaim
       ? CLAIM_MS / 1000
-      : how.rekey
-        ? RETRY_NEW_KEY_S
+      : !how.resend
+        ? LOOK_AGAIN_S
         : Math.max(2, Math.ceil((how.retryAfterMs ?? 5_000) / 1000));
     throw new WriteError(
       "platform_unavailable",
@@ -944,15 +950,31 @@ export class AgentPayments {
   }
 
   /**
-   * A retry refused (the token spent, say) may be refused for what the first ask did: the attempt holds
-   * the order as on its way, and is looked for again once the platform's search has caught up.
+   * An attempt nobody can yet say the outcome of (none found by its id, an answer that cannot be read, a
+   * resend refused before the platform ran it): it holds the order as on its way, and is looked up again.
+   * `resend` false: the same request can no longer tell (the platform keeps what it answered).
    */
-  private async held(row: AgentRow, claim: string, now: number, why: string): Promise<never> {
+  private async held(
+    row: AgentRow,
+    claim: string,
+    now: number,
+    why: string | null,
+    how: { readonly resend?: false } = {},
+  ): Promise<never> {
     await this.db.client.query({
-      sql: `UPDATE agent_payments SET last_error = ?, last_error_at = ?, retry_key = retry_key + 1, claim_until = ?,
-                   claimed_by = NULL, updated_at = ?
+      sql: `UPDATE agent_payments SET last_error = COALESCE(?, last_error), last_error_at = CASE WHEN ? IS NULL THEN last_error_at ELSE ? END,
+                   resend = CASE WHEN ? = 0 THEN 0 ELSE resend END, claim_until = ?, claimed_by = NULL, updated_at = ?
              WHERE id = ? AND claimed_by = ?`,
-      params: [withoutToken(why).slice(0, 500), now, now + HOLD_MS, now, row.id, claim],
+      params: [
+        why === null ? null : withoutToken(why).slice(0, 500),
+        why,
+        now,
+        how.resend === false ? 0 : 1,
+        now + HOLD_MS,
+        now,
+        row.id,
+        claim,
+      ],
       method: "run",
     });
     throw inProgress(HOLD_MS);
@@ -1142,8 +1164,8 @@ export class AgentPayments {
   /**
    * On each sync: payments that were processing (or that nobody heard back about), asked of the platform
    * until it says, and one its card holder never confirmed stopped; paid ones not yet on their order,
-   * recorded; an attempt the platform never answered, looked up by the inbox's own id, then said to the
-   * owner, and still looked up. Answers how many calls it made.
+   * recorded; an attempt the platform never answered, looked up by the inbox's own id, said to the owner
+   * after a day, and still looked up: never let go as made of nothing. Answers how many calls it made.
    */
   async settle(conn: PayConnection, now: number): Promise<number> {
     const read = conn.payments.agentCharge;
@@ -1199,16 +1221,24 @@ export class AgentPayments {
         await this.checkedAt(r.id, now);
       }
     }
-    // An attempt the platform never answered: looked up by our own id, then settled as it stands, or
-    // let go as never made, so the order is free for another token.
+    // An attempt the platform never answered: looked up by our own id and settled as it stands when
+    // found. Not found, it holds the order still: the platform may yet reconcile a charge of it.
     if (conn.payments.findCharge) {
       const { rows: unanswered } = await this.db.client.query({
         sql: `SELECT ${COLUMNS} FROM agent_payments
                WHERE connector_id = ? AND state IN ('creating', 'unknown') AND external_id IS NULL
-                 AND (claim_until IS NULL OR claim_until < ?) AND COALESCE(asked_at, created_at) < ?
+                 AND (claim_until IS NULL OR claim_until < ?) AND COALESCE(asked_at, created_at) < ? AND created_at > ?
                  AND (checked_at IS NULL OR checked_at < CASE WHEN state = 'unknown' THEN ? ELSE ? END)
-               ORDER BY COALESCE(asked_at, created_at) LIMIT ?`,
-        params: [conn.id, now, now - LOOK_AFTER_MS, now - UNKNOWN_EVERY_MS, now - CHECK_EVERY_MS, SETTLE_PER_RUN],
+               ORDER BY COALESCE(checked_at, 0), COALESCE(asked_at, created_at) LIMIT ?`,
+        params: [
+          conn.id,
+          now,
+          now - LOOK_AFTER_MS,
+          now - LOOK_FOR_MS,
+          now - UNKNOWN_EVERY_MS,
+          now - CHECK_EVERY_MS,
+          SETTLE_PER_RUN,
+        ],
         method: "all",
       });
       for (const r of unanswered.map(rowOf)) {
@@ -1217,19 +1247,24 @@ export class AgentPayments {
         await this.lookUp(conn, r, now);
       }
     }
-    // An attempt nobody heard back about: unknown, still holding the order and still read back, and the
-    // owner told where to look.
-    const { rows: lost } = await this.db.client.query({
+    // An attempt nobody heard back about for a day: unknown, still holding the order and still looked
+    // up, and the owner told where to look, by the id every payment of it carries.
+    const { rows: flagged } = await this.db.client.query({
       sql: `SELECT ${COLUMNS} FROM agent_payments WHERE connector_id = ?
-               AND ((state = 'creating' AND COALESCE(asked_at, created_at) < ?) OR (state = 'processing' AND created_at < ?))
+               AND ((state = 'creating' AND created_at < ?) OR (state = 'processing' AND created_at < ?))
                AND (claim_until IS NULL OR claim_until < ?) LIMIT 5`,
-      params: [conn.id, now - LOST_CREATING_MS, now - LOST_PROCESSING_MS, now],
+      params: [conn.id, now - FLAG_MS, now - FLAG_PROCESSING_MS, now],
       method: "all",
     });
-    for (const r of lost.map(rowOf)) {
+    for (const r of flagged.map(rowOf)) {
+      const provider = providerOf(r.kind);
+      const note =
+        r.externalId === null
+          ? `${provider} never said whether this payment went through, and has none for it yet: look for a payment with sdi_pay ${r.id} in ${provider}. The order is not offered for payment again until there is an answer.`
+          : `${provider} never said whether this payment went through: check it there.`;
       const changed = await this.db.client.query({
         sql: `UPDATE agent_payments SET state = 'unknown', note = ?, updated_at = ? WHERE id = ? AND state IN ('creating', 'processing')`,
-        params: [`${providerOf(r.kind)} never said whether this payment went through: check it there.`, now, r.id],
+        params: [note, now, r.id],
         method: "run",
       });
       if (changed.changes !== 1) continue;
@@ -1239,7 +1274,9 @@ export class AgentPayments {
           this.db,
           connectorCaller(conn.id, now),
           rowToItem(item),
-          `A payment from the customer's assistant for this order did not finish. Check it in ${providerOf(r.kind)}.`,
+          r.externalId === null
+            ? `A payment from the customer's assistant for this order has had no answer from ${provider} for a day. Look for a payment with sdi_pay ${r.id} in ${provider}: until there is an answer, the order is not offered for payment again.`
+            : `A payment from the customer's assistant for this order did not finish. Check it in ${provider}.`,
           "note",
         );
       }
@@ -1262,28 +1299,21 @@ export class AgentPayments {
     }
   }
 
-  /** An attempt the platform never answered, looked up by the inbox's own id for it. */
+  /**
+   * An attempt the platform never answered, looked up by the inbox's own id for it. None there is never
+   * taken for none made: the attempt holds the order still, and is looked up again.
+   */
   private async lookUp(conn: PayConnection, row: AgentRow, now: number): Promise<void> {
     let found: AgentCharge | null;
     try {
-      found = (await conn.payments.findCharge?.(conn.ctx, { ref: row.id })) ?? null;
+      found = (await conn.payments.findCharge?.(conn.ctx, { ref: row.id, since: row.createdAt })) ?? null;
     } catch (error) {
       if (!(error instanceof ConnectorError)) throw error;
       await this.checkedAt(row.id, now);
       return;
     }
     if (!found || found.livemode !== row.livemode) {
-      if (now - askedOf(row) < NEVER_MADE_MS) {
-        await this.checkedAt(row.id, now);
-        return;
-      }
-      await this.db.client.query({
-        sql: `UPDATE agent_payments SET state = 'failed', failure = 'lost', last_error = ?, last_error_at = ?, checked_at = ?,
-                     updated_at = ? WHERE id = ? AND state IN ('creating', 'unknown') AND external_id IS NULL
-                     AND (claim_until IS NULL OR claim_until < ?)`,
-        params: [`${providerOf(row.kind)} made no payment for this attempt`, now, now, now, row.id, now],
-        method: "run",
-      });
+      await this.checkedAt(row.id, now);
       return;
     }
     switch (found.status) {

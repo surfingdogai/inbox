@@ -18,9 +18,11 @@
 -- (`agent_payments_live`): two assistants paying at once, one paying again after the first went
 -- through, or another token while nobody knows what the first did, make one charge.
 --
--- `retry_key` is which idempotency key the platform is asked under: 0 the attempt's own, n its nth new
--- one, taken when the platform keeps a failure under the one before (Stripe answers a 500 again to every
--- retry with its key). `asked_at` is when it was last asked.
+-- The platform is asked under one idempotency key per attempt, always with the same request (`title` is
+-- what the payment is called in the business's dashboard, as first sent). `resend` is 1 while the same
+-- request under that key may yet tell what the first ask did, 0 once the platform keeps a failure under
+-- the key and answers it to every retry (a Stripe 500), so only a lookup can. `asked_at` is when it was
+-- last asked.
 CREATE TABLE IF NOT EXISTS `agent_payments` (
 	`id` text PRIMARY KEY NOT NULL,
 	`item_id` text NOT NULL,
@@ -43,7 +45,8 @@ CREATE TABLE IF NOT EXISTS `agent_payments` (
 	`last_error` text,
 	`last_error_at` integer,
 	`note` text,
-	`retry_key` integer DEFAULT 0 NOT NULL,
+	`title` text,
+	`resend` integer DEFAULT 1 NOT NULL,
 	`asked_at` integer,
 	`claim_until` integer,
 	`claimed_by` text,

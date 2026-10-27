@@ -793,11 +793,6 @@ export interface AgentChargeRequest {
   readonly title: string;
   /** The six characters the order is known by. */
   readonly reference: string;
-  /**
-   * Asked under the attempt's nth new idempotency key, when the platform keeps a failure under the one
-   * before (Stripe answers a 500 again to every retry with its key); absent or 0, the attempt's own.
-   */
-  readonly retryKey?: number | undefined;
 }
 
 /** Why a charge on an assistant's token did not go through, in the inbox's words (ADR-042 §6). */
@@ -817,11 +812,15 @@ export interface AgentCharge {
    * assistant's platform shows them; the payment goes on once they do. `failed`: nothing was charged.
    * `canceled`: it was stopped before it was charged. `unknown`: the platform did not say what it did
    * (it failed inside, its edge did not answer, or the first request under the key still runs), so a
-   * charge may have been made: `rekey` says whether only a new idempotency key gets an answer.
+   * charge may have been made: `resend` says whether the same request under the same key may yet.
    */
   readonly status: "succeeded" | "processing" | "requires_action" | "failed" | "canceled" | "unknown";
-  /** With `unknown`: the platform keeps its failure under this key, so asking again under it is answered the same. */
-  readonly rekey?: boolean | undefined;
+  /**
+   * With `unknown`: whether sending the same request again under the same key may yet tell what the
+   * first did (its edge kept nothing, or the first still runs). False when the platform keeps the
+   * failure under the key and answers it again to every retry (a Stripe 500), so only a lookup can.
+   */
+  readonly resend?: boolean | undefined;
   /** The platform's id for the payment (`pi_…`), when it made one. */
   readonly externalId: string | null;
   /** What the platform took, in the inbox's minor units; null when nothing was. */
@@ -881,8 +880,8 @@ export interface PaymentsHandler {
    */
   agentPayPermissions?(ctx: RunContext): Promise<readonly string[]>;
   /**
-   * Charges an assistant's one-time token on the business's own account, once: the same `ref` and
-   * `retryKey` are the same charge, however often they are sent. A decline answers `failed` with why;
+   * Charges an assistant's one-time token on the business's own account, once: the same `ref` is the
+   * same charge, under the same idempotency key, however often it is sent. A decline answers `failed` with why;
    * a platform that did not say what it did answers `unknown`; one that cannot be reached throws
    * (`unreachable`, `rate_limited`), and a key without the permission throws `config`.
    */
@@ -891,10 +890,12 @@ export interface PaymentsHandler {
   agentCharge?(ctx: RunContext, charge: { readonly externalId: string }): Promise<AgentCharge | null>;
   /**
    * A charge made under the inbox's own id for the attempt (`AgentChargeRequest.ref`), looked up when the
-   * platform never answered the request that made it (it was down, or the answer was lost): the charge
-   * as it stands, or null when there is none.
+   * platform never answered the request that made it (it was down, or the answer was lost), with a read
+   * that has no lag behind a write: the charge as it stands, read again by its id, or null when none is
+   * there yet. Null is never proof that none was made: the platform may still reconcile one.
+   * `since`: when the attempt was first asked (ms).
    */
-  findCharge?(ctx: RunContext, charge: { readonly ref: string }): Promise<AgentCharge | null>;
+  findCharge?(ctx: RunContext, charge: { readonly ref: string; readonly since: number }): Promise<AgentCharge | null>;
   /** Stops a charge its card holder never confirmed (`requires_action` too long), so it is never taken later. */
   cancelCharge?(ctx: RunContext, charge: { readonly externalId: string }): Promise<void>;
   /**

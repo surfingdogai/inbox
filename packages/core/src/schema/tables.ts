@@ -1045,8 +1045,13 @@ export const agentPayments = sqliteTable(
     lastErrorAt: integer("last_error_at"),
     /** What the owner should know (paid after the order was cancelled: refund it there). */
     note: text("note"),
-    /** Which idempotency key the platform is asked under: 0 the attempt's own, n its nth new one. */
-    retryKey: integer("retry_key").notNull().default(0),
+    /** What the payment is called in the business's dashboard, as first sent: a resend is the same request. */
+    title: text("title"),
+    /**
+     * 1 while the same request under the same idempotency key may yet tell what the first ask did; 0 once
+     * the platform keeps a failure under the key and answers it to every retry (a Stripe 500).
+     */
+    resend: integer("resend").notNull().default(1),
     /** When the platform was last asked. */
     askedAt: integer("asked_at"),
     claimUntil: integer("claim_until"),

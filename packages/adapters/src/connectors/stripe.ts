@@ -785,11 +785,13 @@ const EDGE_STATUSES: ReadonlySet<number> = new Set([502, 503, 504]);
  * reference; nothing about the customer is sent. Stripe holds the token to the business's profile, its
  * amount, its currency and its expiry, and refuses one outside them.
  *
- * When Stripe does not say what it did, the answer is `unknown`, never a refusal: a 500 is kept under
- * the key and answered again to every retry with it (https://docs.stripe.com/api/idempotent_requests),
- * so only a new key gets an answer (`rekey`); an edge's 502, 503 or 504 keeps nothing, nor does a 409
- * for a first request under the key that still runs, so the same key asks again; a 400 for a key first
- * used with other parameters is answered only under a new one.
+ * When Stripe does not say what it did, the answer is `unknown`, never a refusal, and the request is
+ * never made again under another key (https://docs.stripe.com/error-low-level#server-errors): an
+ * edge's 502, 503 or 504 keeps nothing, nor does a 409 for a first request under the key that still
+ * runs, so the same request under the same key may yet be answered as the first was (`resend`); a 500
+ * is kept under the key and answered again to every retry with it
+ * (https://docs.stripe.com/api/idempotent_requests), as is the first answer to a key a 400 says was
+ * used with other parameters, so only a lookup can tell what those did.
  */
 async function chargeToken(ctx: RunContext, req: AgentChargeRequest): Promise<AgentCharge> {
   const key = keyOf(ctx);
@@ -799,7 +801,7 @@ async function chargeToken(ctx: RunContext, req: AgentChargeRequest): Promise<Ag
   const said = (json: Record<string, unknown>) => withoutToken(messageOf(json), req.token);
   const { res, json } = await call(ctx, key, "POST", "/v1/payment_intents", {
     version: STRIPE_AGENT_VERSION,
-    idempotency: req.retryKey ? `sdi-${req.ref}-pi-${req.retryKey}` : `sdi-${req.ref}-pi`,
+    idempotency: `sdi-${req.ref}-pi`,
     serverErrors: "answer",
     body: form([
       ["amount", amount.value],
@@ -821,15 +823,15 @@ async function chargeToken(ctx: RunContext, req: AgentChargeRequest): Promise<Ag
     );
   }
   const error = (json.error ?? null) as Record<string, unknown> | null;
-  const unknown = (rekey: boolean): AgentCharge => ({
+  const unknown = (resend: boolean): AgentCharge => ({
     status: "unknown",
     externalId: null,
     amount: null,
     livemode: modeOf(key) === "live",
-    rekey,
+    resend,
   });
-  if (res.status >= 500) return unknown(!EDGE_STATUSES.has(res.status));
-  if (error?.type === "idempotency_error") return unknown(res.status !== 409);
+  if (res.status >= 500) return unknown(EDGE_STATUSES.has(res.status));
+  if (error?.type === "idempotency_error") return unknown(res.status === 409);
   // A decline: Stripe answers 402 with the PaymentIntent it made in the error. Nothing was charged.
   if (res.status === 402 && error?.type === "card_error") {
     const intent = (error.payment_intent ?? {}) as Record<string, unknown>;
@@ -920,12 +922,17 @@ function chargeOf(intent: Record<string, unknown>, key: string): AgentCharge | n
   const received = currency.length === 3 ? fromStripeAmount(Number(intent.amount_received ?? 0), currency) : null;
   const types = Array.isArray(intent.payment_method_types) ? intent.payment_method_types : [];
   const error = (intent.last_payment_error ?? null) as Record<string, unknown> | null;
+  // Failed only when Stripe says why: one waiting for a payment method with no error was never tried
+  // (a request cut short inside Stripe), so it is held as waiting, and stopped if never taken; one
+  // authorised and not yet captured holds the customer's money, so it is on its way.
   const status =
     intent.status === "succeeded"
       ? "succeeded"
-      : intent.status === "processing"
+      : intent.status === "processing" || intent.status === "requires_capture"
         ? "processing"
-        : intent.status === "requires_action" || intent.status === "requires_confirmation"
+        : intent.status === "requires_action" ||
+            intent.status === "requires_confirmation" ||
+            (intent.status === "requires_payment_method" && error === null)
           ? "requires_action"
           : intent.status === "canceled"
             ? "canceled"
@@ -969,31 +976,67 @@ async function agentCharge(ctx: RunContext, charge: { readonly externalId: strin
   return chargeOf(json, key);
 }
 
+/** How long before the attempt's first ask a charge of its own is looked for: the two clocks differ. */
+const FIND_SKEW_S = 300;
+/** Pages of a hundred PaymentIntents one lookup reads, newest first: days of a small business's payments. */
+const FIND_PAGES = 10;
+/** Which of an attempt's PaymentIntents tells most, should Stripe ever hold more than one: paid first. */
+const FIND_RANK: Readonly<Record<AgentCharge["status"], number>> = {
+  succeeded: 0,
+  processing: 1,
+  requires_action: 2,
+  failed: 3,
+  canceled: 4,
+  unknown: 5,
+};
+
 /**
  * A charge the inbox asked for and never heard back about, found by the inbox's own id for the attempt,
- * which every one of its PaymentIntents carries (`metadata[sdi_pay]`), with Stripe's search
- * (https://docs.stripe.com/search). Search can trail a new payment by up to a minute, so the inbox asks
- * only some minutes after the request it never heard back about.
+ * which every one of its PaymentIntents carries (`metadata[sdi_pay]`). Listed, never searched: Stripe's
+ * search trails a write by up to a minute, and longer during an outage, exactly when an answer is lost,
+ * while its list APIs have no such lag (https://docs.stripe.com/search, "Data freshness"). The account's
+ * PaymentIntents since the attempt was first asked are read newest first, ours picked by the id, and
+ * the one found read again by its own id, as Stripe holds it now. Null when none is there: never proof
+ * that none was made, since Stripe may still reconcile one after an outage
+ * (https://docs.stripe.com/error-low-level#server-errors), so the inbox never takes it for one.
  */
-async function findCharge(ctx: RunContext, charge: { readonly ref: string }): Promise<AgentCharge | null> {
+async function findCharge(
+  ctx: RunContext,
+  charge: { readonly ref: string; readonly since: number },
+): Promise<AgentCharge | null> {
   const key = keyOf(ctx);
-  if (!/^[A-Za-z0-9]+$/.test(charge.ref)) return null;
-  const query = encodeURIComponent(`metadata['sdi_pay']:'${charge.ref}'`);
-  const { res, json } = await call(ctx, key, "GET", `/v1/payment_intents/search?query=${query}&limit=1`, {
-    version: STRIPE_AGENT_VERSION,
-  });
-  if (res.status === 403) {
-    throw new ConnectorError(
-      "config",
-      `The Stripe key cannot read payments from assistants: give it ${STRIPE_AGENT_PERMISSIONS.intents} on Stripe's key page.`,
-      { field: "api_key" },
-    );
+  const readable = (status: number) => {
+    if (status === 403) {
+      throw new ConnectorError(
+        "config",
+        `The Stripe key cannot read payments from assistants: give it ${STRIPE_AGENT_PERMISSIONS.intents} on Stripe's key page.`,
+        { field: "api_key" },
+      );
+    }
+  };
+  const since = Math.max(0, Math.floor(charge.since / 1000) - FIND_SKEW_S);
+  const ours: Record<string, unknown>[] = [];
+  let after: string | null = null;
+  for (let page = 0; page < FIND_PAGES; page++) {
+    const query = new URLSearchParams({ "created[gte]": String(since), limit: "100" });
+    if (after) query.set("starting_after", after);
+    const { res, json } = await call(ctx, key, "GET", `/v1/payment_intents?${query}`, {
+      version: STRIPE_AGENT_VERSION,
+    });
+    readable(res.status);
+    if (res.status >= 400) throw new ConnectorError("refused", refusalOf(json, res.status));
+    const data = arrayOf(json.data);
+    ours.push(...data.filter((pi) => ((pi.metadata ?? {}) as Record<string, unknown>).sdi_pay === charge.ref));
+    const last = data.at(-1)?.id;
+    if (json.has_more !== true || typeof last !== "string") break;
+    after = last;
   }
-  if (res.status >= 400) throw new ConnectorError("refused", refusalOf(json, res.status));
-  const [found] = arrayOf(json.data).filter(
-    (pi) => ((pi.metadata ?? {}) as Record<string, unknown>).sdi_pay === charge.ref,
-  );
-  return found ? chargeOf(found, key) : null;
+  const best = ours
+    .map((pi) => chargeOf(pi, key))
+    .filter((c): c is AgentCharge => c !== null)
+    .sort((a, b) => FIND_RANK[a.status] - FIND_RANK[b.status])[0];
+  if (!best?.externalId) return null;
+  return (await agentCharge(ctx, { externalId: best.externalId })) ?? best;
 }
 
 /**
