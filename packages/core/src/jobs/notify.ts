@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { type BusinessFacts, businessFacts } from "../customer/audience";
 import { oneLine } from "../customer/format";
 import { customerLang } from "../customer/lang";
-import { cutLinks, fillLinks, linksForEmail } from "../customer/links";
+import { confirmLink, cutLinks, fillLinks, linksForEmail } from "../customer/links";
 import { isAutomated, type MailWithdrawal, renderCustomerMail } from "../customer/mail";
 import type { OfferTerms } from "../customer/offer";
 import type { Db } from "../db";
@@ -18,6 +18,7 @@ import { stayLang } from "../stays/copy";
 import { ARRIVAL_MARKER, ARRIVAL_STATES, ARRIVAL_TEMPLATE, renderStayMail, stayLinks } from "../stays/mail";
 import { ownerStayMail } from "../stays/owner-mail";
 import { openArrival } from "../stays/setup";
+import { gateOf, holdsBack } from "../spam/screen";
 import { withdrawalOf } from "../write/returns";
 import { describe, rowToItem } from "../write/views";
 import {
@@ -91,6 +92,14 @@ export function notifyHandler(
     const item = rowToItem(row);
     // A message put aside as spam (by the owner, or as it arrived: ADR-026 §7) tells nobody.
     if (row.state === "spam") return { note: "not sent: spam" };
+    // Held by the spam filter, or put aside (ADR-029): the business is told nothing, and the sender
+    // only that their request arrived — unless a bot sent it, when nobody is written to at all.
+    const gate = row.screen ? await gateOf(db, item.id) : null;
+    if (holdsBack(gate)) {
+      if (p.to === "owner") return { note: "not sent: held by the spam filter" };
+      if (p.event !== "create" || gate?.screen === "aside") return { note: "not sent: held by the spam filter" };
+      if (gate?.noProof) return { note: "not sent: no acknowledgement for this request" };
+    }
     const settings = await readSettings(db);
     const publicUrl = opts.baseUrl ?? settings.notifications.appUrl ?? "";
     // The owner is told at the address they gave, else at the one they sign in with: an owner who
@@ -125,6 +134,7 @@ export function notifyHandler(
             )
           : await customerMail(db, item, p, {
               jobKey: job.id,
+              screened: row.screen !== null && row.screen !== undefined,
               contact,
               canSend: sender !== null,
               mailOut,
@@ -261,6 +271,8 @@ async function customerMail(
     readonly settings: Settings;
     readonly facts: BusinessFacts;
     readonly now: number;
+    /** The spam filter screened it (ADR-029): its sender is someone the business has no history with. */
+    readonly screened?: boolean | undefined;
   },
 ): Promise<ComposedMail | { note: string }> {
   // The acknowledgement goes only while nothing has happened since the request: a booking a rule
@@ -366,7 +378,7 @@ async function customerMail(
     law,
     days: o.settings.returns.days,
   };
-  const links = skip
+  const answerLinks = skip
     ? null
     : await linksForEmail(db, o.secrets, item, {
         mailKey: o.jobKey,
@@ -376,6 +388,13 @@ async function customerMail(
         minNoticeMin: o.settings.booking.minNoticeMin,
         ...(right?.available && CONFIRMING.has(p.event) ? { withdraw: { until: right.until } } : {}),
       });
+  // The acknowledgement to someone the business has no history with asks them to confirm it is them
+  // (ADR-029 §3.3), whatever the spam filter made of their request, so it gives nothing away.
+  const confirm =
+    !skip && p.event === "create" && o.screened
+      ? await confirmLink(db, o.secrets, { itemId: item.id, mailKey: o.jobKey, lang, base: o.base, now: o.now })
+      : null;
+  const links = confirm ? new Map([...(answerLinks ?? []), ["confirm_me" as const, confirm]]) : answerLinks;
   // The return or refund the change made: what the email says of the money.
   const refund = item.type !== "refund" && p.eventId ? await refundMadeBy(db, item.id, p.eventId) : null;
   const [linkedRow] = item.linkedItemId ? await db.orm.select().from(items).where(eq(items.id, item.linkedItemId)) : [];

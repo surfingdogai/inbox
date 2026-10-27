@@ -329,7 +329,7 @@ describe("a customer who has written many times", () => {
     // A regular who writes every week for two years: each request by email is a party of its own.
     const ids: string[] = [];
     for (let i = 0; i < 110; i++) {
-      const m = await s.caps.sendMessage(customer(T0 + i * MIN), {
+      const m = await s.caps.sendMessage(customer(T0 + i * 7 * DAY), {
         body: `Week ${i}: see you Thursday. Rita Carvalho`,
         contact: { name: "Rita Carvalho", email: "rita.carvalho@example.com" },
       });

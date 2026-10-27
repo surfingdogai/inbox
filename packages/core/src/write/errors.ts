@@ -51,6 +51,11 @@ export type WriteErrorCode =
   | "draft_stale"
   /** ADR-018 §4: a rule that reads where a customer lives or comes from may not set a price or terms. */
   | "geo_terms"
+  /**
+   * ADR-029 §4.4: one sender started more new conversations today than any person does; the answer
+   * says when to come back (`details.retry_after_s`), never why.
+   */
+  | "too_many_requests"
   | "internal";
 
 export interface FieldProblem {
@@ -85,6 +90,7 @@ const STATUS: Record<WriteErrorCode, number> = {
   outside_limits: 422,
   draft_stale: 409,
   geo_terms: 422,
+  too_many_requests: 429,
   internal: 500,
 };
 

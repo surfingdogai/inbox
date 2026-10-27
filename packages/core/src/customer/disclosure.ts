@@ -40,6 +40,9 @@ export interface DisclosureCopy {
     stopMine: string;
     stopButton: string;
     stopped: (date: string) => string;
+    /** While new messages may be read by an automated check (ADR-029 §14): what it sees and keeps. */
+    spamHeading: string;
+    spam: string;
   }>;
 }
 
@@ -71,6 +74,8 @@ const EN: DisclosureCopy = {
     stopButton: "Stop using it for me",
     stopped: (date) =>
       `Done. Since ${date} we tell no booking network anything more about you. Your bookings, orders and our emails work as before.`,
+    spamHeading: "Keeping out spam",
+    spam: "We check new messages from people we haven't heard from before, to keep unwanted messages away from our team. The check can include a reading by an automated service, which sees the message without email addresses, phone numbers or bank details and keeps nothing. A person here can always see and bring back any message the check set aside.",
   },
 };
 
@@ -106,6 +111,8 @@ const PT: DisclosureCopy = {
     stopButton: "Deixar de a usar para mim",
     stopped: (date) =>
       `Feito. Desde ${date} não dizemos mais nada sobre si a nenhuma rede de reservas. As suas marcações, encomendas e os nossos emails continuam como antes.`,
+    spamHeading: "Proteção contra spam",
+    spam: "Verificamos as mensagens novas de quem ainda não nos contactou, para manter as mensagens indesejadas longe da nossa equipa. A verificação pode incluir uma leitura por um serviço automático, que vê a mensagem sem endereços de email, números de telefone ou dados bancários, e não guarda nada. Alguém da nossa equipa pode sempre ver e recuperar qualquer mensagem posta de parte.",
   },
 };
 
@@ -157,6 +164,8 @@ export function privacyPage(input: {
   readonly networks: readonly string[];
   /** For one customer, from their code email: the date they stopped it (in their words), or null while they have not. */
   readonly mine?: { readonly stopped: string | null; readonly form: CustomerPage["form"] } | undefined;
+  /** Whether new messages may be read by the spam filter's AI check now (ADR-029 §14). */
+  readonly spamReading?: boolean | undefined;
 }): CustomerPage {
   const d = DISCLOSURE[input.lang].privacy;
   const host = (origin: string) => {
@@ -184,6 +193,7 @@ export function privacyPage(input: {
       // guessed path (`/privacy`) is a dead link on the default network.
       links: input.networks.map((n) => ({ label: host(n), href: n })),
     },
+    ...(input.spamReading ? [{ heading: d.spamHeading, paragraphs: [d.spam] }] : []),
     { heading: d.questionsHeading, paragraphs: [d.questions] },
   ];
   return {

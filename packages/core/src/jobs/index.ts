@@ -13,6 +13,8 @@ import type { PhoneCapabilities } from "../phones/phones";
 import type { ReceiptCapabilities } from "../receipts/capabilities";
 import { runRulesForEvent } from "../rules/engine";
 import type { SecretBox } from "../secrets/box";
+import { gateOf, holdsBack, SPAM_SCREEN_KIND, stillScreening } from "../spam/screen";
+import { SCREEN_DEADLINE_MS } from "../spam/types";
 import { LIFECYCLE_SWEEP_KIND, lifecycleSweepHandler } from "./lifecycle";
 import { type NotifyPayload, notifyHandler, OWNER_DIGEST_KIND, ownerDigestHandler } from "./notify";
 import type { JobHandler } from "./runner";
@@ -38,6 +40,8 @@ export function createRunner(deps: {
   secrets?: SecretBox | null | undefined;
   /** The owner's phones (ADR-028): with them, a notification to each phone that wants one. */
   phones?: PhoneCapabilities | undefined;
+  /** The spam filter (ADR-029): the screening that waits on an AI check, and its daily housekeeping. */
+  spam?: SpamJobs | undefined;
 }): JobRunner {
   const runner = new JobRunner()
     // The owner's phones hear of what the owner is emailed about, whether or not the email goes (ADR-028).
@@ -56,7 +60,19 @@ export function createRunner(deps: {
     .register(EMAIL_CHECK_KIND, emailCheckHandler(deps.mailOut, { baseUrl: deps.baseUrl }))
     .register("rules", async (job, { db, now }) => {
       const p = job.payload as { itemId: string; eventId: string; trigger: string };
-      const r = await runRulesForEvent(db, { ...p, now });
+      // Held or put aside by the spam filter (ADR-029): no rule runs. Still being screened, inside its
+      // deadline: it waits for the verdict, or for the deadline, whichever comes first.
+      const gate = await gateOf(db, p.itemId);
+      if (holdsBack(gate)) return { note: "held by the spam filter: no rule runs" };
+      if (gate && stillScreening(gate, now)) {
+        await ensureJob(db, "rules", `rules:${p.eventId}:wait`, {
+          now,
+          runAt: gate.createdAt + SCREEN_DEADLINE_MS,
+          payload: p,
+        });
+        return { note: "waiting for its screening" };
+      }
+      const r = await runRulesForEvent(db, { ...p, now, onlyFlags: gate?.screen === "warned" });
       return {
         note: `${r.evaluated} evaluated, ${r.matched.length} matched, ${r.actions} actions${r.errors.length ? `; ${r.errors.join(" | ")}` : ""}`,
       };
@@ -92,9 +108,12 @@ export function createRunner(deps: {
     .register("review_fact", async () => ({ note: "review facts arrive in a later release" }))
     .register(
       LIFECYCLE_SWEEP_KIND,
-      withPhonePrune(
-        deps.phones,
-        lifecycleSweepHandler({ mailOut: deps.mailOut, secrets: deps.secrets ?? null, baseUrl: deps.baseUrl }),
+      withSpamDaily(
+        deps.spam,
+        withPhonePrune(
+          deps.phones,
+          lifecycleSweepHandler({ mailOut: deps.mailOut, secrets: deps.secrets ?? null, baseUrl: deps.baseUrl }),
+        ),
       ),
     )
     // The contacts backfill (0009): resumable, 200 parties a run, each run queueing the next.
@@ -109,6 +128,21 @@ export function createRunner(deps: {
       }
       return { note: `${r.done} part${r.done === 1 ? "y" : "ies"} after ${after || "the start"}` };
     });
+  if (deps.spam) {
+    const spam = deps.spam;
+    runner
+      // A stranger's request waiting on its AI check: decided, then its effects pulled forward or
+      // cancelled. Run again at once, so what it made due runs in this same run.
+      .register(SPAM_SCREEN_KIND, async (job, { now }) => {
+        const p = job.payload as { itemId: string; eventId: string };
+        const r = await spam.screen({ itemId: p.itemId, eventId: p.eventId, now });
+        return { note: r.note, rerun: true };
+      })
+      .register(SPAM_DAILY_KIND, async (_job, { now }) => {
+        const r = await spam.daily(now);
+        return { note: `${r.removed} put-aside item${r.removed === 1 ? "" : "s"} past their time removed` };
+      });
+  }
   if (deps.phones) {
     runner
       .register(PHONE_PUSH_KIND, phonePushFanoutHandler(deps.phones))
@@ -132,6 +166,32 @@ export interface IssueReceiptPayload {
 }
 
 export type { NotifyPayload };
+
+/** What the runner needs of the spam filter (`SpamCapabilities`). */
+export interface SpamJobs {
+  screen(input: {
+    readonly itemId: string;
+    readonly eventId: string;
+    readonly now: number;
+  }): Promise<{ readonly note: string }>;
+  daily(now: number): Promise<{ readonly removed: number }>;
+}
+
+/** The spam filter's daily housekeeping (ADR-029 §9.4): one a day, each run queueing the next. */
+export const SPAM_DAILY_KIND = "spam_daily";
+
+/**
+ * The sweep makes sure the spam filter's housekeeping is due once a day (ADR-029): only where the
+ * runner has a spam filter to run it.
+ */
+function withSpamDaily(spam: SpamJobs | undefined, sweep: JobHandler): JobHandler {
+  if (!spam) return sweep;
+  return async (job, ctx) => {
+    const day = new Date(ctx.now).toISOString().slice(0, 10);
+    await ensureJob(ctx.db, SPAM_DAILY_KIND, `${SPAM_DAILY_KIND}:${day}`, { now: ctx.now }).catch(() => undefined);
+    return sweep(job, ctx);
+  };
+}
 
 /**
  * Each quarter hour's sweep tidies the phones first (ADR-028): phones nobody confirmed in time go,

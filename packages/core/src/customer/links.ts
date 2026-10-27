@@ -51,7 +51,12 @@ export type LinkAction =
   | "stay_cancel"
   | "stay_card"
   | "stay_change_yes"
-  | "stay_change_no";
+  | "stay_change_no"
+  /**
+   * "Confirm it's me" (ADR-029 §3.3), in the acknowledgement to someone the business has not dealt
+   * with before: the page, then one button that proves their address.
+   */
+  | "confirm_me";
 
 export const LINK_ACTIONS: readonly LinkAction[] = [
   "accept_time",
@@ -74,6 +79,7 @@ export const LINK_ACTIONS: readonly LinkAction[] = [
   "stay_card",
   "stay_change_yes",
   "stay_change_no",
+  "confirm_me",
 ];
 
 export interface LinkRow {
@@ -99,7 +105,7 @@ export interface LinkRow {
  * booking network, a year.
  */
 export const LINK_MAX_MS: Readonly<
-  Record<"time" | "quote" | "order" | "change" | "details" | "networks" | "withdraw", number>
+  Record<"time" | "quote" | "order" | "change" | "details" | "networks" | "withdraw" | "confirm", number>
 > = {
   time: 14 * 86_400_000,
   quote: 30 * 86_400_000,
@@ -109,6 +115,7 @@ export const LINK_MAX_MS: Readonly<
   networks: 365 * 86_400_000,
   /** Goods not yet delivered: their period has not begun, so the link lives on until a later email's. */
   withdraw: 60 * 86_400_000,
+  confirm: 14 * 86_400_000,
 };
 
 /** What a withdrawal link is bound to: the contract itself, whatever changes in it. */
@@ -338,6 +345,39 @@ export async function networksLink(
     input.now,
   );
   const token = tokens.get("networks_off");
+  return token ? linkUrl(input.base, token) : null;
+}
+
+/**
+ * "Confirm it's me" (ADR-029 §3.3): one per acknowledgement, two weeks long, bound to the item. Null
+ * without a secret to sign it or a public address.
+ */
+export async function confirmLink(
+  db: Db,
+  box: SecretBox | null,
+  input: {
+    readonly itemId: string;
+    readonly mailKey: string;
+    readonly lang: CustomerLang;
+    readonly base: string;
+    readonly now: number;
+  },
+): Promise<string | null> {
+  if (!box || !input.base) return null;
+  const tokens = await mintLinks(
+    db,
+    box,
+    {
+      itemId: input.itemId,
+      mailKey: input.mailKey,
+      lang: input.lang,
+      termsSha: `confirm:${input.itemId}`,
+      expiresAt: input.now + LINK_MAX_MS.confirm,
+      actions: ["confirm_me"],
+    },
+    input.now,
+  );
+  const token = tokens.get("confirm_me");
   return token ? linkUrl(input.base, token) : null;
 }
 

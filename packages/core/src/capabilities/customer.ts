@@ -4,6 +4,7 @@ import { audienceFor, type BusinessFacts, businessFacts } from "../customer/audi
 import { confirmTermsMessage, copyFor, vars, type WithdrawalCopy, withdrawalCopy } from "../customer/copy";
 import {
   type Audience,
+  customerState,
   nextActions,
   offerSummary,
   orderLinesText,
@@ -208,6 +209,13 @@ interface Deps {
         readonly page: Omit<StayPageDeps, "db">;
       }
     | undefined;
+  /** "Confirm it's me" (ADR-029 §3.3): the sender proves their address, and a held request goes on. */
+  readonly spam?:
+    | {
+        confirmFromSender(itemId: string, now: number): Promise<"released" | "confirmed">;
+        readsWithAi(now: number): Promise<boolean>;
+      }
+    | undefined;
 }
 
 export class CustomerDoors {
@@ -223,8 +231,9 @@ export class CustomerDoors {
    * business's, the open offer with its fingerprint, who it waits on, what they can do next.
    */
   async present(item: Item, audience: Audience, now: number): Promise<CustomerItemView> {
-    // A message put aside as spam reads as closed, all of it: its words, its buttons, what comes next.
-    const seen = item.state === "spam" ? ({ ...item, state: "closed" } as Item) : item;
+    // A message put aside as spam reads as closed, all of it: its words, its buttons, what comes next;
+    // a quote request put aside, as received and then expired (`customerState`, ADR-029).
+    const seen = item.state === "spam" ? ({ ...item, state: customerState(item, now) } as Item) : item;
     const view = viewFor(seen, "customer_agent", undefined, undefined, audience);
     const offer = await openOffer(item, { minNoticeMin: audience.minNoticeMin });
     const rows =
@@ -252,7 +261,7 @@ export class CustomerDoors {
       !refunds.some((r) => r.state === "requested" || r.state === "approved" || r.state === "goods_received");
     return {
       ...view,
-      item: customerItem(item),
+      item: customerItem(item, now),
       reference: shortRef(item.id),
       offer: current,
       agreed: agreed ? { terms: agreed.terms, terms_sha: agreed.termsSha } : null,
@@ -267,7 +276,7 @@ export class CustomerDoors {
                 : null,
           }
         : null,
-      waiting_on: waitingOn(item),
+      waiting_on: waitingOn(seen),
       // Past its deadline it can no longer be accepted, whether or not our sweep has closed it yet.
       next: nextActions(
         seen,
@@ -692,6 +701,7 @@ export class CustomerDoors {
       lang,
       business: facts.name,
       networks: await issuingNetworks(this.db, await readSettings(this.db)),
+      spamReading: (await this.deps.spam?.readsWithAi(Date.now())) === true,
     });
   }
 
@@ -1342,6 +1352,7 @@ export class CustomerDoors {
     if (ctx.row.action === "networks_off") return this.networksPage(ctx, opts.now);
     // A stay's links (ADR-037): its own pages, in the guest's language among six.
     if (isStayAction(ctx.row.action)) return stayLinkView({ db: this.db, ...this.deps.stays?.page }, ctx, opts.now);
+    if (ctx.row.action === "confirm_me") return this.confirmPage(ctx, opts.now);
     return this.pageFor(ctx, opts.now, { from: opts.from });
   }
 
@@ -1362,6 +1373,7 @@ export class CustomerDoors {
     const words = copyFor(audience.lang).page;
     if (row.action === "networks_off") return this.stopFromLink(ctx, form, now);
     if (isStayAction(row.action)) return stayLinkAct({ db: this.db, ...this.deps.stays?.page }, ctx, form, now);
+    if (row.action === "confirm_me") return this.confirmFromLink(ctx, form, now);
     if (row.usedAt !== null)
       return { page: this.plain(ctx, 409, words.alreadyDone(vars({ status: status(item, audience) }))) };
     const blocked = await this.blocked(ctx, now);
@@ -1528,6 +1540,7 @@ export class CustomerDoors {
       lang: audience.lang,
       business: ctx.business,
       networks: await issuingNetworks(this.db, await readSettings(this.db)),
+      spamReading: (await this.deps.spam?.readsWithAi(now)) === true,
       mine: {
         stopped,
         form: {
@@ -1545,6 +1558,39 @@ export class CustomerDoors {
       footer: words.footer(vars({ business: ctx.business, ref: shortRef(item.id) })).replace(/^ · /, ""),
       help: words.help,
     };
+  }
+
+  /**
+   * "Confirm it's me" (ADR-029 §3.3): one button, then a thank-you. Both pages read the same whatever
+   * became of the request — held, delivered, let in, lapsed — so pressing it tells nobody anything.
+   */
+  private confirmPage(ctx: LinkContext, now: number, opts: { readonly error?: string } = {}): CustomerPage {
+    const words = copyFor(ctx.audience.lang).page.confirmMe;
+    if (now > ctx.row.expiresAt) return this.plain(ctx, 410, copyFor(ctx.audience.lang).page.linkExpired);
+    if (ctx.row.usedAt !== null) return this.plain(ctx, 200, words.done);
+    return {
+      ...this.plain(ctx, opts.error ? 422 : 200, words.heading, [words.lead]),
+      ...(opts.error ? { error: opts.error } : {}),
+      form: { hidden: { terms: ctx.row.termsSha, confirm: "1" }, fields: [], button: words.button },
+    };
+  }
+
+  /** The sender pressed "Confirm it's me": their address is proven, and a request held for want of it goes on. */
+  private async confirmFromLink(
+    ctx: LinkContext,
+    form: Readonly<Record<string, string | undefined>>,
+    now: number,
+  ): Promise<LinkActResult> {
+    const { row } = ctx;
+    if (now > row.expiresAt) return { page: this.plain(ctx, 410, copyFor(ctx.audience.lang).page.linkExpired) };
+    if (form.confirm !== "1" || form.terms !== row.termsSha) {
+      return { page: this.confirmPage(ctx, now, { error: copyFor(ctx.audience.lang).page.notSent }) };
+    }
+    if (row.usedAt === null) {
+      await this.deps.spam?.confirmFromSender(ctx.item.id, now);
+      await this.db.client.query(linkUsedStatement(row.jti, now));
+    }
+    return { redirect: `/c/${ctx.token}` };
   }
 
   /**
@@ -2462,6 +2508,7 @@ function stateAllows(action: LinkAction, item: Item): boolean {
     case "details":
       return item.state === "needs_info";
     case "networks_off":
+    case "confirm_me":
       return true;
     case "stay_accept":
     case "stay_decline":

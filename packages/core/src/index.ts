@@ -200,6 +200,7 @@ export {
 export * from "./settings/schema";
 export * from "./stays/index";
 export * from "./trades/index";
+export * from "./spam/index";
 export { canonicalNetworkOrigin } from "./util/hosts";
 export {
   canonicalLanguages,

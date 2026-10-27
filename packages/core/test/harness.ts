@@ -39,10 +39,10 @@ export async function resetTables(client: SqliteClient): Promise<void> {
  */
 export function confirming<C extends Capabilities>(caps: C): C {
   const again =
-    <I extends { terms_sha?: string | undefined }, R>(fn: (caller: Caller, input: I) => Promise<R>) =>
-    async (caller: Caller, input: I): Promise<R> => {
+    <I extends { terms_sha?: string | undefined }, R, O>(fn: (caller: Caller, input: I, opts?: O) => Promise<R>) =>
+    async (caller: Caller, input: I, opts?: O): Promise<R> => {
       try {
-        return await fn(caller, input);
+        return await fn(caller, input, opts);
       } catch (error) {
         const sha = (error as WriteError).details?.terms_sha;
         if (
@@ -53,7 +53,7 @@ export function confirming<C extends Capabilities>(caps: C): C {
         ) {
           throw error;
         }
-        return fn(caller, { ...input, terms_sha: sha });
+        return fn(caller, { ...input, terms_sha: sha }, opts);
       }
     };
   caps.createBooking = again(caps.createBooking.bind(caps));

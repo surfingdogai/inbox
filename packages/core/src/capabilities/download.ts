@@ -194,6 +194,24 @@ export const DOWNLOAD_TABLES: Readonly<Record<string, DownloadTable>> = {
     strip: empty("jobs"),
   },
   migrations: { note: "The version of the database, so the inbox that opens it knows it." },
+  // The spam filter (ADR-029): what it decided and why, the owner's lists and filters, its counts.
+  spam_verdicts: { note: "What the spam filter made of each request from someone new, and why: codes, never words." },
+  spam_lists: { note: "Let through, and Always put aside." },
+  spam_filter_spans: { note: "When each spam filter was on." },
+  spam_days: { note: "The spam filter's counts, by day." },
+  spam_prints: {
+    leftOut: "Fingerprints of what strangers sent, for spotting the same message again: they mean something only here.",
+    strip: empty("spam_prints"),
+  },
+  spam_handles: {
+    leftOut: "How many new requests each sender made today, and who confirmed their address: keyed to this inbox only.",
+    strip: empty("spam_handles"),
+  },
+  spam_cache: {
+    leftOut: "Answers the AI check gave this week, kept so the same message is checked once.",
+    strip: empty("spam_cache"),
+  },
+  spam_domains: { leftOut: "Which mail domains take mail, as last looked up.", strip: empty("spam_domains") },
 };
 
 /** The search index, which SQLite keeps in a table and several of its own: kept as it is. */

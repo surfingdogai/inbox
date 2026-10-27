@@ -27,9 +27,10 @@ import { directoryNetworks, mayReceiveEmails, verifiedNetworks } from "../networ
 import { secretHash } from "../protocol/credentials";
 import type { SecretBox } from "../secrets/box";
 import { readSettings, type Settings } from "../settings/schema";
+import type { Door } from "../spam/types";
 import { type Caller, isCustomer, nowOf, type TrustTier } from "../write/caller";
 import { findIdempotent, threadEntryStatement } from "../write/common";
-import { type CreateInput, type CreateResult, createItem } from "../write/create";
+import { ACKNOWLEDGED, type CreateInput, type CreateResult, type CreateScreener, createItem } from "../write/create";
 import { WriteError } from "../write/errors";
 
 /**
@@ -52,6 +53,7 @@ export interface CarriedInput {
 export class IdentityCapabilities {
   private port: IdentityPort | null = null;
   private mail: MailOut | null = null;
+  private spam: CreateScreener | null = null;
 
   constructor(
     private readonly db: Db,
@@ -68,6 +70,11 @@ export class IdentityCapabilities {
     this.mail = mail;
   }
 
+  /** The spam filter every customer's create passes through (ADR-029). */
+  attachSpam(spam: CreateScreener | null): void {
+    this.spam = spam;
+  }
+
   /**
    * A create with its person (§2.1, §8.1): what the agent carried is presented first (in parallel,
    * time-boxed, failing open), the item is created with the match, presentations and links in its
@@ -80,7 +87,7 @@ export class IdentityCapabilities {
     const { credentials } = collectCarried(carried.pass, carried.key, caller.carried);
     const agent = caller.agent ?? NO_AGENT;
     if (caller.idempotency && (await findIdempotent(this.db, caller.idempotency))) {
-      const replayed = await createItem(this.db, caller, input);
+      const replayed = await createItem(this.db, caller, input, { spam: this.spam });
       return { ...replayed, identity: await this.answer(replayed.view.item.id, {}, retryAudience(caller, replayed)) };
     }
     // Nothing is asked of a network for a request the create would refuse anyway, and nothing at
@@ -113,17 +120,24 @@ export class IdentityCapabilities {
         ? await issuingNetworks(this.db, await readSettings(this.db))
         : [];
     const tier = tierOf(caller, agent, presented.presentations);
-    const result = await createItem(this.db, tier === caller.tier ? caller : { ...caller, tier }, {
-      ...input,
-      identity: {
-        agent,
-        presentations: presented.presentations,
-        authenticatedEmail: caller.actor.channel === "email" && caller.tier === "verified_principal",
-        issueAt,
-        rulesDelayMs: issueAt.length ? RULES_AFTER_ISSUANCE_MS : 0,
-        ...(localParty ? { localParty } : {}),
+    const result = await createItem(
+      this.db,
+      tier === caller.tier ? caller : { ...caller, tier },
+      {
+        ...input,
+        // Every customer's request is screened (ADR-029); the door says which it came through.
+        ...(isCustomer(caller) ? { screen: input.screen ?? { door: doorOf(caller) } } : {}),
+        identity: {
+          agent,
+          presentations: presented.presentations,
+          authenticatedEmail: caller.actor.channel === "email" && caller.tier === "verified_principal",
+          issueAt,
+          rulesDelayMs: issueAt.length ? RULES_AFTER_ISSUANCE_MS : 0,
+          ...(localParty ? { localParty } : {}),
+        },
       },
-    });
+      { spam: this.spam },
+    );
     // A retry found only now, while this request was presenting (two copies at once, or a copy
     // that arrived while the first was still being written): answered as any other retry.
     if (result.replayed) {
@@ -277,8 +291,26 @@ export class IdentityCapabilities {
       passes: [...passes.entries()].map(([network, pass]) => ({ network, pass })),
       verify: { available: knownEmail !== null, sent_to: knownEmail && sent.length ? maskEmail(knownEmail) : null },
       networks: [...networks.entries()].map(([network, state]) => ({ network, state })),
+      confirm: await this.confirmOf(itemId),
       guide: AGENT_GUIDE_URL,
     };
+  }
+
+  /**
+   * Where "Confirm it's me" goes (ADR-029 §3.3): a booking, an order or a quote request a stranger
+   * sent with an email, whatever the filter made of it, when links can be signed. Null otherwise.
+   */
+  private async confirmOf(itemId: string): Promise<{ sent_to: string } | null> {
+    if (!this.secrets) return null;
+    const { rows } = await this.db.client.query({
+      sql: "SELECT type, screen, party_id, COALESCE(json_extract(flags, '$.sandbox'), 0) FROM items WHERE id = ?",
+      params: [itemId],
+      method: "all",
+    });
+    const r = rows[0];
+    if (!r || r[1] === null || r[1] === undefined || !ACKNOWLEDGED.has(String(r[0])) || Number(r[3]) === 1) return null;
+    const email = await emailOf(this.db, String(r[2]));
+    return email ? { sent_to: maskEmail(email) } : null;
   }
 
   /**
@@ -647,4 +679,11 @@ function safeJson(s: string): unknown {
   } catch {
     return null;
   }
+}
+
+/** The door a customer's request came through, as the spam filter tells them apart. */
+export function doorOf(caller: Caller): Door {
+  if (caller.actor.channel === "email") return "email";
+  if (caller.actor.channel === "form" || caller.actor.channel === "action_link") return "form";
+  return "agent";
 }

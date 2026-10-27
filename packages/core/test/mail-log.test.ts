@@ -185,7 +185,11 @@ describe("the mail log", () => {
     );
     expect(sent[0]?.text).toMatch(new RegExp(`^Accept: ${BASE}/c/[A-Za-z0-9_-]{22}\\.[A-Za-z0-9_-]{22}$`, "m"));
     expect(String(failed[0]?.[1])).toMatch(new RegExp(`^Accept: ${BASE}/c/[A-Za-z0-9_-]{22}\\.…$`, "m"));
-    expect(await rows(s.db, "SELECT COUNT(*) FROM action_links WHERE item_id = ?", [id])).toEqual([[3]]);
+    // The three answers, and the acknowledgement's "Confirm it's me" to someone new (ADR-029).
+    expect(await rows(s.db, "SELECT COUNT(*) FROM action_links WHERE item_id = ?", [id])).toEqual([[4]]);
+    expect(
+      await rows(s.db, "SELECT COUNT(*) FROM action_links WHERE item_id = ? AND action = 'confirm_me'", [id]),
+    ).toEqual([[1]]);
     expect(await rows(s.db, "SELECT status, attempts FROM outbound_mail WHERE template = 'booking.proposed'")).toEqual([
       ["sent", 2],
     ]);

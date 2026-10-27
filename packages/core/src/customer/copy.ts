@@ -163,6 +163,12 @@ export interface Copy {
     changeTime: string;
     /** A change we asked for to a promise, answered by replying. */
     replyToAnswerChange: string;
+    /**
+     * In the acknowledgement to someone the business has not dealt with before (ADR-029 §3.3): the
+     * line, and the button's words, that let them confirm the request is theirs.
+     */
+    confirmMe: string;
+    confirmMeButton: string;
   }>;
   readonly page: PageCopy;
   /** Every email the business sends a customer (`customer/mail.ts` puts them together). */
@@ -510,6 +516,8 @@ export interface PageCopy {
     done: string;
   }>;
   readonly linkExpired: string;
+  /** The page "Confirm it's me" opens, and what it says once pressed: the same whatever became of the request. */
+  readonly confirmMe: Readonly<{ heading: string; lead: string; button: string; done: string }>;
   readonly alreadyDone: Say;
   readonly offerChanged: string;
   readonly replaced: string;
@@ -642,6 +650,8 @@ const EN: Copy = {
     keepAsIs: "Keep it as it is",
     changeTime: "Change the time",
     replyToAnswerChange: "Reply to this email to accept the change, or to keep things as they are.",
+    confirmMe: "Please confirm it's you, so we know your request reached the right person.",
+    confirmMeButton: "Confirm it's me",
   },
   page: {
     footer: (v) => `${v.business} · Reference ${v.ref}`,
@@ -768,6 +778,12 @@ const EN: Copy = {
       done: "Thank you. We have your answer and will get back to you soon.",
     },
     linkExpired: "This link has expired. Reply to our email and we will help you.",
+    confirmMe: {
+      heading: "Confirm it's you",
+      lead: "Please confirm it's you, so we know your request reached the right person.",
+      button: "Confirm it's me",
+      done: "Thank you, that's confirmed. We'll be in touch.",
+    },
     alreadyDone: (v) => `This is already done. ${v.status}`,
     offerChanged: "We have changed what we proposed. Please use the link in our latest email.",
     replaced: "This link is from an earlier email. Please use the link in our latest email.",
@@ -1247,6 +1263,8 @@ const PT: Copy = {
     keepAsIs: "Manter como está",
     changeTime: "Mudar a hora",
     replyToAnswerChange: "Responda a este email para aceitar a alteração ou para manter tudo como está.",
+    confirmMe: "Confirme que é você, para sabermos que o seu pedido chegou à pessoa certa.",
+    confirmMeButton: "Confirmo que sou eu",
   },
   page: {
     footer: (v) => `${v.business} · Referência ${v.ref}`,
@@ -1372,6 +1390,12 @@ const PT: Copy = {
       done: "Obrigado. Recebemos a sua resposta e vamos responder em breve.",
     },
     linkExpired: "Esta ligação expirou. Responda ao nosso email e ajudamos.",
+    confirmMe: {
+      heading: "Confirme que é você",
+      lead: "Confirme que é você, para sabermos que o seu pedido chegou à pessoa certa.",
+      button: "Confirmo que sou eu",
+      done: "Obrigado, está confirmado. Entraremos em contacto.",
+    },
     alreadyDone: (v) => `Isto já está feito. ${v.status}`,
     offerChanged: "Alterámos a nossa proposta. Use a ligação do nosso email mais recente.",
     replaced: "Esta ligação é de um email anterior. Use a ligação do nosso email mais recente.",

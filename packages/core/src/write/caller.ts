@@ -60,6 +60,11 @@ export interface Caller {
    * (`flags.carried`) and acknowledged by email at most once a day per address.
    */
   readonly viaNetwork?: boolean | undefined;
+  /**
+   * The code a network carried the request under (`Surfing-Dog-Carried-For`): the same for one sender
+   * at this inbox for a day. Never proved; the spam filter keeps a day's count by it (ADR-029 §4.4).
+   */
+  readonly carriedFor?: string | undefined;
   readonly now?: () => number;
 }
 

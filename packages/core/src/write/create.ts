@@ -21,6 +21,9 @@ import { secretHash } from "../protocol/credentials";
 import { readSettings } from "../settings/schema";
 import { prepareStay } from "../stays/create";
 import { workPushStatements } from "../trades/job-tool";
+import type { DoorContext, DoorScreen } from "../spam/screen";
+import { deadlineOf, SPAM_SCREEN_KIND } from "../spam/screen";
+import type { ScreenInput } from "../spam/types";
 import { hashJson, hashText } from "../util/canonical";
 import { actorMeta, type Caller, isCustomer, isOwnerAssistant, nowOf, permissionKind } from "./caller";
 import {
@@ -31,6 +34,7 @@ import {
   idempotencyStatement,
   jobStatement,
   threadEntryStatement,
+  WEBHOOK_FANOUT_KIND,
   webhookFanoutStatement,
 } from "./common";
 import { fromZod, WriteError } from "./errors";
@@ -56,6 +60,12 @@ export interface CreateInput {
    * state, closed, and tells nobody — no alert, no rule, no webhook. Only for a message.
    */
   readonly spam?: string | undefined;
+  /**
+   * What the door saw, for the spam filter (ADR-029 §4): which door, and its facts (a form's key and
+   * timing, an email's authentication). A customer's create carries it; the business's own never does.
+   * Never part of the idempotency hash: a double click is one request, however fast the second was.
+   */
+  readonly screen?: ScreenInput | undefined;
   readonly flags?: Partial<ItemFlags> | undefined;
   /**
    * Who is asking, beyond the caller (ADR-017 §8.1): the signed agent, what the networks presented,
@@ -150,9 +160,19 @@ export interface CreateResult {
 
 /** How long a request's acknowledgement waits, so a rule that confirms it at once sends one email, not two. */
 export const ACK_DELAY_MS = 90_000;
-const ACKNOWLEDGED: ReadonlySet<string> = new Set(["booking", "order", "quote_request", "stay"]);
+export const ACKNOWLEDGED: ReadonlySet<string> = new Set(["booking", "order", "quote_request", "stay"]);
 
-export async function createItem(db: Db, caller: Caller, input: CreateInput): Promise<CreateResult> {
+/** The spam filter's door, as the create calls it (`SpamCapabilities.atDoor`). */
+export interface CreateScreener {
+  atDoor(ctx: DoorContext): Promise<DoorScreen>;
+}
+
+export async function createItem(
+  db: Db,
+  caller: Caller,
+  input: CreateInput,
+  opts: { readonly spam?: CreateScreener | null | undefined } = {},
+): Promise<CreateResult> {
   const now = nowOf(caller);
   const schema = payloadSchemas[input.type];
   if (!schema) throw new WriteError("invalid_input", `unknown item type ${String(input.type)}`);
@@ -173,13 +193,14 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
   const idem = caller.idempotency;
   // Who is asking (the agent, the presentations) is not the request: a retry carrying a fresh
   // signature or a pass presented again is the same request. What the inbox adds is not either: the
-  // files as the customer sent them stand for it.
+  // files as the customer sent them stand for it. Nor what the door saw (the spam filter's facts).
   const {
     identity: _identity,
     confirmed: _confirmed,
     pricing: _pricing,
     stayExtra: _extra,
     inboxAdds: _adds,
+    screen: _screen,
     ...hashed
   } = input;
   const requestHash = idem
@@ -272,11 +293,39 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
   const who = identityColumns(match, identity);
   const machine = machines[input.type];
   const spam = input.type === "message" && input.spam ? input.spam : null;
-  const initial = spam ? "spam" : machine.initial;
+  // A stranger's request is screened as it is written (ADR-029): what the filter decides goes into
+  // this batch. A filter that fails lets the request through as if there were none; only a sender
+  // past an agent's ceiling is refused, and told to come back later.
+  let door: DoorScreen | null = null;
+  if (opts.spam && input.screen && !spam) {
+    try {
+      door = await opts.spam.atDoor({
+        caller,
+        type: input.type,
+        screen: input.screen,
+        contact: input.contact,
+        message: input.message,
+        subject: input.subject,
+        payload,
+        match,
+        identity,
+        sandbox: caller.sandbox || input.flags?.sandbox === true,
+        now,
+      });
+    } catch (error) {
+      if (error instanceof WriteError) throw error;
+      door = null;
+    }
+  }
+  const aside = door?.verdict === "aside";
+  const held = door?.verdict === "hold";
+  const pending = door?.verdict === "pending";
+  const initial = spam || aside ? "spam" : machine.initial;
   const id = ulid();
   const flags = itemFlagsSchema.parse({
     ...input.flags,
     ...adds?.flags,
+    ...(door?.flags ?? {}),
     sandbox: caller.sandbox || input.flags?.sandbox === true,
     ...(caller.viaNetwork ? { carried: true } : {}),
   });
@@ -330,8 +379,9 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
   for (const group of adds?.claims ?? []) statements.push(...claimStatements(group.resourceKey, id, group.claims));
   statements.push({
     sql: `INSERT INTO items (id, type, state, version, party_id, location_id, channel, subject, linked_item_id, access_token_hash, payload, flags,
-            agent_thumbprint, agent_level, agent_directory, customer_match, possible_party_id, created_at, updated_at, closed_at, request_expires_at)
-          VALUES (?, ?, ?, 1, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${spam ? "?" : "NULL"}, ?)`,
+            agent_thumbprint, agent_level, agent_directory, customer_match, possible_party_id, created_at, updated_at, closed_at, request_expires_at,
+            screen, screen_at)
+          VALUES (?, ?, ?, 1, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${spam || aside ? "?" : "NULL"}, ?, ?, ?)`,
     params: [
       id,
       input.type,
@@ -350,11 +400,14 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
       who.possiblePartyId,
       now,
       now,
-      ...(spam ? [now] : []),
+      ...(spam || aside ? [now] : []),
       requestExpiresAt,
+      door?.screen ?? null,
+      door?.screen ? now : null,
     ],
     method: "run",
   });
+  if (door) statements.push(...door.statements(id));
   if (request) statements.push(insertOfferStatement(request));
   if (stay) statements.push(...stay.statements);
   if (stopped) {
@@ -406,6 +459,8 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
         ...(payload.personalised ? { personalised: true } : {}),
         // Put aside as it arrived (ADR-026 §7): why, for the owner who looks under Spam.
         ...(spam ? { spam } : {}),
+        // Put aside by the spam filter (ADR-029): its cause's code; the owner reads why under Spam.
+        ...(aside ? { spam_filter: door?.decision?.cause ?? "spam" } : {}),
         ...actorMeta(caller),
       },
       now,
@@ -429,8 +484,8 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
     );
   }
   // A message put aside as spam as it arrived tells nobody and moves nothing: no alert, no rule, no
-  // webhook. It waits under Spam for the owner.
-  if (spam) {
+  // webhook. It waits under Spam for the owner. So does what the spam filter put aside (ADR-029).
+  if (spam || aside) {
     try {
       await db.batch(statements);
     } catch (error) {
@@ -439,14 +494,25 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
     }
     return { view, accessToken, replayed: false };
   }
-  statements.push(
-    jobStatement("notify", { to: "owner", itemId: id, event: "create", eventId }, now, {
-      dedupeKey: `notify:${eventId}:owner`,
-    }),
-  );
+  // While it is screened, every effect waits for the verdict, until its deadline: then it runs anyway,
+  // so a screening that never finishes loses nobody's request (ADR-029 §4.0).
+  const deadline = pending ? deadlineOf(now) : undefined;
+  if (pending) {
+    statements.push(jobStatement(SPAM_SCREEN_KIND, { itemId: id, eventId }, now, { dedupeKey: `spam_screen:${id}` }));
+  }
+  // Held until the sender confirms or a person lets it in: nobody is alerted, no rule runs, no webhook
+  // goes. The acknowledgement still does, as it would for anyone (unless a bot sent it).
+  if (!held) {
+    statements.push(
+      jobStatement("notify", { to: "owner", itemId: id, event: "create", eventId }, now, {
+        dedupeKey: `notify:${eventId}:owner`,
+        ...(deadline ? { runAt: deadline } : {}),
+      }),
+    );
+  }
   // The customer hears that their request arrived, a moment later: a rule that answers it at once
   // sends its answer instead of both. Never for a message: an automatic reply to a mail could loop.
-  if (isCustomer(caller) && ACKNOWLEDGED.has(input.type)) {
+  if (isCustomer(caller) && ACKNOWLEDGED.has(input.type) && !(held && door?.noAck)) {
     statements.push(
       jobStatement("notify", { to: "customer", itemId: id, event: "create", eventId }, now, {
         dedupeKey: `notify:${eventId}:customer`,
@@ -454,16 +520,26 @@ export async function createItem(db: Db, caller: Caller, input: CreateInput): Pr
       }),
     );
   }
-  // A first contact's answers land in a second batch; the rules wait a moment for them (§8.1).
-  const rulesDelay = Math.max(0, Math.min(identity?.rulesDelayMs ?? 0, 60_000));
-  statements.push(
-    jobStatement("rules", { itemId: id, eventId, trigger: "item.created" }, now, {
-      dedupeKey: `rules:${eventId}`,
-      ...(rulesDelay ? { runAt: now + rulesDelay } : {}),
-    }),
-  );
-  if (await hasEventListeners(db)) {
-    statements.push(webhookFanoutStatement({ id: eventId, type: `${input.type}.create`, itemId: id }, now));
+  if (!held) {
+    // A first contact's answers land in a second batch; the rules wait a moment for them (§8.1).
+    const rulesDelay = Math.max(0, Math.min(identity?.rulesDelayMs ?? 0, 60_000));
+    const rulesAt = Math.max(deadline ?? 0, rulesDelay ? now + rulesDelay : 0);
+    statements.push(
+      jobStatement("rules", { itemId: id, eventId, trigger: "item.created" }, now, {
+        dedupeKey: `rules:${eventId}`,
+        ...(rulesAt ? { runAt: rulesAt } : {}),
+      }),
+    );
+    if (await hasEventListeners(db)) {
+      statements.push(
+        deadline
+          ? jobStatement(WEBHOOK_FANOUT_KIND, { eventId, eventType: `${input.type}.create`, itemId: id }, now, {
+              dedupeKey: `fanout:${eventId}`,
+              runAt: deadline,
+            })
+          : webhookFanoutStatement({ id: eventId, type: `${input.type}.create`, itemId: id }, now),
+      );
+    }
   }
   // A customer's request for a price goes to the owner's job tool when the owner sends every one (ADR-039 §5).
   if (input.type === "quote_request" && isCustomer(caller)) {

@@ -108,6 +108,9 @@ import { TradeCapabilities } from "../trades/capability";
 import { workProfile } from "../trades/job";
 import { registerWorkResolver } from "../trades/job-tool";
 import { linkVisit } from "../trades/visit";
+import { SpamCapabilities, type SpamStatus, type SpamVerdictView } from "../spam/capability";
+import { chipOf, kindSentence, reasons } from "../spam/copy";
+import type { ScreenInput } from "../spam/types";
 import { hashText } from "../util/canonical";
 import {
   type Caller,
@@ -201,6 +204,11 @@ export interface Trader {
   readonly phone?: string | undefined;
   readonly vat_id?: string | undefined;
   readonly complaints_url?: string | undefined;
+}
+
+/** What a door saw of a request, beyond the request itself (ADR-029): handed to the spam filter. */
+export interface DoorFacts {
+  readonly screen?: ScreenInput | undefined;
 }
 
 export interface Page<T> {
@@ -304,6 +312,28 @@ export interface ItemDetail extends ItemView {
    * (ADR-018 §4), waiting for the owner to send or drop; null when there is none.
    */
   readonly draft: DraftView | null;
+  /** What the spam filter made of it and why, in the owner's words (ADR-029 §11.2); absent when it never saw it. */
+  readonly spam?: ItemSpamView | undefined;
+}
+
+/** "Why it's here": the filter's verdict in our sentences, and passages the code found in the message. */
+export interface ItemSpamView {
+  /** `items.screen`: held, aside, warned, released, delivered, pending. */
+  readonly screen: string | null;
+  readonly verdict: string;
+  /** The chip on its row. */
+  readonly chip: string;
+  /** The strongest cause first. */
+  readonly reasons: readonly string[];
+  /** Passages of the sender's own (masked) words the code found word for word. */
+  readonly quotes: readonly string[];
+  /** Who decided: the spam filter, its AI check, a mail server, or a person here. */
+  readonly by: "spam_filter" | "ai_check" | "mail_server" | "you";
+  /** A filter in its learning week only labelled what it would have put aside. */
+  readonly learning: boolean;
+  /** Who let it in: the owner, staff, or the sender who confirmed. */
+  readonly released_by: string | null;
+  readonly at: string;
 }
 
 /** The settings document as a read returns it: secrets masked, and named in `redacted`. */
@@ -394,6 +424,12 @@ export class Capabilities {
   readonly trades: TradeCapabilities;
   /** Restaurants, takeaways, bakeries and cafés (ADR-040): the menu, orders for a time, tables. */
   readonly food: FoodCapabilities;
+  /**
+   * The spam filter (ADR-029): every stranger's request is screened as it is written. The host attaches
+   * the model that reads for the filters the owner switched on (`spam.attach`); without one they look
+   * for known phrases only.
+   */
+  readonly spam: SpamCapabilities;
 
   private readonly baseUrl: string | undefined;
   /** How the discovery check reaches its network (`checkDiscovery`): the host's outbound fetch, or none in a demo. */
@@ -527,7 +563,7 @@ export class Capabilities {
   }
 
   constructor(
-    private readonly db: Db,
+    readonly db: Db,
     secrets: SecretBox | null = null,
     /**
      * This instance's public URL (`INBOX_PUBLIC_URL`), when the host knows it. It is what an
@@ -571,7 +607,7 @@ export class Capabilities {
     this.phones = new PhoneCapabilities(db, secrets);
     this.baseUrl = baseUrl;
     this.discoveryFetch = outbound?.discovery ?? outbound?.fetch;
-    this.customers = new CustomerData(db);
+    this.customers = new CustomerData(db, secrets);
     this.email = new EmailChannelCapabilities(db, () => this.mail, baseUrl);
     this.stays = new StayCapabilities(db, secrets, {
       connectors: this.connectors,
@@ -612,6 +648,8 @@ export class Capabilities {
     if (!scheduleSourceOf("booking")) registerScheduleSource("booking", tableDeposits);
     registerSyncStep(posStatusStep);
     registerSyncStep(elsewhereStep);
+    this.spam = new SpamCapabilities(db, secrets);
+    this.people.attachSpam(this.spam);
     this.customer = new CustomerDoors(db, {
       access: this.access,
       people: this.people,
@@ -625,6 +663,7 @@ export class Capabilities {
           base: baseUrl,
         },
       },
+      spam: this.spam,
     });
   }
 
@@ -997,7 +1036,7 @@ export class Capabilities {
     });
   }
 
-  async requestQuote(caller: Caller, input: T.RequestQuoteInput): Promise<CreateResult> {
+  async requestQuote(caller: Caller, input: T.RequestQuoteInput, opts: DoorFacts = {}): Promise<CreateResult> {
     await this.refuseShut(caller, "quote_request");
     const c = withIdempotencyKey(caller, input.idempotency_key);
     // The site against the area, an emergency against its door, the files checked and kept (ADR-039).
@@ -1010,6 +1049,7 @@ export class Capabilities {
         contact: input.contact,
         message: input.message,
         ...(inboxAdds ? { inboxAdds } : {}),
+        ...(opts.screen ? { screen: opts.screen } : {}),
       },
       input,
     );
@@ -1020,7 +1060,7 @@ export class Capabilities {
    * with an email and nothing carried, each network that issues is asked for a first key (ADR-017
    * §2.1). The answer's `identity` says who the inbox takes the customer for.
    */
-  async createBooking(caller: Caller, input: T.CreateBookingInput): Promise<CreateResult> {
+  async createBooking(caller: Caller, input: T.CreateBookingInput, opts: DoorFacts = {}): Promise<CreateResult> {
     await this.refuseElsewhere(caller, "booking");
     await this.refuseShut(caller, "booking");
     await this.refuseUnbookable(caller, input.payload?.reservationFor?.serviceId, { booking: true });
@@ -1031,7 +1071,7 @@ export class Capabilities {
     const table = replay
       ? null
       : await this.food.planTable(c, input.payload, input.contact?.locale ?? caller.locale ?? "en");
-    if (table?.kind === "quote") return this.tableQuote(c, input, table.words);
+    if (table?.kind === "quote") return this.tableQuote(c, input, table.words, opts);
     const shown = table?.kind === "booking" ? { ...input, payload: { ...input.payload, ...table.adds } } : input;
     // Priced for this customer once — the owner's reward for their record included — so the summary
     // they confirm and the booking as written hold the same price (ADR-018 §4, Q3).
@@ -1054,6 +1094,7 @@ export class Capabilities {
         confirmed,
         pricing,
         ...(inboxAdds ? { inboxAdds } : {}),
+        ...(opts.screen ? { screen: opts.screen } : {}),
       },
       input,
     );
@@ -1065,7 +1106,12 @@ export class Capabilities {
    * A table for more than the business books online, asked for as a request for a price (ADR-040): the
    * business answers with a quote for the event or the private room. The agent is told so.
    */
-  private async tableQuote(c: Caller, input: T.CreateBookingInput, words: string): Promise<CreateResult> {
+  private async tableQuote(
+    c: Caller,
+    input: T.CreateBookingInput,
+    words: string,
+    opts: DoorFacts = {},
+  ): Promise<CreateResult> {
     const p = input.payload;
     const party = p.partySize ?? 1;
     const made = await this.people.create(
@@ -1080,6 +1126,7 @@ export class Capabilities {
         },
         contact: input.contact,
         message: input.message,
+        ...(opts.screen ? { screen: opts.screen } : {}),
       },
       input,
     );
@@ -1097,7 +1144,7 @@ export class Capabilities {
     return row.id;
   }
 
-  async createOrder(caller: Caller, input: T.CreateOrderInput): Promise<CreateResult> {
+  async createOrder(caller: Caller, input: T.CreateOrderInput, opts: DoorFacts = {}): Promise<CreateResult> {
     await this.refuseElsewhere(caller, "order");
     const c = withIdempotencyKey(caller, input.idempotency_key);
     // An order for a time is checked by the kitchen before anything is asked or promised (ADR-040): the
@@ -1124,6 +1171,7 @@ export class Capabilities {
             confirmed,
             pricing,
             ...(inboxAdds ? { inboxAdds } : {}),
+            ...(opts.screen ? { screen: opts.screen } : {}),
           },
           input,
         );
@@ -1265,6 +1313,8 @@ export class Capabilities {
       readonly automatic?: boolean;
       /** A new message the email door puts aside as spam as it arrives, with why (ADR-026 §7). */
       readonly spam?: string | undefined;
+      /** What the door saw, for the spam filter (ADR-029): a form's key and timing, an email's authentication. */
+      readonly screen?: ScreenInput | undefined;
     } = {},
   ): Promise<CreateResult | TransitionResult | ItemView> {
     const c = withToken(withIdempotencyKey(caller, input.idempotency_key), input.access_token);
@@ -1279,6 +1329,7 @@ export class Capabilities {
           message: input.body,
           messageId: input.message_id,
           ...(opts.spam ? { spam: opts.spam } : {}),
+          ...(opts.screen ? { screen: opts.screen } : {}),
         },
         input,
       );
@@ -1381,6 +1432,10 @@ export class Capabilities {
     if (input.state) conditions.push(eq(items.state, input.state));
     if (input.needs_human !== undefined) conditions.push(eq(items.needsHuman, input.needs_human ? 1 : 0));
     if (input.open_only && !input.state) conditions.push(sql`${items.closedAt} IS NULL`);
+    // What the spam filter holds or is still screening waits under Held (ADR-029), not on the desk:
+    // listed only when asked for by its screen.
+    if (input.screen) conditions.push(eq(items.screen, input.screen));
+    else conditions.push(sql`COALESCE(${items.screen}, '') NOT IN ('pending', 'held', 'aside')`);
     // "Email not sent": one that failed for good, or one to the customer that was never sent (no
     // address, nothing to send from, no mail service, the day's acknowledgements used) — but a test
     // item's, which is never sent by design.
@@ -1512,6 +1567,7 @@ export class Capabilities {
     ]);
     const draft = await draftRow(this.db, item.id);
     const calendar = await calendarFit(this.db, item, await this.timezone());
+    const verdict = await this.spam.verdictOf(item.id);
     const delivery = new Map<string, EntryDelivery>();
     for (const m of mail) {
       if (m.entryId && m.recipient === "customer") {
@@ -1526,6 +1582,7 @@ export class Capabilities {
     return {
       ...viewFor(item, permissionKind(caller), partyViews.get(row.partyId), hidden.get(item.id)),
       ...(calendar ? { calendar } : {}),
+      ...(verdict ? { spam: spamView(verdict, row.screen) } : {}),
       receipts,
       customer: await this.people.customerView(row),
       events: events.map((e) => ({
@@ -1577,6 +1634,8 @@ export class Capabilities {
    */
   async transitionItem(caller: Caller, input: T.TransitionItemInput): Promise<TransitionResult> {
     requireBusiness(caller);
+    // Held by the spam filter (ADR-029): a person acting on it lets it in first; nobody else acts on it.
+    await this.releaseForPerson(caller, input.item_id, input.event);
     // The owner's AI's words on a transition can reach the customer: none of another's (`access/leaks.ts`).
     if (isOwnerAssistant(caller)) {
       const [owned] = await this.db.orm
@@ -1595,7 +1654,14 @@ export class Capabilities {
       ...(input.expected_version !== undefined ? { expectedVersion: input.expected_version } : {}),
       ...(writtenBy ? { writtenBy } : {}),
     };
-    if (input.event !== "record_cancel") return transitionItem(this.db, c, request);
+    if (input.event !== "record_cancel") {
+      const r = await transitionItem(this.db, c, request);
+      // A person's Mark as spam or Not spam teaches the filter, and brings back what it held back.
+      if ((input.event === "mark_spam" || input.event === "unspam") && !r.replayed) {
+        await this.spam.afterOwnerMark(caller, input.item_id, input.event, nowOf(caller));
+      }
+      return r;
+    }
     try {
       return await transitionItem(this.db, c, request);
     } catch (error) {
@@ -1608,6 +1674,88 @@ export class Capabilities {
       if (!late && !retried) throw error;
       return transitionItem(this.db, c, { ...request, event: "record_cancel_late" });
     }
+  }
+
+  /**
+   * A request the spam filter holds (ADR-029) is a person's to let in: one who acts on it — confirms
+   * it, answers it, quotes it — lets it in as they do, and its held-back effects run. The owner's AI,
+   * a rule or a key never acts on something held: they are told it waits for a person. Marking it as
+   * spam, or a note, changes nothing about the hold.
+   */
+  private async releaseForPerson(caller: Caller, itemId: string, event: string): Promise<void> {
+    const [row] = await this.db.orm.select({ screen: items.screen }).from(items).where(eq(items.id, itemId));
+    if (!row || (row.screen !== "held" && row.screen !== "pending")) return;
+    if (event === "mark_spam") return;
+    if (!isPerson(caller)) {
+      throw new WriteError(
+        "not_allowed",
+        "This request is held until the sender confirms it or a person lets it in. Tell the owner it is waiting under Held.",
+        { details: { reason: "held", ask_owner: true } },
+      );
+    }
+    await this.spam.letIn(caller, { item_id: itemId }, nowOf(caller)).catch((error) => {
+      // Someone let it in a moment ago: what they asked for goes on.
+      if (!(error instanceof WriteError && error.code === "wrong_state")) throw error;
+    });
+  }
+
+  // ---- the spam filter (ADR-029) ------------------------------------------------------------
+
+  /** The filters, the lists, the counts and the AI check's room, as Settings → Spam shows them. */
+  async spamStatus(caller: Caller): Promise<SpamStatus> {
+    requireBusiness(caller);
+    return this.spam.status(caller, nowOf(caller));
+  }
+
+  /** Switches a filter on or off, or what it does: the owner or staff in person only (it may carry a price). */
+  async setSpamFilter(caller: Caller, input: T.SetSpamFilterInput): Promise<SpamStatus> {
+    requireBusiness(caller);
+    return this.spam.setFilter(caller, { filter: input.filter, on: input.on, choice: input.choice }, nowOf(caller));
+  }
+
+  /** "Start now": a filter in its learning week starts putting aside. */
+  async startSpamFilterNow(caller: Caller, input: T.StartSpamFilterInput): Promise<SpamStatus> {
+    requireBusiness(caller);
+    return this.spam.startNow(caller, input, nowOf(caller));
+  }
+
+  /** Let it in: a held request goes on, and its sender comes straight in from now on. A person only. */
+  async letIn(caller: Caller, input: T.GetItemInput): Promise<{ released: boolean; time_passed: boolean }> {
+    requireBusiness(caller);
+    return this.spam.letIn(caller, input, nowOf(caller));
+  }
+
+  /** Looks fine: a labelled request loses its label, and its sender is let through. A person only. */
+  async looksFine(caller: Caller, input: T.GetItemInput): Promise<{ released: boolean }> {
+    requireBusiness(caller);
+    return this.spam.looksFine(caller, input, nowOf(caller));
+  }
+
+  /** Spam, on a held request: from Held to Spam, where it lapses by its own clock. A person only. */
+  async markHeldSpam(
+    caller: Caller,
+    input: T.GetItemInput,
+  ): Promise<{ block: { kind: string; value: string } | null }> {
+    requireBusiness(caller);
+    return this.spam.markHeldSpam(caller, input, nowOf(caller));
+  }
+
+  /** Always put aside this sender: the owner's choice after marking something spam. */
+  async alwaysPutAside(caller: Caller, input: T.GetItemInput): Promise<{ added: boolean }> {
+    requireBusiness(caller);
+    return this.spam.alwaysPutAside(caller, input, nowOf(caller));
+  }
+
+  /** Let everyone at a company's domain through. */
+  async letDomainThrough(caller: Caller, input: T.LetDomainThroughInput): Promise<{ added: boolean }> {
+    requireBusiness(caller);
+    return this.spam.letDomainThrough(caller, input, nowOf(caller));
+  }
+
+  /** Removes a row from Let through or Always put aside. */
+  async removeSpamListEntry(caller: Caller, input: T.RemoveSpamListEntryInput): Promise<{ removed: boolean }> {
+    requireBusiness(caller);
+    return this.spam.removeListEntry(caller, input);
   }
 
   /**
@@ -1754,6 +1902,7 @@ export class Capabilities {
   /** A reply to the customer (answers an open message) or an internal note. */
   async reply(caller: Caller, input: T.ReplyInput): Promise<TransitionResult | ItemView> {
     requireBusiness(caller);
+    if (!input.internal) await this.releaseForPerson(caller, input.item_id, "reply");
     const [row] = await this.db.orm.select().from(items).where(eq(items.id, input.item_id));
     if (!row) throw new WriteError("not_found", "no such item");
     const item = rowToItem(row);
@@ -2553,5 +2702,24 @@ function mergeAdds(
     flags: { ...(a?.flags ?? {}), ...b.flags },
     hash: a?.hash ?? null,
     claims: b.claims,
+  };
+}
+
+/** The filter's verdict as the owner reads it (ADR-029 §11.2): our sentences, never a model's. */
+function spamView(v: SpamVerdictView, screen: string | null): ItemSpamView {
+  const topic = v.answer?.topic;
+  const lines = reasons(v.signals as never, { topic, learning: v.learning });
+  const ai = v.signals.some((s) => s.c === "ai_kind" && s.w > 0);
+  const kind = v.cause === "pitches" || v.cause === "scams" || v.cause === "junk" ? kindSentence(v.cause, topic) : "";
+  return {
+    screen,
+    verdict: v.verdict,
+    chip: chipOf(v.learning ? "learning" : v.cause, v.verdict === "warn"),
+    reasons: kind && !lines.includes(kind) ? [kind, ...lines] : lines,
+    quotes: v.quotes,
+    by: v.owner_verdict ? "you" : v.cause === "server_marked" ? "mail_server" : ai ? "ai_check" : "spam_filter",
+    learning: v.learning,
+    released_by: v.released_by,
+    at: v.decided_at ?? v.created_at,
   };
 }

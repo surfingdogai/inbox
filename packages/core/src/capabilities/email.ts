@@ -338,6 +338,16 @@ export class EmailChannelCapabilities {
     requireBusiness(caller);
     const a = await readAttachment(this.db, id);
     if (!a) throw new WriteError("not_found", "no such attachment, or it was not kept");
+    // What the spam filter put aside or holds keeps its files shut until a person brings it back (ADR-029 §4.3).
+    const { rows } = await this.db.client.query({
+      sql: "SELECT state, screen FROM items WHERE id = ?",
+      params: [a.itemId],
+      method: "all",
+    });
+    const [state, screen] = (rows[0] ?? []) as [unknown, unknown];
+    if (state === "spam" || screen === "aside" || screen === "held") {
+      throw new WriteError("not_allowed", "Bring the message back to open its files.", { details: { reason: "spam" } });
+    }
     return a;
   }
 }

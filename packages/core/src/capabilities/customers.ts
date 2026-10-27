@@ -13,6 +13,9 @@ import {
   stopView,
 } from "../identity/stops";
 import { items as itemsTable } from "../schema/tables";
+import type { SecretBox } from "../secrets/box";
+import { handleRef } from "../spam/handles";
+import { foldAddress } from "../spam/normalise";
 import { canonicalJson } from "../util/canonical";
 import { type Caller, isCustomer, isOwnerAssistant, isOwnerInPerson, nowOf } from "../write/caller";
 import { WriteError } from "../write/errors";
@@ -122,7 +125,11 @@ const marks = (n: number) => Array.from({ length: n }, () => "?").join(", ");
 const iso = (v: unknown) => (v === null || v === undefined ? null : new Date(Number(v)).toISOString());
 
 export class CustomerData {
-  constructor(private readonly db: Db) {}
+  constructor(
+    private readonly db: Db,
+    /** For the spam filter's keyed handles on their addresses (ADR-029), which go with them. */
+    private readonly secrets: SecretBox | null = null,
+  ) {}
 
   /** Who the customer is, in numbers: what an export holds and an erasure would reach. */
   async summary(caller: Caller, input: { readonly party_id: string }): Promise<CustomerSummary> {
@@ -388,6 +395,7 @@ export class CustomerData {
     const now = nowOf(caller);
     const statements = [
       ...(await stopStatements(this.db, parties, "erased", now)),
+      ...(await this.spamHandleStatements(parties)),
       ...eraseStatements(parties, now),
       // The search index forgets a rewritten entry's words only when its segments are merged: until
       // then their name and text stay in its pages. Merged now, in the same batch.
@@ -398,6 +406,23 @@ export class CustomerData {
   }
 
   // ---- helpers ---------------------------------------------------------------
+
+  /** The spam filter's handles on the customer's mailboxes (ADR-029): keyed hashes of their addresses, erased with them. */
+  private async spamHandleStatements(parties: readonly string[]): Promise<Statement[]> {
+    const out: Statement[] = [];
+    for (const part of inChunks(parties)) {
+      const { rows } = await this.db.client.query({
+        sql: `SELECT DISTINCT value FROM party_contacts WHERE kind = 'email' AND party_id IN (${marks(part.length)})`,
+        params: [...part],
+        method: "all",
+      });
+      for (const r of rows) {
+        const ref = await handleRef(this.secrets, "mailbox", foldAddress(String(r[0])));
+        out.push({ sql: "DELETE FROM spam_handles WHERE kind = 'mailbox' AND ref = ?", params: [ref], method: "run" });
+      }
+    }
+    return out;
+  }
 
   /** The customer's parties and items, and the summary of both. */
   private async scope(partyId: string): Promise<{
@@ -526,6 +551,12 @@ export function eraseStatements(parties: readonly string[], now: number): Statem
       // was coming goes whole with them.
       run(`DELETE FROM ucp_sessions WHERE item_id IN ${theirItems}`),
       run(`DELETE FROM reviews_outbox WHERE item_id IN ${theirItems}`),
+      // What the spam filter kept about them (ADR-029): its verdicts and prints on their items, the
+      // owner's list rows that came from them, and the handles it trusted them by.
+      run(`DELETE FROM spam_verdicts WHERE item_id IN ${theirItems}`),
+      run(`DELETE FROM spam_prints WHERE item_id IN ${theirItems}`),
+      run(`DELETE FROM spam_lists WHERE party_id IN ${inParties}`),
+      run(`DELETE FROM spam_handles WHERE party_id IN ${inParties}`),
       // What they wrote and where they live; the lines, amounts and times stay.
       run(
         `UPDATE items SET payload = json_remove(json_set(payload, '$.text', ?), '$.subject', '$.inReplyTo'), subject = ?

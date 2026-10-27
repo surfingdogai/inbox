@@ -6,6 +6,7 @@ import type { JobHandler } from "../jobs/runner";
 import { ensureJob } from "../jobs/schedule";
 import { machines } from "../machine/tables";
 import { business, items, products, services } from "../schema/tables";
+import { gateOf, holdsBack } from "../spam/screen";
 import { rowToItem } from "../write/views";
 import { buildPushPayload, encodePayload } from "./payload";
 import type { PhoneCapabilities } from "./phones";
@@ -86,6 +87,8 @@ export function phonePushFanoutHandler(phones: PhoneCapabilities): JobHandler {
     if (!row) return { note: "item gone" };
     const item = rowToItem(row);
     if (item.flags.sandbox) return { note: "test item: no notification" };
+    // Held or put aside by the spam filter (ADR-029): no phone is told.
+    if (holdsBack(await gateOf(db, item.id))) return { note: "held by the spam filter: no notification" };
     const kind = pushKindOf(item, awaitsOwner(item, p.event));
     const { tz } = await timezoneOf(db);
     let queued = 0;

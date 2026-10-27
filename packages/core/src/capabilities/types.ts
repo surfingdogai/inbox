@@ -427,6 +427,12 @@ export const listItemsInput = z.object({
     .max(200)
     .optional()
     .describe("Full-text search over the conversation, or the six-character reference the customer quotes."),
+  screen: z
+    .enum(["pending", "held", "aside", "warned", "released", "delivered"])
+    .optional()
+    .describe(
+      "Only what the spam filter made so: held (waiting for the sender to confirm or a person to let it in), aside (put aside), warned (delivered with a label). Held and put-aside requests are listed only when asked for.",
+    ),
   mail_failed: z
     .boolean()
     .optional()
@@ -523,6 +529,36 @@ export const updateSettingsInput = z.object({
       "The version you read: 0 while nothing has been written yet, as get_settings says. A write over another version is refused instead of overwriting it.",
     ),
 });
+
+/** Settings → Spam (ADR-029): a filter switched on or off, or what it does with what it is sure of. */
+export const setSpamFilterInput = z.object({
+  filter: z.enum(["pitches", "scams", "junk"]).describe("Sales pitches, scams or junk."),
+  on: z.boolean(),
+  choice: z
+    .enum(["aside", "label"])
+    .optional()
+    .describe("Put aside (the default), or just label it and leave it on the desk."),
+});
+
+export const startSpamFilterInput = z.object({
+  filter: z.enum(["basic", "pitches", "scams", "junk"]).describe("The filter, or basic for the free protection."),
+});
+
+export const letDomainThroughInput = z.object({
+  domain: z.string().min(3).max(253),
+  item_id: z.string().min(1).max(64).optional(),
+});
+
+export const removeSpamListEntryInput = z.object({
+  list: z.enum(["allow", "block"]),
+  kind: z.enum(["address", "domain", "agent_key"]),
+  value: z.string().min(1).max(320),
+});
+
+export type SetSpamFilterInput = z.infer<typeof setSpamFilterInput>;
+export type StartSpamFilterInput = z.infer<typeof startSpamFilterInput>;
+export type LetDomainThroughInput = z.infer<typeof letDomainThroughInput>;
+export type RemoveSpamListEntryInput = z.infer<typeof removeSpamListEntryInput>;
 
 export type ListServicesInput = z.infer<typeof listServicesInput>;
 export type ListProductsInput = z.infer<typeof listProductsInput>;

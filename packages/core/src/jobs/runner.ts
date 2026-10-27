@@ -17,7 +17,7 @@ export interface JobRow {
 export type JobHandler = (
   job: JobRow,
   ctx: { db: Db; now: number },
-) => Promise<{ note?: string | undefined } | undefined>;
+) => Promise<{ note?: string | undefined; rerun?: boolean | undefined } | undefined>;
 
 export interface RunReport {
   readonly claimed: number;
@@ -92,6 +92,26 @@ export class JobRunner {
   }
 
   private async run(db: Db, opts: { limit?: number; workerId?: string; now?: number }): Promise<RunReport> {
+    const first = await this.pass(db, opts);
+    // A job that made others due now (the spam filter's verdict pulls a create's effects forward)
+    // asks for one more pass, so they run in this run rather than wait for the next.
+    if (!first.rerun) return first.report;
+    const second = await this.pass(db, opts);
+    const a = first.report;
+    const b = second.report;
+    return {
+      claimed: a.claimed + b.claimed,
+      done: a.done + b.done,
+      failed: a.failed + b.failed,
+      dead: a.dead + b.dead,
+      released: a.released + b.released,
+    };
+  }
+
+  private async pass(
+    db: Db,
+    opts: { limit?: number; workerId?: string; now?: number },
+  ): Promise<{ report: RunReport; rerun: boolean }> {
     const now = opts.now ?? Date.now();
     const limit = opts.limit ?? 20;
     const workerId = opts.workerId ?? "local";
@@ -102,7 +122,7 @@ export class JobRunner {
       params: [now + LEASE_MS, workerId, now, now, limit],
       method: "all",
     });
-    const report = { claimed: rows.length, done: 0, failed: 0, dead: 0, released: 0 };
+    const report = { claimed: rows.length, done: 0, failed: 0, dead: 0, released: 0, rerun: false };
     // Jobs without a lane keep the order they were claimed in, in one sequence; each lane is a
     // sequence of its own, and the sequences run side by side.
     const sequences = new Map<string, JobRow[]>([["", []]]);
@@ -132,7 +152,8 @@ export class JobRunner {
         }
       }),
     );
-    return report;
+    const { rerun, ...counts } = report;
+    return { report: counts, rerun };
   }
 
   /**
@@ -159,7 +180,7 @@ export class JobRunner {
     db: Db,
     job: JobRow,
     now: number,
-    report: { done: number; failed: number; dead: number },
+    report: { done: number; failed: number; dead: number; rerun: boolean },
   ): Promise<void> {
     const handler = this.handlers.get(job.kind);
     try {
@@ -171,6 +192,7 @@ export class JobRunner {
         method: "run",
       });
       report.done++;
+      if (result?.rerun) report.rerun = true;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (job.attempts >= job.maxAttempts) {

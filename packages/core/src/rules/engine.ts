@@ -45,7 +45,17 @@ export interface RuleRunReport {
 
 export async function runRulesForEvent(
   db: Db,
-  input: { itemId: string; eventId: string; trigger: string; now?: number },
+  input: {
+    itemId: string;
+    eventId: string;
+    trigger: string;
+    now?: number;
+    /**
+     * The spam filter delivered it with a label (ADR-029 §3.1): a rule may flag it, never answer,
+     * confirm, quote, reply or ask for anything; a person decides.
+     */
+    onlyFlags?: boolean;
+  },
 ): Promise<RuleRunReport> {
   const now = input.now ?? Date.now();
   const report = { evaluated: 0, matched: [] as string[], actions: 0, errors: [] as string[] };
@@ -105,6 +115,26 @@ export async function runRulesForEvent(
             itemId: current.id,
             ruleId: rule.id,
             reason: skippedSentence(rule.name, action, reputation ? "reads" : "follows"),
+            causation,
+            now,
+          });
+        } catch (error) {
+          report.errors.push(
+            `${rule.name}: the skipped action could not be noted on the item: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+        continue;
+      }
+      // Labelled by the spam filter: a rule may flag it and nothing more, and the owner reads why.
+      if (input.onlyFlags && action.action !== "set_flags" && action.action !== "stop") {
+        report.errors.push(
+          `${rule.name}: spam_label: skipped ${action.action === "transition" ? action.event : action.action}`,
+        );
+        try {
+          await recordRuleSkipped(db, {
+            itemId: current.id,
+            ruleId: rule.id,
+            reason: `${rule.name.trim() ? `Rule '${rule.name.trim()}'` : "This rule"} wanted to act on it, but the spam filter labelled it: a person decides`,
             causation,
             now,
           });

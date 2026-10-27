@@ -1,0 +1,715 @@
+[
+  {
+    "lang": "en",
+    "name": "Amara Okafor",
+    "email": "amara.okafor@gmail.com",
+    "text": "Hi, is the latte art class suitable for complete beginners?"
+  },
+  {
+    "lang": "en",
+    "name": "Tom",
+    "email": "tom1987@outlook.com",
+    "text": "where is my order?? paid 2 weeks ago and nothing. not happy."
+  },
+  {
+    "lang": "en",
+    "name": "Priya Raman",
+    "email": "priya.raman@rediffmail.com",
+    "text": "Hello, I would like to buy 4 bags of the Toraja beans for my office. Do you deliver to Chennai or only locally? Please let me know the total with shipping."
+  },
+  { "lang": "en", "name": "J", "email": "jj@icloud.com", "text": "open sunday?" },
+  {
+    "lang": "en",
+    "name": "Grace Mensah",
+    "email": "grace.mensah@yahoo.com",
+    "text": "Good morning. I am writing on behalf of St Mary's school. We want to bring 12 students for a coffee workshop next month. Can you give us a price for a group?"
+  },
+  {
+    "lang": "en",
+    "name": "Liam O'Brien",
+    "email": "liam.obrien@gmail.com",
+    "text": "Your website says the class is 60 minutes but my friend said it took two hours. Which is it? Also can I pay cash on the day?"
+  },
+  {
+    "lang": "en",
+    "name": "Assistant for Mei Lin",
+    "email": "mei.lin@example.org",
+    "text": "Hello, I'm an AI assistant writing for my person, Mei Lin. She would like to book the latte art class on Thursday at 10:00 for one person. She is vegan; is oat milk available?"
+  },
+  {
+    "lang": "en",
+    "name": "Sam Carter",
+    "email": "sam.carter@proton.me",
+    "text": "I received the wrong beans. I ordered Toraja and got something else. I want a refund or the right ones please."
+  },
+  {
+    "lang": "en",
+    "name": "Fatima Al-Sayed",
+    "email": "fatima.alsayed@hotmail.com",
+    "text": "hi im looking for a gift voucher for my husbands birthday, do u do vouchers for the class??"
+  },
+  {
+    "lang": "en",
+    "name": "Rohan",
+    "email": "rohan.m@gmail.com",
+    "text": "Can I cancel my booking for Friday? Something came up at work. Sorry for the short notice."
+  },
+  {
+    "lang": "es",
+    "name": "Lucía Fernández",
+    "email": "lucia.fernandez@gmail.com",
+    "text": "Hola, ¿tienen clases de arte latte los sábados? Somos dos personas."
+  },
+  {
+    "lang": "es",
+    "name": "Carlos Ruiz",
+    "email": "carlos.ruiz@yahoo.es",
+    "text": "Buenas tardes. Pedí café hace diez días y todavía no ha llegado. ¿Me pueden decir dónde está mi pedido? Gracias."
+  },
+  {
+    "lang": "es",
+    "name": "Valentina Gómez",
+    "email": "valentina.gomez@hotmail.com",
+    "text": "Quisiera saber el precio del curso para un grupo de 6 personas de mi empresa. ¿Hacen factura?"
+  },
+  { "lang": "es", "name": "Mateo", "email": "mateo99@gmail.com", "text": "q horario tienen hoy" },
+  {
+    "lang": "es",
+    "name": "Sofía Herrera",
+    "email": "sofia.herrera@outlook.com",
+    "text": "El café llegó con la bolsa rota. Muy mal. Quiero que me lo cambien."
+  },
+  {
+    "lang": "es",
+    "name": "Javier Morales",
+    "email": "j.morales@empresa.example.com.mx",
+    "text": "Hola, somos una cafetería en Guadalajara y nos interesa comprarles grano al por mayor. ¿Tienen lista de precios para mayoristas?"
+  },
+  {
+    "lang": "es",
+    "name": "Isabel",
+    "email": "isabel.p@gmail.com",
+    "text": "Hola, mi asistente me dijo que les escribiera. ¿Puedo reservar dos plazas para el jueves a las 10?"
+  },
+  {
+    "lang": "es",
+    "name": "Diego Torres",
+    "email": "diego.torres@gmail.com",
+    "text": "buenas, se puede pagar con tarjeta en la clase o solo efectivo? gracias de antemano"
+  },
+  {
+    "lang": "pt",
+    "name": "Rita Carvalho",
+    "email": "rita.carvalho@sapo.pt",
+    "text": "Olá, queria marcar a aula de latte art para duas pessoas no sábado de manhã. Ainda há lugares?"
+  },
+  {
+    "lang": "pt",
+    "name": "João Silva",
+    "email": "joao.silva@uol.com.br",
+    "text": "Bom dia, vocês enviam café para o Brasil? Quanto fica o frete para São Paulo?"
+  },
+  {
+    "lang": "pt",
+    "name": "Ana Souza",
+    "email": "ana.souza@gmail.com",
+    "text": "Paguei e não recebi confirmação nenhuma. Isto é sério? Respondam por favor."
+  },
+  { "lang": "pt", "name": "Pedro", "email": "pedro.m@bol.com.br", "text": "oi, tem desconto pra estudante na aula?" },
+  {
+    "lang": "pt",
+    "name": "Mariana Costa",
+    "email": "mariana.costa@hotmail.com",
+    "text": "Boa tarde. Gostaria de um orçamento para um workshop de café para a equipa da minha empresa, cerca de 15 pessoas, em dezembro."
+  },
+  {
+    "lang": "pt",
+    "name": "Rui Pereira",
+    "email": "rui.pereira@gmail.com",
+    "text": "O meu pedido chegou com o café errado. Pedi o Toraja. Como faço para trocar?"
+  },
+  {
+    "lang": "pt",
+    "name": "Beatriz",
+    "email": "bia.lima@outlook.com",
+    "text": "Posso levar a minha filha de 10 anos à aula? Ela adora desenhar no leite!"
+  },
+  {
+    "lang": "fr",
+    "name": "Camille Dubois",
+    "email": "camille.dubois@orange.fr",
+    "text": "Bonjour, est-ce que le cours de latte art est disponible en anglais ? Nous sommes en vacances la semaine prochaine."
+  },
+  {
+    "lang": "fr",
+    "name": "Moussa Diop",
+    "email": "moussa.diop@gmail.com",
+    "text": "Salam, je voudrais commander 2 kg de café en grains pour mon restaurant à Dakar. C'est possible ?"
+  },
+  {
+    "lang": "fr",
+    "name": "Julien",
+    "email": "julien.m@free.fr",
+    "text": "toujours pas reçu mon colis. c'est inadmissible. je veux une réponse aujourd'hui."
+  },
+  {
+    "lang": "fr",
+    "name": "Chloé Martin",
+    "email": "chloe.martin@laposte.net",
+    "text": "Bonjour, j'aimerais offrir un bon cadeau pour le cours. Comment ça se passe ?"
+  },
+  {
+    "lang": "fr",
+    "name": "Nadia Benali",
+    "email": "nadia.benali@hotmail.fr",
+    "text": "Bonsoir, je suis allergique aux noix, est-ce qu'il y a des traces dans vos sirops ? Merci de votre réponse."
+  },
+  {
+    "lang": "fr",
+    "name": "Assistant de Paul",
+    "email": "paul.leroy@example.fr",
+    "text": "Bonjour, je suis l'assistant de Paul Leroy. Il souhaite annuler sa réservation de vendredi et en reprendre une la semaine suivante si possible."
+  },
+  { "lang": "fr", "name": "Hugo", "email": "hugo.b@gmail.com", "text": "vous êtes ouverts le 1er novembre ?" },
+  {
+    "lang": "de",
+    "name": "Lena Schmidt",
+    "email": "lena.schmidt@gmx.de",
+    "text": "Hallo, ich hätte gern zwei Plätze im Latte-Art-Kurs am Donnerstag. Geht das noch?"
+  },
+  {
+    "lang": "de",
+    "name": "Jonas Weber",
+    "email": "jonas.weber@web.de",
+    "text": "Meine Bestellung ist seit drei Wochen nicht angekommen. Was ist da los? Bitte um schnelle Antwort."
+  },
+  {
+    "lang": "de",
+    "name": "Anna Müller",
+    "email": "anna.mueller@t-online.de",
+    "text": "Guten Tag, bieten Sie auch Firmenkurse an? Wir wären etwa zehn Personen und bräuchten eine Rechnung."
+  },
+  {
+    "lang": "de",
+    "name": "Klaus",
+    "email": "klaus.h@gmail.com",
+    "text": "Wie lange hält sich der Kaffee ungeöffnet? Und mahlen Sie auch für Siebträger?"
+  },
+  {
+    "lang": "de",
+    "name": "Sabine Krüger",
+    "email": "sabine.krueger@outlook.de",
+    "text": "Die Packung war beschädigt und der Kaffee lag überall im Karton. Ich möchte Ersatz."
+  },
+  {
+    "lang": "de",
+    "name": "Mehmet Yilmaz",
+    "email": "mehmet.yilmaz@gmx.net",
+    "text": "Hallo, ich spreche nicht so gut Deutsch, entschuldigung. Ich will Kaffee kaufen für mein Imbiss. Wie viel kostet 5 kilo?"
+  },
+  {
+    "lang": "de",
+    "name": "Felix",
+    "email": "felix@familie-braun.example.de",
+    "text": "Kann man bei euch auch einfach so vorbeikommen und Bohnen kaufen, ohne Kurs?"
+  },
+  {
+    "lang": "it",
+    "name": "Giulia Rossi",
+    "email": "giulia.rossi@libero.it",
+    "text": "Buongiorno, vorrei prenotare il corso di latte art per sabato. Siamo in tre."
+  },
+  {
+    "lang": "it",
+    "name": "Marco Bianchi",
+    "email": "marco.bianchi@virgilio.it",
+    "text": "Il pacco è arrivato aperto. Non è accettabile, voglio un rimborso."
+  },
+  {
+    "lang": "it",
+    "name": "Francesca",
+    "email": "francesca.c@gmail.com",
+    "text": "Ciao! Fate anche caffè decaffeinato? Mia madre non può bere caffeina."
+  },
+  {
+    "lang": "it",
+    "name": "Luca Romano",
+    "email": "luca.romano@hotmail.it",
+    "text": "Salve, avete un preventivo per un corso aziendale di due ore per 8 persone?"
+  },
+  { "lang": "it", "name": "Sara", "email": "sara.esposito@gmail.com", "text": "a che ora chiudete stasera??" },
+  {
+    "lang": "it",
+    "name": "Alessandro Greco",
+    "email": "alessandro.greco@outlook.it",
+    "text": "Ho prenotato per giovedì ma devo spostare a venerdì, si può fare?"
+  },
+  {
+    "lang": "nl",
+    "name": "Sanne de Vries",
+    "email": "sanne.devries@gmail.com",
+    "text": "Hoi, kan ik de latte art workshop cadeau doen aan mijn vriend? Hoe werkt dat?"
+  },
+  {
+    "lang": "nl",
+    "name": "Daan Jansen",
+    "email": "daan.jansen@hotmail.nl",
+    "text": "Mijn bestelling is nog steeds niet binnen. Kunnen jullie dat nakijken?"
+  },
+  {
+    "lang": "nl",
+    "name": "Emma Bakker",
+    "email": "emma.bakker@ziggo.example.nl",
+    "text": "Goedemiddag, wij zoeken koffiebonen voor ons kantoor, ongeveer 3 kilo per maand. Wat kost dat?"
+  },
+  { "lang": "nl", "name": "Noah", "email": "noah.v@outlook.com", "text": "zijn jullie open op zondag" },
+  {
+    "lang": "nl",
+    "name": "Fleur Visser",
+    "email": "fleur.visser@gmail.com",
+    "text": "De koffie smaakte verbrand, klopt dat bij deze branding? Ik ben een beetje teleurgesteld."
+  },
+  {
+    "lang": "pl",
+    "name": "Marta Kowalska",
+    "email": "marta.kowalska@wp.pl",
+    "text": "Dzień dobry, czy mogę zapisać się na kurs latte art w czwartek? Jestem początkująca."
+  },
+  {
+    "lang": "pl",
+    "name": "Piotr Nowak",
+    "email": "piotr.nowak@o2.pl",
+    "text": "Zamówienie nie dotarło od dwóch tygodni. Proszę o informację, co się dzieje."
+  },
+  {
+    "lang": "pl",
+    "name": "Agnieszka",
+    "email": "agnieszka.w@interia.pl",
+    "text": "Czy macie kawę bezkofeinową? Szukam prezentu dla mamy."
+  },
+  {
+    "lang": "pl",
+    "name": "Krzysztof Wiśniewski",
+    "email": "k.wisniewski@onet.pl",
+    "text": "Chciałbym zamówić 3 kg ziaren do kawiarni w Krakowie. Jaka jest cena hurtowa?"
+  },
+  {
+    "lang": "pl",
+    "name": "Ola",
+    "email": "ola.z@gmail.com",
+    "text": "czy mozna przyjsc z psem na zajecia? jest spokojny"
+  },
+  {
+    "lang": "tr",
+    "name": "Ayşe Demir",
+    "email": "ayse.demir@gmail.com",
+    "text": "Merhaba, latte art kursu için cumartesi günü yer var mı? İki kişiyiz."
+  },
+  {
+    "lang": "tr",
+    "name": "Mustafa Kaya",
+    "email": "mustafa.kaya@hotmail.com",
+    "text": "Siparişim hâlâ gelmedi. Ne zaman gelecek? Lütfen cevap verin."
+  },
+  {
+    "lang": "tr",
+    "name": "Zeynep",
+    "email": "zeynep.c@outlook.com",
+    "text": "Kahve çekirdeklerini öğütülmüş olarak da gönderiyor musunuz?"
+  },
+  {
+    "lang": "tr",
+    "name": "Emre Şahin",
+    "email": "emre.sahin@yandex.com",
+    "text": "Şirketimiz için 10 kişilik bir kahve atölyesi düşünüyoruz. Fiyat teklifi alabilir miyiz?"
+  },
+  { "lang": "tr", "name": "Elif", "email": "elif.y@gmail.com", "text": "pazar acik misiniz" },
+  {
+    "lang": "id",
+    "name": "Budi Santoso",
+    "email": "budi.santoso@gmail.com",
+    "text": "Halo kak, kelas latte art hari Kamis masih ada slot? Saya mau ikut sendiri."
+  },
+  {
+    "lang": "id",
+    "name": "Siti Rahayu",
+    "email": "siti.rahayu@yahoo.co.id",
+    "text": "Pesanan saya belum sampai sudah seminggu. Mohon dicek ya, terima kasih."
+  },
+  {
+    "lang": "id",
+    "name": "Dewi Lestari",
+    "email": "dewi.lestari@company.example.co.id",
+    "text": "Selamat siang, kami mau pesan kopi Toraja 5 kg untuk kantor. Bisa minta harga dan ongkir ke Bandung?"
+  },
+  { "lang": "id", "name": "Agus", "email": "agus.p@gmail.com", "text": "kak bisa bayar pakai qris ga?" },
+  {
+    "lang": "id",
+    "name": "Rina",
+    "email": "rina.w@gmail.com",
+    "text": "Kopinya enak banget! Mau tanya, ada ukuran 1 kg tidak? Biar lebih hemat."
+  },
+  {
+    "lang": "id",
+    "name": "Asisten untuk Hendra",
+    "email": "hendra.k@example.co.id",
+    "text": "Halo, saya asisten untuk Pak Hendra. Beliau ingin memesan kelas latte art untuk dua orang hari Jumat jam 10 pagi."
+  },
+  {
+    "lang": "id",
+    "name": "Yusuf",
+    "email": "yusuf.h@gmail.com",
+    "text": "Kemarin saya ikut kelas, susunya kurang dingin jadi susah bikin foam. Lain kali tolong diperhatikan ya."
+  },
+  {
+    "lang": "ja",
+    "name": "渡辺 健二",
+    "email": "kenji.watanabe@yahoo.co.jp",
+    "text": "こんにちは。木曜日のラテアート教室に二人で参加したいのですが、空いていますか？"
+  },
+  {
+    "lang": "ja",
+    "name": "佐藤 花子",
+    "email": "hanako.sato@gmail.com",
+    "text": "注文したコーヒー豆がまだ届きません。確認していただけますか。"
+  },
+  {
+    "lang": "ja",
+    "name": "鈴木",
+    "email": "suzuki.t@docomo.example.ne.jp",
+    "text": "日本への発送は可能ですか？送料を教えてください。"
+  },
+  {
+    "lang": "ja",
+    "name": "田中 美咲",
+    "email": "misaki.tanaka@icloud.com",
+    "text": "教室は英語で行われますか？英語が少し苦手なので心配です。"
+  },
+  { "lang": "ja", "name": "高橋", "email": "takahashi.r@gmail.com", "text": "日曜日は営業していますか" },
+  {
+    "lang": "zh",
+    "name": "王芳",
+    "email": "wangfang@qq.com",
+    "text": "你好，请问周六的拉花课还有名额吗？我们两个人。"
+  },
+  {
+    "lang": "zh",
+    "name": "李伟",
+    "email": "liwei@163.com",
+    "text": "我的订单已经两个星期没到了，请帮我查一下，谢谢。"
+  },
+  { "lang": "zh", "name": "陈静", "email": "chenjing@126.com", "text": "请问你们的咖啡豆可以寄到上海吗？运费多少？" },
+  {
+    "lang": "zh",
+    "name": "张明",
+    "email": "zhangming@gmail.com",
+    "text": "我们公司想办一个十人的咖啡体验活动，可以报个价吗？需要开发票。"
+  },
+  { "lang": "zh", "name": "林小姐", "email": "lin.x@sina.com", "text": "收到的咖啡包装破了，怎么办？" },
+  { "lang": "zh", "name": "黄", "email": "huang.l@gmail.com", "text": "周日营业吗" },
+  {
+    "lang": "ar",
+    "name": "محمد العلي",
+    "email": "mohammed.alali@gmail.com",
+    "text": "مرحبا، هل يمكنني حجز درس فن اللاتيه يوم الخميس لشخصين؟"
+  },
+  { "lang": "ar", "name": "فاطمة", "email": "fatima.h@hotmail.com", "text": "لم يصل طلبي حتى الآن، أرجو الرد بسرعة." },
+  {
+    "lang": "ar",
+    "name": "أحمد حسن",
+    "email": "ahmed.hassan@yahoo.com",
+    "text": "السلام عليكم، هل لديكم قهوة منزوعة الكافيين؟ وكم سعر الكيلو؟"
+  },
+  {
+    "lang": "ar",
+    "name": "ليلى",
+    "email": "layla.k@outlook.com",
+    "text": "أريد هدية لزوجي، هل تبيعون بطاقات هدايا للدروس؟"
+  },
+  { "lang": "ar", "name": "يوسف", "email": "youssef.m@gmail.com", "text": "هل المحل مفتوح يوم الجمعة؟" },
+  {
+    "lang": "hi",
+    "name": "राहुल शर्मा",
+    "email": "rahul.sharma@gmail.com",
+    "text": "नमस्ते, क्या गुरुवार को लाटे आर्ट क्लास में दो लोगों के लिए जगह है?"
+  },
+  {
+    "lang": "hi",
+    "name": "Anjali Gupta",
+    "email": "anjali.gupta@rediffmail.com",
+    "text": "Mera order abhi tak nahi aaya, kab tak aayega? Please jaldi batayein."
+  },
+  {
+    "lang": "hi",
+    "name": "सुनीता",
+    "email": "sunita.v@yahoo.co.in",
+    "text": "क्या आप डीकैफ़ कॉफ़ी भी बेचते हैं? मेरी माँ के लिए चाहिए।"
+  },
+  {
+    "lang": "hi",
+    "name": "Vikram",
+    "email": "vikram.s@gmail.com",
+    "text": "bhai class ka time kya hai sunday ko? aur kitne ka hai"
+  },
+  {
+    "lang": "hi",
+    "name": "मीना पटेल",
+    "email": "meena.patel@outlook.com",
+    "text": "हमारी कंपनी के दस लोगों के लिए कॉफ़ी वर्कशॉप का दाम बताइए।"
+  },
+  {
+    "lang": "sw",
+    "name": "Wanjiku Kamau",
+    "email": "wanjiku.kamau@gmail.com",
+    "text": "Habari, naweza kujiandikisha kwa darasa la latte art siku ya Alhamisi? Mimi ni mwanzo kabisa."
+  },
+  {
+    "lang": "sw",
+    "name": "Juma Omondi",
+    "email": "juma.omondi@yahoo.com",
+    "text": "Agizo langu halijafika bado. Tafadhali niambieni liko wapi."
+  },
+  {
+    "lang": "sw",
+    "name": "Amina",
+    "email": "amina.h@gmail.com",
+    "text": "Je, mnauza kahawa ya kilo moja? Nataka kwa ofisi yetu Nairobi."
+  },
+  { "lang": "sw", "name": "Baraka", "email": "baraka.m@outlook.com", "text": "mko wazi jumapili?" },
+  {
+    "lang": "ru",
+    "name": "Анна Иванова",
+    "email": "anna.ivanova@mail.ru",
+    "text": "Здравствуйте! Можно записаться на мастер-класс по латте-арту в субботу? Нас двое."
+  },
+  {
+    "lang": "ru",
+    "name": "Дмитрий",
+    "email": "dmitry.p@yandex.ru",
+    "text": "Заказ не пришёл уже две недели. Что происходит? Жду ответа."
+  },
+  {
+    "lang": "ru",
+    "name": "Ольга Смирнова",
+    "email": "olga.smirnova@bk.ru",
+    "text": "Есть ли у вас кофе без кофеина? Хочу купить в подарок."
+  },
+  { "lang": "ru", "name": "Сергей", "email": "sergey.k@gmail.com", "text": "Вы работаете в воскресенье?" },
+  {
+    "lang": "uk",
+    "name": "Олена Коваленко",
+    "email": "olena.kovalenko@ukr.net",
+    "text": "Добрий день! Чи можна забронювати урок латте-арту на четвер для однієї особи?"
+  },
+  {
+    "lang": "uk",
+    "name": "Андрій",
+    "email": "andriy.s@gmail.com",
+    "text": "Посилка прийшла пошкоджена, кава розсипалась. Що робити?"
+  },
+  {
+    "lang": "ko",
+    "name": "김민지",
+    "email": "minji.kim@naver.com",
+    "text": "안녕하세요, 목요일 라떼아트 수업에 두 명 예약 가능할까요?"
+  },
+  {
+    "lang": "ko",
+    "name": "이준호",
+    "email": "junho.lee@daum.net",
+    "text": "주문한 원두가 아직 안 왔어요. 확인 부탁드립니다."
+  },
+  { "lang": "ko", "name": "박서연", "email": "seoyeon.park@gmail.com", "text": "디카페인 원두도 판매하시나요?" },
+  { "lang": "ko", "name": "최", "email": "choi.h@kakao.com", "text": "일요일에 영업하세요?" },
+  {
+    "lang": "vi",
+    "name": "Nguyễn Thị Hoa",
+    "email": "hoa.nguyen@gmail.com",
+    "text": "Chào bạn, lớp latte art thứ Năm còn chỗ không ạ? Mình đi một mình."
+  },
+  {
+    "lang": "vi",
+    "name": "Trần Văn Nam",
+    "email": "nam.tran@yahoo.com",
+    "text": "Đơn hàng của tôi vẫn chưa đến, làm ơn kiểm tra giúp."
+  },
+  { "lang": "vi", "name": "Lê Minh", "email": "minh.le@outlook.com", "text": "Cửa hàng có bán cà phê xay sẵn không?" },
+  {
+    "lang": "th",
+    "name": "สมชาย ใจดี",
+    "email": "somchai.j@gmail.com",
+    "text": "สวัสดีครับ คลาสลาเต้อาร์ตวันพฤหัสยังมีที่ว่างไหมครับ"
+  },
+  { "lang": "th", "name": "นภา", "email": "napa.s@hotmail.com", "text": "สั่งเมล็ดกาแฟไปแล้วยังไม่ได้รับเลยค่ะ ช่วยเช็คให้หน่อยค่ะ" },
+  { "lang": "th", "name": "อรุณ", "email": "arun.p@gmail.com", "text": "วันอาทิตย์เปิดไหมครับ" },
+  {
+    "lang": "fa",
+    "name": "مریم رضایی",
+    "email": "maryam.rezaei@gmail.com",
+    "text": "سلام، می‌خواهم برای کلاس لاته آرت روز پنجشنبه ثبت نام کنم. جا هست؟"
+  },
+  { "lang": "fa", "name": "علی", "email": "ali.k@yahoo.com", "text": "سفارشم هنوز نرسیده. لطفاً پیگیری کنید." },
+  {
+    "lang": "he",
+    "name": "נועה כהן",
+    "email": "noa.cohen@walla.co.il",
+    "text": "שלום, אפשר להירשם לסדנת לאטה ארט ביום חמישי? אנחנו שתיים."
+  },
+  { "lang": "he", "name": "דוד", "email": "david.l@gmail.com", "text": "ההזמנה שלי עוד לא הגיעה. מה קורה?" },
+  {
+    "lang": "el",
+    "name": "Μαρία Παπαδοπούλου",
+    "email": "maria.papadopoulou@gmail.com",
+    "text": "Γεια σας, υπάρχει θέση στο μάθημα latte art την Πέμπτη για δύο άτομα;"
+  },
+  {
+    "lang": "el",
+    "name": "Νίκος",
+    "email": "nikos.g@yahoo.gr",
+    "text": "Η παραγγελία μου δεν έχει έρθει ακόμα. Μπορείτε να ελέγξετε;"
+  },
+  {
+    "lang": "tl",
+    "name": "Maria Santos",
+    "email": "maria.santos@gmail.com",
+    "text": "Hello po, may slot pa po ba sa latte art class sa Huwebes? Dalawa po kami."
+  },
+  {
+    "lang": "tl",
+    "name": "Jose Reyes",
+    "email": "jose.reyes@yahoo.com",
+    "text": "Hindi pa po dumarating yung order ko, pwede po bang pakicheck?"
+  },
+  {
+    "lang": "yo",
+    "name": "Adebayo Adeyemi",
+    "email": "adebayo.adeyemi@gmail.com",
+    "text": "E kaaro, se mo le forukọsilẹ fun kilasi latte art ni Ọjọbọ? Emi nikan ni."
+  },
+  {
+    "lang": "ms",
+    "name": "Nurul Aisyah",
+    "email": "nurul.aisyah@gmail.com",
+    "text": "Hai, kelas latte art hari Khamis masih ada tempat? Saya nak daftar seorang."
+  },
+  {
+    "lang": "ms",
+    "name": "Ahmad",
+    "email": "ahmad.z@yahoo.com",
+    "text": "Pesanan saya belum sampai lagi. Boleh tolong semak?"
+  },
+  {
+    "lang": "bn",
+    "name": "রহিম উদ্দিন",
+    "email": "rahim.uddin@gmail.com",
+    "text": "নমস্কার, বৃহস্পতিবারের লাটে আর্ট ক্লাসে দুইজনের জায়গা আছে?"
+  },
+  {
+    "lang": "ta",
+    "name": "Karthik",
+    "email": "karthik.r@gmail.com",
+    "text": "வணக்கம், வியாழக்கிழமை லாட்டே ஆர்ட் வகுப்பில் இடம் உள்ளதா?"
+  },
+  {
+    "lang": "am",
+    "name": "ሰላም ተስፋዬ",
+    "email": "selam.tesfaye@gmail.com",
+    "text": "ሰላም፣ ሐሙስ ለላቴ አርት ትምህርት ቦታ አለ? ሁለት ሰዎች ነን።"
+  },
+  {
+    "lang": "en",
+    "name": "Kofi Boateng",
+    "email": "kofi.boateng@gmail.com",
+    "text": "Hey, I saw your shop on maps https://maps.app.goo.gl/AbCdEf123 — are you the one near the market? Want to drop by for beans."
+  },
+  {
+    "lang": "en",
+    "name": "Olivia Chen",
+    "email": "olivia.chen@gmail.com",
+    "text": "I MEAN IT, THIS IS THE THIRD TIME I WRITE. WHERE IS MY REFUND???"
+  },
+  {
+    "lang": "en",
+    "name": "Ravi",
+    "email": "ravi.k@gmail.com",
+    "text": "pls send invoice for my order last week, need it for my company expenses. thx"
+  },
+  {
+    "lang": "en",
+    "name": "Hannah Schmidt",
+    "email": "hannah@schmidt-design.example.de",
+    "text": "Hi there, I run a small design studio and we'd love to book a private latte art session as a team treat for 6 people. What would that cost?"
+  },
+  {
+    "lang": "en",
+    "name": "Assistant",
+    "email": "ken.okoro@example.ng",
+    "text": "Hi, I'm Ken Okoro's assistant. He asked me to check whether the Toraja beans are in stock and whether he can collect them on Saturday."
+  },
+  {
+    "lang": "en",
+    "name": "Ngozi",
+    "email": "ngozi.e@yahoo.com",
+    "text": "Good day. Please I want to know if you sell coffee machines or only beans. Thank you and God bless."
+  },
+  {
+    "lang": "en",
+    "name": "Mohammed Rahman",
+    "email": "m.rahman@gmail.com",
+    "text": "Salam, what time is the latte art class on Friday and is there parking nearby?"
+  },
+  {
+    "lang": "en",
+    "name": "Ella",
+    "email": "ella.w@icloud.com",
+    "text": "the beans were amazing!! can i order the same again but ground for a french press"
+  },
+  {
+    "lang": "en",
+    "name": "Kwame Asante",
+    "email": "kwame.asante@gmail.com",
+    "text": "Hello, I teach a hospitality course and would like my students to visit your roastery. Could we arrange a short visit and talk?"
+  },
+  {
+    "lang": "en",
+    "name": "Tanvir",
+    "email": "tanvir.h@outlook.com",
+    "text": "i booked by mistake for the wrong day, can u move it to saturday, same time"
+  },
+  {
+    "lang": "en",
+    "name": "Lindiwe Dlamini",
+    "email": "lindiwe.dlamini@gmail.com",
+    "text": "Hi, my parcel tracking says delivered but I never got it. Could you check with the courier please?"
+  },
+  {
+    "lang": "en",
+    "name": "Alejandro",
+    "email": "alejandro.v@gmail.com",
+    "text": "Hello I am from Colombia and I am barista too, can I visit you to see how you roast? Is free?"
+  },
+  {
+    "lang": "en",
+    "name": "Yuki",
+    "email": "yuki.m@gmail.com",
+    "text": "Hi! Do you have a gift box? Christmas present for my colleagues, about 8 boxes."
+  },
+  {
+    "lang": "en",
+    "name": "Arjun Mehta",
+    "email": "arjun.mehta@company.example.in",
+    "text": "Dear Sir/Madam, kindly share your price list for coffee beans in bulk quantities for our cafeteria. Regards, Arjun, Admin department."
+  },
+  {
+    "lang": "en",
+    "name": "Zara",
+    "email": "zara.q@gmail.com",
+    "text": "Is it ok if I come 15 minutes late to the class tomorrow? Traffic is bad from the airport."
+  },
+  {
+    "lang": "en",
+    "name": "Ibrahim",
+    "email": "ibrahim.d@gmail.com",
+    "text": "Hello, I found an earring after the class on Thursday, think it belongs to someone in my group. Where can I leave it?"
+  }
+]
