@@ -2,7 +2,7 @@ import type { Db } from "../db";
 
 /**
  * The addresses of the email channel (ADR-026 §4). The inbox has one address of its own
- * (`settings.email.inboundAddress`, e.g. `misty-stork-z4if@in.surfingdog.ai`); every conversation is
+ * (`settings.email.inboundAddress`, e.g. `misty-stork-z4if@surfingdog.email`); every conversation is
  * one of its plus addresses, with a secret token after the `+`:
  *
  * - `t…` a conversation with a customer: their replies land on that item, whatever headers their

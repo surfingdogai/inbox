@@ -14,7 +14,7 @@ export type Route =
 
 /**
  * Where mail for `to` goes: to a hosted inbox when the address is on the hosted inbound domain
- * (`<slug>@in.surfingdog.ai`, or a conversation's `<slug>+<token>@…`), refused when it is on that
+ * (`<slug>@surfingdog.email`, or a conversation's `<slug>+<token>@…`), refused when it is on that
  * domain but names no inbox; to our own inbox otherwise (the addresses routed to this Worker for it).
  */
 export function routeFor(to: string, hostedDomain: string | undefined): Route {

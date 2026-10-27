@@ -6,7 +6,7 @@
  *
  * Two kinds of address reach it:
  *
- * - an address on the hosted inbound domain (`HOSTED_INBOUND_DOMAIN`, e.g. `in.surfingdog.ai`):
+ * - an address on the hosted inbound domain (`HOSTED_INBOUND_DOMAIN`, e.g. `surfingdog.email`):
  *   `<slug>@…` is a hosted inbox's own address and `<slug>+<token>@…` one of its conversations. The
  *   message goes to the hosted router (`HOSTED_INBOUND_URL`), signed with `HOSTED_INBOUND_KEY`, the
  *   envelope and what the receiving server found about the sender in the signed query;
@@ -19,7 +19,7 @@ interface Env {
   readonly INBOX_INBOUND_URL: string;
   /** Our own inbox's `email.inboundSecret`, set with `wrangler secret put`. */
   readonly INBOX_EMAIL_SECRET: string;
-  /** The domain hosted inboxes' addresses are on, e.g. in.surfingdog.ai. Unset: no hosted mail. */
+  /** The domain hosted inboxes' addresses are on, e.g. surfingdog.email. Unset: no hosted mail. */
   readonly HOSTED_INBOUND_DOMAIN?: string;
   /** The hosted router's delivery address, e.g. https://mail-in.example.org (the router's HOSTED_INBOUND_HOST). */
   readonly HOSTED_INBOUND_URL?: string;

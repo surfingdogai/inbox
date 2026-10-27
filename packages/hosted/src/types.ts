@@ -103,7 +103,7 @@ export const policyPayloadSchema = z.looseObject({
     customer_mail: z.boolean(),
     customer_daily_cap: z.number().int().min(0),
     /**
-     * The inbox's own address (ADR-026 §1), e.g. `<slug>@in.surfingdog.ai`: the gateway delivers what
+     * The inbox's own address (ADR-026 §1), e.g. `<slug>@surfingdog.email`: the gateway delivers what
      * is sent or forwarded to it, and each conversation is one of its plus addresses. Absent from a
      * control plane that has none: the inbox then has no address of its own.
      */

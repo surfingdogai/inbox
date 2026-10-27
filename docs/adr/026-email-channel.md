@@ -165,7 +165,9 @@ and let the owner answer notifications by email.
 
 ## Not decided here
 
-- Whether the hosted inbound domain stays a subdomain of ours (`in.surfingdog.ai`) or moves to the
-  business's own (`reply.<domain>`, one more MX record). A conversation's address on the business's own
+- Whether the hosted inbound domain moves to the business's own (`reply.<domain>`, one more MX
+  record). Decided 27 Oct 2026: it is not a subdomain of ours but a domain of its own,
+  `surfingdog.email`, because Cloudflare Email Routing takes a catch-all only on a zone's apex: a
+  subdomain would need one routing rule per inbox, about 200 at most. A conversation's address on the business's own
   domain needs only its forward's plus addresses today.
 - Outbound attachments (the owner attaching a file to a reply in the app).

@@ -7,7 +7,7 @@
   "workers_dev": false,
   "vars": {
     "INBOX_INBOUND_URL": "https://inbox.surfingdog.ai/v1/email/inbound",
-    "HOSTED_INBOUND_DOMAIN": "in.surfingdog.ai",
+    "HOSTED_INBOUND_DOMAIN": "surfingdog.email",
     "HOSTED_INBOUND_URL": "https://mail-in.surfingdog.ai"
   }
   // INBOX_EMAIL_SECRET is a secret: `wrangler secret put INBOX_EMAIL_SECRET --config apps/email-gateway/wrangler.jsonc`
