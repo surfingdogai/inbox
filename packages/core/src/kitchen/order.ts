@@ -245,6 +245,54 @@ export interface KitchenAdds {
   readonly flags: Partial<ItemFlags>;
 }
 
+/** The places an order can take now: its slot and each capped item's places for its day, where there is room. */
+async function placesNow(
+  db: Db,
+  checked: { ctx: KitchenContext; products: ReadonlyMap<string, MenuProduct> },
+  payload: OrderLike,
+  o: { readonly locationId?: string | null | undefined; readonly now: number },
+): Promise<{
+  readonly claims: { resourceKey: string; claims: [number, number][] }[];
+  readonly slotFull: boolean;
+  readonly overCap: boolean;
+}> {
+  const { ctx, products } = checked;
+  const claims: { resourceKey: string; claims: [number, number][] }[] = [];
+  let slotFull = false;
+  let overCap = false;
+  const start = payload.fulfil?.slot ? Date.parse(payload.fulfil.slot.start) : Number.NaN;
+  if (Number.isFinite(start)) {
+    const key = orderSlotKey(o.locationId);
+    const taken = await takenPlaces(db, key, start, start);
+    const place = freePlaces(taken.get(start), ctx.settings.kitchen.perSlot, 1);
+    if (place) claims.push({ resourceKey: key, claims: place.map((ord) => [start, ord] as [number, number]) });
+    else slotFull = true;
+  }
+  // The daily caps, summed per product over the order's lines.
+  const units = new Map<string, number>();
+  for (const l of payload.orderedItem ?? []) {
+    const p = productOf(l, products);
+    if (p?.menu?.dailyCap) units.set(p.id, (units.get(p.id) ?? 0) + l.quantity);
+  }
+  if (units.size > 0) {
+    const date = dateIn(Number.isFinite(start) ? start : o.now, ctx.timezone);
+    const bucket = dayBucket(date, ctx.timezone);
+    for (const [productId, n] of units) {
+      const p = products.get(productId);
+      const cap = p?.menu?.dailyCap ?? 0;
+      const key = capKey(productId);
+      const taken = await takenPlaces(db, key, bucket, bucket);
+      const places = freePlaces(taken.get(bucket), cap, n);
+      if (!places) {
+        overCap = true;
+        continue;
+      }
+      claims.push({ resourceKey: key, claims: places.map((ord) => [bucket, ord] as [number, number]) });
+    }
+  }
+  return { claims, slotFull, overCap };
+}
+
 /**
  * The places an order takes and why it waits, once the customer confirmed it. Its slot is claimed (the
  * create's batch decides a race); each item with a daily cap takes one place per unit while there are
@@ -259,40 +307,13 @@ export async function prepareOrder(
   const { ctx, products } = checked;
   const k = ctx.settings.kitchen;
   const hold = new Set<KitchenHold>();
-  const claims: { resourceKey: string; claims: [number, number][] }[] = [];
   const lines = payload.orderedItem ?? [];
-  const start = payload.fulfil?.slot ? Date.parse(payload.fulfil.slot.start) : Number.NaN;
-  if (Number.isFinite(start)) {
-    const key = orderSlotKey(o.locationId);
-    const taken = await takenPlaces(db, key, start, start);
-    const place = freePlaces(taken.get(start), k.perSlot, 1);
-    // The check found room a moment ago; gone now, the create is told the slot was taken.
-    if (!place)
-      throw new WriteError("slot_taken", "that slot was taken a moment ago", { details: { reason: "slot_full" } });
-    claims.push({ resourceKey: key, claims: place.map((ord) => [start, ord] as [number, number]) });
-  }
-  // The daily caps, summed per product over the order's lines.
-  const units = new Map<string, number>();
-  for (const l of lines) {
-    const p = productOf(l, products);
-    if (p?.menu?.dailyCap) units.set(p.id, (units.get(p.id) ?? 0) + l.quantity);
-  }
-  if (units.size > 0) {
-    const date = dateIn(Number.isFinite(start) ? start : Date.now(), ctx.timezone);
-    const bucket = dayBucket(date, ctx.timezone);
-    for (const [productId, n] of units) {
-      const p = products.get(productId);
-      const cap = p?.menu?.dailyCap ?? 0;
-      const key = capKey(productId);
-      const taken = await takenPlaces(db, key, bucket, bucket);
-      const places = freePlaces(taken.get(bucket), cap, n);
-      if (!places) {
-        hold.add("over_cap");
-        continue;
-      }
-      claims.push({ resourceKey: key, claims: places.map((ord) => [bucket, ord] as [number, number]) });
-    }
-  }
+  const places = await placesNow(db, checked, payload, { locationId: o.locationId, now: Date.now() });
+  // The check found room a moment ago; gone now, the create is told the slot was taken.
+  if (places.slotFull)
+    throw new WriteError("slot_taken", "that slot was taken a moment ago", { details: { reason: "slot_full" } });
+  if (places.overCap) hold.add("over_cap");
+  const claims = [...places.claims];
   for (const l of lines) {
     const m = productOf(l, products)?.menu;
     if (!m) continue;
@@ -308,6 +329,50 @@ export async function prepareOrder(
   // What waits for a person because of the dish or the caps is marked for one, whatever the rules say.
   const forAPerson = mark.hold.some((h) => h !== "owner_accepts");
   return { payload: { kitchen: mark }, claims, flags: forAPerson ? { needsHuman: true } : {} };
+}
+
+/**
+ * A held order let in (ADR-041 §2). What the spam filter held took no place, so it takes its places now
+ * under the rules a new order meets: its slot, and each capped item's places for its day. Where one is
+ * full now it takes none of that one, and the order waits for a person (`over_cap`), never accepted at
+ * once: the inbox never sells past what the kitchen set aside. An order that kept its places (it was let
+ * in while still being read), or one that is not the kitchen's, takes nothing more.
+ */
+export async function releasedOrderStatements(db: Db, itemId: string, now: number): Promise<Statement[]> {
+  const { rows } = await db.client.query({
+    sql: `SELECT payload, (SELECT COUNT(*) FROM slot_claims WHERE item_id = ?) FROM items
+           WHERE id = ? AND type = 'order'`,
+    params: [itemId, itemId],
+    method: "all",
+  });
+  const r = rows[0];
+  if (!r || Number(r[1] ?? 0) > 0) return [];
+  let payload: OrderLike & { readonly kitchen?: KitchenMark | undefined };
+  try {
+    payload = JSON.parse(String(r[0])) as typeof payload;
+  } catch {
+    return [];
+  }
+  if (!payload.kitchen) return [];
+  const products = await linesProducts(db, payload);
+  const ctx = await kitchenContext(db);
+  // The create claims under the main slot key (its kitchen takes no location yet): so does this.
+  const places = await placesNow(db, { ctx, products }, payload, { locationId: null, now });
+  const out = places.claims.flatMap((g) => claimStatements(g.resourceKey, itemId, g.claims));
+  if (places.slotFull || places.overCap) {
+    const mark: KitchenMark = {
+      instant: false,
+      hold: [...new Set<KitchenHold>([...payload.kitchen.hold, "over_cap"])],
+    };
+    out.push({
+      sql: `UPDATE items SET payload = json_set(payload, '$.kitchen', json(?)), flags = json_patch(flags, ?),
+                   version = version + 1, updated_at = ?
+             WHERE id = ?`,
+      params: [JSON.stringify(mark), JSON.stringify({ needsHuman: true }), now, itemId],
+      method: "run",
+    });
+  }
+  return out;
 }
 
 /**

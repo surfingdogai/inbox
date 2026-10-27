@@ -634,6 +634,119 @@ describe("slots: the last place goes to one order", () => {
     expect(await claims(s.db, "order-slot:")).toBe(1);
   });
 
+  /** A form the page never drew: a bot's, held for proof as it arrives (ADR-041). */
+  const heldOrder = async (s: Shop, productId: string, slot: string, quantity = 1) => {
+    const form: Caller = {
+      actor: { kind: "customer_human", id: `anon:${ulid()}`, channel: "form" },
+      tier: "anonymous",
+      sandbox: false,
+      now: () => VOLCAN_T,
+    };
+    const held = await s.caps.createOrder(
+      form,
+      order([line(productId, "Pizza", quantity, MXN(1))], { method: "pickup", slot: { start: slot } }),
+      { screen: { door: "form", form: { key: "none", trap: false } } },
+    );
+    const { rows } = await s.db.client.query({
+      sql: "SELECT screen FROM items WHERE id = ?",
+      params: [held.view.item.id],
+      method: "all",
+    });
+    expect(rows).toEqual([["held"]]);
+    return held.view.item.id;
+  };
+
+  it("a held order a person lets in takes its place then, as a new order would: the next is told the slot was taken (ADR-041)", async () => {
+    const s = await shop({
+      name: "Pizzería Volcán",
+      currency: "MXN",
+      timezone: "America/Mexico_City",
+      language: "es",
+      t: VOLCAN_T,
+      kitchen: { perSlot: 1 },
+    });
+    await s.caps.setup.applyPreset(person(VOLCAN_T), { preset: "food", replace: true });
+    const pizza = await dish(s, VOLCAN_T, { name: "Pizza al pastor", price: 18900, currency: "MXN", menu: PIZZA });
+    const slot = await firstSlot(s, VOLCAN_T, "2026-11-04");
+    const id = await heldOrder(s, pizza.product.id, slot);
+    expect(await claims(s.db, "order-slot:")).toBe(0);
+    await s.caps.letIn(person(VOLCAN_T + MIN), { item_id: id });
+    expect(await claims(s.db, "order-slot:")).toBe(1);
+    // Inside what the kitchen set aside, it is accepted at once like any other.
+    expect((await itemOf(s.db, id)).payload.kitchen).toEqual({ instant: true, hold: [] });
+    await rules(s.db, id, VOLCAN_T + MIN);
+    expect((await itemOf(s.db, id)).state).toBe("accepted");
+    // The slot is full now: the next customer is refused it, never sold past it.
+    const next = await refused(
+      s.caps.createOrder(
+        customer(VOLCAN_T + MIN),
+        order([line(pizza.product.id, "Pizza", 1, MXN(1))], { method: "pickup", slot: { start: slot } }),
+      ),
+    );
+    expect(next.code).toBe("slot_taken");
+    expect(await claims(s.db, "order-slot:")).toBe(1);
+  });
+
+  it("a held order let in after its slot filled takes no place there and waits for a person (ADR-041)", async () => {
+    const s = await shop({
+      name: "Pizzería Volcán",
+      currency: "MXN",
+      timezone: "America/Mexico_City",
+      language: "es",
+      t: VOLCAN_T,
+      kitchen: { perSlot: 1 },
+    });
+    await s.caps.setup.applyPreset(person(VOLCAN_T), { preset: "food", replace: true });
+    const pizza = await dish(s, VOLCAN_T, { name: "Pizza al pastor", price: 18900, currency: "MXN", menu: PIZZA });
+    const slot = await firstSlot(s, VOLCAN_T, "2026-11-04");
+    const id = await heldOrder(s, pizza.product.id, slot);
+    // A customer takes the last place while it is held.
+    await s.caps.createOrder(
+      customer(VOLCAN_T),
+      order([line(pizza.product.id, "Pizza", 1, MXN(1))], { method: "pickup", slot: { start: slot } }),
+    );
+    await s.caps.letIn(person(VOLCAN_T + MIN), { item_id: id });
+    // One place, one order in it: the one let in took none.
+    expect(await claims(s.db, "order-slot:")).toBe(1);
+    const let_ = await itemOf(s.db, id);
+    expect(let_.payload.kitchen).toEqual({ instant: false, hold: ["over_cap"] });
+    expect(let_.flags.needsHuman).toBe(true);
+    // Automation never accepts it: a person decides whether the kitchen can make it.
+    await rules(s.db, id, VOLCAN_T + MIN);
+    expect((await itemOf(s.db, id)).state).toBe("received");
+    const e = await refused(transitionItem(s.db, assistant(VOLCAN_T + MIN), { itemId: id, event: "accept" }));
+    expect(e.details?.guard).toBe("kitchen");
+  });
+
+  it("a held order let in takes its daily places again, or waits for a person when they are gone (ADR-041)", async () => {
+    const s = await shop({
+      name: "Pizzería Volcán",
+      currency: "MXN",
+      timezone: "America/Mexico_City",
+      language: "es",
+      t: VOLCAN_T,
+    });
+    const pizza = await dish(s, VOLCAN_T, {
+      name: "Pizza al pastor",
+      price: 18900,
+      currency: "MXN",
+      menu: { ...PIZZA, dailyCap: 2 },
+    });
+    const slot = await firstSlot(s, VOLCAN_T, "2026-11-04");
+    const fits = await heldOrder(s, pizza.product.id, slot);
+    const late = await heldOrder(s, pizza.product.id, slot, 2);
+    expect(await claims(s.db, "menu-cap:")).toBe(0);
+    await s.caps.letIn(person(VOLCAN_T + MIN), { item_id: fits });
+    expect(await claims(s.db, "menu-cap:")).toBe(1);
+    // Two more would pass the cap of two: the second takes no cap place, nor its slot's, and waits.
+    await s.caps.letIn(person(VOLCAN_T + MIN), { item_id: late });
+    expect(await claims(s.db, "menu-cap:")).toBe(1);
+    expect((await itemOf(s.db, late)).payload.kitchen).toEqual({ instant: false, hold: ["over_cap"] });
+    // Letting it in again does nothing twice.
+    await refused(s.caps.letIn(person(VOLCAN_T + 2 * MIN), { item_id: late }));
+    expect(await claims(s.db, "menu-cap:")).toBe(1);
+  });
+
   it("offers no slot before the kitchen's time, nor one past how far ahead it takes orders", async () => {
     const s = await volcan();
     const r = await s.caps.food.listOrderSlots({ date: "2026-11-04", method: "pickup" }, VOLCAN_T, "en");

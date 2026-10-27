@@ -1,5 +1,6 @@
 import type { Statement } from "@surfingdog/platform";
 import type { Db } from "../db";
+import { releasedOrderStatements } from "../kitchen/order";
 import type { SecretBox } from "../secrets/box";
 import { workPushStatements } from "../trades/job-tool";
 import { hasEventListeners, jobStatement, WEBHOOK_FANOUT_KIND } from "../write/common";
@@ -29,7 +30,10 @@ export async function createEventOf(db: Db, itemId: string): Promise<string | nu
   return id === undefined || id === null ? null : String(id);
 }
 
-/** The effects of a create, run now because it was let in. The owner's alert only when someone else let it in. */
+/**
+ * The effects of a create, run now because it was let in. The owner's alert only when someone else let
+ * it in. The places a kitchen's order takes go in the same batch, before its rules run.
+ */
 export async function releasedEffects(
   db: Db,
   input: {
@@ -64,6 +68,9 @@ export async function releasedEffects(
   // A request for a price goes to the owner's job tool now, as it would have when it came (ADR-039 §5).
   if (input.type === "quote_request")
     out.push(...(await workPushStatements(db, itemId, "created", now, { key: "released" })));
+  // A kitchen's order takes its slot and its daily places now, as a new order would, or waits for a
+  // person where they are full (ADR-040): it is never let in past what the kitchen set aside.
+  if (input.type === "order") out.push(...(await releasedOrderStatements(db, itemId, now)));
   return out;
 }
 
