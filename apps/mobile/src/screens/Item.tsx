@@ -1,3 +1,4 @@
+import { App as CapApp } from "@capacitor/app";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatDay, formatWhen, partyName, stateWord } from "../../../inbox/client/src/lib/format";
 import {
@@ -14,6 +15,7 @@ import type { ItemDetail } from "../../../inbox/client/src/lib/types";
 import { useApp } from "../context";
 import type { Slots } from "../lib/client";
 import { InboxError } from "../lib/session";
+import { Waiting } from "../lib/undo";
 import {
   actionsFor,
   agoSentence,
@@ -98,37 +100,37 @@ export function Item({
   const actions = useMemo(() => (detail ? actionsFor(detail, tz) : null), [detail, tz]);
   const spamActs = useMemo(() => (detail ? actsFor(detail) : []), [detail]);
   const [undo, setUndo] = useState<{ act: SpamAct; text: string } | null>(null);
-  const waiting = useRef<{ act: SpamAct; timer: ReturnType<typeof setTimeout> } | null>(null);
+  // What a press needs when it is sent, read as it is then: the screen may have drawn itself again
+  // many times in its six seconds, and that must never send it.
+  const appRef = useRef(app);
+  appRef.current = app;
   const detailRef = useRef(detail);
   detailRef.current = detail;
 
   /** Sends what waited for Undo: the filter's own calls, or the item's transition where it is one. */
-  const commit = useCallback(async () => {
-    const w = waiting.current;
+  const send = async (act: SpamAct) => {
+    const a = appRef.current;
     const d = detailRef.current;
-    waiting.current = null;
-    setUndo(null);
-    if (!w || !d || !app.client) return;
-    clearTimeout(w.timer);
+    if (!d || !a.client) return;
     const key = crypto.randomUUID();
     const screen = d.spam?.screen ?? null;
     try {
-      if (w.act === "let_in" || (w.act === "not_spam" && d.item.state !== "spam"))
-        await app.client.spamAct(d.item.id, "let-in", key);
-      else if (w.act === "looks_fine") await app.client.spamAct(d.item.id, "looks-fine", key);
-      else if (w.act === "spam" && (screen === "held" || screen === "pending"))
-        await app.client.spamAct(d.item.id, "spam", key);
+      if (act === "let_in" || (act === "not_spam" && d.item.state !== "spam"))
+        await a.client.spamAct(d.item.id, "let-in", key);
+      else if (act === "looks_fine") await a.client.spamAct(d.item.id, "looks-fine", key);
+      else if (act === "spam" && (screen === "held" || screen === "pending"))
+        await a.client.spamAct(d.item.id, "spam", key);
       else
-        await app.act(
+        await a.act(
           d.item.id,
           "transition",
-          { event: w.act === "spam" ? "mark_spam" : "unspam", expected_version: d.item.version },
-          ACT_LABEL[w.act],
+          { event: act === "spam" ? "mark_spam" : "unspam", expected_version: d.item.version },
+          ACT_LABEL[act],
         );
-      void app.refresh();
-      setDetail(await app.loadItem(d.item.id));
+      void a.refresh();
+      setDetail(await a.loadItem(d.item.id));
     } catch (e) {
-      app.toast(
+      a.toast(
         e instanceof InboxError && e.offline
           ? "You're offline: press it again when you're back."
           : e instanceof Error
@@ -136,25 +138,39 @@ export function Item({
             : "Not done.",
       );
     }
-  }, [app]);
-  // Leaving the item sends what waits: Undo is only for the six seconds on this screen.
-  useEffect(
-    () => () => {
-      if (waiting.current) void commit();
-    },
-    [commit],
+  };
+  const sendRef = useRef(send);
+  sendRef.current = send;
+  const waiting = useRef<Waiting<SpamAct> | null>(null);
+  waiting.current ??= new Waiting<SpamAct>(
+    (act) => sendRef.current(act),
+    UNDO_MS,
+    () => setUndo(null),
   );
+  // Leaving the item sends what waits, and so does the app going to the background: Undo is only for
+  // the six seconds on this screen. Only then: these listeners are set once, for the screen's life.
+  useEffect(() => {
+    const q = waiting.current;
+    const hidden = () => {
+      if (document.visibilityState === "hidden") q?.now();
+    };
+    const away = () => q?.now();
+    document.addEventListener("visibilitychange", hidden);
+    window.addEventListener("pagehide", away);
+    const paused = CapApp.addListener("pause", away).catch(() => null);
+    return () => {
+      document.removeEventListener("visibilitychange", hidden);
+      window.removeEventListener("pagehide", away);
+      void paused.then((sub) => sub?.remove());
+      q?.now();
+    };
+  }, []);
   const spamAct = (act: SpamAct) => {
     if (!detail) return;
-    if (waiting.current) void commit();
-    waiting.current = { act, timer: setTimeout(() => void commit(), UNDO_MS) };
+    waiting.current?.start(act);
     setUndo({ act, text: toastFor(act, detail).text });
   };
-  const cancelAct = () => {
-    if (waiting.current) clearTimeout(waiting.current.timer);
-    waiting.current = null;
-    setUndo(null);
-  };
+  const cancelAct = () => waiting.current?.undo();
   useEffect(() => {
     if (action && actions?.primary?.event === action) setSheet("confirm");
     else if (action === "propose" && actions?.propose) setSheet("propose");

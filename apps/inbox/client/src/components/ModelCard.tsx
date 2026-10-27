@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { api, problemOf } from "../lib/api";
 import { qk, useSpamModel } from "../lib/queries";
-import { GEMINI_NOTE, MODEL_HINT, MODEL_INTRO, ONLY_YOU, testFailed, testLine } from "../lib/spam";
+import { defaultModel, GEMINI_NOTE, MODEL_HINT, MODEL_INTRO, ONLY_YOU, testFailed, testLine } from "../lib/spam";
 import type { ModelCard as Card, ModelChoice, ModelTest } from "../lib/types";
 import { SectionHead } from "./Form";
 
@@ -126,7 +126,8 @@ function ModelSteps({
     mutationFn: () => api.spamModels(provider, key.trim() || undefined),
     onSuccess: (r) => {
       setModels(r.models);
-      setModel(r.models[0]?.id ?? "");
+      // A small model if the provider has one; else nothing until the owner chooses.
+      setModel(defaultModel(r.models));
     },
   });
   const save = useMutation({
@@ -197,6 +198,11 @@ function ModelSteps({
               Model
             </label>
             <select id={`${id}-model`} className="input" value={model} onChange={(e) => setModel(e.target.value)}>
+              {!model && (
+                <option value="" disabled>
+                  Choose a model
+                </option>
+              )}
               {models.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name}

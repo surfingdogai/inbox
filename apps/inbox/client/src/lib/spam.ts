@@ -7,7 +7,7 @@ import type { ItemSpamSummary, ItemView, SpamStatus } from "./types";
  */
 
 export const HELD_TOP =
-  "Held until the sender confirms or you let them in. Nobody was told. Bookings here hold no time.";
+  "Held until the sender confirms or you let them in. You weren't alerted and nothing ran. Bookings here hold no time.";
 export const SPAM_TOP = "Put aside, not deleted. Not spam moves one back.";
 export const HELD_EMPTY = "Nothing held.";
 export const SPAM_EMPTY = "Nothing put aside.";
@@ -17,7 +17,7 @@ export const MAY_BE_CUSTOMER = "May be a customer";
 export function keepLine(keepDays: number): string {
   return keepDays > 0
     ? `Put-aside messages are kept ${keepDays} days.`
-    : "Put-aside messages are kept until you clear them.";
+    : "Put-aside messages are kept until you choose a time in Settings → Spam.";
 }
 
 /** Who sent it, as a Held row names them: the name they gave, else their email's domain. */
@@ -108,7 +108,17 @@ export function toastFor(act: SpamAct, view: ItemView, now: number = Date.now())
         follow: { kind: "suggest_time", label: "Suggest another time" },
       };
     }
-    return { text: `Let in. ${heldWho(view)} comes straight to you from now on.` };
+    // Let it in lets that one sender through, never their whole domain: named by their name, else by
+    // their full address.
+    const name = view.party?.name?.trim();
+    if (name) return { text: `Let in. ${name} comes straight to you from now on.` };
+    if (address) return { text: `Let in. Messages from ${address} come straight to you from now on.` };
+    return {
+      text:
+        sender?.app === true || view.party?.kind === "agent"
+          ? "Let in. Messages from this app come straight to you from now on."
+          : "Let in. This sender comes straight to you from now on.",
+    };
   }
   if (act === "not_spam" || act === "looks_fine") {
     const domain = sender?.company_domain ?? null;
@@ -169,7 +179,7 @@ export const ACT_LABEL: Readonly<Record<SpamAct, string>> = {
 // ---- Settings → Spam --------------------------------------------------------------------------
 
 export const SETTINGS_INTRO =
-  "What isn't from a customer waits under Spam or Held instead of on your desk. Nobody is told, nothing is deleted, and one tap brings anything back.";
+  "What isn't from a customer waits under Spam or Held instead of on your desk. Nobody is told, and one tap brings anything back.";
 export const BASIC_LINE =
   "Stops form bots, mail a server already marked as spam, senders posing as you, disguised links, the same message from many senders, and floods of new requests from one sender.";
 export const BASIC_FREE = "Free. Nothing it reads leaves your inbox.";
@@ -218,8 +228,30 @@ export function readerLine(
         ? `Read by ${s.model.model} from ${s.model.provider}, set up for this inbox.`
         : "Read by your own AI model, set up for this inbox.";
     default:
-      return "Without an AI model, the filters look for known phrases only. Connect one in Settings → Integrations.";
+      return "Without an AI model, the filters look for known phrases only.";
   }
+}
+
+/** The link after the reader line, on one's own server with no model: the one place to connect one. */
+export const CONNECT_MODEL = "Connect one in Settings → Integrations";
+
+/**
+ * Whether Settings → Spam speaks of the owner's own model's use (the month's checks, the cap, what the
+ * provider charges): on their own server, with a model connected. Without one there is nothing to count.
+ */
+export function showsModelUse(s: Pick<SpamStatus, "reader" | "billing">): boolean {
+  return s.billing.state === "self_hosted" && s.reader === "own_model";
+}
+
+/** Model ids that name a provider's smaller, cheaper models: what the spam check needs. */
+const SMALL_MODEL = /haiku|mini|nano|flash|lite|small/i;
+
+/**
+ * The model the chooser starts on: the provider's first small one (the list comes small first), else
+ * none, so the owner, who pays per check, picks a large one only on purpose.
+ */
+export function defaultModel(models: readonly { readonly id: string }[]): string {
+  return models.find((m) => SMALL_MODEL.test(m.id))?.id ?? "";
 }
 
 /** A month's price for one filter, in the currency the host bills. */
@@ -265,10 +297,13 @@ export const MONTHLY_CHECKS: readonly { readonly value: 0 | 500 | 2000 | 10000; 
 ];
 
 export const KEEP_CHOICES: readonly { readonly value: 0 | 30 | 90; readonly label: string }[] = [
-  { value: 0, label: "Until I clear it" },
+  { value: 0, label: "Keep them" },
   { value: 90, label: "90 days" },
   { value: 30, label: "30 days" },
 ];
+
+/** Under Keep what's put aside: what goes whatever the choice. */
+export const KEEP_BOTS = "A bot's form messages go after seven days.";
 
 /** The Test result on the Your AI model card (§11.5). */
 export function testLine(t: { readonly pitch: boolean; readonly customer: boolean }): string {

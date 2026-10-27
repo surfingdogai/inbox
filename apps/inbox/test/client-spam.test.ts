@@ -4,12 +4,17 @@ import {
   actsFor,
   basicMonth,
   byWords,
+  CONNECT_MODEL,
+  defaultModel,
   deskChip,
   filterMonth,
   followDone,
+  HELD_TOP,
   heldOrder,
   heldWhat,
   heldWho,
+  KEEP_BOTS,
+  KEEP_CHOICES,
   keepLine,
   learningLine,
   MAY_BE_CUSTOMER,
@@ -17,6 +22,8 @@ import {
   quoteLine,
   readerLine,
   rowTag,
+  SETTINGS_INTRO,
+  showsModelUse,
   testFailed,
   testLine,
   timePassed,
@@ -156,6 +163,13 @@ describe("rows and chips", () => {
     expect(heldWhat(view({ type: "order" }))).toBe("Order");
   });
 
+  it("says at the top of Held what waited, without saying nobody was told: the sender got their acknowledgement", () => {
+    expect(HELD_TOP).toBe(
+      "Held until the sender confirms or you let them in. You weren't alerted and nothing ran. Bookings here hold no time.",
+    );
+    expect(HELD_TOP).not.toMatch(/nobody was told/i);
+  });
+
   it("puts a small chip before a labelled request's subject on the desk, and nothing on the rest", () => {
     expect(deskChip(view({ spam: { screen: "warned", chip: "May be a sales pitch" } }))).toBe("May be a sales pitch");
     expect(deskChip(view({ spam: { screen: "delivered", chip: "" } }))).toBe("");
@@ -197,6 +211,14 @@ describe("one press, and Undo", () => {
       spam: { sender: sender("kemal@atolye.example", "atolye.example") },
     });
     expect(toastFor("let_in", kemal, now)).toEqual({ text: "Let in. Kemal Yıldız comes straight to you from now on." });
+    // No name: the full address it lets through, never the whole domain.
+    const nameless = view({
+      email: "orders@bulk-supply.example",
+      spam: { sender: sender("orders@bulk-supply.example", "bulk-supply.example") },
+    });
+    expect(toastFor("let_in", nameless, now)).toEqual({
+      text: "Let in. Messages from orders@bulk-supply.example come straight to you from now on.",
+    });
     const late = view({ name: "Kemal Yıldız", start: "2026-10-26T08:00:00Z" });
     expect(timePassed(late, now)).toBe(true);
     expect(toastFor("let_in", late, now)).toEqual({
@@ -290,9 +312,9 @@ describe("Settings → Spam, in every state", () => {
         }),
       ),
     ).toBe("Read by a small model from Google Gemini, set up for this inbox.");
-    expect(readerLine(status())).toBe(
-      "Without an AI model, the filters look for known phrases only. Connect one in Settings → Integrations.",
-    );
+    // Without a model, the line says so once, and the page puts the one link to connect one after it.
+    expect(readerLine(status())).toBe("Without an AI model, the filters look for known phrases only.");
+    expect(CONNECT_MODEL).toBe("Connect one in Settings → Integrations");
     const resting = status({
       reader: "hosted_ai",
       checks: {
@@ -322,6 +344,21 @@ describe("Settings → Spam, in every state", () => {
     expect(priceLine(status())).toBe("41 checked by your model this month · 15,000 words of model time.");
   });
 
+  it("speaks of the model's checks, its cap and its charges only where one's own server has a model", () => {
+    // No model: nothing is checked, capped or charged, so none of those lines shows.
+    expect(showsModelUse(status())).toBe(false);
+    expect(
+      showsModelUse(status({ reader: "own_model", model: { provider: "OpenAI", model: "m", set_by_server: true } })),
+    ).toBe(true);
+    expect(showsModelUse(status({ reader: "hosted_ai", billing: { state: "off", price: null } }))).toBe(false);
+  });
+
+  it("starts the model chooser on a small model, or on none: the owner pays for each check", () => {
+    expect(defaultModel([{ id: "large-2" }, { id: "large-2-mini" }, { id: "large-1-flash" }])).toBe("large-2-mini");
+    expect(defaultModel([{ id: "large-2" }, { id: "large-1" }])).toBe("");
+    expect(defaultModel([])).toBe("");
+  });
+
   it("asks before switching a filter on, on a hosted inbox, and never asks for money while it is free", () => {
     const sheet = turnOnSheet("pitches", status({ reader: "hosted_phrases", billing: { state: "off", price: null } }));
     expect(sheet.title).toBe("Turn on Sales pitches?");
@@ -338,8 +375,13 @@ describe("Settings → Spam, in every state", () => {
     expect(learningLine("2026-11-02T09:00:00Z", "UTC", "en-GB")).toBe(
       "Learning until Mon 2 Nov: it labels what it would put aside, and puts nothing aside yet.",
     );
-    expect(keepLine(0)).toBe("Put-aside messages are kept until you clear them.");
+    // There is no "clear" to press: the default keeps them, and the time is chosen in Settings.
+    expect(keepLine(0)).toBe("Put-aside messages are kept until you choose a time in Settings → Spam.");
     expect(keepLine(90)).toBe("Put-aside messages are kept 90 days.");
+    expect(KEEP_CHOICES.map((c) => c.label)).toEqual(["Keep them", "90 days", "30 days"]);
+    // What goes whatever the choice is said where the choice is made, and the intro promises no less.
+    expect(KEEP_BOTS).toBe("A bot's form messages go after seven days.");
+    expect(SETTINGS_INTRO).not.toMatch(/nothing is deleted/i);
   });
 
   it("says what the model's Test found, or why it could not", () => {

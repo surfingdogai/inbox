@@ -9,9 +9,11 @@ import {
   BASIC_FREE,
   BASIC_LINE,
   basicMonth,
+  CONNECT_MODEL,
   FILTER_COPY,
   FILTERS_LINE,
   filterMonth,
+  KEEP_BOTS,
   KEEP_CHOICES,
   learningLine,
   MONTHLY_CHECKS,
@@ -19,6 +21,7 @@ import {
   priceLine,
   readerLine,
   SETTINGS_INTRO,
+  showsModelUse,
   turnOnSheet,
 } from "../lib/spam";
 import type { SpamStatus } from "../lib/types";
@@ -134,9 +137,20 @@ function SpamPage() {
               />
             ))}
           </div>
-          <p className="fine">{readerLine(s, tz)}</p>
-          <p className="fine">{priceLine(s)}</p>
-          {!hosted && (
+          <p className="fine">
+            {readerLine(s, tz)}
+            {!hosted && s.reader === "no_model" && (
+              <>
+                {" "}
+                <Link to="/settings/integrations" className="link-button">
+                  {CONNECT_MODEL}
+                </Link>
+              </>
+            )}
+          </p>
+          {/* On one's own server with no model there is nothing to count, cap or pay for. */}
+          {(hosted || showsModelUse(s)) && <p className="fine">{priceLine(s)}</p>}
+          {showsModelUse(s) && (
             <div className="spam-block-head">
               <span className="fine">Most checks a month</span>
               <fieldset className="seg seg-wrap" disabled={locked} aria-label="Most checks a month">
@@ -153,14 +167,7 @@ function SpamPage() {
               </fieldset>
             </div>
           )}
-          {!hosted && <p className="fine">Your provider charges you for each check.</p>}
-          {!hosted && s.reader === "no_model" && (
-            <p className="fine">
-              <Link to="/settings/integrations" className="link-button">
-                Connect a model in Settings → Integrations
-              </Link>
-            </p>
-          )}
+          {showsModelUse(s) && <p className="fine">Your provider charges you for each check.</p>}
         </div>
 
         <div className="spam-block spam-lists">
@@ -210,6 +217,7 @@ function SpamPage() {
               ))}
             </fieldset>
           </div>
+          <p className="fine">{KEEP_BOTS}</p>
         </div>
       </section>
       {asking && sheet && (
