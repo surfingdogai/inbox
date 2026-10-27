@@ -281,6 +281,41 @@ describe("Stripe: an assistant's shared payment token, charged once on the busin
     expect(form(p.seen[0]?.body ?? "")["metadata[sdi_pay]"]).toBe(CHARGE.ref);
   });
 
+  it("an account without shared payment tokens is the connection's to fix, never the token's", async () => {
+    // Stripe not knowing the parameter the token goes in: the account has no shared payment tokens.
+    const p = fakeStripe(() =>
+      json(
+        {
+          error: {
+            type: "invalid_request_error",
+            code: "parameter_unknown",
+            param: "payment_method_data[shared_payment_granted_token]",
+            message: "Received unknown parameter: payment_method_data[shared_payment_granted_token]",
+          },
+        },
+        400,
+      ),
+    );
+    const refused = (await chargeToken(ctx(p.http), CHARGE).catch((e) => e)) as ConnectorError;
+    expect(refused).toBeInstanceOf(ConnectorError);
+    expect([refused.code, refused.field]).toEqual(["config", "agent_pay"]);
+    expect(refused.message).not.toContain(TOKEN);
+    // A parameter Stripe missed is the request's too, whatever it names.
+    const missing = fakeStripe(() =>
+      json(
+        {
+          error: {
+            type: "invalid_request_error",
+            code: "parameter_missing",
+            param: "payment_method_data[shared_payment_granted_token]",
+            message: "Missing required param: payment_method_data[shared_payment_granted_token].",
+          },
+        },
+        400,
+      ),
+    );
+    expect(((await chargeToken(ctx(missing.http), CHARGE).catch((e) => e)) as ConnectorError).code).toBe("refused");
+  });
 
   it("a refusal about anything else is Stripe's to say; a key without the permission names it; a platform down is tried again", async () => {
     const small = fakeStripe(() =>

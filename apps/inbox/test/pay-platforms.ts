@@ -86,7 +86,8 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
    * after Stripe made the charge and kept its answer under the key. `broke`: the charge is made, and
    * Stripe answers, and keeps, a 500. `running`: with `lost` or `cut`, the first request under a key has
    * not finished, so another with it is told so (409) until it does. `lag`: its search does not find
-   * the new payments yet (its list always does).
+   * the new payments yet (its list always does). `unknownParam`: the account has no shared payment
+   * tokens, so Stripe does not know the parameter the token goes in.
    */
   const agent: {
     allowed: boolean;
@@ -97,6 +98,7 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
     broke: boolean;
     running: boolean;
     lag: boolean;
+    unknownParam: boolean;
   } = {
     allowed: true,
     profile: live ? "profile_1FjordLive00001" : "profile_test_1Fjord0001",
@@ -106,6 +108,7 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
     broke: false,
     running: false,
     lag: false,
+    unknownParam: false,
   };
   const tokens = new Map<string, GrantedToken>();
   const intents = new Map<string, Intent>();
@@ -285,6 +288,20 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
       if (!body) return json(STRIPE_MISSING_PARAM("amount"), 400);
       // The request never reaches Stripe: the inbox's wait runs out, and nothing is kept or made.
       if (agent.cut === "before") throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+      if (agent.unknownParam) {
+        const param = "payment_method_data[shared_payment_granted_token]";
+        return json(
+          {
+            error: {
+              type: "invalid_request_error",
+              code: "parameter_unknown",
+              param,
+              message: `Received unknown parameter: ${param}`,
+            },
+          },
+          400,
+        );
+      }
       // An idempotent request is answered as it was the first time, whatever that was: with other
       // parameters it is refused, and while the first still runs it is told so.
       const k = headers.get("idempotency-key");

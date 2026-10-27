@@ -893,7 +893,9 @@ export class AgentPayments {
     const why =
       error.code === "auth"
         ? "Stripe no longer takes this key."
-        : "Stripe stopped taking payments from assistants for your inbox: the key no longer has PaymentIntents: Write. Assistants are sent your payment link.";
+        : error.field === "agent_pay"
+          ? `${error.message} Assistants are sent your payment link.`
+          : "Stripe stopped taking payments from assistants for your inbox: the key no longer has PaymentIntents: Write. Assistants are sent your payment link.";
     await this.db.client.query({
       sql: `UPDATE connectors SET config_public = json_set(config_public, '$.agentPay', json('false'), '$.agentPayStopped', ?),
                    updated_at = ? WHERE id = ?`,

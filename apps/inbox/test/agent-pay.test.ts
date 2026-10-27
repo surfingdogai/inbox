@@ -928,6 +928,24 @@ describe("an accepted order, paid by the customer's assistant into the business'
     expect((await status(s, id)).payment).toMatchObject({ state: "due", agent: null });
   });
 
+  it("an account without shared payment tokens switches it off and tells the owner, never sends the assistant for another token", async () => {
+    const s = await setup();
+    const conn = await ready(s);
+    const id = await order(s);
+    s.stripe.agent.unknownParam = true;
+    const res = await pay(s, id, s.stripe.grantToken({ maxAmount: 18900, currency: "nok" }));
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ code: "agent_pay_unavailable", details: { reason: "connection" } });
+    const view = (await (await s.call("GET", "/v1/owner/integrations", undefined, s.owner)).json()) as {
+      connections: { id: string; agent_pay: { on: boolean; stopped: string | null } }[];
+    };
+    const tile = view.connections.find((c) => c.id === conn)?.agent_pay;
+    expect(tile?.on).toBe(false);
+    expect(tile?.stopped).toContain("shared payment tokens");
+    expect(await attempts(s.db, id, "state, failure")).toEqual([["failed", "connection"]]);
+    expect((await status(s, id)).payment).toMatchObject({ state: "due", agent: null });
+  });
+
   it("a test order is paid only on the test key, with a test token; a real one never with a test key", async () => {
     const s = await setup({ stripeKey: STRIPE_TEST_KEY, testMode: true });
     await ready(s, STRIPE_TEST_KEY);

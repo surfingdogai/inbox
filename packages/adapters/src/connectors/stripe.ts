@@ -792,6 +792,9 @@ const EDGE_STATUSES: ReadonlySet<number> = new Set([502, 503, 504]);
  * is kept under the key and answered again to every retry with it
  * (https://docs.stripe.com/api/idempotent_requests), as is the first answer to a key a 400 says was
  * used with other parameters, so only a lookup can tell what those did.
+ *
+ * Stripe not knowing a parameter it is sent (`parameter_unknown`: the account has no shared payment
+ * tokens) is the connection's to fix, never the token's: thrown as `config`, which switches it off.
  */
 async function chargeToken(ctx: RunContext, req: AgentChargeRequest): Promise<AgentCharge> {
   const key = keyOf(ctx);
@@ -850,6 +853,13 @@ async function chargeToken(ctx: RunContext, req: AgentChargeRequest): Promise<Ag
       },
     };
   }
+  if (res.status === 400 && error?.code === "parameter_unknown") {
+    throw new ConnectorError(
+      "config",
+      "Stripe does not take shared payment tokens on this account yet, so it refused a payment from a customer's assistant.",
+      { field: "agent_pay" },
+    );
+  }
   if (res.status >= 400) {
     const refused = tokenRefusal(error, req.token);
     if (refused) {
@@ -896,11 +906,13 @@ async function chargeToken(ctx: RunContext, req: AgentChargeRequest): Promise<Ag
  * - "This … can only be used to process payments in `eur`.": another currency.
  *
  * The token is taken out of the words first, so its own characters never decide. Null for a refusal
- * about something else.
+ * about something else, and for one about the request itself: a parameter Stripe does not know or
+ * missed, even the token's own (an account without shared payment tokens), is never the token's fault.
  */
 function tokenRefusal(error: Record<string, unknown> | null, token: string): AgentChargeFailure | null {
   if (!error) return null;
   const code = typeof error.code === "string" ? error.code : "";
+  if (code === "parameter_unknown" || code === "parameter_missing") return null;
   const param = typeof error.param === "string" ? error.param : "";
   const message = withoutToken(typeof error.message === "string" ? error.message : "", token);
   const about = /shared[ _.]?payment|granted[ _]token/i.test(`${param} ${code} ${message}`);

@@ -233,7 +233,10 @@ decided here).
 Stripe does not document the error codes it gives a token it will not charge, and a sandbox gives a
 code only for an unknown one (below): the adapter reads the parameter it names and its words as well as
 its code, with the token taken out of them (over the limit or another currency; expired; deactivated or
-held by another payment; else unknown).
+held by another payment; else unknown). A refusal about the request itself is never the token's, even
+when it names the token's parameter: `parameter_unknown` (an account without shared payment tokens)
+switches the feature off and tells the owner (§7), and `parameter_missing` is Stripe's refusal, so the
+assistant is sent to `payment_url`, never for another token.
 
 ### 7. The owner's switch, in person
 
@@ -248,8 +251,9 @@ connection, is the owner's in person (`requirePerson`): the owner's AI and integ
 - **The profile ID is typed.** It is the one pasted field here: Stripe documents no way for a
   restricted key to read a profile. When one appears, the field becomes a read.
 - **Off** takes effect at once. A disconnect stops it at once too.
-- **A key that lost the permission** (a 403 on a charge, or a key Stripe no longer takes) switches it off
-  by itself, says why on the connection (`agent_pay.stopped`), and tells the owner once.
+- **A key that lost the permission** (a 403 on a charge, or a key Stripe no longer takes), or an account
+  Stripe says has no shared payment tokens (`parameter_unknown` on a charge), switches it off by itself,
+  says why on the connection (`agent_pay.stopped`), and tells the owner once.
 - The connection shows how many orders assistants paid. The order's payments show each attempt
   (`agent_payments` on `GET /v1/owner/items/{id}/payments`), with the payment's page in Stripe.
 
