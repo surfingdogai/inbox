@@ -322,7 +322,13 @@ async function call(
   key: string,
   method: string,
   path: string,
-  opts: { readonly body?: string; readonly idempotency?: string; readonly version?: string } = {},
+  opts: {
+    readonly body?: string;
+    readonly idempotency?: string;
+    readonly version?: string;
+    /** Answer a 5xx to the caller instead of throwing it: a charge reads what kind it was. */
+    readonly serverErrors?: "answer";
+  } = {},
 ): Promise<{ res: ConnectorHttpResponse; json: Record<string, unknown> }> {
   const res = await ctx.http.request({
     method,
@@ -353,7 +359,7 @@ async function call(
       retryAfterMs: retryAfterMs(res.headers),
     });
   }
-  if (res.status >= 500) {
+  if (res.status >= 500 && opts.serverErrors !== "answer") {
     throw new ConnectorError(
       "unreachable",
       "Stripe is not answering properly; this inbox tries again in a few minutes.",
@@ -764,21 +770,37 @@ async function agentPayPermissions(ctx: RunContext): Promise<string[]> {
   return [];
 }
 
+/** Stripe's words with any shared payment token they name taken out: a token is never kept, nor shown. */
+function withoutToken(text: string, token: string): string {
+  return (token ? text.replaceAll(token, "spt_…") : text).replace(/\bspt_[A-Za-z0-9_]+/g, "spt_…");
+}
+
+/** The edge's answers when it could not reach Stripe's servers: nothing is kept under the key. */
+const EDGE_STATUSES: ReadonlySet<number> = new Set([502, 503, 504]);
+
 /**
  * Charges an assistant's shared payment token on the business's own account: one PaymentIntent,
  * confirmed at once, for exactly what the order comes to, under an idempotency key from the inbox's own
  * id for the attempt, so a retry is the same charge. The description is the catalogue's names and the
  * reference; nothing about the customer is sent. Stripe holds the token to the business's profile, its
  * amount, its currency and its expiry, and refuses one outside them.
+ *
+ * When Stripe does not say what it did, the answer is `unknown`, never a refusal: a 500 is kept under
+ * the key and answered again to every retry with it (https://docs.stripe.com/api/idempotent_requests),
+ * so only a new key gets an answer (`rekey`); an edge's 502, 503 or 504 keeps nothing, nor does a 409
+ * for a first request under the key that still runs, so the same key asks again; a 400 for a key first
+ * used with other parameters is answered only under a new one.
  */
 async function chargeToken(ctx: RunContext, req: AgentChargeRequest): Promise<AgentCharge> {
   const key = keyOf(ctx);
   const amount = stripeAmount(req.amount);
   // Asked only after `currencyProblem` said yes: a refusal here is a bug's, never a guessed amount.
   if (!amount.ok) throw new ConnectorError("refused", amount.reason);
+  const said = (json: Record<string, unknown>) => withoutToken(messageOf(json), req.token);
   const { res, json } = await call(ctx, key, "POST", "/v1/payment_intents", {
     version: STRIPE_AGENT_VERSION,
-    idempotency: `sdi-${req.ref}-pi`,
+    idempotency: req.retryKey ? `sdi-${req.ref}-pi-${req.retryKey}` : `sdi-${req.ref}-pi`,
+    serverErrors: "answer",
     body: form([
       ["amount", amount.value],
       ["currency", req.amount.currency.toLowerCase()],
@@ -799,6 +821,15 @@ async function chargeToken(ctx: RunContext, req: AgentChargeRequest): Promise<Ag
     );
   }
   const error = (json.error ?? null) as Record<string, unknown> | null;
+  const unknown = (rekey: boolean): AgentCharge => ({
+    status: "unknown",
+    externalId: null,
+    amount: null,
+    livemode: modeOf(key) === "live",
+    rekey,
+  });
+  if (res.status >= 500) return unknown(!EDGE_STATUSES.has(res.status));
+  if (error?.type === "idempotency_error") return unknown(res.status !== 409);
   // A decline: Stripe answers 402 with the PaymentIntent it made in the error. Nothing was charged.
   if (res.status === 402 && error?.type === "card_error") {
     const intent = (error.payment_intent ?? {}) as Record<string, unknown>;
@@ -813,7 +844,7 @@ async function chargeToken(ctx: RunContext, req: AgentChargeRequest): Promise<Ag
       failure: {
         code: auth ? "authentication_required" : "declined",
         platformCode: (decline ?? code)?.slice(0, 80) ?? null,
-        message: messageOf(json),
+        message: said(json),
       },
     };
   }
@@ -828,12 +859,12 @@ async function chargeToken(ctx: RunContext, req: AgentChargeRequest): Promise<Ag
         failure: {
           code: refused,
           platformCode: typeof error?.code === "string" ? error.code.slice(0, 80) : null,
-          message: messageOf(json),
+          message: said(json),
         },
       };
     }
-    if (res.status === 404) throw new ConnectorError("not_found", messageOf(json) || "Stripe has no such thing.");
-    throw new ConnectorError("refused", refusalOf(json, res.status));
+    if (res.status === 404) throw new ConnectorError("not_found", said(json) || "Stripe has no such thing.");
+    throw new ConnectorError("refused", withoutToken(refusalOf(json, res.status), req.token));
   }
   const charge = chargeOf(json, key);
   if (!charge) throw new ConnectorError("bad_response", "Stripe took the payment but did not say what it made.");
@@ -954,7 +985,10 @@ async function findCharge(ctx: RunContext, charge: { readonly ref: string }): Pr
   return found ? chargeOf(found, key) : null;
 }
 
-/** Stops a charge that waits on its card holder, so it is never taken later: one already stopped is let be. */
+/**
+ * Stops a charge its card holder never confirmed, so it is never taken later: one already stopped, or
+ * taken meanwhile, is let be (the inbox reads it back to know which).
+ */
 async function cancelCharge(ctx: RunContext, charge: { readonly externalId: string }): Promise<void> {
   const { res, json } = await call(
     ctx,

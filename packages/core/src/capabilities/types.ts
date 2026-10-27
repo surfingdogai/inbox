@@ -206,11 +206,14 @@ export const payOrderInput = z.object({
       .object({
         max_amount: z.number().int().positive(),
         currency: z.string().regex(/^[A-Za-z]{3}$/),
-        expires_at: z.string().datetime({ offset: true }).optional(),
+        expires_at: z
+          .union([z.number().int().positive(), z.string().datetime({ offset: true })])
+          .optional()
+          .describe("Seconds since 1970, as Stripe writes it, or a date and time."),
       })
       .optional()
       .describe(
-        "What your platform says the token allows, if it says: checked against the total, and it can only refuse.",
+        "The token's usage_limits as Stripe gave them to your platform, if it says: checked against the total, and it can only refuse.",
       ),
   }),
   idempotency_key: idempotencyKey,

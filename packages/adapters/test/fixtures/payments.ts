@@ -337,6 +337,28 @@ export function stripeTokenRefused(why: "missing" | "expired" | "consumed" | "re
   return { error: { type: "invalid_request_error", param, ...said } };
 }
 
+/**
+ * Stripe refusing a request under an idempotency key it has seen (https://docs.stripe.com/api/idempotent_requests,
+ * https://docs.stripe.com/error-handling): `running`, 409, the first request with the key has not
+ * finished; `mismatch`, 400, the key was first used with other parameters.
+ */
+export function stripeIdempotencyError(why: "running" | "mismatch", key: string) {
+  return {
+    error: {
+      type: "idempotency_error",
+      message:
+        why === "running"
+          ? "There is currently another in-progress request using this idempotency key. Please try again later."
+          : `Keys for idempotent requests can only be used with the same parameters they were first used with. Try using a key other than '${key}' if you meant to execute a different request.`,
+    },
+  };
+}
+
+/** Stripe failing inside (500): its result is kept under the request's idempotency key. */
+export const STRIPE_API_ERROR = {
+  error: { type: "api_error", message: "An error occurred with our connection to Stripe." },
+};
+
 /* --- Mollie ----------------------------------------------------------------- */
 
 export const MOLLIE_LIVE_KEY = fake("live", "FAKEFAKEFAKEnkVtjNVWXLSlXsM");

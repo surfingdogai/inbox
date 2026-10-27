@@ -465,17 +465,18 @@ export function publicRest(caps: Capabilities, opts: { readonly baseUrl?: string
       responses: {
         ...json("Paid", R.payOrderResultSchema),
         202: {
-          description: "The payment is on its way: read GET /items/{id} for when it is paid.",
+          description:
+            "The payment is on its way, or waits for the card holder to confirm it (3D Secure, a redirect), which your platform shows them: read GET /items/{id} for when it is paid.",
           content: { "application/json": { schema: resolver(R.payOrderResultSchema) } },
         },
         402: {
           description:
-            "payment_declined (nothing was charged: ask your person for another card, and pay with a new token; details.attempts_left) or authentication_required (the card asks its holder to confirm: give them details.payment_url). details.human says it in the business's words.",
+            "payment_declined (nothing was charged: ask your person for another card, and pay with a new token; details.attempts_left) or authentication_required (declined because the card needs its holder, who cannot be asked here: give them details.payment_url). details.human says it in the business's words.",
         },
         403: { description: "The order is someone else's, or the caller is the business's own key or AI." },
         409: {
           description:
-            "agent_pay_unavailable (details.reason: off, no_connection, currency, zero_total, connection, refused: give your person payment_url), not_accepted_yet (details.retry_after_s, or waiting_on), already_paid, change_pending, terms_changed (details.terms_sha is the order's now: ask your person again), in_progress (retry with the same Idempotency-Key), or wrong_state.",
+            "agent_pay_unavailable (details.reason: off, no_connection, currency, zero_total, connection, refused: give your person payment_url), not_accepted_yet (details.retry_after_s, or waiting_on), already_paid, change_pending, terms_changed (details.terms_sha is the order's now: ask your person again), in_progress (a payment on its way, or one whose outcome is not known yet: retry with the same token and Idempotency-Key after Retry-After, never a new token), or wrong_state.",
         },
         422: {
           description:
@@ -484,7 +485,7 @@ export function publicRest(caps: Capabilities, opts: { readonly baseUrl?: string
         429: { description: "too_many_attempts: too many declined payments today; give your person payment_url." },
         503: {
           description:
-            "platform_unavailable: retry with the same token and Idempotency-Key (Retry-After). Never charged twice.",
+            "platform_unavailable: Stripe did not say whether it took the payment. Retry after Retry-After with the same token and Idempotency-Key, never a new token. Never charged twice.",
         },
       },
     }),

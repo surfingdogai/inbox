@@ -1045,6 +1045,10 @@ export const agentPayments = sqliteTable(
     lastErrorAt: integer("last_error_at"),
     /** What the owner should know (paid after the order was cancelled: refund it there). */
     note: text("note"),
+    /** Which idempotency key the platform is asked under: 0 the attempt's own, n its nth new one. */
+    retryKey: integer("retry_key").notNull().default(0),
+    /** When the platform was last asked. */
+    askedAt: integer("asked_at"),
     claimUntil: integer("claim_until"),
     claimedBy: text("claimed_by"),
     checkedAt: integer("checked_at"),
@@ -1055,8 +1059,10 @@ export const agentPayments = sqliteTable(
     paidAt: integer("paid_at"),
   },
   (t) => [
-    // One attempt in flight, or one paid, per order: two assistants paying at once make one charge.
-    uniqueIndex("agent_payments_live").on(t.itemId).where(sql`${t.state} IN ('creating', 'processing', 'paid')`),
+    // One attempt in flight, unknown or paid per order: two assistants paying at once make one charge.
+    uniqueIndex("agent_payments_live")
+      .on(t.itemId)
+      .where(sql`${t.state} IN ('creating', 'processing', 'unknown', 'paid')`),
     uniqueIndex("agent_payments_credential").on(t.credentialSha),
     uniqueIndex("agent_payments_external").on(t.connectorId, t.externalId),
     index("agent_payments_item").on(t.itemId, t.createdAt),

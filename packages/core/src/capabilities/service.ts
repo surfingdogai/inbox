@@ -839,7 +839,7 @@ export class Capabilities {
       },
       ...(s.commerce.legal.legalName.trim() ? { trader: traderOf(s.commerce.legal) } : {}),
       ...(elsewhere.length ? { doors_elsewhere: elsewhere } : {}),
-      ...(await this.declaredPayments(s.payments.accepted)),
+      ...this.declaredPayments(s.payments.accepted),
       // How a trade takes work (ADR-039): where it goes, emergencies, call-out. Never the area's base.
       ...(itemTypes.includes("quote_request") && workProfile(s) ? { work: workProfile(s) ?? undefined } : {}),
       ...(await this.kitchenProfileOf()),
@@ -847,12 +847,12 @@ export class Capabilities {
   }
 
   /**
-   * What the profile says the business takes: what the owner declared, and, while customers' assistants
-   * can pay it directly (ADR-042), `acp_delegated`, which nobody types: it follows the owner's switch.
+   * What the profile says the business takes: what the owner declared. Assistants' payments at the
+   * inbox's own door (ADR-042) add nothing here: `acp_delegated` means ACP's checkout, which an ACP
+   * platform would look for and not find, and the vocabulary has no token for this door yet.
    */
-  private async declaredPayments(accepted: readonly string[]): Promise<{ payments?: string[] }> {
-    const declared = (await this.connectors.agentPay.anyOn()) ? [...accepted, "acp_delegated"] : [...accepted];
-    return declared.length ? { payments: publishedPayments(declared) } : {};
+  private declaredPayments(accepted: readonly string[]): { payments?: string[] } {
+    return accepted.length ? { payments: publishedPayments(accepted) } : {};
   }
 
   /** The profile's `kitchen`, when the business takes orders for a time or books tables (ADR-040). */

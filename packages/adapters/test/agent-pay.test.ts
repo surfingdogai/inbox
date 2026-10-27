@@ -11,12 +11,14 @@ import {
 import {
   HOOK,
   INBOX_ID,
+  STRIPE_API_ERROR,
   STRIPE_LIVE_KEY,
   STRIPE_MISSING_PARAM,
   STRIPE_PERMISSION_ERROR,
   STRIPE_TEST_KEY,
   STRIPE_WEBHOOK_SECRET,
   stripeCardDeclined,
+  stripeIdempotencyError,
   stripePaymentIntent,
   stripeTokenRefused,
 } from "./fixtures/payments";
@@ -215,7 +217,50 @@ describe("Stripe: an assistant's shared payment token, charged once on the busin
       const p = fakeStripe(() => json(stripeTokenRefused(said, TOKEN), 400));
       const charge = await chargeToken(ctx(p.http), CHARGE);
       expect([said, charge.status, charge.failure?.code]).toEqual([said, "failed", code]);
+      // Stripe's words may name the token: never passed on with them.
+      expect(JSON.stringify(charge)).not.toContain(TOKEN);
     }
+    const named = fakeStripe(() =>
+      json({ error: { type: "invalid_request_error", message: `Something about '${TOKEN}' is wrong.` } }, 400),
+    );
+    const refused = (await chargeToken(ctx(named.http), CHARGE).catch((e) => e)) as ConnectorError;
+    expect(refused.code).toBe("refused");
+    expect(refused.message).not.toContain(TOKEN);
+  });
+
+  it("Stripe not saying what it did is said so, with whether the same key can ever get an answer", async () => {
+    // A 500 is kept under the key, and every retry with it gets the same: only a new key is answered.
+    const inside = fakeStripe(() => json(STRIPE_API_ERROR, 500));
+    expect(await chargeToken(ctx(inside.http), CHARGE)).toMatchObject({
+      status: "unknown",
+      rekey: true,
+      externalId: null,
+    });
+    // An edge's 502, 503 or 504 keeps nothing: the same key asks again.
+    for (const status of [502, 503, 504]) {
+      const edge = fakeStripe(() => json(STRIPE_API_ERROR, status));
+      expect([status, await chargeToken(ctx(edge.http), CHARGE)]).toMatchObject([
+        status,
+        { status: "unknown", rekey: false },
+      ]);
+    }
+    // The first request under the key still runs (409); or the key was first used with other parameters (400).
+    const running = fakeStripe(() => json(stripeIdempotencyError("running", `sdi-${CHARGE.ref}-pi`), 409));
+    expect(await chargeToken(ctx(running.http), CHARGE)).toMatchObject({ status: "unknown", rekey: false });
+    const other = fakeStripe(() => json(stripeIdempotencyError("mismatch", `sdi-${CHARGE.ref}-pi`), 400));
+    expect(await chargeToken(ctx(other.http), CHARGE)).toMatchObject({ status: "unknown", rekey: true });
+    // A request that never got an answer is the transport's to say: unreachable, thrown.
+    const cut = {
+      request: async () => Promise.reject(new ConnectorError("unreachable", "api.stripe.com did not answer in time.")),
+    };
+    expect(((await chargeToken(ctx(cut), CHARGE).catch((e) => e)) as ConnectorError).code).toBe("unreachable");
+  });
+
+  it("asks again under a new idempotency key when told to, with the same id for the attempt", async () => {
+    const p = fakeStripe(() => json(stripePaymentIntent({ id: "pi_1Fjord", amount: 18900, currency: "nok" })));
+    await chargeToken(ctx(p.http), { ...CHARGE, retryKey: 2 });
+    expect(p.seen[0]?.headers.get("idempotency-key")).toBe(`sdi-${CHARGE.ref}-pi-2`);
+    expect(form(p.seen[0]?.body ?? "")["metadata[sdi_pay]"]).toBe(CHARGE.ref);
   });
 
   it("a refusal about anything else is Stripe's to say; a key without the permission names it; a platform down is tried again", async () => {
@@ -229,8 +274,8 @@ describe("Stripe: an assistant's shared payment token, charged once on the busin
     const no = await chargeToken(ctx(forbidden.http), CHARGE).catch((e) => e);
     expect((no as ConnectorError).code).toBe("config");
     expect((no as ConnectorError).message).toContain(STRIPE_AGENT_PERMISSIONS.intents);
-    const down = fakeStripe(() => json({ error: { type: "api_error", message: "down" } }, 500));
-    expect(((await chargeToken(ctx(down.http), CHARGE).catch((e) => e)) as ConnectorError).code).toBe("unreachable");
+    const busy = fakeStripe(() => json({ error: { type: "rate_limit_error", message: "slow down" } }, 429));
+    expect(((await chargeToken(ctx(busy.http), CHARGE).catch((e) => e)) as ConnectorError).code).toBe("rate_limited");
   });
 
   it("refuses an answer that is not the charge asked for: another amount, another mode", async () => {

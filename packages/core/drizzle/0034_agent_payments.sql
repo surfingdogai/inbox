@@ -10,11 +10,17 @@
 -- row is the business's record of where the money went, and stays after a disconnect. No row holds a
 -- customer's name, email or address.
 --
--- `state`: creating (the platform is being asked), processing (it settles the payment later), paid,
--- declined (nothing was charged), failed (a token refused, or a payment that did not go through after
--- processing), cancelled (stopped before it was charged: the card asked its holder), unknown (the
--- platform never said). One attempt in flight, or one paid, per order (`agent_payments_live`): two
--- assistants paying at once, or one paying again after the first went through, make one charge.
+-- `state`: creating (the platform is being asked, or never said what it did), processing (it settles
+-- the payment later, or waits for the card holder to confirm it), paid, declined (nothing was charged),
+-- failed (a token refused, or a payment that did not go through after processing), cancelled (stopped
+-- before it was charged: the card holder never confirmed it), unknown (the platform never said, and the
+-- owner is told: still read back). One attempt in flight, unknown or paid per order
+-- (`agent_payments_live`): two assistants paying at once, one paying again after the first went
+-- through, or another token while nobody knows what the first did, make one charge.
+--
+-- `retry_key` is which idempotency key the platform is asked under: 0 the attempt's own, n its nth new
+-- one, taken when the platform keeps a failure under the one before (Stripe answers a 500 again to every
+-- retry with its key). `asked_at` is when it was last asked.
 CREATE TABLE IF NOT EXISTS `agent_payments` (
 	`id` text PRIMARY KEY NOT NULL,
 	`item_id` text NOT NULL,
@@ -37,6 +43,8 @@ CREATE TABLE IF NOT EXISTS `agent_payments` (
 	`last_error` text,
 	`last_error_at` integer,
 	`note` text,
+	`retry_key` integer DEFAULT 0 NOT NULL,
+	`asked_at` integer,
 	`claim_until` integer,
 	`claimed_by` text,
 	`checked_at` integer,
@@ -46,7 +54,7 @@ CREATE TABLE IF NOT EXISTS `agent_payments` (
 	`paid_at` integer
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS `agent_payments_live` ON `agent_payments` (`item_id`) WHERE `state` IN ('creating', 'processing', 'paid');
+CREATE UNIQUE INDEX IF NOT EXISTS `agent_payments_live` ON `agent_payments` (`item_id`) WHERE `state` IN ('creating', 'processing', 'unknown', 'paid');
 --> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS `agent_payments_credential` ON `agent_payments` (`credential_sha`);
 --> statement-breakpoint

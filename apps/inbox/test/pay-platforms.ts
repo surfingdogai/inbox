@@ -3,12 +3,14 @@ import {
   MOLLIE_PROFILE,
   mollieLinkPayments,
   STRIPE_AMOUNT_TOO_SMALL,
+  STRIPE_API_ERROR,
   STRIPE_EMPTY_LIST,
   STRIPE_INVALID_KEY,
   STRIPE_MISSING_PARAM,
   STRIPE_PERMISSION_ERROR,
   stripeCardDeclined,
   stripeEvent,
+  stripeIdempotencyError,
   stripePaymentIntent,
   stripeSession,
   stripeTokenRefused,
@@ -71,16 +73,37 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
    * Assistants' payments (ADR-042): the account's profile, whether the key may write PaymentIntents, the
    * tokens platforms got for the profile, the PaymentIntents made from them, and outages.
    */
-  /** `lost`: Stripe makes the charge, and the answer never reaches the inbox (a cut connection). */
-  const agent: { allowed: boolean; profile: string; down: number | null; lost: boolean } = {
+  /**
+   * Outages as Stripe has them (https://docs.stripe.com/api/idempotent_requests). `down`: it fails
+   * before charging; a 500 is kept under the idempotency key and answered again to every retry with
+   * it, an edge's 502, 503 or 504 is not. `lost`: the charge is made and its answer kept, and the answer
+   * never reaches the inbox (a cut connection). `broke`: the charge is made, and Stripe answers, and
+   * keeps, a 500. `running`: with `lost`, the first request under a key has not finished, so another
+   * with it is told so (409) until it does. `lag`: its search does not find the new payments yet.
+   */
+  const agent: {
+    allowed: boolean;
+    profile: string;
+    down: number | null;
+    lost: boolean;
+    broke: boolean;
+    running: boolean;
+    lag: boolean;
+  } = {
     allowed: true,
     profile: live ? "profile_1FjordLive00001" : "profile_test_1Fjord0001",
     down: null,
     lost: false,
+    broke: false,
+    running: false,
+    lag: false,
   };
   const tokens = new Map<string, GrantedToken>();
   const intents = new Map<string, ReturnType<typeof stripePaymentIntent>>();
-  const answered = new Map<string, { status: number; body: unknown }>();
+  /** What each idempotency key was first sent with and answered, and whether that request still runs. */
+  const answered = new Map<string, { request: string; status: number; body: unknown; running: boolean }>();
+  /** The idempotency keys the charges were asked under, in order. */
+  const chargeKeys: string[] = [];
   let n = 0;
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -213,12 +236,13 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
           400,
         );
       }
-      if (agent.down !== null) return json({ error: { type: "api_error", message: "An error occurred." } }, agent.down);
+      const charging = route === "POST /v1/payment_intents" && body !== "";
+      if (agent.down !== null && !charging) return json(STRIPE_API_ERROR, agent.down);
       const [, , , id, verb] = url.pathname.split("/");
       if (method === "GET" && id === "search") {
         // Stripe's search, for the one query the inbox asks: its own id for an attempt.
         const ref = /metadata\['sdi_pay'\]:'([^']+)'/.exec(url.searchParams.get("query") ?? "")?.[1];
-        const data = [...intents.values()].filter((pi) => ref && pi.metadata.sdi_pay === ref);
+        const data = agent.lag ? [] : [...intents.values()].filter((pi) => ref && pi.metadata.sdi_pay === ref);
         return json({ object: "search_result", data, has_more: false, url: "/v1/payment_intents/search" });
       }
       if (method === "GET" && id) {
@@ -233,13 +257,27 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
       }
       if (route !== "POST /v1/payment_intents") return new Response("not found", { status: 404 });
       if (!body) return json(STRIPE_MISSING_PARAM("amount"), 400);
-      // An idempotent request is answered as it was the first time, whatever that was.
+      // An idempotent request is answered as it was the first time, whatever that was: with other
+      // parameters it is refused, and while the first still runs it is told so.
       const k = headers.get("idempotency-key");
+      if (k) chargeKeys.push(k);
       const seen = k ? answered.get(k) : undefined;
-      if (seen) return json(seen.body, seen.status);
-      const answer = chargeToken(f);
-      if (k) answered.set(k, answer);
-      if (agent.lost) return json({ error: { type: "api_error", message: "An error occurred." } }, 502);
+      if (k && seen) {
+        if (seen.request !== body) return json(stripeIdempotencyError("mismatch", k), 400);
+        if (seen.running && agent.running) return json(stripeIdempotencyError("running", k), 409);
+        seen.running = false;
+        return json(seen.body, seen.status);
+      }
+      if (agent.down !== null) {
+        // Inside Stripe, a 500 is the request's result, kept under its key; at the edge, nothing is kept.
+        if (k && agent.down === 500)
+          answered.set(k, { request: body, status: 500, body: STRIPE_API_ERROR, running: false });
+        return json(STRIPE_API_ERROR, agent.down);
+      }
+      const made = chargeToken(f);
+      const answer = agent.broke ? { status: 500, body: STRIPE_API_ERROR } : made;
+      if (k) answered.set(k, { request: body, ...answer, running: agent.lost && agent.running });
+      if (agent.lost) return json(STRIPE_API_ERROR, 502);
       return json(answer.body, answer.status);
     }
     // Card holds (ADR-036): a Checkout Session in setup mode, and a customer probe that makes nothing.
@@ -394,6 +432,7 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
     agent,
     tokens,
     intents,
+    chargeKeys,
     grantToken,
     settle,
   };
