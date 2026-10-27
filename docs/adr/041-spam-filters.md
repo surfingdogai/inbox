@@ -2,8 +2,9 @@
 
 **Status:** proposed, 24 October 2026. The core pipeline, its signals, the AI check behind a port, every
 door, the hosted plumbing, the metering, the owner app's screens, the owner's two emails, the phone app
-and the site's pages are built and tested; the WordPress plugin's connection is not yet. Every open
-business decision ships switched off (§12). Amends ADR-026 §7 and the inbox's own form (§4).
+and the site's pages are built and tested; the WordPress plugin's connection is not yet. The founder
+decided the open business questions on 27 October 2026; the table at the end says how each ships.
+Amends ADR-026 §7 and the inbox's own form (§4).
 
 ## Context
 
@@ -14,8 +15,10 @@ spam, and judges no words at all. Owners want the pitches and scams kept off the
 they must never lose a real customer to a filter, whatever language, script or country that customer
 writes from.
 
-The decided pricing: *we pay for the AI; the spam filter is a cost per inbox × number of filters
-switched on.*
+The decided pricing (27 October 2026, replacing a cost per inbox × filters switched on): *a hosted
+inbox is on Free or Pro. Free keeps basic protection, with no AI. Pro, $10, €10 or £9 a month with
+taxes included, includes the three filters, read by our AI, which we pay for. There is no price for
+each filter.*
 
 ## Decision
 
@@ -23,8 +26,8 @@ switched on.*
    form bots (a filled hidden field, a form never drawn, one filled faster than anyone types), mail a
    server marked, senders posing as the business or a platform it uses, look-alike domains, disguised
    links, the same words or link domain from many senders, floods of new requests from one sender, and
-   senders the owner always puts aside. Three filters the owner switches on, each priced alike: **sales
-   pitches**, **scams** and **junk**. Each reads known phrases on its own and, where a model is set up,
+   senders the owner always puts aside. Three filters: **sales pitches**, **scams** and **junk**. On
+   one's own server the owner switches them on; on a hosted inbox they come with Pro and start on. Each reads known phrases on its own and, where a model is set up,
    with the AI check; one model call judges all three. Each starts with a **learning week** (anything it
    would put aside is only labelled); switching it off and on within thirty days does not restart it.
    Basic protection's point-based outcomes begin in a learning week from the day the migration runs.
@@ -112,26 +115,32 @@ switched on.*
    item through on its local signals.
 8. **Words stay home.** Basic protection reads inside the inbox; only domain names leave, to the
    resolver the inbox already uses. The business's privacy page says, while a model may read, that an
-   automated check can read new messages without addresses, numbers or bank details; that it keeps
-   nothing only where the host's model reads (D2), never of a model the business set up itself.
-9. **Hosted: our model, behind the ledger.** The model and its key live in the shard's environment only
-   (`HOSTED_SPAM_MODEL_*`), never in a tenant's file, settings, policy, download, answers or logs, and a
-   model key is redacted from every log line. The policy's `spam` block says whether our AI may read for
-   an inbox, which filters it may switch on, its day and month caps, how Settings names who reads, and
-   billing. Every check is reserved in the shared ledger before it is made: the inbox's day and month
-   across every shard, and the runtime's own token budget for the day across every inbox; what a copied
-   tenant file says it spent changes nothing. A policy without the block is hosted all the same: no
-   model, phrases only, billing off, and no owner's own key; a filter it withdraws is switched off as the
-   inbox opens. On one's own server the operator sets `SPAM_MODEL_*`,
-   and the owner's monthly checks cap applies.
-10. **Metered per inbox and per filter.** `spam_days` counts, by UTC day, filter-days (a day a filter was
-    on at any moment), AI checks, reuses, cap refusals, failures, tokens, and what was put aside, held,
-    labelled, released and brought back. Once billing is on, a month costs, for each filter, its days on
-    (at most thirty) at a day's price — the month's price over thirty, rounded up to a cent — and never
-    more than the month's price; hosted usage reports the counts under `spam`. A request held or put
+   automated check can read new messages without addresses, numbers or bank details. Where the host's
+   model reads (D2) it adds what Anthropic's API does with them, as its terms say: no training on them,
+   deleted within 30 days unless its safety checks flag them (then up to two years) or the law
+   requires keeping them. It never says a service keeps nothing, and says nothing of what a model the
+   business set up itself keeps.
+9. **Hosted: Free and Pro, our model behind the ledger.** The policy's `plan` (`free` or `pro`; absent,
+   or a plan the runtime does not know, is Free) says what the inbox has. Pro: the three filters, on
+   from the start (D3), read by Claude Haiku (`claude-haiku-5-5`) on our own Anthropic key. Free: no
+   filters and no AI; basic protection is the same on both. The key lives in the shard's environment
+   only (`HOSTED_SPAM_ANTHROPIC_KEY`; `HOSTED_SPAM_MODEL` may name another model), never in a tenant's
+   file, settings, policy, download, answers or logs, and a model key is redacted from every log line.
+   Without it no model is asked, and Settings says the AI check isn't on yet. The policy's `spam` block
+   keeps what the control plane may still set: `ai: false` stops our AI for an inbox, and the day and
+   month caps (150 and 1,500 unless it says otherwise). Every check is reserved in the shared ledger
+   before it is made: the inbox's day and month across every shard, and the runtime's own token budget
+   for the day across every inbox; what a copied tenant file says it spent changes nothing. A hosted
+   inbox takes no owner's own key; a filter its plan no longer includes is switched off by the system
+   as the inbox opens, and comes back as it was if the plan does. On one's own server the operator sets
+   `SPAM_MODEL_*`, and the owner's monthly checks cap applies.
+10. **Metered per inbox, charged by nothing.** `spam_days` counts, by UTC day, filter-days (a day a
+    filter was on at any moment), AI checks, reuses, cap refusals, failures, tokens, and what was put
+    aside, held, labelled, released and brought back; hosted usage reports the counts under `spam`, for
+    what Pro costs to run. Nothing is charged by them: Pro includes the filters. A request held or put
     aside is not in `items` until it is let in.
-11. **Owners decide, in person.** Filters may carry a price: only the owner or staff, signed in, switch
-    them, choose Put aside or Just label, end a learning week, let in, block, or let a domain through —
+11. **Owners decide, in person.** What reads a stranger's words is the owner's choice: only the owner or
+    staff, signed in, switch the filters, choose Put aside or Just label, end a learning week, let in, block, or let a domain through —
     never their AI, a rule or a key. The model's key decides where strangers' messages are sent: the
     owner alone sets, replaces or removes it, as for anything that sends data somewhere new. The owner's
     AI may read `spam_status`.
@@ -194,7 +203,7 @@ brings it back.
 - No real customer is lost to a filter: the worst is a labelled, held or put-aside request, kept and
   explained, and every failure lets it through.
 - A held request reads exactly as a delivered one, at the door, on every read and on the confirm page.
-- Hosted inboxes can offer filters at a cost bounded per inbox and per runtime before any is charged.
+- What Pro's AI check costs us is bounded per inbox and per runtime, whatever an inbox's file says.
 - New tables: `spam_verdicts`, `spam_lists`, `spam_prints`, `spam_handles`, `spam_filter_spans`,
   `spam_days`, `spam_cache`, `spam_domains` (migration 0033), and the ledger's `judge_day`,
   `judge_total_day` and `judge_told` (the control plane is told once per cap, inbox and day). Erasing a
@@ -202,20 +211,21 @@ brings it back.
   check's cached answers for their words, list rows and handles; handles nobody trusted are pruned
   after a month unseen. The owner's download keeps verdicts, lists, spans and day counts.
 
-## Not decided here (each ships off)
+## Decided, 27 October 2026
 
-| # | Decision | Ships as |
+| # | Question | The founder's decision, and how it ships |
 |---|---|---|
-| D1 | The price per filter, a bundle, a free first month | billing `off`, `price: null` |
-| D2 | Our AI for hosted inboxes: provider and model, where it runs, retention, the terms | policy `spam.ai: false`: hosted filters read phrases only |
-| D3 | Filters on by default for new hosted inboxes | off |
-| D4 | Caps: 150 a day and 1,500 a month per inbox, 50 million tokens a day per runtime, the budgets above | as proposed, in the policy |
+| D1 | The price per filter, a bundle, a free first month | No price per filter. Free keeps basic protection; Pro ($10, €10 or £9 a month, taxes included) includes the three filters. The policy's `plan`; Settings, the docs and the site say so, with what the $10 supports. |
+| D2 | Our AI for hosted inboxes: provider and model, where it runs, retention, the terms | Claude Haiku (`claude-haiku-5-5`) through Anthropic's API on our own key, `HOSTED_SPAM_ANTHROPIC_KEY`: off, and said so, until it is set. Anthropic's standard commercial retention applies (no training; deleted within 30 days unless flagged under its usage policy, then up to two years, or kept by law); never "keeps nothing". The processing agreement names Anthropic as a sub-processor. |
+| D3 | Filters on by default for new hosted inboxes | On for Pro, each starting with its learning week (labels only, then puts aside). Nothing is deleted automatically; Not spam is one tap. A filter a person switched off stays off. |
+| D4 | Caps: 150 a day and 1,500 a month per inbox, 50 million tokens a day per runtime, the budgets above | Kept, in the policy's `spam` block. |
 | D5 | Deleting put-aside items after 30 or 90 days | kept ("Keep them") unless the owner chooses 90 or 30 days |
 | D6 | A Spam tap also blocking the sender | offered, never automatic |
-| D7 | Sharing anything across businesses | nothing shared |
+| D7 | Sharing anything across businesses | Decided: inboxes share fingerprints of known spam with each other, never content. Not built yet: nothing is shared. |
 | D8 | Spam data in receipts, standing or ranking | none of it |
-| D9 | Naming the model's provider in Settings | generic line; the policy's `reader` may name it |
-| D10 | The privacy page line, with counsel | shown only while a model may read |
+| D9 | Naming the model's provider in Settings | Named plainly: "Claude Haiku, by Anthropic". |
+| D10 | The privacy page line | Shown only while a model may read; for our model, Anthropic's retention as above. |
 | D11 | A browser challenge, operator link lists, a DNS blocklist feed | not built |
-| D12 | Hosted owners bringing their own model key | off |
-| D13 | Switching off filters of owners who do not agree to billing | off with billing |
+| D12 | Hosted owners bringing their own model key | later; off |
+| D13 | Switching off filters of owners who do not agree to billing | Gone with the per-filter price: Free has no filters, and the plan switches them off as the system. |
+| D14 | Beta testers | Pro free for a month with no card: the control plane's admin setting per inbox, with an end date. The inbox reads only `plan`, `pro` until the control plane says `free`. |
