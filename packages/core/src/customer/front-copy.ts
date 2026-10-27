@@ -49,6 +49,11 @@ export interface FrontCopy {
     readonly booking: string;
     readonly quote: string;
     readonly message: string;
+    /**
+     * Under every Sent page when the business shows a public address or phone (ADR-029 §14): what to
+     * do if nobody answers, whatever became of the request.
+     */
+    readonly safety: (v: { readonly email?: string | undefined; readonly phone?: string | undefined }) => string;
   };
   readonly back: string;
   /** For the business's own people: the way to their inbox. */
@@ -109,6 +114,12 @@ const EN: FrontCopy = {
     booking: "We have your booking request. We'll email you as soon as it's confirmed.",
     quote: "We have your request. We'll email you a quote.",
     message: "We have your message. We'll reply by email.",
+    safety: (v) =>
+      v.email && v.phone
+        ? `Haven't heard from us in two working days? Write to ${v.email} or call ${v.phone}.`
+        : v.email
+          ? `Haven't heard from us in two working days? Write to ${v.email}.`
+          : `Haven't heard from us in two working days? Call ${v.phone ?? ""}.`,
   },
   back: "Back",
   signIn: "Staff sign in",
@@ -161,6 +172,12 @@ const PT: FrontCopy = {
     booking: "Recebemos o seu pedido de marcação. Enviamos um e-mail assim que estiver confirmada.",
     quote: "Recebemos o seu pedido. Enviamos-lhe um orçamento por e-mail.",
     message: "Recebemos a sua mensagem. Respondemos por e-mail.",
+    safety: (v) =>
+      v.email && v.phone
+        ? `Não teve resposta nossa em dois dias úteis? Escreva para ${v.email} ou ligue para ${v.phone}.`
+        : v.email
+          ? `Não teve resposta nossa em dois dias úteis? Escreva para ${v.email}.`
+          : `Não teve resposta nossa em dois dias úteis? Ligue para ${v.phone ?? ""}.`,
   },
   back: "Voltar",
   signIn: "Entrada da equipa",

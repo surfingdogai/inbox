@@ -40,6 +40,7 @@ import {
   publicUrlFrom,
   secretKeyFrom,
   senderFrom,
+  spamFrom,
   ucpLodgingFrom,
 } from "./env";
 import {
@@ -328,6 +329,8 @@ const { app, runner, prepare } = createInbox({
   snapshot: nodeSnapshot(client, path.dirname(file)),
   // The owner's phones (ADR-028): the push relay (INBOX_PUSH_RELAY, `off` for none).
   pushRelay: process.env.INBOX_PUSH_RELAY,
+  // The spam filter's AI check with the operator's own model (SPAM_MODEL_*), when one is set up.
+  ...spamFrom(process.env, pinnedFetch({ deny: deny.ranges })),
 });
 if (demo) {
   // A demo only starts on an empty database. Over anything else it would mute the instance's mail

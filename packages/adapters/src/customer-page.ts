@@ -135,8 +135,10 @@ export function renderCustomerPage(
   // The business's name, else the address the customer typed: never the software's.
   const name = page.business || new URL(c.req.url).host;
   const title = page.title || name;
+  // Inside the business's own website (`?embed=1`): the form alone, the site around it is theirs.
+  const embed = page.embed === true;
   const body = [
-    `<header><p class="biz">${esc(name)}</p></header>`,
+    embed ? "" : `<header><p class="biz">${esc(name)}</p></header>`,
     `<h1>${esc(page.heading)}</h1>`,
     page.error ? `<p class="error" role="alert">${esc(page.error)}</p>` : "",
     ...(page.paragraphs ?? []).map((p) => `<p>${esc(p)}</p>`),
@@ -161,7 +163,7 @@ export function renderCustomerPage(
     page.nav?.length
       ? `<nav>${page.nav.map((l) => `<a href="${esc(l.href)}">${esc(l.label)}</a>`).join(" · ")}</nav>`
       : "",
-    `<footer><p>${esc(page.footer || name)}</p>${page.help ? `<p>${esc(page.help)}</p>` : ""}</footer>`,
+    embed ? "" : `<footer><p>${esc(page.footer || name)}</p>${page.help ? `<p>${esc(page.help)}</p>` : ""}</footer>`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -204,9 +206,11 @@ function formHtml(form: NonNullable<CustomerPage["form"]>): string {
     .join("");
   const fields = form.fields.map(fieldHtml).join("\n");
   const action = form.action ? ` action="${esc(form.action)}"` : "";
-  // Hidden from people and from screen readers; a bot filling every field fills this one too.
+  // Hidden from people, from screen readers and from password managers; a bot filling every field
+  // fills this one too. Its name is drawn for each form (ADR-029 §4.1), so no bot learns it once.
+  const trapName = typeof form.trap === "string" ? form.trap : "website";
   const trap = form.trap
-    ? `<div class="hp" aria-hidden="true"><label for="website">Website</label><input id="website" name="website" tabindex="-1" autocomplete="off"></div>`
+    ? `<div class="hp" aria-hidden="true"><label for="${esc(trapName)}">Website</label><input id="${esc(trapName)}" name="${esc(trapName)}" tabindex="-1" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other"></div>`
     : "";
   return `<form method="post"${action}>${hidden}\n${fields}\n${trap}<button type="submit">${esc(form.button)}</button></form>`;
 }

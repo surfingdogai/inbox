@@ -23,6 +23,7 @@ export const SCOPES = {
   "keys:write": "create and revoke integration keys",
   "customers:erase": "erase one customer's personal data (it cannot be undone)",
   "money:write": "record payments and refunds, and price offers and quotes, as your shop or till does",
+  "forms:submit": "bring in what visitors send through your website's own forms, and nothing else",
   offline_access: "stay connected without asking again",
 } as const;
 
@@ -45,7 +46,7 @@ export const KEY_SCOPES = SCOPE_NAMES.filter((s) => s !== "keys:write" && s !== 
  * owner's limits, whatever it holds. A key handed to another system holds `money:write` only when the
  * owner gives it; without it, that system is held to the owner's limits as the owner's AI is.
  */
-export const NOT_FOR_AI_SCOPES: readonly Scope[] = ["customers:erase", "money:write"];
+export const NOT_FOR_AI_SCOPES: readonly Scope[] = ["customers:erase", "money:write", "forms:submit"];
 
 /**
  * Ready-made scope sets, one per kind of system a key is pasted into. None includes
@@ -75,6 +76,14 @@ export const KEY_PRESETS = [
     name: "Read only",
     description: "Reports and dashboards: read items, events and setup, change nothing.",
     scopes: ["inbox:read", "events:read", "settings:read"],
+  },
+  {
+    // ADR-029 §4.2: a website keeps its own forms and brings what visitors send into the inbox,
+    // screened like the inbox's own form. It can do nothing else.
+    key: "website_forms",
+    name: "Website forms",
+    description: "Your website's own contact forms: what visitors send arrives here, filtered. Nothing else.",
+    scopes: ["forms:submit"],
   },
 ] as const satisfies readonly { key: string; name: string; description: string; scopes: readonly Scope[] }[];
 

@@ -28,6 +28,7 @@ import {
   type OwnerEmailChange,
   type PosPartners,
   publicOrigin,
+  takesMail,
   WEBHOOK_DELIVERY_KIND,
   WEBHOOK_FANOUT_KIND,
   webhookDeliverHandler,
@@ -56,14 +57,17 @@ import {
   createSecretBox,
   type Db,
   directoryProfile,
+  embedAncestors,
   enabledNetworks,
   FRONT_PATHS,
   type HostPolicy,
   httpRelay,
   IDENTITY_ISSUE_KIND,
   type JobRunner,
+  type JudgePort,
   MANIFEST_PATH,
   MIGRATIONS,
+  type ModelInfo,
   networkLane,
   PAY_CLOSE_KIND,
   PAY_LINK_KIND,
@@ -81,6 +85,7 @@ import {
   readSettings,
   relayAddress,
   type Settings,
+  type SpamHostPolicy,
   STAY_ARI_SYNC_KIND,
   STAY_MESSAGE_KIND,
   STAY_SWEEP_KIND,
@@ -218,6 +223,18 @@ export interface AppDeps {
    * so they are off unless whoever runs the inbox turns them on.
    */
   readonly ucpLodging?: boolean | undefined;
+  /**
+   * The spam filter's AI check (ADR-029 §7.2): the model that reads for the filters an owner switched
+   * on, and on a hosted inbox the host's policy for it (which filters, its caps, whether its AI may be
+   * used). Absent, the filters look for known phrases only; the free protection works either way.
+   */
+  readonly spam?:
+    | {
+        readonly judge?: JudgePort | null | undefined;
+        readonly host?: SpamHostPolicy | null | undefined;
+        readonly model?: ModelInfo | null | undefined;
+      }
+    | undefined;
 }
 
 export interface Inbox {
@@ -318,12 +335,22 @@ export function createInbox(deps: AppDeps): Inbox {
   );
   // Throws here, as the inbox is built, on a policy that names something that is not a setting.
   caps.attachPolicy(deps.policy ?? null);
+  // The spam filter (ADR-029): the model that reads for the filters an owner switched on — the host's
+  // on a hosted inbox, the operator's or the owner's on their own server, none at all in a demo — and
+  // whether a mail domain takes mail, asked of the same public resolver the calendars use.
+  caps.spam.attach({
+    judge: demo ? null : (deps.spam?.judge ?? null),
+    host: deps.spam?.host ?? null,
+    model: demo ? null : (deps.spam?.model ?? null),
+    resolveMail: demo ? null : (domain) => takesMail(connectorHttp({ fetchImpl: deps.fetchImpl }), domain),
+  });
   const runner = createRunner({
     mailOut,
     baseUrl: deps.baseUrl,
     receipts: caps.receipts,
     secrets: caps.secrets,
     phones: caps.phones,
+    spam: caps.spam,
   })
     // Networks (ADR-017 §8.1): the hourly tick does the housekeeping and queues the rest; every
     // call to a network runs in that network's own lane, so a slow one never delays another.
@@ -442,6 +469,8 @@ export function createInbox(deps: AppDeps): Inbox {
   let policyApplied = !deps.policy;
   const applyPolicy = async (): Promise<void> => {
     await caps.applyHostPolicy(deps.now ? deps.now() : Date.now());
+    // A filter the host no longer offers is switched off, as the system (ADR-029 §15.3).
+    await caps.spam.applyHost(deps.now ? deps.now() : Date.now());
     policyApplied = true;
   };
   const prepare = async (): Promise<void> => {
@@ -527,6 +556,24 @@ export function createInbox(deps: AppDeps): Inbox {
     path.startsWith("/p/") ||
     path.startsWith("/oauth/connect/") ||
     (path === "/" && !hasOwnerSession(request));
+  // The business's form inside its own website (`/p/…?embed=1`, ADR-029 §4.1): only the business's own
+  // site may frame it, and nobody when it has none. Set after the page's own headers, over them.
+  app.use("/p/*", async (c, next) => {
+    await next();
+    if (c.req.query("embed") !== "1") return;
+    const ancestors = await embedAncestors(caps);
+    // In place: a response set anew would take the old one's headers back over these.
+    const headers = c.res.headers;
+    const csp = headers.get("Content-Security-Policy") ?? "";
+    const frame = `frame-ancestors ${ancestors.length ? ancestors.join(" ") : "'none'"}`;
+    headers.set(
+      "Content-Security-Policy",
+      /frame-ancestors[^;]*/.test(csp)
+        ? csp.replace(/frame-ancestors[^;]*/, frame)
+        : `${csp}${csp ? "; " : ""}${frame}`,
+    );
+    if (ancestors.length) headers.delete("X-Frame-Options");
+  });
   app.use("*", (c, next) =>
     customerPage(c.req.path, c.req.raw)
       ? pageHeaders(c, next)

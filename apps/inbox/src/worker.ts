@@ -18,6 +18,7 @@ import {
   publicUrlFrom,
   secretKeyFrom,
   senderFrom,
+  spamFrom,
   ucpLodgingFrom,
 } from "./env";
 
@@ -79,6 +80,16 @@ type Bindings = Env & {
   DELIVERECT_CLIENT_SECRET?: string;
   DELIVERECT_CHANNEL?: string;
   DELIVERECT_STAGING?: string;
+  /**
+   * The model the spam filter's AI check uses (ADR-029 §7.2), the operator's own: `messages` or
+   * `chat`, the API's address, its key, the model's id and the name Settings shows. Unset, the filters
+   * look for known phrases only.
+   */
+  SPAM_MODEL_API?: string;
+  SPAM_MODEL_URL?: string;
+  SPAM_MODEL_KEY?: string;
+  SPAM_MODEL?: string;
+  SPAM_MODEL_NAME?: string;
 };
 
 // One app per isolate; the D1 binding is stable for the isolate's life.
@@ -105,6 +116,7 @@ function inboxFor(env: Bindings): Inbox {
       demo: flagOn(env.INBOX_DEMO) ? { ownerEmails, from } : undefined,
       ucpLodging: ucpLodgingFrom(env.INBOX_UCP_LODGING, secretKey),
       ...oauthFrom(env),
+      ...spamFrom(env),
       pushRelay: env.INBOX_PUSH_RELAY,
       ...jobToolsFrom(env),
       ...posFrom(env),

@@ -330,6 +330,13 @@ export const identityAnswerSchema = z.looseObject({
     sent_to: nullableString.describe("The masked address a code went to."),
   }),
   networks: z.array(z.object({ network: z.string(), state: z.string() })),
+  confirm: z
+    .object({ sent_to: z.string().describe("The masked address, like a•••@e•••.org.") })
+    .nullable()
+    .optional()
+    .describe(
+      "For a booking, an order or a quote request from someone the business has not dealt with before: the address a link was emailed to, for the person to confirm it is them. Ask them to press it.",
+    ),
   guide: z.string().describe("How an agent identifies itself and its person: https://surfingdog.ai/for-agents.md"),
 });
 

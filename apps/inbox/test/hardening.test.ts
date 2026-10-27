@@ -187,7 +187,10 @@ describe("inbound email", () => {
         raw: mime({ from: `Ana <${from}>`, subject: `Question ${i}`, id: `q-${from}-${i}` }),
         envelopeFrom: from,
       });
-    for (let i = 0; i < LIMITS.emailSender.capacity; i++) expect((await one(i)).outcome, `email ${i}`).toBe("created");
+    // Kept, every one (past five new conversations a day, a stranger's wait under Spam: ADR-029).
+    for (let i = 0; i < LIMITS.emailSender.capacity; i++) {
+      expect(["created", "spam"], `email ${i}`).toContain((await one(i)).outcome);
+    }
     const held = await one(99);
     expect(held).toMatchObject({ outcome: "limited" });
     expect(held.outcome === "limited" && held.retryAfterSec).toBeGreaterThan(0);
@@ -259,7 +262,13 @@ describe("the owner's alerts", () => {
       const res = await app.request(
         json(
           "/v1/messages",
-          { body: `Question ${i}`, subject: `Question ${i}`, contact: { name: `C${i}`, email: `c${i}@example.com` } },
+          // Thirty people from thirty places: one company's domain starting more new conversations than
+          // that in a day would wait for the owner (ADR-029), which is not what this is about.
+          {
+            body: `Question ${i}`,
+            subject: `Question ${i}`,
+            contact: { name: `C${i}`, email: `c${i}@shop${i}.example.com` },
+          },
           { "cf-connecting-ip": `198.51.100.${i + 1}` },
         ),
       );

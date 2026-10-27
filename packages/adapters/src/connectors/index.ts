@@ -48,7 +48,7 @@ export {
   calendlyConnector,
   calendlyForm,
 } from "./calendly";
-export { lookupMx, lookupPath, lookupSrv } from "./dns";
+export { lookupMx, lookupPath, lookupSrv, takesMail } from "./dns";
 export {
   GOOGLE_CALENDAR_SCOPES,
   GOOGLE_SCOPES,

@@ -1,5 +1,7 @@
 import {
   connectorPushStatements,
+  gateOf,
+  holdsBack,
   type JobHandler,
   matchesEvent,
   schema,
@@ -56,6 +58,8 @@ export function webhookFanoutHandler(): JobHandler {
   return async (job, { db, now }) => {
     const p = job.payload as FanoutPayload;
     if (!p?.eventId) return { note: "no event id" };
+    // Held or put aside by the spam filter (ADR-029): nothing goes until a person or the sender lets it in.
+    if (p.itemId && holdsBack(await gateOf(db, p.itemId))) return { note: "held by the spam filter" };
     const event = await readEvent(db, p.eventId);
     const eventType = event?.type ?? p.eventType;
     if (!eventType) return { note: `event ${p.eventId} is gone` };

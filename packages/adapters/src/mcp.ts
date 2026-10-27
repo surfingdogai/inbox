@@ -169,10 +169,17 @@ const ownerHumanOf = (r: {
  * said to the assistant: the person asked a business for something, and nothing here is theirs to
  * be told, except, when the network knows them, the code a business once emailed them.
  */
-export function identityText(identity: IdentityAnswer | undefined, name: string | undefined): string {
+export function identityText(
+  identity: IdentityAnswer | undefined,
+  name: string | undefined,
+  o: { readonly created?: boolean } = {},
+): string {
   if (!identity) return "";
   const who = name?.trim() || "this person";
   const lines: string[] = [];
+  // Every new person with an email is asked to confirm (ADR-029 §3.3): said once, as the request is made.
+  if (o.created && identity.confirm)
+    lines.push(`We emailed a link to ${identity.confirm.sent_to} to confirm it's you.`);
   for (const n of identity.networks) {
     if (n.state === "person_exists") {
       lines.push(
@@ -403,7 +410,10 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
       (args) =>
         run(async () => {
           const r = await caps.requestQuote(caller, args);
-          return { text: `${humanOf(r)}${identityText(r.identity, args.contact?.name)}`, structured: r };
+          return {
+            text: `${humanOf(r)}${identityText(r.identity, args.contact?.name, { created: true })}`,
+            structured: r,
+          };
         }),
     );
     server.registerTool(
@@ -419,7 +429,10 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
         try {
           const r = await caps.createBooking(caller, args);
           // A table for more than the business books online is a request for a price (ADR-040).
-          return ok(`${r.note ? `${r.note} ` : ""}${humanOf(r)}${identityText(r.identity, args.contact?.name)}`, r);
+          return ok(
+            `${r.note ? `${r.note} ` : ""}${humanOf(r)}${identityText(r.identity, args.contact?.name, { created: true })}`,
+            r,
+          );
         } catch (error) {
           return confirmOrFailed(error);
         }
@@ -437,7 +450,7 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
       async (args) => {
         try {
           const r = await caps.createOrder(caller, args);
-          return ok(`${humanOf(r)}${identityText(r.identity, args.contact?.name)}`, r);
+          return ok(`${humanOf(r)}${identityText(r.identity, args.contact?.name, { created: true })}`, r);
         } catch (error) {
           return confirmOrFailed(error);
         }
@@ -591,7 +604,7 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
           return {
             text:
               "view" in r
-                ? `${humanOf(r as { view: { human: string } })}${identityText((r as { identity?: IdentityAnswer }).identity, args.contact?.name)}`
+                ? `${humanOf(r as { view: { human: string } })}${identityText((r as { identity?: IdentityAnswer }).identity, args.contact?.name, { created: true })}`
                 : (r as { human: string }).human,
             structured: r,
           };
@@ -819,6 +832,23 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
               : []),
           ]);
           return withUntrusted(text, r, ["offers"], entries);
+        }),
+    );
+    server.registerTool(
+      "spam_status",
+      {
+        title: "The spam filter",
+        description:
+          "What the spam filter does for this inbox: its filters (pitches, scams, junk) and whether each is on, learning or only labelling, this month's counts, who reads for it, the AI check's room, and the owner's lists. Held requests (list_items with screen: held) wait for the sender to confirm or a person to let them in; put-aside ones are under Spam. You can read all of this; switching a filter, letting something in and the lists are the owner's, signed in — tell the owner instead.",
+        inputSchema: z.object({}),
+        annotations: readOnly,
+      },
+      () =>
+        guarded("spam_status", async () => {
+          const r = await caps.spamStatus(caller);
+          const on = r.filters.filter((f) => f.on).map((f) => f.filter);
+          const text = `Spam filters on: ${on.length ? on.join(", ") : "none"}. This month: ${r.this_month.aside} put aside, ${r.this_month.held} held, ${r.this_month.brought_back} brought back. ${r.held_now} held now. Only the owner, signed in, changes the filters or lets anything in.`;
+          return { text, structured: r };
         }),
     );
     server.registerTool(

@@ -259,3 +259,27 @@ The item's status also carries the conversation (`thread`): what the business wr
 and what they wrote, oldest first, never the business's internal notes. Relay the business's
 replies as they are; one marked `automated` was not written by a person. The MCP text ends with the
 business's last message when it is the latest word.
+
+## 10. Getting your person's request seen
+
+A business's inbox keeps unwanted messages away from its people. Whatever it makes of a request, it
+answers the same way, so nothing in the answer tells you how it was sorted. What helps a request from
+someone new reach a person there:
+
+- **Sign your requests, and keep one key per person you act for** (step 7). A key that starts many new
+  conversations with many businesses in a day looks like what it would be.
+- **Carry your person's pass** when they have one (steps 2 and 3). A person a network knows is never
+  worse off for being known.
+- **Give the email address your person reads.** A booking, order or quote request from someone new
+  is acknowledged by email, with a link to confirm it is them. The create answer says where it went:
+  `identity.confirm.sent_to` (masked, such as `a•••@e•••.org`). Ask your person to open that email and
+  press "Confirm it's me". It asks nothing else of them.
+- **One request per need.** Send it once, with an idempotency key, and read its status rather than
+  sending it again in other words.
+- **Never send the same words to many businesses.** The same text arriving at many inboxes is how
+  mass mailings look, and is treated as one.
+- **Write as your person would**, in their language: what they want, when, and how to reach them.
+  Instructions addressed to the inbox, its filters or the business's systems are not read as a request.
+
+If you are asked to try again later (`429 too_many_requests`, with `Retry-After`), wait that long and
+send the request again unchanged.

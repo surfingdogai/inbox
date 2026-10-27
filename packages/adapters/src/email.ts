@@ -370,10 +370,13 @@ export async function ingestEmail(
     }
   }
 
-  // Put aside as spam as it arrives when a server it passed through says so (ADR-026 §7): made in
-  // the spam state, so it tells nobody, moves no rule and keeps none of its files. The owner finds it
-  // under Spam. The words themselves are never judged.
+  // A new message from someone the business has not dealt with is screened as it arrives (ADR-029
+  // §4.3): what a server it passed through said of it, what the receiving server found of its sender,
+  // its display name, where answers would go, its links. Put aside, it is made in the spam state, so
+  // it tells nobody, moves no rule and keeps none of its files; the owner finds it under Spam. A
+  // sender the business knows is only ever labelled, even one a server marked.
   const spam = spamVerdict(parsed);
+  const files = (parsed.attachments ?? []).filter((a) => !a.related);
   const created = await caps.sendMessage(
     caller,
     {
@@ -382,7 +385,21 @@ export async function ingestEmail(
       contact: { email: from, ...(parsed.from?.name ? { name: parsed.from.name } : {}) },
       ...(messageId ? { idempotency_key: messageId } : {}),
     },
-    spam ? { spam } : {},
+    {
+      screen: {
+        door: "email",
+        email: {
+          serverMarked: spam !== null,
+          ...(auth ? { auth } : {}),
+          ...(parsed.from?.name ? { displayName: parsed.from.name } : {}),
+          ...(parsed.replyTo?.[0]?.address && parsed.replyTo[0].address.toLowerCase() !== from
+            ? { replyTo: parsed.replyTo[0].address.toLowerCase() }
+            : {}),
+          ...(parsed.html ? { html: parsed.html.slice(0, 200_000) } : {}),
+          attachments: { count: files.length, types: files.slice(0, 10).map((a) => a.mimeType || "file") },
+        },
+      },
+    },
   );
   const view = (created as { view: { item: { id: string } }; accessToken?: string }).view;
   if (messageId)
@@ -393,9 +410,14 @@ export async function ingestEmail(
         method: "run",
       })
       .catch(() => undefined);
-  if (spam) {
-    console.info("email: put a new email aside as spam, as a server it passed through marked it");
-    return { outcome: "spam", itemId: view.item.id, reason: spam };
+  const { rows: put } = await db.client.query({
+    sql: "SELECT state FROM items WHERE id = ?",
+    params: [view.item.id],
+    method: "all",
+  });
+  if (put[0]?.[0] === "spam") {
+    console.info("email: put a new email aside as spam as it arrived");
+    return { outcome: "spam", itemId: view.item.id, reason: spam ?? "Put aside by the spam filter." };
   }
   await attach(db, view.item.id, parsed, messageId, now(), "in", { sender: from, maxBytes: opts.attachmentsMaxBytes });
   return { outcome: "created", itemId: view.item.id, accessToken: (created as { accessToken?: string }).accessToken };

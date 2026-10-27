@@ -15,6 +15,17 @@ const READ_SETUP = "settings:read";
 export const ROUTE_SCOPES: Readonly<Record<string, readonly string[]>> = {
   "GET /items": ["inbox:read"],
   "GET /items/:id": ["inbox:read"],
+  // The spam filter (ADR-029): its status is setup's to read; what changes it is a person's in person,
+  // checked by the capability whatever the scopes.
+  "GET /spam": [READ_SETUP],
+  "PUT /spam/filters/:filter": ["*"],
+  "POST /spam/filters/:filter/start": ["*"],
+  "POST /spam/lists/domains": ["*"],
+  "DELETE /spam/lists": ["*"],
+  "POST /items/:id/let-in": ["inbox:write"],
+  "POST /items/:id/looks-fine": ["inbox:write"],
+  "POST /items/:id/spam": ["inbox:write"],
+  "POST /items/:id/always-put-aside": ["inbox:write"],
   "POST /items/:id/transitions": ["inbox:write"],
   "GET /items/:id/offers": ["inbox:read"],
   "GET /items/:id/payments": ["inbox:read"],
@@ -170,6 +181,7 @@ export const TOOL_SCOPES: Readonly<Record<string, readonly string[]>> = {
   // A kitchen's (ADR-040): how far an order is, and what is sold out today.
   set_order_progress: ["inbox:write"],
   set_sold_out: ["catalogue:write"],
+  spam_status: [READ_SETUP],
   list_items: ["inbox:read"],
   get_item: ["inbox:read"],
   transition_item: ["inbox:write"],
@@ -252,6 +264,10 @@ export const PHONE_OPERATIONS: ReadonlySet<string> = new Set([
   "POST /items/:id/offers/draft/send",
   "DELETE /items/:id/offers/draft",
   "GET /items/:id/payments",
+  // Let it in, Spam and Looks fine: one press each on the phone (ADR-029 §12).
+  "POST /items/:id/let-in",
+  "POST /items/:id/looks-fine",
+  "POST /items/:id/spam",
 ]);
 
 /** Where the owner REST door is mounted; the map above is keyed on paths below it. */

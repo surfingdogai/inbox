@@ -104,7 +104,12 @@ async function connect(app: App, headers: Record<string, string> = {}) {
 type Created = {
   view: { item: { id: string; partyId: string } };
   accessToken: string;
-  identity: { recognised: string; passes: { network: string; pass: string }[]; verify: { available: boolean } };
+  identity: {
+    recognised: string;
+    passes: { network: string; pass: string }[];
+    verify: { available: boolean };
+    confirm?: { sent_to: string } | null;
+  };
 };
 
 describe("people at the doors", () => {
@@ -157,6 +162,11 @@ describe("people at the doors", () => {
     const text = r.content[0]?.text ?? "";
     const pass = r.structuredContent.identity.passes[0]?.pass as string;
     expect(text.endsWith(`Keep this pass for Rita: ${pass} (network ${HOST}).`)).toBe(true);
+    // Rita is new here: the assistant is told where the link to confirm it is her went (ADR-029 §3.3).
+    expect(text).toContain(
+      `We emailed a link to ${r.structuredContent.identity.confirm?.sent_to} to confirm it's you.`,
+    );
+    expect(r.structuredContent.identity.confirm?.sent_to).toMatch(/^r•••@e•••\.com$/);
     // Said to the assistant, and nothing it is asked to pass on to Rita about keys or networks.
     expect(text).not.toMatch(/Tell Rita|comes by email/);
     // The same request again: the same item and no second first contact. Not the pass, nor the

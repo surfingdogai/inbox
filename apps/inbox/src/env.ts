@@ -1,4 +1,5 @@
-import { flagOn } from "@surfingdog/adapters";
+import { flagOn, judgeFromEnv } from "@surfingdog/adapters";
+import type { JudgePort } from "@surfingdog/core";
 import { type AddressRange, parseAddressRange } from "@surfingdog/platform";
 
 /**
@@ -249,4 +250,34 @@ export function ucpLodgingFrom(
   if (secretKey) return true;
   log("INBOX_UCP_LODGING is on but INBOX_SECRET_KEY is unset: UCP Lodging stays off.");
   return false;
+}
+
+/**
+ * The spam filter's AI check with the operator's own model (ADR-029 §7.2): SPAM_MODEL_API (`messages`
+ * or `chat`), SPAM_MODEL_URL (a chat API's base, or a model on the operator's own server), SPAM_MODEL_KEY,
+ * SPAM_MODEL and SPAM_MODEL_NAME. Settings then says "Set by your server". Nothing set, nothing asked:
+ * the filters look for known phrases only.
+ */
+export function spamFrom(
+  env: {
+    readonly SPAM_MODEL_API?: string | undefined;
+    readonly SPAM_MODEL_URL?: string | undefined;
+    readonly SPAM_MODEL_KEY?: string | undefined;
+    readonly SPAM_MODEL?: string | undefined;
+    readonly SPAM_MODEL_NAME?: string | undefined;
+  },
+  fetchImpl?: typeof fetch,
+): { spam?: { judge: JudgePort; model: { provider: string; model: string; setByServer: true } } } {
+  const found = judgeFromEnv(
+    {
+      SPAM_MODEL_API: env.SPAM_MODEL_API,
+      SPAM_MODEL_URL: env.SPAM_MODEL_URL,
+      SPAM_MODEL_KEY: env.SPAM_MODEL_KEY,
+      SPAM_MODEL: env.SPAM_MODEL,
+      SPAM_MODEL_NAME: env.SPAM_MODEL_NAME,
+    },
+    fetchImpl,
+  );
+  if (!found) return {};
+  return { spam: { judge: found.judge, model: { provider: found.provider, model: found.model, setByServer: true } } };
 }

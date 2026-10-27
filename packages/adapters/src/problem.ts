@@ -43,6 +43,7 @@ const TITLES: Record<string, string> = {
   outside_limits: "Outside the owner's limits",
   draft_stale: "The draft is out of date",
   geo_terms: "A price may not depend on where someone is",
+  too_many_requests: "Too many requests",
   unauthorized: "Authentication required",
   internal: "Something went wrong",
 };
@@ -71,7 +72,11 @@ export function problemFrom(error: unknown): Problem {
 
 export function problemResponse(c: Context, error: unknown): Response {
   const p = problemFrom(error);
-  return c.json(p, p.status as ContentfulStatusCode, { "Content-Type": "application/problem+json" });
+  const retry = p.status === 429 ? Number(p.details?.retry_after_s) : Number.NaN;
+  return c.json(p, p.status as ContentfulStatusCode, {
+    "Content-Type": "application/problem+json",
+    ...(Number.isFinite(retry) && retry > 0 ? { "Retry-After": String(Math.ceil(retry)) } : {}),
+  });
 }
 
 export function unauthorized(

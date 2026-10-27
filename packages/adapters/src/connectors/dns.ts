@@ -74,3 +74,38 @@ export async function lookupMx(http: ConnectorHttp, domain: string): Promise<str
   }
   return out;
 }
+
+/**
+ * Whether a mail domain takes mail at all (ADR-029 §5.2, `no_mail`): it names a mail server (MX), or
+ * has an address (A) a server may deliver to. False only when the resolver answered and neither is
+ * there (the name does not exist, or holds neither); null when it could not say. Only the domain is
+ * asked about, never an address.
+ */
+export async function takesMail(http: ConnectorHttp, domain: string): Promise<boolean | null> {
+  const asked = async (type: "MX" | "A"): Promise<{ status: number; answers: number } | null> => {
+    try {
+      const res = await http.request({
+        method: "GET",
+        url: `${RESOLVER}?name=${encodeURIComponent(domain)}&type=${type}`,
+        headers: { accept: "application/dns-json" },
+        maxBytes: 64 * 1024,
+        timeoutMs: 3_000,
+      });
+      if (res.status !== 200) return null;
+      const json = JSON.parse(res.text) as DnsJson;
+      const code = type === "MX" ? 15 : 1;
+      return { status: json.Status ?? -1, answers: (json.Answer ?? []).filter((a) => a.type === code).length };
+    } catch {
+      return null;
+    }
+  };
+  const mx = await asked("MX");
+  if (mx === null) return null;
+  if (mx.answers > 0) return true;
+  // NXDOMAIN: there is no such name, so nothing there takes mail.
+  if (mx.status === 3) return false;
+  if (mx.status !== 0) return null;
+  const a = await asked("A");
+  if (a === null || (a.status !== 0 && a.status !== 3)) return null;
+  return a.answers > 0;
+}

@@ -22,7 +22,9 @@ import { HOST_SESSION_COOKIE, SESSION_COOKIE } from "./session";
  * same renderer, headers and rules as the pages behind the links in its emails — no script, no web
  * font, nothing fetched from anywhere else. A GET never writes; a POST writes once, then sends the
  * browser on (303). The app spends every POST from the same `create` limit as the API's creates
- * (index.ts), and a form whose hidden trap came back filled is thanked and dropped.
+ * (index.ts). A form whose hidden field came back filled is thanked like any other and kept aside for
+ * the owner, never dropped (ADR-029 §4.1). With `?embed=1` the same pages sit inside the business's
+ * own website: the form alone, and only its own site may frame it (app.ts).
  */
 export interface FrontPageDeps {
   readonly caps: Capabilities;
@@ -73,6 +75,8 @@ export function frontPage(deps: FrontPageDeps): Hono {
     });
   });
 
+  const embedOf = (c: Context) => c.req.query("embed") === "1";
+
   app.get("/book", async (c) => {
     // Bookings taken at a platform: a booking page here would offer times the platform never sees.
     const elsewhere = await deps.caps.doorElsewhere("booking");
@@ -83,38 +87,41 @@ export function frontPage(deps: FrontPageDeps): Hono {
         deps.caps,
         await langOf(c),
         { service: c.req.query("service"), from: c.req.query("from") },
-        { now: now() },
+        { now: now(), embed: embedOf(c) },
       ),
     );
   });
-  app.get("/quote", async (c) => renderCustomerPage(c, await frontAskView(deps.caps, await langOf(c), "quote")));
-  app.get("/message", async (c) => renderCustomerPage(c, await frontAskView(deps.caps, await langOf(c), "message")));
+  app.get("/quote", async (c) =>
+    renderCustomerPage(c, await frontAskView(deps.caps, await langOf(c), "quote", { now: now(), embed: embedOf(c) })),
+  );
+  app.get("/message", async (c) =>
+    renderCustomerPage(c, await frontAskView(deps.caps, await langOf(c), "message", { now: now(), embed: embedOf(c) })),
+  );
   app.get("/sent", async (c) =>
-    renderCustomerPage(c, await frontSent(deps.caps, await langOf(c), c.req.query("k") ?? "")),
+    renderCustomerPage(c, await frontSent(deps.caps, await langOf(c), c.req.query("k") ?? "", { embed: embedOf(c) })),
   );
 
   const act =
-    (run: (lang: CustomerLang, form: FrontForm) => Promise<LinkActResult>, kind: string) => async (c: Context) => {
+    (run: (lang: CustomerLang, form: FrontForm, embed: boolean) => Promise<LinkActResult>) => async (c: Context) => {
       const lang = await langOf(c);
       const form = await readForm(c);
       if (form === null) return c.body(null, 413);
-      // A filled trap: thanked like anyone else, and nothing is written.
-      if (form.website) return c.redirect(`/p/sent?k=${kind}`, 303);
-      const result = await run(lang, form);
+      // A filled hidden field is the spam filter's to decide (ADR-029 §4.1): thanked like anyone, never dropped.
+      const result = await run(lang, form, embedOf(c));
       return "redirect" in result ? c.redirect(result.redirect, 303) : renderCustomerPage(c, result.page);
     };
 
   app.post(
     "/book",
-    act((lang, form) => frontBookAct(deps.caps, lang, form, { now: now() }), "booking"),
+    act((lang, form, embed) => frontBookAct(deps.caps, lang, form, { now: now(), embed })),
   );
   app.post(
     "/quote",
-    act((lang, form) => frontAskAct(deps.caps, lang, "quote", form, { now: now() }), "quote"),
+    act((lang, form, embed) => frontAskAct(deps.caps, lang, "quote", form, { now: now(), embed })),
   );
   app.post(
     "/message",
-    act((lang, form) => frontAskAct(deps.caps, lang, "message", form, { now: now() }), "message"),
+    act((lang, form, embed) => frontAskAct(deps.caps, lang, "message", form, { now: now(), embed })),
   );
   return app;
 }

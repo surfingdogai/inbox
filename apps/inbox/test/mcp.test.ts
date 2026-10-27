@@ -287,6 +287,7 @@ describe("MCP doors", () => {
       "get_item",
       "transition_item",
       "list_offers",
+      "spam_status",
       "open_return",
       "make_offer",
       "get_profile",

@@ -24,6 +24,7 @@ import {
   eventPatternSchema,
   fromZod,
   getItemInput,
+  letDomainThroughInput,
   listDeliveriesInput,
   listEventsInput,
   listItemsInput,
@@ -39,6 +40,7 @@ import {
   productInput,
   profileInput,
   provideDetailsInput,
+  removeSpamListEntryInput,
   replayMissingInput,
   replyInput,
   requestQuoteInput,
@@ -48,9 +50,11 @@ import {
   serviceInput,
   setClosuresInput,
   setFloorsInput,
+  setSpamFilterInput,
   setupPlanSchema,
   setWeeklyInput,
   splitAddress,
+  startSpamFilterInput,
   suggestTimeInput,
   testRuleInput,
   transitionItemInput,
@@ -724,6 +728,120 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
       responses: json("Item detail", R.itemDetailSchema),
     }),
     async (c) => c.json(await caps.getItem(c.get("caller"), getItemInput.parse({ item_id: c.req.param("id") }))),
+  );
+
+  // ---- the spam filter (ADR-029) ----------------------------------------------------------
+  // What it is, and what the owner does with it. Switching a filter, letting something in and the lists
+  // are a person's, signed in: the capability says "Only you can change this, signed in." to anyone else.
+
+  app.get(
+    "/spam",
+    owner({
+      tags: ["owner"],
+      summary: "The spam filter: its filters, learning weeks, counts, lists and the AI check's room",
+      responses: json("Spam filter", z.looseObject({})),
+    }),
+    async (c) => c.json(await caps.spamStatus(c.get("caller"))),
+  );
+
+  app.put(
+    "/spam/filters/:filter",
+    owner({
+      tags: ["owner"],
+      summary: "Switch a spam filter on or off, or choose what it does (a person in person only)",
+      responses: json("Spam filter", z.looseObject({})),
+      write: true,
+    }),
+    validator("json", setSpamFilterInput.omit({ filter: true }), hook),
+    async (c) =>
+      c.json(
+        await caps.setSpamFilter(c.get("caller"), {
+          ...c.req.valid("json"),
+          filter: setSpamFilterInput.shape.filter.parse(c.req.param("filter")),
+        }),
+      ),
+  );
+
+  app.post(
+    "/spam/filters/:filter/start",
+    owner({
+      tags: ["owner"],
+      summary: "End a filter's learning week now (basic for the free protection)",
+      responses: json("Spam filter", z.looseObject({})),
+      write: true,
+    }),
+    async (c) =>
+      c.json(
+        await caps.startSpamFilterNow(c.get("caller"), startSpamFilterInput.parse({ filter: c.req.param("filter") })),
+      ),
+  );
+
+  app.post(
+    "/spam/lists/domains",
+    owner({
+      tags: ["owner"],
+      summary: "Let everyone at a company's domain through",
+      responses: json("Added", z.looseObject({})),
+      write: true,
+    }),
+    validator("json", letDomainThroughInput, hook),
+    async (c) => c.json(await caps.letDomainThrough(c.get("caller"), c.req.valid("json"))),
+  );
+
+  app.delete(
+    "/spam/lists",
+    owner({
+      tags: ["owner"],
+      summary: "Remove a row from Let through or Always put aside",
+      responses: json("Removed", z.looseObject({})),
+      write: true,
+    }),
+    validator("json", removeSpamListEntryInput, hook),
+    async (c) => c.json(await caps.removeSpamListEntry(c.get("caller"), c.req.valid("json"))),
+  );
+
+  app.post(
+    "/items/:id/let-in",
+    owner({
+      tags: ["owner"],
+      summary: "Let in a request the spam filter holds: it goes on, and its sender comes straight in from now on",
+      responses: json("Let in", z.looseObject({})),
+      write: true,
+    }),
+    async (c) => c.json(await caps.letIn(c.get("caller"), getItemInput.parse({ item_id: c.req.param("id") }))),
+  );
+
+  app.post(
+    "/items/:id/looks-fine",
+    owner({
+      tags: ["owner"],
+      summary: "Take the spam filter's label off a request, and let its sender through",
+      responses: json("Looks fine", z.looseObject({})),
+      write: true,
+    }),
+    async (c) => c.json(await caps.looksFine(c.get("caller"), getItemInput.parse({ item_id: c.req.param("id") }))),
+  );
+
+  app.post(
+    "/items/:id/spam",
+    owner({
+      tags: ["owner"],
+      summary: "Spam, on a request the filter holds: from Held to Spam",
+      responses: json("Spam", z.looseObject({})),
+      write: true,
+    }),
+    async (c) => c.json(await caps.markHeldSpam(c.get("caller"), getItemInput.parse({ item_id: c.req.param("id") }))),
+  );
+
+  app.post(
+    "/items/:id/always-put-aside",
+    owner({
+      tags: ["owner"],
+      summary: "Always put aside what this request's sender sends",
+      responses: json("Added", z.looseObject({})),
+      write: true,
+    }),
+    async (c) => c.json(await caps.alwaysPutAside(c.get("caller"), getItemInput.parse({ item_id: c.req.param("id") }))),
   );
 
   /** A transition answers 200, or 202 when what automation offered was kept as a draft for the owner. */

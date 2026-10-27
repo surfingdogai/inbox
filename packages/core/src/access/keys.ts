@@ -147,6 +147,9 @@ const KEY_NOTE = "Store this key now. It is shown once and never again; if it is
  * scopes through `requireScope`, which records a call outside them and, when `security.enforceScopes` is
  * on, refuses it.
  */
+/** Scopes a key is given on its own, for one job, and that let it do nothing else (ADR-029 §4.2). */
+const SELF_CONTAINED_SCOPES: readonly string[] = ["forms:submit"];
+
 export class AccessCapabilities {
   constructor(private readonly db: Db) {}
 
@@ -158,7 +161,11 @@ export class AccessCapabilities {
   async requireScope(caller: Caller, anyOf: readonly string[], operation: string): Promise<void> {
     const p = caller.principal;
     if (!p || isCustomer(caller) || anyOf.length === 0 || holdsScope(p.scopes, anyOf)) return;
-    const enforce = (await readSettings(this.db)).security.enforceScopes;
+    // A key that holds only a scope kept to itself (a website's forms key, ADR-029 §4.2) lives on a
+    // public web server: it is refused everything else whether or not scopes are enforced yet.
+    const enforce =
+      (p.scopes.length > 0 && p.scopes.every((s) => SELF_CONTAINED_SCOPES.includes(s))) ||
+      (await readSettings(this.db)).security.enforceScopes;
     const now = nowOf(caller);
     const scope = anyOf[0] ?? "*";
     // Recording is the point of log-first, but never itself a reason to refuse: a record that

@@ -148,7 +148,8 @@ describe("booking from the page", () => {
     const html = await page.text();
     expect(html).toContain("Book: Tyre check");
     expect(html).toContain('type="email" name="email"');
-    expect(html).toContain('name="website"');
+    // The hidden field takes a name drawn for this form (ADR-029 §4.1), and password managers leave it be.
+    expect(html).toMatch(/name="(f_[a-z0-9]{6}|website)" tabindex="-1" autocomplete="off" data-1p-ignore/);
     const start = /name="start" value="([^"]+)"/.exec(html)?.[1];
     expect(start).toBeTruthy();
     const sent = await post(s, "/p/book", {
@@ -235,7 +236,7 @@ describe("asking from the page", () => {
     expect(all.every((i) => i.item.channel === "form")).toBe(true);
   });
 
-  it("thanks a bot that filled the trap, and writes nothing", async () => {
+  it("thanks a bot that filled the trap like anyone else, and keeps its message aside, never dropped", async () => {
     const s = await setup();
     const r = await post(s, "/p/message", {
       name: "x",
@@ -244,7 +245,9 @@ describe("asking from the page", () => {
       website: "https://spam.example",
     });
     expect(r.status).toBe(303);
-    expect(await items(s)).toHaveLength(0);
+    expect(r.headers.get("location")).toBe("/p/sent?k=message");
+    const kept = await s.db.client.query({ sql: "SELECT state, screen FROM items", method: "all" });
+    expect(kept.rows).toEqual([["spam", "aside"]]);
   });
 
   it("stops a flood from one address with the same limit the API's creates have", async () => {

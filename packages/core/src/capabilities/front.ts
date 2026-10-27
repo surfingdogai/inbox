@@ -5,6 +5,9 @@ import { frontCopy } from "../customer/front-copy";
 import type { CustomerLang } from "../customer/lang";
 import type { CustomerPage, LinkActResult, PageField, PageLink, PageSection } from "../customer/page";
 import { ulid } from "../ids";
+import { readSettings } from "../settings/schema";
+import { drawFormKey, readFormKey, trapNameOf, trapRoom } from "../spam/formkey";
+import type { ScreenInput } from "../spam/types";
 import type { Caller } from "../write/caller";
 import { WriteError } from "../write/errors";
 import type { Capabilities } from "./service";
@@ -176,15 +179,37 @@ function personFields(lang: CustomerLang, form: FrontForm): PageField[] {
   ];
 }
 
-/** A once-per-form key: the same form sent twice (a double click, a reload) makes one request. */
-const formKey = () => ulid();
+/**
+ * A once-per-form key, signed (ADR-029 §4.1): the same form sent twice (a double click, a reload)
+ * makes one request, and the hidden field takes a name drawn from it. A form shown again (an error,
+ * the confirm step) keeps the key it was drawn with.
+ */
+async function keyFor(
+  caps: Capabilities,
+  form: FrontForm,
+  path: string,
+  kind: string,
+  now: number,
+): Promise<{ readonly k: string; readonly trap: string }> {
+  if (form.k && /^[0-9A-Za-z]{10,40}$/.test(form.k)) return { k: form.k, trap: await trapNameOf(caps.secrets, form.k) };
+  return drawFormKey(caps.secrets, path, kind, now);
+}
+
+/** A page's own address, embedded or not: the form posts back to the same kind of page. */
+const embedded = (path: string, embed: boolean | undefined) =>
+  embed ? `${path}${path.includes("?") ? "&" : "?"}embed=1` : path;
 
 /** The booking page: the service's facts, a week of free times, and who is booking. */
 export async function frontBookView(
   caps: Capabilities,
   lang: CustomerLang,
   q: { readonly service?: string | undefined; readonly from?: string | undefined },
-  opts: { readonly now?: number; readonly error?: string; readonly form?: FrontForm } = {},
+  opts: {
+    readonly now?: number;
+    readonly error?: string;
+    readonly form?: FrontForm;
+    readonly embed?: boolean | undefined;
+  } = {},
 ): Promise<CustomerPage> {
   const f = frontCopy(lang);
   const now = opts.now ?? Date.now();
@@ -227,8 +252,10 @@ export async function frontBookView(
   const here = `${FRONT_PATHS.book}?service=${encodeURIComponent(service.id)}`;
   const form = opts.form ?? {};
   const price = priceText(service, lang);
+  const key = await keyFor(caps, form, FRONT_PATHS.book, "booking", now);
   return {
     ...(await base(caps, lang, opts.error ? 422 : 200)),
+    ...(opts.embed ? { embed: true } : {}),
     heading: f.book.heading(service.name),
     paragraphs: [
       ...(service.description ? [service.description] : []),
@@ -241,8 +268,8 @@ export async function frontBookView(
     ],
     error: opts.error,
     form: {
-      action: FRONT_PATHS.book,
-      hidden: { service: service.id, k: form.k || formKey() },
+      action: embedded(FRONT_PATHS.book, opts.embed),
+      hidden: { service: service.id, k: key.k },
       fields: [
         { kind: "times", name: "start", label: words.heading, days, empty: words.noneFree },
         ...personFields(lang, form),
@@ -256,12 +283,14 @@ export async function frontBookView(
         },
       ],
       button: copyFor(lang).page.acceptTime.buttonFree,
-      trap: true,
+      trap: key.trap,
     },
     nav: [
-      ...(startDay > today ? [{ label: words.earlier, href: `${here}&from=${iso(startDay - WEEK)}` }] : []),
-      { label: words.later, href: `${here}&from=${iso(startDay + WEEK)}` },
-      { label: f.back, href: "/" },
+      ...(startDay > today
+        ? [{ label: words.earlier, href: embedded(`${here}&from=${iso(startDay - WEEK)}`, opts.embed) }]
+        : []),
+      { label: words.later, href: embedded(`${here}&from=${iso(startDay + WEEK)}`, opts.embed) },
+      ...(opts.embed ? [] : [{ label: f.back, href: "/" }]),
     ],
   };
 }
@@ -271,39 +300,59 @@ export async function frontAskView(
   caps: Capabilities,
   lang: CustomerLang,
   kind: "quote" | "message",
-  opts: { readonly error?: string; readonly form?: FrontForm } = {},
+  opts: {
+    readonly error?: string;
+    readonly form?: FrontForm;
+    readonly now?: number;
+    readonly embed?: boolean | undefined;
+  } = {},
 ): Promise<CustomerPage> {
   const f = frontCopy(lang);
   const words = kind === "quote" ? f.quote : f.message;
   const form = opts.form ?? {};
+  const path = kind === "quote" ? FRONT_PATHS.quote : FRONT_PATHS.message;
+  const key = await keyFor(caps, form, path, kind, opts.now ?? Date.now());
   return {
     ...(await base(caps, lang, opts.error ? 422 : 200)),
+    ...(opts.embed ? { embed: true } : {}),
     heading: words.heading,
     paragraphs: [words.lead],
     error: opts.error,
     form: {
-      action: kind === "quote" ? FRONT_PATHS.quote : FRONT_PATHS.message,
-      hidden: { k: form.k || formKey() },
+      action: embedded(path, opts.embed),
+      hidden: { k: key.k },
       fields: [
         ...personFields(lang, form),
         { kind: "textarea", name: "text", label: words.what, required: true, maxLength: TEXT_MAX, value: form.text },
       ],
       button: f.send,
-      trap: true,
+      trap: key.trap,
     },
-    nav: [{ label: f.back, href: "/" }],
+    nav: opts.embed ? [] : [{ label: f.back, href: "/" }],
   };
 }
 
-/** The page after a request: what happens next. */
-export async function frontSent(caps: Capabilities, lang: CustomerLang, kind: string): Promise<CustomerPage> {
+/**
+ * The page after a request: what happens next, the same whatever the spam filter made of it, with a
+ * way to reach the business if nobody answers when it shows a public address or phone (ADR-029 §14).
+ */
+export async function frontSent(
+  caps: Capabilities,
+  lang: CustomerLang,
+  kind: string,
+  opts: { readonly embed?: boolean | undefined } = {},
+): Promise<CustomerPage> {
   const f = frontCopy(lang);
   const k: FrontKind = kind === "quote" || kind === "message" ? kind : "booking";
+  const legal = (await readSettings(caps.db)).commerce.legal;
+  const email = legal.email || undefined;
+  const phone = legal.phone || undefined;
   return {
     ...(await base(caps, lang)),
+    ...(opts.embed ? { embed: true } : {}),
     heading: f.sent.heading,
-    paragraphs: [f.sent[k]],
-    nav: [{ label: f.back, href: "/" }],
+    paragraphs: [f.sent[k], ...(email || phone ? [f.sent.safety({ email, phone })] : [])],
+    nav: opts.embed ? [] : [{ label: f.back, href: "/" }],
   };
 }
 
@@ -329,7 +378,39 @@ function person(lang: CustomerLang, form: FrontForm): { name: string; email: str
   return { name, email };
 }
 
-const keyOf = (form: FrontForm) => (/^[0-9A-Za-z]{10,40}$/.test(form.k ?? "") ? (form.k as string) : ulid());
+/**
+ * What the form says of itself, for the spam filter (ADR-029 §4.1): its key, when it was drawn, its
+ * hidden field. Null when its hidden field came back filled and today's room for bots' requests is
+ * used up: the visitor is thanked, and nothing more is kept.
+ */
+async function screenOf(
+  caps: Capabilities,
+  form: FrontForm,
+  path: string,
+  kind: string,
+  now: number,
+): Promise<{ readonly screen: ScreenInput; readonly key: string } | null> {
+  const { facts, key } = await readFormKey(caps.secrets, form, path, kind);
+  if (facts.trap && !(await trapRoom(caps.db, now))) return null;
+  return { screen: { door: "form", form: facts }, key };
+}
+
+/**
+ * Writes a request from the form under its key; one that comes back with other words under the same
+ * key (a replayed key) is written under a new one, and says so.
+ */
+async function underKey<R>(
+  read: { readonly screen: ScreenInput; readonly key: string },
+  write: (key: string, screen: ScreenInput) => Promise<R>,
+): Promise<R> {
+  try {
+    return await write(read.key, read.screen);
+  } catch (error) {
+    if (!(error instanceof WriteError && error.code === "idempotency_mismatch")) throw error;
+    const form = read.screen.form ? { ...read.screen.form, replayed: true } : undefined;
+    return write(ulid(), { ...read.screen, ...(form ? { form } : {}) });
+  }
+}
 
 /**
  * A booking sent from the page. A priced service first shows the summary the person confirms (the
@@ -340,7 +421,7 @@ export async function frontBookAct(
   caps: Capabilities,
   lang: CustomerLang,
   form: FrontForm,
-  opts: { readonly now?: number } = {},
+  opts: { readonly now?: number; readonly embed?: boolean | undefined } = {},
 ): Promise<LinkActResult> {
   // Bookings taken at a platform are made there: the visitor is sent on, and nothing is written here.
   const elsewhere = await caps.doorElsewhere("booking");
@@ -352,7 +433,11 @@ export async function frontBookAct(
     return {
       page: { ...(await base(caps, lang, 404)), heading: f.book.noService, nav: [{ label: f.back, href: "/" }] },
     };
-  const again = (error: string) => frontBookView(caps, lang, { service: service.id }, { now, error, form });
+  const again = (error: string) =>
+    frontBookView(caps, lang, { service: service.id }, { now, error, form, embed: opts.embed });
+  const sent = embedded(`${FRONT_PATHS.sent}?k=booking`, opts.embed);
+  const read = await screenOf(caps, form, FRONT_PATHS.book, "booking", now);
+  if (!read) return { redirect: sent };
   const who = person(lang, form);
   if ("error" in who) return { page: await again(who.error) };
   const start = Date.parse(form.start ?? "");
@@ -361,13 +446,19 @@ export async function frontBookAct(
   const endTime = new Date(start + service.durationMin * 60_000).toISOString();
   const note = (form.note ?? "").slice(0, TEXT_MAX);
   try {
-    await caps.createBooking(visitor(lang, keyOf(form), now), {
-      payload: { reservationFor: { serviceId: service.id, name: service.name }, startTime, endTime },
-      contact: { name: who.name, email: who.email, locale: lang },
-      ...(note ? { message: note } : {}),
-      ...(form.terms_sha ? { terms_sha: form.terms_sha } : {}),
-    });
-    return { redirect: `${FRONT_PATHS.sent}?k=booking` };
+    await underKey(read, (key, screen) =>
+      caps.createBooking(
+        visitor(lang, key, now),
+        {
+          payload: { reservationFor: { serviceId: service.id, name: service.name }, startTime, endTime },
+          contact: { name: who.name, email: who.email, locale: lang },
+          ...(note ? { message: note } : {}),
+          ...(form.terms_sha ? { terms_sha: form.terms_sha } : {}),
+        },
+        { screen },
+      ),
+    );
+    return { redirect: sent };
   } catch (error) {
     if (error instanceof WriteError && error.code === "confirm_terms") {
       const details = error.details ?? {};
@@ -375,24 +466,30 @@ export async function frontBookAct(
       return {
         page: {
           ...(await base(caps, lang)),
+          ...(opts.embed ? { embed: true } : {}),
           heading: f.book.confirmHeading,
           paragraphs: [String(details.summary ?? "")].filter(Boolean),
           form: {
-            action: FRONT_PATHS.book,
+            action: embedded(FRONT_PATHS.book, opts.embed),
             hidden: {
               service: service.id,
               start: startTime,
               name: who.name,
               email: who.email,
               note,
-              k: keyOf(form),
+              k: read.key,
               terms_sha: String(details.terms_sha ?? ""),
             },
             fields: [],
             button: words.buttonPriced,
-            trap: true,
+            trap: await trapNameOf(caps.secrets, read.key),
           },
-          nav: [{ label: f.back, href: `${FRONT_PATHS.book}?service=${encodeURIComponent(service.id)}` }],
+          nav: [
+            {
+              label: f.back,
+              href: embedded(`${FRONT_PATHS.book}?service=${encodeURIComponent(service.id)}`, opts.embed),
+            },
+          ],
         },
       };
     }
@@ -411,22 +508,71 @@ export async function frontAskAct(
   lang: CustomerLang,
   kind: "quote" | "message",
   form: FrontForm,
-  opts: { readonly now?: number } = {},
+  opts: { readonly now?: number; readonly embed?: boolean | undefined } = {},
 ): Promise<LinkActResult> {
   const f = frontCopy(lang);
   const now = opts.now ?? Date.now();
+  const sent = embedded(`${FRONT_PATHS.sent}?k=${kind}`, opts.embed);
+  const read = await screenOf(caps, form, kind === "quote" ? FRONT_PATHS.quote : FRONT_PATHS.message, kind, now);
+  if (!read) return { redirect: sent };
   const who = person(lang, form);
   const text = (form.text ?? "").slice(0, TEXT_MAX);
   if ("error" in who || !text) {
-    return { page: await frontAskView(caps, lang, kind, { error: "error" in who ? who.error : f.missing, form }) };
+    return {
+      page: await frontAskView(caps, lang, kind, {
+        error: "error" in who ? who.error : f.missing,
+        form,
+        now,
+        embed: opts.embed,
+      }),
+    };
   }
-  const caller = visitor(lang, keyOf(form), now);
   const contact = { name: who.name, email: who.email, locale: lang };
-  if (kind === "quote") {
-    const what = text.split("\n")[0]?.slice(0, 120) || f.quote.heading;
-    await caps.requestQuote(caller, { payload: { itemOffered: { name: what }, description: text }, contact });
-  } else {
-    await caps.sendMessage(caller, { body: text, contact });
+  await underKey(read, async (key, screen) => {
+    const caller = visitor(lang, key, now);
+    if (kind === "quote") {
+      const what = text.split("\n")[0]?.slice(0, 120) || f.quote.heading;
+      return caps.requestQuote(
+        caller,
+        { payload: { itemOffered: { name: what }, description: text }, contact },
+        { screen },
+      );
+    }
+    return caps.sendMessage(caller, { body: text, contact }, { screen });
+  });
+  return { redirect: sent };
+}
+
+/**
+ * The origins that may frame the business's form on their pages (ADR-029 §4.1): the business's own
+ * website, with and without `www.`, and its own domain; on a hosted inbox, the site its host names.
+ * Empty: nobody may.
+ */
+export async function embedAncestors(caps: Capabilities, hostSite?: string | null): Promise<string[]> {
+  const settings = await readSettings(caps.db);
+  const profile = await caps.getBusinessProfile();
+  const out = new Set<string>();
+  const add = (host: string) => {
+    const h = host.toLowerCase().replace(/^www\./, "");
+    if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(h)) return;
+    out.add(`https://${h}`);
+    out.add(`https://www.${h}`);
+  };
+  if (hostSite) {
+    try {
+      add(new URL(hostSite).hostname);
+    } catch {
+      // not a site
+    }
+    return [...out];
   }
-  return { redirect: `${FRONT_PATHS.sent}?k=${kind}` };
+  if (settings.directory.url) {
+    try {
+      add(new URL(settings.directory.url).hostname);
+    } catch {
+      // not a site
+    }
+  }
+  if (profile.domain) add(profile.domain);
+  return [...out];
 }

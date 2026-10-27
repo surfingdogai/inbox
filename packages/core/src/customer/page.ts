@@ -35,6 +35,11 @@ export interface CustomerPage {
    * written as a JSON-LD data block, which nothing runs.
    */
   readonly jsonLd?: Readonly<Record<string, unknown>> | undefined;
+  /**
+   * Drawn to sit inside the business's own website (`?embed=1`, ADR-029 §4.1): the form alone, with
+   * no header, no way around the page and no footer.
+   */
+  readonly embed?: boolean | undefined;
 }
 
 export interface PageSection {
@@ -55,10 +60,11 @@ export interface PageForm {
   readonly fields: readonly PageField[];
   readonly button: string;
   /**
-   * A field people never see and bots fill in (the front page's forms): a form that comes back with
-   * it filled is thanked and dropped.
+   * A field people never see and bots fill in (the front page's forms), by its name for this form
+   * (ADR-029 §4.1; `true` for the old name). A form that comes back with it filled is thanked like any
+   * other, and kept aside for the owner.
    */
-  readonly trap?: boolean | undefined;
+  readonly trap?: boolean | string | undefined;
 }
 
 export type PageField =
