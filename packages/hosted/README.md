@@ -24,6 +24,13 @@ Many inboxes on one machine, for whoever runs Surfing Dog Inbox for other people
   name; the owner can switch them off, before then too, and that choice survives the inbox going
   back to its setup address and live again. An inbox made before this is left as it was until the
   operator joins it on purpose: `POST /admin/v1/tenants/{id}/networks/join`, or `join-networks`.
+- **Plans and the spam filter.** The policy's `plan` (`free` or `pro`; absent, Free) says what an
+  inbox has. Pro includes the spam filters, on from the start and read by Claude Haiku on the
+  operator's own Anthropic key, `HOSTED_SPAM_ANTHROPIC_KEY`, in the shards' environment only (unset,
+  no model is asked and Settings says the AI check isn't on yet); `HOSTED_SPAM_MODEL` names another
+  model, `HOSTED_SPAM_DAILY_TOKENS` the runtime's daily ceiling. The policy's `spam` block may stop
+  the AI for an inbox (`ai: false`) or set its caps (150 checks a day, 1,500 a month by default),
+  which the ledger keeps across every shard.
 
 Every name, socket, key and directory comes from the environment; see `src/config.ts`.
 
