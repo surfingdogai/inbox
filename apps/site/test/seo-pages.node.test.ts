@@ -367,6 +367,7 @@ describe("the owners' pages", () => {
     const pkg = JSON.parse(read("package.json")) as { dependencies: Record<string, string> };
     expect(pkg.dependencies["@astrojs/sitemap"]).toBeDefined();
     expect(read("public/robots.txt")).toContain("Sitemap: https://surfingdog.ai/sitemap-checks.xml");
-    for (const n of [2, 3, 4]) expect(read("public/robots.txt")).toContain(`Sitemap: https://surfingdog.ai/sitemap-checks-${n}.xml`);
+    for (const n of [2, 3, 4])
+      expect(read("public/robots.txt")).toContain(`Sitemap: https://surfingdog.ai/sitemap-checks-${n}.xml`);
   });
 });
