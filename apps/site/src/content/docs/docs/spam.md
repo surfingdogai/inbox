@@ -171,4 +171,4 @@ The owner MCP's `spam_status` reads the filters, this month's counts, who reads,
 
 Erasing a customer removes the filter's verdicts on their requests, their prints, the AI check's answers about their words, their rows on the lists and their handles' history. A download of your inbox keeps the verdicts, the lists, when each filter was on and the day counts; never the prints, the handles, the cached answers, or your model's key.
 
-**Keep what's put aside**: **Keep them** (the default), 90 days or 30 days. A bot's form messages go after seven days whatever you choose; nothing you brought back is ever removed.
+**Keep what's put aside**: **Keep them** (the default), 90 days or 30 days. Nothing is deleted on its own, a bot's form messages included; nothing you brought back is ever removed.

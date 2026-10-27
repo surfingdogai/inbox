@@ -915,8 +915,8 @@ export class SpamCapabilities implements SpamDeps {
   /**
    * The daily housekeeping (`spam_daily`): prints and cached answers past their time, and — only when
    * the owner chose to keep what is put aside for 30 or 90 days — put-aside items older than that, with
-   * their history, never one a person brought back; a bot's (a hidden field, a form never drawn) after
-   * seven days whatever the choice.
+   * their history, never one a person brought back. Nothing else is deleted on its own: a bot's form
+   * message is kept as long as anything else put aside (the founder, 27 October 2026).
    */
   async daily(now: number): Promise<{ readonly removed: number }> {
     const settings = await readSettings(this.db);
@@ -931,9 +931,9 @@ export class SpamCapabilities implements SpamDeps {
       sql: `SELECT i.id FROM items i JOIN spam_verdicts v ON v.item_id = i.id
              WHERE i.screen = 'aside' AND v.owner_verdict IS NULL
                AND NOT EXISTS (SELECT 1 FROM receipts r WHERE r.item_id = i.id)
-               AND ((v.cause IN ('trap', 'no_key') AND i.created_at < ?) OR (? > 0 AND i.created_at < ?))
+               AND ? > 0 AND i.created_at < ?
              LIMIT 200`,
-      params: [now - 7 * 86_400_000, keep, now - keep * 86_400_000],
+      params: [keep, now - keep * 86_400_000],
       method: "all",
     });
     const ids = rows.map((r) => String(r[0]));

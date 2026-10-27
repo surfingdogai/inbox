@@ -117,7 +117,7 @@ describe("the spam filter's pages", () => {
     // What leaves the server: a new sender's mail domain, looked up in DNS with an AI check, never without.
     expect(docs).toMatch(/mail domain is looked up in DNS/);
     expect(docs).toContain("With an AI check, never without one, a new sender's mail domain is looked up in DNS");
-    // A bot's form messages go after a week, and the owner may choose a time: nothing says nothing is deleted.
+    // The owner may choose a time to delete what is put aside: nothing promises nothing is ever deleted.
     const ours = SPAM_GUIDE_OPTIONS.find((o) => o.ours)?.what ?? "";
     expect(ours).not.toMatch(/nothing (a person wrote is )?deleted/);
     expect(ours).toContain("kept for as long as you choose");

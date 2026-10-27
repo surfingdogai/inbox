@@ -15,8 +15,8 @@ import {
   heldOrder,
   heldWhat,
   heldWho,
-  KEEP_BOTS,
   KEEP_CHOICES,
+  KEEP_NOTE,
   keepLine,
   learningLine,
   MAY_BE_CUSTOMER,
@@ -415,8 +415,8 @@ describe("Settings → Spam, in every state", () => {
     expect(keepLine(0)).toBe("Put-aside messages are kept until you choose a time in Settings → Spam.");
     expect(keepLine(90)).toBe("Put-aside messages are kept 90 days.");
     expect(KEEP_CHOICES.map((c) => c.label)).toEqual(["Keep them", "90 days", "30 days"]);
-    // What goes whatever the choice is said where the choice is made, and the intro promises no less.
-    expect(KEEP_BOTS).toBe("A bot's form messages go after seven days.");
+    // Nothing goes on its own (the founder, 27 October 2026): said where the choice is made.
+    expect(KEEP_NOTE).toBe("Nothing is deleted unless you choose a time here.");
     expect(SETTINGS_INTRO).not.toMatch(/nothing is deleted/i);
     // A held sender got their acknowledgement: the owner wasn't alerted, which is all that is said.
     expect(SETTINGS_INTRO).toBe(
@@ -426,7 +426,7 @@ describe("Settings → Spam, in every state", () => {
     expect(BASIC_FREE).toBe(
       "Free, and nothing it reads leaves your inbox. A new sender's mail domain is looked up in DNS with an AI check, never without one.",
     );
-    // A bot's form messages go after a week: the Spam list never says nothing is deleted.
+    // The Spam list says how to bring one back, and nothing of deleting.
     expect(SPAM_TOP).toBe("Put aside. Not spam moves one back.");
   });
 

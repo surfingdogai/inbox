@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DOWNLOAD_TABLES } from "../../src/capabilities/download";
-import { agent, DAY, fakeJudge, MIN, owner, spamSetup, T0 } from "./harness";
+import { agent, DAY, fakeJudge, MIN, owner, spamSetup, T0, visitor } from "./harness";
 
 /**
  * Erasing a customer erases what the spam filter kept about them (ADR-041 §9.4): its verdicts and
@@ -94,6 +94,27 @@ describe("erasing a customer the AI check read", () => {
     expect(Number((await s.q("SELECT COUNT(*) FROM spam_handles"))[0]?.[0])).toBe(2);
     await s.caps.spam.daily(T0 + 31 * DAY);
     expect(await s.q("SELECT COUNT(*) FROM spam_handles")).toEqual([[0]]);
+  });
+});
+
+describe("what is put aside", () => {
+  it("is kept, a bot's form message too, until the owner chooses a time, and goes only then", async () => {
+    const s = await spamSetup();
+    const bot = await s.caps.sendMessage(
+      visitor(T0),
+      { body: "Cheap followers, visit now", contact: { name: "Bot", email: "bot@example.net" } },
+      { screen: { door: "form", form: { key: "valid", trap: true, drawnAt: T0 - 30_000 } } },
+    );
+    const id = (bot as { view: { item: { id: string } } }).view.item.id;
+    expect(await s.q("SELECT screen FROM items WHERE id = ?", [id])).toEqual([["aside"]]);
+    // Nothing is deleted on its own (the founder, 27 October 2026).
+    await s.caps.spam.daily(T0 + 8 * DAY);
+    await s.caps.spam.daily(T0 + 120 * DAY);
+    expect(await s.q("SELECT COUNT(*) FROM items WHERE id = ?", [id])).toEqual([[1]]);
+    // The owner chooses 30 days: from then, what was put aside more than 30 days ago goes.
+    await s.caps.updateSettings(owner(T0 + 120 * DAY), { doc: { spam: { keepDays: 30 } } });
+    await s.caps.spam.daily(T0 + 121 * DAY);
+    expect(await s.q("SELECT COUNT(*) FROM items WHERE id = ?", [id])).toEqual([[0]]);
   });
 });
 

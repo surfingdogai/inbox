@@ -140,8 +140,8 @@ each filter.*
     what Pro costs to run. Nothing is charged by them: Pro includes the filters. A request held or put
     aside is not in `items` until it is let in.
 11. **Owners decide, in person.** What reads a stranger's words is the owner's choice: only the owner or
-    staff, signed in, switch the filters, choose Put aside or Just label, end a learning week, let in, block, or let a domain through —
-    never their AI, a rule or a key. The model's key decides where strangers' messages are sent: the
+    staff, signed in, switch the filters, choose Put aside or Just label, end a learning week, let in,
+    block, or let a domain through — never their AI, a rule or a key. The model's key decides where strangers' messages are sent: the
     owner alone sets, replaces or removes it, as for anything that sends data somewhere new. The owner's
     AI may read `spam_status`.
 
@@ -219,7 +219,7 @@ brings it back.
 | D2 | Our AI for hosted inboxes: provider and model, where it runs, retention, the terms | Claude Haiku (`claude-haiku-5-5`) through Anthropic's API on our own key, `HOSTED_SPAM_ANTHROPIC_KEY`: off, and said so, until it is set. Anthropic's standard commercial retention applies (no training; deleted within 30 days unless flagged under its usage policy, then up to two years, or kept by law); never "keeps nothing". The processing agreement names Anthropic as a sub-processor. |
 | D3 | Filters on by default for new hosted inboxes | On for Pro, each starting with its learning week (labels only, then puts aside). Nothing is deleted automatically; Not spam is one tap. A filter a person switched off stays off. |
 | D4 | Caps: 150 a day and 1,500 a month per inbox, 50 million tokens a day per runtime, the budgets above | Kept, in the policy's `spam` block. |
-| D5 | Deleting put-aside items after 30 or 90 days | kept ("Keep them") unless the owner chooses 90 or 30 days |
+| D5 | Deleting put-aside items after 30 or 90 days | Kept ("Keep them") unless the owner chooses 90 or 30 days. Nothing is deleted on its own (27 October 2026): a bot's form messages, once gone after seven days, are kept like the rest. |
 | D6 | A Spam tap also blocking the sender | offered, never automatic |
 | D7 | Sharing anything across businesses | Decided: inboxes share fingerprints of known spam with each other, never content. Not built yet: nothing is shared. |
 | D8 | Spam data in receipts, standing or ranking | none of it |

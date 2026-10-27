@@ -13,8 +13,8 @@ import {
   FILTER_COPY,
   FILTERS_LINE,
   filterMonth,
-  KEEP_BOTS,
   KEEP_CHOICES,
+  KEEP_NOTE,
   learningLine,
   MONTHLY_CHECKS,
   notIncluded,
@@ -221,7 +221,7 @@ function SpamPage() {
               ))}
             </fieldset>
           </div>
-          <p className="fine">{KEEP_BOTS}</p>
+          <p className="fine">{KEEP_NOTE}</p>
         </div>
       </section>
       {asking && sheet && (

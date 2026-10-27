@@ -345,8 +345,8 @@ export const KEEP_CHOICES: readonly { readonly value: 0 | 30 | 90; readonly labe
   { value: 30, label: "30 days" },
 ];
 
-/** Under Keep what's put aside: what goes whatever the choice. */
-export const KEEP_BOTS = "A bot's form messages go after seven days.";
+/** Under Keep what's put aside: nothing goes on its own. */
+export const KEEP_NOTE = "Nothing is deleted unless you choose a time here.";
 
 /** The Test result on the Your AI model card (§11.5). */
 export function testLine(t: { readonly pitch: boolean; readonly customer: boolean }): string {
