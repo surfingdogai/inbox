@@ -1,0 +1,83 @@
+name: update-test
+# A self-hosted inbox with real data, updated from one release to another the way a self-hoster
+# updates one (deploy/test/update-test.sh, one phase a step): installed with the first release's own
+# installer, given a business, a booking, an order and a message through its own doors, then
+# `sudo inbox update <to>`. It checks the new version answers with its database, every record reads
+# back identical, the migrations ran, the owner app loads and the update's backup is there; then
+# `sudo inbox rollback`, and the update once more.
+#
+# Before each release: Actions → update-test → Run workflow, `from` the last release and `to` the new
+# one (its image and its GitHub Release must exist, a release candidate's included).
+on:
+  push:
+    branches: [update-test]
+  workflow_dispatch:
+    inputs:
+      from:
+        description: The release installed first, with its own installer
+        required: true
+        default: 0.1.0
+      to:
+        description: The release it updates to
+        required: true
+        default: 0.2.0-rc.1
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    name: update with data · ${{ inputs.from || '0.1.0' }} → ${{ inputs.to || '0.2.0-rc.1' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      FROM: ${{ inputs.from || '0.1.0' }}
+      TO: ${{ inputs.to || '0.2.0-rc.1' }}
+      WORK: /tmp/update-test
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 24
+      - name: install the first release with its own installer
+        run: deploy/test/update-test.sh install
+      - name: data, through the public and owner APIs
+        run: deploy/test/update-test.sh seed
+      - name: inbox update, then health, kit, migrations, records, owner app, backup
+        run: deploy/test/update-test.sh update
+      - name: inbox rollback, then the data from before
+        run: deploy/test/update-test.sh rollback
+      - name: inbox update once more
+        run: deploy/test/update-test.sh again
+      # A release candidate's own check: from it, the release it leads to must not be refused.
+      - name: from a pre-release, the release after it
+        continue-on-error: true
+        run: deploy/test/update-test.sh final
+      - name: what the inbox said
+        if: failure()
+        run: |
+          sudo docker compose --project-directory /opt/inbox -f /opt/inbox/docker-compose.yml ps -a || true
+          sudo docker compose --project-directory /opt/inbox -f /opt/inbox/docker-compose.yml logs --no-color --tail 200 || true
+          sudo ls -la /opt/inbox/data/backups /opt/inbox/state || true
+      - name: summary
+        if: always()
+        env:
+          STATUS: ${{ job.status }}
+        run: deploy/test/update-test.sh summary
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: update-test-${{ inputs.from || '0.1.0' }}-to-${{ inputs.to || '0.2.0-rc.1' }}
+          if-no-files-found: ignore
+          retention-days: 14
+          # The read-backs, the comparisons, the migrations and what each command said. Not the
+          # customers' access tokens (records.json), nor the owner key.
+          path: |
+            /tmp/update-test/before.json
+            /tmp/update-test/after-*.json
+            /tmp/update-test/compare-*.md
+            /tmp/update-test/migrations-*.txt
+            /tmp/update-test/update.log
+            /tmp/update-test/rollback.log
+            /tmp/update-test/again.log
+            /tmp/update-test/final.log

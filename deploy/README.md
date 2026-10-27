@@ -57,3 +57,8 @@ storage. [surfingdog.ai/docs/backups](https://surfingdog.ai/docs/backups/).
 `deploy/test`: the installer and `inbox` against stand-ins for the system's commands (`pnpm test:node`),
 the image's smoke test (`smoke-image.sh`), and the installer for real in a systemd container
 (`installer-vm.sh`). The `self-host` workflow runs all three.
+
+Before each release, the `update-test` workflow (`update-test.sh`, `update-data.mjs`) installs the last
+release with its own installer, gives it a booking, an order and a message through its own doors, runs
+`inbox update` to the new one and checks that every record reads back identical, then rolls back and
+updates again. Run it from the Actions tab with `from` and `to`.
