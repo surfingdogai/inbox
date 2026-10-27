@@ -42,8 +42,9 @@ export interface DisclosureCopy {
     stopped: (date: string) => string;
     /**
      * While new messages may be read by an automated check (ADR-041 §14): what it sees and keeps, when
-     * the host's service reads (`spam`, which keeps nothing), or a service the business set up itself
-     * (`spamOwn`, which says nothing of what it keeps).
+     * the host's service reads (`spam`: Anthropic's API, which does not train on it and deletes it
+     * within 30 days unless its safety checks flag it or the law requires keeping it), or a service the
+     * business set up itself (`spamOwn`, which says nothing of what it keeps).
      */
     spamHeading: string;
     spam: string;
@@ -80,7 +81,7 @@ const EN: DisclosureCopy = {
     stopped: (date) =>
       `Done. Since ${date} we tell no booking network anything more about you. Your bookings, orders and our emails work as before.`,
     spamHeading: "Keeping out spam",
-    spam: "We check new messages from people we haven't heard from before, to keep unwanted messages away from our team. The check can include a reading by an automated service, which sees the message without email addresses, phone numbers or bank details and keeps nothing. A person here can see and bring back any message the check set aside while it is kept.",
+    spam: "We check new messages from people we haven't heard from before, to keep unwanted messages away from our team. The check can include a reading by an automated service, which sees the message without email addresses, phone numbers or bank details. That service does not use it to train AI models, and deletes it within 30 days, unless its safety checks flag it (it may then keep it for up to two years) or the law requires keeping it. A person here can see and bring back any message the check set aside while it is kept.",
     spamOwn:
       "We check new messages from people we haven't heard from before, to keep unwanted messages away from our team. The check can include a reading by an automated service, which sees the message without email addresses, phone numbers or bank details. A person here can see and bring back any message the check set aside while it is kept.",
   },
@@ -119,7 +120,7 @@ const PT: DisclosureCopy = {
     stopped: (date) =>
       `Feito. Desde ${date} não dizemos mais nada sobre si a nenhuma rede de reservas. As suas marcações, encomendas e os nossos emails continuam como antes.`,
     spamHeading: "Proteção contra spam",
-    spam: "Verificamos as mensagens novas de quem ainda não nos contactou, para manter as mensagens indesejadas longe da nossa equipa. A verificação pode incluir uma leitura por um serviço automático, que vê a mensagem sem endereços de email, números de telefone ou dados bancários, e não guarda nada. Alguém da nossa equipa pode ver e recuperar qualquer mensagem posta de parte enquanto for guardada.",
+    spam: "Verificamos as mensagens novas de quem ainda não nos contactou, para manter as mensagens indesejadas longe da nossa equipa. A verificação pode incluir uma leitura por um serviço automático, que vê a mensagem sem endereços de email, números de telefone ou dados bancários. Esse serviço não a usa para treinar modelos de IA e apaga-a no prazo de 30 dias, a menos que os seus controlos de segurança a assinalem (podendo então guardá-la até dois anos) ou que a lei obrigue a guardá-la. Alguém da nossa equipa pode ver e recuperar qualquer mensagem posta de parte enquanto for guardada.",
     spamOwn:
       "Verificamos as mensagens novas de quem ainda não nos contactou, para manter as mensagens indesejadas longe da nossa equipa. A verificação pode incluir uma leitura por um serviço automático, que vê a mensagem sem endereços de email, números de telefone ou dados bancários. Alguém da nossa equipa pode ver e recuperar qualquer mensagem posta de parte enquanto for guardada.",
   },
@@ -175,7 +176,7 @@ export function privacyPage(input: {
   readonly mine?: { readonly stopped: string | null; readonly form: CustomerPage["form"] } | undefined;
   /**
    * Whether new messages may be read by the spam filter's AI check now, and whose model (ADR-041 §14):
-   * the host's, which keeps nothing, or one the business set up itself; null while none may.
+   * the host's, whose retention the page states, or one the business set up itself; null while none may.
    */
   readonly spamReading?: "host" | "own" | null | undefined;
 }): CustomerPage {
