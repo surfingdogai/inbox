@@ -75,6 +75,7 @@ jobs:
           # The read-backs, the comparisons, the migrations and what each command said. Not the
           # customers' access tokens (records.json), nor the owner key.
           path: |
+            /tmp/update-test/summary-final.md
             /tmp/update-test/before.json
             /tmp/update-test/after-*.json
             /tmp/update-test/compare-*.md

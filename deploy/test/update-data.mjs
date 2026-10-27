@@ -9,8 +9,9 @@
 // A read-back holds every record as the inbox serves it, less the words it shows around the data
 // (`human`, the buttons it offers, its guide for agents), which a new version may put differently.
 // `compare` passes when every field the first read-back had is in the second, with the same value:
-// fields a newer version adds are listed, not counted against it. Node 22 or later; no packages.
-import { createHash } from "node:crypto";
+// fields a newer version adds are listed, not counted against it. Each receipt's signature is checked
+// against the keys the inbox publishes at the time of the read-back. Node 22 or later; no packages.
+import { createHash, createPublicKey, verify } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 
 const [command, ...args] = process.argv.slice(2);
@@ -280,7 +281,9 @@ async function read(base, keyFile, recordsFile, out) {
     events: await all(api, "/v1/owner/events?limit=100", "events"),
     receipts: want(await api.owner("GET", "/v1/owner/receipts"), 200, "the receipts' status"),
     keys: want(await api.owner("GET", "/v1/owner/api-keys"), 200, "the keys").items,
+    jwks: want(await api.customer("GET", "/.well-known/jwks.json"), 200, "the receipt keys"),
     records: {},
+    signatures: {},
   };
   for (const name of ["booking", "order", "message"]) {
     const { id, token } = records[name];
@@ -291,6 +294,7 @@ async function read(base, keyFile, recordsFile, out) {
       `the ${name}, as its customer sees it`,
     );
     snapshot.records[name] = { owner, customer };
+    for (const r of owner.receipts) snapshot.signatures[`${name} ${r.kind} ${r.id}`] = signed(r.jws, snapshot.jwks);
   }
   writeFileSync(out, `${JSON.stringify(snapshot, null, 2)}\n`);
   const r = snapshot.records;
@@ -298,6 +302,20 @@ async function read(base, keyFile, recordsFile, out) {
     `${snapshot.health.version}: ${snapshot.items.length} items, ${snapshot.events.length} events, ` +
       `booking ${r.booking.owner.item.state}, order ${r.order.owner.item.state}, message ${r.message.owner.item.state}`,
   );
+}
+
+/** Whether a receipt's JWS verifies with the key its header names, among the keys published now. */
+function signed(jws, jwks) {
+  const [head, body, signature] = String(jws).split(".");
+  try {
+    const { kid } = JSON.parse(Buffer.from(head, "base64url").toString("utf8"));
+    const jwk = jwks.keys.find((k) => k.kid === kid);
+    if (!jwk) return `no published key ${kid}`;
+    const key = createPublicKey({ key: jwk, format: "jwk" });
+    return verify(null, Buffer.from(`${head}.${body}`), key, Buffer.from(signature, "base64url")) || "bad signature";
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
 }
 
 /** JSON with its keys in order, for a checksum that does not depend on key order. */
@@ -378,9 +396,9 @@ function compare(beforeFile, afterFile, reportFile) {
       item.state,
       money(item.payload?.totalPrice),
       b.owner.party?.name ?? "",
-      `${b.owner.events.length} events`,
-      `${b.owner.thread?.length ?? 0} in the thread`,
-      `${b.owner.receipts.length} receipts`,
+      `events ${b.owner.events.length}`,
+      `thread ${b.owner.thread?.length ?? 0}`,
+      `receipts ${b.owner.receipts.length}`,
     ]
       .filter(Boolean)
       .join(" · ");
@@ -389,7 +407,7 @@ function compare(beforeFile, afterFile, reportFile) {
       `${name} (customer)`,
       b.customer,
       a.customer,
-      `${b.customer.reference} · ${b.customer.thread.length} in the thread`,
+      `ref ${b.customer.reference} · thread ${b.customer.thread.length} · receipts ${b.customer.receipts?.length ?? 0}`,
     );
   }
   check("profile", before.profile, after.profile, before.profile.name);
@@ -400,6 +418,12 @@ function compare(beforeFile, afterFile, reportFile) {
   check("event stream", before.events, after.events, `${before.events.length} events`);
   check("receipts", before.receipts, after.receipts, `${before.receipts.issued} issued`);
   check("owner keys", before.keys, after.keys, `${before.keys.length}`);
+  check("receipt keys", before.jwks, after.jwks, `${before.jwks.keys.length} published`);
+  check("receipt signatures", before.signatures, after.signatures, `${Object.keys(before.signatures).length} verified`);
+  for (const [receipt, ok] of Object.entries(after.signatures)) {
+    if (ok !== true) problems.push(`receipt ${receipt} does not verify: ${ok}`);
+  }
+  if (Object.keys(before.signatures).length === 0) problems.push("no receipt to check");
 
   const lines = [
     "| Record | What it holds | sha256 before | sha256 after | |",

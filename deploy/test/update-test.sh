@@ -181,7 +181,7 @@ phase_update() {
   if ! data compare "$WORK/before.json" "$WORK/after-$name.json" "$WORK/compare-$name.md"; then
     fail "the data did not read back identical on $TO (the table below says what changed)"
   fi
-  pass "Every record reads back identical on $TO: the booking, the order and the message as the owner and as each customer see them (state, totals, customer, events, thread, receipts), the profile, services, products, hours, item list, event stream, receipts and keys; the owner key still opens it"
+  pass "Every record reads back identical on $TO: the booking, the order and the message as the owner and as each customer see them (state, totals, customer, events, thread, receipts), the profile, services, products, hours, item list, event stream, receipts and keys; both receipts still verify against the keys it publishes; the owner key still opens it"
 
   # The owner app: the index this version ships, and its script.
   owner_app
@@ -248,7 +248,6 @@ phase_final() {
 
 # phase_summary: the result, then each check as it went. STATUS is the job's status, when it has one.
 phase_summary() {
-  out="${GITHUB_STEP_SUMMARY:-/dev/stdout}"
   touch "$SUMMARY"
   if grep -q '✗' "$SUMMARY" || [ "${STATUS:-success}" != success ]; then
     result="failed"
@@ -264,11 +263,14 @@ phase_summary() {
     cat "$SUMMARY"
     for f in update rollback again; do
       [ -f "$WORK/compare-$f.md" ] || continue
-      printf '\n<details><summary>The records, read back after the %s</summary>\n\n' "$f"
+      case "$f" in update) after="the update" ;; rollback) after="the rollback" ;; *) after="the second update" ;; esac
+      printf '\n<details><summary>The records, read back after %s</summary>\n\n' "$after"
       cat "$WORK/compare-$f.md"
       printf '\n</details>\n'
     done
-  } >>"$out"
+  } >"$WORK/summary-final.md"
+  cat "$WORK/summary-final.md"
+  [ -z "${GITHUB_STEP_SUMMARY:-}" ] || cat "$WORK/summary-final.md" >>"$GITHUB_STEP_SUMMARY"
 }
 
 case "$PHASE" in
