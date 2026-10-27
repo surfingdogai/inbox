@@ -131,11 +131,17 @@ jobs:
           apk=apps/mobile/android/app/build/outputs/apk/release/app-release.apk
           [ -f "$apk" ] || { echo "::error::no signed app-release.apk (an unsigned one means the release key was not used)"; ls -R apps/mobile/android/app/build/outputs/apk || true; exit 1; }
           bt="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
-          "$bt/apksigner" verify --verbose --print-certs "$apk" > signers.txt
+          echo "build-tools: $bt"
+          "$bt/apksigner" verify --verbose --print-certs "$apk" > signers.txt || { cat signers.txt; echo "::error::apksigner: the APK does not verify"; exit 1; }
           cat signers.txt
           grep -q '^Verified using v2 scheme (APK Signature Scheme v2): true' signers.txt || { echo "::error::not signed with APK Signature Scheme v2"; exit 1; }
-          [ "$(grep -c '^Signer #[0-9]* certificate SHA-256 digest:' signers.txt)" = 1 ] || { echo "::error::expected exactly one signer"; exit 1; }
-          got="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' signers.txt)"
+          # apksigner's lines differ by version ("Signer #1 certificate SHA-256 digest: …" up to
+          # build-tools 36, "V2 Signer: certificate SHA-256 digest: …" from 37): read either.
+          if grep -q '^Number of signers:' signers.txt; then
+            grep -qx 'Number of signers: 1' signers.txt || { echo "::error::expected exactly one signer"; exit 1; }
+          fi
+          got="$(sed -n 's/^.* certificate SHA-256 digest: //p' signers.txt | tr 'A-F' 'a-f' | sort -u)"
+          [ -n "$got" ] && [ "$(printf '%s\n' "$got" | wc -l)" -eq 1 ] || { echo "::error::expected exactly one signing certificate, got: ${got:-none}"; exit 1; }
           [ "$got" = "$RELEASE_CERT_SHA256" ] || { echo "::error::signed by $got, not the release certificate $RELEASE_CERT_SHA256"; exit 1; }
           "$bt/aapt2" dump badging "$apk" > badging.txt
           grep -q "^package: name='$APP_ID' versionCode='$CODE' versionName='$VERSION'" badging.txt || { echo "::error::package, versionCode or versionName is not $APP_ID $CODE $VERSION"; head -1 badging.txt; exit 1; }
@@ -160,8 +166,8 @@ jobs:
             echo "- APK: \`$NAME.apk\`, $size bytes, sha256 \`$sha\`"
             echo "- versionCode $CODE · signed by the release certificate \`$cert\`"
             echo '```'
-            grep -E '^(Verified using|Signer #1 certificate (DN|SHA-256|SHA-1))' signers.txt
-            grep -E "^(package|sdkVersion|targetSdkVersion|application-label|uses-permission)" badging.txt
+            grep -E '^Verified using|^Number of signers| certificate (DN|SHA-256 digest|SHA-1 digest): ' signers.txt || true
+            grep -E "^(package|sdkVersion|minSdkVersion|targetSdkVersion|application-label|uses-permission)" badging.txt || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
