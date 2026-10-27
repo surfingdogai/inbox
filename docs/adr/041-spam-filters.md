@@ -33,10 +33,13 @@ switched on.*
    link or drafted quote, and the acknowledgement still goes); *put aside* (messages only: kept, listed,
    explained, one tap back). Nothing the filter does bounces, deletes or answers differently. A booking,
    order or quote request is never put aside, at most held. A held request lapses by its own clock,
-   silently.
+   silently. Its sender reads what was put aside as one nobody answered yet: a message open, a quote
+   request received (then expired as its request lapses), with that state's own actions and "waiting on
+   us".
 3. **Strangers only.** Known customers — a strong match (ADR-017 §8.2) with a party the business acted
-   on —, a proven mailbox, a trusted handle, anyone on Let through, replies on a thread, and everything
-   the business makes are never screened and cost no model call. A trusted sender still gets the checks
+   on —, a handle a person trusted, anyone on Let through, replies on a thread, and everything the
+   business makes are never screened and cost no model call. A mailbox its sender proved is still a
+   stranger's: pitchers use real mailboxes because they want replies. A trusted sender still gets the checks
    that point at a third party (a server mark, a look-alike, a disguised link, a change of bank details),
    as a label only.
 4. **Doors.** The inbox's own form signs each form it draws (an id and an HMAC under the inbox's secret)
@@ -51,7 +54,9 @@ switched on.*
    per handle (§6) and a 429 past a ceiling, in the sender's language, with no reason given.
 5. **"Confirm it's me".** Every acknowledgement to someone new with an email carries a link to confirm it
    is them, held or not, so being asked tells nobody anything. Opening it changes nothing; its button
-   proves the mailbox and lets go a request held for an uncertain reason. A request held for a certain one
+   proves the mailbox and lets go that one request if it was held for an uncertain reason. Their later
+   requests are screened as before, with budgets three times as wide; a proof made after anything from
+   that mailbox was marked spam widens nothing. Only a person's Let it in or Not spam makes a sender known. A request held for a certain one
    (a trap, no key, a server mark, a wave, a block, like one marked spam) gets no acknowledgement at all,
    so a forged address is never written to. Create answers say where the link went:
    `identity.confirm.sent_to`, masked; the MCP text says so in words.
@@ -61,13 +66,25 @@ switched on.*
    disguise: language, script, country, address, name, email provider, spelling, length and "written by an
    AI" are never signals. Repeats count other senders only (prints: SHA-256 and a 64-bit SimHash over
    character 4-grams, in eight bands); a short honest question repeats freely. Per-handle budgets of new
-   conversations a day: an agent key 5 (ceiling 50), a vouched key 15 (150), a pass 10 (50), a mailbox 5
-   (30), a mail domain 20 (100); a pass widens its mailbox's and domain's.
+   conversations a day: an agent's own key (`Sdi-Agent-Key`) 5 (ceiling 50), a pass 10 (50), a mailbox 5
+   (30), a mail domain 20 (100); a pass widens its mailbox's and domain's. A platform's key (Web Bot
+   Auth's `Signature-Agent`) signs for every one of its users, so it is no sender: it never makes a
+   request wait on its own, is on no list, is trusted by nobody, and only a flood of 500 new
+   conversations a day (1,500 vouched) answers 429. Email under an address that no DMARC pass or aligned
+   DKIM vouched for is counted apart from that address's signed mail, and a request a certain bot signal
+   decided (a hidden field, a form never drawn, a server's mark, a wave, a block) counts against nobody,
+   so forgeries never spend a real sender's budget. The AI check finding a customer takes its points off
+   what the filters found, never off the free protection's: a filter switched on only ever puts more
+   aside. A link to the business's own site, a platform it uses or a host everyone links to (a map's
+   share link, a profile, a drive) makes no message "only links"; shorteners are known by their full
+   host, and count in a shared link domain like any other.
 7. **The AI check.** Behind `JudgePort`; the inbox ships a Messages API adapter on the provider's own SDK
    and a chat-completions adapter (any provider or a local model server). It runs for a stranger's first
    contact with a filter on, no certain signal, enough words and room under the caps. It is sent masked
-   text only (addresses, phone numbers, bank and card numbers removed, links down to their domain), the
-   sender's domain and never their address, inside a random boundary, with a fresh check value it must
+   text only (addresses, phone numbers, bank, account and card numbers and payment addresses removed,
+   in any script's digits and in full-width forms, links down to their domain, characters drawn as
+   nothing taken out), the subject and the sender's name masked the same way, the sender's domain and
+   never their address, inside a random boundary, with a fresh check value it must
    return; the answer is held to a JSON schema of enums, and no model sentence reaches anyone. Its quotes
    must be found word for word, or they are dropped, and two dropped make it unclear. It is one vote: it
    may put a message aside alone only with high certainty, a verified quote, no customer sign and past
@@ -75,15 +92,17 @@ switched on.*
    item through on its local signals.
 8. **Words stay home.** Basic protection reads inside the inbox; only domain names leave, to the
    resolver the inbox already uses. The business's privacy page says, while a model may read, that an
-   automated check can read new messages without addresses, numbers or bank details and keeps nothing.
+   automated check can read new messages without addresses, numbers or bank details; that it keeps
+   nothing only where the host's model reads (D2), never of a model the business set up itself.
 9. **Hosted: our model, behind the ledger.** The model and its key live in the shard's environment only
    (`HOSTED_SPAM_MODEL_*`), never in a tenant's file, settings, policy, download, answers or logs, and a
    model key is redacted from every log line. The policy's `spam` block says whether our AI may read for
    an inbox, which filters it may switch on, its day and month caps, how Settings names who reads, and
    billing. Every check is reserved in the shared ledger before it is made: the inbox's day and month
    across every shard, and the runtime's own token budget for the day across every inbox; what a copied
-   tenant file says it spent changes nothing. A policy without the block asks no model; a filter it
-   withdraws is switched off as the inbox opens. On one's own server the operator sets `SPAM_MODEL_*`,
+   tenant file says it spent changes nothing. A policy without the block is hosted all the same: no
+   model, phrases only, billing off, and no owner's own key; a filter it withdraws is switched off as the
+   inbox opens. On one's own server the operator sets `SPAM_MODEL_*`,
    and the owner's monthly checks cap applies.
 10. **Metered per inbox and per filter.** `spam_days` counts, by UTC day, filter-days (a day a filter was
     on at any moment), AI checks, reuses, cap refusals, failures, tokens, and what was put aside, held,
@@ -93,7 +112,9 @@ switched on.*
     aside is not in `items` until it is let in.
 11. **Owners decide, in person.** Filters may carry a price: only the owner or staff, signed in, switch
     them, choose Put aside or Just label, end a learning week, let in, block, or let a domain through —
-    never their AI, a rule or a key. The owner's AI may read `spam_status`.
+    never their AI, a rule or a key. The model's key decides where strangers' messages are sent: the
+    owner alone sets, replaces or removes it, as for anything that sends data somewhere new. The owner's
+    AI may read `spam_status`.
 
 ### Amends ADR-026 §7
 
@@ -126,7 +147,8 @@ brings it back.
   owner sees it under Held.
 - **Undo sends nothing.** Let it in, Not spam, Looks fine and Spam wait six seconds on the owner's
   screen before they are sent, so Undo leaves no trace anywhere (no list, no print, no rule run);
-  another press, leaving the inbox or closing the page sends what waits at once. The follow-up a toast
+  another press, leaving the inbox or closing the page sends what waits at once, and on the phone
+  leaving the item or the app going to the background; nothing else does. The follow-up a toast
   offers (a company's domain through, a sender always aside, another time) sends the act first.
 - **Spam lists everything put aside**: `state: spam` on the owner's list also takes what the filter put
   aside, including a held booking a person sent there, which keeps its own state. Each listed row carries
@@ -141,7 +163,8 @@ brings it back.
   sweep at their hour in the business's time, one job a day and one a Monday, and decide as they run.
 - **The phone** reads the filter at `/v1/phone/spam` and may switch the two emails there; filters are
   switched on the web. A held booking for a time within 48 hours queues one notification, only where a
-  phone listens, and only while it is still held.
+  phone listens, and only while it is still held; it never names the sender or says their words,
+  whatever the phone shows of others.
 - **Spam is never red** in the owner app or the phone: Mark as spam and the Spam state are in ink.
 
 ## Consequences
@@ -152,7 +175,8 @@ brings it back.
 - Hosted inboxes can offer filters at a cost bounded per inbox and per runtime before any is charged.
 - New tables: `spam_verdicts`, `spam_lists`, `spam_prints`, `spam_handles`, `spam_filter_spans`,
   `spam_days`, `spam_cache`, `spam_domains` (migration 0026), and the ledger's `judge_day` and
-  `judge_total_day`. Erasing a customer removes their verdicts, prints, list rows and handles; the
+  `judge_total_day`. Erasing a customer removes their verdicts, prints, the AI check's cached answers
+  for their words, list rows and handles; handles nobody trusted are pruned after a month unseen. The
   owner's download keeps verdicts, lists, spans and day counts.
 
 ## Not decided here (each ships off)
@@ -163,7 +187,7 @@ brings it back.
 | D2 | Our AI for hosted inboxes: provider and model, where it runs, retention, the terms | policy `spam.ai: false`: hosted filters read phrases only |
 | D3 | Filters on by default for new hosted inboxes | off |
 | D4 | Caps: 150 a day and 1,500 a month per inbox, 50 million tokens a day per runtime, the budgets above | as proposed, in the policy |
-| D5 | Deleting put-aside items after 30 or 90 days | kept until cleared |
+| D5 | Deleting put-aside items after 30 or 90 days | kept ("Keep them") unless the owner chooses 90 or 30 days |
 | D6 | A Spam tap also blocking the sender | offered, never automatic |
 | D7 | Sharing anything across businesses | nothing shared |
 | D8 | Spam data in receipts, standing or ranking | none of it |

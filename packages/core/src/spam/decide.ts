@@ -74,7 +74,22 @@ const DOOR_CODES = new Set([
   "blocked",
 ]);
 
-const sum = (signals: readonly Signal[]) => signals.reduce((n, s) => n + s.w, 0);
+/**
+ * The points, as they add up. The AI check finding a customer takes points off what the filters
+ * found, never off the free protection's: switching a filter on can only ever put more aside, so a
+ * model fooled into "customer" returns a message at most to where it would be with the filters off.
+ */
+function sum(signals: readonly Signal[]): number {
+  let basic = 0;
+  let filters = 0;
+  let customer = 0;
+  for (const s of signals) {
+    if (s.c === "ai_customer") customer += s.w;
+    else if (s.f === "pitches" || s.f === "scams" || s.f === "junk") filters += s.w;
+    else basic += s.w;
+  }
+  return basic + Math.max(0, filters + customer);
+}
 const positive = (signals: readonly Signal[], source: Source) =>
   signals.filter((s) => s.f === source && s.w > 0).reduce((n, s) => n + s.w, 0);
 

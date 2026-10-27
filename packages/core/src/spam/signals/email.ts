@@ -11,6 +11,30 @@ import type { EmailFacts, Signal } from "../types";
 
 const ADDRESS_OR_DOMAIN = /[^\s@<>]+@[^\s@<>]+\.[a-z]{2,}|\b[a-z0-9-]{2,}(?:\.[a-z0-9-]{2,})*\.[a-z]{2,}\b/gi;
 
+/** Whether a DKIM signature of the From's own domain came with the email. */
+function alignedDkimOf(f: EmailFacts, from: string): boolean {
+  const fromDomain = emailDomain(from) ?? "";
+  if (!fromDomain) return false;
+  const fromReg = registrableDomain(fromDomain);
+  return (f.auth?.dkim ?? []).some(
+    (d) => d === fromDomain || fromDomain.endsWith(`.${d}`) || registrableDomain(d) === fromReg,
+  );
+}
+
+/**
+ * Whether the receiving server found the From's own domain behind the email: DMARC passed, or a DKIM
+ * signature of that domain, with DMARC not failing. What counts against an address's budget is kept
+ * apart for mail without it, so forgeries under an address never spend its owner's.
+ */
+export function emailAuthenticated(f: EmailFacts | undefined, from: string): boolean {
+  if (!f || f.auth?.dmarc === "fail") return false;
+  return f.auth?.dmarc === "pass" || alignedDkimOf(f, from);
+}
+
+/** Words that make a name an office of the business rather than a person's: "Amélie Billing", "support.amelie". */
+const ROLE_WORDS =
+  /^(billing|support|admin|administration|accounts?|accounting|invoices?|invoicing|payments?|finance|security|helpdesk|help|service|team|office|noreply|no-reply|donotreply|bookings?|reservations?|orders?|sales)$/u;
+
 export function emailSignals(
   f: EmailFacts,
   from: string,
@@ -21,9 +45,7 @@ export function emailSignals(
   const fromDomain = emailDomain(from) ?? "";
   const fromReg = fromDomain ? registrableDomain(fromDomain) : "";
   const dkim = f.auth?.dkim ?? [];
-  const alignedDkim = dkim.some(
-    (d) => d === fromDomain || fromDomain.endsWith(`.${d}`) || registrableDomain(d) === fromReg,
-  );
+  const alignedDkim = alignedDkimOf(f, from);
   // SPF alone says nothing: the business's own forward breaks it for every honest sender.
   if (f.auth?.dmarc === "fail") out.push({ c: "dmarc_fail", w: 2, f: "basic" });
   else if (f.auth?.dmarc === "pass" || alignedDkim) out.push({ c: "aligned", w: -1, f: "basic" });
@@ -39,18 +61,8 @@ export function emailSignals(
   const fromOwn = own.includes(fromReg);
   if (!fromOwn && !alignedDkimFor(own, dkim)) {
     const local = (from.split("@")[0] ?? "").toLowerCase();
-    const brand = brandOf(business.name);
-    const nameFolded = foldConfusables(name).toLowerCase();
-    // The business's whole name, as words of their own, or the whole local part: a customer whose
-    // name shares a word with the business's ("Maria Rossi" writing to "Rossi Bakery") never counts.
-    const usesName =
-      brand.length >= 5 &&
-      (squash(nameFolded) === brand || wholeWords(nameFolded, business.name) || squash(local) === brand);
-    const usesDomain = own.some((d) => {
-      const label = d.split(".")[0] ?? "";
-      return d.length > 0 && (nameFolded.includes(d) || (label.length >= 5 && squash(local).startsWith(label)));
-    });
-    if (usesName || usesDomain) out.push({ c: "poses_as_us", w: 3, f: "basic" });
+    if (posesAsUs(foldConfusables(name).toLowerCase(), local, business.name, own))
+      out.push({ c: "poses_as_us", w: 3, f: "basic" });
   }
   const reply = f.replyTo ? emailDomain(f.replyTo) : null;
   if (reply) {
@@ -66,6 +78,63 @@ export function emailSignals(
 
 function alignedDkimFor(own: readonly string[], dkim: readonly string[]): boolean {
   return dkim.some((d) => own.includes(registrableDomain(d)));
+}
+
+/**
+ * Whether a display name or an address's local part passes for the business itself: its whole name
+ * or its domain, alone or with an office's word ("billing", "support"), never a person's name that
+ * merely holds it. "Maria Rossi" writing to "Rossi Bakery", or "Amélie Dupont" to a business called
+ * "Amélie", is a customer. A business named by one word, often a first name, counts only with an
+ * office's word beside it.
+ */
+function posesAsUs(display: string, local: string, businessName: string, own: readonly string[]): boolean {
+  const brand = plain(brandOf(businessName));
+  const single = words(businessName).length < 2;
+  const displayWords = words(display);
+  const localWords = local
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean)
+    .map(plain);
+  // What a name is once an office's words are taken out, and whether it had any.
+  const rest = (ws: readonly string[]) => ws.filter((w) => !ROLE_WORDS.test(w));
+  const role = (ws: readonly string[]) => ws.some((w) => ROLE_WORDS.test(w));
+  const is = (ws: readonly string[], target: string) => {
+    if (squashWords(rest(ws.map(plain))) !== target) return false;
+    return !single || role(ws);
+  };
+  if (brand.length >= 5) {
+    if (is(displayWords, brand) || is(localWords, brand)) return true;
+    if (!single && wholeWords(display, businessName)) return true;
+  }
+  return own.some((d) => {
+    if (!d) return false;
+    // The business's whole domain written in the name ("kopisenja.example Billing").
+    if (display.includes(d)) return true;
+    const label = plain(squash(d.split(".")[0] ?? ""));
+    if (label.length < 5) return false;
+    // A domain that is the one-word name again is held to the one-word rule.
+    const oneWord = single && label === brand;
+    const left = rest(localWords);
+    if (squashWords(left) !== label) return false;
+    return !oneWord || role(localWords);
+  });
+}
+
+/** Lower-case words of letters and digits, as folded. */
+function words(text: string): string[] {
+  return foldConfusables(text.normalize("NFKC"))
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
+}
+
+/** Without accents: "amélie" → "amelie", so a name and an address compare. */
+function plain(text: string): string {
+  return text.normalize("NFD").replace(/\p{M}+/gu, "");
+}
+
+function squashWords(ws: readonly string[]): string {
+  return ws.join("");
 }
 
 /** A business name as one run of letters and digits, lower case: "Café Maré" → "cafémaré". */

@@ -154,9 +154,10 @@ describe("a message the business put aside as spam", () => {
       (j) => j.kind === "notify" && (j.payload as { event?: string }).event === "message",
     );
     expect(told).toHaveLength(0);
-    // The customer reads it exactly as a closed message: its words, its buttons, what comes next.
+    // The customer reads it exactly as a message nobody has answered yet: its words, its buttons, what
+    // comes next (ADR-029: nothing they read changes with what was thought of their words).
     const v = await s.caps.getItemStatus(anon(m.accessToken), { item_id: mid });
-    expect(v.item.state).toBe("closed");
+    expect(v.item.state).toBe("open");
     expect(v.next?.map((n) => n.action)).toEqual(["send_message"]);
     expect(JSON.stringify(v)).not.toMatch(/spam/i);
   });

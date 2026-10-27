@@ -15,11 +15,11 @@ import { listOf } from "./lists";
 import { judgeText } from "./mask";
 import { checksSoFar, countStatement } from "./meter";
 import { emailDomain, hostOf, linkDomains, normalise, registrableDomain } from "./normalise";
-import { asksBankChange, isGibberish, phraseHits } from "./phrases";
+import { asksBankChange, foundWords, isGibberish, phraseHits } from "./phrases";
 import { hamming, NEAR_BITS, NO_REPEATS, type Print, printOf, printStatement, repeatsOf, sha256Hex } from "./prints";
 import { agentSignals } from "./signals/agent";
 import { contentSignals, looksLike, PROVIDER_DOMAINS } from "./signals/content";
-import { emailSignals } from "./signals/email";
+import { emailAuthenticated, emailSignals } from "./signals/email";
 import { formSignals } from "./signals/form";
 import {
   type AiOutcome,
@@ -27,6 +27,7 @@ import {
   type Door,
   type Filter,
   type FilterChoice,
+  NO_PROOF,
   SCREEN_DEADLINE_MS,
   SCREEN_OF,
   SCREENED_TYPES,
@@ -91,8 +92,8 @@ export interface DoorScreen {
   readonly flags: Partial<ItemFlags>;
   /** No acknowledgement goes to the sender (a certain bot signal: nothing to prove, nobody to tell). */
   readonly noAck: boolean;
-  /** The verdict row, the print, the handles' counts and the day's counters: written with the item. */
-  readonly statements: (itemId: string) => Statement[];
+  /** The verdict row, the print, the handles' counts and the day's counters: written with the item and its party. */
+  readonly statements: (itemId: string, partyId?: string | null) => Statement[];
 }
 
 const NOT_SCREENED: DoorScreen = {
@@ -189,12 +190,15 @@ export async function businessContext(db: Db, settings?: Settings): Promise<Busi
   };
 }
 
-/** Whether the words name one of the business's own services or products: then they may be a customer's. */
+/**
+ * Whether the words name one of the business's own services or products: then they may be a customer's.
+ * The name as words of its own ("tea", never the "tea" in "team"), with three letters at least.
+ */
 export function namesOwnOffer(normalised: string, offers: readonly string[]): boolean {
   const plain = stripMarks(normalised);
   return offers.some((o) => {
     const name = stripMarks(normalise(o));
-    return name.length >= 3 && plain.includes(name);
+    return [...name.matchAll(/\p{L}/gu)].length >= 3 && foundWords(plain, name);
   });
 }
 
@@ -431,12 +435,19 @@ export async function screenAtDoor(deps: SpamDeps, ctx: DoorContext): Promise<Do
   const passes = (ctx.identity?.presentations ?? []).map((p) => ({ network: p.network, ppid: p.ppid }));
   const sender = await handlesOf(deps.secrets, {
     email: reading.email,
+    ...(ctx.screen.email && reading.email
+      ? { authenticated: emailAuthenticated(ctx.screen.email, reading.email) }
+      : {}),
     agent,
     passes,
     carriedFor: ctx.caller.carriedFor,
   });
-  const listed = await listOf(db, { email: reading.email, thumbprint: agent?.thumbprint });
-  const standing = await standingOf(db, sender.handles, now);
+  // A platform's key is on no list: it signs for all of the platform's users.
+  const listed = await listOf(db, {
+    email: reading.email,
+    thumbprint: sender.platform ? undefined : agent?.thumbprint,
+  });
+  const standing = await standingOf(db, sender, now);
   const strong = ctx.match.match === "strong" && ctx.match.joinPartyId !== undefined;
   const known =
     ctx.caller.tier === "reputed_principal" ||
@@ -574,19 +585,30 @@ function pendingRow(
     decision: null,
     flags: {},
     noAck: false,
-    statements: (itemId) => [
+    statements: (itemId, partyId) => [
       {
         sql: `INSERT OR IGNORE INTO spam_verdicts (item_id, door, verdict, cause, certain, score, signals, ai, learning, created_at)
               VALUES (?, ?, 'pending', NULL, 0, ?, ?, 'none', 0, ?)`,
         params: [itemId, ctx.screen.door, Math.round(score * 10) / 10, JSON.stringify(signals), ctx.now],
         method: "run",
       },
-      ...strangerStatements(itemId, ctx, reading, sender),
+      ...strangerStatements(itemId, ctx, reading, sender, { counts: true, partyId: partyId ?? null }),
     ],
   };
 }
 
-function strangerStatements(itemId: string, ctx: DoorContext, reading: Reading, sender: SenderHandles): Statement[] {
+/**
+ * The print of a stranger's request, and one more new conversation under each of their handles. A
+ * request a certain bot signal decided (a hidden field filled, a form never drawn, mail a server
+ * marked, a wave, Always put aside) counts against no one: whoever it names may not have sent it.
+ */
+function strangerStatements(
+  itemId: string,
+  ctx: DoorContext,
+  reading: Reading,
+  sender: SenderHandles,
+  o: { readonly counts: boolean; readonly partyId: string | null },
+): Statement[] {
   const out: Statement[] = [];
   if (reading.print && sender.first) {
     out.push(
@@ -599,7 +621,7 @@ function strangerStatements(itemId: string, ctx: DoorContext, reading: Reading, 
       }),
     );
   }
-  out.push(...countFirstStatements(sender.handles, ctx.now));
+  if (o.counts) out.push(...countFirstStatements(sender.counted, ctx.now, o.partyId));
   return out;
 }
 
@@ -637,7 +659,7 @@ function verdictRow(
     decision,
     flags,
     noAck: decision.noProof,
-    statements: (itemId) => [
+    statements: (itemId, partyId) => [
       {
         sql: `INSERT OR IGNORE INTO spam_verdicts (item_id, door, verdict, cause, certain, score, signals, ai, answer, quotes, learning, created_at, decided_at)
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -666,7 +688,12 @@ function verdictRow(
         ],
         method: "run",
       },
-      ...(o.reading && o.sender ? strangerStatements(itemId, ctx, o.reading, o.sender) : []),
+      ...(o.reading && o.sender
+        ? strangerStatements(itemId, ctx, o.reading, o.sender, {
+            counts: !signals.some((s) => s.x === 1 && NO_PROOF.has(s.c)),
+            partyId: partyId ?? null,
+          })
+        : []),
       ...(verdict === "hold" ? heldSoonStatements(itemId, ctx.type, ctx.payload, ctx.now) : []),
       ...(counter ? [countStatement(counter, ctx.now)] : []),
       ...(o.ai === "reused" ? [countStatement("reused", ctx.now)] : []),
@@ -952,23 +979,27 @@ export async function runScreenJob(
     params: [to, now, input.itemId],
     method: "run" as const,
   });
+  // Whatever it decided, the item's version moves on once: a writer who read it before reads it again,
+  // and its sender, reading it, learns nothing of the verdict from its version.
+  const moved = (patch: Record<string, unknown> | null): Statement => ({
+    sql: patch
+      ? "UPDATE items SET flags = json_patch(flags, ?), version = version + 1, updated_at = ? WHERE id = ?"
+      : "UPDATE items SET version = version + 1, updated_at = ? WHERE id = ?",
+    params: patch ? [JSON.stringify(patch), now, input.itemId] : [now, input.itemId],
+    method: "run",
+  });
   if (verdict === "deliver" || verdict === "warn") {
     statements.push(casScreen(SCREEN_OF[verdict]), pullForwardStatement(input.eventId, now));
-    if (flags || untrusted) {
-      // The label, in the same batch: the item's flags merged, its version moved on so a writer who
-      // read it before reads it again.
-      const patch = { ...(flags ?? {}), ...(untrusted ? { untrustedInstructions: true } : {}) };
-      statements.push({
-        sql: `UPDATE items SET flags = json_patch(flags, ?), version = version + 1, updated_at = ? WHERE id = ?`,
-        params: [JSON.stringify(patch), now, input.itemId],
-        method: "run",
-      });
-    }
+    // The label, in the same batch: the item's flags merged.
+    statements.push(
+      moved(flags || untrusted ? { ...(flags ?? {}), ...(untrusted ? { untrustedInstructions: true } : {}) } : null),
+    );
   } else if (verdict === "hold") {
     statements.push(
       casScreen("held"),
       cancelEffectsStatement(input.eventId, now, decision.noProof),
       ...heldSoonStatements(input.itemId, item.type, item.payload, now),
+      moved(null),
     );
   } else {
     // Put aside: a message or a quote request goes to its spam state, as the system, and nothing it

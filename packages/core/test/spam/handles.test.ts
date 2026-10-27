@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { countFirstStatements } from "../../src/spam/handles";
 import { WriteError } from "../../src/write/errors";
-import { agent, DAY, fakeJudge, MIN, owner, spamSetup, T0 } from "./harness";
+import { agent, DAY, fakeJudge, idOf, MIN, owner, sentText, spamSetup, T0 } from "./harness";
 
 /**
  * Budgets per handle (ADR-029 §4.4): a stranger starts a few conversations a day under each of its
@@ -129,13 +130,63 @@ describe("an agent's key", () => {
     expect(pt.message).toBe("Recebemos muitos pedidos novos seus. Por favor, tente mais tarde.");
     expect(await s.q("SELECT COUNT(*) FROM items")).toEqual([[50]]);
   });
+});
 
-  it("starts three times as many under a platform a network vouches for", async () => {
+describe("a platform's key, which signs for all its users", () => {
+  const PLATFORM = "pLaTfOrMkEyThUmBpRiNt0123456789abcdefghijk";
+  const DIRECTORY = "https://assistant-platform.example";
+
+  it("never puts a customer's message aside, nor holds their booking, for the platform's other users", async () => {
     const s = await spamSetup();
-    for (let i = 0; i < 16; i++) await sendAs(s, i, { key: KEY, level: "vouched" });
-    const all = await screens(s);
-    expect(all.filter((x) => x === "delivered")).toHaveLength(15);
-    expect(all[15]).toBe("aside:many_new");
+    // Fifty-two people, each with their own address and their own words, through one assistant platform.
+    for (let i = 0; i < 52; i++) {
+      await s.caps.sendMessage(agent(T0 + i * 1_000, { key: PLATFORM, platform: DIRECTORY }), {
+        body: words(i),
+        contact: { name: `Customer ${i}`, email: `person${i}@home${i}.example.org` },
+      });
+    }
+    expect((await screens(s)).filter((x) => x !== "delivered")).toEqual([]);
+    for (let i = 0; i < 8; i++) {
+      const b = await s.caps.createBooking(agent(T0 + DAY / 2 + i * 1_000, { key: PLATFORM, platform: DIRECTORY }), {
+        payload: {
+          reservationFor: { serviceId: s.svc, name: "Latte art class" },
+          startTime: new Date(T0 + 3 * DAY + (i % 4) * 3_600_000).toISOString(),
+          endTime: new Date(T0 + 3 * DAY + (i % 4) * 3_600_000 + 3_600_000).toISOString(),
+        },
+        contact: { name: `Guest ${i}`, email: `guest${i}@house${i}.example.org` },
+      });
+      expect(await s.q("SELECT screen FROM items WHERE id = ?", [b.view.item.id])).toEqual([["delivered"]]);
+    }
+  });
+
+  it("still counts each of its users by their own mailbox, and asks a flood to come back later", async () => {
+    const s = await spamSetup();
+    for (let i = 0; i < 6; i++)
+      await sendAs(s, i, { key: PLATFORM, level: "vouched", email: "one.person@mailbox.example.org" });
+    expect((await screens(s)).at(-1)).toBe("aside:many_new");
+    const t = await spamSetup();
+    // Its own ceiling is a flood's: far past what any one sender would start in a day.
+    for (let i = 0; i < 500; i++)
+      await t.db.batch(countFirstStatements([{ kind: "platform_key", ref: PLATFORM }], T0 + i));
+    const refused = await t.caps
+      .sendMessage(agent(T0 + MIN, { key: PLATFORM, platform: DIRECTORY }), {
+        body: words(1),
+        contact: { name: "Anyone", email: "anyone@example.org" },
+      })
+      .catch((e) => e);
+    expect(refused).toMatchObject({ code: "too_many_requests", status: 429 });
+  });
+
+  it("is on no list and trusted by nobody: letting one user in lets in no one else", async () => {
+    const s = await spamSetup();
+    const first = await s.caps.sendMessage(agent(T0, { key: PLATFORM, platform: DIRECTORY }), {
+      body: words(1),
+      contact: { name: "No address" },
+    });
+    await s.caps.transitionItem(owner(T0 + MIN), { item_id: idOf(first), event: "mark_spam" });
+    await s.caps.transitionItem(owner(T0 + 2 * MIN), { item_id: idOf(first), event: "unspam" });
+    expect(await s.q("SELECT COUNT(*) FROM spam_lists")).toEqual([[0]]);
+    expect(await s.q("SELECT COUNT(*) FROM spam_handles WHERE trusted_at IS NOT NULL")).toEqual([[0]]);
   });
 });
 
@@ -174,5 +225,81 @@ describe("a sender the business knows", () => {
     for (let i = 10; i < 20; i++) await sendAs(s, i, { key: KEY, email: "regular@example.org" });
     const recent = await s.q("SELECT screen FROM items ORDER BY created_at DESC LIMIT 10");
     expect(recent.every((r) => r[0] === null)).toBe(true);
+  });
+});
+
+describe("a sender who pressed Confirm it's me", () => {
+  const PITCHER = { name: "Rank", email: "outreach@rankboost.example.net" };
+  const judge = () =>
+    fakeJudge((req) =>
+      /RankBoost/.test(sentText(req))
+        ? { kind: "sales_pitch", certainty: "high", topic: "seo", quotes: ["first page of Google"] }
+        : { kind: "unclear", certainty: "low" },
+    );
+
+  it("lets that one request go on, and is screened as before afterwards, with wider budgets", async () => {
+    const j = judge();
+    const s = await spamSetup({ filters: ["pitches"], judge: j });
+    const q = await s.caps.requestQuote(agent(T0), {
+      payload: {
+        itemOffered: { name: "SEO" },
+        description: "RankBoost puts cafes on the first page of Google in 30 days.",
+      },
+      contact: PITCHER,
+    });
+    await s.drain(T0 + 5 * MIN);
+    expect(await s.q("SELECT screen FROM items WHERE id = ?", [q.view.item.id])).toEqual([["held"]]);
+    expect(await s.caps.spam.confirmFromSender(q.view.item.id, T0 + 6 * MIN)).toBe("released");
+    const before = j.calls.length;
+    for (let i = 0; i < 3; i++) {
+      await s.caps.sendMessage(agent(T0 + 10 * MIN + i * 1_000), {
+        body: `RankBoost #${i}: we put cafes on the first page of Google in 30 days, guaranteed.`,
+        contact: PITCHER,
+      });
+      await s.drain(T0 + 10 * MIN + i * 1_000);
+    }
+    // Every one was read, and put aside: proving a mailbox proves nothing about the next pitch.
+    expect(j.calls.length - before).toBeGreaterThanOrEqual(1);
+    const later = await s.q("SELECT screen FROM items WHERE type = 'message' ORDER BY created_at");
+    expect(later.map((r) => r[0])).toEqual(["aside", "aside", "aside"]);
+    // Its budget is three times a stranger's: the sixteenth new conversation of the day waits, not the sixth.
+    const u = await spamSetup();
+    const first = await u.caps.createBooking(agent(T0), {
+      payload: {
+        reservationFor: { serviceId: u.svc, name: "Latte art class" },
+        startTime: new Date(T0 + 3 * DAY).toISOString(),
+        endTime: new Date(T0 + 3 * DAY + 3_600_000).toISOString(),
+      },
+      contact: { name: "Busy", email: "busy@office.example.org" },
+    });
+    await u.caps.spam.confirmFromSender(first.view.item.id, T0 + MIN);
+    for (let i = 1; i < 16; i++) await sendAs(u, i, { email: "busy@office.example.org" });
+    const all = await screens(u);
+    expect(all.slice(0, 15).every((x) => x === "delivered")).toBe(true);
+    expect(all[15]).toBe("aside:many_new");
+  });
+
+  it("never undoes a spam mark: only a person's Let it in or Not spam makes a sender known", async () => {
+    const s = await spamSetup({ filters: ["pitches"], judge: judge() });
+    const m = await s.caps.sendMessage(agent(T0), { body: "Hello, a question about decaf beans?", contact: PITCHER });
+    await s.drain(T0 + MIN);
+    await s.caps.transitionItem(owner(T0 + 2 * MIN), { item_id: idOf(m), event: "mark_spam" });
+    const b = await s.caps.createBooking(agent(T0 + DAY), {
+      payload: {
+        reservationFor: { serviceId: s.svc, name: "Latte art class" },
+        startTime: new Date(T0 + 3 * DAY).toISOString(),
+        endTime: new Date(T0 + 3 * DAY + 3_600_000).toISOString(),
+      },
+      contact: PITCHER,
+      message: "Hi",
+    });
+    await s.drain(T0 + DAY + 5 * MIN);
+    await s.caps.spam.confirmFromSender(b.view.item.id, T0 + DAY + 6 * MIN);
+    const r = await s.caps.sendMessage(agent(T0 + DAY + 10 * MIN), {
+      body: "RankBoost again: we put cafes on the first page of Google in 30 days, guaranteed.",
+      contact: PITCHER,
+    });
+    await s.drain(T0 + DAY + 11 * MIN);
+    expect(await s.q("SELECT screen, state FROM items WHERE id = ?", [idOf(r)])).toEqual([["aside", "spam"]]);
   });
 });

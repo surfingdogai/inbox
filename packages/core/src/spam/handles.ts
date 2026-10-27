@@ -7,29 +7,40 @@ import { sha256Hex } from "./prints";
 import { dayOf, type Handle, type HandleKind } from "./types";
 
 /**
- * Who asks, as handles this inbox keeps its own history on (ADR-029 §4.4): an agent's key, a network
- * pass, a mailbox, a mail domain, the code a network carries a request under. Never a client's network
- * address: many people share one. A stranger may start a few conversations a day under each handle;
- * past that their next request waits (`many_new`) and costs no AI check, and past a ceiling an agent is
- * asked to come back later. Rotating keys is caught by the mailbox, rotating mailboxes by the key or the
- * domain, rotating both by the words. A sender who confirmed, or whom a person let in, is no stranger.
+ * Who asks, as handles this inbox keeps its own history on (ADR-029 §4.4): an agent's own key, a
+ * network pass, a mailbox, a mail domain, the code a network carries a request under. Never a client's
+ * network address: many people share one. Nor a platform's key (Web Bot Auth): a platform signs every
+ * one of its users' requests with the same key, so it is only a large flood bucket, never a sender. A
+ * stranger may start a few conversations a day under each handle; past that their next request waits
+ * (`many_new`) and costs no AI check, and past a ceiling an agent is asked to come back later. Rotating
+ * keys is caught by the mailbox, rotating mailboxes by the key or the domain, rotating both by the
+ * words. A sender whom a person let in is no stranger; one who confirmed it's them gets wider budgets,
+ * and is screened all the same.
  */
 
 export interface Budget {
-  /** New conversations a day before `many_new`. */
-  readonly day: number;
+  /** New conversations a day before `many_new`; null where the handle never puts anything aside alone. */
+  readonly day: number | null;
   /** New conversations a day before an agent door answers 429; null where none applies. */
   readonly ceiling: number | null;
 }
 
-export const BUDGETS: Readonly<Record<HandleKind | "vouched_key", Budget>> = {
+export const BUDGETS: Readonly<Record<HandleKind | "vouched_platform", Budget>> = {
   agent_key: { day: 5, ceiling: 50 },
-  vouched_key: { day: 15, ceiling: 150 },
+  // A platform's key speaks for all its users: different people, different words. Only a flood stops it.
+  platform_key: { day: null, ceiling: 500 },
+  vouched_platform: { day: null, ceiling: 1_500 },
   pass: { day: 10, ceiling: 50 },
   mailbox: { day: 5, ceiling: 30 },
   mail_domain: { day: 20, ceiling: 100 },
   carried_for: { day: 5, ceiling: null },
 };
+
+/** How much wider a sender's budgets are once they confirmed it's them (the confirm link). */
+export const PROVEN_WIDEN = 3;
+
+/** The handles that stand for one sender: what trust, proof and a party attach to. */
+export const PERSONAL: ReadonlySet<HandleKind> = new Set(["agent_key", "pass", "mailbox"]);
 
 const encoder = new TextEncoder();
 
@@ -42,12 +53,34 @@ export async function handleRef(secrets: SecretBox | null, kind: HandleKind, val
   return `k:${Array.from(sig.slice(0, 20), (b) => b.toString(16).padStart(2, "0")).join("")}`;
 }
 
+/**
+ * Where an address's or a domain's count is kept for mail no server vouched for: apart from the
+ * signed-in mail of the same address, so forgeries under someone's address never spend their budget.
+ */
+const UNSIGNED = "unsigned\0";
+
+/** The refs a mailbox's handles may be kept under: its own, and its unsigned mail's (erasure removes both). */
+export async function mailboxRefs(secrets: SecretBox | null, address: string): Promise<string[]> {
+  const folded = foldAddress(address);
+  return [await handleRef(secrets, "mailbox", folded), await handleRef(secrets, "mailbox", `${UNSIGNED}${folded}`)];
+}
+
 export interface SenderHandles {
+  /** Who the sender is: what trust, proof, marks and the lists read. */
   readonly handles: readonly Handle[];
-  /** The handle repeats are counted by: the mailbox, else the key, else the pass. */
+  /** What a day's budgets are counted under: the same, with unsigned mail kept apart. */
+  readonly counted: readonly Handle[];
+  /** The handle repeats are counted by: the mailbox, else the agent's own key, else the pass. */
   readonly first: Handle | null;
   /** Whether the key is a vouched platform's. */
   readonly vouched: boolean;
+  /** Whether the key is a platform's, shared by all its users, rather than the agent's own. */
+  readonly platform: boolean;
+}
+
+/** Whether an agent's key is a platform's (it came from a platform's directory), not the agent's own. */
+export function isPlatformKey(agent: { readonly level?: string; readonly platform?: string | undefined } | undefined) {
+  return agent !== undefined && (Boolean(agent.platform) || agent.level === "vouched");
 }
 
 /** The handles of one request, as the door and the caller give them. */
@@ -55,6 +88,11 @@ export async function handlesOf(
   secrets: SecretBox | null,
   input: {
     readonly email?: string | undefined;
+    /**
+     * For an email: whether its sender was authenticated (DMARC, or a DKIM signature of its own domain).
+     * Undefined at a door that has no such thing.
+     */
+    readonly authenticated?: boolean | undefined;
     readonly agent?:
       | { readonly level: string; readonly thumbprint?: string | undefined; readonly platform?: string | undefined }
       | undefined;
@@ -63,63 +101,86 @@ export async function handlesOf(
   },
 ): Promise<SenderHandles> {
   const handles: Handle[] = [];
+  const counted: Handle[] = [];
+  const unsigned = input.authenticated === false;
   let mailbox: Handle | null = null;
   if (input.email) {
     const address = foldAddress(input.email);
     mailbox = { kind: "mailbox", ref: await handleRef(secrets, "mailbox", address) };
     handles.push(mailbox);
+    counted.push(
+      unsigned ? { kind: "mailbox", ref: await handleRef(secrets, "mailbox", `${UNSIGNED}${address}`) } : mailbox,
+    );
     const domain = emailDomain(address);
     if (domain && !SHARED_MAIL_PROVIDERS.has(domain)) {
-      handles.push({ kind: "mail_domain", ref: await handleRef(secrets, "mail_domain", domain) });
+      const own: Handle = { kind: "mail_domain", ref: await handleRef(secrets, "mail_domain", domain) };
+      handles.push(own);
+      counted.push(
+        unsigned ? { kind: "mail_domain", ref: await handleRef(secrets, "mail_domain", `${UNSIGNED}${domain}`) } : own,
+      );
     }
   }
+  const platform = isPlatformKey(input.agent);
   let key: Handle | null = null;
   if (input.agent && input.agent.level !== "none" && input.agent.thumbprint) {
-    key = { kind: "agent_key", ref: input.agent.thumbprint };
-    handles.push(key);
+    const h: Handle = { kind: platform ? "platform_key" : "agent_key", ref: input.agent.thumbprint };
+    if (!platform) key = h;
+    handles.push(h);
+    counted.push(h);
   }
   let pass: Handle | null = null;
   for (const p of (input.passes ?? []).slice(0, 4)) {
     const h: Handle = { kind: "pass", ref: `${p.network} ${p.ppid}`.slice(0, 300) };
     pass ??= h;
     handles.push(h);
+    counted.push(h);
   }
   if (input.carriedFor && /^[A-Za-z0-9_-]{4,128}$/.test(input.carriedFor)) {
-    handles.push({ kind: "carried_for", ref: input.carriedFor });
+    const h: Handle = { kind: "carried_for", ref: input.carriedFor };
+    handles.push(h);
+    counted.push(h);
   }
-  return { handles, first: mailbox ?? key ?? pass, vouched: input.agent?.level === "vouched" };
+  return { handles, counted, first: mailbox ?? key ?? pass, vouched: input.agent?.level === "vouched", platform };
 }
 
 /** What this inbox knows of a sender's handles. */
 export interface HandleStanding {
-  /** A handle the sender proved (the confirm link) or a person trusted, with no spam mark since. */
+  /** A handle a person trusted (Let it in, Not spam, Looks fine) with no spam mark since. */
   readonly trusted: boolean;
+  /** A handle the sender proved (the confirm link), never marked as spam: their budgets are wider. */
+  readonly proven: boolean;
   /** Per handle, the new conversations it started today. */
   readonly today: ReadonlyMap<string, number>;
 }
 
 const keyOf = (h: Handle) => `${h.kind} ${h.ref}`;
 
-export async function standingOf(db: Db, handles: readonly Handle[], now: number): Promise<HandleStanding> {
+export async function standingOf(db: Db, sender: SenderHandles, now: number): Promise<HandleStanding> {
   const today = new Map<string, number>();
   let trusted = false;
-  if (handles.length === 0) return { trusted, today };
+  let proven = false;
+  const all = [...new Map([...sender.handles, ...sender.counted].map((h) => [keyOf(h), h])).values()];
+  if (all.length === 0) return { trusted, proven, today };
   const { rows } = await db.client.query({
     sql: `SELECT kind, ref, day, firsts, proven_at, trusted_at, marked_at FROM spam_handles
-           WHERE ${handles.map(() => "(kind = ? AND ref = ?)").join(" OR ")}`,
-    params: handles.flatMap((h) => [h.kind, h.ref]),
+           WHERE ${all.map(() => "(kind = ? AND ref = ?)").join(" OR ")}`,
+    params: all.flatMap((h) => [h.kind, h.ref]),
     method: "all",
   });
   const day = dayOf(now);
+  const who = new Set(sender.handles.map(keyOf));
   for (const r of rows) {
     const k = `${String(r[0])} ${String(r[1])}`;
     today.set(k, r[2] === day ? Number(r[3] ?? 0) : 0);
-    const good = Math.max(Number(r[4] ?? 0), Number(r[5] ?? 0));
+    // Only the handles a sender cannot share with strangers speak for them: a mailbox, a key, a pass.
+    if (!who.has(k) || !PERSONAL.has(String(r[0]) as HandleKind)) continue;
     const marked = Number(r[6] ?? 0);
-    // Only the handles a sender cannot share with strangers trust them: a mailbox, a key, a pass.
-    if (good > 0 && good > marked && String(r[0]) !== "mail_domain" && String(r[0]) !== "carried_for") trusted = true;
+    // A person's trust holds until a spam mark after it; a sender's own proof, only while nothing they
+    // sent was ever marked as spam: a pitcher's real mailbox proves nothing about the next pitch.
+    if (Number(r[5] ?? 0) > marked) trusted = true;
+    if (Number(r[4] ?? 0) > 0 && marked === 0) proven = true;
   }
-  return { trusted, today };
+  return { trusted, proven, today };
 }
 
 export interface BudgetCheck {
@@ -130,9 +191,9 @@ export interface BudgetCheck {
 }
 
 /**
- * The budgets a stranger's new conversation is held to, with what lifts them: a vouched platform's
- * key three times the self-held one's, a network pass presented twice the mailbox's and the domain's.
- * Lifts only widen.
+ * The budgets a stranger's new conversation is held to, with what lifts them: a network pass presented
+ * twice the mailbox's and the domain's, a sender who confirmed it's them three times every one. A
+ * platform's key only ever has a ceiling. Lifts only widen.
  */
 export function checkBudgets(
   s: SenderHandles,
@@ -141,27 +202,40 @@ export function checkBudgets(
 ): BudgetCheck {
   let over: BudgetCheck["over"] = null;
   let ceiling = false;
-  for (const h of s.handles) {
-    const base = h.kind === "agent_key" && s.vouched ? BUDGETS.vouched_key : BUDGETS[h.kind];
-    const widen = lifts.pass && (h.kind === "mailbox" || h.kind === "mail_domain") ? 2 : 1;
+  for (const h of s.counted) {
+    const base = h.kind === "platform_key" && s.vouched ? BUDGETS.vouched_platform : BUDGETS[h.kind];
+    const widen =
+      (lifts.pass && (h.kind === "mailbox" || h.kind === "mail_domain") ? 2 : 1) * (standing.proven ? PROVEN_WIDEN : 1);
     const count = (standing.today.get(keyOf(h)) ?? 0) + 1;
     if (base.ceiling !== null && count > base.ceiling * widen) ceiling = true;
-    if (count > base.day * widen && (over === null || count > over.count)) over = { kind: h.kind, count };
+    if (base.day !== null && count > base.day * widen && (over === null || count > over.count))
+      over = { kind: h.kind, count };
   }
   return { over, ceiling };
 }
 
-/** One more new conversation under each handle today, in the item's batch. */
-export function countFirstStatements(handles: readonly Handle[], now: number): Statement[] {
+/**
+ * One more new conversation under each handle today, in the item's batch. The party is written on the
+ * handles that stand for one sender, so erasing them erases these too.
+ */
+export function countFirstStatements(
+  handles: readonly Handle[],
+  now: number,
+  partyId: string | null = null,
+): Statement[] {
   const day = dayOf(now);
-  return handles.map((h) => ({
-    sql: `INSERT INTO spam_handles (kind, ref, day, firsts, last_seen_at) VALUES (?, ?, ?, 1, ?)
-          ON CONFLICT (kind, ref) DO UPDATE SET
-            firsts = CASE WHEN spam_handles.day = excluded.day THEN spam_handles.firsts + 1 ELSE 1 END,
-            day = excluded.day, last_seen_at = excluded.last_seen_at`,
-    params: [h.kind, h.ref, day, now],
-    method: "run" as const,
-  }));
+  return handles.map((h) => {
+    const party = PERSONAL.has(h.kind) ? partyId : null;
+    return {
+      sql: `INSERT INTO spam_handles (kind, ref, day, firsts, party_id, last_seen_at) VALUES (?, ?, ?, 1, ?, ?)
+            ON CONFLICT (kind, ref) DO UPDATE SET
+              firsts = CASE WHEN spam_handles.day = excluded.day THEN spam_handles.firsts + 1 ELSE 1 END,
+              day = excluded.day, party_id = COALESCE(excluded.party_id, spam_handles.party_id),
+              last_seen_at = excluded.last_seen_at`,
+      params: [h.kind, h.ref, day, party, now],
+      method: "run" as const,
+    };
+  });
 }
 
 /** A person trusted these handles (Not spam, Let it in), or the sender proved them (Confirm it's me). */
@@ -173,7 +247,7 @@ export function trustHandleStatements(
 ): Statement[] {
   const column = how === "trusted" ? "trusted_at" : "proven_at";
   return handles
-    .filter((h) => h.kind !== "mail_domain" && h.kind !== "carried_for")
+    .filter((h) => PERSONAL.has(h.kind))
     .map((h) => ({
       sql: `INSERT INTO spam_handles (kind, ref, day, firsts, ${column}, party_id, last_seen_at) VALUES (?, ?, NULL, 0, ?, ?, ?)
             ON CONFLICT (kind, ref) DO UPDATE SET ${column} = excluded.${column},
@@ -185,26 +259,47 @@ export function trustHandleStatements(
 
 /** A person marked something these handles sent as spam: a trust given before no longer holds. */
 export function markHandleStatements(handles: readonly Handle[], now: number): Statement[] {
-  return handles.map((h) => ({
-    sql: "UPDATE spam_handles SET marked_at = ? WHERE kind = ? AND ref = ?",
-    params: [now, h.kind, h.ref],
-    method: "run" as const,
-  }));
+  return handles
+    .filter((h) => PERSONAL.has(h.kind))
+    .map((h) => ({
+      sql: `INSERT INTO spam_handles (kind, ref, day, firsts, marked_at, last_seen_at) VALUES (?, ?, NULL, 0, ?, ?)
+            ON CONFLICT (kind, ref) DO UPDATE SET marked_at = excluded.marked_at`,
+      params: [h.kind, h.ref, now, now],
+      method: "run" as const,
+    }));
+}
+
+/** Handles nobody vouched for and nobody has seen for a month: what a day's count needs is long gone. */
+export const HANDLE_KEEP_MS = 30 * 86_400_000;
+/** A spam mark is remembered half a year, as a marked print is. */
+export const HANDLE_MARK_KEEP_MS = 180 * 86_400_000;
+
+export function pruneHandlesStatement(now: number): Statement {
+  return {
+    sql: `DELETE FROM spam_handles WHERE proven_at IS NULL AND trusted_at IS NULL
+            AND (marked_at IS NULL OR marked_at < ?) AND last_seen_at < ?`,
+    params: [now - HANDLE_MARK_KEEP_MS, now - HANDLE_KEEP_MS],
+    method: "run",
+  };
 }
 
 /** The handles a stored item was screened under, from its row: its contact and its agent. */
 export async function itemHandles(db: Db, secrets: SecretBox | null, itemId: string): Promise<SenderHandles> {
   const { rows } = await db.client.query({
-    sql: `SELECT i.agent_thumbprint, i.agent_level,
+    sql: `SELECT i.agent_thumbprint, i.agent_level, i.agent_directory,
                  (SELECT value FROM party_contacts c WHERE c.party_id = i.party_id AND c.kind = 'email' ORDER BY c.created_at LIMIT 1)
             FROM items i WHERE i.id = ?`,
     params: [itemId],
     method: "all",
   });
   const r = rows[0];
-  if (!r) return { handles: [], first: null, vouched: false };
+  if (!r) return { handles: [], counted: [], first: null, vouched: false, platform: false };
   const thumbprint = r[0] === null || r[0] === undefined ? undefined : String(r[0]);
   const level = r[1] === null || r[1] === undefined ? "none" : String(r[1]);
-  const email = r[2] === null || r[2] === undefined ? undefined : String(r[2]);
-  return handlesOf(secrets, { email, agent: thumbprint ? { level, thumbprint } : undefined });
+  const platform = r[2] === null || r[2] === undefined || r[2] === "" ? undefined : String(r[2]);
+  const email = r[3] === null || r[3] === undefined ? undefined : String(r[3]);
+  return handlesOf(secrets, {
+    email,
+    agent: thumbprint ? { level, thumbprint, ...(platform ? { platform } : {}) } : undefined,
+  });
 }

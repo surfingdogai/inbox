@@ -407,7 +407,7 @@ export async function createItem(
     ],
     method: "run",
   });
-  if (door) statements.push(...door.statements(id));
+  if (door) statements.push(...door.statements(id, party.partyId));
   if (request) statements.push(insertOfferStatement(request));
   if (stay) statements.push(...stay.statements);
   if (stopped) {

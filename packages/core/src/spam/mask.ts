@@ -1,4 +1,4 @@
-import { hostOf, registrableDomain } from "./normalise";
+import { hostOf, registrableDomain, withoutInvisible } from "./normalise";
 
 /**
  * What the AI check is sent of a message (ADR-029 §7.3): the words, with every email address, phone
@@ -7,13 +7,17 @@ import { hostOf, registrableDomain } from "./normalise";
  */
 
 const EMAIL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}.-]+\.[\p{L}]{2,}/gu;
+/** A payment address with no top-level domain, as instant-payment systems write them (name@bank). */
+const PAY_ADDRESS = /[\p{L}\p{N}._-]{2,}@[\p{L}]{2,}(?![\p{L}\p{N}@-]|\.[\p{L}\p{N}])/gu;
 const URL = /\b(?:https?:\/\/|www\.)[^\s<>"'()[\]{}]+/giu;
 /** An IBAN as people write it: a country, two check digits, then groups of letters and digits. */
 const IBAN = /\b[A-Z]{2}\d{2}(?:[ -]?[A-Z0-9]{4}){2,7}(?:[ -]?[A-Z0-9]{1,4})?\b/gi;
 /** Thirteen to nineteen digits, spaced or dashed as cards are printed. */
 const CARD = /\b\d(?:[ -]?\d){12,18}\b/g;
-/** A run that holds seven digits or more, as phone numbers are written anywhere. */
-const PHONE = /(?:\+|00)?\(?\d[\d\s().\-/]{5,}\d/g;
+/** Seventeen digits or more in one run: an account number (a card's would have passed the Luhn check). */
+const ACCOUNT = /\b\d(?:[ -]?\d){16,33}\b/g;
+/** A run that holds seven digits or more, as phone numbers are written anywhere, with any dash between. */
+const PHONE = /(?:\+|00)?\(?\d[\d\s().\-/\u2010-\u2015\u2212\u30fc\u3000]{5,}\d/g;
 /** Dates and times are not phone numbers. */
 const DATE_LIKE = /^(?:\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4})(?:[ T]\d{1,2}[:.]\d{2})?$/;
 
@@ -33,16 +37,41 @@ export function luhn(digits: string): boolean {
   return digits.length >= 13 && sum % 10 === 0;
 }
 
+/** The value of a decimal digit in any script: Unicode writes each script's ten in a run from zero. */
+function digitValue(cp: number): number {
+  let k = 0;
+  while (k < 60 && /\p{Nd}/u.test(String.fromCodePoint(cp - k - 1))) k++;
+  return k % 10;
+}
+
+/**
+ * Digits in any script as ASCII digits, and the full-width forms of ASCII as ASCII ("０９０－１２３４",
+ * "ｍａｒｉａ＠ｇｍａｉｌ．ｃｏｍ", "۰۹۱۲"), so what is masked is found however it was typed. Nothing
+ * else in the text changes.
+ */
+export function foldForMask(text: string): string {
+  let out = "";
+  for (const ch of text) {
+    const cp = ch.codePointAt(0) ?? 0;
+    if (cp >= 0xff01 && cp <= 0xff5e) out += String.fromCodePoint(cp - 0xfee0);
+    else if (cp > 0x7f && /\p{Nd}/u.test(ch)) out += String(digitValue(cp));
+    else out += ch;
+  }
+  return out;
+}
+
 /** The text with its personal data taken out. */
 export function mask(text: string): string {
-  return text
+  return foldForMask(text)
     .replace(URL, (url) => {
       const host = hostOf(url.replace(/[.,;:!?]+$/, ""));
       return host ? `[link to ${registrableDomain(host)}]` : "[link]";
     })
     .replace(EMAIL, "[email]")
+    .replace(PAY_ADDRESS, "[payment address]")
     .replace(IBAN, (m) => (/\d.*\d.*\d.*\d/.test(m.slice(4)) ? "[bank account]" : m))
     .replace(CARD, (m) => (luhn(m.replace(/\D/g, "")) ? "[card number]" : m))
+    .replace(ACCOUNT, "[bank account]")
     .replace(PHONE, (m) => {
       const digits = m.replace(/\D/g, "");
       if (digits.length < 7 || digits.length > 16) return m;
@@ -56,9 +85,9 @@ export function mask(text: string): string {
  * last 500, with `[…]` between), control characters out, then masked.
  */
 export function judgeText(text: string): string {
-  const cut = cutQuoted(text)
+  const cut = withoutInvisible(cutQuoted(text))
     // biome-ignore lint/suspicious/noControlCharactersInRegex: removing them is the point.
-    .replace(/[\u0000-\u0008\u000b-\u001f\u007f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g, "")
+    .replace(/[\u0000-\u0008\u000b-\u001f\u007f\u2028\u2029]/g, "")
     .trim();
   const short = cut.length > 2_000 ? `${cut.slice(0, 1_500)}\n[…]\n${cut.slice(-500)}` : cut;
   return mask(short);

@@ -150,3 +150,30 @@ describe("the AI's answer as points", () => {
     ]);
   });
 });
+
+describe("a customer found by the AI check", () => {
+  const customer = { c: "ai_customer", w: -4, f: "ai" as const };
+  it("takes points off what the filters found, never off the free protection's", () => {
+    // A link showing the business's own address and going elsewhere, and a link to a bare address:
+    // the free protection puts it aside on its own; a model fooled into "customer" cannot undo that.
+    const basic = [s("link_mismatch", 3), s("link_disguised", 3)];
+    expect(decide({ type: "message", signals: basic }).verdict).toBe("aside");
+    expect(decide({ type: "message", signals: [...basic, customer], choices: on("pitches") })).toMatchObject({
+      verdict: "aside",
+      score: 6,
+    });
+    expect(decide({ type: "message", signals: [s("link_only", 3), customer] }).verdict).toBe("warn");
+    // What a filter found, it may take back: switching a filter on only ever puts more aside.
+    expect(
+      decide({ type: "message", signals: [s("pitch_phrases", 3, "pitches"), customer], choices: on("pitches") })
+        .verdict,
+    ).toBe("deliver");
+    expect(
+      decide({
+        type: "message",
+        signals: [s("link_only", 3), s("pitch_phrases", 3, "pitches"), customer],
+        choices: on("pitches"),
+      }),
+    ).toMatchObject({ verdict: "warn", score: 3 });
+  });
+});

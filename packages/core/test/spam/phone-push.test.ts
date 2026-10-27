@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { createRunner } from "../../src/jobs/index";
+import { phonePushOneHandler } from "../../src/phones/jobs";
 import { buildPushPayload, HELD_SOON_EVENT } from "../../src/phones/payload";
-import { classPayload, DAY, HOUR, MIN, spamSetup, T0, visitor } from "./harness";
+import { classPayload, DAY, HOUR, MIN, owner, spamSetup, T0, visitor } from "./harness";
 
 /**
  * What the owner's phones hear of the spam filter (ADR-029 §12): nothing about what it holds or puts
@@ -46,6 +47,46 @@ describe("the phone, about held requests", () => {
     // The fanout queued it for the phone that listens; nothing about the other held one.
     const ones = (await jobs("phone_push_one")).map((r) => JSON.parse(String(r[0])));
     expect(ones.map((o) => [o.itemId, o.event])).toEqual([[soon, HELD_SOON_EVENT]]);
+  });
+
+  it("never names the sender or says their words, even on a phone that shows details", async () => {
+    const s = await spamSetup();
+    const soon = await heldByBot(s, T0, { name: "Scam Sender", email: "pay.now@scam.example.net" }, T0 + 20 * HOUR);
+    const sent: Uint8Array[] = [];
+    const phones = {
+      listeners: async () => [{ id: "ph_1", notify: JSON.stringify({ details: true }) }],
+      deliver: async (_device: string, bytes: Uint8Array) => {
+        sent.push(bytes);
+        return { note: "sent" };
+      },
+    } as unknown as Parameters<typeof phonePushOneHandler>[0];
+    await phonePushOneHandler(phones)(
+      {
+        id: "j1",
+        kind: "phone_push_one",
+        payload: { deviceId: "ph_1", itemId: soon, event: HELD_SOON_EVENT },
+      } as never,
+      { db: s.db, now: T0 + MIN } as never,
+    );
+    expect(sent).toHaveLength(1);
+    const payload = JSON.parse(new TextDecoder().decode(sent[0]));
+    expect(payload.title).toBe("A booking request for Tue 27 Oct is waiting in Held");
+    expect(payload.who).toBeUndefined();
+    expect(payload.text).toBeUndefined();
+    expect(JSON.stringify(payload)).not.toMatch(/Scam Sender|scam\.example/);
+    // And the builder holds to it whatever it is handed.
+    const built = buildPushPayload({
+      item: (await s.caps.getItem(owner(T0), { item_id: soon })).item as never,
+      kind: "booking",
+      event: HELD_SOON_EVENT,
+      details: true,
+      who: "Scam Sender",
+      text: "Pay the deposit at https://scam.example.net",
+      timezone: "Asia/Jakarta",
+      now: T0,
+    });
+    expect(built.who).toBeUndefined();
+    expect(built.text).toBeUndefined();
   });
 
   it("says it without a name, and a labelled request with what it may be when details are on", () => {

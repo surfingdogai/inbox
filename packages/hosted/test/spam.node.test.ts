@@ -5,7 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Ledger } from "../src/ledger";
 import { redact } from "../src/redact";
-import { hostedModelFrom, spamHostPolicy, tenantJudge } from "../src/spam";
+import { hostedModelFrom, PHRASES_ONLY, spamHostPolicy, tenantJudge } from "../src/spam";
 import { type PolicyPayload, policyPayloadSchema } from "../src/types";
 import { type FakeTenant, type Runtime, startRuntime } from "./harness";
 
@@ -169,7 +169,7 @@ describe("our model", () => {
     ledger.close();
   });
 
-  it("is a policy's to give: the block is checked, and an inbox without one has none", () => {
+  it("is a policy's to give: the block is checked, and an inbox without one is hosted on phrases only", () => {
     expect(policyPayloadSchema.shape.spam.safeParse({ ...SPAM, filters: ["everything"] }).success).toBe(false);
     expect(policyPayloadSchema.shape.spam.safeParse({ ...SPAM, day_cap: -1 }).success).toBe(false);
     expect(spamHostPolicy({ spam: SPAM } as PolicyPayload)).toEqual({
@@ -181,7 +181,8 @@ describe("our model", () => {
       billing: "off",
       price: null,
     });
-    expect(spamHostPolicy({} as PolicyPayload)).toBeNull();
+    expect(spamHostPolicy({} as PolicyPayload)).toEqual(PHRASES_ONLY);
+    expect(PHRASES_ONLY).toMatchObject({ ai: false, billing: "off", price: null });
   });
 
   it("never writes a model key into a log line", () => {
@@ -253,6 +254,26 @@ describe("a hosted inbox's spam filter", () => {
     await settle(t);
     expect(model.calls.length).toBe(before);
     expect(verdictsOf(t).map((v) => v.ai)).toEqual(["skipped"]);
+  });
+
+  it("is hosted all the same without a spam block: no owner's own key, and Settings speaks as a hosted inbox", async () => {
+    const { host, owner, cookie } = await liveInbox(undefined);
+    const card = await rt.http(host, "GET", "/v1/owner/spam/model", { headers: { cookie } });
+    expect(card.status).toBe(200);
+    expect(card.json).toMatchObject({ offered: false, not_offered: "hosted", own: null, can_change: false });
+    const put = await rt.http(host, "PUT", "/v1/owner/spam/model", {
+      headers: owner,
+      body: JSON.stringify({ provider: "openai", model: "gpt-x", key: "sk-proj-hosted-tenant-0123456789" }),
+    });
+    expect(put.status).toBe(403);
+    const status = (await rt.http(host, "GET", "/v1/owner/spam", { headers: { cookie } })).json as {
+      reader: string;
+      billing: { state: string };
+      checks: { month_cap: number | null };
+    };
+    expect(status.reader).toBe("hosted_phrases");
+    expect(status.billing.state).toBe("off");
+    expect(status.checks.month_cap).not.toBe(2_000);
   });
 
   it("counts each check in the ledger before it is made, within the inbox's caps, whatever its own file says", async () => {

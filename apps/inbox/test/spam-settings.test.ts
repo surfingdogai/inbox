@@ -152,10 +152,11 @@ describe("Your AI model", () => {
       provider: "openai",
       key: "sk-test-openai-0001",
     });
+    // The small ones first: the owner pays for each check, and a small model is enough here.
     expect(await listed.json()).toEqual({
       models: [
-        { id: "gpt-text-large", name: "gpt-text-large" },
         { id: "gpt-text-small", name: "gpt-text-small" },
+        { id: "gpt-text-large", name: "gpt-text-large" },
       ],
     });
     const saved = await s.call("PUT", "/spam/model", s.owner, {

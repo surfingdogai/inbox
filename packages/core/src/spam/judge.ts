@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { mask } from "./mask";
+import { withoutInvisible } from "./normalise";
 import type { CheckedAnswer } from "./types";
 
 /**
@@ -176,17 +178,15 @@ Rules
 
 Answer with the JSON object only.`;
   const text = message.text.split(boundary).join(" ");
+  // The name and the subject are the sender's words too: masked as the text is, so no address, phone
+  // number or account in them leaves either.
+  const line = (value: string | null) =>
+    mask(withoutInvisible(oneLine(value ?? "")))
+      .split(boundary)
+      .join(" ");
   const user = `A new ${message.kind} came through the business's ${message.door}.
-From: "${
-    oneLine(message.displayName ?? "")
-      .split(boundary)
-      .join(" ") || "no name"
-  }" at ${message.domain ?? "no address"} (${message.provider})
-Subject: ${
-    oneLine(message.subject ?? "")
-      .split(boundary)
-      .join(" ") || "none"
-  }
+From: "${line(message.displayName) || "no name"}" at ${message.domain ?? "no address"} (${message.provider})
+Subject: ${line(message.subject) || "none"}
 Links go to: ${message.linkDomains.length ? message.linkDomains.slice(0, 10).join(", ") : "no links"}
 Attachments: ${message.attachments || "none"}
 ${boundary}

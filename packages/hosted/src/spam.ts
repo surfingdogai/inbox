@@ -42,10 +42,25 @@ export function hostedModelFrom(
   return null;
 }
 
-/** The policy's `spam` block, as the inbox's spam filter reads it; null when the policy has none. */
-export function spamHostPolicy(p: PolicyPayload): SpamHostPolicy | null {
+/**
+ * A hosted inbox whose policy carries no `spam` block yet: hosted all the same. Our AI does not read,
+ * the filters look for known phrases only, nothing is billed, and no owner's own key is asked for (a
+ * hosted inbox takes none, ADR-029). Never treated as one's own server.
+ */
+export const PHRASES_ONLY: SpamHostPolicy = {
+  ai: false,
+  filters: ["pitches", "scams", "junk"],
+  dayCap: 0,
+  monthCap: 0,
+  reader: null,
+  billing: "off",
+  price: null,
+};
+
+/** The policy's `spam` block, as the inbox's spam filter reads it; phrases only when the policy has none. */
+export function spamHostPolicy(p: PolicyPayload): SpamHostPolicy {
   const s = p.spam;
-  if (!s) return null;
+  if (!s) return PHRASES_ONLY;
   return {
     ai: s.ai,
     filters: s.filters,

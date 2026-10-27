@@ -74,22 +74,44 @@ export function yourNoun(type: ItemType, lang: CustomerLang): string {
   return copyFor(lang).yourNoun[type];
 }
 
-/** The sentence an assistant relays for the item as it stands. Never an id: a six-character reference. */
 /**
- * The state a customer reads their item in. A message the business put aside reads as closed; a
- * quote request it put aside (ADR-029) as received, and as expired once its request lapsed, as it
- * would have had nobody answered it: nobody learns their request was put aside.
+ * The state a customer reads their item in. A message the business put aside reads as open, one
+ * nobody has answered yet; a quote request it put aside (ADR-029) as received, and as expired once its
+ * request lapsed, as it would have had nobody answered it: nobody learns their request was put aside,
+ * and nothing they read changes with what the filter thought of their words.
  */
 export function customerState(item: Pick<Item, "type" | "state" | "payload">, now: number = Date.now()): string {
   if (item.state !== "spam") return item.state;
-  if (item.type !== "quote_request") return "closed";
-  const until = (item.payload as { offer?: { validThrough?: string } }).offer?.validThrough;
-  return until && Date.parse(until) <= now ? "expired" : "received";
+  if (item.type !== "quote_request") return "open";
+  const until = lapsesAt(item);
+  return until !== null && until <= now ? "expired" : "received";
 }
 
+function lapsesAt(item: Pick<Item, "payload">): number | null {
+  const until = (item.payload as { offer?: { validThrough?: string } }).offer?.validThrough;
+  const at = until ? Date.parse(until) : Number.NaN;
+  return Number.isFinite(at) ? at : null;
+}
+
+/**
+ * The item as its customer reads it when it was put aside: in the state a request nobody answered is
+ * in, never closed by us (`closedAt`), so what they read, what they can do and who we wait on are a
+ * delivered one's. A quote request that lapsed reads closed when it lapsed, as one nobody answered does.
+ */
+export function customerSees<T extends Pick<Item, "type" | "state" | "payload" | "closedAt">>(
+  item: T,
+  now: number = Date.now(),
+): T {
+  if (item.state !== "spam") return item;
+  const state = customerState(item, now);
+  const lapsed = state === "expired" ? lapsesAt(item) : null;
+  return { ...item, state, closedAt: lapsed !== null ? new Date(lapsed).toISOString() : null } as T;
+}
+
+/** The sentence an assistant relays for the item as it stands. Never an id: a six-character reference. */
 export function statusSentence(given: Item, a: Audience = DEFAULT_AUDIENCE): string {
-  // A request put aside reads as one nobody answered yet (customerState).
-  const item = given.state === "spam" ? ({ ...given, state: customerState(given) } as Item) : given;
+  // A request put aside reads as one nobody answered yet (customerSees).
+  const item = customerSees(given);
   const c = copyFor(a.lang);
   if (item.type === "refund") return refundSentence(item, a);
   if (item.type === "booking" && item.state === "proposed" && item.payload.proposed) {

@@ -108,15 +108,20 @@ export const ownerAi = (t: number): Caller => ({
   now: () => t,
 });
 
-/** An assistant on the agent doors: unsigned, or signed with its own key. */
+/**
+ * An assistant on the agent doors: unsigned, signed with its own key, or signed with a platform's key
+ * (`platform`: the directory the key came from, which signs for every one of the platform's users).
+ */
 export const agent = (
   t: number,
-  o: { key?: string; level?: "self" | "vouched"; carriedFor?: string; idem?: string } = {},
+  o: { key?: string; level?: "self" | "vouched"; platform?: string; carriedFor?: string; idem?: string } = {},
 ): Caller => ({
   actor: { kind: "customer_agent", id: `agent:${o.key ?? "anon"}`, channel: "rest" },
   tier: o.key ? "signed_agent" : "anonymous",
   sandbox: false,
-  ...(o.key ? { agent: { level: o.level ?? "self", thumbprint: o.key } } : {}),
+  ...(o.key
+    ? { agent: { level: o.level ?? "self", thumbprint: o.key, ...(o.platform ? { platform: o.platform } : {}) } }
+    : {}),
   ...(o.carriedFor ? { carriedFor: o.carriedFor, viaNetwork: true } : {}),
   ...(o.idem ? { idempotency: { scope: `agent:${o.key ?? "anon"}`, key: o.idem } } : {}),
   now: () => t,
@@ -240,6 +245,9 @@ export async function spamSetup(
     (await db.client.query({ sql, params: params as never, method: "all" })).rows as unknown[][];
   return { db, caps, mail, svc, product, drain, runOnce, q };
 }
+
+/** The id of what a create door answered, whichever door it was. */
+export const idOf = (r: unknown): string => (r as { view: { item: { id: string } } }).view.item.id;
 
 /** A booking request's payload for the class, a few days out. */
 export function classPayload(svc: string, at: number = T0 + 3 * DAY + HOUR) {

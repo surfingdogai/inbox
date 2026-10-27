@@ -15,7 +15,7 @@ import {
   filterStates,
   switchFilterStatements,
 } from "./filters";
-import { itemHandles, trustHandleStatements } from "./handles";
+import { isPlatformKey, itemHandles, pruneHandlesStatement, trustHandleStatements } from "./handles";
 import type { JudgePort } from "./judge";
 import {
   addToListStatements,
@@ -203,16 +203,18 @@ export class SpamCapabilities implements SpamDeps {
   }
 
   /**
-   * Whether new messages may be read by the AI check now: a model to ask, a host that lets it read, and
-   * a filter on. The business's privacy page says so while it is (ADR-029 §14).
+   * Whether new messages may be read by the AI check now, and whose model reads: a model to ask, a host
+   * that lets it read, and a filter on. The business's privacy page says so while it is (ADR-029 §14):
+   * the host's (`host`, which keeps nothing, D2) or one this server's operator or owner set up (`own`,
+   * whose provider's terms are theirs to know).
    */
-  async readsWithAi(now: number): Promise<boolean> {
+  async aiReader(now: number): Promise<"host" | "own" | null> {
     await this.refreshOwn();
-    if (!this.judge() || (this.policy && !this.policy.ai)) return false;
+    if (!this.judge() || (this.policy && !this.policy.ai)) return null;
     const allowed = this.policy ? new Set<string>(this.policy.filters) : null;
     for (const s of (await filterStates(this.db, now)).values())
-      if (s.on && (!allowed || allowed.has(s.filter))) return true;
-    return false;
+      if (s.on && (!allowed || allowed.has(s.filter))) return this.policy ? "host" : "own";
+    return null;
   }
 
   /** Screens a create at its door (`createItem` calls this). */
@@ -357,7 +359,8 @@ export class SpamCapabilities implements SpamDeps {
     const verdicts = new Map(found.map((r) => [String(r[0]), r]));
     const { rows: who } = await this.db.client.query({
       sql: `SELECT i.id, i.agent_thumbprint,
-                   (SELECT value FROM party_contacts c WHERE c.party_id = i.party_id AND c.kind = 'email' ORDER BY c.created_at LIMIT 1)
+                   (SELECT value FROM party_contacts c WHERE c.party_id = i.party_id AND c.kind = 'email' ORDER BY c.created_at LIMIT 1),
+                   i.agent_level, i.agent_directory
               FROM items i WHERE i.id IN (${marks})`,
       params: ids,
       method: "all",
@@ -373,7 +376,12 @@ export class SpamCapabilities implements SpamDeps {
             address,
             company_domain:
               company && !SHARED_MAIL_PROVIDERS.has(company) && !DISPOSABLE_MAIL.has(company) ? company : null,
-            app: !address && r[1] !== null && r[1] !== undefined,
+            // An app's own key may be put aside; a platform's, which signs for all its users, never.
+            app:
+              !address &&
+              r[1] !== null &&
+              r[1] !== undefined &&
+              !isPlatformKey({ level: String(r[3] ?? "none"), platform: r[4] ? String(r[4]) : undefined }),
           },
         ] as const;
       }),
@@ -474,12 +482,17 @@ export class SpamCapabilities implements SpamDeps {
           }
         : null,
       providers: MODEL_PROVIDERS.map((id) => ({ id, name: PROVIDER_NAMES[id] })),
-      can_change: canChange(caller) && this.ownOffered(),
+      can_change: canChangeModel(caller) && this.ownOffered(),
     };
   }
 
   private requireOwnModel(caller: Caller): { kit: ModelKit; secrets: SecretBox } {
-    requirePerson(caller);
+    // The key decides where every new stranger's message is sent: the owner's own act, never staff's.
+    if (!canChangeModel(caller)) {
+      throw new WriteError("not_allowed", "Only the owner can change this, signed in.", {
+        details: { reason: "owner_in_person" },
+      });
+    }
     if (!this.ownOffered() || !this.kit || !this.secrets) {
       throw new WriteError(
         "not_allowed",
@@ -908,6 +921,7 @@ export class SpamCapabilities implements SpamDeps {
     const settings = await readSettings(this.db);
     await this.db.batch([
       prunePrintsStatement(now),
+      pruneHandlesStatement(now),
       { sql: "DELETE FROM spam_cache WHERE at < ?", params: [now - 7 * 86_400_000], method: "run" },
       { sql: "DELETE FROM spam_domains WHERE checked_at < ?", params: [now - 30 * 86_400_000], method: "run" },
     ]);
@@ -987,6 +1001,14 @@ export function canChange(caller: Caller): boolean {
   const via = caller.principal?.via;
   if (caller.actor.kind === "owner") return isOwnerInPerson(caller);
   return via === undefined || via === "session" || via === "device";
+}
+
+/**
+ * The owner, signed in, in person: who may set, replace or remove the AI model's key, which decides
+ * which provider every new stranger's message goes to (as for anything that sends data somewhere new).
+ */
+export function canChangeModel(caller: Caller): boolean {
+  return isPerson(caller) && isOwnerInPerson(caller);
 }
 
 function requirePerson(caller: Caller): void {

@@ -1,4 +1,4 @@
-import { type Audience, customerLabel, customerState, DEFAULT_AUDIENCE, statusSentence } from "../customer/describe";
+import { type Audience, customerLabel, customerSees, DEFAULT_AUDIENCE, statusSentence } from "../customer/describe";
 import { shortRef } from "../customer/format";
 import { type ActorKind, type Item, type ItemType, itemFlagsSchema, type Money, payloadSchemas } from "../domain/types";
 import { availableTransitions } from "../machine/machine";
@@ -159,14 +159,16 @@ export function rowToItem(row: ItemRow): Item {
  * for a customer, the language, time zone and notice the business speaks to them in.
  */
 export function viewFor(
-  item: Item,
+  given: Item,
   actor: ActorKind,
   party?: PartyView,
   hidden?: ReadonlySet<string>,
   audience?: Audience,
 ): ItemView {
-  const machine = machines[item.type];
+  const machine = machines[given.type];
   const customer = CUSTOMER_KINDS.has(actor);
+  // A customer reads a request put aside as one nobody answered: its transitions too (`customerSees`).
+  const item = customer ? customerSees(given) : given;
   const lang = (audience ?? DEFAULT_AUDIENCE).lang;
   // What we proposed is withdrawn only when it said it was subject to our confirmation (ADR-018 §2).
   const withdrawable = (item.payload as { offer?: { binding?: boolean } }).offer?.binding === false;
@@ -211,10 +213,11 @@ export function viewFor(
 
 /**
  * The item as its customer sees it: none of the business's own flags (priority, a person needed,
- * test mode), and a message the business put aside as spam is simply closed (a quote request,
- * received: `customerState`).
+ * test mode), and a request the business put aside as spam reads as one nobody answered yet (a
+ * message open, a quote request received: `customerSees`), never closed by us.
  */
-export function customerItem(item: Item, now: number = Date.now()): Item {
+export function customerItem(given: Item, now: number = Date.now()): Item {
+  const item = customerSees(given, now);
   const { flags: _flags, ...rest } = item;
   // Nor how far a negotiation has gone: the round is the business's to count (ADR-018 §4).
   const offer = (item.payload as { offer?: Record<string, unknown> }).offer;
@@ -224,7 +227,7 @@ export function customerItem(item: Item, now: number = Date.now()): Item {
         return { ...item.payload, offer: pointer };
       })()
     : item.payload;
-  return { ...rest, payload, state: customerState(item, now) } as unknown as Item;
+  return { ...rest, payload } as unknown as Item;
 }
 
 const TYPE_WORD: Record<ItemType, string> = {

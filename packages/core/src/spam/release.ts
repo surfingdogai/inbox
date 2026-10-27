@@ -2,7 +2,7 @@ import type { Statement } from "@surfingdog/platform";
 import type { Db } from "../db";
 import type { SecretBox } from "../secrets/box";
 import { hasEventListeners, jobStatement, WEBHOOK_FANOUT_KIND } from "../write/common";
-import { itemHandles, markHandleStatements, trustHandleStatements } from "./handles";
+import { isPlatformKey, itemHandles, markHandleStatements, trustHandleStatements } from "./handles";
 import { addToListStatements } from "./lists";
 import { countStatement } from "./meter";
 import { emailDomain, foldAddress } from "./normalise";
@@ -100,9 +100,11 @@ export async function teachStatements(
   const r = rows[0];
   if (!r) return [];
   const partyId = String(r[0]);
-  const thumbprint = r[1] === null || r[1] === undefined ? null : String(r[1]);
+  const sender = await itemHandles(db, secrets, itemId);
+  const handles = sender.handles;
+  // A platform's key signs for all its users: letting one in lets in no one else.
+  const thumbprint = r[1] === null || r[1] === undefined || sender.platform ? null : String(r[1]);
   const email = r[2] === null || r[2] === undefined ? null : String(r[2]);
-  const handles = (await itemHandles(db, secrets, itemId)).handles;
   const out: Statement[] = [
     {
       sql: `INSERT INTO spam_verdicts (item_id, door, verdict, cause, certain, score, signals, ai, learning, owner_verdict, owner_at, released_by, created_at)
@@ -153,7 +155,8 @@ export async function blockChoiceOf(
 ): Promise<{ kind: "address" | "agent_key"; value: string } | null> {
   const { rows } = await db.client.query({
     sql: `SELECT i.agent_thumbprint,
-                 (SELECT value FROM party_contacts c WHERE c.party_id = i.party_id AND c.kind = 'email' ORDER BY c.created_at LIMIT 1)
+                 (SELECT value FROM party_contacts c WHERE c.party_id = i.party_id AND c.kind = 'email' ORDER BY c.created_at LIMIT 1),
+                 i.agent_level, i.agent_directory
             FROM items i WHERE i.id = ?`,
     params: [itemId],
     method: "all",
@@ -161,7 +164,9 @@ export async function blockChoiceOf(
   const r = rows[0];
   if (!r) return null;
   if (r[1] !== null && r[1] !== undefined) return { kind: "address", value: foldAddress(String(r[1])) };
-  if (r[0] !== null && r[0] !== undefined) return { kind: "agent_key", value: String(r[0]) };
+  // Never a platform's key: it would put aside every one of its users.
+  const platform = isPlatformKey({ level: String(r[2] ?? "none"), platform: r[3] ? String(r[3]) : undefined });
+  if (r[0] !== null && r[0] !== undefined && !platform) return { kind: "agent_key", value: String(r[0]) };
   return null;
 }
 

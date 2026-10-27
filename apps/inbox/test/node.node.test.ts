@@ -84,3 +84,51 @@ describe("the Node server in demo mode", () => {
     }
   });
 });
+
+// The operator's own model (SPAM_MODEL_URL) is often on the same machine: a local model server on
+// loopback. Its address comes from the operator's environment, never from settings, so the spam
+// filter's fetch may reach a private address where a webhook's may not.
+describe("the operator's own model on the Node server", () => {
+  it("is reached on this machine, through a fetch that allows a private address", async () => {
+    const node = readFileSync(path.resolve(import.meta.dirname, "../src/node.ts"), "utf8");
+    expect(node).toMatch(/spamFrom\(process\.env, pinnedFetch\(\{ deny: deny\.ranges, allowPrivate: true \}\)\)/);
+    const { createServer } = await import("node:http");
+    const { judgeFromEnv } = await import("@surfingdog/adapters");
+    const { pinnedFetch } = await import("@surfingdog/platform/node");
+    let asked = 0;
+    const server = createServer((req, res) => {
+      asked++;
+      req.resume();
+      req.on("end", () => {
+        const answer = {
+          kind: "customer",
+          certainty: "high",
+          customer_intent: true,
+          talks_to_filter: false,
+          quotes: [],
+        };
+        res.setHeader("content-type", "application/json");
+        res.end(
+          JSON.stringify({
+            choices: [{ message: { content: JSON.stringify(answer) }, finish_reason: "stop" }],
+            usage: { prompt_tokens: 10, completion_tokens: 5 },
+          }),
+        );
+      });
+    });
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
+    try {
+      const port = (server.address() as { port: number }).port;
+      const env = { SPAM_MODEL_API: "chat", SPAM_MODEL_URL: `http://127.0.0.1:${port}/v1`, SPAM_MODEL: "local" };
+      const found = judgeFromEnv(env, pinnedFetch({ deny: [], allowPrivate: true }));
+      const r = await found?.judge.judge(
+        { system: "s", user: "u", schema: {}, maxTokens: 10 },
+        new AbortController().signal,
+      );
+      expect(asked).toBe(1);
+      expect(r?.ok).toBe(true);
+    } finally {
+      server.close();
+    }
+  });
+});

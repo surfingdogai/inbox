@@ -110,8 +110,11 @@ export interface CheckedAnswer {
 /** How the AI check went for one item. */
 export type AiOutcome = "none" | "skipped" | "reused" | "judged" | "capped" | "failed";
 
-/** The kinds of handle a sender is known by here (never a client's network address). */
-export type HandleKind = "agent_key" | "pass" | "mailbox" | "mail_domain" | "carried_for";
+/**
+ * The kinds of handle a sender is known by here (never a client's network address). `agent_key` is an
+ * agent's own key; `platform_key` a platform's (Web Bot Auth), which signs for every one of its users.
+ */
+export type HandleKind = "agent_key" | "platform_key" | "pass" | "mailbox" | "mail_domain" | "carried_for";
 
 export interface Handle {
   readonly kind: HandleKind;

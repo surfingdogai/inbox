@@ -83,6 +83,43 @@ describe("what the check is sent", () => {
     expect(luhn("1234567890123456")).toBe(false);
   });
 
+  it("masks digits of every script, full-width forms, long account numbers and payment addresses", () => {
+    const cases: [string, string][] = [
+      ["電話は０９０－１２３４－５６７８です", "電話は[phone]です"],
+      ["फ़ोन ९८७६५४३२१० पर", "फ़ोन [phone] पर"],
+      ["شماره من ۰۹۱۲۳۴۵۶۷۸۹ است", "شماره من [phone] است"],
+      ["Call +٩٧١٥٠١٢٣٤٥٦٧ please", "Call [phone] please"],
+      ["ｍａｒｉａ＠ｇｍａｉｌ．ｃｏｍ", "[email]"],
+      ["Transfer to CLABE 002010077777777771 today", "Transfer to CLABE [bank account] today"],
+      ["Account 12345678901234567 at the bank", "Account [bank account] at the bank"],
+      ["UPI id maria@okhdfcbank please pay", "UPI id [payment address] please pay"],
+      ["Pay to maria@okhdfcbank.", "Pay to [payment address]."],
+    ];
+    for (const [text, masked] of cases) expect(mask(text), text).toBe(masked);
+    // What is not personal reads the same: a date, a time, a count (in ASCII digits), a mention.
+    expect(mask("Class on 2026-10-29 at 10:00 for ３ people, thanks @kopisenja")).toBe(
+      "Class on 2026-10-29 at 10:00 for 3 people, thanks @kopisenja",
+    );
+  });
+
+  it("masks the subject and the sender's name as it masks the text: no address, number or account leaves", () => {
+    const p = buildPrompt(
+      business,
+      message("Please call me back", {
+        displayName: "maria.silva@gmail.com +351 912 345 678",
+        subject: "Call me back on +351 912 345 678 or at maria.silva@gmail.com, IBAN DE89 3704 0044 0532 0130 00",
+      }),
+    );
+    const head = p.request.user.split("\n").filter((l) => l.startsWith("From:") || l.startsWith("Subject:"));
+    expect(head).toHaveLength(2);
+    for (const line of head) {
+      expect(line).not.toMatch(/[\p{L}\p{N}._%+-]+@/u);
+      expect(line.replace(/[\s().-]/g, "")).not.toMatch(/\d{7,}/);
+    }
+    expect(head[0]).toBe('From: "[email] [phone]" at example.org (a company domain)');
+    expect(head[1]).toBe("Subject: Call me back on [phone] or at [email], IBAN [bank account]");
+  });
+
   it("cuts quoted history and long texts, keeping the first and last of it", () => {
     expect(judgeText("New question here\n> old quoted line\n> another")).toBe("New question here");
     expect(judgeText("Answer\nOn Mon, 26 Oct 2026, Rita wrote:\nold text")).toBe("Answer");
@@ -116,6 +153,19 @@ describe("what the check is sent", () => {
     expect(everything).not.toContain("812-3456-7890");
     expect(everything).not.toMatch(/Hamid|4471/);
     expect(sentText(req as never)).toContain("[phone]");
+  });
+
+  it("sends an agent's message's first line, which becomes its subject, masked too", async () => {
+    const judge = fakeJudge({ kind: "unclear", certainty: "low" });
+    const s = await spamSetup({ filters: ["pitches"], judge });
+    await s.caps.sendMessage(agent(T0), {
+      body: "Please call me on +351 912 345 678 or write to maria.lopez@empresa.example\nI would like to book the latte art class for my team next month, around twelve people.",
+      contact: { name: "maria.lopez@empresa.example", email: "maria.lopez@empresa.example" },
+    });
+    await s.drain(T0 + MIN);
+    const user = judge.calls[0]?.user ?? "";
+    expect(user).not.toMatch(/912 345 678|maria\.lopez@/);
+    expect(user).toContain('From: "[email]" at empresa.example');
   });
 });
 

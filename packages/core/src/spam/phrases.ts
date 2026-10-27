@@ -323,7 +323,13 @@ export interface PhraseHit {
 
 const UNSPACED = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}]/u;
 
+/** Whether a phrase is in a text as words of its own: never inside another word ("tea" in "team"). */
+export function foundWords(text: string, phrase: string): boolean {
+  return found(text, phrase);
+}
+
 function found(text: string, phrase: string): boolean {
+  if (!phrase) return false;
   if (UNSPACED.test(phrase)) return text.includes(phrase);
   let at = text.indexOf(phrase);
   while (at >= 0) {

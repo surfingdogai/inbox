@@ -276,3 +276,63 @@ describe("the files of what is put aside", () => {
     });
   });
 });
+
+describe("forged mail under a real sender's address", () => {
+  const forge = (s: Awaited<ReturnType<typeof setup>>, from: string, i: number) =>
+    s.ingest(
+      { From: from, Subject: `Win ${i}`, "X-Spam-Flag": "YES" },
+      `Cheap pills ${i} https://pills${i}.example.net`,
+      {
+        auth: { dmarc: "fail" },
+      },
+    );
+
+  it("never spends the budget of the sender it names: their own signed mail arrives", async () => {
+    const s = await setup();
+    for (let i = 0; i < 5; i++) await forge(s, "Ingrid Berg <ingrid@berg-regnskap.example>", i);
+    const own = await s.ingest(
+      { From: "Ingrid Berg <ingrid@berg-regnskap.example>", Subject: "Order for the office" },
+      "Hello, could we order 3 kg of the house blend for our office, delivered on Thursday? Thanks, Ingrid",
+      { auth: { dmarc: "pass", dkim: ["berg-regnskap.example"] } },
+    );
+    expect(await s.verdictOf(idOf(own))).toMatchObject({ state: "open", screen: "delivered", signals: ["aligned"] });
+  });
+
+  it("never spends their company's either, and unsigned mail is counted apart from signed", async () => {
+    const s = await setup();
+    for (let i = 0; i < 20; i++) await forge(s, `Staff ${i} <staff${i}@berg-regnskap.example>`, i);
+    // Unsigned mail that no server marked counts, but only against unsigned mail from there.
+    for (let i = 0; i < 6; i++) {
+      await s.ingest({ From: `Temp ${i} <temp${i}@berg-regnskap.example>`, Subject: `Hello ${i}` }, ask(), {
+        auth: { dmarc: "fail" },
+      });
+    }
+    const ola = await s.ingest(
+      { From: "Ola Nordmann <ola@berg-regnskap.example>", Subject: "Coffee for the office" },
+      "Hello, could we order 3 kg of the house blend for our office, delivered on Thursday? Thanks, Ola",
+      { auth: { dmarc: "pass", dkim: ["berg-regnskap.example"] } },
+    );
+    expect(await s.verdictOf(idOf(ola))).toMatchObject({ state: "open", screen: "delivered" });
+  });
+});
+
+describe("a first-time customer whose provider breaks DMARC", () => {
+  for (const body of [
+    "Is this your shop? https://maps.app.goo.gl/Xy12",
+    "Open on Sunday? https://maps.app.goo.gl/Xy12",
+    "Is this still available? https://fjordkaffe.example/shop/ethiopia-1kg",
+    "Do you still have these? https://shop.fjordkaffe.example/p/123",
+  ]) {
+    it(`is not put aside for a short question with a link: ${body}`, async () => {
+      const s = await setup();
+      await s.db.client.query({
+        sql: "UPDATE spam_filter_spans SET learning_until = 0 WHERE id = 'basic'",
+        method: "run",
+      });
+      const r = await s.ingest({ From: "Ingrid Berg <ingrid@berg-regnskap.example>", Subject: "Question" }, body, {
+        auth: { dmarc: "fail" },
+      });
+      expect(await s.verdictOf(idOf(r))).toMatchObject({ state: "open", screen: "delivered", signals: ["dmarc_fail"] });
+    });
+  }
+});

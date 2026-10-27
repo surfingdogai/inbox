@@ -133,14 +133,15 @@ describe("the status door", () => {
     expect(v.human).toContain("accept it, decline it or pick another time");
   });
 
-  it("shows a spam message as closed", async () => {
+  it("shows a spam message as one nobody has answered yet: open, waiting on us", async () => {
     const s = await setup();
     const m = await s.caps.sendMessage(anon(), { body: "Cheap watches", contact: { email: "x@example.com" } });
     const mid = (m as { view: { item: { id: string } }; accessToken: string }).view.item.id;
     await transitionItem(s.db, owner, { itemId: mid, event: "mark_spam" });
     const v = await s.caps.getItemStatus(anon((m as { accessToken: string }).accessToken), { item_id: mid });
-    expect(v.item.state).toBe("closed");
-    expect(v.waiting_on).toBeNull();
+    expect(v.item.state).toBe("open");
+    expect(v.item.closedAt).toBeNull();
+    expect(v.waiting_on).toBe("us");
   });
 });
 

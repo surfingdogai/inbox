@@ -14,8 +14,7 @@ import {
 } from "../identity/stops";
 import { items as itemsTable } from "../schema/tables";
 import type { SecretBox } from "../secrets/box";
-import { handleRef } from "../spam/handles";
-import { foldAddress } from "../spam/normalise";
+import { mailboxRefs } from "../spam/handles";
 import { canonicalJson } from "../util/canonical";
 import { type Caller, isCustomer, isOwnerAssistant, isOwnerInPerson, nowOf } from "../write/caller";
 import { WriteError } from "../write/errors";
@@ -417,8 +416,14 @@ export class CustomerData {
         method: "all",
       });
       for (const r of rows) {
-        const ref = await handleRef(this.secrets, "mailbox", foldAddress(String(r[0])));
-        out.push({ sql: "DELETE FROM spam_handles WHERE kind = 'mailbox' AND ref = ?", params: [ref], method: "run" });
+        // Their mail's own count, and the one kept apart for mail sent under their address unsigned.
+        for (const ref of await mailboxRefs(this.secrets, String(r[0]))) {
+          out.push({
+            sql: "DELETE FROM spam_handles WHERE kind = 'mailbox' AND ref = ?",
+            params: [ref],
+            method: "run",
+          });
+        }
       }
     }
     return out;
@@ -551,9 +556,11 @@ export function eraseStatements(parties: readonly string[], now: number): Statem
       // was coming goes whole with them.
       run(`DELETE FROM ucp_sessions WHERE item_id IN ${theirItems}`),
       run(`DELETE FROM reviews_outbox WHERE item_id IN ${theirItems}`),
-      // What the spam filter kept about them (ADR-029): its verdicts and prints on their items, the
-      // owner's list rows that came from them, and the handles it trusted them by.
+      // What the spam filter kept about them (ADR-029): its verdicts and prints on their items, the AI
+      // check's answers for their words (which quote them), the owner's list rows that came from them,
+      // and the handles it knew them by.
       run(`DELETE FROM spam_verdicts WHERE item_id IN ${theirItems}`),
+      run(`DELETE FROM spam_cache WHERE sha IN (SELECT sha FROM spam_prints WHERE item_id IN ${theirItems})`),
       run(`DELETE FROM spam_prints WHERE item_id IN ${theirItems}`),
       run(`DELETE FROM spam_lists WHERE party_id IN ${inParties}`),
       run(`DELETE FROM spam_handles WHERE party_id IN ${inParties}`),

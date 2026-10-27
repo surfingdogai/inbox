@@ -188,10 +188,11 @@ export function buildPushPayload(ctx: PayloadContext): PushPayload {
   if (isNew && item.type === "order" && ctx.kind !== "handled")
     title = `${title} · ${moneyText(item.payload.totalPrice)}`;
   // A booking request the spam filter holds, for a time close at hand (ADR-029 §12): said once, with no name.
-  if (ctx.event === HELD_SOON_EVENT && item.type === "booking")
+  const heldSoon = ctx.event === HELD_SOON_EVENT;
+  if (heldSoon && item.type === "booking")
     title = `A booking request for ${when(item.payload.startTime, ctx.timezone, locale).day} is waiting in Held`;
   // Delivered with a label: what it may be, before what it is, on a phone that shows details.
-  if (ctx.details && item.flags.spamLabel) title = `${chipOf(item.flags.spamLabel, true)}: ${title}`;
+  if (ctx.details && !heldSoon && item.flags.spamLabel) title = `${chipOf(item.flags.spamLabel, true)}: ${title}`;
   // A booking's price rides in the body, after its time and service, as the approved design has it.
   let body = summary(ctx, ctx.timezone, locale);
   if (isNew && item.type === "booking" && item.payload.totalPrice)
@@ -205,8 +206,8 @@ export function buildPushPayload(ctx: PayloadContext): PushPayload {
     kind: ctx.kind,
     title: oneLine(title, 80),
     body: oneLine(body, 120),
-    ...(ctx.details && ctx.who ? { who: oneLine(ctx.who, 60) } : {}),
-    ...(ctx.details && ctx.text ? { text: oneLine(ctx.text, 160) } : {}),
+    ...(ctx.details && !heldSoon && ctx.who ? { who: oneLine(ctx.who, 60) } : {}),
+    ...(ctx.details && !heldSoon && ctx.text ? { text: oneLine(ctx.text, 160) } : {}),
     ...(action ? { action } : {}),
     ...(free ? { free: true as const } : {}),
     at: ctx.now,

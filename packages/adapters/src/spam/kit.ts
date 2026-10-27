@@ -18,6 +18,14 @@ const GEMINI = "https://generativelanguage.googleapis.com/v1beta/openai";
 const NOT_TEXT =
   /(embed|tts|whisper|dall-e|image|imagen|audio|realtime|transcribe|moderation|search|davinci|babbage|aqa|veo|lyria|computer-use|live)/i;
 
+/** A provider's smaller, cheaper models by name: what the spam check needs, and what the owner pays least for. */
+const SMALL = /haiku|mini|nano|flash|lite|small/i;
+
+/** The models with the small ones first, each group in the order it came: the owner pays per check. */
+export function smallFirst(models: readonly ModelChoice[]): ModelChoice[] {
+  return [...models.filter((m) => SMALL.test(m.id)), ...models.filter((m) => !SMALL.test(m.id))];
+}
+
 export function ownModelKit(fetchImpl?: typeof fetch): ModelKit {
   const doFetch = fetchImpl ?? fetch;
   return {
@@ -26,8 +34,8 @@ export function ownModelKit(fetchImpl?: typeof fetch): ModelKit {
       return chatJudge({ url: provider === "openai" ? OPENAI : GEMINI, apiKey: key, model, fetch: fetchImpl });
     },
     async models({ provider, key }) {
-      if (provider === "anthropic") return anthropicModels(key, fetchImpl);
-      return chatModels(provider, key, doFetch);
+      if (provider === "anthropic") return smallFirst(await anthropicModels(key, fetchImpl));
+      return smallFirst(await chatModels(provider, key, doFetch));
     },
   };
 }

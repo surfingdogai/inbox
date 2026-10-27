@@ -219,6 +219,29 @@ describe("the owner's own AI model, on their own server", () => {
     await expect(s.caps.removeSpamModel(ai)).rejects.toMatchObject({ code: "not_allowed" });
   });
 
+  it("is the owner's alone: staff signed in may switch filters, never set where messages are sent", async () => {
+    const s = await spamSetup();
+    s.caps.spam.attach({ kit: kit() });
+    const staff: Caller = {
+      actor: { kind: "staff", id: "user_2", channel: "owner_ui" },
+      tier: "verified_principal",
+      sandbox: false,
+      principal: { via: "session", id: "sess_2", name: "staff@kopisenja.example", scopes: ["*"], userId: "user_2" },
+      now: () => T0,
+    };
+    expect((await s.caps.spamModel(staff)).can_change).toBe(false);
+    await expect(
+      s.caps.setSpamModel(staff, { provider: "openai", model: "m", key: "sk-test-key-0004" }),
+    ).rejects.toMatchObject({ code: "not_allowed", details: { reason: "owner_in_person" } });
+    await expect(s.caps.spamModels(staff, { provider: "openai", key: "sk-test-key-0004" })).rejects.toMatchObject({
+      code: "not_allowed",
+    });
+    await expect(s.caps.removeSpamModel(staff)).rejects.toMatchObject({ code: "not_allowed" });
+    // A filter is still staff's to switch.
+    expect((await s.caps.spam.setFilter(staff, { filter: "junk", on: true }, T0)).filters[2]?.on).toBe(true);
+    expect((await s.caps.spamModel(owner(T0))).can_change).toBe(true);
+  });
+
   it("is not offered where the host reads, nor where the server set one", async () => {
     const hosted = await spamSetup({
       host: {

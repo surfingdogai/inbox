@@ -1,6 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { WriteError } from "../../src/write/errors";
-import { agent, classPayload, DAY, fakeJudge, HOUR, MIN, owner, sentText, spamSetup, T0 } from "./harness";
+import {
+  agent,
+  classPayload,
+  DAY,
+  fakeJudge,
+  HOUR,
+  idOf,
+  MIN,
+  owner,
+  sentText,
+  spamSetup,
+  T0,
+  visitor,
+} from "./harness";
 
 /**
  * Attacks on the spam filter as a whole (ADR-029 §16): a run of five hundred requests from agents
@@ -171,5 +184,93 @@ describe("an answer lent to a near copy", () => {
     expect(first).toEqual(["judged", '["my name is maya"]', "high"]);
     // The copy does not say "my name is Maya": lent without the quote, it is no longer certain.
     expect(second).toEqual(["reused", null, "medium"]);
+  });
+});
+
+describe("what disguises a pitch", () => {
+  const verdictOf = async (s: Awaited<ReturnType<typeof spamSetup>>, id: string) =>
+    (await s.q("SELECT v.verdict, v.cause FROM spam_verdicts v WHERE v.item_id = ?", [id]))[0];
+
+  it("is never a word that holds a short product's name: 'team' names no 'Tea'", async () => {
+    for (const crew of ["crew", "team"]) {
+      const judge = fakeJudge({
+        kind: "sales_pitch",
+        certainty: "high",
+        topic: "seo",
+        quotes: ["first page of Google"],
+      });
+      const s = await spamSetup({ filters: ["pitches"], judge });
+      await s.db.client.query({
+        sql: `INSERT INTO products (id, name, price, active, created_at, updated_at) VALUES ('p_tea', 'Tea', '{"value":1000000,"currency":"IDR"}', 1, ?, ?)`,
+        params: [T0, T0],
+        method: "run",
+      });
+      const r = await s.caps.sendMessage(agent(T0), {
+        body: `Hi there, our ${crew} puts cafes like yours on the first page of Google in 30 days. Reply for a free audit of your website.`,
+        contact: { name: "Rank Co", email: `hi@rank-${crew}.example.net` },
+      });
+      await s.drain(T0 + MIN);
+      expect(await verdictOf(s, idOf(r)), crew).toEqual(["aside", "pitches"]);
+    }
+  });
+
+  it("is never a shortener: a reworded wave behind one still shares its link domain", async () => {
+    const s = await spamSetup();
+    const texts = [
+      "Good morning, we help cafes win more guests online every single week.",
+      "Want more people walking through your door? Our growth studio can help.",
+      "Hello from a small agency that grows local coffee shops quickly.",
+      "Quick question for the owner: would you like twice the footfall this season?",
+    ];
+    let last = "";
+    for (const [i, t] of texts.entries()) {
+      const r = await s.caps.sendMessage(agent(T0 + i * MIN), {
+        body: `${t} https://bit.ly/3xYz${i}`,
+        contact: { name: `S${i}`, email: `s${i}@sender${i}.example.org` },
+      });
+      last = idOf(r);
+      await s.drain(T0 + i * MIN + 1);
+    }
+    const [row] = await s.q("SELECT signals, verdict FROM spam_verdicts WHERE item_id = ?", [last]);
+    expect(String(row?.[0])).toContain("same_link_domain");
+    expect(row?.[1]).toBe("warn");
+  });
+
+  it("is never a character drawn as nothing: copies with a joiner in a different place are one wave", async () => {
+    const pitch =
+      "Hi, I noticed your website and I think we can redesign it. We build websites for cafes and bring organic traffic every month.";
+    const joiner = String.fromCodePoint(0x034f);
+    const s = await spamSetup();
+    let last = "";
+    for (let i = 0; i < 5; i++) {
+      const r = await s.caps.sendMessage(agent(T0 + i * MIN), {
+        body: `${pitch.slice(0, 10 + i * 7)}${joiner}${pitch.slice(10 + i * 7)}`,
+        contact: { name: `W${i}`, email: `w${i}@wave${i}.example.org` },
+      });
+      last = idOf(r);
+      await s.drain(T0 + i * MIN + 1);
+    }
+    expect(await verdictOf(s, last)).toEqual(["aside", "wave"]);
+  });
+});
+
+describe("what a bot sent under someone's address", () => {
+  it("counts against nobody: its own message the next day is screened as a stranger's first", async () => {
+    const s = await spamSetup();
+    const anna = { name: "Anna Kowalska", email: "anna.kowalska@biuro.example.pl" };
+    // Six form posts under her address, each with the hidden field filled: a bot's.
+    for (let i = 0; i < 6; i++) {
+      await s.caps.sendMessage(
+        visitor(T0 + i * 1_000),
+        { body: `Cheap followers ${i} https://followers${i}.example.net`, contact: anna },
+        { screen: { door: "form", form: { key: "valid", trap: true, drawnAt: T0 - 30_000 } } },
+      );
+    }
+    const r = await s.caps.sendMessage(agent(T0 + 10_000), {
+      body: "Hello, could we order three kilos of the house blend for our office, delivered on Thursday?",
+      contact: anna,
+    });
+    expect(await s.q("SELECT screen FROM items WHERE id = ?", [idOf(r)])).toEqual([["delivered"]]);
+    expect(await s.q("SELECT COUNT(*) FROM spam_handles WHERE firsts > 1")).toEqual([[0]]);
   });
 });

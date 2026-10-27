@@ -167,9 +167,10 @@ describe("confirm it's me", () => {
     await press();
     await s.drain();
     expect(toOwner(s)).toHaveLength(1);
-    // The address is proven: the sender's next request comes straight in.
+    // Proving the address let that one request go on. The sender's next one is screened as before,
+    // with wider budgets: its look-alike address labels it, as it would anyone's (ADR-029 §5).
     const next = await book(s, "rudi@bengkelsarl.example", 2, "Could you also check the brakes?");
-    expect(await screenOf(s, next.view.item.id)).toBeNull();
+    expect(await screenOf(s, next.view.item.id)).toBe("warned");
   });
 
   it("is never sent for a bot's request, and does not release one held for a certain reason", async () => {

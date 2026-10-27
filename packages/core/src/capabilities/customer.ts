@@ -4,6 +4,7 @@ import { audienceFor, type BusinessFacts, businessFacts } from "../customer/audi
 import { confirmTermsMessage, copyFor, vars, type WithdrawalCopy, withdrawalCopy } from "../customer/copy";
 import {
   type Audience,
+  customerSees,
   customerState,
   nextActions,
   offerSummary,
@@ -213,7 +214,7 @@ interface Deps {
   readonly spam?:
     | {
         confirmFromSender(itemId: string, now: number): Promise<"released" | "confirmed">;
-        readsWithAi(now: number): Promise<boolean>;
+        aiReader(now: number): Promise<"host" | "own" | null>;
       }
     | undefined;
 }
@@ -231,9 +232,10 @@ export class CustomerDoors {
    * business's, the open offer with its fingerprint, who it waits on, what they can do next.
    */
   async present(item: Item, audience: Audience, now: number): Promise<CustomerItemView> {
-    // A message put aside as spam reads as closed, all of it: its words, its buttons, what comes next;
-    // a quote request put aside, as received and then expired (`customerState`, ADR-029).
-    const seen = item.state === "spam" ? ({ ...item, state: customerState(item, now) } as Item) : item;
+    // A request put aside as spam reads as one nobody answered yet, all of it: its words, its buttons,
+    // who we wait on, what comes next — a message open, a quote request received and then expired
+    // (`customerSees`, ADR-029).
+    const seen = customerSees(item, now);
     const view = viewFor(seen, "customer_agent", undefined, undefined, audience);
     const offer = await openOffer(item, { minNoticeMin: audience.minNoticeMin });
     const rows =
@@ -515,7 +517,7 @@ export class CustomerDoors {
         item.type === "booking" || item.type === "order" ? await withdrawalOf(this.db, item, settings, nowOf(c)) : null;
       if (!right || right.why === "not_agreed") {
         throw new WriteError("wrong_state", copyFor(audience.lang).returns.problems.notAgreed, {
-          details: { state: item.state },
+          details: { state: customerState(item) },
         });
       }
       const statement = await this.statementOf(item, audience, words, right, input.lines);
@@ -646,7 +648,7 @@ export class CustomerDoors {
       if (item.type !== "order" || !ORDER_SENT.has(item.state)) {
         const audience = await this.audienceOf(item, c);
         throw new WriteError("wrong_state", copyFor(audience.lang).returns.problems.nothingToReturn, {
-          details: { state: item.state },
+          details: { state: customerState(item) },
         });
       }
       try {
@@ -701,7 +703,7 @@ export class CustomerDoors {
       lang,
       business: facts.name,
       networks: await issuingNetworks(this.db, await readSettings(this.db)),
-      spamReading: (await this.deps.spam?.readsWithAi(Date.now())) === true,
+      spamReading: (await this.deps.spam?.aiReader(Date.now())) ?? null,
     });
   }
 
@@ -749,7 +751,7 @@ export class CustomerDoors {
       const audience = await this.audienceOf(item, c);
       const words = copyFor(audience.lang);
       const offer = await openOffer(item, { minNoticeMin: audience.minNoticeMin });
-      if (!offer) throw new WriteError("no_offer", words.problems.noOffer, { details: { state: item.state } });
+      if (!offer) throw new WriteError("no_offer", words.problems.noOffer, { details: { state: customerState(item) } });
       const summary = offerSummary(item, offer, audience);
       const current = offerJson(offer, summary, null, nowOf(c));
       if (input.offer_id && input.offer_id !== (offer.id ?? legacyOfferId(item.id))) {
@@ -870,7 +872,7 @@ export class CustomerDoors {
       if (!event) {
         const audience = await this.audienceOf(item, c);
         throw new WriteError("no_offer", copyFor(audience.lang).problems.nothingToAnswer, {
-          details: { state: item.state },
+          details: { state: customerState(item) },
         });
       }
       if (item.type === "stay") {
@@ -974,7 +976,7 @@ export class CustomerDoors {
         // A change to what was agreed: their other time, quantities or delivery date.
         if (door === "suggest_time" && item.type !== "booking") {
           throw new WriteError("no_offer", copyFor(audience.lang).problems.nothingToAnswer, {
-            details: { state: item.state },
+            details: { state: customerState(item) },
           });
         }
         await this.assertChangePinned(c, item, input.offer_id);
@@ -989,7 +991,7 @@ export class CustomerDoors {
       const found = await openOffer(item, { minNoticeMin: audience.minNoticeMin });
       if (!found || (door === "suggest_time" && found.kind !== "time")) {
         throw new WriteError("no_offer", copyFor(audience.lang).problems.nothingToAnswer, {
-          details: { state: item.state },
+          details: { state: customerState(item) },
         });
       }
       offer = found;
@@ -1540,7 +1542,7 @@ export class CustomerDoors {
       lang: audience.lang,
       business: ctx.business,
       networks: await issuingNetworks(this.db, await readSettings(this.db)),
-      spamReading: (await this.deps.spam?.readsWithAi(now)) === true,
+      spamReading: (await this.deps.spam?.aiReader(now)) ?? null,
       mine: {
         stopped,
         form: {

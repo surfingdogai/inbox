@@ -179,6 +179,9 @@ export function phonePushOneHandler(phones: PhoneCapabilities): JobHandler {
     });
     if (Number(rows[0]?.[0] ?? 0) >= MAX_PUSHES_PER_HOUR) return { note: "this hour's notifications are used up" };
     const prefs = readPrefs(device.notify);
+    // A held booking request's one notification never names its sender or says their words, whatever
+    // the phone shows of others: it may be a scam's, and it waits in Held for a person to look (§12).
+    const details = prefs.details && p.event !== HELD_SOON_EVENT;
     const { tz } = await timezoneOf(db);
     const fallback =
       item.type === "message"
@@ -194,9 +197,9 @@ export function phonePushOneHandler(phones: PhoneCapabilities): JobHandler {
       item,
       kind,
       event: p.event,
-      details: prefs.details,
-      who: prefs.details ? await displayName(db, item.partyId) : null,
-      text: prefs.details ? await newestWords(db, item.id, fallback) : null,
+      details,
+      who: details ? await displayName(db, item.partyId) : null,
+      text: details ? await newestWords(db, item.id, fallback) : null,
       offered: await catalogueName(db, item),
       free: fit ? fit.free : null,
       timezone: tz,

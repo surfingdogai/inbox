@@ -329,8 +329,10 @@ const { app, runner, prepare } = createInbox({
   snapshot: nodeSnapshot(client, path.dirname(file)),
   // The owner's phones (ADR-028): the push relay (INBOX_PUSH_RELAY, `off` for none).
   pushRelay: process.env.INBOX_PUSH_RELAY,
-  // The spam filter's AI check with the operator's own model (SPAM_MODEL_*), when one is set up.
-  ...spamFrom(process.env, pinnedFetch({ deny: deny.ranges })),
+  // The spam filter's AI check with the operator's own model (SPAM_MODEL_*), when one is set up. Its
+  // address comes from the operator's own environment, never from settings: a model on this machine or
+  // on the local network (SPAM_MODEL_URL=http://127.0.0.1:11434/v1) is reached like any other.
+  ...spamFrom(process.env, pinnedFetch({ deny: deny.ranges, allowPrivate: true })),
 });
 if (demo) {
   // A demo only starts on an empty database. Over anything else it would mute the instance's mail

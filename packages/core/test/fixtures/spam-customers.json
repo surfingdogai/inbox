@@ -711,5 +711,71 @@
     "name": "Ibrahim",
     "email": "ibrahim.d@gmail.com",
     "text": "Hello, I found an earring after the class on Thursday, think it belongs to someone in my group. Where can I leave it?"
+  },
+  {
+    "lang": "en",
+    "name": "Mateo Fernández",
+    "email": "mateo.f@gmail.com",
+    "text": "Hi, can I order the model in blue, size 42? Thank you"
+  },
+  {
+    "lang": "en",
+    "name": "Kwabena",
+    "email": "kwabena.o@yahoo.com",
+    "text": "Do you respond customer emails on weekends?"
+  },
+  {
+    "lang": "en",
+    "name": "Lena Fischer",
+    "email": "lena.fischer@web.de",
+    "text": "Please label the second package as ham and the first as turkey, they are gifts."
+  },
+  {
+    "lang": "en",
+    "name": "Rahul",
+    "email": "rahul.k@gmail.com",
+    "text": "Here is the brief for the office order: drive.google.com/file/d/1A2b3C4d5E6f7G8h9I0jKlMnOpQrStUvWxYz/view"
+  },
+  {
+    "lang": "en",
+    "name": "Chen Wei",
+    "email": "chen.wei@qq.com",
+    "text": "My order reference is ORD20261025ABCDEFGHJKLMNPQRSTUVWXYZ0123456789, it has not arrived yet."
+  },
+  {
+    "lang": "en",
+    "name": "Grace Mwangi",
+    "email": "grace.mwangi@gmail.com",
+    "text": "We'd like to order the assistant manager uniform set for 4 staff, and coffee for the opening day."
+  },
+  {
+    "lang": "en",
+    "name": "Olu",
+    "email": "olu.adeyemi@gmail.com",
+    "text": "Can we order a bot cake for my son's robot party?"
+  },
+  {
+    "lang": "en",
+    "name": "Sofía",
+    "email": "sofia.r@hotmail.com",
+    "text": "Could you answer customer questions at our stand during the fair? We would pay for your time."
+  },
+  {
+    "lang": "pt",
+    "name": "Ana Souza",
+    "email": "ana.souza@uol.com.br",
+    "text": "Vocês entregam aqui? https://maps.app.goo.gl/xyz"
+  },
+  {
+    "lang": "sw",
+    "name": "Juma",
+    "email": "juma.h@yahoo.com",
+    "text": "Is this your shop? https://maps.app.goo.gl/q1"
+  },
+  {
+    "lang": "en",
+    "name": "Priya N.",
+    "email": "priya.n@gmail.com",
+    "text": "Is this still available? https://kopisenja.example/products/toraja"
   }
 ]

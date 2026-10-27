@@ -6,8 +6,13 @@ import { SECOND_LEVEL } from "./data";
  * text is for comparing and counting only; nobody reads it, and it is never stored.
  */
 
-/** Zero-width characters and bidirectional controls. */
-const INVISIBLE = /[\u200b-\u200d\u2060\ufeff\u202a-\u202e\u2066-\u2069\u200e\u200f\u061c\u00ad]/g;
+/**
+ * Characters drawn as nothing: zero-width ones, bidirectional controls, the combining grapheme joiner,
+ * variation selectors, invisible operators, Hangul fillers, tag characters — every one Unicode calls
+ * default-ignorable. They change nothing a reader sees, so they change nothing compared either.
+ */
+const INVISIBLE = /\p{Default_Ignorable_Code_Point}/gu;
+const INVISIBLE_ONE = /\p{Default_Ignorable_Code_Point}/u;
 
 /**
  * Cyrillic and Greek letters drawn like Latin ones (a subset of Unicode's confusables, UTS #39), folded
@@ -213,21 +218,33 @@ export function hasDisguisedWord(text: string): boolean {
   return false;
 }
 
+/** An invisible character that counts inside a Latin word: any but the soft hyphen, which hyphenation leaves. */
+const hides = (ch: string) => ch !== "\u00ad" && INVISIBLE_ONE.test(ch);
+
 /**
- * Whether a zero-width or bidirectional control sits between two Latin letters: inside a word, where
- * it only hides the word. Between letters of other scripts (a zero-width non-joiner in Persian, a joiner
- * in an emoji) it is writing, and never counts.
+ * Whether a character drawn as nothing sits between two Latin letters: inside a word, where it only
+ * hides the word. Between letters of other scripts (a zero-width non-joiner in Persian, a joiner in an
+ * emoji) it is writing, and never counts.
  */
 export function hasInvisibleInLatin(text: string): boolean {
   const chars = [...text];
   for (let i = 1; i < chars.length - 1; i++) {
-    if (!/[\u200b-\u200d\u2060\ufeff\u202a-\u202e\u2066-\u2069\u200e\u200f]/.test(chars[i] ?? "")) continue;
+    if (!hides(chars[i] ?? "")) continue;
     let j = i + 1;
-    while (j < chars.length && /[\u200b-\u200d\u2060\ufeff\u202a-\u202e\u2066-\u2069\u200e\u200f]/.test(chars[j] ?? ""))
-      j++;
+    while (j < chars.length && hides(chars[j] ?? "")) j++;
     if (LATIN.test(chars[i - 1] ?? "") && LATIN.test(chars[j] ?? "")) return true;
   }
   return false;
+}
+
+/**
+ * Text as a model is sent it: every character drawn as nothing taken out, but the joiners some
+ * scripts and emoji are written with (U+200C, U+200D), unless they sit against a Latin letter.
+ */
+export function withoutInvisible(text: string): string {
+  return text
+    .replace(/(?![\u200c\u200d])\p{Default_Ignorable_Code_Point}/gu, "")
+    .replace(/(?<=\p{Script=Latin})[\u200c\u200d]+|[\u200c\u200d]+(?=\p{Script=Latin})/gu, "");
 }
 
 /** Scripts written without spaces between words, compared by runs of characters instead. */

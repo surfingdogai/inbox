@@ -17,6 +17,7 @@ import { ensureJob } from "../jobs/schedule";
 import { localDay, startOfDay } from "../negotiation/withdrawal";
 import { readSettings, type Settings } from "../settings/schema";
 import { chipOf } from "./copy";
+import { mask } from "./mask";
 
 /**
  * The spam filter's two emails to the owner (ADR-029 §11.6), each only when there is something to say:
@@ -95,9 +96,12 @@ export async function scheduleSpamEmails(db: Db, now: number): Promise<void> {
   });
 }
 
-/** Who asked, as the owner knows them: the name they gave, else their email's domain. */
+/**
+ * Who asked, as the owner knows them: the name they gave, else their email's domain. A name is the
+ * sender's own words: masked as what the AI check reads is, so no address or link in it is live here.
+ */
 function whoOf(name: unknown, email: unknown): string {
-  if (typeof name === "string" && name.trim()) return oneLine(name.trim());
+  if (typeof name === "string" && name.trim()) return mask(oneLine(name.trim()));
   if (typeof email === "string" && email.includes("@")) return email.slice(email.lastIndexOf("@") + 1).toLowerCase();
   return "Someone new";
 }
@@ -248,7 +252,12 @@ async function weekOf(
   return {
     aside: Number(count[0]?.[0] ?? 0),
     held: Number(heldRows[0]?.[0] ?? 0),
-    closest: near.map((r) => ({ who: whoOf(r[0], r[1]), line: typeof r[2] === "string" ? firstLine(r[2]) : "" })),
+    // What a put-aside message says, masked: a scam's link reaches the owner as "[link to example.com]",
+    // never as a link to press in an email from their own inbox. The whole text is in the app.
+    closest: near.map((r) => ({
+      who: whoOf(r[0], r[1]),
+      line: typeof r[2] === "string" ? firstLine(mask(r[2])) : "",
+    })),
   };
 }
 

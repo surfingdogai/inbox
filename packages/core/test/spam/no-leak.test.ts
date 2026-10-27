@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { JudgeRequest } from "../../src/spam/judge";
-import { agent, BASE, classPayload, fakeJudge, MIN, nonceOf, spamSetup, T0 } from "./harness";
+import { agent, BASE, classPayload, DAY, fakeJudge, idOf, MIN, nonceOf, spamSetup, T0 } from "./harness";
 
 /**
  * Nobody learns their request was held (ADR-029 §10.2, §14): its create answer, every later read and
@@ -75,6 +75,70 @@ describe("a held request and a delivered one", () => {
     expect(acks[0]?.text).toContain(`${BASE}/c/`);
   });
 
+  it("reads the same for a quote request put aside as for one delivered: at the door and on every read", async () => {
+    const s = await spamSetup();
+    // The owner chose Always put aside for this address, from a request of theirs long gone.
+    await s.db.client.query({
+      sql: "INSERT INTO spam_lists (list, kind, value, party_id, item_id, by_user, created_at) VALUES ('block', 'address', 'sales@agency.example', NULL, NULL, 'user_1', ?)",
+      params: [T0 - DAY],
+      method: "run",
+    });
+    const ask = (email: string, t: number) =>
+      s.caps.requestQuote(agent(t), {
+        payload: {
+          itemOffered: { name: "Latte art class" },
+          description: "A private class for a team of eight, please.",
+        },
+        contact: { name: "Sam", email },
+      });
+    const aside = await ask("sales@agency.example", T0 + MIN);
+    const delivered = await ask("sam@office.example.org", T0 + MIN + 1);
+    expect(
+      (await s.q("SELECT screen, state FROM items WHERE type = 'quote_request' ORDER BY created_at")).map((r) =>
+        r.join(" "),
+      ),
+    ).toEqual(["aside spam", "delivered received"]);
+    expect(comparable(aside)).toBe(comparable(delivered));
+    expect(aside.view.transitions.map((t) => t.event)).toEqual(delivered.view.transitions.map((t) => t.event));
+    const read = (r: typeof aside) =>
+      s.caps.getItemStatus(agent(T0 + 5 * MIN), { item_id: r.view.item.id, access_token: r.accessToken as string });
+    const [a, b] = [await read(aside), await read(delivered)];
+    expect(comparable(a)).toBe(comparable(b));
+    expect(a).toMatchObject({ waiting_on: "us", item: { state: "received", closedAt: null } });
+  });
+
+  it("reads the same for a message put aside as for one delivered: open, waiting on us", async () => {
+    const pitchJudge = fakeJudge((req: JudgeRequest) =>
+      req.user.includes("first page of Google")
+        ? { kind: "sales_pitch", certainty: "high", topic: "seo", quotes: ["first page of Google"] }
+        : { kind: "customer", certainty: "high", customer_intent: true },
+    );
+    const s = await spamSetup({ filters: ["pitches"], judge: pitchJudge });
+    const pitch = await s.caps.sendMessage(agent(T0), {
+      body: PITCH,
+      contact: { name: "Alex", email: "alex@pitch.example.net" },
+    });
+    const asks = await s.caps.sendMessage(agent(T0 + 1), {
+      body: NOTE,
+      contact: { name: "Alex", email: "alex@home.example.org" },
+    });
+    await s.drain(T0 + 5 * MIN);
+    expect((await s.q("SELECT state FROM items ORDER BY created_at")).map((r) => r[0])).toEqual(["spam", "open"]);
+    const read = (r: typeof pitch) =>
+      s.caps.getItemStatus(agent(T0 + 6 * MIN), {
+        item_id: idOf(r),
+        access_token: (r as { accessToken?: string }).accessToken as string,
+      });
+    const [a, b] = [await read(pitch), await read(asks)];
+    // Their own words differ; nothing else does.
+    const words = (v: unknown) =>
+      comparable(v)
+        .replace(/"subject":"[^"]*"/g, '"subject":"WORDS"')
+        .replace(/"human":"Your message \\"[^\\]*\\" is/g, '"human":"Your message WORDS is');
+    expect(words(a)).toBe(words(b));
+    expect(a).toMatchObject({ waiting_on: "us", item: { state: "open", closedAt: null } });
+  });
+
   it("gives no confirm line to a known customer, and none to a message", async () => {
     const s = await spamSetup();
     const m = await s.caps.sendMessage(agent(T0), {
@@ -94,10 +158,18 @@ describe("the business's privacy page", () => {
     expect(await headings(await spamSetup({ filters: ["pitches"] }))).not.toContain("Keeping out spam");
     const reading = await spamSetup({ filters: ["pitches"], judge: judge() });
     expect(await headings(reading)).toContain("Keeping out spam");
-    const page = await reading.caps.customer.privacy({ lang: "pt" });
-    expect(page.sections?.find((x) => x.heading === "Proteção contra spam")?.paragraphs[0]).toContain(
-      "não guarda nada",
-    );
+    const line = async (lang: "en" | "pt", heading: string) =>
+      (await reading.caps.customer.privacy({ lang })).sections?.find((x) => x.heading === heading)?.paragraphs[0] ?? "";
+    // A model this server's owner set up: what its provider keeps is not ours to promise.
+    expect(await line("en", "Keeping out spam")).toContain("without email addresses, phone numbers or bank details");
+    expect(await line("en", "Keeping out spam")).not.toContain("keeps nothing");
+    expect(await line("pt", "Proteção contra spam")).not.toContain("não guarda nada");
+    // The host's model, which keeps nothing (D2): then it says so.
+    reading.caps.spam.attach({
+      host: { ai: true, filters: ["pitches"], dayCap: 150, monthCap: 1_500, reader: null, billing: "off", price: null },
+    });
+    expect(await line("en", "Keeping out spam")).toContain("keeps nothing");
+    expect(await line("pt", "Proteção contra spam")).toContain("não guarda nada");
     // A host that does not let its AI read: nothing to say.
     reading.caps.spam.attach({
       host: {

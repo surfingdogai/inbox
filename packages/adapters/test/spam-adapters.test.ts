@@ -1,6 +1,7 @@
 import { buildPrompt, runJudge } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
 import { chatJudge, judgeFromEnv, messagesJudge } from "../src/spam";
+import { ownModelKit, smallFirst } from "../src/spam/kit";
 
 /**
  * The spam filter's two model adapters (ADR-029 §7.5), against recorded answers: what each sends,
@@ -298,5 +299,28 @@ describe("the model the operator set up", () => {
       SPAM_MODEL_URL: "http://models.internal.example:8080/v1",
     });
     expect(local).toMatchObject({ provider: "models.internal.example", model: "local-8b" });
+  });
+});
+
+describe("the owner's own model, chosen from the provider's list", () => {
+  it("lists the small models first, each group in the provider's order: the owner pays for each check", async () => {
+    const listed = {
+      data: [{ id: "gpt-text-large" }, { id: "gpt-text-mini" }, { id: "gpt-text-nano" }, { id: "gpt-text-xl" }],
+    };
+    const kit = ownModelKit(
+      (async () =>
+        new Response(JSON.stringify(listed), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })) as typeof fetch,
+    );
+    const models = await kit.models({ provider: "openai", key: "sk-test-key-0001" });
+    expect(models.map((m) => m.id)).toEqual(["gpt-text-mini", "gpt-text-nano", "gpt-text-large", "gpt-text-xl"]);
+    expect(
+      smallFirst([
+        { id: "big-1", name: "Big" },
+        { id: "big-1-haiku", name: "Haiku" },
+      ]).map((m) => m.id),
+    ).toEqual(["big-1-haiku", "big-1"]);
   });
 });

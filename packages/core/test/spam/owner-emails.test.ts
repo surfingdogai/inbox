@@ -224,3 +224,32 @@ describe("the Monday summary", () => {
     expect(ownerMails(s).filter((m) => m.subject.startsWith("Spam this week"))).toHaveLength(0);
   });
 });
+
+describe("what the emails quote of a sender", () => {
+  it("is masked: no live link, address or number from a put-aside message reaches the owner's mailbox", async () => {
+    const s = await spamSetup();
+    await asideMessage(
+      s,
+      T0 + HOUR,
+      "Account Team support@secure-login.example.net",
+      "Your account is locked: sign in at https://secure-login.example.net/verify or call +44 20 7946 0958 today.",
+    );
+    await heldBooking(s, T0 + 2 * HOUR, "billing@pay-now.example.net", "x@pay-now.example.net");
+    await scheduleSpamEmails(s.db, T0 + 3 * HOUR);
+    await s.drain(Date.parse("2026-10-27T02:00:00Z"));
+    await s.drain(Date.parse("2026-11-02T01:00:00Z"));
+    const digest = ownerMails(s).find((m) => m.subject.includes("held for you"));
+    const summary = ownerMails(s).find((m) => m.subject.startsWith("Spam this week"));
+    expect(digest?.text).toContain("· [email] — Booking request");
+    const quoted = (summary?.text.split("\n") ?? []).filter((l) => l.startsWith("· "));
+    expect(quoted).toEqual([
+      "· Account Team [email] — “Your account is locked: sign in at [link to example.net] or call [phone] today.”",
+    ]);
+    // The only links are the app's own.
+    for (const m of [digest, summary]) {
+      expect(
+        (m?.text.match(/https?:\/\/\S+/g) ?? []).every((l) => l.startsWith("https://inbox.kopisenja.example/")),
+      ).toBe(true);
+    }
+  });
+});
