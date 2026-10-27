@@ -18,6 +18,7 @@ import {
   COUNTED,
   countHref,
   countRows,
+  linkCheck,
   looksLikeAddress,
   READY_HREF,
   REAL_HREF,
@@ -426,6 +427,22 @@ describe("the home page and the three products", () => {
     const box = read("src/components/AskBox.astro");
     expect(box).toMatch(/action="\/search" method="get"/);
     expect(box).toMatch(/method="post" action="\/check"/);
+  });
+
+  it("a link with ?url= fills the box and starts the check", () => {
+    // An address goes to the checker's own link, which starts the check for a person's browser and
+    // only fills the field for a crawler or a preview; words only fill the box.
+    expect(linkCheck("?url=kllrcoffee.com")).toEqual({ value: "kllrcoffee.com", go: "/check?url=kllrcoffee.com" });
+    expect(linkCheck("?utm_source=x&url=https%3A%2F%2Fshop.example%2Fmenu")).toEqual({
+      value: "https://shop.example/menu",
+      go: "/check?url=https%3A%2F%2Fshop.example%2Fmenu",
+    });
+    expect(linkCheck("?url=hair%20salon")).toEqual({ value: "hair salon", go: null });
+    for (const none of ["", "?q=bakery", "?url=", "?url=%20%20"]) expect(linkCheck(none), none).toBeNull();
+    expect(linkCheck(`?url=${"a".repeat(300)}.example`)).toBeNull();
+    const box = read("src/components/AskBox.astro");
+    expect(box).toMatch(/linkCheck\(location\.search\)/);
+    expect(box).toMatch(/location\.replace\(/);
   });
 
   it("what the home page says matches the status pills", () => {

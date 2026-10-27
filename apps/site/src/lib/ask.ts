@@ -20,6 +20,18 @@ export function looksLikeAddress(raw: string): boolean {
   return /^([\p{L}\p{N}](?:[\p{L}\p{N}-]*[\p{L}\p{N}])?\.)+[\p{L}]{2,}$/u.test(host);
 }
 
+/**
+ * What a link to the home page with ?url= asks of the box (surfingdog.ai/?url=kllrcoffee.com): the
+ * value to show in it, and, when it is a web address, the checker's own link to go to, which starts
+ * the check when a person's browser opens it and only fills the field for a crawler, a preview or a
+ * prefetch (the network's /check?url=). Null when the link names nothing to show.
+ */
+export function linkCheck(search: string): { value: string; go: string | null } | null {
+  const value = (new URLSearchParams(search).get("url") ?? "").trim();
+  if (!value || value.length > 200) return null;
+  return { value, go: looksLikeAddress(value) ? `/check?url=${encodeURIComponent(value)}` : null };
+}
+
 /** The "directory" block of GET /v1/stats: aggregates, never a name or a domain. */
 export interface DirectoryStats {
   checked: number;

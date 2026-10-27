@@ -169,7 +169,16 @@ const { id, value = "", size = "md", autofocus = false } = Astro.props;
 </style>
 
 <script>
-  import { looksLikeAddress } from "../lib/ask";
+  import { linkCheck, looksLikeAddress } from "../lib/ask";
+
+  // A link with ?url= (surfingdog.ai/?url=shop.example): the box shows it, and an address goes on to
+  // the checker's own link, which starts the check for a person's browser.
+  const link = linkCheck(location.search);
+  if (link) {
+    const first = document.querySelector<HTMLInputElement>("[data-ask] input[name=q]");
+    if (first) first.value = link.value;
+    if (link.go) location.replace(link.go);
+  }
 
   for (const form of Array.from(document.querySelectorAll<HTMLFormElement>("[data-ask]"))) {
     const check = form.nextElementSibling as HTMLFormElement | null;
