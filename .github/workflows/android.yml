@@ -118,16 +118,37 @@ jobs:
           echo "name=${name}" >> "$GITHUB_OUTPUT"
           sha256sum "${name}.apk"
           echo "- APK: \`${name}.apk\`, sha256 \`$(sha256sum "${name}.apk" | cut -d' ' -f1)\`" >> "$GITHUB_STEP_SUMMARY"
+      # Signed by the test key alone (the keystore the build read, ~/.android/debug.keystore), never by
+      # the release certificate of workflow android-release; the package ours, not debuggable. The
+      # outputs go to the log first, so a failed check shows what the tools said.
       - name: who signed it, and what it asks for
         env:
           APK: ${{ steps.apk.outputs.name }}.apk
+          RELEASE_CERT_SHA256: 989460209235dbad49623f5fc21169c347f98a90025a9236e899881ae47527bf
+          APP_ID: ai.surfingdog.inbox
         run: |
           bt="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          echo "build-tools: $bt"
+          checks="$RUNNER_TEMP/apk-checks"
+          mkdir -p "$checks"
+          "$bt/apksigner" verify --verbose --print-certs "$APK" > "$checks/signers.txt" || { cat "$checks/signers.txt"; echo "::error::apksigner: the APK does not verify"; exit 1; }
+          cat "$checks/signers.txt"
+          "$bt/aapt2" dump badging "$APK" > "$checks/badging.txt" || echo "aapt2 dump badging exited $?"
+          grep -E "^(package|sdkVersion|targetSdkVersion|application-debuggable|uses-permission)" "$checks/badging.txt" || true
+          [ "$(grep -c '^Signer #[0-9]* certificate SHA-256 digest:' "$checks/signers.txt")" = 1 ] || { echo "::error::expected exactly one signer"; exit 1; }
+          got="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$checks/signers.txt" | tr 'A-F' 'a-f')"
+          [ "$got" != "$RELEASE_CERT_SHA256" ] || { echo "::error::a test build is signed with the release key"; exit 1; }
+          [ -f ~/.android/debug.keystore ] || { echo "::error::no test key at ~/.android/debug.keystore"; exit 1; }
+          # AGP's debug keystore password, the same for every debug keystore (apps/mobile/README.md).
+          want="$(keytool -list -v -keystore ~/.android/debug.keystore -storepass android | sed -n 's/^[[:space:]]*SHA256: //p' | head -1 | tr -d ':' | tr 'A-F' 'a-f')"
+          [ -n "$want" ] && [ "$got" = "$want" ] || { echo "::error::signed by $got, not the test key ($want)"; exit 1; }
+          grep -q "^package: name='$APP_ID'" "$checks/badging.txt" || { echo "::error::the package is not $APP_ID"; exit 1; }
+          if grep -q '^application-debuggable' "$checks/badging.txt"; then echo "::error::the test APK is debuggable"; exit 1; fi
           {
             echo "- A test build, signed with the test key: it never installs over the public app."
             echo '```'
-            "$bt/apksigner" verify --print-certs "$APK" | grep -E '^Signer #1 certificate (DN|SHA-256 digest)'
-            "$bt/aapt2" dump badging "$APK" | grep -E "^(package|targetSdkVersion|uses-permission)"
+            grep -E '^Signer #1 certificate (DN|SHA-256 digest)' "$checks/signers.txt" || true
+            grep -E "^(package|targetSdkVersion|uses-permission)" "$checks/badging.txt" || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
