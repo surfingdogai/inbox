@@ -28,14 +28,26 @@ export default defineConfig({
     projects: [
       {
         resolve,
-        test: { name: "node", environment: "node", include, exclude: ["**/*.workers.test.ts", "**/node_modules/**"] },
+        test: {
+          name: "node",
+          environment: "node",
+          include,
+          exclude: ["**/*.workers.test.ts", "**/node_modules/**"],
+          setupFiles: ["./test/no-production.ts"],
+        },
       },
       {
         resolve,
         plugins: [cloudflareTest({ wrangler: { configPath: "./wrangler.jsonc" } })],
         // A file's first test makes a fresh D1 and runs every migration: on a busy machine that is
         // seconds, so workerd gets three times the default before a test counts as stuck.
-        test: { name: "workers", include, exclude: ["**/*.node.test.ts", "**/node_modules/**"], testTimeout: 15_000 },
+        test: {
+          name: "workers",
+          include,
+          exclude: ["**/*.node.test.ts", "**/node_modules/**"],
+          testTimeout: 15_000,
+          setupFiles: ["./test/no-production.ts"],
+        },
       },
     ],
   },
