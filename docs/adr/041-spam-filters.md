@@ -3,7 +3,8 @@
 **Status:** proposed, 24 October 2026. The core pipeline, its signals, the AI check behind a port, every
 door, the hosted plumbing, the metering, the owner app's screens, the owner's two emails, the phone app
 and the site's pages are built and tested; the WordPress plugin's connection is not yet. The founder
-decided the open business questions on 27 October 2026; the table at the end says how each ships.
+decided the open business questions on 27 October 2026; the table at the end says how each ships. Known
+spam shared between hosted inboxes (D7) is built as §16 says.
 Amends ADR-026 §7 and the inbox's own form (§4).
 
 ## Context
@@ -145,6 +146,55 @@ each filter.*
     owner alone sets, replaces or removes it, as for anything that sends data somewhere new. The owner's
     AI may read `spam_status`.
 
+### Known spam, shared between hosted inboxes (§16, D7)
+
+Decided 27 October 2026: inboxes share fingerprints of known spam with each other, never content.
+
+1. **The fingerprint.** MinHash (thirty-two functions, eight bands of four) of the character 4-grams of
+   the text, masked as the AI check's is (addresses, phone numbers, bank, card and payment numbers), with
+   links masked whole, with or without a scheme, normalised as prints are, and every run of digits one
+   `#`; under 100 characters or 50 distinct pieces, none. With it, the sender's registrable company mail
+   domain, only where a mail server vouched for the address (DMARC or aligned DKIM): never a provider many
+   share, nor a throwaway one. The inbox hands the raw bands to its host's `SharedSpamPort` and keeps none.
+2. **Keyed by the host.** The hosted runtime keys every band, the domain, the owner (the control plane's
+   account id, else the owner's address) and the item (inbox and item) with HMAC-SHA256 under a key
+   derived from the ledger's, and keeps them in the ledger every shard opens (`spam_share_owners`,
+   `spam_share_reports`, `spam_share_bands`). No tenant file, policy, download or answer holds the key or
+   a fingerprint, and nothing kept can be turned back into a message or matched without the key. Two
+   fingerprints match when they share two bands of eight: a copy with other links, numbers and addresses
+   shares all eight, one reworded a little most of them, one on the same topic none.
+3. **Counting.** A fingerprint is known spam for an inbox once the reports of three owners or more other
+   than its own fall within one fortnight, less one for every owner who said Not spam on a match of it.
+   An owner counts once, however many inboxes they have, and a report is kept only from an owner whose
+   account was a week old when they made it: as old as the policy's `owner_account.created_at`, else as
+   old as this runtime's first opening of one of their inboxes. Everything is forgotten thirty days after
+   it was reported. A sender's domain is known the same way, from the reports that named it.
+4. **What is reported**, by a `spam_share` job that reads the item as it is when it runs: a person's Spam;
+   or what the filter put aside on its own and is sure of (a certain `trap`, `no_key`, `server_marked` or
+   `wave`, or the AI check's high certainty with a verified quote and no customer sign), past any learning
+   week. A person's Not spam, Let it in or Looks fine on an item a shared match labelled is a word against
+   it; any other later word takes back what the inbox said. Never what the owner's Always put aside, a
+   look-alike or a shared match alone put aside: the list never feeds itself. Erasing a customer queues
+   the job for their items, and it takes back what was said.
+5. **What a match does.** `shared_spam`: under the filter most reporters named (Junk when none did), when
+   that filter is on, 6 points, never certain, so its learning week and Just label apply (a label, then
+   put aside); otherwise 4 points of the free protection's, a label that never puts aside alone. A
+   booking's or an order's note only labels. The AI check still runs, and a customer in its answer, or
+   the business's own offer named, still lowers it. `shared_domain` adds 2 points and labels nothing
+   alone. Known senders are never looked up, nor requests a pass or a vouched platform speaks for, as for
+   repeats; a lookup that fails is no match. Never a deletion, a block, a refusal, or anything in
+   receipts, standing or ranking.
+6. **Free and Pro.** Every hosted inbox reads the list: a lookup costs no AI, and on Free a match only
+   labels. Only a Pro inbox live at the business's own domain, and not read-only, reports: marks that
+   cost a plan and a domain each can't be faked by the dozen, which with the week and the three owners
+   keeps the list hard to poison. Free inboxes' marks stay their own.
+7. **Said plainly.** Settings → Spam (`status.shared`: `off`, `reads`, `reads_and_shares`) says what the
+   inbox does; the business's privacy page says, as the business, that fingerprints of spam are shared
+   and can't be turned back into the message; the hosted processing agreement and the owner's privacy
+   notice say so too.
+8. **One's own server** has no port: nothing is shared, and nothing others shared is read. A shared list
+   may be offered there later, behind the same port.
+
 ### Amends ADR-026 §7
 
 "The words are never judged" becomes: the words are judged only by filters the owner switched on. A
@@ -206,7 +256,8 @@ brings it back.
 - What Pro's AI check costs us is bounded per inbox and per runtime, whatever an inbox's file says.
 - New tables: `spam_verdicts`, `spam_lists`, `spam_prints`, `spam_handles`, `spam_filter_spans`,
   `spam_days`, `spam_cache`, `spam_domains` (migration 0033), and the ledger's `judge_day`,
-  `judge_total_day` and `judge_told` (the control plane is told once per cap, inbox and day). Erasing a
+  `judge_total_day` and `judge_told` (the control plane is told once per cap, inbox and day) and
+  `spam_share_owners`, `spam_share_reports` and `spam_share_bands` (§16), made as a shard opens it. Erasing a
   customer removes their verdicts, prints (every screened request has one, whoever it names), the AI
   check's cached answers for their words, list rows and handles; handles nobody trusted are pruned
   after a month unseen. The owner's download keeps verdicts, lists, spans and day counts.
@@ -221,7 +272,7 @@ brings it back.
 | D4 | Caps: 150 a day and 1,500 a month per inbox, 50 million tokens a day per runtime, the budgets above | Kept, in the policy's `spam` block. |
 | D5 | Deleting put-aside items after 30 or 90 days | Kept ("Keep them") unless the owner chooses 90 or 30 days. Nothing is deleted on its own (27 October 2026): a bot's form messages, once gone after seven days, are kept like the rest. |
 | D6 | A Spam tap also blocking the sender | offered, never automatic |
-| D7 | Sharing anything across businesses | Decided: inboxes share fingerprints of known spam with each other, never content. Not built yet: nothing is shared. |
+| D7 | Sharing anything across businesses | Inboxes share fingerprints of known spam with each other, never content (§16): keyed MinHash fingerprints in the hosted ledger, known once three other owners with week-old accounts reported one within a fortnight, less every Not spam on a match, forgotten after thirty days. A match labels, or does what the filter it is under is set to; it never deletes or blocks. Every hosted inbox reads; Pro inboxes live at their own domain report. Off on one's own server. |
 | D8 | Spam data in receipts, standing or ranking | none of it |
 | D9 | Naming the model's provider in Settings | Named plainly: "Claude Haiku, by Anthropic". |
 | D10 | The privacy page line | Shown only while a model may read; for our model, Anthropic's retention as above. |

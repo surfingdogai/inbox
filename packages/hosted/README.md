@@ -31,6 +31,14 @@ Many inboxes on one machine, for whoever runs Surfing Dog Inbox for other people
   model, `HOSTED_SPAM_DAILY_TOKENS` the runtime's daily ceiling. The policy's `spam` block may stop
   the AI for an inbox (`ai: false`) or set its caps (150 checks a day, 1,500 a month by default),
   which the ledger keeps across every shard.
+- **Known spam, shared.** The ledger also keeps the fingerprints of known spam the inboxes share,
+  keyed with a key derived from its own: never a message, an address or a name. Every inbox reads
+  them; Pro inboxes live at their own domain report to them. A fingerprint counts once three other
+  owners, with accounts a week old, reported one like it within a fortnight; Not spam on a match
+  lowers it; all is forgotten after 30 days. The policy may name the owner's account
+  (`owner_account`: `id`, `created_at`) so one owner's inboxes count once and the account's age is
+  the control plane's; without it the owner is told apart by `owner_email` and dated from when this
+  runtime first opened one of their inboxes.
 
 Every name, socket, key and directory comes from the environment; see `src/config.ts`.
 
