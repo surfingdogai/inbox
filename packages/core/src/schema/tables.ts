@@ -470,6 +470,13 @@ export const items = sqliteTable(
      * rows written before, which never lapse on their own.
      */
     requestExpiresAt: integer("request_expires_at"),
+    /**
+     * What the spam filter made of it (0026, ADR-029): `pending` while it is screened, then
+     * `delivered`, `warned`, `held`, `aside` or `released`. NULL: never screened (the business's own,
+     * a customer it knows, or an item from before the filter).
+     */
+    screen: text("screen"),
+    screenAt: integer("screen_at"),
   },
   (t) => [
     index("items_type_state").on(t.type, t.state, t.updatedAt),
@@ -1341,6 +1348,136 @@ export const phoneTokens = sqliteTable(
   (t) => [index("phone_tokens_device").on(t.deviceId, t.kind)],
 );
 
+// ---- the spam filter (0026, ADR-029) -------------------------------------------------------
+
+/** What screening found for one item: codes and numbers, never words. */
+export const spamVerdicts = sqliteTable(
+  "spam_verdicts",
+  {
+    itemId: text("item_id").primaryKey(),
+    door: text("door").notNull(),
+    verdict: text("verdict").notNull(),
+    cause: text("cause"),
+    certain: integer("certain").notNull().default(0),
+    score: real("score").notNull(),
+    signals: text("signals", { mode: "json" }).notNull(),
+    ai: text("ai").notNull().default("none"),
+    answer: text("answer", { mode: "json" }),
+    quotes: text("quotes", { mode: "json" }),
+    learning: integer("learning").notNull().default(0),
+    tokensIn: integer("tokens_in"),
+    tokensOut: integer("tokens_out"),
+    ms: integer("ms"),
+    ownerVerdict: text("owner_verdict"),
+    ownerAt: integer("owner_at"),
+    releasedBy: text("released_by"),
+    createdAt: createdAt(),
+    decidedAt: integer("decided_at"),
+  },
+  (t) => [index("spam_verdicts_time").on(t.verdict, t.createdAt)],
+);
+
+/** The owner's lists: Let through (`allow`) and Always put aside (`block`). */
+export const spamLists = sqliteTable(
+  "spam_lists",
+  {
+    list: text("list").notNull(),
+    kind: text("kind").notNull(),
+    value: text("value").notNull(),
+    partyId: text("party_id"),
+    itemId: text("item_id"),
+    byUser: text("by_user").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.list, t.kind, t.value] })],
+);
+
+/** Prints of screened texts: hashes and link domains, never words. */
+export const spamPrints = sqliteTable(
+  "spam_prints",
+  {
+    itemId: text("item_id").primaryKey(),
+    sender: text("sender").notNull(),
+    sha: text("sha").notNull(),
+    sim: text("sim").notNull(),
+    b0: integer("b0").notNull(),
+    b1: integer("b1").notNull(),
+    b2: integer("b2").notNull(),
+    b3: integer("b3").notNull(),
+    b4: integer("b4").notNull(),
+    b5: integer("b5").notNull(),
+    b6: integer("b6").notNull(),
+    b7: integer("b7").notNull(),
+    linkDomains: text("link_domains", { mode: "json" }).notNull(),
+    mark: integer("mark").notNull().default(0),
+    at: integer("at").notNull(),
+  },
+  (t) => [
+    index("spam_prints_sha").on(t.sha, t.at),
+    index("spam_prints_b0").on(t.b0),
+    index("spam_prints_b1").on(t.b1),
+    index("spam_prints_b2").on(t.b2),
+    index("spam_prints_b3").on(t.b3),
+    index("spam_prints_b4").on(t.b4),
+    index("spam_prints_b5").on(t.b5),
+    index("spam_prints_b6").on(t.b6),
+    index("spam_prints_b7").on(t.b7),
+    index("spam_prints_time").on(t.at),
+  ],
+);
+
+/** Who asked, as handles this inbox keeps its own history on; mailboxes and domains as keyed hashes. */
+export const spamHandles = sqliteTable(
+  "spam_handles",
+  {
+    kind: text("kind").notNull(),
+    ref: text("ref").notNull(),
+    day: text("day"),
+    firsts: integer("firsts").notNull().default(0),
+    provenAt: integer("proven_at"),
+    trustedAt: integer("trusted_at"),
+    markedAt: integer("marked_at"),
+    partyId: text("party_id"),
+    lastSeenAt: integer("last_seen_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.kind, t.ref] })],
+);
+
+/** When each filter was on, and how: filter-days are recounted from these. */
+export const spamFilterSpans = sqliteTable(
+  "spam_filter_spans",
+  {
+    id: id(),
+    filter: text("filter").notNull(),
+    choice: text("choice").notNull().default("aside"),
+    fromAt: integer("from_at").notNull(),
+    toAt: integer("to_at"),
+    learningUntil: integer("learning_until"),
+    byKind: text("by_kind").notNull(),
+    byId: text("by_id").notNull(),
+  },
+  (t) => [index("spam_filter_spans_filter").on(t.filter, t.fromAt)],
+);
+
+/** Counters by UTC day, for metering and the owner's numbers. */
+export const spamDays = sqliteTable(
+  "spam_days",
+  { day: text("day").notNull(), key: text("key").notNull(), n: integer("n").notNull() },
+  (t) => [primaryKey({ columns: [t.day, t.key] })],
+);
+
+export const spamCache = sqliteTable("spam_cache", {
+  sha: text("sha").primaryKey(),
+  answer: text("answer", { mode: "json" }).notNull(),
+  at: integer("at").notNull(),
+});
+
+export const spamDomains = sqliteTable("spam_domains", {
+  domain: text("domain").primaryKey(),
+  mail: integer("mail"),
+  checkedAt: integer("checked_at").notNull(),
+});
+
 export const jobs = sqliteTable(
   "jobs",
   {
@@ -1540,6 +1677,7 @@ export const eventsV1 = sqliteView("events_v1", {
   e."event" AS "event",
   'item_event' AS "source"
 FROM "item_events" e JOIN "items" i ON i."id" = e."item_id"
+WHERE e."event" <> 'rule_skipped' AND COALESCE(i."screen", '') <> 'held'
 UNION ALL
 SELECT
   t."id",
@@ -1558,7 +1696,7 @@ SELECT
   'message',
   'thread_entry'
 FROM "thread_entries" t JOIN "items" i ON i."id" = t."item_id"
-WHERE t."direction" = 'in'
+WHERE t."direction" = 'in' AND COALESCE(i."screen", '') <> 'held'
 UNION ALL
 SELECT
   r."id",

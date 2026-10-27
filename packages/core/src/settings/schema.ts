@@ -856,6 +856,26 @@ const sections = {
   kitchen: kitchenSettingsSchema,
   /** The menu's sections and the dayparts items are served in (ADR-040). */
   menu: menuSettingsSchema,
+  /**
+   * The spam filter's choices (ADR-029), the owner's in person (`OWNER_ONLY_SETTINGS`). The filters
+   * themselves are not settings: they are switched by a person with `set_spam_filter`, since one
+   * may carry a price, so no key, rule or the owner's AI switches one on or off.
+   */
+  spam: z
+    .object({
+      keepDays: z
+        .union([z.literal(0), z.literal(30), z.literal(90)])
+        .default(0)
+        .describe("How long what is put aside is kept: 0 until the owner clears it, else 30 or 90 days."),
+      heldDigest: z.boolean().default(true).describe("A short email in the morning when something new is held."),
+      weeklySummary: z.boolean().default(true).describe("A summary on Mondays when something was put aside."),
+      monthlyChecks: z
+        .union([z.literal(500), z.literal(2000), z.literal(10000), z.literal(0)])
+        .default(2000)
+        .describe("On one's own server: the most AI checks a month with the owner's own model; 0 for no limit."),
+    })
+    .prefault({})
+    .describe("What the spam filter keeps, and the emails it sends the owner."),
   testMode: z.boolean().default(false),
 };
 

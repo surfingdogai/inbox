@@ -1200,14 +1200,33 @@ export const orderMachine: Machine<OrderState> = {
   ],
 };
 
-export type QuoteState = "received" | "needs_info" | "quoted" | "accepted" | "declined" | "expired";
+export type QuoteState = "received" | "needs_info" | "quoted" | "accepted" | "declined" | "expired" | "spam";
 
 export const quoteMachine: Machine<QuoteState> = {
   type: "quote_request",
   initial: "received",
-  states: ["received", "needs_info", "quoted", "accepted", "declined", "expired"],
+  states: ["received", "needs_info", "quoted", "accepted", "declined", "expired", "spam"],
   terminal: ["accepted", "declined", "expired"],
   transitions: [
+    {
+      // Put aside (ADR-029): by the business, or by the spam filter as it arrived. Its customer still
+      // reads it as received, then expired once its request lapsed: nobody is told it was put aside.
+      event: "mark_spam",
+      label: "Mark as spam",
+      from: ["received", "needs_info"],
+      to: "spam",
+      by: ownersAndSystem,
+      effects: ["close"],
+    },
+    {
+      // Back to the business to answer, with its request's clock wound again so it does not lapse at once.
+      event: "unspam",
+      label: "Not spam",
+      from: ["spam"],
+      to: "received",
+      by: ["owner", "staff"],
+      effects: [],
+    },
     {
       event: "request_info",
       label: "Ask for details",

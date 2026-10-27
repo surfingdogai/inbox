@@ -96,6 +96,13 @@ export const itemFlagsSchema = z.object({
    * one a day per address, so saying it falsely costs nobody anything. Absent on everything else.
    */
   carried: z.boolean().optional(),
+  /**
+   * The spam filter delivered it with a label (ADR-029): the cause's code (`pitches`, `scams`,
+   * `junk`, `learning`, …), shown as a small chip. Absent on everything it was sure of, or never saw.
+   */
+  spamLabel: z.string().max(40).optional(),
+  /** Its words speak to an assistant or a filter: the owner's AI reads them as untrusted, with that said. */
+  untrustedInstructions: z.boolean().optional(),
 });
 export type ItemFlags = z.infer<typeof itemFlagsSchema>;
 

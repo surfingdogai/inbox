@@ -185,7 +185,7 @@ describe("the customer's words", () => {
         "cancelled",
         "charged_back",
       ],
-      quote_request: ["received", "needs_info", "quoted", "accepted", "declined", "expired"],
+      quote_request: ["received", "needs_info", "quoted", "accepted", "declined", "expired", "spam"],
       message: ["open", "answered", "closed", "spam"],
       refund: ["requested", "approved", "rejected", "refunded"],
     };

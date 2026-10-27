@@ -75,7 +75,21 @@ export function yourNoun(type: ItemType, lang: CustomerLang): string {
 }
 
 /** The sentence an assistant relays for the item as it stands. Never an id: a six-character reference. */
-export function statusSentence(item: Item, a: Audience = DEFAULT_AUDIENCE): string {
+/**
+ * The state a customer reads their item in. A message the business put aside reads as closed; a
+ * quote request it put aside (ADR-029) as received, and as expired once its request lapsed, as it
+ * would have had nobody answered it: nobody learns their request was put aside.
+ */
+export function customerState(item: Pick<Item, "type" | "state" | "payload">, now: number = Date.now()): string {
+  if (item.state !== "spam") return item.state;
+  if (item.type !== "quote_request") return "closed";
+  const until = (item.payload as { offer?: { validThrough?: string } }).offer?.validThrough;
+  return until && Date.parse(until) <= now ? "expired" : "received";
+}
+
+export function statusSentence(given: Item, a: Audience = DEFAULT_AUDIENCE): string {
+  // A request put aside reads as one nobody answered yet (customerState).
+  const item = given.state === "spam" ? ({ ...given, state: customerState(given) } as Item) : given;
   const c = copyFor(a.lang);
   if (item.type === "refund") return refundSentence(item, a);
   if (item.type === "booking" && item.state === "proposed" && item.payload.proposed) {

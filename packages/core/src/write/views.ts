@@ -1,4 +1,4 @@
-import { type Audience, customerLabel, DEFAULT_AUDIENCE, statusSentence } from "../customer/describe";
+import { type Audience, customerLabel, customerState, DEFAULT_AUDIENCE, statusSentence } from "../customer/describe";
 import { shortRef } from "../customer/format";
 import { type ActorKind, type Item, type ItemType, itemFlagsSchema, type Money, payloadSchemas } from "../domain/types";
 import { availableTransitions } from "../machine/machine";
@@ -182,9 +182,10 @@ export function viewFor(
 
 /**
  * The item as its customer sees it: none of the business's own flags (priority, a person needed,
- * test mode), and a message the business put aside as spam is simply closed.
+ * test mode), and a message the business put aside as spam is simply closed (a quote request,
+ * received: `customerState`).
  */
-export function customerItem(item: Item): Item {
+export function customerItem(item: Item, now: number = Date.now()): Item {
   const { flags: _flags, ...rest } = item;
   // Nor how far a negotiation has gone: the round is the business's to count (ADR-018 §4).
   const offer = (item.payload as { offer?: Record<string, unknown> }).offer;
@@ -194,7 +195,7 @@ export function customerItem(item: Item): Item {
         return { ...item.payload, offer: pointer };
       })()
     : item.payload;
-  return { ...rest, payload, state: item.state === "spam" ? "closed" : item.state } as unknown as Item;
+  return { ...rest, payload, state: customerState(item, now) } as unknown as Item;
 }
 
 const TYPE_WORD: Record<ItemType, string> = {

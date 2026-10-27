@@ -42,7 +42,9 @@ export type SecretPurpose =
    * A UCP Lodging booking session's last request (ADR-038): who is coming and the ids the platform gave
    * each guest, opened only to answer that session.
    */
-  | "ucp-session";
+  | "ucp-session"
+  /** The owner's own AI model key (ADR-029), pasted once in Settings and never shown again. */
+  | "model-key";
 
 /**
  * What a deterministic key is derived for. Sealing is randomised and must be; these are the few
@@ -75,7 +77,15 @@ export type MacPurpose =
    * A short-lived link to a file a customer sent with a request (ADR-039 §2): only the business sees
    * it, through a link that stops working within minutes.
    */
-  | "attachment-link";
+  | "attachment-link"
+  /**
+   * The business's own form (ADR-029): the signature on the key each form is drawn with, and the
+   * name its hidden field takes. A key drawn before a rotation no longer verifies, which is why a bad
+   * signature only counts against a request, never decides alone.
+   */
+  | "form-key"
+  /** The spam filter's handles on mailboxes and mail domains (ADR-029): stable here, meaningless anywhere else. */
+  | "spam-handle";
 
 export interface SecretBox {
   /**
