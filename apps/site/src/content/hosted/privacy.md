@@ -42,7 +42,7 @@ When your website's own data does not say what your business is, a language-mode
 
 Public DNS resolvers answer our checks of your hostname. A certificate authority issues the certificate for it, and, as for every certificate, your hostname is then listed in public certificate logs.
 
-If you choose Pro, Stripe gets your email address and your domain, to make your inbox its customer, and takes your payment through Link as the merchant of record, under its own privacy policy. It can be outside the European Union.
+If you choose Pro, Stripe gets your email address and your domain, to make your inbox its customer, and takes your payment through Link as the merchant of record, under its own privacy policy. It can be outside the European Union. On Pro, the AI spam filters send Anthropic masked copies of messages your inbox receives, never your own address; the [processing agreement](/hosted/processing/) says what, and what Anthropic does with them.
 
 Mail you write to our addresses is kept in our mailbox at an email company, which may store it outside the European Union.
 

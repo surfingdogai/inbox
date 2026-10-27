@@ -666,9 +666,30 @@ describe("the price: Free, and Pro at $10", () => {
     for (const page of ["index.md", "terms.md", "privacy.md"]) {
       expect(front(`${HOSTED_DIR}/${page}`).eyebrow, page).not.toMatch(/pilot/i);
     }
-    for (const page of ["terms.md", "privacy.md"])
+    expect(privacy).toContain(
+      "On Pro, the AI spam filters send Anthropic masked copies of messages your inbox receives",
+    );
+    for (const page of ["terms.md", "privacy.md", "processing.md"])
       expect(front(`${HOSTED_DIR}/${page}`).updated, page).toBe("27 October 2026");
     expect(front(`${HOSTED_DIR}/terms.md`).description).not.toMatch(/pilot/i);
+  });
+
+  it("the processing agreement names Pro's AI model, what each check sends, and what its maker keeps", () => {
+    const dpa = flat(body(`${HOSTED_DIR}/processing.md`));
+    expect(dpa).toContain(
+      "**Anthropic, if you choose Pro.** Pro's AI spam filters ask Anthropic's AI model, Claude Haiku",
+    );
+    expect(dpa).toContain("at most 150 times a day and 1,500 times a month for your inbox");
+    expect(dpa).toContain("with every email address, phone number, card or bank account number and link taken out");
+    expect(dpa).toContain("the sender's domain, never their address");
+    // Anthropic's own words (privacy.claude.com, articles 7996866 and 7996868, read 27 Oct 2026).
+    expect(dpa).toContain(
+      "it does not train its models on what it is sent, and it deletes it from its systems within 30 days",
+    );
+    expect(dpa).toContain("then it can be kept for up to two years");
+    expect(dpa).toContain("On Free, nothing is sent to it.");
+    expect(dpa).toContain("transfers to it rely on the standard contractual clauses in its data processing addendum");
+    expect(dpa).not.toMatch(/zero (data )?retention/i);
   });
 
   it("leaves no pilot on a price anywhere a business reads one", () => {
