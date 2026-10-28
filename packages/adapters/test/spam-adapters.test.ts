@@ -1,10 +1,10 @@
 import { buildPrompt, runJudge } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
-import { chatJudge, judgeFromEnv, messagesJudge } from "../src/spam";
+import { chatJudge, geminiJudge, judgeFromEnv, messagesJudge } from "../src/spam";
 import { ownModelKit, smallFirst } from "../src/spam/kit";
 
 /**
- * The spam filter's two model adapters (ADR-041 §7.5), against recorded answers: what each sends,
+ * The spam filter's model adapters (ADR-041 §7.5), against recorded answers: what each sends,
  * how each reads what comes back, and how each says why nothing usable did. Nothing here reaches a
  * network; the fetch each is given answers from a list.
  */
@@ -273,6 +273,122 @@ describe("the chat-completions adapter", () => {
         ...noSleep,
         limits: { attemptMs: 20, retryAfterMs: 0, totalMs: 100 },
       },
+    );
+    expect(out).toEqual({ ok: false, why: "timeout", tokensIn: 0, tokensOut: 0 });
+  });
+});
+
+const gemini = (text: string, finish = "STOP", usage: Record<string, number> = {}) => ({
+  candidates: [{ index: 0, finishReason: finish, content: { role: "model", parts: [{ text }] } }],
+  usageMetadata: { promptTokenCount: 805, candidatesTokenCount: 57, thoughtsTokenCount: 12, ...usage },
+  modelVersion: "gemini-3.1-flash-lite",
+});
+
+describe("the Gemini adapter", () => {
+  it("sends one generateContent call: the key in its header, the answer held to the schema, thinking minimal, nothing stored", async () => {
+    const key = "AQ.Ab8RN6recorded-auth-key-0123456789";
+    const r = recorder([json(200, gemini(JSON.stringify(answer)))]);
+    const port = geminiJudge({ apiKey: key, model: "gemini-3.1-flash-lite", fetch: r.fetchImpl });
+    const out = await runJudge(port, request, { nonce, text: sentText }, noSleep);
+    expect(out).toMatchObject({
+      ok: true,
+      answer: { kind: "sales_pitch", certainty: "high", topic: "seo", quotes: ["page one of google in 30 days"] },
+      tokensIn: 805,
+      // Thinking is billed as output: it counts as output does.
+      tokensOut: 69,
+    });
+    const [call] = r.sent;
+    expect(call?.url).toBe(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent",
+    );
+    expect(call?.headers.get("x-goog-api-key")).toBe(key);
+    expect(call?.headers.get("authorization")).toBeNull();
+    expect(call?.body).toEqual({
+      systemInstruction: { parts: [{ text: request.system }] },
+      contents: [{ role: "user", parts: [{ text: request.user }] }],
+      generationConfig: {
+        maxOutputTokens: 300,
+        responseMimeType: "application/json",
+        responseJsonSchema: request.schema,
+        thinkingConfig: { thinkingLevel: "minimal" },
+      },
+      store: false,
+    });
+    // The key goes in its header and nowhere else: not the address, not the body.
+    expect(call?.url).not.toContain(key);
+    expect(JSON.stringify(call?.body)).not.toContain(key);
+    // Sampling is left at Google's defaults, as Google asks for Gemini 3.
+    expect(JSON.stringify(call?.body)).not.toMatch(/temperature|topP|topK/);
+  });
+
+  it("turns thinking off on Gemini 2.5, and asks a model that refuses the setting once more without it", async () => {
+    const r = recorder([
+      json(400, {
+        error: { code: 400, message: "Thinking level is not supported for this model.", status: "INVALID_ARGUMENT" },
+      }),
+      json(200, gemini(JSON.stringify(answer))),
+      json(200, gemini(JSON.stringify(answer))),
+      json(200, gemini(JSON.stringify(answer))),
+    ]);
+    const port = geminiJudge({ apiKey: "k", model: "gemini-9-lite", fetch: r.fetchImpl });
+    expect((await port.judge(request, signal())).ok).toBe(true);
+    expect((await port.judge(request, signal())).ok).toBe(true);
+    const old = geminiJudge({ apiKey: "k", model: "gemini-2.5-flash-lite", fetch: r.fetchImpl });
+    expect((await old.judge(request, signal())).ok).toBe(true);
+    const thinking = r.sent.map((s) => (s.body.generationConfig as Record<string, unknown>).thinkingConfig ?? null);
+    expect(thinking).toEqual([{ thinkingLevel: "minimal" }, null, null, { thinkingBudget: 0 }]);
+  });
+
+  it("says why nothing usable came back", async () => {
+    const r = recorder([
+      json(200, { promptFeedback: { blockReason: "PROHIBITED_CONTENT" }, usageMetadata: { promptTokenCount: 800 } }),
+      json(200, gemini("", "SAFETY")),
+      json(200, gemini('{"check":', "MAX_TOKENS")),
+      json(400, {
+        error: {
+          code: 400,
+          message: "API key not valid. Please pass a valid API key.",
+          status: "INVALID_ARGUMENT",
+          details: [{ reason: "API_KEY_INVALID" }],
+        },
+      }),
+      json(403, { error: { code: 403, message: "Permission denied", status: "PERMISSION_DENIED" } }),
+      json(429, { error: { code: 429, message: "Resource exhausted", status: "RESOURCE_EXHAUSTED" } }),
+      json(503, { error: { code: 503, message: "The model is overloaded.", status: "UNAVAILABLE" } }),
+      json(404, { error: { code: 404, message: "models/gemini-x is not found", status: "NOT_FOUND" } }),
+      () => new Response("<html>gateway</html>", { status: 200, headers: { "content-type": "text/html" } }),
+    ]);
+    const port = geminiJudge({ apiKey: "k", model: "gemini-3.1-flash-lite", fetch: r.fetchImpl });
+    const whys: string[] = [];
+    for (let i = 0; i < 9; i++) {
+      const out = await port.judge(request, signal());
+      whys.push(out.ok ? "ok" : out.why);
+    }
+    expect(whys).toEqual([
+      "refused",
+      "refused",
+      "invalid",
+      "auth",
+      "auth",
+      "unavailable",
+      "unavailable",
+      "invalid",
+      "invalid",
+    ]);
+  });
+
+  it("gives up on a model that never answers, by core's clock", async () => {
+    const hang = (async (_: unknown, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), {
+          once: true,
+        });
+      })) as typeof fetch;
+    const out = await runJudge(
+      geminiJudge({ apiKey: "k", model: "gemini-3.1-flash-lite", fetch: hang }),
+      request,
+      { nonce, text: sentText },
+      { ...noSleep, limits: { attemptMs: 20, retryAfterMs: 0, totalMs: 100 } },
     );
     expect(out).toEqual({ ok: false, why: "timeout", tokensIn: 0, tokensOut: 0 });
   });
