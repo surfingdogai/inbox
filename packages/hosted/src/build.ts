@@ -85,7 +85,7 @@ export interface BuildDeps {
   readonly pushRegistrar?: RelayRegistrar | undefined;
   /** For the internal test as an agent only: the doors open whatever the policy says. Never served. */
   readonly agentsOpen?: boolean | undefined;
-  /** Our model for the spam filter's AI check (ADR-041 §7.2), Claude Haiku from the shard's environment; null for none. */
+  /** Our model for the spam filter's AI check (ADR-041 §7.2), Gemini from the shard's environment; null for none. */
   readonly spamModel?: HostedModel | null | undefined;
   readonly now?: (() => number) | undefined;
 }

@@ -9,6 +9,8 @@ const RULES: readonly [RegExp, string | ((match: string, ...groups: string[]) =>
   // A model provider's key, the spam filter's AI check's (ADR-041 §7.2): never in a line.
   [/\b(sk|sk-ant|sk-proj|gsk)[-_][A-Za-z0-9_-]{16,}/g, "[redacted key]"],
   [/\bAIza[A-Za-z0-9_-]{30,}/g, "[redacted key]"],
+  // Google's authorization keys, the kind Google AI Studio makes since May 2026.
+  [/\bAQ\.[A-Za-z0-9_.-]{20,}/g, "[redacted key]"],
   [/((?:x-api-key|api[_-]?key)["']?\s*[:=]\s*["']?)[A-Za-z0-9._-]{12,}/gi, "$1[redacted]"],
   // A customer's network key or pass: its secret part.
   [/\b(sd(?:key|pass)1_[a-z0-9.-]+_[a-z2-7]{16}_)[a-z2-7]{32}\b/g, "$1[redacted]"],

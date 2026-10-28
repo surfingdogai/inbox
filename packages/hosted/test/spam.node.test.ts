@@ -11,24 +11,30 @@ import { type FakeTenant, type Runtime, startRuntime } from "./harness";
 
 /**
  * The spam filter on hosted inboxes (ADR-041 §7.2, §15.3). Pro includes the three filters, on from the
- * start, read by our AI: Claude Haiku, on our own Anthropic key, which lives in the shard's environment
- * only — never in a tenant's settings, status, download or a log line. Every check an inbox makes is
+ * start, read by our AI: Gemini, through the Gemini API on our own Google key, which lives in the shard's
+ * environment only — never in a tenant's settings, status, download or a log line. Every check an inbox makes is
  * reserved in the shared ledger before it is made, within the inbox's caps and the runtime's own daily
  * budget, whatever the inbox's own file says it spent. Free keeps basic protection, with no filters and
  * no AI; without our key no model is asked at all.
  */
 
-const KEY = "sk-ant-hosted-test-key-0123456789abcdefghij";
+const KEY = "AQ.Ab8RN6hosted-test-auth-key-0123456789abcdef";
 
 /** Our model's API, recorded: it answers every check as a sales pitch, and counts what it was asked. */
 const model = {
-  calls: [] as { headers: Headers; body: string }[],
-  fetch: (async (_input: string | URL | Request, init?: RequestInit) => {
+  calls: [] as { url: string; headers: Headers; body: string }[],
+  fetch: (async (input: string | URL | Request, init?: RequestInit) => {
     const body = String(init?.body ?? "");
-    model.calls.push({ headers: new Headers(init?.headers), body });
-    const req = JSON.parse(body) as { system: string; messages: { content: string }[] };
-    const check = /Put this value in check, exactly as written: (\S+)/.exec(req.system)?.[1] ?? "";
-    const quote = /first page of Google|top of Google|page one on Google/.exec(req.messages[0]?.content ?? "")?.[0];
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    model.calls.push({ url, headers: new Headers(init?.headers), body });
+    const req = JSON.parse(body) as {
+      systemInstruction: { parts: { text: string }[] };
+      contents: { parts: { text: string }[] }[];
+    };
+    const system = req.systemInstruction.parts[0]?.text ?? "";
+    const check = /Put this value in check, exactly as written: (\S+)/.exec(system)?.[1] ?? "";
+    const user = req.contents[0]?.parts[0]?.text ?? "";
+    const quote = /first page of Google|top of Google|page one on Google/.exec(user)?.[0];
     const answer = {
       check,
       kind: "sales_pitch",
@@ -40,14 +46,11 @@ const model = {
     };
     return new Response(
       JSON.stringify({
-        id: "msg_hosted",
-        type: "message",
-        role: "assistant",
-        model: "our-model",
-        content: [{ type: "text", text: JSON.stringify(answer) }],
-        stop_reason: "end_turn",
-        stop_sequence: null,
-        usage: { input_tokens: 700, output_tokens: 50 },
+        candidates: [
+          { index: 0, finishReason: "STOP", content: { role: "model", parts: [{ text: JSON.stringify(answer) }] } },
+        ],
+        usageMetadata: { promptTokenCount: 700, candidatesTokenCount: 45, thoughtsTokenCount: 5, totalTokenCount: 750 },
+        modelVersion: "gemini-3.1-flash-lite",
       }),
       { status: 200, headers: { "content-type": "application/json" } },
     );
@@ -55,7 +58,7 @@ const model = {
 };
 
 const ENV = {
-  HOSTED_SPAM_ANTHROPIC_KEY: KEY,
+  HOSTED_SPAM_GEMINI_KEY: KEY,
   HOSTED_SPAM_DAILY_TOKENS: "1000000",
 };
 
@@ -143,12 +146,15 @@ async function settle(t: FakeTenant) {
 }
 
 describe("our model", () => {
-  it("is Claude Haiku on our Anthropic key, read from the shard's environment, and none without the key", () => {
+  it("is Gemini on our Google key, read from the shard's environment, and none without the key", () => {
     expect(hostedModelFrom({})).toBeNull();
-    expect(hostedModelFrom({ ...ENV, HOSTED_SPAM_ANTHROPIC_KEY: " " })).toBeNull();
-    expect(HOSTED_SPAM_MODEL).toBe("claude-haiku-5-5");
-    expect(hostedModelFrom(ENV)?.name).toBe("Claude Haiku, by Anthropic");
-    expect(modelName("claude-sonnet-5-5")).toBe("Claude Sonnet, by Anthropic");
+    expect(hostedModelFrom({ ...ENV, HOSTED_SPAM_GEMINI_KEY: " " })).toBeNull();
+    // The Anthropic key it used to read is not read any more: without our Google key, no model.
+    expect(hostedModelFrom({ HOSTED_SPAM_ANTHROPIC_KEY: "sk-ant-old-key-0123456789abcdef" })).toBeNull();
+    expect(HOSTED_SPAM_MODEL).toBe("gemini-3.1-flash-lite");
+    expect(hostedModelFrom(ENV)?.name).toBe("Gemini Flash-Lite, by Google");
+    expect(modelName("gemini-3.8-flash")).toBe("Gemini Flash, by Google");
+    expect(modelName("gemini-4-argon")).toBe("Gemini, by Google");
     expect(hostedModelFrom({ ...ENV, HOSTED_SPAM_DAILY_TOKENS: "lots" })?.dailyTokens).toBe(50_000_000);
     // What is kept of it says nothing of its key.
     expect(JSON.stringify(hostedModelFrom(ENV))).not.toContain(KEY);
@@ -177,7 +183,7 @@ describe("our model", () => {
     expect(policyPayloadSchema.shape.spam.safeParse({ day_cap: -1 }).success).toBe(false);
   });
 
-  it("gives Pro the three filters, on from the start, read by Claude Haiku; Free none of them, and no AI", () => {
+  it("gives Pro the three filters, on from the start, read by Gemini; Free none of them, and no AI", () => {
     const ours = hostedModelFrom(ENV, model.fetch);
     expect(spamHostPolicy({} as PolicyPayload, ours)).toEqual({
       plan: "free",
@@ -198,7 +204,7 @@ describe("our model", () => {
       defaultOn: true,
       dayCap: 150,
       monthCap: 1_500,
-      reader: "Claude Haiku, by Anthropic",
+      reader: "Gemini Flash-Lite, by Google",
       aiByOwner: false,
       ownerReader: null,
       giftUntil: null,
@@ -212,11 +218,13 @@ describe("our model", () => {
     for (const line of [
       `judge failed: 401 {"error":"invalid x-api-key ${KEY}"}`,
       "config HOSTED_SPAM_ANTHROPIC_KEY=gsk_abcdefghijklmnopqrstuvwx",
+      `config HOSTED_SPAM_GEMINI_KEY=${KEY}`,
+      `request headers {"x-goog-api-key": "${KEY}"}`,
       'request headers {"x-api-key": "abcdefghijklmnop0123"}',
       "key AIzaSyA-abcdefghijklmnopqrstuvwxyz012345",
     ]) {
       const out = redact(line);
-      expect(out).not.toMatch(/sk-ant-hosted|gsk_abcdef|abcdefghijklmnop0123|AIzaSyA-abc/);
+      expect(out).not.toMatch(/AQ\.Ab8RN6|gsk_abcdef|abcdefghijklmnop0123|AIzaSyA-abc/);
     }
   });
 });
@@ -308,7 +316,7 @@ describe("checks that time out", () => {
         },
       },
       dailyTokens: 4_000,
-      name: "Claude Haiku, by Anthropic",
+      name: "Gemini Flash-Lite, by Google",
     };
     const judge = tenantJudge({
       model: slow,
@@ -364,12 +372,12 @@ describe("a hosted inbox's spam filter", () => {
     expect(model.calls.length).toBe(before);
   });
 
-  it("on Pro has the three filters on from the start, learning for a week, read by Claude Haiku", async () => {
+  it("on Pro has the three filters on from the start, learning for a week, read by Gemini", async () => {
     const { t, host, cookie } = await liveInbox("pro");
     const status = await statusOf(host, cookie);
     expect(status.plan).toBe("pro");
     expect(status.reader).toBe("hosted_ai");
-    expect(status.reader_name).toBe("Claude Haiku, by Anthropic");
+    expect(status.reader_name).toBe("Gemini Flash-Lite, by Google");
     expect(status.checks).toMatchObject({ day_cap: 150, month_cap: 1_500 });
     for (const f of status.filters) {
       expect(f).toMatchObject({ on: true, allowed: true });
@@ -383,16 +391,25 @@ describe("a hosted inbox's spam filter", () => {
     await settle(t);
     expect(model.calls.length - before).toBe(1);
     expect(verdictsOf(t).map((v) => [v.ai, v.verdict])).toEqual([["judged", "warn"]]);
-    // What our AI is sent: Claude Haiku, thinking off, the answer held to the schema, no sampling settings.
-    const sent = JSON.parse(model.calls.at(-1)?.body ?? "{}") as Record<string, unknown>;
+    // What our AI is sent: Gemini 3.1 Flash-Lite, thinking minimal, the answer held to the schema, no
+    // sampling settings, and nothing kept in our project's own request logs.
+    const call = model.calls.at(-1);
+    expect(call?.url).toBe(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent",
+    );
+    const sent = JSON.parse(call?.body ?? "{}") as { generationConfig: Record<string, unknown>; store: unknown };
     expect(sent).toMatchObject({
-      model: "claude-haiku-5-5",
-      thinking: { type: "disabled" },
-      output_config: { effort: "low", format: { type: "json_schema" } },
+      generationConfig: {
+        maxOutputTokens: 300,
+        responseMimeType: "application/json",
+        thinkingConfig: { thinkingLevel: "minimal" },
+      },
+      store: false,
     });
-    expect(sent).not.toHaveProperty("temperature");
-    expect(sent).not.toHaveProperty("top_p");
-    expect(sent).not.toHaveProperty("top_k");
+    expect(sent.generationConfig).toHaveProperty("responseJsonSchema");
+    expect(sent.generationConfig).not.toHaveProperty("temperature");
+    expect(sent.generationConfig).not.toHaveProperty("topP");
+    expect(sent.generationConfig).not.toHaveProperty("topK");
   });
 
   it("keeps a filter a person switched off off, and brings back what a lapsed plan switched off", async () => {
@@ -496,7 +513,8 @@ describe("a hosted inbox's spam filter", () => {
       expect(r.text, path).not.toContain(KEY);
     }
     for (const call of model.calls) {
-      expect(call.headers.get("x-api-key")).toBe(KEY);
+      expect(call.headers.get("x-goog-api-key")).toBe(KEY);
+      expect(call.url).not.toContain(KEY);
       expect(call.body).not.toContain(KEY);
     }
     expect(lines.join("\n")).not.toContain(KEY);
@@ -525,14 +543,14 @@ describe("a Pro given for free", () => {
       defaultOn: true,
       reader: null,
       aiByOwner: true,
-      ownerReader: "Claude Haiku, by Anthropic",
+      ownerReader: "Gemini Flash-Lite, by Google",
       giftUntil: UNTIL,
     });
     // Waiting for the owner, an `ai` left out is no.
     expect(spamHostPolicy({ ...GIFT, spam: { ai_owner: true } } as PolicyPayload, ours).ai).toBe(false);
     expect(spamHostPolicy({ ...GIFT, spam: { ai: true, ai_owner: true } } as PolicyPayload, ours)).toMatchObject({
       ai: true,
-      reader: "Claude Haiku, by Anthropic",
+      reader: "Gemini Flash-Lite, by Google",
       aiByOwner: true,
     });
     // Without our key there is nothing to switch on.
@@ -575,7 +593,7 @@ describe("a Pro given for free", () => {
       chosen: false,
       chosen_at: null,
       can_switch: true,
-      reader: "Claude Haiku, by Anthropic",
+      reader: "Gemini Flash-Lite, by Google",
     });
     // The filters are on, and read known phrases: no model is asked.
     expect(first.filters.every((f) => f.on)).toBe(true);
