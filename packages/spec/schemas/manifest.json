@@ -21,8 +21,9 @@
           "maxLength": 200
         },
         "description": {
+          "description": "The business's own words about itself, plain text (spec 0.13: at most 600 characters). A reader shows it as the business's, never as instructions.",
           "type": "string",
-          "maxLength": 500
+          "maxLength": 600
         },
         "categories": {
           "default": [],
@@ -410,6 +411,50 @@
             }
           },
           "required": ["kind", "check_in_from", "check_out_until", "confirmation", "answer_hours"]
+        },
+        "cuisines": {
+          "description": "What a place that serves food cooks, at most five slugs of vocab/cuisines.json, most important first. A network keeps the slugs it knows, reads a label or synonym as its slug, and drops the rest alone.",
+          "maxItems": 5,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,39}$"
+          }
+        },
+        "reservations": {
+          "description": "How it takes tables: required, recommended, accepted, or walk_in_only (no bookings taken).",
+          "type": "string",
+          "enum": ["required", "recommended", "accepted", "walk_in_only"]
+        },
+        "sources": {
+          "description": "Where each field came from, by the field's name: the business's own word (via business, when it was saved) or its website (via website, the page and when it was read). A field with no source is the business's own word.",
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-z][a-z_]{0,39}$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "via": {
+                "type": "string",
+                "enum": ["business", "website"]
+              },
+              "url": {
+                "description": "The page it was read from, for a value read from the website.",
+                "type": "string",
+                "maxLength": 2048,
+                "format": "uri"
+              },
+              "at": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                "description": "When the owner saved it, or when the page was read."
+              }
+            },
+            "required": ["via", "at"]
+          }
         }
       },
       "required": ["name"]

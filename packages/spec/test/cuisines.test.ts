@@ -8,9 +8,13 @@ import {
   foldCuisineTerm,
   isCuisineSlug,
   MAX_PROFILE_CUISINES,
+  PROFILE_DESCRIPTION_MAX,
+  profileSchema,
+  profileSourceSchema,
   readCuisines,
   readCuisineTerm,
 } from "../src/index";
+import profileVectors from "../vectors/profile.json" with { type: "json" };
 import attributes from "../vocab/attributes.json" with { type: "json" };
 
 /** The cuisines vocabulary (spec 0.13) and attributes.json version 2, which files a cuisine as `cuisine=<slug>`. */
@@ -115,5 +119,50 @@ describe("reading a profile's cuisines", () => {
     expect(cuisineLabel("not_a_slug")).toBe("not_a_slug");
     expect(isCuisineSlug("ramen")).toBe(true);
     expect(isCuisineSlug("Ramen")).toBe(false);
+  });
+});
+
+describe("a profile's 0.13 fields", () => {
+  it("names at most five cuisine slugs, one of four ways to take tables, 600 characters of its own words, and sources", () => {
+    expect(profileSchema.shape.cuisines.safeParse(["ramen", "japanese"]).success).toBe(true);
+    expect(profileSchema.shape.cuisines.safeParse(["a", "b", "c", "d", "e", "f"]).success).toBe(false);
+    expect(profileSchema.shape.cuisines.safeParse(["Ramen"]).success).toBe(false);
+    for (const r of ["required", "recommended", "accepted", "walk_in_only"])
+      expect(profileSchema.shape.reservations.safeParse(r).success, r).toBe(true);
+    expect(profileSchema.shape.reservations.safeParse("Required").success).toBe(false);
+    expect(PROFILE_DESCRIPTION_MAX).toBe(600);
+    expect(profileSchema.shape.description.safeParse("x".repeat(600)).success).toBe(true);
+    expect(profileSchema.shape.description.safeParse("x".repeat(601)).success).toBe(false);
+    const sources = {
+      description: { via: "business", at: "2026-11-30T09:00:00Z" },
+      cuisines: { via: "website", url: "https://tasca.example/sobre", at: "2026-11-29T09:15:00+01:00" },
+    };
+    expect(profileSchema.shape.sources.safeParse(sources).success).toBe(true);
+    expect(profileSourceSchema.safeParse({ via: "model", at: "2026-11-30T09:00:00Z" }).success).toBe(false);
+    expect(profileSourceSchema.safeParse({ via: "business", at: "yesterday" }).success).toBe(false);
+  });
+
+  it("are what the vectors keep: each kept value is one a profile may say, its cuisines as readCuisines reads them", () => {
+    let food = 0;
+    for (const c of profileVectors.cases) {
+      const kept = c.kept as Record<string, unknown>;
+      const profile = c.profile as Record<string, unknown>;
+      if (kept.cuisines !== undefined) {
+        food++;
+        expect(profileSchema.shape.cuisines.safeParse(kept.cuisines).success, c.name).toBe(true);
+        expect(readCuisines(profile.cuisines).cuisines, c.name).toEqual(kept.cuisines);
+      }
+      if (kept.reservations !== undefined)
+        expect(profileSchema.shape.reservations.safeParse(kept.reservations).success, c.name).toBe(true);
+      if (kept.sources !== undefined) {
+        expect(profileSchema.shape.sources.safeParse(kept.sources).success, c.name).toBe(true);
+        // A source is kept only for a field that is.
+        for (const field of Object.keys(kept.sources as object))
+          expect(kept[field], `${c.name}: ${field}`).toBeTruthy();
+      }
+      if (typeof kept.description === "string")
+        expect(kept.description.length, c.name).toBeLessThanOrEqual(PROFILE_DESCRIPTION_MAX);
+    }
+    expect(food).toBeGreaterThanOrEqual(3);
   });
 });

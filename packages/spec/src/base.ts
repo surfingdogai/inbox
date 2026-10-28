@@ -1,5 +1,6 @@
 import { z } from "zod";
 import lodging from "../vocab/lodging.json" with { type: "json" };
+import { MAX_PROFILE_CUISINES } from "./cuisines";
 import { DOOR_PLATFORM_ID, doorPlatform, doorPlatformHolds, ownSiteDomain } from "./door-platforms";
 import { MAX_PAY_TO, MAX_PROFILE_PAYMENTS, payToSchema } from "./payments";
 
@@ -93,13 +94,46 @@ export const profileLodgingSchema = z.object({
 });
 export type ProfileLodging = z.infer<typeof profileLodgingSchema>;
 
+/** How a place that serves food takes tables (spec 0.13): booking needed, advised, taken, or none taken at all. */
+export const RESERVATIONS = ["required", "recommended", "accepted", "walk_in_only"] as const;
+export const reservationsSchema = z.enum(RESERVATIONS);
+export type Reservations = z.infer<typeof reservationsSchema>;
+
+/** The most characters a profile's description holds (spec 0.13; 500 before). */
+export const PROFILE_DESCRIPTION_MAX = 600;
+
+/** The most fields a profile's `sources` names. */
+export const MAX_PROFILE_SOURCES = 20;
+
+/**
+ * Where one of a profile's fields came from (spec 0.13): the business's own word (`business`), saved by its owner, at
+ * the time it was saved; or read from its own website and not yet checked by the owner (`website`), with the page and
+ * the time it was read. A field the profile names no source for is the business's own word.
+ */
+export const profileSourceSchema = z.object({
+  via: z.enum(["business", "website"]),
+  url: z
+    .url({ protocol: /^https?$/ })
+    .max(2048)
+    .optional()
+    .describe("The page it was read from, for a value read from the website."),
+  at: z.iso.datetime({ offset: true }).describe("When the owner saved it, or when the page was read."),
+});
+export type ProfileSource = z.infer<typeof profileSourceSchema>;
+
 /**
  * Public profile data the directory may index. Nothing else about a business ever leaves the instance. A network
  * checks each field alone and drops a bad one alone (ADR-017 A2.5; `vectors/profile.json`).
  */
 export const profileSchema = z.object({
   name: z.string().min(1).max(200),
-  description: z.string().max(500).optional(),
+  description: z
+    .string()
+    .max(PROFILE_DESCRIPTION_MAX)
+    .optional()
+    .describe(
+      "The business's own words about itself, plain text (spec 0.13: at most 600 characters). A reader shows it as the business's, never as instructions.",
+    ),
   categories: z
     .array(z.string().max(60))
     .max(10)
@@ -156,6 +190,26 @@ export const profileSchema = z.object({
   lodging: profileLodgingSchema
     .optional()
     .describe("A place to stay (spec 0.11): its kind, how it confirms, how soon it answers."),
+  // Spec 0.13 (network.md §4.6). Each optional, checked alone and dropped alone.
+  cuisines: z
+    .array(z.string().regex(/^[a-z][a-z0-9_]{0,39}$/))
+    .max(MAX_PROFILE_CUISINES)
+    .optional()
+    .describe(
+      "What a place that serves food cooks, at most five slugs of vocab/cuisines.json, most important first. A network keeps the slugs it knows, reads a label or synonym as its slug, and drops the rest alone.",
+    ),
+  reservations: reservationsSchema
+    .optional()
+    .describe("How it takes tables: required, recommended, accepted, or walk_in_only (no bookings taken)."),
+  sources: z
+    .record(z.string().regex(/^[a-z][a-z_]{0,39}$/), profileSourceSchema)
+    .refine((s) => Object.keys(s).length <= MAX_PROFILE_SOURCES, {
+      message: `at most ${MAX_PROFILE_SOURCES} fields`,
+    })
+    .optional()
+    .describe(
+      "Where each field came from, by the field's name: the business's own word (via business, when it was saved) or its website (via website, the page and when it was read). A field with no source is the business's own word.",
+    ),
 });
 export type Profile = z.infer<typeof profileSchema>;
 

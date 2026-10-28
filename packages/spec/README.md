@@ -164,6 +164,17 @@ or network:
   (`BUSINESS_KINDS`, `businessKind`, `isBusinessKind`, `KIND_LABEL_MAX`), 574 kinds with their names in five
   languages, and `kindCategories`, how an inbox publishes a business's kind in its profile's `categories`. A
   0.13 reader reads `categories` as before.
+- 0.14 (optional for a network and for an inbox): rich listings. A profile may say what a place that serves food cooks (`cuisines`: at most five slugs
+  of `vocab/cuisines.json`, 117 of them, regional and dishes, with labels in English, Portuguese, Spanish,
+  French, German, Italian and Dutch, synonyms, OpenStreetMap `cuisine=` values, schema.org `servesCuisine`
+  strings and the Overture place categories whose places serve each; `readCuisines`, `readCuisineTerm`,
+  `cuisineLabel`), how it takes tables (`reservations`: `required`, `recommended`, `accepted` or
+  `walk_in_only`), up to 600 characters of the business's own words (`description`, 500 before), and where each
+  field came from (`sources`: the business's own word, saved by its owner, or its website, read and not yet
+  checked, with the page and when). `vocab/attributes.json` version 2 files a cuisine as the attribute
+  `cuisine=<slug>`, of a new type, `set`: up to five values of another vocabulary (`values_from`). Vegan and
+  vegetarian named as a cuisine read as their diet attribute; halal and kosher are never read from one. Each
+  field is checked and dropped alone, so a 0.13 reader ignores them (`vectors/profile.json`).
 
 A version number is given when a change merges, in the order changes merge. Work in progress names no number, so
 two changes built side by side never claim the same one.
@@ -227,7 +238,7 @@ implementations:
 | `passes.json` | key, pass and pass-reference strings, `ppid`, `email_mac`, and 43 email normalisation cases |
 | `scoring.json` | the network's scores (ADR-017 §5): every worked example, the R5 grid, ageing, hold and release |
 | `ordering.json` | the network's order (ADR-017 §6): shuffles above 2^53, one snapshot's order, cursors |
-| `profile.json` | what the network keeps from a manifest's profile (ADR-017 A2.5): each field checked and dropped alone, hours, categories and tags, and a place to stay's `lodging` (0.11) |
+| `profile.json` | what the network keeps from a manifest's profile (ADR-017 A2.5): each field checked and dropped alone, hours, categories and tags, a place to stay's `lodging` (0.11), and cuisines, reservations, a description of 600 characters and each field's source (0.13) |
 | `doors-elsewhere.json` | what a reader keeps of a manifest's `doors_elsewhere` (`readDoorsElsewhere`): the kinds of request a business takes somewhere else, and where, each entry checked and dropped alone, and since 0.10 the platform each names; `detect` and `clean`, the platform a URL is on and the tracking it carries |
 | `mcp.json` | what an assistant reads from the network's tools (ADR-017 A2.7): the card derived from each listing, today's hours in the business's zone, and one answer of each tool |
 | `score.json` | the agentic score, rules version 2 (§4.13): for each case a profile and every capability's state, and the score, grade, numerator and fixes the published formula gives; `score-v1.json` the same under version 1 |
@@ -269,6 +280,10 @@ categories it falls under (slugs of `vocab/categories.json`). An inbox publishes
 lacks is the business's own words, as a free tag (`kindCategories`). Some kinds also list other names people
 search for them by (`also`: "Dog groomer", "B&B"), for finding a kind only, never published. A kind is never
 removed or renamed.
+`vocab/cuisines.json` (0.14) lists the cuisines a profile's `cuisines` names and a network files as `cuisine=<slug>`,
+the network's own file byte for byte: each slug's kind (regional or dish), labels in seven languages, synonyms, the
+OpenStreetMap and schema.org words that name it and the Overture place categories whose places serve it, and the two
+diets a cuisine may name instead (vegan, vegetarian), read as their attributes. A slug is never removed or renamed.
 
 `receipts.json` is written by `npx tsx scripts/gen-receipt-vectors.ts` from `packages/core`;
 `receipts-v2.json`, `signatures.json`, `passes.json`, the four stay vectors and `schemas/` by

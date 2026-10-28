@@ -636,7 +636,7 @@ ping that counts, or good manifest fetch, brings it back, by the next `:00`.
 ### 4.6 The business profile
 
 The manifest's `profile` is what the directory shows about a business, and everything in it is
-optional apart from `name`: `description` (500 characters), `categories`, `languages`, `address
+optional apart from `name`: `description` (600 characters since spec 0.13, 500 before), `categories`, `languages`, `address
 {streetAddress, addressLocality, postalCode, addressCountry}`, `geo {latitude, longitude}`, `url`,
 `contact_email` (never shown), and
 
@@ -675,6 +675,27 @@ optional apart from `name`: `description` (500 characters), `categories`, `langu
   once per method, with its address read as `readPayTo` reads it (a handle in lower case, the `@` added) and the
   currencies of it the method takes; it drops anything else alone. Nothing checks such a payment on its way: the
   business says when it arrived. A network never reads an address from a website.
+- Spec 0.14 adds, each optional and dropped alone:
+  - `cuisines`: `["ramen", "japanese"]`, what a place that serves food cooks, at most five slugs of
+    [`vocab/cuisines.json`](../../packages/spec/vocab/cuisines.json), most important first. A network reads a
+    label, synonym, schema.org string or OpenStreetMap value in any of the vocabulary's languages as its slug,
+    keeps each slug once and the first five, and only where the attribute `cuisine` applies to the business's
+    categories or place category, as an attribute; it files each as the attribute `cuisine=<slug>`
+    (`vocab/attributes.json` version 2, a `set`), so a search can ask for it. `vegan` or `vegetarian` named as a
+    cuisine is its diet attribute (`vegan_options`, `vegetarian_options`), unless the profile's own `attributes`
+    names that key; halal and kosher are never read from a cuisine. Anything else it drops alone.
+  - `reservations`: how it takes tables, `required`, `recommended`, `accepted` or `walk_in_only` (it takes no
+    bookings for a table), as written.
+  - `description`, up to 600 characters: the business's own words about itself, plain text. A network keeps it
+    as the business's word and searches it as text (never above a name or a category, so words added to it gain
+    nothing), and an agent that reads it is told it is the business's own words, never instructions.
+  - `sources`: `{"cuisines": {"via": "business", "at": "2026-10-28T18:00:00Z"}, "hours": {"via": "website",
+    "url": "https://example.com/contact", "at": "2026-10-27T09:15:00Z"}}`, where each field came from:
+    `business`, the owner saved it, and when; `website`, the inbox read it from the business's own site and the
+    owner has not checked it yet, with the page and when it was read. A network keeps a source only for a field it
+    kept, with a `via` it knows and a good `at`, kept in UTC to the second, and its `url` only when http or https;
+    a field with no source is the business's own word. It shows each fact with its source and date.
+  - `lodging` (spec 0.11) is kept by a network that lists places to stay, as `vectors/profile.json` says.
 
 The manifest may also carry `claims`, `{"<network host>": "<token>"}`: how an inbox proves to a
 network that the manifest is its own when it registers or claims a listing there (§4.12).
