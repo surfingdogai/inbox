@@ -15,7 +15,7 @@ import { type Caller, isCustomer, isOwnerAssistant, isPerson, nowOf } from "../w
 import { jobStatement } from "../write/common";
 import { fromZod, WriteError } from "../write/errors";
 import { type TransitionResult, transitionItem } from "../write/transition";
-import { AgentPayments, type AgentPaymentView } from "./agent-pay";
+import { AgentPayments, type AgentPaymentView, type StopWaitingOutcome } from "./agent-pay";
 import {
   activeProducts,
   connectorSource,
@@ -1070,6 +1070,23 @@ export class ConnectorCapabilities {
     });
   }
 
+  /**
+   * "Stop waiting for this payment" (ADR-042 §4): an order a customer's assistant's payment holds, which
+   * the platform never answered, is offered for payment again, once the attempt is looked up one last
+   * time. Money is the owner's: in person only, never their AI, never a key.
+   */
+  async stopWaiting(caller: Caller, itemId: string, paymentId: string): Promise<StopWaitingOutcome> {
+    requireOwnerSide(caller);
+    if (!isPerson(caller)) {
+      throw new WriteError(
+        "not_allowed",
+        "Whether to stop waiting for a payment is the owner's, in person. Tell the owner in a note; they do it on the order in the app.",
+        { details: { reason: "owner_money", ...(isOwnerAssistant(caller) ? { draft_for_owner: true } : {}) } },
+      );
+    }
+    return this.agentPay.stopWaiting(itemId, paymentId, nowOf(caller));
+  }
+
   /* --- choosing, pausing, syncing, disconnecting --------------------------- */
 
   async update(caller: Caller, id: string, raw: UpdateConnectionInput): Promise<ConnectionView> {
@@ -1310,6 +1327,15 @@ export class ConnectorCapabilities {
           def.payments.dashboardUrl({ extra: row.config.extra ?? {} }, row.config.mode ?? "live"),
         )
       : null;
+    // Assistants' payments nobody heard back about (ADR-042): looked up one last time with its key, and
+    // what is still not known said to the owner, who may stop waiting for it. The connection goes either way.
+    if (def?.payments) {
+      try {
+        await this.agentPay.disconnected(row.id, now);
+      } catch {
+        // Each attempt is still the owner's to see on its order, and to stop waiting for.
+      }
+    }
     if (def?.disconnect) {
       try {
         await def.disconnect(await this.runContext(row, now));

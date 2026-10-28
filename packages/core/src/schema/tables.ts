@@ -1030,7 +1030,10 @@ export const agentPayments = sqliteTable(
     /** The fingerprint of the terms the customer confirmed: what was charged for. */
     termsSha: text("terms_sha").notNull(),
     credentialSha: text("credential_sha").notNull(),
-    /** creating | processing | paid | declined | failed | cancelled | unknown. */
+    /**
+     * creating | processing | paid | declined | failed | cancelled | unknown | unresolved (one the platform
+     * never answered that the owner stopped waiting for: it no longer holds the order, and is still looked up).
+     */
     state: text("state").notNull().default("creating"),
     /** The platform's id for the payment (`pi_…`). */
     externalId: text("external_id"),

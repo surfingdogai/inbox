@@ -893,9 +893,12 @@ export interface PaymentsHandler {
    * platform never answered the request that made it (it was down, or the answer was lost), with a read
    * that has no lag behind a write: the charge as it stands, read again by its id, or null when none is
    * there yet. Null is never proof that none was made: the platform may still reconcile one.
-   * `since`: when the attempt was first asked (ms).
+   * `since` and `until`: when the attempt was first and last asked (ms), which bound what is read.
    */
-  findCharge?(ctx: RunContext, charge: { readonly ref: string; readonly since: number }): Promise<AgentCharge | null>;
+  findCharge?(
+    ctx: RunContext,
+    charge: { readonly ref: string; readonly since: number; readonly until: number },
+  ): Promise<AgentCharge | null>;
   /** Stops a charge its card holder never confirmed (`requires_action` too long), so it is never taken later. */
   cancelCharge?(ctx: RunContext, charge: { readonly externalId: string }): Promise<void>;
   /**

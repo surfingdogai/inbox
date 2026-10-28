@@ -969,6 +969,205 @@ describe("an accepted order, paid by the customer's assistant into the business'
   });
 });
 
+/** The owner's "Stop waiting for this payment", in the app. */
+const stopWaiting = (s: S, id: string, paymentId: string, headers: Record<string, string> = s.owner) =>
+  s.call("POST", `/v1/owner/items/${id}/payments/stop-waiting`, { payment_id: paymentId }, headers);
+
+async function ownerPayments(s: S, id: string) {
+  const res = await s.call("GET", `/v1/owner/items/${id}/payments`, undefined, s.owner);
+  expect(res.status, await res.clone().text()).toBe(200);
+  return (await res.json()) as {
+    agent_payments: {
+      id: string;
+      state: string;
+      note: string | null;
+      can_stop_waiting: boolean;
+      dashboard_url: string | null;
+      paid_at: number | null;
+    }[];
+  };
+}
+
+/** Stripe failing inside (a 500 it keeps under the key), and a day on, the owner told: the attempt's id. */
+async function unanswered(s: S, conn: string, id: string, token: string): Promise<string> {
+  s.stripe.agent.down = 500;
+  expect((await pay(s, id, token)).status).toBe(503);
+  s.stripe.agent.down = null;
+  await s.inbox.caps.connectors.run(conn, Date.now() + 25 * 3_600_000, "sync");
+  const [ref, state] = ((await attempts(s.db, id, "id, state"))[0] ?? []).map(String);
+  expect(state).toBe("unknown");
+  return ref ?? "";
+}
+
+describe("the owner stops waiting for a payment Stripe never answered", () => {
+  it("only once told, in person: Stripe is asked once more, and the order is offered for payment again; a charge Stripe reconciles later goes on it", async () => {
+    const s = await setup();
+    const conn = await ready(s);
+    const id = await order(s);
+    const token = s.stripe.grantToken({ maxAmount: 18900, currency: "nok" });
+    s.stripe.agent.down = 500;
+    expect((await pay(s, id, token)).status).toBe(503);
+    s.stripe.agent.down = null;
+    const [ref = ""] = ((await attempts(s.db, id, "id"))[0] ?? []).map(String);
+    // Before the owner is told, there is nothing to stop: the inbox is still asking.
+    expect((await ownerPayments(s, id)).agent_payments[0]?.can_stop_waiting).toBe(false);
+    const early = await stopWaiting(s, id, ref);
+    expect(early.status).toBe(409);
+    expect(((await early.json()) as { code: string }).code).toBe("wrong_state");
+    await s.inbox.caps.connectors.run(conn, Date.now() + 25 * 3_600_000, "sync");
+    expect((await ownerPayments(s, id)).agent_payments[0]).toMatchObject({ state: "unknown", can_stop_waiting: true });
+    // The owner's, in person: never a key handed to another system.
+    const integration = await createApiKey(s.db, { kind: "integration", name: "Zapier", scopes: ["*"] });
+    expect((await stopWaiting(s, id, ref, { authorization: `Bearer ${integration.key}` })).status).toBe(403);
+    expect(await attempts(s.db, id)).toEqual([["unknown"]]);
+    const lists = () => s.stripe.calls.filter((c) => c === "GET /v1/payment_intents").length;
+    const before = lists();
+    const stopped = await stopWaiting(s, id, ref);
+    expect(stopped.status, await stopped.clone().text()).toBe(200);
+    expect(await stopped.json()).toMatchObject({ item_id: id, payment_id: ref, outcome: "stopped", looked_up: true });
+    // Stripe was asked once more first.
+    expect(lists()).toBeGreaterThan(before);
+    // Kept for the record, no longer holding the order: its link again, and another token.
+    expect(await attempts(s.db, id)).toEqual([["unresolved"]]);
+    const now = await status(s, id);
+    expect(now.payment?.state).toBe("due");
+    expect(now.payment?.payment_url).toMatch(/^https:\/\/buy\.stripe\.com\//);
+    expect(now.payment?.agent).not.toBeNull();
+    expect((await ownerPayments(s, id)).agent_payments[0]).toMatchObject({
+      state: "unresolved",
+      can_stop_waiting: false,
+    });
+    // The token Stripe never answered for is never sent again.
+    const old = await pay(s, id, token, { key: "the-old-token-again" });
+    expect(old.status).toBe(422);
+    expect(((await old.json()) as { code: string }).code).toBe("token_used");
+    expect(intentCalls(s)).toHaveLength(1);
+    const detail = await (await s.call("GET", `/v1/owner/items/${id}`, undefined, s.owner)).text();
+    expect(detail).toContain("You stopped waiting for Stripe's answer");
+    // Stripe, recovering, reconciles the charge after all: still looked up, it goes on the order, once.
+    s.stripe.reconcile(ref, { amount: 18900, currency: "nok" });
+    await s.inbox.caps.connectors.run(conn, Date.now() + 27 * 3_600_000, "sync");
+    await drain(s, 60_000);
+    expect((await itemOf(s.db, id)).state).toBe("paid");
+    expect(await attempts(s.db, id)).toEqual([["paid"]]);
+    expect(succeeded(s)).toHaveLength(1);
+  });
+
+  it("Stripe has the charge when it is asked once more: the order is paid instead", async () => {
+    const s = await setup();
+    const conn = await ready(s);
+    const id = await order(s);
+    const ref = await unanswered(s, conn, id, s.stripe.grantToken({ maxAmount: 18900, currency: "nok" }));
+    s.stripe.reconcile(ref, { amount: 18900, currency: "nok" });
+    const res = await stopWaiting(s, id, ref);
+    expect(res.status, await res.clone().text()).toBe(200);
+    expect(await res.json()).toMatchObject({ outcome: "paid", looked_up: true });
+    await drain(s, 60_000);
+    expect((await itemOf(s.db, id)).state).toBe("paid");
+    // What the owner was told of not knowing is out of date, and goes.
+    expect((await ownerPayments(s, id)).agent_payments[0]).toMatchObject({ state: "paid", note: null });
+  });
+
+  it("Stripe cannot be asked just now: nothing changes, and the owner tries again shortly", async () => {
+    const s = await setup();
+    const conn = await ready(s);
+    const id = await order(s);
+    const ref = await unanswered(s, conn, id, s.stripe.grantToken({ maxAmount: 18900, currency: "nok" }));
+    s.stripe.agent.down = 503;
+    const res = await stopWaiting(s, id, ref);
+    expect(res.status).toBe(503);
+    expect(((await res.json()) as { code: string }).code).toBe("platform_unavailable");
+    expect(await attempts(s.db, id)).toEqual([["unknown"]]);
+    expect((await status(s, id)).payment).toMatchObject({ state: "processing", payment_url: null, agent: null });
+  });
+
+  it("a charge Stripe shows only after the order was paid at its link is kept, and the owner told to refund it", async () => {
+    const s = await setup();
+    const conn = await ready(s);
+    const id = await order(s);
+    const ref = await unanswered(s, conn, id, s.stripe.grantToken({ maxAmount: 18900, currency: "nok" }));
+    expect((await stopWaiting(s, id, ref)).status).toBe(200);
+    const link = [...s.stripe.links.values()].find((l) => l.meta.sdi_item === id);
+    const told = await s.inbox.app.request(await s.stripe.pay(link?.id ?? ""));
+    expect(told.status, await told.clone().text()).toBe(200);
+    await drain(s, 60_000);
+    expect((await itemOf(s.db, id)).state).toBe("paid");
+    s.stripe.reconcile(ref, { amount: 18900, currency: "nok" });
+    await s.inbox.caps.connectors.run(conn, Date.now() + 27 * 3_600_000, "sync");
+    await drain(s, 60_000);
+    const [late] = (await ownerPayments(s, id)).agent_payments;
+    expect(late).toMatchObject({ id: ref, state: "paid" });
+    expect(late?.note).toContain("refund it in Stripe");
+    const detail = await (await s.call("GET", `/v1/owner/items/${id}`, undefined, s.owner)).text();
+    expect(detail).toContain("refund it in Stripe");
+  });
+
+  it("another token pays once the owner stopped waiting; the first one's late charge is kept beside it, and the owner told to refund it", async () => {
+    const s = await setup();
+    const conn = await ready(s);
+    const id = await order(s);
+    const ref = await unanswered(s, conn, id, s.stripe.grantToken({ maxAmount: 18900, currency: "nok" }));
+    expect((await stopWaiting(s, id, ref)).status).toBe(200);
+    const fresh = await pay(s, id, s.stripe.grantToken({ maxAmount: 18900, currency: "nok" }));
+    expect(fresh.status, await fresh.clone().text()).toBe(200);
+    await drain(s, 60_000);
+    expect((await itemOf(s.db, id)).state).toBe("paid");
+    s.stripe.reconcile(ref, { amount: 18900, currency: "nok" });
+    await s.inbox.caps.connectors.run(conn, Date.now() + 27 * 3_600_000, "sync");
+    await drain(s, 60_000);
+    const late = (await ownerPayments(s, id)).agent_payments.find((p) => p.id === ref);
+    expect(late).toMatchObject({ state: "unresolved" });
+    expect(late?.paid_at).not.toBeNull();
+    expect(late?.dashboard_url).toMatch(/^https:\/\/dashboard\.stripe\.com\/payments\/pi_/);
+    expect(late?.note).toContain("refund it in Stripe");
+    expect((await ownerPayments(s, id)).agent_payments.filter((p) => p.state === "paid")).toHaveLength(1);
+    // Looked up no more.
+    const asked = s.stripe.calls.length;
+    await s.inbox.caps.connectors.run(conn, Date.now() + 30 * 3_600_000, "sync");
+    expect(s.stripe.calls.slice(asked).filter((c) => c === "GET /v1/payment_intents")).toEqual([]);
+  });
+
+  it("Stripe disconnected before it answered: asked one last time, the owner told and free to stop waiting; connected again, the charge is still found", async () => {
+    const s = await setup();
+    const conn = await ready(s);
+    const id = await order(s);
+    s.stripe.agent.down = 500;
+    expect((await pay(s, id, s.stripe.grantToken({ maxAmount: 18900, currency: "nok" }))).status).toBe(503);
+    s.stripe.agent.down = null;
+    const [ref = ""] = ((await attempts(s.db, id, "id"))[0] ?? []).map(String);
+    const lists = s.stripe.calls.filter((c) => c === "GET /v1/payment_intents").length;
+    const removed = await s.call("DELETE", `/v1/owner/integrations/${conn}`, undefined, s.owner);
+    expect(removed.status, await removed.clone().text()).toBe(200);
+    await drain(s, 2 * 3_600_000);
+    const { rows } = await s.db.client.query({
+      sql: "SELECT id FROM connectors WHERE id = ?",
+      params: [conn],
+      method: "all",
+    });
+    expect(rows).toHaveLength(0);
+    // Asked one last time with its key; none found, the owner is told what to look for.
+    expect(s.stripe.calls.filter((c) => c === "GET /v1/payment_intents").length).toBeGreaterThan(lists);
+    const [flagged] = (await ownerPayments(s, id)).agent_payments;
+    expect(flagged).toMatchObject({ state: "unknown", can_stop_waiting: true });
+    expect(flagged?.note).toContain(`sdi_pay ${ref}`);
+    expect(flagged?.note).toContain("disconnected");
+    // No connection left to ask: the owner's word stands.
+    const stopped = await stopWaiting(s, id, ref);
+    expect(stopped.status, await stopped.clone().text()).toBe(200);
+    expect(await stopped.json()).toMatchObject({ outcome: "stopped", looked_up: false });
+    expect((await status(s, id)).payment?.state).toBe("due");
+    // The same account connected again: its key finds the charge Stripe reconciled, the order is paid by it.
+    const again = await ready(s);
+    expect(again).not.toBe(conn);
+    s.stripe.reconcile(ref, { amount: 18900, currency: "nok" });
+    // One the owner stopped waiting for is looked up hourly.
+    await s.inbox.caps.connectors.run(again, Date.now() + 2 * 3_600_000, "sync");
+    await drain(s, 60_000);
+    expect(await attempts(s.db, id, "state, connector_id")).toEqual([["paid", again]]);
+    expect((await itemOf(s.db, id)).state).toBe("paid");
+  });
+});
+
 describe("the MCP door", () => {
   async function connect(s: S) {
     const fetchLike = async (input: string | URL, init?: RequestInit) => s.inbox.app.request(String(input), init);

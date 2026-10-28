@@ -462,6 +462,18 @@ export function useProposeShopTotal(itemId: string) {
   });
 }
 
+/** Stop waiting for an assistant's payment Stripe never answered: the order is offered for payment again. */
+export function useStopWaiting(itemId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (paymentId: string) => api.stopWaiting(itemId, paymentId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.item(itemId) });
+      void qc.invalidateQueries({ queryKey: qk.payments(itemId) });
+    },
+  });
+}
+
 export function useFeeds() {
   return useQuery({ queryKey: qk.feeds, queryFn: api.feeds, staleTime: 15_000 });
 }

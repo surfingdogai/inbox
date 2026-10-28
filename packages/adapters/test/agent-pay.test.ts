@@ -242,13 +242,15 @@ describe("Stripe: an assistant's shared payment token, charged once on the busin
   });
 
   it("Stripe not saying what it did is said so, with whether the same request under the same key may yet tell", async () => {
-    // A 500 is kept under the key, and every retry with it gets the same: only a lookup can tell.
-    const inside = fakeStripe(() => json(STRIPE_API_ERROR, 500));
-    expect(await chargeToken(ctx(inside.http), CHARGE)).toMatchObject({
-      status: "unknown",
-      resend: false,
-      externalId: null,
-    });
+    // A 500 is kept under the key, and every retry with it gets the same: only a lookup can tell. A 424
+    // (a dependency outside Stripe failed) is taken alike, never for a refusal that made nothing.
+    for (const status of [500, 424]) {
+      const inside = fakeStripe(() => json(STRIPE_API_ERROR, status));
+      expect([status, await chargeToken(ctx(inside.http), CHARGE)]).toMatchObject([
+        status,
+        { status: "unknown", resend: false, externalId: null },
+      ]);
+    }
     // An edge's 502, 503 or 504 keeps nothing: the same request under the same key may yet be answered.
     for (const status of [502, 503, 504]) {
       const edge = fakeStripe(() => json(STRIPE_API_ERROR, status));
@@ -383,7 +385,8 @@ describe("Stripe: an assistant's shared payment token, charged once on the busin
       }
       return undefined;
     });
-    const found = await findCharge(ctx(p.http), { ref: CHARGE.ref, since });
+    const until = since + 3 * 60_000;
+    const found = await findCharge(ctx(p.http), { ref: CHARGE.ref, since, until });
     expect(found).toMatchObject({ status: "succeeded", externalId: "pi_1Ours" });
     const urls = p.seen.map((r) => new URL(r.url));
     expect(urls.map((u) => u.pathname)).toEqual([
@@ -391,8 +394,11 @@ describe("Stripe: an assistant's shared payment token, charged once on the busin
       "/v1/payment_intents",
       "/v1/payment_intents/pi_1Ours",
     ]);
-    // From a little before the first ask, against the clocks' difference; never Stripe's search.
+    // From a little before the first ask to a little after the last, against the clocks' difference, so
+    // a busy account's later payments never push it out of reach; never Stripe's search.
     expect(urls[0]?.searchParams.get("created[gte]")).toBe(String(Math.floor(since / 1000) - 300));
+    expect(urls[0]?.searchParams.get("created[lte]")).toBe(String(Math.floor(until / 1000) + 300));
+    expect(urls[1]?.searchParams.get("created[lte]")).toBe(String(Math.floor(until / 1000) + 300));
     expect(urls[1]?.searchParams.get("starting_after")).toBe("pi_1Other2");
     expect(p.seen.every((r) => r.method === "GET" && r.headers.get("stripe-version") === STRIPE_AGENT_VERSION)).toBe(
       true,
@@ -400,12 +406,16 @@ describe("Stripe: an assistant's shared payment token, charged once on the busin
     expect(p.seen.some((r) => r.url.includes("/search"))).toBe(false);
     // None there: null, which the inbox never takes for none made.
     const none = fakeStripe(() => json({ object: "list", data: [theirs(1)], has_more: false }));
-    expect(await findCharge(ctx(none.http), { ref: CHARGE.ref, since })).toBeNull();
+    expect(await findCharge(ctx(none.http), { ref: CHARGE.ref, since, until: since })).toBeNull();
     expect(none.seen).toHaveLength(1);
     // A key that may not read them says so.
     const forbidden = fakeStripe(() => json(STRIPE_PERMISSION_ERROR("rak_payment_intent_read"), 403));
     expect(
-      ((await findCharge(ctx(forbidden.http), { ref: CHARGE.ref, since }).catch((e) => e)) as ConnectorError).code,
+      (
+        (await findCharge(ctx(forbidden.http), { ref: CHARGE.ref, since, until: since }).catch(
+          (e) => e,
+        )) as ConnectorError
+      ).code,
     ).toBe("config");
   });
 

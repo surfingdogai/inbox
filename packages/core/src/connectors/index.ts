@@ -12,6 +12,7 @@ export {
   type PayOrderOutcome,
   type PayOrderRequest,
   payNowLabel,
+  type StopWaitingOutcome,
 } from "./agent-pay";
 export {
   type AuthorizeInput,

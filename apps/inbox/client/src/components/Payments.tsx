@@ -3,7 +3,7 @@ import { Check, Copy, CreditCard, ExternalLink } from "lucide-react";
 import { useState } from "react";
 import { problemOf } from "../lib/api";
 import { formatDateTime, formatMoney, methodName } from "../lib/format";
-import { useProposeShopTotal } from "../lib/queries";
+import { useProposeShopTotal, useStopWaiting } from "../lib/queries";
 import type { AgentPaymentView, PaymentView } from "../lib/types";
 
 /**
@@ -133,12 +133,29 @@ export function RefundAt({ payment, owed }: { payment: PaymentView; owed: string
  * What customers' assistants paid directly into the business's own Stripe (ADR-042): each payment that
  * went through, with how and where to refund it, one on its way or still waiting for Stripe's answer
  * (which holds the order), and what the owner should know (one that came after the order was
- * cancelled, one Stripe never answered); an attempt that did not go through is one quiet count.
+ * cancelled, one Stripe never answered); an attempt that did not go through is one quiet count. One
+ * Stripe never answered, once the owner is told, has one thing to do after looking for it in Stripe:
+ * stop waiting for it, so the order is offered for payment again.
  */
-export function AgentPayments({ payments, tz }: { payments: readonly AgentPaymentView[]; tz: string | undefined }) {
+export function AgentPayments({
+  itemId,
+  payments,
+  tz,
+}: {
+  itemId: string;
+  payments: readonly AgentPaymentView[];
+  tz: string | undefined;
+}) {
+  const stop = useStopWaiting(itemId);
+  const [asking, setAsking] = useState<string | null>(null);
   if (payments.length === 0) return null;
   const done = payments.filter(
-    (p) => p.state === "paid" || p.state === "processing" || p.state === "creating" || p.state === "unknown",
+    (p) =>
+      p.state === "paid" ||
+      p.state === "processing" ||
+      p.state === "creating" ||
+      p.state === "unknown" ||
+      p.state === "unresolved",
   );
   const tried = payments.length - done.length;
   return (
@@ -157,7 +174,11 @@ export function AgentPayments({ payments, tz }: { payments: readonly AgentPaymen
                     ? `on its way: ${formatMoney(p.amount)}`
                     : p.state === "creating"
                       ? `waiting for ${p.provider}'s answer: ${formatMoney(p.amount)}`
-                      : `not confirmed by ${p.provider}: check it there`}
+                      : p.state === "unresolved"
+                        ? p.paid_at
+                          ? `paid after you stopped waiting: ${formatMoney(p.paid_amount ?? p.amount)}`
+                          : `you stopped waiting for ${p.provider}'s answer: ${formatMoney(p.amount)}`
+                        : `not confirmed by ${p.provider}: check it there`}
                 {!p.livemode && <span className="opt"> · test</span>}
               </span>
               {p.paid_at && (
@@ -172,9 +193,56 @@ export function AgentPayments({ payments, tz }: { payments: readonly AgentPaymen
                 </a>
               )}
               {p.note && <p className="hint">{p.note}</p>}
+              {p.can_stop_waiting && asking !== p.id && (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  disabled={stop.isPending}
+                  onClick={() => setAsking(p.id)}
+                >
+                  Stop waiting for this payment
+                </button>
+              )}
+              {p.can_stop_waiting && asking === p.id && (
+                <span className="hint">
+                  Only if {p.provider} has no payment for it. The order is offered for payment again, and {p.provider}{" "}
+                  is asked once more first. If the payment shows up later, it goes on the order, or you are told here to
+                  refund it.{" "}
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    disabled={stop.isPending}
+                    onClick={() => stop.mutate(p.id, { onSettled: () => setAsking(null) })}
+                  >
+                    {stop.isPending ? "Asking…" : "Stop waiting"}
+                  </button>{" "}
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    disabled={stop.isPending}
+                    onClick={() => setAsking(null)}
+                  >
+                    Keep waiting
+                  </button>
+                </span>
+              )}
             </li>
           ))}
         </ul>
+      )}
+      {stop.error && (
+        <p className="hint error" role="alert">
+          {problemOf(stop.error).detail}
+        </p>
+      )}
+      {stop.data && stop.data.outcome !== "stopped" && (
+        <p className="hint" role="status">
+          {stop.data.outcome === "paid"
+            ? "Stripe had it after all: the order is paid."
+            : stop.data.outcome === "processing"
+              ? "Stripe has it on its way: the order waits for it."
+              : "Stripe made nothing for it: the order is offered for payment again."}
+        </p>
       )}
       {tried > 0 && (
         <p className="hint">

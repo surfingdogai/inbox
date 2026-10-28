@@ -37,6 +37,7 @@ export const ROUTE_SCOPES: Readonly<Record<string, readonly string[]>> = {
   "GET /items/:id/payments": ["inbox:read"],
   // Money is the owner's in person, checked by the capability whatever the scopes.
   "POST /items/:id/payments/shop-total": ["inbox:write"],
+  "POST /items/:id/payments/stop-waiting": ["inbox:write"],
   "POST /items/:id/offers": ["inbox:write"],
   // Sending is the owner's in person, checked by the capability whatever the scopes.
   "POST /items/:id/offers/draft/send": ["inbox:write"],

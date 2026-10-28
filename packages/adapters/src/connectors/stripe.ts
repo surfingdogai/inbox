@@ -791,7 +791,9 @@ const EDGE_STATUSES: ReadonlySet<number> = new Set([502, 503, 504]);
  * runs, so the same request under the same key may yet be answered as the first was (`resend`); a 500
  * is kept under the key and answered again to every retry with it
  * (https://docs.stripe.com/api/idempotent_requests), as is the first answer to a key a 400 says was
- * used with other parameters, so only a lookup can tell what those did.
+ * used with other parameters, so only a lookup can tell what those did. A 424 ("a failure in a
+ * dependency external to Stripe", https://docs.stripe.com/api/errors) is taken as a 500: kept under
+ * the key, and only looked up, never taken for a refusal that made nothing.
  *
  * Stripe not knowing a parameter it is sent (`parameter_unknown`: the account has no shared payment
  * tokens) is the connection's to fix, never the token's: thrown as `config`, which switches it off.
@@ -833,7 +835,7 @@ async function chargeToken(ctx: RunContext, req: AgentChargeRequest): Promise<Ag
     livemode: modeOf(key) === "live",
     resend,
   });
-  if (res.status >= 500) return unknown(EDGE_STATUSES.has(res.status));
+  if (res.status >= 500 || res.status === 424) return unknown(EDGE_STATUSES.has(res.status));
   if (error?.type === "idempotency_error") return unknown(res.status === 409);
   // A decline: Stripe answers 402 with the PaymentIntent it made in the error. Nothing was charged.
   if (res.status === 402 && error?.type === "card_error") {
@@ -988,7 +990,7 @@ async function agentCharge(ctx: RunContext, charge: { readonly externalId: strin
   return chargeOf(json, key);
 }
 
-/** How long before the attempt's first ask a charge of its own is looked for: the two clocks differ. */
+/** How long before the attempt's first ask, and after its last, a charge of its own is looked for: the two clocks differ. */
 const FIND_SKEW_S = 300;
 /** Pages of a hundred PaymentIntents one lookup reads, newest first: days of a small business's payments. */
 const FIND_PAGES = 10;
@@ -1008,13 +1010,15 @@ const FIND_RANK: Readonly<Record<AgentCharge["status"], number>> = {
  * search trails a write by up to a minute, and longer during an outage, exactly when an answer is lost,
  * while its list APIs have no such lag (https://docs.stripe.com/search, "Data freshness"). The account's
  * PaymentIntents since the attempt was first asked are read newest first, ours picked by the id, and
- * the one found read again by its own id, as Stripe holds it now. Null when none is there: never proof
+ * the one found read again by its own id, as Stripe holds it now. Only those made between a little
+ * before its first ask and a little after its last are read, so a busy account's later payments never
+ * push it out of reach. Null when none is there: never proof
  * that none was made, since Stripe may still reconcile one after an outage
  * (https://docs.stripe.com/error-low-level#server-errors), so the inbox never takes it for one.
  */
 async function findCharge(
   ctx: RunContext,
-  charge: { readonly ref: string; readonly since: number },
+  charge: { readonly ref: string; readonly since: number; readonly until: number },
 ): Promise<AgentCharge | null> {
   const key = keyOf(ctx);
   const readable = (status: number) => {
@@ -1027,10 +1031,11 @@ async function findCharge(
     }
   };
   const since = Math.max(0, Math.floor(charge.since / 1000) - FIND_SKEW_S);
+  const until = Math.max(since, Math.floor(Math.max(charge.since, charge.until) / 1000) + FIND_SKEW_S);
   const ours: Record<string, unknown>[] = [];
   let after: string | null = null;
   for (let page = 0; page < FIND_PAGES; page++) {
-    const query = new URLSearchParams({ "created[gte]": String(since), limit: "100" });
+    const query = new URLSearchParams({ "created[gte]": String(since), "created[lte]": String(until), limit: "100" });
     if (after) query.set("starting_after", after);
     const { res, json } = await call(ctx, key, "GET", `/v1/payment_intents?${query}`, {
       version: STRIPE_AGENT_VERSION,

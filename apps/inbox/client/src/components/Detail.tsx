@@ -245,7 +245,7 @@ export function ItemDetailView({
         {item.type === "order" && (
           <Payments itemId={item.id} payments={payments} none={pays.data?.none ?? null} tz={tz} />
         )}
-        {item.type === "order" && <AgentPayments payments={pays.data?.agent_payments ?? []} tz={tz} />}
+        {item.type === "order" && <AgentPayments itemId={item.id} payments={pays.data?.agent_payments ?? []} tz={tz} />}
         <Receipts receipts={query.data.receipts ?? []} tz={tz} />
         <Emails mail={query.data.mail ?? []} tz={tz} />
         <CustomerData

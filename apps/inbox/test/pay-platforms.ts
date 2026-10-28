@@ -252,11 +252,12 @@ export function stripePlatform(key: string, base = "https://inbox.example.com") 
       if (agent.down !== null && !charging) return json(STRIPE_API_ERROR, agent.down);
       const [, , , id, verb] = url.pathname.split("/");
       if (method === "GET" && !id) {
-        // Stripe's list, newest first, with no lag behind a write: the account's PaymentIntents since a time.
+        // Stripe's list, newest first, with no lag behind a write: the account's PaymentIntents made between two times.
         const since = Number(url.searchParams.get("created[gte]") ?? 0);
+        const until = Number(url.searchParams.get("created[lte]") ?? Number.POSITIVE_INFINITY);
         const limit = Number(url.searchParams.get("limit") ?? 10);
         const after = url.searchParams.get("starting_after");
-        const all = [...intents.values()].filter((pi) => pi.created >= since).reverse();
+        const all = [...intents.values()].filter((pi) => pi.created >= since && pi.created <= until).reverse();
         const from = after ? all.findIndex((pi) => pi.id === after) + 1 : 0;
         const data = all.slice(from, from + limit);
         return json({ object: "list", data, has_more: from + limit < all.length, url: "/v1/payment_intents" });

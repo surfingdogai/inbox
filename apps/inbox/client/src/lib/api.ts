@@ -386,6 +386,17 @@ export const api = {
     call<TransitionResult>("POST", `/v1/owner/items/${encodeURIComponent(id)}/payments/shop-total`, {
       idempotent: true,
     }),
+  /** Stop waiting for a payment from the customer's assistant that Stripe never answered (ADR-042). */
+  stopWaiting: (id: string, paymentId: string) =>
+    call<{
+      item_id: string;
+      payment_id: string;
+      outcome: "stopped" | "paid" | "processing" | "not_charged";
+      looked_up: boolean;
+    }>("POST", `/v1/owner/items/${encodeURIComponent(id)}/payments/stop-waiting`, {
+      body: { payment_id: paymentId },
+      idempotent: true,
+    }),
   updateConnection: (id: string, body: ConnectionPatch) =>
     call<ConnectionView>("PATCH", `/v1/owner/integrations/${encodeURIComponent(id)}`, { body, idempotent: true }),
   syncConnection: (id: string) =>

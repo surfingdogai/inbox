@@ -101,10 +101,33 @@ const HANDLERS: Readonly<Record<string, { readonly handler: "stripe_spt"; readon
   stripe: { handler: "stripe_spt", psp: "stripe" },
 };
 
-export type AgentPayState = "creating" | "processing" | "paid" | "declined" | "failed" | "cancelled" | "unknown";
+/**
+ * `unresolved`: one the platform never said the outcome of, which the owner stopped waiting for (in
+ * person, once told): kept for the record and still looked up, but it no longer holds the order.
+ */
+export type AgentPayState =
+  | "creating"
+  | "processing"
+  | "paid"
+  | "declined"
+  | "failed"
+  | "cancelled"
+  | "unknown"
+  | "unresolved";
 
 /** The states that hold an order (`agent_payments_live`, less paid): no other token is charged for it meanwhile. */
 const HOLDING: ReadonlySet<AgentPayState> = new Set(["creating", "processing", "unknown"]);
+/**
+ * No attempt of the order in flight, unknown or paid (`agent_payments_live`): an `unresolved` one becomes
+ * one of them only then, its order's id the parameter.
+ */
+const NONE_LIVE =
+  "NOT EXISTS (SELECT 1 FROM agent_payments o WHERE o.item_id = ? AND o.state IN ('creating', 'processing', 'unknown', 'paid'))";
+/**
+ * A connection's attempts: its own, and those of a connection of its kind and mode that is gone (its id,
+ * kind and livemode the parameters). Only one connection of a kind and mode is there at a time.
+ */
+const OWNED = "(connector_id = ? OR (kind = ? AND livemode = ? AND connector_id NOT IN (SELECT id FROM connectors)))";
 
 interface AgentRow {
   readonly id: string;
@@ -175,6 +198,9 @@ function rowOf(r: readonly unknown[]): AgentRow {
 /** When an attempt was last put to the platform. */
 const askedOf = (row: AgentRow) => row.askedAt ?? row.createdAt;
 
+/** What an attempt's charge is looked up by: the inbox's own id for it, between its first ask and its last. */
+const findOf = (row: AgentRow) => ({ ref: row.id, since: row.createdAt, until: askedOf(row) });
+
 /** A platform's words with any token they name taken out: a token is never kept, nor shown to the owner. */
 function withoutToken(text: string): string {
   return text.replace(/\bspt_[A-Za-z0-9_]+/g, "spt_…");
@@ -236,7 +262,26 @@ export interface AgentPaymentView {
   readonly failure: string | null;
   readonly error: string | null;
   readonly note: string | null;
+  /**
+   * The owner may stop waiting for it (`stopWaiting`): the platform never answered and the owner was
+   * told, or the connection it was made through is gone. The order is then offered for payment again.
+   */
+  readonly can_stop_waiting: boolean;
   readonly created_at: number;
+}
+
+/**
+ * What came of the owner's "Stop waiting for this payment": looked up once more first, `paid` (the order
+ * is paid with it), `processing` (on its way at the platform: it still holds the order), `not_charged`
+ * (the platform says it made nothing: the order is free), or `stopped` (none found: kept as unresolved,
+ * still looked up, and the order is offered for payment again).
+ */
+export interface StopWaitingOutcome {
+  readonly item_id: string;
+  readonly payment_id: string;
+  readonly outcome: "stopped" | "paid" | "processing" | "not_charged";
+  /** Whether the platform could be asked first (no connection of its kind and mode left, or a key that may not read it). */
+  readonly looked_up: boolean;
 }
 
 export interface PayOrderRequest {
@@ -719,22 +764,33 @@ export class AgentPayments {
       case "processing":
       case "unknown":
         return { state: "processing", amount: { value: row.amount, currency: row.currency } };
+      // The business stopped waiting for it: never sent again, and the order is open to a new token.
+      case "unresolved":
+        throw new WriteError(
+          "token_used",
+          "The payment platform never said whether this token's payment went through, and the business stopped waiting for it: get a new token for this order, or give your person payment_url.",
+        );
       case "creating": {
         if (row.claimUntil !== null && row.claimUntil > now) throw inProgress(row.claimUntil - now);
-        if (row.connectorId !== conn.id || row.termsSha !== req.termsSha) throw inProgress();
+        if (row.termsSha !== req.termsSha) throw inProgress();
+        // Asked again only through the connection that first asked, with its key: the same account and
+        // the same idempotency key. One that is gone cannot tell: the owner is told (`disconnected`).
+        const own = row.connectorId === conn.id ? conn : await this.host.payConnection(row.connectorId, now);
+        if (!own || !this.takes(own.kind, own.payments)) throw inProgress();
+        // The platform answers the same request under the same key as it did the first, while it keeps
+        // the key: what the first did, or, when it never ran, the charge made now, once.
+        const resend = row.resend && now - row.createdAt < RESEND_MS;
         const claim = randomToken(12);
         const taken = await this.db.client.query({
-          sql: `UPDATE agent_payments SET claim_until = ?, claimed_by = ?, asked_at = ?, updated_at = ?
+          sql: `UPDATE agent_payments SET claim_until = ?, claimed_by = ?, asked_at = CASE WHEN ? = 1 THEN ? ELSE asked_at END,
+                       updated_at = ?
                  WHERE id = ? AND state = 'creating' AND (claim_until IS NULL OR claim_until < ?)`,
-          params: [now + CLAIM_MS, claim, now, now, row.id, now],
+          params: [now + CLAIM_MS, claim, resend ? 1 : 0, now, now, row.id, now],
           method: "run",
         });
         if (taken.changes !== 1) throw inProgress();
-        // The platform answers the same request under the same key as it did the first, while it keeps
-        // the key: what the first did, or, when it never ran, the charge made now, once.
-        if (row.resend && now - row.createdAt < RESEND_MS)
-          return this.charge(row, req.token, order, conn, claim, now, true);
-        return this.lookFor(row, order, conn, claim, now);
+        if (resend) return this.charge(row, req.token, order, own, claim, now, true);
+        return this.lookFor(row, order, own, claim, now);
       }
       default:
         throw this.failureError((row.failure ?? "declined") as AgentChargeFailure, order, await this.voice(order));
@@ -755,7 +811,7 @@ export class AgentPayments {
   ): Promise<PayOrderOutcome> {
     let found: AgentCharge | null = null;
     try {
-      found = (await conn.payments.findCharge?.(conn.ctx, { ref: row.id, since: row.createdAt })) ?? null;
+      found = (await conn.payments.findCharge?.(conn.ctx, findOf(row))) ?? null;
     } catch (error) {
       if (!(error instanceof ConnectorError)) throw error;
       return this.held(row, claim, now, error.message);
@@ -1042,15 +1098,18 @@ export class AgentPayments {
    * A charge that went through: the attempt marked paid (a compare-and-set, so a retry and a sync that
    * meet record it once), then the payment on the order, by the connector, which issues the receipt and
    * the customer's email, and closes any link. A payment the order cannot take (it was cancelled or paid
-   * meanwhile) is kept on the attempt and the owner told where to refund it.
+   * meanwhile) is kept on the attempt and the owner told where to refund it. One the owner stopped
+   * waiting for (`unresolved`) is the order's payment only while no other attempt of it is in flight or
+   * paid; beside one, it is kept and the owner told where to refund it. What the owner was told of not
+   * knowing is out of date once it is paid, and goes.
    */
   private async paid(row: AgentRow, conn: PayConnection, charge: AgentCharge, now: number, claim?: string) {
     const amount = charge.amount ?? { value: row.amount, currency: row.currency };
     const marked = await this.db.client.query({
       sql: `UPDATE agent_payments SET state = 'paid', external_id = COALESCE(?, external_id), method = ?, paid_amount = ?,
                    paid_currency = ?, dashboard_url = COALESCE(?, dashboard_url), paid_at = ?, claim_until = NULL, claimed_by = NULL,
-                   checked_at = ?, updated_at = ?
-             WHERE id = ? AND state IN ('creating', 'processing', 'unknown')${claim ? " AND (claimed_by = ? OR claimed_by IS NULL)" : ""}`,
+                   note = NULL, checked_at = ?, updated_at = ?
+             WHERE id = ? AND (state IN ('creating', 'processing', 'unknown') OR (state = 'unresolved' AND ${NONE_LIVE}))${claim ? " AND (claimed_by = ? OR claimed_by IS NULL)" : ""}`,
       params: [
         charge.externalId,
         charge.method?.slice(0, 40) ?? null,
@@ -1061,11 +1120,15 @@ export class AgentPayments {
         now,
         now,
         row.id,
+        row.itemId,
         ...(claim ? [claim] : []),
       ],
       method: "run",
     });
-    if (marked.changes !== 1) return;
+    if (marked.changes !== 1) {
+      if (row.state === "unresolved") await this.paidBeside(row, charge, amount, now);
+      return;
+    }
     await this.record(
       { ...row, state: "paid", externalId: charge.externalId ?? row.externalId, method: charge.method ?? null },
       conn.id,
@@ -1109,21 +1172,57 @@ export class AgentPayments {
     const fresh = await this.row(row.id);
     const where = fresh?.dashboardUrl ? ` ${fresh.dashboardUrl}` : "";
     const note = `Paid by the customer's assistant after the order could no longer take it: refund it in ${provider} if it is not wanted.`;
+    // Once: an attempt's payment goes on its order or here, never both (an earlier note of not knowing is replaced).
     const updated = await this.db.client.query({
-      sql: "UPDATE agent_payments SET note = ?, recorded_at = ?, updated_at = ? WHERE id = ? AND note IS NULL",
+      sql: "UPDATE agent_payments SET note = ?, recorded_at = ?, updated_at = ? WHERE id = ? AND recorded_at IS NULL",
       params: [note, now, now, row.id],
       method: "run",
     });
     if (updated.changes !== 1) return;
-    const [item] = await this.db.orm.select().from(items).where(eq(items.id, row.itemId));
-    if (!item) return;
-    await appendThreadEntry(
-      this.db,
-      connectorCaller(row.connectorId, now),
-      rowToItem(item),
-      `${note}${where}`.slice(0, 1000),
-      "note",
+    await this.tellOwner(row.itemId, row.connectorId, `${note}${where}`, now);
+  }
+
+  /**
+   * A payment the owner stopped waiting for, which went through after all while another attempt of the
+   * order was in flight or paid: it cannot be the order's, so it is kept, and the owner told where to
+   * refund it. Looked up no more.
+   */
+  private async paidBeside(row: AgentRow, charge: AgentCharge, amount: Money, now: number): Promise<void> {
+    const provider = providerOf(row.kind);
+    const note = `Paid by the customer's assistant after you stopped waiting for it, beside another payment for this order: refund it in ${provider} if it is not wanted.`;
+    const updated = await this.db.client.query({
+      sql: `UPDATE agent_payments SET external_id = COALESCE(?, external_id), method = ?, paid_amount = ?, paid_currency = ?,
+                   dashboard_url = COALESCE(?, dashboard_url), paid_at = ?, note = ?, recorded_at = ?, checked_at = ?, updated_at = ?
+             WHERE id = ? AND state = 'unresolved' AND recorded_at IS NULL`,
+      params: [
+        charge.externalId,
+        charge.method?.slice(0, 40) ?? null,
+        amount.value,
+        amount.currency,
+        charge.dashboardUrl?.slice(0, 500) ?? null,
+        now,
+        note,
+        now,
+        now,
+        now,
+        row.id,
+      ],
+      method: "run",
+    });
+    if (updated.changes !== 1) return;
+    await this.tellOwner(
+      row.itemId,
+      row.connectorId,
+      `${note}${charge.dashboardUrl ? ` ${charge.dashboardUrl}` : ""}`,
+      now,
     );
+  }
+
+  /** A line on the order's thread for the owner, from the connection. */
+  private async tellOwner(itemId: string, connectorId: string, text: string, now: number): Promise<void> {
+    const [item] = await this.db.orm.select().from(items).where(eq(items.id, itemId));
+    if (!item) return;
+    await appendThreadEntry(this.db, connectorCaller(connectorId, now), rowToItem(item), text.slice(0, 1000), "note");
   }
 
   private async settleRow(
@@ -1137,13 +1236,15 @@ export class AgentPayments {
       readonly failure?: string;
       readonly lastError?: string | null;
     },
+    /** Only from these states: a lookup never undoes what another settled meanwhile. */
+    from?: readonly AgentPayState[],
   ): Promise<void> {
     await this.db.client.query({
       sql: `UPDATE agent_payments SET state = ?, external_id = COALESCE(?, external_id), dashboard_url = COALESCE(?, dashboard_url),
                    failure = COALESCE(?, failure), last_error = COALESCE(?, last_error),
                    last_error_at = CASE WHEN ? IS NULL THEN last_error_at ELSE ? END,
                    claim_until = NULL, claimed_by = NULL, checked_at = ?, updated_at = ?
-             WHERE id = ?${claim ? " AND claimed_by = ?" : ""}`,
+             WHERE id = ?${claim ? " AND claimed_by = ?" : ""}${from ? ` AND state IN (${from.map(() => "?").join(", ")})` : ""}`,
       params: [
         to.state,
         to.externalId ?? null,
@@ -1156,6 +1257,7 @@ export class AgentPayments {
         now,
         id,
         ...(claim ? [claim] : []),
+        ...(from ?? []),
       ],
       method: "run",
     });
@@ -1168,13 +1270,16 @@ export class AgentPayments {
    * until it says, and one its card holder never confirmed stopped; paid ones not yet on their order,
    * recorded; an attempt the platform never answered, looked up by the inbox's own id, said to the owner
    * after a day, and still looked up: never let go as made of nothing. Answers how many calls it made.
+   * The connection's own attempts, and those of one of its kind and mode that is gone (disconnected,
+   * then connected again): found with this key, one is this connection's from then on.
    */
   async settle(conn: PayConnection, now: number): Promise<number> {
     const read = conn.payments.agentCharge;
     let calls = 0;
+    const owned = [conn.id, conn.kind, conn.mode === "live" ? 1 : 0];
     const { rows: unrecorded } = await this.db.client.query({
-      sql: `SELECT ${COLUMNS} FROM agent_payments WHERE connector_id = ? AND state = 'paid' AND recorded_at IS NULL LIMIT 5`,
-      params: [conn.id],
+      sql: `SELECT ${COLUMNS} FROM agent_payments WHERE ${OWNED} AND state = 'paid' AND recorded_at IS NULL LIMIT 5`,
+      params: owned,
       method: "all",
     });
     for (const r of unrecorded.map(rowOf)) {
@@ -1183,10 +1288,10 @@ export class AgentPayments {
     if (!read) return calls;
     const { rows: open } = await this.db.client.query({
       sql: `SELECT ${COLUMNS} FROM agent_payments
-             WHERE connector_id = ? AND state IN ('processing', 'unknown') AND external_id IS NOT NULL
+             WHERE ${OWNED} AND state IN ('processing', 'unknown') AND external_id IS NOT NULL
                AND (checked_at IS NULL OR checked_at < CASE WHEN state = 'unknown' THEN ? ELSE ? END)
              ORDER BY checked_at LIMIT ?`,
-      params: [conn.id, now - UNKNOWN_EVERY_MS, now - CHECK_EVERY_MS, SETTLE_PER_RUN],
+      params: [...owned, now - UNKNOWN_EVERY_MS, now - CHECK_EVERY_MS, SETTLE_PER_RUN],
       method: "all",
     });
     for (const r of open.map(rowOf)) {
@@ -1203,6 +1308,7 @@ export class AgentPayments {
         await this.checkedAt(r.id, now);
         continue;
       }
+      if (r.connectorId !== conn.id) await this.adopt(r, conn, now);
       const stopped = charge.status === "requires_action" && now - askedOf(r) > ACTION_MS && calls < SETTLE_PER_RUN;
       if (stopped) {
         calls++;
@@ -1224,21 +1330,22 @@ export class AgentPayments {
       }
     }
     // An attempt the platform never answered: looked up by our own id and settled as it stands when
-    // found. Not found, it holds the order still: the platform may yet reconcile a charge of it.
+    // found. Not found, it holds the order still: the platform may yet reconcile a charge of it. One the
+    // owner stopped waiting for is looked up too, so a charge found late is recorded or refunded.
     if (conn.payments.findCharge) {
       const { rows: unanswered } = await this.db.client.query({
         sql: `SELECT ${COLUMNS} FROM agent_payments
-               WHERE connector_id = ? AND state IN ('creating', 'unknown') AND external_id IS NULL
+               WHERE ${OWNED} AND state IN ('creating', 'unknown', 'unresolved') AND external_id IS NULL
                  AND (claim_until IS NULL OR claim_until < ?) AND COALESCE(asked_at, created_at) < ? AND created_at > ?
-                 AND (checked_at IS NULL OR checked_at < CASE WHEN state = 'unknown' THEN ? ELSE ? END)
+                 AND (checked_at IS NULL OR checked_at < CASE WHEN state = 'creating' THEN ? ELSE ? END)
                ORDER BY COALESCE(checked_at, 0), COALESCE(asked_at, created_at) LIMIT ?`,
         params: [
-          conn.id,
+          ...owned,
           now,
           now - LOOK_AFTER_MS,
           now - LOOK_FOR_MS,
-          now - UNKNOWN_EVERY_MS,
           now - CHECK_EVERY_MS,
+          now - UNKNOWN_EVERY_MS,
           SETTLE_PER_RUN,
         ],
         method: "all",
@@ -1252,17 +1359,17 @@ export class AgentPayments {
     // An attempt nobody heard back about for a day: unknown, still holding the order and still looked
     // up, and the owner told where to look, by the id every payment of it carries.
     const { rows: flagged } = await this.db.client.query({
-      sql: `SELECT ${COLUMNS} FROM agent_payments WHERE connector_id = ?
+      sql: `SELECT ${COLUMNS} FROM agent_payments WHERE ${OWNED}
                AND ((state = 'creating' AND created_at < ?) OR (state = 'processing' AND created_at < ?))
                AND (claim_until IS NULL OR claim_until < ?) LIMIT 5`,
-      params: [conn.id, now - FLAG_MS, now - FLAG_PROCESSING_MS, now],
+      params: [...owned, now - FLAG_MS, now - FLAG_PROCESSING_MS, now],
       method: "all",
     });
     for (const r of flagged.map(rowOf)) {
       const provider = providerOf(r.kind);
       const note =
         r.externalId === null
-          ? `${provider} never said whether this payment went through, and has none for it yet: look for a payment with sdi_pay ${r.id} in ${provider}. The order is not offered for payment again until there is an answer.`
+          ? `${provider} never said whether this payment went through, and has none for it yet: look for a payment with sdi_pay ${r.id} in ${provider}. The order is not offered for payment again until there is an answer, or until you stop waiting for it.`
           : `${provider} never said whether this payment went through: check it there.`;
       const changed = await this.db.client.query({
         sql: `UPDATE agent_payments SET state = 'unknown', note = ?, updated_at = ? WHERE id = ? AND state IN ('creating', 'processing')`,
@@ -1277,7 +1384,7 @@ export class AgentPayments {
           connectorCaller(conn.id, now),
           rowToItem(item),
           r.externalId === null
-            ? `A payment from the customer's assistant for this order has had no answer from ${provider} for a day. Look for a payment with sdi_pay ${r.id} in ${provider}: until there is an answer, the order is not offered for payment again.`
+            ? `A payment from the customer's assistant for this order has had no answer from ${provider} for a day. Look for a payment with sdi_pay ${r.id} in ${provider}: until there is an answer, or until you stop waiting for it on the order, the order is not offered for payment again.`
             : `A payment from the customer's assistant for this order did not finish. Check it in ${provider}.`,
           "note",
         );
@@ -1308,7 +1415,7 @@ export class AgentPayments {
   private async lookUp(conn: PayConnection, row: AgentRow, now: number): Promise<void> {
     let found: AgentCharge | null;
     try {
-      found = (await conn.payments.findCharge?.(conn.ctx, { ref: row.id, since: row.createdAt })) ?? null;
+      found = (await conn.payments.findCharge?.(conn.ctx, findOf(row))) ?? null;
     } catch (error) {
       if (!(error instanceof ConnectorError)) throw error;
       await this.checkedAt(row.id, now);
@@ -1318,29 +1425,58 @@ export class AgentPayments {
       await this.checkedAt(row.id, now);
       return;
     }
+    await this.settleFound(conn, row, found, now);
+  }
+
+  /**
+   * What a lookup found of an attempt nobody heard back about, recorded as it stands, by the connection
+   * that found it. On its way, or waiting on its card holder, it is read back until the platform says;
+   * one the owner stopped waiting for holds its order again so only while nothing else does.
+   */
+  private async settleFound(conn: PayConnection, row: AgentRow, found: AgentCharge, now: number): Promise<void> {
+    if (row.connectorId !== conn.id) await this.adopt(row, conn, now);
     switch (found.status) {
       case "succeeded":
         await this.paid(row, conn, found, now);
         return;
-      // On its way, or waiting on its card holder: read back until the platform says.
       case "processing":
-      case "requires_action":
-        await this.settleRow(row.id, null, now, {
-          state: "processing",
-          externalId: found.externalId,
-          dashboardUrl: found.dashboardUrl ?? null,
+      case "requires_action": {
+        const held = await this.db.client.query({
+          sql: `UPDATE agent_payments SET state = 'processing', external_id = COALESCE(?, external_id),
+                       dashboard_url = COALESCE(?, dashboard_url), claim_until = NULL, claimed_by = NULL, checked_at = ?, updated_at = ?
+                 WHERE id = ? AND (state IN ('creating', 'unknown') OR (state = 'unresolved' AND ${NONE_LIVE}))`,
+          params: [found.externalId, found.dashboardUrl ?? null, now, now, row.id, row.itemId],
+          method: "run",
         });
+        if (held.changes !== 1) await this.checkedAt(row.id, now);
         return;
+      }
       default: {
         const code = found.failure?.code ?? "declined";
-        await this.settleRow(row.id, null, now, {
-          state: code === "declined" || code === "authentication_required" ? "declined" : "failed",
-          externalId: found.externalId,
-          failure: code,
-          lastError: [found.failure?.platformCode, found.failure?.message].filter(Boolean).join(": ") || null,
-        });
+        await this.settleRow(
+          row.id,
+          null,
+          now,
+          {
+            state: code === "declined" || code === "authentication_required" ? "declined" : "failed",
+            externalId: found.externalId,
+            failure: code,
+            lastError: [found.failure?.platformCode, found.failure?.message].filter(Boolean).join(": ") || null,
+          },
+          ["creating", "processing", "unknown", "unresolved"],
+        );
       }
     }
+  }
+
+  /** An attempt of a connection that is gone, found with the key of one of its kind and mode now: that one's. */
+  private async adopt(row: AgentRow, conn: PayConnection, now: number): Promise<void> {
+    await this.db.client.query({
+      sql: `UPDATE agent_payments SET connector_id = ?, updated_at = ?
+             WHERE id = ? AND connector_id NOT IN (SELECT id FROM connectors)`,
+      params: [conn.id, now, row.id],
+      method: "run",
+    });
   }
 
   /** A payment that was processing and did not go through: the order says so, as a link's failure does. */
@@ -1382,7 +1518,10 @@ export class AgentPayments {
       params: [itemId],
       method: "all",
     });
-    return rows.map(rowOf).map((r) => ({
+    const all = rows.map(rowOf);
+    const stoppable = new Set<string>();
+    for (const r of all) if (await this.mayStopWaiting(r)) stoppable.add(r.id);
+    return all.map((r) => ({
       id: r.id,
       via: "agent" as const,
       provider: this.host.title?.(r.kind) ?? providerOf(r.kind),
@@ -1398,8 +1537,179 @@ export class AgentPayments {
       failure: r.failure,
       error: r.state === "paid" ? null : r.lastError,
       note: r.note,
+      can_stop_waiting: stoppable.has(r.id),
       created_at: r.createdAt,
     }));
+  }
+
+  /**
+   * Whether the owner may stop waiting for an attempt: one the platform never answered, said to the
+   * owner, with no payment of it at the platform; or one whose connection is gone, which nothing here
+   * can read back. One the platform has a payment of settles there, and the sync reads it.
+   */
+  private async mayStopWaiting(row: AgentRow): Promise<boolean> {
+    if (row.state !== "unknown") return false;
+    return row.externalId === null || !(await this.connectorThere(row.connectorId));
+  }
+
+  private async connectorThere(connectorId: string): Promise<boolean> {
+    const { rows } = await this.db.client.query({
+      sql: "SELECT 1 FROM connectors WHERE id = ?",
+      params: [connectorId],
+      method: "all",
+    });
+    return rows.length > 0;
+  }
+
+  /** The connection of a gone one's kind and mode now, opened, that may look its attempts up. */
+  private async connectionLike(row: AgentRow, now: number): Promise<PayConnection | null> {
+    const { rows } = await this.db.client.query({
+      sql: `SELECT id FROM connectors WHERE kind = ? AND json_extract(config_public, '$.mode') = ?
+              AND json_extract(config_public, '$.disconnectingAt') IS NULL ORDER BY created_at DESC LIMIT 1`,
+      params: [row.kind, row.livemode ? "live" : "test"],
+      method: "all",
+    });
+    const id = rows[0]?.[0];
+    return typeof id === "string" ? this.host.payConnection(id, now) : null;
+  }
+
+  /**
+   * "Stop waiting for this payment": the owner, in person, frees an order an attempt holds that the
+   * platform never answered (said to them after a day, or when its connection went). It is looked up
+   * once more first, with its own connection or, when that is gone, one of its kind and mode now:
+   * found, it is settled as it stands, so a payment that went through pays the order instead. None
+   * found, it is kept as `unresolved` for the record, no longer holding the order, which is offered for
+   * payment again (its link, or another token), and still looked up by the sync, so a payment found
+   * late goes on the order or, when the order was paid another way meanwhile, to the owner to refund.
+   * A platform that cannot be asked just now refuses it: try again shortly. The caller checks the
+   * owner is there in person (`ConnectorCapabilities.stopWaiting`).
+   */
+  async stopWaiting(itemId: string, paymentId: string, now: number): Promise<StopWaitingOutcome> {
+    const row = await this.row(paymentId);
+    if (!row || row.itemId !== itemId) {
+      throw new WriteError("not_found", "no such payment for this order", {
+        details: { item_id: itemId, payment_id: paymentId },
+      });
+    }
+    const provider = providerOf(row.kind);
+    const answer = (outcome: StopWaitingOutcome["outcome"], lookedUp: boolean): StopWaitingOutcome => ({
+      item_id: itemId,
+      payment_id: row.id,
+      outcome,
+      looked_up: lookedUp,
+    });
+    if (!(await this.mayStopWaiting(row))) {
+      throw new WriteError(
+        "wrong_state",
+        row.state === "unknown"
+          ? `${provider} has this payment: it settles there, and the order follows. Check it in ${provider}.`
+          : row.state === "creating" || row.state === "processing"
+            ? `This payment is still being asked about: you can stop waiting for it once you are told ${provider} never answered.`
+            : "This payment is not waiting for an answer.",
+        { details: { state: row.state } },
+      );
+    }
+    const gone = !(await this.connectorThere(row.connectorId));
+    const conn = gone ? await this.connectionLike(row, now) : await this.host.payConnection(row.connectorId, now);
+    let lookedUp = false;
+    if (conn) {
+      let found: AgentCharge | null = null;
+      try {
+        found = row.externalId
+          ? ((await conn.payments.agentCharge?.(conn.ctx, { externalId: row.externalId })) ?? null)
+          : ((await conn.payments.findCharge?.(conn.ctx, findOf(row))) ?? null);
+        lookedUp = Boolean(row.externalId ? conn.payments.agentCharge : conn.payments.findCharge);
+      } catch (error) {
+        if (!(error instanceof ConnectorError)) throw error;
+        // Not now: asked again in a moment. A key that may not read it can tell no more later: the owner's word stands.
+        if (error.code === "unreachable" || error.code === "rate_limited" || error.code === "bad_response") {
+          throw new WriteError(
+            "platform_unavailable",
+            `${provider} could not be asked about this payment just now: try again in a few minutes.`,
+            { details: { retry_after_s: 60 } },
+          );
+        }
+      }
+      if (found && found.livemode === row.livemode) {
+        await this.settleFound(conn, row, found, now);
+        const after = await this.row(row.id);
+        return answer(outcomeOf(after?.state ?? row.state), true);
+      }
+    }
+    const note = `You stopped waiting for ${provider}'s answer about this payment (sdi_pay ${row.id}): the order is offered for payment again. If ${provider} shows it later, it goes on the order, or, if the order was paid another way meanwhile, you are told here to refund it.`;
+    const freed = await this.db.client.query({
+      sql: `UPDATE agent_payments SET state = 'unresolved', note = ?, claim_until = NULL, claimed_by = NULL, checked_at = ?, updated_at = ?
+             WHERE id = ? AND state = 'unknown'`,
+      params: [note, now, now, row.id],
+      method: "run",
+    });
+    if (freed.changes !== 1) {
+      // Settled meanwhile (the sync heard): as it stands now.
+      const after = await this.row(row.id);
+      return answer(outcomeOf(after?.state ?? row.state), lookedUp);
+    }
+    await this.tellOwner(
+      row.itemId,
+      conn?.id ?? row.connectorId,
+      `You stopped waiting for ${provider}'s answer about a payment from the customer's assistant (sdi_pay ${row.id}): the order is offered for payment again. If ${provider} shows that payment later, it goes on the order, or, if the order was paid another way meanwhile, you are told here to refund it.`,
+      now,
+    );
+    return answer("stopped", lookedUp);
+  }
+
+  /**
+   * A payment connection going (its disconnect finishing): its attempts nobody heard back about are
+   * looked up one last time with its key, and those still not known are said to the owner, by the id to
+   * look for, as `unknown`: nothing here can read them back now, so the owner may stop waiting for them.
+   */
+  async disconnected(connectorId: string, now: number): Promise<void> {
+    const { rows } = await this.db.client.query({
+      sql: `SELECT ${COLUMNS} FROM agent_payments WHERE connector_id = ? AND state IN ('creating', 'processing', 'unknown') LIMIT 50`,
+      params: [connectorId],
+      method: "all",
+    });
+    if (rows.length === 0) return;
+    const conn = await this.host.payConnection(connectorId, now);
+    for (const r of rows.map(rowOf)) {
+      if (conn) {
+        try {
+          let found = r.externalId
+            ? ((await conn.payments.agentCharge?.(conn.ctx, { externalId: r.externalId })) ?? null)
+            : ((await conn.payments.findCharge?.(conn.ctx, findOf(r))) ?? null);
+          // Waiting on its card holder, which nothing here would stop after this: stopped now.
+          if (found?.status === "requires_action" && found.externalId) {
+            await conn.payments.cancelCharge?.(conn.ctx, { externalId: found.externalId });
+            found = (await conn.payments.agentCharge?.(conn.ctx, { externalId: found.externalId })) ?? found;
+          }
+          if (
+            found &&
+            found.livemode === r.livemode &&
+            found.status !== "processing" &&
+            found.status !== "requires_action"
+          ) {
+            await this.settleFound(conn, r, found, now);
+            continue;
+          }
+        } catch (error) {
+          if (!(error instanceof ConnectorError)) throw error;
+        }
+      }
+      const provider = providerOf(r.kind);
+      const look = r.externalId === null ? `look for a payment with sdi_pay ${r.id}` : `check payment ${r.externalId}`;
+      const note = `${provider} was disconnected before it said whether this payment went through: ${look} in ${provider}. The order is not offered for payment again until you stop waiting for it.`;
+      const changed = await this.db.client.query({
+        sql: `UPDATE agent_payments SET state = 'unknown', note = ?, updated_at = ? WHERE id = ? AND state IN ('creating', 'processing', 'unknown')`,
+        params: [note, now, r.id],
+        method: "run",
+      });
+      if (changed.changes !== 1) continue;
+      await this.tellOwner(
+        r.itemId,
+        connectorId,
+        `${provider} was disconnected before it said whether a payment from the customer's assistant for this order went through. ${look[0]?.toUpperCase()}${look.slice(1)} in ${provider}: until you stop waiting for it on the order, the order is not offered for payment again.`,
+        now,
+      );
+    }
   }
 
   /* --- rows ------------------------------------------------------------------------ */
@@ -1467,6 +1777,14 @@ export class AgentPayments {
       createdAt: Number(r[5] ?? 0),
     };
   }
+}
+
+/** What came of stopping waiting, by where the attempt stands after its last lookup. */
+function outcomeOf(state: AgentPayState): StopWaitingOutcome["outcome"] {
+  if (state === "paid") return "paid";
+  if (state === "creating" || state === "processing" || state === "unknown") return "processing";
+  if (state === "unresolved") return "stopped";
+  return "not_charged";
 }
 
 function unavailable(reason: string, message: string): WriteError {

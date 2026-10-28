@@ -1016,11 +1016,16 @@ export const itemPaymentsSchema = z.object({
         id: z.string(),
         via: z.literal("agent"),
         provider: z.string(),
-        state: z.enum(["creating", "processing", "paid", "declined", "failed", "cancelled", "unknown"]),
+        state: z.enum(["creating", "processing", "paid", "declined", "failed", "cancelled", "unknown", "unresolved"]),
         amount: z.object({ value: z.number().int(), currency: z.string() }),
         payment_id: z.string().nullable(),
         dashboard_url: z.string().nullable().describe("The payment in your own dashboard: where it is refunded."),
         failure: z.string().nullable(),
+        can_stop_waiting: z
+          .boolean()
+          .describe(
+            "Stripe never answered it and you were told, or its connection is gone: you may stop waiting for it (POST /v1/owner/items/{id}/payments/stop-waiting).",
+          ),
       }),
     )
     .optional()
@@ -1034,6 +1039,17 @@ export const itemPaymentsSchema = z.object({
   link_is_ours: z
     .boolean()
     .describe("The order's paymentUrl is one of these links (the platform's), not one the owner gave"),
+});
+
+export const stopWaitingSchema = z.object({
+  item_id: z.string(),
+  payment_id: z.string(),
+  outcome: z
+    .enum(["stopped", "paid", "processing", "not_charged"])
+    .describe(
+      "Looked up once more first: paid (it went through, and the order is paid), processing (on its way at Stripe: the order still waits for it), not_charged (Stripe made nothing: the order is free), or stopped (none found: kept for the record and still looked up, and the order is offered for payment again)",
+    ),
+  looked_up: z.boolean().describe("Whether Stripe could be asked first"),
 });
 
 export const integrationsSchema = z.object({

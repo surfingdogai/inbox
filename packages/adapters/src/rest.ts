@@ -95,6 +95,9 @@ const json = (description: string, schema?: z.ZodType, status: 200 | 201 = 200) 
   422: { description: "Invalid input: the problem document names the fields to fix." },
 });
 
+/** The attempt the owner stops waiting for, as `agent_payments` names it (ADR-042). */
+const stopWaitingInput = z.object({ payment_id: z.string().min(1).max(64) });
+
 /** Every owner operation needs an owner key, an integration key, an OAuth token or the owner app's session. */
 const OWNER_SECURITY = [{ ownerKey: [] }];
 
@@ -1044,6 +1047,25 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
     async (c) => {
       const id = String(c.req.param("id"));
       return once(c, "payments.shop_total", { item_id: id }, (caller) => caps.connectors.proposeShopTotal(caller, id));
+    },
+  );
+  app.post(
+    "/items/:id/payments/stop-waiting",
+    owner({
+      tags: ["owner"],
+      summary: "Stop waiting for a payment from the customer's assistant that Stripe never answered",
+      description:
+        "For an attempt in agent_payments with can_stop_waiting: Stripe never said whether it went through, and you were told on the order (or its connection is gone). Look for it in Stripe first, by its sdi_pay id. It is looked up once more: a payment found pays the order (paid) or keeps it waiting (processing). None found, it is kept for the record and still looked up, and the order is offered for payment again, its link or another token (stopped); if Stripe shows that payment later, it goes on the order, or you are told to refund it. 503 platform_unavailable: Stripe could not be asked just now, try again shortly. The owner's, in person: the owner's AI and an integration key are refused (403).",
+      responses: json("Stopped waiting", R.stopWaitingSchema),
+      write: true,
+    }),
+    validator("json", stopWaitingInput, hook),
+    async (c) => {
+      const id = String(c.req.param("id"));
+      const paymentId = c.req.valid("json").payment_id;
+      return once(c, "payments.stop_waiting", { item_id: id, payment_id: paymentId }, (caller) =>
+        caps.connectors.stopWaiting(caller, id, paymentId),
+      );
     },
   );
 
