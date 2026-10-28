@@ -1,9 +1,11 @@
 import {
+  ATTRIBUTES_VOCABULARY,
   closureDaysSchema,
   type ItemType,
   kindCategories,
   type PayTo,
   type Profile,
+  type ProfileSource,
   profileHoursSchema,
   profileSchema,
   profileServiceSchema,
@@ -12,9 +14,11 @@ import {
 } from "@surfingdog/spec";
 import type { z } from "zod";
 import type { Db } from "../db";
-import type { Settings } from "../settings/schema";
+import { methodsOf } from "../kitchen/settings";
+import { menuOf } from "../menu/schema";
+import type { ListingField, Settings, SetupSource } from "../settings/schema";
 import { lodgingProfile } from "../stays/public";
-import { listProperties, readSetup } from "../stays/store";
+import { listProperties, type PropertySetup, readSetup } from "../stays/store";
 import { dateLocaliser, readClosures } from "./closures";
 
 /**
@@ -127,8 +131,11 @@ export async function offeredItemTypes(
  * weekly hours and the closures that have not ended, up to thirty active services by name, how it is paid
  * (`settings.payments`), the kind of business it runs (`directory.kind`, in its categories: the kind's category
  * slugs and its name as a free tag, after the owner's own) and the currencies it takes (its own first, then the
- * others it named; only when it named others).
- * Never a contact email, a phone or the legal address. Each field is checked alone against the
+ * others it named; only when it named others). Since spec 0.14 also its listing (`directory`: its kind of place,
+ * cuisines, how it takes tables, price band and the features it ticked), the attributes the inbox can vouch for from
+ * what it holds (`heldAttributes`), and where each field came from (`profileSources`).
+ * Never a contact email, a phone or the legal address, and nothing about a customer, an item, a person who works
+ * there or the stock (`directory-profile-privacy.test.ts`). Each field is checked alone against the
  * spec's profile, as a network checks it, and one it would reject is left out on its own.
  */
 export async function directoryProfile(
@@ -148,6 +155,11 @@ export async function directoryProfile(
     readonly currencies?: readonly string[] | undefined;
     /** Attributes of a network's vocabulary the business declares (ADR-039: free estimates, emergencies). */
     readonly attributes?: Readonly<Record<string, true>> | undefined;
+    /**
+     * The rest of the settings, for what the inbox derives (a kitchen's ways of serving, its delivery zones) and
+     * where each field came from (`setup.sources`, `directory.saved`). Absent, neither is published.
+     */
+    readonly settings?: Settings | undefined;
     readonly now: number;
   },
 ): Promise<Profile | undefined> {
@@ -171,7 +183,16 @@ export async function directoryProfile(
   );
   if (Object.keys(address).length) fields.address = address;
   if (d.geo) fields.geo = d.geo;
-  if (input.attributes && Object.keys(input.attributes).length) fields.attributes = { ...input.attributes };
+  // The listing (spec 0.14): what agents can match on, as the owner chose it.
+  if (d.placeCategory) {
+    fields.place_category = {
+      primary: d.placeCategory.primary,
+      ...(d.placeCategory.alternates.length ? { alternates: [...d.placeCategory.alternates] } : {}),
+    };
+  }
+  if (d.priceBand !== null) fields.price_band = d.priceBand;
+  if (d.cuisines.length) fields.cuisines = [...d.cuisines];
+  if (d.reservations !== null) fields.reservations = d.reservations;
   const hours = await publicHours(db, input.timezone, input.now);
   if (hours) fields.hours = hours;
   const services = await publicServices(db);
@@ -186,11 +207,18 @@ export async function directoryProfile(
   if (own && others.length) fields.currencies = [...new Set([own, ...others])].slice(0, 5);
   // A place to stay that takes stays here (ADR-037 §6.3): its kind, how it confirms, how soon it answers.
   const types = await offeredItemTypes(db);
+  let stay: PropertySetup | null = null;
   if (types.includes("stay")) {
     const property = (await listProperties(db, { active: true }))[0];
-    const setup = property ? await readSetup(db, property.id) : null;
-    if (setup) fields.lodging = lodgingProfile(setup);
+    stay = property ? await readSetup(db, property.id) : null;
+    if (stay) fields.lodging = lodgingProfile(stay);
   }
+  const attributes = orderedAttributes([
+    ...Object.keys(input.attributes ?? {}),
+    ...d.features,
+    ...(input.settings ? await heldAttributes(db, input.settings, stay) : []),
+  ]);
+  if (attributes.length) fields.attributes = Object.fromEntries(attributes.map((k) => [k, true]));
 
   const shape = profileSchema.shape as unknown as Record<string, z.ZodType>;
   const kept: Record<string, unknown> = {};
@@ -198,8 +226,105 @@ export async function directoryProfile(
     const checked = shape[key]?.safeParse(value);
     if (checked?.success) kept[key] = checked.data;
   }
+  if (input.settings) {
+    const sources = profileSources(input.settings, Object.keys(kept));
+    const checked = profileSchema.shape.sources.safeParse(sources);
+    if (checked.success && checked.data && Object.keys(checked.data).length) kept.sources = checked.data;
+  }
   const profile = profileSchema.safeParse(kept);
   return profile.success ? profile.data : undefined;
+}
+
+/** Attribute keys once each, in the vocabulary's order, so the profile reads the same however they were gathered. */
+function orderedAttributes(keys: readonly string[]): string[] {
+  const wanted = new Set(keys);
+  const known = ATTRIBUTES_VOCABULARY.keys.map((k) => k.key).filter((k) => wanted.has(k));
+  return [...known, ...[...wanted].filter((k) => !known.includes(k)).sort()];
+}
+
+/**
+ * The attributes the inbox can vouch for from what it holds (spec 0.13), never from what it guesses:
+ *
+ * - food: a dish on the menu, on sale and listed, tagged vegan gives `vegan_options` (and `vegetarian_options`, which
+ *   a vegan dish is), tagged vegetarian gives `vegetarian_options`, and tagged gluten-free gives
+ *   `gluten_free_options` only when a person at the business confirmed that dish's allergens. Halal and kosher are
+ *   never derived: they need a proof. A kitchen that takes orders for a time gives `pickup` and `takeaway` for
+ *   collection, `delivery` only with a delivery zone to deliver to, and `on_site` for eating in.
+ * - stays: `pets_welcome` when the property takes pets or offers a pet as an extra; `parking`, `wifi` and
+ *   `air_conditioning` when a room it offers has them, or (parking) an extra offers it.
+ */
+export async function heldAttributes(db: Db, settings: Settings, stay: PropertySetup | null): Promise<string[]> {
+  const out = new Set<string>();
+  const { rows } = await db.client.query({
+    sql: "SELECT menu FROM products WHERE active = 1 AND listed = 1 AND menu IS NOT NULL",
+    params: [],
+    method: "all",
+  });
+  for (const r of rows) {
+    const menu = menuOf(r[0]);
+    if (!menu) continue;
+    if (menu.dietary.includes("vegan")) out.add("vegan_options").add("vegetarian_options");
+    if (menu.dietary.includes("vegetarian")) out.add("vegetarian_options");
+    if (menu.dietary.includes("gluten_free") && menu.allergens.status === "confirmed") out.add("gluten_free_options");
+  }
+  const k = settings.kitchen;
+  if (k.enabled) {
+    for (const m of methodsOf(k, settings.area.zones.length)) {
+      if (m === "pickup") out.add("pickup").add("takeaway");
+      else if (m === "delivery") out.add("delivery");
+      else out.add("on_site");
+    }
+  }
+  if (stay) {
+    const rooms = stay.rooms.filter((r) => r.active && r.offered);
+    const amenities = new Set(rooms.flatMap((r) => r.amenities));
+    const extras = new Set(stay.extras.filter((e) => e.active).map((e) => e.item));
+    if (stay.property.pets.allowed === "yes" || extras.has("pet")) out.add("pets_welcome");
+    if (amenities.has("parking") || extras.has("parking")) out.add("parking");
+    if (amenities.has("wifi")) out.add("wifi");
+    if (amenities.has("air_conditioning")) out.add("air_conditioning");
+  }
+  return [...out];
+}
+
+/** Where each profile field is read from in the settings: the setup plan's fields (`setup.sources`), and its save. */
+const SOURCE_OF: Readonly<Record<string, { readonly setup: readonly string[]; readonly saved?: ListingField }>> = {
+  name: { setup: ["profile.name"] },
+  languages: { setup: ["profile.languages"] },
+  description: { setup: ["directory.description"], saved: "description" },
+  categories: { setup: ["directory.categories"] },
+  address: { setup: ["directory.address"] },
+  geo: { setup: ["directory.geo"] },
+  url: { setup: ["directory.url"] },
+  hours: { setup: ["hours"] },
+  services: { setup: ["services"] },
+  payments: { setup: ["payments"] },
+  place_category: { setup: ["directory.placeCategory"], saved: "placeCategory" },
+  cuisines: { setup: ["directory.cuisines"], saved: "cuisines" },
+  reservations: { setup: ["directory.reservations"], saved: "reservations" },
+  price_band: { setup: ["directory.priceBand"], saved: "priceBand" },
+};
+
+/**
+ * Where each field the profile publishes came from (`profile.sources`, spec 0.13): read from the business's own
+ * website by a setup plan and not yet checked by the owner (`via: website`, the page and when it was read), or said
+ * by the owner (`via: business`, when they saved it, `directory.saved`). A field with neither names no source, and is
+ * the business's own word.
+ */
+export function profileSources(settings: Settings, fields: readonly string[]): Record<string, ProfileSource> {
+  const out: Record<string, ProfileSource> = {};
+  for (const field of fields) {
+    const of = SOURCE_OF[field];
+    if (!of) continue;
+    const read = of.setup.map((f) => settings.setup.sources[f]).find((s): s is SetupSource => s !== undefined);
+    const saved = of.saved ? settings.directory.saved[of.saved] : undefined;
+    if (read && read.confidence !== "confirmed") {
+      out[field] = { via: "website", url: read.source_url, at: read.checked_at };
+    } else if (saved) {
+      out[field] = { via: "business", at: saved };
+    }
+  }
+  return out;
 }
 
 /**

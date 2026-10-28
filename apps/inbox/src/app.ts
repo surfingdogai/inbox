@@ -709,6 +709,8 @@ export function createInbox(deps: AppDeps): Inbox {
         currencies: settings.payments.currencies,
         // What a trade says of itself as a network's attributes (ADR-039): free estimates, emergencies.
         attributes: workAttributes(settings),
+        // What the inbox vouches for from what it holds, and where each field came from (spec 0.14).
+        settings,
         now: deps.now ? deps.now() : Date.now(),
       }),
       receiptKeys: jwks.keys as unknown as Record<string, unknown>[],
