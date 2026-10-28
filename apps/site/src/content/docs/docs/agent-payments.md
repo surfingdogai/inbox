@@ -40,6 +40,7 @@ It works where Stripe offers it: the US, Canada, the UK, Switzerland, Norway and
 - On the connection: whether it is on, and how many orders assistants paid this way.
 - On each order: **Paid by the customer's assistant**, with the amount and how it was paid, and **Refund in Stripe**, which opens the payment's own page there. A payment that did not go through is one quiet line: nothing was charged.
 - If a payment arrives for an order that was cancelled in the meantime, it is kept, and a note on the order tells you to refund it in Stripe.
+- If Stripe never says whether a payment went through (an outage), the order waits for it, so the customer is never charged twice. After a day, a note on the order tells you what to look for in Stripe (`sdi_pay`). If Stripe has no such payment, **Stop waiting for this payment**: Stripe is asked once more, and the order is offered for payment again. If that payment shows up later, it goes on the order, or, if the order was paid another way, a note tells you to refund it.
 - If your key loses the permission, your Inbox switches agent payments off itself and tells you why.
 
 ## For agents
@@ -93,6 +94,10 @@ curl -X PATCH https://<your-instance>/v1/owner/integrations/<id> \
 
 # What assistants paid on an order
 curl https://<your-instance>/v1/owner/items/<id>/payments -H "authorization: Bearer sdi_own_…"
+
+# Stop waiting for one Stripe never answered (the owner in person, signed in)
+curl -X POST https://<your-instance>/v1/owner/items/<id>/payments/stop-waiting \
+  -H 'content-type: application/json' -d '{ "payment_id": "<agent_payments[].id>" }'
 ```
 
 A missing permission comes back in `agent_pay.missing` (`["PaymentIntents: Write"]`), and nothing is switched on. While the switch is on, assistants find it on the order itself (`payment.agent`) and as `pay_order` on your Inbox's MCP server. Your business profile does not list it as ACP: this is not an ACP checkout, and a platform looking for one would find nothing to pay.

@@ -159,15 +159,18 @@ link follow from the existing paths.
     key (the token spent, revoked, expired) means the first ask made nothing, so it is settled as one.
   - **A 500**, or a 400 `idempotency_error`: Stripe answers the same to every retry with the key, so
     nothing is sent again (`agent_payments.resend` is 0), and never under another key either, as Stripe
-    advises for an outcome it calls indeterminate. The retry looks the attempt up instead.
+    advises for an outcome it calls indeterminate. The retry looks the attempt up instead. A 424 (a
+    dependency outside Stripe failed) is taken as a 500, never as a refusal that made nothing.
   - **A refusal before Stripe ran the request** (the key, its permission) when sending it again, or an
     answer that cannot be read: it says nothing of what the first ask did, so the attempt holds the
     order (`in_progress`) and is looked up.
 - **One per request.** The caller's `idempotency_key` replays the stored answer; the stored request
   holds the token's hash, never the token.
 - **Never taken for nothing.** An attempt Stripe never answered is looked up by the inbox's own id for
-  it (`metadata[sdi_pay]`) with Stripe's list of the account's PaymentIntents since a little before the
-  first ask, newest first, which has no lag behind a write, and the one found is read again by its id.
+  it (`metadata[sdi_pay]`) with Stripe's list of the account's PaymentIntents made between a little
+  before its first ask and a little after its last (`created[gte]`, `created[lte]`, five minutes either
+  side), newest first, which has no lag behind a write, and the one found is read again by its id. The
+  upper bound keeps a busy account's later payments from pushing it past the ten pages read.
   Never with Stripe's search: it trails a write by up to a minute, longer in an outage, which is when
   answers are lost. Found, the attempt is settled as it stands, so a charge whose answer was lost is
   recorded, never made twice. A PaymentIntent waiting for a payment method with no error on it (never
@@ -180,8 +183,27 @@ link follow from the existing paths.
 A day after its first ask, an attempt still `creating`, or still `processing` after a day, becomes
 `unknown`, and the owner is told on the order, with the id to look for in Stripe (`sdi_pay`); `unknown`
 still holds the order and is still looked up, so a charge Stripe reconciles later is recorded. The owner
-can settle the order themselves (record the payment, or cancel it). Letting the customer pay again once
-the owner finds no charge in Stripe is not a control here yet (Not decided here).
+can settle the order themselves (record the payment, or cancel it), or free it:
+
+- **Stop waiting for this payment.** On the order in the app, for an `unknown` attempt with no
+  PaymentIntent known (or one whose connection is gone), the owner in person, never their AI or a key
+  (`POST /v1/owner/items/:id/payments/stop-waiting`). The attempt is looked up once more first, with
+  its own connection: found, it is settled as it stands, so one that went through pays the order instead
+  (`paid`), one on its way keeps it (`processing`), one Stripe made nothing of frees it (`not_charged`).
+  Stripe not answering just now refuses it (`503`, try again); a key that may not read the list cannot
+  tell more later, so the owner's word stands. None found, the attempt becomes `unresolved`: kept for
+  the record, no longer holding the order, which is offered for payment again (its link, or another
+  token; the old token is never sent again, `token_used`), and still looked up hourly for the rest of
+  the week. A charge found then goes on the order when nothing else of it is in flight or paid, or,
+  when the order was paid another way meanwhile, is kept with a note on the order to refund it in Stripe
+  (`paidAfter`, or beside another assistant's payment). The owner is told on the order either way.
+- **A connection that goes.** When a Stripe connection's disconnect finishes, its attempts nobody heard
+  back about are looked up one last time with its key (one waiting on its card holder is stopped), and
+  those still not known become `unknown`, with a note on the order saying what to look for: nothing can
+  read them back now, so the owner may stop waiting for them at once. A retry by the assistant is sent
+  again only through the connection that first asked (the same account and key), never another. Once
+  the same account is connected again, the new connection's sync looks up the attempts of a gone
+  connection of its kind and mode as its own, and takes the one it finds.
 
 ### 5. Test keys for test orders
 
@@ -269,7 +291,7 @@ Migration 0034 adds `agent_payments` and changes nothing that exists. An inbox w
 it on writes no row. One row per attempt: the order, the connection (not a foreign key, so the record
 outlives a disconnect), the door, the amount and currency (the inbox's minor units), the mode, the
 `terms_sha` it was charged for, the token's hash, the state (`creating`, `processing`, `paid`, `declined`,
-`failed`, `cancelled`, `unknown`), Stripe's id, method, amount taken and dashboard page, our failure code
+`failed`, `cancelled`, `unknown`, `unresolved`), Stripe's id, method, amount taken and dashboard page, our failure code
 and Stripe's words (with any token they name taken out), a note for the owner, the description the
 charge was first sent with (`title`), whether the same request under its key may still tell what the
 first ask did (`resend`), when it was last asked (`asked_at`), the claim, and when it went on the
@@ -390,13 +412,6 @@ Dashboard: 1 (403 before 400, with the permission set to None) and 2 and 7 (the 
 PaymentIntents: Write). A redirect method needs an agent's platform to make the token.
 
 ## Not decided here
-
-**Letting the customer pay again when Stripe never answered.** An attempt Stripe never answered holds its
-order until Stripe has an answer (§4), and the owner is told after a day. A control for an owner who
-finds no charge in Stripe (its request logs show the request under `sdi-<row id>-pi`) to free the order
-for the link or another token would be the owner's in person, and would keep looking the attempt up, a
-charge found late going to the refund note (`paidAfter`), since the order may be paid another way by
-then. Until then the owner records a payment taken another way, or cancels the order.
 
 **An ACP checkout door** (behind its own switch, off; hosted off while programmes are closed). Whether
 ChatGPT's checkout takes new merchants could not be confirmed, so it waits. Its shape:
