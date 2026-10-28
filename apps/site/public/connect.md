@@ -37,16 +37,29 @@ Below, `<inbox>` is the inbox's own address, such as `inbox.theirdomain.com`.
 - Owner MCP and REST for services, products, opening hours, closed days, rules, settings, items and
   their transitions, and replies.
 - Product feeds: a CSV or Google Merchant XML file at a public URL, imported every six hours.
-- Calendars: iCloud, Fastmail, Nextcloud, any CalDAV calendar, a calendar's private `.ics` link, and
-  Cal.com (Google Calendar where the inbox has a Google client). Busy times there take those times off
+- Calendars: iCloud, Fastmail, Nextcloud, any CalDAV calendar, a calendar's private `.ics` link,
+  Cal.com and Calendly (Google Calendar where the inbox has a Google client; bookings go into Calendly
+  on its paid plans only). Busy times there take those times off
   what is offered, about three months ahead; confirmed bookings are written into the calendar. The
   owner connects one in Settings → Integrations, in person: an AI or an integration key can only
   `list_integrations` and `sync_integration`. See https://surfingdog.ai/docs/calendars/.
 - Payments: the business's own Stripe account (a restricted key) or Mollie account (its API key).
-  Orders the inbox accepts get a link to pay into that account (bookings not yet), and are marked
+  Orders the inbox accepts get a link to pay into that account, and so do a stay's deposit and
+  balance and a table's deposit (other bookings not yet); each is marked
   paid once the platform confirms it; refunds stay in the platform's dashboard. The owner connects it in Settings →
   Integrations, in person; an AI reads an order's links with `list_payments` and records no money.
   See https://surfingdog.ai/docs/payments/.
+- Shops: WooCommerce®, Shopify and Square. Their products come in, and an order the inbox accepts
+  goes into the shop, paid at the shop's own checkout; Square's busy times come in too, and bookings
+  the owner confirms go into it. Property systems: Beds24 and Hostaway (what is free comes in; each
+  stay is written there first). Ordering systems: GloriaFood and Flipdish (the menu, to start from).
+  Job tools: ServiceM8 (requests the owner takes on become jobs). The owner connects each in
+  Settings → Integrations, in person; you see them with `list_integrations`. These, and the
+  calendars above, were built from each one's documentation and tested against a stand-in; not yet
+  run with a real account. Mews, apaleo, Cloudbeds, Smoobu, Toast, Lightspeed, Clover, Deliverect, Jobber, Housecall
+  Pro and Fergus are built and switched off until what each needs is in place: say so, and do not
+  offer them. See https://surfingdog.ai/docs/integrations/. WooCommerce and its associated designs
+  are trademarks of Automattic Inc.
 - The email door: mail sent or forwarded to the inbox's address becomes a message.
 - An idempotency key on every owner write.
 
@@ -56,13 +69,17 @@ work around it in a way that pretends it exists.
 - Recording a booking or an order that happened in another system.
 - Storing another system's id on an inbox item or customer.
 - Create-or-update a product by SKU in one call.
-- Webhooks from other platforms straight into the inbox. Today they go to a bridge (Zapier, Make,
-  n8n), and the bridge calls the inbox.
+- Webhooks from other platforms straight into the inbox, beyond the connections above (each takes
+  its own platform's). Today the rest go to a bridge (Zapier, Make, n8n), and the bridge calls the
+  inbox.
 - Two-way calendar sync: a booking cancelled in Cal.com or a calendar is not cancelled in the inbox.
 - A hosted booking form, and a widget for the business's website.
-- Pay links for bookings (deposits), and refunds made from the inbox.
-- Native connectors for Shopify, WooCommerce and Outlook calendars. They are on the
-  requests board, https://surfingdog.ai/requests, where the person can vote for them.
+- Pay links for booked services, and refunds made from the inbox. (A stay's deposit and balance,
+  and a table's deposit, have links: https://surfingdog.ai/docs/stays/ and
+  https://surfingdog.ai/docs/ordering/#tables.)
+- Signing in with Outlook: an Outlook calendar connects by its published link, busy times only.
+  Systems not listed here are on the requests board, https://surfingdog.ai/requests, where the
+  person can vote for them.
 
 ---
 
@@ -384,6 +401,11 @@ revokes the key in the owner app. Turn the bridge's flow off. Remove test contac
 
 The goal: an agent that asks what the business sells gets the same products and prices as the shop.
 
+**WooCommerce, Shopify or Square: the person connects it instead,** in Settings → Integrations, in
+person (https://surfingdog.ai/docs/integrations/). Its products come in and stay up to date, and
+orders the inbox accepts are paid at the shop's own checkout. Use the routes below only for another
+platform, or when the person does not want to connect the shop.
+
 - **Direction:** shop → inbox. Products, prices, and stock where the source has it.
 - **Speed:** every six hours with a feed. Only when you run it without one.
 - **Key:** none. You do this over the owner MCP.
@@ -432,8 +454,8 @@ The goal: an agent that asks what the business sells gets the same products and 
 **Undo.** `remove_feed {"feed_id": "…"}` takes the feed's products off sale and keeps them. Products
 you made: `archive_product`.
 
-**Optional: inbox orders paid through the shop.** A bridge (recipe 1) that holds the shop's own
-credentials can do this today. First check `list_rules`: a rule that fires `request_payment` on its
+**Optional: inbox orders paid through a shop the inbox does not connect to.** A bridge (recipe 1)
+that holds the shop's own credentials can do this today. First check `list_rules`: a rule that fires `request_payment` on its
 own must stop doing that, or the order is already waiting for payment with no link when the bridge
 tries.
 
@@ -449,7 +471,11 @@ tries.
 Start by agreeing with the person which system is the diary for each person or room: the one that
 decides whether a slot is free.
 
-**Inbox bookings into the calendar the other tools check.** Works today, instantly, through a bridge.
+**Inbox bookings into the calendar the other tools check.** A calendar, Cal.com or Calendly the
+person connects in Settings → Integrations gets them without a bridge
+(https://surfingdog.ai/docs/calendars/), and Share your bookings gives any other tool a private link
+to import (https://surfingdog.ai/docs/connectors/calendar-link/). For anything else, through a
+bridge:
 
 1. Key: `automation`, since the flow only reads bookings. Bridge: recipe 1.
 2. Person, in Settings → Integrations: an endpoint for the flow's URL with the events
@@ -462,11 +488,13 @@ decides whether a slot is free.
 4. Calendly and Cal.com check a connected Google or Outlook calendar for conflicts, so these events
    block time there too. Fresha does the same through its Google sync
    ([help](https://www.fresha.com/help-center/knowledge-base/calendar/101373-sync-your-fresha-calendar)).
-   Calendly has no other way in: it has no API to set busy time
-   ([docs](https://developer.calendly.com/docs/api-guides/view-event-type-and-user-calendar-availability-data)).
+   Calendly has no API to set busy time
+   ([docs](https://developer.calendly.com/docs/api-guides/view-event-type-and-user-calendar-availability-data));
+   a connected Calendly on a paid plan takes the bookings themselves
+   (https://surfingdog.ai/docs/connectors/calendly/).
 
-**Their bookings into the inbox.** There are no busy-time blocks yet, so the inbox cannot see time
-booked elsewhere. What works today:
+**Their bookings into the inbox.** A connected calendar, Cal.com or Calendly takes its busy times
+off what the inbox offers. For a tool the inbox does not connect to (Fresha, say), what works today:
 
 - For a service sold in both places, stop the inbox confirming on its own. `list_rules` shows the
   rules. There may be more than one that confirms bookings. Switch each one off
@@ -480,7 +508,7 @@ booked elsewhere. What works today:
 - Forward the other tool's confirmation emails into the inbox (block E), so they are in one place.
 - In a chat, read the other calendar through your own connector before you confirm anything.
 
-Coming: busy-time blocks, calendar feeds, and recording bookings made elsewhere.
+Coming: recording bookings made elsewhere.
 
 **Test.** Find a free time with `GET https://<inbox>/v1/availability?service_id=…&from=…&to=…`.
 Create a sandbox booking there with `POST /v1/bookings`, the `x-sandbox: 1` header and no contact.

@@ -1,11 +1,15 @@
 ---
-title: WooCommerce
+title: WooCommerce®
 description: Connect your WordPress shop with one press on its own Approve page. Your products and stock come in; orders you accept go into WooCommerce and are paid at your shop's own checkout.
 sidebar:
   order: 1
 ---
 
-Your WooCommerce shop already has your products, your stock, your checkout and your payment methods. Connected, your Inbox uses them: agents see what you sell, and an order you accept goes into WooCommerce, where your customer pays at your own checkout.
+Your WooCommerce® shop already has your products, your stock, your checkout and your payment methods. Connected, your Inbox uses them: agents see what you sell, and an order you accept goes into WooCommerce, where your customer pays at your own checkout.
+
+WooCommerce and its associated designs are trademarks of Automattic Inc.
+
+Built from WooCommerce's documentation and tested against a stand-in; not yet run with a real account.
 
 Settings → Integrations → **WooCommerce** → **Connect your shop**.
 

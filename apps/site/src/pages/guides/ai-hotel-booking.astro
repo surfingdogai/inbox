@@ -1,0 +1,13 @@
+---
+// A topic guide, beside the eight guides and outside their contract: its words are in src/lib/topics.ts.
+import TopicGuide from "../../components/TopicGuide.astro";
+import Layout from "../../layouts/Layout.astro";
+import { topicBySlug, topicLd } from "../../lib/topics";
+
+const t = topicBySlug("ai-hotel-booking");
+const ld = topicLd(t, Astro.site?.toString() ?? "https://surfingdog.ai/");
+---
+
+<Layout title={`${t.title} · Surfing Dog`} description={t.description} type="article" ld={ld}>
+  <TopicGuide topic={t} />
+</Layout>

@@ -163,7 +163,7 @@ export const GUIDES: readonly Guide[] = [
       },
       {
         way: "Your shop platform",
-        what: "Shopify documents agentic storefronts and agent orders; if your result says no checkout, check that `/.well-known/ucp` answers on your shop's own domain. Wix describes agentic commerce on Wix. For WooCommerce, Squarespace, Webflow or GoDaddy, ask the platform, or the maker of your shop plugin, whether it publishes UCP or ACP for your shop.",
+        what: "Shopify documents agentic storefronts and agent orders; if your result says no checkout, check that `/.well-known/ucp` answers on your shop's own domain. Wix describes agentic commerce on Wix. For WooCommerce®, Squarespace, Webflow or GoDaddy, ask the platform, or the maker of your shop plugin, whether it publishes UCP or ACP for your shop.",
         links: [
           {
             label: "Shopify: agentic storefronts",

@@ -18,6 +18,7 @@ import {
 } from "../src/lib/guides";
 import { HOSTED_LINE } from "../src/lib/hosted";
 import { LOCAL_GUIDES, PAGES } from "../src/lib/i18n";
+import { TOPICS } from "../src/lib/topics";
 
 /**
  * The guides at /guides/: every address the network's result pages link to answers, each guide ends
@@ -213,7 +214,7 @@ describe("the guides", () => {
       const p = path.replace(/\?.*$/, "");
       if (proxied.some((r) => r.test(p))) return true;
       const guide = p.match(/^\/guides\/([a-z0-9-]+)\/$/)?.[1];
-      if (guide && PLATFORM_PAGES.some((pp) => pp.slug === guide)) {
+      if (guide && (PLATFORM_PAGES.some((pp) => pp.slug === guide) || TOPICS.some((t) => t.slug === guide))) {
         return !anchor && existsSync(site(`src/pages/guides/${guide}.astro`));
       }
       // The guides that go with the free tools, in English: pages of their own (src/lib/i18n.ts).

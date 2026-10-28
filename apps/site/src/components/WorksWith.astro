@@ -1,0 +1,220 @@
+---
+/**
+ * A quiet row of the systems the inbox works with (src/lib/integrations.ts), each name linked to its
+ * own page (src/lib/platforms.ts), grouped by kind so a line breaks between kinds, with one fine line
+ * under it said of those alone (each built from its platform's documentation and tested against a
+ * stand-in); a row of the payment accounts it is paid into; and a row of the assistants it is reached
+ * from, each linked to its own page. Names only, in one style, and no mark beside any; the credit lines
+ * the names need close it.
+ * `items` narrows the rows, for a business page; `assistants` leaves the last row out; `noted`, the
+ * credit lines its page already gives. The systems row ends with a link to all of them, and what is coming.
+ */
+import { ASSISTANT_LINKS, INTEGRATIONS, type Integration, noticesOf, SYSTEMS, UNTRIED_LINE } from "../lib/integrations";
+import { pageOf, platformHref } from "../lib/platforms";
+
+interface Props {
+  items?: readonly Integration[];
+  assistants?: boolean;
+  /** Credit lines the page already gives nearer the name's first use: not said twice. */
+  noted?: readonly string[];
+  /** The link to every integration, and what is coming (/integrations/): on unless a page has its own. */
+  all?: boolean;
+}
+const { items = INTEGRATIONS, assistants = true, noted = [], all = true } = Astro.props;
+
+const systems = items.filter((i) => SYSTEMS.includes(i.group));
+const payments = items.filter((i) => !SYSTEMS.includes(i.group));
+const groups: Integration[][] = [];
+for (const i of systems) {
+  const last = groups.at(-1);
+  if (last && last[0]?.group === i.group) last.push(i);
+  else groups.push([i]);
+}
+const notices = noticesOf(items).filter((n) => !noted.includes(n));
+/** A name goes to its own page where it has one (src/lib/platforms.ts), else to its doc. */
+const hrefOf = (i: Integration) => {
+  const page = pageOf(i.id);
+  return page ? platformHref(page.slug) : i.href;
+};
+---
+
+<div class="ww">
+  <div class="ww-line">
+    <p class="ww-label" id="ww-systems">Works with</p>
+    <ul class="ww-row" aria-labelledby="ww-systems">
+      {
+        groups.map((g) => (
+          <li class="ww-group">
+            <ul class="ww-names">
+              {g.map((i) => (
+                <li>
+                  <a class="ww-item" href={hrefOf(i)}>
+                    <span>{i.name}{i.brand.symbol && <sup class="ww-sym">{i.brand.symbol}</sup>}</span>
+                    {i.only && <span class="ww-tag">{i.only}</span>}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </li>
+        ))
+      }
+      {
+        all && (
+          <li class="ww-group">
+            <a class="ww-tag ww-all" href="/integrations/">
+              all of them, and more coming
+            </a>
+          </li>
+        )
+      }
+    </ul>
+    {systems.length > 0 && <p class="ww-note ww-untried">{UNTRIED_LINE}</p>}
+  </div>
+  {
+    payments.length > 0 && (
+      <div class="ww-line">
+        <p class="ww-label" id="ww-payments">
+          Paid with
+        </p>
+        <ul class="ww-row ww-names" aria-labelledby="ww-payments">
+          {payments.map((i) => (
+            <li>
+              <a class="ww-item" href={hrefOf(i)}>
+                {i.name}
+              </a>
+            </li>
+          ))}
+          <li class="ww-tag">into your own account</li>
+        </ul>
+      </div>
+    )
+  }
+  {
+    assistants && (
+      <div class="ww-line">
+        <p class="ww-label" id="ww-assistants">
+          Reached from
+        </p>
+        <ul class="ww-row ww-names" aria-labelledby="ww-assistants">
+          {ASSISTANT_LINKS.map((a) => (
+            <li>
+              <a class="ww-item" href={`/assistants/${a.slug}/`}>
+                {a.name}
+              </a>
+            </li>
+          ))}
+          <li class="ww-tag">each page says what it needs</li>
+        </ul>
+      </div>
+    )
+  }
+  <div class="ww-notes">
+    <p class="ww-note">
+      We built these connections ourselves; the names are their owners' trademarks, and none endorses us.{
+        notices.map((n) => ` ${n}`)
+      }
+    </p>
+  </div>
+</div>
+
+<style>
+  .ww {
+    display: grid;
+    gap: var(--sp-3);
+    padding-block: var(--sp-5);
+    border-block: 1px solid var(--hairline);
+  }
+  .ww-line {
+    display: grid;
+    gap: var(--sp-2);
+    align-items: baseline;
+  }
+  @media (min-width: 760px) {
+    .ww-line {
+      grid-template-columns: 112px minmax(0, 1fr);
+      gap: var(--sp-1) var(--sp-4);
+    }
+  }
+  .ww-label {
+    margin: 0;
+    font-size: var(--fs-micro);
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .ww-row,
+  .ww-names {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  /* Between kinds a wider gap, and a line breaks there first: a kind moves down whole. */
+  .ww-row {
+    gap: var(--sp-1) var(--sp-6);
+  }
+  .ww-names {
+    gap: var(--sp-1) var(--sp-3);
+  }
+  .ww-item {
+    position: relative;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    font-size: var(--fs-ui);
+    font-weight: 500;
+    line-height: 1.6;
+    color: var(--ink-2);
+    text-decoration: none;
+    transition: color var(--dur-fast) ease;
+  }
+  .ww-item:hover,
+  .ww-item:focus-visible {
+    color: var(--violet-ink);
+  }
+  .ww-all {
+    text-decoration: underline;
+    text-decoration-color: var(--hairline-strong);
+    text-underline-offset: 3px;
+    transition: color var(--dur-fast) ease;
+  }
+  .ww-all:hover,
+  .ww-all:focus-visible {
+    color: var(--violet-ink);
+  }
+  .ww-sym {
+    font-size: 0.62em;
+    line-height: 0;
+  }
+  .ww-tag {
+    font-size: var(--fs-micro);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    line-height: 1.6;
+    color: var(--ink-3);
+  }
+  .ww-notes {
+    display: grid;
+    gap: 2px;
+    margin-top: var(--sp-1);
+  }
+  /* Under the systems' names, in their column: said of them alone. */
+  .ww-untried {
+    margin-top: var(--sp-1);
+  }
+  @media (min-width: 760px) {
+    .ww-untried {
+      grid-column: 2;
+    }
+  }
+  .ww-note {
+    margin: 0;
+    max-width: var(--measure);
+    font-size: var(--fs-fine);
+    line-height: 1.5;
+    color: var(--ink-3);
+  }
+</style>

@@ -21,9 +21,10 @@ Written on 21 September 2026. The self-hostable inbox is under way and this page
 - the email door: inbound MIME parsed, deduplicated and threaded onto the right item;
 - the job runner for notifications and rules, on cron and queues on Workers and on a loop on Node;
 - network membership: an instance reports to one or more networks, switched on in settings, with counts-only telemetry every hour and the receipts it issues;
+- connectors: calendars and payments, and from 0.2.0 shops, property systems, ordering systems and job tools ([Integrations](/docs/integrations/));
 - our own live instance at [inbox.surfingdog.ai](https://inbox.surfingdog.ai/.well-known/agent-inbox.json) and the network at [network.surfingdog.ai](https://network.surfingdog.ai/v1/stats).
 
-Still to come: connectors (coming)<!-- hosted: open --> and<!-- hosted: closed -->, hosted tenancy, and<!-- hosted: end --> customer records on the network (coming). A member's track record on the network is live: its listing shows its promises kept, broken and still open once enough have closed, as the business's own word until the network can confirm them with its customers ([Receipts](/docs/receipts/#networks)). Every page in these docs says whether a feature is live.
+Still to come: <!-- hosted: closed -->hosted tenancy and <!-- hosted: end -->customer records on the network (coming). A member's track record on the network is live: its listing shows its promises kept, broken and still open once enough have closed, as the business's own word until the network can confirm them with its customers ([Receipts](/docs/receipts/#networks)). Every page in these docs says whether a feature is live.
 
 ## Pages
 
@@ -33,6 +34,7 @@ Still to come: connectors (coming)<!-- hosted: open --> and<!-- hosted: closed -
 - [Concepts](/docs/concepts/): items and their states, rules, agent policy and trust tiers, networks, and receipts: promises kept, broken or still open.
 - [Spam filter](/docs/spam/): what it keeps off your desk, what it never loses, what leaves your server and when, and connecting your own AI model.
 - [Connect your AI](/docs/connect-your-ai/): let Claude, ChatGPT or any MCP client work your inbox through the owner MCP.
+- [Integrations](/integrations/): every system the inbox connects to, in one table, and what is coming; each one's steps are in [the docs](/docs/integrations/).
 - [API](/docs/api/): every public and owner operation, and the conventions they share.
 - [Manifest](/docs/manifest/): the discovery document an instance publishes.
 - [Self-hosted vs hosted](/docs/self-hosted-vs-hosted/): an honest comparison.

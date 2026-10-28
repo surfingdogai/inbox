@@ -52,6 +52,8 @@ export interface Assistant {
   readonly source: { readonly label: string; readonly href: string };
   /** A blog post about this assistant and small businesses, when there is one. */
   readonly post?: { readonly label: string; readonly href: string };
+  /** The guides that answer the wider questions its owners ask, asked there rather than here. */
+  readonly guides?: readonly { readonly label: string; readonly href: string }[];
   /** Can it book or buy with a business, and how: for the owner who asks. */
   readonly owner: Owner;
 }
@@ -97,6 +99,10 @@ const SRC = {
     href: "https://blog.google/products-and-platforms/products/search/search-io-2026/",
   },
   googleUcp: { label: "Google: UCP for merchants", href: "https://developers.google.com/merchant/ucp" },
+  googleCheckout: {
+    label: "Google Merchant Center Help: checkout with UCP",
+    href: "https://support.google.com/merchants/answer/16837055",
+  },
   shopifyGoogle: {
     label: "Shopify Help Center: Google AI Mode and Gemini",
     href: "https://help.shopify.com/en/manual/online-sales-channels/agentic-storefronts/google",
@@ -187,7 +193,7 @@ export const ASSISTANTS: readonly Assistant[] = [
           sources: [SRC.museReport],
         },
         {
-          text: "Shopify stores that sell to the US, Canada or Mexico get a direct checkout on Meta's apps, Muse among them once it is available there.",
+          text: "Shopify stores that sell to the US, Canada, Mexico, Brazil, Japan or Singapore get a direct checkout on Meta's apps, Muse among them once it is available there.",
           sources: [SRC.shopifyMeta],
         },
         {
@@ -272,6 +278,10 @@ export const ASSISTANTS: readonly Assistant[] = [
       label: "OpenAI's dots can book a table. Can it book with you?",
       href: "/blog/openai-dots-and-your-business/",
     },
+    guides: [
+      { label: "how to sell on ChatGPT", href: "/guides/sell-on-chatgpt/" },
+      { label: "agentic commerce explained", href: "/guides/agentic-commerce/" },
+    ],
     owner: {
       question: "Can ChatGPT book or order with your business?",
       does: [
@@ -304,10 +314,6 @@ export const ASSISTANTS: readonly Assistant[] = [
         {
           q: "Can ChatGPT order things for you?",
           a: "It finds and compares products, then the purchase finishes in the shop's own checkout or the shop's own app in ChatGPT; OpenAI stepped back from checkout inside the chat in March 2026. Agents such as dots can also buy through a browser, which goes more smoothly where a shop offers a checkout made for agents.",
-        },
-        {
-          q: "How do I sell on ChatGPT?",
-          a: "Get your products into ChatGPT's shopping results, through your shop platform or a product feed under the Agentic Commerce Protocol; eligible Shopify stores that sell to the US are included already. Keep a checkout that works from ChatGPT, and give agents a way to ask, change, cancel and return.",
         },
       ],
     },
@@ -388,6 +394,10 @@ export const ASSISTANTS: readonly Assistant[] = [
       label: "Google: Connect and manage custom apps for Gemini",
       href: "https://support.google.com/gemini/answer/17209137",
     },
+    guides: [
+      { label: "agentic commerce explained", href: "/guides/agentic-commerce/" },
+      { label: "AI hotel booking", href: "/guides/ai-hotel-booking/" },
+    ],
     owner: {
       question: "Can Gemini book or order with your business?",
       does: [
@@ -396,26 +406,26 @@ export const ASSISTANTS: readonly Assistant[] = [
           sources: [SRC.googleUk, SRC.diningReport],
         },
         {
-          text: "Appointments: Google says Gemini can reserve a table with OpenTable in the UK and book a doctor's appointment with Zocdoc in the US, through apps it connected in August 2026; Thumbtack and Angi joined at the same time.",
+          text: "Appointments: Google says Gemini can reserve a dinner table with OpenTable in the UK and book a doctor's appointment with Zocdoc, through apps it connected in August 2026; Angi and Thumbtack, for home professionals, joined at the same time.",
           sources: [SRC.geminiApps],
         },
         {
-          text: "Local services: Google said in May 2026 that AI Mode finds local experiences and services with prices and free times, with links to finish booking with the provider, and, for home repair, beauty and pet care, calls businesses for its users, for everyone in the US over the summer.",
+          text: "Local services: Google said in May 2026 that booking in Search reaches local experiences and services, with prices, free times and links to finish booking with the provider, and that for home repair, beauty and pet care Google calls businesses for its users, for everyone in the US over the summer.",
           sources: [SRC.googleIo],
         },
         {
-          text: "Shopping: AI Mode and the Gemini app check out through the Universal Commerce Protocol (UCP) with merchants Google admits, starting in the US, and the merchant stays the merchant of record. Shopify stores based in the US have it on by default.",
-          sources: [SRC.googleUcp, SRC.shopifyGoogle],
+          text: "Shopping: AI Mode and the Gemini app check out through the Universal Commerce Protocol (UCP) with select merchants Google admits, for products eligible in the US, Canada and Australia, and the merchant stays the merchant of record. Shopify stores that sell to buyers in the US, Canada or Australia, based anywhere, get it as it rolls out.",
+          sources: [SRC.googleUcp, SRC.googleCheckout, SRC.shopifyGoogle],
         },
       ],
       faqs: [
         {
           q: "Can Gemini book an appointment?",
-          a: "Yes, through apps it connects to, such as Zocdoc in the US and OpenTable in the UK. Google's AI Mode finds free times and links to the booking platform; in the US it can also call some local businesses. A business none of them reach needs a door of its own. Our free check shows which doors your site offers.",
+          a: "Yes, through apps it connects to, such as Zocdoc for a doctor and OpenTable in the UK. Google Search finds free times and links to the booking platform; in the US, Google can also call some local businesses. A business none of them reach needs a door of its own. Our free check shows which doors your site offers.",
         },
         {
           q: "Can Gemini buy things for you?",
-          a: "From merchants who offer checkout through UCP, the Universal Commerce Protocol, in AI Mode and the Gemini app; the merchant stays the merchant of record. Shopify stores based in the US and selling there have it on by default. Other shops can ask to join through Google Merchant Center; there is a waitlist.",
+          a: "From merchants who offer checkout through UCP, the Universal Commerce Protocol, in AI Mode and the Gemini app; the merchant stays the merchant of record. Shopify stores that sell to the US, Canada or Australia get it as it rolls out. Other shops can ask to join through Google Merchant Center; there is a waitlist.",
         },
       ],
     },
@@ -443,6 +453,7 @@ export const ASSISTANTS: readonly Assistant[] = [
       label: "Microsoft Learn: connect an agent to an existing MCP server",
       href: "https://learn.microsoft.com/en-us/microsoft-copilot-studio/mcp-add-existing-server-to-agent",
     },
+    guides: [{ label: "agentic commerce explained", href: "/guides/agentic-commerce/" }],
     owner: {
       question: "Can Microsoft Copilot book or order with your business?",
       does: [

@@ -1,0 +1,311 @@
+---
+// /integrations: every system the inbox works with, in one table, and what is coming
+// (src/lib/integrations-table.ts). Linked from the "Works with" row on /inbox, the footer and the docs.
+import Marked from "../../components/Marked.astro";
+import Layout from "../../layouts/Layout.astro";
+import { inline } from "../../lib/inline";
+import { APPLE_NOTICE, UNTRIED_LINE, WOO_NOTICE } from "../../lib/integrations";
+import { COMING, type Status, SYSTEM_GROUPS, TABLE } from "../../lib/integrations-table";
+
+const site = Astro.site?.toString() ?? "https://surfingdog.ai/";
+const url = new URL("/integrations/", site).toString();
+const TITLE = "Inbox integrations: Shopify, Square, Calendly and more · Surfing Dog";
+const DESCRIPTION =
+  "Every system Surfing Dog Inbox connects to: calendars, Shopify, WooCommerce®, Square, Beds24, Hostaway, ServiceM8, Stripe, Mollie, AI assistants. More coming.";
+const ld = [
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: "Inbox integrations",
+    description: DESCRIPTION,
+    url,
+    about: { "@type": "SoftwareApplication", name: "Surfing Dog Inbox", url: new URL("/inbox/", site).toString() },
+    publisher: { "@id": `${site}#org` },
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Surfing Dog Inbox", item: new URL("/inbox/", site).toString() },
+      { "@type": "ListItem", position: 2, name: "Integrations", item: url },
+    ],
+  },
+];
+const external = (href: string) => /^https?:\/\//.test(href);
+/** The one line said of the systems' connections sits under the last group of them. */
+const lastSystem = TABLE.filter((g) => SYSTEM_GROUPS.includes(g.id)).at(-1)?.id;
+const STATUS_CLASS: Record<Status, string> = { Works: "st-works", "Rolling out": "st-rolling", Coming: "st-coming" };
+---
+
+<Layout title={TITLE} description={DESCRIPTION} image="/art/og-inbox-v1.png" ld={ld}>
+  <section class="wrap wrap-read section is-head" aria-labelledby="it-h">
+    <p class="eyebrow"><a href="/inbox/">Surfing Dog Inbox</a> · Integrations</p>
+    <h1 class="h-page" id="it-h">Inbox integrations</h1>
+    <p class="lede">
+      What your inbox connects to, each with your own account. <b>Works</b> is in this release, with nothing to set but
+      your account; <b>Rolling out</b> works where its maker has rolled it out; <b>Coming</b> is built, and waits on
+      another company or a standard. No dates.
+    </p>
+  </section>
+
+  <section class="wrap section-tight it-band" aria-label="Every integration">
+    <table class="it">
+      <thead>
+        <tr>
+          <th scope="col">Name</th>
+          <th scope="col">What the inbox does with it</th>
+          <th scope="col" class="it-st-h">Status</th>
+        </tr>
+      </thead>
+      {
+        TABLE.map((g) => (
+          <tbody id={`it-${g.id}`}>
+            <tr class="it-group">
+              <th scope="rowgroup" colspan="3">
+                {g.title}
+              </th>
+            </tr>
+            {g.rows.map((r) => (
+              <tr>
+                <th scope="row" class="it-name">
+                  <a href={r.href} rel={external(r.href) ? "noopener" : undefined}>
+                    <Marked text={r.name} />
+                  </a>
+                </th>
+                <td class="it-does">{r.does}</td>
+                <td class="it-st">
+                  <span class:list={["st", STATUS_CLASS[r.status]]}>{r.status}</span>
+                </td>
+              </tr>
+            ))}
+            {g.id === lastSystem && (
+              <tr class="it-untried">
+                <td colspan="3">{UNTRIED_LINE}</td>
+              </tr>
+            )}
+          </tbody>
+        ))
+      }
+      <tbody id="it-coming">
+        <tr class="it-group it-more">
+          <th scope="rowgroup" colspan="3">More coming</th>
+        </tr>
+      </tbody>
+      {
+        COMING.map((g) => (
+          <tbody id={`it-${g.id}`}>
+            <tr class="it-group it-sub">
+              <th scope="rowgroup" colspan="3" set:html={inline(g.title)} />
+            </tr>
+            {g.rows.map((r) => (
+              <tr>
+                <th scope="row" class="it-name">
+                  <a href={r.href}>
+                    <Marked text={r.name} />
+                  </a>
+                </th>
+                <td class="it-does">{r.does}</td>
+                <td class="it-st">
+                  <span class:list={["st", STATUS_CLASS[r.status]]}>{r.status}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        ))
+      }
+    </table>
+
+    <div class="it-notes">
+      <p>
+        Not listed? Ask for it, or vote for it, on the <a class="link" href="/requests/">requests board</a>. Every
+        connection's own steps are in the <a class="link" href="/docs/integrations/">docs</a>.
+      </p>
+      <p>
+        We built these connections ourselves; the names are their owners' trademarks, and none endorses us. {WOO_NOTICE}
+        {APPLE_NOTICE}
+      </p>
+    </div>
+  </section>
+</Layout>
+
+<style>
+  .eyebrow a {
+    color: inherit;
+    text-decoration: none;
+  }
+  .eyebrow a:hover,
+  .eyebrow a:focus-visible {
+    text-decoration: underline;
+  }
+  .lede b {
+    font-weight: 600;
+    color: var(--ink);
+  }
+  /* Wider than the reading column, never as wide as the page: three quiet columns. */
+  .it-band {
+    max-width: calc(860px + var(--gutter) * 2);
+  }
+  .it {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--fs-card);
+    line-height: var(--lh-ui);
+  }
+  .it thead th {
+    padding: 0 var(--sp-3) var(--sp-2) 0;
+    text-align: left;
+    font-size: var(--fs-micro);
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .it .it-st-h {
+    padding-right: 0;
+  }
+  .it-group th {
+    padding: var(--sp-6) 0 var(--sp-2);
+    text-align: left;
+    font-size: var(--fs-ui);
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .it-more th {
+    padding-top: var(--sp-8);
+    font-size: var(--fs-h-sub);
+  }
+  .it-sub th {
+    padding-top: var(--sp-4);
+    font-size: var(--fs-fine);
+    font-weight: 600;
+    color: var(--ink-3);
+  }
+  .it-sub :global(code) {
+    padding: 0 2px;
+    border-color: transparent;
+    background: transparent;
+    font-size: 0.95em;
+    font-weight: 400;
+    color: var(--ink-2);
+  }
+  /* Said of the rows above it, under a hairline as they are: fine and quiet. */
+  .it tbody tr.it-untried > td {
+    padding: var(--sp-2) 0 0;
+    border-top: 1px solid var(--hairline);
+    font-size: var(--fs-fine);
+    line-height: 1.5;
+    color: var(--ink-3);
+  }
+  .it tbody tr:not(.it-group) > * {
+    padding: var(--sp-2) var(--sp-3) var(--sp-2) 0;
+    border-top: 1px solid var(--hairline);
+    text-align: left;
+    vertical-align: baseline;
+  }
+  .it-name {
+    width: 32%;
+    font-weight: 500;
+  }
+  .it-name a {
+    color: var(--ink);
+    text-decoration: none;
+    transition: color var(--dur-fast) ease;
+  }
+  .it-name a:hover,
+  .it-name a:focus-visible {
+    color: var(--violet-ink);
+  }
+  .it-does {
+    color: var(--ink-2);
+  }
+  .it .it-st {
+    width: 1%;
+    padding-right: 0;
+    white-space: nowrap;
+  }
+  .st {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--fs-fine);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .st::before {
+    content: "";
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    flex: none;
+  }
+  .st-works {
+    color: var(--ink-2);
+  }
+  .st-works::before {
+    background: var(--c-success);
+  }
+  .st-rolling {
+    color: var(--ink-2);
+  }
+  .st-rolling::before {
+    box-sizing: border-box;
+    border: 1px solid var(--c-success);
+  }
+  .st-coming {
+    color: var(--ink-3);
+  }
+  .st-coming::before {
+    box-sizing: border-box;
+    border: 1px solid var(--ink-3);
+  }
+  .it-notes {
+    display: grid;
+    gap: var(--sp-2);
+    max-width: var(--measure);
+    margin-top: var(--sp-7);
+  }
+  .it-notes p {
+    margin: 0;
+    font-size: var(--fs-fine);
+    line-height: 1.5;
+    color: var(--ink-3);
+  }
+  /* A phone: each row is the name, then what it does and its status under it. */
+  @media (max-width: 560px) {
+    .it thead {
+      display: none;
+    }
+    .it tbody tr:not(.it-group, .it-untried) {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      column-gap: var(--sp-3);
+      padding: var(--sp-2) 0;
+      border-top: 1px solid var(--hairline);
+    }
+    .it tbody tr:not(.it-group, .it-untried) > * {
+      padding: 0;
+      border-top: 0;
+    }
+    .it-untried,
+    .it-untried > td {
+      display: block;
+    }
+    .it-name {
+      width: auto;
+      grid-column: 1;
+    }
+    .it .it-st {
+      grid-column: 2;
+      grid-row: 1;
+      width: auto;
+    }
+    .it-does {
+      grid-column: 1 / -1;
+      margin-top: 2px;
+    }
+    .it-group,
+    .it-group th {
+      display: block;
+    }
+  }
+</style>

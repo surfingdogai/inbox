@@ -16,6 +16,15 @@ export function getStaticPaths() {
 
 const { a } = Astro.props as { a: Assistant };
 const others = ASSISTANTS.filter((x) => x.slug !== a.slug);
+/** Its post, the guides that answer its owners' wider questions, and what every assistant needs. */
+const reads = [
+  ...(a.post ? [a.post] : []),
+  ...(a.guides ?? []),
+  {
+    label: "what a personal AI assistant needs from your business",
+    href: "/blog/what-ai-assistants-need-from-your-business/",
+  },
+];
 const url = new URL(Astro.url.pathname, Astro.site).toString();
 const ld = [
   {
@@ -146,11 +155,15 @@ const ld = [
       <a class="link" href="/docs/connect-your-ai/">Connect your AI</a> for every tool the owner server gives it.
     </p>
     <p>
-      Read more: {a.post && (
-        <>
-          <a class="link" href={a.post.href}>{a.post.label}</a>, and{" "}
-        </>
-      )}<a class="link" href="/blog/what-ai-assistants-need-from-your-business/">what a personal AI assistant needs from your business</a>.
+      Read more:{" "}
+      {
+        reads.map((r, i) => (
+          <>
+            {i > 0 && (i === reads.length - 1 ? ", and " : ", ")}
+            <a class="link" href={r.href}>{r.label}</a>
+          </>
+        ))
+      }.
     </p>
     <p class="muted">
       The other assistants:
@@ -185,6 +198,8 @@ const ld = [
     display: grid;
     gap: var(--sp-2);
     padding-left: 1.25rem;
+    /* A long address in a step breaks rather than widen the page at 320px. */
+    overflow-wrap: anywhere;
   }
   .wrap-read.section p + p,
   .wrap-read.section ul + p {

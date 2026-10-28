@@ -24,7 +24,7 @@ import {
 const site = Astro.site?.toString() ?? "https://surfingdog.ai/";
 const url = new URL(`/guides/${SHOPIFY.slug}/`, site).toString();
 /** When this page was last read against Shopify's pages and the check's rules. */
-const MODIFIED = "2026-10-12";
+const MODIFIED = "2026-10-27";
 const ld = [
   {
     "@context": "https://schema.org",
@@ -172,13 +172,15 @@ const doorSources = [
           <b>Surfing Dog Inbox (ours, open source)</b>, one option among apps for asking you something: free software
           (MIT) you run at your own subdomain, where agents write to you and you answer from its app, from your helpdesk
           through a bridge, or with your own AI. {HOSTED_LINE} Orders placed in your Shopify checkout
-          stay in Shopify, so changing or returning them, or a receipt, needs a door there (<a href="/inbox/"
-            >how the inbox works</a
+          stay in Shopify, so changing or returning them, or a receipt, needs a door there (<a
+            href="/integrations/shopify/">the inbox with Shopify</a
           >).
         </li>
       </ul>
       <p>
         For any shop: <a href={guideHref("sell-through-ai-assistants")}>agentic commerce readiness</a> · <a
+          href="/guides/agentic-commerce/">agentic commerce explained</a
+        > · <a href="/guides/sell-on-chatgpt/">how to sell on ChatGPT</a> · <a
           href={guideHref("ai-assistant-messages-and-quotes")}>messages and quotes</a
         > · <a href={guideHref("llms-txt")}>what llms.txt does</a>.
       </p>

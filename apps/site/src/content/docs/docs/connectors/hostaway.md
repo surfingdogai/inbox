@@ -5,9 +5,11 @@ sidebar:
   order: 11
 ---
 
+Built from Hostaway's documentation and tested against a stand-in; not yet run with a real account.
+
 Hostaway keeps your listings, their calendars and your reservations. Connected, your Inbox reads what is free from Hostaway and puts every booking into Hostaway first, so a night is never sold twice.
 
-Settings → **Integrations** → **Property system** → **Hostaway**. If Hostaway says **Soon**, your Inbox hasn't been updated yet. Hosted inboxes get it with the next update.
+Settings → **Integrations** → **Property system** → **Hostaway**.
 
 ## Connect it
 
@@ -65,4 +67,4 @@ The webhook is removed and the access is given back. To end it in Hostaway too, 
 - **A multi-unit listing** is sold one unit at a time.
 - **Guest messages** from Hostaway in your Inbox.
 
-Built from Hostaway's public API reference, <https://api.hostaway.com/documentation>, and tested against a local copy of it; not yet tried on a live account. See [Property systems](/docs/property-systems/) for what every connection does.
+Built from Hostaway's public API reference, <https://api.hostaway.com/documentation>. See [Property systems](/docs/property-systems/) for what every connection does.

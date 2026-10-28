@@ -9,6 +9,7 @@ import GuideList from "../../components/GuideList.astro";
 import GuideOptions from "../../components/GuideOptions.astro";
 import Layout from "../../layouts/Layout.astro";
 import { GUIDES, type Guide, guideBySlug, guideHref } from "../../lib/guides";
+import { WOO_NOTICE } from "../../lib/integrations";
 
 export async function getStaticPaths() {
   const entries = await getCollection("guides");
@@ -24,6 +25,8 @@ export async function getStaticPaths() {
 
 const { guide, entry } = Astro.props as { guide: Guide; entry: CollectionEntry<"guides"> };
 const { Content } = await render(entry);
+/** Automattic's notice, beside the ways to do it, on a guide whose ways name WooCommerce®. */
+const woo = JSON.stringify(guide.options).includes("WooCommerce");
 const site = Astro.site?.toString() ?? "https://surfingdog.ai/";
 const url = new URL(guideHref(guide.slug), site).toString();
 /** When the guides were last read against the check's rules. */
@@ -65,6 +68,7 @@ const ld = [
       <Content />
     </div>
     <GuideOptions options={guide.options} />
+    {woo && <p class="fine">{WOO_NOTICE}</p>}
     <GuideCheck examples={guide.examples} />
     <GuideList current={guide.slug} compact />
   </article>

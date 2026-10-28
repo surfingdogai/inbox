@@ -70,6 +70,8 @@ A bakery's cakes can ask for the writing on them, how many it serves and a flavo
 | Clover | **Not yet**: a Clover App Market app | Your menu, and orders you accept as Clover orders | <https://docs.clover.com/dev/docs/create-an-atomic-order> |
 | Deliverect | **Not yet**: a certified Deliverect channel, and the webhook secret from its Integration settings | Orders you accept into your Deliverect channel, and its word on how far they are | <https://developers.deliverect.com/v3.0-ordering-experience/docs/channel-api-overview> |
 
+GloriaFood and Flipdish are built from each one's documentation and tested against a stand-in; not yet run with a real account.
+
 Nothing to press shows a button that goes nowhere: a system that needs its partner app on the server says **not yet** until it is there; until then, GloriaFood and Flipdish connect with what you make in your own account. On your own server: `TOAST_CLIENT_ID`, `TOAST_CLIENT_SECRET` and `TOAST_API_HOST`; `LIGHTSPEED_CLIENT_ID` and `LIGHTSPEED_CLIENT_SECRET`; `CLOVER_CLIENT_ID` and `CLOVER_CLIENT_SECRET`; `DELIVERECT_CLIENT_ID`, `DELIVERECT_CLIENT_SECRET` and `DELIVERECT_CHANNEL` (with `DELIVERECT_STAGING=1` against its staging).
 
 ## What a connection does
@@ -82,4 +84,4 @@ Nothing to press shows a button that goes nowhere: a system that needs its partn
 
 ## Building one
 
-Every ordering system is built from its published reference and checked against a local fake of it (`packages/adapters/test/fakes/pos.ts`), never with a business's real account. Decisions: [ADR-040](https://github.com/surfingdogai/inbox/blob/main/docs/adr/040-food.md).
+Every ordering system is built from its published reference and tested against a stand-in of it (`packages/adapters/test/fakes/pos.ts`); none has yet run with a real account. Decisions: [ADR-040](https://github.com/surfingdogai/inbox/blob/main/docs/adr/040-food.md).

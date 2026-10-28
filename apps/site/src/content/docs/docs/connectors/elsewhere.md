@@ -13,8 +13,10 @@ Settings → General → **What agents can do** → **Take bookings or orders on
 
 1. Paste the link to your booking page or your shop: the one you would give a customer. A link from a platform in the list picks that platform for you.
 2. If your platform gives you a direct booking link for your own website (Fresha, Treatwell and OpenTable do), paste that one rather than your page in its marketplace. When a network already found your page there, your Inbox starts from it: check it, and change it for your direct link if you have one.
-3. For a shop on your own website (Shopify, WooCommerce, Wix…), pick it from the list. The link starts from your website; add your website in General first, so agents know the shop is yours.
+3. For a shop on your own website (Shopify, WooCommerce®, Wix…), pick it from the list. The link starts from your website; add your website in General first, so agents know the shop is yours.
 4. **Save.**
+
+WooCommerce and its associated designs are trademarks of Automattic Inc.
 
 Tracking at the end of a link (`utm_source`, `fbclid`, `gclid` and the like) is taken off as you paste it: agents send people to the page itself.
 

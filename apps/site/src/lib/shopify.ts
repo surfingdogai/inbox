@@ -4,11 +4,11 @@ import type { Faq, Source } from "./faq";
  * /guides/shopify-ai-assistants/: what AI assistants do with a Shopify store, what Shopify publishes
  * on the store's own domain, what our check counts for it under the published rules, and what an
  * owner can add. What Shopify and the assistants do moves monthly, so every line about them says
- * where we read it, and the page says when; what the check counts follows /v1/score-rules (version
+ * where we read it, and the page says when (Shopify's pages read again on 27 October 2026); what the check counts follows /v1/score-rules (version
  * 3, as amended on 15 October 2026: a UCP profile counts where the store's server answers or its pages
  * show its prices) and the network's next steps for Shopify (vocab/guide.json).
  */
-export const SHOPIFY_CHECKED = "12 October 2026";
+export const SHOPIFY_CHECKED = "27 October 2026";
 export const SHOPIFY_AS_OF = "as of October 2026";
 
 export const SHOPIFY = {
@@ -20,7 +20,7 @@ export const SHOPIFY = {
   description:
     "Shopify agentic commerce, as of October 2026: what ChatGPT, Gemini, Copilot and Meta do with your store, what Shopify publishes for you, and what's missing.",
   answer:
-    "Often, in part. Shopify publishes agent doors on an eligible store's domain, such as a UCP checkout and an llms.txt. ChatGPT sends buyers to your checkout; Gemini and Copilot check out in the chat for US buyers, Meta for the US, Canada and Mexico. Questions, cancelling and returns need more.",
+    "Often, in part. Shopify publishes agent doors on an eligible store's domain, such as a UCP checkout and an llms.txt. ChatGPT sends buyers to your checkout; Gemini, Copilot and Meta check out in the chat, each for buyers in its own countries. Questions, cancelling and returns need more.",
 } as const;
 
 const HELP = "https://help.shopify.com/en/manual/online-sales-channels/agentic-storefronts";
@@ -51,22 +51,22 @@ export const SHOPIFY_CHANNELS: readonly { readonly name: string; readonly does: 
   [
     {
       name: "ChatGPT",
-      does: "Finds and compares your products through Shopify Catalog. The buyer pays in your own checkout, opened in ChatGPT's in-app browser or a new tab. Your store must sell to customers in the US. OpenAI stepped back from checkout inside the chat in March 2026.",
+      does: "Finds and compares your products through Shopify Catalog. The buyer pays in your own checkout, opened in ChatGPT's in-app browser or a new tab. Your store must sell to customers in the US, and can be based outside it. OpenAI deprioritised its own Instant Checkout in March 2026.",
       sources: [SHOPIFY_SOURCES.chatgpt, SHOPIFY_SOURCES.openai],
     },
     {
       name: "Google AI Mode and Gemini",
-      does: "A Shopify-powered checkout inside the chat, paid by card, for a store based in the US that sells to US customers and has a Google Merchant Center account.",
+      does: "A Shopify-powered checkout inside the chat, paid by card, for buyers in the US, Canada and Australia, rolling out gradually. Your store can be based in any country, and needs a Google Merchant Center account.",
       sources: [SHOPIFY_SOURCES.google],
     },
     {
       name: "Microsoft Copilot",
-      does: "A checkout inside Copilot, on by default for an eligible store, shown to buyers in the US.",
+      does: "A checkout inside Copilot, on by default for an eligible store that sells to customers in the US, and shown to buyers in the US.",
       sources: [SHOPIFY_SOURCES.microsoft],
     },
     {
       name: "Meta, Muse among its apps once it's available there",
-      does: "A checkout on Meta's apps for a store that sells to the US, Canada or Mexico.",
+      does: "A checkout on Meta's apps for a store that sells to the US, Canada, Mexico, Brazil, Japan or Singapore, with you as the merchant of record. Subscriptions, bundles, customisable products, products sold to businesses alone, local delivery and pickup are not supported there.",
       sources: [SHOPIFY_SOURCES.meta],
     },
   ];
@@ -95,7 +95,7 @@ export const SHOPIFY_DOORS: readonly { readonly path: string; readonly what: str
 export const SHOPIFY_FAQS: readonly Faq[] = [
   {
     q: "Does Shopify support agentic commerce?",
-    a: "Yes. For eligible stores Shopify publishes a UCP checkout on the store's own domain and lists products with AI assistants through agentic storefronts, on by default. Checkout inside Gemini and Copilot is for US buyers, and on Meta for the US, Canada and Mexico; ChatGPT sends buyers to your own checkout.",
+    a: "Yes. For eligible stores Shopify publishes a UCP checkout on the store's own domain and lists products with AI assistants through agentic storefronts, on by default. Checkout inside Gemini is rolling out for buyers in the US, Canada and Australia, from stores based anywhere; inside Copilot, for the US; on Meta, for six countries. ChatGPT sends buyers to your checkout.",
   },
   {
     q: "Can I sell on ChatGPT with Shopify?",

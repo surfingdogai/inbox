@@ -140,6 +140,8 @@ const WAITLIST = "https://network.surfingdog.ai/account/waitlist";
     border: 1px solid var(--hairline);
     color: var(--ink);
     white-space: normal;
+    /* The install line's address may break at 320px rather than widen the card past the screen. */
+    overflow-wrap: anywhere;
   }
   .cmd code::before {
     content: "$ ";

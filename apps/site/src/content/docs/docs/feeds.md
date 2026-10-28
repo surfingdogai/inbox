@@ -5,7 +5,9 @@ description: Point your Inbox at the product feed your shop already publishes, a
 
 An agent asked to buy something from you needs to know two things: whether you have it, and what it costs. A **product feed** is the cheapest way to tell it, because your shop almost certainly publishes one already.
 
-Nearly every platform emits a feed so that Google Shopping can read it — WooCommerce, Wix, PrestaShop, BigCommerce, Squarespace and Shopify all do. It is a public URL. There is no password to hand over, no app to install, no OAuth screen and nothing to review. You paste the URL, and your catalogue fills itself.
+Nearly every platform emits a feed so that Google Shopping can read it — WooCommerce®, Wix, PrestaShop, BigCommerce, Squarespace and Shopify all do. It is a public URL. There is no password to hand over, no app to install, no OAuth screen and nothing to review. You paste the URL, and your catalogue fills itself.
+
+WooCommerce and its associated designs are trademarks of Automattic Inc.
 
 ## Connect one
 

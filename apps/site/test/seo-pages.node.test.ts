@@ -6,6 +6,7 @@ import { ASSISTANTS, OWNER_AS_OF, OWNER_CHECKED } from "../src/lib/assistants";
 import { type Faq, faqPage } from "../src/lib/faq";
 import { GUIDES, HUB, PLATFORM_PAGES, wordCount } from "../src/lib/guides";
 import { LOCAL_GUIDES, PAGES as LOCAL_PAGES } from "../src/lib/i18n";
+import { PLATFORMS } from "../src/lib/platforms";
 import {
   SHOPIFY,
   SHOPIFY_AS_OF,
@@ -15,6 +16,7 @@ import {
   SHOPIFY_FAQS,
   SHOPIFY_SOURCES,
 } from "../src/lib/shopify";
+import { TOPICS } from "../src/lib/topics";
 
 /**
  * The pages that answer what owners search for: "can ChatGPT book appointments" on each assistant's
@@ -134,8 +136,9 @@ describe("the owners' pages", () => {
       "Can ChatGPT book appointments?",
       "Can ChatGPT make restaurant reservations?",
       "Can ChatGPT order things for you?",
-      "How do I sell on ChatGPT?",
     ]);
+    // Selling on ChatGPT is asked and answered on its own guide, which the page links.
+    expect(chatgpt?.guides?.map((g) => g.href)).toContain("/guides/sell-on-chatgpt/");
     expect(ASSISTANTS.find((a) => a.slug === "gemini")?.owner.faqs[0]?.q).toBe("Can Gemini book an appointment?");
     expect(ASSISTANTS.find((a) => a.slug === "claude")?.owner.faqs[0]?.q).toBe("Can Claude book reservations?");
     // The hub is the checklist, and the selling guide leads with agentic commerce readiness; their
@@ -193,7 +196,18 @@ describe("the owners' pages", () => {
     expect(OWNER_AS_OF).toBe("as of October 2026");
     expect(SHOPIFY_AS_OF).toBe("as of October 2026");
     expect(OWNER_CHECKED).toBe("12 October 2026");
-    expect(SHOPIFY_CHECKED).toBe("12 October 2026");
+    expect(SHOPIFY_CHECKED).toBe("27 October 2026");
+    // What Shopify's pages say on that day: Google for buyers in three countries, from a store based
+    // anywhere; Meta in six; nothing left of the US-only store or the three-country Meta.
+    const said = (name: string) => SHOPIFY_CHANNELS.find((c) => c.name.startsWith(name))?.does ?? "";
+    expect(said("Google")).toContain("for buyers in the US, Canada and Australia, rolling out gradually");
+    expect(said("Google")).toContain("Your store can be based in any country");
+    expect(said("Meta")).toContain("the US, Canada, Mexico, Brazil, Japan or Singapore");
+    for (const text of [SHOPIFY.answer, ...SHOPIFY_FAQS.map((f) => f.a), ...SHOPIFY_CHANNELS.map((c) => c.does)])
+      expect(text).not.toMatch(/based in the US|Canada (and|or) Mexico/);
+    for (const a of ASSISTANTS)
+      for (const text of [...a.owner.does.map((d) => d.text), ...a.owner.faqs.map((f) => f.a)])
+        expect(text, a.slug).not.toMatch(/based in the US|Canada (and|or) Mexico/);
     const page = read(ASSISTANT_PAGE);
     expect(page).toContain("What {a.short} does, {OWNER_AS_OF}");
     expect(page).toContain("Read {OWNER_CHECKED} from each maker's own pages");
@@ -309,11 +323,15 @@ describe("the owners' pages", () => {
       if (guide) {
         return (
           GUIDES.some((g) => g.slug === guide) ||
-          ((PLATFORM_PAGES.some((pp) => pp.slug === guide) || LOCAL_GUIDES.some((g) => LOCAL_PAGES[g].en === p)) &&
+          ((PLATFORM_PAGES.some((pp) => pp.slug === guide) ||
+            TOPICS.some((t) => t.slug === guide) ||
+            LOCAL_GUIDES.some((g) => LOCAL_PAGES[g].en === p)) &&
             existsSync(site(`src/pages/guides/${guide}.astro`)))
         );
       }
       if (p === "/guides/") return true;
+      const platform = p.match(/^\/integrations\/([a-z0-9-]+)\/$/)?.[1];
+      if (platform) return PLATFORMS.some((x) => x.slug === platform);
       const post = p.match(/^\/blog\/([a-z0-9-]+)\/$/)?.[1];
       if (post) return existsSync(site(`src/content/blog/${post}.md`));
       if (p.startsWith("/docs/")) return existsSync(site(`src/content/docs${p.replace(/\/$/, "")}.md`));
@@ -336,6 +354,7 @@ describe("the owners' pages", () => {
       ),
       ...DOCS_WITH_CHECK.flatMap((p) => [...read(p).matchAll(/\]\((\/[^)\s]*)\)/g)].map((m) => m[1] ?? "")),
       ...ASSISTANTS.flatMap((a) => (a.post ? [a.post.href] : [])),
+      ...ASSISTANTS.flatMap((a) => (a.guides ?? []).map((g) => g.href)),
       ...PLATFORM_PAGES.map((pp) => `/guides/${pp.slug}/`),
     ];
     expect(hrefs.length).toBeGreaterThan(15);

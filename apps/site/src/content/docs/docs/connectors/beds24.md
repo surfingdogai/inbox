@@ -5,7 +5,7 @@ sidebar:
   order: 10
 ---
 
-**New:** built from Beds24's documentation. Your first stays are checked against Beds24 as they are written.
+Built from Beds24's documentation and tested against a stand-in; not yet run with a real account. Your first stays are checked against Beds24 as they are written.
 
 For hotels, guesthouses, B&Bs, hostels and holiday rentals that keep their rooms in Beds24. Your Inbox reads what Beds24 says is free, and writes each stay there first.
 

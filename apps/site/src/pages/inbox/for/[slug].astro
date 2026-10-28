@@ -1,0 +1,164 @@
+---
+// One short page per kind of business (src/lib/cases.ts): what the inbox does for it, one example on
+// the system it already runs, what it works with, a check of the owner's own site, and how to start.
+// Linked from the examples on /inbox.
+import GuideCheck from "../../../components/GuideCheck.astro";
+import Marked from "../../../components/Marked.astro";
+import WorksWith from "../../../components/WorksWith.astro";
+import Layout from "../../../layouts/Layout.astro";
+import { CASES, type Case, caseHref, worksWith } from "../../../lib/cases";
+import { HOSTED_CTA } from "../../../lib/hosted";
+import { WOO_NOTICE } from "../../../lib/integrations";
+
+export function getStaticPaths() {
+  return CASES.map((c) => ({ params: { slug: c.slug }, props: { c } }));
+}
+
+const { c } = Astro.props as { c: Case };
+const heading = c.title.replace(/ · Surfing Dog$/, "");
+const others = CASES.filter((x) => x.slug !== c.slug);
+// Automattic's notice goes beside the first WooCommerce® on a page: the example, when it is the shop;
+// the other examples, when the shop is among them.
+const names = (x: Case) => x.label.includes("WooCommerce");
+const wooHere = names(c);
+const wooOthers = others.some(names);
+const url = new URL(Astro.url.pathname, Astro.site).toString();
+const ld = [
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: heading,
+    description: c.description,
+    url,
+    about: {
+      "@type": "SoftwareApplication",
+      name: "Surfing Dog Inbox",
+      url: new URL("/inbox/", Astro.site).toString(),
+    },
+    publisher: { "@type": "Organization", name: "Surfing Dog Lda" },
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Surfing Dog Inbox", item: new URL("/inbox/", Astro.site).toString() },
+      { "@type": "ListItem", position: 2, name: c.kind, item: url },
+    ],
+  },
+];
+---
+
+<Layout title={c.title} description={c.description} image="/art/og-inbox-v1.png" ld={ld}>
+  <section class="wrap wrap-read section is-head" aria-labelledby="case-h">
+    <p class="eyebrow"><a class="link" href="/inbox/">Surfing Dog Inbox</a> · {c.kind}</p>
+    <h1 class="h-page" id="case-h">{heading}</h1>
+    <p class="lede">{c.lede}</p>
+    <div class="hero-actions head-cta">
+      {
+        HOSTED_CTA ? (
+          <a class="btn btn-primary" href={HOSTED_CTA.href}>
+            {HOSTED_CTA.label}
+          </a>
+        ) : (
+          <a class="btn btn-primary" href="/inbox/#run">
+            Get the inbox
+          </a>
+        )
+      }
+      <a class="btn btn-ghost" href="/inbox/#run">Or run it yourself</a>
+    </div>
+  </section>
+
+  <section class="wrap wrap-read section section-tight" aria-labelledby="ex-h">
+    <h2 class="h-section" id="ex-h">An example</h2>
+    <p class="fine">What the inbox does today, shown on a made-up business.</p>
+    <article class="glass panel example">
+      <h3 class="h-card"><Marked text={c.label} /></h3>
+      <p class="arrives">{c.arrives}</p>
+      <p class="card-text">{c.does}</p>
+    </article>
+    {wooHere && <p class="fine notice">{WOO_NOTICE}</p>}
+  </section>
+
+  <section class="wrap wrap-read section section-tight" aria-labelledby="does-h">
+    <h2 class="h-section" id="does-h">What it does</h2>
+    <ul class="points">
+      {c.points.map((p) => <li>{p}</li>)}
+    </ul>
+    <p class="fine">
+      Every detail is in the docs: <a class="link" href={c.doc.href}>{c.doc.label}</a>.
+    </p>
+  </section>
+
+  <section class="wrap wrap-read section section-tight" aria-labelledby="ww-systems">
+    <WorksWith items={worksWith(c)} noted={wooHere ? [WOO_NOTICE] : []} />
+  </section>
+
+  <section class="wrap wrap-read section section-tight" aria-label="Check your website">
+    <GuideCheck examples={[]} title="Check your website" />
+  </section>
+
+  <section class="wrap wrap-read section" aria-labelledby="others-h">
+    <h2 class="h-section" id="others-h">Other examples</h2>
+    <ul class="others">
+      {
+        others.map((o) => (
+          <li>
+            <a class="link" href={caseHref(o)}>
+              {o.kind}
+            </a>
+            <span class="muted">
+              {" · "}
+              <Marked text={o.label} />
+            </span>
+          </li>
+        ))
+      }
+    </ul>
+    {wooOthers && <p class="fine notice">{WOO_NOTICE}</p>}
+  </section>
+</Layout>
+
+<style>
+  .head-cta {
+    margin-top: var(--sp-5);
+  }
+  .example {
+    display: grid;
+    gap: var(--sp-2);
+    margin-top: var(--sp-3);
+  }
+  .arrives {
+    margin: 0;
+    font-size: var(--fs-card);
+    line-height: var(--lh-body);
+    color: var(--ink);
+  }
+  .points {
+    display: grid;
+    gap: var(--sp-2);
+    margin: var(--sp-3) 0 0;
+    padding-left: 1.1rem;
+    list-style: disc;
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+    color: var(--ink-2);
+  }
+  .points ::marker {
+    color: var(--ink-3);
+  }
+  .others {
+    display: grid;
+    gap: var(--sp-1);
+    margin: var(--sp-3) 0 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--fs-body);
+  }
+  .muted {
+    color: var(--ink-3);
+  }
+  .notice {
+    margin-top: var(--sp-3);
+  }
+</style>

@@ -1,57 +1,25 @@
 ---
+import { CASES, caseHref } from "../lib/cases";
+import Marked from "./Marked.astro";
 import Shot from "./Shot.astro";
 
 /**
- * Four trades, one build. `rule` is the line that differs between them; `what` is the day that
- * line produces. Keeping the rule first is the whole point of the section.
+ * Five kinds of business, each on the system it already runs (src/lib/cases.ts): what reaches the
+ * owner, then what the inbox does with that system, in one sentence. Examples, and labelled so; each
+ * links to its own short page, which keeps the detail.
  */
-const cases = [
-  {
-    who: "A bike shop",
-    rule: "Confirm a service booking when the slot is free and the shop is open.",
-    what: "An agent books a full service for Tuesday. It's confirmed before the owner looks at a screen.",
-  },
-  {
-    who: "A bakery",
-    rule: "Accept orders under your limit. Send bigger ones to a person.",
-    what: "Small orders go straight through. Big ones wait, and the customer is told so.",
-  },
-  {
-    who: "A plumber",
-    rule: "Send every quote request to the owner. Put leaks and anything urgent at the top.",
-    what: "The job, the address and the date arrive as fields, ready to price.",
-  },
-  {
-    who: "A studio",
-    rule: "Let the owner's own AI answer messages, using the owner's prices and hours.",
-    what: "It connects over MCP and checks the real availability before it replies.",
-  },
-];
 ---
 
 <section class="section" id="use-cases" aria-labelledby="cases-h" data-reveal>
   <div class="wrap">
-    <div class="sec-head">
+    <div class="cases-head">
       <div>
-        <p class="eyebrow">In practice</p>
-        <h2 class="h-section" id="cases-h">Four businesses, four sets of rules</h2>
+        <p class="eyebrow">Examples</p>
+        <h2 class="h-section" id="cases-h">On the systems they already run</h2>
         <p class="lede">
-          They all run the same inbox. Only the rules differ.
+          Five kinds of business, one inbox. These are examples of what it does today, not customers.
         </p>
       </div>
-    </div>
-    <div class="cols">
-      <ol class="glass panel flows">
-        {
-          cases.map((c) => (
-            <li class="flow">
-              <h3 class="h-card">{c.who}</h3>
-              <p class="does">{c.rule}</p>
-              <p class="card-text">{c.what}</p>
-            </li>
-          ))
-        }
-      </ol>
       <Shot
         src="/shots/item-day.png"
         alt="A booking in the inbox with its details, its state and buttons for the next step"
@@ -59,18 +27,36 @@ const cases = [
         caption="The booking, where it stands, the conversation and the next steps."
       />
     </div>
+    <ol class="glass panel flows">
+      {
+        CASES.map((c) => (
+          <li class="flow">
+            <h3 class="h-card">
+              <a class="case-link" href={caseHref(c)}>
+                <Marked text={c.label} />
+              </a>
+            </h3>
+            <p class="arrives">{c.arrives}</p>
+            <p class="card-text">{c.short}</p>
+          </li>
+        ))
+      }
+    </ol>
   </div>
 </section>
 
 <style>
-  .cols {
+  /* The heading beside the print of what lands; under them, one line per example. */
+  .cases-head {
     display: grid;
     gap: var(--gap-grid);
-    align-items: start;
+    align-items: center;
+    margin-bottom: var(--space-head);
   }
   @media (min-width: 900px) {
-    .cols {
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    .cases-head {
+      grid-template-columns: minmax(0, 6fr) minmax(0, 5fr);
+      gap: var(--sp-8);
     }
   }
   .flows {
@@ -87,9 +73,31 @@ const cases = [
   .flow:first-child {
     border-top: 0;
   }
-  /* The rule itself, in full ink: it is the sentence that changes from trade to trade. */
-  .does {
+  /* Wide, each example is a row: the business, what reaches it, what the inbox does. */
+  @media (min-width: 900px) {
+    .flow {
+      grid-template-columns: 224px minmax(0, 1fr) minmax(0, 1fr);
+      gap: var(--sp-6);
+      align-items: baseline;
+    }
+  }
+  .flow > * {
     margin: 0;
+  }
+  .case-link {
+    color: inherit;
+    text-decoration: none;
+  }
+  .case-link:hover,
+  .case-link:focus-visible {
+    color: var(--violet-ink);
+  }
+  .case-link::after {
+    content: " →";
+    color: var(--ink-3);
+  }
+  /* What reaches the owner, in full ink: the line that changes from business to business. */
+  .arrives {
     max-width: var(--measure-card);
     font-size: var(--fs-card);
     line-height: var(--lh-body);

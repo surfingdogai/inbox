@@ -1,5 +1,5 @@
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
-import { createApiKey, TOOL_SCOPES } from "@surfingdog/adapters";
+import { builtInConnectors, createApiKey, TOOL_SCOPES } from "@surfingdog/adapters";
 import { schema, ulid } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
 import { type App, createApp } from "../src/app";
@@ -353,6 +353,17 @@ describe("MCP doors", () => {
       "set_order_progress",
       "set_sold_out",
     ]);
+    // What an owner's AI reads of the connections names what this release connects with nothing set
+    // (every connector ready on a hosted inbox, by a word of its name), and nothing as being built.
+    const integrations = tools.tools.find((t) => t.name === "list_integrations")?.description ?? "";
+    const generic = new Set(["Calendar", "Calendar link", "Share your bookings"]);
+    for (const c of builtInConnectors({ hosted: true })) {
+      if (generic.has(c.title) || (c.ready?.() ?? true) !== true) continue;
+      expect(integrations, c.title).toContain(c.title.split(" ")[0] ?? c.title);
+    }
+    expect(integrations).toContain("Outlook's among them, for busy times only");
+    expect(integrations).toContain("shares the bookings");
+    expect(integrations).not.toMatch(/being built/);
     // Every owner tool names the scopes that let a caller through; one missing is a gap in the
     // log-first record and, once scopes are enforced, a tool only the owner could call.
     for (const t of tools.tools) expect(TOOL_SCOPES[t.name], t.name).toBeDefined();

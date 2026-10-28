@@ -9,6 +9,7 @@
 // Cloudflare Workers.
 import Layout from "../layouts/Layout.astro";
 import { DEPLOY_URL, HOSTED_INSTALL } from "../lib/hosted";
+import { WOO_NOTICE } from "../lib/integrations";
 import { SELF_HOST } from "../lib/self-host";
 
 const PROMPT =
@@ -145,10 +146,10 @@ const CONNECT_PROMPT =
       <p class="hint">
         Each system that calls your inbox gets its own key, which you can revoke in Settings → Keys. The steps it
         follows are at
-        <a class="link" href="/connect.md">/connect.md</a>. Calendars, Cal.com, Stripe and Mollie connect in Settings
-        → Integrations today. Being built: WooCommerce, Shopify, Square and Calendly
-        (<a class="link" href="/docs/integrations/">integrations</a>). Vote for yours on
-        <a class="link" href="/requests/">the requests board</a>.
+        <a class="link" href="/connect.md">/connect.md</a>. Calendars, Calendly, payments, shops (WooCommerce®, Shopify,
+        Square), property systems, ordering systems and job tools connect in Settings → Integrations today
+        (<a class="link" href="/docs/integrations/">which, and how</a>). Missing yours? Vote for it on
+        <a class="link" href="/requests/">the requests board</a>. {WOO_NOTICE}
       </p>
     </div>
   </section>

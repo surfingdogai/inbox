@@ -9,7 +9,7 @@ Settings → Integrations → **Job tool**. Which requests go in: Settings → [
 
 ## Which tools
 
-ServiceM8 connects with your own key today. Housecall Pro and Fergus connect with yours too, once the server you are on has cleared their API terms for this use; until then they show **Needs setup**. Jobber, and ServiceM8's one-click sign-in, show **Needs setup** until their partner app is on the server. Nothing to press shows a button that goes nowhere.
+ServiceM8 connects with your own key today: built from ServiceM8's documentation and tested against a stand-in; not yet run with a real account. Housecall Pro and Fergus connect with yours too, once the server you are on has cleared their API terms for this use; until then they show **Needs setup**. Jobber, and ServiceM8's one-click sign-in, show **Needs setup** until their partner app is on the server. Nothing to press shows a button that goes nowhere.
 
 | Tool | Connects with | What a request becomes | Its developer documentation |
 | --- | --- | --- | --- |
@@ -32,4 +32,4 @@ On your own server: `JOB_TOOLS_CLEARED=housecallpro,fergus` once you have read t
 
 ## Building one
 
-Every job tool is built from its published reference and checked against a local fake of it (`packages/adapters/test/fakes/work.ts`), never with a business's real key.
+Every job tool is built from its published reference and tested against a stand-in of it (`packages/adapters/test/fakes/work.ts`); none has yet run with a real account.

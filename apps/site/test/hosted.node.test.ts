@@ -825,11 +825,9 @@ describe("the docs, in both states", () => {
     expect(version(VS, true)).toContain("| Hosted by us |");
     expect(version(VS, false)).toContain("Hosted is not open yet; until it is, self-host.");
     expect(version(VS, false)).toContain("| Hosted by us (not open yet) |");
-    expect(version(OVERVIEW, true)).toContain("Still to come: connectors (coming) and customer records");
+    expect(version(OVERVIEW, true)).toContain("Still to come: customer records");
     expect(version(OVERVIEW, true)).toContain("let us host it, deploy to Cloudflare, or run it on your own server");
-    expect(version(OVERVIEW, false)).toContain(
-      "Still to come: connectors (coming), hosted tenancy, and customer records",
-    );
+    expect(version(OVERVIEW, false)).toContain("Still to come: hosted tenancy and customer records");
     expect(version(OVERVIEW, false)).toContain("or join the hosted waitlist, then make your first calls.");
     for (const doc of [QUICKSTART, VS, OVERVIEW]) expect(version(doc, true)).not.toMatch(/waitlist|not open yet/);
   });

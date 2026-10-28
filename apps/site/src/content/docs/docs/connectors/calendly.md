@@ -5,6 +5,8 @@ sidebar:
   order: 4
 ---
 
+Built from Calendly's documentation and tested against a stand-in; not yet run with a real account.
+
 If you already take bookings on Calendly, your Inbox works with it. Times booked on Calendly, or busy in a calendar Calendly checks, are not offered to agents. On Calendly's Standard plan and above, each booking your Inbox confirms is held on Calendly too, so nobody books that time there.
 
 Settings → Integrations → **Calendly**.

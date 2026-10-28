@@ -1,0 +1,19 @@
+---
+/**
+ * Text with a trademark symbol its owner asks for, the symbol set small and raised as the "Works
+ * with" row sets it.
+ */
+interface Props {
+  text: string;
+}
+const parts = Astro.props.text.split("®");
+---
+
+{parts.map((part, i) => (i === 0 ? part : <><sup class="mark-sym">®</sup>{part}</>))}
+
+<style>
+  .mark-sym {
+    font-size: 0.62em;
+    line-height: 0;
+  }
+</style>

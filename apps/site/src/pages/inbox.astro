@@ -10,6 +10,7 @@ import Rules from "../components/Rules.astro";
 import Run from "../components/Run.astro";
 import UseCases from "../components/UseCases.astro";
 import Why from "../components/Why.astro";
+import WorksWith from "../components/WorksWith.astro";
 import Layout from "../layouts/Layout.astro";
 import { HOSTED_INBOX_LD } from "../lib/hosted";
 
@@ -39,6 +40,11 @@ const ld = {
   <Why />
   <Rules />
   <UseCases />
+  <section class="section section-tight" id="works-with" aria-labelledby="ww-systems">
+    <div class="wrap">
+      <WorksWith />
+    </div>
+  </section>
   <Inbox />
   <Run />
   <ForAgents />

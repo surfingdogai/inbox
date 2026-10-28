@@ -1,0 +1,254 @@
+---
+// One platform the inbox works with today (src/lib/platforms.ts): what a customer's assistant can do
+// with a business on it through the inbox, what stays on the platform and in the owner's own account,
+// the platform's own AI and the inbox beside it, how to connect it, a check of the owner's own site,
+// the questions owners ask (shown, and given as FAQPage data in the same words), related platforms and
+// the guides that answer its wider questions. A calendar, shop, kitchen, stay or trade connection says
+// it was built from its platform's documentation and tested against a stand-in; a payment one doesn't.
+import Faqs from "../../components/Faqs.astro";
+import GuideAnswer from "../../components/GuideAnswer.astro";
+import GuideCheck from "../../components/GuideCheck.astro";
+import Marked from "../../components/Marked.astro";
+import Layout from "../../layouts/Layout.astro";
+import { faqPage } from "../../lib/faq";
+import { inline } from "../../lib/inline";
+import { integration, SYSTEMS, UNTRIED_LINE, untriedOf } from "../../lib/integrations";
+import {
+  PLATFORMS,
+  PLATFORMS_AS_OF,
+  type Platform,
+  platformBySlug,
+  platformHref,
+  platformNotices,
+} from "../../lib/platforms";
+
+export function getStaticPaths() {
+  return PLATFORMS.map((p) => ({ params: { slug: p.slug }, props: { p } }));
+}
+
+const { p } = Astro.props as { p: Platform };
+const site = Astro.site?.toString() ?? "https://surfingdog.ai/";
+const url = new URL(platformHref(p.slug), site).toString();
+const index = new URL("/integrations/", site).toString();
+const related = p.related.map((slug) => platformBySlug(slug)).filter((x): x is Platform => Boolean(x));
+/** The page's words with its marks: `code`, [links](/path) and **bold**, everything else escaped. */
+const rich = (text: string) => inline(text).replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+const notices = platformNotices(p);
+/** Said of a system's connections only: one on its own page, several (the calendars) together. */
+const systems = p.ids.map(integration).filter((i) => SYSTEMS.includes(i.group));
+const untried = systems.length === 0 ? null : systems.length > 1 ? UNTRIED_LINE : untriedOf(p.name.replace("®", ""));
+const sources = [...new Map(p.theirs.facts.flatMap((f) => f.sources).map((s) => [s.href, s])).values()];
+const ld = [
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: p.heading,
+    description: p.description,
+    abstract: p.answer,
+    url,
+    about: { "@type": "SoftwareApplication", name: "Surfing Dog Inbox", url: new URL("/inbox/", site).toString() },
+    publisher: { "@id": `${site}#org` },
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Surfing Dog Inbox", item: new URL("/inbox/", site).toString() },
+      { "@type": "ListItem", position: 2, name: "Integrations", item: index },
+      { "@type": "ListItem", position: 3, name: p.name.replace("®", ""), item: url },
+    ],
+  },
+  faqPage(p.faqs, url),
+];
+---
+
+<Layout title={`${p.title} · Surfing Dog`} description={p.description} image="/art/og-inbox-v1.png" ld={ld}>
+  <article class="wrap wrap-read section is-head pf" aria-labelledby="pf-title">
+    <p class="eyebrow"><a href="/integrations/">Integrations</a> · <Marked text={p.name} /></p>
+    <h1 class="h-page" id="pf-title"><Marked text={p.heading} /></h1>
+    <GuideAnswer text={p.answer} />
+
+    <div class="prose pf-body">
+      <h2 id="can">What a customer's assistant can do</h2>
+      <ul>
+        {p.can.map((t) => <li set:html={rich(t)} />)}
+      </ul>
+
+      <h2 id="stays">{p.stays.heading}</h2>
+      <ul>
+        {p.stays.points.map((t) => <li set:html={rich(t)} />)}
+      </ul>
+
+      <h2 id="theirs">{p.theirs.heading}</h2>
+      {p.theirs.facts.length > 0 && <p class="asof">From its own pages, {PLATFORMS_AS_OF}:</p>}
+      {
+        p.theirs.facts.map((f) => (
+          <p>
+            <span set:html={rich(f.text)} />{" "}
+            <span class="src">
+              ({f.sources.map((s, i) => <>{i > 0 && "; "}<a href={s.href} rel="noopener">{s.label}</a></>)})
+            </span>
+          </p>
+        ))
+      }
+      <p set:html={rich(p.theirs.beside)} />
+
+      <h2 id="connect">Connect it</h2>
+      <p set:html={rich(p.connect.text)} />
+      <p><a class="link" href={p.connect.doc.href}>{p.connect.doc.label}</a></p>
+    </div>
+
+    <GuideCheck examples={[]} title={p.check} />
+    <Faqs faqs={p.faqs} />
+
+    <nav class="pf-more" aria-labelledby="pf-more-h">
+      <h2 class="pf-more-h" id="pf-more-h">More integrations</h2>
+      <p>
+        {
+          related.map((r) => (
+            <>
+              <a class="link" href={platformHref(r.slug)}>
+                <Marked text={r.name} />
+              </a>
+              <span aria-hidden="true"> · </span>
+            </>
+          ))
+        }
+        <a class="link" href="/integrations/">All of them, and more coming</a>
+      </p>
+      <h2 class="pf-more-h pf-guides-h" id="pf-guides-h">Guides</h2>
+      <p>
+        {
+          p.guides.map((g, i) => (
+            <>
+              {i > 0 && <span aria-hidden="true"> · </span>}
+              <a class="link" href={g.href}>
+                {g.label}
+              </a>
+            </>
+          ))
+        }
+      </p>
+    </nav>
+
+    <div class="pf-notes">
+      {untried && <p>{untried}</p>}
+      <p>
+        We built these connections ourselves; the names are their owners' trademarks, and none endorses us.{
+          notices.map((n) => ` ${n}`)
+        }
+      </p>
+      {
+        sources.length > 0 && (
+          <details class="sources">
+            <summary>Sources, read in {PLATFORMS_AS_OF.replace("as of ", "")}</summary>
+            <ul>
+              {sources.map((s) => (
+                <li>
+                  <a class="link" href={s.href} rel="noopener">
+                    {s.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )
+      }
+    </div>
+  </article>
+</Layout>
+
+<style>
+  .pf {
+    padding-bottom: var(--section-y);
+  }
+  .eyebrow a {
+    color: inherit;
+    text-decoration: none;
+  }
+  .eyebrow a:hover,
+  .eyebrow a:focus-visible {
+    text-decoration: underline;
+  }
+  /* The same reading size as a guide's prose. */
+  .pf-body {
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+  }
+  .pf-body > :global(p:first-child) {
+    font-size: inherit;
+    line-height: inherit;
+    color: inherit;
+  }
+  .pf-body h2 {
+    font-size: var(--fs-section);
+  }
+  .pf-body ul {
+    list-style: disc;
+  }
+  .pf-body li::marker {
+    color: var(--ink-3);
+  }
+  .pf-body :global(b) {
+    font-weight: 600;
+  }
+  .pf-body :global(:not(pre) > code) {
+    padding: 0 4px;
+    border-color: transparent;
+    background: var(--row-bg);
+    font-size: var(--fs-mono);
+  }
+  .asof,
+  .src {
+    font-size: var(--fs-fine);
+    color: var(--ink-3);
+  }
+  .pf-more {
+    padding-top: var(--sp-5);
+    border-top: 1px solid var(--hairline);
+  }
+  .pf-more-h {
+    margin: 0;
+    font-size: var(--fs-micro);
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .pf-guides-h {
+    margin-top: var(--sp-4);
+  }
+  .pf-more p {
+    margin: var(--sp-2) 0 0;
+    font-size: var(--fs-ui);
+    line-height: 1.7;
+    color: var(--ink-3);
+  }
+  .pf-notes {
+    display: grid;
+    gap: var(--sp-2);
+  }
+  .pf-notes p {
+    margin: 0;
+    font-size: var(--fs-fine);
+    line-height: 1.5;
+    color: var(--ink-3);
+  }
+  .sources summary {
+    width: fit-content;
+    font-size: var(--fs-fine);
+    color: var(--ink-3);
+    cursor: pointer;
+  }
+  .sources summary:hover {
+    color: var(--ink-2);
+  }
+  .sources ul {
+    display: grid;
+    gap: var(--sp-1);
+    margin: var(--sp-2) 0 0;
+    padding-left: 1.25rem;
+    list-style: disc;
+    font-size: var(--fs-fine);
+  }
+</style>

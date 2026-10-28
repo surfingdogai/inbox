@@ -5,7 +5,7 @@ sidebar:
   order: 2
 ---
 
-**Being built.** This connector is not in a release yet.
+Built from Shopify's documentation and tested against a stand-in; not yet run with a real account.
 
 Shopify already lets assistants shop your cart and pay at your checkout. Your Inbox adds what Shopify does not: questions, quotes and bookings in one place, and a signed receipt for each one. Agents are sent to your Shopify checkout to buy, and to your Inbox for the rest.
 
@@ -41,7 +41,7 @@ Only on your own server: make an app in the Dev Dashboard with the scopes above,
 
 ## Send agents to your checkout
 
-Your shop's checkout is where carts are bought. Once your Inbox names it for orders, your manifest sends agents there to buy, and to your Inbox for questions and quotes. Soon you can choose this in Settings → General.
+Your shop's checkout is where carts are bought. Name it for orders in Settings → General → **What agents can do** ([Booked or ordered elsewhere](/docs/connectors/elsewhere/)), and your manifest sends agents there to buy, and to your Inbox for questions and quotes.
 
 ## What it reads, and what it writes
 

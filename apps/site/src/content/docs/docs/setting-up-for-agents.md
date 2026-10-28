@@ -35,7 +35,7 @@ A shop with its own checkout, a clinic on a booking system, a team on Intercom, 
 - it keeps a log: every item, every event, who caused it and through which door, and, when something becomes a promise (a booking confirmed, an order accepted or paid), a signed [receipt](/docs/receipts/);
 - it hands each item to where the business already works, and the business's own systems, people or AI answer.
 
-How it hands things over **today**: signed [webhooks](/docs/webhooks/), the [owner API](/docs/api/) and its event stream, and email alerts to the owner. Native connectors for other platforms are **coming**; the connector-style piece that exists now is the [product feed](/docs/feeds/) import. So handing items to a helpdesk is a **pattern** today: a webhook and a small bridge, described in [Messages with the tools you already have](#messages-with-the-tools-you-already-have).
+How it hands things over **today**: signed [webhooks](/docs/webhooks/), the [owner API](/docs/api/) and its event stream, and email alerts to the owner. Native connectors cover calendars and payments, and from 0.2.0 shops, property systems, ordering systems and job tools ([Integrations](/docs/integrations/)), and the [product feed](/docs/feeds/) import reads a shop's feed. None is a helpdesk, so handing items to one is a **pattern** today: a webhook and a small bridge, described in [Messages with the tools you already have](#messages-with-the-tools-you-already-have).
 
 ### Either way
 
@@ -67,9 +67,9 @@ Some starting points, to adjust with the owner:
 
 **Today** the inbox advertises what it has the means to do: `message` always, `booking` once a service booked at a time has opening hours the owner saved, `order` once a product is active, `quote_request` with either ([Manifest](/docs/manifest/)). So a shop whose orders go to its own checkout leaves products out of the inbox, and the inbox's manifest does not offer orders. If an agent sends an order anyway, the public API still takes it as a request that waits for a person: nothing is promised until someone accepts it.
 
-Where bookings or orders are taken somewhere else, say so with `doorsElsewhere` ([Your page](/docs/your-page/)): the manifest names that address as `doors_elsewhere`, leaves the kind out of `item_types`, and the business's page links there.
+Where bookings or orders are taken somewhere else, the owner app says so: Settings → General → **What agents can do** → **Take bookings or orders on another site?** takes the link to the business's own page there, and names the platform it is on ([Booked or ordered elsewhere](/docs/connectors/elsewhere/)). The inbox then stops offering that kind itself; the manifest names the address as `doors_elsewhere` and leaves the kind out of `item_types`, and the business's page links there. Messages and quote requests stay with the inbox. Over the API it is `doorsElsewhere` ([Your page](/docs/your-page/)), which is also how a place to stay sends guests to its own booking engine ([A place to stay](/docs/stays/#if-you-take-bookings-elsewhere-already)).
 
-**Coming**: a setting per door in the inbox: handled by the inbox, handled elsewhere at an address the business owns, or off and declared as unavailable, with sensible defaults for each kind of business.
+**Coming**: declaring a door off and unavailable, and sensible defaults for each kind of business.
 
 ## Make every door findable
 

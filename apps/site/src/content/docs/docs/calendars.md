@@ -7,6 +7,8 @@ Your Inbox offers times from the opening hours you set. A calendar you connect m
 
 Settings → Integrations → **Calendar** (iCloud, Fastmail, Nextcloud, any other that speaks CalDAV, a calendar link, or Google), **Cal.com** or [**Calendly**](/docs/connectors/calendly/).
 
+iCloud, Fastmail, Nextcloud and the other CalDAV calendars, a Google or Outlook calendar link, Google Calendar and Cal.com are built from each one's documentation and tested against a stand-in; not yet run with a real account.
+
 ## What it does, and what it never does
 
 - **Busy times only remove times.** A busy time in your calendar takes that time off what your Inbox offers and refuses to confirm a booking over it. It never moves, cancels or refuses a booking that was already confirmed.

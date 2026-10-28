@@ -34,6 +34,7 @@ export const pt: Dict = {
       "Spam filter": "Filtro de spam",
       "Try it": "Experimente",
       Assistants: "Assistentes",
+      Integrations: "Integrações",
       Requests: "Pedidos",
       Sponsors: "Patrocinadores",
       Docs: "Documentação",
