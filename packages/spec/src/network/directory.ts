@@ -646,8 +646,16 @@ export type PlaceCategoryResponse = z.infer<typeof placeCategoryResponseSchema>;
 export const attributeKeySchema = z.object({
   key: z.string().regex(/^[a-z][a-z0-9_]*$/),
   group: z.string(),
-  type: z.enum(["bool", "enum"]),
+  type: z
+    .enum(["bool", "enum", "set"])
+    .describe(
+      "bool: true or false; enum: one of its values; set (version 2): up to five values of another vocabulary.",
+    ),
   values: z.array(z.string()).optional().describe('The values of an "enum" key; a filter names one as key=value.'),
+  values_from: z
+    .string()
+    .optional()
+    .describe('A "set" key\'s vocabulary (cuisines.json for cuisine); a filter names one of its values as key=value.'),
   labels: z.record(z.string(), z.string()).describe("Language → label."),
   filterable: z.boolean().optional().describe("false: shown in the list, never filterable or shown yet."),
 });
@@ -671,7 +679,9 @@ export const attributesResponseSchema = z.object({
 export type AttributesResponse = z.infer<typeof attributesResponseSchema>;
 
 /**
- * The file `vocab/attributes.json` (§4.10): every attribute key, the group it belongs to, the categories it applies to
+ * The file `vocab/attributes.json` (§4.10): every attribute key, its type (version 2 adds `set`: up to five values of
+ * another vocabulary, named by `values_from`, as `cuisine` holds slugs of `vocab/cuisines.json`), the group it belongs
+ * to, the categories it applies to
  * (group slugs, or `*`), whether a crawler may read it (`declared`: from the business's own structured data;
  * `seen`: also from an explicit statement on its own pages; `never`), whether it needs a proof a register would give
  * (never filterable or shown until one exists), and its labels.
@@ -683,8 +693,13 @@ export const attributeVocabularySchema = z.object({
     z.object({
       key: z.string().regex(/^[a-z][a-z0-9_]*$/),
       group: z.string(),
-      type: z.enum(["bool", "enum"]),
+      type: z.enum(["bool", "enum", "set"]),
       values: z.array(z.string().regex(/^[a-z0-9_]+$/)).optional(),
+      values_from: z
+        .string()
+        .regex(/^[a-z][a-z0-9-]*\.json$/)
+        .optional()
+        .describe("Version 2: the vocabulary of a set key's values, a file beside this one (cuisines.json)."),
       applies_to: z.array(z.string()).min(1),
       crawlable: z.enum(["declared", "seen", "never"]),
       needs_proof: z.boolean(),

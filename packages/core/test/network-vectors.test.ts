@@ -1067,6 +1067,8 @@ describe("protocol 0.2: vocab/doors.json and vocab/attributes.json", () => {
       for (const g of k.applies_to) expect(g === "*" || slugs.has(g), `${k.key}: ${g}`).toBe(true);
       expect(Object.keys(k.labels).sort(), k.key).toEqual(["de", "en", "es", "fr", "pt"]);
       expect(k.type === "enum", k.key).toBe(Boolean(k.values?.length));
+      // Version 2: a set's values are another vocabulary's (cuisine, vocab/cuisines.json).
+      expect(k.type === "set", k.key).toBe(Boolean(k.values_from));
     }
     expect(v.keys.filter((k) => k.needs_proof).map((k) => k.key)).toEqual(["halal", "kosher", "cert"]);
     expect(v.keys.filter((k) => k.group === "identity").every((k) => k.crawlable === "declared")).toBe(true);

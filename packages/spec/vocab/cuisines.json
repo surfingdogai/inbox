@@ -1,0 +1,2231 @@
+{
+  "description": "Cuisines a place that serves food may name (spec 0.13): what it cooks, by where the food comes from (regional) or by what is served (dish), at most five per business. Each slug has labels in English, Portuguese, Spanish, French, German, Italian and Dutch, and synonyms; osm are the OpenStreetMap cuisine= values it reads, schemaorg the servesCuisine strings, and overture the Overture place category ids that name it (a place there serves it). A term (a slug with its underscores as spaces, a label, a synonym or a schemaorg string) is compared in lower case, without accents, with every run of other characters as one space and the words \"and\" and \"e\" left out, and names one entry only. A diet is not a cuisine: vegan and vegetarian named as a cuisine are read as their diet attribute of vocab/attributes.json, and halal and kosher are never cuisines and are never read from one. A cuisine named that is not here is a business's own word: shown with its source, never filtered on. A slug is never removed or renamed; new ones come by a change to this file, which raises version.",
+  "version": 1,
+  "languages": ["en", "pt", "es", "fr", "de", "it", "nl"],
+  "max_per_business": 5,
+  "cuisines": [
+    {
+      "slug": "african",
+      "kind": "regional",
+      "labels": {
+        "en": "African",
+        "pt": "Africana",
+        "es": "Africana",
+        "fr": "Africaine",
+        "de": "Afrikanisch",
+        "it": "Africana",
+        "nl": "Afrikaans"
+      },
+      "synonyms": {},
+      "osm": ["african"],
+      "schemaorg": ["African"],
+      "overture": ["african_restaurant"]
+    },
+    {
+      "slug": "american",
+      "kind": "regional",
+      "labels": {
+        "en": "American",
+        "pt": "Americana",
+        "es": "Americana",
+        "fr": "Américaine",
+        "de": "Amerikanisch",
+        "it": "Americana",
+        "nl": "Amerikaans"
+      },
+      "synonyms": {},
+      "osm": ["american"],
+      "schemaorg": ["American"],
+      "overture": ["american_restaurant"]
+    },
+    {
+      "slug": "arab",
+      "kind": "regional",
+      "labels": {
+        "en": "Arab",
+        "pt": "Árabe",
+        "es": "Árabe",
+        "fr": "Arabe",
+        "de": "Arabisch",
+        "it": "Araba",
+        "nl": "Arabisch"
+      },
+      "synonyms": {
+        "en": ["arabian"]
+      },
+      "osm": ["arab"],
+      "schemaorg": ["Arab"],
+      "overture": ["arabian_restaurant"]
+    },
+    {
+      "slug": "argentinian",
+      "kind": "regional",
+      "labels": {
+        "en": "Argentinian",
+        "pt": "Argentina",
+        "es": "Argentina",
+        "fr": "Argentine",
+        "de": "Argentinisch",
+        "it": "Argentina",
+        "nl": "Argentijns"
+      },
+      "synonyms": {
+        "en": ["argentine"]
+      },
+      "osm": ["argentinian"],
+      "schemaorg": ["Argentinian"],
+      "overture": ["argentine_restaurant"]
+    },
+    {
+      "slug": "asian",
+      "kind": "regional",
+      "labels": {
+        "en": "Asian",
+        "pt": "Asiática",
+        "es": "Asiática",
+        "fr": "Asiatique",
+        "de": "Asiatisch",
+        "it": "Asiatica",
+        "nl": "Aziatisch"
+      },
+      "synonyms": {
+        "en": ["pan-asian"]
+      },
+      "osm": ["asian"],
+      "schemaorg": ["Asian"],
+      "overture": ["asian_restaurant", "pan_asian_restaurant"]
+    },
+    {
+      "slug": "austrian",
+      "kind": "regional",
+      "labels": {
+        "en": "Austrian",
+        "pt": "Austríaca",
+        "es": "Austriaca",
+        "fr": "Autrichienne",
+        "de": "Österreichisch",
+        "it": "Austriaca",
+        "nl": "Oostenrijks"
+      },
+      "synonyms": {},
+      "osm": ["austrian"],
+      "schemaorg": ["Austrian"],
+      "overture": ["austrian_restaurant"]
+    },
+    {
+      "slug": "balkan",
+      "kind": "regional",
+      "labels": {
+        "en": "Balkan",
+        "pt": "Balcânica",
+        "es": "Balcánica",
+        "fr": "Balkanique",
+        "de": "Balkanisch",
+        "it": "Balcanica",
+        "nl": "Balkan"
+      },
+      "synonyms": {},
+      "osm": ["balkan"],
+      "schemaorg": ["Balkan"],
+      "overture": ["serbo_croatian_restaurant"]
+    },
+    {
+      "slug": "bangladeshi",
+      "kind": "regional",
+      "labels": {
+        "en": "Bangladeshi",
+        "pt": "Bangladechiana",
+        "es": "Bangladesí",
+        "fr": "Bangladaise",
+        "de": "Bangladeschisch",
+        "it": "Bengalese",
+        "nl": "Bengaals"
+      },
+      "synonyms": {},
+      "osm": ["bangladeshi"],
+      "schemaorg": ["Bangladeshi"],
+      "overture": ["bangladeshi_restaurant"]
+    },
+    {
+      "slug": "basque",
+      "kind": "regional",
+      "labels": {
+        "en": "Basque",
+        "pt": "Basca",
+        "es": "Vasca",
+        "fr": "Basque",
+        "de": "Baskisch",
+        "it": "Basca",
+        "nl": "Baskisch"
+      },
+      "synonyms": {},
+      "osm": ["basque"],
+      "schemaorg": ["Basque"],
+      "overture": ["basque_restaurant"]
+    },
+    {
+      "slug": "belgian",
+      "kind": "regional",
+      "labels": {
+        "en": "Belgian",
+        "pt": "Belga",
+        "es": "Belga",
+        "fr": "Belge",
+        "de": "Belgisch",
+        "it": "Belga",
+        "nl": "Belgisch"
+      },
+      "synonyms": {},
+      "osm": ["belgian"],
+      "schemaorg": ["Belgian"],
+      "overture": ["belgian_restaurant"]
+    },
+    {
+      "slug": "brazilian",
+      "kind": "regional",
+      "labels": {
+        "en": "Brazilian",
+        "pt": "Brasileira",
+        "es": "Brasileña",
+        "fr": "Brésilienne",
+        "de": "Brasilianisch",
+        "it": "Brasiliana",
+        "nl": "Braziliaans"
+      },
+      "synonyms": {},
+      "osm": ["brazilian"],
+      "schemaorg": ["Brazilian"],
+      "overture": ["brazilian_restaurant"]
+    },
+    {
+      "slug": "british",
+      "kind": "regional",
+      "labels": {
+        "en": "British",
+        "pt": "Britânica",
+        "es": "Británica",
+        "fr": "Britannique",
+        "de": "Britisch",
+        "it": "Britannica",
+        "nl": "Brits"
+      },
+      "synonyms": {},
+      "osm": ["british"],
+      "schemaorg": ["British"],
+      "overture": ["british_restaurant"]
+    },
+    {
+      "slug": "cajun",
+      "kind": "regional",
+      "labels": {
+        "en": "Cajun",
+        "pt": "Cajun",
+        "es": "Cajún",
+        "fr": "Cajun",
+        "de": "Cajun",
+        "it": "Cajun",
+        "nl": "Cajun"
+      },
+      "synonyms": {
+        "en": ["creole", "cajun and creole"],
+        "fr": ["créole"]
+      },
+      "osm": ["cajun"],
+      "schemaorg": ["Cajun"],
+      "overture": ["cajun_and_creole_restaurant"]
+    },
+    {
+      "slug": "cantonese",
+      "kind": "regional",
+      "labels": {
+        "en": "Cantonese",
+        "pt": "Cantonesa",
+        "es": "Cantonesa",
+        "fr": "Cantonaise",
+        "de": "Kantonesisch",
+        "it": "Cantonese",
+        "nl": "Kantonees"
+      },
+      "synonyms": {},
+      "osm": ["cantonese"],
+      "schemaorg": ["Cantonese"],
+      "overture": []
+    },
+    {
+      "slug": "caribbean",
+      "kind": "regional",
+      "labels": {
+        "en": "Caribbean",
+        "pt": "Caribenha",
+        "es": "Caribeña",
+        "fr": "Caribéenne",
+        "de": "Karibisch",
+        "it": "Caraibica",
+        "nl": "Caribisch"
+      },
+      "synonyms": {},
+      "osm": ["caribbean"],
+      "schemaorg": ["Caribbean"],
+      "overture": ["caribbean_restaurant"]
+    },
+    {
+      "slug": "catalan",
+      "kind": "regional",
+      "labels": {
+        "en": "Catalan",
+        "pt": "Catalã",
+        "es": "Catalana",
+        "fr": "Catalane",
+        "de": "Katalanisch",
+        "it": "Catalana",
+        "nl": "Catalaans"
+      },
+      "synonyms": {},
+      "osm": ["catalan"],
+      "schemaorg": ["Catalan"],
+      "overture": ["catalan_restaurant"]
+    },
+    {
+      "slug": "chinese",
+      "kind": "regional",
+      "labels": {
+        "en": "Chinese",
+        "pt": "Chinesa",
+        "es": "China",
+        "fr": "Chinoise",
+        "de": "Chinesisch",
+        "it": "Cinese",
+        "nl": "Chinees"
+      },
+      "synonyms": {},
+      "osm": ["chinese"],
+      "schemaorg": ["Chinese"],
+      "overture": ["chinese_restaurant"]
+    },
+    {
+      "slug": "colombian",
+      "kind": "regional",
+      "labels": {
+        "en": "Colombian",
+        "pt": "Colombiana",
+        "es": "Colombiana",
+        "fr": "Colombienne",
+        "de": "Kolumbianisch",
+        "it": "Colombiana",
+        "nl": "Colombiaans"
+      },
+      "synonyms": {},
+      "osm": ["colombian"],
+      "schemaorg": ["Colombian"],
+      "overture": ["colombian_restaurant"]
+    },
+    {
+      "slug": "cuban",
+      "kind": "regional",
+      "labels": {
+        "en": "Cuban",
+        "pt": "Cubana",
+        "es": "Cubana",
+        "fr": "Cubaine",
+        "de": "Kubanisch",
+        "it": "Cubana",
+        "nl": "Cubaans"
+      },
+      "synonyms": {},
+      "osm": ["cuban"],
+      "schemaorg": ["Cuban"],
+      "overture": ["cuban_restaurant"]
+    },
+    {
+      "slug": "czech",
+      "kind": "regional",
+      "labels": {
+        "en": "Czech",
+        "pt": "Checa",
+        "es": "Checa",
+        "fr": "Tchèque",
+        "de": "Tschechisch",
+        "it": "Ceca",
+        "nl": "Tsjechisch"
+      },
+      "synonyms": {},
+      "osm": ["czech"],
+      "schemaorg": ["Czech"],
+      "overture": ["czech_restaurant"]
+    },
+    {
+      "slug": "danish",
+      "kind": "regional",
+      "labels": {
+        "en": "Danish",
+        "pt": "Dinamarquesa",
+        "es": "Danesa",
+        "fr": "Danoise",
+        "de": "Dänisch",
+        "it": "Danese",
+        "nl": "Deens"
+      },
+      "synonyms": {},
+      "osm": ["danish"],
+      "schemaorg": ["Danish"],
+      "overture": ["danish_restaurant"]
+    },
+    {
+      "slug": "dutch",
+      "kind": "regional",
+      "labels": {
+        "en": "Dutch",
+        "pt": "Holandesa",
+        "es": "Holandesa",
+        "fr": "Néerlandaise",
+        "de": "Niederländisch",
+        "it": "Olandese",
+        "nl": "Nederlands"
+      },
+      "synonyms": {
+        "nl": ["hollands"]
+      },
+      "osm": ["dutch"],
+      "schemaorg": ["Dutch"],
+      "overture": []
+    },
+    {
+      "slug": "ethiopian",
+      "kind": "regional",
+      "labels": {
+        "en": "Ethiopian",
+        "pt": "Etíope",
+        "es": "Etíope",
+        "fr": "Éthiopienne",
+        "de": "Äthiopisch",
+        "it": "Etiope",
+        "nl": "Ethiopisch"
+      },
+      "synonyms": {},
+      "osm": ["ethiopian"],
+      "schemaorg": ["Ethiopian"],
+      "overture": ["ethiopian_restaurant"]
+    },
+    {
+      "slug": "filipino",
+      "kind": "regional",
+      "labels": {
+        "en": "Filipino",
+        "pt": "Filipina",
+        "es": "Filipina",
+        "fr": "Philippine",
+        "de": "Philippinisch",
+        "it": "Filippina",
+        "nl": "Filipijns"
+      },
+      "synonyms": {},
+      "osm": ["filipino"],
+      "schemaorg": ["Filipino"],
+      "overture": ["filipino_restaurant"]
+    },
+    {
+      "slug": "french",
+      "kind": "regional",
+      "labels": {
+        "en": "French",
+        "pt": "Francesa",
+        "es": "Francesa",
+        "fr": "Française",
+        "de": "Französisch",
+        "it": "Francese",
+        "nl": "Frans"
+      },
+      "synonyms": {},
+      "osm": ["french"],
+      "schemaorg": ["French"],
+      "overture": ["french_restaurant"]
+    },
+    {
+      "slug": "fusion",
+      "kind": "regional",
+      "labels": {
+        "en": "Fusion",
+        "pt": "Fusão",
+        "es": "Fusión",
+        "fr": "Fusion",
+        "de": "Fusion",
+        "it": "Fusion",
+        "nl": "Fusion"
+      },
+      "synonyms": {},
+      "osm": ["fusion"],
+      "schemaorg": ["Fusion"],
+      "overture": ["asian_fusion_restaurant"]
+    },
+    {
+      "slug": "georgian",
+      "kind": "regional",
+      "labels": {
+        "en": "Georgian",
+        "pt": "Georgiana",
+        "es": "Georgiana",
+        "fr": "Géorgienne",
+        "de": "Georgisch",
+        "it": "Georgiana",
+        "nl": "Georgisch"
+      },
+      "synonyms": {},
+      "osm": ["georgian"],
+      "schemaorg": ["Georgian"],
+      "overture": ["georgian_restaurant"]
+    },
+    {
+      "slug": "german",
+      "kind": "regional",
+      "labels": {
+        "en": "German",
+        "pt": "Alemã",
+        "es": "Alemana",
+        "fr": "Allemande",
+        "de": "Deutsch",
+        "it": "Tedesca",
+        "nl": "Duits"
+      },
+      "synonyms": {},
+      "osm": ["german"],
+      "schemaorg": ["German"],
+      "overture": ["german_restaurant"]
+    },
+    {
+      "slug": "greek",
+      "kind": "regional",
+      "labels": {
+        "en": "Greek",
+        "pt": "Grega",
+        "es": "Griega",
+        "fr": "Grecque",
+        "de": "Griechisch",
+        "it": "Greca",
+        "nl": "Grieks"
+      },
+      "synonyms": {
+        "en": ["gyros", "souvlaki"]
+      },
+      "osm": ["greek"],
+      "schemaorg": ["Greek"],
+      "overture": ["greek_restaurant"]
+    },
+    {
+      "slug": "hawaiian",
+      "kind": "regional",
+      "labels": {
+        "en": "Hawaiian",
+        "pt": "Havaiana",
+        "es": "Hawaiana",
+        "fr": "Hawaïenne",
+        "de": "Hawaiianisch",
+        "it": "Hawaiana",
+        "nl": "Hawaïaans"
+      },
+      "synonyms": {},
+      "osm": ["hawaiian"],
+      "schemaorg": ["Hawaiian"],
+      "overture": ["hawaiian_restaurant"]
+    },
+    {
+      "slug": "hungarian",
+      "kind": "regional",
+      "labels": {
+        "en": "Hungarian",
+        "pt": "Húngara",
+        "es": "Húngara",
+        "fr": "Hongroise",
+        "de": "Ungarisch",
+        "it": "Ungherese",
+        "nl": "Hongaars"
+      },
+      "synonyms": {},
+      "osm": ["hungarian"],
+      "schemaorg": ["Hungarian"],
+      "overture": ["hungarian_restaurant"]
+    },
+    {
+      "slug": "indian",
+      "kind": "regional",
+      "labels": {
+        "en": "Indian",
+        "pt": "Indiana",
+        "es": "India",
+        "fr": "Indienne",
+        "de": "Indisch",
+        "it": "Indiana",
+        "nl": "Indiaas"
+      },
+      "synonyms": {},
+      "osm": ["indian"],
+      "schemaorg": ["Indian"],
+      "overture": ["indian_restaurant"]
+    },
+    {
+      "slug": "indonesian",
+      "kind": "regional",
+      "labels": {
+        "en": "Indonesian",
+        "pt": "Indonésia",
+        "es": "Indonesia",
+        "fr": "Indonésienne",
+        "de": "Indonesisch",
+        "it": "Indonesiana",
+        "nl": "Indonesisch"
+      },
+      "synonyms": {},
+      "osm": ["indonesian"],
+      "schemaorg": ["Indonesian"],
+      "overture": ["indonesian_restaurant"]
+    },
+    {
+      "slug": "international",
+      "kind": "regional",
+      "labels": {
+        "en": "International",
+        "pt": "Internacional",
+        "es": "Internacional",
+        "fr": "Internationale",
+        "de": "International",
+        "it": "Internazionale",
+        "nl": "Internationaal"
+      },
+      "synonyms": {},
+      "osm": ["international"],
+      "schemaorg": ["International"],
+      "overture": ["international_restaurant"]
+    },
+    {
+      "slug": "irish",
+      "kind": "regional",
+      "labels": {
+        "en": "Irish",
+        "pt": "Irlandesa",
+        "es": "Irlandesa",
+        "fr": "Irlandaise",
+        "de": "Irisch",
+        "it": "Irlandese",
+        "nl": "Iers"
+      },
+      "synonyms": {},
+      "osm": ["irish"],
+      "schemaorg": ["Irish"],
+      "overture": ["irish_restaurant"]
+    },
+    {
+      "slug": "israeli",
+      "kind": "regional",
+      "labels": {
+        "en": "Israeli",
+        "pt": "Israelita",
+        "es": "Israelí",
+        "fr": "Israélienne",
+        "de": "Israelisch",
+        "it": "Israeliana",
+        "nl": "Israëlisch"
+      },
+      "synonyms": {
+        "pt": ["israelense"]
+      },
+      "osm": ["israeli"],
+      "schemaorg": ["Israeli"],
+      "overture": ["israeli_restaurant"]
+    },
+    {
+      "slug": "italian",
+      "kind": "regional",
+      "labels": {
+        "en": "Italian",
+        "pt": "Italiana",
+        "es": "Italiana",
+        "fr": "Italienne",
+        "de": "Italienisch",
+        "it": "Italiana",
+        "nl": "Italiaans"
+      },
+      "synonyms": {},
+      "osm": ["italian"],
+      "schemaorg": ["Italian"],
+      "overture": ["italian_restaurant"]
+    },
+    {
+      "slug": "jamaican",
+      "kind": "regional",
+      "labels": {
+        "en": "Jamaican",
+        "pt": "Jamaicana",
+        "es": "Jamaicana",
+        "fr": "Jamaïcaine",
+        "de": "Jamaikanisch",
+        "it": "Giamaicana",
+        "nl": "Jamaicaans"
+      },
+      "synonyms": {},
+      "osm": ["jamaican"],
+      "schemaorg": ["Jamaican"],
+      "overture": ["jamaican_restaurant"]
+    },
+    {
+      "slug": "japanese",
+      "kind": "regional",
+      "labels": {
+        "en": "Japanese",
+        "pt": "Japonesa",
+        "es": "Japonesa",
+        "fr": "Japonaise",
+        "de": "Japanisch",
+        "it": "Giapponese",
+        "nl": "Japans"
+      },
+      "synonyms": {},
+      "osm": ["japanese"],
+      "schemaorg": ["Japanese"],
+      "overture": ["japanese_restaurant"]
+    },
+    {
+      "slug": "jewish",
+      "kind": "regional",
+      "labels": {
+        "en": "Jewish",
+        "pt": "Judaica",
+        "es": "Judía",
+        "fr": "Juive",
+        "de": "Jüdisch",
+        "it": "Ebraica",
+        "nl": "Joods"
+      },
+      "synonyms": {},
+      "osm": ["jewish"],
+      "schemaorg": ["Jewish"],
+      "overture": ["jewish_restaurant"]
+    },
+    {
+      "slug": "korean",
+      "kind": "regional",
+      "labels": {
+        "en": "Korean",
+        "pt": "Coreana",
+        "es": "Coreana",
+        "fr": "Coréenne",
+        "de": "Koreanisch",
+        "it": "Coreana",
+        "nl": "Koreaans"
+      },
+      "synonyms": {
+        "en": ["korean bbq"]
+      },
+      "osm": ["korean"],
+      "schemaorg": ["Korean"],
+      "overture": ["korean_restaurant"]
+    },
+    {
+      "slug": "latin_american",
+      "kind": "regional",
+      "labels": {
+        "en": "Latin American",
+        "pt": "Latino-americana",
+        "es": "Latinoamericana",
+        "fr": "Latino-américaine",
+        "de": "Lateinamerikanisch",
+        "it": "Latinoamericana",
+        "nl": "Latijns-Amerikaans"
+      },
+      "synonyms": {},
+      "osm": ["latin_american"],
+      "schemaorg": ["Latin American"],
+      "overture": ["latin_american_restaurant"]
+    },
+    {
+      "slug": "lebanese",
+      "kind": "regional",
+      "labels": {
+        "en": "Lebanese",
+        "pt": "Libanesa",
+        "es": "Libanesa",
+        "fr": "Libanaise",
+        "de": "Libanesisch",
+        "it": "Libanese",
+        "nl": "Libanees"
+      },
+      "synonyms": {},
+      "osm": ["lebanese"],
+      "schemaorg": ["Lebanese"],
+      "overture": ["lebanese_restaurant"]
+    },
+    {
+      "slug": "malaysian",
+      "kind": "regional",
+      "labels": {
+        "en": "Malaysian",
+        "pt": "Malaia",
+        "es": "Malaya",
+        "fr": "Malaisienne",
+        "de": "Malaysisch",
+        "it": "Malese",
+        "nl": "Maleisisch"
+      },
+      "synonyms": {},
+      "osm": ["malaysian"],
+      "schemaorg": ["Malaysian"],
+      "overture": ["malaysian_restaurant"]
+    },
+    {
+      "slug": "mediterranean",
+      "kind": "regional",
+      "labels": {
+        "en": "Mediterranean",
+        "pt": "Mediterrânica",
+        "es": "Mediterránea",
+        "fr": "Méditerranéenne",
+        "de": "Mediterran",
+        "it": "Mediterranea",
+        "nl": "Mediterraans"
+      },
+      "synonyms": {
+        "pt": ["mediterrânea"]
+      },
+      "osm": ["mediterranean"],
+      "schemaorg": ["Mediterranean"],
+      "overture": ["mediterranean_restaurant"]
+    },
+    {
+      "slug": "mexican",
+      "kind": "regional",
+      "labels": {
+        "en": "Mexican",
+        "pt": "Mexicana",
+        "es": "Mexicana",
+        "fr": "Mexicaine",
+        "de": "Mexikanisch",
+        "it": "Messicana",
+        "nl": "Mexicaans"
+      },
+      "synonyms": {},
+      "osm": ["mexican"],
+      "schemaorg": ["Mexican"],
+      "overture": ["mexican_restaurant"]
+    },
+    {
+      "slug": "middle_eastern",
+      "kind": "regional",
+      "labels": {
+        "en": "Middle Eastern",
+        "pt": "Médio Oriente",
+        "es": "Oriente Medio",
+        "fr": "Moyen-Orient",
+        "de": "Nahöstlich",
+        "it": "Mediorientale",
+        "nl": "Midden-Oosters"
+      },
+      "synonyms": {
+        "pt": ["oriente médio"],
+        "fr": ["orientale"]
+      },
+      "osm": ["middle_eastern"],
+      "schemaorg": ["Middle Eastern"],
+      "overture": ["middle_eastern_restaurant"]
+    },
+    {
+      "slug": "moroccan",
+      "kind": "regional",
+      "labels": {
+        "en": "Moroccan",
+        "pt": "Marroquina",
+        "es": "Marroquí",
+        "fr": "Marocaine",
+        "de": "Marokkanisch",
+        "it": "Marocchina",
+        "nl": "Marokkaans"
+      },
+      "synonyms": {},
+      "osm": ["moroccan"],
+      "schemaorg": ["Moroccan"],
+      "overture": ["moroccan_restaurant"]
+    },
+    {
+      "slug": "nepalese",
+      "kind": "regional",
+      "labels": {
+        "en": "Nepalese",
+        "pt": "Nepalesa",
+        "es": "Nepalí",
+        "fr": "Népalaise",
+        "de": "Nepalesisch",
+        "it": "Nepalese",
+        "nl": "Nepalees"
+      },
+      "synonyms": {
+        "en": ["nepali", "himalayan"]
+      },
+      "osm": ["nepalese"],
+      "schemaorg": ["Nepalese"],
+      "overture": ["himalayan_nepalese_restaurant"]
+    },
+    {
+      "slug": "pakistani",
+      "kind": "regional",
+      "labels": {
+        "en": "Pakistani",
+        "pt": "Paquistanesa",
+        "es": "Pakistaní",
+        "fr": "Pakistanaise",
+        "de": "Pakistanisch",
+        "it": "Pakistana",
+        "nl": "Pakistaans"
+      },
+      "synonyms": {},
+      "osm": ["pakistani"],
+      "schemaorg": ["Pakistani"],
+      "overture": ["pakistani_restaurant"]
+    },
+    {
+      "slug": "persian",
+      "kind": "regional",
+      "labels": {
+        "en": "Persian",
+        "pt": "Persa",
+        "es": "Persa",
+        "fr": "Persane",
+        "de": "Persisch",
+        "it": "Persiana",
+        "nl": "Perzisch"
+      },
+      "synonyms": {
+        "en": ["iranian"],
+        "pt": ["iraniana"],
+        "es": ["iraní"],
+        "fr": ["iranienne"],
+        "de": ["iranisch"],
+        "nl": ["iraans"]
+      },
+      "osm": ["persian"],
+      "schemaorg": ["Persian"],
+      "overture": ["persian_iranian_restaurant"]
+    },
+    {
+      "slug": "peruvian",
+      "kind": "regional",
+      "labels": {
+        "en": "Peruvian",
+        "pt": "Peruana",
+        "es": "Peruana",
+        "fr": "Péruvienne",
+        "de": "Peruanisch",
+        "it": "Peruviana",
+        "nl": "Peruaans"
+      },
+      "synonyms": {
+        "es": ["nikkei"]
+      },
+      "osm": ["peruvian"],
+      "schemaorg": ["Peruvian"],
+      "overture": ["peruvian_restaurant"]
+    },
+    {
+      "slug": "polish",
+      "kind": "regional",
+      "labels": {
+        "en": "Polish",
+        "pt": "Polaca",
+        "es": "Polaca",
+        "fr": "Polonaise",
+        "de": "Polnisch",
+        "it": "Polacca",
+        "nl": "Poolse"
+      },
+      "synonyms": {},
+      "osm": ["polish"],
+      "schemaorg": ["Polish"],
+      "overture": ["polish_restaurant"]
+    },
+    {
+      "slug": "portuguese",
+      "kind": "regional",
+      "labels": {
+        "en": "Portuguese",
+        "pt": "Portuguesa",
+        "es": "Portuguesa",
+        "fr": "Portugaise",
+        "de": "Portugiesisch",
+        "it": "Portoghese",
+        "nl": "Portugees"
+      },
+      "synonyms": {},
+      "osm": ["portuguese"],
+      "schemaorg": ["Portuguese"],
+      "overture": ["portuguese_restaurant"]
+    },
+    {
+      "slug": "regional",
+      "kind": "regional",
+      "labels": {
+        "en": "Regional",
+        "pt": "Regional",
+        "es": "Regional",
+        "fr": "Régionale",
+        "de": "Regional",
+        "it": "Regionale",
+        "nl": "Regionaal"
+      },
+      "synonyms": {
+        "fr": ["du terroir"],
+        "de": ["gutbürgerlich"]
+      },
+      "osm": ["regional"],
+      "schemaorg": ["Regional"],
+      "overture": []
+    },
+    {
+      "slug": "russian",
+      "kind": "regional",
+      "labels": {
+        "en": "Russian",
+        "pt": "Russa",
+        "es": "Rusa",
+        "fr": "Russe",
+        "de": "Russisch",
+        "it": "Russa",
+        "nl": "Russisch"
+      },
+      "synonyms": {},
+      "osm": ["russian"],
+      "schemaorg": ["Russian"],
+      "overture": ["russian_restaurant"]
+    },
+    {
+      "slug": "scandinavian",
+      "kind": "regional",
+      "labels": {
+        "en": "Scandinavian",
+        "pt": "Escandinava",
+        "es": "Escandinava",
+        "fr": "Scandinave",
+        "de": "Skandinavisch",
+        "it": "Scandinava",
+        "nl": "Scandinavisch"
+      },
+      "synonyms": {
+        "en": ["nordic"],
+        "pt": ["nórdica"],
+        "es": ["nórdica"],
+        "fr": ["nordique"],
+        "de": ["nordisch"],
+        "it": ["nordica"],
+        "nl": ["noords"]
+      },
+      "osm": ["scandinavian"],
+      "schemaorg": ["Scandinavian"],
+      "overture": ["scandinavian_restaurant"]
+    },
+    {
+      "slug": "sichuan",
+      "kind": "regional",
+      "labels": {
+        "en": "Sichuan",
+        "pt": "Sichuan",
+        "es": "Sichuan",
+        "fr": "Sichuanaise",
+        "de": "Sichuan",
+        "it": "Sichuanese",
+        "nl": "Sichuan"
+      },
+      "synonyms": {
+        "en": ["szechuan", "szechwan"]
+      },
+      "osm": ["sichuan"],
+      "schemaorg": ["Sichuan"],
+      "overture": []
+    },
+    {
+      "slug": "spanish",
+      "kind": "regional",
+      "labels": {
+        "en": "Spanish",
+        "pt": "Espanhola",
+        "es": "Española",
+        "fr": "Espagnole",
+        "de": "Spanisch",
+        "it": "Spagnola",
+        "nl": "Spaans"
+      },
+      "synonyms": {},
+      "osm": ["spanish"],
+      "schemaorg": ["Spanish"],
+      "overture": ["spanish_restaurant"]
+    },
+    {
+      "slug": "sri_lankan",
+      "kind": "regional",
+      "labels": {
+        "en": "Sri Lankan",
+        "pt": "Cingalesa",
+        "es": "Esrilanquesa",
+        "fr": "Sri-lankaise",
+        "de": "Sri-lankisch",
+        "it": "Srilankese",
+        "nl": "Sri Lankaans"
+      },
+      "synonyms": {},
+      "osm": ["sri_lankan"],
+      "schemaorg": ["Sri Lankan"],
+      "overture": ["sri_lankan_restaurant"]
+    },
+    {
+      "slug": "swiss",
+      "kind": "regional",
+      "labels": {
+        "en": "Swiss",
+        "pt": "Suíça",
+        "es": "Suiza",
+        "fr": "Suisse",
+        "de": "Schweizerisch",
+        "it": "Svizzera",
+        "nl": "Zwitsers"
+      },
+      "synonyms": {},
+      "osm": ["swiss"],
+      "schemaorg": ["Swiss"],
+      "overture": ["swiss_restaurant"]
+    },
+    {
+      "slug": "syrian",
+      "kind": "regional",
+      "labels": {
+        "en": "Syrian",
+        "pt": "Síria",
+        "es": "Siria",
+        "fr": "Syrienne",
+        "de": "Syrisch",
+        "it": "Siriana",
+        "nl": "Syrisch"
+      },
+      "synonyms": {},
+      "osm": ["syrian"],
+      "schemaorg": ["Syrian"],
+      "overture": ["syrian_restaurant"]
+    },
+    {
+      "slug": "taiwanese",
+      "kind": "regional",
+      "labels": {
+        "en": "Taiwanese",
+        "pt": "Taiwanesa",
+        "es": "Taiwanesa",
+        "fr": "Taïwanaise",
+        "de": "Taiwanisch",
+        "it": "Taiwanese",
+        "nl": "Taiwanees"
+      },
+      "synonyms": {},
+      "osm": ["taiwanese"],
+      "schemaorg": ["Taiwanese"],
+      "overture": ["taiwanese_restaurant"]
+    },
+    {
+      "slug": "tex_mex",
+      "kind": "regional",
+      "labels": {
+        "en": "Tex-Mex",
+        "pt": "Tex-Mex",
+        "es": "Tex-Mex",
+        "fr": "Tex-Mex",
+        "de": "Tex-Mex",
+        "it": "Tex-Mex",
+        "nl": "Tex-Mex"
+      },
+      "synonyms": {
+        "en": ["texmex"]
+      },
+      "osm": ["tex-mex", "tex_mex"],
+      "schemaorg": ["Tex-Mex"],
+      "overture": ["texmex_restaurant"]
+    },
+    {
+      "slug": "thai",
+      "kind": "regional",
+      "labels": {
+        "en": "Thai",
+        "pt": "Tailandesa",
+        "es": "Tailandesa",
+        "fr": "Thaïlandaise",
+        "de": "Thailändisch",
+        "it": "Thailandese",
+        "nl": "Thais"
+      },
+      "synonyms": {
+        "fr": ["thaï"]
+      },
+      "osm": ["thai"],
+      "schemaorg": ["Thai"],
+      "overture": ["thai_restaurant"]
+    },
+    {
+      "slug": "turkish",
+      "kind": "regional",
+      "labels": {
+        "en": "Turkish",
+        "pt": "Turca",
+        "es": "Turca",
+        "fr": "Turque",
+        "de": "Türkisch",
+        "it": "Turca",
+        "nl": "Turks"
+      },
+      "synonyms": {},
+      "osm": ["turkish"],
+      "schemaorg": ["Turkish"],
+      "overture": ["turkish_restaurant"]
+    },
+    {
+      "slug": "ukrainian",
+      "kind": "regional",
+      "labels": {
+        "en": "Ukrainian",
+        "pt": "Ucraniana",
+        "es": "Ucraniana",
+        "fr": "Ukrainienne",
+        "de": "Ukrainisch",
+        "it": "Ucraina",
+        "nl": "Oekraïens"
+      },
+      "synonyms": {},
+      "osm": ["ukrainian"],
+      "schemaorg": ["Ukrainian"],
+      "overture": ["ukrainian_restaurant"]
+    },
+    {
+      "slug": "venezuelan",
+      "kind": "regional",
+      "labels": {
+        "en": "Venezuelan",
+        "pt": "Venezuelana",
+        "es": "Venezolana",
+        "fr": "Vénézuélienne",
+        "de": "Venezolanisch",
+        "it": "Venezuelana",
+        "nl": "Venezolaans"
+      },
+      "synonyms": {},
+      "osm": ["venezuelan"],
+      "schemaorg": ["Venezuelan"],
+      "overture": ["venezuelan_restaurant"]
+    },
+    {
+      "slug": "vietnamese",
+      "kind": "regional",
+      "labels": {
+        "en": "Vietnamese",
+        "pt": "Vietnamita",
+        "es": "Vietnamita",
+        "fr": "Vietnamienne",
+        "de": "Vietnamesisch",
+        "it": "Vietnamita",
+        "nl": "Vietnamees"
+      },
+      "synonyms": {
+        "en": ["pho", "banh mi"]
+      },
+      "osm": ["vietnamese"],
+      "schemaorg": ["Vietnamese"],
+      "overture": ["vietnamese_restaurant"]
+    },
+    {
+      "slug": "acai",
+      "kind": "dish",
+      "labels": {
+        "en": "Açaí",
+        "pt": "Açaí",
+        "es": "Açaí",
+        "fr": "Açaí",
+        "de": "Açaí",
+        "it": "Açaí",
+        "nl": "Açaí"
+      },
+      "synonyms": {
+        "en": ["acai bowls"]
+      },
+      "osm": ["acai"],
+      "schemaorg": ["Açaí"],
+      "overture": ["acai_bowls"]
+    },
+    {
+      "slug": "arepas",
+      "kind": "dish",
+      "labels": {
+        "en": "Arepas",
+        "pt": "Arepas",
+        "es": "Arepas",
+        "fr": "Arepas",
+        "de": "Arepas",
+        "it": "Arepas",
+        "nl": "Arepas"
+      },
+      "synonyms": {},
+      "osm": ["arepa"],
+      "schemaorg": ["Arepas"],
+      "overture": []
+    },
+    {
+      "slug": "bagel",
+      "kind": "dish",
+      "labels": {
+        "en": "Bagels",
+        "pt": "Bagels",
+        "es": "Bagels",
+        "fr": "Bagels",
+        "de": "Bagels",
+        "it": "Bagel",
+        "nl": "Bagels"
+      },
+      "synonyms": {},
+      "osm": ["bagel"],
+      "schemaorg": ["Bagels"],
+      "overture": ["bagel_restaurant", "bagel_shop"]
+    },
+    {
+      "slug": "barbecue",
+      "kind": "dish",
+      "labels": {
+        "en": "Barbecue",
+        "pt": "Churrasco",
+        "es": "Barbacoa",
+        "fr": "Barbecue",
+        "de": "Barbecue",
+        "it": "Barbecue",
+        "nl": "Barbecue"
+      },
+      "synonyms": {
+        "en": ["bbq", "bar-b-q", "smokehouse"],
+        "pt": ["churrascaria"]
+      },
+      "osm": ["barbecue", "bbq"],
+      "schemaorg": ["Barbecue"],
+      "overture": ["barbecue_restaurant"]
+    },
+    {
+      "slug": "breakfast",
+      "kind": "dish",
+      "labels": {
+        "en": "Breakfast",
+        "pt": "Pequeno-almoço",
+        "es": "Desayuno",
+        "fr": "Petit-déjeuner",
+        "de": "Frühstück",
+        "it": "Colazione",
+        "nl": "Ontbijt"
+      },
+      "synonyms": {
+        "en": ["brunch", "breakfast and brunch"],
+        "pt": ["café da manhã"]
+      },
+      "osm": ["breakfast", "brunch"],
+      "schemaorg": ["Breakfast"],
+      "overture": ["breakfast_and_brunch_restaurant"]
+    },
+    {
+      "slug": "bubble_tea",
+      "kind": "dish",
+      "labels": {
+        "en": "Bubble tea",
+        "pt": "Bubble tea",
+        "es": "Té de burbujas",
+        "fr": "Bubble tea",
+        "de": "Bubble Tea",
+        "it": "Bubble tea",
+        "nl": "Bubbeltea"
+      },
+      "synonyms": {
+        "en": ["boba", "pearl milk tea"]
+      },
+      "osm": ["bubble_tea"],
+      "schemaorg": ["Bubble tea"],
+      "overture": ["bubble_tea"]
+    },
+    {
+      "slug": "burger",
+      "kind": "dish",
+      "labels": {
+        "en": "Burgers",
+        "pt": "Hambúrgueres",
+        "es": "Hamburguesas",
+        "fr": "Burgers",
+        "de": "Burger",
+        "it": "Hamburger",
+        "nl": "Hamburgers"
+      },
+      "synonyms": {
+        "en": ["burger", "hamburger"],
+        "pt": ["hambúrguer"],
+        "es": ["hamburguesa"]
+      },
+      "osm": ["burger"],
+      "schemaorg": ["Burgers"],
+      "overture": ["burger_restaurant"]
+    },
+    {
+      "slug": "burrito",
+      "kind": "dish",
+      "labels": {
+        "en": "Burritos",
+        "pt": "Burritos",
+        "es": "Burritos",
+        "fr": "Burritos",
+        "de": "Burritos",
+        "it": "Burritos",
+        "nl": "Burritos"
+      },
+      "synonyms": {
+        "en": ["burrito"]
+      },
+      "osm": ["burrito"],
+      "schemaorg": ["Burritos"],
+      "overture": []
+    },
+    {
+      "slug": "cake",
+      "kind": "dish",
+      "labels": {
+        "en": "Cakes",
+        "pt": "Bolos",
+        "es": "Tartas",
+        "fr": "Gâteaux",
+        "de": "Kuchen",
+        "it": "Torte",
+        "nl": "Taart"
+      },
+      "synonyms": {
+        "en": ["cake", "cupcakes"],
+        "pt": ["bolo"],
+        "es": ["tarta", "pasteles"],
+        "fr": ["gâteau"],
+        "de": ["torten"],
+        "it": ["torta"],
+        "nl": ["taarten"]
+      },
+      "osm": ["cake"],
+      "schemaorg": ["Cakes"],
+      "overture": ["custom_cakes_shop", "cupcake_shop"]
+    },
+    {
+      "slug": "chicken",
+      "kind": "dish",
+      "labels": {
+        "en": "Chicken",
+        "pt": "Frango",
+        "es": "Pollo",
+        "fr": "Poulet",
+        "de": "Hähnchen",
+        "it": "Pollo",
+        "nl": "Kip"
+      },
+      "synonyms": {
+        "en": ["fried chicken", "rotisserie chicken", "roast chicken"],
+        "pt": ["frango assado", "frango no churrasco"],
+        "es": ["pollo asado"],
+        "fr": ["poulet rôti"],
+        "de": ["brathähnchen"]
+      },
+      "osm": ["chicken", "fried_chicken"],
+      "schemaorg": ["Chicken"],
+      "overture": ["chicken_restaurant", "rotisserie_chicken_restaurant"]
+    },
+    {
+      "slug": "crepe",
+      "kind": "dish",
+      "labels": {
+        "en": "Crêpes",
+        "pt": "Crepes",
+        "es": "Crepes",
+        "fr": "Crêpes",
+        "de": "Crêpes",
+        "it": "Crêpes",
+        "nl": "Crêpes"
+      },
+      "synonyms": {
+        "en": ["crepe"],
+        "fr": ["galettes", "crêperie"]
+      },
+      "osm": ["crepe"],
+      "schemaorg": ["Crêpes"],
+      "overture": []
+    },
+    {
+      "slug": "curry",
+      "kind": "dish",
+      "labels": {
+        "en": "Curry",
+        "pt": "Caril",
+        "es": "Curry",
+        "fr": "Curry",
+        "de": "Curry",
+        "it": "Curry",
+        "nl": "Curry"
+      },
+      "synonyms": {
+        "en": ["curries"]
+      },
+      "osm": ["curry"],
+      "schemaorg": ["Curry"],
+      "overture": []
+    },
+    {
+      "slug": "dessert",
+      "kind": "dish",
+      "labels": {
+        "en": "Desserts",
+        "pt": "Sobremesas",
+        "es": "Postres",
+        "fr": "Desserts",
+        "de": "Desserts",
+        "it": "Dolci",
+        "nl": "Desserts"
+      },
+      "synonyms": {
+        "en": ["sweets"],
+        "pt": ["doces"],
+        "es": ["dulces"]
+      },
+      "osm": ["dessert"],
+      "schemaorg": ["Desserts"],
+      "overture": ["desserts"]
+    },
+    {
+      "slug": "dim_sum",
+      "kind": "dish",
+      "labels": {
+        "en": "Dim sum",
+        "pt": "Dim sum",
+        "es": "Dim sum",
+        "fr": "Dim sum",
+        "de": "Dim Sum",
+        "it": "Dim sum",
+        "nl": "Dim sum"
+      },
+      "synonyms": {
+        "en": ["yum cha"]
+      },
+      "osm": ["dim_sum"],
+      "schemaorg": ["Dim sum"],
+      "overture": ["dim_sum_restaurant"]
+    },
+    {
+      "slug": "donut",
+      "kind": "dish",
+      "labels": {
+        "en": "Doughnuts",
+        "pt": "Donuts",
+        "es": "Dónuts",
+        "fr": "Donuts",
+        "de": "Donuts",
+        "it": "Ciambelle",
+        "nl": "Donuts"
+      },
+      "synonyms": {
+        "en": ["donut", "doughnut"]
+      },
+      "osm": ["donut"],
+      "schemaorg": ["Doughnuts"],
+      "overture": ["donuts"]
+    },
+    {
+      "slug": "dumplings",
+      "kind": "dish",
+      "labels": {
+        "en": "Dumplings",
+        "pt": "Dumplings",
+        "es": "Dumplings",
+        "fr": "Raviolis chinois",
+        "de": "Teigtaschen",
+        "it": "Ravioli cinesi",
+        "nl": "Dumplings"
+      },
+      "synonyms": {
+        "en": ["dumpling", "gyoza", "jiaozi", "momo", "momos"]
+      },
+      "osm": ["dumpling"],
+      "schemaorg": ["Dumplings"],
+      "overture": ["dumpling_restaurant"]
+    },
+    {
+      "slug": "empanadas",
+      "kind": "dish",
+      "labels": {
+        "en": "Empanadas",
+        "pt": "Empanadas",
+        "es": "Empanadas",
+        "fr": "Empanadas",
+        "de": "Empanadas",
+        "it": "Empanadas",
+        "nl": "Empanadas"
+      },
+      "synonyms": {
+        "en": ["empanada"]
+      },
+      "osm": ["empanada"],
+      "schemaorg": ["Empanadas"],
+      "overture": ["empanadas"]
+    },
+    {
+      "slug": "falafel",
+      "kind": "dish",
+      "labels": {
+        "en": "Falafel",
+        "pt": "Falafel",
+        "es": "Falafel",
+        "fr": "Falafel",
+        "de": "Falafel",
+        "it": "Falafel",
+        "nl": "Falafel"
+      },
+      "synonyms": {},
+      "osm": ["falafel"],
+      "schemaorg": ["Falafel"],
+      "overture": ["falafel_restaurant"]
+    },
+    {
+      "slug": "fine_dining",
+      "kind": "dish",
+      "labels": {
+        "en": "Fine dining",
+        "pt": "Alta cozinha",
+        "es": "Alta cocina",
+        "fr": "Gastronomique",
+        "de": "Gehobene Küche",
+        "it": "Alta cucina",
+        "nl": "Fine dining"
+      },
+      "synonyms": {
+        "en": ["haute cuisine", "tasting menu"]
+      },
+      "osm": ["fine_dining"],
+      "schemaorg": ["Fine dining"],
+      "overture": ["haute_cuisine_restaurant"]
+    },
+    {
+      "slug": "fish",
+      "kind": "dish",
+      "labels": {
+        "en": "Fish",
+        "pt": "Peixe",
+        "es": "Pescado",
+        "fr": "Poisson",
+        "de": "Fisch",
+        "it": "Pesce",
+        "nl": "Vis"
+      },
+      "synonyms": {
+        "pt": ["peixe grelhado"],
+        "es": ["pescados"]
+      },
+      "osm": ["fish"],
+      "schemaorg": ["Fish"],
+      "overture": ["fish_restaurant"]
+    },
+    {
+      "slug": "fish_and_chips",
+      "kind": "dish",
+      "labels": {
+        "en": "Fish and chips",
+        "pt": "Fish and chips",
+        "es": "Fish and chips",
+        "fr": "Fish and chips",
+        "de": "Fish and Chips",
+        "it": "Fish and chips",
+        "nl": "Fish and chips"
+      },
+      "synonyms": {
+        "en": ["chippy", "chip shop"]
+      },
+      "osm": ["fish_and_chips"],
+      "schemaorg": ["Fish and chips"],
+      "overture": ["fish_and_chips_restaurant"]
+    },
+    {
+      "slug": "fondue",
+      "kind": "dish",
+      "labels": {
+        "en": "Fondue",
+        "pt": "Fondue",
+        "es": "Fondue",
+        "fr": "Fondue",
+        "de": "Fondue",
+        "it": "Fonduta",
+        "nl": "Fondue"
+      },
+      "synonyms": {
+        "en": ["raclette"]
+      },
+      "osm": ["fondue"],
+      "schemaorg": ["Fondue"],
+      "overture": ["fondue_restaurant"]
+    },
+    {
+      "slug": "fries",
+      "kind": "dish",
+      "labels": {
+        "en": "Fries",
+        "pt": "Batatas fritas",
+        "es": "Patatas fritas",
+        "fr": "Frites",
+        "de": "Pommes frites",
+        "it": "Patatine fritte",
+        "nl": "Friet"
+      },
+      "synonyms": {
+        "en": ["french fries"],
+        "fr": ["friterie"],
+        "nl": ["patat", "frietkot", "frituur"]
+      },
+      "osm": ["friture", "fries"],
+      "schemaorg": ["Fries"],
+      "overture": []
+    },
+    {
+      "slug": "frozen_yogurt",
+      "kind": "dish",
+      "labels": {
+        "en": "Frozen yogurt",
+        "pt": "Iogurte gelado",
+        "es": "Yogur helado",
+        "fr": "Yaourt glacé",
+        "de": "Frozen Joghurt",
+        "it": "Yogurt gelato",
+        "nl": "Frozen yoghurt"
+      },
+      "synonyms": {
+        "en": ["froyo", "frozen yoghurt"]
+      },
+      "osm": ["frozen_yogurt"],
+      "schemaorg": ["Frozen yogurt"],
+      "overture": ["frozen_yoghurt_shop"]
+    },
+    {
+      "slug": "hot_dog",
+      "kind": "dish",
+      "labels": {
+        "en": "Hot dogs",
+        "pt": "Cachorros-quentes",
+        "es": "Perritos calientes",
+        "fr": "Hot-dogs",
+        "de": "Hotdogs",
+        "it": "Hot dog",
+        "nl": "Hotdogs"
+      },
+      "synonyms": {
+        "en": ["hot dog"],
+        "pt": ["cachorro-quente"]
+      },
+      "osm": ["hot_dog"],
+      "schemaorg": ["Hot dogs"],
+      "overture": ["hot_dog_restaurant"]
+    },
+    {
+      "slug": "ice_cream",
+      "kind": "dish",
+      "labels": {
+        "en": "Ice cream",
+        "pt": "Gelados",
+        "es": "Helados",
+        "fr": "Glaces",
+        "de": "Eis",
+        "it": "Gelato",
+        "nl": "IJs"
+      },
+      "synonyms": {
+        "en": ["gelato", "gelateria"],
+        "pt": ["gelado", "gelataria", "sorvete", "sorveteria"],
+        "es": ["helado", "heladería"],
+        "fr": ["glace", "glacier"],
+        "de": ["speiseeis", "eiscafé", "eisdiele"],
+        "it": ["gelati"],
+        "nl": ["ijssalon"]
+      },
+      "osm": ["ice_cream"],
+      "schemaorg": ["Ice cream"],
+      "overture": ["ice_cream_shop", "gelato"]
+    },
+    {
+      "slug": "juice",
+      "kind": "dish",
+      "labels": {
+        "en": "Juices",
+        "pt": "Sumos",
+        "es": "Zumos",
+        "fr": "Jus",
+        "de": "Säfte",
+        "it": "Succhi",
+        "nl": "Sappen"
+      },
+      "synonyms": {
+        "en": ["juice", "smoothies", "juice bar"],
+        "pt": ["sucos", "sumos naturais"],
+        "es": ["jugos"]
+      },
+      "osm": ["juice"],
+      "schemaorg": ["Juices"],
+      "overture": ["smoothie_juice_bar"]
+    },
+    {
+      "slug": "kebab",
+      "kind": "dish",
+      "labels": {
+        "en": "Kebab",
+        "pt": "Kebab",
+        "es": "Kebab",
+        "fr": "Kebab",
+        "de": "Kebab",
+        "it": "Kebab",
+        "nl": "Kebab"
+      },
+      "synonyms": {
+        "en": ["kebabs", "doner", "döner", "doner kebab", "döner kebab", "durum", "dürüm"]
+      },
+      "osm": ["kebab"],
+      "schemaorg": ["Kebab"],
+      "overture": ["doner_kebab"]
+    },
+    {
+      "slug": "noodles",
+      "kind": "dish",
+      "labels": {
+        "en": "Noodles",
+        "pt": "Noodles",
+        "es": "Fideos",
+        "fr": "Nouilles",
+        "de": "Nudeln",
+        "it": "Noodles",
+        "nl": "Noedels"
+      },
+      "synonyms": {
+        "en": ["noodle", "noodle bar"],
+        "es": ["fideos chinos"]
+      },
+      "osm": ["noodle"],
+      "schemaorg": ["Noodles"],
+      "overture": ["noodles_restaurant"]
+    },
+    {
+      "slug": "pancake",
+      "kind": "dish",
+      "labels": {
+        "en": "Pancakes",
+        "pt": "Panquecas",
+        "es": "Tortitas",
+        "fr": "Pancakes",
+        "de": "Pfannkuchen",
+        "it": "Pancake",
+        "nl": "Pannenkoeken"
+      },
+      "synonyms": {
+        "en": ["pancake house"],
+        "pt": ["panquecas americanas"],
+        "nl": ["pannenkoekenhuis"]
+      },
+      "osm": ["pancake"],
+      "schemaorg": ["Pancakes"],
+      "overture": ["pancake_house"]
+    },
+    {
+      "slug": "pasta",
+      "kind": "dish",
+      "labels": {
+        "en": "Pasta",
+        "pt": "Massas",
+        "es": "Pasta",
+        "fr": "Pâtes",
+        "de": "Pasta",
+        "it": "Pasta",
+        "nl": "Pasta"
+      },
+      "synonyms": {
+        "pt": ["massa fresca"]
+      },
+      "osm": ["pasta"],
+      "schemaorg": ["Pasta"],
+      "overture": []
+    },
+    {
+      "slug": "pastry",
+      "kind": "dish",
+      "labels": {
+        "en": "Pastries",
+        "pt": "Pastelaria",
+        "es": "Pastelería",
+        "fr": "Pâtisseries",
+        "de": "Gebäck",
+        "it": "Pasticceria",
+        "nl": "Gebak"
+      },
+      "synonyms": {
+        "en": ["pastry", "patisserie"],
+        "fr": ["pâtisserie"],
+        "de": ["konditorei"]
+      },
+      "osm": ["pastry"],
+      "schemaorg": ["Pastries"],
+      "overture": ["patisserie_cake_shop"]
+    },
+    {
+      "slug": "piadina",
+      "kind": "dish",
+      "labels": {
+        "en": "Piadina",
+        "pt": "Piadina",
+        "es": "Piadina",
+        "fr": "Piadina",
+        "de": "Piadina",
+        "it": "Piadina",
+        "nl": "Piadina"
+      },
+      "synonyms": {},
+      "osm": ["piadina"],
+      "schemaorg": ["Piadina"],
+      "overture": ["piadina_restaurant"]
+    },
+    {
+      "slug": "pizza",
+      "kind": "dish",
+      "labels": {
+        "en": "Pizza",
+        "pt": "Pizza",
+        "es": "Pizza",
+        "fr": "Pizza",
+        "de": "Pizza",
+        "it": "Pizza",
+        "nl": "Pizza"
+      },
+      "synonyms": {
+        "en": ["pizzas", "pizzeria"],
+        "pt": ["pizzaria"]
+      },
+      "osm": ["pizza"],
+      "schemaorg": ["Pizza"],
+      "overture": ["pizza_restaurant"]
+    },
+    {
+      "slug": "poke",
+      "kind": "dish",
+      "labels": {
+        "en": "Poke",
+        "pt": "Poke",
+        "es": "Poke",
+        "fr": "Poké",
+        "de": "Poke",
+        "it": "Poke",
+        "nl": "Poke"
+      },
+      "synonyms": {
+        "en": ["poke bowls"]
+      },
+      "osm": ["poke"],
+      "schemaorg": ["Poke"],
+      "overture": ["poke_restaurant"]
+    },
+    {
+      "slug": "ramen",
+      "kind": "dish",
+      "labels": {
+        "en": "Ramen",
+        "pt": "Ramen",
+        "es": "Ramen",
+        "fr": "Ramen",
+        "de": "Ramen",
+        "it": "Ramen",
+        "nl": "Ramen"
+      },
+      "synonyms": {},
+      "osm": ["ramen"],
+      "schemaorg": ["Ramen"],
+      "overture": []
+    },
+    {
+      "slug": "salad",
+      "kind": "dish",
+      "labels": {
+        "en": "Salads",
+        "pt": "Saladas",
+        "es": "Ensaladas",
+        "fr": "Salades",
+        "de": "Salate",
+        "it": "Insalate",
+        "nl": "Salades"
+      },
+      "synonyms": {
+        "en": ["salad", "salad bar"],
+        "pt": ["salada"],
+        "es": ["ensalada"]
+      },
+      "osm": ["salad"],
+      "schemaorg": ["Salads"],
+      "overture": ["salad_bar"]
+    },
+    {
+      "slug": "sandwich",
+      "kind": "dish",
+      "labels": {
+        "en": "Sandwiches",
+        "pt": "Sandes",
+        "es": "Sándwiches",
+        "fr": "Sandwichs",
+        "de": "Sandwiches",
+        "it": "Panini",
+        "nl": "Broodjes"
+      },
+      "synonyms": {
+        "en": ["sandwich"],
+        "pt": ["sanduíches", "bifanas"],
+        "es": ["bocadillos"],
+        "it": ["tramezzini"],
+        "de": ["belegte brötchen"]
+      },
+      "osm": ["sandwich"],
+      "schemaorg": ["Sandwiches"],
+      "overture": []
+    },
+    {
+      "slug": "schnitzel",
+      "kind": "dish",
+      "labels": {
+        "en": "Schnitzel",
+        "pt": "Escalope panado",
+        "es": "Escalope",
+        "fr": "Escalope viennoise",
+        "de": "Schnitzel",
+        "it": "Cotoletta",
+        "nl": "Schnitzel"
+      },
+      "synonyms": {
+        "en": ["wiener schnitzel"]
+      },
+      "osm": ["schnitzel"],
+      "schemaorg": ["Schnitzel"],
+      "overture": ["schnitzel_restaurant"]
+    },
+    {
+      "slug": "seafood",
+      "kind": "dish",
+      "labels": {
+        "en": "Seafood",
+        "pt": "Marisco",
+        "es": "Marisco",
+        "fr": "Fruits de mer",
+        "de": "Meeresfrüchte",
+        "it": "Frutti di mare",
+        "nl": "Zeevruchten"
+      },
+      "synonyms": {
+        "pt": ["mariscos", "marisqueira"],
+        "es": ["mariscos", "marisquería"]
+      },
+      "osm": ["seafood"],
+      "schemaorg": ["Seafood"],
+      "overture": ["seafood_restaurant"]
+    },
+    {
+      "slug": "shawarma",
+      "kind": "dish",
+      "labels": {
+        "en": "Shawarma",
+        "pt": "Shawarma",
+        "es": "Shawarma",
+        "fr": "Chawarma",
+        "de": "Schawarma",
+        "it": "Shawarma",
+        "nl": "Shoarma"
+      },
+      "synonyms": {
+        "en": ["shwarma"]
+      },
+      "osm": ["shawarma"],
+      "schemaorg": ["Shawarma"],
+      "overture": []
+    },
+    {
+      "slug": "soup",
+      "kind": "dish",
+      "labels": {
+        "en": "Soup",
+        "pt": "Sopas",
+        "es": "Sopas",
+        "fr": "Soupes",
+        "de": "Suppen",
+        "it": "Zuppe",
+        "nl": "Soep"
+      },
+      "synonyms": {
+        "en": ["soups"],
+        "pt": ["sopa"],
+        "es": ["sopa"],
+        "fr": ["soupe"],
+        "de": ["suppe"],
+        "it": ["zuppa"]
+      },
+      "osm": ["soup"],
+      "schemaorg": ["Soup"],
+      "overture": ["soup_restaurant"]
+    },
+    {
+      "slug": "steak_house",
+      "kind": "dish",
+      "labels": {
+        "en": "Steakhouse",
+        "pt": "Steakhouse",
+        "es": "Steakhouse",
+        "fr": "Steakhouse",
+        "de": "Steakhouse",
+        "it": "Steakhouse",
+        "nl": "Steakhouse"
+      },
+      "synonyms": {
+        "en": ["steak", "steaks", "steak house"],
+        "es": ["asador"],
+        "de": ["steakhaus"]
+      },
+      "osm": ["steak_house"],
+      "schemaorg": ["Steakhouse"],
+      "overture": ["steakhouse"]
+    },
+    {
+      "slug": "sushi",
+      "kind": "dish",
+      "labels": {
+        "en": "Sushi",
+        "pt": "Sushi",
+        "es": "Sushi",
+        "fr": "Sushi",
+        "de": "Sushi",
+        "it": "Sushi",
+        "nl": "Sushi"
+      },
+      "synonyms": {
+        "en": ["sashimi"]
+      },
+      "osm": ["sushi"],
+      "schemaorg": ["Sushi"],
+      "overture": ["sushi_restaurant"]
+    },
+    {
+      "slug": "tacos",
+      "kind": "dish",
+      "labels": {
+        "en": "Tacos",
+        "pt": "Tacos",
+        "es": "Tacos",
+        "fr": "Tacos",
+        "de": "Tacos",
+        "it": "Tacos",
+        "nl": "Tacos"
+      },
+      "synonyms": {
+        "en": ["taco", "taqueria"]
+      },
+      "osm": ["tacos", "taco"],
+      "schemaorg": ["Tacos"],
+      "overture": ["taco_restaurant"]
+    },
+    {
+      "slug": "tapas",
+      "kind": "dish",
+      "labels": {
+        "en": "Tapas",
+        "pt": "Petiscos",
+        "es": "Tapas",
+        "fr": "Tapas",
+        "de": "Tapas",
+        "it": "Tapas",
+        "nl": "Tapas"
+      },
+      "synonyms": {
+        "en": ["small plates"],
+        "es": ["pintxos", "pinchos"],
+        "pt": ["tapas"]
+      },
+      "osm": ["tapas"],
+      "schemaorg": ["Tapas"],
+      "overture": ["tapas_bar"]
+    },
+    {
+      "slug": "waffle",
+      "kind": "dish",
+      "labels": {
+        "en": "Waffles",
+        "pt": "Waffles",
+        "es": "Gofres",
+        "fr": "Gaufres",
+        "de": "Waffeln",
+        "it": "Waffle",
+        "nl": "Wafels"
+      },
+      "synonyms": {
+        "en": ["waffle"]
+      },
+      "osm": ["waffle"],
+      "schemaorg": ["Waffles"],
+      "overture": ["waffle_restaurant"]
+    },
+    {
+      "slug": "wings",
+      "kind": "dish",
+      "labels": {
+        "en": "Chicken wings",
+        "pt": "Asas de frango",
+        "es": "Alitas de pollo",
+        "fr": "Ailes de poulet",
+        "de": "Chicken Wings",
+        "it": "Ali di pollo",
+        "nl": "Kippenvleugels"
+      },
+      "synonyms": {
+        "en": ["wings", "buffalo wings"]
+      },
+      "osm": ["wings"],
+      "schemaorg": ["Chicken wings"],
+      "overture": ["chicken_wings_restaurant"]
+    }
+  ],
+  "diets": [
+    {
+      "term": "vegan",
+      "attribute": "vegan_options",
+      "labels": {
+        "en": "Vegan",
+        "pt": "Vegana",
+        "es": "Vegana",
+        "fr": "Végane",
+        "de": "Vegan",
+        "it": "Vegana",
+        "nl": "Veganistisch"
+      },
+      "synonyms": {
+        "en": ["plant based", "plant-based"],
+        "pt": ["vegan"],
+        "fr": ["vegan", "végétalienne"],
+        "nl": ["vegan"]
+      },
+      "osm": ["vegan"],
+      "schemaorg": ["Vegan", "VeganDiet"],
+      "overture": ["vegan_restaurant"]
+    },
+    {
+      "term": "vegetarian",
+      "attribute": "vegetarian_options",
+      "labels": {
+        "en": "Vegetarian",
+        "pt": "Vegetariana",
+        "es": "Vegetariana",
+        "fr": "Végétarienne",
+        "de": "Vegetarisch",
+        "it": "Vegetariana",
+        "nl": "Vegetarisch"
+      },
+      "synonyms": {
+        "en": ["veggie"],
+        "fr": ["végétarien"],
+        "de": ["vegetarier"]
+      },
+      "osm": ["vegetarian"],
+      "schemaorg": ["Vegetarian", "VegetarianDiet"],
+      "overture": ["vegetarian_restaurant"]
+    }
+  ]
+}

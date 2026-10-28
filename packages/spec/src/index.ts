@@ -5,6 +5,7 @@
  */
 export * from "./base";
 export * from "./conformance";
+export * from "./cuisines";
 export * from "./door-platforms";
 export * from "./food";
 export * from "./gtin";

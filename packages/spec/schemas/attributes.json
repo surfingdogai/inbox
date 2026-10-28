@@ -23,7 +23,8 @@
           },
           "type": {
             "type": "string",
-            "enum": ["bool", "enum"]
+            "enum": ["bool", "enum", "set"],
+            "description": "bool: true or false; enum: one of its values; set (version 2): up to five values of another vocabulary."
           },
           "values": {
             "description": "The values of an \"enum\" key; a filter names one as key=value.",
@@ -31,6 +32,10 @@
             "items": {
               "type": "string"
             }
+          },
+          "values_from": {
+            "description": "A \"set\" key's vocabulary (cuisines.json for cuisine); a filter names one of its values as key=value.",
+            "type": "string"
           },
           "labels": {
             "type": "object",
