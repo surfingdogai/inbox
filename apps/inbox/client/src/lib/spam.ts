@@ -270,12 +270,13 @@ export function learningLine(until: string, tz?: string, locale?: string): strin
 }
 
 /**
- * What Anthropic's API does with what our AI check sends it, as Anthropic's commercial terms and data
- * retention pages say (read 27 October 2026): no training on it, deleted within 30 days, kept longer
- * only when its safety checks flag it or the law requires it.
+ * What Google's Gemini API does with what our AI check sends it, as Google's terms for its paid
+ * services and its abuse-monitoring page say (ai.google.dev/gemini-api/terms and
+ * /docs/usage-policies, read 28 October 2026): not used to improve its products, kept 55 days only to
+ * detect misuse and for disclosures the law requires. Never "keeps nothing".
  */
 export const HOSTED_DATA =
-  "Anthropic doesn't use it to train its models, and deletes it within 30 days, unless its safety checks flag it (then it may keep it for up to two years, and the checks' scores for up to seven) or the law requires keeping it.";
+  "Google doesn't use it to improve its products, and keeps it for 55 days, only to detect misuse of its service and for disclosures the law requires.";
 
 /** Who reads for the filters, as Settings says it (§11.4). */
 export function readerLine(

@@ -356,7 +356,7 @@ describe("where the shared list is said", () => {
         const text = JSON.stringify(await section(x, lang));
         expect(text).toMatch(/não permite reconstituir a mensagem|can't be turned back into the message/);
         // The business's customers are told nothing of whose product it is.
-        expect(text).not.toMatch(/Surfing Dog|Anthropic/);
+        expect(text).not.toMatch(/Surfing Dog|Anthropic|Google|Gemini/);
       }
     }
     reads.caps.spam.attach({ shared: null });

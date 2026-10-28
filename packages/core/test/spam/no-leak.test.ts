@@ -164,19 +164,19 @@ describe("the business's privacy page", () => {
     expect(await line("en", "Keeping out spam")).toContain("without email addresses, phone numbers or bank details");
     expect(await line("en", "Keeping out spam")).not.toContain("keeps nothing");
     expect(await line("pt", "Proteção contra spam")).not.toContain("não guarda nada");
-    // The host's model, Anthropic's: what its API does with what it is sent, as Anthropic's terms say,
-    // and never that it keeps nothing.
+    // The host's model, Google's Gemini: what its API does with what it is sent, as Google's terms for
+    // paid services say, and never that it keeps nothing.
     reading.caps.spam.attach({
-      host: hostPolicy({ filters: ["pitches"], reader: "Claude Haiku, by Anthropic" }),
+      host: hostPolicy({ filters: ["pitches"], reader: "Gemini Flash-Lite, by Google" }),
     });
     expect(await line("en", "Keeping out spam")).toContain(
-      "That service does not use it to train AI models, and deletes it within 30 days, unless its safety checks flag it (it may then keep it for up to two years) or the law requires keeping it.",
+      "That service does not use it to improve its products, and keeps it for 55 days, only to detect misuse of the service and for disclosures the law requires.",
     );
     expect(await line("en", "Keeping out spam")).not.toContain("keeps nothing");
-    expect(await line("pt", "Proteção contra spam")).toContain("apaga-a no prazo de 30 dias");
+    expect(await line("pt", "Proteção contra spam")).toContain("guarda-a durante 55 dias");
     expect(await line("pt", "Proteção contra spam")).not.toContain("não guarda nada");
     // The business's own customers are not told whose product it is: the page speaks as the business.
-    expect(await line("en", "Keeping out spam")).not.toMatch(/Anthropic|Claude|Surfing Dog/);
+    expect(await line("en", "Keeping out spam")).not.toMatch(/Google|Gemini|Anthropic|Claude|Surfing Dog/);
     // A host that does not let its AI read: nothing to say.
     reading.caps.spam.attach({
       host: hostPolicy({ ai: false, filters: ["pitches"] }),

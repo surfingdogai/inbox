@@ -91,7 +91,7 @@ export interface SpamStatus {
   readonly reader: Reader;
   /** The model on one's own server, as the operator or the owner set it up. */
   readonly model: { readonly provider: string; readonly model: string; readonly set_by_server: boolean } | null;
-  /** Who reads on a hosted inbox, as Settings names them ("Claude Haiku, by Anthropic"); null while none does. */
+  /** Who reads on a hosted inbox, as Settings names them ("Gemini Flash-Lite, by Google"); null while none does. */
   readonly reader_name: string | null;
   readonly checks: {
     readonly today: number;
@@ -128,7 +128,7 @@ export interface SpamStatus {
     readonly chosen: boolean;
     readonly chosen_at: string | null;
     readonly can_switch: boolean;
-    /** Who reads once it is on ("Claude Haiku, by Anthropic"). */
+    /** Who reads once it is on ("Gemini Flash-Lite, by Google"). */
     readonly reader: string | null;
   } | null;
   readonly this_month: { readonly aside: number; readonly held: number; readonly brought_back: number };

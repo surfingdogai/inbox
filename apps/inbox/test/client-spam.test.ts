@@ -335,11 +335,11 @@ function status(o: Partial<SpamStatus> & { reader?: SpamStatus["reader"] } = {})
 }
 
 describe("Settings → Spam, in every state", () => {
-  it("says who reads: Claude Haiku on Pro, no AI yet, Free, own model, no model, resting", () => {
-    const pro = status({ plan: "pro", reader: "hosted_ai", reader_name: "Claude Haiku, by Anthropic" });
+  it("says who reads: Gemini on Pro, no AI yet, Free, own model, no model, resting", () => {
+    const pro = status({ plan: "pro", reader: "hosted_ai", reader_name: "Gemini Flash-Lite, by Google" });
     // The provider named plainly, and what its API does with what it is sent, as its terms say.
     expect(readerLine(pro)).toBe(
-      "Read by Claude Haiku, by Anthropic, which we pay for, only for new senders, with email addresses, phone numbers and bank details taken out. Anthropic doesn't use it to train its models, and deletes it within 30 days, unless its safety checks flag it (then it may keep it for up to two years, and the checks' scores for up to seven) or the law requires keeping it.",
+      "Read by Gemini Flash-Lite, by Google, which we pay for, only for new senders, with email addresses, phone numbers and bank details taken out. Google doesn't use it to improve its products, and keeps it for 55 days, only to detect misuse of its service and for disclosures the law requires.",
     );
     expect(readerLine(pro)).not.toMatch(/keeps nothing|zero retention|never stored/i);
     // Pro before our key is set: nothing says an AI reads.
@@ -416,11 +416,11 @@ describe("Settings → Spam, in every state", () => {
   it("says who reads before switching a filter on again on Pro, and asks for no money: Pro includes it", () => {
     const sheet = turnOnSheet(
       "pitches",
-      status({ plan: "pro", reader: "hosted_ai", reader_name: "Claude Haiku, by Anthropic" }),
+      status({ plan: "pro", reader: "hosted_ai", reader_name: "Gemini Flash-Lite, by Google" }),
     );
     expect(sheet.title).toBe("Turn on Sales pitches?");
     expect(sheet.text).toMatch(
-      /^It reads new messages from people you haven't dealt with before\. Read by Claude Haiku, by Anthropic, .* Included in Pro\.$/,
+      /^It reads new messages from people you haven't dealt with before\. Read by Gemini Flash-Lite, by Google, .* Included in Pro\.$/,
     );
   });
 
@@ -499,7 +499,7 @@ describe("Settings → Spam on a Pro given for free", () => {
         chosen: false,
         chosen_at: null,
         can_switch: true,
-        reader: "Claude Haiku, by Anthropic",
+        reader: "Gemini Flash-Lite, by Google",
         ...o,
       },
     });
@@ -516,12 +516,12 @@ describe("Settings → Spam on a Pro given for free", () => {
       "The AI check is off until you turn it on, so for now the filters look for known phrases only.",
     );
     expect(ownerAiLine(gifted(), now)).toBe(
-      "Off until you turn it on. Then Claude Haiku, by Anthropic reads new senders' messages the filters can't decide, with email addresses, phone numbers and bank details taken out.",
+      "Off until you turn it on. Then Gemini Flash-Lite, by Google reads new senders' messages the filters can't decide, with email addresses, phone numbers and bank details taken out.",
     );
     const sheet = aiOnSheet(gifted());
     expect(sheet.title).toBe("Turn on the AI check?");
-    expect(sheet.text).toContain("read by Claude Haiku, by Anthropic, which we pay for");
-    expect(sheet.text).toContain("and the checks' scores for up to seven");
+    expect(sheet.text).toContain("read by Gemini Flash-Lite, by Google, which we pay for");
+    expect(sheet.text).toContain("keeps it for 55 days, only to detect misuse of its service");
     expect(sheet.text).toMatch(/Turn it off here at any time\.$/);
     expect(OWNER_AI_ONLY).toBe("Only the owner can switch it, signed in.");
   });

@@ -108,7 +108,7 @@ describe("who switches a filter", () => {
 });
 
 describe("Pro's filters", () => {
-  const pro = (over = {}) => hostPolicy({ defaultOn: true, reader: "Claude Haiku, by Anthropic", ...over });
+  const pro = (over = {}) => hostPolicy({ defaultOn: true, reader: "Gemini Flash-Lite, by Google", ...over });
 
   it("start on as the inbox opens, learning for a week: they label, and put nothing aside yet", async () => {
     const judge = fakeJudge({ kind: "sales_pitch", certainty: "high", topic: "seo", quotes: ["rank your cafe first"] });
@@ -117,7 +117,7 @@ describe("Pro's filters", () => {
     const status = await s.caps.spamStatus(owner(T0 + MIN));
     expect(status.plan).toBe("pro");
     expect(status.reader).toBe("hosted_ai");
-    expect(status.reader_name).toBe("Claude Haiku, by Anthropic");
+    expect(status.reader_name).toBe("Gemini Flash-Lite, by Google");
     for (const f of status.filters) {
       expect(f).toMatchObject({ on: true, allowed: true, choice: "aside" });
       expect(f.learning_until).toBe(new Date(T0 + 7 * DAY).toISOString());

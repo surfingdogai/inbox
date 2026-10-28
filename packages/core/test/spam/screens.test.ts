@@ -298,7 +298,7 @@ describe("the AI check on a Pro given for free", () => {
       host: hostPolicy({
         ai: false,
         aiByOwner: true,
-        ownerReader: "Claude Haiku, by Anthropic",
+        ownerReader: "Gemini Flash-Lite, by Google",
         giftUntil: "2026-11-27T00:00:00.000Z",
       }),
     });
@@ -310,7 +310,7 @@ describe("the AI check on a Pro given for free", () => {
       chosen: false,
       chosen_at: null,
       can_switch: false,
-      reader: "Claude Haiku, by Anthropic",
+      reader: "Gemini Flash-Lite, by Google",
     });
     expect(await s.caps.spam.aiReader(T0)).toBeNull();
     for (const who of [staff, ownerAi(T0)]) {
@@ -350,7 +350,7 @@ describe("the AI check on a Pro given for free", () => {
     });
     // Back on the gift, with the filters back and the host having it on: off is the owner's to choose again.
     s.caps.spam.attach({
-      host: hostPolicy({ ai: true, defaultOn: true, aiByOwner: true, ownerReader: "Claude Haiku, by Anthropic" }),
+      host: hostPolicy({ ai: true, defaultOn: true, aiByOwner: true, ownerReader: "Gemini Flash-Lite, by Google" }),
     });
     await s.caps.spam.applyHost(T0 + HOUR);
     expect(await s.caps.spam.aiReader(T0 + HOUR)).toBe("host");

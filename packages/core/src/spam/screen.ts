@@ -88,7 +88,7 @@ export interface SpamHostPolicy {
   readonly defaultOn: boolean;
   readonly dayCap: number;
   readonly monthCap: number;
-  /** Who reads, as Settings names them ("Claude Haiku, by Anthropic"); null while no AI reads. */
+  /** Who reads, as Settings names them ("Gemini Flash-Lite, by Google"); null while no AI reads. */
   readonly reader: string | null;
   /**
    * On a Pro the host gave for free (a beta tester's month), the host's AI reads only once the owner
