@@ -1,5 +1,5 @@
 import { type Audience, customerLabel, customerSees, DEFAULT_AUDIENCE, statusSentence } from "../customer/describe";
-import { shortRef } from "../customer/format";
+import { shortRef, whenText } from "../customer/format";
 import { type ActorKind, type Item, type ItemType, itemFlagsSchema, type Money, payloadSchemas } from "../domain/types";
 import { availableTransitions } from "../machine/machine";
 import { machines } from "../machine/tables";
@@ -207,7 +207,7 @@ export function viewFor(
     .map(({ event, label }) => ({ event, label }));
   // A customer reads the business's own words; the business reads about its item. Whatever door
   // answers them — a create, a transition, the status — the business's flags never go with it.
-  const human = customer ? describeToCustomer(item, audience) : describe(item);
+  const human = customer ? describeToCustomer(item, audience) : describe(item, audience?.timezone);
   return { item: customer ? customerItem(item) : item, transitions, human, ...(party ? { party } : {}) };
 }
 
@@ -297,13 +297,17 @@ const STAY_STATE: Readonly<Record<string, string>> = {
   expired: "lapsed",
 };
 
-export function describe(item: Item): string {
+/**
+ * What the business reads about its item. `timezone`, the business's own: a booking's time on its
+ * clock, as the owner's alerts say it; without one, in UTC.
+ */
+export function describe(item: Item, timezone?: string): string {
   if (item.type === "stay") {
     const what = item.subject ? `Stay "${item.subject}"` : "Stay";
     return `${what} is ${STAY_STATE[item.state] ?? item.state.replaceAll("_", " ")}. Reference ${shortRef(item.id)}.`;
   }
   const what = item.subject ? `${TYPE_WORD[item.type]} "${item.subject}"` : TYPE_WORD[item.type];
-  const when = item.type === "booking" ? ` for ${formatWhen(item.payload.startTime)}` : "";
+  const when = item.type === "booking" ? ` for ${formatWhen(item.payload.startTime, timezone)}` : "";
   const prices = statedPrices(item);
   const who = item.channel === "email" || item.channel === "form" ? "The customer" : "The customer's assistant";
   const price = prices ? ` ${who} suggested ${moneyText(prices.stated)}; your price is ${moneyText(prices.ours)}.` : "";
@@ -311,13 +315,13 @@ export function describe(item: Item): string {
     item.type === "order" && item.state === "proposed"
       ? "waiting for the customer's answer to the changes the business suggested"
       : (STATE_WORD[item.state] ?? item.state);
-  return `${what}${when} is ${state}.${price}${changeLine(item)} Reference ${item.id}.`;
+  return `${what}${when} is ${state}.${price}${changeLine(item, timezone)} Reference ${item.id}.`;
 }
 
 /** A change asked for and not answered yet, for the business: who asked, and what it would be. */
-function changeLine(item: Item): string {
+function changeLine(item: Item, timezone?: string): string {
   if (item.type === "booking" && item.payload.change) {
-    const to = formatWhen(item.payload.change.startTime);
+    const to = formatWhen(item.payload.change.startTime, timezone);
     return item.payload.change.by === "customer"
       ? ` The customer asks to move it to ${to}.`
       : ` You asked the customer to move it to ${to}; waiting for their answer.`;
@@ -338,9 +342,10 @@ function statedPrices(item: Item): { stated: Money; ours: Money } | null {
   return stated && ours ? { stated, ours } : null;
 }
 
-function formatWhen(isoTime: string): string {
+function formatWhen(isoTime: string, timezone?: string): string {
   const d = new Date(isoTime);
   if (Number.isNaN(d.getTime())) return isoTime;
+  if (timezone && timezone !== "UTC") return whenText(isoTime, timezone, "en");
   return `${d.toISOString().replace("T", " ").slice(0, 16)} UTC`;
 }
 

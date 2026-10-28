@@ -276,6 +276,8 @@ describe("JobRunner", () => {
       ["hello@oficinamare.pt", "New booking from Rita Amaral: Full service"],
     ]);
     expect(mail.sent[0]?.text).toContain("https://app.example/items/");
+    // No time zone set: the time is said in UTC, and says so.
+    expect(mail.sent[0]?.text).toContain('Booking "Full service" for 2026-09-22 08:00 UTC is requested');
 
     await caps.transitionItem(owner, { item_id: created.view.item.id, event: "confirm" });
     await runner.runDue(db, { now: T0 + 1 });
@@ -288,6 +290,63 @@ describe("JobRunner", () => {
     expect(mail.sent.filter((m) => m.to[0] === "rita@example.com")).toHaveLength(1);
     const left = await db.orm.select({ status: jobs.status }).from(jobs);
     expect(left.every((j) => j.status === "done")).toBe(true);
+  });
+
+  it("tells the owner a booking's time on the business's own clock, in the alert and in the app", async () => {
+    const db = await setup();
+    const svc = ulid();
+    await db.orm.insert(services).values({
+      id: svc,
+      name: "Full service",
+      durationMin: 90,
+      capacity: 1,
+      granularityMin: 30,
+      createdAt: T0,
+      updatedAt: T0,
+    });
+    const caps = new Capabilities(db);
+    const owner: Caller = {
+      actor: { kind: "owner", id: "u1", channel: "owner_ui" },
+      tier: "verified_principal",
+      sandbox: false,
+      now: () => T0,
+    };
+    await caps.updateSettings(owner, {
+      doc: {
+        business: { name: "Oficina Maré" },
+        notifications: { ownerEmail: "hello@oficinamare.pt", appUrl: "https://app.example" },
+        email: { fromAddress: "inbox@oficinamare.pt", replyTo: "hello@oficinamare.pt" },
+      },
+    });
+    // The time zone as the owner sets it, in the business's profile (Settings → General).
+    await caps.setup.updateProfile(owner, { timezone: "America/New_York" });
+    const mail = logMailOut();
+    const runner = createRunner({ mailOut: mail });
+    const created = await caps.createBooking(
+      {
+        actor: { kind: "customer_human", id: "form", channel: "form" },
+        tier: "anonymous",
+        sandbox: false,
+        now: () => T0,
+      },
+      {
+        payload: {
+          reservationFor: { serviceId: svc, name: "Full service" },
+          startTime: "2026-09-22T14:00:00Z",
+          endTime: "2026-09-22T15:30:00Z",
+        },
+        contact: { name: "Rita Amaral", email: "rita@example.com" },
+      },
+    );
+    await runner.runDue(db, { now: T0 });
+    // 14:00 UTC is 10:00 in New York (EDT): the owner reads 10:00, never a UTC time to convert.
+    const alert = mail.sent.find((m) => m.to[0] === "hello@oficinamare.pt");
+    expect(alert?.text).toContain('Booking "Full service" for Tuesday, 22 September 2026 at 10:00 (');
+    expect(alert?.text).not.toContain("UTC");
+    // And the owner's own answer, when they confirm it, on the same clock.
+    const confirmed = await caps.transitionItem(owner, { item_id: created.view.item.id, event: "confirm" });
+    expect(confirmed.view.human).toContain('Booking "Full service" for Tuesday, 22 September 2026 at 10:00 (');
+    expect(confirmed.view.human).toContain("is confirmed.");
   });
 
   it("tells the owner at the address they sign in with when they gave none, and says so when there is none", async () => {

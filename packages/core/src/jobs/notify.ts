@@ -127,6 +127,7 @@ export function notifyHandler(
                   words: await lastWordsOf(db, item.id),
                   byEmail: inboundOf(settings) !== null,
                   business: facts.name,
+                  timezone: facts.timezone,
                 },
                 await ownerStayMail(db, item, p.event, who),
               ),
@@ -547,6 +548,8 @@ function ownerMail(
     /** The owner can answer this email, and the answer goes to the customer (ADR-026 §5). */
     readonly byEmail: boolean;
     readonly business: string;
+    /** The business's time zone, as its profile gives it: a booking's time is said on its clock. */
+    readonly timezone?: string | undefined;
   } = { words: null, byEmail: false, business: "" },
   /** A stay's own words for the owner (ADR-037 S16), when it has them for this event. */
   stay: { readonly subject: string; readonly lines: readonly string[] } | null = null,
@@ -568,7 +571,8 @@ function ownerMail(
     // in it is refused by a mail service, and the owner would never hear of the request.
     subject: oneLine(stay?.subject ?? ownerSubject(item, p.event, who)),
     text: [
-      ...(stay ? stay.lines : [describe(item)]),
+      // A booking's time on the business's own clock: the owner reads it as they would say it.
+      ...(stay ? stay.lines : [describe(item, o.timezone)]),
       "",
       `From: ${who}`,
       ...(said.length ? ["", ...said] : []),

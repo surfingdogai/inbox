@@ -30,7 +30,7 @@ import { type Breach, refundWithinLimit } from "../negotiation/limits";
 import { insertOfferStatement, type OfferRow, offerRows, openOf, pointerOf } from "../negotiation/offers";
 import { paidFor, refundDueOf, SEND_BACK_DAYS } from "../negotiation/refunds";
 import { items, resources, services } from "../schema/tables";
-import { readSettings } from "../settings/schema";
+import { readSettings, type Settings } from "../settings/schema";
 import { planStay, type StayPlan, stayEventFor } from "../stays/transition";
 import { workPushStatements } from "../trades/job-tool";
 import { type TradeQuoteTerms, taxOnTop, tradeQuoteProblems } from "../trades/quote";
@@ -1143,7 +1143,14 @@ async function attempt_(
         now,
       )
     : undefined;
-  const view = viewFor(updated, permissionKind(caller), undefined, hidden, audience);
+  // The business reads its own item's time on its own clock, as its alerts say it.
+  const view = viewFor(
+    updated,
+    permissionKind(caller),
+    undefined,
+    hidden,
+    audience ?? (await ownerClock(db, settings)),
+  );
   const response = { view, linked: linkedView };
 
   if (idem && requestHash) statements.unshift(idempotencyStatement(idem, requestHash, 200, response, item.id, now));
@@ -2940,4 +2947,9 @@ async function ownerSlotWords(db: Db, spec: SlotSpec, bucket: number): Promise<s
     return `your ${calendarName(beyond.name || "connected")} is read only ${days} days ahead, and that time is further`;
   }
   return "that time is fully booked";
+}
+
+/** The business's own clock, for what it reads about its item: a booking's time as its alerts say it. */
+async function ownerClock(db: Db, settings: Settings): Promise<Audience> {
+  return { lang: "en", timezone: (await businessFacts(db, settings)).timezone, minNoticeMin: 0 };
 }
