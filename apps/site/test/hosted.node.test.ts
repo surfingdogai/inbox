@@ -381,7 +381,7 @@ describe("hosted first, once the pilot is open", () => {
   it("the /inbox hero: the hosted inbox first while open, Deploy to Cloudflare while closed", () => {
     const open = hostedHero(true);
     expect(open.primary).toEqual({ label: "Get your agent inbox", href: START_URL });
-    expect(open.also).toEqual({ label: "Or run it yourself", href: "#run" });
+    expect(open.also).toEqual({ label: "Or run it yourself, it's open source", href: "#run" });
     // The lede says we host it; the fine line carries only the terms.
     expect(open.lede).toContain("We host Surfing Dog Inbox for you at your own address, like inbox.yourbusiness.com");
     expect(open.lede).not.toMatch(/you run/);

@@ -75,7 +75,7 @@ export const hostedHero = (
   open
     ? {
         primary: GET,
-        also: { label: "Or run it yourself", href: "#run" },
+        also: { label: "Or run it yourself, it's open source", href: "#run" },
         lede: "Soon your customers' AI agents will book and order for them. We host Surfing Dog Inbox for you at your own address, like inbox.yourbusiness.com: those requests come straight to you, and your rules answer the routine ones.",
         note: "Free, or Pro at $10, €10 or £9 a month. Your inbox and its backups are stored in the European Union.",
       }
