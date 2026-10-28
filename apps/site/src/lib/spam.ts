@@ -60,7 +60,7 @@ export const SPAM_FAQS: readonly Faq[] = [
   },
   {
     q: "Which AI models can I use?",
-    a: "On your own server: a key from Anthropic, OpenAI or Google Gemini, or a model you run; without one, the filters look for known phrases. Hosted, with Pro: Gemini from Google, which we pay for, on Google's paid terms. Google doesn't use what it's sent to improve its products, and keeps it for 55 days, only to detect misuse and for disclosures the law requires.",
+    a: "On your own server: a key from Anthropic, OpenAI or Google Gemini, or a model you run; without one, the filters look for known phrases. Hosted, with Pro: Gemini from Google, which we pay for. Google doesn't use what it's sent to improve its products, and keeps it 55 days to detect misuse, or as the law requires.",
   },
   {
     q: "Can an AI assistant still ask me for a price?",
