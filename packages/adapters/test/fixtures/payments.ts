@@ -59,6 +59,18 @@ export const STRIPE_AMOUNT_TOO_SMALL = {
   },
 };
 
+/**
+ * A link asked of an account that sells with Managed Payments on by default, as a Stripe sandbox
+ * answered it on 28 October 2026 (the account's id in the dashboard address changed).
+ */
+export const STRIPE_MANAGED_PAYMENTS_TAX_CODE = {
+  error: {
+    message:
+      "Invalid line_items[0]: the product tax code is missing. Set the product's tax_code field to an eligible product tax code (more details: https://docs.stripe.com/payments/managed-payments/eligibility#product-tax-code-requirements). Product tax code is required for Managed Payments, which is enabled by default on your account. If you want to disable Managed Payments on this session, you can pass managed_payments[enabled]=false. You can configure whether Managed Payments is enabled by default at https://dashboard.stripe.com/acct_1Example0000000/test/settings/managed-payments.",
+    type: "invalid_request_error",
+  },
+};
+
 export const STRIPE_OLD_ENDPOINTS = {
   object: "list",
   data: [

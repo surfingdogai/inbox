@@ -40,6 +40,7 @@ import {
   STRIPE_ENDPOINT_CREATED,
   STRIPE_INVALID_KEY,
   STRIPE_LIVE_KEY,
+  STRIPE_MANAGED_PAYMENTS_TAX_CODE,
   STRIPE_MISSING_PARAM,
   STRIPE_OLD_ENDPOINTS,
   STRIPE_PAYMENT_LINK,
@@ -236,8 +237,11 @@ describe("Mollie's currencies, one by one", () => {
 
 /* --- Stripe --------------------------------------------------------------------- */
 
-/** A Stripe account whose key may do everything the inbox asks, unless told otherwise. */
-function stripeAccount(opts: { forbid?: readonly string[]; key?: string } = {}) {
+/**
+ * A Stripe account whose key may do everything the inbox asks, unless told otherwise. `managed`: it
+ * sells with Managed Payments on by default, so a link that does not turn it off is refused.
+ */
+function stripeAccount(opts: { forbid?: readonly string[]; key?: string; managed?: boolean } = {}) {
   const forbid = new Set(opts.forbid ?? []);
   const key = opts.key ?? STRIPE_LIVE_KEY;
   return fakePlatform((r) => {
@@ -251,6 +255,9 @@ function stripeAccount(opts: { forbid?: readonly string[]; key?: string } = {}) 
         return forbid.has("links") ? no("rak_payment_links_read") : json(STRIPE_EMPTY_LIST("/v1/payment_links"));
       case "POST /v1/payment_links":
         if (forbid.has("links")) return no("rak_payment_links_write");
+        if (r.body && opts.managed && !r.body.includes("managed_payments%5Benabled%5D=false")) {
+          return json(STRIPE_MANAGED_PAYMENTS_TAX_CODE, 400);
+        }
         return r.body ? json(STRIPE_PAYMENT_LINK) : json(STRIPE_MISSING_PARAM("line_items"), 400);
       case "POST /v1/products":
         return forbid.has("products") ? no("rak_product_write") : json(STRIPE_MISSING_PARAM("name"), 400);
@@ -411,6 +418,34 @@ describe("Stripe: pay links", () => {
     });
     // Nothing about the customer goes to Stripe from here: no name, no email.
     expect(made?.body).not.toContain("%40");
+  });
+
+  it("asks again with Managed Payments off on an account that has it on by default, and only there", async () => {
+    // The business is the seller of what it links to; Stripe's Managed Payments (Stripe the seller,
+    // of digital products with a tax code) would refuse every link it makes.
+    const p = stripeAccount({ managed: true });
+    const link = await stripeConnector().payments?.createLink(ctx(p.http), REQUEST);
+    expect(link).toEqual({ externalId: STRIPE_PAYMENT_LINK.id, url: STRIPE_PAYMENT_LINK.url });
+    const links = p.seen.filter((r) => r.method === "POST" && r.url.endsWith("/v1/payment_links"));
+    expect(links.map((r) => r.headers.get("idempotency-key"))).toEqual([
+      `sdi-${REQUEST.ref}-link`,
+      `sdi-${REQUEST.ref}-link-own`,
+    ]);
+    const first = Object.fromEntries(form(links[0]?.body ?? ""));
+    const again = Object.fromEntries(form(links[1]?.body ?? ""));
+    expect(first["managed_payments[enabled]"]).toBeUndefined();
+    expect(again).toEqual({ ...first, "managed_payments[enabled]": "false" });
+    // Any other refusal is said as it was, and asked once.
+    const odd = fakePlatform((r) =>
+      new URL(r.url).pathname === "/v1/prices"
+        ? json(STRIPE_PRICE)
+        : json({ error: { type: "invalid_request_error", message: "Invalid line_items[0]: no such price" } }, 400),
+    );
+    const said = await stripeConnector()
+      .payments?.createLink(ctx(odd.http), REQUEST)
+      .catch((e) => e);
+    expect((said as ConnectorError).message).toBe("Stripe said: Invalid line_items[0]: no such price");
+    expect(odd.seen.filter((r) => r.url.endsWith("/v1/payment_links"))).toHaveLength(1);
   });
 
   it("says a refusal an owner meets plainly, any other in Stripe's words, and a missing permission by name", async () => {

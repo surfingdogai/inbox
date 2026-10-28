@@ -388,7 +388,10 @@ function refusalOf(json: Record<string, unknown>, status: number): string {
   return `Stripe said: ${messageOf(json) || `HTTP ${status}`}`;
 }
 
-/** A call that must work: a refusal said in Stripe's words, a missing permission named. */
+/**
+ * A call that must work: a refusal said in Stripe's words, a missing permission named. `again` may
+ * answer a 400 with the request to make instead, once: what Stripe's own answer says to send.
+ */
 async function must(
   ctx: Ctx,
   key: string,
@@ -396,8 +399,11 @@ async function must(
   path: string,
   what: { readonly doing: string; readonly permission: string },
   opts: { readonly body?: string; readonly idempotency?: string } = {},
+  again?: (json: Record<string, unknown>) => { readonly body: string; readonly idempotency: string } | null,
 ): Promise<Record<string, unknown>> {
-  const { res, json } = await call(ctx, key, method, path, opts);
+  let { res, json } = await call(ctx, key, method, path, opts);
+  const instead = res.status === 400 && again ? again(json) : null;
+  if (instead) ({ res, json } = await call(ctx, key, method, path, instead));
   if (res.status === 403) {
     throw new ConnectorError(
       "config",
@@ -408,6 +414,20 @@ async function must(
   if (res.status === 404) throw new ConnectorError("not_found", messageOf(json) || "Stripe has no such thing.");
   if (res.status >= 400) throw new ConnectorError("refused", refusalOf(json, res.status));
   return json;
+}
+
+/**
+ * Stripe's refusal of a link on an account with Managed Payments on by default: an invalid request,
+ * with no code, whose message names the parameter that turns it off for this one (checked in a Stripe
+ * sandbox, 28 October 2026).
+ */
+function managedPaymentsInTheWay(json: Record<string, unknown>): boolean {
+  const e = (json.error ?? {}) as { type?: unknown; message?: unknown };
+  return (
+    e.type === "invalid_request_error" &&
+    typeof e.message === "string" &&
+    e.message.includes("managed_payments[enabled]=false")
+  );
 }
 
 function modeOf(key: string): Mode {
@@ -623,31 +643,37 @@ async function createLink(ctx: RunContext, req: PayLinkRequest) {
   );
   const priceId = typeof price.id === "string" ? price.id : "";
   if (!priceId) throw new ConnectorError("bad_response", "Stripe made the price but did not say its id.");
+  const params: (readonly [string, string | number | boolean])[] = [
+    ["line_items[0][price]", priceId],
+    ["line_items[0][quantity]", 1],
+    // Good for one payment: once paid, Stripe deactivates it.
+    ["restrictions[completed_sessions][limit]", 1],
+    // A booking's deposit or balance says "Book" on Stripe's button (ADR-036).
+    ["submit_type", req.purpose && req.purpose !== "pay" ? "book" : "pay"],
+    ["metadata[sdi_ref]", req.ref],
+    ["metadata[sdi_item]", req.itemId],
+    ["metadata[sdi_inbox]", ctx.inbox.id],
+    ["payment_intent_data[metadata][sdi_ref]", req.ref],
+    ["payment_intent_data[metadata][sdi_item]", req.itemId],
+    ["after_completion[type]", "hosted_confirmation"],
+    ["after_completion[hosted_confirmation][custom_message]", req.thanks.slice(0, 500)],
+    ["inactive_message", req.inactive.slice(0, 500)],
+  ];
   const link = await must(
     ctx,
     key,
     "POST",
     "/v1/payment_links",
     { doing: "make payment links", permission: STRIPE_PERMISSIONS.links },
-    {
-      idempotency: `sdi-${req.ref}-link`,
-      body: form([
-        ["line_items[0][price]", priceId],
-        ["line_items[0][quantity]", 1],
-        // Good for one payment: once paid, Stripe deactivates it.
-        ["restrictions[completed_sessions][limit]", 1],
-        // A booking's deposit or balance says "Book" on Stripe's button (ADR-036).
-        ["submit_type", req.purpose && req.purpose !== "pay" ? "book" : "pay"],
-        ["metadata[sdi_ref]", req.ref],
-        ["metadata[sdi_item]", req.itemId],
-        ["metadata[sdi_inbox]", ctx.inbox.id],
-        ["payment_intent_data[metadata][sdi_ref]", req.ref],
-        ["payment_intent_data[metadata][sdi_item]", req.itemId],
-        ["after_completion[type]", "hosted_confirmation"],
-        ["after_completion[hosted_confirmation][custom_message]", req.thanks.slice(0, 500)],
-        ["inactive_message", req.inactive.slice(0, 500)],
-      ]),
-    },
+    { idempotency: `sdi-${req.ref}-link`, body: form(params) },
+    // An account that sells with Stripe's Managed Payments on by default (Stripe the seller, of digital
+    // products with a tax code) refuses a link for what the business sells itself. On this link the
+    // business is the seller, so it is asked for once more with Managed Payments off, as Stripe's answer
+    // says to, under a key of its own; an account without Managed Payments is never sent the parameter.
+    (json) =>
+      managedPaymentsInTheWay(json)
+        ? { idempotency: `sdi-${req.ref}-link-own`, body: form([...params, ["managed_payments[enabled]", false]]) }
+        : null,
   );
   const externalId = typeof link.id === "string" ? link.id : "";
   const url = typeof link.url === "string" ? link.url : "";
