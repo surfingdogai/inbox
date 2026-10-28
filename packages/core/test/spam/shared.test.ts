@@ -160,6 +160,44 @@ describe("what a shared match decides", () => {
       expect(decide({ type: "message", signals: [own], choices: asideChoices(plan.on) }).verdict).toBe("warn");
     });
 
+    it(`beside a signal of the inbox's own too weak to label alone, only labels, on ${plan.name}`, () => {
+      // Each delivers a message with no label on its own; the text and the domain known add 5 points.
+      const weak: Signal[] = [
+        { c: "reply_elsewhere", w: 2, f: "basic" },
+        { c: "many_links", w: 2, f: "basic" },
+        { c: "disposable", w: 2, f: "basic" },
+        { c: "display_other", w: 2, f: "basic" },
+      ];
+      for (const own of weak) {
+        expect(decide({ type: "message", signals: [own], choices: asideChoices(plan.on) }).verdict, own.c).toBe(
+          "deliver",
+        );
+        const d = decide({ type: "message", signals: [own, ...shared(plan.on)], choices: asideChoices(plan.on) });
+        expect(d.score, own.c).toBeGreaterThanOrEqual(ASIDE_AT);
+        expect(d, own.c).toMatchObject({ verdict: "warn", cause: "shared_spam", label: "shared_spam" });
+        const quote = decide({
+          type: "quote_request",
+          signals: [own, ...shared(plan.on)],
+          choices: asideChoices(plan.on),
+        });
+        expect(quote.verdict, own.c).toBe("warn");
+      }
+      // Mail a server vouched for: its point off leaves the Reply-To elsewhere at 1, and only a label.
+      const vouched: Signal[] = [
+        { c: "aligned", w: -1, f: "basic" },
+        { c: "reply_elsewhere", w: 2, f: "basic" },
+      ];
+      expect(
+        decide({ type: "message", signals: [...vouched, ...shared(plan.on)], choices: asideChoices(plan.on) }).verdict,
+      ).toBe("warn");
+      // Two of them together label on their own, and the match beside them puts the message aside.
+      const two = weak.slice(0, 2);
+      expect(decide({ type: "message", signals: two, choices: asideChoices(plan.on) }).verdict).toBe("warn");
+      expect(
+        decide({ type: "message", signals: [...two, ...shared(plan.on)], choices: asideChoices(plan.on) }).verdict,
+      ).toBe("aside");
+    });
+
     it(`with a signal of the inbox's own, still never holds a booking's or an order's note on it, on ${plan.name}`, () => {
       const own: Signal = { c: "many_links", w: 2, f: "basic" };
       for (const type of ["booking", "order"] as const) {

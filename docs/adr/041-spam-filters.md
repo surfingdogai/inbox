@@ -171,10 +171,13 @@ Decided 27 October 2026: inboxes share fingerprints of known spam with each othe
    fall within one fortnight, less one for every reporter who said Not spam on a match of it. A reporter
    is an inbox of a distinct owner: the count is the fewer of the distinct owners and the distinct
    inboxes, the reading inbox's own and its owner's never among them, so one account's several inboxes
-   count once, and so does one inbox whatever owner it names. A report is kept only from an owner whose
-   account was a week old when they made it: as old as the policy's `owner_account.created_at`, else as
-   old as this runtime's first opening of the inbox. Everything is forgotten thirty days after it was
-   reported. A sender's domain is known the same way, from the reports that named it.
+   count once, and so does one inbox whatever owner it names. Until the control plane sends
+   `owner_account`, which it does not yet, each inbox is its own owner, so a business with three inboxes
+   counts three times; the public texts say inboxes count, not businesses. A report is kept only from
+   an owner whose account was a week old when they made it: as old as the policy's
+   `owner_account.created_at`, else as old as this runtime's first opening of the inbox. Everything is
+   forgotten thirty days after it was reported. A sender's domain is known the same way, from the
+   reports that named it.
 4. **What is reported**, by a `spam_share` job that reads the item as it is when it runs: a person's Spam;
    or what the filter put aside on its own and is sure of (a certain `trap`, `no_key`, `server_marked` or
    `wave`, or the AI check's high certainty with a verified quote and no customer sign), past any learning
@@ -191,7 +194,9 @@ Decided 27 October 2026: inboxes share fingerprints of known spam with each othe
    points and labels nothing alone, and counts only for mail a mail server vouched for (DMARC or aligned
    DKIM): an address typed at a form or given by an assistant names no domain, neither looked up nor
    reported. In `decide`, where the shared points are needed to reach the aside band, the band stays a
-   label unless a signal of this inbox's own checks or of the AI has points of its own; on a booking or
+   label unless this inbox's own checks and the AI, without the shared points, reach the label band (3)
+   on their own: a Reply-To elsewhere, many links, a throwaway domain or a display name naming another
+   address (2 each) delivers alone, so beside a match it is labelled, never put aside. On a booking or
    an order the shared points never hold it at all, since assistants write many people's notes alike.
    A quote request, which its sender can confirm, may be held by the two together. Known senders are
    never looked up, nor requests a pass or a vouched platform speaks for, as for repeats; a lookup that

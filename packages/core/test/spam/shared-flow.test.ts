@@ -6,10 +6,10 @@ import { agent, classPayload, DAY, HOUR, hostPolicy, idOf, MIN, owner, spamSetup
 /**
  * Known spam shared between a host's inboxes, as one inbox lives it (ADR-041 §16): it reads a match by
  * its fingerprint as a stranger's request arrives; the match alone only labels, and puts a message aside
- * only beside a signal of the inbox's own or the AI's; a person's Spam, or what the filter is sure of,
- * is reported from a Pro inbox, a Not spam on a match from any inbox; nothing but bands and a company
- * domain a mail server vouched for ever reaches the host's port; and nothing at all where the host
- * offers no shared list.
+ * only beside what the inbox's own checks or the AI found that would label it alone; a person's Spam,
+ * or what the filter is sure of, is reported from a Pro inbox, a Not spam on a match from any inbox;
+ * nothing but bands and a company domain a mail server vouched for ever reaches the host's port; and
+ * nothing at all where the host offers no shared list.
  */
 
 const PITCH =
@@ -124,6 +124,21 @@ describe("a match on the shared list", () => {
     // Vouched, with its domain known as well: still a label, and nothing put aside.
     const screens = await s.q("SELECT screen FROM items WHERE type = 'message' ORDER BY created_at");
     expect(screens.every(([screen]) => screen === "warned")).toBe(true);
+  });
+
+  it("puts nothing aside beside a signal of its own that alone would not label: a Reply-To elsewhere", async () => {
+    const email = {
+      screen: {
+        door: "email" as const,
+        email: { serverMarked: false, auth: { dmarc: "pass" }, replyTo: "sales@another-co.example" },
+      },
+    };
+    const none = await setup({ host: free() });
+    const delivered = idOf(await none.caps.sendMessage(visitor(T0), { body: PLAIN, contact: pitcher }, email));
+    expect((await none.verdict(delivered))?.[1]).toBe("deliver");
+    const s = await setup({ host: free(), shared: fakeShared({ match: KNOWN_ALL }) });
+    const id = idOf(await s.caps.sendMessage(visitor(T0), { body: PLAIN, contact: pitcher }, email));
+    expect(await s.verdict(id)).toEqual(["warned", "warn", "shared_spam"]);
   });
 
   it("only labels on Pro when the filter it is under is off", async () => {

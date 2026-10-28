@@ -17,7 +17,7 @@ import {
  * from 6 — or with any certain signal — it reaches the aside band. Then caps, each of which can only
  * lower the outcome: a sender the business knows, a request that names the business's own offer, a
  * network pass, a filter set to label only, a filter still learning, an AI answer without proof, the
- * host's shared list with nothing of this inbox's own beside it, an owner already alerted. Last, the
+ * host's shared list beside less of this inbox's own than would label it, an owner already alerted. Last, the
  * band becomes the verdict its type allows: a message is put aside; a booking or an order is held for
  * proof, never put aside; a quote request is held, and put aside only for what is certain.
  */
@@ -160,11 +160,12 @@ export function decide(input: DecideInput): Decision {
       signals.some((s) => filtered(s) && s.w > 0) && sum(signals.filter((s) => !filtered(s))) < ASIDE_AT;
     if (input.answer?.customerIntent && filtersNeeded) atMostWarn();
     // The host's shared list never decides alone (ADR-041 §16.5): what other businesses marked adds to
-    // what this inbox's own checks or the AI found, and without one of those it labels at most. A
-    // booking's or an order's note, which assistants write alike for many people, it only labels.
+    // what this inbox's own checks or the AI found only when that would label the request on its own;
+    // beside less, a signal that alone delivers it, it labels at most. A booking's or an order's note,
+    // which assistants write alike for many people, it only labels.
     const own = signals.filter((s) => !SHARED_CODES.has(s.c));
     if (signals.some((s) => SHARED_CODES.has(s.c) && s.w > 0) && sum(own) < ASIDE_AT) {
-      if (!own.some((s) => s.w > 0) || input.type === "booking" || input.type === "order") atMostWarn();
+      if (sum(own) < WARN_AT || input.type === "booking" || input.type === "order") atMostWarn();
     }
     for (const [filter, choice] of input.choices ?? []) if (choice === "label" && needs(filter)) atMostWarn();
     for (const source of input.learning ?? []) {
