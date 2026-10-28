@@ -626,9 +626,7 @@ describe("the price: Free, and Pro at $10", () => {
     expect(page).toContain(
       `Pro, if you want it: ${PRO}, for each inbox. It adds the three AI spam filters, for sales pitches, scams and junk, on from the start.`,
     );
-    expect(page).toContain(
-      "They put messages aside and never delete them, and ask Claude Haiku, an AI model from Anthropic",
-    );
+    expect(page).toContain("They put messages aside and never delete them, and ask Gemini, an AI model from Google");
     expect(page).toContain("Cancel at any time; Pro runs to the end of the month you paid for.");
     expect(page).toContain(SUPPORT);
     expect(page).not.toMatch(/during the pilot|30 days before|a price, when there is one/);
@@ -668,13 +666,13 @@ describe("the price: Free, and Pro at $10", () => {
       expect(flat(read(`${HOSTED_DIR}/${page}`)), page).not.toMatch(/pilot/i);
     }
     expect(privacy).toContain(
-      "On Pro, with its AI check on, the spam filters send Anthropic the masked text of new senders' messages they cannot decide by themselves",
+      "On Pro, with its AI check on, the spam filters send Google, through its Gemini API, the masked text of new senders' messages they cannot decide by themselves",
     );
     expect(privacy).toContain("whether and when you turned its AI check on or off");
     // A Pro we give: the owner is told, and its AI check waits for them.
     expect(terms).toContain("We tell you by email, and Settings → Spam says until when.");
     expect(terms).toContain(
-      "Its filters are on, but its AI check stays off until you turn it on in Settings → Spam: until then nothing goes to Anthropic.",
+      "Its filters are on, but its AI check stays off until you turn it on in Settings → Spam: until then nothing goes to Google.",
     );
     // The filters ship with Pro: nothing says they are coming, or that Pro changes nothing.
     expect(terms).not.toMatch(/which are coming|filters \(coming\)|Pro changes nothing/);
@@ -683,20 +681,21 @@ describe("the price: Free, and Pro at $10", () => {
     );
     expect(terms).toContain(SUPPORT);
     for (const page of ["terms.md", "privacy.md", "processing.md"])
-      expect(front(`${HOSTED_DIR}/${page}`).updated, page).toBe("27 October 2026");
+      expect(front(`${HOSTED_DIR}/${page}`).updated, page).toBe("28 October 2026");
     expect(front(`${HOSTED_DIR}/terms.md`).description).not.toMatch(/pilot/i);
   });
 
   it("the processing agreement names Pro's AI model once, what each check sends, and what its maker keeps", () => {
     const dpa = flat(body(`${HOSTED_DIR}/processing.md`));
-    // One entry for Anthropic, one transfer paragraph, and the confidentiality section says it too.
-    expect(dpa.match(/\*\*Anthropic/g)).toHaveLength(1);
-    expect(dpa.match(/Anthropic is in the United States|to Anthropic \(section 5\) is processed/g)).toHaveLength(1);
+    // One entry for Google, one transfer paragraph, and the confidentiality section says it too.
+    expect(dpa.match(/\*\*Google/g)).toHaveLength(1);
+    expect(dpa.match(/send to Google \(section 5\)/g)).toHaveLength(1);
+    expect(dpa).not.toMatch(/Anthropic|Claude/);
     expect(dpa).toContain(
-      "On Pro, the spam filters' AI check has Anthropic's AI model read the masked text of a new sender's message that the filters cannot decide by themselves (section 5).",
+      "On Pro, the spam filters' AI check has Google's AI model, Gemini, read the masked text of a new sender's message that the filters cannot decide by themselves (section 5).",
     );
     expect(dpa).toContain(
-      "**Anthropic, for Pro's AI spam filters.** When the filters cannot decide by themselves a message from someone your inbox has not dealt with before, they ask Anthropic's AI model, Claude Haiku, at most 150 times a day and 1,500 times a month for your inbox.",
+      "**Google, for Pro's AI spam filters.** When the filters cannot decide by themselves a message from someone your inbox has not dealt with before, they ask Google's AI model, Gemini (Gemini 3.1 Flash-Lite, through the Gemini API on our own Google Cloud project, which has billing on), at most 150 times a day and 1,500 times a month for your inbox.",
     );
     expect(dpa).toContain(
       "Each check sends the message's masked text: earlier mail quoted in it cut, at most 2,000 characters, with every email address, phone number, payment address, bank account and card number taken out and each link cut to its domain.",
@@ -706,17 +705,28 @@ describe("the price: Free, and Pro at $10", () => {
     expect(dpa).toContain(
       "The answer is a verdict from a fixed list, with at most three short passages copied from the message.",
     );
-    // Anthropic's own words (privacy.claude.com, articles 7996866 and 7996868, read 27 Oct 2026): no
-    // training by default, 30 days, flagged inputs and outputs up to two years, the scores up to seven.
-    expect(dpa).toContain("By default, Anthropic does not use what it is sent to train its models.");
-    expect(dpa).toContain("It deletes it within 30 days");
+    // Google's own words for the paid Gemini API (ai.google.dev/gemini-api/terms, /docs/usage-policies
+    // and /docs/zdr, read 28 Oct 2026): not used to improve its products, under its processor addendum,
+    // logged 55 days for abuse monitoring and legal disclosures, flagged content reviewable by staff,
+    // in-memory caching for 24 hours, any country with Google facilities.
     expect(dpa).toContain(
-      "it may keep what was sent and answered for up to two years and the checks' scores for up to seven",
+      "Google does not use what it is sent, or what it answers, to improve its products, and processes them under its data processing addendum for products where Google is a data processor.",
+    );
+    expect(dpa).toContain(
+      "It keeps them for 55 days, solely to detect and prevent breaches of its prohibited use policy and for disclosures the law requires",
+    );
+    expect(dpa).toContain("what its checks flag may be read by authorised Google staff");
+    expect(dpa).toContain("It may also hold them in memory for up to 24 hours");
+    expect(dpa).toContain(
+      "Each check is sent with its request logging off, so our own Google project keeps no log of it.",
     );
     expect(dpa).toContain(
       "On a Pro you pay for, the AI check is on from the start; on a Pro we give you for free, it stays off until you turn it on in Settings → Spam. On Free, nothing is sent to it.",
     );
-    expect(dpa).toContain("relies on the standard contractual clauses in Anthropic's data processing addendum");
+    expect(dpa).toContain("in any country where Google or its sub-processors have facilities");
+    expect(dpa).toContain(
+      "rely on the EU–US Data Privacy Framework, under which Google is certified, or, where that does not apply, on the standard contractual clauses in Google's data processing addendum",
+    );
     expect(dpa).not.toMatch(/zero (data )?retention|pilot/i);
   });
 

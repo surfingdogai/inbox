@@ -85,14 +85,14 @@ It runs on a stranger's opening message, with a filter on, when nothing certain 
 | --- | --- | --- |
 | Basic protection, Held and Spam, the lists, the emails | yes | yes |
 | The three filters | no | on from the start, each with its learning week |
-| The AI check | no | Claude Haiku from Anthropic, which we pay for |
+| The AI check | no | Gemini from Google (Gemini 3.1 Flash-Lite), which we pay for |
 | [Known spam](#known-spam-shared-between-hosted-inboxes) from other businesses | labelled; your Not spam counts for them | labelled; your Spam and Not spam count for them |
 
 The $10 supports the open-source inbox, the open network, and keeping access to AI agents from being locked in a connector store. There is no price for each filter.
 
 **A Pro we give for free**, such as a beta tester's month, says so in Settings → Spam, with until when. Its filters are on and look for known phrases, and its AI check stays off until the owner turns it on there: turning it on says what it sends. The owner switches it, signed in, and nobody else.
 
-Settings → Spam names who reads. Anthropic does not use what it is sent to train its models, and deletes it within 30 days, unless its safety checks flag it for breaking its usage policy (then it may keep it up to two years, and the checks' scores up to seven) or the law requires keeping it. That is Anthropic's standard commercial retention, not a zero-retention arrangement. Until the AI check is switched on for hosted inboxes, Settings says so, and the filters look for known phrases.
+Settings → Spam names who reads. We use Google's Gemini API from a Google Cloud project with billing on, so Google's [terms for paid services](https://ai.google.dev/gemini-api/terms) apply: Google does not use what it is sent to improve its products, and keeps it for [55 days](https://ai.google.dev/gemini-api/docs/usage-policies), only to detect and prevent misuse of its service and for disclosures the law requires; what its checks flag may be read by authorised Google staff. It may be stored for a while or cached in any country where Google has facilities. That is Google's standard retention for the paid Gemini API, not a zero-retention arrangement. Each check is sent with request logging off, so our own Google project keeps no log of it. Until the AI check is switched on for hosted inboxes, Settings says so, and the filters look for known phrases.
 
 ## Known spam, shared between hosted inboxes
 

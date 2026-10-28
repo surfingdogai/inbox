@@ -120,15 +120,16 @@ each filter.*
 8. **Words stay home.** Basic protection reads inside the inbox; only domain names leave, to the
    resolver the inbox already uses. The business's privacy page says, while a model may read, that an
    automated check can read new messages without addresses, numbers or bank details. Where the host's
-   model reads (D2) it adds what Anthropic's API does with them, as its terms say: no training on them,
-   deleted within 30 days unless its safety checks flag them (then up to two years) or the law
-   requires keeping them. It never says a service keeps nothing, and says nothing of what a model the
+   model reads (D2) it adds what Google's Gemini API does with them, as its terms for paid services
+   say: not used to improve its products, kept for 55 days only to detect misuse and for disclosures
+   the law requires. It never says a service keeps nothing, and says nothing of what a model the
    business set up itself keeps.
 9. **Hosted: Free and Pro, our model behind the ledger.** The policy's `plan` (`free` or `pro`; absent,
    or a plan the runtime does not know, is Free) says what the inbox has. Pro: the three filters, on
-   from the start (D3), read by Claude Haiku (`claude-haiku-5-5`) on our own Anthropic key. Free: no
-   filters and no AI; basic protection is the same on both. The key lives in the shard's environment
-   only (`HOSTED_SPAM_ANTHROPIC_KEY`; `HOSTED_SPAM_MODEL` may name another model), never in a tenant's
+   from the start (D3), read by Gemini 3.1 Flash-Lite (`gemini-3.1-flash-lite`) through Google's Gemini
+   API on our own key, from our own Google Cloud project with billing on. Free: no filters and no AI;
+   basic protection is the same on both. The key lives in the shard's environment only
+   (`HOSTED_SPAM_GEMINI_KEY`; `HOSTED_SPAM_MODEL` may name another Gemini model), never in a tenant's
    file, settings, policy, download, answers or logs, and a model key is redacted from every log line.
    Without it no model is asked, and Settings says the AI check isn't on yet. The policy's `spam` block
    keeps what the control plane may still set: `ai: false` stops our AI for an inbox, and the day and
@@ -310,18 +311,18 @@ brings it back.
 | # | Question | The founder's decision, and how it ships |
 |---|---|---|
 | D1 | The price per filter, a bundle, a free first month | No price per filter. Free keeps basic protection; Pro ($10, €10 or £9 a month, taxes included) includes the three filters. The policy's `plan`; Settings, the docs and the site say so, with what the $10 supports in the founder's words ("The $10 supports…", "Your €10…", "Your £9…"). The hosted terms' price section says Free and Pro (the billing change). |
-| D2 | Our AI for hosted inboxes: provider and model, where it runs, retention, the terms | Claude Haiku (`claude-haiku-5-5`) through Anthropic's API on our own key, `HOSTED_SPAM_ANTHROPIC_KEY`: off, and said so, until it is set. Anthropic's standard commercial retention applies (no training by default; deleted within 30 days unless flagged under its usage policy, then inputs and outputs up to two years and the safety checks' scores up to seven, or kept by law); never "keeps nothing". The processing agreement names Anthropic as a sub-processor. |
+| D2 | Our AI for hosted inboxes: provider and model, where it runs, retention, the terms | Changed 28 October 2026 ("We will use google AI and not anthropic, we will use our google account"): Gemini 3.1 Flash-Lite (`gemini-3.1-flash-lite`, the cheapest stable Gemini model a new project can use that holds its answer to a JSON schema, $0.25 in and $1.50 out per million tokens) through Google's Gemini API (`generateContent`, the key in `x-goog-api-key`, thinking minimal, `store: false`) on our own key from Surfing Dog's Google Cloud project with billing on, `HOSTED_SPAM_GEMINI_KEY`: off, and said so, until it is set. Google's terms for paid services apply (ai.google.dev/gemini-api/terms, read 28 October 2026): prompts and answers not used to improve its products, processed under Google's data processing addendum for products where Google is a data processor; logged for 55 days only to detect and prevent prohibited use and for legally required disclosures, flagged content reviewable by authorised Google staff (docs/usage-policies); stored transiently or cached in any country where Google or its agents have facilities; transfers under the EU–US Data Privacy Framework, else the addendum's standard contractual clauses. Never "keeps nothing": zero retention is Vertex AI's, not the Gemini API's. The processing agreement names Google as the sub-processor in Anthropic's place (Claude Haiku, `HOSTED_SPAM_ANTHROPIC_KEY`, decided 27 October and never switched on). |
 | D3 | Filters on by default for new hosted inboxes | On for Pro, each starting with its learning week (labels only, then puts aside). Nothing is deleted automatically; Not spam is one tap. A filter a person switched off stays off. |
 | D4 | Caps: 150 a day and 1,500 a month per inbox, 50 million tokens a day per runtime, the budgets above | Kept, in the policy's `spam` block. |
 | D5 | Deleting put-aside items after 30 or 90 days | Kept ("Keep them") unless the owner chooses 90 or 30 days. Nothing is deleted on its own (27 October 2026): a bot's form messages, once gone after seven days, are kept like the rest. |
 | D6 | A Spam tap also blocking the sender | offered, never automatic |
 | D7 | Sharing anything across businesses | Inboxes share fingerprints of known spam with each other, never content (§16): keyed MinHash fingerprints in the hosted ledger, known once inboxes of three other owners (the control plane's account id, else the tenant id; never an address) with week-old accounts reported one within a fortnight, less every Not spam on a match, forgotten after thirty days. Per machine for now. Every hosted inbox reads; Pro inboxes live at their own domain report spam; every inbox, Free too, reports Not spam on a match. Off on one's own server. |
 | D8 | Spam data in receipts, standing or ranking | none of it |
-| D9 | Naming the model's provider in Settings | Named plainly: "Claude Haiku, by Anthropic". |
-| D10 | The privacy page line | Shown while a model may read, or while the inbox reads the host's shared list of known spam. For our model, Anthropic's retention as above; for the shared list, that each new stranger's message is compared by fingerprint, in two wordings: an inbox that only reads, and one whose Spam marks are shared too. |
+| D9 | Naming the model's provider in Settings | Named plainly: "Gemini Flash-Lite, by Google" (28 October 2026; was "Claude Haiku, by Anthropic"). |
+| D10 | The privacy page line | Shown while a model may read, or while the inbox reads the host's shared list of known spam. For our model, Google's retention as above; for the shared list, that each new stranger's message is compared by fingerprint, in two wordings: an inbox that only reads, and one whose Spam marks are shared too. |
 | D11 | A browser challenge, operator link lists, a DNS blocklist feed | not built |
 | D12 | Hosted owners bringing their own model key | later; off |
 | D13 | Switching off filters of owners who do not agree to billing | Gone with the per-filter price: Free has no filters, and the plan switches them off as the system. |
-| D14 | Beta testers | Pro free for a month with no card: the control plane's admin setting per inbox, with an end date. The owner is told by email, and Settings → Spam says until when. Its filters are on as on any Pro, and its AI check stays off until the owner turns it on in Settings → Spam (§9): nothing goes to Anthropic before. Paid Pro keeps D3's default, the AI on. |
+| D14 | Beta testers | Pro free for a month with no card: the control plane's admin setting per inbox, with an end date. The owner is told by email, and Settings → Spam says until when. Its filters are on as on any Pro, and its AI check stays off until the owner turns it on in Settings → Spam (§9): nothing goes to Google before. Paid Pro keeps D3's default, the AI on. |
 | D15 | A shared match deciding on its own | Never: it labels ("Seen as spam at other businesses"), and adds its points only beside a signal of the inbox's own or the AI's; it never holds a booking or an order. A known spam domain counts only for mail a mail server vouched for (§16.5). |
 | D16 | Free inboxes' Not spam on a shared match | Counts against the match, like any inbox's (§16.6). |

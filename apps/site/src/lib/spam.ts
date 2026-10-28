@@ -41,8 +41,8 @@ export const SPAM_LINES = {
   lost: "Bookings it doubts wait for the sender to confirm, and hold no time. Messages it puts aside are kept for as long as you choose, and one tap brings them back.",
   form: "Put our form on any site, with no script and no puzzle for your customers. Or let your own website's forms pass what they receive to your inbox, with a key that can do nothing else.",
   yours:
-    "No spam company's cloud. Hosted inboxes share fingerprints of spam with each other, never messages, and a fingerprint can't be turned back into one. Before anything is read by AI (with Pro, Claude Haiku from Anthropic), email addresses, phone numbers and bank details are taken out.",
-  cost: "Run it yourself: free, with your own AI model or none. Hosted: basic protection is free; the three filters come with Pro, $10, €10 or £9 a month, taxes included, read by Claude Haiku from Anthropic, which we pay for. The $10 supports the open-source inbox, the open network, and keeping access to AI agents from being locked in a connector store.",
+    "No spam company's cloud. Hosted inboxes share fingerprints of spam with each other, never messages, and a fingerprint can't be turned back into one. Before anything is read by AI (with Pro, Gemini from Google), email addresses, phone numbers and bank details are taken out.",
+  cost: "Run it yourself: free, with your own AI model or none. Hosted: basic protection is free; the three filters come with Pro, $10, €10 or £9 a month, taxes included, read by Gemini from Google, which we pay for. The $10 supports the open-source inbox, the open network, and keeping access to AI agents from being locked in a connector store.",
 } as const;
 
 export const SPAM_FAQS: readonly Faq[] = [
@@ -60,7 +60,7 @@ export const SPAM_FAQS: readonly Faq[] = [
   },
   {
     q: "Which AI models can I use?",
-    a: "On your own server: a key from Anthropic, OpenAI or Google Gemini, or a model you run; without one, the filters look for known phrases. Hosted, with Pro: Claude Haiku from Anthropic, which we pay for. Anthropic doesn't train on what it's sent, and deletes it within 30 days unless its safety checks flag it or the law requires otherwise.",
+    a: "On your own server: a key from Anthropic, OpenAI or Google Gemini, or a model you run; without one, the filters look for known phrases. Hosted, with Pro: Gemini from Google, which we pay for, on Google's paid terms. Google doesn't use what it's sent to improve its products, and keeps it for 55 days, only to detect misuse and for disclosures the law requires.",
   },
   {
     q: "Can an AI assistant still ask me for a price?",

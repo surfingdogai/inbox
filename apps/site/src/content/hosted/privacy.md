@@ -2,7 +2,7 @@
 title: Hosted inbox privacy notice
 description: What we keep about you, the business owner, when you set up a hosted inbox, and why.
 eyebrow: Privacy · hosted inbox
-updated: 27 October 2026
+updated: 28 October 2026
 order: 3
 ---
 
@@ -42,7 +42,7 @@ When your website's own data does not say what your business is, a language-mode
 
 Public DNS resolvers answer our checks of your hostname. A certificate authority issues the certificate for it, and, as for every certificate, your hostname is then listed in public certificate logs.
 
-If you choose Pro, Stripe gets your email address and your domain, to make your inbox its customer, and takes your payment through Link as the merchant of record, under its own privacy policy. It can be outside the European Union. On Pro, with its AI check on, the spam filters send Anthropic the masked text of new senders' messages they cannot decide by themselves, with your business's name, description, languages and the names of what it offers, and never your own address; the [processing agreement](/hosted/processing/) says exactly what, and what Anthropic keeps.
+If you choose Pro, Stripe gets your email address and your domain, to make your inbox its customer, and takes your payment through Link as the merchant of record, under its own privacy policy. It can be outside the European Union. On Pro, with its AI check on, the spam filters send Google, through its Gemini API, the masked text of new senders' messages they cannot decide by themselves, with your business's name, description, languages and the names of what it offers, and never your own address; the [processing agreement](/hosted/processing/) says exactly what, and what Google keeps.
 
 Mail you write to our addresses is kept in our mailbox at an email company, which may store it outside the European Union.
 
