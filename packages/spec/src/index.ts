@@ -3,6 +3,7 @@
  * message an inbox exchanges with a network (`network`, ADR-017 §7; `docs/protocol/network.md`),
  * and the conformance check that holds a manifest, a receipt or an acknowledgement to them.
  */
+export * from "./attributes";
 export * from "./base";
 export * from "./conformance";
 export * from "./cuisines";

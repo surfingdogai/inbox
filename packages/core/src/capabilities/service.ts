@@ -78,6 +78,7 @@ import {
   OWNER_ONLY_SETTINGS,
   openedNetworks,
 } from "../settings/guard";
+import { stampListingSaves } from "../settings/listing";
 import { mergeSettings, patchPaths } from "../settings/merge";
 import { prepareSettingsWrite, syncLegacyPair } from "../settings/patch";
 import { settingsPayments, settingsPayTo, stripePayOf } from "../settings/payments";
@@ -2383,6 +2384,8 @@ export class Capabilities {
     const merged = mergeSettings(prepared.base, patch) as Record<string, unknown>;
     merged.schemaVersion = SETTINGS_SCHEMA_VERSION;
     syncLegacyPair(merged);
+    // When the owner last said each listing field, as the inbox saw it saved: never what the write sent.
+    stampListingSaves(stored, merged, now);
     const checked = settingsWriteSchema.safeParse(merged);
     if (!checked.success) {
       const changed = patchPaths(patch);

@@ -8,6 +8,7 @@ import {
   isPaymentToken,
   MAX_PROFILE_PAYMENTS,
   PAYMENTS_VOCABULARY,
+  PROFILE_DESCRIPTION_MAX,
   paymentLabel,
   sortPaymentTokens,
 } from "@surfingdog/spec";
@@ -87,7 +88,11 @@ const planDirectorySchema = z
         "false keeps the business out of every network's directory. A plan cannot list it: that is the owner's to choose, in the app.",
       ),
     url: z.literal("").optional().describe('"" clears the website in the public profile. A plan never sets one.'),
-    description: z.string().max(500).optional().describe("A sentence or two about the business, in public."),
+    description: z
+      .string()
+      .max(PROFILE_DESCRIPTION_MAX)
+      .optional()
+      .describe("The business in its own words, in public: plain text, at most 600 characters."),
     categories: z.array(z.string().max(60)).max(10).optional(),
     address: z
       .object({

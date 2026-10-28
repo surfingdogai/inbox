@@ -10,12 +10,17 @@ import {
   fillStayTemplate,
   hostIsOn,
   isBusinessKind,
+  isCuisineSlug,
+  isDeclarableAttribute,
   isPaymentToken,
   isStripePayRecipient,
   KIND_LABEL_MAX,
+  MAX_PROFILE_CUISINES,
   MAX_PROFILE_PAYMENTS,
   ownSiteDomain,
+  PROFILE_DESCRIPTION_MAX,
   readDoorsElsewhere,
+  reservationsSchema,
   STRIPE_PAY_CURRENCIES,
 } from "@surfingdog/spec";
 import { z } from "zod";
@@ -126,6 +131,26 @@ export const MAX_SETUP_SOURCES = 30;
 
 /** At most this many services suggested to the owner by a setup plan. */
 export const MAX_SUGGESTED_SERVICES = 30;
+
+/**
+ * The listing fields of `directory` whose save time the inbox keeps (`directory.saved`), so a network is told when the
+ * business last said each (`profile.sources`, spec 0.13).
+ */
+export const LISTING_FIELDS = [
+  "description",
+  "cuisines",
+  "reservations",
+  "priceBand",
+  "placeCategory",
+  "features",
+] as const;
+export type ListingField = (typeof LISTING_FIELDS)[number];
+
+/** An Overture place category id: lower-case words joined by `_`. */
+const placeCategoryId = z
+  .string()
+  .max(80)
+  .regex(/^[a-z0-9]+(_[a-z0-9]+)*$/, "a place category id, like hair_salon");
 
 const disabledNetwork = (): NetworkEntry => networkEntrySchema.parse({});
 /** The most currencies a business takes besides its own: a profile names five at most (`profile.currencies`). */
@@ -692,7 +717,13 @@ const sections = {
         .describe(
           "Written only by a host that holds the business out of the directories for now: whether it comes back in when the host lets go. Nobody else writes it.",
         ),
-      description: z.string().max(500).default("").describe("A sentence or two about the business, in public."),
+      description: z
+        .string()
+        .max(PROFILE_DESCRIPTION_MAX)
+        .default("")
+        .describe(
+          "The business in its own words, in public: plain text, at most 600 characters. Networks show it as the business's own words. Only the owner in person changes it.",
+        ),
       categories: z
         .array(z.string().max(60))
         .max(10)
@@ -746,6 +777,47 @@ const sections = {
         .or(z.literal(""))
         .default("")
         .describe("The business's own website, if it has one."),
+      // The listing (spec 0.13): what agents can match on, each a choice in Settings → Business, never a typed code.
+      // What the business says of itself to every agent, so only the owner in person changes any of it (`guard.ts`).
+      placeCategory: z
+        .object({
+          primary: placeCategoryId,
+          alternates: z.array(placeCategoryId).max(2).default([]),
+        })
+        .nullable()
+        .default(null)
+        .describe("What kind of place it is, as an Overture place category id (hair_salon, noodles_restaurant)."),
+      cuisines: z
+        .array(z.string().refine(isCuisineSlug, "a cuisine of vocab/cuisines.json, like ramen or portuguese"))
+        .max(MAX_PROFILE_CUISINES)
+        .refine((all) => new Set(all).size === all.length, "each cuisine once")
+        .default([])
+        .describe(
+          "What a place that serves food cooks: at most five cuisines of vocab/cuisines.json, most important first.",
+        ),
+      reservations: reservationsSchema
+        .nullable()
+        .default(null)
+        .describe("How it takes tables: required, recommended, accepted, or walk_in_only; null when not said."),
+      priceBand: z
+        .int()
+        .min(1)
+        .max(4)
+        .nullable()
+        .default(null)
+        .describe("How dear it is, 1 (cheapest) to 4; null when not said."),
+      features: z
+        .array(z.string().refine(isDeclarableAttribute, "an attribute of vocab/attributes.json a business may declare"))
+        .max(40)
+        .refine((all) => new Set(all).size === all.length, "each feature once")
+        .default([])
+        .describe("What the owner ticked of the attributes a business may declare: wifi, parking, outdoor_seating…"),
+      saved: z
+        .partialRecord(z.enum(LISTING_FIELDS), z.iso.datetime({ offset: true }))
+        .default({})
+        .describe(
+          "When the owner last saved each listing field: written by the inbox itself on every save that changes one, never taken from a write.",
+        ),
     })
     .prefault({}),
   /**

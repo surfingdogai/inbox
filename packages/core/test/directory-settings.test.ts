@@ -75,6 +75,12 @@ describe("the directory settings", () => {
       address: { streetAddress: "", addressLocality: "", postalCode: "", addressCountry: "" },
       geo: null,
       url: "",
+      placeCategory: null,
+      cuisines: [],
+      reservations: null,
+      priceBand: null,
+      features: [],
+      saved: {},
     });
   });
 
@@ -147,15 +153,103 @@ describe("coming back into the directories", () => {
     expect((await readSettings(db)).directory.listed).toBe(true);
   });
 
-  it("lets the owner's AI edit the public profile, but never put a key or a secret in it", async () => {
+  it("lets the owner's AI edit the public address and categories, but never put a key or a secret in them", async () => {
     const { db, caps } = await setup();
-    await caps.updateSettings(claude, { doc: { directory: { description: "Surfboard repairs in Ericeira." } } });
-    expect((await readSettings(db)).directory.description).toBe("Surfboard repairs in Ericeira.");
+    await caps.updateSettings(claude, { doc: { directory: { categories: ["repairs"] } } });
+    expect((await readSettings(db)).directory.categories).toEqual(["repairs"]);
     await expect(
       caps.updateSettings(claude, {
-        doc: { directory: { description: "Use sdi_own_0123456789abcdef to manage us." } },
+        doc: { directory: { address: { streetAddress: "Use sdi_own_0123456789abcdef to manage us." } } },
       }),
     ).rejects.toMatchObject({ code: "not_allowed" });
-    expect((await readSettings(db)).directory.description).toBe("Surfboard repairs in Ericeira.");
+    expect((await readSettings(db)).directory.address.streetAddress).toBe("");
+  });
+});
+
+describe("the listing (spec 0.13)", () => {
+  const listing = {
+    description: "Hand-pulled ramen in Arroios. The vegan shoyu is made with kombu and mushroom broth.",
+    placeCategory: { primary: "noodles_restaurant", alternates: ["japanese_restaurant"] },
+    cuisines: ["ramen", "japanese"],
+    reservations: "recommended",
+    priceBand: 2,
+    features: ["wifi", "outdoor_seating"],
+  };
+
+  it("is the owner's alone: the owner's AI and another system's key change none of it", async () => {
+    const { db, caps } = await setup();
+    for (const [field, value] of Object.entries(listing)) {
+      for (const caller of [claude, zapier]) {
+        await expect(
+          caps.updateSettings(caller, { doc: { directory: { [field]: value } } }),
+          `${caller.actor.id}: ${field}`,
+        ).rejects.toMatchObject({ code: "not_allowed", fields: [{ path: `doc.directory.${field}` }] });
+      }
+    }
+    await caps.updateSettings(owner, { doc: { directory: listing } });
+    expect((await readSettings(db)).directory).toMatchObject(listing);
+    // Written back as it was read, it changes nothing, so the owner's AI is not refused.
+    await caps.updateSettings(claude, { doc: { directory: listing } });
+  });
+
+  it("holds only choices: cuisines of the vocabulary, each once, at most five; declarable features; a band 1 to 4", async () => {
+    const { caps } = await setup();
+    const bad: Record<string, unknown>[] = [
+      { cuisines: ["Ramen"] },
+      { cuisines: ["ramen", "ramen"] },
+      { cuisines: ["ramen", "sushi", "pizza", "thai", "korean", "greek"] },
+      { cuisines: ["vegan"] },
+      { features: ["halal"] },
+      { features: ["open_24h"] },
+      { features: ["cuisine"] },
+      { reservations: "maybe" },
+      { priceBand: 5 },
+      { placeCategory: { primary: "Hair Salon" } },
+      { description: "x".repeat(601) },
+    ];
+    for (const directory of bad) {
+      await expect(caps.updateSettings(owner, { doc: { directory } }), JSON.stringify(directory)).rejects.toMatchObject(
+        {
+          code: "invalid_input",
+        },
+      );
+    }
+    await caps.updateSettings(owner, { doc: { directory: { description: "x".repeat(600) } } });
+  });
+
+  it("stamps when the owner last said each field, never taking a time a write sends", async () => {
+    const { db, caps } = await setup();
+    const later = (ms: number): Caller => ({ ...owner, now: () => T0 + ms });
+    await caps.updateSettings(owner, { doc: { directory: { cuisines: ["ramen"], description: "Ramen." } } });
+    expect((await readSettings(db)).directory.saved).toEqual({
+      cuisines: "2026-10-06T10:00:00.000Z",
+      description: "2026-10-06T10:00:00.000Z",
+    });
+    // A write that changes one field stamps that one; a forged time is not taken.
+    await caps.updateSettings(later(60_000), {
+      doc: { directory: { cuisines: ["ramen", "japanese"], saved: { description: "2030-01-01T00:00:00.000Z" } } },
+    });
+    expect((await readSettings(db)).directory.saved).toEqual({
+      cuisines: "2026-10-06T10:01:00.000Z",
+      description: "2026-10-06T10:00:00.000Z",
+    });
+    // The same value written again is no new statement.
+    await caps.updateSettings(later(120_000), { doc: { directory: { cuisines: ["ramen", "japanese"] } } });
+    expect((await readSettings(db)).directory.saved.cuisines).toBe("2026-10-06T10:01:00.000Z");
+  });
+
+  it("stamps a value read from the website once the owner checks it", async () => {
+    const { db, caps } = await setup();
+    const read = { source_url: "https://tasca.example/sobre", checked_at: "2026-10-05T09:00:00Z", confidence: "read" };
+    await caps.updateSettings(owner, {
+      doc: { directory: { description: "Ramen." }, setup: { sources: { "directory.description": read } } },
+    });
+    await caps.updateSettings(
+      { ...owner, now: () => T0 + 3_600_000 },
+      {
+        doc: { setup: { sources: { "directory.description": null } } },
+      },
+    );
+    expect((await readSettings(db)).directory.saved.description).toBe("2026-10-06T11:00:00.000Z");
   });
 });
