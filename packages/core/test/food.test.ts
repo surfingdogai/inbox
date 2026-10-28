@@ -738,9 +738,11 @@ describe("slots: the last place goes to one order", () => {
     expect(await claims(s.db, "menu-cap:")).toBe(0);
     await s.caps.letIn(person(VOLCAN_T + MIN), { item_id: fits });
     expect(await claims(s.db, "menu-cap:")).toBe(1);
-    // Two more would pass the cap of two: the second takes no cap place, nor its slot's, and waits.
+    // Two more would pass the cap of two: the second takes no cap place and waits for a person. Its
+    // slot, which has room, it takes, as a new order over a cap does.
     await s.caps.letIn(person(VOLCAN_T + MIN), { item_id: late });
     expect(await claims(s.db, "menu-cap:")).toBe(1);
+    expect(await claims(s.db, "order-slot:")).toBe(2);
     expect((await itemOf(s.db, late)).payload.kitchen).toEqual({ instant: false, hold: ["over_cap"] });
     // Letting it in again does nothing twice.
     await refused(s.caps.letIn(person(VOLCAN_T + 2 * MIN), { item_id: late }));
