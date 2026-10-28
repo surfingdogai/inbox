@@ -132,6 +132,7 @@ import {
  * anyone. The exception is a door report (§4.15): its body is strict, and a member it does not name
  * is refused, so its schemas say `additionalProperties: false`. Cross-field rules (an outcome's `out`
  * and `ref`, "exactly one of") cannot be said in JSON Schema; the Zod schemas and the vectors hold them.
+ * A tuple is closed by its `minItems` and `maxItems` alone, with no `items: false` (`closedTuples`).
  */
 export const JSON_SCHEMAS: Record<string, { schema: z.ZodType; title: string }> = {
   manifest: { schema: manifestSchema, title: "Discovery manifest (/.well-known/agent-inbox.json)" },
@@ -340,11 +341,25 @@ export const JSON_SCHEMAS: Record<string, { schema: z.ZodType; title: string }> 
  */
 export const SCHEMA_BASE = "https://surfingdog.ai/spec/schemas/";
 
+/**
+ * A tuple as every reader takes it: `prefixItems`, closed by `minItems` and `maxItems`, without the
+ * `items: false` beside them. A draft-07 checker (the MCP TypeScript SDK's default) ignores
+ * `prefixItems` and reads that `items` as "no item at all", so it refuses every tuple with something
+ * in it: a business's opening hours, for one. The bounds close it in every draft.
+ */
+function closedTuples(ctx: { zodSchema: z.core.$ZodTypes; jsonSchema: z.core.JSONSchema.BaseSchema }): void {
+  const json = ctx.jsonSchema;
+  if (ctx.zodSchema._zod.def.type === "tuple" && json.items === false && json.maxItems !== undefined) delete json.items;
+}
+
 /** One JSON Schema document, as it is written to `schemas/<name>.json`. */
 export function jsonSchemaOf(name: string): Record<string, unknown> {
   const entry = JSON_SCHEMAS[name];
   if (!entry) throw new Error(`no schema named ${name}`);
-  const { $schema, ...rest } = z.toJSONSchema(entry.schema, { io: "input" }) as Record<string, unknown>;
+  const { $schema, ...rest } = z.toJSONSchema(entry.schema, { io: "input", override: closedTuples }) as Record<
+    string,
+    unknown
+  >;
   if (name.startsWith("mcp-")) return { $schema, title: entry.title, ...rest };
   return { $schema, $id: `${SCHEMA_BASE}${name}.json`, title: entry.title, ...rest };
 }

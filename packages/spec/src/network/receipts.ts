@@ -45,9 +45,10 @@ export const AMENDMENT_LIMITS = { unverified: 3, dueShiftDays: 90 } as const;
 /**
  * Every outcome §3 defines, in its order: which side each writes a row on (`kept`, `broken`, or
  * none), its weight `o`, and who records it. Only the `inbox` ones travel in receipts; the `report`
- * outcomes come from a customer's agent (§3.4) and `promise.unclosed` from the network itself
- * (R30). A row with `since` first counts under that rules version (a network on older rules refuses
- * it); the others have counted since version 3. No row added since has a customer's side.
+ * outcomes come from a customer's agent (§3.4), and the `network` ones from the network itself:
+ * `promise.unclosed` (R30) and, from rules version 9, `promise.closed_late`. A row with `since` first
+ * counts under that rules version (a network on older rules refuses it, or writes none of its own);
+ * the others have counted since version 3. No row added since has a customer's side.
  */
 export const OUTCOMES = [
   { code: "booking.completed", typ: "booking", business: "kept", customer: "kept", o: 1, by: "inbox" },
@@ -65,6 +66,18 @@ export const OUTCOMES = [
   { code: "booking.no_show_business", typ: "booking", business: "broken", customer: null, o: 1, by: "report" },
   { code: "order.not_received", typ: "order", business: "broken", customer: null, o: 1, by: "report" },
   { code: "promise.unclosed", typ: null, business: "broken", customer: null, o: 1, by: "network" },
+  // Rules version 9: a booking or an order the business closed as the customer's, which the network
+  // stored less than 48 hours before it was due and no verified acknowledgement backs, is half a
+  // broken promise.
+  {
+    code: "promise.closed_late",
+    typ: null,
+    business: "broken",
+    customer: null,
+    o: 0.5,
+    by: "network",
+    since: 9,
+  },
   { code: "booking.no_show_customer", typ: "booking", business: null, customer: "broken", o: 1, by: "inbox" },
   {
     code: "booking.cancelled_late_by_customer",

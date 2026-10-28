@@ -107,7 +107,6 @@
                           "pattern": "^(([01]\\d|2[0-3]):[0-5]\\d|24:00)$"
                         }
                       ],
-                      "items": false,
                       "minItems": 2,
                       "maxItems": 2
                     }
@@ -127,7 +126,6 @@
                           "pattern": "^(([01]\\d|2[0-3]):[0-5]\\d|24:00)$"
                         }
                       ],
-                      "items": false,
                       "minItems": 2,
                       "maxItems": 2
                     }
@@ -147,7 +145,6 @@
                           "pattern": "^(([01]\\d|2[0-3]):[0-5]\\d|24:00)$"
                         }
                       ],
-                      "items": false,
                       "minItems": 2,
                       "maxItems": 2
                     }
@@ -167,7 +164,6 @@
                           "pattern": "^(([01]\\d|2[0-3]):[0-5]\\d|24:00)$"
                         }
                       ],
-                      "items": false,
                       "minItems": 2,
                       "maxItems": 2
                     }
@@ -187,7 +183,6 @@
                           "pattern": "^(([01]\\d|2[0-3]):[0-5]\\d|24:00)$"
                         }
                       ],
-                      "items": false,
                       "minItems": 2,
                       "maxItems": 2
                     }
@@ -207,7 +202,6 @@
                           "pattern": "^(([01]\\d|2[0-3]):[0-5]\\d|24:00)$"
                         }
                       ],
-                      "items": false,
                       "minItems": 2,
                       "maxItems": 2
                     }
@@ -227,7 +221,6 @@
                           "pattern": "^(([01]\\d|2[0-3]):[0-5]\\d|24:00)$"
                         }
                       ],
-                      "items": false,
                       "minItems": 2,
                       "maxItems": 2
                     }

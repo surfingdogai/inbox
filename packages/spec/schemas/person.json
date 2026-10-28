@@ -81,6 +81,7 @@
               "booking.no_show_business",
               "order.not_received",
               "promise.unclosed",
+              "promise.closed_late",
               "booking.no_show_customer",
               "booking.cancelled_late_by_customer",
               "order.payment_failed",

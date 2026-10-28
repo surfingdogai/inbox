@@ -275,7 +275,6 @@
               "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
             }
           ],
-          "items": false,
           "minItems": 2,
           "maxItems": 2
         },

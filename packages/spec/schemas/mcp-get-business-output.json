@@ -637,7 +637,6 @@
                     "pattern": "^(([01]\\d|2[0-3]):[0-5]\\d|24:00)$"
                   }
                 ],
-                "items": false,
                 "minItems": 2,
                 "maxItems": 2
               }
@@ -657,7 +656,6 @@
                     "pattern": "^(([01]\\d|2[0-3]):[0-5]\\d|24:00)$"
                   }
                 ],
-                "items": false,
                 "minItems": 2,
                 "maxItems": 2
               }
@@ -677,7 +675,6 @@
                     "pattern": "^(([01]\\d|2[0-3]):[0-5]\\d|24:00)$"
                   }
                 ],
-                "items": false,
                 "minItems": 2,
                 "maxItems": 2
               }
@@ -697,7 +694,6 @@
                     "pattern": "^(([01]\\d|2[0-3]):[0-5]\\d|24:00)$"
                   }
                 ],
-                "items": false,
                 "minItems": 2,
                 "maxItems": 2
               }
@@ -717,7 +713,6 @@
                     "pattern": "^(([01]\\d|2[0-3]):[0-5]\\d|24:00)$"
                   }
                 ],
-                "items": false,
                 "minItems": 2,
                 "maxItems": 2
               }
@@ -737,7 +732,6 @@
                     "pattern": "^(([01]\\d|2[0-3]):[0-5]\\d|24:00)$"
                   }
                 ],
-                "items": false,
                 "minItems": 2,
                 "maxItems": 2
               }
@@ -757,7 +751,6 @@
                     "pattern": "^(([01]\\d|2[0-3]):[0-5]\\d|24:00)$"
                   }
                 ],
-                "items": false,
                 "minItems": 2,
                 "maxItems": 2
               }
@@ -798,6 +791,7 @@
           "booking.no_show_business",
           "order.not_received",
           "promise.unclosed",
+          "promise.closed_late",
           "booking.no_show_customer",
           "booking.cancelled_late_by_customer",
           "order.payment_failed",

@@ -474,7 +474,9 @@ describe("receipts-v6.json", () => {
   });
 
   it("adds rows to the outcome table, none of them on a customer's side", () => {
-    expect(receiptsV6.outcomes).toEqual(JSON.parse(JSON.stringify(OUTCOMES.filter((o) => "since" in o))));
+    expect(receiptsV6.outcomes).toEqual(
+      JSON.parse(JSON.stringify(OUTCOMES.filter((o) => "since" in o && o.since === 6))),
+    );
     for (const o of receiptsV6.outcomes) {
       expect(o.since).toBe(6);
       expect(o.customer, o.code).toBeNull();

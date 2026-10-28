@@ -1739,7 +1739,8 @@ async function buildReceiptsV6(instance: VectorKey, agent: VectorKey, passRef: s
     now: RECEIPTS_V6_NOW,
     issuer: { kid: instance.kid, public_jwk: instance.public_jwk, private_jwk: instance.private_jwk },
     agent: { kid: agent.kid, public_jwk: agent.public_jwk, private_jwk: agent.private_jwk },
-    outcomes: OUTCOMES.filter((o) => "since" in o),
+    // The rows version 6 adds; a later version's are not these vectors'.
+    outcomes: OUTCOMES.filter((o) => "since" in o && o.since === 6),
     amendment_limits: AMENDMENT_LIMITS,
     receipts,
     acknowledgements,
