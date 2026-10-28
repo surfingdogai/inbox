@@ -1,0 +1,274 @@
+---
+/**
+ * The cover for "Can AI read your website? What it sees without JavaScript": one café's page, as a
+ * person's browser shows it and as most AI crawlers read it.
+ *
+ *  1. On the left, the page in a browser: the name, the menu with its prices, the opening hours and
+ *     a booking calendar with today's free times.
+ *  2. A crawler, the violet dot, reads down the same page's HTML on the right. The name and the
+ *     first line are there. Where the menu, the hours and the calendar should be there are only the
+ *     tags that would have loaded them, in dashed boxes: the scripts were never run.
+ *  3. Then the fix: the words go into the HTML itself, each box fills with what the browser showed,
+ *     and the note under them turns from "Scripts not run" to "In the HTML".
+ *
+ * The composed frame is step 2, the post's question: what a crawler sees. Built the way
+ * CoverDots.astro is: the markup is the composed frame at t = STILL and the clock starts there,
+ * reduced motion is that frame, and it stops when nobody is looking.
+ */
+---
+
+<figure
+  class="crh"
+  role="img"
+  aria-label="A café's page in a browser shows its menu with prices, its opening hours and today's free times. The same page's HTML, as most AI crawlers read it, has the name and a line about coffee, but where the menu, the hours and the free times should be there are only the tags of scripts that were never run. Then the words go into the HTML, and the crawler can read them."
+>
+<svg viewBox="0 0 640 360" aria-hidden="true" focusable="false">
+<text x="28" y="30" class="crh-cap">IN A BROWSER</text>
+<text x="340" y="30" class="crh-cap"><tspan class="crh-sm">TO MOST </tspan>AI CRAWLERS</text>
+<rect x="28" y="44" width="272" height="272" rx="14" class="crh-card"/>
+<text x="48" y="80" class="crh-name">Café</text>
+<rect x="48" y="92" width="150" height="5" rx="2.5" class="crh-bar"/>
+<g class="crh-menu">
+<text x="48" y="130" class="crh-item crh-sm">Flat white</text><text x="280" y="130" text-anchor="end" class="crh-item crh-num crh-sm">3.20</text>
+<text x="48" y="150" class="crh-item crh-sm">Croissant</text><text x="280" y="150" text-anchor="end" class="crh-item crh-num crh-sm">2.40</text>
+<text x="48" y="170" class="crh-item crh-sm">Lunch plate</text><text x="280" y="170" text-anchor="end" class="crh-item crh-num crh-sm">9.50</text>
+<g class="crh-nw"><rect x="48" y="124" width="96" height="7" rx="3.5" class="crh-bar"/><rect x="244" y="124" width="36" height="7" rx="3.5" class="crh-bar"/><rect x="48" y="144" width="80" height="7" rx="3.5" class="crh-bar"/><rect x="244" y="144" width="36" height="7" rx="3.5" class="crh-bar"/><rect x="48" y="164" width="112" height="7" rx="3.5" class="crh-bar"/><rect x="244" y="164" width="36" height="7" rx="3.5" class="crh-bar"/></g>
+</g>
+<circle cx="54" cy="202" r="6" class="crh-clock"/><path d="M54,198.6 V202 L56.6,203.6" class="crh-clock"/>
+<text x="68" y="206" class="crh-item crh-sm">Mon–Sat 8–18</text>
+<rect x="68" y="199" width="100" height="7" rx="3.5" class="crh-bar crh-nw"/>
+<rect x="44" y="224" width="240" height="76" rx="12" class="crh-widget"/>
+<text x="58" y="246" class="crh-note">Free today</text>
+<g class="crh-slot"><rect x="58" y="260" width="58" height="24" rx="12"/><text x="87" y="272" dominant-baseline="central" text-anchor="middle">10:00</text></g>
+<g class="crh-slot"><rect x="124" y="260" width="58" height="24" rx="12"/><text x="153" y="272" dominant-baseline="central" text-anchor="middle">11:30</text></g>
+<g class="crh-slot"><rect x="190" y="260" width="58" height="24" rx="12"/><text x="219" y="272" dominant-baseline="central" text-anchor="middle">13:00</text></g>
+
+<rect x="340" y="44" width="272" height="272" rx="14" class="crh-card code"/>
+<g class="crh-line"><text x="356" y="76" class="crh-code crh-sm">&lt;h1&gt;Café&lt;/h1&gt;</text><rect x="356" y="70" width="84" height="7" rx="3.5" class="crh-bar crh-nw"/></g>
+<g class="crh-line"><text x="356" y="96" class="crh-code crh-sm">&lt;p&gt;Coffee, cakes, lunch&lt;/p&gt;</text><rect x="356" y="90" width="150" height="7" rx="3.5" class="crh-bar crh-nw"/></g>
+<g class="crh-gap">
+<rect x="350" y="110" width="252" height="66" rx="10" class="box"/>
+<g class="empty"><text x="364" y="147" class="crh-code tag crh-sm">&lt;div id="menu"&gt;&lt;/div&gt;</text></g>
+<g class="full" style="opacity:0"><text x="364" y="132" class="crh-code crh-sm">Flat white 3.20</text><text x="364" y="149" class="crh-code crh-sm">Croissant 2.40</text><text x="364" y="166" class="crh-code crh-sm">Lunch plate 9.50</text><rect x="364" y="126" width="120" height="7" rx="3.5" class="crh-bar on crh-nw"/><rect x="364" y="143" width="104" height="7" rx="3.5" class="crh-bar on crh-nw"/><rect x="364" y="160" width="132" height="7" rx="3.5" class="crh-bar on crh-nw"/></g>
+</g>
+<g class="crh-gap">
+<rect x="350" y="186" width="252" height="32" rx="10" class="box"/>
+<g class="empty"><text x="364" y="206" class="crh-code tag crh-sm">&lt;iframe src="map"&gt;</text></g>
+<g class="full" style="opacity:0"><text x="364" y="206" class="crh-code crh-sm">Mon–Sat 8–18</text><rect x="364" y="199" width="100" height="7" rx="3.5" class="crh-bar on crh-nw"/></g>
+</g>
+<g class="crh-gap">
+<rect x="350" y="228" width="252" height="40" rx="10" class="box"/>
+<g class="empty"><text x="364" y="252" class="crh-code tag crh-sm">&lt;script src="booking.js"&gt;</text></g>
+<g class="full" style="opacity:0"><text x="364" y="252" class="crh-code crh-sm">Free today: 10:00 11:30 13:00</text><rect x="364" y="245" width="160" height="7" rx="3.5" class="crh-bar on crh-nw"/></g>
+</g>
+<g class="crh-chip wait">
+<rect x="350" y="280" width="152" height="26" rx="13" class="bg"/>
+<circle cx="366" cy="293" r="2" class="dot"/><circle cx="373" cy="293" r="2" class="dot"/><circle cx="380" cy="293" r="2" class="dot"/>
+<text x="392" y="297" class="crh-lab crh-sm">Scripts not run</text>
+<text x="436" y="299.5" text-anchor="middle" class="crh-lab crh-nw">Not run</text>
+</g>
+<g class="crh-chip ok" style="opacity:0">
+<rect x="350" y="280" width="152" height="26" rx="13" class="bg"/>
+<path d="M362,293.4 L365.4,296.8 L371.6,289.6" class="tick"/>
+<text x="382" y="297" class="crh-lab crh-sm">In the HTML</text>
+<text x="436" y="299.5" text-anchor="middle" class="crh-lab crh-nw">Read</text>
+</g>
+<g class="crh-dot" style="opacity:0">
+<circle cx="320" cy="72" r="12" class="ring"/>
+<circle cx="320" cy="72" r="6" class="core"/>
+</g>
+</svg>
+</figure>
+
+<style is:global>
+/* Every selector starts with .crh and every keyframe is crh-*, so nothing leaks. Colours are the
+   host's tokens first, with the brand literal only as the fallback, as in CoverReceipts. */
+.crh{
+  --crh-ink2:var(--ink-2,light-dark(#3f4472,#b9bce0));
+  --crh-ink3:var(--ink-3,light-dark(#565a86,#9a9dc4));
+  --crh-hair:var(--hairline,light-dark(rgba(20,22,60,.08),rgba(255,255,255,.10)));
+  --crh-glass:var(--glass-bg,light-dark(rgba(255,255,255,.32),rgba(255,255,255,.07)));
+  --crh-glassb:var(--glass-border,light-dark(rgba(255,255,255,.55),rgba(255,255,255,.14)));
+  --crh-row:var(--row-bg,light-dark(rgba(255,255,255,.24),rgba(255,255,255,.05)));
+  --crh-palm:var(--palm,#2fd3a5);
+  --crh-palm-i:var(--palm-ink,light-dark(#147a5c,#72e6c3));
+  --crh-violet:var(--violet,#8a6bff);
+  --crh-violet-i:var(--violet-ink,light-dark(#5a3fd0,#ab95ff));
+  --crh-sun:var(--sun,#ffcf5c);
+  --crh-sun-i:var(--sun-ink,light-dark(#866000,#ffda80));
+  --crh-ease:var(--ease-out-soft,cubic-bezier(.2,.8,.2,1));
+  display:block;margin:0;width:100%;aspect-ratio:640/360;container-type:inline-size;
+}
+.crh svg{display:block;width:100%;height:auto}
+.crh text{font-family:var(--font-sans,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif);fill:var(--crh-ink2)}
+.crh .crh-cap{font-size:11px;letter-spacing:.11em}
+.crh .crh-name{font-family:var(--font-display,ui-sans-serif,system-ui,sans-serif);font-size:17px;font-weight:600;letter-spacing:-.01em}
+.crh .crh-item{font-size:11.5px}
+.crh .crh-num{font-variant-numeric:tabular-nums}
+.crh .crh-note{font-size:10.5px;fill:var(--crh-ink3)}
+.crh .crh-lab{font-size:11px}
+.crh .crh-code{font-family:var(--font-mono,ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace);font-size:10.5px}
+.crh .crh-code.tag{fill:var(--crh-ink3)}
+.crh .crh-nw{display:none}   /* the bars a phone-width drawing shows in place of words too small to read */
+.crh .crh-card{fill:var(--crh-glass);stroke:var(--crh-glassb);stroke-width:1}
+.crh .crh-bar{fill:var(--crh-ink3);fill-opacity:.17}
+.crh .crh-bar.on{fill:var(--crh-palm);fill-opacity:.35}
+.crh .crh-clock{fill:none;stroke:var(--crh-ink3);stroke-opacity:.7;stroke-width:1.2;stroke-linecap:round}
+.crh .crh-widget{fill:var(--crh-row);stroke:var(--crh-hair);stroke-width:1}
+.crh .crh-slot rect{fill:var(--crh-palm);fill-opacity:.12;stroke:var(--crh-palm);stroke-opacity:.55;stroke-width:1}
+.crh .crh-slot text{font-size:10.5px;font-variant-numeric:tabular-nums;fill:var(--crh-palm-i)}
+
+/* A gap where a script would have put the words: dashed while empty, a palm hairline once full. */
+.crh .crh-gap .box{fill:none;stroke:var(--crh-ink3);stroke-opacity:.42;stroke-width:1.1;stroke-dasharray:4 5}
+.crh .crh-gap.is-full .box{stroke:var(--crh-palm);stroke-opacity:.65;stroke-dasharray:none}
+.crh .crh-chip .bg{stroke-width:1.1}
+.crh .crh-chip.wait .bg{fill:var(--crh-sun);fill-opacity:.14;stroke:var(--crh-sun);stroke-opacity:.6}
+.crh .crh-chip.wait .dot{fill:var(--crh-sun-i)}
+.crh .crh-chip.wait text{fill:var(--crh-sun-i)}
+.crh .crh-chip.ok .bg{fill:var(--crh-palm);fill-opacity:.14;stroke:var(--crh-palm);stroke-opacity:.65}
+.crh .crh-chip.ok text{fill:var(--crh-palm-i)}
+.crh .tick{fill:none;stroke:var(--crh-palm-i);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+.crh .crh-dot .core{fill:var(--crh-violet)}
+.crh .crh-dot .ring{fill:var(--crh-violet);fill-opacity:.12;stroke:var(--crh-violet);stroke-opacity:.5;stroke-width:1.1;transform-box:fill-box;transform-origin:50% 50%;animation:crh-breathe 2.6s var(--crh-ease) infinite}
+@keyframes crh-breathe{0%,100%{transform:scale(.86);opacity:.55}50%{transform:scale(1.06);opacity:1}}
+
+@container (max-width:600px){
+  .crh .crh-cap{font-size:14px}
+  .crh .crh-name{font-size:20px}
+  .crh .crh-item{font-size:13.5px}
+  .crh .crh-code{font-size:12px}
+  .crh .crh-lab{font-size:13px}
+  .crh .crh-note{font-size:12.5px}
+}
+@container (max-width:400px){
+  .crh .crh-cap{font-size:20px}
+  .crh .crh-name{font-size:26px}
+  .crh .crh-sm,.crh .crh-note,.crh .crh-slot text{display:none}
+  .crh .crh-nw{display:inline}
+  .crh .crh-lab.crh-nw{font-size:19px}
+}
+
+.crh.crh-still,.crh.crh-still *{animation:none!important;transition:none!important}
+.crh.crh-paused *{animation-play-state:paused!important}
+@media (prefers-reduced-motion:reduce){.crh *{animation:none!important;transition:none!important}}
+</style>
+
+<script>
+// @ts-nocheck — a compact hand-written ES5 drawing machine, the same shape as CoverDots'.
+(function(){
+"use strict";
+
+function bez(x1,y1,x2,y2){
+  var cx=3*x1,bx=3*(x2-x1)-cx,ax=1-cx-bx,cy=3*y1,by=3*(y2-y1)-cy,ay=1-cy-by;
+  return function(x){
+    var t=x,i,e,d;
+    for(i=0;i<5;i++){
+      e=((ax*t+bx)*t+cx)*t-x; if(e<1e-4&&e>-1e-4)break;
+      d=(3*ax*t+2*bx)*t+cx;   if(d<1e-6&&d>-1e-6)break;
+      t-=e/d;
+    }
+    return ((ay*t+by)*t+cy)*t;
+  };
+}
+var eSoft=bez(.2,.8,.2,1),
+    cl=function(v){return v<0?0:v>1?1:v;},
+    seg=function(t,a,b){return cl((t-a)/(b-a));},
+    ramp=function(t,a,b){return eSoft(seg(t,a,b));};
+
+/* The timeline, in seconds: the crawler reads down the HTML, the gaps show, then the words go in. */
+var READ0=.5,READ1=3.1,           /* the crawler's way down the page */
+    LINES=[.85,1.25],             /* the name and the first line arrive as it passes */
+    GAPS=[1.7,2.25,2.7],          /* each tag with nothing in it */
+    NOTE=3.2,                     /* "Scripts not run" */
+    FIX=[6.0,6.35,6.7],           /* the words go into the HTML */
+    OK=7.1,                       /* "In the HTML" */
+    EXIT=10.3,LOOP=11.5,
+    STILL=4.6;                    /* the frame the markup ships and the clock starts from: what a crawler sees */
+
+function mount(fig){
+  if(fig.getAttribute("data-crh")==="on")return;
+  function q(s){var e=fig.querySelector(s);if(!e)throw new Error("CoverRawHtml "+s);return e;}
+  function qa(s){var l=fig.querySelectorAll(s);if(!l.length)throw new Error("CoverRawHtml "+s);return [].slice.call(l);}
+
+  var dot=q(".crh-dot"),lines=qa(".crh-line"),gaps=qa(".crh-gap"),wait=q(".crh-chip.wait"),ok=q(".crh-chip.ok"),
+      okTick=q(".crh-chip.ok .tick");
+
+  fig.setAttribute("data-crh","on");
+
+  var TL=okTick.getTotalLength();okTick.style.strokeDasharray=TL;
+  var G=gaps.map(function(g){return {g:g,empty:g.querySelector(".empty"),full:g.querySelector(".full")};});
+
+  function op(e,v){e.style.opacity=v;}
+  function mv(e,x,y){e.style.transform="translate("+x+"px,"+y+"px)";}
+
+  function render(t){
+    var g=1-ramp(t,EXIT,LOOP),k,u,f;
+
+    /* the crawler goes down the gap between the two pages, reading as it goes */
+    u=seg(t,READ0,READ1);
+    mv(dot,0,u*210);
+    op(dot,ramp(t,READ0-.3,READ0)*(1-ramp(t,READ1,READ1+.4)));
+
+    for(k=0;k<2;k++)op(lines[k],g*ramp(t,LINES[k],LINES[k]+.3));
+    for(k=0;k<3;k++){
+      u=g*ramp(t,GAPS[k],GAPS[k]+.35);
+      f=g*ramp(t,FIX[k],FIX[k]+.45);
+      op(G[k].g,u);
+      op(G[k].empty,1-f);
+      op(G[k].full,f);
+      G[k].g.classList.toggle("is-full",f>.5);
+    }
+    u=g*ramp(t,NOTE,NOTE+.35);
+    f=g*ramp(t,OK,OK+.4);
+    op(wait,u*(1-ramp(t,FIX[0],FIX[0]+.3)));
+    op(ok,f);
+    okTick.style.strokeDashoffset=TL*(1-ramp(t,OK+.15,OK+.5));
+  }
+
+  render(STILL);
+
+  var clock=STILL,last=0,raf=0,run=false,seen=true,
+      mq=matchMedia("(prefers-reduced-motion:reduce)");
+
+  function frame(now){
+    if(!run)return;
+    clock+=Math.max(0,Math.min((now-last)/1000,.05));
+    last=now;
+    render(clock%LOOP);
+    raf=requestAnimationFrame(frame);
+  }
+  function sync(){
+    if(fig.classList.contains("crh-still"))return;
+    var want=seen&&!document.hidden;
+    if(want===run)return;
+    run=want;
+    if(run){fig.classList.remove("crh-paused");last=performance.now();raf=requestAnimationFrame(frame);}
+    else{cancelAnimationFrame(raf);fig.classList.add("crh-paused");}
+  }
+  function still(){
+    fig.classList.add("crh-still");
+    run=false;cancelAnimationFrame(raf);
+    render(STILL);
+  }
+
+  if(mq.matches){still();return;}
+  if("IntersectionObserver" in window){
+    new IntersectionObserver(function(es){seen=es[0].isIntersecting;sync();},{threshold:.01}).observe(fig);
+  }
+  document.addEventListener("visibilitychange",sync);
+  function onMq(){if(mq.matches&&!fig.classList.contains("crh-still"))still();}
+  if(mq.addEventListener)mq.addEventListener("change",onMq);
+  else if(mq.addListener)mq.addListener(onMq);
+  sync();
+}
+
+function mountAll(){
+  document.querySelectorAll(".crh").forEach(function(f){
+    try{mount(f);}catch(err){if(window.console&&console.warn)console.warn("cover raw html",err);}
+  });
+}
+mountAll();
+document.addEventListener("astro:page-load",mountAll);
+})();
+</script>

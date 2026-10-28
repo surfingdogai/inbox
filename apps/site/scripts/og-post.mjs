@@ -53,6 +53,10 @@ const IDEAS = {
   "muse-for-small-business": "Their Muse books.\nYour rules answer.",
   "openai-dots-and-your-business": "An agent books where it gets\na price, a time and a yes.",
   "what-ai-assistants-need-from-your-business": "Seven things an assistant\nneeds to book with you.",
+  "is-your-website-ready-for-ai-agents": "Can an AI read your site?\nCan it book there? Check both.",
+  "can-ai-read-your-website": "Most AI crawlers read your HTML\nand never run your scripts.",
+  "ai-assistant-for-restaurants": "One AI answers your phone.\nYour guest's AI books the table.",
+  "get-your-business-on-chatgpt": "There's no listing to buy.\nBe readable, then bookable.",
 };
 
 const CHROME = [

@@ -1,0 +1,267 @@
+---
+/**
+ * The cover for "Is your website ready for AI agents? Here's how to check": the two questions the
+ * post separates, one site and two lists.
+ *
+ *  1. A reader sweeps down the site, top to bottom, and the first list ticks as it goes: AI
+ *     crawlers are let in, the words are in the HTML, the details are there as data.
+ *  2. A customer's assistant, the violet dot, comes to do something. Where a door should be there
+ *     is only a dashed outline, and a question mark: it can read all about the place, and can't
+ *     book.
+ *  3. A door goes in, "Book a time". The assistant goes through it, and the second list ticks:
+ *     ask a question, book a time. Pay stays a dotted ring, the next step, as the post says.
+ *
+ * Built the way CoverDots.astro is: the markup is the composed frame at t = STILL and the clock
+ * starts there, reduced motion is that frame, and it stops when nobody is looking.
+ */
+---
+
+<figure
+  class="car"
+  role="img"
+  aria-label="A website is read from top to bottom, and the first list ticks: AI crawlers let in, words in the HTML, details as data. A customer's assistant then comes to book and finds no door, only a dashed outline. A Book a time door goes in, the assistant goes through it, and the second list ticks: ask a question, book a time. Paying is the next step."
+>
+<svg viewBox="0 0 640 360" aria-hidden="true" focusable="false">
+<text x="24" y="30" class="car-cap">TWO QUESTIONS</text>
+<rect x="28" y="48" width="240" height="268" rx="14" class="car-card"/>
+<circle cx="46" cy="66" r="3" class="car-pip"/><circle cx="57" cy="66" r="3" class="car-pip"/><circle cx="68" cy="66" r="3" class="car-pip"/>
+<text x="84" y="69.5" class="car-url car-sm">yourbusiness.com</text>
+<line x1="28" y1="82" x2="268" y2="82" class="car-hair"/>
+<rect x="46" y="100" width="118" height="10" rx="5" class="car-bar strong"/>
+<rect x="46" y="124" width="190" height="5" rx="2.5" class="car-bar"/>
+<rect x="46" y="137" width="166" height="5" rx="2.5" class="car-bar"/>
+<rect x="46" y="150" width="178" height="5" rx="2.5" class="car-bar"/>
+<rect x="46" y="174" width="88" height="5" rx="2.5" class="car-bar"/><rect x="220" y="174" width="30" height="5" rx="2.5" class="car-bar"/>
+<rect x="46" y="188" width="104" height="5" rx="2.5" class="car-bar"/><rect x="220" y="188" width="30" height="5" rx="2.5" class="car-bar"/>
+<rect x="46" y="202" width="76" height="5" rx="2.5" class="car-bar"/><rect x="220" y="202" width="30" height="5" rx="2.5" class="car-bar"/>
+<rect x="46" y="236" width="204" height="48" rx="13" class="car-slot" style="opacity:0"/>
+<g class="car-q" style="opacity:0">
+<circle cx="148" cy="260" r="13" class="disc"/>
+<text x="148" y="260" dominant-baseline="central" text-anchor="middle" class="car-glyph">?</text>
+</g>
+<g class="car-door">
+<rect x="46" y="236" width="204" height="48" rx="13" class="bg"/>
+<text x="148" y="260" dominant-baseline="central" text-anchor="middle" class="car-door-t">Book a time</text>
+</g>
+<g class="car-scan" style="opacity:0">
+<rect x="29" y="64" width="238" height="26" class="band"/>
+<line x1="29" y1="90" x2="267" y2="90" class="line"/>
+</g>
+<text x="330" y="72" class="car-h">Can an AI read it?</text>
+<g class="car-row a"><circle cx="342" cy="100" r="8" class="ring"/><circle cx="342" cy="100" r="8" class="on"/><path d="M338.4,100.2 L341.2,103 L346,97.2" class="tick"/><text x="360" y="104.2" class="car-lab car-sm">Lets AI crawlers in</text><text x="360" y="105.8" class="car-lab car-nw">Crawlers in</text></g>
+<g class="car-row a"><circle cx="342" cy="130" r="8" class="ring"/><circle cx="342" cy="130" r="8" class="on"/><path d="M338.4,130.2 L341.2,133 L346,127.2" class="tick"/><text x="360" y="134.2" class="car-lab car-sm">Words in the HTML</text><text x="360" y="135.8" class="car-lab car-nw">In the HTML</text></g>
+<g class="car-row a"><circle cx="342" cy="160" r="8" class="ring"/><circle cx="342" cy="160" r="8" class="on"/><path d="M338.4,160.2 L341.2,163 L346,157.2" class="tick"/><text x="360" y="164.2" class="car-lab car-sm">Details as data</text><text x="360" y="165.8" class="car-lab car-nw">As data</text></g>
+<line x1="330" y1="186" x2="612" y2="186" class="car-hair"/>
+<text x="330" y="214" class="car-h">Can it do something?</text>
+<g class="car-row b"><circle cx="342" cy="242" r="8" class="ring"/><circle cx="342" cy="242" r="8" class="on"/><path d="M338.4,242.2 L341.2,245 L346,239.2" class="tick"/><text x="360" y="246.2" class="car-lab car-sm">Ask a question</text><text x="360" y="247.8" class="car-lab car-nw">Ask</text></g>
+<g class="car-row b"><circle cx="342" cy="272" r="8" class="ring"/><circle cx="342" cy="272" r="8" class="on"/><path d="M338.4,272.2 L341.2,275 L346,269.2" class="tick"/><text x="360" y="276.2" class="car-lab car-sm">Book a time</text><text x="360" y="277.8" class="car-lab car-nw">Book</text></g>
+<g class="car-row next"><circle cx="342" cy="302" r="8" class="ring"/><text x="360" y="306.2" class="car-lab car-sm">Pay, next</text><text x="360" y="307.8" class="car-lab car-nw">Pay, next</text></g>
+<g class="car-dot">
+<circle cx="298" cy="260" r="14" class="ring"/>
+<circle cx="298" cy="260" r="7.5" class="core"/>
+</g>
+</svg>
+</figure>
+
+<style is:global>
+/* Every selector starts with .car and every keyframe is car-*, so nothing leaks. Colours are the
+   host's tokens first, with the brand literal only as the fallback, as in CoverReceipts. */
+.car{
+  --car-ink2:var(--ink-2,light-dark(#3f4472,#b9bce0));
+  --car-ink3:var(--ink-3,light-dark(#565a86,#9a9dc4));
+  --car-hair:var(--hairline,light-dark(rgba(20,22,60,.08),rgba(255,255,255,.10)));
+  --car-glass:var(--glass-bg,light-dark(rgba(255,255,255,.32),rgba(255,255,255,.07)));
+  --car-glassb:var(--glass-border,light-dark(rgba(255,255,255,.55),rgba(255,255,255,.14)));
+  --car-palm:var(--palm,#2fd3a5);
+  --car-palm-i:var(--palm-ink,light-dark(#147a5c,#72e6c3));
+  --car-violet:var(--violet,#8a6bff);
+  --car-sun:var(--sun,#ffcf5c);
+  --car-sun-i:var(--sun-ink,light-dark(#866000,#ffda80));
+  --car-ease:var(--ease-out-soft,cubic-bezier(.2,.8,.2,1));
+  display:block;margin:0;width:100%;aspect-ratio:640/360;container-type:inline-size;
+}
+.car svg{display:block;width:100%;height:auto}
+.car text{font-family:var(--font-sans,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif);fill:var(--car-ink2)}
+.car .car-cap{font-size:11px;letter-spacing:.11em}
+.car .car-h{font-family:var(--font-display,ui-sans-serif,system-ui,sans-serif);font-size:13.5px;font-weight:600;letter-spacing:-.01em}
+.car .car-lab{font-size:11.5px}
+.car .car-url{font-size:10px;fill:var(--car-ink3)}
+.car .car-nw{display:none}   /* the short words a phone-width drawing shows in place of the long ones */
+.car .car-card{fill:var(--car-glass);stroke:var(--car-glassb);stroke-width:1}
+.car .car-pip{fill:var(--car-ink3);fill-opacity:.25}
+.car .car-hair{stroke:var(--car-hair);stroke-width:1}
+.car .car-bar{fill:var(--car-ink3);fill-opacity:.17}
+.car .car-bar.strong{fill-opacity:.32}
+
+/* The empty place where a door should be, and the door. */
+.car .car-slot{fill:none;stroke:var(--car-ink3);stroke-opacity:.45;stroke-width:1.2;stroke-dasharray:4 5}
+.car .car-q .disc{fill:var(--car-sun);fill-opacity:.14;stroke:var(--car-sun);stroke-opacity:.6;stroke-width:1.1}
+.car .car-glyph{font-size:14px;font-weight:700;fill:var(--car-sun-i)}
+.car .car-door .bg{fill:var(--car-palm);fill-opacity:.16;stroke:var(--car-palm);stroke-opacity:.7;stroke-width:1.2}
+.car .car-door-t{font-size:13px;font-weight:600;fill:var(--car-palm-i)}
+
+/* The reader's sweep. */
+.car .car-scan .band{fill:var(--car-violet);fill-opacity:.07}
+.car .car-scan .line{stroke:var(--car-violet);stroke-opacity:.7;stroke-width:1.3}
+
+.car .car-row .ring{fill:none;stroke:var(--car-ink3);stroke-opacity:.35;stroke-width:1.1}
+.car .car-row .on{fill:var(--car-palm);fill-opacity:.14;stroke:var(--car-palm);stroke-opacity:.65;stroke-width:1.1}
+.car .car-row .tick{fill:none;stroke:var(--car-palm-i);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+/* Paying comes after booking: a dotted ring that breathes, never a tick. */
+.car .car-row.next .ring{stroke:var(--car-sun);stroke-opacity:.75;stroke-dasharray:2 3;transform-box:fill-box;transform-origin:50% 50%;animation:car-breathe 2.6s var(--car-ease) infinite}
+.car .car-row.next text{fill:var(--car-ink3)}
+
+.car .car-dot .core{fill:var(--car-violet)}
+.car .car-dot .ring{fill:var(--car-violet);fill-opacity:.12;stroke:var(--car-violet);stroke-opacity:.5;stroke-width:1.1;transform-box:fill-box;transform-origin:50% 50%;animation:car-breathe 2.6s var(--car-ease) infinite}
+@keyframes car-breathe{0%,100%{transform:scale(.86);opacity:.55}50%{transform:scale(1.06);opacity:1}}
+
+@container (max-width:600px){
+  .car .car-cap{font-size:15px}
+  .car .car-h{font-size:15.5px}
+  .car .car-lab{font-size:13.5px}
+  .car .car-door-t{font-size:15px}
+}
+@container (max-width:400px){
+  .car .car-cap{font-size:21px}
+  .car .car-h{font-size:20px}
+  .car .car-sm{display:none}
+  .car .car-nw{display:inline;font-size:19px}
+  .car .car-door-t{font-size:21px}
+}
+
+.car.car-still,.car.car-still *{animation:none!important;transition:none!important}
+.car.car-paused *{animation-play-state:paused!important}
+@media (prefers-reduced-motion:reduce){.car *{animation:none!important;transition:none!important}}
+</style>
+
+<script>
+// @ts-nocheck — a compact hand-written ES5 drawing machine, the same shape as CoverDots'.
+(function(){
+"use strict";
+
+function bez(x1,y1,x2,y2){
+  var cx=3*x1,bx=3*(x2-x1)-cx,ax=1-cx-bx,cy=3*y1,by=3*(y2-y1)-cy,ay=1-cy-by;
+  return function(x){
+    var t=x,i,e,d;
+    for(i=0;i<5;i++){
+      e=((ax*t+bx)*t+cx)*t-x; if(e<1e-4&&e>-1e-4)break;
+      d=(3*ax*t+2*bx)*t+cx;   if(d<1e-6&&d>-1e-6)break;
+      t-=e/d;
+    }
+    return ((ay*t+by)*t+cy)*t;
+  };
+}
+var eSoft=bez(.2,.8,.2,1),
+    cl=function(v){return v<0?0:v>1?1:v;},
+    seg=function(t,a,b){return cl((t-a)/(b-a));},
+    ramp=function(t,a,b){return eSoft(seg(t,a,b));};
+
+/* The timeline, in seconds. */
+var SCAN0=.5,SCAN1=2.9,          /* the reader sweeps the page */
+    ROWA=[1.1,1.75,2.4],          /* what it can read, ticking as the sweep passes */
+    DOT=3.1,                      /* the customer's assistant arrives */
+    KNOCK=3.45,                   /* it reaches for a door */
+    ASK=3.8,                      /* and finds none */
+    DOOR=4.9,                     /* a door goes in */
+    THRU=5.5,                     /* it goes through */
+    ROWB=[6.15,6.55],             /* ask, book */
+    BACK=6.8,                     /* home again, by the door */
+    EXIT=9.4,LOOP=10.6,
+    STILL=8.2;                    /* the frame the markup ships and the clock starts from */
+var HOME=298;
+
+function mount(fig){
+  if(fig.getAttribute("data-car")==="on")return;
+  function q(s){var e=fig.querySelector(s);if(!e)throw new Error("CoverAgentReady "+s);return e;}
+  function qa(s){var l=fig.querySelectorAll(s);if(!l.length)throw new Error("CoverAgentReady "+s);return [].slice.call(l);}
+
+  var scan=q(".car-scan"),slot=q(".car-slot"),qm=q(".car-q"),door=q(".car-door"),dot=q(".car-dot"),
+      rowsA=qa(".car-row.a"),rowsB=qa(".car-row.b");
+
+  fig.setAttribute("data-car","on");
+
+  function parts(r){
+    var tk=r.querySelector(".tick"),L=tk.getTotalLength();
+    tk.style.strokeDasharray=L;
+    return {on:r.querySelector(".on"),tick:tk,L:L};
+  }
+  var A=rowsA.map(parts),B=rowsB.map(parts);
+
+  function op(e,v){e.style.opacity=v;}
+  function mv(e,x,y){e.style.transform="translate("+x+"px,"+y+"px)";}
+  function row(p,t,at,g){
+    op(p.on,g*ramp(t,at,at+.3));
+    p.tick.style.strokeDashoffset=p.L*(1-g*ramp(t,at+.1,at+.45));
+  }
+
+  function render(t){
+    var g=1-ramp(t,EXIT,LOOP),k,u,x,o;
+
+    /* the sweep, top to bottom, and the first list */
+    u=seg(t,SCAN0,SCAN1);
+    op(scan,ramp(t,SCAN0,SCAN0+.25)*(1-ramp(t,SCAN1-.3,SCAN1)));
+    mv(scan,0,u*194);
+    for(k=0;k<3;k++)row(A[k],t,ROWA[k],g);
+
+    /* the assistant: arrives, reaches for a door that isn't there, goes through the new one */
+    x=HOME-24*ramp(t,KNOCK,KNOCK+.35)*(1-ramp(t,ASK+.5,ASK+.9));
+    o=ramp(t,DOT,DOT+.3);
+    if(t>=THRU){x=HOME-150*ramp(t,THRU,THRU+.55);o=1-ramp(t,THRU+.25,THRU+.55);}
+    if(t>=BACK){x=HOME;o=ramp(t,BACK,BACK+.45);}
+    mv(dot,x-HOME,0);op(dot,g*o);
+
+    u=ramp(t,DOOR,DOOR+.45)*g;
+    op(slot,ramp(t,DOT-.4,DOT)*(1-ramp(t,DOOR,DOOR+.45)));
+    op(qm,g*ramp(t,ASK,ASK+.3)*(1-ramp(t,DOOR,DOOR+.3)));
+    op(door,u);
+    door.style.transform="scale("+(.96+.04*u)+")";door.style.transformOrigin="148px 260px";
+
+    for(k=0;k<2;k++)row(B[k],t,ROWB[k],g);
+  }
+
+  render(STILL);
+
+  var clock=STILL,last=0,raf=0,run=false,seen=true,
+      mq=matchMedia("(prefers-reduced-motion:reduce)");
+
+  function frame(now){
+    if(!run)return;
+    clock+=Math.max(0,Math.min((now-last)/1000,.05));
+    last=now;
+    render(clock%LOOP);
+    raf=requestAnimationFrame(frame);
+  }
+  function sync(){
+    if(fig.classList.contains("car-still"))return;
+    var want=seen&&!document.hidden;
+    if(want===run)return;
+    run=want;
+    if(run){fig.classList.remove("car-paused");last=performance.now();raf=requestAnimationFrame(frame);}
+    else{cancelAnimationFrame(raf);fig.classList.add("car-paused");}
+  }
+  function still(){
+    fig.classList.add("car-still");
+    run=false;cancelAnimationFrame(raf);
+    render(STILL);
+  }
+
+  if(mq.matches){still();return;}
+  if("IntersectionObserver" in window){
+    new IntersectionObserver(function(es){seen=es[0].isIntersecting;sync();},{threshold:.01}).observe(fig);
+  }
+  document.addEventListener("visibilitychange",sync);
+  function onMq(){if(mq.matches&&!fig.classList.contains("car-still"))still();}
+  if(mq.addEventListener)mq.addEventListener("change",onMq);
+  else if(mq.addListener)mq.addListener(onMq);
+  sync();
+}
+
+function mountAll(){
+  document.querySelectorAll(".car").forEach(function(f){
+    try{mount(f);}catch(err){if(window.console&&console.warn)console.warn("cover agent-ready",err);}
+  });
+}
+mountAll();
+document.addEventListener("astro:page-load",mountAll);
+})();
+</script>

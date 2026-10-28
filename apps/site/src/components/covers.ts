@@ -4,13 +4,17 @@
  * rest, so the box is never empty), and stops when nobody is looking.
  */
 
+import CoverAgentReady from "./CoverAgentReady.astro";
 import CoverDots from "./CoverDots.astro";
 import CoverFlood from "./CoverFlood.astro";
+import CoverFound from "./CoverFound.astro";
 import CoverMuse from "./CoverMuse.astro";
 import CoverNetworks from "./CoverNetworks.astro";
 import CoverOpen from "./CoverOpen.astro";
+import CoverRawHtml from "./CoverRawHtml.astro";
 import CoverReady from "./CoverReady.astro";
 import CoverReceipts from "./CoverReceipts.astro";
+import CoverTables from "./CoverTables.astro";
 
 export const coverAnims = {
   receipts: CoverReceipts,
@@ -20,4 +24,8 @@ export const coverAnims = {
   muse: CoverMuse,
   dots: CoverDots,
   ready: CoverReady,
+  agentready: CoverAgentReady,
+  rawhtml: CoverRawHtml,
+  tables: CoverTables,
+  found: CoverFound,
 } as const;

@@ -1,0 +1,289 @@
+---
+/**
+ * The cover for "How to get your business on ChatGPT: found, recommended, booked": the post's three
+ * steps, one after the other, in one conversation.
+ *
+ *  1. Someone asks their assistant for a dog groomer near them on Saturday. The assistant's search,
+ *     the violet dot, goes to the business's own site and reads it: Found.
+ *  2. The answer lists three places, and the business is the one it names first, with its price
+ *     and its Saturday hours, because it could read them: Recommended.
+ *  3. A Book button. The dot goes through the site's own booking door, and the chat says Booked:
+ *     the step most advice leaves out.
+ *
+ * The assistant is drawn as any chat, with no maker's marks: the post is about ChatGPT, the steps
+ * hold for every assistant. Built the way CoverDots.astro is: the markup is the composed frame at
+ * t = STILL and the clock starts there, reduced motion is that frame, and it stops when nobody is
+ * looking.
+ */
+---
+
+<figure
+  class="cfd"
+  role="img"
+  aria-label="Someone asks their assistant for a dog groomer near them on Saturday. The assistant reads the business's own website: found. Its answer names the business first, with its price and Saturday hours: recommended. A Book button goes through the website's own booking door, and the chat says booked."
+>
+<svg viewBox="0 0 640 360" aria-hidden="true" focusable="false">
+<text x="24" y="30" class="cfd-cap">THREE STEPS</text>
+<rect x="28" y="48" width="164" height="156" rx="14" class="cfd-card"/>
+<circle cx="44" cy="64" r="2.6" class="cfd-pip"/><circle cx="53" cy="64" r="2.6" class="cfd-pip"/><circle cx="62" cy="64" r="2.6" class="cfd-pip"/>
+<text x="74" y="67.5" class="cfd-url cfd-sm">yourbusiness.com</text>
+<line x1="28" y1="76" x2="192" y2="76" class="cfd-hair"/>
+<g class="cfd-site">
+<rect x="44" y="92" width="92" height="9" rx="4.5" class="cfd-bar strong"/>
+<rect x="44" y="112" width="128" height="5" rx="2.5" class="cfd-bar"/>
+<rect x="44" y="124" width="112" height="5" rx="2.5" class="cfd-bar"/>
+<rect x="44" y="136" width="120" height="5" rx="2.5" class="cfd-bar"/>
+</g>
+<g class="cfd-door">
+<rect x="44" y="160" width="132" height="30" rx="10" class="bg"/>
+<rect x="44" y="160" width="132" height="30" rx="10" class="lit" style="opacity:0"/>
+<text x="110" y="175" dominant-baseline="central" text-anchor="middle">Book</text>
+</g>
+
+<g class="cfd-step"><circle cx="40" cy="238" r="8" class="ring"/><circle cx="40" cy="238" r="8" class="on"/><path d="M36.4,238.2 L39.2,241 L44,235.2" class="tick"/><text x="58" y="242.2" class="cfd-lab">Found</text></g>
+<g class="cfd-step"><circle cx="40" cy="268" r="8" class="ring"/><circle cx="40" cy="268" r="8" class="on"/><path d="M36.4,268.2 L39.2,271 L44,265.2" class="tick"/><text x="58" y="272.2" class="cfd-lab">Recommended</text></g>
+<g class="cfd-step"><circle cx="40" cy="298" r="8" class="ring"/><circle cx="40" cy="298" r="8" class="on"/><path d="M36.4,298.2 L39.2,301 L44,295.2" class="tick"/><text x="58" y="302.2" class="cfd-lab">Booked</text></g>
+
+<rect x="212" y="48" width="404" height="268" rx="14" class="cfd-card"/>
+<g class="cfd-ask">
+<rect x="398" y="62" width="202" height="30" rx="12" class="bg"/>
+<text x="586" y="77" dominant-baseline="central" text-anchor="end" class="cfd-sm">Dog groomer near me, Saturday?</text>
+<text x="586" y="78" dominant-baseline="central" text-anchor="end" class="cfd-nw">Groomer, Sat?</text>
+</g>
+<g class="cfd-res first">
+<rect x="228" y="108" width="372" height="44" rx="11" class="bg"/>
+<rect x="228" y="108" width="372" height="44" rx="11" class="lit"/>
+<text x="244" y="126" class="cfd-name">Your business</text>
+<text x="244" y="142" class="cfd-note cfd-sm">From €35 · Open Saturday 9–17</text>
+<g class="cfd-can cfd-sm"><rect x="510" y="120" width="76" height="20" rx="10" class="bg"/><text x="548" y="130" dominant-baseline="central" text-anchor="middle">Can book</text></g>
+</g>
+<g class="cfd-res"><rect x="228" y="160" width="372" height="36" rx="11" class="bg"/><rect x="244" y="171" width="104" height="7" rx="3.5" class="cfd-bar strong"/><rect x="244" y="184" width="150" height="4" rx="2" class="cfd-bar"/></g>
+<g class="cfd-res"><rect x="228" y="204" width="372" height="36" rx="11" class="bg"/><rect x="244" y="215" width="88" height="7" rx="3.5" class="cfd-bar strong"/><rect x="244" y="228" width="132" height="4" rx="2" class="cfd-bar"/></g>
+<g class="cfd-btn">
+<rect x="228" y="256" width="148" height="34" rx="12" class="bg"/>
+<text x="302" y="273" dominant-baseline="central" text-anchor="middle" class="cfd-sm">Book Sat 10:00</text>
+<text x="302" y="274" dominant-baseline="central" text-anchor="middle" class="cfd-nw">Book</text>
+</g>
+<g class="cfd-done">
+<rect x="388" y="256" width="116" height="34" rx="12" class="bg"/>
+<path d="M403,273.4 L406.4,276.8 L412.6,269.6" class="tick"/>
+<text x="422" y="273" dominant-baseline="central" class="cfd-lab">Booked</text>
+</g>
+<g class="cfd-dot" style="opacity:0">
+<circle cx="0" cy="0" r="12" class="ring"/>
+<circle cx="0" cy="0" r="6" class="core"/>
+</g>
+</svg>
+</figure>
+
+<style is:global>
+/* Every selector starts with .cfd and every keyframe is cfd-*, so nothing leaks. Colours are the
+   host's tokens first, with the brand literal only as the fallback, as in CoverReceipts. */
+.cfd{
+  --cfd-ink2:var(--ink-2,light-dark(#3f4472,#b9bce0));
+  --cfd-ink3:var(--ink-3,light-dark(#565a86,#9a9dc4));
+  --cfd-hair:var(--hairline,light-dark(rgba(20,22,60,.08),rgba(255,255,255,.10)));
+  --cfd-glass:var(--glass-bg,light-dark(rgba(255,255,255,.32),rgba(255,255,255,.07)));
+  --cfd-glassb:var(--glass-border,light-dark(rgba(255,255,255,.55),rgba(255,255,255,.14)));
+  --cfd-row:var(--row-bg,light-dark(rgba(255,255,255,.24),rgba(255,255,255,.05)));
+  --cfd-palm:var(--palm,#2fd3a5);
+  --cfd-palm-i:var(--palm-ink,light-dark(#147a5c,#72e6c3));
+  --cfd-violet:var(--violet,#8a6bff);
+  --cfd-violet-i:var(--violet-ink,light-dark(#5a3fd0,#ab95ff));
+  --cfd-ease:var(--ease-out-soft,cubic-bezier(.2,.8,.2,1));
+  display:block;margin:0;width:100%;aspect-ratio:640/360;container-type:inline-size;
+}
+.cfd svg{display:block;width:100%;height:auto}
+.cfd text{font-family:var(--font-sans,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif);fill:var(--cfd-ink2)}
+.cfd .cfd-cap{font-size:11px;letter-spacing:.11em}
+.cfd .cfd-name{font-family:var(--font-display,ui-sans-serif,system-ui,sans-serif);font-size:13px;font-weight:600;letter-spacing:-.01em}
+.cfd .cfd-lab{font-size:11.5px}
+.cfd .cfd-note{font-size:10.5px;fill:var(--cfd-ink3)}
+.cfd .cfd-url{font-size:9.5px;fill:var(--cfd-ink3)}
+.cfd .cfd-nw{display:none}   /* the short words a phone-width drawing shows in place of the long ones */
+.cfd .cfd-card{fill:var(--cfd-glass);stroke:var(--cfd-glassb);stroke-width:1}
+.cfd .cfd-pip{fill:var(--cfd-ink3);fill-opacity:.25}
+.cfd .cfd-hair{stroke:var(--cfd-hair);stroke-width:1}
+.cfd .cfd-bar{fill:var(--cfd-ink3);fill-opacity:.17}
+.cfd .cfd-bar.strong{fill-opacity:.3}
+.cfd .cfd-site.read .cfd-bar{fill:var(--cfd-violet);fill-opacity:.3}
+
+.cfd .cfd-door .bg{fill:var(--cfd-row);stroke:var(--cfd-palm);stroke-opacity:.5;stroke-width:1.1}
+.cfd .cfd-door .lit{fill:var(--cfd-palm);fill-opacity:.2;stroke:var(--cfd-palm);stroke-opacity:.8;stroke-width:1.2}
+.cfd .cfd-door text{font-size:11.5px;font-weight:600;fill:var(--cfd-palm-i)}
+
+.cfd .cfd-step .ring{fill:none;stroke:var(--cfd-ink3);stroke-opacity:.35;stroke-width:1.1}
+.cfd .cfd-step .on{fill:var(--cfd-palm);fill-opacity:.14;stroke:var(--cfd-palm);stroke-opacity:.65;stroke-width:1.1}
+.cfd .tick{fill:none;stroke:var(--cfd-palm-i);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+.cfd .cfd-ask .bg{fill:var(--cfd-violet);fill-opacity:.12;stroke:var(--cfd-violet);stroke-opacity:.45;stroke-width:1}
+.cfd .cfd-ask text{font-size:11.5px}
+.cfd .cfd-res .bg{fill:var(--cfd-row);stroke:var(--cfd-hair);stroke-width:1}
+.cfd .cfd-res .lit{fill:none;stroke:var(--cfd-palm);stroke-opacity:.7;stroke-width:1.2}
+.cfd .cfd-can .bg{fill:var(--cfd-palm);fill-opacity:.12;stroke:var(--cfd-palm);stroke-opacity:.5;stroke-width:1}
+.cfd .cfd-can text{font-size:10px;font-weight:600;fill:var(--cfd-palm-i)}
+.cfd .cfd-btn .bg{fill:var(--cfd-palm);fill-opacity:.16;stroke:var(--cfd-palm);stroke-opacity:.7;stroke-width:1.2}
+.cfd .cfd-btn text{font-size:12px;font-weight:600;fill:var(--cfd-palm-i)}
+.cfd .cfd-done .bg{fill:var(--cfd-glass);stroke:var(--cfd-palm);stroke-opacity:.6;stroke-width:1.1}
+
+.cfd .cfd-dot .core{fill:var(--cfd-violet)}
+.cfd .cfd-dot .ring{fill:var(--cfd-violet);fill-opacity:.12;stroke:var(--cfd-violet);stroke-opacity:.5;stroke-width:1.1;transform-box:fill-box;transform-origin:50% 50%;animation:cfd-breathe 2.6s var(--cfd-ease) infinite}
+@keyframes cfd-breathe{0%,100%{transform:scale(.86);opacity:.55}50%{transform:scale(1.06);opacity:1}}
+
+@container (max-width:600px){
+  .cfd .cfd-cap{font-size:15px}
+  .cfd .cfd-name{font-size:15px}
+  .cfd .cfd-lab,.cfd .cfd-ask text,.cfd .cfd-door text{font-size:13.5px}
+  .cfd .cfd-btn text{font-size:14px}
+}
+@container (max-width:400px){
+  .cfd .cfd-cap{font-size:21px}
+  .cfd .cfd-sm{display:none}
+  .cfd .cfd-nw{display:inline}
+  .cfd .cfd-name{font-size:20px}
+  .cfd .cfd-lab{font-size:19px}
+  .cfd .cfd-ask text,.cfd .cfd-btn text,.cfd .cfd-door text{font-size:19px}
+}
+
+.cfd.cfd-still,.cfd.cfd-still *{animation:none!important;transition:none!important}
+.cfd.cfd-paused *{animation-play-state:paused!important}
+@media (prefers-reduced-motion:reduce){.cfd *{animation:none!important;transition:none!important}}
+</style>
+
+<script>
+// @ts-nocheck — a compact hand-written ES5 drawing machine, the same shape as CoverDots'.
+(function(){
+"use strict";
+
+function bez(x1,y1,x2,y2){
+  var cx=3*x1,bx=3*(x2-x1)-cx,ax=1-cx-bx,cy=3*y1,by=3*(y2-y1)-cy,ay=1-cy-by;
+  return function(x){
+    var t=x,i,e,d;
+    for(i=0;i<5;i++){
+      e=((ax*t+bx)*t+cx)*t-x; if(e<1e-4&&e>-1e-4)break;
+      d=(3*ax*t+2*bx)*t+cx;   if(d<1e-6&&d>-1e-6)break;
+      t-=e/d;
+    }
+    return ((ay*t+by)*t+cy)*t;
+  };
+}
+var eSoft=bez(.2,.8,.2,1),
+    cl=function(v){return v<0?0:v>1?1:v;},
+    seg=function(t,a,b){return cl((t-a)/(b-a));},
+    ramp=function(t,a,b){return eSoft(seg(t,a,b));},
+    lerp=function(a,b,u){return a+(b-a)*u;};
+
+/* The timeline, in seconds. */
+var ASK=.3,                        /* the question */
+    OUT=[.9,1.5],READ=[1.5,2.4],BACK=[2.4,3.0],  /* search goes to the site, reads it, comes back */
+    FOUND=2.6,
+    RES=[3.1,3.35,3.6],LIT=4.0,REC=4.2,          /* the answer, and the business named first */
+    BTN=4.9,PRESS=5.6,THRU=[5.7,6.3],DONE=6.5,   /* Book, through the site's own door, Booked */
+    EXIT=10.0,LOOP=11.2,
+    STILL=7.8;                     /* the frame the markup ships and the clock starts from */
+var START=[228,128],SITE=[160,96],DOOR=[150,175],BTNAT=[302,273];
+
+function mount(fig){
+  if(fig.getAttribute("data-cfd")==="on")return;
+  function q(s){var e=fig.querySelector(s);if(!e)throw new Error("CoverFound "+s);return e;}
+  function qa(s){var l=fig.querySelectorAll(s);if(!l.length)throw new Error("CoverFound "+s);return [].slice.call(l);}
+
+  var ask=q(".cfd-ask"),site=q(".cfd-site"),res=qa(".cfd-res"),lit=q(".cfd-res.first .lit"),btn=q(".cfd-btn"),
+      doorLit=q(".cfd-door .lit"),done=q(".cfd-done"),dot=q(".cfd-dot"),steps=qa(".cfd-step"),doneTick=q(".cfd-done .tick");
+
+  fig.setAttribute("data-cfd","on");
+
+  var S=steps.map(function(s){var tk=s.querySelector(".tick"),L=tk.getTotalLength();tk.style.strokeDasharray=L;return {on:s.querySelector(".on"),tk:tk,L:L};}),
+      DL=doneTick.getTotalLength();
+  doneTick.style.strokeDasharray=DL;
+
+  function op(e,v){e.style.opacity=v;}
+  function at(e,x,y){e.style.transform="translate("+x+"px,"+y+"px)";}
+  function step(k,t,a,g){
+    op(S[k].on,g*ramp(t,a,a+.3));
+    S[k].tk.style.strokeDashoffset=S[k].L*(1-g*ramp(t,a+.1,a+.45));
+  }
+
+  function render(t){
+    var g=1-ramp(t,EXIT,LOOP),k,u,x=START[0],y=START[1],o=0;
+
+    u=g*ramp(t,ASK,ASK+.35);
+    op(ask,u);at(ask,0,(1-u)*6);
+
+    /* search: out to the site, down its page, and back */
+    if(t>=OUT[0]&&t<BACK[1]+.3){
+      u=ramp(t,OUT[0],OUT[1]);
+      x=lerp(START[0],SITE[0],u);y=lerp(START[1],SITE[1],u);
+      if(t>=READ[0]){u=ramp(t,READ[0],READ[1]);x=SITE[0];y=lerp(SITE[1],140,u);}
+      if(t>=BACK[0]){u=ramp(t,BACK[0],BACK[1]);x=lerp(SITE[0],START[0],u);y=lerp(140,START[1],u);}
+      o=ramp(t,OUT[0],OUT[0]+.2)*(1-ramp(t,BACK[1]-.2,BACK[1]+.1));
+    }
+    /* Book: from the button, through the site's own door */
+    if(t>=PRESS){
+      u=ramp(t,THRU[0],THRU[1]);
+      x=lerp(BTNAT[0],DOOR[0],u);y=lerp(BTNAT[1],DOOR[1],u);
+      o=ramp(t,PRESS,PRESS+.15)*(1-ramp(t,THRU[1]-.1,THRU[1]+.2));
+    }
+    at(dot,x,y);op(dot,o*g);
+    site.classList.toggle("read",t>=READ[0]&&t<BACK[0]+.3);
+
+    for(k=0;k<3;k++){u=g*ramp(t,RES[k],RES[k]+.35);op(res[k],u);at(res[k],0,(1-u)*6);}
+    op(lit,g*ramp(t,LIT,LIT+.35));
+
+    u=g*ramp(t,BTN,BTN+.35);
+    op(btn,u);
+    btn.style.transform="scale("+(1-.04*ramp(t,PRESS,PRESS+.12)*(1-ramp(t,PRESS+.15,PRESS+.35)))+")";btn.style.transformOrigin="302px 273px";
+    op(doorLit,g*ramp(t,THRU[1]-.2,THRU[1]+.15));
+    u=g*ramp(t,DONE,DONE+.4);
+    op(done,u);at(done,(1-u)*-8,0);
+    doneTick.style.strokeDashoffset=DL*(1-ramp(t,DONE+.2,DONE+.55));
+
+    step(0,t,FOUND,g);step(1,t,REC,g);step(2,t,DONE+.1,g);
+  }
+
+  render(STILL);
+
+  var clock=STILL,last=0,raf=0,run=false,seen=true,
+      mq=matchMedia("(prefers-reduced-motion:reduce)");
+
+  function frame(now){
+    if(!run)return;
+    clock+=Math.max(0,Math.min((now-last)/1000,.05));
+    last=now;
+    render(clock%LOOP);
+    raf=requestAnimationFrame(frame);
+  }
+  function sync(){
+    if(fig.classList.contains("cfd-still"))return;
+    var want=seen&&!document.hidden;
+    if(want===run)return;
+    run=want;
+    if(run){fig.classList.remove("cfd-paused");last=performance.now();raf=requestAnimationFrame(frame);}
+    else{cancelAnimationFrame(raf);fig.classList.add("cfd-paused");}
+  }
+  function still(){
+    fig.classList.add("cfd-still");
+    run=false;cancelAnimationFrame(raf);
+    render(STILL);
+  }
+
+  if(mq.matches){still();return;}
+  if("IntersectionObserver" in window){
+    new IntersectionObserver(function(es){seen=es[0].isIntersecting;sync();},{threshold:.01}).observe(fig);
+  }
+  document.addEventListener("visibilitychange",sync);
+  function onMq(){if(mq.matches&&!fig.classList.contains("cfd-still"))still();}
+  if(mq.addEventListener)mq.addEventListener("change",onMq);
+  else if(mq.addListener)mq.addListener(onMq);
+  sync();
+}
+
+function mountAll(){
+  document.querySelectorAll(".cfd").forEach(function(f){
+    try{mount(f);}catch(err){if(window.console&&console.warn)console.warn("cover found",err);}
+  });
+}
+mountAll();
+document.addEventListener("astro:page-load",mountAll);
+})();
+</script>

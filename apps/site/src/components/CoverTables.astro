@@ -1,0 +1,296 @@
+---
+/**
+ * The cover for "An AI assistant for your restaurant: who answers, and who books": the two AIs the
+ * post tells apart, meeting in one book.
+ *
+ *  1. The phone rings, and the AI that answers it books a table for two at 19:30: the booking goes
+ *     into the book, and the covers set aside for bookings fill a little.
+ *  2. A guest's own assistant asks for four at 20:00. There's room, so that goes into the same
+ *     book too, and confirms itself.
+ *  3. Then it asks for twelve at 20:30. That's more than the restaurant lets anything confirm on
+ *     its own: the request doesn't go in, it goes to the owner, marked "Needs you".
+ *
+ * One book for both, so a table is never sold twice, and the big table waits for a person: the
+ * post's point. Built the way CoverDots.astro is: the markup is the composed frame at t = STILL and
+ * the clock starts there, reduced motion is that frame, and it stops when nobody is looking.
+ */
+---
+
+<figure
+  class="ctb"
+  role="img"
+  aria-label="A restaurant's phone rings and the AI that answers it books a table for two at 19:30 in the restaurant's book. A guest's assistant books four at 20:00 in the same book, which confirms itself. Then it asks for twelve at 20:30, more than the restaurant lets confirm on its own, so the request goes to the owner, marked needs you."
+>
+<svg viewBox="0 0 640 360" aria-hidden="true" focusable="false">
+<text x="24" y="30" class="ctb-cap">SATURDAY, DINNER</text>
+<g class="ctb-phone">
+<rect x="70" y="116" width="32" height="54" rx="7" class="body"/>
+<line x1="81" y1="161" x2="91" y2="161" class="body"/>
+<path d="M112,131 A14,14 0 0 1 112,155" class="wave"/>
+<path d="M120,124 A23,23 0 0 1 120,162" class="wave"/>
+<path d="M60,131 A14,14 0 0 0 60,155" class="wave"/>
+<path d="M52,124 A23,23 0 0 0 52,162" class="wave"/>
+</g>
+<text x="86" y="196" text-anchor="middle" class="ctb-lab ctb-sm">Your phone AI</text>
+<text x="86" y="200" text-anchor="middle" class="ctb-lab ctb-nw">Phone</text>
+
+<rect x="196" y="48" width="248" height="224" rx="14" class="ctb-card"/>
+<text x="216" y="80" class="ctb-h">Your book</text>
+<text x="216" y="102" class="ctb-note ctb-sm">Covers set aside</text>
+<text x="424" y="102" text-anchor="end" class="ctb-note ctb-num ctb-count ctb-sm">6 of 24</text>
+<rect x="216" y="110" width="208" height="8" rx="4" class="ctb-track"/>
+<rect x="216" y="110" width="52" height="8" rx="4" class="ctb-fill"/>
+<g class="ctb-row">
+<rect x="208" y="134" width="224" height="34" rx="10" class="bg"/>
+<text x="222" y="155.5" class="ctb-time">19:30</text><text x="270" y="155.5" class="ctb-party ctb-sm">2 people</text>
+<path d="M366,145 h8 a2,2 0 0 1 2,2 v14 a2,2 0 0 1 -2,2 h-8 a2,2 0 0 1 -2,-2 v-14 a2,2 0 0 1 2,-2 Z" class="src"/>
+<circle cx="410" cy="151" r="9" class="on"/><path d="M406.2,151.2 L409,154 L414,148.2" class="tick"/>
+</g>
+<g class="ctb-row">
+<rect x="208" y="176" width="224" height="34" rx="10" class="bg"/>
+<text x="222" y="197.5" class="ctb-time">20:00</text><text x="270" y="197.5" class="ctb-party ctb-sm">4 people</text>
+<path d="M370,186 L372.2,191.8 L378,194 L372.2,196.2 L370,202 L367.8,196.2 L362,194 L367.8,191.8 Z" class="src star"/>
+<circle cx="410" cy="193" r="9" class="on"/><path d="M406.2,193.2 L409,196 L414,190.2" class="tick"/>
+</g>
+<rect x="208" y="218" width="224" height="34" rx="10" class="ctb-free"/>
+<text x="222" y="239.5" class="ctb-note ctb-sm">Free sittings left</text>
+
+<g class="ctb-mark s-cus">
+<rect x="538" y="78" width="36" height="36" rx="10" class="tint"/>
+<rect x="538" y="78" width="36" height="36" rx="10" class="edge"/>
+<line x1="556" y1="78" x2="556" y2="68" class="edge"/>
+<circle cx="556" cy="65.2" r="2.8" class="ant"/>
+<path d="M556,86 L558.6,93.4 L566,96 L558.6,98.6 L556,106 L553.4,98.6 L546,96 L553.4,93.4 Z" class="star"/>
+</g>
+<text x="556" y="134" text-anchor="middle" class="ctb-lab ctb-sm">Their assistant</text>
+<text x="556" y="138" text-anchor="middle" class="ctb-lab ctb-nw">Guest</text>
+<g class="ctb-mark s-biz">
+<rect x="538" y="226" width="36" height="36" rx="10" class="tint"/>
+<rect x="538" y="226" width="36" height="36" rx="10" class="edge"/>
+<circle cx="556" cy="239" r="5" class="glyph"/>
+<path d="M548,254 C548,248 552,246 556,246 C560,246 564,248 564,254" class="glyph"/>
+</g>
+<text x="556" y="282" text-anchor="middle" class="ctb-lab">You</text>
+
+<g class="ctb-chip a" style="opacity:0"><rect x="0" y="-12" width="80" height="24" rx="12" class="bg"/><text x="40" y="0" dominant-baseline="central" text-anchor="middle" class="ctb-sm">2 · 19:30</text><text x="40" y="1" dominant-baseline="central" text-anchor="middle" class="ctb-nw">2</text></g>
+<g class="ctb-chip b" style="opacity:0"><rect x="0" y="-12" width="80" height="24" rx="12" class="bg"/><text x="40" y="0" dominant-baseline="central" text-anchor="middle" class="ctb-sm">4 · 20:00</text><text x="40" y="1" dominant-baseline="central" text-anchor="middle" class="ctb-nw">4</text></g>
+<g class="ctb-chip c" style="transform:translate(452px,244px)"><rect x="0" y="-12" width="80" height="24" rx="12" class="bg"/><text x="40" y="0" dominant-baseline="central" text-anchor="middle" class="ctb-sm">12 · 20:30</text><text x="40" y="1" dominant-baseline="central" text-anchor="middle" class="ctb-nw">12</text></g>
+<g class="ctb-need">
+<rect x="500" y="296" width="112" height="28" rx="14" class="bg"/>
+<text x="556" y="310" dominant-baseline="central" text-anchor="middle">Needs you</text>
+</g>
+</svg>
+</figure>
+
+<style is:global>
+/* Every selector starts with .ctb and every keyframe is ctb-*, so nothing leaks. Colours are the
+   host's tokens first, with the brand literal only as the fallback, as in CoverReceipts. */
+.ctb{
+  --ctb-ink2:var(--ink-2,light-dark(#3f4472,#b9bce0));
+  --ctb-ink3:var(--ink-3,light-dark(#565a86,#9a9dc4));
+  --ctb-hair:var(--hairline,light-dark(rgba(20,22,60,.08),rgba(255,255,255,.10)));
+  --ctb-glass:var(--glass-bg,light-dark(rgba(255,255,255,.32),rgba(255,255,255,.07)));
+  --ctb-glassb:var(--glass-border,light-dark(rgba(255,255,255,.55),rgba(255,255,255,.14)));
+  --ctb-row:var(--row-bg,light-dark(rgba(255,255,255,.24),rgba(255,255,255,.05)));
+  --ctb-palm:var(--palm,#2fd3a5);
+  --ctb-palm-i:var(--palm-ink,light-dark(#147a5c,#72e6c3));
+  --ctb-violet:var(--violet,#8a6bff);
+  --ctb-violet-i:var(--violet-ink,light-dark(#5a3fd0,#ab95ff));
+  --ctb-sun:var(--sun,#ffcf5c);
+  --ctb-sun-i:var(--sun-ink,light-dark(#866000,#ffda80));
+  --ctb-flam:var(--flamingo,#ff6fa8);
+  --ctb-flam-i:var(--flamingo-ink,light-dark(#b02a6b,#ff8fbc));
+  --ctb-ease:var(--ease-out-soft,cubic-bezier(.2,.8,.2,1));
+  display:block;margin:0;width:100%;aspect-ratio:640/360;container-type:inline-size;
+}
+.ctb .s-biz{--sc:var(--ctb-flam);--si:var(--ctb-flam-i)}
+.ctb .s-cus{--sc:var(--ctb-violet);--si:var(--ctb-violet-i)}
+.ctb svg{display:block;width:100%;height:auto}
+.ctb text{font-family:var(--font-sans,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif);fill:var(--ctb-ink2)}
+.ctb .ctb-cap{font-size:11px;letter-spacing:.11em}
+.ctb .ctb-h{font-family:var(--font-display,ui-sans-serif,system-ui,sans-serif);font-size:14px;font-weight:600;letter-spacing:-.01em}
+.ctb .ctb-lab{font-size:11.5px}
+.ctb .ctb-note{font-size:10.5px;fill:var(--ctb-ink3)}
+.ctb .ctb-num,.ctb .ctb-time{font-variant-numeric:tabular-nums}
+.ctb .ctb-time{font-size:13px;font-weight:600}
+.ctb .ctb-party{font-size:11.5px;fill:var(--ctb-ink3)}
+.ctb .ctb-nw{display:none}   /* the short word a phone-width drawing shows in place of the long one */
+
+.ctb .ctb-phone .body{fill:none;stroke:var(--ctb-ink2);stroke-opacity:.6;stroke-width:1.4;stroke-linecap:round}
+.ctb .ctb-phone .wave{fill:none;stroke:var(--ctb-palm);stroke-opacity:.55;stroke-width:1.3;stroke-linecap:round}
+.ctb .ctb-card{fill:var(--ctb-glass);stroke:var(--ctb-glassb);stroke-width:1}
+.ctb .ctb-track{fill:var(--ctb-ink3);fill-opacity:.12}
+.ctb .ctb-fill{fill:var(--ctb-palm);fill-opacity:.55}
+.ctb .ctb-row .bg{fill:var(--ctb-row);stroke:var(--ctb-hair);stroke-width:1}
+.ctb .ctb-row .src{fill:none;stroke:var(--ctb-ink3);stroke-opacity:.7;stroke-width:1.2;stroke-linejoin:round}
+.ctb .ctb-row .src.star{fill:var(--ctb-violet);fill-opacity:.25;stroke:var(--ctb-violet);stroke-opacity:.8}
+.ctb .ctb-row .on{fill:var(--ctb-palm);fill-opacity:.14;stroke:var(--ctb-palm);stroke-opacity:.65;stroke-width:1.1}
+.ctb .tick{fill:none;stroke:var(--ctb-palm-i);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.ctb .ctb-free{fill:none;stroke:var(--ctb-ink3);stroke-opacity:.35;stroke-width:1.1;stroke-dasharray:4 5}
+
+.ctb .ctb-mark .tint{fill:var(--sc);fill-opacity:.14}
+.ctb .ctb-mark .edge{fill:none;stroke:var(--sc);stroke-opacity:.7;stroke-width:1.2}
+.ctb .ctb-mark .ant{fill:var(--sc)}
+.ctb .ctb-mark .star{fill:var(--sc)}
+.ctb .ctb-mark .glyph{fill:none;stroke:var(--si);stroke-width:1.6;stroke-linecap:round}
+
+.ctb .ctb-chip .bg{fill:var(--ctb-glass);stroke:var(--ctb-violet);stroke-opacity:.6;stroke-width:1.1}
+.ctb .ctb-chip.a .bg{stroke:var(--ctb-palm)}
+.ctb .ctb-chip text{font-size:11px;font-variant-numeric:tabular-nums}
+.ctb .ctb-need .bg{fill:var(--ctb-flam);fill-opacity:.14;stroke:var(--ctb-flam);stroke-opacity:.6;stroke-width:1.1}
+.ctb .ctb-need text{font-size:11.5px;font-weight:600;fill:var(--ctb-flam-i)}
+
+@container (max-width:600px){
+  .ctb .ctb-cap{font-size:15px}
+  .ctb .ctb-h{font-size:17px}
+  .ctb .ctb-lab,.ctb .ctb-need text{font-size:13.5px}
+  .ctb .ctb-time{font-size:15px}
+  .ctb .ctb-chip text{font-size:13px}
+}
+@container (max-width:400px){
+  .ctb .ctb-cap{font-size:21px}
+  .ctb .ctb-h{font-size:22px}
+  .ctb .ctb-sm{display:none}
+  .ctb .ctb-nw{display:inline}
+  .ctb .ctb-lab{font-size:19px}
+  .ctb .ctb-time{font-size:21px}
+  .ctb .ctb-chip text{font-size:19px;font-weight:600}
+  .ctb .ctb-need text{font-size:17px}
+}
+
+.ctb.ctb-still,.ctb.ctb-still *{animation:none!important;transition:none!important}
+.ctb.ctb-paused *{animation-play-state:paused!important}
+@media (prefers-reduced-motion:reduce){.ctb *{animation:none!important;transition:none!important}}
+</style>
+
+<script>
+// @ts-nocheck — a compact hand-written ES5 drawing machine, the same shape as CoverDots'.
+(function(){
+"use strict";
+
+function bez(x1,y1,x2,y2){
+  var cx=3*x1,bx=3*(x2-x1)-cx,ax=1-cx-bx,cy=3*y1,by=3*(y2-y1)-cy,ay=1-cy-by;
+  return function(x){
+    var t=x,i,e,d;
+    for(i=0;i<5;i++){
+      e=((ax*t+bx)*t+cx)*t-x; if(e<1e-4&&e>-1e-4)break;
+      d=(3*ax*t+2*bx)*t+cx;   if(d<1e-6&&d>-1e-6)break;
+      t-=e/d;
+    }
+    return ((ay*t+by)*t+cy)*t;
+  };
+}
+var eSoft=bez(.2,.8,.2,1),
+    cl=function(v){return v<0?0:v>1?1:v;},
+    seg=function(t,a,b){return cl((t-a)/(b-a));},
+    ramp=function(t,a,b){return eSoft(seg(t,a,b));},
+    lerp=function(a,b,u){return a+(b-a)*u;};
+
+/* The timeline, in seconds. */
+var RING=[.3,1.5],                 /* the phone rings */
+    A=[1.3,2.1],                   /* two at 19:30, from the phone AI into the book */
+    B=[3.3,4.1],                   /* four at 20:00, from the guest's assistant */
+    C=[5.3,6.1],C2=[6.5,7.2],      /* twelve at 20:30: to the book, then on to you */
+    NEED=7.2,
+    EXIT=10.4,LOOP=11.6,
+    STILL=8.6;                     /* the frame the markup ships and the clock starts from */
+var COVERS=24,FILL=208;
+
+function mount(fig){
+  if(fig.getAttribute("data-ctb")==="on")return;
+  function q(s){var e=fig.querySelector(s);if(!e)throw new Error("CoverTables "+s);return e;}
+  function qa(s){var l=fig.querySelectorAll(s);if(!l.length)throw new Error("CoverTables "+s);return [].slice.call(l);}
+
+  var waves=qa(".ctb-phone .wave"),rows=qa(".ctb-row"),fill=q(".ctb-fill"),count=q(".ctb-count"),
+      ca=q(".ctb-chip.a"),cb=q(".ctb-chip.b"),cc=q(".ctb-chip.c"),need=q(".ctb-need"),cus=q(".ctb-mark.s-cus");
+
+  fig.setAttribute("data-ctb","on");
+
+  var ticks=rows.map(function(r){var tk=r.querySelector(".tick"),L=tk.getTotalLength();tk.style.strokeDasharray=L;return {tk:tk,L:L};});
+
+  function op(e,v){e.style.opacity=v;}
+  function at(e,x,y){e.style.transform="translate("+x+"px,"+y+"px)";}
+  /* a chip's way: out of its sender, into its row, fading as it lands */
+  function fly(e,t,w,x0,y0,x1,y1){
+    var u=ramp(t,w[0],w[1]);
+    at(e,lerp(x0,x1,u),lerp(y0,y1,u));
+    op(e,ramp(t,w[0]-.25,w[0])*(1-ramp(t,w[1]-.15,w[1]+.15)));
+  }
+
+  function render(t){
+    var g=1-ramp(t,EXIT,LOOP),k,u,v,n,ring;
+
+    ring=ramp(t,RING[0],RING[0]+.2)*(1-ramp(t,RING[1],RING[1]+.3));
+    for(k=0;k<waves.length;k++){
+      v=.25+.75*ring*(.5+.5*Math.sin((t*7)-(k%2)*1.2));
+      op(waves[k],v);
+    }
+    cus.style.opacity=.75+.25*Math.max(ramp(t,B[0]-.4,B[0])*(1-ramp(t,B[0]+.2,B[0]+.6)),ramp(t,C[0]-.4,C[0])*(1-ramp(t,C[0]+.2,C[0]+.6)));
+
+    fly(ca,t,A,112,143,258,151);
+    fly(cb,t,B,452,96,258,193);
+
+    /* twelve: to the book's edge, where it stops, then on down to you */
+    u=ramp(t,C[0],C[1]);v=ramp(t,C2[0],C2[1]);
+    at(cc,lerp(lerp(452,446,u),452,v),lerp(lerp(96,206,u),244,v));
+    op(cc,g*ramp(t,C[0]-.25,C[0]));
+
+    op(rows[0],g*ramp(t,A[1]-.1,A[1]+.3));
+    op(rows[1],g*ramp(t,B[1]-.1,B[1]+.3));
+    ticks[0].tk.style.strokeDashoffset=ticks[0].L*(1-ramp(t,A[1]+.2,A[1]+.55));
+    ticks[1].tk.style.strokeDashoffset=ticks[1].L*(1-ramp(t,B[1]+.2,B[1]+.55));
+
+    n=Math.round(g*(2*ramp(t,A[1],A[1]+.4)+4*ramp(t,B[1],B[1]+.4)));
+    fill.setAttribute("width",String(Math.max(0.01,FILL*g*(2*ramp(t,A[1],A[1]+.4)+4*ramp(t,B[1],B[1]+.4))/COVERS)));
+    if(count.textContent!==n+" of "+COVERS)count.textContent=n+" of "+COVERS;
+
+    u=g*ramp(t,NEED,NEED+.4);
+    op(need,u);at(need,0,(1-u)*6);
+  }
+
+  render(STILL);
+
+  var clock=STILL,last=0,raf=0,run=false,seen=true,
+      mq=matchMedia("(prefers-reduced-motion:reduce)");
+
+  function frame(now){
+    if(!run)return;
+    clock+=Math.max(0,Math.min((now-last)/1000,.05));
+    last=now;
+    render(clock%LOOP);
+    raf=requestAnimationFrame(frame);
+  }
+  function sync(){
+    if(fig.classList.contains("ctb-still"))return;
+    var want=seen&&!document.hidden;
+    if(want===run)return;
+    run=want;
+    if(run){fig.classList.remove("ctb-paused");last=performance.now();raf=requestAnimationFrame(frame);}
+    else{cancelAnimationFrame(raf);fig.classList.add("ctb-paused");}
+  }
+  function still(){
+    fig.classList.add("ctb-still");
+    run=false;cancelAnimationFrame(raf);
+    render(STILL);
+  }
+
+  if(mq.matches){still();return;}
+  if("IntersectionObserver" in window){
+    new IntersectionObserver(function(es){seen=es[0].isIntersecting;sync();},{threshold:.01}).observe(fig);
+  }
+  document.addEventListener("visibilitychange",sync);
+  function onMq(){if(mq.matches&&!fig.classList.contains("ctb-still"))still();}
+  if(mq.addEventListener)mq.addEventListener("change",onMq);
+  else if(mq.addListener)mq.addListener(onMq);
+  sync();
+}
+
+function mountAll(){
+  document.querySelectorAll(".ctb").forEach(function(f){
+    try{mount(f);}catch(err){if(window.console&&console.warn)console.warn("cover tables",err);}
+  });
+}
+mountAll();
+document.addEventListener("astro:page-load",mountAll);
+})();
+</script>

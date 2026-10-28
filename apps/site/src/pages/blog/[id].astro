@@ -2,6 +2,7 @@
 import { type CollectionEntry, getCollection, render } from "astro:content";
 import Art from "../../components/Art.astro";
 import { coverAnims } from "../../components/covers";
+import GuideCheck from "../../components/GuideCheck.astro";
 import Layout from "../../layouts/Layout.astro";
 
 export async function getStaticPaths() {
@@ -85,6 +86,15 @@ const date = post.data.date.toLocaleDateString("en-GB", {
     <div class="prose">
       <Content />
     </div>
+    {
+      /* A post that ends by asking the reader to check their site ends with the form, so they paste
+         it here and land on their own result. */
+      post.data.checkForm && (
+        <div class="check">
+          <GuideCheck examples={[]} title="Check your business" />
+        </div>
+      )
+    }
     </div>
   </article>
 </Layout>
@@ -130,6 +140,10 @@ const date = post.data.date.toLocaleDateString("en-GB", {
   .cover {
     max-width: 820px;
     margin: var(--sp-7) 0 var(--sp-8);
+  }
+  .check {
+    max-width: var(--measure-prose);
+    margin-top: var(--sp-8);
   }
   .cover + .prose,
   .head + .prose {
