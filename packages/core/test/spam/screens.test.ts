@@ -294,7 +294,7 @@ describe("the AI check on a Pro given for free", () => {
     const told: boolean[] = [];
     const s = await spamSetup({
       filters: ["pitches"],
-      judge: fakeJudge(),
+      judge: fakeJudge({}),
       host: hostPolicy({
         ai: false,
         aiByOwner: true,
