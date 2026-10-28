@@ -1,5 +1,6 @@
 import type { Statement } from "@surfingdog/platform";
 import { eq } from "drizzle-orm";
+import { ownerClock } from "../customer/audience";
 import type { Db } from "../db";
 import { type ItemFlags, itemFlagsSchema } from "../domain/types";
 import { ulid } from "../ids";
@@ -59,11 +60,13 @@ export async function setFlags(
   } catch (error) {
     await diagnoseFailure(db, error, { itemId: item.id, expectedVersion: item.version });
   }
-  const hidden = await hiddenTransitions(db, [{ item, legacyPromise: row.legacyPromise }], await readSettings(db), now);
+  const settings = await readSettings(db);
+  const hidden = await hiddenTransitions(db, [{ item, legacyPromise: row.legacyPromise }], settings, now);
   return viewFor(
     { ...item, flags, version: seq, updatedAt: new Date(now).toISOString() } as typeof item,
     permissionKind(caller),
     undefined,
     hidden.get(item.id),
+    await ownerClock(db, settings),
   );
 }

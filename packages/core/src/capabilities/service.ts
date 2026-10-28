@@ -27,6 +27,8 @@ import { type OrderPayment, payNowLabel } from "../connectors/agent-pay";
 import { ConnectorCapabilities, registerSyncStep } from "../connectors/capability";
 import { registerPosOrderApplier } from "../connectors/hooks";
 import { registerScheduleSource, scheduleSourceOf } from "../connectors/schedules";
+import { ownerClockIn } from "../customer/audience";
+import type { Audience } from "../customer/describe";
 import { effectiveWrittenBy, isAutomated } from "../customer/mail";
 import { isChangeable } from "../customer/offer";
 import type { Db } from "../db";
@@ -807,6 +809,11 @@ export class Capabilities {
     return row?.timezone ?? s.business.timezone;
   }
 
+  /** The business reading about its own items: a booking's time on its own clock, as its alerts say it. */
+  private async ownerClock(): Promise<Audience> {
+    return ownerClockIn(await this.timezone());
+  }
+
   async getBusinessProfile(): Promise<BusinessProfile> {
     const [[row], s] = await Promise.all([this.db.orm.select().from(business).limit(1), readSettings(this.db)]);
     const elsewhere = publishedDoorsElsewhere(s.doorsElsewhere, [row?.domain, s.directory.url]);
@@ -1220,7 +1227,7 @@ export class Capabilities {
     // A customer reads it in the business's words and language, with what we proposed and who we wait on.
     const audience = isCustomer(caller) ? await this.customer.audienceOf(item, c) : null;
     const customerView = audience ? await this.customer.present(item, audience, nowOf(c)) : null;
-    const view = customerView ?? viewFor(item, permissionKind(caller));
+    const view = customerView ?? viewFor(item, permissionKind(caller), undefined, undefined, await this.ownerClock());
     // An order's payment, and how its assistant may pay it directly (ADR-042).
     const payment =
       customerView && item.type === "order"
@@ -1478,7 +1485,7 @@ export class Capabilities {
       );
     }
     await this.appendEntry(c, item, input.body, "in", input.message_id);
-    if (!customer) return viewFor(item, permissionKind(caller));
+    if (!customer) return viewFor(item, permissionKind(caller), undefined, undefined, await this.ownerClock());
     return this.customer.present(item, await this.customer.audienceOf(item, c), nowOf(c));
   }
 
@@ -1584,7 +1591,8 @@ export class Capabilities {
     const hidden = await hiddenTransitions(this.db, listed, await readSettings(this.db), nowOf(caller));
     // An open booking request says whether its time is free (ADR-028): a few reads each, and only for those.
     const asking = listed.filter(({ item }) => item.type === "booking" && item.closedAt === null).slice(0, input.limit);
-    const tz = asking.length > 0 ? await this.timezone() : "UTC";
+    // The business reads each on its own clock: a booking's time in its time zone.
+    const tz = listed.length > 0 ? await this.timezone() : "UTC";
     const fits = new Map(
       await Promise.all(asking.map(async ({ item }) => [item.id, await calendarFit(this.db, item, tz)] as const)),
     );
@@ -1610,7 +1618,13 @@ export class Capabilities {
         ),
     );
     const views = listed.map(({ item }) => {
-      const view = viewFor(item, permissionKind(caller), partyViews.get(item.partyId), hidden.get(item.id));
+      const view = viewFor(
+        item,
+        permissionKind(caller),
+        partyViews.get(item.partyId),
+        hidden.get(item.id),
+        ownerClockIn(tz),
+      );
       const calendar = fits.get(item.id);
       const spam = screened.get(item.id);
       return {
@@ -1688,7 +1702,8 @@ export class Capabilities {
       mailForItem(this.db, item.id),
     ]);
     const draft = await draftRow(this.db, item.id);
-    const calendar = await calendarFit(this.db, item, await this.timezone());
+    const tz = await this.timezone();
+    const calendar = await calendarFit(this.db, item, tz);
     const verdict = await this.spam.verdictOf(item.id);
     const summary = verdict
       ? (await this.spam.summaries([{ id: item.id, screen: row.screen, type: item.type }])).get(item.id)
@@ -1709,11 +1724,12 @@ export class Capabilities {
       permissionKind(caller),
       partyViews.get(row.partyId),
       hidden.get(item.id),
+      ownerClockIn(tz),
     );
     return {
       ...base,
       ...(calendar ? { calendar } : {}),
-      ...(verdict && summary ? { spam: spamView(verdict, summary, await this.timezone()) } : {}),
+      ...(verdict && summary ? { spam: spamView(verdict, summary, tz) } : {}),
       receipts,
       customer: await this.people.customerView(row),
       events: events.map((e) => ({
@@ -2114,7 +2130,7 @@ export class Capabilities {
             throw error;
           }
           return {
-            view: viewFor(plan.item, permissionKind(caller)),
+            view: viewFor(plan.item, permissionKind(caller), undefined, undefined, await this.ownerClock()),
             replayed: false,
             held: { breaches: ["amount_named"] },
           };
@@ -2148,7 +2164,7 @@ export class Capabilities {
           await readSettings(this.db),
           nowOf(caller),
         );
-        return viewFor(item, permissionKind(caller), undefined, hidden.get(item.id));
+        return viewFor(item, permissionKind(caller), undefined, hidden.get(item.id), await this.ownerClock());
       },
     );
     return result;

@@ -4,7 +4,7 @@ import { findSlots, slotOffered } from "../capabilities/availability";
 import { hasLivePayLink, hasPayLinks, linkComing, PAY_LINK_GRACE_MS, payLinkStatement } from "../connectors/pay-queue";
 import { calendarName } from "../connectors/sdk";
 import { BUSY_HORIZON_MS, busyDetails } from "../connectors/store";
-import { audienceFor, businessFacts } from "../customer/audience";
+import { audienceFor, businessFacts, ownerClock } from "../customer/audience";
 import { copyFor, vars } from "../customer/copy";
 import type { Audience } from "../customer/describe";
 import { shortRef, whenText } from "../customer/format";
@@ -30,7 +30,7 @@ import { type Breach, refundWithinLimit } from "../negotiation/limits";
 import { insertOfferStatement, type OfferRow, offerRows, openOf, pointerOf } from "../negotiation/offers";
 import { paidFor, refundDueOf, SEND_BACK_DAYS } from "../negotiation/refunds";
 import { items, resources, services } from "../schema/tables";
-import { readSettings, type Settings } from "../settings/schema";
+import { readSettings } from "../settings/schema";
 import { planStay, type StayPlan, stayEventFor } from "../stays/transition";
 import { workPushStatements } from "../trades/job-tool";
 import { type TradeQuoteTerms, taxOnTop, tradeQuoteProblems } from "../trades/quote";
@@ -969,6 +969,9 @@ async function attempt_(
     }
   }
 
+  // Who reads what this answers: the customer in the business's words, the business on its own clock
+  // (a booking's time in its time zone, as its alerts say it).
+  const clock = audience ?? (await ownerClock(db, settings));
   // Outside the owner's limits, what automation offered is kept for a person: never sent, never refused.
   if (judged && judged.breaches.length > 0) {
     const plan = await draftStatements({
@@ -983,7 +986,7 @@ async function attempt_(
       idem,
       requestHash,
       causation: input.causation,
-      viewOf: (u) => viewFor(u, permissionKind(caller), undefined, undefined, audience),
+      viewOf: (u) => viewFor(u, permissionKind(caller), undefined, undefined, clock),
     });
     try {
       await db.batch(plan.statements);
@@ -1069,17 +1072,7 @@ async function attempt_(
   let linkedEvent: { id: string; type: string; itemId: string } | undefined;
 
   if (effects.has("link_item") && item.type === "quote_request") {
-    const linked = await planLinkedItem(
-      db,
-      caller,
-      item,
-      payload,
-      eventId,
-      now,
-      linkedBooking,
-      audience,
-      offerPlan.taken,
-    );
+    const linked = await planLinkedItem(db, caller, item, payload, eventId, now, linkedBooking, clock, offerPlan.taken);
     linkedId = linked.id;
     statements.push(...linked.statements);
     linkedView = linked.view;
@@ -1125,7 +1118,7 @@ async function attempt_(
         closedAt: null,
         payload: payloadSchemas.refund.parse(plan.payload),
       } as Item;
-      linkedView ??= viewFor(refundItem, permissionKind(caller), undefined, undefined, audience);
+      linkedView ??= viewFor(refundItem, permissionKind(caller), undefined, undefined, clock);
     }
   }
   updated.linkedItemId = linkedId;
@@ -1143,14 +1136,7 @@ async function attempt_(
         now,
       )
     : undefined;
-  // The business reads its own item's time on its own clock, as its alerts say it.
-  const view = viewFor(
-    updated,
-    permissionKind(caller),
-    undefined,
-    hidden,
-    audience ?? (await ownerClock(db, settings)),
-  );
+  const view = viewFor(updated, permissionKind(caller), undefined, hidden, clock);
   const response = { view, linked: linkedView };
 
   if (idem && requestHash) statements.unshift(idempotencyStatement(idem, requestHash, 200, response, item.id, now));
@@ -2749,7 +2735,8 @@ async function planLinkedItem(
   causationId: string,
   now: number,
   booking: LinkedBooking | undefined,
-  audience: Audience | undefined,
+  /** Who reads the new item: its customer, or the business on its own clock. */
+  clock: Audience,
   /** The quote the customer accepted: the promise's own agreed offer answers it. */
   accepted: OfferRow | undefined,
 ) {
@@ -2877,7 +2864,7 @@ async function planLinkedItem(
     type,
     eventId: linkedEventId,
     statements,
-    view: viewFor(item, permissionKind(caller), undefined, undefined, audience),
+    view: viewFor(item, permissionKind(caller), undefined, undefined, clock),
   };
 }
 
@@ -2947,9 +2934,4 @@ async function ownerSlotWords(db: Db, spec: SlotSpec, bucket: number): Promise<s
     return `your ${calendarName(beyond.name || "connected")} is read only ${days} days ahead, and that time is further`;
   }
   return "that time is fully booked";
-}
-
-/** The business's own clock, for what it reads about its item: a booking's time as its alerts say it. */
-async function ownerClock(db: Db, settings: Settings): Promise<Audience> {
-  return { lang: "en", timezone: (await businessFacts(db, settings)).timezone, minNoticeMin: 0 };
 }

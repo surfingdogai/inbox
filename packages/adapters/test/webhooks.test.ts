@@ -727,6 +727,40 @@ describe("what a full event offers the owner next", () => {
     const past = await buildEvent(db, event, "full", "https://inbox.example.com", end + 49 * 3_600_000);
     expect((past.data as { transitions: { event: string }[] }).transitions).toEqual([]);
   });
+
+  it("says a booking's time on the business's own clock, its machine time unchanged", async () => {
+    const { db } = await freshDb();
+    await new Capabilities(db).setup.updateProfile(owner(T0), { timezone: "America/New_York" });
+    const svc = ulid();
+    await db.orm.insert(schema.services).values({
+      id: svc,
+      name: "Full service",
+      durationMin: 90,
+      capacity: 1,
+      granularityMin: 30,
+      createdAt: T0,
+      updatedAt: T0,
+    });
+    const created = await createItem(db, customer(T0), {
+      type: "booking",
+      payload: {
+        reservationFor: { serviceId: svc, name: "Full service" },
+        startTime: "2026-09-23T14:00:00Z",
+        endTime: "2026-09-23T15:30:00Z",
+      },
+      contact: { name: "Rita Amaral", email: "rita@example.com" },
+    });
+    const event = await readEvent(db, (await firstEventId(db, created.view.item.id)) ?? "");
+    if (!event) throw new Error("no event");
+    const full = (await buildEvent(db, event, "full", "https://inbox.example.com", T0)).data as {
+      human: string;
+      item: { payload: { startTime: string } };
+    };
+    // 14:00 UTC is 10:00 in New York (EDT).
+    expect(full.human).toContain('Booking "Full service" for Wednesday, 23 September 2026 at 10:00 (');
+    expect(full.human).not.toContain("UTC");
+    expect(full.item.payload.startTime).toBe("2026-09-23T14:00:00Z");
+  });
 });
 
 describe("working with the owner's Integrations screen", () => {

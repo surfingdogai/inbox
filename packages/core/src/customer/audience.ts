@@ -24,6 +24,18 @@ export async function businessFacts(db: Db, settings?: Settings): Promise<Busine
   };
 }
 
+/**
+ * The business reading about its own items (`viewFor`): a booking's time on its own clock, the time
+ * zone its profile gives, as its alerts say it. Given the zone, or read from the profile.
+ */
+export async function ownerClock(db: Db, settings?: Settings): Promise<Audience> {
+  return ownerClockIn((await businessFacts(db, settings)).timezone);
+}
+
+export function ownerClockIn(timezone: string): Audience {
+  return { lang: "en", timezone, minNoticeMin: 0 };
+}
+
 /** The locale a party gave, if any (an assistant may send `contact.locale`). */
 export async function partyLocale(db: Db, partyId: string): Promise<string | null> {
   const [row] = await db.orm.select({ contact: parties.contact }).from(parties).where(eq(parties.id, partyId));

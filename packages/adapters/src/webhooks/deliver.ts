@@ -8,6 +8,7 @@ import {
   offerRows,
   offerView,
   openWebhookHeaders,
+  ownerClock,
   readSettings,
   rowToItem,
   type SecretBox,
@@ -361,8 +362,10 @@ export async function buildEvent(
   const party = await partyView(db, row.partyId);
   const item = rowToItem(row);
   // What the owner may do next, as the owner app lists it: no correction whose time has passed.
-  const hidden = await hiddenTransitions(db, [{ item, legacyPromise: row.legacyPromise }], await readSettings(db), now);
-  const view = viewFor(item, "owner", party, hidden.get(item.id));
+  const settings = await readSettings(db);
+  const hidden = await hiddenTransitions(db, [{ item, legacyPromise: row.legacyPromise }], settings, now);
+  // Its words as the owner reads them: a booking's time on the business's own clock.
+  const view = viewFor(item, "owner", party, hidden.get(item.id), await ownerClock(db, settings));
   data.item = view.item;
   data.transitions = view.transitions;
   data.human = view.human;

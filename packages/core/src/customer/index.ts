@@ -1,4 +1,4 @@
-export { audienceFor, type BusinessFacts, businessFacts } from "./audience";
+export { audienceFor, type BusinessFacts, businessFacts, ownerClock } from "./audience";
 export { COPY, type Copy, type CopyVars, confirmTermsMessage, copyFor, phraseOf, vars as copyVars } from "./copy";
 export {
   type Audience as CustomerAudience,

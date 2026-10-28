@@ -1,6 +1,6 @@
 import type { Statement } from "@surfingdog/platform";
 import { attachStatements, isAttachGuard } from "../attachments/store";
-import { audienceFor } from "../customer/audience";
+import { audienceFor, ownerClock } from "../customer/audience";
 import { copyFor } from "../customer/copy";
 import type { Db } from "../db";
 import {
@@ -368,7 +368,14 @@ export async function createItem(
       })
     : undefined;
   if (request) payload.offer = pointerOf(request);
-  const view = viewFor(item, permissionKind(caller), undefined, undefined, audience);
+  // The business reads what it wrote down on its own clock: a booking's time in its time zone.
+  const view = viewFor(
+    item,
+    permissionKind(caller),
+    undefined,
+    undefined,
+    audience ?? (await ownerClock(db, settings)),
+  );
   const response = { view, accessToken };
 
   const statements: Statement[] = [];
