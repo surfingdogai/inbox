@@ -377,6 +377,7 @@ export async function createItem(
     undefined,
     undefined,
     audience ?? (await ownerClock(db, settings)),
+    now,
   );
   const response = { view, accessToken };
 

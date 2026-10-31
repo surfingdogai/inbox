@@ -164,11 +164,13 @@ export function viewFor(
   party?: PartyView,
   hidden?: ReadonlySet<string>,
   audience?: Audience,
+  now?: number,
 ): ItemView {
   const machine = machines[given.type];
   const customer = CUSTOMER_KINDS.has(actor);
-  // A customer reads a request put aside as one nobody answered: its transitions too (`customerSees`).
-  const item = customer ? customerSees(given) : given;
+  // A customer reads a request put aside as one nobody answered: its transitions too (`customerSees`),
+  // on the caller's clock when the write knows it, so a quote request lapses when its request does.
+  const item = customer ? customerSees(given, now) : given;
   const lang = (audience ?? DEFAULT_AUDIENCE).lang;
   // What we proposed is withdrawn only when it said it was subject to our confirmation (ADR-018 §2).
   const withdrawable = (item.payload as { offer?: { binding?: boolean } }).offer?.binding === false;
