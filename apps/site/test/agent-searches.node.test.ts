@@ -39,7 +39,8 @@ describe("agents' searches, as the site says them", () => {
     for (const said of [
       "we keep a record of the call, to improve search, with no time limit",
       "its words as the agent typed them, with email addresses, phone numbers, card numbers and bank account numbers (IBANs) taken out",
-      "Street names, house numbers, postcodes, prices and years stay as typed",
+      "Street names, house numbers, postcodes, prices, dates and years stay as typed",
+      "any other run of eight or more digits in a row too, unless it is the decimals of a number",
       "which door it came through (MCP, A2A or the REST API) and which tool it called",
       "how many businesses it found",
       "how long it took and how it ended",
@@ -51,13 +52,16 @@ describe("agents' searches, as the site says them", () => {
   it("say what a record never keeps", () => {
     for (const said of [
       "Never your IP address, a session, or anything else that says who sent it",
-      "which is different every day",
-      "A search on this website's own pages is not recorded.",
+      "with a secret key drawn at random each day, held only in our server's memory and destroyed when the day ends",
+      "no one, us included, can work a code back to an address or match it with another day's",
+      "A search on this website's own pages is not recorded, nor are the reads of a search engine's crawler.",
       "with nothing of what it asked",
     ]) {
       expect(searchesBullet, said).toContain(said);
     }
     expect(privacy).toContain("an agent's searches are recorded as above");
+    expect(privacy).toContain("each call's record keeps only the kind of assistant, as above");
+    expect(privacy).not.toContain("which kind of assistant a session said it is; none of it is written down");
   });
 
   it("no longer say they are kept 90 days, with links or every number removed", () => {
@@ -81,7 +85,8 @@ describe("agents' searches, as the site says them", () => {
       "The words are kept as the agent typed them",
       "No IP address, no session id, no full user agent",
       "a card number, 13 to 19 digits that pass the Luhn check",
-      "an IBAN, whole or in groups",
+      "an IBAN, whole, in groups or split by dots, dashes or slashes",
+      "drawn at random for each UTC day, held only in the network's memory, never written",
       "No page shows the record.",
     ]) {
       expect(adr, said).toContain(said);
