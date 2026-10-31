@@ -12,30 +12,20 @@
  * its final number.
  *
  * Every count is a link to the list of the businesses it counts, on the network: "agent-ready"
- * to every agent-ready business, "real businesses verified" to the real businesses among them (a member,
- * registered or claimed, or a site the crawler matched to its entry on public maps or in a business
- * register: the listing rules of 19 October 2026; shown once the network counts them, and never a 0), and each
- * capability to the agent-ready businesses that can do it (/leaderboard?can=book). Each list is
- * the same businesses its count counts: it names them, or says how many more it counts and does not
- * name.
- *
- * Last, once both counts are read, one line on the difference: how many of the agent-ready are not yet confirmed as
- * real businesses, and, only while the counts prove it, that most of them sell online (notYetReal in src/lib/ask.ts).
- * It is worked out from the same answer, never written in. It comes after the capability counts and their note, so
- * those never read as a breakdown of it, and it names the agent-ready itself, so it reads on its own.
+ * to every agent-ready business, and each capability to the agent-ready businesses that can do it
+ * (/leaderboard?can=book). Each list is the same businesses its count counts: it names them, or says
+ * how many more it counts and does not name. Every one of them is a business; no count sorts them
+ * into kinds of real.
  */
-import { READY_HREF, REAL_HREF } from "../lib/ask";
+import { READY_HREF } from "../lib/ask";
 ---
 
 <div class="counts" data-counts>
   <p class="c-main">
     <a class="c-pair c-link" href={READY_HREF} data-label="agent-ready businesses"><b class="c-n tabular" data-n="agent_ready" aria-hidden="true">–</b> agent-ready businesses</a>
-    <span class="c-dot" aria-hidden="true" data-real hidden>·</span>
-    <a class="c-pair c-link" href={REAL_HREF} data-label="real businesses verified" data-real hidden><b class="c-n tabular" data-n="real" aria-hidden="true">–</b> real businesses verified</a>
   </p>
   <ul class="c-caps" data-caps aria-label="Of the agent-ready businesses" hidden></ul>
   <p class="c-note" data-note>Live counts from the network.</p>
-  <p class="c-other" data-other hidden></p>
   <p class="sr" aria-live="polite" data-said></p>
 </div>
 
@@ -92,14 +82,6 @@ import { READY_HREF, REAL_HREF } from "../lib/ask";
     }
   }
   /* The line on the difference, last: quieter than the counts it explains. */
-  .c-other {
-    max-width: 46ch;
-    margin: 0;
-    font-size: var(--fs-fine);
-    line-height: var(--lh-ui);
-    color: var(--ink-3);
-    text-wrap: balance;
-  }
   .c-caps {
     display: flex;
     flex-wrap: wrap;
@@ -138,7 +120,6 @@ import { READY_HREF, REAL_HREF } from "../lib/ask";
     color: var(--ink-3);
   }
   /* The block arrives softly rather than snapping in. */
-  .counts.is-in .c-other,
   .counts.is-in .c-caps,
   .counts.is-in .c-note {
     animation: counts-in var(--dur-slow) var(--ease) both;
@@ -150,7 +131,6 @@ import { READY_HREF, REAL_HREF } from "../lib/ask";
     }
   }
   @media (prefers-reduced-motion: reduce) {
-    .counts.is-in .c-other,
     .counts.is-in .c-caps,
     .counts.is-in .c-note {
       animation: none;
@@ -159,7 +139,7 @@ import { READY_HREF, REAL_HREF } from "../lib/ask";
 </style>
 
 <script>
-  import { ago, countHref, countRows, notYetReal, notYetRealLine, readDirectory } from "../lib/ask";
+  import { ago, countHref, countRows, readDirectory } from "../lib/ask";
 
   const root = document.querySelector<HTMLElement>("[data-counts]");
   const fmt = new Intl.NumberFormat("en");
@@ -206,24 +186,11 @@ import { READY_HREF, REAL_HREF } from "../lib/ask";
     if (said) {
       const rows = countRows(d).map((r) => `${fmt.format(r.n)} ${r.label}`);
       said.textContent =
-        `${fmt.format(d.agent_ready)} agent-ready businesses` +
-        (d.real === null ? "." : `, ${fmt.format(d.real)} of them real businesses verified.`) +
-        (rows.length ? ` Of the agent-ready, ${rows.join(", ")}.` : "");
-    }
-    // The real businesses' count shows once the network counts them.
-    if (d.real !== null) {
-      for (const el of Array.from(root.querySelectorAll<HTMLElement>("[data-real]"))) el.hidden = false;
-    }
-    // The difference between the two, in one line, from the same answer.
-    const other = root.querySelector<HTMLElement>("[data-other]");
-    const notReal = notYetReal(d);
-    if (other && notReal) {
-      other.textContent = notYetRealLine(notReal, (n) => fmt.format(n));
-      other.hidden = false;
+        `${fmt.format(d.agent_ready)} agent-ready businesses.` +
+        (rows.length ? ` Of them, ${rows.join(", ")}.` : "");
     }
     for (const el of Array.from(root.querySelectorAll<HTMLElement>("[data-n]"))) {
-      const n = el.dataset.n === "real" ? d.real : d.agent_ready;
-      if (n === null) continue;
+      const n = d.agent_ready;
       count(el, n);
       const link = el.closest<HTMLAnchorElement>("a");
       link?.setAttribute("aria-label", `${fmt.format(n)} ${link.dataset.label ?? ""}`.trim());

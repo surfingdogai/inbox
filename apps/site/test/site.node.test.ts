@@ -561,18 +561,11 @@ describe("the home page and the three products", () => {
     const counts = read("src/components/DirectoryCounts.astro");
     expect(counts).not.toMatch(/CHECKED_HREF/); // how many were checked stays internal
     expect(counts).toMatch(/href=\{READY_HREF\}/);
-    expect(counts).toMatch(/href=\{REAL_HREF\}[^>]*>.*real businesses verified/);
-    // A screen reader hears the real businesses as a part of the agent-ready, and the capabilities as the agent-ready's.
-    expect(counts).toContain("of them real businesses verified.");
-    expect(counts).toContain("Of the agent-ready, ${rows.join");
-    expect(counts).toMatch(/@media \(max-width: 520px\) \{\s*\.c-dot \{\s*display: none;/);
+    // Every count is one of the agent-ready, read as such: no second count of some "real" kind beside it.
+    expect(counts).not.toMatch(/REAL_HREF|real businesses|data-real|notYetReal/);
+    expect(counts).toContain("Of them, ${rows.join");
     expect(counts).toMatch(/a\.href = countHref\(r\.key\)/);
-    // Under the counts, one line on the difference, worked out from the same answer.
-    expect(counts).toMatch(/<p class="c-other" data-other hidden><\/p>/);
-    // It comes last, after the capability counts and their note, so those never read as a breakdown of it.
-    expect(counts.indexOf('class="c-other"')).toBeGreaterThan(counts.indexOf('class="c-note"'));
     expect(counts.indexOf('class="c-caps"')).toBeLessThan(counts.indexOf('class="c-note"'));
-    expect(counts).toMatch(/notYetRealLine\(notReal, \(n\) => fmt\.format\(n\)\)/);
     const at = Date.parse("2026-10-07T12:00:00Z");
     expect(ago("2026-10-07T12:00:00Z", at + 20_000)).toBe("just now");
     expect(ago("2026-10-07T12:00:00Z", at + 6 * 60_000)).toBe("6 minutes ago");
