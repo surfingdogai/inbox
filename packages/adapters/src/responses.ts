@@ -163,7 +163,12 @@ export const customerItemViewSchema = z.looseObject({
     .describe(
       "A change your person asked for to what was agreed, while the business has not answered: the booking or the order as it would be, and until when it waits. What was agreed stands meanwhile; decline_offer takes it back.",
     ),
-  waiting_on: z.enum(["you", "us"]).nullable().describe("you: the business waits for the customer; us: the other way."),
+  waiting_on: z
+    .enum(["you", "us"])
+    .nullable()
+    .describe(
+      "you: the business waits for the customer; us: the other way; null: nobody has anything to do (closed, or confirmed with nothing pending).",
+    ),
   next: z.array(z.object({ action: z.string(), label: z.string() })).describe("What the customer can do next."),
   withdrawal: z
     .looseObject({

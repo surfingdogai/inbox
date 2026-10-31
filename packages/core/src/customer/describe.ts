@@ -367,12 +367,24 @@ export function offerSummary(item: Item, offer: OpenOffer, a: Audience = DEFAULT
 /** The states in which the business waits for the customer. */
 const THEIR_MOVE = new Set(["proposed", "quoted", "needs_info", "awaiting_payment", "payment_failed"]);
 
-/** Who the item is waiting on: `you` (the customer), `us` (the business), or nobody once it is closed. */
+/**
+ * The states in which nobody has anything to do: a promise in force that waits for its day (a confirmed
+ * booking or stay, a guest checked in), goods that reached the customer, a message we answered. The
+ * inbox closes them on its own (completed, closed) when their time comes; either side may still write.
+ */
+const NOBODY_TO_ACT = new Set(["confirmed", "checked_in", "fulfilled", "answered"]);
+
+/**
+ * Who the item is waiting on (ADR-043 §3): `you` (the customer), `us` (the business), or nobody (null)
+ * when it is closed or nothing is pending. A change asked for to what was agreed waits on whoever did
+ * not ask for it.
+ */
 export function waitingOn(item: Item): "you" | "us" | null {
   if (item.closedAt !== null || item.state === "spam") return null;
-  // A change we asked for to what was agreed waits for their answer.
-  if (openChange(item)?.by === "business") return "you";
-  return THEIR_MOVE.has(item.state) ? "you" : "us";
+  const change = openChange(item);
+  if (change) return change.by === "business" ? "you" : "us";
+  if (THEIR_MOVE.has(item.state)) return "you";
+  return NOBODY_TO_ACT.has(item.state) ? null : "us";
 }
 
 export type NextAction =

@@ -218,7 +218,8 @@ describe("accept_offer", () => {
     expect(r.view.item.payload).toMatchObject({ startTime: "2026-09-23T13:00:00Z", endTime: "2026-09-23T14:30:00Z" });
     expect((r.view.item.payload as { proposed?: unknown }).proposed).toBeUndefined();
     expect(r.view.offer).toBeNull();
-    expect(r.view.waiting_on).toBe("us");
+    // Booked, and nothing pending: it waits on nobody until its day (ADR-043 §3).
+    expect(r.view.waiting_on).toBeNull();
     expect("flags" in r.view.item).toBe(false);
     expect(await s.db.orm.select().from(slotClaims).where(eq(slotClaims.itemId, id))).toHaveLength(3);
     const queued = await s.db.orm.select({ kind: jobs.kind, payload: jobs.payload }).from(jobs);

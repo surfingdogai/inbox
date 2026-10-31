@@ -126,7 +126,10 @@ export interface CustomerItemView extends ItemView {
     readonly terms_sha: string;
     readonly until: string | null;
   } | null;
-  /** `you`: the business waits for the customer; `us`: the customer waits for the business; null once closed. */
+  /**
+   * `you`: the business waits for the customer; `us`: the customer waits for the business; null when
+   * nobody has anything to do (closed, or a confirmed booking with nothing pending).
+   */
   readonly waiting_on: "you" | "us" | null;
   readonly next: readonly { readonly action: string; readonly label: string }[];
   /**
