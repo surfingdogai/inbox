@@ -8,9 +8,10 @@
  * The states: `held` (a new member's 30 days, R31, until `held_until`), `none` (no receipts),
  * `pending` (receipts the nightly count has not reached), `gathering` (counted, under the listing's
  * `threshold`: `closed`, and `customers` unless self-reported), `shown` (the record). From rules
- * version 8 a record less than a fifth of which is kept promises the customer's side confirmed is
- * `self_reported`: the business's own word, said as its counts (kept, broken, still open) with no
- * meter, no score and no customers, and labelled so. How many the customer's side confirmed is said
+ * version 9 a record that fewer than 3 different customers confirmed kept promises of (version 8:
+ * less than a fifth of it confirmed by the customer's side) is `self_reported`: the business's own
+ * word, said as its counts (kept, broken, still open) with no meter, no score and no customers, and
+ * labelled so. The network says which, so this file follows whatever version is in force. How many the customer's side confirmed is said
  * as a count of the closed promises, never as a share; whatever it did not confirm is the business's
  * own word, and a list says so once, under it (`recordNote`).
  */

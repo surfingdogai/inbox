@@ -29,7 +29,7 @@ export const STATE_LABEL: Record<State, string> = {
 };
 
 /** The date this list was last checked against the running network. */
-export const UPDATED = "12 Oct 2026";
+export const UPDATED = "31 Oct 2026";
 
 export const capabilities: readonly Capability[] = [
   {
@@ -43,7 +43,14 @@ export const capabilities: readonly Capability[] = [
     label: "Published, versioned ranking rules: kept promises move a business up, and nobody can pay to rank",
     state: "live",
   },
-  { id: "pings", label: "Signed hourly pings: an inbox that checks in is answering", state: "live" },
+  // Since rules version 7, live agent doors other than a member's inbox are ranked by level.
+  { id: "rules-doors", label: "Ranking rules for other agent doors, by what an AI can do through them", state: "live" },
+  {
+    id: "pings",
+    label:
+      "Signed hourly pings: an inbox that checks in is answering, unless the network's own reads find its door down",
+    state: "live",
+  },
   {
     id: "receipts",
     label: "Receipts: a business's inbox signs every booking, order or refund, and the customer's AI can sign it too",
@@ -57,7 +64,7 @@ export const capabilities: readonly Capability[] = [
   },
   {
     id: "protocol",
-    label: "Open protocol, MIT example network, network-check and SDK 0.2.0",
+    label: "Open protocol, MIT example network, network-check and the SDK on npm",
     state: "live",
   },
   { id: "inbox", label: "Open-source inbox, self-hosted", state: "live" },
@@ -84,7 +91,6 @@ export const capabilities: readonly Capability[] = [
     state: "live",
   },
   { id: "fan-out", label: "One request to up to three businesses, agent to agent", state: "coming" },
-  { id: "rules-doors", label: "Ranking rules for other doors", state: "coming" },
   // Its words and state follow the pilot's one switch (src/lib/hosted.ts).
   { id: "hosted", ...HOSTED_STATUS },
 ];

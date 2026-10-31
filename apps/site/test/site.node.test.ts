@@ -567,8 +567,11 @@ describe("the home page and the three products", () => {
     expect(counts).toContain("Of the agent-ready, ${rows.join");
     expect(counts).toMatch(/@media \(max-width: 520px\) \{\s*\.c-dot \{\s*display: none;/);
     expect(counts).toMatch(/a\.href = countHref\(r\.key\)/);
-    // Under the two counts, one line on the difference, worked out from the same answer.
+    // Under the counts, one line on the difference, worked out from the same answer.
     expect(counts).toMatch(/<p class="c-other" data-other hidden><\/p>/);
+    // It comes last, after the capability counts and their note, so those never read as a breakdown of it.
+    expect(counts.indexOf('class="c-other"')).toBeGreaterThan(counts.indexOf('class="c-note"'));
+    expect(counts.indexOf('class="c-caps"')).toBeLessThan(counts.indexOf('class="c-note"'));
     expect(counts).toMatch(/notYetRealLine\(notReal, \(n\) => fmt\.format\(n\)\)/);
     const at = Date.parse("2026-10-07T12:00:00Z");
     expect(ago("2026-10-07T12:00:00Z", at + 20_000)).toBe("just now");
@@ -582,29 +585,31 @@ describe("the home page and the three products", () => {
       readDirectory({ directory: { checked: 9, as_of: "2026-10-31T13:54:42Z", ...directory } });
     // The counts of 31 October 2026: 1,146 of the agent-ready take no orders, so at least 35,702 of the 36,848 do.
     const live = dir({ agent_ready: 89973, real_businesses_verified: 53125, capabilities: { order: 88827 } });
-    expect(live && notYetReal(live)).toEqual({ n: 36848, mostShops: true });
-    expect(live && notYetRealLine({ n: 36848, mostShops: true }, fmt)).toBe(
-      "The other 36,848 are not yet confirmed as real local businesses: most are online shops.",
+    expect(live && notYetReal(live)).toEqual({ n: 36848, mostSellOnline: true });
+    expect(live && notYetRealLine({ n: 36848, mostSellOnline: true }, fmt)).toBe(
+      "36,848 of the agent-ready are not yet confirmed as real local businesses: most sell online.",
     );
+    // It says what the orders count proves, never a shop share /v1/stats does not publish.
+    expect(notYetRealLine({ n: 36848, mostSellOnline: true }, fmt)).not.toMatch(/shops?\b/);
     // Half or fewer proven to take orders: the share is not said, the number still is.
     const half = dir({ agent_ready: 100, real_businesses_verified: 60, capabilities: { order: 80 } });
-    expect(half && notYetReal(half)).toEqual({ n: 40, mostShops: false });
-    expect(notYetRealLine({ n: 40, mostShops: false }, fmt)).toBe(
-      "The other 40 are not yet confirmed as real local businesses.",
+    expect(half && notYetReal(half)).toEqual({ n: 40, mostSellOnline: false });
+    expect(notYetRealLine({ n: 40, mostSellOnline: false }, fmt)).toBe(
+      "40 of the agent-ready are not yet confirmed as real local businesses.",
     );
     const justOver = dir({ agent_ready: 100, real_businesses_verified: 60, capabilities: { order: 81 } });
-    expect(justOver && notYetReal(justOver)?.mostShops).toBe(true);
+    expect(justOver && notYetReal(justOver)?.mostSellOnline).toBe(true);
     // No orders count, no share.
     const noOrders = dir({ agent_ready: 100, real_businesses_verified: 60, capabilities: {} });
-    expect(noOrders && notYetReal(noOrders)).toEqual({ n: 40, mostShops: false });
+    expect(noOrders && notYetReal(noOrders)).toEqual({ n: 40, mostSellOnline: false });
     // No line without the real businesses' count, or when every agent-ready business is one.
     const noReal = dir({ agent_ready: 100, capabilities: { order: 100 } });
     expect(noReal && notYetReal(noReal)).toBeNull();
     const allReal = dir({ agent_ready: 100, real_businesses_verified: 100, capabilities: { order: 100 } });
     expect(allReal && notYetReal(allReal)).toBeNull();
     // One, said as one.
-    expect(notYetRealLine({ n: 1, mostShops: true }, fmt)).toBe(
-      "The other one is not yet confirmed as a real local business.",
+    expect(notYetRealLine({ n: 1, mostSellOnline: true }, fmt)).toBe(
+      "One of the agent-ready is not yet confirmed as a real local business.",
     );
   });
 
@@ -1184,6 +1189,16 @@ describe("the track record", () => {
     expect(text).toMatch(/today it cannot check one: it needs an assistant platform's key it recognises/);
     expect(text).toMatch(/0\.40 and at least 3 different customers confirmed it/);
     expect(text).not.toMatch(/a fifth/);
+    // Rules version 9: a search's words lead and reach orders within them, and the network's own reads of a door
+    // can make an inbox not answering whatever its pings say. The search page and its data say the same.
+    expect(text).toMatch(/is answering, unless the network's own reads find its door down/);
+    expect(text).toMatch(
+      /Among the businesses a search matches equally well, one whose inbox has answered for 30 days/,
+    );
+    const fair = read("src/components/FairOrder.astro");
+    expect(fair).toMatch(/After a search's words, businesses whose inbox has answered for 30 days without a break/);
+    expect(fair).not.toMatch(/Answering first/);
+    expect(read("src/pages/search.astro")).toMatch(/After a search's words, businesses whose inbox has answered/);
     for (const path of ["src/content/docs/docs/index.md", "src/content/docs/docs/receipts.md"]) {
       const doc = read(path).replace(/\s+/g, " ");
       expect(doc, path).toMatch(/track record/);
@@ -1193,6 +1208,10 @@ describe("the track record", () => {
     expect(receipts).toMatch(/It shows once at least 5 promises have closed/);
     expect(receipts).toMatch(/is \*\*self-reported\*\*: the business's own word, shown as its counts, with no score/);
     expect(receipts).toMatch(/today there is neither, so every track record is self-reported/);
+    // Rules version 9: a record is self-reported until 3 different customers confirmed kept promises of it; the
+    // version-8 floor of a fifth retired.
+    expect(receipts).toMatch(/Until at least 3 different customers have confirmed kept promises of it, a record is/);
+    expect(receipts).not.toMatch(/a fifth/);
     // The network page no longer says a counter-signature counts today, when none can be checked.
     expect(read("src/pages/network.astro")).not.toMatch(/verified customer's agent signs already counts/);
     // What a business's record makes public, and when: the outcome counts and the score from the

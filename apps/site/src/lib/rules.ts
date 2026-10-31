@@ -2,7 +2,8 @@
  * The rules in force, in a sentence, from GET /v1/ranking: its version, its name, since when, and
  * the next version when one is announced. When the network cannot be read the fallback says what was
  * in force when this was last checked against the network (version 9, rules 0.2.2, since 13 Oct 2026,
- * with nothing announced): a build that cannot reach it never says an older version is in force.
+ * with nothing announced, on 31 Oct 2026). It cannot know of a later version: once one is announced,
+ * update it, or a build that cannot reach the network will name version 9 after it is out of date.
  */
 import { shortDate } from "./status";
 

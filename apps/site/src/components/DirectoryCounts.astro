@@ -19,9 +19,10 @@
  * the same businesses its count counts: it names them, or says how many more it counts and does not
  * name.
  *
- * Under the two counts, once both are read, one line on the difference: how many of the agent-ready are not yet
- * confirmed as real businesses, and, only while the counts prove it, that most of them are online shops
- * (notYetReal in src/lib/ask.ts). It is worked out from the same answer, never written in.
+ * Last, once both counts are read, one line on the difference: how many of the agent-ready are not yet confirmed as
+ * real businesses, and, only while the counts prove it, that most of them sell online (notYetReal in src/lib/ask.ts).
+ * It is worked out from the same answer, never written in. It comes after the capability counts and their note, so
+ * those never read as a breakdown of it, and it names the agent-ready itself, so it reads on its own.
  */
 import { READY_HREF, REAL_HREF } from "../lib/ask";
 ---
@@ -32,9 +33,9 @@ import { READY_HREF, REAL_HREF } from "../lib/ask";
     <span class="c-dot" aria-hidden="true" data-real hidden>·</span>
     <a class="c-pair c-link" href={REAL_HREF} data-label="real businesses verified" data-real hidden><b class="c-n tabular" data-n="real" aria-hidden="true">–</b> real businesses verified</a>
   </p>
-  <p class="c-other" data-other hidden></p>
   <ul class="c-caps" data-caps aria-label="Of the agent-ready businesses" hidden></ul>
   <p class="c-note" data-note>Live counts from the network.</p>
+  <p class="c-other" data-other hidden></p>
   <p class="sr" aria-live="polite" data-said></p>
 </div>
 
@@ -90,7 +91,7 @@ import { READY_HREF, REAL_HREF } from "../lib/ask";
       display: none;
     }
   }
-  /* The line on the difference: quieter than the counts it explains. */
+  /* The line on the difference, last: quieter than the counts it explains. */
   .c-other {
     max-width: 46ch;
     margin: 0;
