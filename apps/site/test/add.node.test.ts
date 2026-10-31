@@ -6,6 +6,8 @@ import { navWord } from "../src/i18n";
 import { ADD_FAQS, ADD_HREF, ADD_LABEL, ADD_PAGE, MCP_ADDRESS } from "../src/lib/add";
 import { wordCount } from "../src/lib/guides";
 import { START_URL } from "../src/lib/hosted";
+import { linksIn } from "../src/lib/inline";
+import { TOPICS, topicLang } from "../src/lib/topics";
 
 /**
  * "Add your website" (src/lib/add.ts, src/pages/add.astro): one wording and one address wherever a
@@ -57,13 +59,28 @@ describe("Add your website", () => {
     for (const l of ["es", "pt", "fr", "de", "it"] as const) expect(navWord(l, ADD_LABEL), l).not.toBe(ADD_LABEL);
   });
 
-  it("is never worded another way: every link to it says Add your website", () => {
+  it("is never worded another way: every link to it says Add your website, in the page's language", () => {
     for (const p of sources()) {
       const src = read(p);
       for (const m of src.matchAll(/<a\b[^>]*href="\/add\/"[^>]*>([^<]*)<\/a>/g))
         expect(m[1]?.trim(), p).toBe(ADD_LABEL);
       expect(src, p).not.toMatch(/href="\/add"(?!\/)/);
     }
+    for (const t of TOPICS) {
+      const texts = [...t.sections.flatMap((s) => [...s.paras, ...(s.list ?? [])]).map((b) => b.text)];
+      for (const text of texts)
+        for (const m of text.matchAll(/\[([^\]]+)\]\(\/add\/\)/g))
+          expect(m[1], t.slug).toBe(navWord(topicLang(t), ADD_LABEL));
+      for (const r of t.related.filter((x) => x.href === ADD_HREF))
+        expect(r.label, t.slug).toBe(navWord(topicLang(t), ADD_LABEL));
+    }
+    // The guides that send owners here: being found by assistants, and the product search.
+    const linked = TOPICS.filter((t) =>
+      t.sections.some((s) => [...s.paras, ...(s.list ?? [])].some((b) => linksIn(b.text).includes(ADD_HREF))),
+    ).map((t) => t.slug);
+    expect(linked).toEqual(
+      expect.arrayContaining(["get-your-business-on-chatgpt", "ai-product-search", "aparecer-en-chatgpt"]),
+    );
   });
 
   it("sends each way to what already does it, and builds nothing of its own", () => {

@@ -10,6 +10,7 @@ import { HOSTED_LLMS, HOSTED_OWNERSHIP } from "./src/lib/hosted.ts";
 import { hostedPilotMarkdown } from "./src/lib/hosted-markdown.ts";
 import { alternates, pageAt } from "./src/lib/i18n.ts";
 import { freeToolsLlms } from "./src/lib/local.ts";
+import { topicAlternates, topicAt } from "./src/lib/topics.ts";
 
 const GITHUB = "https://github.com/surfingdogai/inbox";
 
@@ -39,13 +40,17 @@ export default defineConfig({
     // A heading may name its own id: `### Membership {#subscription}` (src/lib/heading-ids.ts).
     headingIdsMarkdown(),
     // Starlight adds this integration itself when it is missing; given here, it also lists the
-    // network's sitemap in sitemap-index.xml. A translated page (src/lib/i18n.ts) carries every
-    // version of itself, x-default included, as the same hreflang links its head has.
+    // network's sitemap in sitemap-index.xml. A translated page (src/lib/i18n.ts), and a topic guide
+    // written in more than one language (src/lib/topics.ts), carries every version of itself,
+    // x-default included, as the same hreflang links its head has.
     sitemap({
       customSitemaps: [NETWORK_SITEMAP, ...NETWORK_SITEMAP_PARTS],
       serialize(item) {
-        const page = pageAt(new URL(item.url).pathname);
-        if (page) item.links = alternates(page.id).map((a) => ({ url: a.href, lang: a.hreflang }));
+        const path = new URL(item.url).pathname;
+        const page = pageAt(path);
+        const topic = page ? undefined : topicAt(path);
+        const alts = page ? alternates(page.id) : topic ? topicAlternates(topic) : [];
+        if (alts.length) item.links = alts.map((a) => ({ url: a.href, lang: a.hreflang }));
         return item;
       },
     }),

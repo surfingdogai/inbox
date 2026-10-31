@@ -32,6 +32,7 @@ import { resultView } from "../src/lib/results";
 import { rulesFallback, rulesLine } from "../src/lib/rules";
 import { specFiles } from "../src/lib/spec";
 import { capabilities, leastOf, stateOf } from "../src/lib/status";
+import { TOPIC_WORDS } from "../src/lib/topics";
 
 /**
  * The site's words and its example, checked without a build: the pages and components the checker
@@ -225,7 +226,11 @@ describe("the checker's pages and components", () => {
       expect(read(path), path).not.toMatch(/placeholder="[^"]*\bexample\b/);
     }
     expect(read("src/pages/search.astro")).toContain('placeholder="yourbusiness.com"');
-    expect(read("src/components/GuideCheck.astro")).toContain('placeholder="yourbusiness.com"');
+    // A guide in another language gives its own example (src/lib/topics.ts), a name too.
+    expect(read("src/components/GuideCheck.astro")).toContain(
+      'placeholder={words ? words.placeholder : "yourbusiness.com"}',
+    );
+    for (const w of Object.values(TOPIC_WORDS)) if (w.check) expect(w.check.placeholder).toMatch(/^[a-z]+\.com$/);
   });
 });
 

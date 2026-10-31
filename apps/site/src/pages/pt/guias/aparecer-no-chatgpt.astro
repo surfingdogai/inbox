@@ -1,0 +1,22 @@
+---
+// A topic guide written in its own language, beside the English one it goes with (src/lib/topics.ts):
+// its words, and every version of it as hreflang alternates.
+import TopicGuide from "../../../components/TopicGuide.astro";
+import Layout from "../../../layouts/Layout.astro";
+import { topicAlternates, topicBySlug, topicLang, topicLd } from "../../../lib/topics";
+
+const t = topicBySlug("aparecer-no-chatgpt");
+const site = Astro.site?.toString() ?? "https://surfingdog.ai/";
+const ld = topicLd(t, site);
+---
+
+<Layout
+  title={`${t.title} · Surfing Dog`}
+  description={t.description}
+  type="article"
+  ld={ld}
+  lang={topicLang(t)}
+  alternates={topicAlternates(t, site)}
+>
+  <TopicGuide topic={t} />
+</Layout>

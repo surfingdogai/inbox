@@ -5,13 +5,25 @@
  * decides whether one is due, and shows the last read when it isn't.
  */
 import { CHECK_HREF, type Examples } from "../lib/guides";
+import { inline } from "../lib/inline";
 
 interface Props {
   examples: readonly Examples[];
   /** "Check it worked" under a guide; the hub asks to look at a business instead. */
   title?: string;
+  /**
+   * The form's words in another language, for a page that isn't in English (src/lib/topics.ts):
+   * the checker itself answers in English, and `fine` marks its link as such.
+   */
+  words?: {
+    readonly text: string;
+    readonly label: string;
+    readonly placeholder: string;
+    readonly button: string;
+    readonly fine: string;
+  };
 }
-const { examples, title = "Check it worked" } = Astro.props;
+const { examples, title = "Check it worked", words } = Astro.props;
 const intro = title !== "Check it worked";
 ---
 
@@ -19,13 +31,15 @@ const intro = title !== "Check it worked";
   <h2 class="h-section" id="g-check-h">{title}</h2>
   <p>
     {
-      intro
-        ? "Paste your website. We read it the way a customer's assistant would, and show what it can do there, what's missing, and where to start."
-        : "Once your change is live, check your site. We read it the way a customer's assistant would, and show what it can do there now, and what's still missing."
+      words
+        ? words.text
+        : intro
+          ? "Paste your website. We read it the way a customer's assistant would, and show what it can do there, what's missing, and where to start."
+          : "Once your change is live, check your site. We read it the way a customer's assistant would, and show what it can do there now, and what's still missing."
     }
   </p>
   <form class="g-form" method="post" action={CHECK_HREF}>
-    <label for="g-check-url">Your website</label>
+    <label for="g-check-url">{words ? words.label : "Your website"}</label>
     <input
       class="input"
       id="g-check-url"
@@ -36,16 +50,22 @@ const intro = title !== "Check it worked";
       autocapitalize="off"
       spellcheck="false"
       maxlength="2048"
-      placeholder="yourbusiness.com"
+      placeholder={words ? words.placeholder : "yourbusiness.com"}
       required
     />
     <input type="hidden" name="fresh" value="1" />
-    <button class="btn btn-secondary btn-sm" type="submit">Check</button>
+    <button class="btn btn-secondary btn-sm" type="submit">{words ? words.button : "Check"}</button>
   </form>
-  <p class="g-fine">
-    Or open the <a class="link" href={CHECK_HREF}>free AI agent readiness checker</a>. If your site was read recently,
-    you'll see that read, and when you can ask for a fresh one.
-  </p>
+  {
+    words ? (
+      <p class="g-fine" set:html={inline(words.fine, new Set([CHECK_HREF]))} />
+    ) : (
+      <p class="g-fine">
+        Or open the <a class="link" href={CHECK_HREF}>free AI agent readiness checker</a>. If your site was read recently,
+        you'll see that read, and when you can ask for a fresh one.
+      </p>
+    )
+  }
 </section>
 
 {
