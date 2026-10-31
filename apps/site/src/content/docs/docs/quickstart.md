@@ -132,7 +132,7 @@ Hosting is not open yet. When its pilot opens, we will run the same software for
 
 ## First calls
 
-The examples hit demo.surfingdog.ai, our demo bike shop, the one on [Try it](/try/). It emails no one who uses it, is wiped every night, and its rules answer a booking in a free slot within a second. The dates below were worked out when this page was built. On your own instance, use its address.
+The examples hit demo.surfingdog.ai, our demo bike shop, the one on [Try it](/try/). It emails no one who uses it, is wiped every night, and its rules answer a booking in a free slot in a second or two. The dates below were worked out when this page was built. On your own instance, use its address.
 
 Read the manifest, then the services:
 
@@ -164,7 +164,7 @@ curl -X POST https://demo.surfingdog.ai/v1/bookings \
 
 Full service has a price, so the first answer is `409 confirm_terms`: what your person confirms before it binds them (`details.summary`) and its fingerprint (`details.terms_sha`). Send the same request again, with the same key and `"terms_sha"` added, as an assistant does on its person's yes.
 
-The answer is `201` with the item view (`view.item.state` is `requested`, and a second later the demo's rules have confirmed it) and, because you have no account here, an `accessToken`. Keep it: it is the only way to read or cancel that item later. If the answer is lost, send the same request with the same key: a random key gets the same token back.
+The answer is `201` with the item view (`view.item.state` is `requested`, and a second or two later the demo's rules have confirmed it) and, because you have no account here, an `accessToken`. Keep it: it is the only way to read or cancel that item later. If the answer is lost, send the same request with the same key: a random key gets the same token back.
 
 ```bash
 curl "https://demo.surfingdog.ai/v1/items/<item id>" -H 'x-access-token: <token>'

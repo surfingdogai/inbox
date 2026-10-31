@@ -6,8 +6,9 @@
  *   {{demo:day}}   the Saturday the examples book, at least a week after the build (YYYY-MM-DD)
  *   {{demo:to}}    a week after it, the end of the window the examples ask free times in
  *
- * The demo shop (src/lib/demo.ts) opens on Saturday mornings, so a time on that day at 10:00 UTC is
- * one it takes, in summer and in winter. A token this file does not know stops the build.
+ * The demo shop (src/lib/demo.ts has its address) is open Saturdays 09:00–13:00 Europe/Lisbon, as
+ * seedShowcase in apps/inbox/src/seed.ts sets its hours, so 10:00 UTC on that day is a time it takes,
+ * in summer and in winter. A token this file does not know stops the build.
  */
 import type { AstroIntegration } from "astro";
 
