@@ -1011,10 +1011,10 @@ business; cursors that survive the hourly reorder; SMS codes, booking deposits, 
   took effect that day with versions 7 and 8, which never ordered the directory on their own.
 - **Version 10 (Amendment 6), decided 31 October 2026:** when every word of a search names one kind
   of business, a word of a business's name counts first only for a business of that kind, and, for a
-  place to stay, a business of another kind that only mentions the words in the rest of its text is
-  left out, the answer saying when none of that kind is there (A6.1, A6.2). Its rules are named
-  0.2.3. Ours had two members when it published it, both its own inboxes, and no other business, so
-  nobody was owed §11's notice, and it took effect the day it was published.
+  place to stay in a place the search names, a business of another kind that only mentions the words
+  in the rest of its text is left out, the answer saying when none of that kind is there (A6.1,
+  A6.2). Its rules are named 0.2.3. Ours had two members when it published it, both its own inboxes,
+  and no other business, so nobody was owed §11's notice, and it took effect the day it was published.
 
 ## Amendment 1 (23 Sep 2026)
 
@@ -2422,13 +2422,13 @@ agent, and agents' door reports are measurements of machines, private to the bus
 ## Amendment 6 (31 Oct 2026): words that name a kind of business — rules version 10
 
 **Status: decided (31 Oct 2026)**, as rules version 10 (`"0.2.3"`): version 9 (`"0.2.2"`) amended.
-A network publishes it by its own notice and puts it in force as it did versions 5, 6, 8 and 9: the
-moment it publishes it when no more than one business, or no business but its own inboxes, is a
-member of that network then, otherwise at 00:00 UTC on the sixteenth day after the day it published
-it (§11); and never before version 9 takes effect, since it amends it. Ours had two members when it
-published it, both its own inboxes, and no other business, so nobody was owed 15 days' notice, and
-it took effect the day it was published; its changelog entry says so. Every member and number of
-version 9 is kept, but for the ones below.
+A network publishes it by its own notice: in force the moment it publishes it when no business but
+its own inboxes is a member of that network then, otherwise at 00:00 UTC on the sixteenth day after
+the day it published it (§11), even when that other business is its only member; and never before
+version 9 takes effect, since it amends it. Ours had two members when it published it, both its own
+inboxes, and no other business, so nobody was owed 15 days' notice, and it took effect the day it
+was published; its changelog entry says so. Every member and number of version 9 is kept, but for
+the ones below.
 
 **Why.** A search's words order the businesses they keep by bands (`order.bands`), a whole word of a
 business's name first. A word that names a kind of business is also in the names of businesses that
@@ -2454,20 +2454,28 @@ holds the word.
   shop before every gin brand's own shop, so they are read as before. So are searches with other
   words: "tea for hotels" and "hotel key cards" name a category with part of their words at most.
 
-### A6.2 A place to stay, and businesses that only mention one
+### A6.2 A place to stay in a place, and businesses that only mention one
 
 - **Rule.** When the kind is places to stay (the group `stay`: hotels, hostels, guest houses and the
-  like), a business of another kind is left out when every word of the search is only in the rest of
-  its text (places 6 and 8): in no word of its name, other names, categories' labels, services or
-  tags, and not inside a name with no space. When the first page then holds no business in band 1 or
-  2, the answer's `note` says that no business of that kind is found there yet, in the search's own
-  words.
+  like) and the search names a place (a town or a country in `q` or `near_name`, or `near`), a
+  business of another kind is left out when every word of the search is only in the rest of its
+  text: its band is 6 or 8, it is in none of the categories the words name, and no word is in its
+  name, other names, categories' labels, services or tags, as a whole word or a word's beginning, nor
+  inside a name with no space (a domain's). An answer that then lists nobody says in its `note` that
+  no business of that kind is found there yet, in the search's own words; or, when the search asks
+  for more than its words and its place (a filter, or what a door does), that none there matches it.
 - **Why only a place to stay.** Most of the directory is businesses found on their own websites and
   filed as online shops, and in their own text the word of a florist, a wedding planner or a plumber
   mostly says what they are: left out for every kind, on our directory of 31 October 2026, "fleuriste
   Paris" kept 2 of its 7 results and "wedding planner" 3 of 11. A place to stay's word in a
   business's own text mostly says where its customers are: "teas for hotels", "massages at your
   hotel".
+- **Why only in a place.** Without one, those businesses come after every business of the kind
+  anyway, and some are places to stay filed as online shops whose name does not say so: left out
+  everywhere, on the same directory, "hotel" would have lost 109 of its 187 results, 16 of them hotels
+  and B&Bs, and "bed and breakfast" 11 of its 14, 10 of them B&Bs. In a place the rule still leaves
+  out such a place to stay until the directory files it as one: in the 15 searches of places to stay
+  in a town that were measured, 4 of the 12 businesses it left out.
 
 ### A6 in the rules version
 
