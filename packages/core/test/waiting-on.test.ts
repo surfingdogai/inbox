@@ -12,7 +12,7 @@ import { type Caller, transitionItem } from "../src/write/index";
 import { confirming, makeClient, openWeekdays, resetTables } from "./harness";
 
 /**
- * Who an item waits on, as the customer's status says it (ADR-043 §3): a confirmed booking said
+ * Who an item waits on, as the customer's status says it (ADR-044 §3): a confirmed booking said
  * "waiting_on: us" while nothing was pending. Now only who must act is named, and nobody when nothing
  * is pending. Runs on Node and in workerd.
  */

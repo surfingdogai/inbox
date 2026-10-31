@@ -1,4 +1,4 @@
-# ADR-043 — An assistant's retry, the times a business offers, and who an item waits on
+# ADR-044 — An assistant's retry, the times a business offers, and who an item waits on
 
 **Status:** accepted, 31 October 2026. Amends ADR-018 (a customer's request for a time) and the
 retry rule written in `packages/core/src/write/create.ts` after the security review of 14 October

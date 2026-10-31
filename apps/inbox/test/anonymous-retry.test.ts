@@ -88,7 +88,7 @@ describe("an anonymous caller's fingerprint (security review)", () => {
     expect(owned.status).toBe(200);
   });
 
-  it("gives the token again to a retry with the same random key, and only to it (ADR-043 §1)", async () => {
+  it("gives the token again to a retry with the same random key, and only to it (ADR-044 §1)", async () => {
     const { app } = await setup();
     const body = { body: "Do you have a table for two tonight?", contact: { email: "rita@example.com" } };
     const key = crypto.randomUUID();

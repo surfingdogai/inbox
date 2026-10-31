@@ -99,7 +99,7 @@ describe("rules engine", () => {
       { event: "create", actorKind: "customer_human", depth: 0 },
       { event: "confirm", actorKind: "rule", depth: 1 },
     ]);
-    // Same slot again: a customer is told at the door that it is not free (ADR-043 §2), so nothing
+    // Same slot again: a customer is told at the door that it is not free (ADR-044 §2), so nothing
     // lands on the owner for it.
     const again = {
       payload: {

@@ -179,7 +179,7 @@ const DEMO_RULES: { name: string; priority: number; definition: RuleDefinition }
  * asks how many places are free. It was 500, so every slot said "available: 499", which no shop this
  * size would. A 90-minute service holds its place across overlapping start times, so Saturday's four
  * hours take about a dozen full services before they are full; past that, a request for a taken time
- * is refused with the nearest free ones (ADR-043 §2), and an assistant books another.
+ * is refused with the nearest free ones (ADR-044 §2), and an assistant books another.
  */
 export const DEMO_CAPACITY = 6;
 

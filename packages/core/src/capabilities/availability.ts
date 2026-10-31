@@ -246,7 +246,7 @@ export async function slotFit(
 }
 
 /**
- * The free times nearest to `at`, before or after it, at most `count`, in order (ADR-043 §2): what
+ * The free times nearest to `at`, before or after it, at most `count`, in order (ADR-044 §2): what
  * `check_availability` would offer, so the minimum notice holds. Up to half a day before it and a week
  * after it.
  */
@@ -297,7 +297,7 @@ export async function nearestFreeTimes(
 
 /**
  * A customer's request for a time the business does not offer is refused before anything is
- * confirmed or written (ADR-043 §2): outside its hours, on a day it is closed, off the service's grid,
+ * confirmed or written (ADR-044 §2): outside its hours, on a day it is closed, off the service's grid,
  * or with no place free (but a table, ADR-040), it would only land on the owner as work for a time
  * they never opened. The refusal names the nearest free times, in the customer's words. A time inside
  * the minimum notice that the business would otherwise offer is still taken, and waits for a person

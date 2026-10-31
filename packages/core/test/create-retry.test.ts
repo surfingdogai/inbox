@@ -173,10 +173,10 @@ describe("a retry of a customer's create", () => {
   });
 });
 
-/** A random UUID, as `crypto.randomUUID()` makes one: the key an assistant should send (ADR-043 §1). */
+/** A random UUID, as `crypto.randomUUID()` makes one: the key an assistant should send (ADR-044 §1). */
 const RANDOM_KEY = "3f1c9a52-7d4e-4b8a-9c21-5e6f0a7b8d93";
 
-describe("a retry whose idempotency key is a random secret (ADR-043 §1)", () => {
+describe("a retry whose idempotency key is a random secret (ADR-044 §1)", () => {
   it("gets the same access token and the passes back, and the token still works", async () => {
     const s = await setup();
     const input = { ...s.input, idempotency_key: RANDOM_KEY };

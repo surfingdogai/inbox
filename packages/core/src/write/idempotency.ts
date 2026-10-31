@@ -147,7 +147,7 @@ const PRINTED = new Set(
 );
 
 /**
- * Whether an idempotency key is a secret only its sender could send again (ADR-043 §1): it carries
+ * Whether an idempotency key is a secret only its sender could send again (ADR-044 §1): it carries
  * a random UUID (version 4), or a run of at least 32 hexadecimal digits, and that is 128 bits of key
  * material. A key like `booking-1`, a counter, a date, a word or a time-based UUID can be sent by
  * anyone who guesses it; a random one only by whoever made it. Nothing here proves it was drawn at

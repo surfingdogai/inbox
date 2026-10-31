@@ -141,7 +141,7 @@ export interface CreateResult {
   /**
    * Capability secret for anonymous creators: lets them read and cancel this item. A retry's answer
    * carries it again only when the retry is signed by the key the item was made with, or sent with the
-   * same random idempotency key (ADR-043 §1).
+   * same random idempotency key (ADR-044 §1).
    */
   readonly accessToken?: string | undefined;
   /**
@@ -581,7 +581,7 @@ export async function createItem(
 /**
  * A retry of a create, answered from what was stored. The access token goes back to a retry signed by
  * the agent's own key the item was made with, and to one whose idempotency key is a random secret
- * (ADR-043 §1): a random UUID or 32 random hex digits, sent again in the same scope with the same
+ * (ADR-044 §1): a random UUID or 32 random hex digits, sent again in the same scope with the same
  * request while the key is kept. Nothing else tells two anonymous callers apart: the scope a retry is
  * looked up in is a fingerprint of the request's address and user agent, which many people share (one
  * address behind a carrier's NAT, an assistant platform's servers) and a caller can choose, so anyone
@@ -609,7 +609,7 @@ async function replay(
 }
 
 /**
- * Whether a retry proves it is the request that made the item by its key alone (ADR-043 §1): a random
+ * Whether a retry proves it is the request that made the item by its key alone (ADR-044 §1): a random
  * key, in the scope it was first sent in (the lookup already holds it to that), within its lifetime,
  * not carried by a network, and used by nobody else. A key drawn at random never turns up under two
  * scopes; one that does was copied (an example UUID a model wrote from memory), so others hold it too.

@@ -132,7 +132,7 @@ export interface Copy {
     slotTaken: string;
     timeNotFree: Say;
     /**
-     * A booking asked for at a time we do not offer (ADR-043 §2): `taken` when it is inside our hours
+     * A booking asked for at a time we do not offer (ADR-044 §2): `taken` when it is inside our hours
      * and full, `off_grid` when it is inside our hours but not one of our start times, else (`closed`)
      * no time we take bookings; `free`, the nearest free times, or empty when there are none.
      */

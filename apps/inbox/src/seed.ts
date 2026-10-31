@@ -707,7 +707,7 @@ export async function seedShowcase(
   }
 
   // 11. A booking request that needs you: Ana rang to ask for half past six, after closing. A customer's
-  // request for a time the shop does not offer is refused at the door (ADR-043 §2), so the shop wrote
+  // request for a time the shop does not offer is refused at the door (ADR-044 §2), so the shop wrote
   // this one down itself, for a person to decide; no rule confirms a time outside the opening hours.
   {
     const start = localTime(now, TZ, 2, 18, 30);

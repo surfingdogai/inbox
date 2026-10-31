@@ -10,7 +10,7 @@ import { type Caller, transitionItem, WriteError } from "../src/write/index";
 import { confirming, makeClient, resetTables } from "./harness";
 
 /**
- * A customer books a time the business offers (ADR-043 §2). A tester's assistant read Saturday's free
+ * A customer books a time the business offers (ADR-044 §2). A tester's assistant read Saturday's free
  * times (09:00 to 11:30), then asked for 03:00 anyway: it was shown a summary to confirm, and the
  * request landed on the owner as work. Now a time outside the hours, on a closed day, off the grid or
  * with no place free is refused before the summary, naming the nearest free times. Runs on Node and in

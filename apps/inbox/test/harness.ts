@@ -91,7 +91,7 @@ export async function confirmedTool<R>(
 /**
  * Opening hours, Monday to Friday 08:00 to 18:00, for the whole business: hours nobody set are no
  * hours (nothing is offered or booked in them), and a customer asks only for a time inside them
- * (ADR-043 §2), so a test that books opens the business first.
+ * (ADR-044 §2), so a test that books opens the business first.
  * Idempotent: a business that has hours keeps them.
  */
 export async function openWeekdays(db: Db): Promise<void> {

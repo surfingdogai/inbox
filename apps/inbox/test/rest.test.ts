@@ -102,7 +102,7 @@ describe("REST door", () => {
     expect(((await list.json()) as { items: unknown[] }).items).toHaveLength(1);
   });
 
-  it("refuses a booking outside the hours with the nearest free times, before any summary (ADR-043 §2)", async () => {
+  it("refuses a booking outside the hours with the nearest free times, before any summary (ADR-044 §2)", async () => {
     const { db, app, svc } = await setup();
     const res = await app.request(
       jsonPost("/v1/bookings", {

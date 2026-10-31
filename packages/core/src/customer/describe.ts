@@ -375,7 +375,7 @@ const THEIR_MOVE = new Set(["proposed", "quoted", "needs_info", "awaiting_paymen
 const NOBODY_TO_ACT = new Set(["confirmed", "checked_in", "fulfilled", "answered"]);
 
 /**
- * Who the item is waiting on (ADR-043 §3): `you` (the customer), `us` (the business), or nobody (null)
+ * Who the item is waiting on (ADR-044 §3): `you` (the customer), `us` (the business), or nobody (null)
  * when it is closed or nothing is pending. A change asked for to what was agreed waits on whoever did
  * not ask for it.
  */

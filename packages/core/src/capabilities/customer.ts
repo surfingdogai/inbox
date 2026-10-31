@@ -304,7 +304,7 @@ export class CustomerDoors {
   }
 
   /**
-   * Who must act now (ADR-043 §3): what the item's state says, and on a promise in force (a confirmed
+   * Who must act now (ADR-044 §3): what the item's state says, and on a promise in force (a confirmed
    * booking, a stay, delivered goods) the business while the customer's last word came after its last
    * act: a question on a confirmed booking waits for its answer.
    */

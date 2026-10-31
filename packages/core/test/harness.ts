@@ -64,7 +64,7 @@ export function confirming<C extends Capabilities>(caps: C): C {
 /**
  * Opening hours, Monday to Saturday 09:00 to 18:00, for the whole business: hours nobody set are no
  * hours (nothing is offered or booked in them), and a customer asks only for a time inside them
- * (ADR-043 §2), so a test that books opens the business first. Sunday stays closed.
+ * (ADR-044 §2), so a test that books opens the business first. Sunday stays closed.
  * Idempotent: a business that has hours keeps them.
  */
 export async function openWeekdays(db: { client: SqliteClient }): Promise<void> {

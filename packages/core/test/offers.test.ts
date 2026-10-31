@@ -680,7 +680,7 @@ describe("holds", () => {
     expect(new Set(held.map((c) => c.offerId))).toEqual(new Set([open?.id]));
     expect((await itemOf(s.db, b.id)).payload).toMatchObject({ offer: { held: true } });
     expect(open?.shown?.disclosures).toEqual(["held"]);
-    // Nobody else books it meanwhile: a new request for it is refused at the door (ADR-043 §2), and
+    // Nobody else books it meanwhile: a new request for it is refused at the door (ADR-044 §2), and
     // the one that came before cannot be confirmed into it.
     const late = await fail(booking(s, WED_14 - T0, { email: "joe@example.com", locale: "en" }));
     expect(late).toMatchObject({ code: "invalid_input", details: { reason: "time_not_free" } });

@@ -186,7 +186,7 @@ describe("the demo, attacked", { timeout: 30_000 }, () => {
     // Twenty testers, each through their own AI and address, all at ten on Saturday, one after another
     // (each confirmed by the rules before the next asks). The workshop has six stands (DEMO_CAPACITY):
     // the first six are confirmed at ten, and every one after is told at once that ten is not free,
-    // with the nearest free times, and books the first of them (ADR-043 §2).
+    // with the nearest free times, and books the first of them (ADR-044 §2).
     const ids: string[] = [];
     let refused = 0;
     for (let i = 0; i < 20; i++) {
