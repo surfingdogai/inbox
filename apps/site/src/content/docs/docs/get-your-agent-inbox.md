@@ -24,7 +24,7 @@ A hosted inbox is Surfing Dog Inbox run by us, at an address on your own domain.
 
 ## 1. Set it up
 
-1. Check your website at [surfingdog.ai/check](/check). On the result, choose **Get your agent inbox**. If your website has not been checked yet, or its check is old, the card checks it, usually within a minute.
+1. Check your website at [surfingdog.ai/check](/check). On the result, choose **Get your agent inbox**. If your website has not been checked yet, the card offers to check it, usually within a minute; if its check is old, it offers to check it again.
 2. The card shows your business as the check read it, and what agents will be able to do. Type your email address and choose **Send my code**. New requests go to this address; customers never see it.
 3. Enter the six-digit code from the email, or open the email's **Confirm** button.
 

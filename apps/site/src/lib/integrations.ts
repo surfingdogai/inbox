@@ -88,8 +88,8 @@ export const SYSTEMS: readonly Group[] = ["calendars", "shops", "stays", "food",
  */
 export const untried = (pilotOpen: boolean): string =>
   pilotOpen
-    ? `${STATE_LABEL.built}. We built each from its platform's documentation and tested it against a stand-in; the beta is where they first run with a business's real account.`
-    : `${STATE_LABEL.built}. We built each from its platform's documentation and tested it against a stand-in.`;
+    ? `${STATE_LABEL.built}. We built each from its platform's documentation or the standard it follows, and tested it against a stand-in; the beta is where they first run with a business's real account.`
+    : `${STATE_LABEL.built}. We built each from its platform's documentation or the standard it follows, and tested it against a stand-in.`;
 export const UNTRIED_LINE = untried(HOSTED_PILOT_OPEN);
 
 /** The same, of one platform on its own page. */

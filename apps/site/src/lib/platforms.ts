@@ -490,7 +490,7 @@ export const PLATFORMS: readonly Platform[] = [
     faqs: [
       {
         q: "Does it work with Google Calendar?",
-        a: "Yes. On every inbox today, through your calendar's secret address in iCal format: your busy times are not offered. Signing in with Google also writes bookings into your main calendar: on your own server with your own Google client, and on a hosted inbox once Google has checked our sign-in.",
+        a: "Yes, on every inbox, through your calendar's secret address in iCal format: your busy times are not offered. Signing in with Google also writes bookings into your main calendar: on your own server with your own Google client, and on a hosted inbox once Google has checked our sign-in.",
       },
       {
         q: "Can an AI book into my iCloud Calendar?",

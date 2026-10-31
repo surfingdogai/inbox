@@ -215,7 +215,7 @@ describe("the table of integrations", () => {
     expect(page.match(/\{UNTRIED_LINE\}/g)?.length).toBe(1);
     expect(page).not.toMatch(/NOT_YET_REAL|None of these connections/);
     expect(UNTRIED_LINE).toMatch(
-      /^Built, not yet verified on a live account\. We built each from its platform's documentation and tested it against a stand-in/,
+      /^Built, not yet verified on a live account\. We built each from its platform's documentation or the standard it follows, and tested it against a stand-in/,
     );
     expect(SYSTEM_GROUPS.at(-1)).toBe("payments");
     // Every name on the /inbox row, systems and payments alike, is in these groups' rows.

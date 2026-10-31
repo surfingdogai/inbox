@@ -8,7 +8,7 @@ The inbox is one codebase with two self-hosting targets and one hosted edition. 
 | | Deploy to Cloudflare | Your own server | Hosted by us<!-- hosted: closed --> (not open yet)<!-- hosted: end --> |
 | --- | --- | --- | --- |
 | Runs on | Cloudflare Workers on your account: D1, Queues, cron | The Docker image (amd64, arm64), or Node 22.16+ on any machine; one SQLite file | Our own servers, Node runtime, one SQLite file per business |
-| Set-up | The Deploy button provisions everything and asks for three values | [One command](/docs/run-it-yourself/) on Ubuntu or Debian, with HTTPS; or the Docker image, on a server or a [platform](/docs/platforms/) | From your website's check result: check what we read, confirm with a code, then add one DNS record |
+| Set-up | The Deploy button provisions everything and asks for three values | [One command](/docs/run-it-yourself/) on Ubuntu or Debian, with HTTPS; or the Docker image, on a server or a [platform](/docs/platforms/) | From your website's check result: confirm with a code, then add one DNS record |
 | Data | Your D1 database | Your SQLite file and blob directory | One database file per business on our servers |
 | Email out | Cloudflare Email Sending on Workers Paid, from `MAIL_FROM` on a domain onboarded there; or Resend | Cloudflare Email Sending or Resend; with neither, printed to the console | Included, from an address of ours that carries your business's name |
 | Email in | Email Routing (needs a Cloudflare zone) or a provider webhook | Forwarding, a subdomain MX, or a provider webhook | Not yet: requests arrive through the inbox's doors and its page |

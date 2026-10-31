@@ -160,10 +160,10 @@ describe("the Connects to row", () => {
     for (const i of INTEGRATIONS) expect(lines[0], i.id).toContain(word(i.name));
     // The line the site says, open and closed, starts with the state's own words.
     expect(untried(true)).toBe(
-      "Built, not yet verified on a live account. We built each from its platform's documentation and tested it against a stand-in; the beta is where they first run with a business's real account.",
+      "Built, not yet verified on a live account. We built each from its platform's documentation or the standard it follows, and tested it against a stand-in; the beta is where they first run with a business's real account.",
     );
     expect(untried(false)).toBe(
-      "Built, not yet verified on a live account. We built each from its platform's documentation and tested it against a stand-in.",
+      "Built, not yet verified on a live account. We built each from its platform's documentation or the standard it follows, and tested it against a stand-in.",
     );
     expect(UNTRIED_LINE).toBe(untried(HOSTED_PILOT_OPEN));
     expect(untriedOne("Shopify", true)).toBe(

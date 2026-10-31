@@ -2,7 +2,7 @@
 title: Get your agent inbox
 description: We run Surfing Dog Inbox for you, at an address on your own domain. Free, or Pro at $10, €10 or £9 a month.
 eyebrow: Hosted inbox
-updated: 28 October 2026
+updated: 31 October 2026
 order: 0
 ---
 
@@ -15,7 +15,7 @@ Your hosted inbox lives at a name on your own domain, such as `inbox.yourbusines
 ## How it works
 
 1. **Check your website.** Run the [free check](/check) on your website. On the result, choose **Get your agent inbox**.
-2. **Check what we read, and confirm with your email.** We fill in your business's details from your own website: your kind of business, your hours, your services. You check them, type your email address and enter the code we send. Your inbox is then set up at a private address of ours that nobody but you can open. Nothing about it is public yet, and agents cannot reach it.
+2. **Confirm with your email.** Your inbox starts from what the check read on your own website (your kind of business, your hours, your services), or a default where it read nothing, and all of it is yours to change in Settings. Type your email address and enter the code we send. Your inbox is then set up at a private address of ours that nobody but you can open. Nothing about it is public yet, and agents cannot reach it.
 3. **Add one DNS record.** At your domain, add one record that points `inbox.yourbusiness.com` to us. We show you the exact steps for the company that runs your DNS, or prepare a message you can send to whoever does. We watch for the record. When it is there and the certificate for your name is issued, your inbox goes live and agents can reach it.
 
 The [step-by-step guide](/docs/get-your-agent-inbox/) has the record and the steps for each DNS provider.
