@@ -1,0 +1,6896 @@
+{
+  "description": "Kinds of business, for a business to say what it runs: each with its name in English, Portuguese (Portugal), Spanish, French and German, the setup it starts from (preset: appointments, trades, projects, food, bakery, cafe, shop, stays, or general, whose rules follow what agents can do), and the directory categories it falls under (slugs of vocab/categories.json). An inbox publishes a business's kind in its profile's categories: those slugs, and its name as a free tag; a kind the list lacks is the business's own words, as a free tag. A kind is never removed or renamed; new kinds come by a change to this file, which raises version.",
+  "version": 1,
+  "languages": ["en", "pt", "es", "fr", "de"],
+  "presets": ["appointments", "trades", "projects", "food", "bakery", "cafe", "shop", "stays", "general"],
+  "kinds": [
+    {
+      "id": "restaurant",
+      "names": {
+        "en": "Restaurant",
+        "pt": "Restaurante",
+        "es": "Restaurante",
+        "fr": "Restaurant",
+        "de": "Restaurant"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "takeaway",
+      "names": {
+        "en": "Takeaway",
+        "pt": "Take-away",
+        "es": "Comida para llevar",
+        "fr": "Vente à emporter",
+        "de": "Imbiss"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "pizzeria",
+      "names": {
+        "en": "Pizzeria",
+        "pt": "Pizzaria",
+        "es": "Pizzería",
+        "fr": "Pizzeria",
+        "de": "Pizzeria"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "sushi-restaurant",
+      "names": {
+        "en": "Sushi restaurant",
+        "pt": "Restaurante de sushi",
+        "es": "Restaurante de sushi",
+        "fr": "Restaurant de sushis",
+        "de": "Sushi-Restaurant"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "burger-restaurant",
+      "names": {
+        "en": "Burger restaurant",
+        "pt": "Hamburgueria",
+        "es": "Hamburguesería",
+        "fr": "Restaurant de burgers",
+        "de": "Burger-Restaurant"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "steakhouse",
+      "names": {
+        "en": "Steakhouse",
+        "pt": "Churrasqueira",
+        "es": "Asador",
+        "fr": "Grill",
+        "de": "Steakhouse"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "seafood-restaurant",
+      "names": {
+        "en": "Seafood restaurant",
+        "pt": "Marisqueira",
+        "es": "Marisquería",
+        "fr": "Restaurant de fruits de mer",
+        "de": "Fischrestaurant"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "vegetarian-restaurant",
+      "names": {
+        "en": "Vegetarian restaurant",
+        "pt": "Restaurante vegetariano",
+        "es": "Restaurante vegetariano",
+        "fr": "Restaurant végétarien",
+        "de": "Vegetarisches Restaurant"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "vegan-restaurant",
+      "names": {
+        "en": "Vegan restaurant",
+        "pt": "Restaurante vegano",
+        "es": "Restaurante vegano",
+        "fr": "Restaurant végan",
+        "de": "Veganes Restaurant"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "indian-restaurant",
+      "names": {
+        "en": "Indian restaurant",
+        "pt": "Restaurante indiano",
+        "es": "Restaurante indio",
+        "fr": "Restaurant indien",
+        "de": "Indisches Restaurant"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "chinese-restaurant",
+      "names": {
+        "en": "Chinese restaurant",
+        "pt": "Restaurante chinês",
+        "es": "Restaurante chino",
+        "fr": "Restaurant chinois",
+        "de": "Chinesisches Restaurant"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "thai-restaurant",
+      "names": {
+        "en": "Thai restaurant",
+        "pt": "Restaurante tailandês",
+        "es": "Restaurante tailandés",
+        "fr": "Restaurant thaï",
+        "de": "Thailändisches Restaurant"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "japanese-restaurant",
+      "names": {
+        "en": "Japanese restaurant",
+        "pt": "Restaurante japonês",
+        "es": "Restaurante japonés",
+        "fr": "Restaurant japonais",
+        "de": "Japanisches Restaurant"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "italian-restaurant",
+      "names": {
+        "en": "Italian restaurant",
+        "pt": "Restaurante italiano",
+        "es": "Restaurante italiano",
+        "fr": "Restaurant italien",
+        "de": "Italienisches Restaurant"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "mexican-restaurant",
+      "names": {
+        "en": "Mexican restaurant",
+        "pt": "Restaurante mexicano",
+        "es": "Restaurante mexicano",
+        "fr": "Restaurant mexicain",
+        "de": "Mexikanisches Restaurant"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "portuguese-restaurant",
+      "names": {
+        "en": "Portuguese restaurant",
+        "pt": "Restaurante português",
+        "es": "Restaurante portugués",
+        "fr": "Restaurant portugais",
+        "de": "Portugiesisches Restaurant"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "spanish-restaurant",
+      "names": {
+        "en": "Spanish restaurant",
+        "pt": "Restaurante espanhol",
+        "es": "Restaurante español",
+        "fr": "Restaurant espagnol",
+        "de": "Spanisches Restaurant"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "french-restaurant",
+      "names": {
+        "en": "French restaurant",
+        "pt": "Restaurante francês",
+        "es": "Restaurante francés",
+        "fr": "Restaurant français",
+        "de": "Französisches Restaurant"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "greek-restaurant",
+      "names": {
+        "en": "Greek restaurant",
+        "pt": "Restaurante grego",
+        "es": "Restaurante griego",
+        "fr": "Restaurant grec",
+        "de": "Griechisches Restaurant"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "turkish-restaurant",
+      "names": {
+        "en": "Turkish restaurant",
+        "pt": "Restaurante turco",
+        "es": "Restaurante turco",
+        "fr": "Restaurant turc",
+        "de": "Türkisches Restaurant"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "lebanese-restaurant",
+      "names": {
+        "en": "Lebanese restaurant",
+        "pt": "Restaurante libanês",
+        "es": "Restaurante libanés",
+        "fr": "Restaurant libanais",
+        "de": "Libanesisches Restaurant"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "middle-eastern-restaurant",
+      "names": {
+        "en": "Middle Eastern restaurant",
+        "pt": "Restaurante do Médio Oriente",
+        "es": "Restaurante de Oriente Medio",
+        "fr": "Restaurant du Moyen-Orient",
+        "de": "Orientalisches Restaurant"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "korean-restaurant",
+      "names": {
+        "en": "Korean restaurant",
+        "pt": "Restaurante coreano",
+        "es": "Restaurante coreano",
+        "fr": "Restaurant coréen",
+        "de": "Koreanisches Restaurant"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "vietnamese-restaurant",
+      "names": {
+        "en": "Vietnamese restaurant",
+        "pt": "Restaurante vietnamita",
+        "es": "Restaurante vietnamita",
+        "fr": "Restaurant vietnamien",
+        "de": "Vietnamesisches Restaurant"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "african-restaurant",
+      "names": {
+        "en": "African restaurant",
+        "pt": "Restaurante africano",
+        "es": "Restaurante africano",
+        "fr": "Restaurant africain",
+        "de": "Afrikanisches Restaurant"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "caribbean-restaurant",
+      "names": {
+        "en": "Caribbean restaurant",
+        "pt": "Restaurante caribenho",
+        "es": "Restaurante caribeño",
+        "fr": "Restaurant antillais",
+        "de": "Karibisches Restaurant"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "peruvian-restaurant",
+      "names": {
+        "en": "Peruvian restaurant",
+        "pt": "Restaurante peruano",
+        "es": "Restaurante peruano",
+        "fr": "Restaurant péruvien",
+        "de": "Peruanisches Restaurant"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "brazilian-restaurant",
+      "names": {
+        "en": "Brazilian restaurant",
+        "pt": "Restaurante brasileiro",
+        "es": "Restaurante brasileño",
+        "fr": "Restaurant brésilien",
+        "de": "Brasilianisches Restaurant"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "ethiopian-restaurant",
+      "names": {
+        "en": "Ethiopian restaurant",
+        "pt": "Restaurante etíope",
+        "es": "Restaurante etíope",
+        "fr": "Restaurant éthiopien",
+        "de": "Äthiopisches Restaurant"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "nepalese-restaurant",
+      "names": {
+        "en": "Nepalese restaurant",
+        "pt": "Restaurante nepalês",
+        "es": "Restaurante nepalí",
+        "fr": "Restaurant népalais",
+        "de": "Nepalesisches Restaurant"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "tavern",
+      "names": {
+        "en": "Tavern",
+        "pt": "Tasca",
+        "es": "Taberna",
+        "fr": "Taverne",
+        "de": "Taverne"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "tapas-bar",
+      "names": {
+        "en": "Tapas bar",
+        "pt": "Bar de petiscos",
+        "es": "Bar de tapas",
+        "fr": "Bar à tapas",
+        "de": "Tapas-Bar"
+      },
+      "preset": "food",
+      "categories": ["restaurant", "bar"]
+    },
+    {
+      "id": "kebab-shop",
+      "names": {
+        "en": "Kebab shop",
+        "pt": "Casa de kebab",
+        "es": "Kebab",
+        "fr": "Kebab",
+        "de": "Dönerladen"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "ramen-shop",
+      "names": {
+        "en": "Ramen shop",
+        "pt": "Casa de ramen",
+        "es": "Ramen",
+        "fr": "Bar à ramen",
+        "de": "Ramen-Restaurant"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "noodle-bar",
+      "names": {
+        "en": "Noodle bar",
+        "pt": "Casa de noodles",
+        "es": "Bar de fideos",
+        "fr": "Bar à nouilles",
+        "de": "Nudelbar"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "dim-sum",
+      "names": {
+        "en": "Dim sum restaurant",
+        "pt": "Restaurante de dim sum",
+        "es": "Restaurante de dim sum",
+        "fr": "Restaurant de dim sum",
+        "de": "Dim-Sum-Restaurant"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "hot-pot",
+      "names": {
+        "en": "Hot pot restaurant",
+        "pt": "Restaurante de hot pot",
+        "es": "Restaurante de hot pot",
+        "fr": "Restaurant de fondue chinoise",
+        "de": "Hot-Pot-Restaurant"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "bbq-restaurant",
+      "names": {
+        "en": "Barbecue restaurant",
+        "pt": "Restaurante de grelhados",
+        "es": "Restaurante de barbacoa",
+        "fr": "Restaurant barbecue",
+        "de": "Grillrestaurant"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "fish-and-chips",
+      "names": {
+        "en": "Fish and chips shop",
+        "pt": "Fish and chips",
+        "es": "Fish and chips",
+        "fr": "Fish and chips",
+        "de": "Fish-and-Chips-Laden"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "chicken-shop",
+      "names": {
+        "en": "Chicken shop",
+        "pt": "Frango assado",
+        "es": "Pollería",
+        "fr": "Rôtisserie de poulet",
+        "de": "Hähnchen-Imbiss"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "food-truck",
+      "names": {
+        "en": "Food truck",
+        "pt": "Food truck",
+        "es": "Food truck",
+        "fr": "Food truck",
+        "de": "Foodtruck"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "street-food",
+      "names": {
+        "en": "Street food stall",
+        "pt": "Banca de comida de rua",
+        "es": "Puesto de comida callejera",
+        "fr": "Stand de street food",
+        "de": "Streetfood-Stand"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "buffet",
+      "names": {
+        "en": "Buffet restaurant",
+        "pt": "Restaurante buffet",
+        "es": "Restaurante bufé",
+        "fr": "Restaurant buffet",
+        "de": "Buffet-Restaurant"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "fine-dining",
+      "names": {
+        "en": "Fine dining restaurant",
+        "pt": "Restaurante de alta cozinha",
+        "es": "Restaurante de alta cocina",
+        "fr": "Restaurant gastronomique",
+        "de": "Gourmetrestaurant"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "brasserie",
+      "names": {
+        "en": "Brasserie",
+        "pt": "Cervejaria",
+        "es": "Cervecería restaurante",
+        "fr": "Brasserie",
+        "de": "Brasserie"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "gastropub",
+      "names": {
+        "en": "Gastropub",
+        "pt": "Gastropub",
+        "es": "Gastropub",
+        "fr": "Gastropub",
+        "de": "Gastropub"
+      },
+      "preset": "food",
+      "categories": ["restaurant", "bar"]
+    },
+    {
+      "id": "creperie",
+      "names": {
+        "en": "Crêperie",
+        "pt": "Creperia",
+        "es": "Crepería",
+        "fr": "Crêperie",
+        "de": "Crêperie"
+      },
+      "preset": "food",
+      "categories": ["restaurant", "cafe"]
+    },
+    {
+      "id": "poke-bar",
+      "names": {
+        "en": "Poke bar",
+        "pt": "Poke bar",
+        "es": "Poke bar",
+        "fr": "Poke bar",
+        "de": "Poke-Bar"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "salad-bar",
+      "names": {
+        "en": "Salad bar",
+        "pt": "Bar de saladas",
+        "es": "Bar de ensaladas",
+        "fr": "Bar à salades",
+        "de": "Salatbar"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "falafel-shop",
+      "names": {
+        "en": "Falafel shop",
+        "pt": "Casa de falafel",
+        "es": "Falafel",
+        "fr": "Falafel",
+        "de": "Falafel-Imbiss"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "canteen",
+      "names": {
+        "en": "Canteen",
+        "pt": "Cantina",
+        "es": "Comedor",
+        "fr": "Cantine",
+        "de": "Kantine"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "delivery-kitchen",
+      "names": {
+        "en": "Delivery kitchen",
+        "pt": "Cozinha de entregas",
+        "es": "Cocina de reparto",
+        "fr": "Cuisine de livraison",
+        "de": "Lieferküche"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "meal-prep",
+      "names": {
+        "en": "Meal prep service",
+        "pt": "Refeições preparadas",
+        "es": "Comidas preparadas",
+        "fr": "Plats préparés",
+        "de": "Fertiggerichte-Service"
+      },
+      "preset": "food",
+      "categories": ["restaurant"]
+    },
+    {
+      "id": "caterer",
+      "names": {
+        "en": "Caterer",
+        "pt": "Catering",
+        "es": "Catering",
+        "fr": "Traiteur",
+        "de": "Catering"
+      },
+      "preset": "general",
+      "categories": ["events", "restaurant"]
+    },
+    {
+      "id": "private-chef",
+      "names": {
+        "en": "Private chef",
+        "pt": "Chef privado",
+        "es": "Chef privado",
+        "fr": "Chef à domicile",
+        "de": "Privatkoch"
+      },
+      "preset": "general",
+      "categories": ["events"]
+    },
+    {
+      "id": "cafe",
+      "names": {
+        "en": "Café",
+        "pt": "Café",
+        "es": "Cafetería",
+        "fr": "Café",
+        "de": "Café"
+      },
+      "preset": "cafe",
+      "categories": ["cafe"]
+    },
+    {
+      "id": "coffee-shop",
+      "names": {
+        "en": "Coffee shop",
+        "pt": "Coffee shop",
+        "es": "Cafetería de especialidad",
+        "fr": "Coffee shop",
+        "de": "Kaffeebar"
+      },
+      "preset": "cafe",
+      "categories": ["cafe"]
+    },
+    {
+      "id": "tea-room",
+      "names": {
+        "en": "Tea room",
+        "pt": "Salão de chá",
+        "es": "Salón de té",
+        "fr": "Salon de thé",
+        "de": "Teestube"
+      },
+      "preset": "cafe",
+      "categories": ["cafe"]
+    },
+    {
+      "id": "bubble-tea",
+      "names": {
+        "en": "Bubble tea shop",
+        "pt": "Casa de bubble tea",
+        "es": "Tienda de bubble tea",
+        "fr": "Bar à bubble tea",
+        "de": "Bubble-Tea-Laden"
+      },
+      "preset": "cafe",
+      "categories": ["cafe"]
+    },
+    {
+      "id": "juice-bar",
+      "names": {
+        "en": "Juice bar",
+        "pt": "Casa de sumos",
+        "es": "Bar de zumos",
+        "fr": "Bar à jus",
+        "de": "Saftbar"
+      },
+      "preset": "cafe",
+      "categories": ["cafe"]
+    },
+    {
+      "id": "ice-cream-parlour",
+      "names": {
+        "en": "Ice cream parlour",
+        "pt": "Gelataria",
+        "es": "Heladería",
+        "fr": "Glacier",
+        "de": "Eisdiele"
+      },
+      "preset": "cafe",
+      "categories": ["cafe"]
+    },
+    {
+      "id": "frozen-yogurt",
+      "names": {
+        "en": "Frozen yogurt shop",
+        "pt": "Iogurtaria",
+        "es": "Yogurtería",
+        "fr": "Bar à frozen yogurt",
+        "de": "Frozen-Yogurt-Laden"
+      },
+      "preset": "cafe",
+      "categories": ["cafe"]
+    },
+    {
+      "id": "brunch-place",
+      "names": {
+        "en": "Brunch place",
+        "pt": "Espaço de brunch",
+        "es": "Local de brunch",
+        "fr": "Restaurant de brunch",
+        "de": "Brunch-Lokal"
+      },
+      "preset": "cafe",
+      "categories": ["cafe"]
+    },
+    {
+      "id": "dessert-shop",
+      "names": {
+        "en": "Dessert shop",
+        "pt": "Casa de sobremesas",
+        "es": "Tienda de postres",
+        "fr": "Bar à desserts",
+        "de": "Dessertladen"
+      },
+      "preset": "cafe",
+      "categories": ["cafe", "bakery"]
+    },
+    {
+      "id": "sandwich-shop",
+      "names": {
+        "en": "Sandwich shop",
+        "pt": "Casa de sandes",
+        "es": "Bocadillería",
+        "fr": "Sandwicherie",
+        "de": "Sandwichladen"
+      },
+      "preset": "cafe",
+      "categories": ["cafe", "restaurant"]
+    },
+    {
+      "id": "cat-cafe",
+      "names": {
+        "en": "Cat café",
+        "pt": "Café com gatos",
+        "es": "Café de gatos",
+        "fr": "Bar à chats",
+        "de": "Katzencafé"
+      },
+      "preset": "cafe",
+      "categories": ["cafe"]
+    },
+    {
+      "id": "board-game-cafe",
+      "names": {
+        "en": "Board game café",
+        "pt": "Café de jogos de tabuleiro",
+        "es": "Café de juegos de mesa",
+        "fr": "Bar à jeux",
+        "de": "Spielecafé"
+      },
+      "preset": "cafe",
+      "categories": ["cafe"]
+    },
+    {
+      "id": "snack-bar",
+      "names": {
+        "en": "Snack bar",
+        "pt": "Snack-bar",
+        "es": "Bar de aperitivos",
+        "fr": "Snack-bar",
+        "de": "Imbissstube"
+      },
+      "preset": "cafe",
+      "categories": ["cafe"]
+    },
+    {
+      "id": "coffee-roaster",
+      "names": {
+        "en": "Coffee roaster",
+        "pt": "Torrefação de café",
+        "es": "Tostadero de café",
+        "fr": "Torréfacteur",
+        "de": "Kaffeerösterei"
+      },
+      "preset": "shop",
+      "categories": ["cafe", "shop"]
+    },
+    {
+      "id": "bakery",
+      "names": {
+        "en": "Bakery",
+        "pt": "Padaria",
+        "es": "Panadería",
+        "fr": "Boulangerie",
+        "de": "Bäckerei"
+      },
+      "preset": "bakery",
+      "categories": ["bakery"]
+    },
+    {
+      "id": "patisserie",
+      "names": {
+        "en": "Patisserie",
+        "pt": "Pastelaria",
+        "es": "Pastelería",
+        "fr": "Pâtisserie",
+        "de": "Konditorei"
+      },
+      "preset": "bakery",
+      "categories": ["bakery"]
+    },
+    {
+      "id": "cake-maker",
+      "names": {
+        "en": "Cake maker",
+        "pt": "Bolos por encomenda",
+        "es": "Tartas por encargo",
+        "fr": "Gâteaux sur commande",
+        "de": "Tortenmanufaktur"
+      },
+      "preset": "bakery",
+      "categories": ["bakery", "events"]
+    },
+    {
+      "id": "cupcake-shop",
+      "names": {
+        "en": "Cupcake shop",
+        "pt": "Casa de cupcakes",
+        "es": "Tienda de cupcakes",
+        "fr": "Boutique de cupcakes",
+        "de": "Cupcake-Laden"
+      },
+      "preset": "bakery",
+      "categories": ["bakery"]
+    },
+    {
+      "id": "doughnut-shop",
+      "names": {
+        "en": "Doughnut shop",
+        "pt": "Casa de donuts",
+        "es": "Tienda de dónuts",
+        "fr": "Boutique de donuts",
+        "de": "Donutladen"
+      },
+      "preset": "bakery",
+      "categories": ["bakery"]
+    },
+    {
+      "id": "bagel-shop",
+      "names": {
+        "en": "Bagel shop",
+        "pt": "Casa de bagels",
+        "es": "Tienda de bagels",
+        "fr": "Boutique de bagels",
+        "de": "Bagel-Laden"
+      },
+      "preset": "bakery",
+      "categories": ["bakery", "cafe"]
+    },
+    {
+      "id": "gluten-free-bakery",
+      "names": {
+        "en": "Gluten-free bakery",
+        "pt": "Padaria sem glúten",
+        "es": "Panadería sin gluten",
+        "fr": "Boulangerie sans gluten",
+        "de": "Glutenfreie Bäckerei"
+      },
+      "preset": "bakery",
+      "categories": ["bakery"]
+    },
+    {
+      "id": "biscuit-shop",
+      "names": {
+        "en": "Biscuit shop",
+        "pt": "Casa de bolachas",
+        "es": "Tienda de galletas",
+        "fr": "Biscuiterie",
+        "de": "Keksladen"
+      },
+      "preset": "bakery",
+      "categories": ["bakery"]
+    },
+    {
+      "id": "chocolatier",
+      "names": {
+        "en": "Chocolatier",
+        "pt": "Chocolataria",
+        "es": "Chocolatería",
+        "fr": "Chocolatier",
+        "de": "Chocolatier"
+      },
+      "preset": "shop",
+      "categories": ["shop", "bakery"]
+    },
+    {
+      "id": "sweet-shop",
+      "names": {
+        "en": "Sweet shop",
+        "pt": "Loja de doces",
+        "es": "Tienda de golosinas",
+        "fr": "Confiserie",
+        "de": "Süßwarenladen"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "bar",
+      "names": {
+        "en": "Bar",
+        "pt": "Bar",
+        "es": "Bar",
+        "fr": "Bar",
+        "de": "Bar"
+      },
+      "preset": "general",
+      "categories": ["bar"]
+    },
+    {
+      "id": "pub",
+      "names": {
+        "en": "Pub",
+        "pt": "Pub",
+        "es": "Pub",
+        "fr": "Pub",
+        "de": "Kneipe"
+      },
+      "preset": "general",
+      "categories": ["bar"]
+    },
+    {
+      "id": "wine-bar",
+      "names": {
+        "en": "Wine bar",
+        "pt": "Wine bar",
+        "es": "Vinoteca",
+        "fr": "Bar à vin",
+        "de": "Weinbar"
+      },
+      "preset": "general",
+      "categories": ["bar"]
+    },
+    {
+      "id": "cocktail-bar",
+      "names": {
+        "en": "Cocktail bar",
+        "pt": "Bar de cocktails",
+        "es": "Coctelería",
+        "fr": "Bar à cocktails",
+        "de": "Cocktailbar"
+      },
+      "preset": "general",
+      "categories": ["bar"]
+    },
+    {
+      "id": "brewery",
+      "names": {
+        "en": "Brewery and taproom",
+        "pt": "Cervejeira artesanal",
+        "es": "Cervecería artesanal",
+        "fr": "Brasserie artisanale",
+        "de": "Brauerei"
+      },
+      "preset": "general",
+      "categories": ["bar", "shop"]
+    },
+    {
+      "id": "beer-bar",
+      "names": {
+        "en": "Beer bar",
+        "pt": "Bar de cervejas",
+        "es": "Bar de cervezas",
+        "fr": "Bar à bières",
+        "de": "Bierbar"
+      },
+      "preset": "general",
+      "categories": ["bar"]
+    },
+    {
+      "id": "rooftop-bar",
+      "names": {
+        "en": "Rooftop bar",
+        "pt": "Bar de terraço",
+        "es": "Bar en azotea",
+        "fr": "Bar sur le toit",
+        "de": "Dachterrassenbar"
+      },
+      "preset": "general",
+      "categories": ["bar"]
+    },
+    {
+      "id": "beach-bar",
+      "names": {
+        "en": "Beach bar",
+        "pt": "Bar de praia",
+        "es": "Chiringuito",
+        "fr": "Paillote",
+        "de": "Strandbar"
+      },
+      "preset": "general",
+      "categories": ["bar"]
+    },
+    {
+      "id": "nightclub",
+      "names": {
+        "en": "Nightclub",
+        "pt": "Discoteca",
+        "es": "Discoteca",
+        "fr": "Boîte de nuit",
+        "de": "Nachtclub"
+      },
+      "preset": "general",
+      "categories": ["bar", "venues"]
+    },
+    {
+      "id": "karaoke-bar",
+      "names": {
+        "en": "Karaoke bar",
+        "pt": "Bar de karaoke",
+        "es": "Karaoke",
+        "fr": "Bar karaoké",
+        "de": "Karaoke-Bar"
+      },
+      "preset": "general",
+      "categories": ["bar", "venues"]
+    },
+    {
+      "id": "shisha-lounge",
+      "names": {
+        "en": "Shisha lounge",
+        "pt": "Bar de shisha",
+        "es": "Cachimbería",
+        "fr": "Bar à chicha",
+        "de": "Shisha-Bar"
+      },
+      "preset": "general",
+      "categories": ["bar"]
+    },
+    {
+      "id": "winery",
+      "names": {
+        "en": "Winery",
+        "pt": "Adega",
+        "es": "Bodega",
+        "fr": "Domaine viticole",
+        "de": "Weingut"
+      },
+      "preset": "general",
+      "categories": ["tours", "shop"]
+    },
+    {
+      "id": "grocery",
+      "names": {
+        "en": "Grocery",
+        "pt": "Mercearia",
+        "es": "Tienda de comestibles",
+        "fr": "Épicerie",
+        "de": "Lebensmittelgeschäft"
+      },
+      "preset": "shop",
+      "categories": ["grocery"]
+    },
+    {
+      "id": "supermarket",
+      "names": {
+        "en": "Supermarket",
+        "pt": "Supermercado",
+        "es": "Supermercado",
+        "fr": "Supermarché",
+        "de": "Supermarkt"
+      },
+      "preset": "shop",
+      "categories": ["grocery"]
+    },
+    {
+      "id": "convenience-store",
+      "names": {
+        "en": "Convenience store",
+        "pt": "Loja de conveniência",
+        "es": "Tienda de conveniencia",
+        "fr": "Supérette",
+        "de": "Minimarkt"
+      },
+      "preset": "shop",
+      "categories": ["grocery"]
+    },
+    {
+      "id": "butcher",
+      "names": {
+        "en": "Butcher",
+        "pt": "Talho",
+        "es": "Carnicería",
+        "fr": "Boucherie",
+        "de": "Metzgerei"
+      },
+      "preset": "shop",
+      "categories": ["grocery"]
+    },
+    {
+      "id": "fishmonger",
+      "names": {
+        "en": "Fishmonger",
+        "pt": "Peixaria",
+        "es": "Pescadería",
+        "fr": "Poissonnerie",
+        "de": "Fischgeschäft"
+      },
+      "preset": "shop",
+      "categories": ["grocery"]
+    },
+    {
+      "id": "greengrocer",
+      "names": {
+        "en": "Greengrocer",
+        "pt": "Frutaria",
+        "es": "Frutería",
+        "fr": "Primeur",
+        "de": "Obst- und Gemüseladen"
+      },
+      "preset": "shop",
+      "categories": ["grocery"]
+    },
+    {
+      "id": "delicatessen",
+      "names": {
+        "en": "Delicatessen",
+        "pt": "Charcutaria",
+        "es": "Charcutería",
+        "fr": "Épicerie fine",
+        "de": "Feinkostladen"
+      },
+      "preset": "shop",
+      "categories": ["grocery"]
+    },
+    {
+      "id": "cheese-shop",
+      "names": {
+        "en": "Cheese shop",
+        "pt": "Queijaria",
+        "es": "Quesería",
+        "fr": "Fromagerie",
+        "de": "Käseladen"
+      },
+      "preset": "shop",
+      "categories": ["grocery"]
+    },
+    {
+      "id": "organic-shop",
+      "names": {
+        "en": "Organic shop",
+        "pt": "Loja de produtos biológicos",
+        "es": "Tienda ecológica",
+        "fr": "Magasin bio",
+        "de": "Bioladen"
+      },
+      "preset": "shop",
+      "categories": ["grocery"]
+    },
+    {
+      "id": "health-food-shop",
+      "names": {
+        "en": "Health food shop",
+        "pt": "Loja de produtos naturais",
+        "es": "Herbolario",
+        "fr": "Magasin diététique",
+        "de": "Reformhaus"
+      },
+      "preset": "shop",
+      "categories": ["grocery"]
+    },
+    {
+      "id": "wine-shop",
+      "names": {
+        "en": "Wine shop",
+        "pt": "Garrafeira",
+        "es": "Tienda de vinos",
+        "fr": "Caviste",
+        "de": "Weinhandlung"
+      },
+      "preset": "shop",
+      "categories": ["grocery", "shop"]
+    },
+    {
+      "id": "off-licence",
+      "names": {
+        "en": "Drinks shop",
+        "pt": "Loja de bebidas",
+        "es": "Tienda de bebidas",
+        "fr": "Magasin de boissons",
+        "de": "Getränkemarkt"
+      },
+      "preset": "shop",
+      "categories": ["grocery"]
+    },
+    {
+      "id": "farm-shop",
+      "names": {
+        "en": "Farm shop",
+        "pt": "Loja de produtores",
+        "es": "Tienda de productores",
+        "fr": "Vente à la ferme",
+        "de": "Hofladen"
+      },
+      "preset": "shop",
+      "categories": ["grocery"]
+    },
+    {
+      "id": "market-stall",
+      "names": {
+        "en": "Market stall",
+        "pt": "Banca de mercado",
+        "es": "Puesto de mercado",
+        "fr": "Étal de marché",
+        "de": "Marktstand"
+      },
+      "preset": "shop",
+      "categories": ["grocery", "shop"]
+    },
+    {
+      "id": "spice-shop",
+      "names": {
+        "en": "Spice shop",
+        "pt": "Loja de especiarias",
+        "es": "Tienda de especias",
+        "fr": "Épicerie d'épices",
+        "de": "Gewürzladen"
+      },
+      "preset": "shop",
+      "categories": ["grocery"]
+    },
+    {
+      "id": "tea-shop",
+      "names": {
+        "en": "Tea shop",
+        "pt": "Loja de chá",
+        "es": "Tienda de té",
+        "fr": "Boutique de thé",
+        "de": "Teeladen"
+      },
+      "preset": "shop",
+      "categories": ["grocery", "shop"]
+    },
+    {
+      "id": "world-food-shop",
+      "names": {
+        "en": "World food shop",
+        "pt": "Mercearia internacional",
+        "es": "Alimentación internacional",
+        "fr": "Épicerie du monde",
+        "de": "Internationaler Lebensmittelladen"
+      },
+      "preset": "shop",
+      "categories": ["grocery"]
+    },
+    {
+      "id": "halal-butcher",
+      "names": {
+        "en": "Halal butcher",
+        "pt": "Talho halal",
+        "es": "Carnicería halal",
+        "fr": "Boucherie halal",
+        "de": "Halal-Metzgerei"
+      },
+      "preset": "shop",
+      "categories": ["grocery"]
+    },
+    {
+      "id": "bulk-shop",
+      "names": {
+        "en": "Zero-waste shop",
+        "pt": "Loja a granel",
+        "es": "Tienda a granel",
+        "fr": "Épicerie vrac",
+        "de": "Unverpackt-Laden"
+      },
+      "preset": "shop",
+      "categories": ["grocery"]
+    },
+    {
+      "id": "olive-oil-shop",
+      "names": {
+        "en": "Olive oil shop",
+        "pt": "Loja de azeite",
+        "es": "Tienda de aceite",
+        "fr": "Boutique d'huile d'olive",
+        "de": "Olivenölladen"
+      },
+      "preset": "shop",
+      "categories": ["grocery"]
+    },
+    {
+      "id": "honey-producer",
+      "names": {
+        "en": "Honey producer",
+        "pt": "Produtor de mel",
+        "es": "Productor de miel",
+        "fr": "Apiculteur",
+        "de": "Imkerei"
+      },
+      "preset": "shop",
+      "categories": ["grocery", "crafts"]
+    },
+    {
+      "id": "food-producer",
+      "names": {
+        "en": "Food producer",
+        "pt": "Produtor alimentar",
+        "es": "Productor alimentario",
+        "fr": "Producteur alimentaire",
+        "de": "Lebensmittelhersteller"
+      },
+      "preset": "shop",
+      "categories": ["grocery"]
+    },
+    {
+      "id": "farm",
+      "names": {
+        "en": "Farm",
+        "pt": "Quinta agrícola",
+        "es": "Granja",
+        "fr": "Ferme",
+        "de": "Bauernhof"
+      },
+      "preset": "shop",
+      "categories": ["grocery"]
+    },
+    {
+      "id": "grocery-delivery",
+      "names": {
+        "en": "Grocery delivery",
+        "pt": "Entrega de mercearia",
+        "es": "Reparto de comestibles",
+        "fr": "Livraison de courses",
+        "de": "Lebensmittel-Lieferdienst"
+      },
+      "preset": "shop",
+      "categories": ["grocery"]
+    },
+    {
+      "id": "shop",
+      "names": {
+        "en": "Shop",
+        "pt": "Loja",
+        "es": "Tienda",
+        "fr": "Boutique",
+        "de": "Geschäft"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "online-shop",
+      "names": {
+        "en": "Online shop",
+        "pt": "Loja online",
+        "es": "Tienda online",
+        "fr": "Boutique en ligne",
+        "de": "Onlineshop"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "clothing-shop",
+      "names": {
+        "en": "Clothing shop",
+        "pt": "Loja de roupa",
+        "es": "Tienda de ropa",
+        "fr": "Magasin de vêtements",
+        "de": "Bekleidungsgeschäft"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "shoe-shop",
+      "names": {
+        "en": "Shoe shop",
+        "pt": "Sapataria",
+        "es": "Zapatería",
+        "fr": "Magasin de chaussures",
+        "de": "Schuhgeschäft"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "bookshop",
+      "names": {
+        "en": "Bookshop",
+        "pt": "Livraria",
+        "es": "Librería",
+        "fr": "Librairie",
+        "de": "Buchhandlung"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "toy-shop",
+      "names": {
+        "en": "Toy shop",
+        "pt": "Loja de brinquedos",
+        "es": "Juguetería",
+        "fr": "Magasin de jouets",
+        "de": "Spielwarengeschäft"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "electronics-shop",
+      "names": {
+        "en": "Electronics shop",
+        "pt": "Loja de eletrónica",
+        "es": "Tienda de electrónica",
+        "fr": "Magasin d'électronique",
+        "de": "Elektronikgeschäft"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "phone-shop",
+      "names": {
+        "en": "Phone shop",
+        "pt": "Loja de telemóveis",
+        "es": "Tienda de móviles",
+        "fr": "Boutique de téléphonie",
+        "de": "Handyladen"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "computer-shop",
+      "names": {
+        "en": "Computer shop",
+        "pt": "Loja de informática",
+        "es": "Tienda de informática",
+        "fr": "Magasin d'informatique",
+        "de": "Computergeschäft"
+      },
+      "preset": "shop",
+      "categories": ["shop", "it-services"]
+    },
+    {
+      "id": "hardware-store",
+      "names": {
+        "en": "Hardware store",
+        "pt": "Drogaria",
+        "es": "Ferretería",
+        "fr": "Quincaillerie",
+        "de": "Eisenwarenhandlung"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "diy-store",
+      "names": {
+        "en": "DIY store",
+        "pt": "Loja de bricolage",
+        "es": "Tienda de bricolaje",
+        "fr": "Magasin de bricolage",
+        "de": "Baumarkt"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "builders-merchant",
+      "names": {
+        "en": "Builders' merchant",
+        "pt": "Materiais de construção",
+        "es": "Almacén de materiales de construcción",
+        "fr": "Négoce de matériaux",
+        "de": "Baustoffhandel"
+      },
+      "preset": "shop",
+      "categories": ["shop", "trades"]
+    },
+    {
+      "id": "paint-shop",
+      "names": {
+        "en": "Paint shop",
+        "pt": "Loja de tintas",
+        "es": "Tienda de pinturas",
+        "fr": "Magasin de peinture",
+        "de": "Farbengeschäft"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "tile-shop",
+      "names": {
+        "en": "Tile shop",
+        "pt": "Loja de azulejos",
+        "es": "Tienda de azulejos",
+        "fr": "Magasin de carrelage",
+        "de": "Fliesengeschäft"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "garden-centre",
+      "names": {
+        "en": "Garden centre",
+        "pt": "Centro de jardinagem",
+        "es": "Centro de jardinería",
+        "fr": "Jardinerie",
+        "de": "Gartencenter"
+      },
+      "preset": "shop",
+      "categories": ["shop", "florist"]
+    },
+    {
+      "id": "furniture-shop",
+      "names": {
+        "en": "Furniture shop",
+        "pt": "Loja de móveis",
+        "es": "Tienda de muebles",
+        "fr": "Magasin de meubles",
+        "de": "Möbelgeschäft"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "home-decor-shop",
+      "names": {
+        "en": "Home decor shop",
+        "pt": "Loja de decoração",
+        "es": "Tienda de decoración",
+        "fr": "Boutique de décoration",
+        "de": "Einrichtungsgeschäft"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "kitchenware-shop",
+      "names": {
+        "en": "Kitchenware shop",
+        "pt": "Loja de utensílios de cozinha",
+        "es": "Tienda de menaje",
+        "fr": "Magasin d'articles de cuisine",
+        "de": "Küchenfachgeschäft"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "lighting-shop",
+      "names": {
+        "en": "Lighting shop",
+        "pt": "Loja de iluminação",
+        "es": "Tienda de iluminación",
+        "fr": "Magasin de luminaires",
+        "de": "Leuchtengeschäft"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "bed-shop",
+      "names": {
+        "en": "Bed and mattress shop",
+        "pt": "Loja de colchões",
+        "es": "Tienda de colchones",
+        "fr": "Magasin de literie",
+        "de": "Bettengeschäft"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "carpet-shop",
+      "names": {
+        "en": "Carpet and rug shop",
+        "pt": "Loja de tapetes",
+        "es": "Tienda de alfombras",
+        "fr": "Magasin de tapis",
+        "de": "Teppichgeschäft"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "appliance-shop",
+      "names": {
+        "en": "Appliance shop",
+        "pt": "Loja de eletrodomésticos",
+        "es": "Tienda de electrodomésticos",
+        "fr": "Magasin d'électroménager",
+        "de": "Elektrogeräte-Fachgeschäft"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "gift-shop",
+      "names": {
+        "en": "Gift shop",
+        "pt": "Loja de presentes",
+        "es": "Tienda de regalos",
+        "fr": "Boutique de cadeaux",
+        "de": "Geschenkeladen"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "jewellery-shop",
+      "names": {
+        "en": "Jewellery shop",
+        "pt": "Joalharia",
+        "es": "Joyería",
+        "fr": "Bijouterie",
+        "de": "Juweliergeschäft"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "watch-shop",
+      "names": {
+        "en": "Watch shop",
+        "pt": "Relojoaria",
+        "es": "Relojería",
+        "fr": "Horlogerie",
+        "de": "Uhrengeschäft"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "cosmetics-shop",
+      "names": {
+        "en": "Cosmetics and perfume shop",
+        "pt": "Perfumaria",
+        "es": "Perfumería",
+        "fr": "Parfumerie",
+        "de": "Parfümerie"
+      },
+      "preset": "shop",
+      "categories": ["shop", "hair-beauty"]
+    },
+    {
+      "id": "sports-shop",
+      "names": {
+        "en": "Sports shop",
+        "pt": "Loja de desporto",
+        "es": "Tienda de deportes",
+        "fr": "Magasin de sport",
+        "de": "Sportgeschäft"
+      },
+      "preset": "shop",
+      "categories": ["shop", "fitness"]
+    },
+    {
+      "id": "outdoor-shop",
+      "names": {
+        "en": "Outdoor gear shop",
+        "pt": "Loja de campismo e montanha",
+        "es": "Tienda de montaña",
+        "fr": "Magasin d'équipement outdoor",
+        "de": "Outdoorladen"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "bike-shop",
+      "names": {
+        "en": "Bike shop",
+        "pt": "Loja de bicicletas",
+        "es": "Tienda de bicicletas",
+        "fr": "Magasin de vélos",
+        "de": "Fahrradladen"
+      },
+      "preset": "shop",
+      "categories": ["shop", "auto"]
+    },
+    {
+      "id": "music-shop",
+      "names": {
+        "en": "Music shop",
+        "pt": "Loja de instrumentos musicais",
+        "es": "Tienda de instrumentos musicales",
+        "fr": "Magasin de musique",
+        "de": "Musikgeschäft"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "record-shop",
+      "names": {
+        "en": "Record shop",
+        "pt": "Loja de discos",
+        "es": "Tienda de discos",
+        "fr": "Disquaire",
+        "de": "Plattenladen"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "art-supplies-shop",
+      "names": {
+        "en": "Art supplies shop",
+        "pt": "Loja de materiais de arte",
+        "es": "Tienda de bellas artes",
+        "fr": "Magasin de beaux-arts",
+        "de": "Künstlerbedarf"
+      },
+      "preset": "shop",
+      "categories": ["shop", "crafts"]
+    },
+    {
+      "id": "stationery-shop",
+      "names": {
+        "en": "Stationery shop",
+        "pt": "Papelaria",
+        "es": "Papelería",
+        "fr": "Papeterie",
+        "de": "Schreibwarengeschäft"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "craft-supplies-shop",
+      "names": {
+        "en": "Craft supplies shop",
+        "pt": "Loja de materiais de artesanato",
+        "es": "Tienda de manualidades",
+        "fr": "Magasin de loisirs créatifs",
+        "de": "Bastelladen"
+      },
+      "preset": "shop",
+      "categories": ["shop", "crafts"]
+    },
+    {
+      "id": "fabric-shop",
+      "names": {
+        "en": "Fabric shop",
+        "pt": "Loja de tecidos",
+        "es": "Tienda de telas",
+        "fr": "Magasin de tissus",
+        "de": "Stoffladen"
+      },
+      "preset": "shop",
+      "categories": ["shop", "crafts"]
+    },
+    {
+      "id": "haberdashery",
+      "names": {
+        "en": "Haberdashery",
+        "pt": "Retrosaria",
+        "es": "Mercería",
+        "fr": "Mercerie",
+        "de": "Kurzwarenladen"
+      },
+      "preset": "shop",
+      "categories": ["shop", "crafts"]
+    },
+    {
+      "id": "second-hand-shop",
+      "names": {
+        "en": "Second-hand shop",
+        "pt": "Loja de usados",
+        "es": "Tienda de segunda mano",
+        "fr": "Dépôt-vente",
+        "de": "Secondhandladen"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "vintage-shop",
+      "names": {
+        "en": "Vintage shop",
+        "pt": "Loja vintage",
+        "es": "Tienda vintage",
+        "fr": "Friperie",
+        "de": "Vintage-Laden"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "charity-shop",
+      "names": {
+        "en": "Charity shop",
+        "pt": "Loja solidária",
+        "es": "Tienda solidaria",
+        "fr": "Boutique solidaire",
+        "de": "Sozialkaufhaus"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "antiques-shop",
+      "names": {
+        "en": "Antiques shop",
+        "pt": "Antiquário",
+        "es": "Tienda de antigüedades",
+        "fr": "Antiquaire",
+        "de": "Antiquitätengeschäft"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "pawn-shop",
+      "names": {
+        "en": "Pawn shop",
+        "pt": "Casa de penhores",
+        "es": "Casa de empeños",
+        "fr": "Prêteur sur gages",
+        "de": "Pfandhaus"
+      },
+      "preset": "shop",
+      "categories": ["shop", "finance"]
+    },
+    {
+      "id": "pet-shop",
+      "names": {
+        "en": "Pet shop",
+        "pt": "Loja de animais",
+        "es": "Tienda de mascotas",
+        "fr": "Animalerie",
+        "de": "Zoohandlung"
+      },
+      "preset": "shop",
+      "categories": ["pets", "shop"]
+    },
+    {
+      "id": "bridal-shop",
+      "names": {
+        "en": "Bridal shop",
+        "pt": "Loja de noivas",
+        "es": "Tienda de novias",
+        "fr": "Boutique de mariage",
+        "de": "Brautmodengeschäft"
+      },
+      "preset": "shop",
+      "categories": ["shop", "events"]
+    },
+    {
+      "id": "lingerie-shop",
+      "names": {
+        "en": "Lingerie shop",
+        "pt": "Loja de lingerie",
+        "es": "Tienda de lencería",
+        "fr": "Boutique de lingerie",
+        "de": "Dessousgeschäft"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "childrens-clothing-shop",
+      "names": {
+        "en": "Children's clothing shop",
+        "pt": "Loja de roupa de criança",
+        "es": "Tienda de ropa infantil",
+        "fr": "Magasin de vêtements pour enfants",
+        "de": "Kinderbekleidungsgeschäft"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "baby-shop",
+      "names": {
+        "en": "Baby shop",
+        "pt": "Loja de bebé",
+        "es": "Tienda de bebés",
+        "fr": "Magasin de puériculture",
+        "de": "Babyfachgeschäft"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "tobacconist",
+      "names": {
+        "en": "Tobacconist",
+        "pt": "Tabacaria",
+        "es": "Estanco",
+        "fr": "Bureau de tabac",
+        "de": "Tabakladen"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "vape-shop",
+      "names": {
+        "en": "Vape shop",
+        "pt": "Loja de vapes",
+        "es": "Tienda de vapeo",
+        "fr": "Boutique de cigarettes électroniques",
+        "de": "E-Zigaretten-Laden"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "newsagent",
+      "names": {
+        "en": "Newsagent",
+        "pt": "Quiosque de jornais",
+        "es": "Quiosco de prensa",
+        "fr": "Marchand de journaux",
+        "de": "Zeitschriftenladen"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "comic-shop",
+      "names": {
+        "en": "Comic shop",
+        "pt": "Loja de banda desenhada",
+        "es": "Tienda de cómics",
+        "fr": "Librairie BD",
+        "de": "Comicladen"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "games-shop",
+      "names": {
+        "en": "Games shop",
+        "pt": "Loja de jogos",
+        "es": "Tienda de juegos",
+        "fr": "Boutique de jeux",
+        "de": "Spieleladen"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "hobby-shop",
+      "names": {
+        "en": "Hobby and model shop",
+        "pt": "Loja de modelismo",
+        "es": "Tienda de modelismo",
+        "fr": "Magasin de modélisme",
+        "de": "Modellbaugeschäft"
+      },
+      "preset": "shop",
+      "categories": ["shop", "crafts"]
+    },
+    {
+      "id": "fishing-shop",
+      "names": {
+        "en": "Fishing tackle shop",
+        "pt": "Loja de pesca",
+        "es": "Tienda de pesca",
+        "fr": "Magasin de pêche",
+        "de": "Angelgeschäft"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "party-shop",
+      "names": {
+        "en": "Party supplies shop",
+        "pt": "Loja de artigos de festa",
+        "es": "Tienda de fiestas",
+        "fr": "Magasin de fête",
+        "de": "Partyladen"
+      },
+      "preset": "shop",
+      "categories": ["shop", "events"]
+    },
+    {
+      "id": "souvenir-shop",
+      "names": {
+        "en": "Souvenir shop",
+        "pt": "Loja de lembranças",
+        "es": "Tienda de souvenirs",
+        "fr": "Boutique de souvenirs",
+        "de": "Souvenirladen"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "department-store",
+      "names": {
+        "en": "Department store",
+        "pt": "Grande armazém",
+        "es": "Grandes almacenes",
+        "fr": "Grand magasin",
+        "de": "Kaufhaus"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "pharmacy",
+      "names": {
+        "en": "Pharmacy",
+        "pt": "Farmácia",
+        "es": "Farmacia",
+        "fr": "Pharmacie",
+        "de": "Apotheke"
+      },
+      "preset": "shop",
+      "categories": ["health", "shop"]
+    },
+    {
+      "id": "herbalist",
+      "names": {
+        "en": "Herbalist",
+        "pt": "Ervanária",
+        "es": "Herboristería",
+        "fr": "Herboristerie",
+        "de": "Kräuterladen"
+      },
+      "preset": "shop",
+      "categories": ["shop", "wellness"]
+    },
+    {
+      "id": "mobility-aids-shop",
+      "names": {
+        "en": "Mobility aids shop",
+        "pt": "Loja de ajudas técnicas",
+        "es": "Ortopedia",
+        "fr": "Matériel médical",
+        "de": "Sanitätshaus"
+      },
+      "preset": "shop",
+      "categories": ["health", "shop"]
+    },
+    {
+      "id": "car-dealer",
+      "names": {
+        "en": "Car dealer",
+        "pt": "Stand de automóveis",
+        "es": "Concesionario",
+        "fr": "Concessionnaire automobile",
+        "de": "Autohaus"
+      },
+      "preset": "shop",
+      "categories": ["auto", "shop"]
+    },
+    {
+      "id": "motorbike-dealer",
+      "names": {
+        "en": "Motorbike dealer",
+        "pt": "Stand de motos",
+        "es": "Concesionario de motos",
+        "fr": "Concessionnaire moto",
+        "de": "Motorradhändler"
+      },
+      "preset": "shop",
+      "categories": ["auto", "shop"]
+    },
+    {
+      "id": "car-parts-shop",
+      "names": {
+        "en": "Car parts shop",
+        "pt": "Loja de peças auto",
+        "es": "Tienda de recambios",
+        "fr": "Magasin de pièces auto",
+        "de": "Autoteilehandel"
+      },
+      "preset": "shop",
+      "categories": ["auto", "shop"]
+    },
+    {
+      "id": "wholesaler",
+      "names": {
+        "en": "Wholesaler",
+        "pt": "Armazenista",
+        "es": "Mayorista",
+        "fr": "Grossiste",
+        "de": "Großhändler"
+      },
+      "preset": "shop",
+      "categories": ["shop"]
+    },
+    {
+      "id": "print-shop",
+      "names": {
+        "en": "Print and copy shop",
+        "pt": "Reprografia",
+        "es": "Copistería",
+        "fr": "Imprimerie",
+        "de": "Copyshop"
+      },
+      "preset": "general",
+      "categories": ["crafts", "shop"]
+    },
+    {
+      "id": "optician",
+      "names": {
+        "en": "Optician",
+        "pt": "Ótica",
+        "es": "Óptica",
+        "fr": "Opticien",
+        "de": "Optiker"
+      },
+      "preset": "appointments",
+      "categories": ["health", "shop"]
+    },
+    {
+      "id": "hair-salon",
+      "names": {
+        "en": "Hair salon",
+        "pt": "Cabeleireiro",
+        "es": "Peluquería",
+        "fr": "Salon de coiffure",
+        "de": "Friseursalon"
+      },
+      "preset": "appointments",
+      "categories": ["hair-beauty"]
+    },
+    {
+      "id": "barber",
+      "names": {
+        "en": "Barber",
+        "pt": "Barbearia",
+        "es": "Barbería",
+        "fr": "Barbier",
+        "de": "Barbershop"
+      },
+      "preset": "appointments",
+      "categories": ["hair-beauty"]
+    },
+    {
+      "id": "nail-salon",
+      "names": {
+        "en": "Nail salon",
+        "pt": "Salão de unhas",
+        "es": "Salón de uñas",
+        "fr": "Onglerie",
+        "de": "Nagelstudio"
+      },
+      "preset": "appointments",
+      "categories": ["hair-beauty"]
+    },
+    {
+      "id": "beauty-salon",
+      "names": {
+        "en": "Beauty salon",
+        "pt": "Centro de estética",
+        "es": "Centro de estética",
+        "fr": "Institut de beauté",
+        "de": "Kosmetikstudio"
+      },
+      "preset": "appointments",
+      "categories": ["hair-beauty"]
+    },
+    {
+      "id": "makeup-artist",
+      "names": {
+        "en": "Make-up artist",
+        "pt": "Maquilhador",
+        "es": "Maquillador",
+        "fr": "Maquilleur",
+        "de": "Visagist"
+      },
+      "preset": "appointments",
+      "categories": ["hair-beauty"]
+    },
+    {
+      "id": "lash-and-brow-studio",
+      "names": {
+        "en": "Lash and brow studio",
+        "pt": "Estúdio de pestanas e sobrancelhas",
+        "es": "Estudio de pestañas y cejas",
+        "fr": "Bar à cils et sourcils",
+        "de": "Wimpern- und Brauenstudio"
+      },
+      "preset": "appointments",
+      "categories": ["hair-beauty"]
+    },
+    {
+      "id": "waxing-studio",
+      "names": {
+        "en": "Waxing studio",
+        "pt": "Centro de depilação",
+        "es": "Centro de depilación",
+        "fr": "Institut d'épilation",
+        "de": "Waxing-Studio"
+      },
+      "preset": "appointments",
+      "categories": ["hair-beauty"]
+    },
+    {
+      "id": "laser-hair-removal",
+      "names": {
+        "en": "Laser hair removal",
+        "pt": "Depilação a laser",
+        "es": "Depilación láser",
+        "fr": "Épilation laser",
+        "de": "Laser-Haarentfernung"
+      },
+      "preset": "appointments",
+      "categories": ["hair-beauty"]
+    },
+    {
+      "id": "tanning-salon",
+      "names": {
+        "en": "Tanning salon",
+        "pt": "Solário",
+        "es": "Centro de bronceado",
+        "fr": "Centre de bronzage",
+        "de": "Sonnenstudio"
+      },
+      "preset": "appointments",
+      "categories": ["hair-beauty"]
+    },
+    {
+      "id": "tattoo-studio",
+      "names": {
+        "en": "Tattoo studio",
+        "pt": "Estúdio de tatuagens",
+        "es": "Estudio de tatuajes",
+        "fr": "Salon de tatouage",
+        "de": "Tattoostudio"
+      },
+      "preset": "appointments",
+      "categories": ["hair-beauty"]
+    },
+    {
+      "id": "piercing-studio",
+      "names": {
+        "en": "Piercing studio",
+        "pt": "Estúdio de piercings",
+        "es": "Estudio de piercing",
+        "fr": "Studio de piercing",
+        "de": "Piercingstudio"
+      },
+      "preset": "appointments",
+      "categories": ["hair-beauty"]
+    },
+    {
+      "id": "aesthetics-clinic",
+      "names": {
+        "en": "Aesthetics clinic",
+        "pt": "Clínica de estética",
+        "es": "Clínica estética",
+        "fr": "Clinique esthétique",
+        "de": "Ästhetik-Klinik"
+      },
+      "preset": "appointments",
+      "categories": ["hair-beauty", "health"]
+    },
+    {
+      "id": "permanent-makeup",
+      "names": {
+        "en": "Permanent make-up",
+        "pt": "Maquilhagem permanente",
+        "es": "Micropigmentación",
+        "fr": "Maquillage permanent",
+        "de": "Permanent Make-up"
+      },
+      "preset": "appointments",
+      "categories": ["hair-beauty"]
+    },
+    {
+      "id": "mens-grooming",
+      "names": {
+        "en": "Men's grooming",
+        "pt": "Estética masculina",
+        "es": "Estética masculina",
+        "fr": "Soins pour hommes",
+        "de": "Herrenpflege"
+      },
+      "preset": "appointments",
+      "categories": ["hair-beauty"]
+    },
+    {
+      "id": "bridal-hair-and-makeup",
+      "names": {
+        "en": "Bridal hair and make-up",
+        "pt": "Penteados e maquilhagem de noiva",
+        "es": "Peinados y maquillaje de novia",
+        "fr": "Coiffure et maquillage de mariée",
+        "de": "Braut-Styling"
+      },
+      "preset": "appointments",
+      "categories": ["hair-beauty", "events"]
+    },
+    {
+      "id": "hair-extensions",
+      "names": {
+        "en": "Hair extensions",
+        "pt": "Extensões de cabelo",
+        "es": "Extensiones de pelo",
+        "fr": "Extensions de cheveux",
+        "de": "Haarverlängerung"
+      },
+      "preset": "appointments",
+      "categories": ["hair-beauty"]
+    },
+    {
+      "id": "mobile-hairdresser",
+      "names": {
+        "en": "Mobile hairdresser",
+        "pt": "Cabeleireiro ao domicílio",
+        "es": "Peluquería a domicilio",
+        "fr": "Coiffeur à domicile",
+        "de": "Mobiler Friseur"
+      },
+      "preset": "appointments",
+      "categories": ["hair-beauty"]
+    },
+    {
+      "id": "skin-care-clinic",
+      "names": {
+        "en": "Skin care clinic",
+        "pt": "Clínica de cuidados de pele",
+        "es": "Clínica de cuidado de la piel",
+        "fr": "Centre de soins de la peau",
+        "de": "Hautpflegestudio"
+      },
+      "preset": "appointments",
+      "categories": ["hair-beauty"]
+    },
+    {
+      "id": "massage-therapist",
+      "names": {
+        "en": "Massage therapist",
+        "pt": "Massagista",
+        "es": "Masajista",
+        "fr": "Masseur",
+        "de": "Massagepraxis"
+      },
+      "preset": "appointments",
+      "categories": ["wellness"]
+    },
+    {
+      "id": "spa",
+      "names": {
+        "en": "Spa",
+        "pt": "Spa",
+        "es": "Spa",
+        "fr": "Spa",
+        "de": "Spa"
+      },
+      "preset": "appointments",
+      "categories": ["wellness"]
+    },
+    {
+      "id": "day-spa",
+      "names": {
+        "en": "Day spa",
+        "pt": "Spa urbano",
+        "es": "Spa urbano",
+        "fr": "Spa de jour",
+        "de": "Day Spa"
+      },
+      "preset": "appointments",
+      "categories": ["wellness"]
+    },
+    {
+      "id": "sauna",
+      "names": {
+        "en": "Sauna",
+        "pt": "Sauna",
+        "es": "Sauna",
+        "fr": "Sauna",
+        "de": "Sauna"
+      },
+      "preset": "appointments",
+      "categories": ["wellness"]
+    },
+    {
+      "id": "hammam",
+      "names": {
+        "en": "Hammam",
+        "pt": "Hammam",
+        "es": "Hammam",
+        "fr": "Hammam",
+        "de": "Hamam"
+      },
+      "preset": "appointments",
+      "categories": ["wellness"]
+    },
+    {
+      "id": "float-centre",
+      "names": {
+        "en": "Float centre",
+        "pt": "Centro de flutuação",
+        "es": "Centro de flotación",
+        "fr": "Centre de flottaison",
+        "de": "Floating-Center"
+      },
+      "preset": "appointments",
+      "categories": ["wellness"]
+    },
+    {
+      "id": "reflexologist",
+      "names": {
+        "en": "Reflexologist",
+        "pt": "Reflexologia",
+        "es": "Reflexología",
+        "fr": "Réflexologue",
+        "de": "Reflexzonentherapie"
+      },
+      "preset": "appointments",
+      "categories": ["wellness"]
+    },
+    {
+      "id": "reiki",
+      "names": {
+        "en": "Reiki practitioner",
+        "pt": "Reiki",
+        "es": "Reiki",
+        "fr": "Praticien reiki",
+        "de": "Reiki-Praxis"
+      },
+      "preset": "appointments",
+      "categories": ["wellness"]
+    },
+    {
+      "id": "meditation-centre",
+      "names": {
+        "en": "Meditation centre",
+        "pt": "Centro de meditação",
+        "es": "Centro de meditación",
+        "fr": "Centre de méditation",
+        "de": "Meditationszentrum"
+      },
+      "preset": "appointments",
+      "categories": ["wellness"]
+    },
+    {
+      "id": "ayurveda-centre",
+      "names": {
+        "en": "Ayurveda centre",
+        "pt": "Centro de ayurveda",
+        "es": "Centro de ayurveda",
+        "fr": "Centre ayurvédique",
+        "de": "Ayurveda-Zentrum"
+      },
+      "preset": "appointments",
+      "categories": ["wellness"]
+    },
+    {
+      "id": "thai-massage",
+      "names": {
+        "en": "Thai massage",
+        "pt": "Massagem tailandesa",
+        "es": "Masaje tailandés",
+        "fr": "Massage thaï",
+        "de": "Thai-Massage"
+      },
+      "preset": "appointments",
+      "categories": ["wellness"]
+    },
+    {
+      "id": "sports-massage",
+      "names": {
+        "en": "Sports massage",
+        "pt": "Massagem desportiva",
+        "es": "Masaje deportivo",
+        "fr": "Massage sportif",
+        "de": "Sportmassage"
+      },
+      "preset": "appointments",
+      "categories": ["wellness", "fitness"]
+    },
+    {
+      "id": "holistic-therapist",
+      "names": {
+        "en": "Holistic therapist",
+        "pt": "Terapeuta holístico",
+        "es": "Terapeuta holístico",
+        "fr": "Thérapeute holistique",
+        "de": "Ganzheitlicher Therapeut"
+      },
+      "preset": "appointments",
+      "categories": ["wellness"]
+    },
+    {
+      "id": "naturopath",
+      "names": {
+        "en": "Naturopath",
+        "pt": "Naturopata",
+        "es": "Naturópata",
+        "fr": "Naturopathe",
+        "de": "Heilpraktiker"
+      },
+      "preset": "appointments",
+      "categories": ["wellness", "health"]
+    },
+    {
+      "id": "gym",
+      "names": {
+        "en": "Gym",
+        "pt": "Ginásio",
+        "es": "Gimnasio",
+        "fr": "Salle de sport",
+        "de": "Fitnessstudio"
+      },
+      "preset": "appointments",
+      "categories": ["fitness"]
+    },
+    {
+      "id": "yoga-studio",
+      "names": {
+        "en": "Yoga studio",
+        "pt": "Estúdio de ioga",
+        "es": "Estudio de yoga",
+        "fr": "Studio de yoga",
+        "de": "Yogastudio"
+      },
+      "preset": "appointments",
+      "categories": ["fitness", "wellness"]
+    },
+    {
+      "id": "pilates-studio",
+      "names": {
+        "en": "Pilates studio",
+        "pt": "Estúdio de pilates",
+        "es": "Estudio de pilates",
+        "fr": "Studio de Pilates",
+        "de": "Pilates-Studio"
+      },
+      "preset": "appointments",
+      "categories": ["fitness"]
+    },
+    {
+      "id": "crossfit-box",
+      "names": {
+        "en": "CrossFit box",
+        "pt": "Box de CrossFit",
+        "es": "Box de CrossFit",
+        "fr": "Box de CrossFit",
+        "de": "CrossFit-Box"
+      },
+      "preset": "appointments",
+      "categories": ["fitness"]
+    },
+    {
+      "id": "personal-trainer",
+      "names": {
+        "en": "Personal trainer",
+        "pt": "Personal trainer",
+        "es": "Entrenador personal",
+        "fr": "Coach sportif",
+        "de": "Personal Trainer"
+      },
+      "preset": "appointments",
+      "categories": ["fitness"]
+    },
+    {
+      "id": "martial-arts-school",
+      "names": {
+        "en": "Martial arts school",
+        "pt": "Escola de artes marciais",
+        "es": "Escuela de artes marciales",
+        "fr": "École d'arts martiaux",
+        "de": "Kampfsportschule"
+      },
+      "preset": "appointments",
+      "categories": ["fitness", "education"]
+    },
+    {
+      "id": "boxing-gym",
+      "names": {
+        "en": "Boxing gym",
+        "pt": "Ginásio de boxe",
+        "es": "Gimnasio de boxeo",
+        "fr": "Salle de boxe",
+        "de": "Boxstudio"
+      },
+      "preset": "appointments",
+      "categories": ["fitness"]
+    },
+    {
+      "id": "dance-studio",
+      "names": {
+        "en": "Dance studio",
+        "pt": "Escola de dança",
+        "es": "Escuela de baile",
+        "fr": "École de danse",
+        "de": "Tanzschule"
+      },
+      "preset": "appointments",
+      "categories": ["fitness", "education"]
+    },
+    {
+      "id": "climbing-gym",
+      "names": {
+        "en": "Climbing gym",
+        "pt": "Ginásio de escalada",
+        "es": "Rocódromo",
+        "fr": "Salle d'escalade",
+        "de": "Kletterhalle"
+      },
+      "preset": "appointments",
+      "categories": ["fitness"]
+    },
+    {
+      "id": "swimming-lessons",
+      "names": {
+        "en": "Swimming lessons",
+        "pt": "Escola de natação",
+        "es": "Escuela de natación",
+        "fr": "École de natation",
+        "de": "Schwimmschule"
+      },
+      "preset": "appointments",
+      "categories": ["fitness", "education"]
+    },
+    {
+      "id": "tennis-club",
+      "names": {
+        "en": "Tennis club",
+        "pt": "Clube de ténis",
+        "es": "Club de tenis",
+        "fr": "Club de tennis",
+        "de": "Tennisclub"
+      },
+      "preset": "appointments",
+      "categories": ["fitness"]
+    },
+    {
+      "id": "padel-club",
+      "names": {
+        "en": "Padel club",
+        "pt": "Clube de padel",
+        "es": "Club de pádel",
+        "fr": "Club de padel",
+        "de": "Padel-Club"
+      },
+      "preset": "appointments",
+      "categories": ["fitness"]
+    },
+    {
+      "id": "golf-course",
+      "names": {
+        "en": "Golf course",
+        "pt": "Campo de golfe",
+        "es": "Campo de golf",
+        "fr": "Golf",
+        "de": "Golfplatz"
+      },
+      "preset": "appointments",
+      "categories": ["fitness", "tours"]
+    },
+    {
+      "id": "surf-school",
+      "names": {
+        "en": "Surf school",
+        "pt": "Escola de surf",
+        "es": "Escuela de surf",
+        "fr": "École de surf",
+        "de": "Surfschule"
+      },
+      "preset": "appointments",
+      "categories": ["fitness", "tours"]
+    },
+    {
+      "id": "kitesurf-school",
+      "names": {
+        "en": "Kitesurf school",
+        "pt": "Escola de kitesurf",
+        "es": "Escuela de kitesurf",
+        "fr": "École de kitesurf",
+        "de": "Kitesurfschule"
+      },
+      "preset": "appointments",
+      "categories": ["fitness", "tours"]
+    },
+    {
+      "id": "sailing-school",
+      "names": {
+        "en": "Sailing school",
+        "pt": "Escola de vela",
+        "es": "Escuela de vela",
+        "fr": "École de voile",
+        "de": "Segelschule"
+      },
+      "preset": "appointments",
+      "categories": ["fitness", "education"]
+    },
+    {
+      "id": "ski-school",
+      "names": {
+        "en": "Ski school",
+        "pt": "Escola de esqui",
+        "es": "Escuela de esquí",
+        "fr": "École de ski",
+        "de": "Skischule"
+      },
+      "preset": "appointments",
+      "categories": ["fitness", "tours"]
+    },
+    {
+      "id": "diving-centre",
+      "names": {
+        "en": "Diving centre",
+        "pt": "Centro de mergulho",
+        "es": "Centro de buceo",
+        "fr": "Centre de plongée",
+        "de": "Tauchschule"
+      },
+      "preset": "appointments",
+      "categories": ["tours", "fitness"]
+    },
+    {
+      "id": "indoor-cycling",
+      "names": {
+        "en": "Indoor cycling studio",
+        "pt": "Estúdio de cycling",
+        "es": "Estudio de ciclo indoor",
+        "fr": "Studio de vélo indoor",
+        "de": "Indoor-Cycling-Studio"
+      },
+      "preset": "appointments",
+      "categories": ["fitness"]
+    },
+    {
+      "id": "outdoor-fitness",
+      "names": {
+        "en": "Outdoor fitness",
+        "pt": "Treino ao ar livre",
+        "es": "Entrenamiento al aire libre",
+        "fr": "Fitness en plein air",
+        "de": "Outdoor-Fitness"
+      },
+      "preset": "appointments",
+      "categories": ["fitness"]
+    },
+    {
+      "id": "sports-club",
+      "names": {
+        "en": "Sports club",
+        "pt": "Clube desportivo",
+        "es": "Club deportivo",
+        "fr": "Club sportif",
+        "de": "Sportverein"
+      },
+      "preset": "appointments",
+      "categories": ["fitness"]
+    },
+    {
+      "id": "riding-stables",
+      "names": {
+        "en": "Riding stables",
+        "pt": "Centro hípico",
+        "es": "Centro hípico",
+        "fr": "Centre équestre",
+        "de": "Reitstall"
+      },
+      "preset": "appointments",
+      "categories": ["fitness", "tours"]
+    },
+    {
+      "id": "pitch-hire",
+      "names": {
+        "en": "Sports pitch hire",
+        "pt": "Aluguer de campos desportivos",
+        "es": "Alquiler de pistas deportivas",
+        "fr": "Location de terrains de sport",
+        "de": "Sportplatzvermietung"
+      },
+      "preset": "appointments",
+      "categories": ["fitness", "venues"]
+    },
+    {
+      "id": "bowling-alley",
+      "names": {
+        "en": "Bowling alley",
+        "pt": "Bowling",
+        "es": "Bolera",
+        "fr": "Bowling",
+        "de": "Bowlingbahn"
+      },
+      "preset": "appointments",
+      "categories": ["venues", "fitness"]
+    },
+    {
+      "id": "trampoline-park",
+      "names": {
+        "en": "Trampoline park",
+        "pt": "Parque de trampolins",
+        "es": "Parque de camas elásticas",
+        "fr": "Parc de trampolines",
+        "de": "Trampolinpark"
+      },
+      "preset": "appointments",
+      "categories": ["venues"]
+    },
+    {
+      "id": "escape-room",
+      "names": {
+        "en": "Escape room",
+        "pt": "Escape room",
+        "es": "Sala de escape",
+        "fr": "Escape game",
+        "de": "Escape Room"
+      },
+      "preset": "appointments",
+      "categories": ["tours", "venues"]
+    },
+    {
+      "id": "doctor",
+      "names": {
+        "en": "Doctor",
+        "pt": "Médico",
+        "es": "Médico",
+        "fr": "Médecin",
+        "de": "Arztpraxis"
+      },
+      "preset": "appointments",
+      "categories": ["health"]
+    },
+    {
+      "id": "medical-clinic",
+      "names": {
+        "en": "Medical clinic",
+        "pt": "Clínica médica",
+        "es": "Clínica médica",
+        "fr": "Clinique médicale",
+        "de": "Medizinisches Zentrum"
+      },
+      "preset": "appointments",
+      "categories": ["health"]
+    },
+    {
+      "id": "physiotherapist",
+      "names": {
+        "en": "Physiotherapist",
+        "pt": "Fisioterapeuta",
+        "es": "Fisioterapeuta",
+        "fr": "Kinésithérapeute",
+        "de": "Physiotherapie"
+      },
+      "preset": "appointments",
+      "categories": ["health"]
+    },
+    {
+      "id": "chiropractor",
+      "names": {
+        "en": "Chiropractor",
+        "pt": "Quiroprático",
+        "es": "Quiropráctico",
+        "fr": "Chiropracteur",
+        "de": "Chiropraktik"
+      },
+      "preset": "appointments",
+      "categories": ["health"]
+    },
+    {
+      "id": "osteopath",
+      "names": {
+        "en": "Osteopath",
+        "pt": "Osteopata",
+        "es": "Osteópata",
+        "fr": "Ostéopathe",
+        "de": "Osteopathie"
+      },
+      "preset": "appointments",
+      "categories": ["health"]
+    },
+    {
+      "id": "podiatrist",
+      "names": {
+        "en": "Podiatrist",
+        "pt": "Podologista",
+        "es": "Podólogo",
+        "fr": "Podologue",
+        "de": "Podologie"
+      },
+      "preset": "appointments",
+      "categories": ["health"]
+    },
+    {
+      "id": "hearing-care",
+      "names": {
+        "en": "Hearing care",
+        "pt": "Centro auditivo",
+        "es": "Centro auditivo",
+        "fr": "Audioprothésiste",
+        "de": "Hörakustiker"
+      },
+      "preset": "appointments",
+      "categories": ["health", "shop"]
+    },
+    {
+      "id": "dermatologist",
+      "names": {
+        "en": "Dermatologist",
+        "pt": "Dermatologista",
+        "es": "Dermatólogo",
+        "fr": "Dermatologue",
+        "de": "Hautarzt"
+      },
+      "preset": "appointments",
+      "categories": ["health"]
+    },
+    {
+      "id": "nutritionist",
+      "names": {
+        "en": "Nutritionist",
+        "pt": "Nutricionista",
+        "es": "Nutricionista",
+        "fr": "Nutritionniste",
+        "de": "Ernährungsberatung"
+      },
+      "preset": "appointments",
+      "categories": ["health", "wellness"]
+    },
+    {
+      "id": "speech-therapist",
+      "names": {
+        "en": "Speech therapist",
+        "pt": "Terapeuta da fala",
+        "es": "Logopeda",
+        "fr": "Orthophoniste",
+        "de": "Logopädie"
+      },
+      "preset": "appointments",
+      "categories": ["health", "therapy"]
+    },
+    {
+      "id": "occupational-therapist",
+      "names": {
+        "en": "Occupational therapist",
+        "pt": "Terapeuta ocupacional",
+        "es": "Terapeuta ocupacional",
+        "fr": "Ergothérapeute",
+        "de": "Ergotherapie"
+      },
+      "preset": "appointments",
+      "categories": ["health"]
+    },
+    {
+      "id": "acupuncturist",
+      "names": {
+        "en": "Acupuncturist",
+        "pt": "Acupuntura",
+        "es": "Acupuntura",
+        "fr": "Acupuncteur",
+        "de": "Akupunktur"
+      },
+      "preset": "appointments",
+      "categories": ["health", "wellness"]
+    },
+    {
+      "id": "medical-laboratory",
+      "names": {
+        "en": "Medical laboratory",
+        "pt": "Laboratório de análises",
+        "es": "Laboratorio de análisis",
+        "fr": "Laboratoire d'analyses",
+        "de": "Labor"
+      },
+      "preset": "appointments",
+      "categories": ["health"]
+    },
+    {
+      "id": "midwife",
+      "names": {
+        "en": "Midwife",
+        "pt": "Parteira",
+        "es": "Matrona",
+        "fr": "Sage-femme",
+        "de": "Hebamme"
+      },
+      "preset": "appointments",
+      "categories": ["health"]
+    },
+    {
+      "id": "paediatrician",
+      "names": {
+        "en": "Paediatrician",
+        "pt": "Pediatra",
+        "es": "Pediatra",
+        "fr": "Pédiatre",
+        "de": "Kinderarzt"
+      },
+      "preset": "appointments",
+      "categories": ["health"]
+    },
+    {
+      "id": "gynaecologist",
+      "names": {
+        "en": "Gynaecologist",
+        "pt": "Ginecologista",
+        "es": "Ginecólogo",
+        "fr": "Gynécologue",
+        "de": "Frauenarzt"
+      },
+      "preset": "appointments",
+      "categories": ["health"]
+    },
+    {
+      "id": "optometrist",
+      "names": {
+        "en": "Optometrist",
+        "pt": "Optometrista",
+        "es": "Optometrista",
+        "fr": "Optométriste",
+        "de": "Optometrie"
+      },
+      "preset": "appointments",
+      "categories": ["health"]
+    },
+    {
+      "id": "travel-clinic",
+      "names": {
+        "en": "Travel clinic",
+        "pt": "Consulta do viajante",
+        "es": "Clínica del viajero",
+        "fr": "Centre de vaccinations internationales",
+        "de": "Reisemedizin"
+      },
+      "preset": "appointments",
+      "categories": ["health"]
+    },
+    {
+      "id": "fertility-clinic",
+      "names": {
+        "en": "Fertility clinic",
+        "pt": "Clínica de fertilidade",
+        "es": "Clínica de fertilidad",
+        "fr": "Centre de fertilité",
+        "de": "Kinderwunschklinik"
+      },
+      "preset": "appointments",
+      "categories": ["health"]
+    },
+    {
+      "id": "home-care",
+      "names": {
+        "en": "Home care",
+        "pt": "Apoio domiciliário",
+        "es": "Atención domiciliaria",
+        "fr": "Aide à domicile",
+        "de": "Häusliche Pflege"
+      },
+      "preset": "general",
+      "categories": ["health"]
+    },
+    {
+      "id": "dentist",
+      "names": {
+        "en": "Dentist",
+        "pt": "Dentista",
+        "es": "Dentista",
+        "fr": "Dentiste",
+        "de": "Zahnarzt"
+      },
+      "preset": "appointments",
+      "categories": ["dental"]
+    },
+    {
+      "id": "orthodontist",
+      "names": {
+        "en": "Orthodontist",
+        "pt": "Ortodontista",
+        "es": "Ortodoncista",
+        "fr": "Orthodontiste",
+        "de": "Kieferorthopäde"
+      },
+      "preset": "appointments",
+      "categories": ["dental"]
+    },
+    {
+      "id": "dental-hygienist",
+      "names": {
+        "en": "Dental hygienist",
+        "pt": "Higienista oral",
+        "es": "Higienista dental",
+        "fr": "Hygiéniste dentaire",
+        "de": "Dentalhygiene"
+      },
+      "preset": "appointments",
+      "categories": ["dental"]
+    },
+    {
+      "id": "dental-implants",
+      "names": {
+        "en": "Dental implant clinic",
+        "pt": "Clínica de implantes dentários",
+        "es": "Clínica de implantes dentales",
+        "fr": "Centre d'implantologie",
+        "de": "Implantologie"
+      },
+      "preset": "appointments",
+      "categories": ["dental"]
+    },
+    {
+      "id": "teeth-whitening",
+      "names": {
+        "en": "Teeth whitening",
+        "pt": "Branqueamento dentário",
+        "es": "Blanqueamiento dental",
+        "fr": "Blanchiment dentaire",
+        "de": "Zahnaufhellung"
+      },
+      "preset": "appointments",
+      "categories": ["dental", "hair-beauty"]
+    },
+    {
+      "id": "psychologist",
+      "names": {
+        "en": "Psychologist",
+        "pt": "Psicólogo",
+        "es": "Psicólogo",
+        "fr": "Psychologue",
+        "de": "Psychologe"
+      },
+      "preset": "appointments",
+      "categories": ["therapy"]
+    },
+    {
+      "id": "psychotherapist",
+      "names": {
+        "en": "Psychotherapist",
+        "pt": "Psicoterapeuta",
+        "es": "Psicoterapeuta",
+        "fr": "Psychothérapeute",
+        "de": "Psychotherapeut"
+      },
+      "preset": "appointments",
+      "categories": ["therapy"]
+    },
+    {
+      "id": "counsellor",
+      "names": {
+        "en": "Counsellor",
+        "pt": "Aconselhamento psicológico",
+        "es": "Orientación psicológica",
+        "fr": "Conseiller psychologique",
+        "de": "Psychologische Beratung"
+      },
+      "preset": "appointments",
+      "categories": ["therapy"]
+    },
+    {
+      "id": "couples-therapist",
+      "names": {
+        "en": "Couples therapist",
+        "pt": "Terapia de casal",
+        "es": "Terapia de pareja",
+        "fr": "Thérapeute de couple",
+        "de": "Paartherapie"
+      },
+      "preset": "appointments",
+      "categories": ["therapy"]
+    },
+    {
+      "id": "psychiatrist",
+      "names": {
+        "en": "Psychiatrist",
+        "pt": "Psiquiatra",
+        "es": "Psiquiatra",
+        "fr": "Psychiatre",
+        "de": "Psychiater"
+      },
+      "preset": "appointments",
+      "categories": ["therapy", "health"]
+    },
+    {
+      "id": "life-coach",
+      "names": {
+        "en": "Life coach",
+        "pt": "Coach de vida",
+        "es": "Coach de vida",
+        "fr": "Coach de vie",
+        "de": "Life Coach"
+      },
+      "preset": "appointments",
+      "categories": ["consulting", "therapy"]
+    },
+    {
+      "id": "art-therapist",
+      "names": {
+        "en": "Art therapist",
+        "pt": "Arteterapeuta",
+        "es": "Arteterapeuta",
+        "fr": "Art-thérapeute",
+        "de": "Kunsttherapeut"
+      },
+      "preset": "appointments",
+      "categories": ["therapy"]
+    },
+    {
+      "id": "hypnotherapist",
+      "names": {
+        "en": "Hypnotherapist",
+        "pt": "Hipnoterapeuta",
+        "es": "Hipnoterapeuta",
+        "fr": "Hypnothérapeute",
+        "de": "Hypnosetherapeut"
+      },
+      "preset": "appointments",
+      "categories": ["therapy", "wellness"]
+    },
+    {
+      "id": "tradesperson",
+      "names": {
+        "en": "Tradesperson",
+        "pt": "Profissional de obras e reparações",
+        "es": "Profesional de oficios",
+        "fr": "Artisan du bâtiment",
+        "de": "Handwerker"
+      },
+      "preset": "trades",
+      "categories": ["trades"]
+    },
+    {
+      "id": "plumber",
+      "names": {
+        "en": "Plumber",
+        "pt": "Canalizador",
+        "es": "Fontanero",
+        "fr": "Plombier",
+        "de": "Klempner"
+      },
+      "preset": "trades",
+      "categories": ["trades"]
+    },
+    {
+      "id": "electrician",
+      "names": {
+        "en": "Electrician",
+        "pt": "Eletricista",
+        "es": "Electricista",
+        "fr": "Électricien",
+        "de": "Elektriker"
+      },
+      "preset": "trades",
+      "categories": ["trades"]
+    },
+    {
+      "id": "carpenter",
+      "names": {
+        "en": "Carpenter",
+        "pt": "Carpinteiro",
+        "es": "Carpintero",
+        "fr": "Menuisier",
+        "de": "Tischler"
+      },
+      "preset": "trades",
+      "categories": ["trades"]
+    },
+    {
+      "id": "painter-and-decorator",
+      "names": {
+        "en": "Painter and decorator",
+        "pt": "Pintor",
+        "es": "Pintor",
+        "fr": "Peintre en bâtiment",
+        "de": "Maler"
+      },
+      "preset": "trades",
+      "categories": ["trades"]
+    },
+    {
+      "id": "roofer",
+      "names": {
+        "en": "Roofer",
+        "pt": "Telhados",
+        "es": "Techador",
+        "fr": "Couvreur",
+        "de": "Dachdecker"
+      },
+      "preset": "trades",
+      "categories": ["trades"]
+    },
+    {
+      "id": "plasterer",
+      "names": {
+        "en": "Plasterer",
+        "pt": "Estucador",
+        "es": "Yesero",
+        "fr": "Plâtrier",
+        "de": "Stuckateur"
+      },
+      "preset": "trades",
+      "categories": ["trades"]
+    },
+    {
+      "id": "tiler",
+      "names": {
+        "en": "Tiler",
+        "pt": "Ladrilhador",
+        "es": "Alicatador",
+        "fr": "Carreleur",
+        "de": "Fliesenleger"
+      },
+      "preset": "trades",
+      "categories": ["trades"]
+    },
+    {
+      "id": "locksmith",
+      "names": {
+        "en": "Locksmith",
+        "pt": "Serralheiro",
+        "es": "Cerrajero",
+        "fr": "Serrurier",
+        "de": "Schlüsseldienst"
+      },
+      "preset": "trades",
+      "categories": ["trades"]
+    },
+    {
+      "id": "glazier",
+      "names": {
+        "en": "Glazier",
+        "pt": "Vidraceiro",
+        "es": "Cristalero",
+        "fr": "Vitrier",
+        "de": "Glaser"
+      },
+      "preset": "trades",
+      "categories": ["trades"]
+    },
+    {
+      "id": "handyman",
+      "names": {
+        "en": "Handyman",
+        "pt": "Faz-tudo",
+        "es": "Manitas",
+        "fr": "Homme à tout faire",
+        "de": "Hausmeisterservice"
+      },
+      "preset": "trades",
+      "categories": ["trades"]
+    },
+    {
+      "id": "heating-engineer",
+      "names": {
+        "en": "Heating engineer",
+        "pt": "Técnico de aquecimento",
+        "es": "Técnico de calefacción",
+        "fr": "Chauffagiste",
+        "de": "Heizungsbauer"
+      },
+      "preset": "trades",
+      "categories": ["trades"]
+    },
+    {
+      "id": "gas-engineer",
+      "names": {
+        "en": "Gas engineer",
+        "pt": "Técnico de gás",
+        "es": "Técnico de gas",
+        "fr": "Technicien gaz",
+        "de": "Gasinstallateur"
+      },
+      "preset": "trades",
+      "categories": ["trades"]
+    },
+    {
+      "id": "air-conditioning",
+      "names": {
+        "en": "Air conditioning",
+        "pt": "Ar condicionado",
+        "es": "Aire acondicionado",
+        "fr": "Climatisation",
+        "de": "Klimatechnik"
+      },
+      "preset": "trades",
+      "categories": ["trades"]
+    },
+    {
+      "id": "solar-installer",
+      "names": {
+        "en": "Solar panel installer",
+        "pt": "Instalação de painéis solares",
+        "es": "Instalador de placas solares",
+        "fr": "Installateur de panneaux solaires",
+        "de": "Solarteur"
+      },
+      "preset": "trades",
+      "categories": ["trades"]
+    },
+    {
+      "id": "ev-charger-installer",
+      "names": {
+        "en": "EV charger installer",
+        "pt": "Instalação de carregadores elétricos",
+        "es": "Instalador de cargadores eléctricos",
+        "fr": "Installateur de bornes de recharge",
+        "de": "Wallbox-Installateur"
+      },
+      "preset": "trades",
+      "categories": ["trades", "auto"]
+    },
+    {
+      "id": "flooring-fitter",
+      "names": {
+        "en": "Flooring fitter",
+        "pt": "Pavimentos",
+        "es": "Instalador de suelos",
+        "fr": "Poseur de sols",
+        "de": "Bodenleger"
+      },
+      "preset": "trades",
+      "categories": ["trades"]
+    },
+    {
+      "id": "bricklayer",
+      "names": {
+        "en": "Bricklayer",
+        "pt": "Pedreiro",
+        "es": "Albañil",
+        "fr": "Maçon",
+        "de": "Maurer"
+      },
+      "preset": "trades",
+      "categories": ["trades"]
+    },
+    {
+      "id": "stonemason",
+      "names": {
+        "en": "Stonemason",
+        "pt": "Canteiro",
+        "es": "Cantero",
+        "fr": "Tailleur de pierre",
+        "de": "Steinmetz"
+      },
+      "preset": "trades",
+      "categories": ["trades", "crafts"]
+    },
+    {
+      "id": "gardener",
+      "names": {
+        "en": "Gardener",
+        "pt": "Jardineiro",
+        "es": "Jardinero",
+        "fr": "Jardinier",
+        "de": "Gärtner"
+      },
+      "preset": "trades",
+      "categories": ["trades"]
+    },
+    {
+      "id": "tree-surgeon",
+      "names": {
+        "en": "Tree surgeon",
+        "pt": "Abate e poda de árvores",
+        "es": "Podador de árboles",
+        "fr": "Élagueur",
+        "de": "Baumpflege"
+      },
+      "preset": "trades",
+      "categories": ["trades"]
+    },
+    {
+      "id": "fencing",
+      "names": {
+        "en": "Fencing contractor",
+        "pt": "Vedações",
+        "es": "Instalador de vallas",
+        "fr": "Poseur de clôtures",
+        "de": "Zaunbau"
+      },
+      "preset": "trades",
+      "categories": ["trades"]
+    },
+    {
+      "id": "pest-control",
+      "names": {
+        "en": "Pest control",
+        "pt": "Controlo de pragas",
+        "es": "Control de plagas",
+        "fr": "Lutte contre les nuisibles",
+        "de": "Schädlingsbekämpfung"
+      },
+      "preset": "trades",
+      "categories": ["trades", "cleaning"]
+    },
+    {
+      "id": "chimney-sweep",
+      "names": {
+        "en": "Chimney sweep",
+        "pt": "Limpeza de chaminés",
+        "es": "Deshollinador",
+        "fr": "Ramoneur",
+        "de": "Schornsteinfeger"
+      },
+      "preset": "trades",
+      "categories": ["trades", "cleaning"]
+    },
+    {
+      "id": "appliance-repair",
+      "names": {
+        "en": "Appliance repair",
+        "pt": "Reparação de eletrodomésticos",
+        "es": "Reparación de electrodomésticos",
+        "fr": "Réparation d'électroménager",
+        "de": "Haushaltsgeräte-Reparatur"
+      },
+      "preset": "trades",
+      "categories": ["repair", "trades"]
+    },
+    {
+      "id": "drain-unblocking",
+      "names": {
+        "en": "Drain unblocking",
+        "pt": "Desentupimentos",
+        "es": "Desatascos",
+        "fr": "Débouchage",
+        "de": "Rohrreinigung"
+      },
+      "preset": "trades",
+      "categories": ["trades"]
+    },
+    {
+      "id": "damp-proofing",
+      "names": {
+        "en": "Damp proofing",
+        "pt": "Tratamento de humidades",
+        "es": "Tratamiento de humedades",
+        "fr": "Traitement de l'humidité",
+        "de": "Feuchtigkeitssanierung"
+      },
+      "preset": "trades",
+      "categories": ["trades"]
+    },
+    {
+      "id": "insulation",
+      "names": {
+        "en": "Insulation installer",
+        "pt": "Isolamento térmico",
+        "es": "Aislamiento térmico",
+        "fr": "Isolation",
+        "de": "Dämmung"
+      },
+      "preset": "trades",
+      "categories": ["trades"]
+    },
+    {
+      "id": "pool-maintenance",
+      "names": {
+        "en": "Pool maintenance",
+        "pt": "Manutenção de piscinas",
+        "es": "Mantenimiento de piscinas",
+        "fr": "Entretien de piscines",
+        "de": "Poolpflege"
+      },
+      "preset": "trades",
+      "categories": ["trades", "cleaning"]
+    },
+    {
+      "id": "alarm-installer",
+      "names": {
+        "en": "Alarm and CCTV installer",
+        "pt": "Alarmes e videovigilância",
+        "es": "Alarmas y videovigilancia",
+        "fr": "Installateur d'alarmes",
+        "de": "Alarmanlagen"
+      },
+      "preset": "trades",
+      "categories": ["trades"]
+    },
+    {
+      "id": "aerial-installer",
+      "names": {
+        "en": "TV aerial and satellite",
+        "pt": "Antenas e satélite",
+        "es": "Antenas y satélite",
+        "fr": "Antenniste",
+        "de": "Antennenbau"
+      },
+      "preset": "trades",
+      "categories": ["trades"]
+    },
+    {
+      "id": "metalworker",
+      "names": {
+        "en": "Welder and metalworker",
+        "pt": "Serralharia",
+        "es": "Cerrajería metálica",
+        "fr": "Soudeur-métallier",
+        "de": "Metallbau"
+      },
+      "preset": "trades",
+      "categories": ["trades", "crafts"]
+    },
+    {
+      "id": "upholsterer",
+      "names": {
+        "en": "Upholsterer",
+        "pt": "Estofador",
+        "es": "Tapicero",
+        "fr": "Tapissier",
+        "de": "Polsterer"
+      },
+      "preset": "trades",
+      "categories": ["repair", "crafts"]
+    },
+    {
+      "id": "window-fitter",
+      "names": {
+        "en": "Window and door fitter",
+        "pt": "Caixilharia",
+        "es": "Carpintería de aluminio",
+        "fr": "Menuisier aluminium",
+        "de": "Fensterbauer"
+      },
+      "preset": "trades",
+      "categories": ["trades"]
+    },
+    {
+      "id": "garage-doors",
+      "names": {
+        "en": "Garage door fitter",
+        "pt": "Portões de garagem",
+        "es": "Puertas de garaje",
+        "fr": "Portes de garage",
+        "de": "Garagentore"
+      },
+      "preset": "trades",
+      "categories": ["trades"]
+    },
+    {
+      "id": "irrigation",
+      "names": {
+        "en": "Irrigation installer",
+        "pt": "Sistemas de rega",
+        "es": "Sistemas de riego",
+        "fr": "Arrosage automatique",
+        "de": "Bewässerungsanlagen"
+      },
+      "preset": "trades",
+      "categories": ["trades"]
+    },
+    {
+      "id": "water-treatment",
+      "names": {
+        "en": "Water treatment",
+        "pt": "Tratamento de água",
+        "es": "Tratamiento de agua",
+        "fr": "Traitement de l'eau",
+        "de": "Wasseraufbereitung"
+      },
+      "preset": "trades",
+      "categories": ["trades"]
+    },
+    {
+      "id": "septic-tank",
+      "names": {
+        "en": "Septic tank services",
+        "pt": "Limpeza de fossas",
+        "es": "Limpieza de fosas sépticas",
+        "fr": "Vidange de fosse septique",
+        "de": "Klärgruben-Service"
+      },
+      "preset": "trades",
+      "categories": ["trades"]
+    },
+    {
+      "id": "scaffolding",
+      "names": {
+        "en": "Scaffolding",
+        "pt": "Andaimes",
+        "es": "Andamios",
+        "fr": "Échafaudage",
+        "de": "Gerüstbau"
+      },
+      "preset": "trades",
+      "categories": ["trades"]
+    },
+    {
+      "id": "rubbish-removal",
+      "names": {
+        "en": "Rubbish removal",
+        "pt": "Recolha de entulho",
+        "es": "Retirada de escombros",
+        "fr": "Débarras",
+        "de": "Entrümpelung"
+      },
+      "preset": "trades",
+      "categories": ["trades", "cleaning"]
+    },
+    {
+      "id": "removals",
+      "names": {
+        "en": "Removals",
+        "pt": "Mudanças",
+        "es": "Mudanzas",
+        "fr": "Déménagement",
+        "de": "Umzugsunternehmen"
+      },
+      "preset": "trades",
+      "categories": ["transport"]
+    },
+    {
+      "id": "man-and-van",
+      "names": {
+        "en": "Man and van",
+        "pt": "Pequenos transportes",
+        "es": "Portes y pequeñas mudanzas",
+        "fr": "Petit déménagement",
+        "de": "Kleintransporte"
+      },
+      "preset": "trades",
+      "categories": ["transport"]
+    },
+    {
+      "id": "piano-tuner",
+      "names": {
+        "en": "Piano tuner",
+        "pt": "Afinador de pianos",
+        "es": "Afinador de pianos",
+        "fr": "Accordeur de piano",
+        "de": "Klavierstimmer"
+      },
+      "preset": "trades",
+      "categories": ["repair"]
+    },
+    {
+      "id": "farrier",
+      "names": {
+        "en": "Farrier",
+        "pt": "Ferrador",
+        "es": "Herrador",
+        "fr": "Maréchal-ferrant",
+        "de": "Hufschmied"
+      },
+      "preset": "trades",
+      "categories": ["pets"]
+    },
+    {
+      "id": "network-installer",
+      "names": {
+        "en": "Network and cabling",
+        "pt": "Redes e cablagem",
+        "es": "Redes y cableado",
+        "fr": "Réseaux et câblage",
+        "de": "Netzwerktechnik"
+      },
+      "preset": "trades",
+      "categories": ["it-services", "trades"]
+    },
+    {
+      "id": "smart-home-installer",
+      "names": {
+        "en": "Smart home installer",
+        "pt": "Domótica",
+        "es": "Domótica",
+        "fr": "Domotique",
+        "de": "Smart-Home-Installation"
+      },
+      "preset": "trades",
+      "categories": ["it-services", "trades"]
+    },
+    {
+      "id": "energy-assessor",
+      "names": {
+        "en": "Energy assessor",
+        "pt": "Certificação energética",
+        "es": "Certificación energética",
+        "fr": "Diagnostiqueur immobilier",
+        "de": "Energieberater"
+      },
+      "preset": "trades",
+      "categories": ["property", "consulting"]
+    },
+    {
+      "id": "builder",
+      "names": {
+        "en": "Builder",
+        "pt": "Construtor",
+        "es": "Constructor",
+        "fr": "Entreprise de construction",
+        "de": "Bauunternehmen"
+      },
+      "preset": "projects",
+      "categories": ["trades"]
+    },
+    {
+      "id": "renovation",
+      "names": {
+        "en": "Renovation company",
+        "pt": "Remodelações",
+        "es": "Reformas",
+        "fr": "Rénovation",
+        "de": "Renovierung"
+      },
+      "preset": "projects",
+      "categories": ["trades"]
+    },
+    {
+      "id": "kitchen-fitter",
+      "names": {
+        "en": "Kitchen fitter",
+        "pt": "Remodelação de cozinhas",
+        "es": "Reforma de cocinas",
+        "fr": "Cuisiniste",
+        "de": "Küchenbauer"
+      },
+      "preset": "projects",
+      "categories": ["trades"]
+    },
+    {
+      "id": "bathroom-fitter",
+      "names": {
+        "en": "Bathroom fitter",
+        "pt": "Remodelação de casas de banho",
+        "es": "Reforma de baños",
+        "fr": "Rénovation de salle de bains",
+        "de": "Badsanierung"
+      },
+      "preset": "projects",
+      "categories": ["trades"]
+    },
+    {
+      "id": "loft-conversion",
+      "names": {
+        "en": "Loft conversion",
+        "pt": "Aproveitamento de sótãos",
+        "es": "Reforma de buhardillas",
+        "fr": "Aménagement de combles",
+        "de": "Dachausbau"
+      },
+      "preset": "projects",
+      "categories": ["trades"]
+    },
+    {
+      "id": "home-extensions",
+      "names": {
+        "en": "Home extensions",
+        "pt": "Ampliações",
+        "es": "Ampliaciones",
+        "fr": "Extension de maison",
+        "de": "Anbau"
+      },
+      "preset": "projects",
+      "categories": ["trades"]
+    },
+    {
+      "id": "architect",
+      "names": {
+        "en": "Architect",
+        "pt": "Arquiteto",
+        "es": "Arquitecto",
+        "fr": "Architecte",
+        "de": "Architekt"
+      },
+      "preset": "projects",
+      "categories": ["trades", "consulting"]
+    },
+    {
+      "id": "interior-designer",
+      "names": {
+        "en": "Interior designer",
+        "pt": "Designer de interiores",
+        "es": "Interiorista",
+        "fr": "Architecte d'intérieur",
+        "de": "Innenarchitekt"
+      },
+      "preset": "projects",
+      "categories": ["trades", "consulting"]
+    },
+    {
+      "id": "landscaper",
+      "names": {
+        "en": "Landscaper",
+        "pt": "Paisagismo",
+        "es": "Paisajismo",
+        "fr": "Paysagiste",
+        "de": "Garten- und Landschaftsbau"
+      },
+      "preset": "projects",
+      "categories": ["trades"]
+    },
+    {
+      "id": "garden-designer",
+      "names": {
+        "en": "Garden designer",
+        "pt": "Arquiteto paisagista",
+        "es": "Diseñador de jardines",
+        "fr": "Concepteur de jardins",
+        "de": "Gartenplaner"
+      },
+      "preset": "projects",
+      "categories": ["trades"]
+    },
+    {
+      "id": "structural-engineer",
+      "names": {
+        "en": "Structural engineer",
+        "pt": "Engenheiro de estruturas",
+        "es": "Ingeniero de estructuras",
+        "fr": "Ingénieur structure",
+        "de": "Statiker"
+      },
+      "preset": "projects",
+      "categories": ["trades", "consulting"]
+    },
+    {
+      "id": "land-surveyor",
+      "names": {
+        "en": "Land surveyor",
+        "pt": "Topógrafo",
+        "es": "Topógrafo",
+        "fr": "Géomètre",
+        "de": "Vermesser"
+      },
+      "preset": "projects",
+      "categories": ["property", "trades"]
+    },
+    {
+      "id": "demolition",
+      "names": {
+        "en": "Demolition",
+        "pt": "Demolições",
+        "es": "Demoliciones",
+        "fr": "Démolition",
+        "de": "Abbruch"
+      },
+      "preset": "projects",
+      "categories": ["trades"]
+    },
+    {
+      "id": "groundworks",
+      "names": {
+        "en": "Groundworks and paving",
+        "pt": "Terraplanagem e pavimentação",
+        "es": "Movimiento de tierras y pavimentación",
+        "fr": "Terrassement et pavage",
+        "de": "Tiefbau und Pflasterarbeiten"
+      },
+      "preset": "projects",
+      "categories": ["trades"]
+    },
+    {
+      "id": "pool-builder",
+      "names": {
+        "en": "Swimming pool builder",
+        "pt": "Construção de piscinas",
+        "es": "Construcción de piscinas",
+        "fr": "Pisciniste",
+        "de": "Poolbau"
+      },
+      "preset": "projects",
+      "categories": ["trades"]
+    },
+    {
+      "id": "conservatories",
+      "names": {
+        "en": "Conservatories and glazing",
+        "pt": "Marquises",
+        "es": "Cerramientos",
+        "fr": "Vérandas",
+        "de": "Wintergärten"
+      },
+      "preset": "projects",
+      "categories": ["trades"]
+    },
+    {
+      "id": "shopfitter",
+      "names": {
+        "en": "Shopfitter",
+        "pt": "Decoração de lojas",
+        "es": "Interiorismo comercial",
+        "fr": "Agenceur",
+        "de": "Ladenbau"
+      },
+      "preset": "projects",
+      "categories": ["trades"]
+    },
+    {
+      "id": "timber-frame-builder",
+      "names": {
+        "en": "Timber frame builder",
+        "pt": "Casas de madeira",
+        "es": "Casas de madera",
+        "fr": "Constructeur de maisons bois",
+        "de": "Holzbau"
+      },
+      "preset": "projects",
+      "categories": ["trades"]
+    },
+    {
+      "id": "building-restoration",
+      "names": {
+        "en": "Building restoration",
+        "pt": "Reabilitação de edifícios",
+        "es": "Rehabilitación de edificios",
+        "fr": "Restauration du bâti",
+        "de": "Altbausanierung"
+      },
+      "preset": "projects",
+      "categories": ["trades"]
+    },
+    {
+      "id": "house-cleaner",
+      "names": {
+        "en": "House cleaner",
+        "pt": "Limpezas domésticas",
+        "es": "Limpieza del hogar",
+        "fr": "Ménage à domicile",
+        "de": "Haushaltsreinigung"
+      },
+      "preset": "trades",
+      "categories": ["cleaning"]
+    },
+    {
+      "id": "office-cleaning",
+      "names": {
+        "en": "Office cleaning",
+        "pt": "Limpeza de escritórios",
+        "es": "Limpieza de oficinas",
+        "fr": "Nettoyage de bureaux",
+        "de": "Büroreinigung"
+      },
+      "preset": "trades",
+      "categories": ["cleaning"]
+    },
+    {
+      "id": "carpet-cleaning",
+      "names": {
+        "en": "Carpet and upholstery cleaning",
+        "pt": "Limpeza de tapetes e estofos",
+        "es": "Limpieza de alfombras y tapicerías",
+        "fr": "Nettoyage de tapis et canapés",
+        "de": "Teppich- und Polsterreinigung"
+      },
+      "preset": "trades",
+      "categories": ["cleaning"]
+    },
+    {
+      "id": "end-of-tenancy-cleaning",
+      "names": {
+        "en": "End of tenancy cleaning",
+        "pt": "Limpeza de fim de arrendamento",
+        "es": "Limpieza de fin de alquiler",
+        "fr": "Nettoyage de fin de bail",
+        "de": "Endreinigung"
+      },
+      "preset": "trades",
+      "categories": ["cleaning"]
+    },
+    {
+      "id": "window-cleaner",
+      "names": {
+        "en": "Window cleaner",
+        "pt": "Limpeza de vidros",
+        "es": "Limpiacristales",
+        "fr": "Laveur de vitres",
+        "de": "Fensterreinigung"
+      },
+      "preset": "trades",
+      "categories": ["cleaning"]
+    },
+    {
+      "id": "pressure-washing",
+      "names": {
+        "en": "Pressure washing",
+        "pt": "Lavagem a alta pressão",
+        "es": "Limpieza a presión",
+        "fr": "Nettoyage haute pression",
+        "de": "Hochdruckreinigung"
+      },
+      "preset": "trades",
+      "categories": ["cleaning"]
+    },
+    {
+      "id": "holiday-let-cleaning",
+      "names": {
+        "en": "Holiday let cleaning",
+        "pt": "Limpeza de alojamento local",
+        "es": "Limpieza de pisos turísticos",
+        "fr": "Ménage de locations saisonnières",
+        "de": "Ferienwohnungsreinigung"
+      },
+      "preset": "trades",
+      "categories": ["cleaning"]
+    },
+    {
+      "id": "dry-cleaner",
+      "names": {
+        "en": "Dry cleaner",
+        "pt": "Lavandaria a seco",
+        "es": "Tintorería",
+        "fr": "Pressing",
+        "de": "Reinigung"
+      },
+      "preset": "general",
+      "categories": ["cleaning"]
+    },
+    {
+      "id": "launderette",
+      "names": {
+        "en": "Launderette",
+        "pt": "Lavandaria self-service",
+        "es": "Lavandería autoservicio",
+        "fr": "Laverie",
+        "de": "Waschsalon"
+      },
+      "preset": "general",
+      "categories": ["cleaning"]
+    },
+    {
+      "id": "laundry-service",
+      "names": {
+        "en": "Laundry service",
+        "pt": "Lavandaria",
+        "es": "Lavandería",
+        "fr": "Blanchisserie",
+        "de": "Wäscherei"
+      },
+      "preset": "general",
+      "categories": ["cleaning"]
+    },
+    {
+      "id": "ironing-service",
+      "names": {
+        "en": "Ironing service",
+        "pt": "Engomadoria",
+        "es": "Servicio de planchado",
+        "fr": "Service de repassage",
+        "de": "Bügelservice"
+      },
+      "preset": "general",
+      "categories": ["cleaning"]
+    },
+    {
+      "id": "car-mechanic",
+      "names": {
+        "en": "Car mechanic",
+        "pt": "Oficina automóvel",
+        "es": "Taller mecánico",
+        "fr": "Garage automobile",
+        "de": "Autowerkstatt"
+      },
+      "preset": "appointments",
+      "categories": ["auto"]
+    },
+    {
+      "id": "tyre-shop",
+      "names": {
+        "en": "Tyre shop",
+        "pt": "Pneus",
+        "es": "Neumáticos",
+        "fr": "Centre de pneus",
+        "de": "Reifenservice"
+      },
+      "preset": "appointments",
+      "categories": ["auto"]
+    },
+    {
+      "id": "car-wash",
+      "names": {
+        "en": "Car wash",
+        "pt": "Lavagem auto",
+        "es": "Lavado de coches",
+        "fr": "Station de lavage",
+        "de": "Autowaschanlage"
+      },
+      "preset": "appointments",
+      "categories": ["auto"]
+    },
+    {
+      "id": "car-detailing",
+      "names": {
+        "en": "Car detailing",
+        "pt": "Detalhe automóvel",
+        "es": "Detallado de coches",
+        "fr": "Esthétique automobile",
+        "de": "Fahrzeugaufbereitung"
+      },
+      "preset": "appointments",
+      "categories": ["auto"]
+    },
+    {
+      "id": "body-shop",
+      "names": {
+        "en": "Body shop",
+        "pt": "Bate-chapas",
+        "es": "Chapa y pintura",
+        "fr": "Carrosserie",
+        "de": "Karosseriewerkstatt"
+      },
+      "preset": "trades",
+      "categories": ["auto"]
+    },
+    {
+      "id": "vehicle-inspection",
+      "names": {
+        "en": "Vehicle inspection centre",
+        "pt": "Centro de inspeções",
+        "es": "Estación de ITV",
+        "fr": "Contrôle technique",
+        "de": "Prüfstelle"
+      },
+      "preset": "appointments",
+      "categories": ["auto"]
+    },
+    {
+      "id": "motorbike-mechanic",
+      "names": {
+        "en": "Motorbike mechanic",
+        "pt": "Oficina de motos",
+        "es": "Taller de motos",
+        "fr": "Garage moto",
+        "de": "Motorradwerkstatt"
+      },
+      "preset": "appointments",
+      "categories": ["auto"]
+    },
+    {
+      "id": "bike-repair",
+      "names": {
+        "en": "Bike repair",
+        "pt": "Reparação de bicicletas",
+        "es": "Taller de bicicletas",
+        "fr": "Réparation de vélos",
+        "de": "Fahrradwerkstatt"
+      },
+      "preset": "appointments",
+      "categories": ["auto", "repair"]
+    },
+    {
+      "id": "windscreen-repair",
+      "names": {
+        "en": "Windscreen repair",
+        "pt": "Vidros auto",
+        "es": "Lunas de coche",
+        "fr": "Réparation de pare-brise",
+        "de": "Autoglas"
+      },
+      "preset": "appointments",
+      "categories": ["auto"]
+    },
+    {
+      "id": "auto-electrician",
+      "names": {
+        "en": "Auto electrician",
+        "pt": "Eletricista auto",
+        "es": "Electricista del automóvil",
+        "fr": "Électricien auto",
+        "de": "Kfz-Elektriker"
+      },
+      "preset": "appointments",
+      "categories": ["auto"]
+    },
+    {
+      "id": "car-rental",
+      "names": {
+        "en": "Car rental",
+        "pt": "Rent-a-car",
+        "es": "Alquiler de coches",
+        "fr": "Location de voitures",
+        "de": "Autovermietung"
+      },
+      "preset": "general",
+      "categories": ["auto", "transport"]
+    },
+    {
+      "id": "campervan-hire",
+      "names": {
+        "en": "Campervan hire",
+        "pt": "Aluguer de autocaravanas",
+        "es": "Alquiler de autocaravanas",
+        "fr": "Location de camping-cars",
+        "de": "Wohnmobilvermietung"
+      },
+      "preset": "general",
+      "categories": ["transport", "auto"]
+    },
+    {
+      "id": "driving-school",
+      "names": {
+        "en": "Driving school",
+        "pt": "Escola de condução",
+        "es": "Autoescuela",
+        "fr": "Auto-école",
+        "de": "Fahrschule"
+      },
+      "preset": "appointments",
+      "categories": ["education", "auto"]
+    },
+    {
+      "id": "parking",
+      "names": {
+        "en": "Parking",
+        "pt": "Parque de estacionamento",
+        "es": "Aparcamiento",
+        "fr": "Parking",
+        "de": "Parkplatz"
+      },
+      "preset": "general",
+      "categories": ["auto"]
+    },
+    {
+      "id": "phone-repair",
+      "names": {
+        "en": "Phone repair",
+        "pt": "Reparação de telemóveis",
+        "es": "Reparación de móviles",
+        "fr": "Réparation de téléphones",
+        "de": "Handyreparatur"
+      },
+      "preset": "appointments",
+      "categories": ["repair"]
+    },
+    {
+      "id": "computer-repair",
+      "names": {
+        "en": "Computer repair",
+        "pt": "Reparação de computadores",
+        "es": "Reparación de ordenadores",
+        "fr": "Réparation d'ordinateurs",
+        "de": "Computerreparatur"
+      },
+      "preset": "appointments",
+      "categories": ["repair", "it-services"]
+    },
+    {
+      "id": "watch-repair",
+      "names": {
+        "en": "Watch repair",
+        "pt": "Reparação de relógios",
+        "es": "Reparación de relojes",
+        "fr": "Réparation de montres",
+        "de": "Uhrmacher"
+      },
+      "preset": "appointments",
+      "categories": ["repair"]
+    },
+    {
+      "id": "shoe-repair",
+      "names": {
+        "en": "Shoe repair",
+        "pt": "Sapateiro",
+        "es": "Zapatero",
+        "fr": "Cordonnerie",
+        "de": "Schuhmacher"
+      },
+      "preset": "appointments",
+      "categories": ["repair"]
+    },
+    {
+      "id": "alterations",
+      "names": {
+        "en": "Tailor and alterations",
+        "pt": "Arranjos de costura",
+        "es": "Arreglos de ropa",
+        "fr": "Retouches",
+        "de": "Änderungsschneiderei"
+      },
+      "preset": "appointments",
+      "categories": ["repair", "crafts"]
+    },
+    {
+      "id": "jewellery-repair",
+      "names": {
+        "en": "Jewellery repair",
+        "pt": "Reparação de joias",
+        "es": "Reparación de joyas",
+        "fr": "Réparation de bijoux",
+        "de": "Schmuckreparatur"
+      },
+      "preset": "appointments",
+      "categories": ["repair"]
+    },
+    {
+      "id": "furniture-restoration",
+      "names": {
+        "en": "Furniture restoration",
+        "pt": "Restauro de móveis",
+        "es": "Restauración de muebles",
+        "fr": "Restauration de meubles",
+        "de": "Möbelrestaurierung"
+      },
+      "preset": "trades",
+      "categories": ["repair", "crafts"]
+    },
+    {
+      "id": "key-cutting",
+      "names": {
+        "en": "Key cutting",
+        "pt": "Duplicação de chaves",
+        "es": "Duplicado de llaves",
+        "fr": "Reproduction de clés",
+        "de": "Schlüsselnachfertigung"
+      },
+      "preset": "appointments",
+      "categories": ["repair"]
+    },
+    {
+      "id": "tv-repair",
+      "names": {
+        "en": "TV and audio repair",
+        "pt": "Reparação de TV e som",
+        "es": "Reparación de TV y audio",
+        "fr": "Réparation TV et hi-fi",
+        "de": "TV- und Audio-Reparatur"
+      },
+      "preset": "appointments",
+      "categories": ["repair"]
+    },
+    {
+      "id": "instrument-maker",
+      "names": {
+        "en": "Instrument maker and repairer",
+        "pt": "Luthier",
+        "es": "Luthier",
+        "fr": "Luthier",
+        "de": "Instrumentenbauer"
+      },
+      "preset": "appointments",
+      "categories": ["repair", "crafts"]
+    },
+    {
+      "id": "lawyer",
+      "names": {
+        "en": "Lawyer",
+        "pt": "Advogado",
+        "es": "Abogado",
+        "fr": "Avocat",
+        "de": "Rechtsanwalt"
+      },
+      "preset": "appointments",
+      "categories": ["legal"]
+    },
+    {
+      "id": "notary",
+      "names": {
+        "en": "Notary",
+        "pt": "Notário",
+        "es": "Notario",
+        "fr": "Notaire",
+        "de": "Notar"
+      },
+      "preset": "appointments",
+      "categories": ["legal"]
+    },
+    {
+      "id": "immigration-adviser",
+      "names": {
+        "en": "Immigration adviser",
+        "pt": "Apoio à imigração",
+        "es": "Asesoría de extranjería",
+        "fr": "Conseil en immigration",
+        "de": "Einwanderungsberatung"
+      },
+      "preset": "appointments",
+      "categories": ["legal", "consulting"]
+    },
+    {
+      "id": "mediator",
+      "names": {
+        "en": "Mediator",
+        "pt": "Mediador",
+        "es": "Mediador",
+        "fr": "Médiateur",
+        "de": "Mediator"
+      },
+      "preset": "appointments",
+      "categories": ["legal"]
+    },
+    {
+      "id": "patent-attorney",
+      "names": {
+        "en": "Patent attorney",
+        "pt": "Agente de propriedade industrial",
+        "es": "Agente de la propiedad industrial",
+        "fr": "Conseil en propriété industrielle",
+        "de": "Patentanwalt"
+      },
+      "preset": "appointments",
+      "categories": ["legal"]
+    },
+    {
+      "id": "private-investigator",
+      "names": {
+        "en": "Private investigator",
+        "pt": "Detetive privado",
+        "es": "Detective privado",
+        "fr": "Détective privé",
+        "de": "Privatdetektiv"
+      },
+      "preset": "appointments",
+      "categories": ["legal"]
+    },
+    {
+      "id": "accountant",
+      "names": {
+        "en": "Accountant",
+        "pt": "Contabilista",
+        "es": "Contable",
+        "fr": "Expert-comptable",
+        "de": "Buchhalter"
+      },
+      "preset": "appointments",
+      "categories": ["accounting"]
+    },
+    {
+      "id": "bookkeeper",
+      "names": {
+        "en": "Bookkeeper",
+        "pt": "Técnico de contabilidade",
+        "es": "Gestor contable",
+        "fr": "Aide-comptable",
+        "de": "Buchführung"
+      },
+      "preset": "appointments",
+      "categories": ["accounting"]
+    },
+    {
+      "id": "tax-adviser",
+      "names": {
+        "en": "Tax adviser",
+        "pt": "Consultor fiscal",
+        "es": "Asesor fiscal",
+        "fr": "Conseiller fiscal",
+        "de": "Steuerberater"
+      },
+      "preset": "appointments",
+      "categories": ["accounting", "finance"]
+    },
+    {
+      "id": "payroll-services",
+      "names": {
+        "en": "Payroll services",
+        "pt": "Processamento salarial",
+        "es": "Gestión de nóminas",
+        "fr": "Gestion de la paie",
+        "de": "Lohnbuchhaltung"
+      },
+      "preset": "appointments",
+      "categories": ["accounting"]
+    },
+    {
+      "id": "administrative-agency",
+      "names": {
+        "en": "Administrative agency",
+        "pt": "Gabinete de apoio administrativo",
+        "es": "Gestoría",
+        "fr": "Cabinet administratif",
+        "de": "Verwaltungsdienst"
+      },
+      "preset": "appointments",
+      "categories": ["accounting", "legal"]
+    },
+    {
+      "id": "financial-adviser",
+      "names": {
+        "en": "Financial adviser",
+        "pt": "Consultor financeiro",
+        "es": "Asesor financiero",
+        "fr": "Conseiller financier",
+        "de": "Finanzberater"
+      },
+      "preset": "appointments",
+      "categories": ["finance"]
+    },
+    {
+      "id": "insurance-broker",
+      "names": {
+        "en": "Insurance broker",
+        "pt": "Mediador de seguros",
+        "es": "Corredor de seguros",
+        "fr": "Courtier en assurances",
+        "de": "Versicherungsmakler"
+      },
+      "preset": "appointments",
+      "categories": ["finance"]
+    },
+    {
+      "id": "mortgage-broker",
+      "names": {
+        "en": "Mortgage broker",
+        "pt": "Intermediário de crédito",
+        "es": "Intermediario hipotecario",
+        "fr": "Courtier en crédit",
+        "de": "Baufinanzierungsberater"
+      },
+      "preset": "appointments",
+      "categories": ["finance", "property"]
+    },
+    {
+      "id": "currency-exchange",
+      "names": {
+        "en": "Currency exchange",
+        "pt": "Casa de câmbio",
+        "es": "Casa de cambio",
+        "fr": "Bureau de change",
+        "de": "Wechselstube"
+      },
+      "preset": "general",
+      "categories": ["finance"]
+    },
+    {
+      "id": "money-transfer",
+      "names": {
+        "en": "Money transfer",
+        "pt": "Transferências de dinheiro",
+        "es": "Envío de dinero",
+        "fr": "Transfert d'argent",
+        "de": "Geldtransfer"
+      },
+      "preset": "general",
+      "categories": ["finance"]
+    },
+    {
+      "id": "estate-agent",
+      "names": {
+        "en": "Estate agent",
+        "pt": "Imobiliária",
+        "es": "Inmobiliaria",
+        "fr": "Agence immobilière",
+        "de": "Immobilienmakler"
+      },
+      "preset": "appointments",
+      "categories": ["property"]
+    },
+    {
+      "id": "letting-agent",
+      "names": {
+        "en": "Letting agent",
+        "pt": "Agência de arrendamento",
+        "es": "Agencia de alquiler",
+        "fr": "Agence de location",
+        "de": "Vermietungsagentur"
+      },
+      "preset": "appointments",
+      "categories": ["property"]
+    },
+    {
+      "id": "property-manager",
+      "names": {
+        "en": "Property manager",
+        "pt": "Gestão de imóveis",
+        "es": "Administración de fincas",
+        "fr": "Gestion locative",
+        "de": "Hausverwaltung"
+      },
+      "preset": "general",
+      "categories": ["property"]
+    },
+    {
+      "id": "holiday-rental-manager",
+      "names": {
+        "en": "Holiday rental manager",
+        "pt": "Gestão de alojamento local",
+        "es": "Gestión de alquiler vacacional",
+        "fr": "Conciergerie",
+        "de": "Ferienwohnungsverwaltung"
+      },
+      "preset": "general",
+      "categories": ["property", "stay"]
+    },
+    {
+      "id": "home-staging",
+      "names": {
+        "en": "Home staging",
+        "pt": "Home staging",
+        "es": "Home staging",
+        "fr": "Home staging",
+        "de": "Home Staging"
+      },
+      "preset": "projects",
+      "categories": ["property"]
+    },
+    {
+      "id": "self-storage",
+      "names": {
+        "en": "Self storage",
+        "pt": "Armazenamento self storage",
+        "es": "Trasteros",
+        "fr": "Garde-meubles",
+        "de": "Selfstorage"
+      },
+      "preset": "general",
+      "categories": ["property", "transport"]
+    },
+    {
+      "id": "coworking-space",
+      "names": {
+        "en": "Coworking space",
+        "pt": "Espaço de cowork",
+        "es": "Espacio de coworking",
+        "fr": "Espace de coworking",
+        "de": "Coworking-Space"
+      },
+      "preset": "appointments",
+      "categories": ["venues", "property"]
+    },
+    {
+      "id": "meeting-rooms",
+      "names": {
+        "en": "Meeting room hire",
+        "pt": "Aluguer de salas de reunião",
+        "es": "Alquiler de salas de reuniones",
+        "fr": "Location de salles de réunion",
+        "de": "Konferenzraumvermietung"
+      },
+      "preset": "appointments",
+      "categories": ["venues"]
+    },
+    {
+      "id": "business-consultant",
+      "names": {
+        "en": "Business consultant",
+        "pt": "Consultor de empresas",
+        "es": "Consultor de empresas",
+        "fr": "Consultant en entreprise",
+        "de": "Unternehmensberater"
+      },
+      "preset": "appointments",
+      "categories": ["consulting"]
+    },
+    {
+      "id": "marketing-agency",
+      "names": {
+        "en": "Marketing agency",
+        "pt": "Agência de marketing",
+        "es": "Agencia de marketing",
+        "fr": "Agence marketing",
+        "de": "Marketingagentur"
+      },
+      "preset": "general",
+      "categories": ["consulting"]
+    },
+    {
+      "id": "pr-agency",
+      "names": {
+        "en": "PR agency",
+        "pt": "Agência de comunicação",
+        "es": "Agencia de comunicación",
+        "fr": "Agence de relations presse",
+        "de": "PR-Agentur"
+      },
+      "preset": "general",
+      "categories": ["consulting"]
+    },
+    {
+      "id": "design-studio",
+      "names": {
+        "en": "Design studio",
+        "pt": "Estúdio de design",
+        "es": "Estudio de diseño",
+        "fr": "Studio de design",
+        "de": "Designstudio"
+      },
+      "preset": "general",
+      "categories": ["consulting", "crafts"]
+    },
+    {
+      "id": "translator",
+      "names": {
+        "en": "Translator",
+        "pt": "Tradutor",
+        "es": "Traductor",
+        "fr": "Traducteur",
+        "de": "Übersetzer"
+      },
+      "preset": "general",
+      "categories": ["consulting"]
+    },
+    {
+      "id": "interpreter",
+      "names": {
+        "en": "Interpreter",
+        "pt": "Intérprete",
+        "es": "Intérprete",
+        "fr": "Interprète",
+        "de": "Dolmetscher"
+      },
+      "preset": "appointments",
+      "categories": ["consulting"]
+    },
+    {
+      "id": "business-coach",
+      "names": {
+        "en": "Business coach",
+        "pt": "Coach empresarial",
+        "es": "Coach empresarial",
+        "fr": "Coach d'entreprise",
+        "de": "Business Coach"
+      },
+      "preset": "appointments",
+      "categories": ["consulting"]
+    },
+    {
+      "id": "hr-consultant",
+      "names": {
+        "en": "HR consultant",
+        "pt": "Consultor de recursos humanos",
+        "es": "Consultor de recursos humanos",
+        "fr": "Consultant RH",
+        "de": "Personalberater"
+      },
+      "preset": "appointments",
+      "categories": ["consulting", "recruitment"]
+    },
+    {
+      "id": "copywriter",
+      "names": {
+        "en": "Copywriter",
+        "pt": "Redator",
+        "es": "Redactor publicitario",
+        "fr": "Rédacteur",
+        "de": "Texter"
+      },
+      "preset": "general",
+      "categories": ["consulting"]
+    },
+    {
+      "id": "social-media-manager",
+      "names": {
+        "en": "Social media manager",
+        "pt": "Gestor de redes sociais",
+        "es": "Gestor de redes sociales",
+        "fr": "Community manager",
+        "de": "Social-Media-Manager"
+      },
+      "preset": "general",
+      "categories": ["consulting"]
+    },
+    {
+      "id": "recruitment-agency",
+      "names": {
+        "en": "Recruitment agency",
+        "pt": "Agência de recrutamento",
+        "es": "Agencia de selección",
+        "fr": "Cabinet de recrutement",
+        "de": "Personalvermittlung"
+      },
+      "preset": "general",
+      "categories": ["recruitment"]
+    },
+    {
+      "id": "temp-agency",
+      "names": {
+        "en": "Temp agency",
+        "pt": "Trabalho temporário",
+        "es": "Empresa de trabajo temporal",
+        "fr": "Agence d'intérim",
+        "de": "Zeitarbeitsfirma"
+      },
+      "preset": "general",
+      "categories": ["recruitment"]
+    },
+    {
+      "id": "domestic-staffing",
+      "names": {
+        "en": "Domestic staffing agency",
+        "pt": "Agência de serviço doméstico",
+        "es": "Agencia de servicio doméstico",
+        "fr": "Agence d'employés de maison",
+        "de": "Haushaltshilfe-Vermittlung"
+      },
+      "preset": "general",
+      "categories": ["recruitment", "cleaning"]
+    },
+    {
+      "id": "web-designer",
+      "names": {
+        "en": "Web designer",
+        "pt": "Web designer",
+        "es": "Diseñador web",
+        "fr": "Webdesigner",
+        "de": "Webdesigner"
+      },
+      "preset": "general",
+      "categories": ["it-services"]
+    },
+    {
+      "id": "it-support",
+      "names": {
+        "en": "IT support",
+        "pt": "Suporte informático",
+        "es": "Soporte informático",
+        "fr": "Support informatique",
+        "de": "IT-Service"
+      },
+      "preset": "general",
+      "categories": ["it-services"]
+    },
+    {
+      "id": "software-developer",
+      "names": {
+        "en": "Software developer",
+        "pt": "Programador",
+        "es": "Programador",
+        "fr": "Développeur",
+        "de": "Softwareentwickler"
+      },
+      "preset": "general",
+      "categories": ["it-services", "software-ai"]
+    },
+    {
+      "id": "app-developer",
+      "names": {
+        "en": "App developer",
+        "pt": "Desenvolvimento de apps",
+        "es": "Desarrollo de apps",
+        "fr": "Développeur d'applications",
+        "de": "App-Entwickler"
+      },
+      "preset": "general",
+      "categories": ["it-services", "software-ai"]
+    },
+    {
+      "id": "seo-agency",
+      "names": {
+        "en": "SEO agency",
+        "pt": "Agência de SEO",
+        "es": "Agencia SEO",
+        "fr": "Agence SEO",
+        "de": "SEO-Agentur"
+      },
+      "preset": "general",
+      "categories": ["it-services", "consulting"]
+    },
+    {
+      "id": "cybersecurity",
+      "names": {
+        "en": "Cybersecurity",
+        "pt": "Cibersegurança",
+        "es": "Ciberseguridad",
+        "fr": "Cybersécurité",
+        "de": "IT-Sicherheit"
+      },
+      "preset": "general",
+      "categories": ["it-services", "software-ai"]
+    },
+    {
+      "id": "web-hosting",
+      "names": {
+        "en": "Web hosting",
+        "pt": "Alojamento web",
+        "es": "Alojamiento web",
+        "fr": "Hébergement web",
+        "de": "Webhosting"
+      },
+      "preset": "general",
+      "categories": ["it-services", "software-ai"]
+    },
+    {
+      "id": "software-company",
+      "names": {
+        "en": "Software company",
+        "pt": "Empresa de software",
+        "es": "Empresa de software",
+        "fr": "Éditeur de logiciels",
+        "de": "Softwarefirma"
+      },
+      "preset": "general",
+      "categories": ["software-ai"]
+    },
+    {
+      "id": "ai-agency",
+      "names": {
+        "en": "AI agency",
+        "pt": "Agência de IA",
+        "es": "Agencia de IA",
+        "fr": "Agence IA",
+        "de": "KI-Agentur"
+      },
+      "preset": "general",
+      "categories": ["software-ai"]
+    },
+    {
+      "id": "saas",
+      "names": {
+        "en": "Software as a service",
+        "pt": "Software como serviço",
+        "es": "Software como servicio",
+        "fr": "Logiciel en ligne",
+        "de": "Software as a Service"
+      },
+      "preset": "general",
+      "categories": ["software-ai"]
+    },
+    {
+      "id": "data-consultancy",
+      "names": {
+        "en": "Data consultancy",
+        "pt": "Consultoria de dados",
+        "es": "Consultoría de datos",
+        "fr": "Conseil en données",
+        "de": "Datenberatung"
+      },
+      "preset": "general",
+      "categories": ["software-ai", "consulting"]
+    },
+    {
+      "id": "tutor",
+      "names": {
+        "en": "Tutor",
+        "pt": "Explicador",
+        "es": "Profesor particular",
+        "fr": "Professeur particulier",
+        "de": "Nachhilfe"
+      },
+      "preset": "appointments",
+      "categories": ["education"]
+    },
+    {
+      "id": "language-school",
+      "names": {
+        "en": "Language school",
+        "pt": "Escola de línguas",
+        "es": "Academia de idiomas",
+        "fr": "École de langues",
+        "de": "Sprachschule"
+      },
+      "preset": "appointments",
+      "categories": ["education"]
+    },
+    {
+      "id": "music-teacher",
+      "names": {
+        "en": "Music teacher",
+        "pt": "Professor de música",
+        "es": "Profesor de música",
+        "fr": "Professeur de musique",
+        "de": "Musiklehrer"
+      },
+      "preset": "appointments",
+      "categories": ["education"]
+    },
+    {
+      "id": "music-school",
+      "names": {
+        "en": "Music school",
+        "pt": "Escola de música",
+        "es": "Escuela de música",
+        "fr": "École de musique",
+        "de": "Musikschule"
+      },
+      "preset": "appointments",
+      "categories": ["education"]
+    },
+    {
+      "id": "art-classes",
+      "names": {
+        "en": "Art classes",
+        "pt": "Aulas de arte",
+        "es": "Clases de arte",
+        "fr": "Cours d'art",
+        "de": "Malkurse"
+      },
+      "preset": "appointments",
+      "categories": ["education", "crafts"]
+    },
+    {
+      "id": "cooking-school",
+      "names": {
+        "en": "Cooking school",
+        "pt": "Escola de culinária",
+        "es": "Escuela de cocina",
+        "fr": "École de cuisine",
+        "de": "Kochschule"
+      },
+      "preset": "appointments",
+      "categories": ["education"]
+    },
+    {
+      "id": "coding-school",
+      "names": {
+        "en": "Coding school",
+        "pt": "Escola de programação",
+        "es": "Escuela de programación",
+        "fr": "École de code",
+        "de": "Programmierschule"
+      },
+      "preset": "appointments",
+      "categories": ["education", "it-services"]
+    },
+    {
+      "id": "exam-preparation",
+      "names": {
+        "en": "Exam preparation",
+        "pt": "Centro de explicações",
+        "es": "Academia de preparación",
+        "fr": "Soutien scolaire",
+        "de": "Prüfungsvorbereitung"
+      },
+      "preset": "appointments",
+      "categories": ["education"]
+    },
+    {
+      "id": "pottery-classes",
+      "names": {
+        "en": "Pottery classes",
+        "pt": "Aulas de cerâmica",
+        "es": "Clases de cerámica",
+        "fr": "Cours de poterie",
+        "de": "Töpferkurse"
+      },
+      "preset": "appointments",
+      "categories": ["education", "crafts"]
+    },
+    {
+      "id": "photography-course",
+      "names": {
+        "en": "Photography course",
+        "pt": "Curso de fotografia",
+        "es": "Curso de fotografía",
+        "fr": "Cours de photo",
+        "de": "Fotokurs"
+      },
+      "preset": "appointments",
+      "categories": ["education", "photography"]
+    },
+    {
+      "id": "first-aid-training",
+      "names": {
+        "en": "First aid training",
+        "pt": "Formação em primeiros socorros",
+        "es": "Formación en primeros auxilios",
+        "fr": "Formation aux premiers secours",
+        "de": "Erste-Hilfe-Kurs"
+      },
+      "preset": "appointments",
+      "categories": ["education", "health"]
+    },
+    {
+      "id": "professional-training",
+      "names": {
+        "en": "Professional training",
+        "pt": "Formação profissional",
+        "es": "Formación profesional",
+        "fr": "Formation professionnelle",
+        "de": "Weiterbildung"
+      },
+      "preset": "appointments",
+      "categories": ["education"]
+    },
+    {
+      "id": "online-courses",
+      "names": {
+        "en": "Online courses",
+        "pt": "Cursos online",
+        "es": "Cursos online",
+        "fr": "Cours en ligne",
+        "de": "Onlinekurse"
+      },
+      "preset": "appointments",
+      "categories": ["education"]
+    },
+    {
+      "id": "nursery",
+      "names": {
+        "en": "Nursery",
+        "pt": "Creche",
+        "es": "Guardería",
+        "fr": "Crèche",
+        "de": "Kita"
+      },
+      "preset": "general",
+      "categories": ["childcare"]
+    },
+    {
+      "id": "babysitter",
+      "names": {
+        "en": "Babysitter",
+        "pt": "Babysitter",
+        "es": "Canguro",
+        "fr": "Baby-sitter",
+        "de": "Babysitter"
+      },
+      "preset": "appointments",
+      "categories": ["childcare"]
+    },
+    {
+      "id": "nanny-agency",
+      "names": {
+        "en": "Nanny agency",
+        "pt": "Agência de amas",
+        "es": "Agencia de niñeras",
+        "fr": "Agence de nounous",
+        "de": "Nanny-Agentur"
+      },
+      "preset": "general",
+      "categories": ["childcare", "recruitment"]
+    },
+    {
+      "id": "after-school-club",
+      "names": {
+        "en": "After-school club",
+        "pt": "ATL",
+        "es": "Actividades extraescolares",
+        "fr": "Accueil périscolaire",
+        "de": "Hort"
+      },
+      "preset": "general",
+      "categories": ["childcare", "education"]
+    },
+    {
+      "id": "kids-activities",
+      "names": {
+        "en": "Kids' activities",
+        "pt": "Atividades para crianças",
+        "es": "Actividades infantiles",
+        "fr": "Activités pour enfants",
+        "de": "Kinderaktivitäten"
+      },
+      "preset": "appointments",
+      "categories": ["childcare"]
+    },
+    {
+      "id": "holiday-camp",
+      "names": {
+        "en": "Holiday camp",
+        "pt": "Campo de férias",
+        "es": "Campamento de verano",
+        "fr": "Colonie de vacances",
+        "de": "Feriencamp"
+      },
+      "preset": "appointments",
+      "categories": ["childcare", "tours"]
+    },
+    {
+      "id": "kids-party-venue",
+      "names": {
+        "en": "Children's party venue",
+        "pt": "Espaço de festas infantis",
+        "es": "Local de fiestas infantiles",
+        "fr": "Salle d'anniversaire pour enfants",
+        "de": "Kindergeburtstag-Location"
+      },
+      "preset": "appointments",
+      "categories": ["childcare", "venues"]
+    },
+    {
+      "id": "soft-play",
+      "names": {
+        "en": "Soft play centre",
+        "pt": "Parque infantil coberto",
+        "es": "Parque de bolas",
+        "fr": "Aire de jeux couverte",
+        "de": "Indoor-Spielplatz"
+      },
+      "preset": "appointments",
+      "categories": ["childcare", "venues"]
+    },
+    {
+      "id": "event-planner",
+      "names": {
+        "en": "Event planner",
+        "pt": "Organização de eventos",
+        "es": "Organizador de eventos",
+        "fr": "Organisateur d'événements",
+        "de": "Eventplaner"
+      },
+      "preset": "general",
+      "categories": ["events"]
+    },
+    {
+      "id": "wedding-planner",
+      "names": {
+        "en": "Wedding planner",
+        "pt": "Wedding planner",
+        "es": "Wedding planner",
+        "fr": "Wedding planner",
+        "de": "Hochzeitsplaner"
+      },
+      "preset": "general",
+      "categories": ["events"]
+    },
+    {
+      "id": "dj",
+      "names": {
+        "en": "DJ",
+        "pt": "DJ",
+        "es": "DJ",
+        "fr": "DJ",
+        "de": "DJ"
+      },
+      "preset": "general",
+      "categories": ["events"]
+    },
+    {
+      "id": "band",
+      "names": {
+        "en": "Band and musicians",
+        "pt": "Banda e músicos",
+        "es": "Grupo de música",
+        "fr": "Groupe de musique",
+        "de": "Band und Musiker"
+      },
+      "preset": "general",
+      "categories": ["events"]
+    },
+    {
+      "id": "party-entertainer",
+      "names": {
+        "en": "Party entertainer",
+        "pt": "Animação de festas",
+        "es": "Animador de fiestas",
+        "fr": "Animateur de fêtes",
+        "de": "Partyanimateur"
+      },
+      "preset": "general",
+      "categories": ["events", "childcare"]
+    },
+    {
+      "id": "magician",
+      "names": {
+        "en": "Magician",
+        "pt": "Mágico",
+        "es": "Mago",
+        "fr": "Magicien",
+        "de": "Zauberer"
+      },
+      "preset": "general",
+      "categories": ["events"]
+    },
+    {
+      "id": "event-rentals",
+      "names": {
+        "en": "Event rentals",
+        "pt": "Aluguer para eventos",
+        "es": "Alquiler para eventos",
+        "fr": "Location pour événements",
+        "de": "Eventverleih"
+      },
+      "preset": "general",
+      "categories": ["events"]
+    },
+    {
+      "id": "photo-booth",
+      "names": {
+        "en": "Photo booth hire",
+        "pt": "Aluguer de photo booth",
+        "es": "Alquiler de fotomatón",
+        "fr": "Location de photobooth",
+        "de": "Fotobox-Verleih"
+      },
+      "preset": "general",
+      "categories": ["events", "photography"]
+    },
+    {
+      "id": "sound-and-lighting",
+      "names": {
+        "en": "Sound and lighting hire",
+        "pt": "Aluguer de som e luz",
+        "es": "Alquiler de sonido e iluminación",
+        "fr": "Location de son et lumière",
+        "de": "Licht- und Tontechnik"
+      },
+      "preset": "general",
+      "categories": ["events"]
+    },
+    {
+      "id": "celebrant",
+      "names": {
+        "en": "Celebrant",
+        "pt": "Celebrante",
+        "es": "Oficiante de ceremonias",
+        "fr": "Officiant de cérémonie",
+        "de": "Freier Redner"
+      },
+      "preset": "general",
+      "categories": ["events"]
+    },
+    {
+      "id": "balloon-decorations",
+      "names": {
+        "en": "Balloon decorations",
+        "pt": "Decoração com balões",
+        "es": "Decoración con globos",
+        "fr": "Décoration en ballons",
+        "de": "Ballondekoration"
+      },
+      "preset": "general",
+      "categories": ["events"]
+    },
+    {
+      "id": "marquee-hire",
+      "names": {
+        "en": "Marquee hire",
+        "pt": "Aluguer de tendas",
+        "es": "Alquiler de carpas",
+        "fr": "Location de chapiteaux",
+        "de": "Zeltverleih"
+      },
+      "preset": "general",
+      "categories": ["events"]
+    },
+    {
+      "id": "event-venue",
+      "names": {
+        "en": "Event venue",
+        "pt": "Espaço para eventos",
+        "es": "Espacio para eventos",
+        "fr": "Salle d'événements",
+        "de": "Eventlocation"
+      },
+      "preset": "general",
+      "categories": ["venues"]
+    },
+    {
+      "id": "wedding-venue",
+      "names": {
+        "en": "Wedding venue",
+        "pt": "Quinta para casamentos",
+        "es": "Finca para bodas",
+        "fr": "Lieu de mariage",
+        "de": "Hochzeitslocation"
+      },
+      "preset": "general",
+      "categories": ["venues", "events"]
+    },
+    {
+      "id": "conference-centre",
+      "names": {
+        "en": "Conference centre",
+        "pt": "Centro de congressos",
+        "es": "Centro de convenciones",
+        "fr": "Centre de congrès",
+        "de": "Kongresszentrum"
+      },
+      "preset": "general",
+      "categories": ["venues"]
+    },
+    {
+      "id": "function-room",
+      "names": {
+        "en": "Function room",
+        "pt": "Sala de festas",
+        "es": "Salón de celebraciones",
+        "fr": "Salle de réception",
+        "de": "Festsaal"
+      },
+      "preset": "general",
+      "categories": ["venues"]
+    },
+    {
+      "id": "theatre",
+      "names": {
+        "en": "Theatre",
+        "pt": "Teatro",
+        "es": "Teatro",
+        "fr": "Théâtre",
+        "de": "Theater"
+      },
+      "preset": "general",
+      "categories": ["venues", "tours"]
+    },
+    {
+      "id": "cinema",
+      "names": {
+        "en": "Cinema",
+        "pt": "Cinema",
+        "es": "Cine",
+        "fr": "Cinéma",
+        "de": "Kino"
+      },
+      "preset": "general",
+      "categories": ["venues"]
+    },
+    {
+      "id": "concert-venue",
+      "names": {
+        "en": "Concert venue",
+        "pt": "Sala de concertos",
+        "es": "Sala de conciertos",
+        "fr": "Salle de concert",
+        "de": "Konzertsaal"
+      },
+      "preset": "general",
+      "categories": ["venues"]
+    },
+    {
+      "id": "recording-studio",
+      "names": {
+        "en": "Recording studio",
+        "pt": "Estúdio de gravação",
+        "es": "Estudio de grabación",
+        "fr": "Studio d'enregistrement",
+        "de": "Tonstudio"
+      },
+      "preset": "appointments",
+      "categories": ["venues"]
+    },
+    {
+      "id": "rehearsal-studio",
+      "names": {
+        "en": "Rehearsal studio",
+        "pt": "Sala de ensaio",
+        "es": "Local de ensayo",
+        "fr": "Studio de répétition",
+        "de": "Proberaum"
+      },
+      "preset": "appointments",
+      "categories": ["venues"]
+    },
+    {
+      "id": "amusement-arcade",
+      "names": {
+        "en": "Amusement arcade",
+        "pt": "Salão de jogos",
+        "es": "Salón recreativo",
+        "fr": "Salle d'arcade",
+        "de": "Spielhalle"
+      },
+      "preset": "general",
+      "categories": ["venues"]
+    },
+    {
+      "id": "art-gallery",
+      "names": {
+        "en": "Art gallery",
+        "pt": "Galeria de arte",
+        "es": "Galería de arte",
+        "fr": "Galerie d'art",
+        "de": "Kunstgalerie"
+      },
+      "preset": "shop",
+      "categories": ["venues", "crafts"]
+    },
+    {
+      "id": "museum",
+      "names": {
+        "en": "Museum",
+        "pt": "Museu",
+        "es": "Museo",
+        "fr": "Musée",
+        "de": "Museum"
+      },
+      "preset": "general",
+      "categories": ["tours", "venues"]
+    },
+    {
+      "id": "community-centre",
+      "names": {
+        "en": "Community centre",
+        "pt": "Centro comunitário",
+        "es": "Centro cívico",
+        "fr": "Centre communautaire",
+        "de": "Gemeindezentrum"
+      },
+      "preset": "general",
+      "categories": ["venues"]
+    },
+    {
+      "id": "photographer",
+      "names": {
+        "en": "Photographer",
+        "pt": "Fotógrafo",
+        "es": "Fotógrafo",
+        "fr": "Photographe",
+        "de": "Fotograf"
+      },
+      "preset": "appointments",
+      "categories": ["photography"]
+    },
+    {
+      "id": "wedding-photographer",
+      "names": {
+        "en": "Wedding photographer",
+        "pt": "Fotógrafo de casamentos",
+        "es": "Fotógrafo de bodas",
+        "fr": "Photographe de mariage",
+        "de": "Hochzeitsfotograf"
+      },
+      "preset": "general",
+      "categories": ["photography", "events"]
+    },
+    {
+      "id": "videographer",
+      "names": {
+        "en": "Videographer",
+        "pt": "Videógrafo",
+        "es": "Videógrafo",
+        "fr": "Vidéaste",
+        "de": "Videograf"
+      },
+      "preset": "general",
+      "categories": ["photography"]
+    },
+    {
+      "id": "photo-studio",
+      "names": {
+        "en": "Photo studio",
+        "pt": "Estúdio fotográfico",
+        "es": "Estudio fotográfico",
+        "fr": "Studio photo",
+        "de": "Fotostudio"
+      },
+      "preset": "appointments",
+      "categories": ["photography"]
+    },
+    {
+      "id": "drone-photography",
+      "names": {
+        "en": "Drone photography",
+        "pt": "Fotografia com drone",
+        "es": "Fotografía con dron",
+        "fr": "Photographie par drone",
+        "de": "Drohnenfotografie"
+      },
+      "preset": "general",
+      "categories": ["photography"]
+    },
+    {
+      "id": "passport-photos",
+      "names": {
+        "en": "Passport photos",
+        "pt": "Fotografias tipo passe",
+        "es": "Fotos de carné",
+        "fr": "Photos d'identité",
+        "de": "Passbilder"
+      },
+      "preset": "appointments",
+      "categories": ["photography"]
+    },
+    {
+      "id": "newborn-photographer",
+      "names": {
+        "en": "Newborn photographer",
+        "pt": "Fotógrafo de recém-nascidos",
+        "es": "Fotógrafo de recién nacidos",
+        "fr": "Photographe de naissance",
+        "de": "Neugeborenenfotograf"
+      },
+      "preset": "appointments",
+      "categories": ["photography"]
+    },
+    {
+      "id": "product-photographer",
+      "names": {
+        "en": "Product photographer",
+        "pt": "Fotografia de produto",
+        "es": "Fotografía de producto",
+        "fr": "Photographe produit",
+        "de": "Produktfotograf"
+      },
+      "preset": "general",
+      "categories": ["photography"]
+    },
+    {
+      "id": "photo-printing",
+      "names": {
+        "en": "Photo printing",
+        "pt": "Revelação de fotografias",
+        "es": "Revelado de fotos",
+        "fr": "Tirage photo",
+        "de": "Fotodruck"
+      },
+      "preset": "shop",
+      "categories": ["photography", "shop"]
+    },
+    {
+      "id": "place-to-stay",
+      "names": {
+        "en": "Place to stay",
+        "pt": "Alojamento",
+        "es": "Alojamiento",
+        "fr": "Hébergement",
+        "de": "Unterkunft"
+      },
+      "preset": "stays",
+      "categories": ["stay"]
+    },
+    {
+      "id": "hotel",
+      "names": {
+        "en": "Hotel",
+        "pt": "Hotel",
+        "es": "Hotel",
+        "fr": "Hôtel",
+        "de": "Hotel"
+      },
+      "preset": "stays",
+      "categories": ["stay"]
+    },
+    {
+      "id": "boutique-hotel",
+      "names": {
+        "en": "Boutique hotel",
+        "pt": "Hotel boutique",
+        "es": "Hotel boutique",
+        "fr": "Hôtel de charme",
+        "de": "Boutique-Hotel"
+      },
+      "preset": "stays",
+      "categories": ["stay"]
+    },
+    {
+      "id": "guesthouse",
+      "names": {
+        "en": "Guesthouse",
+        "pt": "Casa de hóspedes",
+        "es": "Casa de huéspedes",
+        "fr": "Maison d'hôtes",
+        "de": "Pension"
+      },
+      "preset": "stays",
+      "categories": ["stay"]
+    },
+    {
+      "id": "bed-and-breakfast",
+      "names": {
+        "en": "Bed and breakfast",
+        "pt": "Bed & breakfast",
+        "es": "Bed & breakfast",
+        "fr": "Chambre d'hôtes",
+        "de": "Bed & Breakfast"
+      },
+      "preset": "stays",
+      "categories": ["stay"]
+    },
+    {
+      "id": "hostel",
+      "names": {
+        "en": "Hostel",
+        "pt": "Hostel",
+        "es": "Albergue",
+        "fr": "Auberge de jeunesse",
+        "de": "Hostel"
+      },
+      "preset": "stays",
+      "categories": ["stay"]
+    },
+    {
+      "id": "holiday-rental",
+      "names": {
+        "en": "Holiday rental",
+        "pt": "Alojamento local",
+        "es": "Alquiler vacacional",
+        "fr": "Location de vacances",
+        "de": "Ferienwohnung"
+      },
+      "preset": "stays",
+      "categories": ["stay"]
+    },
+    {
+      "id": "aparthotel",
+      "names": {
+        "en": "Aparthotel",
+        "pt": "Apartamentos turísticos",
+        "es": "Aparthotel",
+        "fr": "Résidence hôtelière",
+        "de": "Aparthotel"
+      },
+      "preset": "stays",
+      "categories": ["stay"]
+    },
+    {
+      "id": "serviced-apartment",
+      "names": {
+        "en": "Serviced apartment",
+        "pt": "Apartamento com serviços",
+        "es": "Apartamento con servicios",
+        "fr": "Appartement avec services",
+        "de": "Serviced Apartment"
+      },
+      "preset": "stays",
+      "categories": ["stay"]
+    },
+    {
+      "id": "campsite",
+      "names": {
+        "en": "Campsite",
+        "pt": "Parque de campismo",
+        "es": "Camping",
+        "fr": "Camping",
+        "de": "Campingplatz"
+      },
+      "preset": "stays",
+      "categories": ["stay"]
+    },
+    {
+      "id": "glamping",
+      "names": {
+        "en": "Glamping",
+        "pt": "Glamping",
+        "es": "Glamping",
+        "fr": "Glamping",
+        "de": "Glamping"
+      },
+      "preset": "stays",
+      "categories": ["stay"]
+    },
+    {
+      "id": "motel",
+      "names": {
+        "en": "Motel",
+        "pt": "Motel",
+        "es": "Motel",
+        "fr": "Motel",
+        "de": "Motel"
+      },
+      "preset": "stays",
+      "categories": ["stay"]
+    },
+    {
+      "id": "inn",
+      "names": {
+        "en": "Inn",
+        "pt": "Estalagem",
+        "es": "Posada",
+        "fr": "Auberge",
+        "de": "Gasthof"
+      },
+      "preset": "stays",
+      "categories": ["stay", "restaurant"]
+    },
+    {
+      "id": "farm-stay",
+      "names": {
+        "en": "Farm stay",
+        "pt": "Turismo rural",
+        "es": "Casa rural",
+        "fr": "Gîte à la ferme",
+        "de": "Ferien auf dem Bauernhof"
+      },
+      "preset": "stays",
+      "categories": ["stay"]
+    },
+    {
+      "id": "resort",
+      "names": {
+        "en": "Resort",
+        "pt": "Resort",
+        "es": "Resort",
+        "fr": "Complexe hôtelier",
+        "de": "Resort"
+      },
+      "preset": "stays",
+      "categories": ["stay"]
+    },
+    {
+      "id": "villa-rental",
+      "names": {
+        "en": "Villa rental",
+        "pt": "Moradia de férias",
+        "es": "Villa vacacional",
+        "fr": "Villa de vacances",
+        "de": "Ferienvilla"
+      },
+      "preset": "stays",
+      "categories": ["stay"]
+    },
+    {
+      "id": "chalet",
+      "names": {
+        "en": "Chalet",
+        "pt": "Chalé",
+        "es": "Chalet",
+        "fr": "Chalet",
+        "de": "Chalet"
+      },
+      "preset": "stays",
+      "categories": ["stay"]
+    },
+    {
+      "id": "surf-house",
+      "names": {
+        "en": "Surf house",
+        "pt": "Surf house",
+        "es": "Surf house",
+        "fr": "Surf house",
+        "de": "Surfhaus"
+      },
+      "preset": "stays",
+      "categories": ["stay"]
+    },
+    {
+      "id": "lodge",
+      "names": {
+        "en": "Lodge",
+        "pt": "Lodge",
+        "es": "Lodge",
+        "fr": "Lodge",
+        "de": "Lodge"
+      },
+      "preset": "stays",
+      "categories": ["stay"]
+    },
+    {
+      "id": "cabin",
+      "names": {
+        "en": "Cabin",
+        "pt": "Cabana",
+        "es": "Cabaña",
+        "fr": "Cabane",
+        "de": "Hütte"
+      },
+      "preset": "stays",
+      "categories": ["stay"]
+    },
+    {
+      "id": "motorhome-park",
+      "names": {
+        "en": "Motorhome park",
+        "pt": "Parque de autocaravanas",
+        "es": "Área de autocaravanas",
+        "fr": "Aire de camping-cars",
+        "de": "Wohnmobilstellplatz"
+      },
+      "preset": "stays",
+      "categories": ["stay"]
+    },
+    {
+      "id": "ryokan",
+      "names": {
+        "en": "Ryokan",
+        "pt": "Ryokan",
+        "es": "Ryokan",
+        "fr": "Ryokan",
+        "de": "Ryokan"
+      },
+      "preset": "stays",
+      "categories": ["stay"]
+    },
+    {
+      "id": "riad",
+      "names": {
+        "en": "Riad",
+        "pt": "Riad",
+        "es": "Riad",
+        "fr": "Riad",
+        "de": "Riad"
+      },
+      "preset": "stays",
+      "categories": ["stay"]
+    },
+    {
+      "id": "historic-inn",
+      "names": {
+        "en": "Historic inn",
+        "pt": "Pousada",
+        "es": "Parador",
+        "fr": "Hôtel historique",
+        "de": "Historisches Hotel"
+      },
+      "preset": "stays",
+      "categories": ["stay"]
+    },
+    {
+      "id": "capsule-hotel",
+      "names": {
+        "en": "Capsule hotel",
+        "pt": "Hotel cápsula",
+        "es": "Hotel cápsula",
+        "fr": "Hôtel capsule",
+        "de": "Kapselhotel"
+      },
+      "preset": "stays",
+      "categories": ["stay"]
+    },
+    {
+      "id": "mountain-hut",
+      "names": {
+        "en": "Mountain hut",
+        "pt": "Refúgio de montanha",
+        "es": "Refugio de montaña",
+        "fr": "Refuge de montagne",
+        "de": "Berghütte"
+      },
+      "preset": "stays",
+      "categories": ["stay"]
+    },
+    {
+      "id": "houseboat",
+      "names": {
+        "en": "Houseboat",
+        "pt": "Casa flutuante",
+        "es": "Barco vivienda",
+        "fr": "Péniche",
+        "de": "Hausboot"
+      },
+      "preset": "stays",
+      "categories": ["stay"]
+    },
+    {
+      "id": "retreat-centre",
+      "names": {
+        "en": "Retreat centre",
+        "pt": "Centro de retiros",
+        "es": "Centro de retiros",
+        "fr": "Centre de retraite",
+        "de": "Retreat-Zentrum"
+      },
+      "preset": "stays",
+      "categories": ["stay", "wellness"]
+    },
+    {
+      "id": "taxi",
+      "names": {
+        "en": "Taxi",
+        "pt": "Táxi",
+        "es": "Taxi",
+        "fr": "Taxi",
+        "de": "Taxi"
+      },
+      "preset": "appointments",
+      "categories": ["transport"]
+    },
+    {
+      "id": "private-driver",
+      "names": {
+        "en": "Private driver",
+        "pt": "Motorista privado",
+        "es": "Conductor privado",
+        "fr": "Chauffeur privé",
+        "de": "Privatfahrer"
+      },
+      "preset": "appointments",
+      "categories": ["transport"]
+    },
+    {
+      "id": "airport-transfer",
+      "names": {
+        "en": "Airport transfer",
+        "pt": "Transferes de aeroporto",
+        "es": "Traslados al aeropuerto",
+        "fr": "Transfert aéroport",
+        "de": "Flughafentransfer"
+      },
+      "preset": "appointments",
+      "categories": ["transport"]
+    },
+    {
+      "id": "limousine-hire",
+      "names": {
+        "en": "Limousine hire",
+        "pt": "Aluguer de limusinas",
+        "es": "Alquiler de limusinas",
+        "fr": "Location de limousines",
+        "de": "Limousinenservice"
+      },
+      "preset": "appointments",
+      "categories": ["transport", "events"]
+    },
+    {
+      "id": "courier",
+      "names": {
+        "en": "Courier",
+        "pt": "Estafeta",
+        "es": "Mensajería",
+        "fr": "Coursier",
+        "de": "Kurierdienst"
+      },
+      "preset": "general",
+      "categories": ["transport"]
+    },
+    {
+      "id": "van-hire",
+      "names": {
+        "en": "Van hire",
+        "pt": "Aluguer de carrinhas",
+        "es": "Alquiler de furgonetas",
+        "fr": "Location d'utilitaires",
+        "de": "Transportervermietung"
+      },
+      "preset": "general",
+      "categories": ["transport", "auto"]
+    },
+    {
+      "id": "coach-hire",
+      "names": {
+        "en": "Coach hire",
+        "pt": "Aluguer de autocarros",
+        "es": "Alquiler de autocares",
+        "fr": "Location d'autocars",
+        "de": "Busvermietung"
+      },
+      "preset": "general",
+      "categories": ["transport"]
+    },
+    {
+      "id": "bike-rental",
+      "names": {
+        "en": "Bike rental",
+        "pt": "Aluguer de bicicletas",
+        "es": "Alquiler de bicicletas",
+        "fr": "Location de vélos",
+        "de": "Fahrradverleih"
+      },
+      "preset": "appointments",
+      "categories": ["transport", "tours"]
+    },
+    {
+      "id": "scooter-rental",
+      "names": {
+        "en": "Scooter rental",
+        "pt": "Aluguer de scooters",
+        "es": "Alquiler de motos",
+        "fr": "Location de scooters",
+        "de": "Rollerverleih"
+      },
+      "preset": "appointments",
+      "categories": ["transport"]
+    },
+    {
+      "id": "boat-charter",
+      "names": {
+        "en": "Boat charter",
+        "pt": "Aluguer de barcos",
+        "es": "Alquiler de barcos",
+        "fr": "Location de bateaux",
+        "de": "Bootsvermietung"
+      },
+      "preset": "appointments",
+      "categories": ["transport", "tours"]
+    },
+    {
+      "id": "freight",
+      "names": {
+        "en": "Freight and haulage",
+        "pt": "Transporte de mercadorias",
+        "es": "Transporte de mercancías",
+        "fr": "Transport de marchandises",
+        "de": "Spedition"
+      },
+      "preset": "general",
+      "categories": ["transport"]
+    },
+    {
+      "id": "parcel-shop",
+      "names": {
+        "en": "Parcel shop",
+        "pt": "Ponto de recolha de encomendas",
+        "es": "Punto de recogida de paquetes",
+        "fr": "Point relais",
+        "de": "Paketshop"
+      },
+      "preset": "general",
+      "categories": ["transport", "shop"]
+    },
+    {
+      "id": "tour-guide",
+      "names": {
+        "en": "Tour guide",
+        "pt": "Guia turístico",
+        "es": "Guía turístico",
+        "fr": "Guide touristique",
+        "de": "Reiseführer"
+      },
+      "preset": "appointments",
+      "categories": ["tours"]
+    },
+    {
+      "id": "walking-tours",
+      "names": {
+        "en": "Walking tours",
+        "pt": "Visitas a pé",
+        "es": "Rutas a pie",
+        "fr": "Visites à pied",
+        "de": "Stadtführungen"
+      },
+      "preset": "appointments",
+      "categories": ["tours"]
+    },
+    {
+      "id": "boat-tours",
+      "names": {
+        "en": "Boat tours",
+        "pt": "Passeios de barco",
+        "es": "Paseos en barco",
+        "fr": "Excursions en bateau",
+        "de": "Bootstouren"
+      },
+      "preset": "appointments",
+      "categories": ["tours"]
+    },
+    {
+      "id": "tuk-tuk-tours",
+      "names": {
+        "en": "Tuk-tuk tours",
+        "pt": "Passeios de tuk-tuk",
+        "es": "Rutas en tuk-tuk",
+        "fr": "Visites en tuk-tuk",
+        "de": "Tuk-Tuk-Touren"
+      },
+      "preset": "appointments",
+      "categories": ["tours", "transport"]
+    },
+    {
+      "id": "wine-tasting",
+      "names": {
+        "en": "Wine tasting",
+        "pt": "Provas de vinho",
+        "es": "Cata de vinos",
+        "fr": "Dégustation de vin",
+        "de": "Weinprobe"
+      },
+      "preset": "appointments",
+      "categories": ["tours"]
+    },
+    {
+      "id": "food-tours",
+      "names": {
+        "en": "Food tours",
+        "pt": "Tours gastronómicos",
+        "es": "Rutas gastronómicas",
+        "fr": "Visites gastronomiques",
+        "de": "Kulinarische Touren"
+      },
+      "preset": "appointments",
+      "categories": ["tours"]
+    },
+    {
+      "id": "kayak-hire",
+      "names": {
+        "en": "Kayak and canoe hire",
+        "pt": "Aluguer de caiaques",
+        "es": "Alquiler de kayaks",
+        "fr": "Location de kayaks",
+        "de": "Kajakverleih"
+      },
+      "preset": "appointments",
+      "categories": ["tours", "fitness"]
+    },
+    {
+      "id": "stand-up-paddle",
+      "names": {
+        "en": "Stand-up paddle",
+        "pt": "Stand-up paddle",
+        "es": "Paddle surf",
+        "fr": "Stand-up paddle",
+        "de": "Stand-up-Paddling"
+      },
+      "preset": "appointments",
+      "categories": ["tours", "fitness"]
+    },
+    {
+      "id": "bike-tours",
+      "names": {
+        "en": "Bike tours",
+        "pt": "Passeios de bicicleta",
+        "es": "Rutas en bici",
+        "fr": "Balades à vélo",
+        "de": "Radtouren"
+      },
+      "preset": "appointments",
+      "categories": ["tours"]
+    },
+    {
+      "id": "adventure-park",
+      "names": {
+        "en": "Adventure park",
+        "pt": "Parque de aventura",
+        "es": "Parque de aventura",
+        "fr": "Parc d'aventure",
+        "de": "Kletterpark"
+      },
+      "preset": "appointments",
+      "categories": ["tours", "venues"]
+    },
+    {
+      "id": "paragliding",
+      "names": {
+        "en": "Paragliding",
+        "pt": "Parapente",
+        "es": "Parapente",
+        "fr": "Parapente",
+        "de": "Gleitschirmfliegen"
+      },
+      "preset": "appointments",
+      "categories": ["tours"]
+    },
+    {
+      "id": "hot-air-balloon",
+      "names": {
+        "en": "Hot-air balloon rides",
+        "pt": "Passeios de balão",
+        "es": "Vuelos en globo",
+        "fr": "Vols en montgolfière",
+        "de": "Ballonfahrten"
+      },
+      "preset": "appointments",
+      "categories": ["tours"]
+    },
+    {
+      "id": "fishing-trips",
+      "names": {
+        "en": "Fishing trips",
+        "pt": "Pesca desportiva",
+        "es": "Excursiones de pesca",
+        "fr": "Sorties de pêche",
+        "de": "Angeltouren"
+      },
+      "preset": "appointments",
+      "categories": ["tours"]
+    },
+    {
+      "id": "whale-watching",
+      "names": {
+        "en": "Whale and dolphin watching",
+        "pt": "Observação de golfinhos",
+        "es": "Avistamiento de cetáceos",
+        "fr": "Observation des dauphins",
+        "de": "Walbeobachtung"
+      },
+      "preset": "appointments",
+      "categories": ["tours"]
+    },
+    {
+      "id": "jeep-tours",
+      "names": {
+        "en": "Jeep tours",
+        "pt": "Passeios de jipe",
+        "es": "Excursiones en todoterreno",
+        "fr": "Excursions en 4x4",
+        "de": "Jeep-Touren"
+      },
+      "preset": "appointments",
+      "categories": ["tours"]
+    },
+    {
+      "id": "day-trips",
+      "names": {
+        "en": "Day trips",
+        "pt": "Excursões",
+        "es": "Excursiones",
+        "fr": "Excursions",
+        "de": "Tagesausflüge"
+      },
+      "preset": "appointments",
+      "categories": ["tours"]
+    },
+    {
+      "id": "mountain-guide",
+      "names": {
+        "en": "Mountain guide",
+        "pt": "Guia de montanha",
+        "es": "Guía de montaña",
+        "fr": "Guide de haute montagne",
+        "de": "Bergführer"
+      },
+      "preset": "appointments",
+      "categories": ["tours"]
+    },
+    {
+      "id": "travel-agency",
+      "names": {
+        "en": "Travel agency",
+        "pt": "Agência de viagens",
+        "es": "Agencia de viajes",
+        "fr": "Agence de voyages",
+        "de": "Reisebüro"
+      },
+      "preset": "general",
+      "categories": ["tours"]
+    },
+    {
+      "id": "zoo-or-aquarium",
+      "names": {
+        "en": "Zoo or aquarium",
+        "pt": "Jardim zoológico ou aquário",
+        "es": "Zoo o acuario",
+        "fr": "Zoo ou aquarium",
+        "de": "Zoo oder Aquarium"
+      },
+      "preset": "general",
+      "categories": ["tours"]
+    },
+    {
+      "id": "theme-park",
+      "names": {
+        "en": "Theme park",
+        "pt": "Parque temático",
+        "es": "Parque temático",
+        "fr": "Parc d'attractions",
+        "de": "Freizeitpark"
+      },
+      "preset": "general",
+      "categories": ["tours", "venues"]
+    },
+    {
+      "id": "vet",
+      "names": {
+        "en": "Vet",
+        "pt": "Veterinário",
+        "es": "Veterinario",
+        "fr": "Vétérinaire",
+        "de": "Tierarzt"
+      },
+      "preset": "appointments",
+      "categories": ["pets", "health"]
+    },
+    {
+      "id": "pet-groomer",
+      "names": {
+        "en": "Pet groomer",
+        "pt": "Tosquias",
+        "es": "Peluquería canina",
+        "fr": "Toilettage",
+        "de": "Hundesalon"
+      },
+      "preset": "appointments",
+      "categories": ["pets"]
+    },
+    {
+      "id": "dog-walker",
+      "names": {
+        "en": "Dog walker",
+        "pt": "Passeio de cães",
+        "es": "Paseador de perros",
+        "fr": "Promeneur de chiens",
+        "de": "Gassi-Service"
+      },
+      "preset": "appointments",
+      "categories": ["pets"]
+    },
+    {
+      "id": "pet-sitter",
+      "names": {
+        "en": "Pet sitter",
+        "pt": "Pet sitter",
+        "es": "Cuidador de mascotas",
+        "fr": "Garde d'animaux",
+        "de": "Tiersitter"
+      },
+      "preset": "appointments",
+      "categories": ["pets"]
+    },
+    {
+      "id": "kennels",
+      "names": {
+        "en": "Kennels and boarding",
+        "pt": "Hotel para cães",
+        "es": "Residencia canina",
+        "fr": "Pension pour chiens",
+        "de": "Hundepension"
+      },
+      "preset": "appointments",
+      "categories": ["pets"]
+    },
+    {
+      "id": "dog-trainer",
+      "names": {
+        "en": "Dog trainer",
+        "pt": "Treinador de cães",
+        "es": "Adiestrador canino",
+        "fr": "Éducateur canin",
+        "de": "Hundetrainer"
+      },
+      "preset": "appointments",
+      "categories": ["pets", "education"]
+    },
+    {
+      "id": "cattery",
+      "names": {
+        "en": "Cattery",
+        "pt": "Hotel para gatos",
+        "es": "Residencia felina",
+        "fr": "Pension pour chats",
+        "de": "Katzenpension"
+      },
+      "preset": "appointments",
+      "categories": ["pets"]
+    },
+    {
+      "id": "dog-daycare",
+      "names": {
+        "en": "Dog daycare",
+        "pt": "Creche canina",
+        "es": "Guardería canina",
+        "fr": "Garderie pour chiens",
+        "de": "Hundetagesstätte"
+      },
+      "preset": "appointments",
+      "categories": ["pets"]
+    },
+    {
+      "id": "aquarium-shop",
+      "names": {
+        "en": "Aquarium shop",
+        "pt": "Loja de aquários",
+        "es": "Tienda de acuarios",
+        "fr": "Aquariophilie",
+        "de": "Aquaristik"
+      },
+      "preset": "shop",
+      "categories": ["pets", "shop"]
+    },
+    {
+      "id": "pet-food-delivery",
+      "names": {
+        "en": "Pet food delivery",
+        "pt": "Entrega de comida para animais",
+        "es": "Comida para mascotas a domicilio",
+        "fr": "Livraison d'aliments pour animaux",
+        "de": "Tierfutter-Lieferung"
+      },
+      "preset": "shop",
+      "categories": ["pets", "shop"]
+    },
+    {
+      "id": "florist",
+      "names": {
+        "en": "Florist",
+        "pt": "Florista",
+        "es": "Floristería",
+        "fr": "Fleuriste",
+        "de": "Blumenladen"
+      },
+      "preset": "shop",
+      "categories": ["florist"]
+    },
+    {
+      "id": "flower-delivery",
+      "names": {
+        "en": "Flower delivery",
+        "pt": "Entrega de flores",
+        "es": "Envío de flores",
+        "fr": "Livraison de fleurs",
+        "de": "Blumenlieferdienst"
+      },
+      "preset": "shop",
+      "categories": ["florist"]
+    },
+    {
+      "id": "wedding-florist",
+      "names": {
+        "en": "Wedding florist",
+        "pt": "Flores para casamentos",
+        "es": "Flores para bodas",
+        "fr": "Fleuriste de mariage",
+        "de": "Hochzeitsflorist"
+      },
+      "preset": "general",
+      "categories": ["florist", "events"]
+    },
+    {
+      "id": "plant-shop",
+      "names": {
+        "en": "Plant shop",
+        "pt": "Loja de plantas",
+        "es": "Tienda de plantas",
+        "fr": "Boutique de plantes",
+        "de": "Pflanzenladen"
+      },
+      "preset": "shop",
+      "categories": ["florist", "shop"]
+    },
+    {
+      "id": "plant-nursery",
+      "names": {
+        "en": "Plant nursery",
+        "pt": "Viveiro",
+        "es": "Vivero",
+        "fr": "Pépinière",
+        "de": "Gärtnerei"
+      },
+      "preset": "shop",
+      "categories": ["florist", "shop"]
+    },
+    {
+      "id": "artisan",
+      "names": {
+        "en": "Artisan maker",
+        "pt": "Artesão",
+        "es": "Artesano",
+        "fr": "Artisan créateur",
+        "de": "Kunsthandwerker"
+      },
+      "preset": "shop",
+      "categories": ["crafts"]
+    },
+    {
+      "id": "potter",
+      "names": {
+        "en": "Potter",
+        "pt": "Ceramista",
+        "es": "Ceramista",
+        "fr": "Céramiste",
+        "de": "Töpfer"
+      },
+      "preset": "shop",
+      "categories": ["crafts"]
+    },
+    {
+      "id": "woodworker",
+      "names": {
+        "en": "Woodworker",
+        "pt": "Marceneiro",
+        "es": "Ebanista",
+        "fr": "Ébéniste",
+        "de": "Schreiner"
+      },
+      "preset": "general",
+      "categories": ["crafts"]
+    },
+    {
+      "id": "goldsmith",
+      "names": {
+        "en": "Jeweller and goldsmith",
+        "pt": "Ourives",
+        "es": "Orfebre",
+        "fr": "Bijoutier-joaillier",
+        "de": "Goldschmied"
+      },
+      "preset": "shop",
+      "categories": ["crafts", "shop"]
+    },
+    {
+      "id": "candle-maker",
+      "names": {
+        "en": "Candle maker",
+        "pt": "Velas artesanais",
+        "es": "Velas artesanales",
+        "fr": "Fabricant de bougies",
+        "de": "Kerzenmanufaktur"
+      },
+      "preset": "shop",
+      "categories": ["crafts"]
+    },
+    {
+      "id": "soap-maker",
+      "names": {
+        "en": "Soap maker",
+        "pt": "Sabonetes artesanais",
+        "es": "Jabones artesanales",
+        "fr": "Savonnerie artisanale",
+        "de": "Seifenmanufaktur"
+      },
+      "preset": "shop",
+      "categories": ["crafts"]
+    },
+    {
+      "id": "leather-goods",
+      "names": {
+        "en": "Leather goods",
+        "pt": "Marroquinaria",
+        "es": "Marroquinería",
+        "fr": "Maroquinerie",
+        "de": "Lederwaren"
+      },
+      "preset": "shop",
+      "categories": ["crafts", "shop"]
+    },
+    {
+      "id": "printmaker",
+      "names": {
+        "en": "Printmaker",
+        "pt": "Gravador",
+        "es": "Grabador",
+        "fr": "Graveur",
+        "de": "Druckgrafiker"
+      },
+      "preset": "shop",
+      "categories": ["crafts"]
+    },
+    {
+      "id": "sign-maker",
+      "names": {
+        "en": "Sign maker",
+        "pt": "Reclamos e sinalética",
+        "es": "Rotulación",
+        "fr": "Enseignes",
+        "de": "Schilderhersteller"
+      },
+      "preset": "general",
+      "categories": ["crafts"]
+    },
+    {
+      "id": "picture-framer",
+      "names": {
+        "en": "Picture framer",
+        "pt": "Molduras",
+        "es": "Enmarcación",
+        "fr": "Encadreur",
+        "de": "Bilderrahmen"
+      },
+      "preset": "appointments",
+      "categories": ["crafts", "shop"]
+    },
+    {
+      "id": "engraving",
+      "names": {
+        "en": "Engraving",
+        "pt": "Gravação personalizada",
+        "es": "Grabados personalizados",
+        "fr": "Gravure sur objets",
+        "de": "Gravur"
+      },
+      "preset": "general",
+      "categories": ["crafts"]
+    },
+    {
+      "id": "3d-printing",
+      "names": {
+        "en": "3D printing",
+        "pt": "Impressão 3D",
+        "es": "Impresión 3D",
+        "fr": "Impression 3D",
+        "de": "3D-Druck"
+      },
+      "preset": "general",
+      "categories": ["crafts", "it-services"]
+    },
+    {
+      "id": "embroidery",
+      "names": {
+        "en": "Embroidery",
+        "pt": "Bordados",
+        "es": "Bordados",
+        "fr": "Broderie",
+        "de": "Stickerei"
+      },
+      "preset": "general",
+      "categories": ["crafts"]
+    },
+    {
+      "id": "custom-printing",
+      "names": {
+        "en": "Custom T-shirt printing",
+        "pt": "Personalização de t-shirts",
+        "es": "Estampación personalizada",
+        "fr": "Impression textile",
+        "de": "Textildruck"
+      },
+      "preset": "general",
+      "categories": ["crafts", "shop"]
+    },
+    {
+      "id": "glassblower",
+      "names": {
+        "en": "Glassblower",
+        "pt": "Vidro soprado",
+        "es": "Soplador de vidrio",
+        "fr": "Souffleur de verre",
+        "de": "Glasbläser"
+      },
+      "preset": "shop",
+      "categories": ["crafts"]
+    },
+    {
+      "id": "blacksmith",
+      "names": {
+        "en": "Blacksmith",
+        "pt": "Ferreiro",
+        "es": "Herrero",
+        "fr": "Forgeron",
+        "de": "Schmied"
+      },
+      "preset": "general",
+      "categories": ["crafts"]
+    },
+    {
+      "id": "knitwear-maker",
+      "names": {
+        "en": "Knitwear maker",
+        "pt": "Malhas artesanais",
+        "es": "Punto artesanal",
+        "fr": "Tricot artisanal",
+        "de": "Strickwaren"
+      },
+      "preset": "shop",
+      "categories": ["crafts"]
+    },
+    {
+      "id": "artist",
+      "names": {
+        "en": "Artist",
+        "pt": "Artista",
+        "es": "Artista",
+        "fr": "Artiste",
+        "de": "Künstler"
+      },
+      "preset": "shop",
+      "categories": ["crafts"]
+    },
+    {
+      "id": "illustrator",
+      "names": {
+        "en": "Illustrator",
+        "pt": "Ilustrador",
+        "es": "Ilustrador",
+        "fr": "Illustrateur",
+        "de": "Illustrator"
+      },
+      "preset": "general",
+      "categories": ["crafts"]
+    },
+    {
+      "id": "bookbinder",
+      "names": {
+        "en": "Bookbinder",
+        "pt": "Encadernador",
+        "es": "Encuadernador",
+        "fr": "Relieur",
+        "de": "Buchbinder"
+      },
+      "preset": "general",
+      "categories": ["crafts"]
+    },
+    {
+      "id": "dressmaker",
+      "names": {
+        "en": "Dressmaker",
+        "pt": "Modista",
+        "es": "Modista",
+        "fr": "Couturière",
+        "de": "Schneiderin"
+      },
+      "preset": "general",
+      "categories": ["crafts", "repair"]
+    },
+    {
+      "id": "funeral-director",
+      "names": {
+        "en": "Funeral director",
+        "pt": "Agência funerária",
+        "es": "Funeraria",
+        "fr": "Pompes funèbres",
+        "de": "Bestattungsunternehmen"
+      },
+      "preset": "general",
+      "categories": []
+    },
+    {
+      "id": "charity",
+      "names": {
+        "en": "Charity",
+        "pt": "Associação sem fins lucrativos",
+        "es": "Asociación sin ánimo de lucro",
+        "fr": "Association",
+        "de": "Gemeinnütziger Verein"
+      },
+      "preset": "general",
+      "categories": []
+    },
+    {
+      "id": "security-services",
+      "names": {
+        "en": "Security services",
+        "pt": "Segurança privada",
+        "es": "Seguridad privada",
+        "fr": "Sécurité privée",
+        "de": "Sicherheitsdienst"
+      },
+      "preset": "general",
+      "categories": []
+    }
+  ]
+}

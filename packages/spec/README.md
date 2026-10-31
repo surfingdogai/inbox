@@ -254,6 +254,12 @@ public page its hosts were read from; and the names under a host, and the first 
 own pages. Not listed: delivery apps and stay marketplaces (Uber Eats, DoorDash, Deliveroo, Booking.com, Airbnb,
 Expedia…). Some listed platforms charge the business per booking or order; that is between the business and the
 platform. A token is never removed or renamed.
+`vocab/business-kinds.json` (0.12, additive) lists kinds of business, from a tattoo studio to a surf house: each
+with its name in English, Portuguese (Portugal), Spanish, French and German, the setup an inbox starts it from
+(`preset`: one of the inbox's rule presets, or `general`, whose rules follow what agents may do) and the directory
+categories it falls under (slugs of `vocab/categories.json`). An inbox publishes a business's kind in its profile's
+`categories`, as a network already reads them: those slugs, then the kind's name as a free tag; a kind the list
+lacks is the business's own words, as a free tag (`kindCategories`). A kind is never removed or renamed.
 
 `receipts.json` is written by `npx tsx scripts/gen-receipt-vectors.ts` from `packages/core`;
 `receipts-v2.json`, `signatures.json`, `passes.json`, the four stay vectors and `schemas/` by

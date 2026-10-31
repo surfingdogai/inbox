@@ -8,6 +8,7 @@ export * from "./conformance";
 export * from "./door-platforms";
 export * from "./food";
 export * from "./gtin";
+export * from "./kinds";
 export * from "./money";
 export * from "./network/index";
 export * from "./payments";
