@@ -1743,7 +1743,9 @@ of it: never the owner's AI and never a key handed to another system.
 **The manifest** names the feed while the products are listed and the inbox can sign it:
 `catalogue: {"feed": "https://{inbox}/v1/catalogue/changes", "items": "https://{inbox}/v1/catalogue/items"}`.
 Absent, the business lists no products. A network reads the feed only at the URL its manifest names, on
-the business's own domain, https, with no redirect off it.
+the business's own domain (its domain, or another host under the same registrable domain, such as the
+business's API host), https, with no redirect off it. The host proves nothing alone: every page is signed
+by a key the business's own manifest publishes, and `iss` names the business's domain.
 
 **`GET /v1/catalogue/changes?after=<cursor>&limit=<1..500>`** on the inbox (`schemas/catalogue-page.json`):
 
