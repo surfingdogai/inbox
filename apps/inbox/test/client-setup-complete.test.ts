@@ -1,27 +1,60 @@
 import { builtInConnectors } from "@surfingdog/adapters";
-import { DEFAULT_SETTINGS, gallery, mergeSettings, PRESET_KEYS, settingsWriteSchema } from "@surfingdog/core";
+import {
+  DEFAULT_SETTINGS,
+  gallery,
+  mergeSettings,
+  PRESET_KEYS,
+  type Settings,
+  settingsSchema,
+  settingsWriteSchema,
+} from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
-import { SOURCE_CARDS, SOURCE_WORDS, sourceRows, VERIFIED_LIVE } from "../client/src/lib/bring";
-import { BUSINESS_KINDS, businessKind, chosenKind, kindAlso, matchKinds } from "../client/src/lib/kinds";
+import {
+  NO_SECRET_KEY,
+  SOURCE_CARDS,
+  SOURCE_WORDS,
+  SYNC_CARDS,
+  sourceRows,
+  sourceState,
+  VERIFIED_LIVE,
+} from "../client/src/lib/bring";
+import {
+  BUSINESS_KINDS,
+  businessKind,
+  chosenKind,
+  exactKind,
+  kindAlso,
+  matchKinds,
+  settleTyped,
+} from "../client/src/lib/kinds";
 import { setupPayments } from "../client/src/lib/payments";
 import {
   anyDoor,
+  bringable,
   DOOR_GROUPS,
   defaultDoors,
+  discountLine,
   doorRows,
   doorsStepDoc,
   GENERAL,
   KINDS,
   kindOf,
+  offerModeFor,
   offerSections,
   quickKind,
+  savedDoors,
   setupKeyOfSaved,
   setupKindOf,
   startDoors,
   stepsFor,
   termsOf,
+  withListed,
+  wizardDoorsDoc,
   wizardPreset,
 } from "../client/src/lib/setup";
+
+/** Settings with a patch merged in, read back as the inbox reads them. */
+const withPatch = (base: Settings, patch: unknown): Settings => settingsSchema.parse(mergeSettings(base, patch));
 
 /**
  * The setup, all of it: hundreds of kinds of business typed ahead in five languages, or the owner's own words; every
@@ -39,6 +72,52 @@ describe("the setup's kinds of business", () => {
     expect(matchKinds("surf").map((k) => k.id)).toEqual(expect.arrayContaining(["surf-school", "surf-house"]));
     expect(matchKinds("   ")).toEqual([]);
     expect(matchKinds("e", 8).length).toBeLessThanOrEqual(8);
+  });
+
+  it("finds a kind as people say it: words in any order, plurals and endings, other names it goes by", () => {
+    const first = (q: string) => matchKinds(q)[0]?.id;
+    for (const q of ["dog groomer", "dog grooming", "pet grooming", "dog groomers", "Pet groomers"]) {
+      expect(first(q), q).toBe("pet-groomer");
+    }
+    expect(matchKinds("groomer").map((k) => k.id)).toEqual(expect.arrayContaining(["pet-groomer", "mens-grooming"]));
+    expect(first("guest house")).toBe("guesthouse");
+    expect(first("guesthouse")).toBe("guesthouse");
+    expect(first("b&b")).toBe("bed-and-breakfast");
+    expect(first("bed and breakfast")).toBe("bed-and-breakfast");
+    expect(first("nails")).toBe("nail-salon");
+    expect(first("plumbing")).toBe("plumber");
+    expect(first("clothes shop")).toBe("clothing-shop");
+    expect(first("salon hair")).toBe("hair-salon");
+    expect(first("hairdresser")).toBe("hair-salon");
+    expect(first("car hire")).toBe("car-rental");
+    // An English name before a word in another language that starts the same ("vêtements").
+    const vet = matchKinds("vet").map((k) => k.id);
+    expect(vet[0]).toBe("vet");
+    expect(vet.indexOf("clothing-shop")).toBeGreaterThan(vet.indexOf("vet"));
+    // The browser's own language counts with English: a French owner finds a clothes shop by its French name.
+    expect(matchKinds("vetements", 8, "fr-FR")[0]?.id).toBe("clothing-shop");
+    // A word that is nobody's finds nothing to pick: the owner's own words are offered instead.
+    expect(matchKinds("zzqx")).toEqual([]);
+  });
+
+  it("reads what was typed and never picked: the kind it names, else the owner's own words, kept with the kind", () => {
+    expect(exactKind("Dog groomer")?.id).toBe("pet-groomer");
+    expect(exactKind("cabeleireiro")?.id).toBe("hair-salon");
+    expect(exactKind("dog")).toBeUndefined();
+    const groomer = settleTyped("dog groomer", null);
+    expect(groomer && "found" in groomer && groomer.found.id).toBe("pet-groomer");
+    expect(settleTyped("  Hovercraft  tours ", null)).toEqual({ own: { id: null, label: "Hovercraft tours" } });
+    // Their own words beside a kind they chose keep that kind, so the setup it starts from stays.
+    expect(settleTyped("Vintage clothes", { id: "shop", label: "Shop" })).toEqual({
+      own: { id: "shop", label: "Vintage clothes" },
+    });
+    // What was chosen, or nothing typed: nothing to settle.
+    expect(settleTyped("Tattoo studio", { id: "tattoo-studio", label: "Tattoo studio" })).toBeNull();
+    expect(settleTyped("Pet groomer", { id: "pet-groomer", label: "Dog groomers" })).toBeNull();
+    expect(settleTyped("   ", null)).toBeNull();
+    // A kind's own name typed as their own words is that kind.
+    const dentist = settleTyped("Dentist", { id: null, label: "Dentist" });
+    expect(dentist && "found" in dentist && dentist.found.id).toBe("dentist");
   });
 
   it("keeps a kind by id with its English name, or the owner's own words, never empty", () => {
@@ -142,6 +221,59 @@ describe("the setup's doors", () => {
     expect(anyDoor({ booking: false, quoteRequest: false, message: false })).toBe(false);
   });
 
+  it("run again, starts every door from Settings, so pressing Continue through changes nothing", () => {
+    // A first run as a dog groomer with booking on saved booking as following what the inbox holds.
+    const first = withPatch(DEFAULT_SETTINGS, wizardDoorsDoc({ booking: true, quoteRequest: true, message: true }));
+    expect(first.doors.booking).toBeUndefined();
+    // Run again on the saved own-words kind (the general setup, whose own default is booking off): booking stays on.
+    const again = savedDoors(GENERAL, first);
+    expect(again).toMatchObject({ booking: true, quoteRequest: true, message: true });
+    const written = doorsStepDoc(again, GENERAL, termsOf(first), false);
+    expect(written.doors).toEqual({ booking: null, quoteRequest: true, message: null });
+    expect(withPatch(first, written).doors).toEqual(first.doors);
+    // A door shut in Settings stays shut, and a kitchen's orders for a time are as Settings → Kitchen has them.
+    const shut = withPatch(DEFAULT_SETTINGS, {
+      doors: { booking: false, quoteRequest: false },
+      kitchen: { enabled: false, prepMin: 45 },
+    });
+    expect(savedDoors(kindOf("food"), shut)).toMatchObject({ booking: false, quoteRequest: false, order: false });
+    expect(
+      savedDoors(kindOf("stays"), withPatch(DEFAULT_SETTINGS, { doors: { stay: false, message: true } })),
+    ).toMatchObject({ stay: false });
+    // Settings that say nothing of the doors yet: the kind's own.
+    expect(savedDoors(GENERAL, DEFAULT_SETTINGS)).toEqual(startDoors(GENERAL, DEFAULT_SETTINGS));
+    expect(savedDoors(undefined, DEFAULT_SETTINGS)).toEqual(defaultDoors(undefined));
+    // Run again on a kitchen already saved: Settings → Kitchen is not put back to the kind's starting settings.
+    const bakery = doorsStepDoc(savedDoors(kindOf("bakery"), shut), kindOf("bakery"), termsOf(shut), false);
+    expect(bakery.kitchen).toEqual({ enabled: false });
+    expect(doorsStepDoc(defaultDoors(kindOf("bakery")), kindOf("bakery")).kitchen).toMatchObject({
+      enabled: true,
+      prepMin: 60,
+    });
+  });
+
+  it("says ordering products as it is: open with a product listed, never a switch that closes nothing", () => {
+    const shop = kindOf("shop");
+    const row = (listed: number) => doorRows(shop, listed).find((d) => d.key === "products");
+    expect(row(0)).toMatchObject({ label: "You sell products" });
+    expect(row(0)?.fixed).toBeUndefined();
+    expect(row(2)).toMatchObject({ label: "Agents can order your products", fixed: true });
+    expect(row(2)?.line).toContain("2 listed");
+    // Re-run as a salon with one product: ordering reads on, and the offer step still asks for products.
+    const salon = kindOf("appointments");
+    const doors = withListed(defaultDoors(salon), salon, 1);
+    expect(doors.products).toBe(true);
+    expect(offerSections(doors, salon)).toEqual(["services", "products"]);
+    expect(withListed(defaultDoors(kindOf("cafe")), kindOf("cafe"), 3)).toEqual(defaultDoors(kindOf("cafe")));
+  });
+
+  it("says what a discount lets the owner's AI take, as the inbox applies it", () => {
+    expect(discountLine(0)).toContain("only at your price or above");
+    expect(discountLine(10)).toContain("up to 10% under yours");
+    expect(discountLine(10)).toContain("never under the lowest price you set");
+    expect(doorRows(kindOf("shop")).find((d) => d.key === "negotiate")?.line).not.toContain("lowest price you set");
+  });
+
   it("writes the doors and their limits as Settings keep them, and only what the kind was asked", () => {
     const terms = { ...termsOf(DEFAULT_SETTINGS), cancelMin: 120, discountPct: 10, payments: ["card", "mb_way"] };
     expect(termsOf(DEFAULT_SETTINGS)).toEqual({ cancelMin: 1440, discountPct: 0, maxChanges: 3, payments: [] });
@@ -197,6 +329,16 @@ describe("the setup's offer", () => {
     expect(offerSections({ booking: false, quoteRequest: false, message: true }, GENERAL)).toEqual([]);
   });
 
+  it("brings products and menus from what the business uses, never services, which are named here", () => {
+    expect(bringable(["services"])).toEqual([]);
+    expect(bringable(["services", "products"])).toEqual(["products"]);
+    expect(bringable(["menu"])).toEqual(["menu"]);
+    expect(offerModeFor("bring", ["services"])).toBe("now");
+    expect(offerModeFor("bring", ["services", "products"])).toBe("bring");
+    expect(offerModeFor("later", ["services"])).toBe("later");
+    expect(Object.keys(SOURCE_CARDS)).not.toContain("services");
+  });
+
   it("says how far along each system is, as this release ships them: none yet verified on a live account", () => {
     const definitions = new Map(builtInConnectors().map((d) => [d.kind, d]));
     const cards = gallery(definitions, { lean: "stays", hookBase: "https://inbox.example.com/v1/hooks/" });
@@ -230,7 +372,7 @@ describe("the setup's offer", () => {
 
   it("names the calendar as people know it, and says what the server still needs", () => {
     const cards = gallery(new Map(builtInConnectors().map((d) => [d.kind, d])));
-    const rows = sourceRows(cards, SOURCE_CARDS.services);
+    const rows = sourceRows(cards, SYNC_CARDS.times);
     expect(rows.map((r) => r.name)).toEqual([
       "Square",
       "Calendly",
@@ -249,5 +391,12 @@ describe("the setup's offer", () => {
     expect(stay[0]?.line).toContain("Airbnb");
     // A card this inbox does not offer is left out, never invented.
     expect(sourceRows(cards, ["spaceport"])).toEqual([]);
+    // A server that cannot connect yet (no secret key): what could be connected needs setup there, and says why.
+    const locked = sourceRows(cards, SYNC_CARDS.times, { canConnect: false });
+    for (const r of locked) expect(r.words, r.name).toBe(SOURCE_WORDS.setup);
+    expect(locked.find((r) => r.key === "calendar_other")?.hint).toBe(NO_SECRET_KEY);
+    // The inbox's own calendar link of its bookings is nobody else's platform: nothing to verify.
+    const feed = cards.find((c) => c.id === "ics_feed");
+    expect(feed && sourceState(feed.ways)).toBe("ready");
   });
 });

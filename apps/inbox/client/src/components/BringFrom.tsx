@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { problemOf } from "../lib/api";
-import { SOURCE_WORDS, type SourceRow, sourceRows } from "../lib/bring";
+import { NO_SECRET_KEY, SOURCE_WORDS, type SourceRow, sourceRows } from "../lib/bring";
 import { useIntegrations } from "../lib/queries";
 
 /**
@@ -14,20 +14,25 @@ export function BringFrom({
   ids,
   feed = false,
   lodging = false,
+  lede = "Connect it in Settings → Integrations. It opens in a new tab, so this setup stays where it is; what comes in is what agents see.",
 }: {
   ids: readonly string[];
   feed?: boolean;
   /** A place to stay: its calendar is its channels' calendar links. */
   lodging?: boolean;
+  /** The line above the systems: what connecting them does. */
+  lede?: string;
 }) {
   const integrations = useIntegrations();
-  const rows = sourceRows(integrations.data?.cards ?? [], ids, { lodging });
+  const rows = sourceRows(integrations.data?.cards ?? [], ids, {
+    lodging,
+    canConnect: integrations.data?.can_connect,
+  });
   return (
     <div className="stack">
-      <p className="lede small">
-        Connect it in Settings → Integrations. It opens in a new tab, so this setup stays where it is; what comes in is
-        what agents see.
-      </p>
+      <p className="lede small">{lede}</p>
+      {/* Why nothing here connects yet, said once rather than on every row. */}
+      {integrations.data?.can_connect === false && rows.length > 0 && <p className="hint">{NO_SECRET_KEY}</p>}
       {integrations.isPending && <div className="skeleton sk-line" />}
       {integrations.isError && <p className="hint error">{problemOf(integrations.error).detail}</p>}
       <ul className="src-list">
@@ -68,7 +73,7 @@ function Row({ row }: { row: SourceRow }) {
         <span className="src-name">{row.name}</span>
       )}
       <span className={clsx("src-state", row.state === "ready" && "is-ready")}>{row.words}</span>
-      <span className="src-line">{row.hint ?? row.line}</span>
+      <span className="src-line">{row.hint === NO_SECRET_KEY ? row.line : (row.hint ?? row.line)}</span>
     </li>
   );
 }

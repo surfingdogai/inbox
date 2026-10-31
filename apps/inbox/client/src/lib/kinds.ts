@@ -27,6 +27,8 @@ export interface BusinessKind {
   };
   readonly preset: KindPreset;
   readonly categories: readonly string[];
+  /** Other names people search for it by ("Dog groomer", "B&B"): found by, never shown or published. */
+  readonly also?: readonly string[] | undefined;
 }
 
 /** What the business runs, as the settings keep it (`directory.kind`). */
@@ -58,28 +60,143 @@ export function kindAlso(kind: BusinessKind, browser: string | undefined): strin
   return fold(name) === fold(kind.names.en) ? "" : name;
 }
 
+/** Small words a search leaves out: "and", "of", "for" in the five languages. */
+const STOP = new Set([
+  "a",
+  "an",
+  "and",
+  "the",
+  "of",
+  "for",
+  "e",
+  "de",
+  "da",
+  "do",
+  "das",
+  "dos",
+  "para",
+  "y",
+  "el",
+  "la",
+  "los",
+  "las",
+  "et",
+  "le",
+  "les",
+  "du",
+  "des",
+  "pour",
+  "und",
+  "der",
+  "die",
+  "fur",
+]);
+
+/** A word without its ending, so groomer, grooming and groomers, or nail and nails, are found by each other. */
+function stem(word: string): string {
+  for (const end of ["ings", "ing", "ers", "er", "es", "s"]) {
+    if (word.length - end.length >= 3 && word.endsWith(end)) return word.slice(0, -end.length);
+  }
+  return word;
+}
+
+const wordsOf = (s: string) =>
+  fold(s)
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
+const compact = (s: string) => wordsOf(s).join("");
+
+/** A name ready to be searched: whole, as its stemmed words, and run together ("guest house" is "guesthouse"). */
+interface Searchable {
+  readonly whole: string;
+  readonly stems: readonly string[];
+  readonly joined: string;
+}
+const searchable = (name: string): Searchable => ({
+  whole: wordsOf(name).join(" "),
+  stems: wordsOf(name).map(stem),
+  joined: compact(name),
+});
+
+/** Each kind's names: English and its other names first (the browser's language beside them), then the rest. */
+const INDEX = BUSINESS_KINDS.map((kind) => ({
+  kind,
+  main: [kind.names.en, ...(kind.also ?? [])].map(searchable),
+  by: Object.fromEntries(LANGS.map((l) => [l, searchable(kind.names[l])])) as Record<
+    (typeof LANGS)[number],
+    Searchable
+  >,
+}));
+
 /**
- * The kinds to offer for what the owner typed, best first: a name that is the text, then names that start with
- * it, then names with a word that starts with it, then (from three letters) names that hold it, in any of the
- * five languages; the list's own order among equals. Nothing for empty text.
+ * How well a name answers the typed words: 6 it is them, 5 it starts with them, 4 every word typed starts a word of
+ * it (or, run together, they start it: "guest house" for Guesthouse), 3 some do, 1 it holds them (from three letters);
+ * 0 not at all. Words are compared without their endings ("groomers" finds Pet groomer).
  */
-export function matchKinds(text: string, limit = 8): readonly BusinessKind[] {
-  const q = fold(text.trim());
-  if (!q) return [];
+function scoreName(n: Searchable, q: { whole: string; stems: readonly string[]; joined: string }): number {
+  if (!n.whole) return 0;
+  if (n.whole === q.whole) return 6;
+  if (n.whole.startsWith(q.whole)) return 5;
+  const hits = q.stems.filter((t) => n.stems.some((w) => w.startsWith(t))).length;
+  if (hits === q.stems.length || (q.joined.length > 3 && n.joined.startsWith(q.joined))) return 4;
+  if (hits > 0 && q.stems.length > 1) return 2 + hits / q.stems.length;
+  if (q.whole.length > 2 && n.whole.includes(q.whole)) return 1;
+  return 0;
+}
+
+/**
+ * The kinds to offer for what the owner typed, best first: by every name of a kind, in any of the five languages
+ * and the other names people know it by, word by word in any order and without endings ("dog groomers" finds Pet
+ * groomer, "guest house" Guesthouse, "nails" Nail salon); a name in English, its other names or the browser's
+ * language counts before the same match in another language ("vet" is Vet before a "vêtements"). The list's own
+ * order among equals. Nothing for empty text.
+ */
+export function matchKinds(text: string, limit = 8, browser?: string | undefined): readonly BusinessKind[] {
+  const all = wordsOf(text);
+  if (all.length === 0) return [];
+  const kept = all.filter((w) => !STOP.has(w));
+  const words = kept.length ? kept : all;
+  const q = { whole: all.join(" "), stems: words.map(stem), joined: all.join("") };
+  const own = (browser ?? "").toLowerCase().split(/[-_]/)[0] ?? "";
   const scored: { kind: BusinessKind; score: number; at: number }[] = [];
-  BUSINESS_KINDS.forEach((kind, at) => {
-    const names = LANGS.map((l) => fold(kind.names[l]));
+  INDEX.forEach(({ kind, main, by }, at) => {
     let score = 0;
-    if (names.some((n) => n === q)) score = 4;
-    else if (names.some((n) => n.startsWith(q))) score = 3;
-    else if (names.some((n) => n.split(/[\s&'-]+/).some((w) => w.startsWith(q)))) score = 2;
-    else if (q.length > 2 && names.some((n) => n.includes(q))) score = 1;
-    if (score) scored.push({ kind, score, at });
+    for (const n of main) score = Math.max(score, scoreName(n, q) + 0.5);
+    for (const l of LANGS) {
+      if (l === "en") continue;
+      score = Math.max(score, scoreName(by[l], q) + (l === own ? 0.5 : 0));
+    }
+    if (score >= 1) scored.push({ kind, score, at });
   });
   return scored
     .sort((a, b) => b.score - a.score || a.at - b.at)
     .slice(0, limit)
     .map((s) => s.kind);
+}
+
+/** The kind the typed words name exactly, by any of its names in any language, if one does. */
+export function exactKind(text: string): BusinessKind | undefined {
+  const whole = wordsOf(text).join(" ");
+  if (!whole) return undefined;
+  return INDEX.find(({ main, by }) => [...main, ...LANGS.map((l) => by[l])].some((n) => n.whole === whole))?.kind;
+}
+
+/**
+ * What the owner typed in the finder but never picked, read when they continue: the kind it names exactly, else
+ * their own words, kept with the kind they had chosen (its id, so the setup it starts from stays). Nothing when the
+ * text is empty or is what was chosen.
+ */
+export function settleTyped(
+  text: string,
+  chosen: ChosenKind | null | undefined,
+): { readonly found: BusinessKind } | { readonly own: ChosenKind } | null {
+  const own = chosenKind(text);
+  if (!own) return null;
+  // A kind's own name, even typed as "Something else", is that kind.
+  const found = exactKind(own.label);
+  if (found) return chosen?.id === found.id ? null : { found };
+  if (chosen && fold(chosen.label) === fold(own.label)) return null;
+  return { own: { id: chosen?.id ?? null, label: own.label } };
 }
 
 /** The kind as the settings keep it: a kind of the list by id with its English name, or the owner's own words. */

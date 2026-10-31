@@ -17,7 +17,7 @@ import {
 import { Fragment, useEffect, useRef, useState } from "react";
 import { type ApiProblem, api, problemOf } from "../lib/api";
 import { session } from "../lib/auth";
-import { SOURCE_WORDS, sourceState } from "../lib/bring";
+import { PARTNER_KINDS, SOURCE_WORDS, sourceState } from "../lib/bring";
 import { cardState } from "../lib/connect";
 import { accountOf, bookedTwice, isBookingPlatform, lengthGaps, servesLink, tagOf } from "../lib/integrations";
 import { type PropertyView, useProperty } from "../lib/property";
@@ -547,7 +547,12 @@ function ConnectPanel({
             >
               {w.label}
               {w.status === "ready" && w.fresh && <span className="opt"> · new</span>}
-              {w.status === "setup" && <span className="opt"> · not yet</span>}
+              {w.status === "setup" && (
+                <span className="opt">
+                  {" · "}
+                  {(PARTNER_KINDS.has(w.kind) ? SOURCE_WORDS.partner : SOURCE_WORDS.setup).toLowerCase()}
+                </span>
+              )}
             </button>
           ))}
         </fieldset>

@@ -22,12 +22,12 @@ import { Chips } from "../components/Property";
 import { WhereYouWork } from "../components/WhereYouWork";
 import { type ApiProblem, problemOf } from "../lib/api";
 import { ensureSignedIn, session } from "../lib/auth";
-import { SOURCE_CARDS } from "../lib/bring";
+import { SOURCE_CARDS, SYNC_CARDS } from "../lib/bring";
 import { guessCurrency } from "../lib/currencies";
 import { durationWords } from "../lib/durations";
 import { EMPTY_MENU, foodApi } from "../lib/food";
 import { countryOfZone, emailLangOfCountry } from "../lib/geo";
-import { type BusinessKind, type ChosenKind, chosenKind } from "../lib/kinds";
+import { type BusinessKind, type ChosenKind, chosenKind, settleTyped } from "../lib/kinds";
 import { languageName, languagesToSave } from "../lib/languages";
 import { paymentName, setupPayments, togglePayment } from "../lib/payments";
 import { KIND_WORDS, propertyApi, STANDARD_PLAN, useProperty } from "../lib/property";
@@ -47,12 +47,14 @@ import {
 } from "../lib/queries";
 import {
   anyDoor,
+  bringable,
   DISCOUNT_CHOICES,
   DISH_PLACEHOLDERS,
   DISH_SECTIONS,
   type DishDraft,
   DOOR_GROUPS,
   defaultDoors,
+  discountLine,
   dishPlan,
   doorRows,
   doorsStepDoc,
@@ -65,12 +67,14 @@ import {
   type OfferMode,
   type OfferSection,
   offerBodies,
+  offerModeFor,
   offerSections,
   ownerEmailDoc,
   quickKind,
   SETUP_NETWORK,
   type SetupKind,
   type StepId,
+  savedDoors,
   setupKeyOfSaved,
   setupKindOf,
   startDoors,
@@ -79,6 +83,7 @@ import {
   type WizardDoors,
   type WizardRoom,
   type WizardTerms,
+  withListed,
   wizardPreset,
   wizardRoomBodies,
 } from "../lib/setup";
@@ -206,6 +211,8 @@ function SetupWizard() {
   const [bizKind, setBizKind] = useState<ChosenKind | null>(null);
   const [kindText, setKindText] = useState("");
   const [kindTouched, setKindTouched] = useState(false);
+  // The setup the saved kind reads as, run again: a kind's starting settings are written only for another one.
+  const [savedKey, setSavedKey] = useState<string | null>(null);
   const steps = stepsFor(kindKey);
   const at: StepId = steps[step]?.id ?? "kind";
   // A place to stay: what kind, when guests come and go, its rooms. Its id once saved, for the rooms.
@@ -275,7 +282,10 @@ function SetupWizard() {
     if (profile.data.languages.length) setLangs(profile.data.languages);
     setPicked({ currency: true, lang: true });
   }, [profile.data, profileRead]);
-  const [doors, setDoors] = useState<WizardDoors>(() => defaultDoors(undefined));
+  const [chosenDoors, setDoors] = useState<WizardDoors>(() => defaultDoors(undefined));
+  // With a product listed, ordering is open whatever was chosen: the doors are shown and saved beside it.
+  const listed = (products.data?.items ?? []).filter((p) => p.active).length;
+  const doors = withListed(chosenDoors, kind, listed);
   // The limits beside the doors, from what Settings say: how long before it can be cancelled, a discount, how paid.
   const [terms, setTerms] = useState<WizardTerms>(() => termsOf(undefined));
   const [settingsRead, setSettingsRead] = useState(false);
@@ -285,16 +295,17 @@ function SetupWizard() {
     const doc = settings.data.doc;
     setTerms(termsOf(doc));
     setOthers(doc.payments.currencies ?? []);
-    // Run again, it starts from what the business said it runs.
+    // Run again, it starts from what the business said it runs, and every door as Settings have it.
     const saved = doc.directory.kind;
     const key = setupKeyOfSaved(saved);
     if (saved && key && !kindTouched) {
       setBizKind(saved);
       setKindText(saved.label);
       setKindKey(key);
-      setDoors(startDoors(kindOf(key), doc));
+      setSavedKey(key);
+      setDoors(savedDoors(kindOf(key), doc));
     } else if (!kindTouched) {
-      setDoors(startDoors(undefined, doc));
+      setDoors(savedDoors(undefined, doc));
     }
   }, [settings.data, settingsRead, kindTouched]);
   const [offers, setOffers] = useState<Offer[]>([{ id: 1, name: "", minutes: "60", price: "" }]);
@@ -302,6 +313,8 @@ function SetupWizard() {
   const [goods, setGoods] = useState<Offer[]>([{ id: 1, name: "", minutes: "0", price: "" }]);
   // How the offer and the rooms are answered: a few now, from the system the business uses, or later.
   const [offerMode, setOfferMode] = useState<OfferMode>("now");
+  // The calendars and booking tools that keep a service's times in step, opened on request.
+  const [syncOpen, setSyncOpen] = useState(false);
   const [roomsMode, setRoomsMode] = useState<OfferMode>("now");
   const [nextId, setNextId] = useState(2);
   // A kitchen's first dishes (ADR-040): on the menu in a section, their allergens for Settings → Menu.
@@ -354,31 +367,38 @@ function SetupWizard() {
   const asked = !doors.booking;
   const preset = wizardPreset(doors, kind);
   const sections = offerSections(doors, kind);
+  // Bringing them falls back to adding them when nothing asked for can be brought (services are named here).
+  const offerHow = offerModeFor(offerMode, sections);
   const country = countryOfZone(timezone);
 
   /* What the business runs: a quick pick, a kind of the list, or its own words. */
+  // Another setup starts from its own doors; the same one (another kind of it) keeps the doors as they are.
+  const startFrom = (setup: SetupKind) => {
+    if (setup.key !== kindKey) setDoors(startDoors(setup, settings.data?.doc));
+  };
   const pickQuick = (key: string) => {
+    const setup = kindOf(key);
+    if (setup) startFrom(setup);
     setKindKey(key);
     setBizKind(quickKind(key));
     setKindText("");
     setKindTouched(true);
-    setDoors(startDoors(kindOf(key), settings.data?.doc));
   };
   const pickFound = (found: BusinessKind) => {
     const setup = setupKindOf(found);
+    startFrom(setup);
     setKindKey(setup.key);
     setBizKind(chosenKind(found));
     setKindText(found.names.en);
     setKindTouched(true);
-    setDoors(startDoors(setup, settings.data?.doc));
   };
   const pickOwn = (words: string) => {
     const own = chosenKind(words);
+    startFrom(GENERAL);
     setKindKey(GENERAL.key);
     setBizKind(own);
     setKindText(own?.label ?? "");
     setKindTouched(true);
-    setDoors(startDoors(GENERAL, settings.data?.doc));
   };
 
   const leave = () => {
@@ -390,9 +410,28 @@ function SetupWizard() {
   const saveStep = async (): Promise<boolean> => {
     setLocal(null);
     try {
-      if (at === "kind" && kindTouched) {
+      // Typed in the finder and never picked: the kind it names exactly; else the owner's own words, kept with the
+      // kind already chosen, or as their own kind when none was. Nothing typed is dropped without a word.
+      const settled = at === "kind" ? settleTyped(kindText, bizKind) : null;
+      let toSave = bizKind;
+      if (settled && "found" in settled) {
+        pickFound(settled.found);
+        toSave = chosenKind(settled.found);
+      } else if (settled && (!kindKey || kindKey === GENERAL.key)) {
+        pickOwn(settled.own.label);
+        toSave = { id: null, label: settled.own.label };
+      } else if (settled && settled.own.id === null) {
+        // A quick pick that is many kinds keeps no words of its own: the owner says which they meant.
+        setLocal(`Pick one of the list for “${settled.own.label}”, or Something else to keep your own words.`);
+        return false;
+      } else if (settled) {
+        setBizKind(settled.own);
+        setKindTouched(true);
+        toSave = settled.own;
+      }
+      if (at === "kind" && (kindTouched || settled)) {
         // A merge of the one key: what the business runs, or nothing for a quick pick that is many kinds.
-        await saveSettings.mutateAsync({ doc: { directory: { kind: bizKind } } });
+        await saveSettings.mutateAsync({ doc: { directory: { kind: toSave } } });
       }
       if (at === "you") {
         await saveProfile.mutateAsync({
@@ -415,10 +454,11 @@ function SetupWizard() {
         if (doc) await saveSettings.mutateAsync({ doc });
       }
       if (at === "doors") {
-        await saveSettings.mutateAsync({ doc: doorsStepDoc(doors, kind, terms) });
+        await saveSettings.mutateAsync({ doc: doorsStepDoc(doors, kind, terms, kindKey !== savedKey) });
       }
-      // Brought from another system, or left for later: nothing to save here.
-      if (at === "offer" && offerMode !== "now") return true;
+      // Left for later, or a kitchen's menu brought from its till: nothing to save here. Brought from a shop, the
+      // services asked for beside its products are still named here and saved below.
+      if (at === "offer" && (offerHow === "later" || (offerHow === "bring" && kitchen))) return true;
       if (at === "offer" && kitchen) {
         const plan = dishPlan(
           dishes.map((d) => ({ ...d, section: d.section || (sectionChoices[0] ?? "Menu") })),
@@ -498,7 +538,8 @@ function SetupWizard() {
       if (at === "offer") {
         // Both checked before either is saved: a price that does not read stops the step with nothing half made.
         const planned = sections.includes("services") ? offerBodies(offers, "services", currency, asked) : null;
-        const sold = sections.includes("products") ? offerBodies(goods, "products", currency) : null;
+        const sold =
+          offerHow === "now" && sections.includes("products") ? offerBodies(goods, "products", currency) : null;
         for (const p of [planned, sold]) {
           if (p && "problem" in p) {
             setLocal(p.problem);
@@ -716,18 +757,18 @@ function SetupWizard() {
                 }}
               />
             </Field>
-            {writtenIn(langs, kind?.key === "stays").length > 1 && (
+            {kind?.key !== "stays" && writtenIn(langs).length > 1 && (
               <Field id="su-lang" label="When theirs is none of these, write in">
                 <select
                   id="su-lang"
                   className="input"
-                  value={fallbackLang(langs, kind?.key === "stays")}
+                  value={fallbackLang(langs)}
                   onChange={(e) => {
                     setLangs(languagesToSave(langs, e.target.value, true));
                     setPicked((p) => ({ ...p, lang: true }));
                   }}
                 >
-                  {writtenIn(langs, kind?.key === "stays").map((l) => (
+                  {writtenIn(langs).map((l) => (
                     <option key={l} value={l}>
                       {languageName(l)}
                     </option>
@@ -766,7 +807,7 @@ function SetupWizard() {
             </p>
             <div className="door-groups">
               {DOOR_GROUPS.map((g) => {
-                const rows = doorRows(kind).filter((d) => d.group === g.id);
+                const rows = doorRows(kind, listed).filter((d) => d.group === g.id);
                 if (rows.length === 0) return null;
                 return (
                   <section key={g.id} aria-label={g.label}>
@@ -774,8 +815,10 @@ function SetupWizard() {
                     <ul className="door-list">
                       {rows.map((d) => (
                         <li key={d.key} className="door-row">
+                          {/* Said, not switched: what the inbox holds opens it, and nothing here closes it. */}
                           <Switch
-                            checked={doors[d.key] === true}
+                            checked={d.fixed === true || doors[d.key] === true}
+                            disabled={d.fixed === true}
                             onChange={(on) => setDoors((all) => ({ ...all, [d.key]: on }))}
                           >
                             {d.label}
@@ -807,10 +850,7 @@ function SetupWizard() {
                                 }))}
                                 onChange={(v) => setTerms((t) => ({ ...t, discountPct: v }))}
                               />
-                              <span className="door-note">
-                                Never under the lowest price you set for an item, in Settings. Without one, a price of
-                                theirs waits for you.
-                              </span>
+                              <span className="door-note">{discountLine(terms.discountPct)}</span>
                             </div>
                           )}
                         </li>
@@ -861,18 +901,21 @@ function SetupWizard() {
               <>
                 <Chips
                   legend="How would you like to add them?"
-                  value={offerMode}
-                  options={OFFER_MODES}
+                  value={offerHow}
+                  options={bringable(sections).length ? OFFER_MODES : OFFER_MODES.filter((m) => m.value !== "bring")}
                   onChange={(m) => {
                     setOfferMode(m);
                     setLocal(null);
                   }}
                 />
-                {offerMode === "bring" && (
-                  <BringFrom ids={sourcesOf(sections, kind)} feed={sections.includes("products")} />
+                {offerHow === "bring" && (
+                  <>
+                    {sections.includes("services") && <h3 className="door-group-label">Products</h3>}
+                    <BringFrom ids={bringIds(sections)} feed={sections.includes("products")} />
+                  </>
                 )}
-                {offerMode === "later" && <p className="hint">{laterLine(sections, doors)}</p>}
-                {offerMode === "now" && kitchen && (
+                {offerHow === "later" && <p className="hint">{laterLine(sections, doors)}</p>}
+                {offerHow === "now" && kitchen && (
                   <>
                     <p className="lede small">
                       Two or three to start. Agents order only what is on your menu; add the rest and their allergens in
@@ -952,9 +995,9 @@ function SetupWizard() {
                     </button>
                   </>
                 )}
-                {offerMode === "now" && !kitchen && (
+                {offerHow !== "later" && !kitchen && (
                   <>
-                    {existing > 0 && (
+                    {offerHow === "now" && existing > 0 && (
                       <p className="hint">
                         This instance already has {existing} {existing === 1 ? "entry" : "entries"}. Anything you add
                         here is added to them.
@@ -964,9 +1007,11 @@ function SetupWizard() {
                       <>
                         {sections.includes("products") && <h3 className="door-group-label">Services</h3>}
                         <p className="lede small">
-                          {doors.booking
-                            ? "One is enough to start. An agent asking what you offer is answered from this."
-                            : "Optional: agents can ask for a price in their own words. Name what you do and they ask about it."}
+                          {offerHow === "bring"
+                            ? "Named here: a shop or a till brings its products, not what people book or ask about."
+                            : doors.booking
+                              ? "One is enough to start. An agent asking what you offer is answered from this."
+                              : "Optional: agents can ask for a price in their own words. Name what you do and they ask about it."}
                         </p>
                         <div className="stack">
                           {offers.map((o) => (
@@ -1032,9 +1077,22 @@ function SetupWizard() {
                           <Plus className="icon" aria-hidden="true" />
                           Add another
                         </button>
+                        {(doors.booking || isTrade(kind)) &&
+                          (syncOpen ? (
+                            <BringFrom
+                              ids={syncIds(kind)}
+                              lede="These keep your times in step once connected in Settings → Integrations (it opens in a new tab): busy times in, bookings out. They do not bring your services; name those here."
+                            />
+                          ) : (
+                            <button type="button" className="linkish" onClick={() => setSyncOpen(true)}>
+                              {isTrade(kind)
+                                ? "Already use a job tool or a calendar?"
+                                : "Already use a calendar or a booking tool?"}
+                            </button>
+                          ))}
                       </>
                     )}
-                    {sections.includes("products") && (
+                    {offerHow === "now" && sections.includes("products") && (
                       <>
                         {sections.includes("services") && <h3 className="door-group-label">Products</h3>}
                         <p className="lede small">
@@ -1359,10 +1417,15 @@ function offerTitle(sections: readonly OfferSection[], booking: boolean): string
 }
 
 /** The systems the offer can be brought from, each card once, in the order of the parts asked for. */
-function sourcesOf(sections: readonly OfferSection[], kind: SetupKind | undefined): string[] {
-  const trade = kind?.key === "trades" || kind?.key === "projects";
-  const ids = [...sections.flatMap((x) => SOURCE_CARDS[x]), ...(trade ? SOURCE_CARDS.work : [])];
-  return [...new Set(ids)];
+function bringIds(sections: readonly OfferSection[]): string[] {
+  return [...new Set(bringable(sections).flatMap((x) => (x === "products" || x === "menu" ? SOURCE_CARDS[x] : [])))];
+}
+
+const isTrade = (kind: SetupKind | undefined) => kind?.key === "trades" || kind?.key === "projects";
+
+/** What keeps a service's times in step: a trade's job tool first, then calendars and booking tools. */
+function syncIds(kind: SetupKind | undefined): string[] {
+  return [...new Set(isTrade(kind) ? [...SYNC_CARDS.work, ...SYNC_CARDS.times] : SYNC_CARDS.times)];
 }
 
 /** What waits for the offer when it is left for later, said once per door. */
@@ -1559,23 +1622,28 @@ function kindLine(kind: SetupKind | undefined, chosen: ChosenKind | null): strin
 const writes = (stays: boolean): readonly string[] => (stays ? GUEST_LANGS : ["en", "pt"]);
 const primary = (tag: string) => tag.toLowerCase().split(/[-_]/)[0] ?? "";
 
-/** Of the languages chosen, the ones the inbox writes in, each once, in the owner's order. */
-function writtenIn(langs: readonly string[], stays: boolean): string[] {
-  return [...new Set(langs.map(primary).filter((l) => writes(stays).includes(l)))];
+/** Of the languages chosen, the ones the inbox writes to customers in, each once, in the owner's order. */
+function writtenIn(langs: readonly string[]): string[] {
+  return [...new Set(langs.map(primary).filter((l) => writes(false).includes(l)))];
 }
 
-/** What the inbox writes in when a customer's own language is not one it has: the first chosen it has, else English. */
-function fallbackLang(langs: readonly string[], stays: boolean): string {
-  return writtenIn(langs, stays)[0] ?? "en";
+/**
+ * What the inbox writes to a customer in when their own language is not one it has (core `customerLang`): the first
+ * of the business's languages it has, else English.
+ */
+function fallbackLang(langs: readonly string[]): string {
+  return writtenIn(langs)[0] ?? "en";
 }
 
 /**
  * The line under the languages: customers write in any of them; the inbox answers in theirs where it has it, and
- * says in which otherwise, so a business that speaks German knows its emails are in English for now.
+ * says in which otherwise, so a business that speaks German knows its emails are in English for now. A guest whose
+ * language is none of a stay's six is answered in English (core `stayLang`), whatever the owner speaks.
  */
 function langsLine(langs: readonly string[], stays: boolean): string {
   const names = writes(stays).map((l) => languageName(l));
   const list = names.length > 1 ? `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}` : (names[0] ?? "");
   const who = stays ? "Guests" : "Customers";
-  return `${who} can write in any of them. Your inbox answers in theirs when it is ${list}; otherwise in ${languageName(fallbackLang(langs, stays))}.`;
+  const otherwise = languageName(stays ? "en" : fallbackLang(langs));
+  return `${who} can write in any of them. Your inbox answers in theirs when it is ${list}; otherwise in ${otherwise}.`;
 }

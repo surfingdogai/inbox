@@ -87,7 +87,10 @@ export interface WizardDoors {
   readonly message: boolean;
   /** A kitchen's orders for a time (`kitchen.enabled`): collection or delivery, at a time it can make. */
   readonly order?: boolean | undefined;
-  /** Products ordered from the catalogue: the door opens once a product is listed, so this asks for some. */
+  /**
+   * Whether the business sells products. Not a door of Settings: ordering opens on its own once a product is listed
+   * and stays open while one is, so this only says whether the offer step asks for some (`withListed`).
+   */
   readonly products?: boolean | undefined;
   /** A place to stay's requests for dates (`doors.stay`): open once it has rooms. */
   readonly stay?: boolean | undefined;
@@ -330,6 +333,8 @@ export interface DoorChoice {
   readonly group: DoorGroup;
   readonly label: string;
   readonly line: string;
+  /** Said, not switched: what the inbox holds opens it, and nothing here closes it (products already listed). */
+  readonly fixed?: boolean | undefined;
 }
 
 const QUOTE_LINES: Readonly<Record<string, string>> = {
@@ -343,9 +348,11 @@ const QUOTE_LINES: Readonly<Record<string, string>> = {
 /**
  * Every door the inbox has, as the wizard shows a kind: a place to stay asks for stays, a restaurant books tables, a
  * kitchen takes orders for a time, everyone else books time and sells products; each can be asked for a price,
- * negotiate, change what was agreed and write. Each line says what it means for the owner.
+ * negotiate, change what was agreed and write. Each line says what it means for the owner. Ordering products has no
+ * switch in Settings: it opens with the first product listed, so with some listed (`listed`) it is said, not
+ * switched, and without, the switch only says whether the business sells any.
  */
-export function doorRows(kind: SetupKind | undefined): readonly DoorChoice[] {
+export function doorRows(kind: SetupKind | undefined, listed = 0): readonly DoorChoice[] {
   const key = kind?.key ?? "";
   const kitchen = isKitchen(kind);
   const stays = key === "stays";
@@ -374,12 +381,20 @@ export function doorRows(kind: SetupKind | undefined): readonly DoorChoice[] {
       label: "Agents can order for a time",
       line: "Collection or delivery, at a time your kitchen can make.",
     });
+  } else if (!stays && listed > 0) {
+    rows.push({
+      key: "products",
+      group: "buy",
+      label: "Agents can order your products",
+      line: `${listed} listed, at your prices and stock. Ordering stays open while you list one: Settings → Products.`,
+      fixed: true,
+    });
   } else if (!stays) {
     rows.push({
       key: "products",
       group: "buy",
-      label: "Agents can order products",
-      line: "What you list, at your prices and stock. Opens once you add a product, here or from your shop.",
+      label: "You sell products",
+      line: "Agents can order what you list, at your prices and stock. Ordering opens with your first product; on, the next step asks for a few or brings them from your shop.",
     });
   }
   rows.push({
@@ -393,7 +408,7 @@ export function doorRows(kind: SetupKind | undefined): readonly DoorChoice[] {
       key: "negotiate",
       group: "price",
       label: "Agents can suggest their own price",
-      line: "It comes to you to take or answer. Your AI and rules take one only at or above the lowest price you set.",
+      line: "It comes to you to take or answer. Your AI and rules may take one only at your price, or as far under it as you allow.",
     });
     rows.push({
       key: "changes",
@@ -431,8 +446,8 @@ export function defaultDoors(kind: SetupKind | undefined): WizardDoors {
 }
 
 /**
- * The doors to start from once the settings are known: the kind's own, with a price of their own and changes as the
- * owner already set them in Settings, so running the wizard again turns nothing back unasked.
+ * The doors to start from when the owner picks a kind in this session: the kind's own, with a price of their own and
+ * changes as the owner already set them in Settings (those are not a kind's to decide).
  */
 export function startDoors(kind: SetupKind | undefined, doc: Settings | undefined): WizardDoors {
   const d = defaultDoors(kind);
@@ -442,6 +457,48 @@ export function startDoors(kind: SetupKind | undefined, doc: Settings | undefine
     ...(d.negotiate !== undefined ? { negotiate: doc.negotiation.priceCounters } : {}),
     ...(d.changes !== undefined ? { changes: doc.negotiation.changes.maxPerItem > 0 } : {}),
   };
+}
+
+/**
+ * The doors to start from when the wizard opens on what Settings already say (it is run again, or the doors were set
+ * in Settings first): every door as Settings keep it, so pressing Continue through writes back what is there and
+ * turns nothing back unasked. A door left to follow what the inbox holds reads as on, false as off; a kitchen's
+ * orders for a time are `kitchen.enabled`. Settings that say nothing of the doors yet start from the kind's own.
+ */
+export function savedDoors(kind: SetupKind | undefined, doc: Settings | undefined): WizardDoors {
+  const d = startDoors(kind, doc);
+  if (!doc) return d;
+  const { booking, quoteRequest, message, stay } = doc.doors;
+  // The doors step always writes whether agents can ask for a price: with none of them said, it has not run.
+  if ([booking, quoteRequest, message, stay].every((v) => v === undefined || v === null)) return d;
+  return {
+    ...d,
+    booking: booking !== false,
+    quoteRequest: quoteRequest ?? d.quoteRequest,
+    message: message !== false,
+    ...(d.stay !== undefined ? { stay: stay !== false } : {}),
+    ...(d.order !== undefined ? { order: doc.kitchen.enabled } : {}),
+  };
+}
+
+/**
+ * The doors as the wizard shows them, beside what the inbox holds: with a product listed, ordering is open whatever
+ * was chosen, and says so (`doorRows`), for every kind that sells products.
+ */
+export function withListed(d: WizardDoors, kind: SetupKind | undefined, listed: number): WizardDoors {
+  if (listed <= 0 || isKitchen(kind) || kind?.key === "stays") return d;
+  return { ...d, products: true };
+}
+
+/**
+ * What the owner's AI and rules may do with a price of the customer's own, as Settings → Negotiation applies it
+ * (core `effectiveFloor`): at 0%, take one only at the owner's price or above; at N%, up to N% under it, never under
+ * the lowest price the owner set for an item. Anything lower comes to the owner.
+ */
+export function discountLine(pct: number): string {
+  if (pct <= 0)
+    return "Your AI and rules take a price of theirs only at your price or above. Anything lower comes to you.";
+  return `Your AI and rules may take a price of theirs up to ${pct}% under yours, never under the lowest price you set for an item in Settings. Anything lower comes to you.`;
 }
 
 /** Whether any door is open: with none, agents cannot reach the business at all. */
@@ -479,16 +536,19 @@ export const DISCOUNT_CHOICES: readonly number[] = [0, 5, 10, 15];
 
 /**
  * The settings the doors step writes: the three doors, and for a kitchen its starting settings with
- * orders for a time on or off as the owner chose. A merge, like every wizard write.
+ * orders for a time on or off as the owner chose. A merge, like every wizard write. A kind's starting settings
+ * (a bakery's slots, a café's preparation time) are written only when the owner picked the kind in this session
+ * (`seed`): run again on a kind already saved, only whether orders are taken is, so Settings → Kitchen stays as set.
  */
 export function doorsStepDoc(
   d: WizardDoors,
   kind: SetupKind | undefined,
   terms?: WizardTerms | undefined,
+  seed = true,
 ): Record<string, unknown> {
-  const doc: Record<string, unknown> = { ...wizardDoorsDoc(d), ...(kind?.settings ?? {}) };
+  const doc: Record<string, unknown> = { ...wizardDoorsDoc(d), ...(seed ? (kind?.settings ?? {}) : {}) };
   if (kind && isKitchen(kind)) {
-    const kitchen = (kind.settings?.kitchen ?? {}) as Record<string, unknown>;
+    const kitchen = (seed ? (kind.settings?.kitchen ?? {}) : {}) as Record<string, unknown>;
     doc.kitchen = { ...kitchen, enabled: d.order !== false };
   }
   if (!terms) return doc;
@@ -662,3 +722,17 @@ export function offerSections(d: WizardDoors, kind: SetupKind | undefined): read
 
 /** How the offer step is answered: a few now, brought from the system the business uses, or later. */
 export type OfferMode = "now" | "bring" | "later";
+
+/**
+ * What of the offer can be brought from a system the business already uses: products from its shop or till, a
+ * kitchen's menu from its ordering system. Services cannot: calendars and booking tools keep their times in step
+ * (busy times in, bookings out), Square's catalogue leaves them out, so they are named in the wizard.
+ */
+export function bringable(sections: readonly OfferSection[]): readonly OfferSection[] {
+  return sections.filter((s) => s === "products" || s === "menu");
+}
+
+/** How the offer step is answered, given what it asks for: bringing them is adding them when none can be brought. */
+export function offerModeFor(mode: OfferMode, sections: readonly OfferSection[]): OfferMode {
+  return mode === "bring" && bringable(sections).length === 0 ? "now" : mode;
+}

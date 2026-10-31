@@ -27,7 +27,7 @@ export function KindPicker({
   const [active, setActive] = useState(0);
   const listId = `${id}-list`;
   const browser = typeof navigator === "undefined" ? undefined : navigator.language;
-  const matches = useMemo(() => (open ? matchKinds(text) : []), [open, text]);
+  const matches = useMemo(() => (open ? matchKinds(text, 8, browser) : []), [open, text, browser]);
   const words = text.trim();
   // The owner's own words, once nothing in the list is exactly what they typed.
   const exact = matches.some((k) => k.names.en.toLowerCase() === words.toLowerCase());
