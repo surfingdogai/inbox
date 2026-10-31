@@ -9,7 +9,11 @@ now, A2.10), accepted, rules version 5 (§15); Amendment 3 (changes both sides a
 refunds, from ADR-018), accepted, rules version 6 (§15); Amendment 4 (12 October 2026: a record
 ranks only when its customers verifiably confirmed a fifth of it, rows that name no customer count
 as one customer or only against the business, and version 7's order amended before it takes
-effect, with bounds on what a network takes), decided, rules version 8 (§15). The decisions are
+effect, with bounds on what a network takes), decided, rules version 8 (§15); Amendment 5 (13
+October 2026: a score counts only what the business cannot make up, a record ranks from three
+customers who confirmed it, late closures, and this network's own reads of a door), decided, rules
+version 9; and Amendment 6 (31 October 2026: words that name a kind of business find that kind
+first), decided, rules version 10 (§15). The decisions are
 the founder's; a number marked *default* is a proposal he may change without a new ADR (§14 lists every
 number and whose it is). The first ranking was withdrawn on 22 September 2026 before it had been
 designed as a whole, and the directory has since been neutral (newest verified first; near a place,
@@ -981,7 +985,9 @@ business; cursors that survive the hourly reorder; SMS codes, booking deposits, 
   published it. Ours had one member, our own inbox, when it published it.
 - **Version 7 (rules 0.2.0, protocol 0.2):** the directory lists agent-ready businesses with their
   doors, members and the businesses a network finds on their own websites in one order (protocol
-  §4.4). Always announced 15 days ahead; on our network it takes effect on 23 October 2026.
+  §4.4). Always announced 15 days ahead; on our network it was announced on 7 October 2026 for 23
+  October and, with no other business a member, took effect on 13 October 2026 with versions 8 and
+  9, which amend it.
 - **Version 8 (Amendment 4), decided 12 October 2026:** version 7 amended before it takes effect.
   A record ranks only when at least a fifth of it is kept outcomes its customers verifiably
   confirmed, and any other record rests on the business's own word and shows its counts and no
@@ -995,6 +1001,20 @@ business; cursors that survive the hourly reorder; SMS codes, booking deposits, 
   one member, our own inbox, when it was decided, so on our network it is to take effect with
   version 7, and version 7 is never to order the directory on its own; its changelog entry says
   what happened.
+- **Version 9 (Amendment 5), decided 13 October 2026:** version 8 amended. A score counts only what
+  the business cannot make up in its favour (A5.1); a record ranks once three distinct customers
+  confirmed kept promises of it (A5.2); a late closure labelled the customer's is half a broken
+  promise (A5.3); a report that stands always counts (A5.4); R30's nine days restart once (A5.5);
+  R7 weighs a pair's pieces by weight (A5.6); a member's inbox answers only while this network's own
+  reads do not find its door down (A5.7, A5.8); two known gaps are stated (A5.9). Its rules are
+  named 0.2.2. Ours, whose only member was its own inbox, published it on 13 October 2026, and it
+  took effect that day with versions 7 and 8, which never ordered the directory on their own.
+- **Version 10 (Amendment 6), decided 31 October 2026:** when every word of a search names one kind
+  of business, a word of a business's name counts first only for a business of that kind, and, for a
+  place to stay, a business of another kind that only mentions the words in the rest of its text is
+  left out, the answer saying when none of that kind is there (A6.1, A6.2). Its rules are named
+  0.2.3. Ours had two members when it published it, both its own inboxes, and no other business, so
+  nobody was owed §11's notice, and it took effect the day it was published.
 
 ## Amendment 1 (23 Sep 2026)
 
@@ -2208,3 +2228,254 @@ agent.
 (tiers, distinct customers), §6 (`rank_ranked`, version 7's order), §7.2, §7.3, §7.4 (codes,
 strict JSON), A2.7 (the card), §10, §14 (ranked, repeat, platforms, reach 1, newcomers, unknown
 relations, intake), §15 (versions 7 and 8).
+
+## Amendment 5 (13 Oct 2026): version 8 amended — rules version 9
+
+**Status: decided (13 Oct 2026)**, as rules version 9 (`"0.2.2"`): version 8 (`"0.2.1"`) amended,
+on the decisions of 13 October 2026, as the network publishes it at `/v1/ranking?version=9`. A
+network publishes it by its own notice and puts it in force as it did versions 5, 6 and 8: the
+moment it publishes it when no more than one business is a member of that network then, otherwise
+at 00:00 UTC on the sixteenth day after the day it published it (§11); and never before version 8
+takes effect, since it amends it. Ours published it on 13 October 2026, when its only member was its
+own inbox, and it took effect that day with versions 7 and 8, which never ordered the directory on
+their own; its changelog entry says so. Every member and number of version 8 is kept, but for the
+ones below.
+
+Every claim below that the simulation makes is from the 180-day simulation the network runs on every
+change, with a verification route that real customers' agents use for a quarter of their kept
+outcomes; without one nothing is scored or ranked at all.
+
+**Why.** Under version 8 the simulation still found four ways past the rules: a no-show recorded as
+the customer's cancellation wrote no row (the relabel attack, scored and ranked above the honest 990
+of 1,000), going silent across each deadline kept R30 from recording the promises missed (the
+cycler), and invented kept promises to puppet persons still counted on the business's word beside
+the fifth its customers confirmed (the puppeteer and the sliver). And a report against a booking
+closed as the customer's was taken and then counted for nothing.
+
+### A5.1 A score counts what the business cannot make up
+
+- **Rule.** A business's score is the Wilson lower bound over the evidence it cannot make up in its
+  favour, and nothing else (`score.counted`): kept outcomes a verified acknowledgement backs
+  (verified, q 2.5, never presumed), customers' reports that stand (A5.4), the network's own rows
+  (`promise.unclosed`, `promise.closed_late`), and the broken outcomes the business records against
+  itself. n = K + B: none of it is the business's word in its favour, so the word cap applies to
+  nothing; R31's release cap still bounds n.
+- **The kept outcomes a business records on its own word enter no score.** They are shown as its
+  counts (`kept`, `broken`, `open`, with `self_reported`), as version 8 showed a record on its word.
+  A kept outcome auto-completed (`aut`) halves nothing, since none of the business's own kept
+  outcomes counts.
+- **One reading, stated.** The decision says the business's own outcomes are counts only. The rules
+  read that for the kept outcomes the business records on its own word: a broken outcome it records
+  against itself is not evidence in its favour, and is still counted. Read the other way, a business
+  that cancels on its customers and says so would score as if it had never failed: in the simulation
+  the padder, the puppeteer, the anonymizer, the backdated-notice and pre-armer attacks all then
+  score and rank above the honest 990 of 1,000 (from day 55 of the run), whose missed promises the
+  network found unclosed, and the honest path (record the failure) would be free while the relabel
+  that A5.3 penalises would cost half a broken promise. The choice is one switch; the founder may
+  decide it the other way, and the simulation then shows those five attacks winning.
+- **What is shown.** `verified_share` and `verified_kept_share` stay the shares of the whole record
+  by weight. The business still sees its own score, in its signed ping's standing.
+
+### A5.2 Ranked from three witnesses
+
+- **Rule.** A record is ranked, and shows its score and tier, when at least `witnesses_min` (3)
+  distinct customers confirmed kept promises of it through an acknowledgement this network verified
+  (`tiers.witness`): customers counted by mailbox, every address at one company's email domain as
+  one, never one at the business's own domain (§3.4). Version 8's floor of a fifth of the record
+  (`verified_kept_share_min` 0.2) retires: the business's word no longer enters the score, and the
+  share stays shown. `building` and `trusted` need the same three.
+- **In the simulation** a business that pads its record with puppets at one catch-all domain whose
+  acknowledgements all verify (the witness-padder) has one witness and is never shown nor ranked;
+  under version 8 it ranked above the honest record. A witness's own guards are still to come (one
+  witness per company domain per business per 90 days; none at the business's mail domain).
+- **Still true:** under version 9 no acknowledgement can verify yet on our network (route 1's list
+  is empty; route 2's established person needs scored customers, paused), so no record is ranked
+  until one can.
+- **Not closed, and stated (A5.9):** puppets at free-mail addresses the business opens, one each,
+  are each a customer of their own, so as many witnesses as it makes up (the simulation's free-mail
+  padder). It matters only once an acknowledgement can verify.
+
+### A5.3 A late closure labelled the customer's
+
+- **Rule.** A booking or an order the business closes as the customer's
+  (`booking.cancelled_by_customer`, `order.cancelled_by_customer`, `order.lapsed`), the earliest such
+  outcome this network stored arriving less than 48 hours before due (on the network's clock, never
+  the outcome's `iat` nor its first sighting), with no verified acknowledgement of any such closure,
+  and with no broken outcome of the business's or verified kept outcome standing, is
+  `promise.closed_late`: a network row, broken, o 0.5 (a cancellation with notice), dated due + 72
+  hours, so the customer has three days to confirm it before it counts. A verified acknowledgement of
+  the closure removes it.
+- The relabel attack now scores below the honest record (0.8747 against 0.9694 in the simulation's
+  first cast).
+
+### A5.4 A report that stands always counts
+
+- **Rule.** A customer's report that stands is broken evidence on its own weight: its outcome's o,
+  verified (q 2.5), dated when the item was due; disputed, it counts d (0.5). It replaces the
+  business's kept row; the business's own broken outcome of the item gives way to it, whenever the
+  business recorded that, before the report or after it; and the item's `promise.unclosed` or
+  `promise.closed_late` gives way to it, even when the business closed the item as the customer's.
+  Disputed, the business's own broken outcome still counts beside it. So a report that stands always
+  counts; one that could not would be refused (`409 report_cannot_count`) instead of taken: until
+  version 9 a report beside the business's own broken outcome was accepted (202) and counted for
+  nothing.
+- **Why "whenever".** A first draft let the business's own broken outcome stand instead of the
+  report. A business caught by a report could then record its own failure afterwards, a cancellation
+  of its own weighing 1 (unverified) against the report's 2.5, and so raise its score by recording a
+  failure. The simulation's self-blamer does that for every report: the simulation checks that a
+  report that stands always weighs in full, and a property test over random items checks that
+  nothing the business records after a report lowers what the item weighs against it.
+
+### A5.5 R30's nine days restart once
+
+- **Rule.** When a business is silent as an item's nine days run out, they start again from the next
+  spell of answering, once; a later spell finds the promise unclosed at once. The cycler's 31 missed
+  promises are now recorded unclosed, and it scores 0.7771.
+
+### A5.6 R7 weighs a pair's pieces in order of weight
+
+- **Rule.** For a business's score, R7 weighs a pair's pieces (per pair, side and ledger) in order of
+  o × t × q × d, heaviest to lightest: the heaviest at r = 1 and each next at r = step (0.25) until
+  the pair reaches cap (3) pieces' worth, then 0 (`weights.repeat.formula`). A customer still counts
+  at most three times over. Version 8 shared the cap evenly over a pair's m pieces, so a light broken
+  piece (old, or half) lowered what its pair weighed: in a property test over random records, about
+  7% of added broken pieces raised a version 8 score. Under version 9 adding a broken piece never
+  raises a score, and adding a confirmed kept outcome never lowers one (the test holds both, and
+  checks version 8 does not hold the first). A person's score keeps the average.
+
+### A5.7 Answering needs this network's own read
+
+- **Rule.** A member's inbox is answering (`order.answering`, reach 1, R30's spells, newcomers) when
+  its signed pings say so and its door is not down by this network's own reads: a door failing by
+  them (3 failed reads at least 30 minutes apart, `doors.states`) is not answering, whatever its pings
+  say, until a read finds it answering; a read our check could not make after it (403, 429, a
+  challenge page, robots), or no read, changes nothing. A door that blocks every read of ours, 3 in a
+  row over 48 hours or more (`doors.blocked_reads`, `doors.blocked_hours`), is not answering either:
+  its owner asked to be listed. One failed read, one or two blocked reads, or none, leave the signed
+  pings to decide, and when the last read was blocked the listing says this network could not check.
+  When the door is no longer down, the answering spell begins again (R30's nine days and reach 1's
+  thirty). No agent report can cause any of it. The reads are made at the door the member's manifest
+  names for agents (its REST door, else its MCP door), wherever that is; an inbox's door answers its
+  protocol only by itself: a redirect, or a 401 that is not its own typed refusal, fails the read.
+- **Why not "the latest read in 24 hours".** A first draft made the member not answering only while
+  the latest read of the last 24 hours had failed. A member whose inbox was down could then answer
+  again on its pings alone by blocking our next read, or by going a day unread.
+
+### A5.8 Doors
+
+- **Rule** (`doors`). This network reads agent doors itself, one request each, signed as its
+  crawler, and reads nothing more: daily for members' and claimed listings' doors, the daily set; a
+  confirm read when an agent reports a door down (at most 2 a door a day for reports no proof binds,
+  and at most 50 a day from one address block), and of a door of the daily set its crawl did not find
+  answering; recovery reads at +15 min, +1 h and +4 h after a failed read of a door of the daily set,
+  then daily while failing; at most one read of a door, and of a host, per 10 minutes, and 12 of a
+  door a day. A crawled business nobody claimed is read at its crawl, which fails its doors by the
+  same rule, and by at most the 2 confirm reads a day agents' reports ask for, with no recovery reads.
+  The daily set is read first; reads of other doors take at most half the day's reads, and those
+  agents' reports ask for at most a quarter, so no stream of reports can take the reads that decide
+  whether a member answers. A read thrown away (its control read failed) or never answered takes
+  nothing from the day's reads, and a worker whose control read failed is handed none for 15 minutes.
+  A read fails on no DNS answer, a refused, reset or timed-out connection, a TLS failure, no answer
+  within 10 s, a 5xx that is not a challenge page, or an answer that does not parse; it is blocked on
+  a 403, a 429, a 503 challenge page or a robots disallow, which never lowers a door; a read whose
+  control read through the same route failed is thrown away. A door is live after one good read,
+  failing after 3 failed reads within 7 days at least 30 minutes apart with no good read between, and
+  gone after 30 days failing; a check anyone asks for never lowers one. History follows a door's
+  domain and type across a change of URL for 90 days. Agents' reports reach the business privately
+  and never change a door, a score or the order.
+- A door simulation the network runs on every change tries these rules against the smear (200 keys
+  × 1,000 reports: at most 2 reads a day, nothing public moves), the blocked door, provoked client
+  faults and refusals, a real outage (failing an hour after the first failed read, live again at the
+  next read), a public check, a failed control read, a door gone, retries, self-boosting and unknown
+  doors.
+
+### A5.9 Known gaps, stated (`known_gaps`)
+
+- A business that records its own failure as the customer's no-show or late cancellation writes no
+  broken row against itself: it is caught when the customer reports it, and not before. The
+  simulation's blamer shows it: it scores and ranks above the honest record. The witness rules still
+  to come are to close it.
+- A business that makes up customers at free-mail addresses it holds has each counted as a customer
+  of its own once acknowledgements in their names verify, as many witnesses as it makes up. The
+  simulation's free-mail padder shows it. No acknowledgement can verify on our network yet; the
+  witness's own guards are to close it before one can.
+
+### A5 in the rules version
+
+Rules version 9 (`"0.2.2"`) keeps every member and number of version 8. It adds `score.counted`,
+`score.counts`, `tiers.witness`, `witnesses_min` (3) on the business tiers (and drops
+`verified_kept_share_min` there), `timing.closed_late_before_hours` (48),
+`timing.closed_late_after_hours` (72), `timing.unclosed_restarts` (1), the outcome
+`promise.closed_late` (o 0.5, by the network), `doors` and `known_gaps`; and it rewrites
+`order.rule`, `order.answering`, `order.reach.1`, `order.within_reach`, `order.newcomers.who`,
+`score.shown`, `score.share`, `score.confidence_business`, `weights.presumed_when`,
+`weights.report_weighs`, `weights.which_outcome_stands`, `weights.repeat.formula`, `tiers.ranked` and
+`promise.unclosed`'s `by`. A listing's outcomes gain `promise.closed_late`. Version 8's document
+stays as it was published, but for `next`.
+
+**Decisions.** R2, R5 and R25 hold. R7 holds as a cap of three pieces per customer, weighed in order
+of weight. R32 now needs three witnesses. Reputation stays per person: nothing here reviews an
+agent, and agents' door reports are measurements of machines, private to the business.
+
+**Text changed:** the header, A5, §15 (version 9).
+
+## Amendment 6 (31 Oct 2026): words that name a kind of business — rules version 10
+
+**Status: decided (31 Oct 2026)**, as rules version 10 (`"0.2.3"`): version 9 (`"0.2.2"`) amended.
+A network publishes it by its own notice and puts it in force as it did versions 5, 6, 8 and 9: the
+moment it publishes it when no more than one business, or no business but its own inboxes, is a
+member of that network then, otherwise at 00:00 UTC on the sixteenth day after the day it published
+it (§11); and never before version 9 takes effect, since it amends it. Ours had two members when it
+published it, both its own inboxes, and no other business, so nobody was owed 15 days' notice, and
+it took effect the day it was published; its changelog entry says so. Every member and number of
+version 9 is kept, but for the ones below.
+
+**Why.** A search's words order the businesses they keep by bands (`order.bands`), a whole word of a
+business's name first. A word that names a kind of business is also in the names of businesses that
+serve that kind: under version 9 "hotel" put hotel suppliers, a key-card maker and a gallery named
+after a hotel in band 1 beside the hotels, and reach within the band put them ahead of hotels whose
+doors take bookings. And in a town with no hotel listed, "hotel" there answered with a tea shop for
+hotels, a maker of artificial plants for hotels, and massages at your hotel, because their own text
+holds the word.
+
+### A6.1 A word of a kind finds that kind first
+
+- **Rule.** A search names one kind when the run of its words that names a category
+  (`order.bands.words`) is all of them, names a category at place 2, and every category it names
+  there is of one group of `GET /v1/categories` (a place category of no group is a kind of its own).
+  Then a whole word of a business's name is place 1 only for a business of that kind: one of its
+  groups is that kind (the groups of its place categories, primary and alternates, none only probably
+  so, and those a member's manifest names). Any other business's name is read at place 3, with its
+  other names, categories' labels, services and tags (`order.bands.kind`).
+- So "hotel" lists places to stay whose name holds the word first, then the rest of the hotels, then
+  other businesses whose name holds it, the suppliers among them.
+- **Not a kind.** Words that name categories of several groups name a product's makers and sellers:
+  "gin" and "whisky" name distilleries and liquor shops. Read as a kind they would put every liquor
+  shop before every gin brand's own shop, so they are read as before. So are searches with other
+  words: "tea for hotels" and "hotel key cards" name a category with part of their words at most.
+
+### A6.2 A place to stay, and businesses that only mention one
+
+- **Rule.** When the kind is places to stay (the group `stay`: hotels, hostels, guest houses and the
+  like), a business of another kind is left out when every word of the search is only in the rest of
+  its text (places 6 and 8): in no word of its name, other names, categories' labels, services or
+  tags, and not inside a name with no space. When the first page then holds no business in band 1 or
+  2, the answer's `note` says that no business of that kind is found there yet, in the search's own
+  words.
+- **Why only a place to stay.** Most of the directory is businesses found on their own websites and
+  filed as online shops, and in their own text the word of a florist, a wedding planner or a plumber
+  mostly says what they are: left out for every kind, on our directory of 31 October 2026, "fleuriste
+  Paris" kept 2 of its 7 results and "wedding planner" 3 of 11. A place to stay's word in a
+  business's own text mostly says where its customers are: "teas for hotels", "massages at your
+  hotel".
+
+### A6 in the rules version
+
+Rules version 10 (`"0.2.3"`) keeps every member and number of version 9. It adds
+`order.bands.kind`, and rewrites `summary`, `order.rule`, `order.bands.1` and `order.bands.3`.
+Version 9's document stays as it was published, but for `next`.
+
+**Decisions.** R25 holds: a business a search leaves out is not marked, and searches with other
+words still find it. Nothing about the order can be bought.
+
+**Text changed:** the header, A6, §15 (version 10).

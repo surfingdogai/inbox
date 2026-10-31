@@ -707,12 +707,14 @@ describe("the home page and the three products", () => {
       next: "Version 7 is announced, and takes effect on 23 Oct 2026.",
     });
     expect(rulesLine({ version: 7, status: "announced" })).toBeNull();
-    // The fallback is what was in force when it was last checked against the network: version 9 since 13 October 2026.
-    expect(rulesFallback()).toEqual({ now: "Version 9 (0.2.2), in force since 13 Oct 2026.", next: "" });
+    // The fallback is what is in force once the network publishes version 10: since 31 October 2026.
+    expect(rulesFallback()).toEqual({ now: "Version 10 (0.2.3), in force since 31 Oct 2026.", next: "" });
     // The network page says the same line, read the same way, rather than a version written into it.
     const network = read("src/pages/network.astro");
     expect(network).toContain("<b>{rules.now}</b>");
     expect(network).not.toMatch(/The rules in force are version \d/);
+    // Rules version 10: a word that names a kind of business finds that kind first.
+    expect(network.replace(/\s+/g, " ")).toContain("and a word that names a kind of business finds that kind first.");
   });
 
   it("every internal link in the bar, the footer and the product pages goes somewhere", () => {
