@@ -147,6 +147,14 @@ export function paymentName(token: string): string {
   return labels[token] ?? token;
 }
 
+/**
+ * The ways the setup offers one press each, before Settings → Payments has the rest: card, cash and a bank
+ * transfer, the business's country's own (up to three), and the two wallets most people use.
+ */
+export function setupPayments(country: string | null | undefined): string[] {
+  return [...new Set(["card", "cash", "bank_transfer", ...localPayments(country).slice(0, 3), "apple_pay", "paypal"])];
+}
+
 /** `accepted` in the vocabulary's order, each once, with Card when a card brand is in it. */
 export function withCard(accepted: readonly string[]): string[] {
   const set = new Set(accepted);

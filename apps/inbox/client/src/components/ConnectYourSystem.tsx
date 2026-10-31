@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { BedDouble, CalendarCheck, CalendarDays, CreditCard, ShoppingBag, Store, Wrench } from "lucide-react";
 import type { ReactNode } from "react";
 import { problemOf } from "../lib/api";
+import { SOURCE_WORDS, sourceState } from "../lib/bring";
 import { cardState, cardsFor } from "../lib/connect";
 import { useIntegrations } from "../lib/queries";
 import type { ConnectorGroup, GalleryCard } from "../lib/types";
@@ -59,13 +60,19 @@ export function ConnectYourSystem({
         <div className="int-grid">
           {cards.map((c) => {
             const Icon = ICONS[c.group];
-            const { tag, hint } = cardState(c);
+            const state = sourceState(c.ways);
+            const told = cardState(c);
+            // A platform that lets only approved partners connect waits on the partner, and says so.
+            const tag = state === "partner" ? SOURCE_WORDS.partner : told.tag;
+            const hint = told.hint;
             const body = (
               <>
                 <Icon className="icon int-icon" aria-hidden="true" />
                 <span className="int-text">
                   <span className="int-name">{c.title}</span>
                   <span className="int-line">{lodging && c.id === "calendar" ? c.line : (hint ?? c.line)}</span>
+                  {/* Built from the platform's documentation: said plainly until a live account has confirmed it. */}
+                  {state === "unverified" && <span className="int-line">{SOURCE_WORDS.unverified}.</span>}
                 </span>
                 {tag && <span className="int-tag">{tag}</span>}
               </>

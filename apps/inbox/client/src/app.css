@@ -1771,6 +1771,115 @@ fieldset.chips,
   color: var(--ink-3);
 }
 
+/* The setup's doors: grouped by a small quiet heading, a door's own limits tucked under its switch. */
+.door-groups {
+  display: grid;
+  gap: 14px;
+}
+.door-group-label {
+  margin: 0 0 2px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.door-more {
+  display: grid;
+  gap: 6px;
+  flex-basis: 100%;
+  margin: 4px 0 6px;
+  padding-left: 12px;
+  border-left: 1px solid var(--hairline);
+}
+.door-more .chips-field > legend {
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+/* What the business runs: the quick picks, then the whole list typed ahead. */
+.kind-find {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+}
+.kind-own {
+  font-style: italic;
+  color: var(--ink-2);
+}
+.kind-chosen {
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+/* Other currencies taken: chips, then a quiet chooser to add one. */
+.other-currencies {
+  display: grid;
+  gap: 6px;
+}
+.lang-box.is-static {
+  min-height: 0;
+  padding: 0;
+  cursor: default;
+}
+
+/* Bringing things from what the business uses: a line per system, how far along it is said plainly. */
+.src-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.src-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 12px;
+  align-items: baseline;
+  padding: 9px 0;
+}
+.src-row + .src-row {
+  border-top: 1px solid var(--hairline);
+}
+.src-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+}
+a.src-name {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--hairline);
+}
+a.src-name:hover {
+  text-decoration-color: currentcolor;
+}
+.src-line {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--ink-3);
+}
+.src-state {
+  font-size: 11px;
+  font-weight: 500;
+  text-align: right;
+  color: var(--ink-3);
+}
+.src-state.is-ready {
+  color: var(--ink-2);
+}
+@media (max-width: 520px) {
+  .src-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .src-state {
+    text-align: left;
+  }
+}
+
 /* Bookings or orders on another site: one quiet line per kind, and a small editor that slides open. */
 .elsewhere {
   margin-top: 10px;

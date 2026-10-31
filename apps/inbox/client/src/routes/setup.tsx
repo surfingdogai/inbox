@@ -1,21 +1,38 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import clsx from "clsx";
 import { ArrowLeft, ArrowRight, Check, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { CurrencySelect, LengthPicker, MoneyInput, Stepper, TimeZonePicker } from "../components/Choosers";
+import { BringFrom } from "../components/BringFrom";
+import {
+  CurrencySelect,
+  LanguagePicker,
+  LengthPicker,
+  MoneyInput,
+  OtherCurrencies,
+  Stepper,
+  TimeZonePicker,
+} from "../components/Choosers";
 import { ConnectYourSystem } from "../components/ConnectYourSystem";
 import { ErrorState } from "../components/Feedback";
 import { Field, Switch } from "../components/Form";
 import { HoursEditor } from "../components/Hours";
+import { KindPicker } from "../components/KindPicker";
+import { Chips } from "../components/Property";
 import { WhereYouWork } from "../components/WhereYouWork";
 import { type ApiProblem, problemOf } from "../lib/api";
 import { ensureSignedIn, session } from "../lib/auth";
+import { SOURCE_CARDS } from "../lib/bring";
 import { guessCurrency } from "../lib/currencies";
+import { durationWords } from "../lib/durations";
 import { EMPTY_MENU, foodApi } from "../lib/food";
 import { countryOfZone, emailLangOfCountry } from "../lib/geo";
+import { type BusinessKind, type ChosenKind, chosenKind } from "../lib/kinds";
 import { languageName, languagesToSave } from "../lib/languages";
+import { paymentName, setupPayments, togglePayment } from "../lib/payments";
 import { KIND_WORDS, propertyApi, STANDARD_PLAN, useProperty } from "../lib/property";
 import {
+  qk,
   useApplyPreset,
   useNetworks,
   useProducts,
@@ -29,26 +46,39 @@ import {
   useSettings,
 } from "../lib/queries";
 import {
+  anyDoor,
+  DISCOUNT_CHOICES,
   DISH_PLACEHOLDERS,
   DISH_SECTIONS,
   type DishDraft,
+  DOOR_GROUPS,
+  defaultDoors,
   dishPlan,
-  doorsFor,
+  doorRows,
   doorsStepDoc,
+  GENERAL,
   isKitchen,
   joinNetworkDoc,
   KINDS,
   kindOf,
   networkOffer,
+  type OfferMode,
+  type OfferSection,
   offerBodies,
+  offerSections,
   ownerEmailDoc,
+  quickKind,
   SETUP_NETWORK,
   type SetupKind,
   type StepId,
+  setupKeyOfSaved,
+  setupKindOf,
+  startDoors,
   stepsFor,
+  termsOf,
   type WizardDoors,
   type WizardRoom,
-  wizardDoorsDoc,
+  type WizardTerms,
   wizardPreset,
   wizardRoomBodies,
 } from "../lib/setup";
@@ -121,6 +151,22 @@ function guessLang(zone: string): string {
 const browserLanguages = (): string[] =>
   typeof navigator === "undefined" ? [] : [...(navigator.languages ?? []), navigator.language];
 
+/**
+ * The languages to start from: the time zone's country's and the browser's own, each once. Portuguese where it is
+ * the country's goes first: the inbox writes in it when a customer's own is neither English nor Portuguese.
+ */
+function startLangs(zone: string): string[] {
+  const guess = guessLang(zone);
+  let own = "";
+  try {
+    own = (navigator.language ?? "").toLowerCase().split("-")[0] ?? "";
+  } catch {
+    own = "";
+  }
+  const list = guess === "pt" ? [guess, own] : [own, guess];
+  return [...new Set(list.filter((l) => /^[a-z]{2,3}$/.test(l)))];
+}
+
 interface Offer {
   readonly id: number;
   name: string;
@@ -150,10 +196,16 @@ function SetupWizard() {
   const saveWeekly = useSaveWeekly();
   const applyPreset = useApplyPreset();
 
+  const qc = useQueryClient();
   const [step, setStep] = useState(0);
   // What the business runs (ADR-036): it sets the rules to start from and what agents can do to begin with.
   const [kindKey, setKindKey] = useState<string | null>(null);
   const kind = kindOf(kindKey);
+  // …and exactly what it is, from the list of hundreds or in the owner's own words (`directory.kind`): saved only
+  // once the owner chose, so running the wizard again changes nothing they did not touch.
+  const [bizKind, setBizKind] = useState<ChosenKind | null>(null);
+  const [kindText, setKindText] = useState("");
+  const [kindTouched, setKindTouched] = useState(false);
   const steps = stepsFor(kindKey);
   const at: StepId = steps[step]?.id ?? "kind";
   // A place to stay: what kind, when guests come and go, its rooms. Its id once saved, for the rooms.
@@ -187,13 +239,17 @@ function SetupWizard() {
   const [name, setName] = useState("");
   const [timezone, setTimezone] = useState(tz);
   const [currency, setCurrency] = useState(() => guessCurrency(browserLanguages(), tz));
-  const [emailLang, setEmailLang] = useState<string>(() => guessLang(tz));
-  // Until the owner picks them, the currency and the email language follow the time zone's country.
+  // The currencies taken besides it (`payments.currencies`): prices stay in the business's own.
+  const [others, setOthers] = useState<readonly string[]>([]);
+  const [moreCurrencies, setMoreCurrencies] = useState(false);
+  // The languages the business speaks, its order kept: customers write in any of them.
+  const [langs, setLangs] = useState<readonly string[]>(() => startLangs(tz));
+  // Until the owner picks them, the currency and the languages follow the time zone's country.
   const [picked, setPicked] = useState({ currency: false, lang: false });
   const pickZone = (zone: string) => {
     setTimezone(zone);
     if (!picked.currency) setCurrency(guessCurrency(browserLanguages(), zone));
-    if (!picked.lang) setEmailLang(guessLang(zone));
+    if (!picked.lang) setLangs(startLangs(zone));
   };
   // Where new requests are announced: the address they signed in with, unless they say otherwise.
   const [ownerEmail, setOwnerEmail] = useState("");
@@ -207,13 +263,46 @@ function SetupWizard() {
       live = false;
     };
   }, []);
-  // A business the inbox already knows by name (a plan, an earlier visit) starts with it.
+  // A business the inbox already knows by name (a plan, an earlier visit) starts with it, its currency and its
+  // languages: the wizard run again never guesses over what the owner said.
+  const [profileRead, setProfileRead] = useState(false);
   useEffect(() => {
     const known = profile.data?.name?.trim();
-    if (known) setName((typed) => typed || known);
-  }, [profile.data?.name]);
-  const [doors, setDoors] = useState<WizardDoors>({ booking: true, quoteRequest: true, message: true });
+    if (!known || profileRead || !profile.data) return;
+    setProfileRead(true);
+    setName((typed) => typed || known);
+    setCurrency(profile.data.currency);
+    if (profile.data.languages.length) setLangs(profile.data.languages);
+    setPicked({ currency: true, lang: true });
+  }, [profile.data, profileRead]);
+  const [doors, setDoors] = useState<WizardDoors>(() => defaultDoors(undefined));
+  // The limits beside the doors, from what Settings say: how long before it can be cancelled, a discount, how paid.
+  const [terms, setTerms] = useState<WizardTerms>(() => termsOf(undefined));
+  const [settingsRead, setSettingsRead] = useState(false);
+  useEffect(() => {
+    if (settingsRead || !settings.data) return;
+    setSettingsRead(true);
+    const doc = settings.data.doc;
+    setTerms(termsOf(doc));
+    setOthers(doc.payments.currencies ?? []);
+    // Run again, it starts from what the business said it runs.
+    const saved = doc.directory.kind;
+    const key = setupKeyOfSaved(saved);
+    if (saved && key && !kindTouched) {
+      setBizKind(saved);
+      setKindText(saved.label);
+      setKindKey(key);
+      setDoors(startDoors(kindOf(key), doc));
+    } else if (!kindTouched) {
+      setDoors(startDoors(undefined, doc));
+    }
+  }, [settings.data, settingsRead, kindTouched]);
   const [offers, setOffers] = useState<Offer[]>([{ id: 1, name: "", minutes: "60", price: "" }]);
+  // Products to start a shop's catalogue with: a name and a price each.
+  const [goods, setGoods] = useState<Offer[]>([{ id: 1, name: "", minutes: "0", price: "" }]);
+  // How the offer and the rooms are answered: a few now, from the system the business uses, or later.
+  const [offerMode, setOfferMode] = useState<OfferMode>("now");
+  const [roomsMode, setRoomsMode] = useState<OfferMode>("now");
   const [nextId, setNextId] = useState(2);
   // A kitchen's first dishes (ADR-040): on the menu in a section, their allergens for Settings → Menu.
   const kitchen = isKitchen(kind);
@@ -264,6 +353,33 @@ function SetupWizard() {
   // Booked at a time, or only asked about for a price.
   const asked = !doors.booking;
   const preset = wizardPreset(doors, kind);
+  const sections = offerSections(doors, kind);
+  const country = countryOfZone(timezone);
+
+  /* What the business runs: a quick pick, a kind of the list, or its own words. */
+  const pickQuick = (key: string) => {
+    setKindKey(key);
+    setBizKind(quickKind(key));
+    setKindText("");
+    setKindTouched(true);
+    setDoors(startDoors(kindOf(key), settings.data?.doc));
+  };
+  const pickFound = (found: BusinessKind) => {
+    const setup = setupKindOf(found);
+    setKindKey(setup.key);
+    setBizKind(chosenKind(found));
+    setKindText(found.names.en);
+    setKindTouched(true);
+    setDoors(startDoors(setup, settings.data?.doc));
+  };
+  const pickOwn = (words: string) => {
+    const own = chosenKind(words);
+    setKindKey(GENERAL.key);
+    setBizKind(own);
+    setKindText(own?.label ?? "");
+    setKindTouched(true);
+    setDoors(startDoors(GENERAL, settings.data?.doc));
+  };
 
   const leave = () => {
     rememberSkip();
@@ -274,17 +390,24 @@ function SetupWizard() {
   const saveStep = async (): Promise<boolean> => {
     setLocal(null);
     try {
+      if (at === "kind" && kindTouched) {
+        // A merge of the one key: what the business runs, or nothing for a quick pick that is many kinds.
+        await saveSettings.mutateAsync({ doc: { directory: { kind: bizKind } } });
+      }
       if (at === "you") {
-        // A business already named keeps the languages it has, the email language first; a new one starts with it.
-        const known = profile.data?.name?.trim() ? (profile.data.languages ?? []) : [];
         await saveProfile.mutateAsync({
           name: name.trim(),
           timezone,
           currency,
-          languages: languagesToSave(known, emailLang, true),
+          languages: langs.length ? langs.slice(0, 10) : [guessLang(timezone)],
         });
-        // A merge: only this one key is sent, everything else in the settings stays as it is.
-        if (!ownerEmailHeld) await saveSettings.mutateAsync({ doc: ownerEmailDoc(ownerEmail) });
+        // A merge: where the owner hears of requests, and the currencies taken besides theirs; nothing else.
+        await saveSettings.mutateAsync({
+          doc: {
+            ...(ownerEmailHeld ? {} : ownerEmailDoc(ownerEmail)),
+            payments: { currencies: others.filter((c) => c !== currency) },
+          },
+        });
       }
       if (at === "where") {
         // Skipped (no choice made), the inbox says it works anywhere, as before.
@@ -292,8 +415,10 @@ function SetupWizard() {
         if (doc) await saveSettings.mutateAsync({ doc });
       }
       if (at === "doors") {
-        await saveSettings.mutateAsync({ doc: doorsStepDoc(doors, kind) });
+        await saveSettings.mutateAsync({ doc: doorsStepDoc(doors, kind, terms) });
       }
+      // Brought from another system, or left for later: nothing to save here.
+      if (at === "offer" && offerMode !== "now") return true;
       if (at === "offer" && kitchen) {
         const plan = dishPlan(
           dishes.map((d) => ({ ...d, section: d.section || (sectionChoices[0] ?? "Menu") })),
@@ -318,7 +443,6 @@ function SetupWizard() {
         setPlaceError(null);
         setPlaceBusy(true);
         try {
-          await saveSettings.mutateAsync({ doc: wizardDoorsDoc(doors) });
           const saved = await propertyApi.save({
             ...(placeId ? { id: placeId } : {}),
             name: name.trim(),
@@ -329,6 +453,8 @@ function SetupWizard() {
             town: town.trim() || null,
           });
           setPropertyId(saved.id);
+          // A place to stay sees its property systems among what it can bring its rooms from.
+          void qc.invalidateQueries({ queryKey: qk.integrations });
         } catch (e) {
           setPlaceError(e);
           throw e;
@@ -336,7 +462,7 @@ function SetupWizard() {
           setPlaceBusy(false);
         }
       }
-      if (at === "rooms" && placeId) {
+      if (at === "rooms" && placeId && roomsMode === "now") {
         const planned = wizardRoomBodies(rooms, placeId, currency);
         if ("problem" in planned) {
           setLocal(planned.problem);
@@ -370,16 +496,24 @@ function SetupWizard() {
         }
       }
       if (at === "offer") {
-        const planned = offerBodies(offers, "services", currency, asked);
-        if ("problem" in planned) {
-          setLocal(planned.problem);
-          return false;
+        // Both checked before either is saved: a price that does not read stops the step with nothing half made.
+        const planned = sections.includes("services") ? offerBodies(offers, "services", currency, asked) : null;
+        const sold = sections.includes("products") ? offerBodies(goods, "products", currency) : null;
+        for (const p of [planned, sold]) {
+          if (p && "problem" in p) {
+            setLocal(p.problem);
+            return false;
+          }
         }
-        if (planned.kind === "services") {
+        if (planned && "kind" in planned && planned.kind === "services") {
           for (const body of planned.bodies) await serviceWrite.mutateAsync({ body });
-        } else {
-          for (const body of planned.bodies) await productWrite.mutateAsync({ body });
         }
+        if (sold && "kind" in sold && sold.kind === "products") {
+          for (const body of sold.bodies) await productWrite.mutateAsync({ body });
+        }
+        setOffers([{ id: nextId, name: "", minutes: "60", price: "" }]);
+        setGoods([{ id: nextId + 1, name: "", minutes: "0", price: "" }]);
+        setNextId((n) => n + 2);
       }
       if (at === "hours" && (doors.booking || (kitchen && doors.order !== false))) {
         await saveWeekly.mutateAsync({ weekly: hours });
@@ -401,15 +535,16 @@ function SetupWizard() {
     if (await saveStep()) setStep((s) => Math.min(s + 1, steps.length - 1));
   };
 
+  // Nothing is required that can wait: only a name, and somewhere agents can reach the business.
   const canAdvance =
     at === "kind" ||
     (at === "you" && name.trim().length > 0) ||
     (at === "where" && areaReady(area)) ||
-    (at === "doors" && (doors.booking || doors.quoteRequest || doors.message || doors.order === true)) ||
-    (at === "offer" && (kitchen || !doors.booking || offers.some((o) => o.name.trim()) || existing > 0)) ||
+    (at === "doors" && anyDoor(doors)) ||
+    at === "offer" ||
     at === "hours" ||
     at === "place" ||
-    (at === "rooms" && rooms.some((r) => r.name.trim())) ||
+    (at === "rooms" && (roomsMode !== "now" || rooms.some((r) => r.name.trim()))) ||
     at === "answering";
 
   if (profile.isError) {
@@ -431,6 +566,11 @@ function SetupWizard() {
         kind={kind}
         priced={priced || (known.data?.setup?.rates.length ?? 0) > 0}
         menuEmpty={kitchen && dishesMade === 0 && (products.data?.items.length ?? 0) === 0}
+        missing={{
+          services: !kitchen && doors.booking && (services.data?.items.length ?? 0) === 0,
+          products: !kitchen && doors.products === true && (products.data?.items.length ?? 0) === 0,
+          rooms: kind?.key === "stays" && roomsMode !== "now",
+        }}
       />
     );
 
@@ -459,22 +599,41 @@ function SetupWizard() {
               <h2 className="sec">What do you run?</h2>
             </legend>
             <div className="chips" role="radiogroup">
-              {KINDS.map((k) => (
+              {[...KINDS, GENERAL].map((k) => (
                 <label key={k.key} className="chip">
                   <input
                     type="radio"
                     name="su-kind"
                     checked={kindKey === k.key}
-                    onChange={() => {
-                      setKindKey(k.key);
-                      setDoors(k.doors);
-                    }}
+                    onChange={() =>
+                      // Something else starts from the owner's own words, never from a kind of the list's name.
+                      k.key === GENERAL.key ? pickOwn(bizKind?.id ? "" : kindText) : pickQuick(k.key)
+                    }
                   />
                   <span>{k.label}</span>
                 </label>
               ))}
             </div>
-            <p className="hint">{kind ? kind.line : "Pick the nearest. You can change everything later."}</p>
+            <div className="kind-find">
+              <label className="label" htmlFor="su-kind-find">
+                {kindKey === GENERAL.key && !bizKind ? "Name it, in your own words" : "Or find yours exactly"}
+              </label>
+              <KindPicker
+                id="su-kind-find"
+                text={kindText}
+                onText={(t) => {
+                  setKindText(t);
+                  // Typed while "Something else" is chosen: their own words, until they pick one of the list.
+                  if (kindKey === GENERAL.key && !bizKind?.id) {
+                    setBizKind(chosenKind(t));
+                    setKindTouched(true);
+                  }
+                }}
+                onPick={pickFound}
+                onOwnWords={pickOwn}
+              />
+            </div>
+            <p className="hint">{kindLine(kind, bizKind)}</p>
           </fieldset>
         )}
 
@@ -498,7 +657,7 @@ function SetupWizard() {
               <Field id="su-tz" label="Time zone" hint="Hours and bookings use this time zone.">
                 <TimeZonePicker id="su-tz" value={timezone} onChange={pickZone} />
               </Field>
-              <Field id="su-cur" label="Currency" error={problem?.field("currency")}>
+              <Field id="su-cur" label="Currency" hint="Your prices are in it." error={problem?.field("currency")}>
                 <CurrencySelect
                   id="su-cur"
                   value={currency}
@@ -509,6 +668,21 @@ function SetupWizard() {
                 />
               </Field>
             </div>
+            {others.length === 0 && !moreCurrencies ? (
+              <button type="button" className="linkish" onClick={() => setMoreCurrencies(true)}>
+                You take other currencies too?
+              </button>
+            ) : (
+              <Field
+                id="su-cur-more"
+                label="You also take"
+                optional
+                hint={`Agents are told before they ask. Prices stay in ${currency}; nothing is converted.`}
+                error={problem?.field("payments.currencies")}
+              >
+                <OtherCurrencies id="su-cur-more" own={currency} value={others} onChange={setOthers} />
+              </Field>
+            )}
             {!ownerEmailHeld && (
               <Field
                 id="su-owner"
@@ -528,26 +702,39 @@ function SetupWizard() {
               </Field>
             )}
             <Field
-              id="su-lang"
-              label={kind?.key === "stays" ? "Guests' emails are in" : "Customers' emails are in"}
-              hint={langHint(kind?.key === "stays" ? GUEST_LANGS : ["en", "pt"], emailLang, kind?.key === "stays")}
+              id="su-langs"
+              label="Languages you speak"
+              hint={langsLine(langs, kind?.key === "stays")}
+              error={problem?.field("languages")}
             >
-              <select
-                id="su-lang"
-                className="input"
-                value={emailLang}
-                onChange={(e) => {
-                  setEmailLang(e.target.value);
+              <LanguagePicker
+                id="su-langs"
+                value={langs}
+                onChange={(v) => {
+                  setLangs(v.slice(0, 10));
                   setPicked((p) => ({ ...p, lang: true }));
                 }}
-              >
-                {(kind?.key === "stays" ? GUEST_LANGS : (["en", "pt"] as const)).map((l) => (
-                  <option key={l} value={l}>
-                    {languageName(l)}
-                  </option>
-                ))}
-              </select>
+              />
             </Field>
+            {writtenIn(langs, kind?.key === "stays").length > 1 && (
+              <Field id="su-lang" label="When theirs is none of these, write in">
+                <select
+                  id="su-lang"
+                  className="input"
+                  value={fallbackLang(langs, kind?.key === "stays")}
+                  onChange={(e) => {
+                    setLangs(languagesToSave(langs, e.target.value, true));
+                    setPicked((p) => ({ ...p, lang: true }));
+                  }}
+                >
+                  {writtenIn(langs, kind?.key === "stays").map((l) => (
+                    <option key={l} value={l}>
+                      {languageName(l)}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
           </>
         )}
 
@@ -573,176 +760,342 @@ function SetupWizard() {
         {at === "doors" && (
           <>
             <h2 className="sec">What can agents do?</h2>
-            <p className="lede small">As many as you like. You can change them any time in Settings.</p>
-            <ul className="door-list">
-              {doorsFor(kind).map((d) => (
-                <li key={d.key} className="door-row">
-                  <Switch
-                    checked={doors[d.key] === true}
-                    onChange={(on) => setDoors((all) => ({ ...all, [d.key]: on }))}
-                  >
-                    {d.label}
-                  </Switch>
-                  <span className="door-note">{d.line}</span>
-                </li>
-              ))}
-            </ul>
-            {!doors.booking && !doors.quoteRequest && !doors.message && !doors.order && (
-              <p className="hint">Agents can't reach you at all.</p>
-            )}
-          </>
-        )}
-
-        {at === "offer" && kitchen && (
-          <>
-            <h2 className="sec">Your first dishes</h2>
             <p className="lede small">
-              Two or three to start. Agents order only what is on your menu; add the rest and their allergens in
-              Settings → Menu.
+              Your customers' AI assistants reach you through these. Turn on as many as you like; each changes any time
+              in Settings.
             </p>
-            {existing > 0 && (
-              <p className="hint">
-                This instance already has {existing} {existing === 1 ? "entry" : "entries"}. Dishes you add here are
-                added to them.
-              </p>
-            )}
-            <div className="stack">
-              {dishes.map((d, i) => (
-                <div className="offer row-glass" key={d.id}>
-                  <Field id={`su-d-${d.id}`} label="Name">
-                    <input
-                      id={`su-d-${d.id}`}
-                      className="input"
-                      value={d.name}
-                      placeholder={i === 0 ? (DISH_PLACEHOLDERS[kind?.key ?? ""] ?? "") : ""}
-                      onChange={(e) =>
-                        setDishes((all) => all.map((x) => (x.id === d.id ? { ...x, name: e.target.value } : x)))
-                      }
-                    />
-                  </Field>
-                  <Field id={`su-dp-${d.id}`} label="Price">
-                    <MoneyInput
-                      id={`su-dp-${d.id}`}
-                      currency={currency}
-                      value={d.price}
-                      onChange={(v) => setDishes((all) => all.map((x) => (x.id === d.id ? { ...x, price: v } : x)))}
-                    />
-                  </Field>
-                  <Field id={`su-ds-${d.id}`} label="Section">
-                    <select
-                      id={`su-ds-${d.id}`}
-                      className="input"
-                      value={d.section || (sectionChoices[0] ?? "")}
-                      onChange={(e) =>
-                        setDishes((all) => all.map((x) => (x.id === d.id ? { ...x, section: e.target.value } : x)))
-                      }
-                    >
-                      {sectionChoices.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
+            <div className="door-groups">
+              {DOOR_GROUPS.map((g) => {
+                const rows = doorRows(kind).filter((d) => d.group === g.id);
+                if (rows.length === 0) return null;
+                return (
+                  <section key={g.id} aria-label={g.label}>
+                    <h3 className="door-group-label">{g.label}</h3>
+                    <ul className="door-list">
+                      {rows.map((d) => (
+                        <li key={d.key} className="door-row">
+                          <Switch
+                            checked={doors[d.key] === true}
+                            onChange={(on) => setDoors((all) => ({ ...all, [d.key]: on }))}
+                          >
+                            {d.label}
+                          </Switch>
+                          <span className="door-note">{d.line}</span>
+                          {d.key === "booking" && doors.booking && (
+                            <div className="door-more">
+                              <Chips
+                                legend="They can cancel"
+                                value={terms.cancelMin}
+                                options={cancelChoices(terms.cancelMin)}
+                                onChange={(v) => setTerms((t) => ({ ...t, cancelMin: v }))}
+                              />
+                              <span className="door-note">
+                                {settings.data?.doc.booking.lateCancellation === "refuse"
+                                  ? "Later than that, they are sent to you."
+                                  : "Later than that, it is still taken, and recorded as late."}
+                              </span>
+                            </div>
+                          )}
+                          {d.key === "negotiate" && doors.negotiate && (
+                            <div className="door-more">
+                              <Chips
+                                legend="Your AI and rules may also take off"
+                                value={terms.discountPct}
+                                options={DISCOUNT_CHOICES.map((p) => ({
+                                  value: p,
+                                  label: p ? `Up to ${p}%` : "Nothing",
+                                }))}
+                                onChange={(v) => setTerms((t) => ({ ...t, discountPct: v }))}
+                              />
+                              <span className="door-note">
+                                Never under the lowest price you set for an item, in Settings. Without one, a price of
+                                theirs waits for you.
+                              </span>
+                            </div>
+                          )}
+                        </li>
                       ))}
-                    </select>
-                  </Field>
-                  {dishes.length > 1 && (
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      aria-label={`Remove ${d.name || "this row"}`}
-                      onClick={() => setDishes((all) => all.filter((x) => x.id !== d.id))}
-                    >
-                      <Trash2 className="icon" aria-hidden="true" />
-                    </button>
-                  )}
-                </div>
-              ))}
+                    </ul>
+                  </section>
+                );
+              })}
+              <section aria-label="Paying">
+                <h3 className="door-group-label">Paying</h3>
+                <fieldset className="chips-field">
+                  <legend className="label">How customers can pay you</legend>
+                  <div className="chips">
+                    {setupPayments(country).map((t) => (
+                      <label key={t} className="chip">
+                        <input
+                          type="checkbox"
+                          checked={terms.payments.includes(t)}
+                          onChange={(e) =>
+                            setTerms((all) => ({ ...all, payments: togglePayment(all.payments, t, e.target.checked) }))
+                          }
+                        />
+                        {paymentName(t)}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+                <p className="door-note">
+                  Agents read this before they pay. To be paid online into your own account, connect Stripe or Mollie
+                  after setup: accepted orders then carry a link to pay, and with Stripe a customer's assistant can pay
+                  it itself once you switch that on.
+                </p>
+              </section>
             </div>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={() => {
-                setDishes((all) => [...all, { id: nextId, name: "", price: "", section: "" }]);
-                setNextId((n) => n + 1);
-              }}
-            >
-              <Plus className="icon" aria-hidden="true" />
-              Another dish
-            </button>
+            {!anyDoor(doors) && <p className="hint">Agents can't reach you at all.</p>}
           </>
         )}
 
-        {at === "offer" && !kitchen && (
+        {at === "offer" && (
           <>
-            <h2 className="sec">{doors.booking ? "What can people book?" : "What can people ask you about?"}</h2>
-            <p className="lede small">
-              {doors.booking
-                ? "One is enough to start. An agent asking what you offer is answered from this."
-                : "Optional: agents can ask for a price in their own words. Name what you do and they ask about it."}
-            </p>
-            {existing > 0 && (
-              <p className="hint">
-                This instance already has {existing} {existing === 1 ? "entry" : "entries"}. Anything you add here is
-                added to them.
+            <h2 className="sec">{offerTitle(sections, doors.booking)}</h2>
+            {sections.length === 0 ? (
+              <p className="lede small">
+                Nothing to list: agents can write to you. Go back and switch on booking or ordering to list what people
+                book or buy.
               </p>
-            )}
-            <div className="stack">
-              {offers.map((o) => (
-                <div className="offer row-glass" key={o.id}>
-                  <Field id={`su-o-${o.id}`} label="Name">
-                    <input
-                      id={`su-o-${o.id}`}
-                      className="input"
-                      value={o.name}
-                      placeholder={doors.booking ? "Initial consultation" : "Kitchen fitting"}
-                      onChange={(e) =>
-                        setOffers((all) => all.map((x) => (x.id === o.id ? { ...x, name: e.target.value } : x)))
-                      }
-                    />
-                  </Field>
-                  {doors.booking && (
-                    <Field id={`su-p-${o.id}`} label="Price" optional>
-                      <MoneyInput
-                        id={`su-p-${o.id}`}
-                        currency={currency}
-                        value={o.price}
-                        placeholder="On request"
-                        onChange={(v) => setOffers((all) => all.map((x) => (x.id === o.id ? { ...x, price: v } : x)))}
-                      />
-                    </Field>
-                  )}
-                  {doors.booking && (
-                    <div className="wide">
-                      <LengthPicker
-                        legend="Length"
-                        value={o.minutes}
-                        onChange={(v) => setOffers((all) => all.map((x) => (x.id === o.id ? { ...x, minutes: v } : x)))}
-                      />
+            ) : (
+              <>
+                <Chips
+                  legend="How would you like to add them?"
+                  value={offerMode}
+                  options={OFFER_MODES}
+                  onChange={(m) => {
+                    setOfferMode(m);
+                    setLocal(null);
+                  }}
+                />
+                {offerMode === "bring" && (
+                  <BringFrom ids={sourcesOf(sections, kind)} feed={sections.includes("products")} />
+                )}
+                {offerMode === "later" && <p className="hint">{laterLine(sections, doors)}</p>}
+                {offerMode === "now" && kitchen && (
+                  <>
+                    <p className="lede small">
+                      Two or three to start. Agents order only what is on your menu; add the rest and their allergens in
+                      Settings → Menu.
+                    </p>
+                    {existing > 0 && (
+                      <p className="hint">
+                        This instance already has {existing} {existing === 1 ? "entry" : "entries"}. Dishes you add here
+                        are added to them.
+                      </p>
+                    )}
+                    <div className="stack">
+                      {dishes.map((d, i) => (
+                        <div className="offer row-glass" key={d.id}>
+                          <Field id={`su-d-${d.id}`} label="Name">
+                            <input
+                              id={`su-d-${d.id}`}
+                              className="input"
+                              value={d.name}
+                              placeholder={i === 0 ? (DISH_PLACEHOLDERS[kind?.key ?? ""] ?? "") : ""}
+                              onChange={(e) =>
+                                setDishes((all) => all.map((x) => (x.id === d.id ? { ...x, name: e.target.value } : x)))
+                              }
+                            />
+                          </Field>
+                          <Field id={`su-dp-${d.id}`} label="Price">
+                            <MoneyInput
+                              id={`su-dp-${d.id}`}
+                              currency={currency}
+                              value={d.price}
+                              onChange={(v) =>
+                                setDishes((all) => all.map((x) => (x.id === d.id ? { ...x, price: v } : x)))
+                              }
+                            />
+                          </Field>
+                          <Field id={`su-ds-${d.id}`} label="Section">
+                            <select
+                              id={`su-ds-${d.id}`}
+                              className="input"
+                              value={d.section || (sectionChoices[0] ?? "")}
+                              onChange={(e) =>
+                                setDishes((all) =>
+                                  all.map((x) => (x.id === d.id ? { ...x, section: e.target.value } : x)),
+                                )
+                              }
+                            >
+                              {sectionChoices.map((c) => (
+                                <option key={c} value={c}>
+                                  {c}
+                                </option>
+                              ))}
+                            </select>
+                          </Field>
+                          {dishes.length > 1 && (
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              aria-label={`Remove ${d.name || "this row"}`}
+                              onClick={() => setDishes((all) => all.filter((x) => x.id !== d.id))}
+                            >
+                              <Trash2 className="icon" aria-hidden="true" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
                     </div>
-                  )}
-                  {offers.length > 1 && (
                     <button
                       type="button"
-                      className="btn btn-ghost btn-sm"
-                      aria-label={`Remove ${o.name || "this row"}`}
-                      onClick={() => setOffers((all) => all.filter((x) => x.id !== o.id))}
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => {
+                        setDishes((all) => [...all, { id: nextId, name: "", price: "", section: "" }]);
+                        setNextId((n) => n + 1);
+                      }}
                     >
-                      <Trash2 className="icon" aria-hidden="true" />
+                      <Plus className="icon" aria-hidden="true" />
+                      Another dish
                     </button>
-                  )}
-                </div>
-              ))}
-            </div>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={() => {
-                setOffers((all) => [...all, { id: nextId, name: "", minutes: "60", price: "" }]);
-                setNextId((n) => n + 1);
-              }}
-            >
-              <Plus className="icon" aria-hidden="true" />
-              Add another
-            </button>
+                  </>
+                )}
+                {offerMode === "now" && !kitchen && (
+                  <>
+                    {existing > 0 && (
+                      <p className="hint">
+                        This instance already has {existing} {existing === 1 ? "entry" : "entries"}. Anything you add
+                        here is added to them.
+                      </p>
+                    )}
+                    {sections.includes("services") && (
+                      <>
+                        {sections.includes("products") && <h3 className="door-group-label">Services</h3>}
+                        <p className="lede small">
+                          {doors.booking
+                            ? "One is enough to start. An agent asking what you offer is answered from this."
+                            : "Optional: agents can ask for a price in their own words. Name what you do and they ask about it."}
+                        </p>
+                        <div className="stack">
+                          {offers.map((o) => (
+                            <div className="offer row-glass" key={o.id}>
+                              <Field id={`su-o-${o.id}`} label="Name">
+                                <input
+                                  id={`su-o-${o.id}`}
+                                  className="input"
+                                  value={o.name}
+                                  placeholder={doors.booking ? "Initial consultation" : "Kitchen fitting"}
+                                  onChange={(e) =>
+                                    setOffers((all) =>
+                                      all.map((x) => (x.id === o.id ? { ...x, name: e.target.value } : x)),
+                                    )
+                                  }
+                                />
+                              </Field>
+                              {doors.booking && (
+                                <Field id={`su-p-${o.id}`} label="Price" optional>
+                                  <MoneyInput
+                                    id={`su-p-${o.id}`}
+                                    currency={currency}
+                                    value={o.price}
+                                    placeholder="On request"
+                                    onChange={(v) =>
+                                      setOffers((all) => all.map((x) => (x.id === o.id ? { ...x, price: v } : x)))
+                                    }
+                                  />
+                                </Field>
+                              )}
+                              {doors.booking && (
+                                <div className="wide">
+                                  <LengthPicker
+                                    legend="Length"
+                                    value={o.minutes}
+                                    onChange={(v) =>
+                                      setOffers((all) => all.map((x) => (x.id === o.id ? { ...x, minutes: v } : x)))
+                                    }
+                                  />
+                                </div>
+                              )}
+                              {offers.length > 1 && (
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost btn-sm"
+                                  aria-label={`Remove ${o.name || "this row"}`}
+                                  onClick={() => setOffers((all) => all.filter((x) => x.id !== o.id))}
+                                >
+                                  <Trash2 className="icon" aria-hidden="true" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => {
+                            setOffers((all) => [...all, { id: nextId, name: "", minutes: "60", price: "" }]);
+                            setNextId((n) => n + 1);
+                          }}
+                        >
+                          <Plus className="icon" aria-hidden="true" />
+                          Add another
+                        </button>
+                      </>
+                    )}
+                    {sections.includes("products") && (
+                      <>
+                        {sections.includes("services") && <h3 className="door-group-label">Products</h3>}
+                        <p className="lede small">
+                          A few to start, each with its price. Stock, options and the rest are in Settings → Products.
+                        </p>
+                        <div className="stack">
+                          {goods.map((g, i) => (
+                            <div className="offer row-glass" key={g.id}>
+                              <Field id={`su-g-${g.id}`} label="Name">
+                                <input
+                                  id={`su-g-${g.id}`}
+                                  className="input"
+                                  value={g.name}
+                                  placeholder={i === 0 ? "Linen tote bag" : ""}
+                                  onChange={(e) =>
+                                    setGoods((all) =>
+                                      all.map((x) => (x.id === g.id ? { ...x, name: e.target.value } : x)),
+                                    )
+                                  }
+                                />
+                              </Field>
+                              <Field id={`su-gp-${g.id}`} label="Price">
+                                <MoneyInput
+                                  id={`su-gp-${g.id}`}
+                                  currency={currency}
+                                  value={g.price}
+                                  onChange={(v) =>
+                                    setGoods((all) => all.map((x) => (x.id === g.id ? { ...x, price: v } : x)))
+                                  }
+                                />
+                              </Field>
+                              {goods.length > 1 && (
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost btn-sm"
+                                  aria-label={`Remove ${g.name || "this row"}`}
+                                  onClick={() => setGoods((all) => all.filter((x) => x.id !== g.id))}
+                                >
+                                  <Trash2 className="icon" aria-hidden="true" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => {
+                            setGoods((all) => [...all, { id: nextId, name: "", minutes: "0", price: "" }]);
+                            setNextId((n) => n + 1);
+                          }}
+                        >
+                          <Plus className="icon" aria-hidden="true" />
+                          Another product
+                        </button>
+                      </>
+                    )}
+                  </>
+                )}
+              </>
+            )}
           </>
         )}
 
@@ -803,77 +1156,98 @@ function SetupWizard() {
         {at === "rooms" && (
           <>
             <h2 className="sec">Your rooms</h2>
-            <p className="lede small">
-              One line per kind of room: how many you have, and how many people sleep in one. With a price a night, each
-              request comes with a quote ready to send.
-            </p>
-            <div className="stack">
-              {rooms.map((r) => (
-                <div className="room-row row-glass" key={r.id}>
-                  <div className="room-row-head">
-                    <Field id={`su-r-${r.id}`} label="Name">
-                      <input
-                        id={`su-r-${r.id}`}
-                        className="input"
-                        value={r.name}
-                        placeholder="Double room"
-                        onChange={(e) =>
-                          setRooms((all) => all.map((x) => (x.id === r.id ? { ...x, name: e.target.value } : x)))
-                        }
-                      />
-                    </Field>
-                    {rooms.length > 1 && (
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-sm btn-icon room-row-remove"
-                        aria-label={`Remove ${r.name || "this row"}`}
-                        onClick={() => setRooms((all) => all.filter((x) => x.id !== r.id))}
-                      >
-                        <Trash2 className="icon" aria-hidden="true" />
-                      </button>
-                    )}
-                  </div>
-                  <div className="room-row-nums">
-                    <Stepper
-                      id={`su-ru-${r.id}`}
-                      label="How many"
-                      value={r.units}
-                      min={1}
-                      max={500}
-                      onChange={(v) => setRooms((all) => all.map((x) => (x.id === r.id ? { ...x, units: v } : x)))}
-                    />
-                    <Stepper
-                      id={`su-rs-${r.id}`}
-                      label="Sleeps"
-                      value={r.sleeps}
-                      min={1}
-                      max={20}
-                      onChange={(v) => setRooms((all) => all.map((x) => (x.id === r.id ? { ...x, sleeps: v } : x)))}
-                    />
-                    <Field id={`su-rp-${r.id}`} label="A night" optional>
-                      <MoneyInput
-                        id={`su-rp-${r.id}`}
-                        currency={currency}
-                        value={r.price ?? ""}
-                        placeholder="On request"
-                        onChange={(v) => setRooms((all) => all.map((x) => (x.id === r.id ? { ...x, price: v } : x)))}
-                      />
-                    </Field>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={() => {
-                setRooms((all) => [...all, { id: nextId, name: "", units: "1", sleeps: "2", price: "" }]);
-                setNextId((n) => n + 1);
+            <Chips
+              legend="How would you like to add them?"
+              value={roomsMode}
+              options={OFFER_MODES}
+              onChange={(m) => {
+                setRoomsMode(m);
+                setLocal(null);
               }}
-            >
-              <Plus className="icon" aria-hidden="true" />
-              Add another
-            </button>
+            />
+            {roomsMode === "bring" && <BringFrom ids={SOURCE_CARDS.rooms} lodging />}
+            {roomsMode === "later" && (
+              <p className="hint">
+                Guests' assistants can ask for dates once your place has rooms: Settings → Property.
+              </p>
+            )}
+            {roomsMode === "now" && (
+              <>
+                <p className="lede small">
+                  One line per kind of room: how many you have, and how many people sleep in one. With a price a night,
+                  each request comes with a quote ready to send.
+                </p>
+                <div className="stack">
+                  {rooms.map((r) => (
+                    <div className="room-row row-glass" key={r.id}>
+                      <div className="room-row-head">
+                        <Field id={`su-r-${r.id}`} label="Name">
+                          <input
+                            id={`su-r-${r.id}`}
+                            className="input"
+                            value={r.name}
+                            placeholder="Double room"
+                            onChange={(e) =>
+                              setRooms((all) => all.map((x) => (x.id === r.id ? { ...x, name: e.target.value } : x)))
+                            }
+                          />
+                        </Field>
+                        {rooms.length > 1 && (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm btn-icon room-row-remove"
+                            aria-label={`Remove ${r.name || "this row"}`}
+                            onClick={() => setRooms((all) => all.filter((x) => x.id !== r.id))}
+                          >
+                            <Trash2 className="icon" aria-hidden="true" />
+                          </button>
+                        )}
+                      </div>
+                      <div className="room-row-nums">
+                        <Stepper
+                          id={`su-ru-${r.id}`}
+                          label="How many"
+                          value={r.units}
+                          min={1}
+                          max={500}
+                          onChange={(v) => setRooms((all) => all.map((x) => (x.id === r.id ? { ...x, units: v } : x)))}
+                        />
+                        <Stepper
+                          id={`su-rs-${r.id}`}
+                          label="Sleeps"
+                          value={r.sleeps}
+                          min={1}
+                          max={20}
+                          onChange={(v) => setRooms((all) => all.map((x) => (x.id === r.id ? { ...x, sleeps: v } : x)))}
+                        />
+                        <Field id={`su-rp-${r.id}`} label="A night" optional>
+                          <MoneyInput
+                            id={`su-rp-${r.id}`}
+                            currency={currency}
+                            value={r.price ?? ""}
+                            placeholder="On request"
+                            onChange={(v) =>
+                              setRooms((all) => all.map((x) => (x.id === r.id ? { ...x, price: v } : x)))
+                            }
+                          />
+                        </Field>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => {
+                    setRooms((all) => [...all, { id: nextId, name: "", units: "1", sleeps: "2", price: "" }]);
+                    setNextId((n) => n + 1);
+                  }}
+                >
+                  <Plus className="icon" aria-hidden="true" />
+                  Add another
+                </button>
+              </>
+            )}
           </>
         )}
 
@@ -968,6 +1342,58 @@ function SetupWizard() {
   );
 }
 
+/** How the offer step and the rooms step can be answered, one press each. */
+const OFFER_MODES: readonly { readonly value: OfferMode; readonly label: string }[] = [
+  { value: "now", label: "Add a few now" },
+  { value: "bring", label: "Bring them from what you already use" },
+  { value: "later", label: "Skip, add later" },
+];
+
+/** The offer step's heading, by what it asks for. */
+function offerTitle(sections: readonly OfferSection[], booking: boolean): string {
+  if (sections.includes("menu")) return "Your first dishes";
+  if (sections.includes("services") && sections.includes("products")) return "What do you offer?";
+  if (sections.includes("products")) return "What do you sell?";
+  if (sections.length === 0) return "What you offer";
+  return booking ? "What can people book?" : "What can people ask you about?";
+}
+
+/** The systems the offer can be brought from, each card once, in the order of the parts asked for. */
+function sourcesOf(sections: readonly OfferSection[], kind: SetupKind | undefined): string[] {
+  const trade = kind?.key === "trades" || kind?.key === "projects";
+  const ids = [...sections.flatMap((x) => SOURCE_CARDS[x]), ...(trade ? SOURCE_CARDS.work : [])];
+  return [...new Set(ids)];
+}
+
+/** What waits for the offer when it is left for later, said once per door. */
+function laterLine(sections: readonly OfferSection[], doors: WizardDoors): string {
+  const lines: string[] = [];
+  if (sections.includes("menu")) lines.push("Orders open once your menu has dishes: Settings → Menu.");
+  if (sections.includes("services")) {
+    lines.push(
+      doors.booking
+        ? "Booking opens once you add a service: Settings → Services."
+        : "Agents can still ask for a price in their own words.",
+    );
+  }
+  if (sections.includes("products")) lines.push("Ordering opens once you add a product: Settings → Products.");
+  return lines.join(" ");
+}
+
+/** How long before a booking it can still be cancelled online, one press each; the one saved kept among them. */
+function cancelChoices(current: number): { value: number; label: string }[] {
+  const usual = [
+    { value: 0, label: "Until it starts" },
+    { value: 120, label: "Up to 2 h before" },
+    { value: 1440, label: "Up to 24 h before" },
+    { value: 2880, label: "Up to 48 h before" },
+  ];
+  if (usual.some((c) => c.value === current)) return usual;
+  return [...usual, { value: current, label: `Up to ${durationWords(current).toLowerCase()} before` }].sort(
+    (a, b) => a.value - b.value,
+  );
+}
+
 /** How the last step names a preset's rules, and what they do, in a line each. */
 const PRESET_WORDS: Readonly<Partial<Record<string, string>>> = {
   appointments: "bookings",
@@ -995,12 +1421,15 @@ function Finished({
   kind,
   priced,
   menuEmpty = false,
+  missing,
 }: {
   onOpen: () => void;
   kind?: SetupKind | undefined;
   priced?: boolean | undefined;
   /** A kitchen with nothing on its menu yet: agents can order nothing until it has dishes. */
   menuEmpty?: boolean;
+  /** What a door that is on still waits for: a service to book, a product to order, rooms. */
+  missing?: { readonly services: boolean; readonly products: boolean; readonly rooms: boolean } | undefined;
 }) {
   const navigate = useNavigate();
   const origin = typeof window === "undefined" ? "" : window.location.origin;
@@ -1081,6 +1510,22 @@ function Finished({
               <b>Your menu.</b> Settings → Menu: dishes, options and allergens.
             </li>
           )}
+          {missing?.services && (
+            <li>
+              <b>Something to book.</b> Settings → Services: booking opens once you add one.
+            </li>
+          )}
+          {missing?.products && (
+            <li>
+              <b>Products.</b> Settings → Products, or your shop in Settings → Integrations: ordering opens with the
+              first.
+            </li>
+          )}
+          {missing?.rooms && (
+            <li>
+              <b>Rooms.</b> Settings → Property, unless your property system brings them.
+            </li>
+          )}
           <li>
             <b>Email in.</b> So a customer can simply write to you. Settings, then the docs page on email.
           </li>
@@ -1100,12 +1545,37 @@ function Finished({
   );
 }
 
+/** The line under the first step's choice: what the chosen setup means, and that everything can change. */
+function kindLine(kind: SetupKind | undefined, chosen: ChosenKind | null): string {
+  if (!kind) return "Pick the nearest, or find yours. You can change everything later.";
+  if (kind.key === GENERAL.key) {
+    return chosen ? `${chosen.label}. ${GENERAL.line}` : `Name it in your own words. ${GENERAL.line}`;
+  }
+  const quick = chosen && chosen.id === quickKind(kind.key)?.id;
+  return chosen && !quick ? `${chosen.label}, set up like ${kind.label.toLowerCase()}. ${kind.line}` : kind.line;
+}
+
+/** The languages the inbox writes its own emails and pages in: customers' two, guests' six. */
+const writes = (stays: boolean): readonly string[] => (stays ? GUEST_LANGS : ["en", "pt"]);
+const primary = (tag: string) => tag.toLowerCase().split(/[-_]/)[0] ?? "";
+
+/** Of the languages chosen, the ones the inbox writes in, each once, in the owner's order. */
+function writtenIn(langs: readonly string[], stays: boolean): string[] {
+  return [...new Set(langs.map(primary).filter((l) => writes(stays).includes(l)))];
+}
+
+/** What the inbox writes in when a customer's own language is not one it has: the first chosen it has, else English. */
+function fallbackLang(langs: readonly string[], stays: boolean): string {
+  return writtenIn(langs, stays)[0] ?? "en";
+}
+
 /**
- * The line under the email language: says plainly when the browser's own language is not one the emails
- * are written in yet, and which they are written in instead.
+ * The line under the languages: customers write in any of them; the inbox answers in theirs where it has it, and
+ * says in which otherwise, so a business that speaks German knows its emails are in English for now.
  */
-function langHint(offered: readonly string[], chosen: string, stays: boolean): string | undefined {
-  const browser = (typeof navigator === "undefined" ? "" : navigator.language).toLowerCase().split("-")[0] ?? "";
-  if (!browser || offered.includes(browser)) return undefined;
-  return `${languageName(browser)} isn't available for ${stays ? "guests" : "customers"} yet; they are written to in ${languageName(chosen)}.`;
+function langsLine(langs: readonly string[], stays: boolean): string {
+  const names = writes(stays).map((l) => languageName(l));
+  const list = names.length > 1 ? `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}` : (names[0] ?? "");
+  const who = stays ? "Guests" : "Customers";
+  return `${who} can write in any of them. Your inbox answers in theirs when it is ${list}; otherwise in ${languageName(fallbackLang(langs, stays))}.`;
 }

@@ -186,6 +186,75 @@ export function CurrencySelect({
   );
 }
 
+/**
+ * Other currencies the business takes besides its own: a chip for each (× takes it off), and a chooser of the rest
+ * to add one, by name, never typed. Its own is never offered; at most `max`.
+ */
+export function OtherCurrencies({
+  id,
+  own,
+  value,
+  onChange,
+  max = 4,
+}: {
+  id: string;
+  own: string;
+  value: readonly string[];
+  onChange: (codes: readonly string[]) => void;
+  max?: number;
+}) {
+  const groups = useMemo(() => currencyGroups(), []);
+  const shown = value.filter((c) => c !== own);
+  const left = (list: readonly string[]) => list.filter((c) => c !== own && !shown.includes(c));
+  return (
+    <div className="other-currencies">
+      {shown.length > 0 && (
+        <div className="lang-box is-static">
+          {shown.map((code) => (
+            <span key={code} className="lang-chip">
+              {code}
+              <button
+                type="button"
+                className="lang-x"
+                aria-label={`Stop taking ${code}`}
+                onClick={() => onChange(shown.filter((c) => c !== code))}
+              >
+                <X aria-hidden="true" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      {shown.length < max && (
+        <select
+          id={id}
+          className="input input-sm"
+          value=""
+          onChange={(e) => {
+            if (e.target.value) onChange([...shown, e.target.value]);
+          }}
+        >
+          <option value="">{shown.length ? "Add another currency" : "Add a currency"}</option>
+          <optgroup label="Common">
+            {left(groups.common).map((c) => (
+              <option key={c} value={c}>
+                {currencyLabel(c)}
+              </option>
+            ))}
+          </optgroup>
+          <optgroup label="All currencies">
+            {left(groups.all).map((c) => (
+              <option key={c} value={c}>
+                {currencyLabel(c)}
+              </option>
+            ))}
+          </optgroup>
+        </select>
+      )}
+    </div>
+  );
+}
+
 /** A country by name; empty is none. `suggest` is offered one press away while none is chosen. */
 export function CountrySelect({
   id,

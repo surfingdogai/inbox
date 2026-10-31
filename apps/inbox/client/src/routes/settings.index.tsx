@@ -8,6 +8,7 @@ import {
   DurationPicker,
   LanguagePicker,
   MoneyInput,
+  OtherCurrencies,
   SourceTag,
   Stepper,
   TimeZonePicker,
@@ -127,7 +128,7 @@ function GeneralPage() {
         />
       )}
       <MailBanner />
-      <WhatYouRun />
+      <WhatYouRun onPatch={patchSettings} pending={patch.isPending} />
       {settings.data && <DoorsCard doc={settings.data.doc} pending={patch.isPending} onPatch={patchSettings} />}
       {(profile.isPending || settings.isPending) && <Loading />}
       {failed && (
@@ -662,6 +663,9 @@ function GeneralForm({
     languages: [...profile.languages],
   }));
   const [startForm] = useState<SettingsFormState>(() => toSettingsForm(doc, initial.redacted ?? []));
+  // The currencies taken besides the business's own (`payments.currencies`), beside the currency.
+  const [startOthers] = useState<readonly string[]>(() => doc.payments.currencies ?? []);
+  const [others, setOthers] = useState(startOthers);
   const [draft, setDraft] = useState(startProfile);
   const [form, setForm] = useState(startForm);
   const [loaded] = useState(initial.version);
@@ -683,7 +687,8 @@ function GeneralForm({
   const busy = saveProfile.isPending || saveSettings.isPending;
   const profileDirty = !same(draft, startProfile);
   const formDirty = !same(form, startForm);
-  const dirty = profileDirty || formDirty;
+  const othersDirty = !same(others, startOthers);
+  const dirty = profileDirty || formDirty || othersDirty;
   const setP = <K extends keyof ProfileDraft>(key: K, value: ProfileDraft[K]) =>
     setDraft((d) => ({ ...d, [key]: value }));
   const set = <K extends keyof SettingsFormState>(key: K, value: SettingsFormState[K]) =>
@@ -725,6 +730,9 @@ function GeneralForm({
       const next: Record<string, unknown> = {
         ...(formDirty ? toSettingsDoc(form) : {}),
         ...(description !== doc.directory.description ? { directory: { description } } : {}),
+        ...(othersDirty || (profileDirty && others.includes(draft.currency))
+          ? { payments: { currencies: others.filter((c) => c !== draft.currency) } }
+          : {}),
       };
       // Saved by the owner: what was read and what they saved, they have checked.
       const checked = clearSources(
@@ -748,6 +756,7 @@ function GeneralForm({
   const discard = () => {
     setDraft(startProfile);
     setForm(startForm);
+    setOthers(startOthers);
     setProblemFrom(null);
     saveProfile.reset();
     saveSettings.reset();
@@ -774,6 +783,9 @@ function GeneralForm({
         profile={profile}
         draft={draft}
         set={setP}
+        others={others}
+        setOthers={setOthers}
+        othersError={field("payments.currencies")}
         sources={sources}
         hosted={hosted}
         field={pfield}
@@ -817,6 +829,9 @@ function BusinessCard({
   profile,
   draft,
   set,
+  others,
+  setOthers,
+  othersError,
   sources,
   hosted,
   field,
@@ -825,6 +840,10 @@ function BusinessCard({
   profile: Profile;
   draft: ProfileDraft;
   set: <K extends keyof ProfileDraft>(key: K, value: ProfileDraft[K]) => void;
+  /** The currencies taken besides its own. */
+  others: readonly string[];
+  setOthers: (codes: readonly string[]) => void;
+  othersError: string | undefined;
   sources: SettingsDoc["doc"]["setup"]["sources"];
   hosted: boolean;
   field: (path: string) => string | undefined;
@@ -917,6 +936,27 @@ function BusinessCard({
             </div>
           ) : (
             note && <div className="hint">{note}</div>
+          )}
+        </div>
+        <div>
+          <div className="label-line">
+            <label className="label" htmlFor="p-currencies">
+              You also take
+            </label>
+            <span className="opt">· optional</span>
+          </div>
+          <OtherCurrencies id="p-currencies" own={draft.currency} value={others} onChange={setOthers} />
+          {othersError ? (
+            <div className="hint error" role="alert">
+              {othersError}
+            </div>
+          ) : (
+            <div className="hint">
+              {others.some((c) => c !== draft.currency)
+                ? "Agents are told before they ask."
+                : "Any other currency you take."}{" "}
+              Prices stay in {draft.currency}; nothing is converted.
+            </div>
           )}
         </div>
         <div className="wide">

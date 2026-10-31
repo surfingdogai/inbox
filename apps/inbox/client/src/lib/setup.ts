@@ -1,6 +1,7 @@
 import { parseMajor } from "./actions";
 import { minorUnitsOf } from "./currencies";
-import type { ConnectorGroup, PresetKey, ProductBody, ServiceBody } from "./types";
+import { type BusinessKind, businessKind, type ChosenKind, type KindPreset } from "./kinds";
+import type { ConnectorGroup, PresetKey, ProductBody, ServiceBody, Settings } from "./types";
 
 /**
  * What the setup wizard's "What you offer" step sends, as pure functions so they run in tests on
@@ -76,13 +77,24 @@ export function ownerEmailDoc(typed: string): { notifications: { ownerEmail: str
   return { notifications: { ownerEmail: email || null } };
 }
 
-/** What agents can do, as the wizard asks it: the same three switches as Settings, and a kitchen's orders for a time. */
+/**
+ * What agents can do, as the wizard asks it: the three switches of Settings, a kitchen's orders for a time, and the
+ * other doors the inbox has: ordering products, asking for a stay, a price of their own, changes to what was agreed.
+ */
 export interface WizardDoors {
   readonly booking: boolean;
   readonly quoteRequest: boolean;
   readonly message: boolean;
   /** A kitchen's orders for a time (`kitchen.enabled`): collection or delivery, at a time it can make. */
   readonly order?: boolean | undefined;
+  /** Products ordered from the catalogue: the door opens once a product is listed, so this asks for some. */
+  readonly products?: boolean | undefined;
+  /** A place to stay's requests for dates (`doors.stay`): open once it has rooms. */
+  readonly stay?: boolean | undefined;
+  /** A price of the customer's own taken as their answer (`negotiation.priceCounters`, off out of the box). */
+  readonly negotiate?: boolean | undefined;
+  /** Changes to a confirmed booking or an accepted order (`negotiation.changes.maxPerItem` above 0). */
+  readonly changes?: boolean | undefined;
 }
 
 /**
@@ -96,6 +108,8 @@ export function wizardDoorsDoc(d: WizardDoors): { doors: Record<string, boolean 
       booking: d.booking ? null : false,
       quoteRequest: d.quoteRequest,
       message: d.message ? null : false,
+      // A stay's door follows the rooms when on, as booking follows services and hours.
+      ...(d.stay !== undefined ? { stay: d.stay ? null : false } : {}),
     },
   };
 }
@@ -110,7 +124,8 @@ export interface SetupKind {
   readonly label: string;
   /** One line under the chip: what kind of business it is. */
   readonly line: string;
-  readonly preset: PresetKey;
+  /** The rules it starts from; none for `general`, whose rules follow what agents can do. */
+  readonly preset: PresetKey | null;
   readonly doors: WizardDoors;
   /** The integration groups its businesses run their days in, shown first when connecting. */
   readonly connect: readonly ConnectorGroup[];
@@ -242,9 +257,53 @@ export function wizardRoomBodies(
   return { bodies, prices };
 }
 
-/** The kind of a key, if it is one. */
+/**
+ * Any other kind of business, from the list of hundreds or in the owner's own words: agents can ask for a price and
+ * send a message to begin with, and the rules follow what the owner lets them do.
+ */
+export const GENERAL: SetupKind = {
+  key: "general",
+  label: "Something else",
+  line: "Agents can ask you for a price and write to you; you choose the rest next.",
+  preset: null,
+  doors: { booking: false, quoteRequest: true, message: true },
+  connect: ["calendars", "payments", "shops"],
+};
+
+/** The kind of a key, if it is one: the quick picks, and `general` for any other. */
 export function kindOf(key: string | null | undefined): SetupKind | undefined {
-  return KINDS.find((k) => k.key === key);
+  return key === GENERAL.key ? GENERAL : KINDS.find((k) => k.key === key);
+}
+
+/** The kind of the list each quick pick is, where it is one kind ("A salon, clinic or studio" is many). */
+const QUICK_KINDS: Readonly<Record<string, string>> = {
+  trades: "tradesperson",
+  projects: "builder",
+  food: "restaurant",
+  bakery: "bakery",
+  cafe: "cafe",
+  shop: "shop",
+  stays: "place-to-stay",
+};
+
+/** What a quick pick says the business runs, as the settings keep it; null for one that is many kinds. */
+export function quickKind(key: string): ChosenKind | null {
+  const kind = businessKind(QUICK_KINDS[key]);
+  return kind ? { id: kind.id, label: kind.names.en } : null;
+}
+
+/** The setup a kind of the list starts from: its preset's quick pick, or `general`. */
+export function setupKindOf(kind: BusinessKind | KindPreset | null | undefined): SetupKind {
+  const preset = typeof kind === "string" ? kind : kind?.preset;
+  return kindOf(preset) ?? GENERAL;
+}
+
+/** The quick pick a saved kind reads as, when the wizard is run again: its own, else its preset's. */
+export function setupKeyOfSaved(saved: ChosenKind | null | undefined): string | null {
+  if (!saved) return null;
+  const quick = Object.entries(QUICK_KINDS).find(([, id]) => id === saved.id)?.[0];
+  if (quick) return quick;
+  return setupKindOf(businessKind(saved.id)).key;
 }
 
 const KITCHENS = new Set(["food", "bakery", "cafe"]);
@@ -255,55 +314,197 @@ export function isKitchen(kind: SetupKind | string | null | undefined): boolean 
   return key !== undefined && key !== null && KITCHENS.has(key);
 }
 
-/** One switch on "What can agents do?", with the line under it. */
+/** The groups "What can agents do?" shows its switches in, in order. */
+export type DoorGroup = "book" | "buy" | "price" | "after" | "talk";
+export const DOOR_GROUPS: readonly { readonly id: DoorGroup; readonly label: string }[] = [
+  { id: "book", label: "Booking" },
+  { id: "buy", label: "Ordering" },
+  { id: "price", label: "Prices" },
+  { id: "after", label: "After it is agreed" },
+  { id: "talk", label: "Messages" },
+];
+
+/** One switch on "What can agents do?", with the line under it: what it means for the owner. */
 export interface DoorChoice {
   readonly key: keyof WizardDoors;
+  readonly group: DoorGroup;
   readonly label: string;
   readonly line: string;
 }
-
-const DOORS: readonly DoorChoice[] = [
-  { key: "booking", label: "Agents can book time", line: "A consultation, a class, a table, a treatment." },
-  { key: "quoteRequest", label: "Agents can ask for a price", line: "A job to quote, a visit to arrange." },
-  { key: "message", label: "Agents can send a message", line: "Anything else, for you to answer." },
-];
 
 const QUOTE_LINES: Readonly<Record<string, string>> = {
   food: "An event, catering, a large table.",
   bakery: "A cake made to order, a catering order.",
   cafe: "Catering, a large order.",
+  trades: "A job to quote, a visit to arrange.",
+  projects: "A project to quote, often after a visit.",
 };
 
 /**
- * The switches the wizard shows a kind: a kitchen's start with orders for a time, and only a
- * restaurant books tables; everyone else sees the three of Settings.
+ * Every door the inbox has, as the wizard shows a kind: a place to stay asks for stays, a restaurant books tables, a
+ * kitchen takes orders for a time, everyone else books time and sells products; each can be asked for a price,
+ * negotiate, change what was agreed and write. Each line says what it means for the owner.
  */
-export function doorsFor(kind: SetupKind | undefined): readonly DoorChoice[] {
-  if (!kind || !isKitchen(kind)) return DOORS;
-  return [
-    {
+export function doorRows(kind: SetupKind | undefined): readonly DoorChoice[] {
+  const key = kind?.key ?? "";
+  const kitchen = isKitchen(kind);
+  const stays = key === "stays";
+  const rows: DoorChoice[] = [];
+  if (stays) {
+    rows.push({
+      key: "stay",
+      group: "book",
+      label: "Agents can ask for a stay",
+      line: "Dates and guests. Each request comes to you with a quote from your prices, for you to send.",
+    });
+  } else if (key === "food") {
+    rows.push({ key: "booking", group: "book", label: "Agents can book a table", line: "A sitting, for a party." });
+  } else if (!kitchen) {
+    rows.push({
+      key: "booking",
+      group: "book",
+      label: "Agents can book time",
+      line: "They see your free times and ask for one. Your rules can confirm one in a free slot; the rest wait for you.",
+    });
+  }
+  if (kitchen) {
+    rows.unshift({
       key: "order",
+      group: "buy",
       label: "Agents can order for a time",
       line: "Collection or delivery, at a time your kitchen can make.",
-    },
-    ...(kind.key === "food"
-      ? [{ key: "booking" as const, label: "Agents can book a table", line: "A sitting, for a party." }]
-      : []),
-    { key: "quoteRequest", label: "Agents can ask for a price", line: QUOTE_LINES[kind.key] ?? "A large order." },
-    DOORS[2] as DoorChoice,
-  ];
+    });
+  } else if (!stays) {
+    rows.push({
+      key: "products",
+      group: "buy",
+      label: "Agents can order products",
+      line: "What you list, at your prices and stock. Opens once you add a product, here or from your shop.",
+    });
+  }
+  rows.push({
+    key: "quoteRequest",
+    group: "price",
+    label: "Agents can ask for a price",
+    line: QUOTE_LINES[key] ?? "They say what they need; you answer with a price they can accept.",
+  });
+  if (!stays) {
+    rows.push({
+      key: "negotiate",
+      group: "price",
+      label: "Agents can suggest their own price",
+      line: "It comes to you to take or answer. Your AI and rules take one only at or above the lowest price you set.",
+    });
+    rows.push({
+      key: "changes",
+      group: "after",
+      label: "Agents can ask to change it",
+      line: "Another time, quantities, a delivery date: nothing changes until it is accepted.",
+    });
+  }
+  rows.push({
+    key: "message",
+    group: "talk",
+    label: "Agents can send a message",
+    line: "Anything else, for you to answer.",
+  });
+  return rows;
 }
+
+/**
+ * The switches of Settings' three doors and a kitchen's orders for a time, as a kind shows them: a kitchen's start
+ * with orders for a time, and only a restaurant books tables.
+ */
+export function doorsFor(kind: SetupKind | undefined): readonly DoorChoice[] {
+  return doorRows(kind).filter((d) => ["order", "booking", "quoteRequest", "message"].includes(d.key));
+}
+
+/**
+ * What agents can do to begin with, for a kind: its own doors, products for a shop, stays for a place to stay;
+ * a price of their own off (the founder's choice, out of the box), changes on, as the inbox has them.
+ */
+export function defaultDoors(kind: SetupKind | undefined): WizardDoors {
+  const doors = kind?.doors ?? { booking: true, quoteRequest: true, message: true };
+  // A place to stay's policies are its plans' (Settings → Property): no price of their own, no changes here.
+  if (kind?.key === "stays") return { ...doors, stay: true };
+  return { ...doors, products: kind?.key === "shop", negotiate: false, changes: true };
+}
+
+/**
+ * The doors to start from once the settings are known: the kind's own, with a price of their own and changes as the
+ * owner already set them in Settings, so running the wizard again turns nothing back unasked.
+ */
+export function startDoors(kind: SetupKind | undefined, doc: Settings | undefined): WizardDoors {
+  const d = defaultDoors(kind);
+  if (!doc) return d;
+  return {
+    ...d,
+    ...(d.negotiate !== undefined ? { negotiate: doc.negotiation.priceCounters } : {}),
+    ...(d.changes !== undefined ? { changes: doc.negotiation.changes.maxPerItem > 0 } : {}),
+  };
+}
+
+/** Whether any door is open: with none, agents cannot reach the business at all. */
+export function anyDoor(d: WizardDoors): boolean {
+  return d.booking || d.quoteRequest || d.message || d.order === true || d.products === true || d.stay === true;
+}
+
+/**
+ * The limits the doors step sets beside its switches, as Settings keep them: how long before a booking it can be
+ * cancelled, how far below a price the owner's AI may go, how many changes, and how customers can pay.
+ */
+export interface WizardTerms {
+  /** `booking.cancellationWindowMin`. */
+  readonly cancelMin: number;
+  /** `negotiation.ai.maxDiscountPct`. */
+  readonly discountPct: number;
+  /** `negotiation.changes.maxPerItem` while changes are on. */
+  readonly maxChanges: number;
+  /** `payments.accepted`: tokens of the payments vocabulary. */
+  readonly payments: readonly string[];
+}
+
+/** The terms to start from: what the settings say, so running the wizard again changes nothing unasked. */
+export function termsOf(doc: Settings | undefined): WizardTerms {
+  return {
+    cancelMin: doc?.booking.cancellationWindowMin ?? 1440,
+    discountPct: doc?.negotiation.ai.maxDiscountPct ?? 0,
+    maxChanges: doc?.negotiation.changes.maxPerItem || 3,
+    payments: doc?.payments.accepted ?? [],
+  };
+}
+
+/** The discounts the owner's AI may be allowed, one press each (`negotiation.ai.maxDiscountPct`). */
+export const DISCOUNT_CHOICES: readonly number[] = [0, 5, 10, 15];
 
 /**
  * The settings the doors step writes: the three doors, and for a kitchen its starting settings with
  * orders for a time on or off as the owner chose. A merge, like every wizard write.
  */
-export function doorsStepDoc(d: WizardDoors, kind: SetupKind | undefined): Record<string, unknown> {
+export function doorsStepDoc(
+  d: WizardDoors,
+  kind: SetupKind | undefined,
+  terms?: WizardTerms | undefined,
+): Record<string, unknown> {
   const doc: Record<string, unknown> = { ...wizardDoorsDoc(d), ...(kind?.settings ?? {}) };
   if (kind && isKitchen(kind)) {
     const kitchen = (kind.settings?.kitchen ?? {}) as Record<string, unknown>;
     doc.kitchen = { ...kitchen, enabled: d.order !== false };
   }
+  if (!terms) return doc;
+  // A price of their own, the discount the owner's AI may give, and changes: each as Settings keep it, and only
+  // what this kind was asked.
+  const negotiation: Record<string, unknown> = {};
+  if (d.negotiate !== undefined) {
+    negotiation.priceCounters = d.negotiate;
+    negotiation.ai = { maxDiscountPct: Math.max(0, Math.min(50, terms.discountPct)) };
+  }
+  if (d.changes !== undefined) {
+    negotiation.changes = { maxPerItem: d.changes ? Math.max(1, Math.min(3, terms.maxChanges)) : 0 };
+  }
+  if (Object.keys(negotiation).length) doc.negotiation = negotiation;
+  if (d.booking) doc.booking = { cancellationWindowMin: Math.max(0, terms.cancelMin) };
+  doc.payments = { accepted: [...terms.payments] };
   return doc;
 }
 
@@ -377,7 +578,7 @@ export function dishPlan(
  * can book, requests for a price's when they can only ask.
  */
 export function wizardPreset(d: WizardDoors, kind?: SetupKind | undefined): PresetKey | null {
-  if (kind) return kind.preset;
+  if (kind?.preset) return kind.preset;
   if (d.booking) return "appointments";
   if (d.quoteRequest) return "trades";
   return null;
@@ -425,10 +626,11 @@ export const STEPS = [
   { id: "hours", label: "Hours" },
   { id: "answering", label: "Answering" },
 ] as const;
-/** A place to stay (ADR-037): the place and its rooms instead of doors, offers and hours, a night's price with each. */
+/** A place to stay (ADR-037): what agents can do, then the place and its rooms instead of offers and hours. */
 export const STAY_STEPS = [
   { id: "kind", label: "Kind" },
   { id: "you", label: "You" },
+  { id: "doors", label: "Agents" },
   { id: "place", label: "Place" },
   { id: "rooms", label: "Rooms" },
   { id: "answering", label: "Answering" },
@@ -444,3 +646,19 @@ export function stepsFor(kind: string | null | undefined): readonly { readonly i
   if (!kind || !TRADE_KINDS.has(kind)) return STEPS;
   return [STEPS[0], STEPS[1], WHERE, ...STEPS.slice(2)];
 }
+
+/* --- what the offer step asks for, and where it can be brought from ----------------------------------------- */
+
+/** What the offer step asks for, by what agents can do: services, products, a kitchen's dishes. */
+export type OfferSection = "services" | "products" | "menu";
+
+export function offerSections(d: WizardDoors, kind: SetupKind | undefined): readonly OfferSection[] {
+  if (isKitchen(kind)) return ["menu"];
+  const out: OfferSection[] = [];
+  if (d.booking || d.quoteRequest) out.push("services");
+  if (d.products) out.push("products");
+  return out;
+}
+
+/** How the offer step is answered: a few now, brought from the system the business uses, or later. */
+export type OfferMode = "now" | "bring" | "later";

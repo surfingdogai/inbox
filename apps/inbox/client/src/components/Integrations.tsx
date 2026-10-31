@@ -17,6 +17,7 @@ import {
 import { Fragment, useEffect, useRef, useState } from "react";
 import { type ApiProblem, api, problemOf } from "../lib/api";
 import { session } from "../lib/auth";
+import { SOURCE_WORDS, sourceState } from "../lib/bring";
 import { cardState } from "../lib/connect";
 import { accountOf, bookedTwice, isBookingPlatform, lengthGaps, servesLink, tagOf } from "../lib/integrations";
 import { type PropertyView, useProperty } from "../lib/property";
@@ -383,7 +384,10 @@ function Tile({
 }) {
   const Icon = ICONS[card.group];
   // The same word as on the Property page: Soon, or Needs setup with what this server's operator sets.
-  const state = cardState(card);
+  const told = cardState(card);
+  const how = sourceState(card.ways);
+  // A platform that lets only approved partners connect waits on the partner, and says so.
+  const state = how === "partner" ? { ...told, tag: SOURCE_WORDS.partner } : told;
   const soon = state.tag !== null;
   const tag = tagOf(connections, unmatched);
   const body = (
@@ -396,6 +400,10 @@ function Tile({
             ? `${instead} takes payment now`
             : (state.hint ?? card.line)}
         </span>
+        {/* Built from the platform's documentation: said plainly until a live account has confirmed it. */}
+        {how === "unverified" && connections.length === 0 && (
+          <span className="int-line">{SOURCE_WORDS.unverified}.</span>
+        )}
       </span>
       {soon ? (
         <span className="int-tag">{state.tag}</span>
