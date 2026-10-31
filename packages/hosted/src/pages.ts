@@ -61,11 +61,24 @@ export function wantsHtml(accept: string | null | undefined): boolean {
   return typeof accept === "string" && accept.includes("text/html");
 }
 
-function problem(status: number, code: string, title: string, detail: string): Answer {
+function problem(
+  status: number,
+  code: string,
+  title: string,
+  detail: string,
+  details?: Record<string, unknown> | undefined,
+): Answer {
   return {
     status,
     headers: { "content-type": "application/problem+json", "cache-control": "no-store" },
-    body: JSON.stringify({ type: `https://surfingdog.ai/problems/${code}`, title, status, code, detail }),
+    body: JSON.stringify({
+      type: `https://surfingdog.ai/problems/${code}`,
+      title,
+      status,
+      code,
+      detail,
+      ...(details ? { details } : {}),
+    }),
   };
 }
 
@@ -87,7 +100,8 @@ export function neutralPage(): Answer {
 export function notFound(html: boolean, movedTo?: string | undefined): Answer {
   if (movedTo) {
     const text = `This inbox is at ${movedTo}.`;
-    if (!html) return problem(404, "not_found", "Not found", text);
+    // Said for a program too: the owner's phone app, connected at the setup address, follows it there.
+    if (!html) return problem(404, "not_found", "Not found", text, { moved_to: movedTo });
     return {
       status: 404,
       headers: { ...PAGE_HEADERS },

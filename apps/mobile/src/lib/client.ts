@@ -1,6 +1,7 @@
 import type { NotifyPrefs } from "../../../../packages/core/src/phones/prefs";
 import type { ItemDetail, ItemView, Page } from "../../../inbox/client/src/lib/types";
-import { type Fetch, type InboxEntry, InboxError, type Sessions } from "./session";
+import type { QueuedAction, SendResult } from "./offline";
+import { type Fetch, type InboxEntry, InboxError, movedTo, type Sessions } from "./session";
 
 /**
  * One inbox, as the phone talks to it: the owner's own API for the items (held by the inbox to what a
@@ -36,13 +37,48 @@ export interface Slots {
 }
 
 export class InboxClient {
+  private at: InboxEntry;
+
   constructor(
-    readonly entry: InboxEntry,
+    entry: InboxEntry,
     private readonly sessions: Sessions,
     private readonly fetchImpl: Fetch = (input, init) => fetch(input, init),
-  ) {}
+  ) {
+    this.at = entry;
+  }
 
+  /** The inbox, at the address it answers at now (it may have moved since this client was made). */
+  get entry(): InboxEntry {
+    return this.at;
+  }
+
+  /**
+   * One call. An inbox that answers it has moved (`movedTo`) is followed once, and the call made again
+   * at its new address. When the inbox there says this phone was removed, it is signed out, as the old
+   * address could have said itself; when the new address cannot be reached or is not that inbox, the
+   * old address's answer stands.
+   */
   private async call<T>(
+    method: string,
+    path: string,
+    opts: { body?: unknown; idempotencyKey?: string; auth?: boolean } = {},
+  ): Promise<T> {
+    try {
+      return await this.callAt<T>(method, path, opts);
+    } catch (error) {
+      const to = movedTo(error);
+      if (!to || to === this.at.origin) throw error;
+      try {
+        this.at = await this.sessions.follow(this.at, to);
+      } catch (refused) {
+        if (refused instanceof InboxError && refused.code === "signed_out") throw refused;
+        throw error;
+      }
+      return this.callAt<T>(method, path, opts);
+    }
+  }
+
+  private async callAt<T>(
     method: string,
     path: string,
     opts: { body?: unknown; idempotencyKey?: string; auth?: boolean } = {},
@@ -166,5 +202,31 @@ export class InboxClient {
 
   removePhone(id: string): Promise<{ removed: true }> {
     return this.call("DELETE", `/v1/phone/phones/${encodeURIComponent(id)}`);
+  }
+}
+
+/**
+ * Whether something the owner did should wait on the phone and go later, rather than be dropped: the
+ * inbox could not be reached, was briefly not answering (busy, being updated, a gateway in between),
+ * or the phone's key needed an unlock the owner did not give just then. Only the inbox's own refusal
+ * of the action (already answered, not allowed, signed out) drops it.
+ */
+export function sendLater(error: unknown): boolean {
+  if (!(error instanceof InboxError)) return true;
+  if (error.offline) return true;
+  const s = error.status;
+  return s === 408 || s === 423 || s === 425 || s === 429 || s >= 500;
+}
+
+/** Sends one thing done on the phone, as the outbox asks: done, to try again later, or refused for good. */
+export async function sendQueued(c: InboxClient | undefined, a: QueuedAction): Promise<SendResult> {
+  if (!c) return { ok: false, offline: false, reason: "That inbox is no longer on this phone." };
+  try {
+    if (a.kind === "reply") await c.reply(a.itemId, String(a.body.body ?? ""), a.key);
+    else await c.transition(a.itemId, a.body, a.key);
+    return { ok: true };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    return { ok: false, offline: sendLater(error), reason };
   }
 }

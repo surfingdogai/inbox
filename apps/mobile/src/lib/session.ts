@@ -6,7 +6,7 @@ import {
   proofStatement,
   sha256b64u,
 } from "../../../../packages/core/src/phones/crypto";
-import type { PhoneLink } from "../../../../packages/core/src/phones/links";
+import { inboxOrigin, type PhoneLink } from "../../../../packages/core/src/phones/links";
 import { type Native, NativeError } from "./native";
 
 /**
@@ -88,20 +88,40 @@ export const pushSentKey = (alias: string) => `push.${alias}`;
 
 async function problem(res: Response): Promise<InboxError> {
   try {
-    const p = (await res.json()) as { detail?: string; code?: string; error?: string };
+    const p = (await res.json()) as {
+      detail?: string;
+      code?: string;
+      error?: string;
+      details?: Record<string, unknown>;
+    };
     return new InboxError(
       p.detail ?? `The inbox answered ${res.status}.`,
       res.status,
       p.code ?? p.error ?? `http_${res.status}`,
+      p.details && typeof p.details === "object" ? p.details : undefined,
     );
   } catch {
     return new InboxError(`The inbox answered ${res.status}.`, res.status, `http_${res.status}`);
   }
 }
 
+/**
+ * Where an inbox says it is now, from a refusal: a hosted inbox set up at its setup address and then
+ * live at the business's own name answers every call at the old address 404, naming the new one
+ * (`details.moved_to`, packages/hosted). Only an https origin is taken; anything else is no move.
+ */
+export function movedTo(error: unknown): string | null {
+  if (!(error instanceof InboxError) || error.status !== 404) return null;
+  const to = error.details?.moved_to;
+  return typeof to === "string" ? inboxOrigin(to) : null;
+}
+
 export class Sessions {
   private readonly access = new Map<string, Tokens>();
   private readonly refreshing = new Map<string, Promise<Tokens>>();
+  private readonly following = new Map<string, Promise<InboxEntry>>();
+  private unlocking: Promise<boolean> | null = null;
+  private readonly moveListeners = new Set<(entry: InboxEntry, from: string) => void>();
 
   constructor(
     private readonly native: Native,
@@ -162,10 +182,25 @@ export class Sessions {
         throw new InboxError("This phone's screen lock changed. Connect it again.", 401, "signed_out");
       if (!(error instanceof NativeError && error.code === "auth_required")) throw error;
     }
-    const ok = await this.native.authenticate("Confirm it's you", "To keep your inbox open").catch(() => false);
+    const ok = await this.unlock();
     if (!ok) throw new InboxError("Unlock to open your inbox.", 423, "locked");
     s = await statement();
     return { at: s.at, proof: await this.native.sign(alias, s.text) };
+  }
+
+  /**
+   * The fingerprint or face, asked once for every inbox that needs it at that moment: an operator's
+   * inboxes refreshing together (Your inboxes, what waited from offline) share one prompt, and an
+   * unlock lets every device key on the phone sign for a while.
+   */
+  private unlock(): Promise<boolean> {
+    this.unlocking ??= this.native
+      .authenticate("Confirm it's you", "To keep your inbox open")
+      .catch(() => false)
+      .finally(() => {
+        this.unlocking = null;
+      });
+    return this.unlocking;
   }
 
   private static newAlias(): string {
@@ -343,14 +378,58 @@ export class Sessions {
     return tokens;
   }
 
+  /** Told when an inbox moved to a new address (`follow`): the entry as it is now, and where it was. */
+  onMove(listener: (entry: InboxEntry, from: string) => void): () => void {
+    this.moveListeners.add(listener);
+    return () => {
+      this.moveListeners.delete(listener);
+    };
+  }
+
+  /**
+   * An inbox said it is now at `to` (a hosted inbox gone live at the business's own name, `movedTo`).
+   * The move is kept only once the inbox at `to` takes this phone's refresh token with a proof signed
+   * for `to`: only the inbox that issued the token can, so an address that is not that inbox moves
+   * nothing. The phone's keys, tokens and cache stay as they are, under the same alias.
+   */
+  async follow(entry: InboxEntry, to: string): Promise<InboxEntry> {
+    const origin = inboxOrigin(to);
+    if (!origin) throw new InboxError("That is not an inbox's address.", 400, "invalid_input");
+    const current = (await this.list()).find((e) => e.alias === entry.alias);
+    if (!current) throw new InboxError("This phone is signed out of this inbox.", 401, "signed_out");
+    if (current.origin === origin) return current;
+    const running = this.following.get(entry.alias);
+    if (running) return running;
+    const work = (async () => {
+      const moved: InboxEntry = { ...current, origin };
+      await this.token(moved, true);
+      const list = await this.list();
+      await this.saveList(list.map((e) => (e.alias === entry.alias ? { ...e, origin } : e)));
+      for (const listener of this.moveListeners) listener(moved, current.origin);
+      return moved;
+    })().finally(() => this.following.delete(entry.alias));
+    this.following.set(entry.alias, work);
+    return work;
+  }
+
   /** Signs this phone out of an inbox: the inbox forgets it (when it can be reached), and so does the phone. */
   async remove(entry: InboxEntry): Promise<void> {
-    try {
-      const token = await this.token(entry);
-      await this.fetchImpl(`${entry.origin}/v1/phone`, {
+    const signOut = async (at: InboxEntry) => {
+      const res = await this.fetchImpl(`${at.origin}/v1/phone`, {
         method: "DELETE",
-        headers: { authorization: `Bearer ${token}` },
+        headers: { authorization: `Bearer ${await this.token(at)}` },
       });
+      if (res.status === 404) throw await problem(res);
+    };
+    try {
+      try {
+        await signOut(entry);
+      } catch (error) {
+        // At its new address now: signed out there, or the inbox would go on sending to this phone.
+        const to = movedTo(error);
+        if (!to) throw error;
+        await signOut(await this.follow(entry, to));
+      }
     } catch {
       // Offline or already removed there: the owner can remove it in Settings → Phone too.
     }
