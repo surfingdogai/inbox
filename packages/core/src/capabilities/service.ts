@@ -139,7 +139,15 @@ import { withdrawalOf } from "../write/returns";
 import { appendThreadEntry } from "../write/thread";
 import { type TransitionResult, transitionItem } from "../write/transition";
 import { customerItem, type ItemSpamSummary, type ItemView, type PartyView, rowToItem, viewFor } from "../write/views";
-import { askedForAPrice, calendarFit, findSlots, quoteNotBookable, type Slot, unknownService } from "./availability";
+import {
+  askedForAPrice,
+  calendarFit,
+  findSlots,
+  quoteNotBookable,
+  refuseTimeNotOffered,
+  type Slot,
+  unknownService,
+} from "./availability";
 import { CustomerDoors, type CustomerItemView } from "./customer";
 import { CustomerData } from "./customers";
 import { doorSwitch, offeredItemTypes } from "./directory";
@@ -1102,6 +1110,19 @@ export class Capabilities {
       ? null
       : await this.food.planTable(c, input.payload, input.contact?.locale ?? caller.locale ?? "en");
     if (table?.kind === "quote") return this.tableQuote(c, input, table.words, opts);
+    // A customer books a time the business offers (ADR-043 §2): any other is refused here, naming the
+    // nearest free ones, before a summary is shown or anything lands on the owner. A retry is the same
+    // request as before, and is answered as it was.
+    if (!replay && isCustomer(c)) {
+      await refuseTimeNotOffered(this.db, {
+        serviceId: input.payload.reservationFor.serviceId,
+        startTime: input.payload.startTime,
+        endTime: input.payload.endTime,
+        partySize: input.payload.partySize,
+        locale: input.contact?.locale ?? caller.locale ?? null,
+        now: nowOf(c),
+      });
+    }
     const shown = table?.kind === "booking" ? { ...input, payload: { ...input.payload, ...table.adds } } : input;
     // Priced for this customer once — the owner's reward for their record included — so the summary
     // they confirm and the booking as written hold the same price (ADR-018 §4, Q3).

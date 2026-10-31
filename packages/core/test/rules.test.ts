@@ -27,6 +27,13 @@ const customer: Caller = {
   sandbox: false,
   now: () => T0,
 };
+/** The business writing down a request it took itself, at the desk or on the phone. */
+const desk: Caller = {
+  actor: { kind: "owner", id: "u1", channel: "owner_ui" },
+  tier: "verified_principal",
+  sandbox: false,
+  now: () => T0,
+};
 
 async function setup(vertical: keyof typeof PRESETS) {
   const db = createDb(await makeClient());
@@ -92,27 +99,40 @@ describe("rules engine", () => {
       { event: "create", actorKind: "customer_human", depth: 0 },
       { event: "confirm", actorKind: "rule", depth: 1 },
     ]);
-    // Same slot again: not free any more → falls through to "ask a person".
-    const clash = await caps.createBooking(customer, {
+    // Same slot again: a customer is told at the door that it is not free (ADR-043 §2), so nothing
+    // lands on the owner for it.
+    const again = {
       payload: {
         reservationFor: { serviceId: svc, name: "Full service" },
         startTime: "2026-09-22T09:00:00Z",
         endTime: "2026-09-22T10:30:00Z",
         totalPrice: { value: 4500, currency: "EUR" },
       },
+    };
+    await expect(caps.createBooking(customer, again)).rejects.toMatchObject({
+      code: "invalid_input",
+      details: { reason: "time_not_free" },
     });
+    // Written down by the business itself (a request taken on the phone): not free → "ask a person".
+    const clash = await caps.createBooking(desk, again);
     await drain(db, runner);
     const [clashRow] = await db.orm.select().from(items).where(eq(items.id, clash.view.item.id));
     expect(clashRow?.state).toBe("requested");
     expect(clashRow?.flags).toMatchObject({ needsHuman: true });
-    // Outside opening hours (Sunday): flagged, not confirmed.
-    const sunday = await caps.createBooking(customer, {
+    // Outside opening hours (Sunday): a customer is refused at the door, with the nearest free times.
+    const onSunday = {
       payload: {
         reservationFor: { serviceId: svc, name: "Full service" },
         startTime: "2026-09-27T09:00:00Z",
         endTime: "2026-09-27T10:30:00Z",
       },
+    };
+    await expect(caps.createBooking(customer, onSunday)).rejects.toMatchObject({
+      code: "invalid_input",
+      details: { reason: "outside_hours" },
     });
+    // Written down by the business: flagged, not confirmed.
+    const sunday = await caps.createBooking(desk, onSunday);
     await drain(db, runner);
     const [sundayRow] = await db.orm.select().from(items).where(eq(items.id, sunday.view.item.id));
     expect(sundayRow?.state).toBe("requested");

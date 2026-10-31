@@ -102,9 +102,47 @@ describe("REST door", () => {
     expect(((await list.json()) as { items: unknown[] }).items).toHaveLength(1);
   });
 
+  it("refuses a booking outside the hours with the nearest free times, before any summary (ADR-043 §2)", async () => {
+    const { db, app, svc } = await setup();
+    const res = await app.request(
+      jsonPost("/v1/bookings", {
+        payload: {
+          reservationFor: { serviceId: svc, name: "Full service" },
+          startTime: `${DAY}T03:00:00Z`,
+          endTime: `${DAY}T04:30:00Z`,
+        },
+        contact: { name: "Rita", email: "rita@example.com" },
+        idempotency_key: "night-1",
+      }),
+    );
+    expect(res.status).toBe(422);
+    const problem = (await res.json()) as {
+      code: string;
+      detail: string;
+      fields: { path: string }[];
+      details: { reason: string; free_times: { start_time: string; end_time: string }[] };
+    };
+    expect(problem.code).toBe("invalid_input");
+    expect(problem.fields.map((f) => f.path)).toEqual(["payload.startTime"]);
+    expect(problem.details.reason).toBe("outside_hours");
+    expect(problem.details.free_times).toHaveLength(3);
+    for (const t of problem.details.free_times) expect(t.start_time.slice(0, 10)).toBe(DAY);
+    expect(problem.detail).toMatch(/^We do not take bookings at .* The nearest free times: .*\.$/);
+    expect(await db.orm.select().from(schema.items)).toHaveLength(0);
+  });
+
   it("cancels late through the customer's door, and gives the owner the new transitions", async () => {
-    const { app, svc, ownerKey } = await setup();
+    const { db, app, svc, ownerKey } = await setup();
     const owner = { authorization: `Bearer ${ownerKey}` };
+    // Two hours from now, whenever the test runs: the service is open every hour of every day.
+    const allDay = [["00:00", "24:00"]];
+    await db.orm.insert(schema.availabilityRules).values({
+      id: ulid(),
+      serviceId: svc,
+      kind: "open",
+      weekly: { mon: allDay, tue: allDay, wed: allDay, thu: allDay, fri: allDay, sat: allDay, sun: allDay },
+      createdAt: T0,
+    });
     // Two hours from now: inside the default 24-hour window, so a cancellation now is late.
     const start = Math.ceil((Date.now() + 2 * 3_600_000) / 1_800_000) * 1_800_000;
     const created = (await (

@@ -131,6 +131,11 @@ export interface Copy {
     nothingToAnswer: string;
     slotTaken: string;
     timeNotFree: Say;
+    /**
+     * A booking asked for at a time we do not offer (ADR-043 §2): `open` when it is inside our hours and
+     * full, else no time we take bookings; `free`, the nearest free times, or empty when there are none.
+     */
+    timeNotOffered: (v: { readonly when: string; readonly free: string; readonly open: boolean }) => string;
     notTooSoon: string;
     pastStart: string;
     notYours: string;
@@ -625,6 +630,10 @@ const EN: Copy = {
     nothingToAnswer: "There is nothing of ours to answer on this right now.",
     slotTaken: "That time is no longer free.",
     timeNotFree: (v) => `${v.when} is not free. Pick one of the free times.`,
+    timeNotOffered: (v) =>
+      `${v.open ? `${v.when} is not free.` : `We do not take bookings at ${v.when}.`} ${
+        v.free ? `The nearest free times: ${v.free}.` : "Nothing is free in the week after it."
+      }`,
     notTooSoon: "It is too close to that time to book it now.",
     pastStart: "That time has passed.",
     notYours: "This is someone else's.",
@@ -1238,6 +1247,10 @@ const PT: Copy = {
     nothingToAnswer: "Neste momento não há nada nosso a que responder.",
     slotTaken: "Essa hora já não está livre.",
     timeNotFree: (v) => `${v.when} não está livre. Escolha uma das horas livres.`,
+    timeNotOffered: (v) =>
+      `${v.open ? `${v.when} não está livre.` : `Não aceitamos marcações para ${v.when}.`} ${
+        v.free ? `As horas livres mais próximas: ${v.free}.` : "Não há nada livre na semana a seguir."
+      }`,
     notTooSoon: "Já é demasiado tarde para marcar essa hora.",
     pastStart: "Essa hora já passou.",
     notYours: "Isto pertence a outra pessoa.",

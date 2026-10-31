@@ -386,9 +386,9 @@ describe("suggest_time", () => {
   it("refuses a time that is closed or taken, naming it as not free", async () => {
     const s = await setup();
     const { id, token } = await proposed(s, "en");
-    // Saturday: closed on the default hours.
+    // Sunday: closed on the default hours.
     const closed = await fail(
-      s.caps.customer.suggestTime(anon(token), { item_id: id, start_time: "2026-09-26T10:00:00Z" }),
+      s.caps.customer.suggestTime(anon(token), { item_id: id, start_time: "2026-09-27T10:00:00Z" }),
     );
     expect(closed.code).toBe("slot_taken");
     expect(closed.message).toMatch(/is not free\. Pick one of the free times\.$/);

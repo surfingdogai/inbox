@@ -265,12 +265,12 @@ describe("the owner's AI and the price, through a change", () => {
 describe("the owner's AI and the cutoff for changes", () => {
   it("cannot move the cancellation window that bounds it, then take a last-minute change", async () => {
     const s = await setup();
-    // A booking tomorrow, 20 hours away: inside the cancellation window (a day), a person takes a change.
+    // A booking tomorrow at 09:00, 22 hours away: inside the cancellation window (a day), a person takes a change.
     const created = await s.caps.createBooking(anon(), {
       payload: {
         reservationFor: { serviceId: s.svc, name: "Full service" },
-        startTime: iso(T0 + 20 * HOUR),
-        endTime: iso(T0 + 20 * HOUR + 90 * MIN),
+        startTime: iso(T0 + 22 * HOUR),
+        endTime: iso(T0 + 22 * HOUR + 90 * MIN),
       },
       contact: { email: "rita@example.com", locale: "en" },
     });

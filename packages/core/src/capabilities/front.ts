@@ -497,6 +497,11 @@ export async function frontBookAct(
     if (error instanceof WriteError && (error.code === "slot_taken" || error.code === "guard_failed")) {
       return { page: await again(f.book.timeTaken) };
     }
+    // Not a time the business offers any more (ADR-043 §2): the refusal names the nearest free ones.
+    const reason = error instanceof WriteError ? error.details?.reason : undefined;
+    if (error instanceof WriteError && (reason === "outside_hours" || reason === "time_not_free")) {
+      return { page: await again(error.message) };
+    }
     if (error instanceof WriteError && error.code === "invalid_input") return { page: await again(f.missing) };
     throw error;
   }

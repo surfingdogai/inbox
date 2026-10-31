@@ -89,24 +89,40 @@ export async function confirmedTool<R>(
 }
 
 /**
- * Opening hours, Monday to Friday 09:00 to 18:00, for the whole business: hours nobody set are no
- * hours (nothing is offered or booked in them), so a test that books opens the business first.
+ * Opening hours, Monday to Friday 08:00 to 18:00, for the whole business: hours nobody set are no
+ * hours (nothing is offered or booked in them), and a customer asks only for a time inside them
+ * (ADR-043 §2), so a test that books opens the business first.
  * Idempotent: a business that has hours keeps them.
  */
 export async function openWeekdays(db: Db): Promise<void> {
+  const day = [["08:00", "18:00"]];
+  await openHours(db, { mon: day, tue: day, wed: day, thu: day, fri: day });
+}
+
+/**
+ * Open every hour of every day, for a test that books a time counted from the clock it runs on
+ * ("in two hours", "in three days"): whatever the day and hour, the time is one the business takes.
+ * Idempotent like `openWeekdays`.
+ */
+export async function openAllWeek(db: Db): Promise<void> {
+  const day = [["00:00", "24:00"]];
+  await openHours(db, { mon: day, tue: day, wed: day, thu: day, fri: day, sat: day, sun: day });
+}
+
+/** Rounds a time up to the half hour, the grid the tests' services are booked on. */
+export function onTheGrid(ms: number): number {
+  return Math.ceil(ms / 1_800_000) * 1_800_000;
+}
+
+async function openHours(db: Db, weekly: Record<string, string[][]>): Promise<void> {
   const { rows } = await db.client.query({
     sql: "SELECT 1 FROM availability_rules WHERE kind = 'open' AND service_id IS NULL LIMIT 1",
     method: "all",
   });
   if (rows.length) return;
-  const day = [["09:00", "18:00"]];
   await db.client.query({
     sql: "INSERT INTO availability_rules (id, service_id, kind, weekly, created_at) VALUES (?, NULL, 'open', ?, ?)",
-    params: [
-      `hours${Math.random().toString(36).slice(2, 12)}`,
-      JSON.stringify({ mon: day, tue: day, wed: day, thu: day, fri: day }),
-      Date.now(),
-    ],
+    params: [`hours${Math.random().toString(36).slice(2, 12)}`, JSON.stringify(weekly), Date.now()],
     method: "run",
   });
 }

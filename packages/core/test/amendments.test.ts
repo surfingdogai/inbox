@@ -608,7 +608,7 @@ describe("the owner's limits on changes", () => {
     expect((await offerRows(s.db, b.id)).at(-1)?.validThrough).toBe(T0 + 48 * HOUR);
 
     // A customer's change, a day before the booking: inside the cancellation window, a person takes it.
-    const soon = await confirmed(s, T0 + 20 * HOUR);
+    const soon = await confirmed(s, T0 + 22 * HOUR);
     await transitionItem(s.db, anon(soon.token), {
       itemId: soon.id,
       event: "propose_change",

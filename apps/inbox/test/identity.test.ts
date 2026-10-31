@@ -16,7 +16,7 @@ import { logMailOut } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { fakeNetwork } from "../../../packages/adapters/test/fake-network";
 import { type App, createInbox } from "../src/app";
-import { freshDb, openWeekdays } from "./harness";
+import { freshDb, onTheGrid, openAllWeek } from "./harness";
 
 /**
  * People through the doors an agent uses (ADR-017 §2, §8.4): REST and MCP answer a first booking
@@ -41,7 +41,7 @@ async function setup() {
     createdAt: T0,
     updatedAt: T0,
   });
-  await openWeekdays(db);
+  await openAllWeek(db);
   const mail = logMailOut();
   let inboxRef: ReturnType<typeof createInbox> | null = null;
   const net = fakeNetwork({
@@ -85,8 +85,8 @@ const post = (path: string, body: unknown, headers: Record<string, string> = {})
 
 const booking = (svc: string, day = 2) => ({
   reservationFor: { serviceId: svc, name: "Surf lesson" },
-  startTime: new Date(Date.now() + day * 86_400_000).toISOString(),
-  endTime: new Date(Date.now() + day * 86_400_000 + 90 * 60_000).toISOString(),
+  startTime: new Date(onTheGrid(Date.now() + day * 86_400_000)).toISOString(),
+  endTime: new Date(onTheGrid(Date.now() + day * 86_400_000) + 90 * 60_000).toISOString(),
 });
 
 async function connect(app: App, headers: Record<string, string> = {}) {

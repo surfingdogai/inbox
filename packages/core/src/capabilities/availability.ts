@@ -1,4 +1,8 @@
 import { and, eq, isNull, or } from "drizzle-orm";
+import { audienceFor } from "../customer/audience";
+import { copyFor } from "../customer/copy";
+import { dayText, timeText, whenText } from "../customer/format";
+import type { CustomerLang } from "../customer/lang";
 import type { Db } from "../db";
 import type { Item } from "../domain/types";
 import { availabilityRules, services } from "../schema/tables";
@@ -182,11 +186,32 @@ export async function slotOffered(
     readonly end: number;
     readonly timezone: string;
     readonly exceptItemId: string;
+    readonly partySize?: number | undefined;
   },
 ): Promise<boolean> {
+  return (await slotFit(db, input)) === "offered";
+}
+
+/**
+ * How one time fits the business (`slotOffered`, with why not): `offered`; `closed` when it is no time
+ * the business takes bookings (outside its hours, on a day it is closed, off the service's grid, a
+ * service it does not book); `taken` when it is inside its hours and no place is free; `no_hours` when
+ * nobody saved hours for it at all, so no time is offered. For a service whose places are people (a
+ * table), free means free for the whole party.
+ */
+export async function slotFit(
+  db: Db,
+  input: {
+    readonly serviceId: string;
+    readonly start: number;
+    readonly end: number;
+    readonly timezone: string;
+    readonly exceptItemId: string;
+    readonly partySize?: number | undefined;
+  },
+): Promise<"offered" | "closed" | "taken" | "no_hours"> {
   const [service] = await db.orm.select().from(services).where(eq(services.id, input.serviceId));
-  if (!service?.active || !(input.end > input.start) || askedForAPrice(service.price)) return false;
-  if (input.start % (service.granularityMin * 60_000) !== 0) return false;
+  if (!service?.active || !(input.end > input.start) || askedForAPrice(service.price)) return "closed";
   const rules = await db.orm
     .select()
     .from(availabilityRules)
@@ -197,22 +222,153 @@ export async function slotOffered(
       ),
     );
   const weekly = weeklyFor(rules, service.id);
-  if (!withinOpening(localiser(input.timezone), weekly, input.start, input.end)) return false;
+  if (!Object.values(weekly).some((windows) => (windows ?? []).length > 0)) return "no_hours";
+  if (input.start % (service.granularityMin * 60_000) !== 0) return "closed";
+  if (!withinOpening(localiser(input.timezone), weekly, input.start, input.end)) return "closed";
   const closures = await readClosures(db, service.id);
   const localDate = dateLocaliser(input.timezone);
   if (
     closures.length > 0 &&
     (isClosed(closures, localDate(input.start)) || isClosed(closures, localDate(input.end - 1)))
   )
-    return false;
-  const spec: SlotSpec = { ...service, resourceKey: `service:${service.id}` };
+    return "closed";
+  const units = service.capacityUnit === "people" ? Math.max(1, input.partySize ?? 1) : undefined;
+  const spec: SlotSpec = { ...service, resourceKey: `service:${service.id}`, ...(units ? { units } : {}) };
   let buckets: number[];
   try {
     buckets = bucketsFor(spec, new Date(input.start).toISOString(), new Date(input.end).toISOString());
   } catch {
-    return false;
+    return "closed";
   }
-  return planClaims(spec, buckets, await readClaims(db, spec, buckets, input.exceptItemId)).ok;
+  return planClaims(spec, buckets, await readClaims(db, spec, buckets, input.exceptItemId)).ok ? "offered" : "taken";
+}
+
+/**
+ * The free times nearest to `at`, before or after it, at most `count`, in order (ADR-043 §2): what
+ * `check_availability` would offer, so the minimum notice holds. Up to half a day before it and a week
+ * after it.
+ */
+export async function nearestFreeTimes(
+  db: Db,
+  input: {
+    readonly serviceId: string;
+    readonly at: number;
+    readonly timezone: string;
+    readonly now: number;
+    readonly minNoticeMin: number;
+    readonly partySize?: number | undefined;
+    readonly count?: number | undefined;
+  },
+): Promise<Slot[]> {
+  const count = input.count ?? 3;
+  const earliest = input.now + input.minNoticeMin * 60_000;
+  const search = async (from: number, to: number, limit: number): Promise<Slot[]> => {
+    if (to <= from) return [];
+    try {
+      const r = await findSlots(db, {
+        serviceId: input.serviceId,
+        from: new Date(from).toISOString(),
+        to: new Date(to).toISOString(),
+        timezone: input.timezone,
+        limit,
+        now: input.now,
+        minNoticeMin: input.minNoticeMin,
+        ...(input.partySize !== undefined ? { partySize: input.partySize } : {}),
+      });
+      return r.slots;
+    } catch {
+      return [];
+    }
+  };
+  const after = Math.max(input.at, earliest);
+  const [later, earlier] = await Promise.all([
+    search(after, after + 7 * 86_400_000, count),
+    search(Math.max(earliest, input.at - 12 * 3_600_000), input.at + 12 * 3_600_000, 200),
+  ]);
+  const seen = new Set<string>();
+  return [...earlier.filter((slot) => Date.parse(slot.startTime) < input.at), ...later]
+    .filter((slot) => !seen.has(slot.startTime) && seen.add(slot.startTime))
+    .sort((a, b) => Math.abs(Date.parse(a.startTime) - input.at) - Math.abs(Date.parse(b.startTime) - input.at))
+    .slice(0, count)
+    .sort((a, b) => Date.parse(a.startTime) - Date.parse(b.startTime));
+}
+
+/**
+ * A customer's request for a time the business does not offer is refused before anything is
+ * confirmed or written (ADR-043 §2): outside its hours, on a day it is closed, off the service's grid,
+ * or with no place free (but a table, ADR-040), it would only land on the owner as work for a time
+ * they never opened. The refusal names the nearest free times, in the customer's words. A time inside
+ * the minimum notice that the business would otherwise offer is still taken, and waits for a person
+ * (ADR-018); one that has started is the create's to refuse, as it always was. The owner's side books
+ * any time it likes.
+ */
+export async function refuseTimeNotOffered(
+  db: Db,
+  input: {
+    readonly serviceId: string;
+    readonly startTime: string;
+    readonly endTime: string;
+    readonly partySize?: number | undefined;
+    readonly locale: string | null;
+    readonly now: number;
+  },
+): Promise<void> {
+  const start = Date.parse(input.startTime);
+  const end = Date.parse(input.endTime);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || start <= input.now) return;
+  const audience = await audienceFor(db, { locale: input.locale });
+  const fit = await slotFit(db, {
+    serviceId: input.serviceId,
+    start,
+    end,
+    timezone: audience.timezone,
+    exceptItemId: "",
+    partySize: input.partySize,
+  });
+  // Hours nobody set: no time is offered, and an agent is told no booking is taken here before it gets
+  // this far (`refuseUnbookable`). A person who writes on a form is heard, and a person answers.
+  if (fit === "offered" || fit === "no_hours") return;
+  // A table past the covers set aside goes to a person, who may seat it from the room (ADR-040 §8):
+  // only a time the restaurant is closed is refused.
+  if (fit === "taken" && (await countsPeople(db, input.serviceId))) return;
+  const free = await nearestFreeTimes(db, {
+    serviceId: input.serviceId,
+    at: start,
+    timezone: audience.timezone,
+    now: input.now,
+    minNoticeMin: audience.minNoticeMin,
+    partySize: input.partySize,
+  });
+  const message = copyFor(audience.lang).problems.timeNotOffered({
+    when: whenText(new Date(start).toISOString(), audience.timezone, audience.lang),
+    free: timesText(free, audience),
+    open: fit === "taken",
+  });
+  throw new WriteError("invalid_input", message, {
+    fields: [{ path: "payload.startTime", problem: "invalid", message }],
+    details: {
+      reason: fit === "taken" ? "time_not_free" : "outside_hours",
+      free_times: free.map((slot) => ({ start_time: slot.startTime, end_time: slot.endTime })),
+    },
+  });
+}
+
+async function countsPeople(db: Db, serviceId: string): Promise<boolean> {
+  const [row] = await db.orm.select({ unit: services.capacityUnit }).from(services).where(eq(services.id, serviceId));
+  return row?.unit === "people";
+}
+
+/** `Saturday, 1 November: 09:00, 09:30; Monday, 3 November: 09:00`, in the business's time zone. */
+function timesText(slots: readonly Slot[], audience: { timezone: string; lang: CustomerLang }): string {
+  const days: { day: string; times: string[] }[] = [];
+  for (const slot of slots) {
+    const day = dayText(slot.startTime, audience.timezone, audience.lang);
+    const last = days[days.length - 1];
+    const time = timeText(slot.startTime, audience.timezone, audience.lang);
+    if (last?.day === day) last.times.push(time);
+    else days.push({ day, times: [time] });
+  }
+  return days.map((d) => `${d.day}: ${d.times.join(", ")}`).join("; ");
 }
 
 /**

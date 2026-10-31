@@ -14,7 +14,7 @@ import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { business, items, jobs, outboundMail, products, services, threadEntries } from "../src/schema/tables";
 import { createSecretBox } from "../src/secrets/box";
 import { type Caller, createItem, rowToItem, transitionItem, WriteError } from "../src/write/index";
-import { confirming, makeClient, openWeekdays, resetTables } from "./harness";
+import { confirming, makeClient, openAllWeek, resetTables } from "./harness";
 
 /**
  * Returns, refunds and the right of withdrawal (ADR-018 §3.4, §7), end to end through the doors: a
@@ -76,7 +76,7 @@ async function setup(doc: Record<string, unknown> = {}) {
     createdAt: T0,
     updatedAt: T0,
   });
-  await openWeekdays(db);
+  await openAllWeek(db);
   const chain = ulid();
   const cheese = ulid();
   await db.orm.insert(products).values([

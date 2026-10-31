@@ -175,8 +175,10 @@ describe("setup: opening hours in rules", () => {
       buffer_before_min: 0,
       buffer_after_min: 0,
     });
+    // Written down by the business itself: a customer asking for a time past closing is refused at the
+    // door (ADR-043 §2), so only the business's own bookings reach a rule outside the hours.
     const hours = async (start: string, end: string) => {
-      const made = (await caps.createBooking(customer, {
+      const made = (await caps.createBooking(owner, {
         payload: { reservationFor: { serviceId: svc.id, name: "Full service" }, startTime: start, endTime: end },
         contact: { email: "rita@example.com" },
       })) as { view: { item: { id: string } } };

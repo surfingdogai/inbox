@@ -188,8 +188,8 @@ describe("the customer's request is the first offer", () => {
 
   it("lapses at the booking's start when that comes first, and is written for orders and quote requests too", async () => {
     const s = await setup();
-    const soon = await booking(s, 10 * HOUR);
-    expect((await offerRows(s.db, soon.id))[0]?.validThrough).toBe(T0 + 10 * HOUR);
+    const soon = await booking(s, 5 * HOUR);
+    expect((await offerRows(s.db, soon.id))[0]?.validThrough).toBe(T0 + 5 * HOUR);
     const o = await s.caps.createOrder(anon(), {
       payload: { orderedItem: [{ sku: "CH-9", name: "Chain", quantity: 2, price: EUR(1) }], totalPrice: EUR(2) },
     });
@@ -671,6 +671,8 @@ describe("holds", () => {
   it("keep the time we propose for the customer, move with it, and become the booking's claim", async () => {
     const s = await setup({ booking: { holdOnPropose: true } });
     const b = await booking(s);
+    // Another customer asked for the time before it was proposed to the first.
+    const other = await booking(s, WED_14 - T0, { email: "ana@example.com", locale: "en" });
     await propose(s, b.id);
     const open = (await offerRows(s.db, b.id)).find((o) => o.status === "open");
     const held = await s.db.orm.select().from(slotClaims).where(eq(slotClaims.itemId, b.id));
@@ -678,8 +680,10 @@ describe("holds", () => {
     expect(new Set(held.map((c) => c.offerId))).toEqual(new Set([open?.id]));
     expect((await itemOf(s.db, b.id)).payload).toMatchObject({ offer: { held: true } });
     expect(open?.shown?.disclosures).toEqual(["held"]);
-    // Nobody else books it meanwhile.
-    const other = await booking(s, WED_14 - T0, { email: "ana@example.com", locale: "en" });
+    // Nobody else books it meanwhile: a new request for it is refused at the door (ADR-043 §2), and
+    // the one that came before cannot be confirmed into it.
+    const late = await fail(booking(s, WED_14 - T0, { email: "joe@example.com", locale: "en" }));
+    expect(late).toMatchObject({ code: "invalid_input", details: { reason: "time_not_free" } });
     expect((await fail(transitionItem(s.db, owner, { itemId: other.id, event: "confirm" }))).code).toBe("slot_taken");
     // Proposed again, the hold moves.
     await propose(s, b.id, WED_14 + 2 * HOUR);
@@ -708,12 +712,12 @@ describe("holds", () => {
       {
         payload: {
           reservationFor: { serviceId: s.svc, name: "Full service" },
-          startTime: iso(WED_14 + 3 * HOUR),
-          endTime: iso(WED_14 + 3 * HOUR + 90 * MIN),
+          startTime: iso(WED_14 + 2 * HOUR),
+          endTime: iso(WED_14 + 2 * HOUR + 90 * MIN),
         },
       },
     );
-    await propose(s, second.view.item.id, WED_14 + 3 * HOUR);
+    await propose(s, second.view.item.id, WED_14 + 2 * HOUR);
     expect(await s.db.orm.select().from(slotClaims).where(eq(slotClaims.itemId, second.view.item.id))).toHaveLength(0);
     expect((await itemOf(s.db, second.view.item.id)).payload).not.toMatchObject({ offer: { held: true } });
   });

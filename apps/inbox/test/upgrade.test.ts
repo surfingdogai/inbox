@@ -14,7 +14,7 @@ import {
 import { describe, expect, it } from "vitest";
 import { toSettingsForm } from "../client/src/lib/settings";
 import { createInbox } from "../src/app";
-import { freshDb, openWeekdays } from "./harness";
+import { freshDb, openAllWeek } from "./harness";
 
 /**
  * The upgrade from one network to several, as the live instance meets it: a settings document the
@@ -106,7 +106,7 @@ async function liveInstance(net = fakeNetwork()) {
     createdAt: T0,
     updatedAt: T0,
   });
-  await openWeekdays(db);
+  await openAllWeek(db);
   await db.orm.insert(schema.business).values({
     id: "self",
     name: "Surfing Dog",

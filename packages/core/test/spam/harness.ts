@@ -10,7 +10,7 @@ import type { JudgePort, JudgeRequest, JudgeResult } from "../../src/spam/judge"
 import type { SpamHostPolicy } from "../../src/spam/screen";
 import type { Filter, FilterChoice } from "../../src/spam/types";
 import type { Caller } from "../../src/write/caller";
-import { confirming, makeClient, openWeekdays, resetTables } from "../harness";
+import { confirming, makeClient, openAllWeek, resetTables } from "../harness";
 
 /**
  * What the spam filter's tests share: a small business with a few services and products, the
@@ -211,7 +211,8 @@ export async function spamSetup(
     createdAt: T0,
     updatedAt: T0,
   });
-  await openWeekdays(db);
+  // The filter is not about hours: the class takes bookings at any hour, so a test books when it likes.
+  await openAllWeek(db);
   await caps.updateSettings(owner(T0), {
     doc: {
       business: { name: "Kopi Senja", timezone: "Asia/Jakarta" },
