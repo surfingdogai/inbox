@@ -1,0 +1,32 @@
+Surfing Dog Inbox est l'application mobile de la Surfing Dog Inbox de votre entreprise. Les nouvelles demandes de réservation, commandes, demandes de devis et messages arrivent sur votre téléphone sous forme de notifications, et vous y répondez depuis celui-ci. Votre boîte de réception reste sur votre propre site.
+
+Ce qu'elle fait
+• Des notifications pour les demandes de réservation et de séjour, les commandes, les demandes de devis et les messages. Choisissez lesquelles recevoir, et fixez des heures de silence qui les gardent jusqu'au matin.
+• Les notifications n'affichent pas le nom du client, sauf si vous activez « Show details ».
+• Acceptez, proposez un autre horaire ou refusez, avec une confirmation avant chaque envoi. L'autre horaire se choisit parmi les créneaux libres que propose votre boîte de réception.
+• Répondez au client depuis la demande.
+• « Today » : les réservations du jour en un coup d'œil.
+• Quand le filtre anti-spam de votre boîte de réception retient quelque chose, voyez pourquoi, puis laissez-le passer ou marquez-le comme spam.
+• Toutes les boîtes de réception dont vous vous occupez dans une seule application, pour qui gère plus d'une entreprise.
+• Fonctionne hors connexion : ce que vous faites attend sur le téléphone et part dès que la connexion revient.
+• S'ouvre avec votre empreinte, votre visage ou le verrouillage de l'écran. Un « Accept » depuis une notification ouvre la demande et demande d'abord votre empreinte ou votre visage ; rien n'est fait tant que vous n'appuyez pas dans l'application.
+
+Connectez-la en un scan
+Il vous faut une Surfing Dog Inbox, sur votre propre serveur ou hébergée par Surfing Dog, et un verrouillage de l'écran sur le téléphone.
+1. Sur un ordinateur, ouvrez votre boîte de réception → Settings → Phone → Add a phone. Un code s'affiche.
+2. Dans l'application, touchez « Scan the code ». Elle demande s'il faut se connecter à votre boîte de réception et affiche deux chiffres.
+3. Vérifiez les deux mêmes chiffres sur l'ordinateur et appuyez sur « Confirm ». Rien à saisir.
+Pas de caméra ? L'application peut demander à votre boîte de réception de vous envoyer un lien de connexion par email.
+
+Confidentialité
+• Les notifications sont chiffrées par votre boîte de réception pour votre seul téléphone. Elles passent par le relais de notifications de Surfing Dog et par Firebase Cloud Messaging de Google, qui ne peuvent pas les lire.
+• La caméra ne lit que le code de votre boîte de réception. L'image ne quitte jamais le téléphone.
+• Ce que l'application garde sur le téléphone est chiffré avec une clé de l'Android Keystore, et n'est jamais sauvegardé.
+• Pas de publicité, pas de statistiques d'utilisation, pas de rapports de plantage.
+Ce que l'application envoie, et à qui (en anglais) : surfingdog.ai/privacy
+
+Bon à savoir
+• L'application est en anglais.
+• Les notifications ont besoin des services Google Play. Sur certains téléphones (Xiaomi, Oppo, Huawei), autorisez l'activité en arrière-plan de Surfing Dog Inbox, sinon les notifications peuvent attendre que vous l'ouvriez.
+• Android 7.0 ou version ultérieure.
+• Open source, sous licence MIT : github.com/surfingdogai/inbox
