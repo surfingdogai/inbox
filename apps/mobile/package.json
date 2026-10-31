@@ -4,18 +4,21 @@
   "version": "1.0.0",
   "type": "module",
   "license": "MIT",
-  "description": "The owner's phone app for a Surfing Dog Inbox: Android first, one Capacitor app with the screens bundled in it.",
+  "description": "The owner's phone app for a Surfing Dog Inbox: Android, and iPhone in preparation; one Capacitor app with the screens bundled in it.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "typecheck": "tsc -p tsconfig.json",
     "sync": "vite build && cap sync android",
+    "sync:ios": "vite build && cap sync ios",
+    "check:ios": "sh scripts/check-ios-native.sh",
     "preview": "vite preview"
   },
   "dependencies": {
     "@capacitor/android": "8.5.3",
     "@capacitor/app": "8.1.2",
     "@capacitor/core": "8.5.3",
+    "@capacitor/ios": "8.5.3",
     "jsqr": "1.4.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"

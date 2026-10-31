@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { inboxOrigin, type PhoneLink } from "../../../../packages/core/src/phones/links";
 import { useApp } from "../context";
+import { lockWords } from "../lib/native";
 import { type Scanner, startScanner } from "../lib/scan";
 import { findInbox, type PendingPhone } from "../lib/session";
 import { ChevronLeft, Corners } from "./icons";
@@ -195,7 +196,8 @@ export function Connect({
       </ol>
       {!secure && (
         <p className="error" role="alert">
-          Set a screen lock first. Your inbox opens only on a phone with a PIN, pattern or password.
+          Set a {lockWords(app.native.platform).noun} first. Your inbox opens only on a phone with{" "}
+          {lockWords(app.native.platform).kinds}.
         </p>
       )}
       {error && (

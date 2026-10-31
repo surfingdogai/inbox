@@ -2,8 +2,9 @@ import { Capacitor, registerPlugin } from "@capacitor/core";
 import { b64uEncode } from "../../../../packages/core/src/phones/crypto";
 
 /**
- * What only the phone itself can do (ADR-028), behind one interface: on Android the app's own native
- * plugin (`InboxNative`, android/app/src/main/java/ai/surfingdog/inbox), and in a browser (development,
+ * What only the phone itself can do (ADR-028), behind one interface: on a phone the app's own native
+ * plugin (`InboxNative`: android/app/src/main/java/ai/surfingdog/inbox on Android, the same methods in
+ * the iPhone project once it is made, IOS.md), and in a browser (development,
  * the screenshots, the tests) a stand-in on Web Crypto and localStorage that is never shipped as the
  * app's way of keeping secrets.
  *
@@ -28,6 +29,13 @@ export interface NativeInbox {
   readonly name: string;
   /** The relay's id for this phone at this inbox (`d` in every message), once the inbox said it. */
   readonly device?: string | undefined;
+}
+
+/** What the phone's lock is called on it: an iPhone's passcode, Android's screen lock. */
+export function lockWords(platform: Native["platform"]): { readonly noun: string; readonly kinds: string } {
+  return platform === "ios"
+    ? { noun: "passcode", kinds: "a passcode" }
+    : { noun: "screen lock", kinds: "a PIN, pattern or password" };
 }
 
 /** Why the device key did not sign: not unlocked lately (ask, then try again), or gone (connect again). */
@@ -96,10 +104,10 @@ interface InboxNativePlugin {
   addListener(event: "pushToken", fn: (e: { token: string }) => void): Promise<{ remove: () => Promise<void> }>;
 }
 
-function androidNative(): Native {
+function pluginNative(platform: "android" | "ios"): Native {
   const p = registerPlugin<InboxNativePlugin>("InboxNative");
   return {
-    platform: "android",
+    platform,
     deviceName: async () => (await p.deviceName()).name,
     deviceKey: async (alias) => {
       try {
@@ -227,7 +235,10 @@ function safeStorage(): Storage | null {
 
 let current: Native | null = null;
 export function native(): Native {
-  if (!current) current = Capacitor.getPlatform() === "android" ? androidNative() : webNative();
+  if (!current) {
+    const platform = Capacitor.getPlatform();
+    current = platform === "android" || platform === "ios" ? pluginNative(platform) : webNative();
+  }
   return current;
 }
 

@@ -146,7 +146,19 @@ describe("pairing and tokens", () => {
   it("connects nothing on a phone with no screen lock", async () => {
     const { fetchImpl, code } = await setup();
     const p = { ...phone(), deviceSecure: async () => false };
-    await expect(new Sessions(p, fetchImpl).pair(await code())).rejects.toMatchObject({ code: "no_screen_lock" });
+    await expect(new Sessions(p, fetchImpl).pair(await code())).rejects.toMatchObject({
+      code: "no_screen_lock",
+      message: "Set a screen lock on this phone first, then scan the code again.",
+    });
+  });
+
+  it("calls an iPhone's screen lock its passcode", async () => {
+    const { fetchImpl, code } = await setup();
+    const p = { ...phone(), platform: "ios" as const, deviceSecure: async () => false };
+    await expect(new Sessions(p, fetchImpl).pair(await code())).rejects.toMatchObject({
+      code: "no_screen_lock",
+      message: "Set a passcode on this phone first, then scan the code again.",
+    });
   });
 
   it("asks for the fingerprint once when the key will not sign without an unlock, then signs", async () => {
