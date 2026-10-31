@@ -194,10 +194,12 @@ export async function slotOffered(
 
 /**
  * How one time fits the business (`slotOffered`, with why not): `offered`; `closed` when it is no time
- * the business takes bookings (outside its hours, on a day it is closed, off the service's grid, a
- * service it does not book); `taken` when it is inside its hours and no place is free; `no_hours` when
- * nobody saved hours for it at all, so no time is offered. For a service whose places are people (a
- * table), free means free for the whole party.
+ * the business takes bookings (outside its hours, on a day it is closed, a service it does not book);
+ * `off_grid` when it is inside the hours but not one of the service's start times; `taken` when it is
+ * inside its hours and no place is free; `no_hours` when nobody saved hours for it at all, so no time
+ * is offered. For a service whose places are people (a table), free means free for the whole party.
+ * The start times are counted, as `findSlots` counts them, from midnight UTC: in a time zone half an
+ * hour off UTC an hourly service starts at half past the local hour.
  */
 export async function slotFit(
   db: Db,
@@ -209,7 +211,7 @@ export async function slotFit(
     readonly exceptItemId: string;
     readonly partySize?: number | undefined;
   },
-): Promise<"offered" | "closed" | "taken" | "no_hours"> {
+): Promise<"offered" | "closed" | "off_grid" | "taken" | "no_hours"> {
   const [service] = await db.orm.select().from(services).where(eq(services.id, input.serviceId));
   if (!service?.active || !(input.end > input.start) || askedForAPrice(service.price)) return "closed";
   const rules = await db.orm
@@ -223,7 +225,6 @@ export async function slotFit(
     );
   const weekly = weeklyFor(rules, service.id);
   if (!Object.values(weekly).some((windows) => (windows ?? []).length > 0)) return "no_hours";
-  if (input.start % (service.granularityMin * 60_000) !== 0) return "closed";
   if (!withinOpening(localiser(input.timezone), weekly, input.start, input.end)) return "closed";
   const closures = await readClosures(db, service.id);
   const localDate = dateLocaliser(input.timezone);
@@ -232,6 +233,7 @@ export async function slotFit(
     (isClosed(closures, localDate(input.start)) || isClosed(closures, localDate(input.end - 1)))
   )
     return "closed";
+  if (input.start % (service.granularityMin * 60_000) !== 0) return "off_grid";
   const units = service.capacityUnit === "people" ? Math.max(1, input.partySize ?? 1) : undefined;
   const spec: SlotSpec = { ...service, resourceKey: `service:${service.id}`, ...(units ? { units } : {}) };
   let buckets: number[];
@@ -342,12 +344,12 @@ export async function refuseTimeNotOffered(
   const message = copyFor(audience.lang).problems.timeNotOffered({
     when: whenText(new Date(start).toISOString(), audience.timezone, audience.lang),
     free: timesText(free, audience),
-    open: fit === "taken",
+    why: fit,
   });
   throw new WriteError("invalid_input", message, {
     fields: [{ path: "payload.startTime", problem: "invalid", message }],
     details: {
-      reason: fit === "taken" ? "time_not_free" : "outside_hours",
+      reason: fit === "taken" ? "time_not_free" : fit === "off_grid" ? "not_a_start_time" : "outside_hours",
       free_times: free.map((slot) => ({ start_time: slot.startTime, end_time: slot.endTime })),
     },
   });

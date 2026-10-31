@@ -137,10 +137,23 @@ describe("a customer's booking at a time the business does not offer", () => {
     // Saturday 12:00 for 90 minutes runs past 13:00.
     const over = await refused(s.caps.createBooking(agent(), at(s.svc, `${SAT}T12:00:00Z`)));
     expect(over.details?.reason).toBe("outside_hours");
-    // Off the half-hour grid.
+    // Off the half-hour grid: inside the hours, and not one of the start times.
     const odd = await refused(s.caps.createBooking(agent(), at(s.svc, `${SAT}T09:10:00Z`)));
-    expect(odd.details?.reason).toBe("outside_hours");
+    expect(odd.details?.reason).toBe("not_a_start_time");
+    expect(odd.message).toContain("is not one of our start times");
     expect(starts(odd)).toEqual([`${SAT}T09:00:00.000Z`, `${SAT}T09:30:00.000Z`, `${SAT}T10:00:00.000Z`]);
+  });
+
+  it("tells a business half an hour off UTC that the local hour is not a start time, and names those that are", async () => {
+    const s = await setup();
+    await s.db.client.query({ sql: "UPDATE business SET timezone = 'Asia/Kolkata'", method: "run" });
+    await s.db.client.query({ sql: "UPDATE services SET granularity_min = 60, duration_min = 60", method: "run" });
+    // Monday 2 November, 10:00 in Kolkata (04:30 UTC): inside the hours, off the hourly grid counted from UTC.
+    const e = await refused(s.caps.createBooking(agent(), at(s.svc, "2026-11-02T04:30:00Z", 60)));
+    expect(e.details?.reason).toBe("not_a_start_time");
+    expect(e.message).toContain("is not one of our start times");
+    expect(starts(e)).toContain("2026-11-02T04:00:00.000Z");
+    expect(starts(e)).toContain("2026-11-02T05:00:00.000Z");
   });
 
   it("is refused when its time is taken, saying it is not free", async () => {
