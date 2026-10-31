@@ -1,3 +1,4 @@
+import { STRIPE_PAY_CURRENCIES, stripePayRecipient } from "../../../../../packages/spec/src/stripe-pay";
 import vocabulary from "../../../../../packages/spec/vocab/payments.json" with { type: "json" };
 
 /**
@@ -5,7 +6,9 @@ import vocabulary from "../../../../../packages/spec/vocab/payments.json" with {
  * and wallets), by their English names, in groups people recognise, the common ones out first and the business's own
  * country's local ones beside them. The ways an agent pays at a door (x402, AP2, ACP, Visa Intelligent Commerce,
  * Mastercard Agent Pay, UCP handlers) are not here: a network reads them from the door that runs them, and a tick
- * would declare a checkout no agent could pay at. A test holds every way a person pays to exactly one group.
+ * would declare a checkout no agent could pay at. Stripe Pay is not a tick either: it is paid to the business's own
+ * Stripe handle, which the tab asks for on its own (`STRIPE_PAY`). A test holds every other way a person pays to
+ * exactly one group.
  */
 export interface PaymentGroup {
   readonly id: string;
@@ -166,4 +169,45 @@ export function togglePayment(accepted: readonly string[], token: string, on: bo
 /** Whether two lists hold the same ways, in any order. */
 export function samePayments(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((t) => b.includes(t));
+}
+
+/* --- Stripe Pay (ADR-045) --------------------------------------------------------------------------------------- */
+
+/** The token of Stripe Pay, which the tab sets with the business's handle rather than as a tick. */
+export const STRIPE_PAY = "stripe_pay";
+
+/** The currencies Stripe Pay moves, in its order: USD, GBP, USDC. */
+export { STRIPE_PAY_CURRENCIES };
+
+/** Stripe Pay as the settings keep it: where to send it, and in which currencies; `to` empty while it is off. */
+export interface StripePayChoice {
+  readonly to: string;
+  readonly currencies: readonly string[];
+}
+
+/** What the owner typed, as the settings keep it (`@acme`, or `profile_…`), or null when it is not a Stripe handle. */
+export function stripePayTo(typed: string): string | null {
+  return stripePayRecipient(typed);
+}
+
+/**
+ * The currencies to start from when the owner first sets Stripe Pay: the business's own one when Stripe Pay moves it
+ * (USD or GBP), else none, for the owner to choose.
+ */
+export function stripePayStart(currency: string | null | undefined): string[] {
+  const c = (currency ?? "").toUpperCase();
+  return STRIPE_PAY_CURRENCIES.includes(c) ? [c] : [];
+}
+
+/** `currencies` with `c` ticked or not, in Stripe Pay's order. */
+export function toggleStripeCurrency(currencies: readonly string[], c: string, on: boolean): string[] {
+  const set = new Set(currencies);
+  if (on) set.add(c);
+  else set.delete(c);
+  return STRIPE_PAY_CURRENCIES.filter((x) => set.has(x));
+}
+
+/** Whether two Stripe Pay choices are the same. */
+export function sameStripePay(a: StripePayChoice, b: StripePayChoice): boolean {
+  return a.to === b.to && samePayments(a.currencies, b.currencies);
 }

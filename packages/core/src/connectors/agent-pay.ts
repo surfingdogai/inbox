@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { businessFacts } from "../customer/audience";
 import { moneyIn, oneLine } from "../customer/format";
 import { type CustomerLang, customerLang } from "../customer/lang";
+import { type PayToOffer, type StripePaySetting, stripePayOffer } from "../customer/stripe-pay";
 import type { Db } from "../db";
 import type { Money } from "../domain/types";
 import { randomToken, ulid } from "../ids";
@@ -240,6 +241,8 @@ export interface OrderPayment {
   readonly payment_url: string | null;
   /** How the assistant pays it itself, when the business takes that; null otherwise. */
   readonly agent: AgentPayOffer | null;
+  /** Ways to pay it to an address of the business's own (Stripe Pay, ADR-045), while it is due; absent when none. */
+  readonly pay_to?: readonly PayToOffer[] | undefined;
   /** What to tell the person, in the business's words and language. */
   readonly human: string;
 }
@@ -522,7 +525,12 @@ export class AgentPayments {
    * from assistants and the order can be paid now, how (`agent`). Null before the order is accepted,
    * and for one that comes to nothing.
    */
-  async paymentOf(itemId: string, agreedSha: string | null, now: number): Promise<OrderPayment | null> {
+  async paymentOf(
+    itemId: string,
+    agreedSha: string | null,
+    now: number,
+    stripePay?: StripePaySetting | null,
+  ): Promise<OrderPayment | null> {
     const order = await this.order(itemId);
     if (!order || order.total.value <= 0) return null;
     if (!PAYABLE.has(order.state) && !PAID.has(order.state)) return null;
@@ -548,12 +556,16 @@ export class AgentPayments {
       };
     }
     const agent = order.changeOpen || !agreedSha ? null : await this.offerFor(order, agreedSha, now);
+    // Stripe Pay to the business's own profile (ADR-045), once the total is settled: never while a change waits.
+    const stripe = order.changeOpen ? null : stripePayOffer(order, stripePay, lang);
+    const said = agent ? w.payNow(business, amount) : w.due(amount);
     return {
       state: "due",
       amount: order.total,
       payment_url: order.paymentUrl,
       agent,
-      human: agent ? w.payNow(business, amount) : w.due(amount),
+      ...(stripe ? { pay_to: [stripe] } : {}),
+      human: stripe ? `${said} ${stripe.human}` : said,
     };
   }
 

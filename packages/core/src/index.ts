@@ -97,8 +97,10 @@ export {
   minorUnits,
   normaliseGtin,
   orderProgressSchema,
+  PAY_TO_METHODS,
   PAYMENT_TOKENS,
   PAYMENTS_VOCABULARY,
+  type PayTo,
   parseDecimal,
   paymentLabel,
   paymentScheduleSchema,
@@ -107,7 +109,10 @@ export {
   postalPrefixSchema,
   publishedPayments,
   readDoorsElsewhere,
+  readPayTo,
+  STRIPE_PAY_CURRENCIES,
   shareOf,
+  stripePayRecipient,
   tableRulesSchema,
   tradeQuoteSchema,
   WEEKDAYS,
@@ -189,6 +194,7 @@ export {
   type SecretPurpose,
 } from "./secrets/box";
 export { mergeSettings } from "./settings/merge";
+export { settingsPayments, settingsPayTo, stripePayOf } from "./settings/payments";
 export {
   type HostHome,
   type HostPolicy,

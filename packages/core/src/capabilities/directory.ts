@@ -1,11 +1,13 @@
 import {
   closureDaysSchema,
   type ItemType,
+  type PayTo,
   type Profile,
   profileHoursSchema,
   profileSchema,
   profileServiceSchema,
   publishedPayments,
+  readPayTo,
 } from "@surfingdog/spec";
 import type { z } from "zod";
 import type { Db } from "../db";
@@ -133,8 +135,10 @@ export async function directoryProfile(
     readonly languages: readonly string[];
     readonly timezone: string;
     readonly directory: Settings["directory"];
-    /** How it is paid (`settings.payments.accepted`): published as `payments`. */
+    /** How it is paid (`settingsPayments`): published as `payments`. */
     readonly payments?: readonly string[] | undefined;
+    /** Where a payer sends what is paid to an address of its own (`settingsPayTo`, ADR-045): published as `pay_to`. */
+    readonly payTo?: readonly PayTo[] | undefined;
     /** Attributes of a network's vocabulary the business declares (ADR-039: free estimates, emergencies). */
     readonly attributes?: Readonly<Record<string, true>> | undefined;
     readonly now: number;
@@ -163,6 +167,9 @@ export async function directoryProfile(
   if (services.length) fields.services = services;
   const payments = publishedPayments(input.payments ?? []);
   if (payments.length) fields.payments = payments;
+  // Stripe Pay's handle (ADR-045), only for a way the profile's payments name, as a network keeps it.
+  const payTo = readPayTo(input.payTo ?? [], payments);
+  if (payTo.length) fields.pay_to = payTo;
   // A place to stay that takes stays here (ADR-037 §6.3): its kind, how it confirms, how soon it answers.
   const types = await offeredItemTypes(db);
   if (types.includes("stay")) {

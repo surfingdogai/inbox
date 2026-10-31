@@ -92,6 +92,8 @@ import {
   STAY_MESSAGE_KIND,
   STAY_SWEEP_KIND,
   STAY_WRITE_KIND,
+  settingsPayments,
+  settingsPayTo,
   stayDoorOf,
   stayMessageHandler,
   staySweepHandler,
@@ -698,7 +700,8 @@ export function createInbox(deps: AppDeps): Inbox {
         languages: profile.languages,
         timezone: profile.timezone,
         directory: settings.directory,
-        payments: settings.payments.accepted,
+        payments: settingsPayments(settings.payments),
+        payTo: settingsPayTo(settings.payments),
         // What a trade says of itself as a network's attributes (ADR-039): free estimates, emergencies.
         attributes: workAttributes(settings),
         now: deps.now ? deps.now() : Date.now(),

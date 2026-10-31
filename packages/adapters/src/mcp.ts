@@ -33,7 +33,9 @@ import {
   moneyText,
   type OnceOptions,
   openReturnInput,
+  type PayToOffer,
   patchOf,
+  paymentLabel,
   payOrderInput,
   productIdInput,
   productInput,
@@ -97,6 +99,13 @@ export const PUBLIC_INSTRUCTIONS = [
 /** Said only while the business takes payments straight from assistants' platforms (ADR-042). */
 export const AGENT_PAY_INSTRUCTIONS =
   "Once an order is accepted, get_item_status says how to pay it: payment.agent when the business takes a payment straight from your platform (pay_order, with a one-time Stripe shared payment token for payment.agent.business_profile and payment.agent.platform_amount, on your person's yes to that total), else payment_url for your person.";
+
+/**
+ * Said only while the business takes Stripe Pay (ADR-045): a transfer to its Stripe profile that nothing here sees,
+ * so the agent confirms it with its person, as Stripe's own guidance says, and the business marks the order paid.
+ */
+export const STRIPE_PAY_INSTRUCTIONS =
+  "This business also takes Stripe Pay, a transfer from your person's Stripe account to its Stripe profile: once an order is accepted, get_item_status shows payment.pay_to with the handle, the exact amount, its currency and the order's reference. Confirm the recipient, the amount and the currency with your person before anything is sent, as Stripe's guidance asks, and send it with the reference. Nothing here sees the transfer: the business marks the order paid once it arrives, so tell it you paid with send_message.";
 
 export const OWNER_INSTRUCTIONS = [
   "You are working this business's inbox on the owner's behalf. list_items shows what needs a person; get_item shows the full story;",
@@ -275,6 +284,19 @@ export function lastFromUs(v: {
 }
 
 /**
+ * Stripe Pay for an order that is due (ADR-045), as the agent reads it: where, how much, which currency and the
+ * reference, what to confirm with its person first, and that the business, not this door, marks it paid.
+ */
+function payToText(v: { payment?: { pay_to?: readonly PayToOffer[] | undefined } | undefined }): string {
+  return (v.payment?.pay_to ?? [])
+    .map(
+      (p) =>
+        ` Pay with ${p.label} to ${p.to}: ${moneyText(p.amount)} (${p.amount.currency}), reference ${p.reference}. Confirm the recipient, the amount and the currency with your person before sending; the business marks the order paid once it arrives.`,
+    )
+    .join("");
+}
+
+/**
  * A tool that answers what the business proposed: the business's sentence, and what an accepted
  * quote became; or, for a suggestion a person there answers, that it was passed on.
  */
@@ -302,6 +324,8 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
     const menu = await hasMenuDoors(caps);
     // A business whose assistants' payments are on (ADR-042) has the tool to pay with.
     const agentPay = await caps.connectors.agentPay.anyOn();
+    // One that takes Stripe Pay (ADR-045) says how it is paid, and who marks it paid.
+    const stripePay = (profile.pay_to ?? []).some((p) => p.method === "stripe_pay");
     // A kitchen that takes its orders on its own site (ADR-035): its menu reads here, orders go there.
     const ordersAt = menu ? await caps.food.orderDoorElsewhere() : null;
     const instructions = [
@@ -310,6 +334,7 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
       ...(work ? [TRADES_INSTRUCTIONS] : []),
       ...(menu ? [foodInstructions(ordersAt)] : []),
       ...(agentPay ? [AGENT_PAY_INSTRUCTIONS] : []),
+      ...(stripePay ? [STRIPE_PAY_INSTRUCTIONS] : []),
     ];
     const server = new McpServer({ name, version }, { instructions: instructions.join(" ") });
     if (stays) registerPublicStayTools(server, caps, caller);
@@ -334,10 +359,14 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
               ? `${d.item_type} at ${d.url}`
               : `${d.item_type} at ${place}, ${d.url}`;
           });
+          // Stripe Pay's handle (ADR-045), as the business set it: never a guess.
+          const payTo = (p.pay_to ?? []).map(
+            (t) => `${paymentLabel(t.method)} to ${t.to} (${t.currencies.join(", ")})`,
+          );
           return {
             text: `${p.name} (${p.timezone}, ${p.currency}) accepts: ${p.item_types.join(", ")}.${
               away.length ? ` Taken elsewhere: ${away.join("; ")}.` : ""
-            }`,
+            }${payTo.length ? ` Paid to: ${payTo.join("; ")}.` : ""}`,
             structured: p,
           };
         }),
@@ -488,7 +517,10 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
         run(async () => {
           const v = await caps.getItemStatus(caller, args);
           const text = v.offer !== undefined && v.next ? customerText(v as unknown as CustomerItemView) : v.human;
-          return { text: `${text}${lastFromUs(v)}${identityText(v.identity, undefined)}`, structured: v };
+          return {
+            text: `${text}${payToText(v)}${lastFromUs(v)}${identityText(v.identity, undefined)}`,
+            structured: v,
+          };
         }),
     );
     if (agentPay) {

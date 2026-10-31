@@ -50,9 +50,19 @@ Paste your profile's **API key**: in Mollie, **Developers → API keys**, the *L
 
 Mollie reports a payment without a signature, only its id; your Inbox then asks Mollie, with your key, what was paid on that link. If you want Mollie to sign its reports as well, add a webhook in **Developers → Webhooks** for `https://<your-inbox>/v1/hooks/mollie` with the `payment-link.paid` event, and give its signing secret over the API (`values.webhook_secret` when you connect): signed reports are then checked by it, and read back from Mollie the same way.
 
+## Stripe Pay
+
+Settings → Payments → **Stripe Pay**: type your Stripe profile handle (`@yourbusiness`, or its profile id, `profile_…`) and tick the currencies you take there. Other businesses can then pay you from their Stripe Dashboard, or have their AI agent do it with Stripe's own tools. Stripe offers Stripe Pay in preview to eligible businesses in the US and the UK, between Stripe accounts, in USD, GBP and USDC: the one paying needs a funded Stripe financial account, and you need a Stripe financial account or a bank account for payouts linked to your Stripe profile.
+
+- **Where it shows.** Your manifest declares it (`stripe_pay` in `profile.payments`, your handle in `profile.pay_to`), your business profile and your page say it, and an accepted order in a currency you take there shows it beside any link: "You can pay with Stripe Pay to @yourbusiness: £29.00, reference 4F2K9Q." The emails about paying an order say the same.
+- **Nothing here sees it.** The transfer goes from their Stripe account to yours, never through your Inbox, and Stripe gives your Inbox no way to see it. When it arrives, open the order and **Record payment**, with the transfer as the reference.
+- **Agents confirm first.** An agent is told to confirm your handle, the amount and the currency with its person before anything is sent, as Stripe's guidance asks, and to send the order's reference with it.
+- **Never for a test order**, nor for an order in a currency you did not tick. An order is never in USDC, so it is offered Stripe Pay in USD or GBP.
+- **Only you set it**, in person: your AI and your keys cannot change where you are paid.
+
 ## For agents
 
-An accepted order that waits for payment is in state `awaiting_payment`, with the link in `payload.paymentUrl`: give it to your person. Once the platform confirms the payment the order moves to `paid`, and its receipt (`knd: paid`) carries `amt` and, when known, `pay`. A payment link is the business's own: pay only there.
+An accepted order that waits for payment is in state `awaiting_payment`, with the link in `payload.paymentUrl`: give it to your person. When the business takes Stripe Pay, the order's status has `payment.pay_to` with its handle, the exact amount in its currency and the order's reference: confirm the recipient, the amount and the currency with your person before sending, and say you paid with `send_message`; the business marks it paid once it arrives. Once the platform confirms the payment the order moves to `paid`, and its receipt (`knd: paid`) carries `amt` and, when known, `pay`. A payment link is the business's own: pay only there.
 
 ## Secrets
 

@@ -10,9 +10,11 @@ import {
   fillStayTemplate,
   hostIsOn,
   isPaymentToken,
+  isStripePayRecipient,
   MAX_PROFILE_PAYMENTS,
   ownSiteDomain,
   readDoorsElsewhere,
+  STRIPE_PAY_CURRENCIES,
 } from "@surfingdog/spec";
 import { z } from "zod";
 import { areaSettingsSchema } from "../area/index";
@@ -722,15 +724,53 @@ const sections = {
    * agent knows before it pays, and a network shows them as declared by the business. A token is never removed from the
    * vocabulary, so a stored one always reads. It is what the business says of itself to every agent, so only the owner
    * in person changes it (`guard.ts`).
+   *
+   * Stripe Pay (ADR-045) is not ticked in `accepted`: it is paid to an address, so it is on exactly while
+   * `stripePay.to` names one, and is published then as `stripe_pay` with `profile.pay_to`.
    */
   payments: z
     .object({
       accepted: z
-        .array(z.string().refine(isPaymentToken, "a payment of vocab/payments.json, like card or apple_pay"))
+        .array(
+          z
+            .string()
+            .refine(isPaymentToken, "a payment of vocab/payments.json, like card or apple_pay")
+            .refine((t) => t !== "stripe_pay", "Stripe Pay is set with your Stripe handle, in payments.stripePay"),
+        )
         .max(MAX_PROFILE_PAYMENTS)
         .refine((all) => new Set(all).size === all.length, "each payment once")
         .default([])
         .describe("How customers and their agents can pay you: card, apple_pay, paypal, pix… (vocab/payments.json)."),
+      /**
+       * Stripe Pay (ADR-045): Stripe's business-to-business transfer, sent to the business's Stripe profile from
+       * another business's Stripe Dashboard or by its AI agent with Stripe's own tools. The money goes from Stripe
+       * account to Stripe account and never through the inbox, which cannot see it: the owner records the payment on
+       * the order when it arrives. Off while `to` is empty.
+       */
+      stripePay: z
+        .object({
+          to: z
+            .string()
+            .max(120)
+            .refine(
+              (s) => s === "" || isStripePayRecipient(s),
+              "your Stripe profile handle, like @yourbusiness, or its profile id (profile_…)",
+            )
+            .default("")
+            .describe("Your Stripe profile handle (@yourbusiness) or profile id (profile_…); empty to stop."),
+          currencies: z
+            .array(z.enum(STRIPE_PAY_CURRENCIES as [string, ...string[]]))
+            .max(STRIPE_PAY_CURRENCIES.length)
+            .refine((all) => new Set(all).size === all.length, "each currency once")
+            .default([])
+            .describe("What you take by Stripe Pay: USD, GBP, USDC."),
+        })
+        .refine((p) => p.to === "" || p.currencies.length > 0, {
+          message: "choose the currencies you take by Stripe Pay: USD, GBP or USDC",
+          path: ["currencies"],
+        })
+        .prefault({})
+        .describe("Stripe Pay: paid to your Stripe profile, outside this inbox. Off while to is empty."),
     })
     .prefault({}),
   /**

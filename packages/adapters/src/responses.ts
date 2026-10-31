@@ -229,6 +229,31 @@ export const customerItemViewSchema = z.looseObject({
         })
         .nullable()
         .describe("How to pay it directly (POST /v1/items/{id}/pay), when the business takes that; null otherwise."),
+      pay_to: z
+        .array(
+          z.looseObject({
+            method: z.literal("stripe_pay"),
+            label: z.string(),
+            to: z.string().describe("The business's Stripe profile handle (@acme) or profile id (profile_…)."),
+            amount: z
+              .object({ value: z.number().int(), currency: z.string() })
+              .describe("Exactly what to send, in the currency's own minor unit; the transfer is in this currency."),
+            reference: z.string().describe("The order's reference: send it with the payment."),
+            confirm: z
+              .array(z.string())
+              .describe(
+                "What your person confirms before anything is sent: the recipient, the amount and the currency.",
+              ),
+            marked_paid_by: z
+              .literal("business")
+              .describe("Nothing here sees the transfer: the business marks the order paid once it arrives."),
+            human: z.string().describe("In the business's words: relay it as it is."),
+          }),
+        )
+        .optional()
+        .describe(
+          "Ways to pay it to an address of the business's own, while it is due: stripe_pay, a Stripe Pay transfer from your person's Stripe account (their Dashboard, or Stripe's own tools) to `to`, for `amount` in its currency, with `reference`. Confirm the recipient, amount and currency with your person before sending, as Stripe's guidance asks. Absent when there is none.",
+        ),
       human: z.string().describe("In the business's words: relay it as it is."),
     })
     .optional()
@@ -529,6 +554,18 @@ export const businessProfileSchema = profileSchema.extend({
     .optional()
     .describe(
       "Kinds of request the business takes somewhere else, and where: a booking platform, its own checkout. None of them is in item_types.",
+    ),
+  payments: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "How customers and their agents can pay: tokens of the payments vocabulary (card, apple_pay, stripe_pay…).",
+    ),
+  pay_to: z
+    .array(z.object({ method: z.string(), to: z.string(), currencies: z.array(z.string()) }))
+    .optional()
+    .describe(
+      "Where to send a way to pay that goes to an address of the business's own (spec 0.13): stripe_pay to its Stripe profile handle (@acme) or profile id, in the currencies it takes there. An order's own amount and reference are on get_item_status once it is accepted.",
     ),
   work: workProfileSchema
     .optional()

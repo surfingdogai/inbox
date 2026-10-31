@@ -1935,6 +1935,22 @@ fieldset.chips,
   margin: 0 4px 0 0;
   padding: 0;
 }
+/* Stripe Pay: the business's own handle, its currencies, and what it means, below the ticks. */
+.pay-stripe {
+  margin-top: 4px;
+}
+.pay-stripe > .hint {
+  margin: 0 0 8px;
+}
+.pay-stripe-input {
+  max-width: 320px;
+}
+.pay-stripe-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
 /* "Saved", beside the heading in a spot of its own: it fades, and nothing moves. */
 .pay-status {
   min-width: 4em;

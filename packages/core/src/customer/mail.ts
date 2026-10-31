@@ -7,6 +7,7 @@ import { moneyIn, oneLine, shortRef, whenText } from "./format";
 import type { CustomerLang } from "./lang";
 import type { LinkAction } from "./links";
 import { isChangeable, type OfferTerms, openChange, timeDeadline } from "./offer";
+import { type StripePaySetting, stripePayOffer } from "./stripe-pay";
 
 /**
  * Every email the business sends its customer, put together: in the customer's language, times in
@@ -76,6 +77,11 @@ export interface CustomerMailInput {
   readonly refund?: Item | null | undefined;
   /** The business's return policy, as far as the emails say it. */
   readonly returns?: { readonly respondHours: number; readonly postage: "customer" | "business" } | undefined;
+  /**
+   * Stripe Pay to the business's own Stripe profile (ADR-045), as the owner set it: an accepted order's emails about
+   * paying say it, in the order's currency when the business takes that one there.
+   */
+  readonly stripePay?: StripePaySetting | null | undefined;
   readonly now?: number | undefined;
 }
 
@@ -642,6 +648,15 @@ function bodyOf(input: CustomerMailInput): Body {
       const url = item.payload.paymentUrl;
       const changed = changeBody(input, v, s, "");
       if (changed) return changed;
+      // Stripe Pay to the business's own profile (ADR-045), beside any link, once the total is settled.
+      const stripe = openChange(item)
+        ? null
+        : stripePayOffer(
+            { id: item.id, total: item.payload.totalPrice, sandbox: item.flags.sandbox },
+            input.stripePay,
+            input.lang,
+          );
+      const byStripe = stripe ? [stripe.human] : [];
       if (input.event === "withdraw" || input.event === "record_withdrawal") {
         return withdrawalBody(input, s, what, input.withdrawal?.law ?? "eu");
       }
@@ -694,12 +709,12 @@ function bodyOf(input: CustomerMailInput): Body {
             return {
               template: "order.accepted",
               subject: e.order.acceptedSubject(s()),
-              blocks: [[e.order.acceptedChanges(v())], orderLines(input, item)],
+              blocks: [[e.order.acceptedChanges(v())], orderLines(input, item), ...(stripe ? [byStripe] : [])],
             };
           return {
             template: "order.accepted",
             subject: e.order.acceptedSubject(s()),
-            blocks: [[e.order.accepted(v())], orderLines(input, item)],
+            blocks: [[e.order.accepted(v())], orderLines(input, item), ...(stripe ? [byStripe] : [])],
           };
         case "awaiting_payment":
           return {
@@ -709,6 +724,7 @@ function bodyOf(input: CustomerMailInput): Body {
               [
                 e.order.payment(v({ total: money(item.payload.totalPrice) })),
                 ...(url ? [e.order.payHere(v({ url }))] : []),
+                ...byStripe,
               ],
             ],
           };
@@ -728,7 +744,7 @@ function bodyOf(input: CustomerMailInput): Body {
           return {
             template: "order.payment_failed",
             subject: e.order.failedSubject(s()),
-            blocks: [[e.order.failed(v()), ...(url ? [e.order.payStill(v({ url }))] : [])]],
+            blocks: [[e.order.failed(v()), ...(url ? [e.order.payStill(v({ url }))] : []), ...byStripe]],
           };
         case "fulfilled":
           return {

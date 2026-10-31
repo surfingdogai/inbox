@@ -46,6 +46,7 @@ import {
   rankingV6Schema,
   rankingV7Schema,
   rankingV8Schema,
+  readPayTo,
   readRankingDocument,
   receiptAckPayloadV2Schema,
   receiptPayloadV2Schema,
@@ -705,6 +706,15 @@ describe("profile.json and vocab/categories.json (the network's, read here as an
       const kept: { payments?: unknown } = c.kept;
       if (kept.payments !== undefined)
         expect(profileSchema.shape.payments.safeParse(kept.payments).success, c.name).toBe(true);
+    }
+    // Spec 0.13: what a network keeps of pay_to is what readPayTo keeps, here and in the network alike.
+    const payTo = profileVectors.cases.filter((c) => "pay_to" in c.profile);
+    expect(payTo.length).toBeGreaterThanOrEqual(3);
+    for (const c of payTo) {
+      const kept = c.kept as { payments?: string[]; pay_to?: unknown };
+      expect(readPayTo((c.profile as { pay_to?: unknown }).pay_to, kept.payments), c.name).toEqual(kept.pay_to ?? []);
+      if (kept.pay_to !== undefined)
+        expect(profileSchema.shape.pay_to.safeParse(kept.pay_to).success, c.name).toBe(true);
     }
     const bad = { name: "x", hours: { timezone: "Europe/Lisbon", weekly: { mon: [["18:00", "09:00"]] } } };
     expect(profileSchema.safeParse(bad).success).toBe(false);

@@ -1,6 +1,6 @@
 {
-  "version": 2,
-  "description": "Payment tokens a listing may show and a search may ask for (accepts). methods and wallets are how a person pays; agent are the ways an AI agent can pay at a door. labels name each token in English. synonyms read what a business says it accepts (schema.org paymentAccepted, a registration, a manifest), ignoring capitals and accents; marks read the payment providers seen in a site's own code, markup and files; handlers read the payment handlers a UCP profile names, word by word, the first whose words appear whole anywhere in the name; handlers_last, after them, the ones whose words must be the whole of the name's last part, after its last dot (dev.shopify.card is a card, pay_later_card is not). A brand's token is read only from words that name the brand. Anything else is left out. A token is never removed or renamed. Version 2 (18 Oct 2026): labels, handlers and handlers_last, bank_transfer apart from sepa, and afterpay, affirm, tabby, tamara, stripe_link, amazon_pay, visa_intelligent_commerce, mastercard_agent_pay, and ways people pay in every region: mpesa, interac, venmo, cash_app, zelle, bizum, paynow, promptpay, gcash, paypay, kakaopay, mercado_pago and oxxo.",
+  "version": 3,
+  "description": "Payment tokens a listing may show and a search may ask for (accepts). methods and wallets are how a person pays; agent are the ways an AI agent can pay at a door. labels name each token in English. synonyms read what a business says it accepts (schema.org paymentAccepted, a registration, a manifest), ignoring capitals and accents; marks read the payment providers seen in a site's own code, markup and files; handlers read the payment handlers a UCP profile names, word by word, the first whose words appear whole anywhere in the name; handlers_last, after them, the ones whose words must be the whole of the name's last part, after its last dot (dev.shopify.card is a card, pay_later_card is not). A brand's token is read only from words that name the brand. Anything else is left out. A token is never removed or renamed. Version 2 (18 Oct 2026): labels, handlers and handlers_last, bank_transfer apart from sepa, and afterpay, affirm, tabby, tamara, stripe_link, amazon_pay, visa_intelligent_commerce, mastercard_agent_pay, and ways people pay in every region: mpesa, interac, venmo, cash_app, zelle, bizum, paynow, promptpay, gcash, paypay, kakaopay, mercado_pago and oxxo. Version 3 (31 Oct 2026): stripe_pay, Stripe's business-to-business transfer to a Stripe profile handle (@name) or profile network id (profile_...); a business names the handle in its profile's pay_to. No mark reads it: only the business's own word declares it.",
   "methods": [
     "card",
     "visa",
@@ -39,6 +39,7 @@
     "tabby",
     "tamara",
     "paypal",
+    "stripe_pay",
     "crypto"
   ],
   "wallets": ["apple_pay", "google_pay", "shop_pay", "stripe_link", "amazon_pay"],
@@ -81,6 +82,7 @@
     "tabby": "Tabby",
     "tamara": "Tamara",
     "paypal": "PayPal",
+    "stripe_pay": "Stripe Pay",
     "crypto": "Crypto",
     "apple_pay": "Apple Pay",
     "google_pay": "Google Pay",
@@ -228,7 +230,8 @@
     "tamara": "tamara",
     "zahlung in bar": "cash",
     "bar bezahlen": "cash",
-    "in bar bezahlen": "cash"
+    "in bar bezahlen": "cash",
+    "stripe pay": "stripe_pay"
   },
   "marks": {
     "stripe": "card",

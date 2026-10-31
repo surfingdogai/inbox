@@ -153,6 +153,13 @@ or network:
   under the bottle's barcode are `multipack` 12, and a case's own barcode with `multipack` 1 is one case. Two
   offers are one product only with the same barcode and the same `multipack`. A 0.12.0 reader ignores it; a
   feed without it reads as before.
+- 0.13 ([ADR-045](../../docs/adr/045-stripe-pay.md)): Stripe Pay, Stripe's transfer between Stripe accounts to a
+  business's Stripe profile. `vocab/payments.json` version 3 adds `stripe_pay` among the ways a person pays (no mark
+  or handler reads it: only the business's own word declares it); a profile's optional `pay_to`
+  (`payToSchema`, at most `MAX_PAY_TO`), where to send a way paid to an address of the business's own, read with
+  `readPayTo` (`PAY_TO_METHODS`, `stripePayRecipient`, `STRIPE_PAY_CURRENCIES`; `vectors/profile.json`); and a
+  listing's `pay_with` entry may carry `to` and `currencies`, from a member's manifest only. A 0.12 reader ignores
+  `pay_to` and the new members, and reads `stripe_pay` as a token it does not know.
 
 ## Stays (0.11)
 

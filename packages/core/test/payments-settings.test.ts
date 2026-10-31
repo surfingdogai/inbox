@@ -14,6 +14,7 @@ import { Capabilities } from "../src/capabilities/service";
 import { createDb } from "../src/db";
 import { buildManifest } from "../src/manifest";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
+import { settingsPayments, settingsPayTo } from "../src/settings/payments";
 import { readSettings, settingsSchema } from "../src/settings/schema";
 import type { Caller, Principal } from "../src/write/index";
 import { WriteError } from "../src/write/index";
@@ -99,7 +100,7 @@ describe("Settings → Payments", () => {
   it("is empty out of the box, and publishes nothing", async () => {
     const { db } = await setup();
     expect((await readSettings(db)).payments.accepted).toEqual([]);
-    expect(settingsSchema.parse({}).payments).toEqual({ accepted: [] });
+    expect(settingsSchema.parse({}).payments).toEqual({ accepted: [], stripePay: { to: "", currencies: [] } });
   });
 
   it("keeps the tokens the owner ticks, and refuses anything else", async () => {
@@ -111,9 +112,11 @@ describe("Settings → Payments", () => {
       expect(e.code, JSON.stringify(accepted)).toBe("invalid_input");
     }
     expect((await readSettings(db)).payments.accepted).toEqual(["card", "mb_way", "apple_pay"]);
-    // Every way the vocabulary names fits at once: the chooser can never offer more than the settings keep.
-    await caps.updateSettings(owner, { doc: { payments: { accepted: [...PAYMENT_TOKENS] } } });
-    expect((await readSettings(db)).payments.accepted).toHaveLength(PAYMENT_TOKENS.length);
+    // Every way the vocabulary names fits at once, but Stripe Pay, which is set with its handle (below): the chooser
+    // can never offer more than the settings keep.
+    const ticks = PAYMENT_TOKENS.filter((t) => t !== "stripe_pay");
+    await caps.updateSettings(owner, { doc: { payments: { accepted: ticks } } });
+    expect((await readSettings(db)).payments.accepted).toHaveLength(ticks.length);
   });
 
   it("is never the owner's AI's to change: a customer's message could ask it to declare a way to pay", async () => {
@@ -191,6 +194,103 @@ describe("Settings → Payments", () => {
     await caps.updateSettings(owner, { doc: { payments: { accepted: [] } } });
     expect((await caps.getBusinessProfile()).payments).toBeUndefined();
     expect((await frontHome(caps, "en")).help).toBe("");
+  });
+});
+
+/**
+ * Stripe Pay (ADR-045): set with the business's own Stripe handle and the currencies it takes there, never ticked;
+ * published as stripe_pay with the profile's pay_to; changed only by the owner in person.
+ */
+describe("Stripe Pay", () => {
+  it("is set with the business's handle and currencies, and refuses anything that is not one", async () => {
+    const { db, caps } = await setup();
+    await caps.updateSettings(owner, {
+      doc: { payments: { stripePay: { to: "@harbour", currencies: ["GBP", "USDC"] } } },
+    });
+    expect((await readSettings(db)).payments.stripePay).toEqual({ to: "@harbour", currencies: ["GBP", "USDC"] });
+    for (const stripePay of [
+      { to: "harbour coffee", currencies: ["GBP"] },
+      { to: "https://stripe.com/@harbour", currencies: ["GBP"] },
+      { to: "@Harbour", currencies: ["GBP"] },
+      { to: "@harbour", currencies: [] },
+      { to: "@harbour", currencies: ["EUR"] },
+    ]) {
+      const e = await refusal(caps.updateSettings(owner, { doc: { payments: { stripePay } } }));
+      expect(e.code, JSON.stringify(stripePay)).toBe("invalid_input");
+    }
+    // It is never a tick: the handle says it.
+    const ticked = await refusal(caps.updateSettings(owner, { doc: { payments: { accepted: ["stripe_pay"] } } }));
+    expect(ticked.code).toBe("invalid_input");
+    // A profile id does too; removed, it is off again.
+    await caps.updateSettings(owner, {
+      doc: { payments: { stripePay: { to: "profile_61TpVxQ2bC", currencies: ["USD"] } } },
+    });
+    expect((await readSettings(db)).payments.stripePay.to).toBe("profile_61TpVxQ2bC");
+    await caps.updateSettings(owner, { doc: { payments: { stripePay: null } } });
+    expect((await readSettings(db)).payments.stripePay).toEqual({ to: "", currencies: [] });
+  });
+
+  it("is never the owner's AI's to set: a customer's message could ask it to send payments elsewhere", async () => {
+    const { db, caps } = await setup();
+    const e = await refusal(
+      caps.updateSettings(ownersAi, { doc: { payments: { stripePay: { to: "@elsewhere", currencies: ["GBP"] } } } }),
+    );
+    expect(e.code).toBe("not_allowed");
+    expect(e.details).toMatchObject({ reason: "owner_in_person", ask_owner: true });
+    expect((await readSettings(db)).payments.stripePay.to).toBe("");
+  });
+
+  it("is published as stripe_pay with where to send it, in the manifest, the profile and the business's page", async () => {
+    const { db, caps } = await setup();
+    await caps.updateSettings(owner, {
+      doc: {
+        business: { name: "Harbour Coffee" },
+        payments: { accepted: ["card"], stripePay: { to: "@harbour", currencies: ["GBP", "USD"] } },
+      },
+    });
+    const settings = await readSettings(db);
+    const profile = await directoryProfile(db, {
+      name: settings.business.name,
+      languages: settings.business.languages,
+      timezone: settings.business.timezone,
+      directory: settings.directory,
+      payments: settingsPayments(settings.payments),
+      payTo: settingsPayTo(settings.payments),
+      now: T0,
+    });
+    expect(profile?.payments).toEqual(["card", "stripe_pay"]);
+    expect(profile?.pay_to).toEqual([{ method: "stripe_pay", to: "@harbour", currencies: ["USD", "GBP"] }]);
+    expect(profileSchema.safeParse(profile).success).toBe(true);
+    const manifest = manifestSchema.parse(buildManifest({ instanceUrl: "https://inbox.example.com", profile }));
+    expect(manifest.profile?.pay_to?.[0]?.to).toBe("@harbour");
+    // A pay_to its payments do not name is left out, as a network would drop it.
+    const unnamed = await directoryProfile(db, {
+      name: "Harbour Coffee",
+      languages: ["en"],
+      timezone: "UTC",
+      directory: settings.directory,
+      payments: ["card"],
+      payTo: settingsPayTo(settings.payments),
+      now: T0,
+    });
+    expect(unnamed && "pay_to" in unnamed).toBe(false);
+    const business = await caps.getBusinessProfile();
+    expect(business.payments).toEqual(["card", "stripe_pay"]);
+    expect(business.pay_to).toEqual([{ method: "stripe_pay", to: "@harbour", currencies: ["USD", "GBP"] }]);
+    expect((await frontHome(caps, "en")).help).toBe("We take card and Stripe Pay (@harbour).");
+    // Stopped: neither the token nor the address is said anywhere.
+    await caps.updateSettings(owner, { doc: { payments: { stripePay: null } } });
+    const after = await caps.getBusinessProfile();
+    expect(after.payments).toEqual(["card"]);
+    expect(after.pay_to).toBeUndefined();
+  });
+
+  it("is never filled in by a setup plan: the handle is the owner's to give", async () => {
+    const { db, caps } = await setup();
+    await caps.applySetupPlan(system, { payments: { accepted: ["card", "stripe_pay"] } });
+    const settings = await readSettings(db);
+    expect(settings.payments.accepted).toEqual(["card"]);
+    expect(settings.payments.stripePay.to).toBe("");
   });
 });
 

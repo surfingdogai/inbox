@@ -482,6 +482,18 @@
                     "description": "The page, file, profile, manifest or door the evidence is at.",
                     "type": "string",
                     "format": "uri"
+                  },
+                  "to": {
+                    "description": "Spec 0.13: where to send it, for a way paid to an address the business declared in its manifest (profile.pay_to): a Stripe profile handle (@acme) or profile id for stripe_pay. Never read from a website.",
+                    "type": "string",
+                    "maxLength": 120
+                  },
+                  "currencies": {
+                    "description": "Spec 0.13: the currencies it takes at that address (stripe_pay: USD, GBP, USDC).",
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 },
                 "required": ["token", "label", "src", "via"]

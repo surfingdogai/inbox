@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import clsx from "clsx";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { ErrorState, Toast } from "../components/Feedback";
 import { SectionHead } from "../components/Form";
 import { type ApiProblem, problemOf } from "../lib/api";
@@ -11,8 +11,14 @@ import {
   type PaymentGroup,
   paymentGroupsFor,
   paymentName,
+  STRIPE_PAY_CURRENCIES,
+  type StripePayChoice,
   samePayments,
+  sameStripePay,
+  stripePayStart,
+  stripePayTo,
   togglePayment,
+  toggleStripeCurrency,
   withCard,
 } from "../lib/payments";
 import { qk, useSaveSettings, useSettings } from "../lib/queries";
@@ -30,6 +36,7 @@ const SAVED_FOR = 2_000;
  * Settings → Payments: how customers and their agents can pay the business. A press ticks a way at once; saves go
  * one at a time, each sending the latest ticks with the version the one before returned, so quick presses are never
  * lost. Published in the inbox's manifest, so an agent knows before it pays. Only the owner in person changes it.
+ * Stripe Pay (ADR-045) is set below the ticks, with the business's own Stripe handle, through the same saves.
  */
 function PaymentsPage() {
   const settings = useSettings();
@@ -79,10 +86,19 @@ function PaymentsForm({ data, onReload }: { data: SettingsDoc; onReload: () => v
   const fromSiteRef = useRef(fromSite);
   const [status, setStatus] = useState<"idle" | "saved" | "fading">("idle");
   const [problem, setProblem] = useState<ApiProblem | null>(null);
+  // Stripe Pay as it is saved: off while it names nobody.
+  const storedStripe: StripePayChoice = {
+    to: data.doc.payments?.stripePay?.to ?? "",
+    currencies: data.doc.payments?.stripePay?.currencies ?? [],
+  };
+  const [stripe, setStripe] = useState<StripePayChoice>(storedStripe);
+  const [stripeProblem, setStripeProblem] = useState<string | null>(null);
   // What the owner wants, what is saved and at which version, and whether a save is on its way.
   const wanted = useRef<readonly string[]>(accepted);
-  const saved = useRef<{ list: readonly string[]; version: number }>({
+  const wantedStripe = useRef<StripePayChoice>(storedStripe);
+  const saved = useRef<{ list: readonly string[]; stripe: StripePayChoice; version: number }>({
     list: data.doc.payments?.accepted ?? [],
+    stripe: storedStripe,
     version: data.version,
   });
   const busy = useRef(false);
@@ -103,22 +119,44 @@ function PaymentsForm({ data, onReload }: { data: SettingsDoc; onReload: () => v
     if (busy.current) return;
     busy.current = true;
     try {
-      while (!samePayments(wanted.current, saved.current.list)) {
+      for (;;) {
         const next = wanted.current;
-        const clear = fromSiteRef.current;
+        const nextStripe = wantedStripe.current;
+        const ticks = !samePayments(next, saved.current.list);
+        const byStripe = !sameStripePay(nextStripe, saved.current.stripe);
+        if (!ticks && !byStripe) break;
+        const clear = ticks && fromSiteRef.current;
         const res = await save.mutateAsync({
-          doc: { payments: { accepted: [...next] }, ...(clear ? { setup: { sources: { payments: null } } } : {}) },
+          doc: {
+            payments: {
+              ...(ticks ? { accepted: [...next] } : {}),
+              // Off is the setting removed: its defaults (nobody, no currency) apply again.
+              ...(byStripe
+                ? { stripePay: nextStripe.to ? { to: nextStripe.to, currencies: [...nextStripe.currencies] } : null }
+                : {}),
+            },
+            ...(clear ? { setup: { sources: { payments: null } } } : {}),
+          },
           expected_version: saved.current.version,
         });
-        saved.current = { list: next, version: res.version };
+        saved.current = {
+          list: ticks ? next : saved.current.list,
+          stripe: byStripe ? nextStripe : saved.current.stripe,
+          version: res.version,
+        };
         if (clear) fromSiteRef.current = false;
       }
       showSaved();
     } catch (e) {
-      // What is saved stands: the ticks go back to it, and the owner is told below.
+      // What is saved stands: the ticks and Stripe Pay go back to it, and the owner is told below.
+      const p = problemOf(e);
+      const stripeWords = p.field("payments.stripePay.to") ?? p.field("payments.stripePay.currencies");
       wanted.current = withCard(saved.current.list);
+      wantedStripe.current = saved.current.stripe;
       setAccepted(wanted.current);
-      setProblem(problemOf(e));
+      setStripe(saved.current.stripe);
+      if (stripeWords) setStripeProblem(stripeWords);
+      else setProblem(p);
     } finally {
       busy.current = false;
     }
@@ -128,6 +166,14 @@ function PaymentsForm({ data, onReload }: { data: SettingsDoc; onReload: () => v
     const next = togglePayment(wanted.current, token, on);
     wanted.current = next;
     setAccepted(next);
+    void flush();
+  };
+  /** Stripe Pay as the owner set it below: saved through the same queue as the ticks. */
+  const setStripePay = (next: StripePayChoice) => {
+    setProblem(null);
+    setStripeProblem(null);
+    wantedStripe.current = next;
+    setStripe(next);
     void flush();
   };
   const conflict = problem?.code === "version_conflict";
@@ -154,6 +200,13 @@ function PaymentsForm({ data, onReload }: { data: SettingsDoc; onReload: () => v
           </div>
         </details>
       </div>
+      <StripePay
+        saved={stripe}
+        currency={data.doc.business.currency}
+        problem={stripeProblem}
+        onSave={setStripePay}
+        onProblem={setStripeProblem}
+      />
       {problem && (
         <Toast
           tone="danger"
@@ -209,6 +262,127 @@ function PaymentChips({
           </div>
         </fieldset>
       )}
+    </fieldset>
+  );
+}
+
+/**
+ * Stripe Pay (ADR-045): the business's own Stripe handle, and the currencies it takes there. Another business pays it
+ * from its Stripe Dashboard, or its AI agent with Stripe's own tools; the money goes from Stripe account to Stripe
+ * account and never through the inbox, which cannot see it. So the owner records the payment on the order, as for any
+ * way paid outside the inbox. Saved only on Save, never while typing.
+ */
+function StripePay({
+  saved,
+  currency,
+  problem,
+  onSave,
+  onProblem,
+}: {
+  saved: StripePayChoice;
+  currency: string;
+  problem: string | null;
+  onSave: (next: StripePayChoice) => void;
+  onProblem: (words: string | null) => void;
+}) {
+  const id = useId();
+  const on = saved.to !== "";
+  const [typed, setTyped] = useState(saved.to);
+  const [currencies, setCurrencies] = useState<readonly string[]>(() =>
+    saved.currencies.length ? saved.currencies : stripePayStart(currency),
+  );
+  // What is saved changed under the form (a save that came back, or one refused and undone): the form shows it.
+  useEffect(() => {
+    setTyped(saved.to);
+    if (saved.currencies.length) setCurrencies(saved.currencies);
+  }, [saved]);
+  const to = stripePayTo(typed);
+  const changed = to !== saved.to || !samePayments(currencies, saved.currencies);
+
+  const submit = () => {
+    if (!to) {
+      onProblem("Type your Stripe profile handle, like @yourbusiness, or its profile id (profile_…).");
+      return;
+    }
+    if (!currencies.length) {
+      onProblem("Choose the currencies you take by Stripe Pay.");
+      return;
+    }
+    onSave({ to, currencies });
+  };
+
+  return (
+    <fieldset className="chips-field pay-stripe">
+      <legend className="label">Stripe Pay</legend>
+      <p className="hint">
+        Other businesses on Stripe pay you to your Stripe handle, from their Dashboard or by their AI agent. In preview
+        from Stripe for eligible businesses in the US and the UK, in USD, GBP and USDC: the payer needs a funded Stripe
+        financial account, and you a financial account or a payout bank account on your Stripe profile.
+      </p>
+      <div>
+        <label className="sr-only" htmlFor={id}>
+          Your Stripe handle
+        </label>
+        <input
+          id={id}
+          className="input pay-stripe-input"
+          type="text"
+          autoComplete="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          placeholder="@yourbusiness"
+          value={typed}
+          aria-invalid={problem ? true : undefined}
+          onChange={(e) => {
+            setTyped(e.target.value);
+            onProblem(null);
+          }}
+        />
+      </div>
+      <fieldset className="pay-brands">
+        <legend className="hint">In</legend>
+        <div className="chips">
+          {STRIPE_PAY_CURRENCIES.map((c) => (
+            <label key={c} className="chip">
+              <input
+                type="checkbox"
+                checked={currencies.includes(c)}
+                onChange={(e) => {
+                  setCurrencies(toggleStripeCurrency(currencies, c, e.target.checked));
+                  onProblem(null);
+                }}
+              />
+              {c}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <div className={clsx("hint", problem && "error")} role={problem ? "alert" : undefined}>
+        {problem ??
+          "It goes straight to your Stripe account, and this inbox cannot see it: when a payment arrives, record it on the order. Agents are told to confirm your handle, the amount and the currency first."}
+      </div>
+      <div className="pay-stripe-actions">
+        <button
+          type="button"
+          className="btn btn-primary btn-sm"
+          disabled={!changed || typed.trim() === ""}
+          onClick={submit}
+        >
+          {on ? "Save" : "Take Stripe Pay"}
+        </button>
+        {on && (
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => {
+              setTyped("");
+              onSave({ to: "", currencies: [] });
+            }}
+          >
+            Stop taking Stripe Pay
+          </button>
+        )}
+      </div>
     </fieldset>
   );
 }

@@ -583,7 +583,9 @@ export async function applySetupPlan(
   }
   // ---- how the business is paid ----
   if (plan.payments) {
-    const wanted = sortPaymentTokens(plan.payments.accepted);
+    // Never Stripe Pay (ADR-045): it is paid to the owner's own Stripe handle, which only the owner gives, never one
+    // read from a site. A plan that names it is applied without it.
+    const wanted = sortPaymentTokens(plan.payments.accepted).filter((t) => t !== "stripe_pay");
     if (!same(wanted, sortPaymentTokens(state.settings.payments.accepted))) {
       settingsPatch.payments = { accepted: wanted };
       said.push(

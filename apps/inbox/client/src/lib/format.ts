@@ -442,6 +442,7 @@ const METHOD_NAMES: Readonly<Record<string, string>> = {
   multibanco: "Multibanco",
   blik: "BLIK",
   twint: "TWINT",
+  stripe_pay: "Stripe Pay",
 };
 
 export function methodName(method: string): string {

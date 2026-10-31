@@ -1,4 +1,8 @@
+import { z } from "zod";
 import vocabulary from "../vocab/payments.json" with { type: "json" };
+import { STRIPE_PAY_CURRENCIES, stripePayRecipient } from "./stripe-pay";
+
+export { isStripePayRecipient, STRIPE_PAY_CURRENCIES, stripePayRecipient } from "./stripe-pay";
 
 /**
  * The payments vocabulary (`vocab/payments.json`, `docs/protocol/network.md` §4.10): the tokens a business's profile
@@ -86,4 +90,60 @@ export function publishedPayments(tokens: readonly string[]): string[] {
 export function sortPaymentTokens(tokens: readonly string[]): string[] {
   const set = new Set(tokens.filter((t) => known.has(t)));
   return PAYMENT_TOKENS.filter((t) => set.has(t));
+}
+
+/* --- paid to an address of the business's own (spec 0.13) ------------------------------------------------------ */
+
+/**
+ * The ways to pay that a payer sends to an address the business names (`profile.pay_to`): today only `stripe_pay`,
+ * Stripe's business-to-business transfer to a Stripe profile. The money goes from the payer's Stripe account to the
+ * business's; nothing between them sees it, so only the business can say it arrived.
+ */
+export const PAY_TO_METHODS: readonly string[] = ["stripe_pay"];
+
+/** One way to pay sent to an address of the business's own: the token, the address, and the currencies it takes there. */
+export const payToSchema = z.object({
+  method: z
+    .string()
+    .regex(/^[a-z0-9_]{2,40}$/)
+    .describe("A token of vocab/payments.json that is paid to an address (PAY_TO_METHODS): stripe_pay."),
+  to: z
+    .string()
+    .min(1)
+    .max(120)
+    .describe("Where to send it: for stripe_pay, a Stripe profile handle (@acme) or profile network id (profile_…)."),
+  currencies: z
+    .array(z.string().regex(/^[A-Z]{3,4}$/))
+    .min(1)
+    .max(8)
+    .describe("What it takes there: for stripe_pay, USD, GBP or USDC (same-currency transfers)."),
+});
+export type PayTo = z.infer<typeof payToSchema>;
+
+/** The most `pay_to` entries a profile names, and a reader reads. */
+export const MAX_PAY_TO = 8;
+
+/**
+ * What a reader keeps of a profile's `pay_to` (`vectors/profile.json`): an entry whose method it knows
+ * (`PAY_TO_METHODS`) and the profile's `payments` name too, once per method, with its address in that method's shape
+ * (`stripePayRecipient`) and the currencies of it the method takes (any capitals), in the method's order. An entry
+ * with no such currency, or anything else, is dropped alone; nothing is read past the first eight.
+ */
+export function readPayTo(entries: unknown, payments: readonly string[] | undefined): PayTo[] {
+  if (!Array.isArray(entries)) return [];
+  const out: PayTo[] = [];
+  for (const e of entries.slice(0, MAX_PAY_TO)) {
+    if (typeof e !== "object" || e === null) continue;
+    const { method, to, currencies } = e as Record<string, unknown>;
+    if (typeof method !== "string" || !PAY_TO_METHODS.includes(method) || !payments?.includes(method)) continue;
+    if (out.some((k) => k.method === method) || typeof to !== "string") continue;
+    const address = stripePayRecipient(to);
+    if (!address || !Array.isArray(currencies)) continue;
+    const named = new Set(
+      currencies.filter((c): c is string => typeof c === "string").map((c) => c.trim().toUpperCase()),
+    );
+    const kept = STRIPE_PAY_CURRENCIES.filter((c) => named.has(c));
+    if (kept.length) out.push({ method, to: address, currencies: kept });
+  }
+  return out;
 }

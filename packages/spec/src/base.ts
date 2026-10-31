@@ -1,7 +1,7 @@
 import { z } from "zod";
 import lodging from "../vocab/lodging.json" with { type: "json" };
 import { DOOR_PLATFORM_ID, doorPlatform, doorPlatformHolds, ownSiteDomain } from "./door-platforms";
-import { MAX_PROFILE_PAYMENTS } from "./payments";
+import { MAX_PAY_TO, MAX_PROFILE_PAYMENTS, payToSchema } from "./payments";
 
 /**
  * The discovery manifest an instance publishes at MANIFEST_PATH. Tiny on purpose: it says what
@@ -145,6 +145,13 @@ export const profileSchema = z.object({
     .optional()
     .describe(
       "How a customer or their agent can pay: tokens of vocab/payments.json (card, apple_pay, paypal, pix…). A network keeps the tokens it knows and drops the rest alone; a card brand (visa) says card too.",
+    ),
+  pay_to: z
+    .array(payToSchema)
+    .max(MAX_PAY_TO)
+    .optional()
+    .describe(
+      "Spec 0.13: where a payer sends a way to pay that goes to an address of the business's own, one entry per method its payments name: stripe_pay to a Stripe profile handle (@acme) or profile id (profile_…), with the currencies it takes there (USD, GBP, USDC). Nothing checks such a payment on its way: the business says when it arrived. A reader keeps what readPayTo keeps.",
     ),
   lodging: profileLodgingSchema
     .optional()

@@ -5,7 +5,7 @@ import {
   doorPlace,
   type KitchenProfile,
   normaliseGtin,
-  publishedPayments,
+  type PayTo,
   type WorkProfile,
 } from "@surfingdog/spec";
 import { and, desc, eq, gt, inArray, isNotNull, lt, or, type SQL, sql } from "drizzle-orm";
@@ -79,6 +79,7 @@ import {
 } from "../settings/guard";
 import { mergeSettings, patchPaths } from "../settings/merge";
 import { prepareSettingsWrite, syncLegacyPair } from "../settings/patch";
+import { settingsPayments, settingsPayTo, stripePayOf } from "../settings/payments";
 import {
   checkHostPolicy,
   forcedPatch,
@@ -190,6 +191,11 @@ export interface BusinessProfile {
    * publishes it: tokens of the payments vocabulary, with card for a card brand; absent when none is ticked.
    */
   readonly payments?: readonly string[] | undefined;
+  /**
+   * Where a payer sends a way to pay that goes to an address of the business's own (spec 0.13, ADR-045): Stripe Pay
+   * to its Stripe profile handle, with the currencies it takes there. Absent while none is set.
+   */
+  readonly pay_to?: readonly PayTo[] | undefined;
   /** How a trade takes work (ADR-039, spec `workProfileSchema`): absent for a business that set none of it. */
   readonly work?: WorkProfile | undefined;
   /** How a kitchen takes orders and tables (ADR-040, spec `kitchenProfileSchema`): absent when it does not. */
@@ -854,7 +860,7 @@ export class Capabilities {
       },
       ...(s.commerce.legal.legalName.trim() ? { trader: traderOf(s.commerce.legal) } : {}),
       ...(elsewhere.length ? { doors_elsewhere: elsewhere } : {}),
-      ...this.declaredPayments(s.payments.accepted),
+      ...this.declaredPayments(s.payments),
       // How a trade takes work (ADR-039): where it goes, emergencies, call-out. Never the area's base.
       ...(itemTypes.includes("quote_request") && workProfile(s) ? { work: workProfile(s) ?? undefined } : {}),
       ...(await this.kitchenProfileOf()),
@@ -862,12 +868,15 @@ export class Capabilities {
   }
 
   /**
-   * What the profile says the business takes: what the owner declared. Assistants' payments at the
-   * inbox's own door (ADR-042) add nothing here: `acp_delegated` means ACP's checkout, which an ACP
-   * platform would look for and not find, and the vocabulary has no token for this door yet.
+   * What the profile says the business takes: what the owner declared, with Stripe Pay and where to send it
+   * (`pay_to`, ADR-045) while it is set. Assistants' payments at the inbox's own door (ADR-042) add nothing
+   * here: `acp_delegated` means ACP's checkout, which an ACP platform would look for and not find, and the
+   * vocabulary has no token for this door yet.
    */
-  private declaredPayments(accepted: readonly string[]): { payments?: string[] } {
-    return accepted.length ? { payments: publishedPayments(accepted) } : {};
+  private declaredPayments(p: Settings["payments"]): { payments?: string[]; pay_to?: PayTo[] } {
+    const payments = settingsPayments(p);
+    const payTo = settingsPayTo(p);
+    return { ...(payments.length ? { payments } : {}), ...(payTo.length ? { pay_to: payTo } : {}) };
   }
 
   /** The profile's `kitchen`, when the business takes orders for a time or books tables (ADR-040). */
@@ -1250,9 +1259,15 @@ export class Capabilities {
     const customerView = audience ? await this.customer.present(item, audience, nowOf(c)) : null;
     const view = customerView ?? viewFor(item, permissionKind(caller), undefined, undefined, await this.ownerClock());
     // An order's payment, and how its assistant may pay it directly (ADR-042).
+    // Stripe Pay to the business's own profile (ADR-045) is offered beside them, as the owner set it.
     const payment =
       customerView && item.type === "order"
-        ? await this.connectors.agentPay.paymentOf(row.id, customerView.agreed?.terms_sha ?? null, nowOf(c))
+        ? await this.connectors.agentPay.paymentOf(
+            row.id,
+            customerView.agreed?.terms_sha ?? null,
+            nowOf(c),
+            stripePayOf((await readSettings(this.db)).payments),
+          )
         : null;
     return {
       ...view,

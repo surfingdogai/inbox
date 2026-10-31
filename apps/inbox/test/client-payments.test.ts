@@ -7,8 +7,13 @@ import {
   PAYMENT_ORDER,
   paymentGroupsFor,
   paymentName,
+  STRIPE_PAY,
   samePayments,
+  sameStripePay,
+  stripePayStart,
+  stripePayTo,
   togglePayment,
+  toggleStripeCurrency,
   withCard,
 } from "../client/src/lib/payments";
 
@@ -21,8 +26,10 @@ describe("the ways to pay the owner picks from", () => {
   it("offer every way a person pays, once each, and no agent's way", () => {
     const offered = PAYMENT_GROUPS.flatMap((g) => g.tokens);
     expect(new Set(offered).size).toBe(offered.length);
-    const person = [...PAYMENTS_VOCABULARY.methods, ...PAYMENTS_VOCABULARY.wallets];
+    // Stripe Pay is set with the business's own handle, below the ticks, never as one.
+    const person = [...PAYMENTS_VOCABULARY.methods, ...PAYMENTS_VOCABULARY.wallets].filter((t) => t !== STRIPE_PAY);
     expect([...offered].sort()).toEqual([...person].sort());
+    expect(offered).not.toContain("stripe_pay");
     for (const t of PAYMENTS_VOCABULARY.agent) expect(offered, t).not.toContain(t);
     expect(PAYMENT_ORDER).toEqual(PAYMENT_TOKENS);
     for (const t of offered) expect(paymentName(t), t).toBe(paymentLabel(t));
@@ -77,5 +84,29 @@ describe("the ways to pay the owner picks from", () => {
     expect(togglePayment(["x402"], "cash", true)).toEqual(["cash", "x402"]);
     expect(samePayments(["card", "cash"], ["cash", "card"])).toBe(true);
     expect(samePayments(["card"], ["card", "cash"])).toBe(false);
+  });
+});
+
+describe("Stripe Pay, as the owner sets it", () => {
+  it("takes a handle or a profile id as the settings keep it, and starts from the business's own currency", () => {
+    expect(stripePayTo("  @Harbour ")).toBe("@harbour");
+    expect(stripePayTo("harbour")).toBe("@harbour");
+    expect(stripePayTo("profile_61TpVxQ2bC")).toBe("profile_61TpVxQ2bC");
+    expect(stripePayTo("harbour coffee")).toBeNull();
+    expect(stripePayTo("https://stripe.com/@harbour")).toBeNull();
+    // What the tab saves is what the settings take.
+    const to = stripePayTo("@Harbour") ?? "";
+    expect(settingsSchema.parse({ payments: { stripePay: { to, currencies: ["GBP"] } } }).payments.stripePay.to).toBe(
+      "@harbour",
+    );
+    expect(stripePayStart("GBP")).toEqual(["GBP"]);
+    expect(stripePayStart("usd")).toEqual(["USD"]);
+    expect(stripePayStart("EUR")).toEqual([]);
+    expect(toggleStripeCurrency(["USDC"], "GBP", true)).toEqual(["GBP", "USDC"]);
+    expect(toggleStripeCurrency(["GBP", "USDC"], "GBP", false)).toEqual(["USDC"]);
+    expect(sameStripePay({ to: "@a", currencies: ["GBP", "USD"] }, { to: "@a", currencies: ["USD", "GBP"] })).toBe(
+      true,
+    );
+    expect(sameStripePay({ to: "@a", currencies: ["GBP"] }, { to: "@b", currencies: ["GBP"] })).toBe(false);
   });
 });

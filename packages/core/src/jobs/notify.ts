@@ -13,6 +13,7 @@ import { machines } from "../machine/tables";
 import { lawOf } from "../negotiation/holidays";
 import { items, parties } from "../schema/tables";
 import type { SecretBox } from "../secrets/box";
+import { stripePayOf } from "../settings/payments";
 import { readSettings, type Settings } from "../settings/schema";
 import { gateOf, holdsBack } from "../spam/screen";
 import { stayLang } from "../stays/copy";
@@ -431,6 +432,7 @@ async function customerMail(
     trader: o.settings.commerce.legal,
     refund,
     returns: { respondHours: o.settings.returns.respondHours, postage: o.settings.returns.postage },
+    stripePay: stripePayOf(o.settings.payments),
     now: o.now,
   });
   // A payment is asked for in one email (ADR-023). Every email is written from the order as it stands

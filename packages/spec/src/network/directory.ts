@@ -335,6 +335,17 @@ export const payWithSchema = z.object({
       "Where the evidence is: registration, manifest, schema_org, ucp, acp, door, file or page today. A later network may add one: read a via you do not know as evidence of its src.",
     ),
   url: z.url().optional().describe("The page, file, profile, manifest or door the evidence is at."),
+  to: z
+    .string()
+    .max(120)
+    .optional()
+    .describe(
+      "Spec 0.13: where to send it, for a way paid to an address the business declared in its manifest (profile.pay_to): a Stripe profile handle (@acme) or profile id for stripe_pay. Never read from a website.",
+    ),
+  currencies: z
+    .array(z.string())
+    .optional()
+    .describe("Spec 0.13: the currencies it takes at that address (stripe_pay: USD, GBP, USDC)."),
 });
 export type PayWith = z.infer<typeof payWithSchema>;
 

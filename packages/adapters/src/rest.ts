@@ -393,7 +393,7 @@ export function publicRest(caps: Capabilities, opts: { readonly baseUrl?: string
       tags: ["public"],
       summary: "Status of your item",
       description:
-        "For the customer (an access token, or a pass the item recognises): the item in the business's words and language, with offer (what the business proposed and waits for you to answer, and its terms_sha; kind change for a change it asks for to a confirmed booking or an accepted order), agreed, requested_change (a change your person asked for that the business has not answered), waiting_on, next, a six-character reference, and thread: the business's replies and the customer's messages, never its internal notes.",
+        "For the customer (an access token, or a pass the item recognises): the item in the business's words and language, with offer (what the business proposed and waits for you to answer, and its terms_sha; kind change for a change it asks for to a confirmed booking or an accepted order), agreed, requested_change (a change your person asked for that the business has not answered), waiting_on, next, a six-character reference, and thread: the business's replies and the customer's messages, never its internal notes. An accepted order carries payment: due, on its way or paid, the business's link, payment.agent when your platform can pay it directly, and payment.pay_to when the business takes Stripe Pay to its Stripe profile (the handle, the exact amount in its currency, the reference): confirm the recipient, the amount and the currency with your person before sending; nothing here sees that transfer, and the business marks the order paid once it arrives.",
       responses: json("Item", R.customerItemViewSchema),
     }),
     async (c) => {

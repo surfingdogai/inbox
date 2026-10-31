@@ -667,6 +667,14 @@ optional apart from `name`: `description` (500 characters), `categories`, `langu
     `pix`…). A network keeps the tokens it knows, reads a name its synonyms list as its token, drops
     anything else alone, adds `card` for a card brand (`visa`, `mastercard`, `amex`), and shows them as
     declared by the business (§4.10).
+- Spec 0.13 adds `pay_to` (31 October 2026): where a payer sends a way to pay that goes to an address of the
+  business's own, at most 8 entries `{"method": "stripe_pay", "to": "@acme", "currencies": ["GBP", "USD"]}`.
+  `stripe_pay` is Stripe Pay, a transfer between Stripe accounts to a Stripe profile handle (`@` and 1 to 50
+  lower-case letters, digits, `_`, `.` or `-`, starting and ending with a letter or digit) or profile network id
+  (`profile_…`), in USD, GBP or USDC. A network keeps an entry only for a method it knows that `payments` names too,
+  once per method, with its address read as `readPayTo` reads it (a handle in lower case, the `@` added) and the
+  currencies of it the method takes; it drops anything else alone. Nothing checks such a payment on its way: the
+  business says when it arrived. A network never reads an address from a website.
 
 The manifest may also carry `claims`, `{"<network host>": "<token>"}`: how an inbox proves to a
 network that the manifest is its own when it registers or claims a listing there (§4.12).
@@ -1010,10 +1018,12 @@ has `place`; H3 cells are not part of 0.2. Hours and their zone are as §4.3 say
 zone is left out of `open_now`. `languages` are BCP 47 tags; the language of its pages counts, as
 `probably`. `currencies` are ISO 4217; `price_band` is 1 to 4.
 
-**Payments.** [`vocab/payments.json`](../../packages/spec/vocab/payments.json) (version 2) lists every
+**Payments.** [`vocab/payments.json`](../../packages/spec/vocab/payments.json) (version 3) lists every
 token with its English label: `methods` and `wallets` are how a person pays, `agent` the ways an agent
 itself pays at a door. A token is never removed or renamed. `accepts.pay_with` gives each of a listing's
-`pay` tokens as `{token, label, src, via, url?}`, with the strongest evidence the network has for it:
+`pay` tokens as `{token, label, src, via, url?, to?, currencies?}`, with the strongest evidence the network has
+for it; `to` and `currencies` (spec 0.13) are where to send a way paid to an address and what it takes there, only
+as a member's manifest declares them (`profile.pay_to`, §4.6):
 
 - `declared`, when the business said so itself: its registration (`via: registration`), its inbox's
   manifest (`manifest`, `profile.payments`), its own structured data (`schema_org`, `paymentAccepted`),

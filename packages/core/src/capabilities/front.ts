@@ -66,9 +66,14 @@ const PERSON_PAYMENTS = new Set([...PAYMENTS_VOCABULARY.methods, ...PAYMENTS_VOC
 
 /**
  * How a visitor can pay, in the business's voice and the visitor's language (`settings.payments`, as published): the
- * ways a person pays, each card brand inside card, general words in lower case. "" when the owner ticked none.
+ * ways a person pays, each card brand inside card, Stripe Pay with its handle (ADR-045), general words in lower case.
+ * "" when the owner ticked none.
  */
-export function payLine(payments: readonly string[] | undefined, lang: CustomerLang): string {
+export function payLine(
+  payments: readonly string[] | undefined,
+  lang: CustomerLang,
+  payTo: readonly { readonly method: string; readonly to: string }[] = [],
+): string {
   const f = frontCopy(lang);
   const shown = (payments ?? []).filter((t) => PERSON_PAYMENTS.has(t));
   const brands = shown.filter((t) => CARD_BRANDS.includes(t)).map(paymentLabel);
@@ -77,6 +82,8 @@ export function payLine(payments: readonly string[] | undefined, lang: CustomerL
     .filter((t) => !(card && CARD_BRANDS.includes(t)))
     .map((t) => {
       const name = f.payNames[t] ?? paymentLabel(t);
+      const to = payTo.find((p) => p.method === t)?.to;
+      if (to) return `${name} (${to})`;
       return t === "card" && brands.length ? `${name} (${brands.join(", ")})` : name;
     });
   return names.length ? f.payWith(names) : "";
@@ -147,7 +154,7 @@ export async function frontHome(caps: Capabilities, lang: CustomerLang): Promise
     links: { lead: sections.length ? f.or : undefined, items: ask },
     nav: [{ label: f.signIn, href: "/login" }],
     // How a visitor can pay, as the owner ticked it: one quiet line under the business's name.
-    help: payLine(profile.payments, lang),
+    help: payLine(profile.payments, lang, profile.pay_to),
     ...(jsonLd ? { jsonLd } : {}),
   };
 }

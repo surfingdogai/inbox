@@ -54,3 +54,10 @@ export {
   timeDeadline,
 } from "./offer";
 export type { CustomerPage, LinkActResult, PageField, PageForm, PageLink, PageSection } from "./page";
+export {
+  type PayToOffer,
+  type StripePaySetting,
+  stripePayLine,
+  stripePayOffer,
+  stripePayWords,
+} from "./stripe-pay";
