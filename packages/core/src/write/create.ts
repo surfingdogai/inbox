@@ -602,7 +602,7 @@ async function replay(
   }
   const stored = hit.response as { view: ItemView; accessToken?: string };
   if (!stored.accessToken) return { view: stored.view, replayed: true };
-  if (recoverable(caller, hit) || (await sameSigner(db, caller, stored.view.item.id))) {
+  if ((await recoverable(db, caller, hit)) || (await sameSigner(db, caller, stored.view.item.id))) {
     return { view: stored.view, accessToken: stored.accessToken, replayed: true };
   }
   return { view: stored.view, accessTokenWithheld: true, replayed: true };
@@ -611,13 +611,20 @@ async function replay(
 /**
  * Whether a retry proves it is the request that made the item by its key alone (ADR-043 §1): a random
  * key, in the scope it was first sent in (the lookup already holds it to that), within its lifetime,
- * and not carried by a network.
+ * not carried by a network, and used by nobody else. A key drawn at random never turns up under two
+ * scopes; one that does was copied (an example UUID a model wrote from memory), so others hold it too.
  */
-function recoverable(caller: Caller, hit: { createdAt?: number | undefined }): boolean {
-  const key = caller.idempotency?.key;
-  if (!key || caller.viaNetwork || !strongIdempotencyKey(key)) return false;
+async function recoverable(db: Db, caller: Caller, hit: { createdAt?: number | undefined }): Promise<boolean> {
+  const idem = caller.idempotency;
+  if (!idem?.key || caller.viaNetwork || !strongIdempotencyKey(idem.key)) return false;
   const at = Number(hit.createdAt);
-  return Number.isFinite(at) && nowOf(caller) - at < IDEMPOTENCY_TTL_MS;
+  if (!Number.isFinite(at) || nowOf(caller) - at >= IDEMPOTENCY_TTL_MS) return false;
+  const { rows } = await db.client.query({
+    sql: "SELECT 1 FROM idempotency_keys WHERE key = ? AND scope <> ? LIMIT 1",
+    params: [idem.key, idem.scope],
+    method: "all",
+  });
+  return rows.length === 0;
 }
 
 /**

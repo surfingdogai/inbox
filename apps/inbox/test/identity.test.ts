@@ -183,7 +183,7 @@ describe("people at the doors", () => {
     expect(again.content[0]?.text ?? "").not.toContain(pass);
     // And it is told so, in words as well: the token is gone, and what to tell the person.
     expect((again.structuredContent as { accessTokenWithheld?: boolean }).accessTokenWithheld).toBe(true);
-    expect(again.content[0]?.text ?? "").toContain("This key was not random enough to prove the retry is yours");
+    expect(again.content[0]?.text ?? "").toContain("This retry could not prove it is yours");
     expect(s.net.calls.filter((c) => c.path === "/v1/persons")).toHaveLength(1);
   });
 

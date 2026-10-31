@@ -241,6 +241,24 @@ describe("a retry whose idempotency key is a random secret (ADR-043 §1)", () =>
     expect(JSON.stringify(third)).not.toContain(first.accessToken as string);
   });
 
+  it("never gives it back for a key someone else sent too: a random one never turns up twice", async () => {
+    const s = await setup();
+    const input = { ...s.input, idempotency_key: RANDOM_KEY };
+    const first = await s.caps.createBooking(shared(), input);
+    // Another caller sends the same key: a copied one, as a model writes an example UUID from memory.
+    const elsewhere: Caller = {
+      ...shared(),
+      actor: { kind: "customer_agent", id: "anon:fedcba9876543210", channel: "mcp_public" },
+    };
+    await s.caps.createBooking(elsewhere, input);
+    const again = await s.caps.createBooking(shared(), input);
+    expect(again.replayed).toBe(true);
+    expect(again.view.item.id).toBe(first.view.item.id);
+    expect(again.accessToken).toBeUndefined();
+    expect(again.accessTokenWithheld).toBe(true);
+    expect(JSON.stringify(again)).not.toContain(first.accessToken as string);
+  });
+
   it("never gives it to a request a network carried, nor after the key's lifetime", async () => {
     let s = await setup();
     const input = { ...s.input, idempotency_key: RANDOM_KEY };
@@ -290,9 +308,16 @@ describe("what counts as a random idempotency key", () => {
       "0123456789abcdef0123456789abcdef",
       "deadbeefdeadbeefdeadbeefdeadbeef",
       "9b2e41f07c3d8a65e1f40b9d27c6a3e", // 31 digits
-      // The examples every manual prints.
+      // The examples every manual prints, and the ones the API tools put in their forms.
       "550e8400-e29b-41d4-a716-446655440000",
       "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+      "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+      "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed",
+      "d290f1ee-6c54-4b01-90e6-d701748f0851",
+      "A1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D",
+      // Every other digit counting.
+      "c1d2e3f4-a5b6-4c7d-8e9f-a0b1c2d3e4f5",
     ]) {
       expect(strongIdempotencyKey(key), key).toBe(false);
     }

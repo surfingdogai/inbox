@@ -126,8 +126,25 @@ export async function once<T>(
 const UUID_V4 = /[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/gi;
 /** Thirty-two hexadecimal digits or more, in one run: `openssl rand -hex 16`. */
 const HEX_RUN = /[0-9a-f]{32,}/gi;
-/** Example UUIDs from the manuals and the encyclopaedias: random once, copied by everyone since. */
-const PRINTED = new Set(["550e8400e29b41d4a716446655440000", "f47ac10b58cc4372a5670e02b2c3d479"]);
+/**
+ * Example UUIDs from the manuals, the encyclopaedias and the API tools' defaults: random once, copied
+ * by everyone since, and what a model with no random-number tool often writes from memory.
+ */
+const PRINTED = new Set(
+  [
+    "550e8400-e29b-41d4-a716-446655440000",
+    "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+    "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+    "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed",
+    "d290f1ee-6c54-4b01-90e6-d701748f0851",
+    "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+    "de305d54-75b4-431b-adb2-eb6b9e546014",
+    "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "110ec58a-a0f2-4ac4-8393-c866d813b8d1",
+    "c9bf9e57-1685-4c89-bafb-ff5af830be8a",
+  ].map((u) => u.replaceAll("-", "")),
+);
 
 /**
  * Whether an idempotency key is a secret only its sender could send again (ADR-043 §1): it carries
@@ -135,9 +152,10 @@ const PRINTED = new Set(["550e8400e29b41d4a716446655440000", "f47ac10b58cc4372a5
  * material. A key like `booking-1`, a counter, a date, a word or a time-based UUID can be sent by
  * anyone who guesses it; a random one only by whoever made it. Nothing here proves it was drawn at
  * random, so what is plainly not random is refused too: one digit over and over, eight digits counting
- * up or down, a short part repeated, a UUID every manual prints. A key made from the request itself
- * (a hash of its body) looks random and is not: anyone who knows the request makes the same one, which
- * is why the docs ask for a fresh random key, never one derived from what is sent.
+ * up or down, or every other digit counting (`a1b2c3d4`), a short part repeated, a UUID every manual
+ * prints. A key made from the request itself (a hash of its body) looks random and is not: anyone who
+ * knows the request makes the same one, which is why the docs ask for a fresh random key, never one
+ * derived from what is sent.
  */
 export function strongIdempotencyKey(key: string): boolean {
   if (key.length > 200) return false;
@@ -160,6 +178,17 @@ function randomLooking(hex: string): boolean {
     up = step === 1 ? up + 1 : 1;
     down = step === -1 ? down + 1 : 1;
     if (same >= 8 || up >= 8 || down >= 8) return false;
+  }
+  // Every other digit counting up or down through six digits (`a1b2c3d4e5f6`).
+  for (let start = 0; start < 2; start++) {
+    let run = 0;
+    let last = 0;
+    for (let i = start + 2; i < hex.length; i += 2) {
+      const step = Number.parseInt(hex[i] as string, 16) - Number.parseInt(hex[i - 2] as string, 16);
+      run = step !== 0 && Math.abs(step) === 1 ? (step === last ? run + 1 : 1) : 0;
+      last = step;
+      if (run >= 5) return false;
+    }
   }
   // A short part repeated: some period of at most half the length repeats all the way through.
   for (let period = 1; period <= hex.length / 2; period++) {
