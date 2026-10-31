@@ -26,6 +26,8 @@ export const CATALOGUE_ITEMS_MAX = 50;
 /** A product's name as a network indexes it, and its description as the feed carries it, at most. */
 export const CATALOGUE_NAME_MAX = 150;
 export const CATALOGUE_DESCRIPTION_MAX = 1000;
+/** The most identical units one offer's `multipack` may say it is (spec 0.12.1). */
+export const CATALOGUE_MULTIPACK_MAX = 10000;
 
 const isoTime = z.iso.datetime({ offset: true });
 
@@ -53,6 +55,16 @@ export const catalogueListedItemSchema = z.object({
       "Its barcode as 14 digits, check digit verified and never a shop's own code or a coupon (vectors/gtin.json), or null.",
     ),
   no_gtin: z.boolean().describe("The owner says it has no barcode (bread, a print, a repair)."),
+  multipack: z
+    .int()
+    .min(1)
+    .max(CATALOGUE_MULTIPACK_MAX)
+    .optional()
+    .describe(
+      "Optional (spec 0.12.1): this offer is this many identical units of one item, the one its gtin names when it has one, sold together at its price. " +
+        "2 to 10,000 is a pack; absent or 1, one. It describes the offer: the gtin still names the item, so a case's own " +
+        "barcode with multipack 1 is one case.",
+    ),
   brand: z.string().max(70).nullable(),
   mpn: z.string().max(70).nullable().describe("The maker's part number, as the business gave it."),
   condition: catalogueConditionSchema,

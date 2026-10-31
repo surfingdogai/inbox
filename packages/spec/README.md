@@ -146,6 +146,13 @@ or network:
   rules (`tableRulesSchema`). Schemas: `allergen-info`, `fulfil`, `order-progress`, `kitchen-profile`,
   `table-rules`, `mcp-get-menu-input`, `mcp-get-menu-output`, `mcp-list-order-slots-input`,
   `mcp-list-order-slots-output`.
+- 0.12.1 (optional for a network and for an inbox): a catalogue offer may be a pack (protocol §4.18). A listed
+  item's optional `multipack` (`CATALOGUE_MULTIPACK_MAX`, in `schemas/catalogue-page.json` and
+  `schemas/catalogue-items.json`) is how many identical units of one item, the one its `gtin` names, the offer
+  is: 2 to 10,000 a pack, absent or 1 one. The barcode still names the item, so twelve bottles sold as a case
+  under the bottle's barcode are `multipack` 12, and a case's own barcode with `multipack` 1 is one case. Two
+  offers are one product only with the same barcode and the same `multipack`. A 0.12.0 reader ignores it; a
+  feed without it reads as before.
 
 ## Stays (0.11)
 

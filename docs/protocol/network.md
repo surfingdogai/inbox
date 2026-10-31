@@ -1776,6 +1776,14 @@ by a key the business's own manifest publishes, and `iss` names the business's d
   never a count. `gtin` is 14 digits, only when it reads as a product's barcode (below); `url` only when the
   page is on the business's own site; `image_url` is a link, never a copy. `hash` is the first 16 hex digits
   of SHA-256 over the item's canonical JSON (keys sorted), without `updated_at` and `hash`.
+- `multipack` (spec 0.12.1, optional): the offer is that many identical units of one item, the one its
+  `gtin` names when it has one, sold together at its `price`. An integer: 2 to 10,000 is a pack; absent or
+  `1` is one, and a writer may leave it out for one. It describes the offer, and the barcode still describes
+  the item it names: twelve bottles sold only as a case, under the bottle's own barcode (indicator digit 0),
+  are `"multipack": 12`; a case's own barcode (indicator 1 to 8) with `"multipack": 1` is one case. A
+  reader that does not know it ignores it, as it ignores any member it does not know; one that knows it
+  keeps a pack apart from single units of the same barcode (below), and may give its price per unit, the
+  price divided by `multipack`. This inbox has no setting for it yet, so its own feed does not carry it.
 - `catalogue` says what a reader compares: the listed `count`, the latest change, whether prices include
   tax (`null`: not said), and `rev`, which moves with any write to any product and with any of these.
 - Never in it: where a product came from, a source's own ids, a location, a barcode that did not pass,
@@ -1819,7 +1827,8 @@ spreadsheet or a program wrote as a number (`4.00638E+12`, `3017620422003.0`) re
 (`02`, `04`, `2`, an RCN-8, indicator 9) and a coupon (`05`, `980`–`984`, `99`) are never a product's
 barcode, and are never published. A magazine's issue (`977`) is `serial`, a book (`978`, `979`) `book`,
 indicator digits 1 to 8 a case or pack of several. Two offers are one product only when their barcodes
-are the same 14 digits; a product with no barcode is its business's own.
+are the same 14 digits and their `multipack` is the same (absent and `1` alike): a pack of twelve and a
+single unit of one barcode are two products, never one list. A product with no barcode is its business's own.
 
 ### 4.19 Stays (spec 0.11, MAY)
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  CATALOGUE_MULTIPACK_MAX,
   CATALOGUE_SIGNATURE_TYP,
   catalogueItemsSchema,
   cataloguePageSchema,
@@ -7,6 +8,7 @@ import {
   catalogueSwitchResponseSchema,
   isPlaceholderTitle,
   JSON_SCHEMAS,
+  jsonSchemaOf,
   manifestSchema,
   pingCatalogueAnswerSchema,
   pingRequestSchema,
@@ -58,6 +60,41 @@ describe("a catalogue page", () => {
     ]) {
       expect(cataloguePageSchema.safeParse({ ...page, items: [bad] }).success, JSON.stringify(bad)).toBe(false);
     }
+  });
+
+  it("may say an offer is a pack of identical units (0.12.1); absent or 1 is one, and anything else is refused", () => {
+    // Absent: one, as every feed before 0.12.1 says it.
+    expect(cataloguePageSchema.parse(page).items[0]).not.toHaveProperty("multipack");
+    // A pack of twelve under the single unit's barcode, and a case's own barcode as one case.
+    for (const item of [
+      { ...listed, multipack: 12 },
+      { ...listed, gtin: "19506000134359", multipack: 1 },
+      { ...listed, gtin: null, multipack: 6 },
+      { ...listed, multipack: 10000 },
+    ]) {
+      expect(cataloguePageSchema.parse({ ...page, items: [item] }).items[0], JSON.stringify(item)).toEqual(item);
+      expect(catalogueItemsSchema.parse({ items: [item], missing: [] }).items[0]).toEqual(item);
+    }
+    for (const multipack of [0, -1, 2.5, 10001, "12", null]) {
+      expect(
+        cataloguePageSchema.safeParse({ ...page, items: [{ ...listed, multipack }] }).success,
+        String(multipack),
+      ).toBe(false);
+      expect(catalogueItemsSchema.safeParse({ items: [{ ...listed, multipack }], missing: [] }).success).toBe(false);
+    }
+    expect(CATALOGUE_MULTIPACK_MAX).toBe(10000);
+    // Both JSON Schemas carry it, optional: a reader on 0.12.0 sees one member more and ignores it.
+    for (const name of ["catalogue-page", "catalogue-items"]) {
+      const item = (jsonSchemaOf(name) as { properties: { items: { items: { oneOf: Record<string, unknown>[] } } } })
+        .properties.items.items.oneOf[0] as { properties: Record<string, unknown>; required: string[] };
+      expect(item.properties.multipack, name).toMatchObject({ type: "integer", minimum: 1, maximum: 10000 });
+      expect(item.required, name).not.toContain("multipack");
+    }
+  });
+
+  it("ignores a member it does not know, as before", () => {
+    const parsed = cataloguePageSchema.parse({ ...page, items: [{ ...listed, pack_of: 12 }] });
+    expect(parsed.items[0]).toEqual(listed);
   });
 
   it("knows a template's sample names, however they are typed", () => {

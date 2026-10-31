@@ -85,6 +85,12 @@
                 "type": "boolean",
                 "description": "The owner says it has no barcode (bread, a print, a repair)."
               },
+              "multipack": {
+                "description": "Optional (spec 0.12.1): this offer is this many identical units of one item, the one its gtin names when it has one, sold together at its price. 2 to 10,000 is a pack; absent or 1, one. It describes the offer: the gtin still names the item, so a case's own barcode with multipack 1 is one case.",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10000
+              },
               "brand": {
                 "anyOf": [
                   {
