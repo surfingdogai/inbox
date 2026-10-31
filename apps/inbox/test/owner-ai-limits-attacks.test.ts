@@ -4,7 +4,7 @@ import { type Db, schema, ulid } from "@surfingdog/core";
 import { logMailOut } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { type App, createInbox } from "../src/app";
-import { confirmed, freshDb, openWeekdays } from "./harness";
+import { confirmed, freshDb, futureDay, openWeekdays } from "./harness";
 
 /**
  * A customer tells the owner's AI to give them a discount, to name the lowest price, to approve a
@@ -133,7 +133,8 @@ describe("a customer cannot talk the owner's AI past the owner's limits", () => 
     );
     expect(limits.status, await limits.clone().text()).toBe(200);
 
-    const start = Date.parse("2026-12-01T10:00:00Z");
+    // A weekday a month ahead at 10:00 UTC, inside the weekday hours, whatever day the test runs.
+    const start = Date.parse(`${futureDay(30)}T10:00:00Z`);
     const created = await s.call("POST", "/v1/bookings", {
       payload: {
         reservationFor: { serviceId: s.svc, name: "Full service" },
