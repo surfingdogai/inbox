@@ -126,3 +126,5 @@ debug build is debuggable: never use it as your everyday app.
 - `src/lib/native.ts` and `android/app/src/main/java/ai/surfingdog/inbox/`: the Keystore, the
   fingerprint or face, and push (decrypted in `PushService`, shown by `Notifier`).
 - `docs/protocol/push-relay.md`: how an inbox reaches the phone through the relay.
+- `store/play/`: the Google Play listing in English, Portuguese, Spanish and French, its Data safety and
+  content answers, signing, screenshots and the steps to publish. Nothing is on Google Play yet.
