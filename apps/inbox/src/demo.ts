@@ -540,7 +540,7 @@ const RULES_READING_MS = 60_000;
  * a person's, and these say which part of that it is.
  */
 function whyWaiting(
-  row: { type: string; state: string; createdAt: number; screen: string | null },
+  row: { type: string; state: string; channel: string; createdAt: number; screen: string | null },
   payload: Obj,
   ctx: { now: number; minNoticeMin: number; priced: (serviceId: string) => boolean },
 ): string | null {
@@ -559,7 +559,10 @@ function whyWaiting(
     case "quote_request":
       return "a person prices every quote";
     case "message":
-      return "a person answers messages from assistants";
+      // The shop's rule answers a person's message with its hours; one from an assistant waits for a person.
+      return arrivedVia(row.channel) === "MCP" || row.channel === "rest"
+        ? "a person answers messages from assistants"
+        : "a person answers it";
     default:
       return "a person decides";
   }
