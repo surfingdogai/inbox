@@ -737,7 +737,7 @@ export const TOPICS: readonly Topic[] = [
             text: "An agent inbox is such a door. It publishes a manifest at `/.well-known/agent-inbox.json`, takes bookings, orders, quote requests and messages over MCP and REST, and says what became of each: received, confirmed, declined. What the check counts: [messages and quotes](/guides/ai-assistant-messages-and-quotes/), and [bookings](/guides/ai-assistant-bookings/).",
           },
           {
-            text: "Surfing Dog Inbox (ours, open source) is one, at your own address, such as inbox.yourbusiness.example. Your rules answer the routine requests and you see the rest; your own AI can work it too, through its owner MCP; and its spam filter keeps sales pitches and scams off your desk without losing a customer. [How it works](/inbox/).",
+            text: "Surfing Dog Inbox (ours, open source) is one, at your own address, such as inbox.yourbusiness.example. Your rules answer the routine requests and you see the rest; your own AI can work it too, through its owner MCP; and [its spam filters](/inbox/spam/), free on your own server or with Pro when we host it, keep sales pitches and scams off your desk without losing a customer. [How it works](/inbox/).",
           },
         ],
       },
@@ -814,7 +814,7 @@ export const TOPICS: readonly Topic[] = [
             sources: [S.googleCalls],
           },
           {
-            text: "At I/O in May 2026 Google said people in the US can ask it to call businesses in categories such as home repair, beauty and pet care, and that booking in Search reaches local experiences and services, with links to finish booking with the provider.",
+            text: "At I/O in May 2026 Google said people would be able to ask it to call businesses in categories such as home repair, beauty and pet care, and that booking in Search would reach local experiences and services, with links to finish booking with the provider.",
             sources: [S.googleIo],
           },
           {

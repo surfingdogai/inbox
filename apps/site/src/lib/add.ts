@@ -34,7 +34,7 @@ export const ADD_FAQS: readonly Faq[] = [
   },
   {
     q: "Can I add a business that isn't mine?",
-    a: "Anyone can check any website, and a check changes nothing about a listing. Only a business's owner can register, correct or hide it, by proving the domain is theirs.",
+    a: "You can check any website. A check reads it as our crawler would, so if an assistant can already ask, book or buy there, it is listed as found on its own site, under the same rules. A check is not a claim: only the business can register or correct its entry, by proving the domain is theirs.",
   },
   {
     q: "Can I list my products too?",

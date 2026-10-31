@@ -129,6 +129,16 @@ describe("Add your website", () => {
     expect(words).toContain("nobody can pay for a place");
     expect(words).toContain("isn't listed");
     expect(words).toContain("A local business is listed once its site matches its entry on public maps or registers");
+    // A check of anyone's site can list it, as the crawler would (the network's checks.go puts it in
+    // the crawl, and its listing follows); it is no claim, and opting out needs no proof (/bot).
+    const other = ADD_FAQS.find((f) => f.q === "Can I add a business that isn't mine?")?.a ?? "";
+    expect(other).toContain("it is listed as found on its own site, under the same rules");
+    expect(other).toContain("A check is not a claim");
+    expect(other).not.toMatch(/changes nothing|hide/);
+    // Only a hosted inbox joins the directory by itself; one run on your own server asks (/network).
+    expect(words).toContain(
+      "a hosted one, free, joins the directory the day it goes live; one you run yourself asks during setup",
+    );
     const styles = read(PAGE).match(/<style>([\s\S]*?)<\/style>/)?.[1] ?? "";
     expect(styles).not.toMatch(/#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(|\bred\b|crimson|tomato/i);
   });

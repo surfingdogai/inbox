@@ -5,7 +5,8 @@
  * side by side, each on the service that does it. The check (the network's /check) reads the site
  * at once, and a site an assistant can already ask, book or buy from goes into the directory as a
  * found listing; the business's own AI registers it with register_business over MCP; a business with
- * no door yet gets one with the inbox, which joins from the start; and a listing is corrected or
+ * no door yet gets one with the inbox (a hosted one joins the day it goes live, one run on the
+ * business's own server asks during setup); and a listing is corrected or
  * hidden at /b/<domain>/owner. What it says of each is what the network's own pages say (/bot).
  */
 import Faqs from "../components/Faqs.astro";
@@ -98,8 +99,9 @@ const ld = [
         <h2 class="add-way-h" id="way-door">No door yet? Get one</h2>
         <p>
           A site with only a phone number, an email address or a contact form isn't listed: an assistant can't do
-          anything there yet. An agent inbox gives you a door at your own address, such as inbox.yourbusiness.com, and
-          ours joins the directory from the start. We host it for free, or you run it yourself; it's open source.
+          anything there yet. An agent inbox gives you a door at your own address, such as inbox.yourbusiness.com. Ours is
+          open source: a hosted one, free, joins the directory the day it goes live; one you run yourself asks during
+          setup.
         </p>
         <p class="actions">
           <a class="btn btn-secondary btn-sm" href={START_URL}>Get your agent inbox</a>

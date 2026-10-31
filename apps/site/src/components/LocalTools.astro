@@ -1,7 +1,7 @@
 ---
 /**
  * The free tools' hub, in the page's language: every tool with one line on what it tells you, then
- * every guide with one line, the readiness checklist's eight (in English) named in this language,
+ * every guide with one line (the topic guides written in this language too), the readiness checklist's eight (in English) named in this language,
  * and one quiet line to the whole-site check. The tools are the network's pages on this address;
  * nothing here reads a site.
  */
@@ -10,6 +10,7 @@ import type { GuideSlug } from "../lib/guides";
 import { GUIDE_SLUGS, guideHref } from "../lib/guides";
 import { type Lang, LOCAL_GUIDES, pagePath, TOOL_IDS, toolEn, toolPath } from "../lib/i18n";
 import { headOf, rich } from "../lib/local";
+import { TOPICS, topicHref, topicLang } from "../lib/topics";
 import CoverTools from "./CoverTools.astro";
 
 interface Props {
@@ -21,6 +22,9 @@ const h = d.hub;
 const en = lang !== "en";
 /** French sets a colon apart with a space that never breaks. */
 const colon = lang === "fr" ? "\u00a0: " : ": ";
+/** In another language, the topic guides written in it (src/lib/topics.ts), after the hub's own; the
+ * English ones are on /guides/. */
+const topics = en ? TOPICS.filter((t) => topicLang(t) === lang) : [];
 const checklist: { slug: GuideSlug; name: string }[] = GUIDE_SLUGS.map((slug) => ({
   slug,
   name: h.checklist.names[slug],
@@ -65,6 +69,16 @@ const checklist: { slug: GuideSlug; name: string }[] = GUIDE_SLUGS.map((slug) =>
           <a href={pagePath(g, lang)}>
             <b>{headOf(d, g).h1}</b>
             <span>{h.guides[g]}</span>
+          </a>
+        </li>
+      ))
+    }
+    {
+      topics.map((t) => (
+        <li>
+          <a href={topicHref(t.slug)}>
+            <b>{t.title}</b>
+            <span>{t.lede ?? t.description}</span>
           </a>
         </li>
       ))

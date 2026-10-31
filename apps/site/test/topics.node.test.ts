@@ -322,6 +322,10 @@ describe("the topic guides", () => {
       for (const b of blocks(t)) expect(plain(b.text), `${t.slug}: ${b.text}`).toMatch(own);
       for (const f of t.faqs) expect(f.a, `${t.slug}: ${f.q}`).toMatch(own);
     }
+    // Its language's hub, which its eyebrow and breadcrumb name, links it back (English ones: /guides/).
+    const hub = read("src/components/LocalTools.astro");
+    expect(hub).toContain("const topics = en ? TOPICS.filter((t) => topicLang(t) === lang) : [];");
+    expect(hub).toContain("<a href={topicHref(t.slug)}>");
     // Every link of ours from such a page to a page in English says so.
     expect(read(COMPONENT)).toContain('{english.has(r.href) && <span lang="en"> (EN)</span>}');
     expect(read(COMPONENT)).toContain("inline(text, english)");
