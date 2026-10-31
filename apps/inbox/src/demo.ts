@@ -5,13 +5,14 @@ import {
   ensureLifecycleSweep,
   type JobHandler,
   type RuleDefinition,
+  readSettings,
   schema,
   ulid,
 } from "@surfingdog/core";
 import { LOCAL_SENDER, type MailOut, type OutboundMail } from "@surfingdog/platform";
 import { desc, eq } from "drizzle-orm";
 import { type Context, Hono } from "hono";
-import { DEMO_SHOP_DOMAIN, type SeedDeps, seedShowcase } from "./seed";
+import { DEMO_SHOP_DOMAIN, type SeedDeps, SHOWCASE_HISTORY_MS, seedShowcase } from "./seed";
 
 /**
  * A public demo shop (INBOX_DEMO=1): an instance anyone's AI can book with, to see the inbox work.
@@ -174,13 +175,13 @@ const DEMO_RULES: { name: string; priority: number; definition: RuleDefinition }
 ];
 
 /**
- * Room at every service for every tester who asks for Saturday morning. A 90-minute service holds
- * its place across overlapping start times, so four hours hold only about twice the capacity: at 12,
- * thirty testers (or one script) filled Saturday morning and every AI after them heard "fully
- * booked" until the night. At this size it takes more new items than every caller together may
- * create in an hour (`DEMO_SHARED.create`).
+ * Six bikes on the stands at once, at every service: a number a real workshop says when an assistant
+ * asks how many places are free. It was 500, so every slot said "available: 499", which no shop this
+ * size would. A 90-minute service holds its place across overlapping start times, so Saturday's four
+ * hours take about a dozen full services before they are full; past that, a request for a taken time
+ * is refused with the nearest free ones (ADR-043 §2), and an assistant books another.
  */
-export const DEMO_CAPACITY = 500;
+export const DEMO_CAPACITY = 6;
 
 /** Whether this instance's business is the demo shop, the only one a demo ever wipes. */
 export async function isDemoShop(db: Db): Promise<boolean> {
@@ -427,6 +428,17 @@ export interface LiveEntry {
   readonly at: number;
   readonly changed_at: number;
   readonly test: boolean;
+  /**
+   * One of the examples the shop is set up with every night, dated as if it came in over the past
+   * week: not something anyone sent since. Its `at` is the date it pretends.
+   */
+  readonly example: boolean;
+  /**
+   * Why a request waits for the shop rather than for its rules, in the shop's words: what the rules do
+   * not take on their own. Null for anything that does not wait, and for a request the rules are
+   * still reading (its first minute).
+   */
+  readonly why: string | null;
 }
 
 export interface LiveFeed {
@@ -509,6 +521,50 @@ function toneOf(state: string): LiveEntry["tone"] {
   return GOOD.has(state) ? "good" : STOPPED.has(state) ? "stopped" : "waiting";
 }
 
+/** "an hour", "90 minutes": the shop's minimum notice, as the live view says it. */
+function noticeWords(minutes: number): string {
+  if (minutes === 60) return "an hour";
+  if (minutes % 60 === 0) return `${minutes / 60} hours`;
+  return `${minutes} minutes`;
+}
+
+/** The states in which a request is the shop's to answer. */
+const WITH_THE_SHOP = new Set(["requested", "received", "open"]);
+/** A request this young is still being read by the rules, which answer it in a second or two. */
+const RULES_READING_MS = 60_000;
+
+/**
+ * Why a request waits for the shop (`LiveEntry.why`), from the item's kind, its catalogue line, its
+ * clock and its screen: never from anything a person wrote. The shop's rules confirm a free booking
+ * at a set price with an hour's notice and accept a small order from the catalogue; anything else is
+ * a person's, and these say which part of that it is.
+ */
+function whyWaiting(
+  row: { type: string; state: string; createdAt: number; screen: string | null },
+  payload: Obj,
+  ctx: { now: number; minNoticeMin: number; priced: (serviceId: string) => boolean },
+): string | null {
+  if (!WITH_THE_SHOP.has(row.state) || ctx.now - row.createdAt < RULES_READING_MS) return null;
+  if (row.screen === "held") return "held until the sender confirms it";
+  switch (row.type) {
+    case "booking": {
+      const start = Date.parse(str(payload.startTime) ?? "");
+      if (!ctx.priced(str(obj(payload.reservationFor).serviceId) ?? "")) return "priced by a person, not by the rules";
+      if (Number.isFinite(start) && start - row.createdAt < ctx.minNoticeMin * 60_000)
+        return `asked for less than ${noticeWords(ctx.minNoticeMin)} ahead, so a person decides`;
+      return "outside what the rules confirm, so a person decides";
+    }
+    case "order":
+      return "outside what the rules accept, so a person decides";
+    case "quote_request":
+      return "a person prices every quote";
+    case "message":
+      return "a person answers messages from assistants";
+    default:
+      return "a person decides";
+  }
+}
+
 /** "Sat 27 Sep, 09:00" in the shop's time zone, or null for anything that is not a time. */
 export function shopTime(iso: unknown, tz: string): string | null {
   if (typeof iso !== "string") return null;
@@ -551,7 +607,7 @@ const str = (v: unknown): string | undefined => (typeof v === "string" && v.leng
  * request, and a line that names nothing the shop sells says so in the shop's words.
  */
 export async function liveFeed(db: Db, now: number, limit = 20): Promise<LiveFeed> {
-  const [rows, services, products, biz] = await Promise.all([
+  const [rows, services, products, biz, settings] = await Promise.all([
     db.orm
       .select({
         id: schema.items.id,
@@ -560,20 +616,37 @@ export async function liveFeed(db: Db, now: number, limit = 20): Promise<LiveFee
         channel: schema.items.channel,
         payload: schema.items.payload,
         flags: schema.items.flags,
+        screen: schema.items.screen,
         createdAt: schema.items.createdAt,
         updatedAt: schema.items.updatedAt,
       })
       .from(schema.items)
       .orderBy(desc(schema.items.createdAt), desc(schema.items.id))
       .limit(limit),
-    db.orm.select({ id: schema.services.id, name: schema.services.name }).from(schema.services),
+    db.orm
+      .select({ id: schema.services.id, name: schema.services.name, price: schema.services.price })
+      .from(schema.services),
     db.orm
       .select({ id: schema.products.id, sku: schema.products.sku, name: schema.products.name })
       .from(schema.products),
-    db.orm.select({ name: schema.business.name, timezone: schema.business.timezone }).from(schema.business).limit(1),
+    db.orm
+      .select({
+        name: schema.business.name,
+        timezone: schema.business.timezone,
+        createdAt: schema.business.createdAt,
+      })
+      .from(schema.business)
+      .limit(1),
+    readSettings(db),
   ]);
   const tz = biz[0]?.timezone || "UTC";
+  // The shop was seeded this long after its business row is dated: what came in before then is an example.
+  const seededAt = (biz[0]?.createdAt ?? Number.NEGATIVE_INFINITY) + SHOWCASE_HISTORY_MS;
   const serviceName = new Map(services.map((s) => [s.id, s.name]));
+  const fixedPrice = new Set(
+    services.filter((s) => (obj(s.price) as { model?: unknown }).model === "fixed").map((s) => s.id),
+  );
+  const why = { now, minNoticeMin: settings.booking.minNoticeMin, priced: (id: string) => fixedPrice.has(id) };
   const productName = new Map<string, string>();
   for (const p of products) {
     productName.set(`id:${p.id}`, p.name);
@@ -623,6 +696,8 @@ export async function liveFeed(db: Db, now: number, limit = 20): Promise<LiveFee
         at: row.createdAt,
         changed_at: row.updatedAt,
         test: obj(row.flags).sandbox === true,
+        example: row.createdAt <= seededAt,
+        why: whyWaiting(row, payload, why),
       };
     }),
   );
@@ -659,9 +734,9 @@ function rowHtml(e: LiveEntry, now: number): string {
     e.when ? ` <span class="when">${esc(e.when)}</span>` : ""
   }</span>
   <span class="pill s-${e.tone}">${esc(e.state_label)}</span>
-  <span class="meta"><span class="via">${esc(e.via)}</span> · <time data-at="${e.at}">${esc(ago(e.at, now))}</time>${
-    e.test ? " · test" : ""
-  }</span>
+  <span class="meta"><span class="via">${esc(e.via)}</span> · ${
+    e.example ? "example" : `<time data-at="${e.at}">${esc(ago(e.at, now))}</time>`
+  }${e.test ? " · test" : ""}${e.why ? ` · <span class="why">${esc(e.why)}</span>` : ""}</span>
 </li>`;
 }
 
@@ -697,7 +772,7 @@ ul{list-style:none;margin:20px 0 0;padding:6px;border:1px solid var(--edge);bord
 .main{grid-area:main;min-width:0;overflow-wrap:anywhere}.what{color:var(--ink-2)}.when{color:var(--ink-3);white-space:nowrap}
 .pill{grid-area:pill;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
 .s-good{color:var(--good);background:var(--good-bg)}.s-waiting{color:var(--wait);background:var(--wait-bg)}.s-stopped{color:var(--stop);background:var(--stop-bg)}
-.meta{grid-area:meta;font-size:12px;color:var(--ink-3)}
+.meta{grid-area:meta;font-size:12px;color:var(--ink-3)}.why{font-style:italic}
 .empty{padding:18px 12px;color:var(--ink-3)}
 @media (max-width:520px){.row{grid-template-columns:auto 1fr;grid-template-areas:"dot main" ". pill" ". meta"}.pill{justify-self:start;margin:4px 0 2px}}
 .fine{margin:16px 0 0;font-size:12px;color:var(--ink-3);max-width:62ch}
@@ -717,7 +792,7 @@ a{color:inherit}
 <ul data-live aria-live="polite">
 ${rows || '<li class="empty">Nothing yet. Be the first.</li>'}
 </ul>
-<p class="fine">No names, addresses, phone numbers or messages are shown here, and the shop never emails anyone who uses it. It is wiped and set up again every night at ${reset} UTC.</p>
+<p class="fine">No names, addresses, phone numbers or messages are shown here, and the shop never emails anyone who uses it. It is wiped every night at ${reset} UTC and set up again with a few examples, dated as if from the past week and marked example. Its rules confirm a free booking at a set price with an hour's notice and accept a small order from the catalogue; anything else waits for a person, and says why.</p>
 </main>
 <script src="/demo/live.js" defer></script>
 </body>
@@ -760,10 +835,15 @@ export const LIVE_JS = `(() => {
     if (item.when) main.append(" ", el("span", "when", item.when));
     const pill = el("span", "pill s-" + item.tone, item.state_label);
     const meta = el("span", "meta");
-    const time = el("time", "", ago(item.at));
-    time.dataset.at = String(item.at);
-    meta.append(el("span", "via", item.via), " · ", time);
+    meta.append(el("span", "via", item.via), " · ");
+    if (item.example) meta.append("example");
+    else {
+      const time = el("time", "", ago(item.at));
+      time.dataset.at = String(item.at);
+      meta.append(time);
+    }
     if (item.test) meta.append(" · test");
+    if (item.why) meta.append(" · ", el("span", "why", item.why));
     li.append(dot, main, pill, meta);
     if (!seen.has(item.key)) li.classList.add("is-new");
     else if (seen.get(item.key) !== item.state) pill.classList.add("is-changed");

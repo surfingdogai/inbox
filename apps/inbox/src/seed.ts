@@ -150,6 +150,13 @@ const TZ = "Europe/Lisbon";
 const EUR = (value: number) => ({ value, currency: "EUR" });
 
 /**
+ * How far back the showcase's history starts: the business row is dated this long before the seed, so
+ * the moment it was seeded is the row's `created_at` plus this (the demo's live view tells its examples
+ * apart by it).
+ */
+export const SHOWCASE_HISTORY_MS = 10 * 24 * 3_600_000;
+
+/**
  * Oficina Maré with a week of life in it, for screenshots and demos: every item type in several
  * states, the appointments rules plus two of the shop's own, services with buffers and capacity,
  * opening hours with Saturday mornings, notifications and network membership on. Everything goes
@@ -165,7 +172,7 @@ export async function seedShowcase(
   deps: SeedDeps = {},
   opts: { demo?: boolean } = {},
 ): Promise<{ seeded: boolean; items: number }> {
-  const t0 = now - 10 * DAY;
+  const t0 = now - SHOWCASE_HISTORY_MS;
   // The business row is the claim: one statement that only the first of two seeders at once wins,
   // so the other returns here instead of failing half way (two requests can meet an empty demo).
   const claim = await db.client.query({

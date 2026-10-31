@@ -4,7 +4,7 @@ import { logMailOut } from "@surfingdog/platform";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { createInbox, type Inbox } from "../src/app";
-import { DEMO_NIGHTLY_KIND, liveFeed, nextNightly } from "../src/demo";
+import { DEMO_CAPACITY, DEMO_NIGHTLY_KIND, liveFeed, nextNightly } from "../src/demo";
 import { localTime, seedShowcase, seedSurfingDog } from "../src/seed";
 import { confirmed, freshDb } from "./harness";
 
@@ -157,7 +157,7 @@ describe("the demo, attacked", { timeout: 30_000 }, () => {
     expect(html).not.toContain("351912000111");
   });
 
-  it("confirms a crowd who all ask for the same Saturday morning", async () => {
+  it("seats a crowd who all ask for the same Saturday morning: six at ten, the rest at the nearest free times", async () => {
     const db = await freshDb();
     const inbox = demoOn(db);
     await inbox.prepare();
@@ -171,35 +171,46 @@ describe("the demo, attacked", { timeout: 30_000 }, () => {
       if (new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Lisbon", weekday: "short" }).format(t) === "Sat")
         start = t;
     }
-    // Forty testers, each through their own AI and address, all at ten on Saturday: the twelve the
-    // shop had room for were gone after twelve, and the rest heard "that time is taken".
-    const ids: string[] = [];
-    for (let i = 0; i < 40; i++) {
-      const res = await confirmed(
+    const book = (i: number, at: string, end: string) =>
+      confirmed(
         (r) => inbox.app.request(r),
         post(
           "/v1/bookings",
           {
-            payload: {
-              reservationFor: { serviceId: full?.id, name: "Full service" },
-              startTime: new Date(start).toISOString(),
-              endTime: new Date(start + 90 * 60_000).toISOString(),
-            },
+            payload: { reservationFor: { serviceId: full?.id, name: "Full service" }, startTime: at, endTime: end },
             contact: { name: `Tester ${i}` },
           },
           { "cf-connecting-ip": `198.51.100.${i + 1}` },
         ),
       );
+    // Twenty testers, each through their own AI and address, all at ten on Saturday. The workshop has
+    // six stands (DEMO_CAPACITY): the first six are confirmed at ten, and every one after is told at
+    // once that ten is not free, with the nearest free times, and books the first of them (ADR-043 §2).
+    const ids: string[] = [];
+    let refused = 0;
+    for (let i = 0; i < 20; i++) {
+      let res = await book(i, new Date(start).toISOString(), new Date(start + 90 * 60_000).toISOString());
+      if (res.status === 422) {
+        refused++;
+        const problem = (await res.json()) as {
+          details: { reason: string; free_times: { start_time: string; end_time: string }[] };
+        };
+        expect(problem.details.reason, `booking ${i + 1}`).toBe("time_not_free");
+        const next = problem.details.free_times[0];
+        if (!next) throw new Error(`no free time named for booking ${i + 1}`);
+        res = await book(i, next.start_time, next.end_time);
+      }
       expect(res.status, `booking ${i + 1}`).toBe(201);
       ids.push(((await res.json()) as { view: { item: { id: string } } }).view.item.id);
     }
+    expect(refused).toBe(20 - DEMO_CAPACITY);
     await drain(inbox, db);
     const states = await db.client.query({
       sql: `SELECT state, COUNT(*) FROM items WHERE id IN (${ids.map(() => "?").join(",")}) GROUP BY state`,
       params: ids,
       method: "all",
     });
-    expect(states.rows.map((r) => `${r[0]}:${r[1]}`)).toEqual(["confirmed:40"]);
+    expect(states.rows.map((r) => `${r[0]}:${r[1]}`)).toEqual(["confirmed:20"]);
   });
 
   it("sends the owner no more than a few sign-in links an hour, however many addresses ask", async () => {

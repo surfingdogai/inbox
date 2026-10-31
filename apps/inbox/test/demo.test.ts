@@ -6,9 +6,11 @@ import { eq } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createInbox, type Inbox } from "../src/app";
 import {
+  DEMO_CAPACITY,
   DEMO_KEEP,
   DEMO_NIGHTLY_KIND,
   ensureDemo,
+  liveFeed,
   nextNightly,
   ownerOnlyMailOut,
   shopTime,
@@ -296,7 +298,21 @@ describe("demo mode", { timeout: 30_000 }, () => {
     expect(feed.items.length).toBeLessThanOrEqual(20);
     for (const item of feed.items) {
       expect(Object.keys(item).sort()).toEqual(
-        ["at", "changed_at", "key", "state", "state_label", "test", "tone", "type", "via", "what", "when"].sort(),
+        [
+          "at",
+          "changed_at",
+          "example",
+          "key",
+          "state",
+          "state_label",
+          "test",
+          "tone",
+          "type",
+          "via",
+          "what",
+          "when",
+          "why",
+        ].sort(),
       );
     }
     const booking = feed.items.find((i) => i.type === "booking" && i.via === "REST");
@@ -342,6 +358,54 @@ describe("demo mode", { timeout: 30_000 }, () => {
       for (const secret of secrets) expect(body, secret).not.toContain(secret);
       expect(body).not.toMatch(/[\w.+-]+@[\w-]+\.[\w.]+/);
     }
+  });
+
+  it("marks the examples it is set up with, and says why a request waits for the shop", async () => {
+    const s = await demoInbox();
+    const seeded = await liveFeed(s.db, Date.now());
+    expect(seeded.items.length).toBeGreaterThan(0);
+    // Everything there before anyone came is an example, dated as if it came in over the past week.
+    expect(seeded.items.every((i) => i.example)).toBe(true);
+    const page = await (await s.app.request(`${BASE}/demo/live`)).text();
+    expect(page).toContain("marked example");
+    expect(page).not.toMatch(/<time data-at="\d+">\d+ days? ago<\/time>/);
+
+    const t = Date.now();
+    await visit(s);
+    // A minute on, the rules have read everything: what waits for the shop says why, in the shop's words.
+    const later = await liveFeed(s.db, Date.now() + 2 * 60_000);
+    const fresh = later.items.filter((i) => i.at >= t);
+    expect(fresh.length).toBeGreaterThan(0);
+    expect(fresh.every((i) => !i.example)).toBe(true);
+    expect(fresh.find((i) => i.type === "quote_request")).toMatchObject({
+      tone: "waiting",
+      why: "a person prices every quote",
+    });
+    // The order with a line not in the catalogue: outside what the rules accept.
+    expect(fresh.find((i) => i.type === "order" && String(i.what).includes("not in the catalogue"))).toMatchObject({
+      tone: "waiting",
+      why: "outside what the rules accept, so a person decides",
+    });
+    // What the rules confirmed or accepted waits on nobody, and says no reason.
+    for (const i of later.items.filter((x) => x.tone !== "waiting")) expect(i.why).toBeNull();
+    for (const i of later.items.filter((x) => x.tone === "waiting" && /^(requested|received|open)$/.test(x.state)))
+      expect(i.why, `${i.type} ${i.state}`).toBeTruthy();
+    // In its first minute a request is still being read, and no reason is guessed.
+    expect((await liveFeed(s.db, t)).items.filter((i) => i.at >= t).every((i) => i.why === null)).toBe(true);
+  });
+
+  it("offers a workshop's own number of places, not hundreds", async () => {
+    const s = await demoInbox();
+    const slot = nextSaturdayMorning();
+    const day = slot.start.slice(0, 10);
+    const res = await s.app.request(
+      `${BASE}/v1/availability?service_id=${s.full}&from=${day}T00:00:00Z&to=${day}T23:59:00Z`,
+    );
+    expect(res.status).toBe(200);
+    const { slots } = (await res.json()) as { slots: { available: number }[] };
+    expect(slots.length).toBeGreaterThan(0);
+    expect(DEMO_CAPACITY).toBeLessThanOrEqual(10);
+    for (const free of slots) expect(free.available).toBeLessThanOrEqual(DEMO_CAPACITY);
   });
 
   it("sends the owner one summary a night, then wipes and seeds the shop again", async () => {
