@@ -1628,7 +1628,10 @@ and keeps its promises is not found.
   URIs, so that no client checking an answer refuses it, and every other business on the page with
   it, for one business's door), and the assistant
   books, orders or asks there. The search is all the network learns
-  from it, and it keeps none of it; what it learns of a booking or an order is the business's signed
+  from it, and it keeps a record of the search, never who sent it (ADR-043: its words as typed with
+  email addresses, phone numbers, card numbers and IBANs taken out, its filters, the place it read,
+  how many it found and which kind of client asked, with no time limit, to improve search; no
+  address, no session); what it learns of a booking or an order is the business's signed
   receipt afterwards (§3.2): that it was promised and how it ended, never what was said.
 - **What an assistant needs.** Each business comes as a card: what it does, where, today's hours in
   its own time zone and whether it is open now, what its inbox takes, where to book, and its standing
