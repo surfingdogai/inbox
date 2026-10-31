@@ -4,10 +4,13 @@
 // first-contact email and the passes their assistants carry), only for networks the owner turns
 // on; what our network keeps and for how long; what a customer can do about it; what the hosted
 // service would hold; what the site itself collects; and what Search (its MCP server at /mcp, A2A,
-// the REST API) and the checker keep: the service's log keeps no search, a check keeps the site and never who
-// asked, register/update keep the listing and keyed hashes of their proof, and the request log
-// holds no IP address and no query string (the front server's error log can hold both, and the
-// headers). Those logs have no time limit yet: the logs bullet names one only once it is set. Requests
+// the REST API) and the checker keep: the service's log keeps no search; the record of agents' calls
+// keeps a search's words as typed, with email addresses, phone numbers, card numbers and IBANs (and any
+// other run of eight or more digits) taken out, with no time limit, and never who sent them (no
+// address, no session, a daily keyed hash of the caller's network to count callers); a check keeps
+// the site and never who asked; register/update keep the listing and keyed hashes of their proof; and
+// the request log holds no IP address and no query string (the front server's error log can hold both,
+// and the headers). Those logs have no time limit yet: the logs bullet names one only once it is set. Requests
 // the MCP server carries to a business's inbox (ADR-025) pass through and are not written down; one
 // record of each is kept (when, which business, which kind, the outcome), 400 days. The phone app
 // (ADR-028): what the inbox, the push relay (docs/protocol/push-relay.md) and Google see, the update
@@ -28,7 +31,7 @@ import { DOOR_SHARE_SHOWN, doorHistoryPublic } from "../lib/door-history";
 import { CARRY_PROMISE, HOSTED_KEEPS } from "../lib/gateway";
 import { HOSTED_PILOT_OPEN } from "../lib/hosted";
 
-const UPDATED = "27 October 2026";
+const UPDATED = "31 October 2026";
 ---
 
 <Layout
@@ -40,8 +43,9 @@ const UPDATED = "27 October 2026";
     <h1 class="h-page" id="privacy-h">What we know about you</h1>
     <p class="lede">
       Surfing Dog Inbox runs on your own server or cloud account, so we know almost nothing about you. Search needs no
-      sign-in and does not keep your searches; the one exception, an error log, is explained below. This page lists
-      exactly what we do see.
+      sign-in and never keeps who searched: we keep the words AI agents search for, with email addresses, phone
+      numbers and card and bank numbers taken out, and an error log can hold more, both explained below. This page
+      lists exactly what we do see.
     </p>
     <p class="fine">Last updated {UPDATED}. {COMPANY_LINE} Questions: privacy@surfingdog.ai</p>
   </section>
@@ -221,9 +225,22 @@ const UPDATED = "27 October 2026";
       </p>
       <ul>
         <li>
-          <b>Searches.</b> The words, filters and place of a search are used to answer and then dropped. The service's
-          log leaves them out (over the REST API they travel in the query string, which it does not record), and
-          nothing ties them to you. The one exception is an error at our front server, under Logs and limits below.
+          <b>Searches.</b> The words, filters and place of a search are used to answer it. When an AI agent searches,
+          over MCP, A2A or the REST API, we keep a record of the call, to improve search, with no time limit: its words
+          as the agent typed them, with email addresses, phone numbers, card numbers and bank account numbers (IBANs)
+          taken out, and any other run of eight or more digits too. Street names, house numbers, postcodes, prices and
+          years stay as typed, and so does a name typed into a search. The record also keeps which door it came through
+          (MCP, A2A or the REST API) and which tool it called; the filters it used (a language, a category, the town or
+          country it named, never the coordinates of a point, and what it wanted to do, such as book); how many
+          businesses it found, in which order, and whether on its first page; the kind of assistant or software that
+          sent it (such as Claude or ChatGPT) and its version, and whether it came from an AI platform's published
+          addresses; and how long it took and how it ended. Never your IP address, a session, or anything else that says
+          who sent it: to count how many different callers there are, each record keeps a code made with a secret key
+          from the caller's network (its address with the last part left off), which is different every day. An agent's
+          other calls to these doors are recorded the same way: which tool, when, how long and how it went, with nothing
+          of what it asked. A search on this website's own pages is not recorded. The service's log leaves searches out
+          (over the REST API they travel in the query string, which it does not record). The one exception is an error
+          at our front server, under Logs and limits below.
         </li>
         <li>
           <b>Checks.</b> When you, or an AI for you, ask to check a website (at <code>/check</code> or with
@@ -269,12 +286,14 @@ const UPDATED = "27 October 2026";
         </li>
         <li>
           <b>Logs and limits.</b> The service's own log records each request's method, path and how long it took: not
-          your IP address, not a search's words, and not a tool's arguments. A path can name a business, such as the
-          domain of one listing or check result looked up, but not who looked. How often one address, or one session
-          of an assistant, calls is counted in memory, to apply the published limits, and never written down, except
-          the keyed hash a register challenge keeps (above). An error at our front server (for example while the service restarts) can be logged with the
-          request's IP address, the address it asked for (a REST search's words included) and its headers. These logs
-          are kept in the server's system log, which is trimmed by size, with no fixed time limit yet.
+          your IP address, not a search's words (an agent's searches are recorded as above), and not a tool's
+          arguments. A path can name a business, such as the domain of one listing or check result looked up, but not
+          who looked. How often one address, or one session of an assistant, calls is counted in memory, to apply the
+          published limits, as is, for a day at most, which kind of assistant a session said it is; none of it is
+          written down, except the keyed hash a register challenge keeps (above). An error at our front server (for
+          example while the service restarts) can be logged with the request's IP address, the address it asked for (a
+          REST search's words included) and its headers. These logs are kept in the server's system log, which is
+          trimmed by size, with no fixed time limit yet.
         </li>
       </ul>
 
@@ -358,6 +377,10 @@ const UPDATED = "27 October 2026";
         <li>
           The hourly messages, with the internet address they came from, for 90 days. A business's listing (its public
           profile, version, whether it is answering, its counts and its standing), and snapshots of it, for good.
+        </li>
+        <li>
+          The words of the searches AI agents send it, as typed, with email addresses, phone numbers and card and bank
+          numbers taken out, with no time limit, to improve search: never who sent them, and no IP address.
         </li>
         <li>
           Every receipt, counter-signature, and record of which business was shown which customer's standing, for
