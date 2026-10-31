@@ -169,7 +169,8 @@ export function App({ deps }: { deps: Deps }) {
   }, [deps.appInfo]);
   const checkUpdate = useRef<() => void>(() => undefined);
   checkUpdate.current = () => {
-    if (!appInfo) return;
+    // Only the Android app is installed from the download page; on an iPhone the App Store updates it.
+    if (!appInfo || native.platform !== "android") return;
     void checkForUpdate(deps.fetch, deps.kv, appInfo.build)
       .then(setUpdate)
       .catch(() => undefined);

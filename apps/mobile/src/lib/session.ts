@@ -7,7 +7,7 @@ import {
   sha256b64u,
 } from "../../../../packages/core/src/phones/crypto";
 import type { PhoneLink } from "../../../../packages/core/src/phones/links";
-import { type Native, NativeError } from "./native";
+import { lockWords, type Native, NativeError } from "./native";
 
 /**
  * The inboxes this phone is connected to, and their tokens (ADR-028). An operator who looks after
@@ -159,7 +159,11 @@ export class Sessions {
       return { at: s.at, proof: await this.native.sign(alias, s.text) };
     } catch (error) {
       if (error instanceof NativeError && error.code === "key_gone")
-        throw new InboxError("This phone's screen lock changed. Connect it again.", 401, "signed_out");
+        throw new InboxError(
+          `This phone's ${lockWords(this.native.platform).noun} changed. Connect it again.`,
+          401,
+          "signed_out",
+        );
       if (!(error instanceof NativeError && error.code === "auth_required")) throw error;
     }
     const ok = await this.native.authenticate("Confirm it's you", "To keep your inbox open").catch(() => false);
@@ -206,7 +210,11 @@ export class Sessions {
   async pair(link: PhoneLink): Promise<PendingPhone> {
     if (link.kind !== "pair") throw new InboxError("That is a sign-in link, not a code to scan.", 400, "invalid_input");
     if (!(await this.native.deviceSecure()))
-      throw new InboxError("Set a screen lock on this phone first, then scan the code again.", 400, "no_screen_lock");
+      throw new InboxError(
+        `Set a ${lockWords(this.native.platform).noun} on this phone first, then scan the code again.`,
+        400,
+        "no_screen_lock",
+      );
     const alias = Sessions.newAlias();
     try {
       const key = await this.native.deviceKey(alias);
@@ -236,7 +244,11 @@ export class Sessions {
     } catch (error) {
       await this.native.deleteKeys(alias);
       if (error instanceof NativeError && error.code === "no_screen_lock")
-        throw new InboxError("Set a screen lock on this phone first, then scan the code again.", 400, "no_screen_lock");
+        throw new InboxError(
+          `Set a ${lockWords(this.native.platform).noun} on this phone first, then scan the code again.`,
+          400,
+          "no_screen_lock",
+        );
       throw error;
     }
   }
@@ -273,7 +285,7 @@ export class Sessions {
    */
   async askForLink(origin: string, email: string): Promise<string> {
     if (!(await this.native.deviceSecure()))
-      throw new InboxError("Set a screen lock on this phone first.", 400, "no_screen_lock");
+      throw new InboxError(`Set a ${lockWords(this.native.platform).noun} on this phone first.`, 400, "no_screen_lock");
     const alias = Sessions.newAlias();
     const verifier = b64uEncode(crypto.getRandomValues(new Uint8Array(32)));
     await this.native.secureSet(verifierKey(origin), JSON.stringify({ alias, verifier }));

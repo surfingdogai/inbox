@@ -321,7 +321,14 @@ export function Settings() {
           <div className="rows">
             <div>
               <span className="two">
-                <span>Version {app.appInfo ? versionLine(app.appInfo.version, app.appInfo.build) : ""}</span>
+                <span>
+                  Version{" "}
+                  {!app.appInfo
+                    ? ""
+                    : app.native.platform === "android"
+                      ? versionLine(app.appInfo.version, app.appInfo.build)
+                      : app.appInfo.version}
+                </span>
                 {app.update.kind !== "none" && <small>{app.update.versionName} is ready</small>}
               </span>
               {app.update.kind !== "none" && (
