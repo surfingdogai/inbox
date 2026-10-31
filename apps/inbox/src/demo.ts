@@ -446,6 +446,8 @@ export interface LiveFeed {
   readonly items: readonly LiveEntry[];
   /** When the shop is next wiped, in epoch milliseconds. */
   readonly next_reset: number;
+  /** How long ahead the shop's rules need a booking, in minutes (its minimum notice). */
+  readonly min_notice_min: number;
   readonly now: number;
 }
 
@@ -534,24 +536,33 @@ const WITH_THE_SHOP = new Set(["requested", "received", "open"]);
 const RULES_READING_MS = 60_000;
 
 /**
- * Why a request waits for the shop (`LiveEntry.why`), from the item's kind, its catalogue line, its
- * clock and its screen: never from anything a person wrote. The shop's rules confirm a free booking
- * at a set price with an hour's notice and accept a small order from the catalogue; anything else is
- * a person's, and these say which part of that it is.
+ * The largest booking the shop's rules confirm on their own: the appointments preset's limit (under
+ * €50, or no price at all), in cents.
  */
-function whyWaiting(
-  row: { type: string; state: string; channel: string; createdAt: number; screen: string | null },
+const SMALL_BOOKING = 5_000;
+
+/**
+ * Why a request waits for the shop (`LiveEntry.why`), from the item's kind, its price, its clock and
+ * whether it is a test: never from anything a person wrote, and never from what the spam screen made
+ * of it, which the sender sees nothing of (ADR-041). The shop's rules confirm a small booking in a
+ * free slot inside the opening hours and accept a small order from the catalogue, and leave tests
+ * alone; anything else is a person's, and these say which part of that it is.
+ */
+export function whyWaiting(
+  row: { type: string; state: string; channel: string; createdAt: number; sandbox: boolean },
   payload: Obj,
-  ctx: { now: number; minNoticeMin: number; priced: (serviceId: string) => boolean },
+  ctx: { now: number; minNoticeMin: number },
 ): string | null {
   if (!WITH_THE_SHOP.has(row.state) || ctx.now - row.createdAt < RULES_READING_MS) return null;
-  if (row.screen === "held") return "held until the sender confirms it";
+  if (row.sandbox) return "a test: the rules leave it alone";
   switch (row.type) {
     case "booking": {
       const start = Date.parse(str(payload.startTime) ?? "");
-      if (!ctx.priced(str(obj(payload.reservationFor).serviceId) ?? "")) return "priced by a person, not by the rules";
       if (Number.isFinite(start) && start - row.createdAt < ctx.minNoticeMin * 60_000)
         return `asked for less than ${noticeWords(ctx.minNoticeMin)} ahead, so a person decides`;
+      const total = (obj(payload.totalPrice) as { value?: unknown }).value;
+      if (typeof total === "number" && total >= SMALL_BOOKING)
+        return "larger than the rules confirm on their own, so a person decides";
       return "outside what the rules confirm, so a person decides";
     }
     case "order":
@@ -619,16 +630,13 @@ export async function liveFeed(db: Db, now: number, limit = 20): Promise<LiveFee
         channel: schema.items.channel,
         payload: schema.items.payload,
         flags: schema.items.flags,
-        screen: schema.items.screen,
         createdAt: schema.items.createdAt,
         updatedAt: schema.items.updatedAt,
       })
       .from(schema.items)
       .orderBy(desc(schema.items.createdAt), desc(schema.items.id))
       .limit(limit),
-    db.orm
-      .select({ id: schema.services.id, name: schema.services.name, price: schema.services.price })
-      .from(schema.services),
+    db.orm.select({ id: schema.services.id, name: schema.services.name }).from(schema.services),
     db.orm
       .select({ id: schema.products.id, sku: schema.products.sku, name: schema.products.name })
       .from(schema.products),
@@ -646,10 +654,7 @@ export async function liveFeed(db: Db, now: number, limit = 20): Promise<LiveFee
   // The shop was seeded this long after its business row is dated: what came in before then is an example.
   const seededAt = (biz[0]?.createdAt ?? Number.NEGATIVE_INFINITY) + SHOWCASE_HISTORY_MS;
   const serviceName = new Map(services.map((s) => [s.id, s.name]));
-  const fixedPrice = new Set(
-    services.filter((s) => (obj(s.price) as { model?: unknown }).model === "fixed").map((s) => s.id),
-  );
-  const why = { now, minNoticeMin: settings.booking.minNoticeMin, priced: (id: string) => fixedPrice.has(id) };
+  const why = { now, minNoticeMin: settings.booking.minNoticeMin };
   const productName = new Map<string, string>();
   for (const p of products) {
     productName.set(`id:${p.id}`, p.name);
@@ -700,11 +705,17 @@ export async function liveFeed(db: Db, now: number, limit = 20): Promise<LiveFee
         changed_at: row.updatedAt,
         test: obj(row.flags).sandbox === true,
         example: row.createdAt <= seededAt,
-        why: whyWaiting(row, payload, why),
+        why: whyWaiting({ ...row, sandbox: obj(row.flags).sandbox === true }, payload, why),
       };
     }),
   );
-  return { business: biz[0]?.name || "Demo shop", items, next_reset: nextNightly(now), now };
+  return {
+    business: biz[0]?.name || "Demo shop",
+    items,
+    next_reset: nextNightly(now),
+    min_notice_min: settings.booking.minNoticeMin,
+    now,
+  };
 }
 
 /** "just now", "4 min ago", "3 h ago", "2 days ago". */
@@ -747,6 +758,7 @@ function rowHtml(e: LiveEntry, now: number): string {
 export function livePage(feed: LiveFeed): string {
   const rows = feed.items.map((e) => rowHtml(e, feed.now)).join("\n");
   const reset = new Date(feed.next_reset).toISOString().slice(11, 16);
+  const notice = noticeWords(feed.min_notice_min);
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -795,7 +807,7 @@ a{color:inherit}
 <ul data-live aria-live="polite">
 ${rows || '<li class="empty">Nothing yet. Be the first.</li>'}
 </ul>
-<p class="fine">No names, addresses, phone numbers or messages are shown here, and the shop never emails anyone who uses it. It is wiped every night at ${reset} UTC and set up again with a few examples, dated as if from the past week and marked example. Its rules confirm a free booking at a set price with an hour's notice and accept a small order from the catalogue; anything else waits for a person, and says why.</p>
+<p class="fine">No names, addresses, phone numbers or messages are shown here, and the shop never emails anyone who uses it. It is wiped every night at ${reset} UTC and set up again with a few examples, dated as if from the past week and marked example. Its rules confirm a small booking in a free slot inside the opening hours, asked for at least ${notice} ahead, and accept a small order from the catalogue; anything else waits for a person, and says why.</p>
 </main>
 <script src="/demo/live.js" defer></script>
 </body>

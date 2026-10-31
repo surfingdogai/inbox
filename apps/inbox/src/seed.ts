@@ -706,11 +706,13 @@ export async function seedShowcase(
     count++;
   }
 
-  // 11. A booking request that needs you: outside opening hours, so no rule could confirm it.
+  // 11. A booking request that needs you: Ana rang to ask for half past six, after closing. A customer's
+  // request for a time the shop does not offer is refused at the door (ADR-043 §2), so the shop wrote
+  // this one down itself, for a person to decide; no rule confirms a time outside the opening hours.
   {
     const start = localTime(now, TZ, 2, 18, 30);
     const t = now - 2 * HOUR;
-    await createItem(db, agent(t), {
+    await createItem(db, owner(t), {
       type: "booking",
       payload: {
         reservationFor: { serviceId: svc.puncture, name: "Puncture repair" },
@@ -720,7 +722,7 @@ export async function seedShowcase(
         notes: "Tubeless, rear wheel.",
       },
       contact: { name: "Ana Ferreira", email: "ana.ferreira@example.com" },
-      message: "Ana can only come after work; is half past six possible, even if you normally close at six?",
+      message: "Ana rang: she can only come after work. Is half past six possible, though we close at six?",
     });
     await settle(t);
     count++;

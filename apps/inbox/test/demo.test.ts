@@ -15,6 +15,7 @@ import {
   ownerOnlyMailOut,
   shopTime,
   summaryText,
+  whyWaiting,
   wipeDemo,
 } from "../src/demo";
 import { localTime, seedSurfingDog } from "../src/seed";
@@ -392,6 +393,48 @@ describe("demo mode", { timeout: 30_000 }, () => {
       expect(i.why, `${i.type} ${i.state}`).toBeTruthy();
     // In its first minute a request is still being read, and no reason is guessed.
     expect((await liveFeed(s.db, t)).items.filter((i) => i.at >= t).every((i) => i.why === null)).toBe(true);
+  });
+
+  it("says why as the rules read it: a test first, then the notice, then the size", () => {
+    const now = Date.parse("2026-11-02T10:00:00Z");
+    const at = now - 10 * 60_000;
+    const ctx = { now, minNoticeMin: 60 };
+    const booking = (startTime: string, extra: Record<string, unknown> = {}) => ({
+      reservationFor: { serviceId: "svc", name: "Wheel truing" },
+      startTime,
+      ...extra,
+    });
+    const row = { type: "booking", state: "requested", channel: "mcp_public", createdAt: at, sandbox: false };
+    // A test is left alone by the rules, whatever else it is.
+    expect(whyWaiting({ ...row, sandbox: true }, booking("2026-11-02T10:20:00Z"), ctx)).toBe(
+      "a test: the rules leave it alone",
+    );
+    // A booking priced "from" has no total, which the rules take: inside the notice is what stops it.
+    expect(whyWaiting(row, booking("2026-11-02T10:20:00Z"), ctx)).toBe(
+      "asked for less than an hour ahead, so a person decides",
+    );
+    expect(
+      whyWaiting(row, booking("2026-11-03T10:00:00Z", { totalPrice: { value: 9_000, currency: "EUR" } }), ctx),
+    ).toBe("larger than the rules confirm on their own, so a person decides");
+    expect(whyWaiting(row, booking("2026-11-03T10:00:00Z"), ctx)).toBe(
+      "outside what the rules confirm, so a person decides",
+    );
+  });
+
+  it("never shows what the spam screen made of a request", async () => {
+    const s = await demoInbox();
+    const t = Date.now();
+    await visit(s);
+    const later = Date.now() + 2 * 60_000;
+    const before = (await liveFeed(s.db, later)).items.filter((i) => i.at >= t);
+    await s.db.client.query({
+      sql: "UPDATE items SET screen = 'held' WHERE created_at >= ?",
+      params: [t],
+      method: "run",
+    });
+    const after = (await liveFeed(s.db, later)).items.filter((i) => i.at >= t);
+    expect(after.map((i) => [i.key, i.why, i.state_label])).toEqual(before.map((i) => [i.key, i.why, i.state_label]));
+    expect(JSON.stringify(after)).not.toMatch(/held|confirms it/);
   });
 
   it("offers a workshop's own number of places, not hundreds", async () => {
