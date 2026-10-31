@@ -97,7 +97,10 @@ not have, and building each four times would make four versions of them:
   kinds from `vocab/business-kinds.json`, each mapped to a preset or to `general`, whose rules follow what
   agents may do, or the owner's own words; kept as `directory.kind` and published in the profile's categories.
   The setup then asks for every door the inbox has, other currencies taken (`payments.currencies`) and the
-  languages spoken, and offers to bring services, products, menus and rooms from the owner's own systems.)
+  languages spoken, and offers to bring products, menus and rooms from the owner's own systems. Services are
+  named in the wizard: calendars and booking tools keep their times in step (busy times in, bookings out) and
+  bring no services. Ordering products has no switch: it opens with the first product listed. Run again, the
+  wizard starts every door from Settings and writes a kind's starting settings only for a kind picked anew.)
 - **The customer copy lint** (`customerCopyProblems`): what a business's customers read never names the
   software, a network, receipts, passes, keys, a reputation or the inbox, in any of the six languages.
 
