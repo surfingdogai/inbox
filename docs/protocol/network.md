@@ -1785,7 +1785,9 @@ by a key the business's own manifest publishes, and `iss` names the business's d
   or the inbox cannot sign. `422` for a cursor the feed did not give or a limit past 500.
 
 **`GET /v1/catalogue/items?ids=a,b`** (at most 50, `schemas/catalogue-items.json`): `{"items": […], "missing": […]}`,
-each as the feed has it, `missing` the ids the inbox has no product for. `Cache-Control: no-store`.
+each as the feed has it, `missing` the ids the inbox has no product for. The answer has these two members and
+nothing else: no `version`, `domain`, `as_of` or `catalogue` block, unlike a feed page. An id longer than an
+id may be (64 characters) is left out of `missing`, not echoed. `Cache-Control: no-store`.
 
 **The signature.** Both answer with `Catalogue-Signature`: a compact JWS, `alg: EdDSA`,
 `typ: "sdi-catalogue+jws"`, `kid` a key the manifest publishes under `receipt_keys` (the receipt key, which
