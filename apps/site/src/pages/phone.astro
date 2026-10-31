@@ -5,8 +5,11 @@
 // from public/phone/latest.json, the file the app reads for updates, written by the workflow
 // android-release: the APK's address, version, size and SHA-256, and the signing certificate. Until
 // that file names an APK with its SHA-256, the page offers no download and says the app is on its way.
-// The QR code (public/phone/qr.svg) opens this page; it pairs nothing.
+// The QR code (public/phone/qr.svg) opens this page; it pairs nothing. The screens are the app's own,
+// printed from its demo and its made-up business by `pnpm --filter @surfingdog/inbox shots phone/`
+// into public/phone, one print for each theme.
 import latest from "../../public/phone/latest.json";
+import Shot from "../components/Shot.astro";
 import Layout from "../layouts/Layout.astro";
 
 const released =
@@ -21,6 +24,32 @@ const does: string[] = [
   "Today's bookings at a glance, and every inbox you look after in one app.",
   "Works offline: what you do waits on the phone and is sent when you're back.",
   "Opens with your fingerprint or face, and asks for it again before accepting from a notification.",
+];
+const screens: { name: string; title: string; caption: string; alt: string }[] = [
+  {
+    name: "inbox",
+    title: "Inbox",
+    caption: "What needs you first, then what's handled.",
+    alt: "The app's inbox: a booking, an order and a quote that need you, then a message and a booking already handled",
+  },
+  {
+    name: "request",
+    title: "A booking request",
+    caption: "Accept, propose another time or decline.",
+    alt: "A booking request for this afternoon: when, the service and its price, free in the calendar, the customer's note, and Accept, Propose another time and Decline",
+  },
+  {
+    name: "settings",
+    title: "Settings",
+    caption: "What to be told about, quiet hours and spam.",
+    alt: "Notification settings: a switch for each kind of request, quiet hours from 21:00 to 08:00, whether the lock screen shows details, and spam",
+  },
+  {
+    name: "connect",
+    title: "Connect",
+    caption: "One scan of the code from your inbox.",
+    alt: "Connect your inbox: where to find the code on your computer, a frame for the camera, and Scan the code",
+  },
 ];
 const asks: { what: string; why: string }[] = [
   { what: "Camera", why: "to scan the code from your inbox. The picture never leaves the phone." },
@@ -60,13 +89,31 @@ const asks: { what: string; why: string }[] = [
             <p class="soon">The first version is on its way. This page offers it the day it's out.</p>
           )
         }
-        <p class="hint">iPhone soon.</p>
+        <p class="hint">iPhone and Google Play: coming next week.</p>
       </div>
       <figure class="qr">
         <img src="/phone/qr.svg" width="132" height="132" alt="A code that opens this page on your phone" />
         <figcaption>On a computer? Scan this with your phone's camera to open this page there.</figcaption>
       </figure>
     </div>
+  </section>
+
+  <section class="wrap wrap-read section section-tight" aria-labelledby="screens-h">
+    <h2 class="sr-only" id="screens-h">The app's screens</h2>
+    <div class="bleed screens">
+      {
+        screens.map((s) => (
+          <Shot
+            src={`/phone/${s.name}-day.webp`}
+            night={`/phone/${s.name}-night.webp`}
+            alt={s.alt}
+            title={s.title}
+            caption={s.caption}
+          />
+        ))
+      }
+    </div>
+    <p class="fine">Shown with a made-up business.</p>
   </section>
 
   <section class="section section-tight" aria-labelledby="install-h">
@@ -188,6 +235,30 @@ const asks: { what: string; why: string }[] = [
   }
   .soon {
     color: var(--ink-2);
+  }
+  /* Four phone screens side by side, two by two on a phone. Thin frames, the print's own corners. */
+  .wrap-read > .screens {
+    margin-block: 0 var(--sp-4);
+  }
+  .screens {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--sp-3);
+  }
+  @media (min-width: 860px) {
+    .screens {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: var(--sp-4);
+    }
+  }
+  .screens :global(.shot) {
+    padding: var(--sp-2);
+  }
+  .screens :global(.shot img) {
+    border-radius: 14px;
+  }
+  .screens :global(.shot-cap) {
+    margin-top: var(--sp-2);
   }
   .qr {
     display: flex;

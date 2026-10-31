@@ -13,27 +13,37 @@
  *   held-day.png                     Held, with a booking request that may be a customer's open
  *   spam-settings-day.png            Settings → Spam
  *
- * and, from the phone app's demo (its Vite server, 390×508 at 2×, the top of the screen):
+ * and, from the phone app's demo (its Vite server and its made-up business, 390×844 at 2×, light and
+ * dark), into apps/site/public/shots the top of one screen:
  *
  *   phone-held.png, phone-held-night.png   a held booking request: why it's here, Let it in and Spam
  *
+ * and into apps/site/public/phone, for the download page, four whole screens as lossless WebP:
+ *
+ *   inbox-day.webp, inbox-night.webp         the inbox: what needs you, then what's handled
+ *   request-day.webp, request-night.webp     a booking request with Accept, Propose another time, Decline
+ *   settings-day.webp, settings-night.webp   Settings: what to be told about, quiet hours, spam
+ *   connect-day.webp, connect-night.webp     the first screen: connect your inbox
+ *
  *   pnpm --filter @surfingdog/inbox shots                 everything
  *   pnpm --filter @surfingdog/inbox shots phone           the phone's alone
+ *   pnpm --filter @surfingdog/inbox shots phone/          the download page's four
  *   pnpm --filter @surfingdog/inbox shots spam held       those whose names start so
  *
  * Needs Google Chrome on this machine: playwright-core drives it through channel "chrome" and
- * downloads nothing.
+ * downloads nothing. The WebP prints need cwebp (libwebp) too.
  */
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
 
 const app = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const out = path.resolve(app, "../site/public/shots");
+const pub = path.resolve(app, "../site/public");
+const out = path.join(pub, "shots");
 const tsx = path.join(app, "node_modules", ".bin", "tsx");
 const port = 8790 + Math.floor(Math.random() * 100);
 const base = `http://localhost:${port}`;
@@ -55,8 +65,66 @@ function cli(args, env) {
   if (r.status !== 0) throw new Error(`${args.join(" ")} failed with status ${r.status}`);
 }
 
-/** The phone app's held booking request, light and dark, from its demo on a Vite dev server. */
+/**
+ * The phone app's prints, from its demo. Each is ready when its `ready` locator shows; `clip` keeps
+ * only the top of the screen, and a `.webp` file is written lossless through cwebp.
+ */
+const PHONE = [
+  {
+    // /inbox/spam: the heading, why it's here with Let it in, and what was asked.
+    name: "phone-held",
+    query: "screen=item&id=amara",
+    ready: (page) => page.getByRole("button", { name: "Let it in" }),
+    files: { light: "shots/phone-held.png", dark: "shots/phone-held-night.png" },
+    clip: { x: 0, y: 0, width: 390, height: 508 },
+  },
+  {
+    name: "phone/inbox",
+    query: "",
+    // The list is in once its last request needing you is.
+    ready: (page) => page.getByText("Daniel Okafor"),
+    files: { light: "phone/inbox-day.webp", dark: "phone/inbox-night.webp" },
+  },
+  {
+    name: "phone/request",
+    query: "screen=item&id=maya",
+    ready: (page) => page.getByRole("button", { name: "Propose another time" }),
+    files: { light: "phone/request-day.webp", dark: "phone/request-night.webp" },
+  },
+  {
+    name: "phone/settings",
+    query: "screen=settings",
+    ready: (page) => page.getByRole("heading", { name: "Quiet hours" }),
+    files: { light: "phone/settings-day.webp", dark: "phone/settings-night.webp" },
+  },
+  {
+    // Nothing connected yet: the screen a new phone opens on.
+    name: "phone/connect",
+    query: "fresh",
+    ready: (page) => page.getByRole("button", { name: "Scan the code" }),
+    files: { light: "phone/connect-day.webp", dark: "phone/connect-night.webp" },
+  },
+];
+
+/** A PNG as a lossless WebP, through cwebp: pixel for pixel, about a third of the size. */
+async function writeWebp(png, file) {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "sdi-webp-"));
+  try {
+    const src = path.join(dir, "print.png");
+    await writeFile(src, png);
+    const r = spawnSync("cwebp", ["-quiet", "-lossless", "-z", "9", "-metadata", "none", src, "-o", file], {
+      stdio: "inherit",
+    });
+    if (r.error || r.status !== 0) throw new Error(`cwebp failed for ${file}: is libwebp installed?`);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+/** The phone app's prints asked for, light and dark, from its demo on a Vite dev server. */
 async function phoneShots() {
+  const shots = PHONE.filter((s) => wanted(s.name));
+  if (shots.length === 0) return;
   const mobile = path.resolve(app, "../mobile");
   const vite = path.join(mobile, "node_modules", ".bin", "vite");
   const mport = 5300 + Math.floor(Math.random() * 100);
@@ -72,11 +140,7 @@ async function phoneShots() {
   try {
     await waitFor(() => log.includes(`127.0.0.1:${mport}`), 30_000, "the phone app's dev server");
     browser = await chromium.launch({ channel: "chrome" });
-    await mkdir(out, { recursive: true });
-    for (const [colorScheme, name] of [
-      ["light", "phone-held"],
-      ["dark", "phone-held-night"],
-    ]) {
+    for (const colorScheme of ["light", "dark"]) {
       const context = await browser.newContext({
         viewport: { width: 390, height: 844 },
         deviceScaleFactor: 2,
@@ -87,14 +151,21 @@ async function phoneShots() {
         isMobile: true,
         hasTouch: true,
       });
-      const page = await context.newPage();
-      await page.goto(`http://127.0.0.1:${mport}/?demo&screen=item&id=amara`, { waitUntil: "networkidle" });
-      await page.getByRole("button", { name: "Let it in" }).first().waitFor({ timeout: 20_000 });
-      await page.evaluate(() => document.fonts.ready);
-      await sleep(400);
-      // The heading, why it's here with Let it in, and what was asked: the top of the screen.
-      await page.screenshot({ path: path.join(out, `${name}.png`), clip: { x: 0, y: 0, width: 390, height: 508 } });
-      console.log(`wrote ${path.relative(process.cwd(), path.join(out, `${name}.png`))}`);
+      for (const shot of shots) {
+        const file = path.join(pub, shot.files[colorScheme]);
+        await mkdir(path.dirname(file), { recursive: true });
+        const page = await context.newPage();
+        const query = shot.query ? `&${shot.query}` : "";
+        await page.goto(`http://127.0.0.1:${mport}/?demo${query}`, { waitUntil: "networkidle" });
+        await shot.ready(page).first().waitFor({ timeout: 20_000 });
+        await page.evaluate(() => document.fonts.ready);
+        await sleep(400);
+        const png = await page.screenshot(shot.clip ? { clip: shot.clip } : {});
+        if (file.endsWith(".webp")) await writeWebp(png, file);
+        else await writeFile(file, png);
+        console.log(`wrote ${path.relative(process.cwd(), file)}`);
+        await page.close();
+      }
       await context.close();
     }
   } finally {
@@ -108,8 +179,9 @@ const only = process.argv.slice(2);
 const wanted = (name) => only.length === 0 || only.some((o) => name.startsWith(o));
 
 async function main() {
-  if (wanted("phone")) await phoneShots();
-  if (only.length > 0 && only.every((o) => "phone".startsWith(o))) return;
+  await phoneShots();
+  // Only phone prints asked for: no server to start.
+  if (only.length > 0 && only.every((o) => o.startsWith("phone") || "phone".startsWith(o))) return;
   if (!existsSync(path.join(app, "dist", "client", "index.html"))) {
     console.log("no client build yet: building it");
     const r = spawnSync("pnpm", ["build:client"], { cwd: app, stdio: "inherit" });
