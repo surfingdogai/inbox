@@ -27,6 +27,13 @@ describe("the business kinds vocabulary", () => {
     expect(new Set(english).size, "each English name once").toBe(english.length);
     for (const k of BUSINESS_KINDS)
       for (const l of KIND_LANGUAGES) expect(k.names[l].trim(), `${k.id} ${l}`).toBe(k.names[l]);
+    // Other names to search by are each one kind's, and none is another kind's own name.
+    const fold = (x: string) => x.toLowerCase().trim();
+    const named = new Map(BUSINESS_KINDS.flatMap((k) => KIND_LANGUAGES.map((l) => [fold(k.names[l]), k.id] as const)));
+    const also = BUSINESS_KINDS.flatMap((k) => (k.also ?? []).map((a) => [fold(a), k.id] as const));
+    expect(new Set(also.map(([a]) => a)).size, "each other name once").toBe(also.length);
+    for (const [a, id] of also) expect(named.get(a) ?? id, `${id}: ${a}`).toBe(id);
+    expect(businessKind("pet-groomer")?.also).toContain("Dog groomer");
     // Every setup is a kind's, so each is reached from the list.
     for (const p of KIND_PRESETS)
       expect(

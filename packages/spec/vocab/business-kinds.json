@@ -1,5 +1,5 @@
 {
-  "description": "Kinds of business, for a business to say what it runs: each with its name in English, Portuguese (Portugal), Spanish, French and German, the setup it starts from (preset: appointments, trades, projects, food, bakery, cafe, shop, stays, or general, whose rules follow what agents can do), and the directory categories it falls under (slugs of vocab/categories.json). An inbox publishes a business's kind in its profile's categories: those slugs, and its name as a free tag; a kind the list lacks is the business's own words, as a free tag. A kind is never removed or renamed; new kinds come by a change to this file, which raises version.",
+  "description": "Kinds of business, for a business to say what it runs: each with its name in English, Portuguese (Portugal), Spanish, French and German, the setup it starts from (preset: appointments, trades, projects, food, bakery, cafe, shop, stays, or general, whose rules follow what agents can do), and the directory categories it falls under (slugs of vocab/categories.json). An inbox publishes a business's kind in its profile's categories: those slugs, and its name as a free tag; a kind the list lacks is the business's own words, as a free tag. Some kinds also list other names people search for them by (also), for finding a kind only, never shown or published. A kind is never removed or renamed; new kinds come by a change to this file, which raises version.",
   "version": 1,
   "languages": ["en", "pt", "es", "fr", "de"],
   "presets": ["appointments", "trades", "projects", "food", "bakery", "cafe", "shop", "stays", "general"],
@@ -26,7 +26,8 @@
         "de": "Imbiss"
       },
       "preset": "food",
-      "categories": ["restaurant"]
+      "categories": ["restaurant"],
+      "also": ["Takeout", "Take-out"]
     },
     {
       "id": "pizzeria",
@@ -686,7 +687,8 @@
         "de": "Kaffeebar"
       },
       "preset": "cafe",
-      "categories": ["cafe"]
+      "categories": ["cafe"],
+      "also": ["Coffee bar"]
     },
     {
       "id": "tea-room",
@@ -1106,7 +1108,8 @@
         "de": "Lebensmittelgeschäft"
       },
       "preset": "shop",
-      "categories": ["grocery"]
+      "categories": ["grocery"],
+      "also": ["Grocery store", "Corner shop"]
     },
     {
       "id": "supermarket",
@@ -1418,7 +1421,8 @@
         "de": "Bekleidungsgeschäft"
       },
       "preset": "shop",
-      "categories": ["shop"]
+      "categories": ["shop"],
+      "also": ["Clothes shop", "Clothing store", "Fashion boutique"]
     },
     {
       "id": "shoe-shop",
@@ -1430,7 +1434,8 @@
         "de": "Schuhgeschäft"
       },
       "preset": "shop",
-      "categories": ["shop"]
+      "categories": ["shop"],
+      "also": ["Shoe store"]
     },
     {
       "id": "bookshop",
@@ -1442,7 +1447,8 @@
         "de": "Buchhandlung"
       },
       "preset": "shop",
-      "categories": ["shop"]
+      "categories": ["shop"],
+      "also": ["Bookstore"]
     },
     {
       "id": "toy-shop",
@@ -1454,7 +1460,8 @@
         "de": "Spielwarengeschäft"
       },
       "preset": "shop",
-      "categories": ["shop"]
+      "categories": ["shop"],
+      "also": ["Toy store"]
     },
     {
       "id": "electronics-shop",
@@ -1562,7 +1569,8 @@
         "de": "Gartencenter"
       },
       "preset": "shop",
-      "categories": ["shop", "florist"]
+      "categories": ["shop", "florist"],
+      "also": ["Garden center"]
     },
     {
       "id": "furniture-shop",
@@ -1670,7 +1678,8 @@
         "de": "Juweliergeschäft"
       },
       "preset": "shop",
-      "categories": ["shop"]
+      "categories": ["shop"],
+      "also": ["Jewelry store", "Jeweller", "Jeweler"]
     },
     {
       "id": "watch-shop",
@@ -1730,7 +1739,8 @@
         "de": "Fahrradladen"
       },
       "preset": "shop",
-      "categories": ["shop", "auto"]
+      "categories": ["shop", "auto"],
+      "also": ["Bicycle shop"]
     },
     {
       "id": "music-shop",
@@ -2066,7 +2076,8 @@
         "de": "Apotheke"
       },
       "preset": "shop",
-      "categories": ["health", "shop"]
+      "categories": ["health", "shop"],
+      "also": ["Chemist", "Drugstore"]
     },
     {
       "id": "herbalist",
@@ -2174,7 +2185,8 @@
         "de": "Friseursalon"
       },
       "preset": "appointments",
-      "categories": ["hair-beauty"]
+      "categories": ["hair-beauty"],
+      "also": ["Hairdresser", "Hair stylist", "Hairstylist", "Coiffeur"]
     },
     {
       "id": "barber",
@@ -2186,7 +2198,8 @@
         "de": "Barbershop"
       },
       "preset": "appointments",
-      "categories": ["hair-beauty"]
+      "categories": ["hair-beauty"],
+      "also": ["Barbershop", "Barber shop"]
     },
     {
       "id": "nail-salon",
@@ -2198,7 +2211,8 @@
         "de": "Nagelstudio"
       },
       "preset": "appointments",
-      "categories": ["hair-beauty"]
+      "categories": ["hair-beauty"],
+      "also": ["Manicure", "Pedicure", "Nail technician", "Nail bar"]
     },
     {
       "id": "beauty-salon",
@@ -2390,7 +2404,8 @@
         "de": "Massagepraxis"
       },
       "preset": "appointments",
-      "categories": ["wellness"]
+      "categories": ["wellness"],
+      "also": ["Massage"]
     },
     {
       "id": "spa",
@@ -2558,7 +2573,8 @@
         "de": "Fitnessstudio"
       },
       "preset": "appointments",
-      "categories": ["fitness"]
+      "categories": ["fitness"],
+      "also": ["Fitness centre", "Fitness center", "Fitness studio"]
     },
     {
       "id": "yoga-studio",
@@ -2606,7 +2622,8 @@
         "de": "Personal Trainer"
       },
       "preset": "appointments",
-      "categories": ["fitness"]
+      "categories": ["fitness"],
+      "also": ["PT"]
     },
     {
       "id": "martial-arts-school",
@@ -2870,7 +2887,8 @@
         "de": "Arztpraxis"
       },
       "preset": "appointments",
-      "categories": ["health"]
+      "categories": ["health"],
+      "also": ["GP", "Family doctor"]
     },
     {
       "id": "medical-clinic",
@@ -2894,7 +2912,8 @@
         "de": "Physiotherapie"
       },
       "preset": "appointments",
-      "categories": ["health"]
+      "categories": ["health"],
+      "also": ["Physio", "Physical therapist"]
     },
     {
       "id": "chiropractor",
@@ -3110,7 +3129,8 @@
         "de": "Zahnarzt"
       },
       "preset": "appointments",
-      "categories": ["dental"]
+      "categories": ["dental"],
+      "also": ["Dental clinic"]
     },
     {
       "id": "orthodontist",
@@ -3194,7 +3214,8 @@
         "de": "Psychologische Beratung"
       },
       "preset": "appointments",
-      "categories": ["therapy"]
+      "categories": ["therapy"],
+      "also": ["Counselor", "Counselling", "Counseling"]
     },
     {
       "id": "couples-therapist",
@@ -3278,7 +3299,8 @@
         "de": "Klempner"
       },
       "preset": "trades",
-      "categories": ["trades"]
+      "categories": ["trades"],
+      "also": ["Plumbing"]
     },
     {
       "id": "electrician",
@@ -3290,7 +3312,8 @@
         "de": "Elektriker"
       },
       "preset": "trades",
-      "categories": ["trades"]
+      "categories": ["trades"],
+      "also": ["Electrical contractor"]
     },
     {
       "id": "carpenter",
@@ -3746,7 +3769,8 @@
         "de": "Umzugsunternehmen"
       },
       "preset": "trades",
-      "categories": ["transport"]
+      "categories": ["transport"],
+      "also": ["Movers", "Removal company", "Moving company"]
     },
     {
       "id": "man-and-van",
@@ -3830,7 +3854,8 @@
         "de": "Bauunternehmen"
       },
       "preset": "projects",
-      "categories": ["trades"]
+      "categories": ["trades"],
+      "also": ["Building contractor", "General contractor", "Construction"]
     },
     {
       "id": "renovation",
@@ -4058,7 +4083,8 @@
         "de": "Haushaltsreinigung"
       },
       "preset": "trades",
-      "categories": ["cleaning"]
+      "categories": ["cleaning"],
+      "also": ["Cleaner", "Cleaning service", "Maid service"]
     },
     {
       "id": "office-cleaning",
@@ -4094,7 +4120,8 @@
         "de": "Endreinigung"
       },
       "preset": "trades",
-      "categories": ["cleaning"]
+      "categories": ["cleaning"],
+      "also": ["Move-out cleaning"]
     },
     {
       "id": "window-cleaner",
@@ -4190,7 +4217,8 @@
         "de": "Autowerkstatt"
       },
       "preset": "appointments",
-      "categories": ["auto"]
+      "categories": ["auto"],
+      "also": ["Garage", "Car repair", "Auto repair"]
     },
     {
       "id": "tyre-shop",
@@ -4274,7 +4302,8 @@
         "de": "Fahrradwerkstatt"
       },
       "preset": "appointments",
-      "categories": ["auto", "repair"]
+      "categories": ["auto", "repair"],
+      "also": ["Bicycle repair"]
     },
     {
       "id": "windscreen-repair",
@@ -4310,7 +4339,8 @@
         "de": "Autovermietung"
       },
       "preset": "general",
-      "categories": ["auto", "transport"]
+      "categories": ["auto", "transport"],
+      "also": ["Car hire"]
     },
     {
       "id": "campervan-hire",
@@ -4418,7 +4448,8 @@
         "de": "Schmuckreparatur"
       },
       "preset": "appointments",
-      "categories": ["repair"]
+      "categories": ["repair"],
+      "also": ["Jewelry repair"]
     },
     {
       "id": "furniture-restoration",
@@ -4478,7 +4509,8 @@
         "de": "Rechtsanwalt"
       },
       "preset": "appointments",
-      "categories": ["legal"]
+      "categories": ["legal"],
+      "also": ["Solicitor", "Attorney", "Law firm"]
     },
     {
       "id": "notary",
@@ -4550,7 +4582,8 @@
         "de": "Buchhalter"
       },
       "preset": "appointments",
-      "categories": ["accounting"]
+      "categories": ["accounting"],
+      "also": ["Accounting firm"]
     },
     {
       "id": "bookkeeper",
@@ -4670,7 +4703,8 @@
         "de": "Immobilienmakler"
       },
       "preset": "appointments",
-      "categories": ["property"]
+      "categories": ["property"],
+      "also": ["Real estate agent", "Realtor"]
     },
     {
       "id": "letting-agent",
@@ -4706,7 +4740,8 @@
         "de": "Ferienwohnungsverwaltung"
       },
       "preset": "general",
-      "categories": ["property", "stay"]
+      "categories": ["property", "stay"],
+      "also": ["Short-let manager", "Holiday let manager"]
     },
     {
       "id": "home-staging",
@@ -5054,7 +5089,8 @@
         "de": "Nachhilfe"
       },
       "preset": "appointments",
-      "categories": ["education"]
+      "categories": ["education"],
+      "also": ["Tutoring", "Private lessons"]
     },
     {
       "id": "language-school",
@@ -5750,7 +5786,8 @@
         "de": "Pension"
       },
       "preset": "stays",
-      "categories": ["stay"]
+      "categories": ["stay"],
+      "also": ["Guest house"]
     },
     {
       "id": "bed-and-breakfast",
@@ -5762,7 +5799,8 @@
         "de": "Bed & Breakfast"
       },
       "preset": "stays",
-      "categories": ["stay"]
+      "categories": ["stay"],
+      "also": ["B&B", "BnB"]
     },
     {
       "id": "hostel",
@@ -5774,7 +5812,8 @@
         "de": "Hostel"
       },
       "preset": "stays",
-      "categories": ["stay"]
+      "categories": ["stay"],
+      "also": ["Backpackers"]
     },
     {
       "id": "holiday-rental",
@@ -5786,7 +5825,8 @@
         "de": "Ferienwohnung"
       },
       "preset": "stays",
-      "categories": ["stay"]
+      "categories": ["stay"],
+      "also": ["Vacation rental", "Holiday let", "Holiday home", "Short-term rental", "Holiday apartment"]
     },
     {
       "id": "aparthotel",
@@ -6050,7 +6090,8 @@
         "de": "Taxi"
       },
       "preset": "appointments",
-      "categories": ["transport"]
+      "categories": ["transport"],
+      "also": ["Cab"]
     },
     {
       "id": "private-driver",
@@ -6134,7 +6175,8 @@
         "de": "Fahrradverleih"
       },
       "preset": "appointments",
-      "categories": ["transport", "tours"]
+      "categories": ["transport", "tours"],
+      "also": ["Bike hire", "Bicycle rental", "Bicycle hire"]
     },
     {
       "id": "scooter-rental",
@@ -6434,7 +6476,8 @@
         "de": "Tierarzt"
       },
       "preset": "appointments",
-      "categories": ["pets", "health"]
+      "categories": ["pets", "health"],
+      "also": ["Veterinarian", "Veterinary clinic", "Animal clinic"]
     },
     {
       "id": "pet-groomer",
@@ -6446,7 +6489,8 @@
         "de": "Hundesalon"
       },
       "preset": "appointments",
-      "categories": ["pets"]
+      "categories": ["pets"],
+      "also": ["Dog groomer", "Dog grooming", "Cat groomer", "Pet grooming"]
     },
     {
       "id": "dog-walker",
@@ -6470,7 +6514,8 @@
         "de": "Tiersitter"
       },
       "preset": "appointments",
-      "categories": ["pets"]
+      "categories": ["pets"],
+      "also": ["Pet sitting", "Cat sitter"]
     },
     {
       "id": "kennels",
@@ -6482,7 +6527,8 @@
         "de": "Hundepension"
       },
       "preset": "appointments",
-      "categories": ["pets"]
+      "categories": ["pets"],
+      "also": ["Dog boarding", "Pet hotel"]
     },
     {
       "id": "dog-trainer",
@@ -6554,7 +6600,8 @@
         "de": "Blumenladen"
       },
       "preset": "shop",
-      "categories": ["florist"]
+      "categories": ["florist"],
+      "also": ["Flower shop"]
     },
     {
       "id": "flower-delivery",

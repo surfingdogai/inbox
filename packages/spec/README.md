@@ -259,7 +259,9 @@ with its name in English, Portuguese (Portugal), Spanish, French and German, the
 (`preset`: one of the inbox's rule presets, or `general`, whose rules follow what agents may do) and the directory
 categories it falls under (slugs of `vocab/categories.json`). An inbox publishes a business's kind in its profile's
 `categories`, as a network already reads them: those slugs, then the kind's name as a free tag; a kind the list
-lacks is the business's own words, as a free tag (`kindCategories`). A kind is never removed or renamed.
+lacks is the business's own words, as a free tag (`kindCategories`). Some kinds also list other names people
+search for them by (`also`: "Dog groomer", "B&B"), for finding a kind only, never published. A kind is never
+removed or renamed.
 
 `receipts.json` is written by `npx tsx scripts/gen-receipt-vectors.ts` from `packages/core`;
 `receipts-v2.json`, `signatures.json`, `passes.json`, the four stay vectors and `schemas/` by

@@ -36,6 +36,8 @@ const kindSchema = z.object({
   }),
   preset: z.enum(KIND_PRESETS),
   categories: z.array(z.string().min(1).max(60)).max(3),
+  /** Other names people search for it by ("Dog groomer", "B&B"), in any of the languages: found by, never published. */
+  also: z.array(z.string().min(1).max(60)).max(8).optional(),
 });
 export type BusinessKind = z.infer<typeof kindSchema>;
 
