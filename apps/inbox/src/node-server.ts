@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import type { ServerOptions } from "node:http";
+import path from "node:path";
 import type { Http2Bindings, HttpBindings } from "@hono/node-server";
 
 /**
@@ -35,6 +36,24 @@ export function commandDatabaseRefusal(file: string, inboxDb: string | undefined
     `No inbox database at ${file}, and INBOX_DB is not set: ${command} creates no new database.`,
     `Run it with the instance's settings, for example: node --env-file=/opt/inbox/.env /opt/inbox/server.mjs ${command}`,
   ].join("\n");
+}
+
+/**
+ * The owner app the Node server serves: INBOX_STATIC when it is set, else `client` beside the bundle,
+ * where the build (apps/inbox/dist), the release's `inbox-server.tar.gz` and the image all put it, else
+ * `../dist/client` from the source (`pnpm dev`, which runs src/node.ts). When neither is there, the
+ * first, so the warning names where the build would go.
+ */
+export function clientDirFrom(
+  inboxStatic: string | undefined,
+  here: string,
+  exists: (dir: string) => boolean = existsSync,
+): string {
+  const set = inboxStatic?.trim();
+  if (set) return set;
+  const beside = path.resolve(here, "client");
+  const fromSource = path.resolve(here, "../dist/client");
+  return [beside, fromSource].find((dir) => exists(dir)) ?? beside;
 }
 
 /** Where the caller's address comes from, as INBOX_CLIENT_ADDRESS_HEADER names it. */

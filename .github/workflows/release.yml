@@ -65,7 +65,9 @@ jobs:
           echo "$v" >out/inbox/VERSION
           cat >out/inbox/README.txt <<EOF
           Surfing Dog Inbox $v, the Node build: one file and the owner app, no install step.
-          Node 22.16+, 24 or 26:  INBOX_DB=./data/inbox.db node server.mjs
+          Node 22.16+, 24 or 26:  INBOX_OWNER_EMAIL=you@example.com INBOX_DB=./data/inbox.db node server.mjs
+          Then sign in at http://127.0.0.1:8787/login with that address. With no email set up, the
+          sign-in email is printed where the server runs.
           Every setting, and the systemd unit and Caddy block to copy: https://surfingdog.ai/install.md (path B)
           EOF
           cp -r deploy/. out/inbox-selfhost/

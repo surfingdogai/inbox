@@ -45,6 +45,7 @@ import {
 } from "./env";
 import {
   clientAddressFrom,
+  clientDirFrom,
   commandDatabaseRefusal,
   DEFAULT_HOST,
   NODE_SERVER_OPTIONS,
@@ -53,9 +54,10 @@ import {
 import { seedDemo, seedShowcase, seedSurfingDog } from "./seed";
 
 /**
- * Node/Bun entry: the same app over the built-in SQLite, the owner app Vite builds into
- * ../dist/client (or INBOX_STATIC), and a one-second job loop. Any path that is neither a door nor
- * a file gets the app shell, like the Worker's `not_found_handling: "single-page-application"`.
+ * Node/Bun entry: the same app over the built-in SQLite, the owner app Vite builds (INBOX_STATIC,
+ * else `client` beside the bundle, else ../dist/client from the source: `clientDirFrom`), and a
+ * one-second job loop. Any path that is neither a door nor a file gets the app shell, like the
+ * Worker's `not_found_handling: "single-page-application"`.
  * It listens on HOST (default 127.0.0.1: behind the proxy that terminates TLS, never around it;
  * the Docker image sets 0.0.0.0) and PORT (default 8787).
  * INBOX_DB points at the database file (default ./data/inbox.db). Mail goes out through Cloudflare
@@ -346,7 +348,7 @@ if (demo) {
   console.log("Demo mode: the shop is seeded, nobody but the owner is emailed, and it is wiped every night.");
 }
 
-const clientDir = process.env.INBOX_STATIC ?? path.resolve(import.meta.dirname, "../dist/client");
+const clientDir = clientDirFrom(process.env.INBOX_STATIC, import.meta.dirname);
 if (existsSync(clientDir)) {
   app.use("/*", serveStatic({ root: clientDir }));
   const shell = serveStatic({ root: clientDir, path: "index.html" });
