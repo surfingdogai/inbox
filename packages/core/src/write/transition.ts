@@ -56,7 +56,7 @@ import {
   webhookFanoutStatement,
 } from "./common";
 import { CHARGED_BACK_SQL, CORRECTED_SQL, correctionFacts, correctionUntil, deadCorrections } from "./corrections";
-import { type FieldProblem, fromZod, WriteError } from "./errors";
+import { type FieldProblem, fromZod, notYoursError, WriteError } from "./errors";
 import {
   draftStatements,
   judgeAccept,
@@ -1413,7 +1413,7 @@ async function lastEventAt(db: Db, itemId: string, event: string): Promise<numbe
 async function assertOwnership(caller: Caller, partyId: string, accessTokenHash: string | null): Promise<void> {
   if (caller.actor.partyId && caller.actor.partyId === partyId) return;
   if (caller.accessToken && accessTokenHash && (await hashText(caller.accessToken)) === accessTokenHash) return;
-  throw new WriteError("not_allowed", "this item belongs to someone else");
+  throw notYoursError(caller);
 }
 
 function applyInput(

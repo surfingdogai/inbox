@@ -412,12 +412,15 @@ export function publicRest(caps: Capabilities, opts: { readonly baseUrl?: string
     describeRoute({
       tags: ["public"],
       summary: "Cancel your item",
+      description:
+        "For the customer: the item's access token in the X-Access-Token header (best: a URL ends up in logs), as access_token in the body, or as access_token in the query, the same ways as GET /items/{id}; or a pass the item recognises.",
       responses: json("Item", R.transitionResultSchema),
     }),
     validator("json", cancelItemInput.omit({ item_id: true }).partial(), hook),
     async (c) => {
       const body = c.req.valid("json");
-      const access_token = body.access_token ?? c.req.header("x-access-token");
+      // The token comes the same ways as on the read: the body, the query, or X-Access-Token.
+      const access_token = body.access_token ?? c.req.query("access_token") ?? c.req.header("x-access-token");
       return c.json(
         await caps.cancelItem(
           c.get("caller"),
@@ -683,7 +686,7 @@ export function publicRest(caps: Capabilities, opts: { readonly baseUrl?: string
     validator("json", verifyCustomerInput, hook),
     async (c) => {
       const body = c.req.valid("json");
-      const token = body.access_token ?? c.req.header("x-access-token");
+      const token = body.access_token ?? c.req.query("access_token") ?? c.req.header("x-access-token");
       const r = await caps.verifyCustomer(c.get("caller"), { ...body, ...(token ? { access_token: token } : {}) });
       return c.json(r, "sent_to" in r ? 202 : 200);
     },

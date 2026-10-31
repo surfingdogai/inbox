@@ -64,7 +64,7 @@ import { isStayAction, type StayPageDeps, stayLinkAct, stayLinkView } from "../s
 import { hashText } from "../util/canonical";
 import { type Caller, isCustomer, nowOf, withIdempotencyKey } from "../write/caller";
 import { findIdempotent } from "../write/common";
-import { WriteError } from "../write/errors";
+import { notYoursError, WriteError } from "../write/errors";
 import { once } from "../write/idempotency";
 import { type PricingFor, priceFromCatalogue } from "../write/pricing";
 import { openReturnOf, withdrawalFlagsOf, withdrawalOf } from "../write/returns";
@@ -2411,7 +2411,7 @@ export class CustomerDoors {
       const owns =
         (caller.actor.partyId && caller.actor.partyId === row.partyId) ||
         (caller.accessToken && row.accessTokenHash && (await hashText(caller.accessToken)) === row.accessTokenHash);
-      if (!owns) throw new WriteError("not_allowed", "this item belongs to someone else");
+      if (!owns) throw notYoursError(caller);
     }
     return row;
   }

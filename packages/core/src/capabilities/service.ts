@@ -131,7 +131,7 @@ import {
 import { findIdempotent } from "../write/common";
 import { hiddenTransitions } from "../write/corrections";
 import type { CreateResult } from "../write/create";
-import { type FieldProblem, fromZod, WriteError } from "../write/errors";
+import { type FieldProblem, fromZod, notYoursError, WriteError } from "../write/errors";
 import { type OnceOptions, type OnceResult, once } from "../write/idempotency";
 import { heldReplyStatements, namesOtherMoney } from "../write/limits";
 import { isAutomation } from "../write/offers";
@@ -2600,7 +2600,7 @@ export class Capabilities {
       const owns =
         (caller.actor.partyId && caller.actor.partyId === row.partyId) ||
         (caller.accessToken && row.accessTokenHash && (await hashText(caller.accessToken)) === row.accessTokenHash);
-      if (!owns) throw new WriteError("not_allowed", "this item belongs to someone else");
+      if (!owns) throw notYoursError(caller);
     }
     return row;
   }

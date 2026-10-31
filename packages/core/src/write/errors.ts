@@ -162,6 +162,25 @@ export class WriteError extends Error {
   }
 }
 
+/**
+ * The refusal of a customer's read or write on an item that is not theirs as far as the request shows.
+ * When no token and no party came at all, it says where the token goes: the item may well be theirs,
+ * and the token was only sent where the door does not look.
+ */
+export function notYoursError(caller: {
+  readonly accessToken?: string | undefined;
+  readonly actor: { readonly partyId?: string | undefined };
+}): WriteError {
+  if (!caller.accessToken && !caller.actor.partyId) {
+    return new WriteError(
+      "not_allowed",
+      "No access token came with this request. Send the token the item was created with as access_token (an argument on MCP; on REST in the body, the query, or best the X-Access-Token header), or a pass the item recognises.",
+      { details: { reason: "no_access_token" } },
+    );
+  }
+  return new WriteError("not_allowed", "this item belongs to someone else");
+}
+
 export function fromZod(error: z.ZodError, prefix = ""): WriteError {
   const fields: FieldProblem[] = error.issues.map((i) => ({
     path: [prefix, ...i.path.map(String)].filter(Boolean).join("."),

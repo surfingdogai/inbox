@@ -131,6 +131,50 @@ describe("REST door", () => {
     expect(await db.orm.select().from(schema.items)).toHaveLength(0);
   });
 
+  it("takes the access token the same ways on a cancel as on a read, and says where it goes when it is missing", async () => {
+    const { app, svc } = await setup();
+    const created = (await (
+      await sentConfirmed(
+        (r) => app.request(r),
+        jsonPost("/v1/bookings", {
+          payload: {
+            reservationFor: { serviceId: svc, name: "Full service" },
+            startTime: `${DAY}T10:00:00Z`,
+            endTime: `${DAY}T11:30:00Z`,
+          },
+          contact: { name: "Rita", email: "rita@example.com" },
+        }),
+      )
+    ).json()) as { view: { item: { id: string } }; accessToken: string };
+    const id = created.view.item.id;
+    const q = `access_token=${encodeURIComponent(created.accessToken)}`;
+    // As /try teaches for the read.
+    expect((await app.request(new Request(`https://inbox.test/v1/items/${id}?${q}`))).status).toBe(200);
+
+    // Without any token: not "someone else's", but where the token goes.
+    const bare = await app.request(jsonPost(`/v1/items/${id}/cancel`, { reason: "plans changed" }));
+    expect(bare.status).toBe(403);
+    const problem = (await bare.json()) as { detail: string; details?: { reason?: string } };
+    expect(problem.detail).toMatch(/^No access token came with this request\..*X-Access-Token/);
+    expect(problem.details?.reason).toBe("no_access_token");
+
+    // A wrong one is someone else's item, as before.
+    const wrong = await app.request(
+      jsonPost(`/v1/items/${id}/cancel?access_token=${"x".repeat(32)}`, { reason: "plans changed" }),
+    );
+    expect(wrong.status).toBe(403);
+    expect(((await wrong.json()) as { detail: string }).detail).toBe("this item belongs to someone else");
+
+    // In the query, as on the read: cancelled.
+    const cancelled = await app.request(
+      jsonPost(`/v1/items/${id}/cancel?${q}`, { reason: "plans changed", idempotency_key: crypto.randomUUID() }),
+    );
+    expect(cancelled.status).toBe(200);
+    expect(((await cancelled.json()) as { view: { item: { state: string } } }).view.item.state).toBe(
+      "cancelled_by_customer",
+    );
+  });
+
   it("cancels late through the customer's door, and gives the owner the new transitions", async () => {
     const { db, app, svc, ownerKey } = await setup();
     const owner = { authorization: `Bearer ${ownerKey}` };
