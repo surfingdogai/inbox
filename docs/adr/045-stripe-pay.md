@@ -39,12 +39,19 @@ learn of a transfer.
    that `payments` names too (`readPayTo`). A setup plan never fills it in, and drops `stripe_pay` if it names it.
 4. **Offered where an order is payable.** An accepted order that is due, with no change waiting, in a currency the
    business takes by Stripe Pay, has `payment.pay_to` on the status door (REST and MCP): `{method: "stripe_pay",
-   to, amount, reference, confirm: ["to", "amount", "currency"], marked_paid_by: "business", human}`. The amount
-   is exactly the order's total in its currency, and the reference is the order's six characters. `human` says it
-   in the business's voice ("You can pay with Stripe Pay to @harbour: £29.00, reference 4F2K9Q. We mark it paid once
-   it reaches us."), and the emails about paying (accepted, waiting for payment, payment failed) carry the same
-   line. The MCP server says, while the business takes it, that the agent confirms the recipient, the amount and
-   the currency with its person before anything is sent, as Stripe's guidance says. Never for a test order (the
+   to, amount, reference, confirm: ["to", "amount", "currency", "from"], marked_paid_by: "business", human}`:
+   `confirm` is the four things Stripe's guidance names, `from` being the payer's source financial account. The
+   amount is exactly the order's total in its currency, and the reference is the order's six characters. `human`
+   says it in the business's voice, and says who can use it, since most customers have no Stripe business account
+   ("If you pay from a Stripe business account, you can pay with Stripe Pay to @harbour: £29.00, reference 4F2K9Q.
+   We mark it paid once it reaches us."); the emails about paying (accepted, waiting for payment, payment failed)
+   carry the same line. While the business takes it in its own currency (so that an order can offer it), the MCP
+   server says who can pay this way (a Stripe business account with a funded financial account, in preview in the
+   US and the UK), that the agent confirms those four things with its person before anything is sent, and that it
+   adds the reference to the transfer if Stripe lets it and, either way, tells the business it paid with
+   `send_message`, giving the reference: Stripe documents no note on a transfer. Settings → Payments says so when
+   none of the ticked currencies is the business's own: the profile still names the handle, but no order offers
+   it. Never for a test order (the
    transfer is real money), nor an order in another currency; USDC is listed for the business but no order is in
    USDC, so it is offered only in USD and GBP.
 5. **Nothing checks it here, and the inbox says so.** No money passes through the inbox, and Stripe documents no
@@ -57,8 +64,11 @@ learn of a transfer.
   with no link to make. The money never touches the inbox.
 - A network reads the handle from the business's own manifest only: searchable as `accepts=stripe_pay`, and shown
   with its address in `get_business`.
-- Payments are not matched to orders automatically. If Stripe later publishes a way for a recipient to learn of
-  a transfer (an event, a list of received transfers), recording it could follow, as ADR-023 does for links.
+- Payments are not matched to orders automatically, and a customer can say they paid when they have not: the
+  owner checks the money in Stripe before recording it. If Stripe later documents a way for a recipient to learn of
+  a Stripe Pay transfer, recording it could follow, as ADR-023 does for links. Stripe's Treasury API has received
+  credits on a financial account, with events; whether a Stripe Pay transfer arrives as one, and with what, is not
+  documented, so nothing here relies on it yet.
 
 ## Not decided here
 

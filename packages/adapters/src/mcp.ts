@@ -101,11 +101,13 @@ export const AGENT_PAY_INSTRUCTIONS =
   "Once an order is accepted, get_item_status says how to pay it: payment.agent when the business takes a payment straight from your platform (pay_order, with a one-time Stripe shared payment token for payment.agent.business_profile and payment.agent.platform_amount, on your person's yes to that total), else payment_url for your person.";
 
 /**
- * Said only while the business takes Stripe Pay (ADR-045): a transfer to its Stripe profile that nothing here sees,
- * so the agent confirms it with its person, as Stripe's own guidance says, and the business marks the order paid.
+ * Said only while the business takes Stripe Pay (ADR-045) in its own currency, so that an order can offer it: a
+ * transfer to its Stripe profile that nothing here sees, so the agent confirms the four things Stripe's own guidance
+ * names with its person, and the business marks the order paid. Stripe documents no note on a transfer, so the
+ * reference goes to the business in a message either way.
  */
 export const STRIPE_PAY_INSTRUCTIONS =
-  "This business also takes Stripe Pay, a transfer from your person's Stripe account to its Stripe profile: once an order is accepted, get_item_status shows payment.pay_to with the handle, the exact amount, its currency and the order's reference. Confirm the recipient, the amount and the currency with your person before anything is sent, as Stripe's guidance asks, and send it with the reference. Nothing here sees the transfer: the business marks the order paid once it arrives, so tell it you paid with send_message.";
+  "This business also takes Stripe Pay, a transfer to its Stripe profile from a Stripe business account with a funded Stripe financial account (in preview from Stripe for eligible businesses in the US and the UK): once an order is accepted, get_item_status shows payment.pay_to with the handle, the exact amount, its currency and the order's reference. Before anything is sent, confirm with your person the recipient, the amount, the currency and which of their Stripe financial accounts pays it, as Stripe's guidance asks. Include the order's reference if Stripe lets you add one; either way, tell the business you paid with send_message, giving the reference. Nothing here sees the transfer: the business marks the order paid once it arrives.";
 
 export const OWNER_INSTRUCTIONS = [
   "You are working this business's inbox on the owner's behalf. list_items shows what needs a person; get_item shows the full story;",
@@ -291,7 +293,7 @@ function payToText(v: { payment?: { pay_to?: readonly PayToOffer[] | undefined }
   return (v.payment?.pay_to ?? [])
     .map(
       (p) =>
-        ` Pay with ${p.label} to ${p.to}: ${moneyText(p.amount)} (${p.amount.currency}), reference ${p.reference}. Confirm the recipient, the amount and the currency with your person before sending; the business marks the order paid once it arrives.`,
+        ` Pay with ${p.label} to ${p.to}: ${moneyText(p.amount)} (${p.amount.currency}), reference ${p.reference}. Before sending, confirm with your person the recipient, the amount, the currency and which of their Stripe financial accounts pays it; then tell the business you paid with send_message, giving the reference. The business marks the order paid once it arrives.`,
     )
     .join("");
 }
@@ -324,8 +326,11 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
     const menu = await hasMenuDoors(caps);
     // A business whose assistants' payments are on (ADR-042) has the tool to pay with.
     const agentPay = await caps.connectors.agentPay.anyOn();
-    // One that takes Stripe Pay (ADR-045) says how it is paid, and who marks it paid.
-    const stripePay = (profile.pay_to ?? []).some((p) => p.method === "stripe_pay");
+    // One that takes Stripe Pay (ADR-045) in its own currency, so that its orders can offer it, says how it is paid
+    // and who marks it paid. An order that offers it elsewhere carries the same words on get_item_status.
+    const stripePay = (profile.pay_to ?? []).some(
+      (p) => p.method === "stripe_pay" && p.currencies.includes(profile.currency.toUpperCase()),
+    );
     // A kitchen that takes its orders on its own site (ADR-035): its menu reads here, orders go there.
     const ordersAt = menu ? await caps.food.orderDoorElsewhere() : null;
     const instructions = [

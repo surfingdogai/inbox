@@ -15,6 +15,7 @@ import {
   type StripePayChoice,
   samePayments,
   sameStripePay,
+  stripePayGap,
   stripePayStart,
   stripePayTo,
   togglePayment,
@@ -298,6 +299,8 @@ function StripePay({
   }, [saved]);
   const to = stripePayTo(typed);
   const changed = to !== saved.to || !samePayments(currencies, saved.currencies);
+  // Currencies none of the business's orders are in: said, never refused (its profile still names the handle).
+  const gap = stripePayGap(currency, currencies);
 
   const submit = () => {
     if (!to) {
@@ -356,10 +359,15 @@ function StripePay({
             </label>
           ))}
         </div>
+        {gap && (
+          <p className="hint pay-stripe-gap" role="status">
+            {gap}
+          </p>
+        )}
       </fieldset>
       <div className={clsx("hint", problem && "error")} role={problem ? "alert" : undefined}>
         {problem ??
-          "It goes straight to your Stripe account, and this inbox cannot see it: when a payment arrives, record it on the order. Agents are told to confirm your handle, the amount and the currency first."}
+          "It goes straight to your Stripe account, and this inbox cannot see it: when a payment arrives, check it in Stripe, then record it on the order. Agents are told to confirm your handle, the amount, the currency and the account paying first."}
       </div>
       <div className="pay-stripe-actions">
         <button

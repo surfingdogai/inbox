@@ -10,6 +10,7 @@ import {
   STRIPE_PAY,
   samePayments,
   sameStripePay,
+  stripePayGap,
   stripePayStart,
   stripePayTo,
   togglePayment,
@@ -108,5 +109,17 @@ describe("Stripe Pay, as the owner sets it", () => {
       true,
     );
     expect(sameStripePay({ to: "@a", currencies: ["GBP"] }, { to: "@b", currencies: ["GBP"] })).toBe(false);
+  });
+
+  it("says when no order could offer it: the business's own currency is not among the ones ticked", () => {
+    expect(stripePayGap("GBP", ["GBP", "USDC"])).toBeNull();
+    expect(stripePayGap("gbp", ["GBP"])).toBeNull();
+    expect(stripePayGap("GBP", [])).toBeNull();
+    expect(stripePayGap("GBP", ["USDC"])).toBe(
+      "Your prices are in GBP: tick GBP, or no order offers Stripe Pay. Your profile still shows your handle.",
+    );
+    expect(stripePayGap("EUR", ["GBP"])).toBe(
+      "Your prices are in EUR, which Stripe Pay does not move: no order offers it, though your profile shows your handle.",
+    );
   });
 });

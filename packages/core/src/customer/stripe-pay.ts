@@ -28,20 +28,30 @@ export interface PayToOffer {
   readonly to: string;
   /** Exactly what to send, in the order's own currency and its minor unit. */
   readonly amount: Money;
-  /** The order's six-character reference, to send with it. */
+  /**
+   * The order's six-character reference: added to the transfer if Stripe lets the payer add one, and given to the
+   * business, either way, when the payer says it was sent.
+   */
   readonly reference: string;
-  /** What the payer confirms with their person before sending, as Stripe's own guidance asks. */
-  readonly confirm: readonly ["to", "amount", "currency"];
+  /**
+   * What the payer confirms with their person before sending, as Stripe's own guidance asks: the recipient, the
+   * amount, the currency, and the Stripe financial account it is paid from (`from`).
+   */
+  readonly confirm: readonly ["to", "amount", "currency", "from"];
   readonly marked_paid_by: "business";
   /** What to tell the person, in the business's words and language. */
   readonly human: string;
 }
 
+/**
+ * Stripe Pay is paid from a Stripe business account (a funded Stripe financial account), so the sentence says so:
+ * most customers have none, and it is not for them.
+ */
 const WORDS: Readonly<Record<CustomerLang, (to: string, amount: string, reference: string) => string>> = {
   en: (to, amount, reference) =>
-    `You can pay with Stripe Pay to ${to}: ${amount}, reference ${reference}. We mark it paid once it reaches us.`,
+    `If you pay from a Stripe business account, you can pay with Stripe Pay to ${to}: ${amount}, reference ${reference}. We mark it paid once it reaches us.`,
   pt: (to, amount, reference) =>
-    `Pode pagar com Stripe Pay para ${to}: ${amount}, referência ${reference}. Marcamo-lo como pago assim que nos chegar.`,
+    `Se pagar a partir de uma conta empresarial Stripe, pode pagar com Stripe Pay para ${to}: ${amount}, referência ${reference}. Marcamo-lo como pago assim que nos chegar.`,
 };
 
 /** The sentence a customer reads about paying an order by Stripe Pay, in their language. */
@@ -72,7 +82,7 @@ export function stripePayOffer(
     to: setting.to,
     amount: order.total,
     reference,
-    confirm: ["to", "amount", "currency"],
+    confirm: ["to", "amount", "currency", "from"],
     marked_paid_by: "business",
     human: stripePayLine(lang, setting.to, moneyIn(order.total, lang), reference),
   };

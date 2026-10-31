@@ -238,11 +238,15 @@ export const customerItemViewSchema = z.looseObject({
             amount: z
               .object({ value: z.number().int(), currency: z.string() })
               .describe("Exactly what to send, in the currency's own minor unit; the transfer is in this currency."),
-            reference: z.string().describe("The order's reference: send it with the payment."),
+            reference: z
+              .string()
+              .describe(
+                "The order's reference: add it to the transfer if Stripe lets you, and give it to the business either way when you tell it you paid (send_message).",
+              ),
             confirm: z
               .array(z.string())
               .describe(
-                "What your person confirms before anything is sent: the recipient, the amount and the currency.",
+                "What your person confirms before anything is sent, as Stripe's guidance asks: the recipient (to), the amount, the currency and the Stripe financial account it is paid from (from).",
               ),
             marked_paid_by: z
               .literal("business")
@@ -252,7 +256,7 @@ export const customerItemViewSchema = z.looseObject({
         )
         .optional()
         .describe(
-          "Ways to pay it to an address of the business's own, while it is due: stripe_pay, a Stripe Pay transfer from your person's Stripe account (their Dashboard, or Stripe's own tools) to `to`, for `amount` in its currency, with `reference`. Confirm the recipient, amount and currency with your person before sending, as Stripe's guidance asks. Absent when there is none.",
+          "Ways to pay it to an address of the business's own, while it is due: stripe_pay, a Stripe Pay transfer to `to` from your person's Stripe business account with a funded Stripe financial account (their Dashboard, or Stripe's own tools), for `amount` in its currency. Before sending, confirm with your person the recipient, the amount, the currency and which of their Stripe financial accounts pays it, as Stripe's guidance asks. Add `reference` to the transfer if Stripe lets you, and give it to the business either way when you tell it you paid. Absent when there is none.",
         ),
       human: z.string().describe("In the business's words: relay it as it is."),
     })

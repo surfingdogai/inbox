@@ -1945,6 +1945,12 @@ fieldset.chips,
 .pay-stripe-input {
   max-width: 320px;
 }
+/* Currencies none of the business's orders are in: said beside the ticks, never refused. */
+.pay-stripe-gap {
+  clear: both;
+  margin: 6px 0 0;
+  color: var(--c-warning-ink);
+}
 .pay-stripe-actions {
   display: flex;
   flex-wrap: wrap;

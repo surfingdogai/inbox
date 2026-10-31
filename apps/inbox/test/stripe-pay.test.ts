@@ -140,19 +140,21 @@ describe("Stripe Pay", () => {
         to: "@harbour",
         amount: { value: 2900, currency: "GBP" },
         reference,
-        confirm: ["to", "amount", "currency"],
+        confirm: ["to", "amount", "currency", "from"],
         marked_paid_by: "business",
-        human: `You can pay with Stripe Pay to @harbour: £29.00, reference ${reference}. We mark it paid once it reaches us.`,
+        human: `If you pay from a Stripe business account, you can pay with Stripe Pay to @harbour: £29.00, reference ${reference}. We mark it paid once it reaches us.`,
       },
     ]);
-    expect(p?.human).toContain("You can pay with Stripe Pay to @harbour");
+    expect(p?.human).toContain("you can pay with Stripe Pay to @harbour");
     const { rows } = await s.db.client.query({
       sql: "SELECT template, body_text FROM outbound_mail WHERE item_id = ? AND recipient = 'customer'",
       params: [o.id],
       method: "all",
     });
     const accepted = rows.find((r) => r[0] === "order.accepted");
-    expect(String(accepted?.[1])).toContain(`You can pay with Stripe Pay to @harbour: £29.00, reference ${reference}.`);
+    expect(String(accepted?.[1])).toContain(
+      `If you pay from a Stripe business account, you can pay with Stripe Pay to @harbour: £29.00, reference ${reference}.`,
+    );
   });
 
   it("is not offered before acceptance, in a currency the business does not take there, or once paid", async () => {
@@ -190,9 +192,23 @@ describe("Stripe Pay", () => {
     const st = await client.callTool({ name: "get_item_status", arguments: { item_id: o.id, access_token: o.token } });
     const text = JSON.stringify(st.content);
     expect(text).toContain(`Pay with Stripe Pay to @harbour: £29.00 (GBP), reference ${o.id.slice(-6).toUpperCase()}.`);
-    expect(text).toContain("Confirm the recipient, the amount and the currency with your person before sending");
+    expect(text).toContain(
+      "Before sending, confirm with your person the recipient, the amount, the currency and which of their Stripe financial accounts pays it",
+    );
+    expect(text).toContain("tell the business you paid with send_message, giving the reference");
     const profile = await client.callTool({ name: "get_business_profile", arguments: {} });
     expect(JSON.stringify(profile.content)).toContain("Paid to: Stripe Pay to @harbour (GBP).");
+  });
+
+  it("promises an assistant nothing while no order could offer it: the business's own currency is not taken there", async () => {
+    const s = await setup({ to: "@harbour", currencies: ["USDC"] });
+    const fetchLike = async (input: string | URL, init?: RequestInit) => s.inbox.app.request(String(input), init);
+    const client = new Client({ name: "test-agent", version: "0" });
+    await client.connect(new StreamableHTTPClientTransport(new URL(`${BASE}/mcp`), { fetch: fetchLike }));
+    expect(client.getInstructions()).not.toContain("Stripe Pay");
+    // The profile still says where the business takes it.
+    const profile = await client.callTool({ name: "get_business_profile", arguments: {} });
+    expect(JSON.stringify(profile.content)).toContain("Paid to: Stripe Pay to @harbour (USDC).");
   });
 
   it("is never offered for a test order, which would be paid with real money", () => {
@@ -203,7 +219,7 @@ describe("Stripe Pay", () => {
       stripePayOffer({ id: "01JTEST0000000ABCDEF", total: { ...total, value: 0 }, sandbox: false }, setting, "en"),
     ).toBeNull();
     expect(stripePayOffer({ id: "01JTEST0000000ABCDEF", total, sandbox: false }, setting, "pt")?.human).toMatch(
-      /^Pode pagar com Stripe Pay para @harbour: 29,00\s£, referência ABCDEF\. Marcamo-lo como pago assim que nos chegar\.$/,
+      /^Se pagar a partir de uma conta empresarial Stripe, pode pagar com Stripe Pay para @harbour: 29,00\s£, referência ABCDEF\. Marcamo-lo como pago assim que nos chegar\.$/,
     );
   });
 

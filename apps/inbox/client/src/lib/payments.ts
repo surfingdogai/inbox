@@ -199,6 +199,19 @@ export function stripePayStart(currency: string | null | undefined): string[] {
   return STRIPE_PAY_CURRENCIES.includes(c) ? [c] : [];
 }
 
+/**
+ * Why no order would offer Stripe Pay with these currencies, or null when the business's own currency is among them
+ * (or none is ticked yet). An order offers it only in its own currency, and USDC is never one: a business that takes
+ * Stripe Pay only in other currencies still shows its handle on its profile, but no order offers it.
+ */
+export function stripePayGap(currency: string | null | undefined, currencies: readonly string[]): string | null {
+  const c = (currency ?? "").toUpperCase();
+  if (!c || !currencies.length || currencies.includes(c)) return null;
+  return STRIPE_PAY_CURRENCIES.includes(c)
+    ? `Your prices are in ${c}: tick ${c}, or no order offers Stripe Pay. Your profile still shows your handle.`
+    : `Your prices are in ${c}, which Stripe Pay does not move: no order offers it, though your profile shows your handle.`;
+}
+
 /** `currencies` with `c` ticked or not, in Stripe Pay's order. */
 export function toggleStripeCurrency(currencies: readonly string[], c: string, on: boolean): string[] {
   const set = new Set(currencies);
