@@ -77,9 +77,17 @@ describe("the app's screens on the page", () => {
   it("show a made-up business, and say so", () => {
     expect(page).toContain("Shown with a made-up business.");
     const demo = read("apps/mobile/src/demo.ts");
-    const hosts = [...demo.matchAll(/https:\/\/([a-z0-9.-]+)/g)].map((m) => m[1] ?? "");
+    const hosts = [...demo.matchAll(/https?:\/\/([a-z0-9.-]+)/g)].map((m) => m[1] ?? "");
     expect(hosts.length).toBeGreaterThan(0);
     for (const host of hosts) expect(host).toMatch(/\.example$/);
+    // Every sender too: example.com or a .example domain, never a real one.
+    const domains = [...demo.matchAll(/[\w.+-]+@([a-z0-9.-]+\.[a-z]+)/gi)].map((m) => (m[1] ?? "").toLowerCase());
+    expect(domains.length).toBeGreaterThan(0);
+    for (const domain of domains) expect(domain).toMatch(/^(example\.com|.+\.example)$/);
+  });
+
+  it("open each print at full size, small as they are on a phone", () => {
+    expect(page).toMatch(/caption=\{s\.caption\}\s+zoom\s/);
   });
 
   it("say what comes next, without a date", () => {

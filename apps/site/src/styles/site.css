@@ -770,6 +770,12 @@ p[id] {
   border-radius: var(--radius-control);
   border: 1px solid var(--hairline);
 }
+/* A print that opens at full size: the link is the print, nothing drawn around it. */
+.shot-zoom {
+  display: block;
+  border-radius: var(--radius-control);
+  cursor: zoom-in;
+}
 .shot-empty {
   display: grid;
   place-items: center;

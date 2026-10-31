@@ -106,6 +106,9 @@ const PHONE = [
   },
 ];
 
+/** The phone prints' clock: Saturday 31 October 2026 at 10:00 UTC, ten in the morning in their time zone. */
+const PHONE_NOW = new Date("2026-10-31T10:00:00Z");
+
 /** A PNG as a lossless WebP, through cwebp: pixel for pixel, about a third of the size. */
 async function writeWebp(png, file) {
   const dir = await mkdtemp(path.join(os.tmpdir(), "sdi-webp-"));
@@ -151,6 +154,9 @@ async function phoneShots() {
         isMobile: true,
         hasTouch: true,
       });
+      // The demo counts its times from now: one fixed morning keeps the dates and the "2 min" the same
+      // on every run, and puts this afternoon's booking request still ahead of it.
+      await context.clock.setFixedTime(PHONE_NOW);
       for (const shot of shots) {
         const file = path.join(pub, shot.files[colorScheme]);
         await mkdir(path.dirname(file), { recursive: true });

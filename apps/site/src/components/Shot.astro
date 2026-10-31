@@ -4,9 +4,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { imageSize } from "../lib/image-size";
 
 /**
- * A real print of the app in a glass frame, no browser chrome. The files live in public/shots;
- * until one lands the frame stays, at the same aspect ratio, with the expected file name in it,
- * so the swap is a file drop. `night` names a second print shown in the night theme.
+ * A real print of the app in a glass frame, no browser chrome. The files live under public/ (shots/,
+ * phone/); until one lands the frame stays, at the same aspect ratio, with the expected file name in
+ * it, so the swap is a file drop. `night` names a second print shown in the night theme. `zoom` links
+ * each print to itself, so a print shown small can be opened at full size.
  */
 interface Props {
   src: string;
@@ -16,9 +17,10 @@ interface Props {
   caption?: string;
   class?: string;
   loading?: "eager" | "lazy";
+  zoom?: boolean;
 }
 
-const { src, alt, night, title, caption, class: className, loading = "lazy" } = Astro.props;
+const { src, alt, night, title, caption, class: className, loading = "lazy", zoom = false } = Astro.props;
 
 function load(path: string) {
   const file = new URL(`.${path}`, publicDir);
@@ -31,7 +33,18 @@ const dark = night ? load(night) : undefined;
 
 <figure class:list={["glass shot", className]}>
   {
-    day ? (
+    day && zoom ? (
+      <a class:list={["shot-zoom day", { "has-night": Boolean(dark) }]} href={day.path}>
+        <img
+          src={day.path}
+          alt={alt}
+          width={day.size?.width}
+          height={day.size?.height}
+          loading={loading}
+          decoding="async"
+        />
+      </a>
+    ) : day ? (
       <img
         class:list={["day", { "has-night": Boolean(dark) }]}
         src={day.path}
@@ -48,7 +61,18 @@ const dark = night ? load(night) : undefined;
     )
   }
   {
-    dark ? (
+    dark && zoom ? (
+      <a class="shot-zoom night" href={dark.path}>
+        <img
+          src={dark.path}
+          alt={alt}
+          width={dark.size?.width}
+          height={dark.size?.height}
+          loading={loading}
+          decoding="async"
+        />
+      </a>
+    ) : dark ? (
       <img
         class="night"
         src={dark.path}

@@ -109,6 +109,7 @@ const asks: { what: string; why: string }[] = [
             alt={s.alt}
             title={s.title}
             caption={s.caption}
+            zoom
           />
         ))
       }
@@ -236,7 +237,7 @@ const asks: { what: string; why: string }[] = [
   .soon {
     color: var(--ink-2);
   }
-  /* Four phone screens side by side, two by two on a phone. Thin frames, the print's own corners. */
+  /* Four phone screens side by side, two by two on a phone, each opening at full size. Thin frames. */
   .wrap-read > .screens {
     margin-block: 0 var(--sp-4);
   }
@@ -253,9 +254,6 @@ const asks: { what: string; why: string }[] = [
   }
   .screens :global(.shot) {
     padding: var(--sp-2);
-  }
-  .screens :global(.shot img) {
-    border-radius: 14px;
   }
   .screens :global(.shot-cap) {
     margin-top: var(--sp-2);
