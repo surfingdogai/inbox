@@ -1,0 +1,225 @@
+---
+/**
+ * Add your website: the one place the site's "Add your website" links lead (the home page, /search,
+ * /network, the footer and the guides). It builds nothing new: it puts the ways a business already has
+ * side by side, each on the service that does it. The check (the network's /check) reads the site
+ * at once, and a site an assistant can already ask, book or buy from goes into the directory as a
+ * found listing; the business's own AI registers it with register_business over MCP; a business with
+ * no door yet gets one with the inbox, which joins from the start; and a listing is corrected or
+ * hidden at /b/<domain>/owner. What it says of each is what the network's own pages say (/bot).
+ */
+import Faqs from "../components/Faqs.astro";
+import Layout from "../layouts/Layout.astro";
+import { ADD_FAQS, ADD_PAGE, MCP_ADDRESS } from "../lib/add";
+import { faqPage } from "../lib/faq";
+import { START_URL } from "../lib/hosted";
+
+const site = Astro.site?.toString() ?? "https://surfingdog.ai/";
+const url = new URL("/add/", site).toString();
+const ld = [
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: ADD_PAGE.h1,
+    description: ADD_PAGE.description,
+    url,
+    isPartOf: { "@id": `${site}#search` },
+    publisher: { "@id": `${site}#org` },
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: site },
+      { "@type": "ListItem", position: 2, name: "Search", item: new URL("/search/", site).toString() },
+      { "@type": "ListItem", position: 3, name: ADD_PAGE.h1, item: url },
+    ],
+  },
+  faqPage(ADD_FAQS, url),
+];
+---
+
+<Layout title={ADD_PAGE.title} description={ADD_PAGE.description} ld={ld}>
+  <article class="wrap wrap-read section is-head add" aria-labelledby="add-h">
+    <p class="eyebrow"><a href="/search/">Search</a></p>
+    <h1 class="h-page" id="add-h">{ADD_PAGE.h1}</h1>
+    <p class="lede">{ADD_PAGE.lede}</p>
+
+    <ol class="add-ways">
+      <li class="add-way" aria-labelledby="way-check">
+        <h2 class="add-way-h" id="way-check">Check it</h2>
+        <p>
+          We read your site the way a customer's assistant would, usually in seconds. When an assistant can ask, book or
+          buy there, your business goes into the directory, with the source and date of every fact. A local business is
+          listed once its site matches its entry on public maps or registers, or once you prove the site is yours.
+        </p>
+        <form class="add-form" method="post" action="/check">
+          <label for="add-url">Your website</label>
+          <input
+            class="input"
+            id="add-url"
+            name="url"
+            type="text"
+            inputmode="url"
+            autocomplete="url"
+            autocapitalize="off"
+            spellcheck="false"
+            maxlength="2048"
+            placeholder="yourbusiness.com"
+            required
+          />
+          <input type="hidden" name="fresh" value="1" />
+          <button class="btn btn-secondary btn-sm" type="submit">Check it</button>
+        </form>
+        <p class="fine">
+          Free, no sign-up. We obey robots.txt, and never fill in a form, log in, book or order. <a
+            class="link"
+            href="/bot#listed">What a listing shows</a
+          >.
+        </p>
+      </li>
+
+      <li class="add-way" aria-labelledby="way-ai">
+        <h2 class="add-way-h" id="way-ai">Have your AI add it</h2>
+        <p>
+          Connect Surfing Dog Search to your assistant at <code>{MCP_ADDRESS}</code>, then say: “Put my business on Surfing
+          Dog.” It calls <code>register_business</code>: it declares your doors and details, and proves the domain is
+          yours with a file or a DNS record, a key, or a code sent to an address at your domain.
+        </p>
+        <p class="fine">
+          <a class="link" href="/assistants/">Each assistant's steps</a><span aria-hidden="true"> · </span><a
+            class="link"
+            href="/bot#claim">How claiming works</a
+          >
+        </p>
+      </li>
+
+      <li class="add-way" aria-labelledby="way-door">
+        <h2 class="add-way-h" id="way-door">No door yet? Get one</h2>
+        <p>
+          A site with only a phone number, an email address or a contact form isn't listed: an assistant can't do
+          anything there yet. An agent inbox gives you a door at your own address, such as inbox.yourbusiness.com, and
+          ours joins the directory from the start. We host it for free, or you run it yourself; it's open source.
+        </p>
+        <p class="actions">
+          <a class="btn btn-secondary btn-sm" href={START_URL}>Get your agent inbox</a>
+          <a class="link" href="/install/">Or run it yourself</a>
+        </p>
+        <p class="fine">Other doors count too: <a class="link" href="/guides/">the checklist</a> has them all.</p>
+      </li>
+    </ol>
+
+    <section class="listed" aria-labelledby="listed-h">
+      <h2 class="h-section" id="listed-h">Already listed?</h2>
+      <p>
+        Open your result at <code>surfingdog.ai/b/yourbusiness.com</code> and choose <b>Manage this page</b>: correct
+        what's listed, or hide the page. Free, with no account. To keep our crawler away from your site, see <a
+          class="link"
+          href="/bot#stop">how to stop it</a
+        >.
+      </p>
+    </section>
+
+    <Faqs faqs={ADD_FAQS} />
+  </article>
+</Layout>
+
+<style>
+  .add {
+    padding-bottom: var(--section-y);
+  }
+  .eyebrow a {
+    color: inherit;
+    text-decoration: none;
+  }
+  .eyebrow a:hover,
+  .eyebrow a:focus-visible {
+    text-decoration: underline;
+  }
+  .add-ways {
+    display: grid;
+    margin: var(--sp-6) 0 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: add-way;
+    border-top: 1px solid var(--hairline);
+  }
+  .add-way {
+    position: relative;
+    padding: var(--sp-5) 0 var(--sp-5) 2.25rem;
+    border-bottom: 1px solid var(--hairline);
+    counter-increment: add-way;
+  }
+  /* The way's number, thin and quiet, where a list's marker would be. */
+  .add-way::before {
+    content: counter(add-way);
+    position: absolute;
+    top: calc(var(--sp-5) + 2px);
+    left: 0;
+    width: 1.5rem;
+    height: 1.5rem;
+    border: 1px solid var(--hairline-strong);
+    border-radius: var(--radius-pill);
+    font-size: var(--fs-micro);
+    font-weight: 600;
+    line-height: calc(1.5rem - 2px);
+    text-align: center;
+    color: var(--ink-3);
+  }
+  .add-way-h {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: var(--fs-h-card);
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .add-way p,
+  .listed p {
+    margin: var(--sp-2) 0 0;
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+    color: var(--ink-2);
+  }
+  .add-way .fine {
+    font-size: var(--fs-fine);
+    line-height: 1.5;
+    color: var(--ink-3);
+  }
+  .add-way :global(code),
+  .listed :global(code) {
+    padding: 0 4px;
+    border-color: transparent;
+    background: var(--row-bg);
+    font-size: var(--fs-mono);
+    overflow-wrap: anywhere;
+  }
+  .add-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-2);
+    margin-top: var(--sp-4);
+    font-size: var(--fs-fine);
+    font-weight: 600;
+    color: var(--ink-3);
+  }
+  .add-form label {
+    flex: 1 0 100%;
+  }
+  .add-form .input {
+    flex: 1 1 220px;
+    min-width: 0;
+  }
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-2) var(--sp-4);
+  }
+  .listed {
+    margin-top: var(--sp-7);
+  }
+  .listed b {
+    font-weight: 600;
+  }
+</style>

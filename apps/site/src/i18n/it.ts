@@ -22,6 +22,7 @@ export const it: Dict = {
     getInbox: "Ottieni la tua casella per agenti",
     nav: {
       "Check a business": "Verifica un'attività",
+      "Add your website": "Aggiungi il tuo sito",
       Guides: "Guide",
       Directory: "Elenco",
       Leaderboards: "Classifiche",

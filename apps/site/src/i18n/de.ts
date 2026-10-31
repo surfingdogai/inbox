@@ -23,6 +23,7 @@ export const de: Dict = {
     getInbox: "Holen Sie sich Ihren Agenten-Posteingang",
     nav: {
       "Check a business": "Unternehmen prüfen",
+      "Add your website": "Website hinzufügen",
       Guides: "Ratgeber",
       Directory: "Verzeichnis",
       Leaderboards: "Bestenlisten",

@@ -163,6 +163,7 @@ export default defineConfig({
           ].join("\n\n"),
           optionalLinks: [
             { label: "Search", url: "https://surfingdog.ai/search" },
+            { label: "Add your website", url: "https://surfingdog.ai/add/" },
             { label: "Trust network", url: "https://surfingdog.ai/trust" },
             { label: "Install guide for an AI", url: "https://surfingdog.ai/install.md" },
             {

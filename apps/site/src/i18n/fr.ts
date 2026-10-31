@@ -22,6 +22,7 @@ export const fr: Dict = {
     getInbox: "Obtenez votre boîte de réception pour agents",
     nav: {
       "Check a business": "Vérifier une entreprise",
+      "Add your website": "Ajoutez votre site",
       Guides: "Guides",
       Directory: "Annuaire",
       Leaderboards: "Classements",

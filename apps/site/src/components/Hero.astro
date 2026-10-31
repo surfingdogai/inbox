@@ -1,7 +1,7 @@
 ---
 /**
  * The Search product's opening, on /search under the page's own search box (which already searches
- * and checks): what the directory is in one line, how to get listed, and what is live. No form and
+ * and checks, and under it "Add your website"): what the directory is in one line, and what is live. No form and
  * no second check of its own. The small pill above the drawing reads the network itself: the API's
  * own status and the rules version in force, once at build time and again in the browser. If either
  * cannot be read it says "warming up" rather than guessing.
@@ -31,7 +31,6 @@ const live = apiOk && version !== null ? `network ok · rules v${version}` : "wa
     <p class="eyebrow">Search · open network</p>
     <h2 class="hero-title" id="hero-h">A directory your AI can search.</h2>
     <p class="hero-sub">Find a business, then reach it directly, through its own doors.</p>
-    <p class="hero-more"><a class="link" href="#businesses">Get your business listed</a></p>
     <ul class="now">
       <li><StatusPill state={stateOf("checker")} /> <span>Check any business's website</span></li>
       <li><StatusPill state={stateOf("directory")} /> <span>Members, with an inbox that answers</span></li>
@@ -53,10 +52,6 @@ const live = apiOk && version !== null ? `network ok · rules v${version}` : "wa
   .hero .hero-title {
     font-size: var(--fs-page-title);
     line-height: var(--lh-title);
-  }
-  .hero-more {
-    margin: var(--sp-4) 0 0;
-    font-size: var(--fs-fine);
   }
   .now {
     display: grid;

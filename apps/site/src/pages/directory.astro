@@ -5,6 +5,7 @@
 // businesses our crawler found with a door for agents on their own website: they are not members,
 // run no inbox with us, and each says what we found and when (its card's found note).
 import Layout from "../layouts/Layout.astro";
+import { ADD_HREF, ADD_LABEL } from "../lib/add";
 ---
 
 <Layout
@@ -120,6 +121,7 @@ import Layout from "../layouts/Layout.astro";
         Stop reporting and your entry shows as quiet. If your manifest stays down for two or three days, you drop off
         the list.
       </p>
+      <p class="hint">Another door already, or none yet? <a class="link" href={ADD_HREF}>{ADD_LABEL}</a></p>
       <div class="rowx">
         <a class="btn btn-primary" href="/install/">Get one running</a>
         <a class="btn btn-secondary" href="/network/">What the network is for</a>

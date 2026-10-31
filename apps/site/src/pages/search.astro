@@ -8,6 +8,7 @@ import OpenNetwork from "../components/OpenNetwork.astro";
 import Status from "../components/Status.astro";
 import WhatAiSees from "../components/WhatAiSees.astro";
 import Layout from "../layouts/Layout.astro";
+import { ADD_HREF, ADD_LABEL } from "../lib/add";
 
 /**
  * Search, the product: the box at the top, the directory's answer for ?q= read in the browser from
@@ -55,6 +56,7 @@ const TRY = ["bakery", "hair salon", "bike repair", "dentist", "florist"];
     <div class="s-box">
       <AskBox id="search-ask" size="md" />
     </div>
+    <p class="s-add">Your business? <a class="link" href={ADD_HREF}>{ADD_LABEL}</a></p>
 
     <div class="results" data-results aria-live="polite">
       <p class="s-try">
@@ -116,6 +118,11 @@ const TRY = ["bakery", "hair salon", "bike repair", "dentist", "florist"];
   .s-box {
     max-width: 640px;
     margin-top: var(--sp-5);
+  }
+  .s-add {
+    margin: var(--sp-2) 0 0;
+    font-size: var(--fs-fine);
+    color: var(--ink-3);
   }
   .results {
     margin-top: var(--sp-5);
@@ -368,7 +375,10 @@ const TRY = ["bakery", "hair salon", "bike repair", "dentist", "florist"];
       if (list.length === 0) {
         const p = el("p", "r-empty");
         p.append(el("b", "", "No agent-ready business matches yet."));
-        p.append("Try fewer or different words, or paste a business's website to check what an AI can do there.");
+        p.append("Try fewer or different words, or paste a business's website to check what an AI can do there. Yours? ");
+        const add = el("a", "link", "Add your website") as HTMLAnchorElement;
+        add.href = "/add/";
+        p.append(add);
         out.push(p);
         host.replaceChildren(...out);
         return;

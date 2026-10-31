@@ -5,6 +5,7 @@ import DirectoryCounts from "../components/DirectoryCounts.astro";
 import Mark from "../components/Mark.astro";
 import Products from "../components/Products.astro";
 import Layout from "../layouts/Layout.astro";
+import { ADD_HREF, ADD_LABEL } from "../lib/add";
 import { HOSTED_HOME, HOSTED_INBOX_LD } from "../lib/hosted";
 
 /**
@@ -139,6 +140,7 @@ const ld = [
         </svg>
       </a>
       <span class="check-why">See what a customer's AI can do on your website, and what's missing.</span>
+      <a class="link add-go" href={ADD_HREF}>{ADD_LABEL}</a>
     </p>
 
     <DirectoryCounts />
@@ -245,6 +247,10 @@ const ld = [
   .check-go:hover svg,
   .check-go:focus-visible svg {
     transform: translateX(2px);
+  }
+  .add-go {
+    font-size: var(--fs-fine);
+    color: var(--ink-3);
   }
   .check-why {
     font-size: var(--fs-ui);

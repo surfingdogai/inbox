@@ -22,6 +22,7 @@ export const es: Dict = {
     getInbox: "Consigue tu bandeja para agentes",
     nav: {
       "Check a business": "Comprobar un negocio",
+      "Add your website": "Añade tu web",
       Guides: "Guías",
       Directory: "Directorio",
       Leaderboards: "Clasificaciones",

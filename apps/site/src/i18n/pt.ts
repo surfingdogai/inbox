@@ -22,6 +22,7 @@ export const pt: Dict = {
     getInbox: "Crie sua caixa de entrada para agentes",
     nav: {
       "Check a business": "Verificar um negócio",
+      "Add your website": "Adicione seu site",
       Guides: "Guias",
       Directory: "Diretório",
       Leaderboards: "Rankings",
