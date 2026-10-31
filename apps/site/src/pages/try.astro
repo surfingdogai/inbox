@@ -13,8 +13,9 @@ const saturday = (() => {
   return d.toISOString().slice(0, 10);
 })();
 
-const BOOK = `curl -s -X POST ${DEMO_URL}/v1/bookings \\
-  -H 'content-type: application/json' \\
+const BOOK = `KEY=$(uuidgen)   # keep it: a retry with it gets the same answer
+curl -s -X POST ${DEMO_URL}/v1/bookings \\
+  -H 'content-type: application/json' -H "idempotency-key: $KEY" \\
   -d '{
     "payload": {
       "reservationFor": { "serviceId": "<id>", "name": "Full service" },
@@ -24,7 +25,7 @@ const BOOK = `curl -s -X POST ${DEMO_URL}/v1/bookings \\
     "contact": { "name": "Rita" }
   }'`;
 const SERVICES = `curl -s ${DEMO_URL}/v1/services | jq '.items[] | {id, name}'`;
-const STATUS = `curl -s "${DEMO_URL}/v1/items/<item id>?access_token=<token>" | jq .item.state`;
+const STATUS = `curl -s ${DEMO_URL}/v1/items/<item id> -H 'x-access-token: <token>' | jq .item.state`;
 const TOOLS = `curl -s ${DEMO_MCP} \\
   -H 'content-type: application/json' \\
   -H 'accept: application/json, text/event-stream' \\
@@ -73,8 +74,8 @@ const TOOLS = `curl -s ${DEMO_MCP} \\
           <span class="num" aria-hidden="true">3</span>
           <h2 class="h-card">Watch it arrive</h2>
           <p class="card-text">
-            It shows up below within a few seconds. The shop's own rules confirm a booking when the slot is free,
-            and accept a small order.
+            It shows up below within a few seconds. The shop's own rules confirm a free booking at a set price and
+            accept a small order; anything else waits for a person, and says why.
           </p>
           <p class="copy"><a class="link" href="#live">See the shop live</a></p>
         </li>
@@ -100,7 +101,8 @@ const TOOLS = `curl -s ${DEMO_MCP} \\
         <noscript><p class="hint">The feed needs JavaScript. <a class="link" href={DEMO_LIVE}>Open the full view</a> instead.</p></noscript>
       </div>
       <p class="fine">
-        The demo never emails anyone who uses it, never shows a name, an address or a message, and is wiped every night.
+        The demo never emails anyone who uses it, never shows a name, an address or a message, and is wiped every night,
+        then set up again with a few examples, dated as if from the past week and marked example.
       </p>
     </div>
   </section>
@@ -125,13 +127,15 @@ const TOOLS = `curl -s ${DEMO_MCP} \\
           <p class="card-text">
             It has a price, so the first answer is <code>409 confirm_terms</code>: what the customer confirms before
             it binds them (<code>details.summary</code>) and its fingerprint (<code>details.terms_sha</code>). Send the
-            same request again with <code>"terms_sha"</code> added, as an assistant does on its person's yes.
+            same request again with <code>"terms_sha"</code> added, as an assistant does on its person's yes. A time
+            the shop does not offer is a <code>422</code> that names the nearest free ones.
           </p>
         </li>
         <li>
           <p class="card-text">
-            The answer carries the booking's id, <code>view.item.id</code>, and an <code>accessToken</code>. A second
-            later the booking says <code>confirmed</code>:
+            The answer carries the booking's id, <code>view.item.id</code>, and an <code>accessToken</code>: send it in
+            the <code>x-access-token</code> header to read or cancel the booking. A second later it says
+            <code>confirmed</code>:
           </p>
           <pre class="glass panel code"><code>{STATUS}</code></pre>
         </li>
@@ -404,6 +408,8 @@ const TOOLS = `curl -s ${DEMO_MCP} \\
     via: string;
     at: number;
     test: boolean;
+    example?: boolean;
+    why?: string | null;
   };
   const feed = document.querySelector<HTMLElement>("[data-feed]");
   const list = document.querySelector<HTMLUListElement>("[data-feed-list]");
@@ -443,7 +449,11 @@ const TOOLS = `curl -s ${DEMO_MCP} \\
     main.append(el("b", "", label), " ", el("span", "what", item.what));
     if (item.when) main.append(" ", el("span", "when", item.when));
     const pill = el("span", `pill ${TONES[item.tone] ?? ""}`, item.state_label);
-    const meta = el("span", "meta", `${item.via} · ${ago(item.at)}${item.test ? " · test" : ""}`);
+    const meta = el(
+      "span",
+      "meta",
+      `${item.via} · ${item.example ? "example" : ago(item.at)}${item.test ? " · test" : ""}${item.why ? ` · ${item.why}` : ""}`,
+    );
     li.append(dot, main, pill, meta);
     const before = seen.get(item.key);
     if (!first && before === undefined) li.classList.add("is-new");

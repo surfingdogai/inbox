@@ -274,8 +274,10 @@ someone new reach a person there:
   is acknowledged by email, with a link to confirm it is them. The create answer says where it went:
   `identity.confirm.sent_to` (masked, such as `a•••@e•••.org`). Ask your person to open that email and
   press "Confirm it's me". It asks nothing else of them.
-- **One request per need.** Send it once, with an idempotency key, and read its status rather than
-  sending it again in other words.
+- **One request per need.** Send it once, with an idempotency key that is a fresh random UUID, and
+  read its status rather than sending it again in other words. If the answer is lost, send the same
+  request with the same key: the access token comes back. A guessable key (`booking-1`) never gets it
+  again, since anyone behind the same address could send it.
 - **Never send the same words to many businesses.** The same text arriving at many inboxes is how
   mass mailings look, and is treated as one.
 - **Write as your person would**, in their language: what they want, when, and how to reach them.

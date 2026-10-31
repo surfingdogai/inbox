@@ -120,7 +120,7 @@ The commands above run inside the container, for example `docker exec inbox node
 
 ### A public demo
 
-`INBOX_DEMO=1` turns an instance into a demo shop that anyone's AI can book with, like the one on [Try it](/try/). Start it on an empty database: it fills itself with a bike workshop and a week of history. It never emails a customer. The only email it sends is a sign-in link or one summary a night, only to `INBOX_OWNER_EMAIL`, from `MAIL_FROM`. It never contacts a network or sends a webhook. Its rules confirm a booking when the slot is free and accept a small order on their own. It limits what each caller, and everyone together, can send, and at 03:00 UTC it wipes itself and starts again. `/demo/live` shows what arrives, with no names, addresses or messages. On a database that already holds anything it does nothing: no live view, no wipe, and the Node server won't start.
+`INBOX_DEMO=1` turns an instance into a demo shop that anyone's AI can book with, like the one on [Try it](/try/). Start it on an empty database: it fills itself with a bike workshop and a week of history. It never emails a customer. The only email it sends is a sign-in link or one summary a night, only to `INBOX_OWNER_EMAIL`, from `MAIL_FROM`. It never contacts a network or sends a webhook. Its rules confirm a free booking at a set price and accept a small order on their own; anything else waits for a person, and `/demo/live` says why. It limits what each caller, and everyone together, can send, and at 03:00 UTC it wipes itself and starts again, with its week of history dated as if it came in over the past days and marked example. `/demo/live` shows what arrives, with no names, addresses or messages. On a database that already holds anything it does nothing: no live view, no wipe, and the Node server won't start.
 
 <!-- hosted: closed -->
 
@@ -147,29 +147,29 @@ Check availability for a service (the window may span at most 14 days):
 curl "https://inbox.surfingdog.ai/v1/availability?service_id=<id>&from=2026-09-22T00:00:00Z&to=2026-09-23T00:00:00Z"
 ```
 
-Request a booking. Generate an idempotency key and keep it: the same key with the same body returns the same item (`200` with `Idempotent-Replayed: true`) instead of a second booking.
+Request a booking at one of those times. Generate a random idempotency key (a UUID) and keep it: the same key with the same body returns the same item (`200` with `Idempotent-Replayed: true`) instead of a second booking.
 
 ```bash
+KEY=$(uuidgen)   # keep it for a retry
 curl -X POST https://inbox.surfingdog.ai/v1/bookings \
-  -H 'content-type: application/json' -H 'x-sandbox: 1' \
+  -H 'content-type: application/json' -H 'x-sandbox: 1' -H "idempotency-key: $KEY" \
   -d '{
     "payload": {
       "reservationFor": { "serviceId": "<id>", "name": "Full service" },
       "startTime": "2026-09-22T08:00:00Z",
       "endTime": "2026-09-22T09:30:00Z"
     },
-    "contact": { "name": "Rita", "email": "rita@example.com" },
-    "idempotency_key": "book-rita-0922"
+    "contact": { "name": "Rita", "email": "rita@example.com" }
   }'
 ```
 
-The answer is `201` with the item view (`view.item.state` is `requested`) and, because you have no account here, an `accessToken`. Keep it: it is the only way to read or cancel that item later.
+The answer is `201` with the item view (`view.item.state` is `requested`) and, because you have no account here, an `accessToken`. Keep it: it is the only way to read or cancel that item later. If the answer is lost, send the same request with the same key: a random key gets the same token back.
 
 ```bash
-curl "https://inbox.surfingdog.ai/v1/items/<item id>?access_token=<token>"
+curl "https://inbox.surfingdog.ai/v1/items/<item id>" -H 'x-access-token: <token>'
 curl -X POST "https://inbox.surfingdog.ai/v1/items/<item id>/cancel" \
-  -H 'content-type: application/json' -H 'x-access-token: <token>' \
-  -d '{ "reason": "Found a closer workshop", "idempotency_key": "cancel-rita-0922" }'
+  -H 'content-type: application/json' -H 'x-access-token: <token>' -H "idempotency-key: $(uuidgen)" \
+  -d '{ "reason": "Found a closer workshop" }'
 ```
 
 Send something wrong and the refusal is a problem document that names the fields:
