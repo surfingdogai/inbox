@@ -276,8 +276,10 @@ someone new reach a person there:
   press "Confirm it's me". It asks nothing else of them.
 - **One request per need.** Send it once, with an idempotency key that is a fresh random UUID, and
   read its status rather than sending it again in other words. If the answer is lost, send the same
-  request with the same key: the access token comes back. A guessable key (`booking-1`) never gets it
-  again, since anyone behind the same address could send it.
+  request with the same key: the access token comes back. A guessable key (`booking-1`, a counter, a
+  date, an example UUID) never gets it again, since anyone behind the same address could send it.
+  Never make the key from the request itself (a hash of it): anyone who sent the same request with it
+  would get the token back.
 - **Never send the same words to many businesses.** The same text arriving at many inboxes is how
   mass mailings look, and is treated as one.
 - **Write as your person would**, in their language: what they want, when, and how to reach them.

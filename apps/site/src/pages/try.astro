@@ -6,24 +6,33 @@ import Layout from "../layouts/Layout.astro";
 import { DEMO_FEED, DEMO_LIVE, DEMO_MCP, DEMO_PROMPT, DEMO_URL } from "../lib/demo";
 import { HOSTED_CTA } from "../lib/hosted";
 
-/** A Saturday to put in the curl example; the script swaps in the coming one. 10:00Z is open all year. */
-const saturday = (() => {
-  const d = new Date();
+/**
+ * The coming Saturday and a week after it, the window the curl example asks free times in; the script
+ * swaps in the ones of the day it is read. The booking takes the first free time it is given, so it
+ * works however many people booked before.
+ */
+const comingSaturday = (now: Date) => {
+  const d = new Date(now);
   d.setUTCDate(d.getUTCDate() + ((6 - d.getUTCDay() + 7) % 7 || 7));
-  return d.toISOString().slice(0, 10);
-})();
+  const until = new Date(d);
+  until.setUTCDate(until.getUTCDate() + 7);
+  return { from: d.toISOString().slice(0, 10), to: until.toISOString().slice(0, 10) };
+};
+const week = comingSaturday(new Date());
 
-const BOOK = `KEY=$(uuidgen)   # keep it: a retry with it gets the same answer
-curl -s -X POST ${DEMO_URL}/v1/bookings \\
-  -H 'content-type: application/json' -H "idempotency-key: $KEY" \\
-  -d '{
-    "payload": {
-      "reservationFor": { "serviceId": "<id>", "name": "Full service" },
-      "startTime": "${saturday}T10:00:00Z",
-      "endTime": "${saturday}T11:30:00Z"
-    },
-    "contact": { "name": "Rita" }
-  }'`;
+const BOOK = `SVC=$(curl -s ${DEMO_URL}/v1/services | jq -r '.items[] | select(.name == "Full service") | .id')
+SLOT=$(curl -s "${DEMO_URL}/v1/availability?service_id=$SVC&from=${week.from}T00:00:00Z&to=${week.to}T00:00:00Z" \
+  | jq -c '.slots[0]')
+KEY=$(uuidgen)   # keep it: a retry with it gets the same answer
+jq -n --arg svc "$SVC" --argjson slot "$SLOT" '{
+  payload: {
+    reservationFor: { serviceId: $svc, name: "Full service" },
+    startTime: $slot.startTime,
+    endTime: $slot.endTime
+  },
+  contact: { name: "Rita" }
+}' | curl -s -X POST ${DEMO_URL}/v1/bookings \
+  -H 'content-type: application/json' -H "idempotency-key: $KEY" -d @-`;
 const SERVICES = `curl -s ${DEMO_URL}/v1/services | jq '.items[] | {id, name}'`;
 const STATUS = `curl -s ${DEMO_URL}/v1/items/<item id> -H 'x-access-token: <token>' | jq .item.state`;
 const TOOLS = `curl -s ${DEMO_MCP} \\
@@ -74,8 +83,8 @@ const TOOLS = `curl -s ${DEMO_MCP} \\
           <span class="num" aria-hidden="true">3</span>
           <h2 class="h-card">Watch it arrive</h2>
           <p class="card-text">
-            It shows up below within a few seconds. The shop's own rules confirm a free booking at a set price and
-            accept a small order; anything else waits for a person, and says why.
+            It shows up below within a few seconds. The shop's own rules confirm a small booking in a free slot inside
+            its hours and accept a small order; anything else waits for a person, and says why.
           </p>
           <p class="copy"><a class="link" href="#live">See the shop live</a></p>
         </li>
@@ -122,13 +131,13 @@ const TOOLS = `curl -s ${DEMO_MCP} \\
           <pre class="glass panel code"><code>{SERVICES}</code></pre>
         </li>
         <li>
-          <p class="card-text">A full service on Saturday morning. Put the id in:</p>
-          <pre class="glass panel code"><code data-saturday={saturday}>{BOOK}</code></pre>
+          <p class="card-text">A full service at the first free time from Saturday on, asked for as an assistant does:</p>
+          <pre class="glass panel code"><code data-from={week.from} data-to={week.to}>{BOOK}</code></pre>
           <p class="card-text">
             It has a price, so the first answer is <code>409 confirm_terms</code>: what the customer confirms before
             it binds them (<code>details.summary</code>) and its fingerprint (<code>details.terms_sha</code>). Send the
-            same request again with <code>"terms_sha"</code> added, as an assistant does on its person's yes. A time
-            the shop does not offer is a <code>422</code> that names the nearest free ones.
+            same request again, with the same key and <code>terms_sha</code> added, as an assistant does on its
+            person's yes. A time the shop does not offer is a <code>422</code> that names the nearest free ones.
           </p>
         </li>
         <li>
@@ -388,12 +397,16 @@ const TOOLS = `curl -s ${DEMO_MCP} \\
   // Copy buttons appear only where the clipboard is there to use.
   wireCopyButtons();
 
-  // The curl example books the coming Saturday, whenever the page was built.
-  const code = document.querySelector<HTMLElement>("[data-saturday]");
-  if (code?.dataset.saturday) {
+  // The curl example asks for free times from the coming Saturday, whenever the page was built.
+  const code = document.querySelector<HTMLElement>("[data-from]");
+  if (code?.dataset.from && code.dataset.to) {
     const d = new Date();
     d.setUTCDate(d.getUTCDate() + ((6 - d.getUTCDay() + 7) % 7 || 7));
-    code.textContent = (code.textContent ?? "").replaceAll(code.dataset.saturday, d.toISOString().slice(0, 10));
+    const until = new Date(d);
+    until.setUTCDate(until.getUTCDate() + 7);
+    code.textContent = (code.textContent ?? "")
+      .replaceAll(`from=${code.dataset.from}`, `from=${d.toISOString().slice(0, 10)}`)
+      .replaceAll(`to=${code.dataset.to}`, `to=${until.toISOString().slice(0, 10)}`);
   }
 
   // The live feed: the demo shop's public view, polled while the page is visible. It holds only a

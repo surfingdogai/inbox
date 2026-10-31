@@ -4,8 +4,8 @@
  * showing only what the product does today:
  *  - "arrives": a booking, an order, a quote request and a message settle into the inbox as typed
  *    items, each in its first state (requested, received, received, open).
- *  - "rules": a rule is switched on; two bookings pass and confirm themselves, a third (late in the
- *    evening, outside the hours in the rule) stops at "Needs you".
+ *  - "rules": a rule is switched on; two bookings pass and confirm themselves, a third (asked for
+ *    twenty minutes ahead, inside the minimum notice, where no rule may confirm) stops at "Needs you".
  *  - "ai": the owner's own AI, connected over MCP, answers a booking with another time; the booking
  *    moves to "proposed", marked as inside the owner's rules.
  *  - "safety": two agents reach for the last place in a slot at once; one gets it, the other is
@@ -51,7 +51,7 @@ const ROW_A = [62, 108, 154, 200];
 const passes = [
   { time: "Sat 10:00", ok: true },
   { time: "Sat 11:30", ok: true },
-  { time: "Sat 21:00", ok: false },
+  { time: "In 20 min", ok: false },
 ];
 const ROW_B = [102, 148, 194];
 
@@ -66,7 +66,7 @@ const meta = {
   },
   rules: {
     label: "A rule deciding bookings",
-    desc: "A rule is switched on: when the slot is free and inside opening hours, confirm the booking. Two bookings pass and are confirmed. A third, late in the evening, stops and waits for a person.",
+    desc: "A rule is switched on: when the slot is free and inside opening hours, confirm the booking. Two bookings pass and are confirmed. A third, asked for twenty minutes ahead, is inside the minimum notice, where only a person may confirm, so it waits for one.",
     loop: 8.9,
     out: 7.6,
     start: 4.8,
