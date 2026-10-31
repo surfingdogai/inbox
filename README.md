@@ -33,8 +33,10 @@ curl -fsSL https://surfingdog.ai/install.sh | sudo sh
 
 **Docker, or a platform you use**: the image `ghcr.io/surfingdogai/inbox`, for amd64 and arm64. The data
 lives in the volume. [deploy/](deploy/) has the Compose file with HTTPS, and templates for Coolify,
-Fly.io, Render, Railway and a DigitalOcean Droplet. By hand, it answers on the server itself only,
-behind a proxy with TLS that drops a `CF-Connecting-IP` the caller sent:
+Fly.io, Render, Railway and a DigitalOcean Droplet. On Render it is one button (a paid Starter
+instance, as only those keep a disk):
+[Deploy to Render](https://render.com/deploy?repo=https://github.com/surfingdogai/inbox). By hand, it
+answers on the server itself only, behind a proxy with TLS that drops a `CF-Connecting-IP` the caller sent:
 
 ```bash
 (umask 077; echo "INBOX_SECRET_KEY=$(openssl rand -base64 32)" > inbox.env)   # keep a copy somewhere safe
