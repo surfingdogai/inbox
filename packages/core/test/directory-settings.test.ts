@@ -70,6 +70,8 @@ describe("the directory settings", () => {
       listed: true,
       description: "",
       categories: [],
+      // What the business runs: nothing until the owner says (the setup's first question).
+      kind: null,
       address: { streetAddress: "", addressLocality: "", postalCode: "", addressCountry: "" },
       geo: null,
       url: "",

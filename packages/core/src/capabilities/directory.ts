@@ -1,6 +1,7 @@
 import {
   closureDaysSchema,
   type ItemType,
+  kindCategories,
   type PayTo,
   type Profile,
   profileHoursSchema,
@@ -123,8 +124,10 @@ export async function offeredItemTypes(
  * The public profile the manifest carries for a directory (ADR-017 A2.5), or nothing while the
  * business has no name. It holds only what the business publishes about itself: the name and
  * languages, what the owner filled in under `directory` (each part only when it is not empty), its
- * weekly hours and the closures that have not ended, up to thirty active services by name, and how it is paid
- * (`settings.payments`).
+ * weekly hours and the closures that have not ended, up to thirty active services by name, how it is paid
+ * (`settings.payments`), the kind of business it runs (`directory.kind`, in its categories: the kind's category
+ * slugs and its name as a free tag, after the owner's own) and the currencies it takes (its own first, then the
+ * others it named; only when it named others).
  * Never a contact email, a phone or the legal address. Each field is checked alone against the
  * spec's profile, as a network checks it, and one it would reject is left out on its own.
  */
@@ -139,6 +142,10 @@ export async function directoryProfile(
     readonly payments?: readonly string[] | undefined;
     /** Where a payer sends what is paid to an address of its own (`settingsPayTo`, ADR-045): published as `pay_to`. */
     readonly payTo?: readonly PayTo[] | undefined;
+    /** Its own currency, whose prices are in it: first in `currencies`, published only with `others`. */
+    readonly currency?: string | undefined;
+    /** The currencies it takes besides its own (`settings.payments.currencies`). */
+    readonly currencies?: readonly string[] | undefined;
     /** Attributes of a network's vocabulary the business declares (ADR-039: free estimates, emergencies). */
     readonly attributes?: Readonly<Record<string, true>> | undefined;
     readonly now: number;
@@ -150,8 +157,12 @@ export async function directoryProfile(
   const fields: Record<string, unknown> = { name, languages: [...input.languages] };
   const description = d.description.trim();
   if (description) fields.description = description;
-  const categories = d.categories.map((c) => c.trim()).filter(Boolean);
-  if (categories.length) fields.categories = categories;
+  const categories: string[] = [];
+  for (const c of [...d.categories, ...kindCategories(d.kind)]) {
+    const tag = c.trim();
+    if (tag && !categories.some((x) => x.toLowerCase() === tag.toLowerCase())) categories.push(tag);
+  }
+  if (categories.length) fields.categories = categories.slice(0, 10);
   if (d.url) fields.url = d.url;
   const address = Object.fromEntries(
     Object.entries(d.address)
@@ -170,6 +181,9 @@ export async function directoryProfile(
   // Stripe Pay's handle (ADR-045), only for a way the profile's payments name, as a network keeps it.
   const payTo = readPayTo(input.payTo ?? [], payments);
   if (payTo.length) fields.pay_to = payTo;
+  const own = input.currency?.trim().toUpperCase();
+  const others = (input.currencies ?? []).map((c) => c.trim().toUpperCase()).filter((c) => c && c !== own);
+  if (own && others.length) fields.currencies = [...new Set([own, ...others])].slice(0, 5);
   // A place to stay that takes stays here (ADR-037 §6.3): its kind, how it confirms, how soon it answers.
   const types = await offeredItemTypes(db);
   if (types.includes("stay")) {

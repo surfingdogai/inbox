@@ -100,7 +100,11 @@ describe("Settings → Payments", () => {
   it("is empty out of the box, and publishes nothing", async () => {
     const { db } = await setup();
     expect((await readSettings(db)).payments.accepted).toEqual([]);
-    expect(settingsSchema.parse({}).payments).toEqual({ accepted: [], stripePay: { to: "", currencies: [] } });
+    expect(settingsSchema.parse({}).payments).toEqual({
+      accepted: [],
+      stripePay: { to: "", currencies: [] },
+      currencies: [],
+    });
   });
 
   it("keeps the tokens the owner ticks, and refuses anything else", async () => {

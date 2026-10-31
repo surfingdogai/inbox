@@ -702,6 +702,9 @@ export function createInbox(deps: AppDeps): Inbox {
         directory: settings.directory,
         payments: settingsPayments(settings.payments),
         payTo: settingsPayTo(settings.payments),
+        // The currencies it takes: its own, whose prices are in it, then the others it named.
+        currency: profile.currency,
+        currencies: settings.payments.currencies,
         // What a trade says of itself as a network's attributes (ADR-039): free estimates, emergencies.
         attributes: workAttributes(settings),
         now: deps.now ? deps.now() : Date.now(),

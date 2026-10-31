@@ -9,8 +9,10 @@ import {
   doorTrackingParams,
   fillStayTemplate,
   hostIsOn,
+  isBusinessKind,
   isPaymentToken,
   isStripePayRecipient,
+  KIND_LABEL_MAX,
   MAX_PROFILE_PAYMENTS,
   ownSiteDomain,
   readDoorsElsewhere,
@@ -24,6 +26,7 @@ import { menuSettingsSchema } from "../menu/schema";
 import { settings as settingsTable } from "../schema/tables";
 import { workSettingsSchema } from "../trades/settings";
 import { canonicalNetworkOrigin, isPublicHost, networkOriginOfUrl } from "../util/hosts";
+import { currencyProblem } from "../util/locale";
 
 /**
  * The settings document: one versioned, Zod-validated JSON. It grows toward the full wizard;
@@ -124,6 +127,9 @@ export const MAX_SETUP_SOURCES = 30;
 export const MAX_SUGGESTED_SERVICES = 30;
 
 const disabledNetwork = (): NetworkEntry => networkEntrySchema.parse({});
+/** The most currencies a business takes besides its own: a profile names five at most (`profile.currencies`). */
+export const MAX_OTHER_CURRENCIES = 4;
+
 const defaultNetworks = (): Record<string, NetworkEntry> => ({ [DEFAULT_NETWORK]: disabledNetwork() });
 
 const sections = {
@@ -691,6 +697,31 @@ const sections = {
         .max(10)
         .default([])
         .describe("What the business is, as category slugs (vocab/categories.json) or free tags."),
+      /**
+       * What the business runs (the setup's first question): a kind of `vocab/business-kinds.json` by its id, with
+       * its name as the owner chose it, or the owner's own words for a kind the list lacks (`id` null). Published in
+       * the profile's categories (`kindCategories`): the kind's category slugs, then its name as a free tag.
+       */
+      kind: z
+        .object({
+          id: z
+            .string()
+            .refine(isBusinessKind, "a kind of vocab/business-kinds.json, like tattoo-studio")
+            .nullable()
+            .default(null)
+            .describe("The kind's id in vocab/business-kinds.json; null for one in the owner's own words."),
+          label: z
+            .string()
+            .trim()
+            .min(1)
+            .max(KIND_LABEL_MAX)
+            .describe("What the business runs, as the owner names it: the kind's name, or their own words."),
+        })
+        .nullable()
+        .default(null)
+        .describe(
+          "What the business runs: a kind of vocab/business-kinds.json, or the owner's own words (id null). Published with the categories.",
+        ),
       address: z
         .object({
           streetAddress: z.string().max(200).default(""),
@@ -771,6 +802,24 @@ const sections = {
         })
         .prefault({})
         .describe("Stripe Pay: paid to your Stripe profile, outside this inbox. Off while to is empty."),
+      /**
+       * The currencies the business takes besides its own (`business.currency`, whose prices stay in it): published
+       * with it as the profile's `currencies`, so an agent knows before it asks. Nothing is converted.
+       */
+      currencies: z
+        .array(
+          z
+            .string()
+            .trim()
+            .toUpperCase()
+            .refine((c) => currencyProblem(c) === null, "an ISO 4217 currency, like USD or GBP"),
+        )
+        .max(MAX_OTHER_CURRENCIES)
+        .refine((all) => new Set(all).size === all.length, "each currency once")
+        .default([])
+        .describe(
+          "Other currencies you take besides your own (ISO 4217, at most 4): published with yours; prices stay in yours, nothing is converted.",
+        ),
     })
     .prefault({}),
   /**

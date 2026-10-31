@@ -571,6 +571,12 @@ export const businessProfileSchema = profileSchema.extend({
     .describe(
       "Where to send a way to pay that goes to an address of the business's own (spec 0.13): stripe_pay to its Stripe profile handle (@acme) or profile id, in the currencies it takes there. An order's own amount and reference are on get_item_status once it is accepted.",
     ),
+  currencies: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "The currencies the business takes: its own first, whose prices are in it, then the others it named. Nothing is converted.",
+    ),
   work: workProfileSchema
     .optional()
     .describe(

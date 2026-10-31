@@ -197,6 +197,11 @@ export interface BusinessProfile {
    * to its Stripe profile handle, with the currencies it takes there. Absent while none is set.
    */
   readonly pay_to?: readonly PayTo[] | undefined;
+  /**
+   * The currencies the business takes (`settings.payments.currencies`): its own first, whose prices are in it,
+   * then the others it named, as the manifest's profile publishes them; absent when it named no other.
+   */
+  readonly currencies?: readonly string[] | undefined;
   /** How a trade takes work (ADR-039, spec `workProfileSchema`): absent for a business that set none of it. */
   readonly work?: WorkProfile | undefined;
   /** How a kitchen takes orders and tables (ADR-040, spec `kitchenProfileSchema`): absent when it does not. */
@@ -862,6 +867,7 @@ export class Capabilities {
       ...(s.commerce.legal.legalName.trim() ? { trader: traderOf(s.commerce.legal) } : {}),
       ...(elsewhere.length ? { doors_elsewhere: elsewhere } : {}),
       ...this.declaredPayments(s.payments),
+      ...takenCurrencies(row?.currency ?? s.business.currency, s.payments.currencies),
       // How a trade takes work (ADR-039): where it goes, emergencies, call-out. Never the area's base.
       ...(itemTypes.includes("quote_request") && workProfile(s) ? { work: workProfile(s) ?? undefined } : {}),
       ...(await this.kitchenProfileOf()),
@@ -2969,4 +2975,10 @@ function spamView(v: SpamVerdictView, summary: ItemSpamSummary, tz: string): Ite
     released_by: v.released_by,
     at: v.decided_at ?? v.created_at,
   };
+}
+
+/** The currencies the business takes, its own first; nothing when it named no other (`settings.payments.currencies`). */
+function takenCurrencies(own: string, others: readonly string[]): { currencies?: string[] } {
+  const rest = others.filter((c) => c !== own.toUpperCase());
+  return rest.length ? { currencies: [own.toUpperCase(), ...rest] } : {};
 }
