@@ -95,6 +95,16 @@ describe("GET /v1/catalogue/changes", () => {
     expect(doors.items).toHaveLength(1);
   });
 
+  it("is left out of the manifest of an inbox answering over plain http, which serves the rest of it", async () => {
+    const s = await setup();
+    const res = await s.app.request(`http://localhost:8787${MANIFEST_PATH}`);
+    expect(res.status).toBe(200);
+    const m = manifestSchema.parse(await res.json());
+    expect(m.instance).toBe("http://localhost:8787");
+    expect(m.catalogue).toBeUndefined();
+    expect(m.protocols.mcp).toBe("http://localhost:8787/mcp");
+  });
+
   it("is not served, nor named, by an inbox that cannot sign it", async () => {
     const s = await setup({ secret: false });
     expect((await s.app.request(`${ORIGIN}/v1/catalogue/changes`)).status).toBe(404);

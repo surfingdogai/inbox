@@ -43,6 +43,9 @@ export function buildManifest(input: {
   /**
    * Whether the business lists its products on networks now (ADR-029): then the manifest names its
    * signed feed and its products by id (`catalogue`), where a network reads them. Absent, it lists none.
+   * Named only on an https origin, which is all a network reads a catalogue from (the spec's
+   * `catalogue` URLs are https): an instance answering over plain http, such as one just installed on
+   * a laptop, leaves it out and serves the rest of its manifest.
    */
   catalogue?: boolean | undefined;
   /** A place to stay's door (ADR-037), published while `item_types` lists `stay`. */
@@ -90,7 +93,7 @@ export function buildManifest(input: {
           })),
         }
       : {}),
-    ...(input.catalogue
+    ...(input.catalogue && origin.startsWith("https://")
       ? { catalogue: { feed: `${origin}/v1/catalogue/changes`, items: `${origin}/v1/catalogue/items` } }
       : {}),
     ...(input.stay && (input.itemTypes ?? []).includes("stay") && !elsewhere.some((d) => d.item_type === "stay")
