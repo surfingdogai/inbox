@@ -5,7 +5,7 @@ description: What your Inbox connects to today, what waits on another company, a
 
 Every one in a table, with what is coming: [Integrations](/integrations/).
 
-Settings → **Integrations**. Calendars, payments, shops and checkouts, property systems, job tools, and ordering and tills, each a card. A card says **Connect** only when your Inbox can connect it; one that waits on something says **Soon** or **Needs setup**, with nothing to press.
+Settings → **Integrations**. Calendars, payments, shops and checkouts, property systems, job tools, and ordering and tills, each a card. A card says **Connect** only when your Inbox can connect it; one that waits on something says **Soon** or **Needs setup**, with nothing to press. One that lets only approved partners connect (Mews, apaleo, Cloudbeds, Smoobu, Toast, Lightspeed, Clover, Deliverect, Jobber) says it is **waiting for the partner**. A connector built from its platform's documentation and checked against a stand-in, but not yet against a live account of that platform, says so: **Built, not yet verified on a live account**. The setup wizard's "Bring them from what you already use" lists the same systems with the same words.
 
 ## In this release
 

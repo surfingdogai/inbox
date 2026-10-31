@@ -5,7 +5,7 @@ description: Hotels, guesthouses, B&Bs, hostels and holiday rentals. Rooms, rate
 
 Your Inbox takes stays the way a place to stay sells them: nights between two dates, rooms for so many guests, a total with every tax and fee in it, and your own cancellation policy. Guests' assistants ask, quote and book through it; you answer from the app, or let your rules draft the answer for you.
 
-Settings → **Property**, or **A place to stay** in the setup wizard.
+Settings → **Property**, or **A place to stay** in the setup wizard, which can also bring your rooms from the property system you already use.
 
 ## What you set up
 

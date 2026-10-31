@@ -93,7 +93,11 @@ not have, and building each four times would make four versions of them:
   about its services, staff, hours and menu, with allergens that always arrive unconfirmed.
 - Rule presets are one file each, listed once; the key schema, the plan, the hosted sign-up and the
   owner app follow from the list. Self-host setup opens on "What do you run?", from one `KINDS` list,
-  and `ConnectYourSystem` shows a kind's systems first.
+  and `ConnectYourSystem` shows a kind's systems first. (31 October 2026: beside the quick picks, hundreds of
+  kinds from `vocab/business-kinds.json`, each mapped to a preset or to `general`, whose rules follow what
+  agents may do, or the owner's own words; kept as `directory.kind` and published in the profile's categories.
+  The setup then asks for every door the inbox has, other currencies taken (`payments.currencies`) and the
+  languages spoken, and offers to bring services, products, menus and rooms from the owner's own systems.)
 - **The customer copy lint** (`customerCopyProblems`): what a business's customers read never names the
   software, a network, receipts, passes, keys, a reputation or the inbox, in any of the six languages.
 
