@@ -14,7 +14,8 @@
       "!**/.wrangler",
       "!**/worker-configuration.d.ts",
       "!**/routeTree.gen.ts",
-      "!**/.astro"
+      "!**/.astro",
+      "!**/*.xcassets"
     ]
   },
   "formatter": {

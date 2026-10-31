@@ -126,3 +126,9 @@ debug build is debuggable: never use it as your everyday app.
 - `src/lib/native.ts` and `android/app/src/main/java/ai/surfingdog/inbox/`: the Keystore, the
   fingerprint or face, and push (decrypted in `PushService`, shown by `Notifier`).
 - `docs/protocol/push-relay.md`: how an inbox reaches the phone through the relay.
+
+## iPhone
+
+Prepared, not yet built: the Xcode project in `ios/`, the native code in `ios/Native/`, the App Store
+text in `store/apple/`, and what is left (Xcode, the Apple account, the steps) in [IOS.md](IOS.md).
+`pnpm --filter @surfingdog/mobile check:ios` checks the native code a Mac can check without Xcode.
