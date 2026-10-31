@@ -30,7 +30,7 @@ try {
 const steps = [
   {
     h: "Inboxes check in",
-    p: "Each inbox whose business chose to join checks in every hour with a ping it signs. An inbox that checked in within the last day, with its manifest reachable, is answering, and answering businesses come before the rest.",
+    p: "Each inbox whose business chose to join checks in every hour with a ping it signs. An inbox that checked in within the last day, with its manifest reachable, is answering, and a business whose inbox has answered for 30 days without a break comes before the rest.",
   },
   {
     h: "Both sides sign the promise",
@@ -38,7 +38,7 @@ const steps = [
   },
   {
     h: "The order reads the record",
-    p: "Among answering businesses, a record of kept promises sets the order once it reaches 0.40 and its customers confirmed at least a fifth of it; the less evidence, the more cautious the record. Everyone else takes turns in a shuffle that changes once a day and that anyone can reproduce.",
+    p: "Next, a record of kept promises sets the order once it reaches 0.40 and at least 3 different customers confirmed it; the less evidence, the more cautious the record. Everyone else takes turns in a shuffle that changes once a day and that anyone can reproduce.",
   },
   {
     h: "Nobody can pay for a place",
@@ -123,7 +123,7 @@ const now = capabilities.filter((c) => ids.includes(c.id));
         A member's track record is on its page (surfingdog.ai/b/ then its domain) and in its listing for agents:
         promises kept, broken and still open, over which dates and under which rules, counted each night. It shows once
         at least 5 promises have closed, and not in the 30 days after a business joins; until then the page says how
-        many have closed so far. Until its customers confirm at least a fifth of it, a record is self-reported: the
+        many have closed so far. Until at least 3 different customers have confirmed it, a record is self-reported: the
         business's own word, shown as its counts, with no score and no count of customers, and it is not ranked. A
         promise counts as confirmed when the network can check the customer's counter-signature, and today it cannot
         check one: it needs an assistant platform's key it recognises, or a customer whose record is established.

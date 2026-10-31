@@ -131,6 +131,33 @@ export function countRows(d: DirectoryStats): { key: CapabilityKey; label: strin
     .map(({ key, label, n }) => ({ key, label, n }));
 }
 
+/**
+ * The agent-ready businesses that are not among the real businesses verified: how many, and whether most of them are
+ * online shops, for the home page's one line under the two counts. Null while the network does not count the real
+ * businesses, and when it counts them all, so the line never shows a number it did not read.
+ *
+ * "Most are online shops" is said only while the counts themselves prove that most of them take orders, an online
+ * shop's mark: the agent-ready businesses that take no orders are agent_ready − order, and at most all of those are
+ * among them, so at least them − (agent_ready − order) of them take orders. On 31 October 2026 that floor was 97%
+ * of them, and 96% of them were in the directory's online-shops group. Without an orders count it is not said.
+ */
+export function notYetReal(d: DirectoryStats): { n: number; mostShops: boolean } | null {
+  if (d.real === null || d.real >= d.agent_ready) return null;
+  const n = d.agent_ready - d.real;
+  const order = d.capabilities.order;
+  const takeNoOrders = typeof order === "number" ? Math.max(0, d.agent_ready - order) : n;
+  return { n, mostShops: (n - takeNoOrders) * 2 > n };
+}
+
+/** The line itself: "The other 36,848 are not yet confirmed as real local businesses: most are online shops." */
+export function notYetRealLine(x: { n: number; mostShops: boolean }, format: (n: number) => string): string {
+  const head =
+    x.n === 1
+      ? "The other one is not yet confirmed as a real local business"
+      : `The other ${format(x.n)} are not yet confirmed as real local businesses`;
+  return x.mostShops && x.n > 1 ? `${head}: most are online shops.` : `${head}.`;
+}
+
 /** "just now", "6 minutes ago", "2 hours ago", "3 days ago": how old the counts are, in plain words. */
 export function ago(iso: string, now: number = Date.now()): string {
   const s = Math.max(0, Math.round((now - Date.parse(iso)) / 1000));

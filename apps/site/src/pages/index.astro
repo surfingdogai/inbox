@@ -8,10 +8,10 @@ import Layout from "../layouts/Layout.astro";
 import { HOSTED_HOME, HOSTED_INBOX_LD } from "../lib/hosted";
 
 /**
- * The home page: what Surfing Dog is in one line, one box, the live counts, one line on checking a
- * business (with the guides), two things to copy into your AI, and the three products. Everything else
- * lives on the products' own pages: the search explainer on /search, the inbox on /inbox, the rules on
- * /trust.
+ * The home page: what Surfing Dog is in one line, one box, and right under it the first thing to do,
+ * checking your business (/check, the checker); then the live counts, two things to copy into your AI,
+ * and the three products. Everything else lives on the products' own pages: the search explainer on
+ * /search, the inbox on /inbox, the rules on /trust, the guides on /guides.
  */
 const TAGLINE = "Open doors to the agentic internet.";
 const WHAT = "Surfing Dog lists and tracks agent-ready businesses: the ones AI agents can message, book and buy from.";
@@ -131,16 +131,17 @@ const ld = [
       <AskBox id="home-ask" size="lg" />
     </div>
 
-    <DirectoryCounts />
+    <p class="home-check">
+      <a class="btn btn-secondary btn-sm check-go" href="/check">
+        Check your business
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M5 12h14M13 6l6 6-6 6"></path>
+        </svg>
+      </a>
+      <span class="check-why">See what a customer's AI can do on your website, and what's missing.</span>
+    </p>
 
-    <section class="ready" aria-labelledby="ready-h">
-      <h2 class="ready-h" id="ready-h">Can a customer's AI assistant book with you?</h2>
-      <p class="ready-p">
-        Paste your website in the box, or <a class="link" href="/check">check your business</a>: we read it the way an
-        assistant would, and show what it can do there, what's missing and where to start. The
-        <a class="link" href="/guides/">guides</a> explain each step.
-      </p>
-    </section>
+    <DirectoryCounts />
 
     <div class="copies">
       <CopyBlock
@@ -227,25 +228,28 @@ const ld = [
     width: 100%;
     max-width: 600px;
   }
-  /* One quiet line on checking a business: a small heading and a sentence, no box. */
-  .ready {
+  /* The first thing to do, close under the box: one quiet button, and why under it. */
+  .home-check {
     display: grid;
+    justify-items: center;
     gap: var(--sp-2);
     max-width: 52ch;
+    margin: calc(var(--sp-4) - var(--sp-7)) 0 0;
   }
-  .ready-h {
-    margin: 0;
-    font-family: var(--font-display);
-    font-size: var(--fs-h-sub);
-    font-weight: 600;
-    letter-spacing: -0.01em;
-    color: var(--ink);
+  .check-go svg {
+    width: 15px;
+    height: 15px;
+    color: var(--violet-ink);
+    transition: transform var(--dur-fast) var(--ease);
   }
-  .ready-p {
-    margin: 0;
-    font-size: var(--fs-card);
-    line-height: 1.55;
-    color: var(--ink-2);
+  .check-go:hover svg,
+  .check-go:focus-visible svg {
+    transform: translateX(2px);
+  }
+  .check-why {
+    font-size: var(--fs-ui);
+    line-height: var(--lh-ui);
+    color: var(--ink-3);
     text-wrap: balance;
   }
   .copies {
@@ -264,6 +268,9 @@ const ld = [
   @media (prefers-reduced-motion: reduce) {
     .draw {
       animation: none;
+    }
+    .check-go svg {
+      transition: none;
     }
   }
 </style>

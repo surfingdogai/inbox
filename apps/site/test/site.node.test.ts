@@ -20,6 +20,8 @@ import {
   countRows,
   linkCheck,
   looksLikeAddress,
+  notYetReal,
+  notYetRealLine,
   READY_HREF,
   REAL_HREF,
   readDirectory,
@@ -405,11 +407,17 @@ describe("the home page and the three products", () => {
     expect(visible(read("src/pages/network.astro"))).not.toMatch(/directory of inboxes/);
   });
 
-  it("the home page asks whether an assistant can book with you, and every blog post links the checker", () => {
+  it("the home page's first action is checking your business, and every blog post links the checker", () => {
     const home = read("src/pages/index.astro");
-    expect(home).toContain('<h2 class="ready-h" id="ready-h">Can a customer\'s AI assistant book with you?</h2>');
-    expect(home).toContain('<a class="link" href="/check">check your business</a>');
-    expect(home).toContain('href="/guides/"');
+    // Right under the box, before the counts: one button to the checker, and why, in one short line.
+    const check = home.indexOf('<a class="btn btn-secondary btn-sm check-go" href="/check">');
+    expect(check).toBeGreaterThan(home.indexOf("<AskBox"));
+    expect(check).toBeLessThan(home.indexOf("<DirectoryCounts"));
+    expect(visible(home)).toMatch(/Check your business\s*<svg/);
+    expect(home).toContain("See what a customer's AI can do on your website, and what's missing.");
+    // Fewer words: the old heading and paragraph are gone, and the guides stay a link in the bar.
+    expect(home).not.toContain("Can a customer's AI assistant book with you?");
+    expect(read("src/components/Nav.astro")).toContain('{ href: "/guides/", label: "Guides" }');
     const posts = readdirSync(site("src/content/blog")).filter((f) => f.endsWith(".md"));
     expect(posts.length).toBeGreaterThanOrEqual(7);
     for (const f of posts) expect(read(`src/content/blog/${f}`), f).toMatch(/\]\(\/check\)/);
@@ -559,10 +567,45 @@ describe("the home page and the three products", () => {
     expect(counts).toContain("Of the agent-ready, ${rows.join");
     expect(counts).toMatch(/@media \(max-width: 520px\) \{\s*\.c-dot \{\s*display: none;/);
     expect(counts).toMatch(/a\.href = countHref\(r\.key\)/);
+    // Under the two counts, one line on the difference, worked out from the same answer.
+    expect(counts).toMatch(/<p class="c-other" data-other hidden><\/p>/);
+    expect(counts).toMatch(/notYetRealLine\(notReal, \(n\) => fmt\.format\(n\)\)/);
     const at = Date.parse("2026-10-07T12:00:00Z");
     expect(ago("2026-10-07T12:00:00Z", at + 20_000)).toBe("just now");
     expect(ago("2026-10-07T12:00:00Z", at + 6 * 60_000)).toBe("6 minutes ago");
     expect(ago("2026-10-07T12:00:00Z", at + 3_600_000)).toBe("1 hour ago");
+  });
+
+  it("the line on the agent-ready not yet confirmed as real is worked out live, and says 'most' only while the counts prove it", () => {
+    const fmt = (n: number) => new Intl.NumberFormat("en").format(n);
+    const dir = (directory: Record<string, unknown>) =>
+      readDirectory({ directory: { checked: 9, as_of: "2026-10-31T13:54:42Z", ...directory } });
+    // The counts of 31 October 2026: 1,146 of the agent-ready take no orders, so at least 35,702 of the 36,848 do.
+    const live = dir({ agent_ready: 89973, real_businesses_verified: 53125, capabilities: { order: 88827 } });
+    expect(live && notYetReal(live)).toEqual({ n: 36848, mostShops: true });
+    expect(live && notYetRealLine({ n: 36848, mostShops: true }, fmt)).toBe(
+      "The other 36,848 are not yet confirmed as real local businesses: most are online shops.",
+    );
+    // Half or fewer proven to take orders: the share is not said, the number still is.
+    const half = dir({ agent_ready: 100, real_businesses_verified: 60, capabilities: { order: 80 } });
+    expect(half && notYetReal(half)).toEqual({ n: 40, mostShops: false });
+    expect(notYetRealLine({ n: 40, mostShops: false }, fmt)).toBe(
+      "The other 40 are not yet confirmed as real local businesses.",
+    );
+    const justOver = dir({ agent_ready: 100, real_businesses_verified: 60, capabilities: { order: 81 } });
+    expect(justOver && notYetReal(justOver)?.mostShops).toBe(true);
+    // No orders count, no share.
+    const noOrders = dir({ agent_ready: 100, real_businesses_verified: 60, capabilities: {} });
+    expect(noOrders && notYetReal(noOrders)).toEqual({ n: 40, mostShops: false });
+    // No line without the real businesses' count, or when every agent-ready business is one.
+    const noReal = dir({ agent_ready: 100, capabilities: { order: 100 } });
+    expect(noReal && notYetReal(noReal)).toBeNull();
+    const allReal = dir({ agent_ready: 100, real_businesses_verified: 100, capabilities: { order: 100 } });
+    expect(allReal && notYetReal(allReal)).toBeNull();
+    // One, said as one.
+    expect(notYetRealLine({ n: 1, mostShops: true }, fmt)).toBe(
+      "The other one is not yet confirmed as a real local business.",
+    );
   });
 
   it("a result says what the entry says, links to the business's own site, and invents nothing", () => {
@@ -666,11 +709,12 @@ describe("the home page and the three products", () => {
       next: "Version 7 is announced, and takes effect on 23 Oct 2026.",
     });
     expect(rulesLine({ version: 7, status: "announced" })).toBeNull();
-    expect(rulesFallback(Date.parse("2026-10-07T00:00:00Z")).now).toContain("Version 6");
-    expect(rulesFallback(Date.parse("2026-10-23T00:00:00Z"))).toEqual({
-      now: "Version 7 (0.2.0), in force since 23 Oct 2026.",
-      next: "",
-    });
+    // The fallback is what was in force when it was last checked against the network: version 9 since 13 October 2026.
+    expect(rulesFallback()).toEqual({ now: "Version 9 (0.2.2), in force since 13 Oct 2026.", next: "" });
+    // The network page says the same line, read the same way, rather than a version written into it.
+    const network = read("src/pages/network.astro");
+    expect(network).toContain("<b>{rules.now}</b>");
+    expect(network).not.toMatch(/The rules in force are version \d/);
   });
 
   it("every internal link in the bar, the footer and the product pages goes somewhere", () => {
@@ -1121,8 +1165,8 @@ describe("the track record", () => {
     expect(stateOf("reliability")).toBe("live");
     const label = capabilities.find((c) => c.id === "reliability")?.label ?? "";
     expect(label).toMatch(/kept, broken and still open/);
-    // Rules version 8: a record on the business's own word shows no score until a fifth is confirmed.
-    expect(label).toMatch(/the business's own word, with no score, until its customers confirm a fifth of it/);
+    // Rules version 9: a record on the business's own word shows no score until 3 different customers confirm it.
+    expect(label).toMatch(/the business's own word, with no score, until 3 different customers confirm it/);
     expect(label).not.toMatch(/\blate\b|\b(yet|coming|being built|will)\b/i);
   });
 
@@ -1134,11 +1178,12 @@ describe("the track record", () => {
     expect(text).toMatch(/once at least 5 promises have closed/);
     expect(text).not.toMatch(/from at least 3 customers/);
     expect(text).toMatch(/not in the 30 days after a business joins/);
-    // Rules version 8: a record on the business's own word is its counts, no score, no customers.
-    expect(text).toMatch(/Until its customers confirm at least a fifth of it, a record is self-reported/);
+    // Rules version 9: a record on the business's own word is its counts, no score, no customers.
+    expect(text).toMatch(/Until at least 3 different customers have confirmed it, a record is self-reported/);
     expect(text).toMatch(/with no score and no count of customers, and it is not ranked/);
     expect(text).toMatch(/today it cannot check one: it needs an assistant platform's key it recognises/);
-    expect(text).toMatch(/0\.40 and its customers confirmed at least a fifth of it/);
+    expect(text).toMatch(/0\.40 and at least 3 different customers confirmed it/);
+    expect(text).not.toMatch(/a fifth/);
     for (const path of ["src/content/docs/docs/index.md", "src/content/docs/docs/receipts.md"]) {
       const doc = read(path).replace(/\s+/g, " ");
       expect(doc, path).toMatch(/track record/);
@@ -1155,8 +1200,14 @@ describe("the track record", () => {
     const network = read("src/pages/network.astro").replace(/\s+/g, " ");
     expect(network).toMatch(/a count of how its promises ended, from its first receipt/);
     expect(network).toMatch(
-      /as its own word, with no score, until its customers confirm at least a fifth of its record/,
+      /as its own word, with no score, until at least 3 different customers have confirmed its kept promises/,
     );
+    // Rules version 9: the business's own word of a kept promise is never scored, and the order is reach, then a
+    // record 3 different customers confirmed, then the daily shuffle.
+    expect(network).toMatch(/Your score counts only what you can't make up in your favour/);
+    expect(network).toMatch(/shown as its counts and never scored/);
+    expect(network).toMatch(/whose inbox has answered for 30 days without a break/);
+    expect(network).not.toMatch(/a fifth|ranked by how reliably|counts more than a business's own word/);
     expect(network).toMatch(/once at least 5 promises have closed/);
     expect(network).not.toMatch(/its score, counted each night/);
     expect(network).not.toMatch(/Public, on its listing once enough promises have closed/);

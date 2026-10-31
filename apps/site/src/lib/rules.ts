@@ -1,9 +1,8 @@
 /**
  * The rules in force, in a sentence, from GET /v1/ranking: its version, its name, since when, and
  * the next version when one is announced. When the network cannot be read the fallback says what was
- * published when this was written (version 6 since 29 Sep 2026, version 7 announced for 23 Oct 2026),
- * and switches on that date by itself, so a build that cannot reach the network never says an old
- * version is in force.
+ * in force when this was last checked against the network (version 9, rules 0.2.2, since 13 Oct 2026,
+ * with nothing announced): a build that cannot reach it never says an older version is in force.
  */
 import { shortDate } from "./status";
 
@@ -12,15 +11,10 @@ export interface RulesLine {
   next: string;
 }
 
-const V7_AT = "2026-10-23T00:00:00Z";
+const V9_AT = "2026-10-13T21:14:24Z";
 
-export function rulesFallback(at: number = Date.now()): RulesLine {
-  return at >= Date.parse(V7_AT)
-    ? { now: `Version 7 (0.2.0), in force since ${shortDate(V7_AT)}.`, next: "" }
-    : {
-        now: "Version 6 (0.1.3), in force since 29 Sep 2026.",
-        next: `Version 7 is announced, and takes effect on ${shortDate(V7_AT)}.`,
-      };
+export function rulesFallback(): RulesLine {
+  return { now: `Version 9 (0.2.2), in force since ${shortDate(V9_AT)}.`, next: "" };
 }
 
 /** The sentence, from the endpoint's answer; null when the answer is not one. */

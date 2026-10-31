@@ -12,6 +12,20 @@ import LiveMetrics from "../components/LiveMetrics.astro";
 import NetworkFlow from "../components/NetworkFlow.astro";
 import Layout from "../layouts/Layout.astro";
 import { DOOR_SHARE_SHOWN, doorHistoryShows } from "../lib/door-history";
+import { type RulesLine, rulesFallback, rulesLine } from "../lib/rules";
+
+// The rules in force, read from the network when the site is built, as the trust page reads them; a build that
+// cannot read them says what was published when this was written (src/lib/rules.ts).
+let rules: RulesLine = rulesFallback();
+try {
+  const res = await fetch("https://network.surfingdog.ai/v1/ranking", {
+    headers: { accept: "application/json" },
+    signal: AbortSignal.timeout(4000),
+  });
+  if (res.ok) rules = rulesLine(await res.json()) ?? rules;
+} catch {
+  // Keep the fallback.
+}
 
 const contents = [
   { href: "#how", label: "How it works" },
@@ -40,7 +54,7 @@ const steps = [
 const principles = [
   {
     title: "For businesses",
-    text: "A promise counts when it closes: the booking happened, the order arrived, or it didn't. Your inbox reports each outcome for you, signed. Businesses are ranked by how reliably they keep their promises, estimated cautiously, so a small shop that always delivers can rank above a big one that sometimes doesn't.",
+    text: "A promise counts when it closes: the booking happened, the order arrived, or it didn't. Your inbox reports each outcome for you, signed. Your score counts only what you can't make up in your favour: kept promises your customers confirmed, and promises broken, left open or closed late. It is estimated cautiously, so a small shop that always delivers can rank above a big one that sometimes doesn't.",
   },
   {
     title: "For customers",
@@ -48,14 +62,14 @@ const principles = [
   },
   {
     title: "Both ways",
-    text: "What a customer's agent signs counts more than a business's own word once the network can check it, through a platform key it recognises or a customer whose record is established; neither exists yet, so today every kept promise is the business's own word. Recent months weigh most, and nothing is ever forgotten. Once customer records start, a good customer's word will count more when judging a business, and a good business's when judging a customer.",
+    text: "A kept promise counts once the network can check that the customer's agent signed it, through a platform key it recognises or a customer whose record is established; neither exists yet, so today every kept promise is the business's own word, shown as its counts and never scored. Recent months weigh most, and nothing is ever forgotten. Once customer records start, a good customer's word will count more when judging a business, and a good business's when judging a customer.",
   },
 ];
 
 const visibility = [
   {
     k: "A business's record",
-    v: "Public, on its listing: a count of how its promises ended, from its first receipt; its promises kept, broken and still open, counted each night under a published version of the rules, as its own word, with no score, until its customers confirm at least a fifth of its record, and its score from then on; and its track record (those counts, over which dates) once at least 5 promises have closed.",
+    v: "Public, on its listing: a count of how its promises ended, from its first receipt; its promises kept, broken and still open, counted each night under a published version of the rules, as its own word, with no score, until at least 3 different customers have confirmed its kept promises, and its score from then on; and its track record (those counts, over which dates) once at least 5 promises have closed.",
   },
   {
     k: "A customer's record",
@@ -141,10 +155,7 @@ const shared = [
         <div>
           <p class="eyebrow">Track record</p>
           <h2 class="h-section" id="reputation-h">Earned by keeping promises</h2>
-          <p class="lede">
-            In force for businesses since 29 September 2026. Customer records are paused until their privacy safeguards
-            are finished.
-          </p>
+          <p class="lede">Customer records are paused until their privacy safeguards are finished.</p>
         </div>
         <span class="pill">Live for businesses</span>
       </div>
@@ -177,15 +188,16 @@ const shared = [
           Not now, and not later.
         </p>
         <p class="card-text">
-          <b>The rules in force are version 6, since 29 September 2026.</b> Businesses whose inbox is answering come first.
-          Among them, those with a good record of kept promises are ranked by it, and the rest are shuffled once a day.
-          Near a place, the same order applies inside the distance the agent asks for. Inboxes report kept and broken
-          promises as they close, and the network scores every record each night.
+          <b>{rules.now}</b> A search's words come first: the businesses they match best go ahead. Then businesses
+          whose inbox has answered for 30 days without a break, then those with other live agent doors, by what an AI
+          can do through them. Within each, a business whose record of kept promises reaches 0.40, confirmed by at least
+          3 different customers, is ranked by it, and the rest are shuffled once a day. Every 5th place goes to a
+          newcomer whose inbox answers. Near a place, the same order applies inside the distance the agent asks for.
+          Inboxes report kept and broken promises as they close, and the network scores every record each night.
           <a class="link" href="https://github.com/surfingdogai/inbox/blob/main/docs/adr/017-reputation-and-ranking.md" rel="noopener">Read the full rules</a>.
         </p>
         <p class="card-text">
-          Every rule is published on this page and at network.surfingdog.ai/v1/ranking, with a version number, before
-          it counts.
+          Every rule is published at network.surfingdog.ai/v1/ranking, with a version number, before it counts.
         </p>
         <p class="more">
           <a class="link" href="https://network.surfingdog.ai/v1/ranking" rel="noopener">Today's rules, as agents read them</a>

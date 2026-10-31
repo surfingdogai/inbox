@@ -18,6 +18,10 @@
  * capability to the agent-ready businesses that can do it (/leaderboard?can=book). Each list is
  * the same businesses its count counts: it names them, or says how many more it counts and does not
  * name.
+ *
+ * Under the two counts, once both are read, one line on the difference: how many of the agent-ready are not yet
+ * confirmed as real businesses, and, only while the counts prove it, that most of them are online shops
+ * (notYetReal in src/lib/ask.ts). It is worked out from the same answer, never written in.
  */
 import { READY_HREF, REAL_HREF } from "../lib/ask";
 ---
@@ -28,6 +32,7 @@ import { READY_HREF, REAL_HREF } from "../lib/ask";
     <span class="c-dot" aria-hidden="true" data-real hidden>·</span>
     <a class="c-pair c-link" href={REAL_HREF} data-label="real businesses verified" data-real hidden><b class="c-n tabular" data-n="real" aria-hidden="true">–</b> real businesses verified</a>
   </p>
+  <p class="c-other" data-other hidden></p>
   <ul class="c-caps" data-caps aria-label="Of the agent-ready businesses" hidden></ul>
   <p class="c-note" data-note>Live counts from the network.</p>
   <p class="sr" aria-live="polite" data-said></p>
@@ -85,6 +90,15 @@ import { READY_HREF, REAL_HREF } from "../lib/ask";
       display: none;
     }
   }
+  /* The line on the difference: quieter than the counts it explains. */
+  .c-other {
+    max-width: 46ch;
+    margin: 0;
+    font-size: var(--fs-fine);
+    line-height: var(--lh-ui);
+    color: var(--ink-3);
+    text-wrap: balance;
+  }
   .c-caps {
     display: flex;
     flex-wrap: wrap;
@@ -123,6 +137,7 @@ import { READY_HREF, REAL_HREF } from "../lib/ask";
     color: var(--ink-3);
   }
   /* The block arrives softly rather than snapping in. */
+  .counts.is-in .c-other,
   .counts.is-in .c-caps,
   .counts.is-in .c-note {
     animation: counts-in var(--dur-slow) var(--ease) both;
@@ -134,6 +149,7 @@ import { READY_HREF, REAL_HREF } from "../lib/ask";
     }
   }
   @media (prefers-reduced-motion: reduce) {
+    .counts.is-in .c-other,
     .counts.is-in .c-caps,
     .counts.is-in .c-note {
       animation: none;
@@ -142,7 +158,7 @@ import { READY_HREF, REAL_HREF } from "../lib/ask";
 </style>
 
 <script>
-  import { ago, countHref, countRows, readDirectory } from "../lib/ask";
+  import { ago, countHref, countRows, notYetReal, notYetRealLine, readDirectory } from "../lib/ask";
 
   const root = document.querySelector<HTMLElement>("[data-counts]");
   const fmt = new Intl.NumberFormat("en");
@@ -196,6 +212,13 @@ import { READY_HREF, REAL_HREF } from "../lib/ask";
     // The real businesses' count shows once the network counts them.
     if (d.real !== null) {
       for (const el of Array.from(root.querySelectorAll<HTMLElement>("[data-real]"))) el.hidden = false;
+    }
+    // The difference between the two, in one line, from the same answer.
+    const other = root.querySelector<HTMLElement>("[data-other]");
+    const notReal = notYetReal(d);
+    if (other && notReal) {
+      other.textContent = notYetRealLine(notReal, (n) => fmt.format(n));
+      other.hidden = false;
     }
     for (const el of Array.from(root.querySelectorAll<HTMLElement>("[data-n]"))) {
       const n = el.dataset.n === "real" ? d.real : d.agent_ready;
