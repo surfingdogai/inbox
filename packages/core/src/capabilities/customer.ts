@@ -44,7 +44,7 @@ import {
 } from "../customer/offer";
 import type { CustomerPage, LinkActResult, PageField, PageLink } from "../customer/page";
 import type { Db } from "../db";
-import { type Contact, type Item, type Money, type PayloadOf, payloadSchemas } from "../domain/types";
+import { BUSINESS_ACTORS, type Contact, type Item, type Money, type PayloadOf, payloadSchemas } from "../domain/types";
 import { collectCarried } from "../identity/carried";
 import { localStanding } from "../identity/context";
 import { stopNetworks } from "../identity/stops";
@@ -68,6 +68,7 @@ import { notYoursError, WriteError } from "../write/errors";
 import { once } from "../write/idempotency";
 import { type PricingFor, priceFromCatalogue } from "../write/pricing";
 import { openReturnOf, withdrawalFlagsOf, withdrawalOf } from "../write/returns";
+import { RULE_SKIPPED_EVENT } from "../write/skipped";
 import { appendThreadEntry } from "../write/thread";
 import { type TransitionResult, transitionItem } from "../write/transition";
 import { customerItem, type ItemRow, type ItemView, rowToItem, viewFor } from "../write/views";
@@ -283,7 +284,7 @@ export class CustomerDoors {
                 : null,
           }
         : null,
-      waiting_on: waitingOn(seen),
+      waiting_on: await this.waitingOnNow(seen),
       // Past its deadline it can no longer be accepted, whether or not our sweep has closed it yet.
       next: nextActions(
         seen,
@@ -300,6 +301,17 @@ export class CustomerDoors {
         ? { stay: await this.deps.stays.terms(item, audience.lang, now) }
         : {}),
     };
+  }
+
+  /**
+   * Who must act now (ADR-043 §3): what the item's state says, and on a promise in force (a confirmed
+   * booking, a stay, delivered goods) the business while the customer's last word came after its last
+   * act: a question on a confirmed booking waits for its answer.
+   */
+  private async waitingOnNow(item: Item): Promise<"you" | "us" | null> {
+    const by = waitingOn(item);
+    if (by !== null || item.closedAt !== null || item.state === "spam") return by;
+    return (await customerSpokeLast(this.db, item.id)) ? "us" : null;
   }
 
   /** The right of withdrawal as the customer reads it: available or why not, until when, in the law's words. */
@@ -2625,4 +2637,30 @@ async function lastEvent(db: Db, itemId: string): Promise<{ event: string; actor
   });
   const r = rows[0];
   return r ? { event: String(r[0]), actorKind: String(r[1]) } : null;
+}
+
+/** Who acts for the business: its people and AI, its rules, and the systems it connected. */
+const BUSINESS_SIDE: readonly string[] = [...BUSINESS_ACTORS, "integration", "connector"];
+
+/**
+ * Whether the customer wrote after the business last acted on the item: a reply it sent, or a move by
+ * the owner, its staff, its AI, a rule or a system of its own (a rule's held-back action is no act).
+ * An entry written in the same moment as the move it came with is part of that move.
+ */
+async function customerSpokeLast(db: Db, itemId: string): Promise<boolean> {
+  const { rows } = await db.client.query({
+    sql: `SELECT
+            (SELECT MAX(created_at) FROM thread_entries WHERE item_id = ? AND direction = 'in'),
+            (SELECT MAX(created_at) FROM thread_entries WHERE item_id = ? AND direction = 'out'),
+            (SELECT MAX(created_at) FROM item_events WHERE item_id = ? AND event <> ?
+                AND actor_kind IN (${BUSINESS_SIDE.map(() => "?").join(", ")}))`,
+    params: [itemId, itemId, itemId, RULE_SKIPPED_EVENT, ...BUSINESS_SIDE],
+    method: "all",
+  });
+  const [lastIn, lastOut, lastAct] = [0, 1, 2].map((i) => {
+    const v = rows[0]?.[i];
+    return v === null || v === undefined ? null : Number(v);
+  });
+  if (lastIn === null || lastIn === undefined) return false;
+  return lastIn > Math.max(lastOut ?? Number.NEGATIVE_INFINITY, lastAct ?? Number.NEGATIVE_INFINITY);
 }
