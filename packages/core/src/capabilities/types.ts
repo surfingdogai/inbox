@@ -122,16 +122,30 @@ const confirmedTerms = z
     "The fingerprint of the terms your person confirmed (details.terms_sha of the 409 confirm_terms a priced request without it gets). Nothing is sent to the business without it when the request carries a price.",
   );
 
+/**
+ * A booking as a door takes it: the end and the service's name may be left out, and follow from the
+ * service (`completeBooking`): the end is the start plus the service's length, the name its own.
+ */
 export const createBookingInput = z.object({
-  payload: bookingPayloadSchema.omit({
-    proposed: true,
-    customerStatedPrice: true,
-    offer: true,
-    change: true,
-    paymentRef: true,
-    paidAmount: true,
-    attachments: true,
-  }),
+  payload: bookingPayloadSchema
+    .omit({
+      proposed: true,
+      customerStatedPrice: true,
+      offer: true,
+      change: true,
+      paymentRef: true,
+      paidAmount: true,
+      attachments: true,
+    })
+    .extend({
+      reservationFor: z.object({
+        serviceId: z.string().min(1),
+        name: z.string().min(1).max(200).optional().describe("The service's name. Left out, it is the service's own."),
+      }),
+      endTime: isoDateTime
+        .optional()
+        .describe("When it ends, ISO 8601. Left out, it is startTime plus the service's length (durationMin)."),
+    }),
   contact: contactSchema.optional(),
   message: z.string().max(20_000).optional(),
   attachments: filesInputSchema,
@@ -634,7 +648,15 @@ export type ListServicesInput = z.infer<typeof listServicesInput>;
 export type ListProductsInput = z.infer<typeof listProductsInput>;
 export type CheckAvailabilityInput = z.infer<typeof checkAvailabilityInput>;
 export type RequestQuoteInput = z.infer<typeof requestQuoteInput>;
-export type CreateBookingInput = z.infer<typeof createBookingInput>;
+/** A booking as a door sent it: its end and its service's name may still be missing. */
+export type CreateBookingRequest = z.infer<typeof createBookingInput>;
+/** A booking with its end and its service's name worked out (`completeBooking`): what is written. */
+export type CreateBookingInput = Omit<CreateBookingRequest, "payload"> & {
+  payload: Omit<CreateBookingRequest["payload"], "reservationFor" | "endTime"> & {
+    reservationFor: { serviceId: string; name: string };
+    endTime: string;
+  };
+};
 export type CreateOrderInput = z.infer<typeof createOrderInput>;
 export type GetItemStatusInput = z.infer<typeof getItemStatusInput>;
 export type AcknowledgeReceiptInput = z.infer<typeof acknowledgeReceiptInput>;

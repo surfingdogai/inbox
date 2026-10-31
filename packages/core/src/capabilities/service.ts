@@ -1107,10 +1107,12 @@ export class Capabilities {
    * with an email and nothing carried, each network that issues is asked for a first key (ADR-017
    * §2.1). The answer's `identity` says who the inbox takes the customer for.
    */
-  async createBooking(caller: Caller, input: T.CreateBookingInput, opts: DoorFacts = {}): Promise<CreateResult> {
+  async createBooking(caller: Caller, request: T.CreateBookingRequest, opts: DoorFacts = {}): Promise<CreateResult> {
     await this.refuseElsewhere(caller, "booking");
     await this.refuseShut(caller, "booking");
-    await this.refuseUnbookable(caller, input.payload?.reservationFor?.serviceId, { booking: true });
+    await this.refuseUnbookable(caller, request.payload?.reservationFor?.serviceId, { booking: true });
+    // An end or a service's name the request left out follows from the service.
+    const input = await this.completeBooking(request);
     const c = withIdempotencyKey(caller, input.idempotency_key);
     // A table (ADR-040): a party above the size the business books online becomes a request for a price;
     // one it books carries its deposit and policy, which the customer confirms with it.
@@ -1160,6 +1162,27 @@ export class Capabilities {
     );
     if (visitFor && !made.replayed) await linkVisit(this.db, visitFor, made.view.item.id, nowOf(c));
     return made;
+  }
+
+  /**
+   * A booking with what it left out worked out from its service: the end is the start plus the
+   * service's length (`durationMin`), the name the service's own. A request that names both is taken as
+   * it came; one that leaves either out for a service this business does not have is refused
+   * (`unknownService`), since there is no length to count from.
+   */
+  private async completeBooking(input: T.CreateBookingRequest): Promise<T.CreateBookingInput> {
+    const p = input.payload;
+    const { serviceId, name } = p.reservationFor;
+    if (name !== undefined && p.endTime !== undefined) {
+      return { ...input, payload: { ...p, reservationFor: { serviceId, name }, endTime: p.endTime } };
+    }
+    const [svc] = await this.db.orm
+      .select({ name: services.name, durationMin: services.durationMin })
+      .from(services)
+      .where(eq(services.id, serviceId));
+    if (!svc) throw unknownService(serviceId);
+    const endTime = p.endTime ?? new Date(Date.parse(p.startTime) + svc.durationMin * 60_000).toISOString();
+    return { ...input, payload: { ...p, reservationFor: { serviceId, name: name ?? svc.name }, endTime } };
   }
 
   /**

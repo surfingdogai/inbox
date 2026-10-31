@@ -264,11 +264,8 @@ describe("REST door", () => {
     expect(res.headers.get("content-type")).toContain("application/problem+json");
     const p = (await res.json()) as { code: string; fields: { path: string; problem: string }[] };
     expect(p.code).toBe("invalid_input");
-    expect(p.fields.map((f) => f.path).sort()).toEqual([
-      "payload.endTime",
-      "payload.reservationFor.name",
-      "payload.startTime",
-    ]);
+    // The end and the service's name follow from the service when left out; the start never does.
+    expect(p.fields.map((f) => f.path).sort()).toEqual(["payload.startTime"]);
   });
 
   it("prices a fixed-price service and a catalogue product as the business does, whatever the request says", async () => {

@@ -1,11 +1,12 @@
 import type { CallToolResult, McpServer } from "@modelcontextprotocol/server";
 import { ATTACHMENT_LIMITS, type Caller, type Capabilities, checkAreaInputSchema } from "@surfingdog/core";
 import type { Context, Hono } from "hono";
-import { describeRoute, resolver, validator } from "hono-openapi";
+import { describeRoute, resolver } from "hono-openapi";
 import { z } from "zod";
 import { clientAddress } from "./limits";
 import { problemFrom, problemResponse } from "./problem";
 import type { CallerEnv } from "./rest";
+import { validator } from "./validate";
 
 /**
  * The trades doors (ADR-039): `check_area` for a customer's agent (MCP and REST), uploads of a

@@ -22,7 +22,9 @@ import {
   doorPlace,
   getItemInput,
   getItemStatusInput,
+  hasAliasedFields,
   type IdentityAnswer,
+  lenientInput,
   listDeliveriesInput,
   listEventsInput,
   listItemsInput,
@@ -85,8 +87,8 @@ export interface McpDeps {
 
 export const PUBLIC_INSTRUCTIONS = [
   "This is a business's typed inbox. Start with get_business_profile, then list_services or list_products.",
-  "For a booking: check_availability, then create_booking at one of its free times, with an idempotency_key you generate and keep: a fresh random UUID for each new request, never one made from the request itself.",
-  "Keep the access_token in a create result: it is the only way to read (get_item_status) or cancel that item later. If the answer is lost, send the same request with the same random idempotency_key and the token comes back; a guessable key (booking-1) never gets it again.",
+  "For a booking: check_availability, then create_booking at one of its free times (leave endTime out and it follows the service's length), with an idempotency_key you generate and keep: a fresh random UUID for each new request, never one made from the request itself.",
+  "Keep the access token in a create result (accessToken): it is the only way to read (get_item_status) or cancel that item later. Every tool takes it as access_token or accessToken, and service_id as serviceId too. If the answer is lost, send the same request with the same random idempotency_key and the token comes back; a guessable key (booking-1) never gets it again.",
   "If you carry a pass for the person (sdpass1_…), send it in `pass` on every call, and keep any pass a result hands you (identity.passes). The person is writing to this business and may never have heard of passes: speak to them of the business. The guide: https://surfingdog.ai/for-agents.md.",
   "Every refusal names the exact fields to fix; repair the input and retry with the same idempotency_key.",
   "When get_item_status shows an offer (another time, a quote, or changes to an order), relay offer.human as the business said it; accept only on your person's clear yes to the summary: accept_offer with its terms_sha and offer_id. Otherwise decline_offer, or make_offer with only what they would change (suggest_time for another time). A price of their own is their answer only where get_business_profile says price_negotiable; otherwise it goes to a person at the business, and what it proposed still stands. When it waits for details, send them with provide_details.",
@@ -312,6 +314,24 @@ const answered = (r: {
   structured: r,
 });
 
+/**
+ * A server whose tools each take service_id and access_token under either spelling, serviceId and
+ * accessToken too (`lenientInput`): agents send both, the second from habit or from a create answer
+ * that carries `accessToken`. The schema a tool lists is the one it documents, as before.
+ */
+function lenientTools(server: McpServer): McpServer {
+  const register = server.registerTool.bind(server) as (name: string, config: object, cb: unknown) => unknown;
+  server.registerTool = ((name: string, config: { inputSchema?: z.ZodType }, cb: unknown) =>
+    register(
+      name,
+      config.inputSchema && hasAliasedFields(config.inputSchema)
+        ? { ...config, inputSchema: lenientInput(config.inputSchema) }
+        : config,
+      cb,
+    )) as typeof server.registerTool;
+  return server;
+}
+
 export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandler {
   return createMcpHandler(async (ctx) => {
     const caller = callerOf(ctx);
@@ -341,7 +361,7 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
       ...(agentPay ? [AGENT_PAY_INSTRUCTIONS] : []),
       ...(stripePay ? [STRIPE_PAY_INSTRUCTIONS] : []),
     ];
-    const server = new McpServer({ name, version }, { instructions: instructions.join(" ") });
+    const server = lenientTools(new McpServer({ name, version }, { instructions: instructions.join(" ") }));
     if (stays) registerPublicStayTools(server, caps, caller);
     if (work) registerPublicTradesTools(server, caps, caller);
     if (menu) registerPublicFoodTools(server, caps, caller, { ordersAt });
@@ -474,7 +494,7 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
       {
         title: "Request a booking",
         description:
-          "Request a service at a time. Check availability first. A fixed-price service costs the business's price from list_services; a different totalPrice you send is only noted for the business. A priced booking binds your person only once they confirmed it: without terms_sha nothing is sent, and you get the summary to show them (confirm.summary, confirm.terms_sha); call again with that terms_sha on their clear yes. Returns the item and, if you have no account, an access_token.",
+          "Request a service at a time. Check availability first. endTime and reservationFor.name may be left out: they follow from the service (its length, its name). A fixed-price service costs the business's price from list_services; a different totalPrice you send is only noted for the business. A priced booking binds your person only once they confirmed it: without terms_sha nothing is sent, and you get the summary to show them (confirm.summary, confirm.terms_sha); call again with that terms_sha on their clear yes. Returns the item and, if you have no account, an access_token.",
         inputSchema: createBookingInput,
         annotations: writes,
       },
@@ -763,7 +783,9 @@ const again = (replayed: boolean) => (replayed ? " (Same request as before: noth
 export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandler {
   return createMcpHandler((ctx) => {
     const caller = callerOf(ctx);
-    const server = new McpServer({ name: "surfingdog-inbox-owner", version }, { instructions: OWNER_INSTRUCTIONS });
+    const server = lenientTools(
+      new McpServer({ name: "surfingdog-inbox-owner", version }, { instructions: OWNER_INSTRUCTIONS }),
+    );
 
     /**
      * Every owner tool runs through here: the caller's scopes are checked against the tool's entry

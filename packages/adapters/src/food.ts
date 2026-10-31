@@ -13,10 +13,11 @@ import {
   tableRulesInput,
 } from "@surfingdog/core";
 import type { Hono } from "hono";
-import { describeRoute, resolver, validator } from "hono-openapi";
+import { describeRoute, resolver } from "hono-openapi";
 import { z } from "zod";
 import { problemFrom } from "./problem";
 import type { CallerEnv } from "./rest";
+import { validator } from "./validate";
 
 /**
  * The food doors (ADR-040): `get_menu` and `list_order_slots` for a customer's agent (MCP and REST), and

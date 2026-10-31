@@ -73,7 +73,7 @@ import {
   withIdempotencyKey,
 } from "@surfingdog/core";
 import { type Context, Hono } from "hono";
-import { type DescribeRouteOptions, describeRoute, resolver, validator } from "hono-openapi";
+import { type DescribeRouteOptions, describeRoute, resolver } from "hono-openapi";
 import { z } from "zod";
 import { ownerOperation, PHONE_OPERATIONS, routeScopes } from "./access";
 import { lookupMx } from "./connectors/dns";
@@ -83,6 +83,7 @@ import { forbidden, problemResponse, unauthorized } from "./problem";
 import * as R from "./responses";
 import { stayOwnerRoutes, stayPublicRoutes } from "./stays";
 import { tradesOwnerRoutes, tradesPublicRoutes } from "./trades";
+import { validator } from "./validate";
 
 /**
  * The REST door. Same operations as MCP, described for OpenAPI from the same Zod schemas.
@@ -204,6 +205,14 @@ const withIdem = (c: { req: { header: (n: string) => string | undefined } }, bod
   ...body,
   idempotency_key: (body.idempotency_key as string | undefined) ?? c.req.header("idempotency-key"),
 });
+
+/**
+ * An item's access token from outside the body: the query (`access_token`, or `accessToken` as agents
+ * also write it), else the `X-Access-Token` header.
+ */
+const outsideToken = (c: {
+  req: { query: (n: string) => string | undefined; header: (n: string) => string | undefined };
+}) => c.req.query("access_token") ?? c.req.query("accessToken") ?? c.req.header("x-access-token");
 
 const created = <T extends { replayed: boolean }>(
   c: { json: (b: unknown, s: 200 | 201, h?: Record<string, string>) => Response },
@@ -397,7 +406,7 @@ export function publicRest(caps: Capabilities, opts: { readonly baseUrl?: string
       responses: json("Item", R.customerItemViewSchema),
     }),
     async (c) => {
-      const access_token = c.req.query("access_token") ?? c.req.header("x-access-token");
+      const access_token = outsideToken(c);
       return c.json(
         await caps.getItemStatus(c.get("caller"), {
           item_id: c.req.param("id"),
@@ -413,14 +422,14 @@ export function publicRest(caps: Capabilities, opts: { readonly baseUrl?: string
       tags: ["public"],
       summary: "Cancel your item",
       description:
-        "For the customer: the item's access token in the X-Access-Token header (best: a URL ends up in logs), as access_token in the body, or as access_token in the query, the same ways as GET /items/{id}; or a pass the item recognises.",
+        "For the customer: the item's access token in the X-Access-Token header (best: a URL ends up in logs), as access_token in the body, or as access_token in the query (accessToken too, either place), the same ways as GET /items/{id}; or a pass the item recognises.",
       responses: json("Item", R.transitionResultSchema),
     }),
     validator("json", cancelItemInput.omit({ item_id: true }).partial(), hook),
     async (c) => {
       const body = c.req.valid("json");
       // The token comes the same ways as on the read: the body, the query, or X-Access-Token.
-      const access_token = body.access_token ?? c.req.query("access_token") ?? c.req.header("x-access-token");
+      const access_token = body.access_token ?? outsideToken(c);
       return c.json(
         await caps.cancelItem(
           c.get("caller"),
@@ -433,8 +442,7 @@ export function publicRest(caps: Capabilities, opts: { readonly baseUrl?: string
   /** A customer's answer to what the business proposed: the access token from the body, the query or X-Access-Token. */
   const answer = <S extends z.ZodObject>(schema: S) => validator("json", schema.omit({ item_id: true }), hook);
   const withItem = (c: Context<CallerEnv>, body: Record<string, unknown>) => {
-    const access_token =
-      (body.access_token as string | undefined) ?? c.req.query("access_token") ?? c.req.header("x-access-token");
+    const access_token = (body.access_token as string | undefined) ?? outsideToken(c);
     return withIdem(c, { ...body, item_id: c.req.param("id"), ...(access_token ? { access_token } : {}) });
   };
   const ANSWER_ERRORS = {
@@ -686,7 +694,7 @@ export function publicRest(caps: Capabilities, opts: { readonly baseUrl?: string
     validator("json", verifyCustomerInput, hook),
     async (c) => {
       const body = c.req.valid("json");
-      const token = body.access_token ?? c.req.query("access_token") ?? c.req.header("x-access-token");
+      const token = body.access_token ?? outsideToken(c);
       const r = await caps.verifyCustomer(c.get("caller"), { ...body, ...(token ? { access_token: token } : {}) });
       return c.json(r, "sent_to" in r ? 202 : 200);
     },
@@ -704,7 +712,7 @@ export function publicRest(caps: Capabilities, opts: { readonly baseUrl?: string
     validator("json", acknowledgeReceiptInput.omit({ item_id: true }), hook),
     async (c) => {
       const body = c.req.valid("json");
-      const token = body.access_token ?? c.req.query("access_token") ?? c.req.header("x-access-token");
+      const token = body.access_token ?? outsideToken(c);
       // Parsed once more with the path param folded in, so the capability sees one typed input.
       const input = acknowledgeReceiptInput.parse({
         ...body,

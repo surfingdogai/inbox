@@ -1,10 +1,11 @@
 import type { CallToolResult, McpServer } from "@modelcontextprotocol/server";
 import { type Caller, type Capabilities, stayInputs as I, WriteError, withIdempotencyKey } from "@surfingdog/core";
 import type { Hono } from "hono";
-import { describeRoute, validator } from "hono-openapi";
+import { describeRoute } from "hono-openapi";
 import { z } from "zod";
 import { problemFrom } from "./problem";
 import type { CallerEnv } from "./rest";
+import { validator } from "./validate";
 
 /**
  * The stays doors (ADR-037 §6): the guest's assistant's tools on the public MCP and REST, and the
