@@ -1,13 +1,17 @@
 ---
 import { CASES, caseHref } from "../lib/cases";
+import { integration, STATE_LABEL } from "../lib/integrations";
 import Marked from "./Marked.astro";
 import Shot from "./Shot.astro";
 
 /**
  * Five kinds of business, each on the system it already runs (src/lib/cases.ts): what reaches the
- * owner, then what the inbox does with that system, in one sentence. Examples, and labelled so; each
- * links to its own short page, which keeps the detail.
+ * owner, then what the inbox does with that system, in one sentence. Examples, and labelled so, with
+ * where their connections stand in the built state's words; each links to its own short page, which
+ * keeps the detail.
  */
+/** Said of the examples' connections while every one of them is built. */
+const built = CASES.every((c) => c.works.every((id) => integration(id).state === "built"));
 ---
 
 <section class="section" id="use-cases" aria-labelledby="cases-h" data-reveal>
@@ -17,7 +21,9 @@ import Shot from "./Shot.astro";
         <p class="eyebrow">Examples</p>
         <h2 class="h-section" id="cases-h">On the systems they already run</h2>
         <p class="lede">
-          Five kinds of business, one inbox. These are examples of what it does today, not customers.
+          Five kinds of business, one inbox. These are examples of what it does, not customers{
+            built ? `; each connection they name is ${STATE_LABEL.built.replace(/^Built/, "built")}.` : "."
+          }
         </p>
       </div>
       <Shot

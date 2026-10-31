@@ -1,11 +1,13 @@
 ---
-// /integrations: every system the inbox works with, in one table, and what is coming
-// (src/lib/integrations-table.ts). Linked from the "Works with" row on /inbox, the footer and the docs.
+// /integrations: every system the inbox works with, in one table, each with its state in the site's
+// one set of words (src/lib/integrations.ts), and what is coming (src/lib/integrations-table.ts).
+// Linked from the row of names on /inbox, the footer and the docs.
+import ConnectionState from "../../components/ConnectionState.astro";
 import Marked from "../../components/Marked.astro";
 import Layout from "../../layouts/Layout.astro";
 import { inline } from "../../lib/inline";
-import { APPLE_NOTICE, UNTRIED_LINE, WOO_NOTICE } from "../../lib/integrations";
-import { COMING, type Status, SYSTEM_GROUPS, TABLE } from "../../lib/integrations-table";
+import { APPLE_NOTICE, STATE_LABEL, UNTRIED_LINE, WOO_NOTICE } from "../../lib/integrations";
+import { COMING, SYSTEM_GROUPS, TABLE } from "../../lib/integrations-table";
 
 const site = Astro.site?.toString() ?? "https://surfingdog.ai/";
 const url = new URL("/integrations/", site).toString();
@@ -34,7 +36,6 @@ const ld = [
 const external = (href: string) => /^https?:\/\//.test(href);
 /** The one line said of the systems' connections sits under the last group of them. */
 const lastSystem = TABLE.filter((g) => SYSTEM_GROUPS.includes(g.id)).at(-1)?.id;
-const STATUS_CLASS: Record<Status, string> = { Works: "st-works", "Rolling out": "st-rolling", Coming: "st-coming" };
 ---
 
 <Layout title={TITLE} description={DESCRIPTION} image="/art/og-inbox-v1.png" ld={ld}>
@@ -42,9 +43,10 @@ const STATUS_CLASS: Record<Status, string> = { Works: "st-works", "Rolling out":
     <p class="eyebrow"><a href="/inbox/">Surfing Dog Inbox</a> · Integrations</p>
     <h1 class="h-page" id="it-h">Inbox integrations</h1>
     <p class="lede">
-      What your inbox connects to, each with your own account. <b>Works</b> is in this release, with nothing to set but
-      your account; <b>Rolling out</b> works where its maker has rolled it out; <b>Coming</b> is built, and waits on
-      another company or a standard. No dates.
+      What your inbox connects to, each with your own account. <b>{STATE_LABEL.built}</b>: in this release, with
+      nothing to set but your account. <b>{STATE_LABEL.works}</b>: works today.
+      <b>{STATE_LABEL.rolling}</b>: works where its maker has rolled it out. <b>{STATE_LABEL.partner}</b> and
+      <b>{STATE_LABEL.standard}</b>: off until another company agrees, or the standard is final. No dates.
     </p>
   </section>
 
@@ -74,7 +76,7 @@ const STATUS_CLASS: Record<Status, string> = { Works: "st-works", "Rolling out":
                 </th>
                 <td class="it-does">{r.does}</td>
                 <td class="it-st">
-                  <span class:list={["st", STATUS_CLASS[r.status]]}>{r.status}</span>
+                  <ConnectionState state={r.state} />
                 </td>
               </tr>
             ))}
@@ -106,7 +108,7 @@ const STATUS_CLASS: Record<Status, string> = { Works: "st-works", "Rolling out":
                 </th>
                 <td class="it-does">{r.does}</td>
                 <td class="it-st">
-                  <span class:list={["st", STATUS_CLASS[r.status]]}>{r.status}</span>
+                  <ConnectionState state={r.state} />
                 </td>
               </tr>
             ))}
@@ -218,45 +220,10 @@ const STATUS_CLASS: Record<Status, string> = { Works: "st-works", "Rolling out":
   .it-does {
     color: var(--ink-2);
   }
+  /* Wide enough for "Built, not yet verified" on a line, the rest under it. */
   .it .it-st {
-    width: 1%;
+    width: 12.5em;
     padding-right: 0;
-    white-space: nowrap;
-  }
-  .st {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: var(--fs-fine);
-    font-weight: 600;
-    letter-spacing: 0.02em;
-  }
-  .st::before {
-    content: "";
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    flex: none;
-  }
-  .st-works {
-    color: var(--ink-2);
-  }
-  .st-works::before {
-    background: var(--c-success);
-  }
-  .st-rolling {
-    color: var(--ink-2);
-  }
-  .st-rolling::before {
-    box-sizing: border-box;
-    border: 1px solid var(--c-success);
-  }
-  .st-coming {
-    color: var(--ink-3);
-  }
-  .st-coming::before {
-    box-sizing: border-box;
-    border: 1px solid var(--ink-3);
   }
   .it-notes {
     display: grid;
@@ -270,15 +237,14 @@ const STATUS_CLASS: Record<Status, string> = { Works: "st-works", "Rolling out":
     line-height: 1.5;
     color: var(--ink-3);
   }
-  /* A phone: each row is the name, then what it does and its status under it. */
+  /* A phone: each row is the name, then what it does and its state under it. */
   @media (max-width: 560px) {
     .it thead {
       display: none;
     }
     .it tbody tr:not(.it-group, .it-untried) {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      column-gap: var(--sp-3);
+      grid-template-columns: minmax(0, 1fr);
       padding: var(--sp-2) 0;
       border-top: 1px solid var(--hairline);
     }
@@ -295,8 +261,7 @@ const STATUS_CLASS: Record<Status, string> = { Works: "st-works", "Rolling out":
       grid-column: 1;
     }
     .it .it-st {
-      grid-column: 2;
-      grid-row: 1;
+      grid-column: 1 / -1;
       width: auto;
     }
     .it-does {

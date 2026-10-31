@@ -2,9 +2,9 @@
  * One example per kind of business, on the /inbox page and each on its own page at /inbox/for/<slug>/:
  * what reaches the owner, and what the inbox does with the system that business already runs.
  * Examples, said as examples: no business is named, nobody is quoted, nothing is counted. Every
- * sentence is what the inbox does today, as its docs (`doc`) and its connectors say; every system is
- * one it connects to today (src/lib/integrations.ts). test/integrations.node.test.ts holds them to
- * both. A name whose owner asks for a mark on its first use carries it where the page first says it
+ * sentence is what the inbox does, as its docs (`doc`) and its connectors say; every system is one it
+ * connects to in this release (src/lib/integrations.ts), and its page says where that connection
+ * stands. test/integrations.node.test.ts holds them to both. A name whose owner asks for a mark on its first use carries it where the page first says it
  * (WooCommerce®, in the label).
  */
 import { type Integration, integration } from "./integrations";
@@ -29,7 +29,7 @@ export interface Case {
   readonly lede: string;
   /** What the inbox does for this kind of business, a line each, from `doc`. */
   readonly points: readonly string[];
-  /** Everything it works with for this kind of business, from src/lib/integrations.ts. */
+  /** Everything it connects to for this kind of business, from src/lib/integrations.ts. */
   readonly works: readonly string[];
   /** The docs page these come from. */
   readonly doc: { readonly label: string; readonly href: string };
@@ -47,7 +47,7 @@ export const CASES: readonly Case[] = [
     does: "The inbox offers only times your kitchen can make, from the menu you brought in from Flipdish, and the order is paid on your own payment link. Busy? Pause, and your Flipdish store can close too.",
     title: "AI orders for restaurants and cafés · Surfing Dog",
     description:
-      "Take orders from your customers' AI assistants, at times your kitchen can make, paid on your own link. Works with GloriaFood, Flipdish, Stripe and Mollie.",
+      "Take orders from your customers' AI assistants, at times your kitchen can make, paid on your own link. Connects to GloriaFood, Flipdish, Stripe and Mollie.",
     lede: "Customers' assistants can read your menu, pick a time your kitchen can make, and order. The order comes to your own inbox, at your own address, and the money to your own payment account.",
     points: [
       "Your menu, with its options and what each adds. Start from the menu in GloriaFood or Flipdish, then keep the dishes you want.",
@@ -71,7 +71,7 @@ export const CASES: readonly Case[] = [
     does: "Times booked on Calendly, or busy in a calendar Calendly checks, are not offered. On Calendly's Standard plan and above, a booking you or your rule confirms is held on Calendly too, on a one-on-one event type of the same length, so nobody books that time there.",
     title: "AI bookings for salons and barbers · Surfing Dog",
     description:
-      "Let your customers' AI assistants book a cut, a colour or a treatment, not at a time your calendar shows busy. Works with Calendly and Cal.com.",
+      "Let your customers' AI assistants book a cut, a colour or a treatment, not at a time your calendar shows busy. Connects to Calendly and Cal.com.",
     lede: "Customers' assistants can see your services and your free times, and book. The booking comes to your own inbox, and into iCloud Calendar, Cal.com or Calendly's paid plans when you keep one.",
     points: [
       "Your services, with how long each takes and its price. Agents book from these.",
@@ -94,7 +94,7 @@ export const CASES: readonly Case[] = [
     does: "The inbox quotes your Beds24 price for nights Beds24 shows free, taxes in the total. Accepted, the stay goes into Beds24 first, marked deposit due, so the room is off sale on every channel; the deposit is paid on your own Stripe or Mollie link.",
     title: "AI bookings for guesthouses and small hotels · Surfing Dog",
     description:
-      "Take stays from guests' AI assistants at your own rates and policy, written to your property system first. Works with Beds24, Hostaway, Stripe and Mollie.",
+      "Take stays from guests' AI assistants at your own rates and policy, written to your property system first. Connects to Beds24, Hostaway, Stripe and Mollie.",
     lede: "Guests' assistants ask for dates, see your total and your cancellation policy, and book. Stays come to your own inbox, and deposits to your own payment account.",
     points: [
       "Rooms, plans, prices, taxes and fees, set once. Every tax and fee is in the total a guest sees.",
@@ -117,7 +117,7 @@ export const CASES: readonly Case[] = [
     does: "The inbox answers from the products and stock it reads from WooCommerce. The order you accept goes into WooCommerce as pending, and your customer pays at your shop's own checkout.",
     title: "AI orders for your online shop · Surfing Dog",
     description:
-      "Let customers' AI assistants ask about products and stock, and order, paid at your own checkout. Works with WooCommerce®, Shopify, Square, Stripe and Mollie.",
+      "Let customers' AI assistants ask about products and stock, and order, paid at your own checkout. Connects to WooCommerce®, Shopify, Square, Stripe and Mollie.",
     lede: "Customers' assistants can ask what you sell, whether it is in stock, and order. Orders come to your own inbox, and the money to your own checkout or payment account.",
     points: [
       "Products and stock read from your WooCommerce shop, and kept up to date within minutes.",

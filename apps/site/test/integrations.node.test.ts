@@ -10,7 +10,9 @@ import {
   APPLE_NOTICE,
   ASSISTANT_LINKS,
   INTEGRATIONS,
+  leastReady,
   noticesOf,
+  STATE_LABEL,
   SYSTEMS,
   UNTRIED,
   UNTRIED_LINE,
@@ -20,12 +22,12 @@ import {
 } from "../src/lib/integrations";
 
 /**
- * The "Works with" row and the examples on /inbox (src/lib/integrations.ts, src/lib/cases.ts), read
+ * The "Connects to" row and the examples on /inbox (src/lib/integrations.ts, src/lib/cases.ts), read
  * against the code and the docs: every name on the row is a connector this release ships, that an
- * owner connects today on a hosted inbox and on their own server, whose doc says so; one line, under the
- * calendars, shops, kitchens, stays and trades alone, says each was built from its platform's
- * documentation and tested against a stand-in, and each one's doc says it of itself; every example runs
- * on one of them and names no system that is switched off; names are text, never a logo; and
+ * owner connects today on a hosted inbox and on their own server, whose doc says so; each is built,
+ * not yet verified on a live account, and one line, under the systems and the payments and never the
+ * assistants, says so, as each one's doc says it of itself; every example runs on one of them, names
+ * no system that is switched off, and says where its system stands; names are text, never a logo; and
  * WooCommerce carries ® and Automattic's notice wherever the site names it. Checked without a build.
  */
 const site = (path: string) => fileURLToPath(new URL(`../${path}`, import.meta.url));
@@ -81,7 +83,7 @@ for (const line of read("src/content/docs/docs/property-systems.md").split("\n")
   if (named) OFF.add(named);
 }
 
-describe("the Works with row", () => {
+describe("the Connects to row", () => {
   it("knows which systems are off: the ones waiting on a company, a partner app or a server's switch", () => {
     for (const t of ["Smoobu", "Mews", "apaleo", "Cloudbeds", "Toast", "Clover", "Deliverect", "Jobber", "Fergus"]) {
       expect(OFF.has(t), t).toBe(true);
@@ -134,56 +136,64 @@ describe("the Works with row", () => {
     }
   });
 
-  it("says of the systems alone, once under them, that each was built from its documentation and tested against a stand-in", () => {
-    const systems = INTEGRATIONS.filter((i) => SYSTEMS.includes(i.group));
-    const others = INTEGRATIONS.filter((i) => !SYSTEMS.includes(i.group));
-    expect(others.map((i) => i.id)).toEqual(["stripe", "mollie"]);
-    // Each system's own doc says it of that system, word for word, beside its name.
-    for (const i of systems) {
+  it("says of every connection, once under them, that it is built, not yet verified on a live account", () => {
+    // None has run with a business's real account yet: every one is built, in the built state's words.
+    for (const i of INTEGRATIONS) expect(i.state, i.id).toBe("built");
+    expect(STATE_LABEL.built).toBe("Built, not yet verified on a live account");
+    expect(STATE_LABEL.built.endsWith(UNTRIED)).toBe(true);
+    expect(leastReady(["works", "built"])).toBe("built");
+    expect(leastReady(["works", "works"])).toBe("works");
+    expect(leastReady(["built", "partner"])).toBe("partner");
+    // Each one's own doc says it of that one, word for word, beside its name: payments too.
+    for (const i of INTEGRATIONS) {
       const text = docAt(i.href.split("#")[0] ?? "").text;
       const says = text.split(/\n\n|\n(?=[-|])/).some((p) => p.includes(UNTRIED) && p.includes(word(i.name)));
       expect(says, `${i.id}: its doc should say "${UNTRIED}" beside its name`).toBe(true);
     }
-    // A payment's doc says nothing of the kind.
-    for (const i of others) expect(docAt(i.href.split("#")[0] ?? "").text, i.id).not.toContain(UNTRIED);
     // A connector the owner app marks as new from its documentation is one of the systems.
+    const systems = INTEGRATIONS.filter((i) => SYSTEMS.includes(i.group));
     for (const i of INTEGRATIONS) if (byKind("hosted", i.connector)?.fresh) expect(systems, i.id).toContain(i);
-    // The overview of what connects says it once, of the same set, and of no payment.
+    // The overview of what connects says it once, of the same set.
     const overview = read("src/content/docs/docs/integrations.md");
     const lines = overview.split("\n").filter((l) => l.includes(UNTRIED));
     expect(lines.length).toBe(1);
-    for (const i of systems) expect(lines[0], i.id).toContain(word(i.name));
-    for (const i of others) expect(lines[0], i.id).not.toContain(word(i.name));
-    // The line the site says, open and closed.
+    for (const i of INTEGRATIONS) expect(lines[0], i.id).toContain(word(i.name));
+    // The line the site says, open and closed, starts with the state's own words.
     expect(untried(true)).toBe(
-      "Each was built from its platform's documentation and tested against a stand-in; the beta is where they first run with a business's real account.",
+      "Built, not yet verified on a live account. We built each from its platform's documentation and tested it against a stand-in; the beta is where they first run with a business's real account.",
     );
     expect(untried(false)).toBe(
-      "Each was built from its platform's documentation and tested against a stand-in; none has yet run with a business's real account.",
+      "Built, not yet verified on a live account. We built each from its platform's documentation and tested it against a stand-in.",
     );
     expect(UNTRIED_LINE).toBe(untried(HOSTED_PILOT_OPEN));
     expect(untriedOne("Shopify", true)).toBe(
-      "Built from Shopify's documentation and tested against a stand-in; the beta is where it first runs with a business's real account.",
+      "Built, not yet verified on a live account. We built it from Shopify's documentation and tested it against a stand-in; the beta is where it first runs with a business's real account.",
     );
-    // On the row: under the systems' names, before the payments and the assistants, and marking none.
+    // On the row: under the systems and the payments, before the assistants, said of them all at once.
     const row = read("src/components/WorksWith.astro");
     const markup = row.slice(row.indexOf('<div class="ww">'));
     expect(markup.match(/\{UNTRIED_LINE\}/g)?.length).toBe(1);
     expect(markup.indexOf("{UNTRIED_LINE}")).toBeGreaterThan(markup.indexOf('id="ww-systems"'));
-    expect(markup.indexOf("{UNTRIED_LINE}")).toBeLessThan(markup.indexOf('id="ww-payments"'));
+    expect(markup.indexOf("{UNTRIED_LINE}")).toBeGreaterThan(markup.indexOf('id="ww-payments"'));
     expect(markup.indexOf("{UNTRIED_LINE}")).toBeLessThan(markup.indexOf('id="ww-assistants"'));
-    expect(row).toContain("const systems = items.filter((i) => SYSTEMS.includes(i.group));");
-    expect(row).toContain('{systems.length > 0 && <p class="ww-note ww-untried">{UNTRIED_LINE}</p>}');
-    expect(row).not.toMatch(/ww-mark|<sup[^>]*>\*<\/sup>|not yet run with a real account\)|None of these connections/);
+    expect(row).toContain('const allBuilt = items.length > 0 && items.every((i) => i.state === "built");');
+    expect(row).toContain('<p class="ww-note ww-untried">{UNTRIED_LINE}</p>');
+    expect(row).toContain('<p class="ww-label" id="ww-systems">Connects to</p>');
+    expect(row).not.toMatch(
+      /Works with|ww-mark|<sup[^>]*>\*<\/sup>|not yet run with a real account|None of these connections/,
+    );
     for (const i of INTEGRATIONS) expect(Object.keys(i), i.id).not.toContain("untried");
     // No lone "new" beside one name, here or in its doc.
     expect(row).not.toMatch(/>\s*new\s*</);
     expect(read("src/content/docs/docs/connectors/beds24.md")).not.toContain("**New:**");
     expect(read("src/content/docs/docs/property-systems.md")).not.toContain("(new)");
-    // The note to agents says it of the same set: the shops, stays, kitchens and trades, and the calendars.
+    // No doc or page still says the old words, or that a connection works today.
+    for (const f of [...files("src"), ...files("public")])
+      expect(read(f), f).not.toMatch(/not yet run with a real account|none has yet run with a/);
+    // The note to agents says it of the same set: the shops, stays, kitchens and trades, the calendars and the payments.
     const connect = read("public/connect.md").replace(/\s+/g, " ");
     expect(connect).toContain(
-      "These, and the calendars above, were built from each one's documentation and tested against a stand-in; not yet run with a real account.",
+      "These, the calendars and the payments above, were built from each one's documentation and tested against a stand-in; not yet verified on a live account: say so when you offer them.",
     );
   });
 
@@ -238,9 +248,10 @@ describe("the Works with row", () => {
 });
 
 describe("the docs say what 0.2.0 does", () => {
-  it("lists every name on the row as working today, and none as being built", () => {
+  it("lists every name on the row as in this release, and none as being built", () => {
     const overview = read("src/content/docs/docs/integrations.md");
-    const today = overview.split("## Works today")[1]?.split("## ")[0] ?? "";
+    expect(overview).not.toContain("## Works today");
+    const today = overview.split("## In this release")[1]?.split("## ")[0] ?? "";
     const waiting = overview.split("## Waiting on another company")[1]?.split("## ")[0] ?? "";
     expect(overview).not.toContain("## Being built");
     for (const i of INTEGRATIONS) {
@@ -368,8 +379,13 @@ describe("the examples", () => {
     for (const c of CASES) expect(c.label).toMatch(/^An? (café|barber|guesthouse|shop|plumber) on [A-Z][\w.]+®?$/);
     const section = read("src/components/UseCases.astro");
     expect(section).toContain('<p class="eyebrow">Examples</p>');
-    expect(section).toContain("These are examples of what it does today, not customers.");
-    expect(read("src/pages/inbox/for/[slug].astro")).toContain("shown on a made-up business");
+    expect(section).toContain("These are examples of what it does, not customers");
+    expect(section).toContain("each connection they name is $" + '{STATE_LABEL.built.replace(/^Built/, "built")}');
+    expect(section).not.toContain("what it does today");
+    const page = read("src/pages/inbox/for/[slug].astro");
+    expect(page).toContain("What the inbox does, shown on a made-up business.");
+    // Under each example, where its system stands, in the state's own words.
+    expect(page).toContain("<ConnectionState state={system.state} of={system.name} />");
   });
 
   it("say on /inbox what the inbox does in one short sentence, and keep the detail on their own page", () => {
@@ -443,7 +459,8 @@ describe("the examples", () => {
           ).toBe(true);
       }
       expect(has(text, live.get(c.system)?.name ?? "?"), c.slug).toBe(true);
-      const said = c.description.match(/Works with (.+)\.$/)?.[1];
+      expect(c.description, c.slug).not.toContain("Works with");
+      const said = c.description.match(/Connects to (.+)\.$/)?.[1];
       if (said) {
         const names = said.replace(/®/g, "").split(/, | and /);
         for (const n of names)

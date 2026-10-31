@@ -1,0 +1,63 @@
+---
+/**
+ * Where a connection stands, in its one set of words (STATE_LABEL, src/lib/integrations.ts): a small
+ * dot and the label, quiet beside a name. Filled for what works, a ring for what is built and not yet
+ * verified or still rolling out, a fainter ring for what waits on a partner or a standard. `of` names
+ * the connection before it, for a line that stands on its own ("Flipdish: Built, …").
+ */
+import { STATE_LABEL, type State } from "../lib/integrations";
+
+interface Props {
+  state: State;
+  of?: string;
+}
+const { state, of } = Astro.props;
+---
+
+<span class:list={["st", `st-${state}`]}
+  ><span class="st-label">{of ? `${of}: ${STATE_LABEL[state]}` : STATE_LABEL[state]}</span></span
+>
+
+<style>
+  .st {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: 6px;
+    font-size: var(--fs-fine);
+    font-weight: 600;
+    line-height: 1.45;
+    letter-spacing: 0.02em;
+    color: var(--ink-2);
+  }
+  /* Two lines of about the same length where it wraps: "Built, not yet verified / on a live account". */
+  .st-label {
+    text-wrap: balance;
+  }
+  /* The dot sits on the first line, however many the label takes. */
+  .st::before {
+    content: "";
+    box-sizing: border-box;
+    width: 5px;
+    height: 5px;
+    margin-top: calc((1.45em - 5px) / 2);
+    border-radius: 50%;
+    flex: none;
+  }
+  .st-works::before {
+    background: var(--c-success);
+  }
+  .st-rolling::before {
+    border: 1px solid var(--c-success);
+  }
+  .st-built::before {
+    border: 1px solid var(--ink-2);
+  }
+  .st-partner,
+  .st-standard {
+    color: var(--ink-3);
+  }
+  .st-partner::before,
+  .st-standard::before {
+    border: 1px solid var(--ink-3);
+  }
+</style>

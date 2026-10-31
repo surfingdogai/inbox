@@ -1,5 +1,5 @@
 /**
- * What the inbox works with, as the /inbox page's "Works with" row and the business pages show it.
+ * What the inbox connects to, as the /inbox page's row of names and the business pages show it.
  * Only what an owner connects today with their own account, in this release (0.2.0), on a hosted
  * inbox and on their own server alike: nothing that waits on a partner programme, on the company's
  * go-ahead (apaleo, Cloudbeds, Mews, Smoobu) or on a switch only a server's operator sets.
@@ -13,6 +13,30 @@
 import { HOSTED_PILOT_OPEN } from "./hosted";
 
 export type Group = "calendars" | "shops" | "stays" | "food" | "trades" | "payments";
+
+/**
+ * Where a connection stands, in the same words wherever the site lists it: the /integrations table,
+ * the row of names on /inbox and on each business page, each platform's own page, and each
+ * connection's doc (test/integrations.node.test.ts holds them to these words). A connection is
+ * verified once it has run with a business's real account; none this release ships has yet, so each
+ * is `built`, and becomes `works` in this file, with its doc, the day it has. `partner` is built and
+ * waits on another company; `standard`, on a standard still in draft; `rolling`, on its maker's
+ * roll-out (an assistant's, never ours).
+ */
+export type State = "works" | "built" | "partner" | "standard" | "rolling";
+
+export const STATE_LABEL: Readonly<Record<State, string>> = {
+  works: "Works",
+  built: "Built, not yet verified on a live account",
+  partner: "Built, waiting for the partner",
+  standard: "Built, waiting for the standard",
+  rolling: "Rolling out",
+};
+
+/** From most ready to least: a page of several connections is as ready as its least ready one. */
+const READINESS: readonly State[] = ["works", "rolling", "built", "partner", "standard"];
+export const leastReady = (states: readonly State[]): State =>
+  states.reduce<State>((a, b) => (READINESS.indexOf(b) > READINESS.indexOf(a) ? b : a), "works");
 
 export interface Brand {
   /** Whose name it is. */
@@ -41,36 +65,38 @@ export interface Integration {
    * adds no bookings. Said beside the name.
    */
   readonly only?: "busy times";
+  /** Where it stands (STATE_LABEL): built until it has run with a business's real account. */
+  readonly state: "works" | "built";
   readonly brand: Brand;
 }
 
 /**
- * How a connector's own doc says it has not yet run with a real account, word for word: the doc of
- * every calendar, shop, kitchen, stay and trade connection says it beside its name, and docs/
- * integrations.md once for them all (test/integrations.node.test.ts keeps the three in step). Payments,
- * assistants and automations say nothing of the kind.
+ * How a connection's own doc says it has not run with a real account yet, word for word: the doc of
+ * every calendar, shop, kitchen, stay, trade and payment connection says it beside its name, and
+ * docs/integrations.md once for them all (test/integrations.node.test.ts keeps them in step). It is
+ * the built state's own words (STATE_LABEL.built). Assistants and automations say nothing of the kind.
  */
-export const UNTRIED = "tested against a stand-in; not yet run with a real account";
+export const UNTRIED = "not yet verified on a live account";
 
-/** The kinds of system the line below is said of: every group of the row but payments. */
+/** The kinds of system the row's first line holds: every group but payments, which have a line of their own. */
 export const SYSTEMS: readonly Group[] = ["calendars", "shops", "stays", "food", "trades"];
 
 /**
- * The one line said of the calendar, shop, kitchen, stay and trade connections, under them, wherever
- * they are listed, and never under payments, assistants or automations. Closed, the pilot's clause
- * gives way to what is true without it.
+ * The one line said of the connections, under them, wherever they are listed: the calendars, shops,
+ * kitchens, stays, trades and payments, never the assistants or automations. It starts with the
+ * built state's label. Closed, the pilot's clause gives way to what is true without it.
  */
 export const untried = (pilotOpen: boolean): string =>
   pilotOpen
-    ? "Each was built from its platform's documentation and tested against a stand-in; the beta is where they first run with a business's real account."
-    : "Each was built from its platform's documentation and tested against a stand-in; none has yet run with a business's real account.";
+    ? `${STATE_LABEL.built}. We built each from its platform's documentation and tested it against a stand-in; the beta is where they first run with a business's real account.`
+    : `${STATE_LABEL.built}. We built each from its platform's documentation and tested it against a stand-in.`;
 export const UNTRIED_LINE = untried(HOSTED_PILOT_OPEN);
 
 /** The same, of one platform on its own page. */
 export const untriedOne = (platform: string, pilotOpen: boolean): string =>
   pilotOpen
-    ? `Built from ${platform}'s documentation and tested against a stand-in; the beta is where it first runs with a business's real account.`
-    : `Built from ${platform}'s documentation and tested against a stand-in; not yet run with a business's real account.`;
+    ? `${STATE_LABEL.built}. We built it from ${platform}'s documentation and tested it against a stand-in; the beta is where it first runs with a business's real account.`
+    : `${STATE_LABEL.built}. We built it from ${platform}'s documentation and tested it against a stand-in.`;
 export const untriedOf = (platform: string): string => untriedOne(platform, HOSTED_PILOT_OPEN);
 
 /** The notice WooCommerce's guidelines ask for near the name. */
@@ -92,6 +118,7 @@ export const INTEGRATIONS: readonly Integration[] = [
     connector: "ics",
     href: "/docs/calendars/#a-calendar-link",
     only: "busy times",
+    state: "built",
     brand: { owner: "Google", guidelines: GOOGLE },
   },
   {
@@ -102,6 +129,7 @@ export const INTEGRATIONS: readonly Integration[] = [
     connector: "caldav",
     preset: "icloud",
     href: "/docs/calendars/#icloud-fastmail-nextcloud-and-other-caldav-calendars",
+    state: "built",
     brand: {
       owner: "Apple",
       guidelines: "https://www.apple.com/legal/intellectual-property/guidelinesfor3rdparties.html",
@@ -117,6 +145,7 @@ export const INTEGRATIONS: readonly Integration[] = [
     preset: "outlook",
     href: "/docs/calendars/#a-calendar-link",
     only: "busy times",
+    state: "built",
     brand: { owner: "Microsoft", guidelines: MICROSOFT },
   },
   {
@@ -127,6 +156,7 @@ export const INTEGRATIONS: readonly Integration[] = [
     group: "calendars",
     connector: "calcom",
     href: "/docs/calendars/#calcom",
+    state: "built",
     brand: { owner: "Cal.com, Inc.", guidelines: "https://cal.com/brand" },
   },
   {
@@ -135,6 +165,7 @@ export const INTEGRATIONS: readonly Integration[] = [
     group: "calendars",
     connector: "calendly",
     href: "/docs/connectors/calendly/",
+    state: "built",
     brand: { owner: "Calendly", guidelines: "https://calendly.com/legal/customer-terms-conditions" },
   },
   {
@@ -145,6 +176,7 @@ export const INTEGRATIONS: readonly Integration[] = [
     group: "shops",
     connector: "woocommerce",
     href: "/docs/connectors/woocommerce/",
+    state: "built",
     brand: {
       owner: "Automattic",
       guidelines: "https://woocommerce.com/trademark-guidelines/",
@@ -159,6 +191,7 @@ export const INTEGRATIONS: readonly Integration[] = [
     group: "shops",
     connector: "shopify",
     href: "/docs/connectors/shopify/",
+    state: "built",
     brand: { owner: "Shopify", guidelines: "https://www.shopify.com/brand-assets" },
   },
   {
@@ -167,6 +200,7 @@ export const INTEGRATIONS: readonly Integration[] = [
     group: "shops",
     connector: "square",
     href: "/docs/connectors/square/",
+    state: "built",
     brand: { owner: "Block, Inc.", guidelines: "https://developer.squareup.com/docs/brand-guidelines" },
   },
   {
@@ -175,6 +209,7 @@ export const INTEGRATIONS: readonly Integration[] = [
     group: "stays",
     connector: "beds24",
     href: "/docs/connectors/beds24/",
+    state: "built",
     brand: { owner: "Beds24", guidelines: null },
   },
   {
@@ -183,6 +218,7 @@ export const INTEGRATIONS: readonly Integration[] = [
     group: "stays",
     connector: "hostaway",
     href: "/docs/connectors/hostaway/",
+    state: "built",
     brand: { owner: "Hostaway", guidelines: null },
   },
   {
@@ -191,6 +227,7 @@ export const INTEGRATIONS: readonly Integration[] = [
     group: "food",
     connector: "gloriafood",
     href: "/docs/ordering/#which-tills",
+    state: "built",
     brand: { owner: "Oracle", guidelines: "https://www.oracle.com/legal/trademarks/" },
   },
   {
@@ -199,6 +236,7 @@ export const INTEGRATIONS: readonly Integration[] = [
     group: "food",
     connector: "flipdish",
     href: "/docs/ordering/#which-tills",
+    state: "built",
     brand: { owner: "Flipdish", guidelines: null },
   },
   {
@@ -207,6 +245,7 @@ export const INTEGRATIONS: readonly Integration[] = [
     group: "trades",
     connector: "servicem8",
     href: "/docs/job-tools/#which-tools",
+    state: "built",
     brand: { owner: "ServiceM8", guidelines: "https://developer.servicem8.com/docs/addon-store-requirements" },
   },
   {
@@ -217,6 +256,7 @@ export const INTEGRATIONS: readonly Integration[] = [
     group: "payments",
     connector: "stripe",
     href: "/docs/payments/#stripe",
+    state: "built",
     brand: { owner: "Stripe", guidelines: "https://stripe.com/legal/marks" },
   },
   {
@@ -225,6 +265,7 @@ export const INTEGRATIONS: readonly Integration[] = [
     group: "payments",
     connector: "mollie",
     href: "/docs/payments/#mollie",
+    state: "built",
     brand: { owner: "Mollie", guidelines: null },
   },
 ];

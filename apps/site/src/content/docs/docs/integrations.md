@@ -7,7 +7,7 @@ Every one in a table, with what is coming: [Integrations](/integrations/).
 
 Settings → **Integrations**. Calendars, payments, shops and checkouts, property systems, job tools, and ordering and tills, each a card. A card says **Connect** only when your Inbox can connect it; one that waits on something says **Soon** or **Needs setup**, with nothing to press.
 
-## Works today
+## In this release
 
 | Card | Connects with | Does |
 | --- | --- | --- |
@@ -29,7 +29,7 @@ Settings → **Integrations**. Calendars, payments, shops and checkouts, propert
 
 WooCommerce and its associated designs are trademarks of Automattic Inc.
 
-The calendar, shop, kitchen, stay and trade connections (iCloud and the other CalDAV calendars, Google, Outlook, Cal.com, Calendly, WooCommerce, Shopify, Square, Beds24, Hostaway, GloriaFood, Flipdish and ServiceM8) are built from each one's documentation and tested against a stand-in; not yet run with a real account.
+The calendar, shop, kitchen, stay, trade and payment connections (iCloud and the other CalDAV calendars, Google, Outlook, Cal.com, Calendly, WooCommerce, Shopify, Square, Beds24, Hostaway, GloriaFood, Flipdish, ServiceM8, Stripe and Mollie) are built from each one's documentation and tested against a stand-in; not yet verified on a live account.
 
 On a hosted inbox, Google says **Soon** until Google has checked our sign-in, and Sign in with Calendly or Square says **Soon** until our app is there; their tokens work meanwhile.
 

@@ -5,7 +5,7 @@ sidebar:
   order: 2
 ---
 
-Built from Shopify's documentation and tested against a stand-in; not yet run with a real account.
+Built from Shopify's documentation and tested against a stand-in; not yet verified on a live account.
 
 Shopify already lets assistants shop your cart and pay at your checkout. Your Inbox adds what Shopify does not: questions, quotes and bookings in one place, and a signed receipt for each one. Agents are sent to your Shopify checkout to buy, and to your Inbox for the rest.
 

@@ -3,17 +3,18 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { builtInConnectors } from "../../../packages/adapters/src/connectors/index";
 import { ASSISTANTS } from "../src/lib/assistants";
-import { INTEGRATIONS, SYSTEMS, UNTRIED_LINE } from "../src/lib/integrations";
+import { INTEGRATIONS, STATE_LABEL, SYSTEMS, UNTRIED_LINE } from "../src/lib/integrations";
 import { COMING, ROWS, type Row, SYSTEM_GROUPS, TABLE } from "../src/lib/integrations-table";
 import { PLATFORMS } from "../src/lib/platforms";
 
 /**
  * /integrations (src/lib/integrations-table.ts, src/pages/integrations/index.astro), read against the
- * connectors in packages/adapters and their docs: a row that Works is ready with nothing set on a
- * hosted inbox and on one's own server, a row Coming is not, every connector this release ships is in
- * a row, every name on the /inbox row is in the table, and nothing carries a date. The one line said of
- * the systems' connections sits under them, never under payments, assistants or automations. Checked
- * without a build.
+ * connectors in packages/adapters and their docs: a row that is built, or works, is ready with nothing
+ * set on a hosted inbox and on one's own server, a row that waits on a partner or a standard is not,
+ * every connector this release ships is in a row, every name on the /inbox row is in the table with
+ * that name's own state, and nothing that waits carries a date. Every state is said in the one set of
+ * words (STATE_LABEL). The one line said of the connections sits under them, never under assistants
+ * or automations. Checked without a build.
  */
 const site = (path: string) => fileURLToPath(new URL(`../${path}`, import.meta.url));
 const read = (path: string) => readFileSync(site(path), "utf8");
@@ -66,18 +67,37 @@ describe("the table of integrations", () => {
       "Built; on once each company agrees",
       "Built; off while the standard is a draft (on your own server, `INBOX_UCP_LODGING=on`)",
     ]);
-    // Works, but for Meta's custom connectors for Muse, which follow Meta's own roll-out.
+    // A connection this release ships is built, not yet verified on a live account: none has run with a
+    // business's real account. What reaches the inbox works, but for Meta's custom connectors for
+    // Muse, which follow Meta's own roll-out.
     for (const g of TABLE)
-      for (const r of g.rows) expect(r.status, r.name).toBe(r.assistant === "meta-muse" ? "Rolling out" : "Works");
+      for (const r of g.rows) {
+        const want = SYSTEM_GROUPS.includes(g.id) ? "built" : r.assistant === "meta-muse" ? "rolling" : "works";
+        expect(r.state, r.name).toBe(want);
+      }
     expect(read("src/lib/assistants.ts")).toContain("custom connectors follow Meta's roll-out.");
-    for (const g of COMING) for (const r of g.rows) expect(r.status, r.name).toBe("Coming");
+    for (const r of COMING.find((g) => g.id === "company")?.rows ?? []) expect(r.state, r.name).toBe("partner");
+    for (const r of COMING.find((g) => g.id === "standard")?.rows ?? []) expect(r.state, r.name).toBe("standard");
+    // In the one set of words, wherever a state is said.
+    expect(STATE_LABEL).toEqual({
+      works: "Works",
+      built: "Built, not yet verified on a live account",
+      partner: "Built, waiting for the partner",
+      standard: "Built, waiting for the standard",
+      rolling: "Rolling out",
+    });
     const page = read(PAGE);
+    expect(page).toContain("<ConnectionState state={r.state} />");
+    expect(page.match(/<ConnectionState /g)?.length).toBe(2);
+    for (const k of ["built", "works", "rolling", "partner", "standard"])
+      expect(page, k).toContain(`{STATE_LABEL.${k}}`);
+    expect(page).not.toMatch(/>\s*(Works|Coming|Rolling out)\s*</);
     expect(page.indexOf(">More coming<")).toBeGreaterThan(page.indexOf("TABLE.map"));
     expect(page.indexOf("COMING.map")).toBeGreaterThan(page.indexOf(">More coming<"));
   });
 
-  it("says Works only of connectors ready with nothing set, on a hosted inbox and on one's own server", () => {
-    for (const r of ROWS.filter((x) => x.status === "Works" && x.connectors)) {
+  it("says built, or works, only of connectors ready with nothing set, on a hosted inbox and on one's own server", () => {
+    for (const r of ROWS.filter((x) => (x.state === "built" || x.state === "works") && x.connectors)) {
       for (const c of r.connectors ?? []) {
         for (const host of Object.keys(HOSTS) as Host[]) {
           expect(
@@ -89,8 +109,8 @@ describe("the table of integrations", () => {
     }
   });
 
-  it("says Coming of connectors that wait on something, and of nothing a host has ready", () => {
-    for (const r of ROWS.filter((x) => x.status === "Coming" && x.connectors)) {
+  it("says waiting for the partner of connectors that wait on something, and of nothing a host has ready", () => {
+    for (const r of ROWS.filter((x) => (x.state === "partner" || x.state === "standard") && x.connectors)) {
       for (const c of r.connectors ?? []) {
         expect(connector("hosted", c.kind), `${r.name}: ${c.kind} is in this release`).toBeDefined();
         for (const host of Object.keys(HOSTS) as Host[])
@@ -105,7 +125,7 @@ describe("the table of integrations", () => {
     }
     // And UCP Lodging, built and off while it is a draft, switched on by its own setting on one's own server.
     const ucp = ROWS.find((r) => r.name === "UCP Lodging");
-    expect(ucp?.status).toBe("Coming");
+    expect(ucp?.state).toBe("standard");
     const stays = read("src/content/docs/docs/stays.md");
     expect(stays).toContain("## UCP Lodging (off for now)");
     expect(stays).toContain("On your own server, `INBOX_UCP_LODGING=on` turns it on");
@@ -130,7 +150,8 @@ describe("the table of integrations", () => {
           r.connectors?.some((c) => c.kind === i.connector && (i.preset ? c.preset === i.preset : !c.preset)),
       );
       expect(row, i.id).toBeDefined();
-      expect(row?.status, i.id).toBe("Works");
+      // The row takes the name's own state (src/lib/integrations.ts): one place sets it.
+      expect(row?.state, i.id).toBe(i.state);
     }
     expect(new Set(ROWS.map((r) => r.name)).size).toBe(ROWS.length);
   });
@@ -177,26 +198,31 @@ describe("the table of integrations", () => {
     for (const r of ROWS) {
       expect(r.does.split(/\s+/).length, r.name).toBeLessThanOrEqual(13);
       expect(r.does, r.name).not.toMatch(/[.!]$/);
-      if (r.status !== "Works") expect(r.does, r.name).not.toMatch(/\b(19|20)\d\d\b|\bQ[1-4]\b|\bsoon\b/i);
+      if (r.state === "partner" || r.state === "standard")
+        expect(r.does, r.name).not.toMatch(/\b(19|20)\d\d\b|\bQ[1-4]\b|\bsoon\b/i);
       expect(r.does, r.name).not.toMatch(/\b(the first|the only|best|seamless\w*|effortless\w*|unlock\w*)\b/i);
     }
     // The one date is GloriaFood's own end, which its owner announced.
     expect(ROWS.filter((r) => /\b20\d\d\b/.test(r.does)).map((r) => r.name)).toEqual(["GloriaFood"]);
   });
 
-  it("says the one line of the systems under them alone, and gives the credits, and no logo", () => {
+  it("says the one line of the connections under them alone, and gives the credits, and no logo", () => {
     const page = read(PAGE);
-    // Under the last group of systems, before payments, assistants and automations.
+    // Under the last group of connections, the payments, before the assistants and automations.
     expect(TABLE.map((g) => g.id).slice(0, SYSTEM_GROUPS.length)).toEqual([...SYSTEM_GROUPS]);
     expect(page).toContain("const lastSystem = TABLE.filter((g) => SYSTEM_GROUPS.includes(g.id)).at(-1)?.id;");
     expect(page).toContain("{g.id === lastSystem && (");
     expect(page.match(/\{UNTRIED_LINE\}/g)?.length).toBe(1);
     expect(page).not.toMatch(/NOT_YET_REAL|None of these connections/);
-    expect(UNTRIED_LINE).toMatch(/^Each was built from its platform's documentation and tested against a stand-in/);
-    // The /inbox row's systems are these groups' rows; its payments are not.
+    expect(UNTRIED_LINE).toMatch(
+      /^Built, not yet verified on a live account\. We built each from its platform's documentation and tested it against a stand-in/,
+    );
+    expect(SYSTEM_GROUPS.at(-1)).toBe("payments");
+    // Every name on the /inbox row, systems and payments alike, is in these groups' rows.
     for (const i of INTEGRATIONS) {
       const group = TABLE.find((g) => g.rows.some((r) => r.connectors?.some((c) => c.kind === i.connector)));
-      expect(SYSTEM_GROUPS.includes(group?.id ?? ""), i.id).toBe(SYSTEMS.includes(i.group));
+      expect(SYSTEM_GROUPS.includes(group?.id ?? ""), i.id).toBe(true);
+      expect(group?.id === "payments", i.id).toBe(!SYSTEMS.includes(i.group));
     }
     expect(page).toContain("the names are their owners' trademarks, and none endorses us.");
     expect(page).toContain("{WOO_NOTICE}");

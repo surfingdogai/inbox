@@ -3,8 +3,10 @@
 // with a business on it through the inbox, what stays on the platform and in the owner's own account,
 // the platform's own AI and the inbox beside it, how to connect it, a check of the owner's own site,
 // the questions owners ask (shown, and given as FAQPage data in the same words), related platforms and
-// the guides that answer its wider questions. A calendar, shop, kitchen, stay or trade connection says
-// it was built from its platform's documentation and tested against a stand-in; a payment one doesn't.
+// the guides that answer its wider questions. Under its heading, its state in the site's one set of
+// words (src/lib/integrations.ts); at its foot, while it is built and not yet verified, that it was
+// built from its platform's documentation and tested against a stand-in.
+import ConnectionState from "../../components/ConnectionState.astro";
 import Faqs from "../../components/Faqs.astro";
 import GuideAnswer from "../../components/GuideAnswer.astro";
 import GuideCheck from "../../components/GuideCheck.astro";
@@ -12,7 +14,7 @@ import Marked from "../../components/Marked.astro";
 import Layout from "../../layouts/Layout.astro";
 import { faqPage } from "../../lib/faq";
 import { inline } from "../../lib/inline";
-import { integration, SYSTEMS, UNTRIED_LINE, untriedOf } from "../../lib/integrations";
+import { integration, leastReady, UNTRIED_LINE, untriedOf } from "../../lib/integrations";
 import {
   PLATFORMS,
   PLATFORMS_AS_OF,
@@ -34,9 +36,11 @@ const related = p.related.map((slug) => platformBySlug(slug)).filter((x): x is P
 /** The page's words with its marks: `code`, [links](/path) and **bold**, everything else escaped. */
 const rich = (text: string) => inline(text).replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
 const notices = platformNotices(p);
-/** Said of a system's connections only: one on its own page, several (the calendars) together. */
-const systems = p.ids.map(integration).filter((i) => SYSTEMS.includes(i.group));
-const untried = systems.length === 0 ? null : systems.length > 1 ? UNTRIED_LINE : untriedOf(p.name.replace("®", ""));
+/** Its connections, and where they stand together: as ready as the least ready of them. */
+const connections = p.ids.map(integration);
+const state = leastReady(connections.map((i) => i.state));
+/** Said while they are built: of one on its own page, of several (the calendars) together. */
+const untried = state !== "built" ? null : connections.length > 1 ? UNTRIED_LINE : untriedOf(p.name.replace("®", ""));
 const sources = [...new Map(p.theirs.facts.flatMap((f) => f.sources).map((s) => [s.href, s])).values()];
 const ld = [
   {
@@ -66,6 +70,7 @@ const ld = [
   <article class="wrap wrap-read section is-head pf" aria-labelledby="pf-title">
     <p class="eyebrow"><a href="/integrations/">Integrations</a> · <Marked text={p.name} /></p>
     <h1 class="h-page" id="pf-title"><Marked text={p.heading} /></h1>
+    <p class="pf-state"><ConnectionState state={state} /></p>
     <GuideAnswer text={p.answer} />
 
     <div class="prose pf-body">
@@ -169,6 +174,10 @@ const ld = [
   .eyebrow a:hover,
   .eyebrow a:focus-visible {
     text-decoration: underline;
+  }
+  /* Its state, quiet, between the heading and the answer. */
+  .pf-state {
+    margin: var(--sp-3) 0 0;
   }
   /* The same reading size as a guide's prose. */
   .pf-body {

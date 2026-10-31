@@ -7,6 +7,8 @@ Connect your own Stripe or Mollie account, and the orders you accept get a link 
 
 Settings → Integrations → **Stripe** or **Mollie**.
 
+Stripe and Mollie are built from each one's documentation and tested against a stand-in; not yet verified on a live account.
+
 ## What it does, and what it never does
 
 - **Accepted orders get a link.** When you accept an order, or a customer accepts your quote, your Inbox makes a link for what it comes to in your account and emails it to the customer in your name, in the same email as the acceptance and your words with it (if the platform is slow to answer, the link follows in a second email). Agents see it on the order too.

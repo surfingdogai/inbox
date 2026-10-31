@@ -1,19 +1,24 @@
 /**
  * /integrations: every system the inbox works with, in one table, grouped by what it is for, and a
  * "More coming" group at the end. Each row is a name, what the inbox does with it in one short line,
- * and a status of a word or two: Works, for what this release (0.2.0) does with nothing to set but
- * the owner's own account, on a hosted inbox and on one's own server alike; Rolling out, for what its
- * maker is still rolling out (Meta's custom connectors for Muse); Coming, for what is built and waits
- * on another company, or on a standard. Never a date. The calendar, shop, kitchen, stay and trade
- * groups (SYSTEM_GROUPS) carry the one line said of their connections, under the last of them.
+ * and its state, in the words of src/lib/integrations.ts (STATE_LABEL): Built, not yet verified on a
+ * live account, for a connection this release (0.2.0) ships with nothing to set but the owner's own
+ * account, on a hosted inbox and on one's own server alike, until it has run with a business's real
+ * account; Works, for what reaches the inbox today (the assistants, any agent, automations), and for
+ * a connection once it has run with one; Rolling out, for what its maker is still rolling out (Meta's
+ * custom connectors for Muse); Built, waiting for the partner, for what is built and waits on another
+ * company; Built, waiting for the standard, for what waits on a draft standard. Never a date. A row
+ * of a connection on the /inbox row takes that connection's state, so a state is set in one place.
+ * The calendar, shop, kitchen, stay, trade and payment groups (SYSTEM_GROUPS) carry the one line said
+ * of their connections, under the last of them.
  *
  * test/integrations-table.node.test.ts reads every row against the connectors in packages/adapters:
- * a row that Works names connectors ready with nothing set, a row Coming names connectors that are
- * not, and every connector this release ships is in a row. Names are text, as their owners write
+ * a row that is built names connectors ready with nothing set, a row that waits names connectors that
+ * are not, and every connector this release ships is in a row. Names are text, as their owners write
  * them, with the mark an owner asks for on its first use (WooCommerce®); never a logo.
  */
 
-export type Status = "Works" | "Rolling out" | "Coming";
+import { INTEGRATIONS, leastReady, type State } from "./integrations";
 
 /** A connector a row stands for: its `kind` in builtInConnectors(), and the preset it names. */
 export interface RowConnector {
@@ -26,7 +31,7 @@ export interface Row {
   readonly name: string;
   /** What the inbox does with it, in one short line. */
   readonly does: string;
-  readonly status: Status;
+  readonly state: State;
   /** Where to read more: its own page, its doc, or an assistant's page. */
   readonly href: string;
   /** The connectors it stands for, where it is one. */
@@ -41,44 +46,58 @@ export interface TableGroup {
   readonly rows: readonly Row[];
 }
 
-const works = (name: string, does: string, href: string, connectors?: readonly RowConnector[]): Row => ({
+/**
+ * A connection this release ships: the state of the connections of src/lib/integrations.ts it stands
+ * for (by connector and preset), the least ready of them, and built where it stands for none of them.
+ */
+const shipped = (name: string, does: string, href: string, connectors?: readonly RowConnector[]): Row => {
+  const of = INTEGRATIONS.filter((i) => connectors?.some((c) => c.kind === i.connector && c.preset === i.preset));
+  return {
+    name,
+    does,
+    state: of.length > 0 ? leastReady(of.map((i) => i.state)) : "built",
+    href,
+    ...(connectors ? { connectors } : {}),
+  };
+};
+const works = (name: string, does: string, href: string): Row => ({ name, does, state: "works", href });
+const waiting = (
+  state: "partner" | "standard",
+  name: string,
+  does: string,
+  href: string,
+  connectors?: readonly RowConnector[],
+): Row => ({
   name,
   does,
-  status: "Works",
+  state,
   href,
   ...(connectors ? { connectors } : {}),
 });
-const coming = (name: string, does: string, href: string, connectors?: readonly RowConnector[]): Row => ({
+const assistant = (slug: string, name: string, does: string, state: State = "works"): Row => ({
   name,
   does,
-  status: "Coming",
-  href,
-  ...(connectors ? { connectors } : {}),
-});
-const assistant = (slug: string, name: string, does: string, status: Status = "Works"): Row => ({
-  name,
-  does,
-  status,
+  state,
   href: `/assistants/${slug}/`,
   assistant: slug,
 });
 
-/** The groups of systems a business runs, whose connections the one line under them is said of. */
-export const SYSTEM_GROUPS: readonly string[] = ["calendars", "shops", "restaurants", "stays", "trades"];
+/** The groups of connections a business makes, whose state the one line under them is said of: payments last. */
+export const SYSTEM_GROUPS: readonly string[] = ["calendars", "shops", "restaurants", "stays", "trades", "payments"];
 
 export const TABLE: readonly TableGroup[] = [
   {
     id: "calendars",
     title: "Calendars and bookings",
     rows: [
-      works("Google Calendar", "Busy times, from its private link", "/integrations/calendars/", [{ kind: "ics" }]),
-      works("iCloud Calendar", "Busy times in, bookings out", "/integrations/calendars/", [
+      shipped("Google Calendar", "Busy times, from its private link", "/integrations/calendars/", [{ kind: "ics" }]),
+      shipped("iCloud Calendar", "Busy times in, bookings out", "/integrations/calendars/", [
         { kind: "caldav", preset: "icloud" },
       ]),
-      works("Microsoft Outlook", "Busy times, from its published link", "/integrations/calendars/", [
+      shipped("Microsoft Outlook", "Busy times, from its published link", "/integrations/calendars/", [
         { kind: "ics", preset: "outlook" },
       ]),
-      works(
+      shipped(
         "Fastmail, Nextcloud and other CalDAV calendars",
         "Busy times in, bookings out",
         "/integrations/calendars/",
@@ -88,17 +107,17 @@ export const TABLE: readonly TableGroup[] = [
           { kind: "caldav", preset: "other" },
         ],
       ),
-      works("Cal.com", "Busy times in, bookings out", "/integrations/calcom/", [{ kind: "calcom" }]),
-      works("Calendly", "Busy times in; bookings out on its paid plans", "/integrations/calendly/", [
+      shipped("Cal.com", "Busy times in, bookings out", "/integrations/calcom/", [{ kind: "calcom" }]),
+      shipped("Calendly", "Busy times in; bookings out on its paid plans", "/integrations/calendly/", [
         { kind: "calendly" },
       ]),
-      works(
+      shipped(
         "Square Appointments",
         "Busy times in; bookings out on Appointments Plus or Premium",
         "/integrations/square/",
         [{ kind: "square" }],
       ),
-      works(
+      shipped(
         "Any calendar that imports a link",
         "Your confirmed bookings, never who booked",
         "/docs/connectors/calendar-link/",
@@ -110,22 +129,22 @@ export const TABLE: readonly TableGroup[] = [
     id: "shops",
     title: "Shops and orders",
     rows: [
-      works(
+      shipped(
         "WooCommerce®",
         "Products and stock in; accepted orders go in pending, paid at your checkout",
         "/integrations/woocommerce/",
         [{ kind: "woocommerce" }],
       ),
-      works(
+      shipped(
         "Shopify",
         "Products in; accepted quotes and orders become draft orders, paid at your checkout",
         "/integrations/shopify/",
         [{ kind: "shopify" }],
       ),
-      works("Square", "Items in; orders you accept paid at your Square checkout", "/integrations/square/", [
+      shipped("Square", "Items in; orders you accept paid at your Square checkout", "/integrations/square/", [
         { kind: "square" },
       ]),
-      works(
+      shipped(
         "A product feed, from any shop",
         "Your catalogue, from the CSV or Google feed it publishes",
         "/docs/feeds/",
@@ -136,13 +155,13 @@ export const TABLE: readonly TableGroup[] = [
     id: "restaurants",
     title: "Restaurants and cafés",
     rows: [
-      works(
+      shipped(
         "GloriaFood",
         "Your menu in, to start from; GloriaFood itself closes on 30 April 2027",
         "/integrations/gloriafood/",
         [{ kind: "gloriafood" }],
       ),
-      works(
+      shipped(
         "Flipdish",
         "Your menu and collection hours in; your store closed while you pause",
         "/integrations/flipdish/",
@@ -154,14 +173,16 @@ export const TABLE: readonly TableGroup[] = [
     id: "stays",
     title: "Places to stay",
     rows: [
-      works("Beds24", "What is free in; each stay written there first", "/integrations/beds24/", [{ kind: "beds24" }]),
-      works("Hostaway", "Free nights in; each booking written there first", "/integrations/hostaway/", [
+      shipped("Beds24", "What is free in; each stay written there first", "/integrations/beds24/", [
+        { kind: "beds24" },
+      ]),
+      shipped("Hostaway", "Free nights in; each booking written there first", "/integrations/hostaway/", [
         { kind: "hostaway" },
       ]),
-      works(
+      shipped(
         "Airbnb, Booking.com and Vrbo calendar links",
         "Nights taken there, as hints for you to check",
-        "/docs/property-systems/#what-works-today",
+        "/docs/property-systems/#in-this-release",
       ),
     ],
   },
@@ -169,7 +190,7 @@ export const TABLE: readonly TableGroup[] = [
     id: "trades",
     title: "Trades",
     rows: [
-      works(
+      shipped(
         "ServiceM8",
         "Requests you take on become jobs, with their photos; its visits block times",
         "/integrations/servicem8/",
@@ -181,10 +202,10 @@ export const TABLE: readonly TableGroup[] = [
     id: "payments",
     title: "Payments",
     rows: [
-      works("Stripe", "A link to pay into your own account, for each order you accept", "/integrations/stripe/", [
+      shipped("Stripe", "A link to pay into your own account, for each order you accept", "/integrations/stripe/", [
         { kind: "stripe" },
       ]),
-      works("Mollie", "A link to pay into your own account, for each order you accept", "/integrations/mollie/", [
+      shipped("Mollie", "A link to pay into your own account, for each order you accept", "/integrations/mollie/", [
         { kind: "mollie" },
       ]),
     ],
@@ -198,7 +219,7 @@ export const TABLE: readonly TableGroup[] = [
       assistant("gemini", "Gemini", "As a custom app in the Gemini app"),
       assistant("microsoft-copilot", "Microsoft Copilot Studio", "As a tool of an agent you build"),
       assistant("grok", "Grok and Grok Bot", "As a custom connector on paid plans; in Grok Bot, a plugin"),
-      assistant("meta-muse", "Meta Muse", "As a custom connector", "Rolling out"),
+      assistant("meta-muse", "Meta Muse", "As a custom connector", "rolling"),
       works("Any other agent", "Over MCP, REST with OpenAPI, or email", "/docs/mcp/"),
     ],
   },
@@ -220,53 +241,74 @@ export const COMING: readonly TableGroup[] = [
     id: "company",
     title: "Built; on once each company agrees",
     rows: [
-      coming("apaleo", "What is free in; each stay written there first", "/docs/connectors/apaleo/", [
+      waiting("partner", "apaleo", "What is free in; each stay written there first", "/docs/connectors/apaleo/", [
         { kind: "apaleo" },
       ]),
-      coming("Cloudbeds", "What is free in; each stay written there first", "/docs/connectors/cloudbeds/", [
+      waiting("partner", "Cloudbeds", "What is free in; each stay written there first", "/docs/connectors/cloudbeds/", [
         { kind: "cloudbeds" },
       ]),
-      coming("Mews", "What is free in; each stay written there first", "/docs/connectors/mews/", [{ kind: "mews" }]),
-      coming("Smoobu", "Free nights in; each booking written there first", "/docs/connectors/smoobu/", [
+      waiting("partner", "Mews", "What is free in; each stay written there first", "/docs/connectors/mews/", [
+        { kind: "mews" },
+      ]),
+      waiting("partner", "Smoobu", "Free nights in; each booking written there first", "/docs/connectors/smoobu/", [
         { kind: "smoobu" },
       ]),
-      coming(
+      waiting(
+        "partner",
         "Google Calendar, signed in",
         "Bookings written into it too, once Google has checked our sign-in",
         "/docs/calendars/#google-calendar",
         [{ kind: "google_calendar" }],
       ),
-      coming("Toast", "Your menu in; orders you accept written into your till", "/docs/ordering/#which-tills", [
-        { kind: "toast" },
-      ]),
-      coming(
+      waiting(
+        "partner",
+        "Toast",
+        "Your menu in; orders you accept written into your till",
+        "/docs/ordering/#which-tills",
+        [{ kind: "toast" }],
+      ),
+      waiting(
+        "partner",
         "Lightspeed Restaurant",
         "Your menu in; orders you accept as to-go orders",
         "/docs/ordering/#which-tills",
         [{ kind: "lightspeed" }],
       ),
-      coming("Clover", "Your menu in; orders you accept as Clover orders", "/docs/ordering/#which-tills", [
+      waiting("partner", "Clover", "Your menu in; orders you accept as Clover orders", "/docs/ordering/#which-tills", [
         { kind: "clover" },
       ]),
-      coming("Deliverect", "Orders you accept, into your Deliverect channel", "/docs/ordering/#which-tills", [
-        { kind: "deliverect" },
-      ]),
-      coming("Jobber", "Requests you take on, on your request form", "/docs/job-tools/#which-tools", [
+      waiting(
+        "partner",
+        "Deliverect",
+        "Orders you accept, into your Deliverect channel",
+        "/docs/ordering/#which-tills",
+        [{ kind: "deliverect" }],
+      ),
+      waiting("partner", "Jobber", "Requests you take on, on your request form", "/docs/job-tools/#which-tools", [
         { kind: "jobber" },
       ]),
-      coming("Housecall Pro", "Requests you take on, as leads in your Job inbox", "/docs/job-tools/#which-tools", [
-        { kind: "housecallpro" },
-      ]),
-      coming("Fergus", "Requests you take on, as enquiries with their photos", "/docs/job-tools/#which-tools", [
-        { kind: "fergus" },
-      ]),
+      waiting(
+        "partner",
+        "Housecall Pro",
+        "Requests you take on, as leads in your Job inbox",
+        "/docs/job-tools/#which-tools",
+        [{ kind: "housecallpro" }],
+      ),
+      waiting(
+        "partner",
+        "Fergus",
+        "Requests you take on, as enquiries with their photos",
+        "/docs/job-tools/#which-tools",
+        [{ kind: "fergus" }],
+      ),
     ],
   },
   {
     id: "standard",
     title: "Built; off while the standard is a draft (on your own server, `INBOX_UCP_LODGING=on`)",
     rows: [
-      coming(
+      waiting(
+        "standard",
         "UCP Lodging",
         "Stays booked from AI platforms, for rooms that confirm at once",
         "/docs/stays/#ucp-lodging-off-for-now",

@@ -5,7 +5,7 @@ sidebar:
   order: 3
 ---
 
-Built from Square's documentation and tested against a stand-in; not yet run with a real account.
+Built from Square's documentation and tested against a stand-in; not yet verified on a live account.
 
 For salons, barbers, cafés, restaurants, trades and gyms that run their day on Square. Your Inbox reads your Square, and writes into it what you confirm.
 

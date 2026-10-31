@@ -5,7 +5,7 @@ sidebar:
   order: 11
 ---
 
-Built from Hostaway's documentation and tested against a stand-in; not yet run with a real account.
+Built from Hostaway's documentation and tested against a stand-in; not yet verified on a live account.
 
 Hostaway keeps your listings, their calendars and your reservations. Connected, your Inbox reads what is free from Hostaway and puts every booking into Hostaway first, so a night is never sold twice.
 

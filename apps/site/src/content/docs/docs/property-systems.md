@@ -7,7 +7,7 @@ A property system (a property management system or a channel manager) is where a
 
 Settings → **Property** → **Connect your system**.
 
-## What works today
+## In this release
 
 **Calendar links, one per room.** Each listing on Airbnb, Booking.com or Vrbo has a calendar link. Add it in Settings → Property → **Calendar links**, choosing which room it is in the same sheet. The nights it shows as taken appear as hints: in the Nights grid, to guests' assistants as *likely taken*, and as a request for you to look. A link lags hours behind, so a hint never confirms or refuses a stay on its own.
 
@@ -15,7 +15,7 @@ Settings → **Property** → **Connect your system**.
 
 **Hostaway**: [connect with your account ID and API key](/docs/connectors/hostaway/).
 
-Beds24 and Hostaway are built from each one's documentation and tested against a stand-in; not yet run with a real account.
+Beds24 and Hostaway are built from each one's documentation and tested against a stand-in; not yet verified on a live account.
 
 ## Not switched on yet
 
@@ -38,4 +38,4 @@ Built, and switched off until each company says yes. Each shows **Soon** or **Ne
 
 ## Building one
 
-Every connection is built against the same contract, from the system's own documentation, and tested against a stand-in of it; none has yet run with a property's real account. The contract and the fake are in the repository (`packages/adapters/test/property/`).
+Every connection is built against the same contract, from the system's own documentation, and tested against a stand-in of it; none is yet verified on a live account. The contract and the fake are in the repository (`packages/adapters/test/property/`).

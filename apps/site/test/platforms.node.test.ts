@@ -6,7 +6,7 @@ import { ASSISTANTS } from "../src/lib/assistants";
 import { faqPage } from "../src/lib/faq";
 import { GUIDE_SLUGS, wordCount } from "../src/lib/guides";
 import { linksIn, plain } from "../src/lib/inline";
-import { APPLE_NOTICE, INTEGRATIONS, integration, SYSTEMS, untriedOf, WOO_NOTICE } from "../src/lib/integrations";
+import { APPLE_NOTICE, INTEGRATIONS, integration, leastReady, untriedOf, WOO_NOTICE } from "../src/lib/integrations";
 import { ROWS } from "../src/lib/integrations-table";
 import { PLATFORMS, type Platform, pageOf, platformHref, platformNotices } from "../src/lib/platforms";
 import { SHOPIFY_FAQS } from "../src/lib/shopify";
@@ -15,7 +15,7 @@ import { TOPICS, topicHref } from "../src/lib/topics";
 /**
  * The platform pages at /integrations/<slug>/ (src/lib/platforms.ts), read against the connectors in
  * packages/adapters and their docs: one page for each platform an owner connects today, and none for
- * one still coming; each page's status is its connector's; its questions are the same words on the page
+ * one still coming; each page's state is its connectors', said under its heading; its questions are the same words on the page
  * and in its FAQPage data; what it says of the platform's own products names where it was read; each is
  * long enough to be worth a page and says things no other page says; and its links go somewhere.
  * Checked without a build.
@@ -108,12 +108,12 @@ describe("the platform pages", () => {
   });
 
   it("have no page for a platform still coming", () => {
-    const coming = ROWS.filter((r) => r.status === "Coming");
+    const coming = ROWS.filter((r) => r.state === "partner" || r.state === "standard");
     for (const r of coming) expect(r.href, r.name).not.toMatch(/^\/integrations\//);
     const comingNames = coming.map((r) => r.name.toLowerCase().split(/[ ,]/)[0]);
     for (const p of PLATFORMS) expect(comingNames, p.slug).not.toContain(p.slug);
     // And the table sends every name that has a page to it.
-    for (const r of ROWS.filter((x) => x.status === "Works" && x.connectors)) {
+    for (const r of ROWS.filter((x) => (x.state === "built" || x.state === "works") && x.connectors)) {
       const pages = PLATFORMS.filter((p) =>
         p.ids.some((id) => {
           const i = INTEGRATIONS.find((x) => x.id === id);
@@ -275,18 +275,24 @@ describe("the platform pages", () => {
     }
   });
 
-  it("end with the check, related platforms, its guides, the one line for a system and the credits, and no logo", () => {
+  it("say where they stand under the heading, and end with the check, related platforms, its guides, the one line while built and the credits, and no logo", () => {
     const page = read(PAGE);
     expect(page).toContain("<GuideCheck examples={[]} title={p.check} />");
-    // The line is said of a calendar, shop, kitchen, stay or trade connection, never of a payment.
-    expect(page).toContain("const systems = p.ids.map(integration).filter((i) => SYSTEMS.includes(i.group));");
+    // Its state under its heading, the least ready of its connections, in the state's own words.
+    expect(page).toContain("const state = leastReady(connections.map((i) => i.state));");
+    expect(page).toContain('<p class="pf-state"><ConnectionState state={state} /></p>');
+    expect(page.indexOf("pf-state")).toBeGreaterThan(page.indexOf('id="pf-title"'));
+    expect(page.indexOf("pf-state")).toBeLessThan(page.indexOf("<GuideAnswer"));
+    for (const p of PLATFORMS) expect(leastReady(p.ids.map((id) => integration(id).state)), p.slug).toBe("built");
+    // The line at its foot is said while a page's connections are built, payments too.
     expect(page).toContain("{untried && <p>{untried}</p>}");
     expect(page).toContain('untriedOf(p.name.replace("®", ""))');
-    for (const p of PLATFORMS) {
-      const systems = p.ids.map(integration).filter((i) => SYSTEMS.includes(i.group));
-      expect(systems.length > 0, p.slug).toBe(!["stripe", "mollie"].includes(p.slug));
-    }
-    expect(untriedOf("Beds24")).toMatch(/^Built from Beds24's documentation and tested against a stand-in; /);
+    expect(page).toMatch(/state !== "built"\s*\?\s*null/);
+    expect(untriedOf("Beds24")).toMatch(
+      /^Built, not yet verified on a live account\. We built it from Beds24's documentation and tested it against a stand-in/,
+    );
+    // No page says a connection works today.
+    for (const p of PLATFORMS) expect(words(p), p.slug).not.toMatch(/works with (your|the) [^.:]*(today|you have)/i);
     for (const p of PLATFORMS) {
       expect(p.guides.length, p.slug).toBeGreaterThanOrEqual(1);
       for (const g of p.guides) expect(exists(g.href), `${p.slug}: ${g.href}`).toBe(true);

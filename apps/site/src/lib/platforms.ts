@@ -2,7 +2,7 @@ import type { Faq, Source } from "./faq";
 import { APPLE_NOTICE, WOO_NOTICE } from "./integrations";
 
 /**
- * One page for each platform the inbox works with today, at /integrations/<slug>/ (src/pages/
+ * One page for each platform the inbox connects to in this release, at /integrations/<slug>/ (src/pages/
  * integrations/[slug].astro): what a customer's AI assistant can do with a business on that platform
  * through its inbox, what stays on the platform and in the owner's own payment account, what the
  * platform's own AI does and how the inbox sits beside it, how to connect it, and the questions owners
@@ -209,7 +209,7 @@ export const PLATFORMS: readonly Platform[] = [
     description:
       "Customers' AI assistants ask about your WooCommerce® products and stock, request quotes and order; accepted orders go in pending, paid at your own checkout.",
     answer:
-      "WooCommerce's own MCP is in beta, and UCP and ACP are coming. The inbox works with your shop today: customers' assistants ask about products and stock and request quotes at your own address, and an order you accept goes into WooCommerce as pending, paid at your shop's own checkout.",
+      "WooCommerce's own MCP is in beta, and UCP and ACP are coming. The inbox connects to your shop: customers' assistants ask about products and stock and request quotes at your own address, and an order you accept goes into WooCommerce as pending, paid at your shop's own checkout.",
     can: [
       "Ask whether something is in stock, in a size or a colour: products, variations and stock are read from your shop within minutes.",
       "Ask for a quote instead of checking out: a bulk order, a trade price. Once your customer accepts your price, the order goes into WooCommerce at that price; a line your shop has no product for goes in as a fee line.",
@@ -816,7 +816,7 @@ export const PLATFORMS: readonly Platform[] = [
     description:
       "Each order you accept from a customer's AI assistant gets a Stripe payment link into your own account, marked paid once Stripe confirms it. No fee, no share.",
     answer:
-      "Stripe's Agentic Commerce Suite lets AI platforms check out with sellers. The inbox works with the Stripe you have: each order you accept, and each quote your customer accepts, gets a payment link into your own account, and is marked paid once Stripe confirms it.",
+      "Stripe's Agentic Commerce Suite lets AI platforms check out with sellers. The inbox connects to the Stripe you have: each order you accept, and each quote your customer accepts, gets a payment link into your own account, and is marked paid once Stripe confirms it.",
     can: [
       "Order, or accept your quote, and get a link to pay you in your own Stripe, emailed in your name; agents see it on the order too.",
       "Pay a stay's deposit or balance, or a table's deposit, on its own Stripe link.",
@@ -877,7 +877,7 @@ export const PLATFORMS: readonly Platform[] = [
     description:
       "Each order you accept from a customer's AI assistant gets a Mollie payment link into your own account, marked paid once Mollie confirms it. No fee, no share.",
     answer:
-      "Mollie says it is ready for the Agentic Commerce Protocol in Europe, and has an MCP server. The inbox works with your Mollie today: each order you accept, and each quote your customer accepts, gets a payment link into your own account, marked paid once Mollie confirms it.",
+      "Mollie says it is ready for the Agentic Commerce Protocol in Europe, and has an MCP server. The inbox connects to your Mollie: each order you accept, and each quote your customer accepts, gets a payment link into your own account, marked paid once Mollie confirms it.",
     can: [
       "Order, or accept your quote, and get a link to pay you in your own Mollie, emailed in your name; agents see it on the order too.",
       "Pay a stay's deposit or balance, or a table's deposit, on its own Mollie link.",

@@ -1,14 +1,15 @@
 ---
 // One short page per kind of business (src/lib/cases.ts): what the inbox does for it, one example on
-// the system it already runs, what it works with, a check of the owner's own site, and how to start.
-// Linked from the examples on /inbox.
+// the system it already runs and where that connection stands, what it connects to, a check of the
+// owner's own site, and how to start. Linked from the examples on /inbox.
+import ConnectionState from "../../../components/ConnectionState.astro";
 import GuideCheck from "../../../components/GuideCheck.astro";
 import Marked from "../../../components/Marked.astro";
 import WorksWith from "../../../components/WorksWith.astro";
 import Layout from "../../../layouts/Layout.astro";
 import { CASES, type Case, caseHref, worksWith } from "../../../lib/cases";
 import { HOSTED_CTA } from "../../../lib/hosted";
-import { WOO_NOTICE } from "../../../lib/integrations";
+import { integration, WOO_NOTICE } from "../../../lib/integrations";
 
 export function getStaticPaths() {
   return CASES.map((c) => ({ params: { slug: c.slug }, props: { c } }));
@@ -16,6 +17,8 @@ export function getStaticPaths() {
 
 const { c } = Astro.props as { c: Case };
 const heading = c.title.replace(/ · Surfing Dog$/, "");
+/** The system the example runs on, and its state, said under the example. */
+const system = integration(c.system);
 const others = CASES.filter((x) => x.slug !== c.slug);
 // Automattic's notice goes beside the first WooCommerce® on a page: the example, when it is the shop;
 // the other examples, when the shop is among them.
@@ -71,11 +74,12 @@ const ld = [
 
   <section class="wrap wrap-read section section-tight" aria-labelledby="ex-h">
     <h2 class="h-section" id="ex-h">An example</h2>
-    <p class="fine">What the inbox does today, shown on a made-up business.</p>
+    <p class="fine">What the inbox does, shown on a made-up business.</p>
     <article class="glass panel example">
       <h3 class="h-card"><Marked text={c.label} /></h3>
       <p class="arrives">{c.arrives}</p>
       <p class="card-text">{c.does}</p>
+      <p class="example-state"><ConnectionState state={system.state} of={system.name} /></p>
     </article>
     {wooHere && <p class="fine notice">{WOO_NOTICE}</p>}
   </section>
@@ -133,6 +137,9 @@ const ld = [
     font-size: var(--fs-card);
     line-height: var(--lh-body);
     color: var(--ink);
+  }
+  .example-state {
+    margin: var(--sp-1) 0 0;
   }
   .points {
     display: grid;

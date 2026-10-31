@@ -54,9 +54,9 @@ Below, `<inbox>` is the inbox's own address, such as `inbox.theirdomain.com`.
   the owner confirms go into it. Property systems: Beds24 and Hostaway (what is free comes in; each
   stay is written there first). Ordering systems: GloriaFood and Flipdish (the menu, to start from).
   Job tools: ServiceM8 (requests the owner takes on become jobs). The owner connects each in
-  Settings → Integrations, in person; you see them with `list_integrations`. These, and the
-  calendars above, were built from each one's documentation and tested against a stand-in; not yet
-  run with a real account. Mews, apaleo, Cloudbeds, Smoobu, Toast, Lightspeed, Clover, Deliverect, Jobber, Housecall
+  Settings → Integrations, in person; you see them with `list_integrations`. These, the calendars
+  and the payments above, were built from each one's documentation and tested against a stand-in;
+  not yet verified on a live account: say so when you offer them. Mews, apaleo, Cloudbeds, Smoobu, Toast, Lightspeed, Clover, Deliverect, Jobber, Housecall
   Pro and Fergus are built and switched off until what each needs is in place: say so, and do not
   offer them. See https://surfingdog.ai/docs/integrations/. WooCommerce and its associated designs
   are trademarks of Automattic Inc.

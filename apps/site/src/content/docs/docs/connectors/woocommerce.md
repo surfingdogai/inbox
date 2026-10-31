@@ -9,7 +9,7 @@ Your WooCommerce® shop already has your products, your stock, your checkout and
 
 WooCommerce and its associated designs are trademarks of Automattic Inc.
 
-Built from WooCommerce's documentation and tested against a stand-in; not yet run with a real account.
+Built from WooCommerce's documentation and tested against a stand-in; not yet verified on a live account.
 
 Settings → Integrations → **WooCommerce** → **Connect your shop**.
 
