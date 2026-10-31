@@ -58,8 +58,12 @@ From source, on **Node** 22.16+, 24 or 26 (one process and one SQLite file):
 git clone https://github.com/surfingdogai/inbox && cd inbox
 pnpm install
 pnpm --filter @surfingdog/inbox build
-node apps/inbox/dist/server.mjs        # http://localhost:8787
+INBOX_OWNER_EMAIL=you@example.com node apps/inbox/dist/server.mjs   # http://localhost:8787
 ```
+
+Open http://localhost:8787/login and sign in with that address. With no email set up, the sign-in
+email is printed in the terminal. The release's `inbox-server.tar.gz` is the same build:
+`node server.mjs` in its folder.
 
 Or give your AI the install guide and let it do the work: it is written for that, with a check
 after every step. The whole guide to running it yourself, with updates and backups:

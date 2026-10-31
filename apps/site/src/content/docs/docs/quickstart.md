@@ -65,14 +65,14 @@ pnpm --filter @surfingdog/inbox build            # apps/inbox/dist/client and ap
 node apps/inbox/dist/server.mjs                  # http://127.0.0.1:8787, database in ./data/inbox.db
 ```
 
-The server serves the owner app from `dist/client` next to the bundle; any path that is neither a door nor a file gets the app shell. Environment variables, all optional:
+The server serves the owner app from `client` next to the bundle, where the build and the release's `inbox-server.tar.gz` both put it; any path that is neither a door nor a file gets the app shell. To sign in the first time, start it with `INBOX_OWNER_EMAIL` set to your address: with no email set up, the sign-in email is printed where the server runs. Environment variables, all optional:
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `PORT` | `8787` | Port to listen on. |
 | `HOST` | `127.0.0.1` | Interface to bind. Loopback, for a server behind a proxy that terminates TLS; the Docker image sets `0.0.0.0` inside its container. |
 | `INBOX_DB` | `./data/inbox.db` | The SQLite file. Created, and migrated, at boot. |
-| `INBOX_STATIC` | `dist/client` beside the bundle | The built owner app to serve. |
+| `INBOX_STATIC` | `client` beside the bundle | The built owner app to serve. |
 | `INBOX_PUBLIC_URL` | derived from the request | The https URL people and agents reach you at. Set it behind a proxy, or forward `X-Forwarded-Proto`; it feeds the manifest, the links in emails and the `iss` of every [receipt](/docs/receipts/). Background jobs have no request to read it from, so without it they use the Inbox address in Settings, which your first sign-in over https fills in. The links in sign-in and address-change emails use the same address once there is one, never the host a request names. |
 | `INBOX_OWNER_EMAIL` | unset | Comma-separated addresses allowed to create the first account by email link. Without it, the first sign-in needs an owner API key. |
 | `INBOX_SECRET_KEY` | unset | Seals connector credentials, webhook secrets and the receipt-signing key (AES-256-GCM), and is the source of the pseudonym pepper in receipts. One long random string, or several comma-separated and newest first, so a key can be rotated without downtime. Without it the instance runs as normal, refuses to store a secret rather than store it in the clear, and issues no [receipts](/docs/receipts/). |
@@ -132,45 +132,48 @@ Hosting is not open yet. When its pilot opens, we will run the same software for
 
 ## First calls
 
-The examples hit inbox.surfingdog.ai, which is our own working inbox. Send `x-sandbox: 1` on anything that creates an item there. It is required, not optional, or you will create a real item and a real notification. On your own instance, leave it off.
+The examples hit demo.surfingdog.ai, our demo bike shop, the one on [Try it](/try/). It emails no one who uses it, is wiped every night, and its rules answer a booking in a free slot within a second. The dates below were worked out when this page was built. On your own instance, use its address.
 
 Read the manifest, then the services:
 
 ```bash
-curl https://inbox.surfingdog.ai/.well-known/agent-inbox.json
-curl https://inbox.surfingdog.ai/v1/services
+curl https://demo.surfingdog.ai/.well-known/agent-inbox.json
+curl https://demo.surfingdog.ai/v1/services
 ```
 
-Check availability for a service (the window may span at most 14 days):
+Check availability for a service, here the `id` of Full service from that list (the window may span at most 14 days):
 
 ```bash
-curl "https://inbox.surfingdog.ai/v1/availability?service_id=<id>&from=2026-09-22T00:00:00Z&to=2026-09-23T00:00:00Z"
+curl "https://demo.surfingdog.ai/v1/availability?service_id=<id>&from={{demo:day}}T00:00:00Z&to={{demo:to}}T00:00:00Z"
 ```
 
-Request a booking at one of those times. Generate a random idempotency key (a UUID) and keep it: the same key with the same body returns the same item (`200` with `Idempotent-Replayed: true`) instead of a second booking.
+Request a booking at one of those times. `endTime` may be left out: it is the start plus the service's length. Generate a random idempotency key (a UUID) and keep it: the same key with the same body returns the same item (`200` with `Idempotent-Replayed: true`) instead of a second booking.
 
 ```bash
 KEY=$(uuidgen)   # keep it for a retry
-curl -X POST https://inbox.surfingdog.ai/v1/bookings \
-  -H 'content-type: application/json' -H 'x-sandbox: 1' -H "idempotency-key: $KEY" \
+curl -X POST https://demo.surfingdog.ai/v1/bookings \
+  -H 'content-type: application/json' -H "idempotency-key: $KEY" \
   -d '{
     "payload": {
-      "reservationFor": { "serviceId": "<id>", "name": "Full service" },
-      "startTime": "2026-09-22T08:00:00Z",
-      "endTime": "2026-09-22T09:30:00Z"
+      "reservationFor": { "serviceId": "<id>" },
+      "startTime": "{{demo:day}}T10:00:00Z"
     },
     "contact": { "name": "Rita", "email": "rita@example.com" }
   }'
 ```
 
-The answer is `201` with the item view (`view.item.state` is `requested`) and, because you have no account here, an `accessToken`. Keep it: it is the only way to read or cancel that item later. If the answer is lost, send the same request with the same key: a random key gets the same token back.
+Full service has a price, so the first answer is `409 confirm_terms`: what your person confirms before it binds them (`details.summary`) and its fingerprint (`details.terms_sha`). Send the same request again, with the same key and `"terms_sha"` added, as an assistant does on its person's yes.
+
+The answer is `201` with the item view (`view.item.state` is `requested`, and a second later the demo's rules have confirmed it) and, because you have no account here, an `accessToken`. Keep it: it is the only way to read or cancel that item later. If the answer is lost, send the same request with the same key: a random key gets the same token back.
 
 ```bash
-curl "https://inbox.surfingdog.ai/v1/items/<item id>" -H 'x-access-token: <token>'
-curl -X POST "https://inbox.surfingdog.ai/v1/items/<item id>/cancel" \
+curl "https://demo.surfingdog.ai/v1/items/<item id>" -H 'x-access-token: <token>'
+curl -X POST "https://demo.surfingdog.ai/v1/items/<item id>/cancel" \
   -H 'content-type: application/json' -H 'x-access-token: <token>' -H "idempotency-key: $(uuidgen)" \
   -d '{ "reason": "Found a closer workshop" }'
 ```
+
+`service_id` and `access_token` may be spelt `serviceId` and `accessToken` too, in a body, a query or an MCP tool's arguments.
 
 Send something wrong and the refusal is a problem document that names the fields:
 
@@ -180,9 +183,8 @@ Send something wrong and the refusal is a problem document that names the fields
   "title": "Invalid input",
   "status": 422,
   "code": "invalid_input",
-  "detail": "Missing: payload.endTime, payload.startTime. Add them and retry with the same idempotency key.",
+  "detail": "Missing: payload.startTime. Add them and retry with the same idempotency key.",
   "fields": [
-    { "path": "payload.endTime", "problem": "missing", "message": "Invalid input: expected string, received undefined" },
     { "path": "payload.startTime", "problem": "missing", "message": "Invalid input: expected string, received undefined" }
   ]
 }

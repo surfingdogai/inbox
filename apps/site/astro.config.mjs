@@ -5,6 +5,8 @@ import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "astro/config";
 import starlightLlmsTxt from "starlight-llms-txt";
 import { BEACON_HEAD } from "./src/lib/analytics.ts";
+import { DEMO_URL } from "./src/lib/demo.ts";
+import { demoDatesMarkdown } from "./src/lib/demo-markdown.ts";
 import { headingIdsMarkdown } from "./src/lib/heading-ids.ts";
 import { HOSTED_LLMS, HOSTED_OWNERSHIP } from "./src/lib/hosted.ts";
 import { hostedPilotMarkdown } from "./src/lib/hosted-markdown.ts";
@@ -39,6 +41,8 @@ export default defineConfig({
     hostedPilotMarkdown(),
     // A heading may name its own id: `### Membership {#subscription}` (src/lib/heading-ids.ts).
     headingIdsMarkdown(),
+    // The demo shop's example dates, from the day of the build (src/lib/demo-markdown.ts).
+    demoDatesMarkdown(),
     // Starlight adds this integration itself when it is missing; given here, it also lists the
     // network's sitemap in sitemap-index.xml. A translated page (src/lib/i18n.ts), and a topic guide
     // written in more than one language (src/lib/topics.ts), carries every version of itself,
@@ -163,7 +167,7 @@ export default defineConfig({
             "Discovery for agents: https://surfingdog.ai/.well-known/ai-catalog.json (ARD), the MCP server card at https://surfingdog.ai/.well-known/mcp/server-card.json and the A2A agent card at https://surfingdog.ai/.well-known/agent-card.json.",
             "Specs, versioned, with JSON Schemas and test vectors (MIT): what an AI agent can do at a business, capability by capability, with the evidence for each and how MCP, A2A, OpenAPI, REST, UCP and ACP doors carry it (https://surfingdog.ai/spec/capabilities.json); the agent inbox manifest; receipts; and the census's method. Index for machines: https://surfingdog.ai/spec/index.json. Check a manifest or a receipt: https://surfingdog.ai/spec/check/.",
             `The protocol is open: anyone can run a network. Everything is MIT: the inbox server, the example network, network-check, and @surfingdog/sdk on npm. ${HOSTED_LLMS.open}`,
-            "Every inbox publishes one discovery manifest at `/.well-known/agent-inbox.json` that lists its REST, OpenAPI and MCP doors. A business's inbox answers at its own address; our demo instance answers at https://inbox.surfingdog.ai (manifest, OpenAPI at /openapi.json, MCP at /mcp).",
+            `Every inbox publishes one discovery manifest at \`/.well-known/agent-inbox.json\` that lists its REST, OpenAPI and MCP doors. A business's inbox answers at its own address; our demo bike shop answers at ${DEMO_URL} (manifest, OpenAPI at /openapi.json, MCP at /mcp), emails no one who uses it and is wiped every night.`,
             // Last, so it reads as the file's first list section, before the plugin's own: the free
             // tools and their guides, a Markdown link a line (src/lib/local.ts). Release order: it
             // names the network's free-tools pages, so this ships after them (src/lib/i18n.ts).
@@ -184,8 +188,8 @@ export default defineConfig({
             { label: "Specs and their index", url: "https://surfingdog.ai/spec/index.json" },
             { label: "What an AI agent can do: the vocabulary", url: "https://surfingdog.ai/spec/capabilities.json" },
             { label: "AI catalog (ARD)", url: "https://surfingdog.ai/.well-known/ai-catalog.json" },
-            { label: "Live demo manifest", url: "https://inbox.surfingdog.ai/.well-known/agent-inbox.json" },
-            { label: "Live OpenAPI document", url: "https://inbox.surfingdog.ai/openapi.json" },
+            { label: "Live demo manifest", url: `${DEMO_URL}/.well-known/agent-inbox.json` },
+            { label: "Live demo OpenAPI document", url: `${DEMO_URL}/openapi.json` },
             { label: "Source on GitHub", url: GITHUB },
           ],
         }),
