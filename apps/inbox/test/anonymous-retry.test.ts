@@ -88,6 +88,45 @@ describe("an anonymous caller's fingerprint (security review)", () => {
     expect(owned.status).toBe(200);
   });
 
+  it("gives the token again to a retry with the same random key, and only to it (ADR-043 §1)", async () => {
+    const { app } = await setup();
+    const body = { body: "Do you have a table for two tonight?", contact: { email: "rita@example.com" } };
+    const key = crypto.randomUUID();
+    const first = (await (await app.request(post("/v1/messages", body, { "idempotency-key": key }))).json()) as Created;
+    expect(first.accessToken).toBeTruthy();
+
+    // The answer was lost; the assistant retries as the docs say, with the same key.
+    const again = await app.request(post("/v1/messages", body, { "idempotency-key": key }));
+    expect(again.status).toBe(200);
+    expect(again.headers.get("idempotent-replayed")).toBe("true");
+    const replayed = (await again.json()) as Created;
+    expect(replayed.view.item.id).toBe(first.view.item.id);
+    expect(replayed.accessToken).toBe(first.accessToken);
+    expect(replayed.accessTokenWithheld).toBeUndefined();
+
+    // The same key in the body works the same as in the header.
+    const inBody = (await (
+      await app.request(post("/v1/messages", { ...body, idempotency_key: key }))
+    ).json()) as Created;
+    expect(inBody.accessToken).toBe(first.accessToken);
+
+    // Another body under the key is still refused, and says nothing of the first.
+    const other = await app.request(
+      post("/v1/messages", { ...body, body: "Another question" }, { "idempotency-key": key }),
+    );
+    expect(other.status).toBe(422);
+    expect(await other.text()).not.toContain(first.accessToken as string);
+
+    // From another address, the key finds nothing: a new message of its own.
+    const elsewhere = await app.request(
+      post("/v1/messages", body, { "idempotency-key": key, "cf-connecting-ip": "203.0.113.9" }),
+    );
+    expect(elsewhere.status).toBe(201);
+    const theirs = (await elsewhere.json()) as Created;
+    expect(theirs.view.item.id).not.toBe(first.view.item.id);
+    expect(theirs.accessToken).not.toBe(first.accessToken);
+  });
+
   it("answers a retried cancellation only to the item's owner", async () => {
     const { app, svc } = await setup();
     const created = (await (

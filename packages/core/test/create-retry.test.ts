@@ -8,7 +8,7 @@ import { secretHash } from "../src/protocol/credentials";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { availabilityRules, services } from "../src/schema/tables";
 import { createSecretBox } from "../src/secrets/box";
-import type { Caller } from "../src/write/index";
+import { type Caller, IDEMPOTENCY_TTL_MS, strongIdempotencyKey } from "../src/write/index";
 import { confirming, makeClient, resetTables } from "./harness";
 
 /**
@@ -169,6 +169,132 @@ describe("a retry of a customer's create", () => {
       expect(retry.accessToken).toBeUndefined();
       expect(retry.accessTokenWithheld).toBe(true);
       expect(retry.identity?.passes).toEqual([]);
+    }
+  });
+});
+
+/** A random UUID, as `crypto.randomUUID()` makes one: the key an assistant should send (ADR-043 §1). */
+const RANDOM_KEY = "3f1c9a52-7d4e-4b8a-9c21-5e6f0a7b8d93";
+
+describe("a retry whose idempotency key is a random secret (ADR-043 §1)", () => {
+  it("gets the same access token and the passes back, and the token still works", async () => {
+    const s = await setup();
+    const input = { ...s.input, idempotency_key: RANDOM_KEY };
+    const first = await s.caps.createBooking(shared(), input);
+    expect(first.accessToken).toBeTruthy();
+    expect(first.identity?.passes).toEqual([{ network: NET, pass: PASS }]);
+    // The first answer was lost: the assistant sends the same request with the same key.
+    const again = await s.caps.createBooking(shared(), input);
+    expect(again.replayed).toBe(true);
+    expect(again.view.item.id).toBe(first.view.item.id);
+    expect(again.accessToken).toBe(first.accessToken);
+    expect(again.accessTokenWithheld).toBeUndefined();
+    expect(again.identity?.passes).toEqual(first.identity?.passes);
+    // The same token, so whoever holds the first answer keeps one that works.
+    const status = await s.caps.getItemStatus(
+      { ...shared(), accessToken: again.accessToken as string },
+      { item_id: first.view.item.id },
+    );
+    expect(status.item.id).toBe(first.view.item.id);
+  });
+
+  it("still withholds it for a short or patterned key", async () => {
+    for (const key of ["booking-1", "00000000-0000-4000-8000-000000000000", "0123456789abcdef0123456789abcdef"]) {
+      const s = await setup();
+      const input = { ...s.input, idempotency_key: key };
+      const first = await s.caps.createBooking(shared(), input);
+      expect(first.accessToken).toBeTruthy();
+      const again = await s.caps.createBooking(shared(), input);
+      expect(again.replayed).toBe(true);
+      expect(again.accessToken).toBeUndefined();
+      expect(again.accessTokenWithheld).toBe(true);
+      expect(again.identity?.passes).toEqual([]);
+      expect(JSON.stringify(again)).not.toContain(first.accessToken as string);
+    }
+  });
+
+  it("refuses the key with another body, as any retry", async () => {
+    const s = await setup();
+    const input = { ...s.input, idempotency_key: RANDOM_KEY };
+    await s.caps.createBooking(shared(), input);
+    await expect(
+      s.caps.createBooking(shared(), { ...input, contact: { name: "Someone else", email: "x@example.com" } }),
+    ).rejects.toMatchObject({ code: "idempotency_mismatch", status: 422 });
+  });
+
+  it("never gives it to another customer's scope, which makes an item of its own", async () => {
+    const s = await setup();
+    const input = { ...s.input, idempotency_key: RANDOM_KEY };
+    const first = await s.caps.createBooking(shared(), input);
+    const elsewhere: Caller = {
+      ...shared(),
+      actor: { kind: "customer_agent", id: "anon:fedcba9876543210", channel: "mcp_public" },
+    };
+    const other = await s.caps.createBooking(elsewhere, input);
+    expect(other.replayed).toBe(false);
+    expect(other.view.item.id).not.toBe(first.view.item.id);
+    expect(other.accessToken).not.toBe(first.accessToken);
+    // And the same scope on another door is another scope too.
+    const rest: Caller = { ...shared(), actor: { ...shared().actor, channel: "rest" } };
+    const third = await s.caps.createBooking(rest, input);
+    expect(third.replayed).toBe(false);
+    expect(JSON.stringify(third)).not.toContain(first.accessToken as string);
+  });
+
+  it("never gives it to a request a network carried, nor after the key's lifetime", async () => {
+    let s = await setup();
+    const input = { ...s.input, idempotency_key: RANDOM_KEY };
+    const carried: Caller = { ...shared(), viaNetwork: true };
+    const made = await s.caps.createBooking(carried, input);
+    expect(made.accessToken).toBeTruthy();
+    const again = await s.caps.createBooking(carried, input);
+    expect(again.replayed).toBe(true);
+    expect(again.accessTokenWithheld).toBe(true);
+
+    s = await setup();
+    const kept = { ...s.input, idempotency_key: RANDOM_KEY };
+    await s.caps.createBooking(shared(), kept);
+    const late: Caller = { ...shared(), now: () => T0 + IDEMPOTENCY_TTL_MS + 1 };
+    const stale = await s.caps.createBooking(late, kept);
+    expect(stale.replayed).toBe(true);
+    expect(stale.accessToken).toBeUndefined();
+    expect(stale.accessTokenWithheld).toBe(true);
+  });
+});
+
+describe("what counts as a random idempotency key", () => {
+  it("takes a random UUID or 32 random hex digits, anywhere in the key", () => {
+    for (const key of [
+      RANDOM_KEY,
+      RANDOM_KEY.toUpperCase(),
+      `req_${RANDOM_KEY}`,
+      "9b2e41f07c3d8a65e1f40b9d27c6a3e8",
+      "booking-9b2e41f07c3d8a65e1f40b9d27c6a3e8",
+    ]) {
+      expect(strongIdempotencyKey(key), key).toBe(true);
+    }
+  });
+
+  it("refuses what is short, a counter, a date, time-based, or a pattern", () => {
+    for (const key of [
+      "booking-1",
+      "msg-1",
+      "book-rita-0922",
+      "2026-10-31T03:00:00Z-rita@example.com",
+      // A time-based UUID (version 1, version 7): part of it is a clock.
+      "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+      "01890a5d-ac96-774b-bcce-b302099a8057",
+      // Patterns that look like hex.
+      "00000000-0000-4000-8000-000000000000",
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "0123456789abcdef0123456789abcdef",
+      "deadbeefdeadbeefdeadbeefdeadbeef",
+      "9b2e41f07c3d8a65e1f40b9d27c6a3e", // 31 digits
+      // The examples every manual prints.
+      "550e8400-e29b-41d4-a716-446655440000",
+      "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+    ]) {
+      expect(strongIdempotencyKey(key), key).toBe(false);
     }
   });
 });

@@ -38,6 +38,7 @@ import {
   webhookFanoutStatement,
 } from "./common";
 import { fromZod, WriteError } from "./errors";
+import { IDEMPOTENCY_TTL_MS, strongIdempotencyKey } from "./idempotency";
 import { NEGOTIATES, requestExpiry, requestRow } from "./offers";
 import { planParty } from "./party";
 import { type PricingFor, priceFromCatalogue } from "./pricing";
@@ -138,14 +139,15 @@ const BUSINESS_FIELDS = [
 export interface CreateResult {
   readonly view: ItemView;
   /**
-   * Capability secret for anonymous creators: lets them read and cancel this item. Shown once: a
-   * retry's answer carries it again only when the retry is signed by the key the item was made with.
+   * Capability secret for anonymous creators: lets them read and cancel this item. A retry's answer
+   * carries it again only when the retry is signed by the key the item was made with, or sent with the
+   * same random idempotency key (ADR-043 §1).
    */
   readonly accessToken?: string | undefined;
   /**
    * On a retry: the first answer carried an access token, and this one does not, since the retry was
-   * not signed by the key the item was made with. Said, so an assistant that lost the first answer
-   * knows the token is gone rather than that there never was one.
+   * neither signed by the key the item was made with nor sent with a random idempotency key. Said, so
+   * an assistant that lost the first answer knows the token is gone rather than that there never was one.
    */
   readonly accessTokenWithheld?: true | undefined;
   readonly replayed: boolean;
@@ -577,18 +579,22 @@ export async function createItem(
 }
 
 /**
- * A retry of a create, answered from what was stored. The access token goes back only to a retry
- * signed by the agent's own key the item was made with. Nothing else tells two anonymous callers
- * apart: the scope a retry is looked up in is a fingerprint of the request's address and user agent,
- * which many people share (one address behind a carrier's NAT, an assistant platform's servers) and a
- * caller can choose, so anyone who sent the same key and body from it would otherwise get the token,
- * and with it the item's whole thread. Any other retry gets the answer without it, and is told so
- * (`accessTokenWithheld`): the token is shown once.
+ * A retry of a create, answered from what was stored. The access token goes back to a retry signed by
+ * the agent's own key the item was made with, and to one whose idempotency key is a random secret
+ * (ADR-043 §1): a random UUID or 32 random hex digits, sent again in the same scope with the same
+ * request while the key is kept. Nothing else tells two anonymous callers apart: the scope a retry is
+ * looked up in is a fingerprint of the request's address and user agent, which many people share (one
+ * address behind a carrier's NAT, an assistant platform's servers) and a caller can choose, so anyone
+ * who sent the same guessable key (`booking-1`) and body from it would otherwise get the token, and
+ * with it the item's whole thread. A random key is known only to whoever made it. Any other retry gets
+ * the answer without the token, and is told so (`accessTokenWithheld`). A request a network carried
+ * never gets it again: its key is made of the request itself (ADR-025 §12), so anyone could send it.
+ * It is the same token, not a new one: whoever holds the first answer keeps a token that works.
  */
 async function replay(
   db: Db,
   caller: Caller,
-  hit: { requestHash: string; response: unknown },
+  hit: { requestHash: string; response: unknown; createdAt?: number | undefined },
   requestHash: string | undefined,
 ): Promise<CreateResult> {
   if (hit.requestHash !== requestHash) {
@@ -596,10 +602,22 @@ async function replay(
   }
   const stored = hit.response as { view: ItemView; accessToken?: string };
   if (!stored.accessToken) return { view: stored.view, replayed: true };
-  if (await sameSigner(db, caller, stored.view.item.id)) {
+  if (recoverable(caller, hit) || (await sameSigner(db, caller, stored.view.item.id))) {
     return { view: stored.view, accessToken: stored.accessToken, replayed: true };
   }
   return { view: stored.view, accessTokenWithheld: true, replayed: true };
+}
+
+/**
+ * Whether a retry proves it is the request that made the item by its key alone (ADR-043 §1): a random
+ * key, in the scope it was first sent in (the lookup already holds it to that), within its lifetime,
+ * and not carried by a network.
+ */
+function recoverable(caller: Caller, hit: { createdAt?: number | undefined }): boolean {
+  const key = caller.idempotency?.key;
+  if (!key || caller.viaNetwork || !strongIdempotencyKey(key)) return false;
+  const at = Number(hit.createdAt);
+  return Number.isFinite(at) && nowOf(caller) - at < IDEMPOTENCY_TTL_MS;
 }
 
 /**

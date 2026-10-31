@@ -122,6 +122,54 @@ export async function once<T>(
   );
 }
 
+/** A random UUID: version 4, RFC 9562's variant. Any case, anywhere in the key (`req_<uuid>` is fine). */
+const UUID_V4 = /[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/gi;
+/** Thirty-two hexadecimal digits or more, in one run: `openssl rand -hex 16`. */
+const HEX_RUN = /[0-9a-f]{32,}/gi;
+/** Example UUIDs from the manuals and the encyclopaedias: random once, copied by everyone since. */
+const PRINTED = new Set(["550e8400e29b41d4a716446655440000", "f47ac10b58cc4372a5670e02b2c3d479"]);
+
+/**
+ * Whether an idempotency key is a secret only its sender could send again (ADR-043 §1): it carries
+ * a random UUID (version 4), or a run of at least 32 hexadecimal digits, and that is 128 bits of key
+ * material. A key like `booking-1`, a counter, a date, a word or a time-based UUID can be sent by
+ * anyone who guesses it; a random one only by whoever made it. Nothing here proves it was drawn at
+ * random, so what is plainly not random is refused too: one digit over and over, eight digits counting
+ * up or down, a short part repeated, a UUID every manual prints. A key made from the request itself
+ * (a hash of its body) looks random and is not: anyone who knows the request makes the same one, which
+ * is why the docs ask for a fresh random key, never one derived from what is sent.
+ */
+export function strongIdempotencyKey(key: string): boolean {
+  if (key.length > 200) return false;
+  const material = [
+    ...[...key.matchAll(UUID_V4)].map((m) => m[0].replaceAll("-", "")),
+    ...[...key.matchAll(HEX_RUN)].map((m) => m[0]),
+  ];
+  return material.some((hex) => randomLooking(hex.toLowerCase()));
+}
+
+function randomLooking(hex: string): boolean {
+  if (hex.length < 32 || PRINTED.has(hex)) return false;
+  if (new Set(hex).size < 8) return false;
+  let same = 1;
+  let up = 1;
+  let down = 1;
+  for (let i = 1; i < hex.length; i++) {
+    const step = Number.parseInt(hex[i] as string, 16) - Number.parseInt(hex[i - 1] as string, 16);
+    same = step === 0 ? same + 1 : 1;
+    up = step === 1 ? up + 1 : 1;
+    down = step === -1 ? down + 1 : 1;
+    if (same >= 8 || up >= 8 || down >= 8) return false;
+  }
+  // A short part repeated: some period of at most half the length repeats all the way through.
+  for (let period = 1; period <= hex.length / 2; period++) {
+    let repeats = true;
+    for (let i = period; i < hex.length && repeats; i++) repeats = hex[i] === hex[i - period];
+    if (repeats) return false;
+  }
+  return true;
+}
+
 /** Keys older than the TTL go; the hourly tick calls this. */
 export async function pruneIdempotencyKeys(db: Db, now: number, maxAgeMs = IDEMPOTENCY_TTL_MS): Promise<number> {
   const r = await db.client.query({

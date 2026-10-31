@@ -401,12 +401,14 @@ export const createResultSchema = z.object({
   accessToken: z
     .string()
     .optional()
-    .describe("Shown once, to an anonymous creator: keep it to read or cancel the item."),
+    .describe(
+      "Given to an anonymous creator: keep it to read or cancel the item. A retry with the same random idempotency key (a random UUID) gets it again.",
+    ),
   accessTokenWithheld: z
     .literal(true)
     .optional()
     .describe(
-      "On a retry (replayed): the first answer carried an access token, and a retry gets it again only when signed by the agent's own key that made the item. Without it this item cannot be read or cancelled through these doors; the business still has it.",
+      "On a retry (replayed): the first answer carried an access token, and a retry gets it again only when its idempotency key is random (a random UUID, or 32 random hex digits) or it is signed by the agent's own key that made the item. Without it this item cannot be read or cancelled through these doors; the business still has it.",
     ),
   replayed: z.boolean(),
   identity: identityAnswerSchema.optional(),

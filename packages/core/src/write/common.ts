@@ -11,6 +11,8 @@ export interface IdempotentHit {
   readonly requestHash: string;
   readonly status: number;
   readonly response: unknown;
+  /** When the key was first used: a key is for retries within its lifetime (`IDEMPOTENCY_TTL_MS`). */
+  readonly createdAt: number;
 }
 
 export async function findIdempotent(
@@ -22,6 +24,7 @@ export async function findIdempotent(
       requestHash: idempotencyKeys.requestHash,
       status: idempotencyKeys.status,
       response: idempotencyKeys.response,
+      createdAt: idempotencyKeys.createdAt,
     })
     .from(idempotencyKeys)
     .where(and(eq(idempotencyKeys.scope, idem.scope), eq(idempotencyKeys.key, idem.key)));

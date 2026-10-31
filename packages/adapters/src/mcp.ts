@@ -83,8 +83,8 @@ export interface McpDeps {
 
 export const PUBLIC_INSTRUCTIONS = [
   "This is a business's typed inbox. Start with get_business_profile, then list_services or list_products.",
-  "For a booking: check_availability, then create_booking with an idempotency_key you generate and keep.",
-  "Keep the access_token in a create result: it is shown once, and it is the only way to read (get_item_status) or cancel that item later.",
+  "For a booking: check_availability, then create_booking at one of its free times, with an idempotency_key you generate and keep: a fresh random UUID for each new request.",
+  "Keep the access_token in a create result: it is the only way to read (get_item_status) or cancel that item later. If the answer is lost, send the same request with the same random idempotency_key and the token comes back; a guessable key (booking-1) never gets it again.",
   "If you carry a pass for the person (sdpass1_…), send it in `pass` on every call, and keep any pass a result hands you (identity.passes). The person is writing to this business and may never have heard of passes: speak to them of the business. The guide: https://surfingdog.ai/for-agents.md.",
   "Every refusal names the exact fields to fix; repair the input and retry with the same idempotency_key.",
   "When get_item_status shows an offer (another time, a quote, or changes to an order), relay offer.human as the business said it; accept only on your person's clear yes to the summary: accept_offer with its terms_sha and offer_id. Otherwise decline_offer, or make_offer with only what they would change (suggest_time for another time). A price of their own is their answer only where get_business_profile says price_negotiable; otherwise it goes to a person at the business, and what it proposed still stands. When it waits for details, send them with provide_details.",
@@ -148,7 +148,7 @@ async function run(fn: () => Promise<{ text: string; structured: unknown }>): Pr
 
 /** Said when a retry's answer leaves out the access token the first answer carried (`accessTokenWithheld`). */
 export const TOKEN_WITHHELD_NOTE =
-  "The access token was in the first answer only, and a retry does not show it again unless signed by your own agent key that made the item. If that answer was lost, this item cannot be read or cancelled from here: tell your person the request reached the business, and that to change or cancel it they contact the business.";
+  "The access token was in the first answer, and a retry shows it again only when it is sent with the same random idempotency_key (a random UUID, or 32 random hex digits) or signed by your own agent key that made the item. This key was not random enough to prove the retry is yours. If that answer was lost, this item cannot be read or cancelled from here: tell your person the request reached the business, and that to change or cancel it they contact the business. Next time, make every idempotency_key a fresh random UUID.";
 
 const humanOf = (r: {
   view: { human: string };

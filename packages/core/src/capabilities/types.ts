@@ -32,7 +32,9 @@ const idempotencyKey = z
   .min(1)
   .max(200)
   .optional()
-  .describe("Same key + same request = same answer. Required for agents.");
+  .describe(
+    "Same key + same request = same answer. Required for agents. Make it a fresh random UUID per request: a retry of a create with a random key gets its access token again.",
+  );
 const paging = { cursor: z.string().max(200).optional(), limit: z.number().int().min(1).max(100).default(50) };
 
 /**
