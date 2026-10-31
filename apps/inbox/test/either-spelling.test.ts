@@ -13,7 +13,8 @@ import { freshDb, futureDay, openWeekdays } from "./harness";
 const T0 = Date.parse("2026-09-21T10:00:00Z");
 const DAY = futureDay();
 const START = `${DAY}T09:00:00Z`;
-const END = new Date(Date.parse(START) + 90 * 60_000).toISOString();
+/** START plus Full service's 90 minutes, written as START is. */
+const END = `${DAY}T10:30:00Z`;
 
 async function setup() {
   const db = await freshDb();
@@ -91,7 +92,7 @@ describe("either spelling, over REST", () => {
     const made = (await res.json()) as Created;
     const p = await payloadOf(db, made.view.item.id);
     expect(p.reservationFor).toEqual({ serviceId: svc, name: "Full service" });
-    expect(Date.parse(p.endTime)).toBe(Date.parse(END));
+    expect(p.endTime).toBe(END);
 
     const cancel = await app.request(
       post(
@@ -104,6 +105,29 @@ describe("either spelling, over REST", () => {
     expect(((await cancel.json()) as { view: { item: { state: string } } }).view.item.state).toBe(
       "cancelled_by_customer",
     );
+  });
+
+  it("answers a retry that writes out the end and the name it worked out as the same request", async () => {
+    const { app, svc } = await setup();
+    const key = crypto.randomUUID();
+    const sent = { reservationFor: { serviceId: svc }, startTime: START };
+    const first = await app.request(
+      post("/v1/bookings", { payload: sent, contact: { email: "rita@example.com" } }, { "idempotency-key": key }),
+    );
+    expect(first.status).toBe(201);
+    const again = await app.request(
+      post(
+        "/v1/bookings",
+        {
+          payload: { ...sent, reservationFor: { serviceId: svc, name: "Full service" }, endTime: END },
+          contact: { email: "rita@example.com" },
+        },
+        { "idempotency-key": key },
+      ),
+    );
+    expect(again.status).toBe(200);
+    expect(again.headers.get("idempotent-replayed")).toBe("true");
+    expect(((await again.json()) as Created).view.item.id).toBe(((await first.json()) as Created).view.item.id);
   });
 
   it("keeps an end it was given", async () => {
@@ -153,7 +177,7 @@ describe("either spelling, over MCP", () => {
     expect(booked.isError).toBeFalsy();
     const made = booked.structuredContent as Created;
     expect(made.accessToken).toBeTruthy();
-    expect(Date.parse((await payloadOf(db, made.view.item.id)).endTime)).toBe(Date.parse(END));
+    expect((await payloadOf(db, made.view.item.id)).endTime).toBe(END);
 
     const status = await client.callTool({
       name: "get_item_status",

@@ -117,6 +117,7 @@ import { workProfile } from "../trades/job";
 import { registerWorkResolver } from "../trades/job-tool";
 import { linkVisit } from "../trades/visit";
 import { hashText } from "../util/canonical";
+import { isoAfter } from "../util/zoned";
 import {
   type Caller,
   type EventActor,
@@ -1181,7 +1182,8 @@ export class Capabilities {
       .from(services)
       .where(eq(services.id, serviceId));
     if (!svc) throw unknownService(serviceId);
-    const endTime = p.endTime ?? new Date(Date.parse(p.startTime) + svc.durationMin * 60_000).toISOString();
+    // Written as the start is (its offset, its seconds), so a retry that adds the same end is the same request.
+    const endTime = p.endTime ?? isoAfter(p.startTime, svc.durationMin);
     return { ...input, payload: { ...p, reservationFor: { serviceId, name: name ?? svc.name }, endTime } };
   }
 

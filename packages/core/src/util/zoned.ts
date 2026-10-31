@@ -100,6 +100,23 @@ export function isoIn(ms: number, zone: string): string {
   return `${String(p.year).padStart(4, "0")}-${pad(p.month)}-${pad(p.day)}T${pad(p.hour)}:${pad(p.minute)}:${pad(p.second)}${off}`;
 }
 
+const STAMP = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(:\d{2}(?:\.\d+)?)(Z|[+-]\d{2}:\d{2})$/;
+
+/**
+ * An ISO 8601 timestamp plus whole minutes, written the way `start` is: at its offset, its seconds and
+ * their fraction as they were (whole minutes leave both alone). `2026-11-07T10:00:00+01:00` plus 90 is
+ * `2026-11-07T11:30:00+01:00`, not the same instant in UTC with milliseconds, so an agent that writes
+ * the end itself on a retry writes what was worked out. Anything else comes back as `toISOString`.
+ */
+export function isoAfter(start: string, minutes: number): string {
+  const m = STAMP.exec(start);
+  if (!m || !Number.isInteger(minutes)) return new Date(Date.parse(start) + minutes * 60_000).toISOString();
+  const wall = new Date(0);
+  wall.setUTCFullYear(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  wall.setUTCHours(Number(m[4]), Number(m[5]) + minutes, 0, 0);
+  return `${wall.toISOString().slice(0, 16)}${m[6]}${m[7]}`;
+}
+
 /** A local date plus whole days (negative goes back): calendar arithmetic, no zone involved. */
 export function addDays(date: string, days: number): string {
   const d = DATE.exec(date);
