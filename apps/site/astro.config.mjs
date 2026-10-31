@@ -56,6 +56,9 @@ export default defineConfig({
     }),
     starlight({
       title: "Surfing Dog Inbox",
+      // The 404 page is src/pages/404.astro, outside the docs collection, so llms-full.txt and
+      // llms-small.txt start with the docs' overview rather than with "Page not found".
+      disable404Route: true,
       description:
         "Docs for Surfing Dog Inbox: an open-source typed inbox for people and AI agents. Bookings, orders, quotes and messages, from anyone and any agent.",
       // The striped half sun, the same mark the site's bar carries.

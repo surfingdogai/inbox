@@ -1,0 +1,26 @@
+---
+/**
+ * The site's page for an address that is not here, in the docs' splash layout. It is a page of its
+ * own, not an entry of the docs collection, so the files made for AI readers from the docs
+ * (llms-full.txt, llms-small.txt) start with the docs' overview instead of this page, and site
+ * search leaves it out. Starlight's own 404 route is off (astro.config.mjs) so this one is served.
+ */
+import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
+---
+
+<StarlightPage
+  frontmatter={{
+    title: "Page not found",
+    template: "splash",
+    editUrl: false,
+    pagefind: false,
+    hero: {
+      tagline: "That page is not here. The inbox, the docs and the blog are.",
+      actions: [
+        { text: "Home", link: "/", icon: "left-arrow" },
+        { text: "Docs", link: "/docs/", variant: "secondary" },
+        { text: "Blog", link: "/blog/", variant: "secondary" },
+      ],
+    },
+  }}
+/>
