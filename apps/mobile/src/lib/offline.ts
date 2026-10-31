@@ -161,12 +161,38 @@ export type SendResult =
 
 const OUTBOX = "outbox";
 
+/**
+ * One box's outbox is read, changed and written back one change at a time, and sent by one flush at a
+ * time, whichever `Outbox` asks: two presses in a row, or a press while the app sends what waited
+ * from offline, must never write over each other.
+ */
+const changing = new WeakMap<Box, Promise<unknown>>();
+const flushing = new WeakMap<Box, Promise<unknown>>();
+
+function inTurn<T>(turns: WeakMap<Box, Promise<unknown>>, box: Box, work: () => Promise<T>): Promise<T> {
+  const next = (turns.get(box) ?? Promise.resolve()).then(work, work);
+  turns.set(
+    box,
+    next.catch(() => undefined),
+  );
+  return next;
+}
+
 export class Outbox {
   constructor(private readonly box: Box) {}
 
   async list(alias?: string): Promise<QueuedAction[]> {
     const all = (await this.box.get<QueuedAction[]>(OUTBOX)) ?? [];
     return alias ? all.filter((a) => a.alias === alias) : all;
+  }
+
+  /** Reads what waits, changes it and writes it back, in turn with every other change. */
+  private change(edit: (all: QueuedAction[]) => QueuedAction[]): Promise<void> {
+    return inTurn(changing, this.box, async () => {
+      const all = await this.list();
+      const next = edit(all);
+      if (next !== all) await this.box.put(OUTBOX, next);
+    });
   }
 
   async add(action: Omit<QueuedAction, "id" | "key" | "at">, now = Date.now()): Promise<QueuedAction> {
@@ -176,38 +202,45 @@ export class Outbox {
       key: `phone-${crypto.randomUUID()}`,
       at: now,
     };
-    await this.box.put(OUTBOX, [...(await this.list()), queued]);
+    await this.change((all) => [...all, queued]);
     return queued;
   }
 
   /** What one inbox had waiting: dropped, when it is removed from the phone. */
   async dropFor(alias: string): Promise<void> {
-    const all = await this.list();
-    const left = all.filter((a) => a.alias !== alias);
-    if (left.length !== all.length) await this.box.put(OUTBOX, left);
+    await this.change((all) => {
+      const left = all.filter((a) => a.alias !== alias);
+      return left.length === all.length ? all : left;
+    });
   }
 
   /**
-   * Sends what waits, oldest first. It stops at the first that cannot reach the inbox (still offline),
-   * drops what the inbox refused (and says why), and keeps the rest for next time.
+   * Sends what waits, oldest first. It stops at the first that cannot go yet (offline, or the inbox not
+   * answering now), drops what the inbox refused (and says why), and keeps the rest for next time,
+   * with whatever was added while it sent. One flush at a time: a second waits, then sends what is left.
    */
-  async flush(
+  flush(
     send: (a: QueuedAction) => Promise<SendResult>,
   ): Promise<{ sent: number; refused: { action: QueuedAction; reason: string }[]; left: number }> {
-    const waiting = await this.list();
-    const refused: { action: QueuedAction; reason: string }[] = [];
-    let sent = 0;
-    let i = 0;
-    for (; i < waiting.length; i++) {
-      const a = waiting[i];
-      if (!a) continue;
-      const r = await send(a);
-      if (r.ok) sent++;
-      else if (r.offline) break;
-      else refused.push({ action: a, reason: r.reason });
-    }
-    const left = waiting.slice(i);
-    await this.box.put(OUTBOX, left);
-    return { sent, refused, left: left.length };
+    return inTurn(flushing, this.box, async () => {
+      const waiting = await this.list();
+      const refused: { action: QueuedAction; reason: string }[] = [];
+      const done = new Set<string>();
+      let sent = 0;
+      for (const a of waiting) {
+        const r = await send(a);
+        if (r.ok) sent++;
+        else if (r.offline) break;
+        else refused.push({ action: a, reason: r.reason });
+        done.add(a.id);
+      }
+      let left = 0;
+      await this.change((all) => {
+        const next = all.filter((a) => !done.has(a.id));
+        left = next.length;
+        return next.length === all.length ? all : next;
+      });
+      return { sent, refused, left };
+    });
   }
 }
