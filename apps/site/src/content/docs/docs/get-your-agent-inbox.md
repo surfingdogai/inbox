@@ -24,12 +24,13 @@ A hosted inbox is Surfing Dog Inbox run by us, at an address on your own domain.
 
 ## 1. Set it up
 
-1. Check your website at [surfingdog.ai/check](/check). On the result, choose **Get your agent inbox**.
-2. Check what we read from your website: your kind of business, your hours, one service. Change anything that is wrong. Fields our model read are marked **please check**.
-3. Type your email address and choose **Send my code**. New requests go to this address; customers never see it.
-4. Enter the six-digit code from the email, or open the email's **Confirm** button.
+1. Check your website at [surfingdog.ai/check](/check). On the result, choose **Get your agent inbox**. If your website has not been checked yet, or its check is old, the card checks it, usually within a minute.
+2. The card shows your business as the check read it, and what agents will be able to do. Type your email address and choose **Send my code**. New requests go to this address; customers never see it.
+3. Enter the six-digit code from the email, or open the email's **Confirm** button.
 
-Your inbox is now set up at a private address of ours, a generated name like `quiet-otter-7k2m.surfingdog.ai`. Nobody but you can open it there. Agents cannot reach it, and nothing about it is listed or indexed. We test it as an agent would, and show you the result: **Tested as an agent: book ✓ quote ✓ message ✓**.
+There is nothing else to fill in. Your inbox starts from what the check read on your website (your kind of business, your hours, your services), or a default where it read nothing, and all of it is yours to change in Settings.
+
+Your inbox is now set up at a private address of ours, a generated name like `quiet-otter-7k2m.surfingdog.ai`. Nobody but you can open it there. Agents cannot reach it, and nothing about it is listed or indexed. We test it as an agent would, and show you what passed, such as **Tested as an agent: book ✓ quote ✓ message ✓**.
 
 ## 2. Add one DNS record
 

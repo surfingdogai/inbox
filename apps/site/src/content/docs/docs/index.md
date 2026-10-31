@@ -11,20 +11,15 @@ To see what an assistant can already do with your website, before you install an
 
 ## Where things stand
 
-Written on 21 September 2026. The self-hostable inbox is under way and this page says what actually runs. Working today, on both runtimes:
+Written on 31 October 2026, for release 0.2.0. Every page in these docs says whether a feature is live.
 
-- the core write path: typed items, five state machines, append-only events, idempotency keys and compare-and-set versions;
-- the rules engine, with presets for appointments, trades and shops;
-- REST with an OpenAPI document, a public MCP server and an owner MCP server;
-- owner API keys, owner sign-in by an emailed link or code, and an OAuth 2.1 authorization server for the owner MCP;
-- the owner app, first version: sign in by emailed link or owner key, a three-pane inbox, a typed item view with the valid next actions as buttons, and settings;
-- the email door: inbound MIME parsed, deduplicated and threaded onto the right item;
-- the job runner for notifications and rules, on cron and queues on Workers and on a loop on Node;
-- network membership: an instance reports to one or more networks, switched on in settings, with counts-only telemetry every hour and the receipts it issues;
-- connectors: calendars and payments, and from 0.2.0 shops, property systems, ordering systems and job tools ([Integrations](/docs/integrations/));
-- our own live instance at [inbox.surfingdog.ai](https://inbox.surfingdog.ai/.well-known/agent-inbox.json) and the network at [network.surfingdog.ai](https://network.surfingdog.ai/v1/stats).
+- **The inbox**, open source, on Cloudflare Workers and on Node: typed items with their state machines and append-only events; rules with presets for appointments, trades and shops; REST with an OpenAPI document, a public MCP server and an owner MCP server; sign-in by an emailed link or code, owner keys and OAuth for your own AI; the owner app; the email door; the [spam filter](/docs/spam/); signed [receipts](/docs/receipts/) and [webhooks](/docs/webhooks/).
+- **Hosted**: <!-- hosted: open -->we run it for you at an address on your own domain, like `inbox.yourbusiness.com` ([Get your agent inbox](/docs/get-your-agent-inbox/)): Free, or Pro at $10, €10 or £9 a month, whose three AI spam filters are on from the start.<!-- hosted: closed -->not open yet; until it is, run it yourself.<!-- hosted: end -->
+- **Connections** to calendars, payments, shops, property systems, ordering systems and job tools: built, not yet verified on a live account ([Integrations](/docs/integrations/)).
+- **The network** at [network.surfingdog.ai](https://network.surfingdog.ai/v1/stats): the directory, signed hourly pings, and each member's track record, its promises kept, broken and still open, as the business's own word until the network can confirm them with its customers ([Receipts](/docs/receipts/#networks)).
+- **Our own inbox**, live at [inbox.surfingdog.ai](https://inbox.surfingdog.ai/.well-known/agent-inbox.json).
 
-Still to come: <!-- hosted: closed -->hosted tenancy and <!-- hosted: end -->customer records on the network (coming). A member's track record on the network is live: its listing shows its promises kept, broken and still open once enough have closed, as the business's own word until the network can confirm them with its customers ([Receipts](/docs/receipts/#networks)). Every page in these docs says whether a feature is live.
+Still to come: <!-- hosted: closed -->hosted tenancy and <!-- hosted: end -->customer records on the network, paused until their privacy safeguards are finished.
 
 ## Pages
 
