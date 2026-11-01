@@ -49,12 +49,37 @@ export const STRIPE_INVALID_KEY = {
   },
 };
 
+/** A PaymentIntent below Stripe's least, in the words Stripe's PaymentIntents answer with. */
 export const STRIPE_AMOUNT_TOO_SMALL = {
   error: {
     code: "amount_too_small",
     doc_url: "https://docs.stripe.com/error-codes/amount-too-small",
     message: "Amount must be at least €0.50 eur",
     param: "unit_amount",
+    type: "invalid_request_error",
+  },
+};
+
+/**
+ * A payment link below Stripe's least, as a Stripe sandbox (a Portuguese account, settling in EUR)
+ * answered `POST /v1/payment_links` on 1 November 2026: the Price is made, the link refused. In the
+ * account's own currency, and in another, where Stripe says what the amount converts to (the request log
+ * address left out).
+ */
+export const STRIPE_LINK_TOO_SMALL = {
+  error: {
+    code: "amount_too_small",
+    doc_url: "https://stripe.com/docs/error-codes/amount-too-small",
+    message: "The Checkout Session's total amount due must add up to at least €0.50 EUR",
+    type: "invalid_request_error",
+  },
+};
+export const STRIPE_LINK_TOO_SMALL_CONVERTED = {
+  error: {
+    code: "amount_too_small",
+    doc_url: "https://stripe.com/docs/error-codes/amount-too-small",
+    message:
+      "The Checkout Session's total amount must convert to at least 50 cents. £0.10 converts to approximately €0.12.",
     type: "invalid_request_error",
   },
 };

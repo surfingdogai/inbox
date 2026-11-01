@@ -377,13 +377,25 @@ function messageOf(json: Record<string, unknown>): string {
 /**
  * A refusal in the owner's words: the ones an owner meets are said plainly, any other in Stripe's
  * own ("Stripe said: …").
+ *
+ * An amount below Stripe's least is refused in one of three forms, as a Stripe sandbox (a Portuguese
+ * account, settling in EUR) answered them on 1 November 2026: a link in the account's own currency,
+ * "The Checkout Session's total amount due must add up to at least €0.50 EUR"; a link in another,
+ * "The Checkout Session's total amount must convert to at least 50 cents. £0.10 converts to
+ * approximately €0.12." (the least in the account's currency, and what this amount comes to in it);
+ * and a PaymentIntent, "Amount must be at least €0.50 eur".
  */
 function refusalOf(json: Record<string, unknown>, status: number): string {
   const e = (json.error ?? {}) as { code?: unknown; message?: unknown };
   if (e.code === "amount_too_small") {
-    const least =
-      typeof e.message === "string" ? /at least (\S+?)(?:\s+[a-z]{3})?\.?$/i.exec(e.message)?.[1] : undefined;
-    return `Stripe takes payments of ${least ?? "a little more"} or more. Ask for payment another way.`;
+    const said = typeof e.message === "string" ? e.message : "";
+    const least = /at least (.+?)(?:\s+[A-Za-z]{3})?(?:\.\s|\.?$)/.exec(said)?.[1];
+    const converts = /(\S+) converts to approximately (\S+?)\.?$/.exec(said);
+    if (least && converts) {
+      return `Stripe takes payments worth at least ${least} in your Stripe account's currency, and ${converts[1]} is about ${converts[2]}. Ask for payment another way.`;
+    }
+    if (least) return `Stripe takes payments of ${least} or more. Ask for payment another way.`;
+    return "The amount is below the least Stripe takes. Ask for payment another way.";
   }
   return `Stripe said: ${messageOf(json) || `HTTP ${status}`}`;
 }

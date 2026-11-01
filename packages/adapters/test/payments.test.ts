@@ -39,6 +39,8 @@ import {
   STRIPE_EMPTY_LIST,
   STRIPE_ENDPOINT_CREATED,
   STRIPE_INVALID_KEY,
+  STRIPE_LINK_TOO_SMALL,
+  STRIPE_LINK_TOO_SMALL_CONVERTED,
   STRIPE_LIVE_KEY,
   STRIPE_MANAGED_PAYMENTS_TAX_CODE,
   STRIPE_MISSING_PARAM,
@@ -457,6 +459,28 @@ describe("Stripe: pay links", () => {
     expect((err as ConnectorError).message).toBe(
       "Stripe takes payments of €0.50 or more. Ask for payment another way.",
     );
+    // A link below Stripe's least: the Price is made, the link refused, in the words a Stripe sandbox
+    // used on 1 November 2026, in the account's own currency and in another.
+    for (const [refusal, words] of [
+      [STRIPE_LINK_TOO_SMALL, "Stripe takes payments of €0.50 or more. Ask for payment another way."],
+      [
+        STRIPE_LINK_TOO_SMALL_CONVERTED,
+        "Stripe takes payments worth at least 50 cents in your Stripe account's currency, and £0.10 is about €0.12. Ask for payment another way.",
+      ],
+      [
+        { error: { code: "amount_too_small", message: "Too small." } },
+        "The amount is below the least Stripe takes. Ask for payment another way.",
+      ],
+    ] as const) {
+      const link = fakePlatform((r) =>
+        new URL(r.url).pathname === "/v1/prices" ? json(STRIPE_PRICE) : json(refusal, 400),
+      );
+      const refused = await stripeConnector()
+        .payments?.createLink(ctx(link.http), REQUEST)
+        .catch((e) => e);
+      expect((refused as ConnectorError).code).toBe("refused");
+      expect((refused as ConnectorError).message).toBe(words);
+    }
     const odd = fakePlatform(() =>
       json({ error: { code: "parameter_invalid", message: "Invalid currency: xxx" } }, 400),
     );
