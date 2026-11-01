@@ -22,6 +22,7 @@ import { Route as SettingsFoundRouteImport } from "./routes/settings.found";
 import { Route as SettingsIntegrationsRouteImport } from "./routes/settings.integrations";
 import { Route as SettingsKeysRouteImport } from "./routes/settings.keys";
 import { Route as SettingsKitchenRouteImport } from "./routes/settings.kitchen";
+import { Route as SettingsLookRouteImport } from "./routes/settings.look";
 import { Route as SettingsMenuRouteImport } from "./routes/settings.menu";
 import { Route as SettingsNetworksRouteImport } from "./routes/settings.networks";
 import { Route as SettingsPaymentsRouteImport } from "./routes/settings.payments";
@@ -97,6 +98,11 @@ const SettingsKitchenRoute = SettingsKitchenRouteImport.update({
   path: "/kitchen",
   getParentRoute: () => SettingsRoute,
 } as any);
+const SettingsLookRoute = SettingsLookRouteImport.update({
+  id: "/look",
+  path: "/look",
+  getParentRoute: () => SettingsRoute,
+} as any);
 const SettingsMenuRoute = SettingsMenuRouteImport.update({
   id: "/menu",
   path: "/menu",
@@ -160,6 +166,7 @@ export interface FileRoutesByFullPath {
   "/settings/integrations": typeof SettingsIntegrationsRoute;
   "/settings/keys": typeof SettingsKeysRoute;
   "/settings/kitchen": typeof SettingsKitchenRoute;
+  "/settings/look": typeof SettingsLookRoute;
   "/settings/menu": typeof SettingsMenuRoute;
   "/settings/networks": typeof SettingsNetworksRoute;
   "/settings/payments": typeof SettingsPaymentsRoute;
@@ -182,6 +189,7 @@ export interface FileRoutesByTo {
   "/settings/integrations": typeof SettingsIntegrationsRoute;
   "/settings/keys": typeof SettingsKeysRoute;
   "/settings/kitchen": typeof SettingsKitchenRoute;
+  "/settings/look": typeof SettingsLookRoute;
   "/settings/menu": typeof SettingsMenuRoute;
   "/settings/networks": typeof SettingsNetworksRoute;
   "/settings/payments": typeof SettingsPaymentsRoute;
@@ -208,6 +216,7 @@ export interface FileRoutesById {
   "/settings/integrations": typeof SettingsIntegrationsRoute;
   "/settings/keys": typeof SettingsKeysRoute;
   "/settings/kitchen": typeof SettingsKitchenRoute;
+  "/settings/look": typeof SettingsLookRoute;
   "/settings/menu": typeof SettingsMenuRoute;
   "/settings/networks": typeof SettingsNetworksRoute;
   "/settings/payments": typeof SettingsPaymentsRoute;
@@ -235,6 +244,7 @@ export interface FileRouteTypes {
     | "/settings/integrations"
     | "/settings/keys"
     | "/settings/kitchen"
+    | "/settings/look"
     | "/settings/menu"
     | "/settings/networks"
     | "/settings/payments"
@@ -257,6 +267,7 @@ export interface FileRouteTypes {
     | "/settings/integrations"
     | "/settings/keys"
     | "/settings/kitchen"
+    | "/settings/look"
     | "/settings/menu"
     | "/settings/networks"
     | "/settings/payments"
@@ -282,6 +293,7 @@ export interface FileRouteTypes {
     | "/settings/integrations"
     | "/settings/keys"
     | "/settings/kitchen"
+    | "/settings/look"
     | "/settings/menu"
     | "/settings/networks"
     | "/settings/payments"
@@ -396,6 +408,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof SettingsKitchenRouteImport;
       parentRoute: typeof SettingsRoute;
     };
+    "/settings/look": {
+      id: "/settings/look";
+      path: "/look";
+      fullPath: "/settings/look";
+      preLoaderRoute: typeof SettingsLookRouteImport;
+      parentRoute: typeof SettingsRoute;
+    };
     "/settings/menu": {
       id: "/settings/menu";
       path: "/menu";
@@ -489,6 +508,7 @@ interface SettingsRouteChildren {
   SettingsIntegrationsRoute: typeof SettingsIntegrationsRoute;
   SettingsKeysRoute: typeof SettingsKeysRoute;
   SettingsKitchenRoute: typeof SettingsKitchenRoute;
+  SettingsLookRoute: typeof SettingsLookRoute;
   SettingsMenuRoute: typeof SettingsMenuRoute;
   SettingsNetworksRoute: typeof SettingsNetworksRoute;
   SettingsPaymentsRoute: typeof SettingsPaymentsRoute;
@@ -509,6 +529,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsIntegrationsRoute: SettingsIntegrationsRoute,
   SettingsKeysRoute: SettingsKeysRoute,
   SettingsKitchenRoute: SettingsKitchenRoute,
+  SettingsLookRoute: SettingsLookRoute,
   SettingsMenuRoute: SettingsMenuRoute,
   SettingsNetworksRoute: SettingsNetworksRoute,
   SettingsPaymentsRoute: SettingsPaymentsRoute,

@@ -232,6 +232,35 @@ async function download(path: string, fallbackName: string): Promise<{ blob: Blo
   throw new ApiProblem(problem);
 }
 
+/** A file sent as the body of a PUT (the logo): the answer, or the problem, as `call`. */
+async function putBytes<T>(path: string, blob: Blob): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(new URL(path, window.location.origin), {
+      method: "PUT",
+      headers: {
+        accept: "application/json",
+        "content-type": blob.type || "application/octet-stream",
+        ...authHeaders(),
+      },
+      credentials: "include",
+      body: blob,
+    });
+  } catch {
+    throw new ApiProblem({
+      type: "about:blank",
+      title: "Unreachable",
+      status: 0,
+      code: "network",
+      detail: "Could not reach the inbox. Check the server is running, then try again.",
+    });
+  }
+  if (res.ok) return (await res.json()) as T;
+  const problem = await problemFrom(res);
+  if (res.status === 401) unauthorizedHandler?.();
+  throw new ApiProblem(problem);
+}
+
 const item = (id: string) => `/v1/owner/items/${encodeURIComponent(id)}`;
 const customerPath = (partyId: string) => `/v1/owner/customers/${encodeURIComponent(partyId)}`;
 
@@ -503,6 +532,12 @@ export const api = {
     call<ModelCard>("PUT", "/v1/owner/spam/model", { body }),
   testSpamModel: () => call<ModelTest>("POST", "/v1/owner/spam/model/test", { body: {} }),
   removeSpamModel: () => call<ModelCard>("DELETE", "/v1/owner/spam/model"),
+
+  // ---- the business's look (Settings → Look): theme and accent are settings; the logo is a file ----
+  setLogo: (file: Blob) => putBytes<SettingsDoc>("/v1/owner/look/logo", file),
+  removeLogo: () => call<SettingsDoc>("DELETE", "/v1/owner/look/logo"),
+  /** The logo as kept, to show here; `v`, its hash, fetches a new one anew. */
+  logo: (v: string) => download(`/v1/owner/look/logo?v=${encodeURIComponent(v)}`, "logo"),
 
   // ---- keys: one named, scoped, revocable key per system that connects ----
   keys: () => call<KeyList>("GET", "/v1/owner/api-keys"),

@@ -36,6 +36,7 @@ export function Rail({
   counts,
   testMode,
   failing,
+  logo,
 }: {
   name: string;
   filter: Filter;
@@ -44,6 +45,8 @@ export function Rail({
   testMode: boolean;
   /** A connected calendar that stopped syncing: what it says, so the owner connects it again. */
   failing?: { readonly title: string; readonly error: string | null } | undefined;
+  /** The business's logo, as an address this page can show (`useLogoUrl`). */
+  logo?: string | null | undefined;
 }) {
   const navigate = useNavigate();
   const leave = async () => {
@@ -52,10 +55,7 @@ export function Rail({
   };
   return (
     <nav className="rail" aria-label="Inbox">
-      <div className="h" title={name}>
-        <Inbox className="icon" aria-hidden="true" />
-        <span className="label">{name}</span>
-      </div>
+      <RailHead name={name} logo={logo} />
       {FILTERS.map((f) => {
         if (f.key === "refund" && !(counts && counts.byType.refund > 0)) return null;
         // Stays only in a place to stay's inbox, once one has come in.
@@ -118,6 +118,16 @@ export function Rail({
         </button>
       </div>
     </nav>
+  );
+}
+
+/** The business at the top of the rail: its logo when it has one (Settings → Look), else the Inbox mark, and its name. */
+export function RailHead({ name, logo }: { name: string; logo?: string | null | undefined }) {
+  return (
+    <div className="h" title={name}>
+      {logo ? <img className="rail-logo" src={logo} alt="" /> : <Inbox className="icon" aria-hidden="true" />}
+      <span className="label">{name}</span>
+    </div>
   );
 }
 

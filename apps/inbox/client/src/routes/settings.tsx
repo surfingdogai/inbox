@@ -4,11 +4,12 @@ import { useEffect, useRef } from "react";
 import { ThemeButton, ThemeSwitch } from "../components/ThemeSwitch";
 import { ensureSignedIn } from "../lib/auth";
 import { foodKind } from "../lib/food";
+import { useLookSync } from "../lib/look";
 import { useProperty } from "../lib/property";
 import { useSettings } from "../lib/queries";
 import { useWork } from "../lib/trades";
 
-/** Settings: who the business is, how it is emailed, what is kept off the desk, what it offers, when it is open, how it is paid, what runs on its own, who it reports to. */
+/** Settings: who the business is, how it looks, how it is emailed, what is kept off the desk, what it offers, when it is open, how it is paid, what runs on its own, who it reports to. */
 export const Route = createFileRoute("/settings")({
   beforeLoad: async ({ location }) => {
     if (!(await ensureSignedIn())) throw redirect({ to: "/login", search: { redirect: location.href } });
@@ -27,6 +28,7 @@ function SettingsLayout() {
   // also quotes, or a shop, never sees them; a link straight to either still opens it.
   const settings = useSettings();
   const trades = useWork();
+  useLookSync();
   const doors = settings.data?.doc.doors;
   const work =
     trades.data?.trade === true ||
@@ -56,6 +58,9 @@ function SettingsLayout() {
       <nav ref={tabs} className="tabs subnav" aria-label="Settings sections">
         <Link to="/settings" className="tab" activeOptions={{ exact: true }}>
           General
+        </Link>
+        <Link to="/settings/look" className="tab">
+          Look
         </Link>
         <Link to="/settings/email" className="tab">
           Email

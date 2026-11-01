@@ -5,6 +5,7 @@ import { Rail } from "../components/Rail";
 import { SpamActionsProvider } from "../components/SpamActions";
 import { ensureSignedIn } from "../lib/auth";
 import { type Filter, parseFilter } from "../lib/filters";
+import { useLogoUrl, useLookSync } from "../lib/look";
 import { usePhone } from "../lib/media";
 import { useBusiness, useCounts, useIntegrations, useSettings } from "../lib/queries";
 
@@ -47,11 +48,22 @@ function InboxLayout() {
   const tz = business.data?.timezone ?? settings.data?.doc.business.timezone;
   // On a phone the list is the home, so a kitchen's pause is there too.
   const phone = usePhone();
+  // The business's look (Settings → Look): its theme and accent on the app, its logo in the rail.
+  useLookSync();
+  const logo = useLogoUrl(settings.data?.doc.look.logo?.sha256);
 
   return (
     <SpamActionsProvider>
       <div className="inbox glass" data-view={id ? "detail" : "list"}>
-        <Rail name={name} filter={filter} q={q} counts={counts.data} testMode={testMode} failing={failing} />
+        <Rail
+          name={name}
+          filter={filter}
+          q={q}
+          counts={counts.data}
+          testMode={testMode}
+          failing={failing}
+          logo={logo}
+        />
         <ItemList
           filter={filter}
           q={q}

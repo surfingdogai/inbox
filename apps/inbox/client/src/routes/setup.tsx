@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import clsx from "clsx";
 import { ArrowLeft, ArrowRight, Check, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -1596,6 +1596,11 @@ function Finished({
             <b>Where events go.</b> Point your other systems at it in Settings, Integrations.
           </li>
         </ul>
+        <p className="hint">
+          <Link to="/settings/look" className="linkish">
+            Add your logo and choose a look
+          </Link>
+        </p>
         {!(stays && !priced) && (
           <div className="rowx">
             <button type="button" className="btn btn-primary" onClick={onOpen}>

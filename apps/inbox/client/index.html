@@ -7,15 +7,40 @@
     <title>Surfing Dog Inbox</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <script>
-      // The stored theme goes on <html> before the first paint, so there is no flash.
+      // The stored theme and the business's look go on <html> before the first paint, so there is no
+      // flash. Only known names and plain colours are taken (lib/look.ts writes them); Auto follows
+      // the look as lib/theme.ts does: Dark is night, Minimal and Warm are day, Standard the device.
       (() => {
+        const root = document.documentElement;
         let theme = null;
+        let look = null;
         try {
           theme = localStorage.getItem("sdi.theme");
+          look = JSON.parse(localStorage.getItem("sdi.look") || "null");
         } catch {
-          // No storage: follow the system.
+          // No storage, or nothing readable: follow the system.
         }
-        if (theme === "light" || theme === "dark") document.documentElement.setAttribute("data-theme", theme);
+        const looks = ["minimal", "dark", "warm"];
+        const accents = ["blue", "teal", "green", "violet", "plum", "ochre"];
+        const hex = (v) => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v);
+        const named = look && typeof look === "object" && looks.includes(look.theme) ? look.theme : null;
+        if (named) root.setAttribute("data-look", named);
+        if (look && accents.includes(look.accent) && [look.day, look.dayFg, look.night, look.nightFg].every(hex)) {
+          root.setAttribute("data-accent", look.accent);
+          root.style.setProperty("--accent-day", look.day);
+          root.style.setProperty("--accent-day-fg", look.dayFg);
+          root.style.setProperty("--accent-night", look.night);
+          root.style.setProperty("--accent-night-fg", look.nightFg);
+        }
+        const mode =
+          theme === "light" || theme === "dark"
+            ? theme
+            : named === "dark"
+              ? "dark"
+              : named
+                ? "light"
+                : null;
+        if (mode) root.setAttribute("data-theme", mode);
       })();
     </script>
   </head>

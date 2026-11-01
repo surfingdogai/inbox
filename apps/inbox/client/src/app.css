@@ -20,7 +20,7 @@ body {
   position: fixed;
 }
 :focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--violet) 65%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--focus) 65%, transparent);
   outline-offset: 2px;
 }
 a {
@@ -229,6 +229,14 @@ a {
   font-family: var(--font-display);
   font-weight: 600;
   font-size: 15px;
+}
+/* The business's logo (Settings → Look), where the Inbox mark is; its name stays beside it. */
+.rail-logo {
+  flex: none;
+  width: auto;
+  height: 20px;
+  max-width: 96px;
+  object-fit: contain;
 }
 .rail-link {
   display: flex;
@@ -650,6 +658,9 @@ a {
   .rail .h {
     padding: 0 6px 0 0;
     white-space: nowrap;
+  }
+  .rail-logo {
+    height: 18px;
   }
   .rail-link {
     padding: 6px 10px;
@@ -1175,6 +1186,7 @@ textarea.json-editor {
 /* An email's name opens what it said. */
 .linkish {
   all: unset;
+  color: var(--link, currentColor);
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 2px;
@@ -1292,6 +1304,11 @@ textarea.json-editor {
   .rail .h {
     justify-content: center;
     padding: 6px 0 12px;
+  }
+  .rail-logo {
+    width: 24px;
+    height: 24px;
+    max-width: none;
   }
   .rail .label,
   .rail-link .n,
@@ -1569,11 +1586,11 @@ fieldset.chips,
 }
 .chip.chip-action:focus-visible,
 .chip.chip-toggle:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--violet) 65%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--focus) 65%, transparent);
   outline-offset: 2px;
 }
 .chip:has(input:focus-visible) {
-  outline: 2px solid color-mix(in srgb, var(--violet) 65%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--focus) 65%, transparent);
   outline-offset: 2px;
 }
 .chip-other {
@@ -1627,8 +1644,8 @@ fieldset.chips,
   cursor: text;
 }
 .lang-box:focus-within {
-  border-color: color-mix(in srgb, var(--violet) 50%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--violet) 18%, transparent);
+  border-color: color-mix(in srgb, var(--focus) 50%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 18%, transparent);
 }
 .lang-chip {
   display: inline-flex;
@@ -2259,7 +2276,7 @@ details[open] > .disclosure .disclosure-open {
   display: inline;
 }
 .disclosure:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--violet) 65%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--focus) 65%, transparent);
   outline-offset: 3px;
   border-radius: 6px;
 }
@@ -2580,7 +2597,7 @@ legend.label-line {
   background: var(--glass-bg-strong);
 }
 .int-tile:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--violet) 65%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--focus) 65%, transparent);
   outline-offset: 2px;
 }
 .int-tile:disabled {
@@ -3495,7 +3512,7 @@ pre.found-code {
   border: 0;
   background: none;
   font: inherit;
-  color: var(--ink-2);
+  color: var(--link, var(--ink-2));
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
@@ -3721,4 +3738,251 @@ pre.found-code {
   display: grid;
   gap: 12px;
   max-width: 520px;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Settings → Look: the logo in a small frame, four small pages to    */
+/*  choose from, seven dots, and what customers see. Thin and quiet.   */
+/* ------------------------------------------------------------------ */
+.look-logo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.look-logo-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+.look-logo-frame {
+  display: grid;
+  place-items: center;
+  width: 152px;
+  height: 56px;
+  padding: 8px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-md);
+  background: #ffffff;
+}
+.look-logo-frame img {
+  max-width: 100%;
+  max-height: 40px;
+  object-fit: contain;
+}
+.look-logo-frame .fine {
+  color: #6b6e96;
+}
+.look-logo-acts {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 13.5px;
+}
+.look-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  gap: 10px;
+  margin-top: 6px;
+}
+.look-swatch {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.look-swatch:hover {
+  border-color: var(--hairline-strong);
+}
+.look-swatch:has(input:checked) {
+  border-color: var(--ink);
+}
+.look-swatch:has(input:focus-visible) {
+  outline: 2px solid color-mix(in srgb, var(--focus) 65%, transparent);
+  outline-offset: 2px;
+}
+/* A page in 72 × 44: its ground, two lines of text, a hairline and a small button. */
+.look-mini {
+  position: relative;
+  display: block;
+  width: 72px;
+  height: 44px;
+  margin-bottom: 6px;
+  overflow: hidden;
+  border: 1px solid var(--m-rule);
+  border-radius: 6px;
+  background: var(--m-bg);
+}
+.look-mini .m-line {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  width: 26px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--m-fg);
+}
+.look-mini .m-second {
+  top: 14px;
+  width: 44px;
+  opacity: 0.4;
+}
+.look-mini .m-rule {
+  position: absolute;
+  top: 22px;
+  right: 7px;
+  left: 7px;
+  border-top: 1px solid var(--m-rule);
+}
+.look-mini .m-button {
+  position: absolute;
+  bottom: 6px;
+  left: 7px;
+  width: 20px;
+  height: 8px;
+  border: 1px solid var(--m-accent);
+  border-radius: 3px;
+  background: var(--m-accent);
+}
+.look-mini[data-look="minimal"] .m-button {
+  background: transparent;
+}
+.look-name {
+  font-size: 13px;
+  font-weight: 500;
+}
+.look-line {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.look-dots-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 8px 0 4px;
+}
+.look-dots {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.look-dot {
+  position: relative;
+  display: inline-flex;
+  cursor: pointer;
+}
+.look-dot > span[aria-hidden] {
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 9999px;
+  background: var(--d);
+}
+.look-dot:has(input:checked) > span[aria-hidden] {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+.look-dot:has(input:focus-visible) > span[aria-hidden] {
+  outline: 2px solid color-mix(in srgb, var(--focus) 65%, transparent);
+  outline-offset: 3px;
+}
+@media (pointer: coarse) {
+  .look-dot::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    transform: translate(-50%, -50%);
+  }
+}
+fieldset:disabled .look-swatch,
+fieldset:disabled .look-dot {
+  cursor: default;
+  opacity: 0.6;
+}
+.look-chosen {
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.look-figure {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+/* As a customer's page draws it: its own font, its own tones, nothing of this app's. */
+.look-preview {
+  padding: 16px 18px;
+  border: 1px solid var(--p-rule);
+  border-radius: var(--radius-md);
+  background: var(--p-bg);
+  color: var(--p-fg);
+  font:
+    14px / 1.5 system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif;
+}
+.look-preview p {
+  margin: 0;
+}
+.look-preview .biz {
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--p-rule);
+  font-weight: 600;
+}
+.look-preview[data-look="minimal"] .biz {
+  font-weight: 500;
+}
+.look-preview .biz img {
+  display: block;
+  width: auto;
+  max-width: 160px;
+  max-height: 28px;
+  margin-bottom: 6px;
+}
+.look-preview .h {
+  font-size: 15px;
+  font-weight: 600;
+}
+.look-preview .t {
+  margin: 2px 0 12px;
+  color: var(--p-muted);
+  font-size: 13px;
+}
+.look-preview .acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  font-size: 13px;
+}
+.look-preview .b {
+  padding: 6px 12px;
+  border: 1px solid var(--p-accent);
+  border-radius: 6px;
+  background: var(--p-accent);
+  color: var(--p-accent-fg);
+  font-weight: 600;
+}
+.look-preview[data-look="minimal"] .b {
+  background: transparent;
+  color: var(--p-accent);
+  font-weight: 500;
+}
+.look-preview .l {
+  color: var(--p-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }

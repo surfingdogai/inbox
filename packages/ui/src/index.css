@@ -50,7 +50,7 @@
   /* A field reads as a field on white glass: a hairline you can see. */
   --input-border: rgba(20, 22, 60, 0.18);
   --hairline-strong: rgba(20, 22, 60, 0.18);
-  --btn-primary-bg: #14163c;
+  --btn-primary-bg: var(--ink);
   --btn-primary-fg: #ffffff;
   --field-alpha: 0.5;
 }
@@ -87,7 +87,7 @@
     --input-bg-hover: rgba(255, 255, 255, 0.09);
     --input-border: rgba(255, 255, 255, 0.16);
     --hairline-strong: rgba(255, 255, 255, 0.18);
-    --btn-primary-bg: #f2f1ff;
+    --btn-primary-bg: var(--ink);
     --btn-primary-fg: #0d0e26;
     --field-alpha: 0.28;
   }
@@ -123,14 +123,74 @@
   --input-bg-hover: rgba(255, 255, 255, 0.09);
   --input-border: rgba(255, 255, 255, 0.16);
   --hairline-strong: rgba(255, 255, 255, 0.18);
-  --btn-primary-bg: #f2f1ff;
+  --btn-primary-bg: var(--ink);
   --btn-primary-fg: #0d0e26;
   --field-alpha: 0.28;
 }
 
-/* Colour has jobs. Item types and states are the only things that get colour. */
+/* ------------------------------------------------------------------ */
+/*  The business's look (Settings → Look), set on <html> by the app:   */
+/*  `data-look` for a theme other than Standard, `data-accent` and its */
+/*  two tones for an accent other than Ink. Dark is the night above;   */
+/*  Minimal and Warm change the day only, and night stays night.       */
+/* ------------------------------------------------------------------ */
+:root[data-look="minimal"]:not([data-theme="dark"]) {
+  --ground: #ffffff;
+  --glass-bg: #ffffff;
+  --glass-bg-strong: #ffffff;
+  --glass-border: var(--hairline-strong);
+  --glass-border-strong: var(--hairline-strong);
+  --glass-fallback: #ffffff;
+  --glass-shadow: none;
+  --glass-shadow-hover: none;
+  --pill-bg: #ffffff;
+  --pill-bg-hover: #ffffff;
+  --pill-border: var(--hairline-strong);
+  --row-bg: transparent;
+  --row-bg-hover: rgba(20, 22, 60, 0.03);
+  --input-bg: #ffffff;
+  --input-bg-hover: #ffffff;
+}
+/* Minimal has no light behind the glass, day or night. */
+:root[data-look="minimal"] {
+  --field-alpha: 0;
+}
+:root[data-look="warm"]:not([data-theme="dark"]) {
+  --ground: #f5efe4;
+  --ink: #2b2420;
+  --ink-2: #5a4d43;
+  --ink-3: #6b5f55;
+  --hairline: rgba(43, 36, 32, 0.08);
+  --hairline-strong: rgba(43, 36, 32, 0.18);
+  --input-border: rgba(43, 36, 32, 0.18);
+  --glass-fallback: rgba(255, 252, 246, 0.88);
+  --field-alpha: 0.32;
+}
+/* The accent takes the primary button, links and focus; chosen chips stay ink, a state, not the brand. */
+:root[data-accent] {
+  --accent: var(--accent-day);
+  --accent-fg: var(--accent-day-fg);
+  --btn-primary-bg: var(--accent);
+  --btn-primary-fg: var(--accent-fg);
+  --focus: var(--accent);
+  --link: var(--accent);
+}
+:root[data-accent][data-theme="dark"] {
+  --accent: var(--accent-night);
+  --accent-fg: var(--accent-night-fg);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-accent]:not([data-theme="light"]) {
+    --accent: var(--accent-night);
+    --accent-fg: var(--accent-night-fg);
+  }
+}
+
+/* Colour has jobs. Item types and states are the only things that get colour; the primary button is
+   ink, or the business's accent. */
 :root,
 [data-theme] {
+  --focus: var(--violet);
   --c-message: var(--lagoon);
   --c-message-ink: var(--lagoon-ink);
   --c-quote: var(--violet);
@@ -266,7 +326,7 @@
 }
 @utility focus-ring {
   &:focus-visible {
-    outline: 2px solid color-mix(in srgb, var(--violet) 65%, transparent);
+    outline: 2px solid color-mix(in srgb, var(--focus) 65%, transparent);
     outline-offset: 2px;
   }
 }
@@ -352,7 +412,7 @@
 
 /* ------------------------------------------------------------------ */
 /*  Components. Buttons say what they do; colour never fills a button  */
-/*  except the neutral ink primary.                                    */
+/*  but the primary, which is ink, or the business's accent.           */
 /* ------------------------------------------------------------------ */
 .btn {
   position: relative;
@@ -623,8 +683,8 @@
   background: var(--input-bg-hover);
 }
 .input:focus {
-  border-color: color-mix(in srgb, var(--violet) 50%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--violet) 18%, transparent);
+  border-color: color-mix(in srgb, var(--focus) 50%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 18%, transparent);
 }
 .input[aria-invalid="true"] {
   border-color: color-mix(in srgb, var(--c-danger) 70%, transparent);
@@ -720,7 +780,7 @@ select.input {
   transform: translateX(18px);
 }
 .switch input:focus-visible + span {
-  outline: 2px solid color-mix(in srgb, var(--violet) 65%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--focus) 65%, transparent);
   outline-offset: 2px;
 }
 

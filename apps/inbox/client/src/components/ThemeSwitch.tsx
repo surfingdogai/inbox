@@ -1,25 +1,25 @@
 import { type LucideIcon, Monitor, Moon, Sun } from "lucide-react";
 import { type ThemeMode, useTheme } from "../lib/theme";
 
-const MODES: readonly { key: ThemeMode; label: string; Icon: LucideIcon }[] = [
-  { key: "system", label: "System", Icon: Monitor },
-  { key: "light", label: "Day", Icon: Sun },
-  { key: "dark", label: "Night", Icon: Moon },
+const MODES: readonly { key: ThemeMode; label: string; title: string; Icon: LucideIcon }[] = [
+  { key: "system", label: "Auto", title: "As the business's look; Standard follows the device", Icon: Monitor },
+  { key: "light", label: "Day", title: "Day", Icon: Sun },
+  { key: "dark", label: "Night", title: "Night", Icon: Moon },
 ];
 
-/** Day, night or the system's choice. `compact` shows icons only. */
+/** Day, night or Auto (as the business's look, `lib/theme.ts`). `compact` shows icons only. */
 export function ThemeSwitch({ compact, className }: { compact?: boolean | undefined; className?: string | undefined }) {
   const [mode, setMode] = useTheme();
   return (
     <fieldset className={className ? `seg ${className}` : "seg"}>
       <legend className="sr-only">Theme</legend>
-      {MODES.map(({ key, label, Icon }) => (
+      {MODES.map(({ key, label, title, Icon }) => (
         <button
           key={key}
           type="button"
           aria-pressed={mode === key}
           aria-label={compact ? label : undefined}
-          title={label}
+          title={title}
           onClick={() => setMode(key)}
         >
           <Icon className="icon-sm" aria-hidden="true" />
@@ -30,7 +30,7 @@ export function ThemeSwitch({ compact, className }: { compact?: boolean | undefi
   );
 }
 
-/** On a phone: one button that steps through system, day and night, its icon the mode now. */
+/** On a phone: one button that steps through Auto, day and night, its icon the mode now. */
 export function ThemeButton({ className }: { className?: string | undefined }) {
   const [mode, setMode] = useTheme();
   const at = MODES.findIndex((m) => m.key === mode);

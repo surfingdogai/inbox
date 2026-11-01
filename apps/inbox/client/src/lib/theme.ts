@@ -1,8 +1,9 @@
 import { useSyncExternalStore } from "react";
 
 /**
- * Day and night follow the system by default; a choice sets `data-theme` on <html> and is kept in
- * localStorage. index.html applies the stored choice before the first paint.
+ * Day, night or Auto; a choice sets `data-theme` on <html> and is kept in localStorage. Auto follows
+ * the business's look (Settings → Look, `data-look` on <html>): Dark is night, Minimal and Warm are
+ * day, and Standard follows the device. index.html applies both before the first paint.
  */
 export type ThemeMode = "system" | "light" | "dark";
 const STORAGE_KEY = "sdi.theme";
@@ -17,10 +18,19 @@ export function readTheme(): ThemeMode {
   }
 }
 
+/** What `data-theme` is for a mode and the business's theme: null leaves it to the device. */
+export function resolveTheme(mode: ThemeMode, look: string | null | undefined): "light" | "dark" | null {
+  if (mode !== "system") return mode;
+  if (look === "dark") return "dark";
+  if (look === "minimal" || look === "warm") return "light";
+  return null;
+}
+
 export function applyTheme(mode: ThemeMode): void {
   const root = document.documentElement;
-  if (mode === "system") root.removeAttribute("data-theme");
-  else root.setAttribute("data-theme", mode);
+  const theme = resolveTheme(mode, root.getAttribute("data-look"));
+  if (theme === null) root.removeAttribute("data-theme");
+  else root.setAttribute("data-theme", theme);
 }
 
 /** At start-up: index.html already applied the stored choice; this keeps the attribute in step. */

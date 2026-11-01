@@ -49,6 +49,8 @@ export const qk = {
   keys: ["keys"] as const,
   spam: ["spam"] as const,
   spamModel: ["spam", "model"] as const,
+  /** The logo's picture, by the first 16 of its hash: a new picture is a new key. */
+  logo: (v: string) => ["look", "logo", v] as const,
   deliveries: (id: string) => ["deliveries", id] as const,
 };
 
