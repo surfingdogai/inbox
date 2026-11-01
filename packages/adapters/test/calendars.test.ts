@@ -555,6 +555,27 @@ describe("CalDAV: finding the server", () => {
     });
   });
 
+  it("says once, in one sentence, why the address the owner gave did not answer", async () => {
+    // Found against a real CalDAV server (Radicale) given a port nothing listened on: the reason is a
+    // sentence of its own, and its full stop is not doubled after the brackets.
+    const http = connectorHttp({
+      fetchImpl: (async () => {
+        throw new TypeError("fetch failed");
+      }) as typeof fetch,
+    });
+    await expect(
+      dav.connect?.(
+        { http, now: NOW, inbox: INBOX },
+        { username: "ana@example.org", password: "pw", server: "https://dav.example.org:5299" },
+      ),
+    ).rejects.toMatchObject({
+      code: "config",
+      field: "server",
+      message:
+        "No calendar was found there (Could not reach dav.example.org:5299). Check the server address under More options.",
+    });
+  });
+
   it("never sends the app password to the website at the email's domain", async () => {
     // The usual small business: its domain is its website, at a website host, and `caldav.` a parking page.
     const { http, seen } = fakePlatform((req) => {

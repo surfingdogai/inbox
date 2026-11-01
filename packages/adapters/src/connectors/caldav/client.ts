@@ -238,7 +238,8 @@ export class CalDavClient {
     if (!server) throw new ConnectorError("config", NOT_FOUND, { field: "server" });
     throw new ConnectorError(
       "config",
-      `No calendar was found there${lastProblem ? ` (${lastProblem})` : ""}. Check the server address under More options.`,
+      // A problem is often a sentence of its own ("Could not reach host."): its full stop goes, as the sentence ends after the brackets.
+      `No calendar was found there${lastProblem ? ` (${lastProblem.replace(/\.$/, "")})` : ""}. Check the server address under More options.`,
       { field: "server" },
     );
   }
