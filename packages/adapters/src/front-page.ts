@@ -12,7 +12,7 @@ import {
   type LinkActResult,
 } from "@surfingdog/core";
 import { type Context, Hono } from "hono";
-import { pageLang, renderCustomerPage, sendPage } from "./customer-page";
+import { lookOrDefault, pageLang, renderCustomerPage, sendPage } from "./customer-page";
 import { publicLogo } from "./look";
 import { HOST_SESSION_COOKIE, SESSION_COOKIE } from "./session";
 
@@ -67,14 +67,12 @@ export function frontPage(deps: FrontPageDeps): Hono {
   app.onError(async (_error, c) => {
     const lang = await langOf(c);
     const business = (await deps.caps.getBusinessProfile()).name;
-    return renderCustomerPage(c, {
-      status: 500,
-      lang,
-      business,
-      heading: copyFor(lang).page.error,
-      footer: business,
-      help: "",
-    });
+    return renderCustomerPage(
+      c,
+      { status: 500, lang, business, heading: copyFor(lang).page.error, footer: business, help: "" },
+      {},
+      await lookOrDefault(deps.caps),
+    );
   });
 
   const embedOf = (c: Context) => c.req.query("embed") === "1";

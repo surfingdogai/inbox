@@ -52,14 +52,12 @@ export function customerPage(deps: CustomerPageDeps): Hono {
   app.onError(async (_error, c) => {
     const lang = await pageLang(deps.caps, c.req.header("accept-language") ?? null);
     const business = (await deps.caps.getBusinessProfile()).name;
-    return renderCustomerPage(c, {
-      status: 500,
-      lang,
-      business,
-      heading: copyFor(lang).page.error,
-      footer: business,
-      help: "",
-    });
+    return renderCustomerPage(
+      c,
+      { status: 500, lang, business, heading: copyFor(lang).page.error, footer: business, help: "" },
+      {},
+      await lookOrDefault(deps.caps),
+    );
   });
 
   // The page the code email links to: the booking network, explained. Nothing personal on it, so a
@@ -136,8 +134,8 @@ export async function pageLang(caps: Capabilities, acceptLanguage: string | null
 }
 
 /**
- * A customer's page in the business's look (`caps.look`). A page said on an error or a refusal keeps
- * the default look (`renderCustomerPage`), so nothing is read for it.
+ * A customer's page in the business's look (`caps.look`). A page said on an error or a refusal takes
+ * it too, when it can be read (`lookOrDefault`).
  */
 export async function sendPage(
   c: Context,
@@ -285,6 +283,8 @@ function logoImg(look: Look): string {
  * - The accent colours buttons, links and the focus ring: its day tone on a light page, its night tone
  *   on a dark one (for Standard, as the device is). Ink is the theme's own ink, the button as it was.
  * - Minimal's button is a thin outline, its weights lighter, its lines 1px.
+ * - On a dark page (Dark, or Standard on a dark device) the logo sits on a small white plate, as in
+ *   Settings: most logos are drawn in dark ink, and would all but vanish on the dark ground.
  */
 export function lookCss(look: Look): string {
   if (isDefaultLook(look)) return "";
@@ -310,8 +310,20 @@ export function lookCss(look: Look): string {
       ".biz,legend{font-weight:500}blockquote{border-left-width:1px}",
     );
   }
-  if (look.logo) out.push(".biz img{display:block;max-width:100%;height:auto;margin:0 0 .5rem}");
+  if (look.logo) {
+    out.push(".biz img{display:block;max-width:100%;height:auto;margin:0 0 .5rem}");
+    if (look.theme === "dark") out.push(LOGO_PLATE);
+    else if (look.theme === "standard") out.push(`@media (prefers-color-scheme:dark){${LOGO_PLATE}}`);
+  }
   return `\n${out.join("\n")}\n`;
+}
+
+/** The logo's plate on a dark page: white, thin, the logo as large as on a light one. */
+const LOGO_PLATE = ".biz img{box-sizing:content-box;padding:4px 6px;border-radius:4px;background:#fff}";
+
+/** The business's look for a page said on an error or a refusal: the default when it cannot be read. */
+export async function lookOrDefault(caps: Capabilities): Promise<Look> {
+  return caps.look.view().catch(() => DEFAULT_LOOK);
 }
 
 const ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };

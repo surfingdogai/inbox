@@ -13,7 +13,7 @@ import type { MailOut, SqliteSnapshot } from "@surfingdog/platform";
 import type { Context, Hono } from "hono";
 import { openAPIRouteHandler } from "hono-openapi";
 import { callerFromRequest, scopeFor } from "./auth";
-import { customerPage, pageLang, renderCustomerPage } from "./customer-page";
+import { customerPage, lookOrDefault, pageLang, renderCustomerPage } from "./customer-page";
 import { downloadRoutes } from "./download";
 import { ingestEmail, parseMailAuth } from "./email";
 import { formsSubmitRoutes } from "./forms-submit";
@@ -251,14 +251,12 @@ function withAgent<C extends Caller>(caller: C, seen: Awaited<ReturnType<typeof 
 async function tooManyPage(c: Context, deps: DoorDeps): Promise<Response> {
   const lang = await pageLang(deps.caps, c.req.header("accept-language") ?? null);
   const business = await deps.businessName();
-  const res = renderCustomerPage(c, {
-    status: 429,
-    lang,
-    business,
-    heading: copyFor(lang).page.tooMany,
-    footer: business,
-    help: "",
-  });
+  const res = renderCustomerPage(
+    c,
+    { status: 429, lang, business, heading: copyFor(lang).page.tooMany, footer: business, help: "" },
+    {},
+    await lookOrDefault(deps.caps),
+  );
   res.headers.set("Retry-After", "600");
   return res;
 }

@@ -1,5 +1,5 @@
-import { CUSTOMER_PAGE_HEADERS, createApiKey, lookCss } from "@surfingdog/adapters";
-import { ACCENT_TONES, DEFAULT_LOOK, schema, THEME_TONES } from "@surfingdog/core";
+import { CUSTOMER_PAGE_HEADERS, createApiKey, lookCss, lookOrDefault } from "@surfingdog/adapters";
+import { ACCENT_TONES, type Capabilities, DEFAULT_LOOK, schema, THEME_TONES } from "@surfingdog/core";
 import { logMailOut } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { logoPng } from "../../../packages/core/test/look-files";
@@ -65,7 +65,17 @@ async function setup() {
     expect(res.status).toBe(200);
     return ((await res.json()) as { doc: { look: { logo: { sha256: string } } } }).doc.look.logo;
   };
-  return { page, look, logo };
+  /** One visitor asking again and again, until the page says it is too many. */
+  const tooMany = async (path: string) => {
+    for (let i = 0; i < 200; i++) {
+      const res = await inbox.app.request(
+        new Request(`${BASE}${path}`, { headers: { "cf-connecting-ip": "203.0.113.9" } }),
+      );
+      if (res.status === 429) return res;
+    }
+    throw new Error("never refused");
+  };
+  return { page, look, logo, tooMany };
 }
 
 const styleOf = (html: string) => /<style>([\s\S]*?)<\/style>/.exec(html)?.[1] ?? "";
@@ -144,6 +154,37 @@ describe("a customer's page in the business's look", () => {
     expect(embedded).not.toContain("<img");
     expect(embedded).not.toContain('class="biz"');
     expect(styleOf(embedded)).toContain("--bg:#141414");
+  });
+
+  it("seats the logo on a small white plate on a dark page, and on no light one", async () => {
+    const s = await setup();
+    await s.logo(logoPng(400, 80));
+    const plate = ".biz img{box-sizing:content-box;padding:4px 6px;border-radius:4px;background:#fff}";
+    // Standard follows the device: the plate only while it is dark.
+    expect(styleOf((await s.page("/p/quote")).html)).toContain(`@media (prefers-color-scheme:dark){${plate}}`);
+    await s.look({ theme: "dark" });
+    const dark = styleOf((await s.page("/p/quote")).html);
+    expect(dark).toContain(plate);
+    expect(dark).not.toContain("@media (prefers-color-scheme:dark){.biz");
+    for (const theme of ["minimal", "warm"]) {
+      await s.look({ theme });
+      expect(styleOf((await s.page("/p/quote")).html)).not.toContain(plate);
+    }
+  });
+
+  it("keeps the look on a page that says something went wrong, or that it is too many", async () => {
+    const s = await setup();
+    await s.logo(logoPng(400, 80));
+    await s.look({ theme: "dark", accent: "teal" });
+    for (const path of ["/c/privacy", "/p/quote"]) {
+      const html = await (await s.tooMany(path)).text();
+      expect(styleOf(html)).toContain("--bg:#141414");
+      expect(styleOf(html)).toContain(`--btn:${ACCENT_TONES.teal.night}`);
+      expect(html).toContain('<p class="biz"><img src="/p/logo/');
+    }
+    // A look that cannot be read is the default: the page is still said.
+    const broken = { look: { view: () => Promise.reject(new Error("no database")) } } as unknown as Capabilities;
+    expect(await lookOrDefault(broken)).toEqual(DEFAULT_LOOK);
   });
 
   it("keeps a small logo its own size, and a tall one within 40 pixels", async () => {
