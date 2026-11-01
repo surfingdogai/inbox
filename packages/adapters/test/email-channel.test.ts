@@ -743,7 +743,7 @@ describe("what the review attacked", () => {
     expect(r.outcome).toBe("created");
   });
 
-  it("drops mailings and notices that answer no conversation: forwarding a whole mailbox brings them", async () => {
+  it("keeps mailings and notices that answer no conversation: an email that reaches the inbox is never thrown away", async () => {
     const { db, ingest, drain, mail } = await setUp();
     const news = await ingest(
       {
@@ -756,16 +756,17 @@ describe("what the review attacked", () => {
       "Big sale",
       { envelopeTo: INBOUND },
     );
-    expect(news).toEqual({ outcome: "dropped", reason: "a mailing or a notice, not a customer" });
+    expect(news.outcome).toBe("created");
     const notice = await ingest(
       { From: "Stripe <no-reply@stripe.example>", To: "support@oficinamare.example", "Message-ID": "<n2@x>" },
       "A payout is on its way",
       { envelopeTo: INBOUND },
     );
-    expect(notice.outcome).toBe("dropped");
+    expect(notice.outcome).toBe("created");
     await drain();
-    expect(mail.sent).toEqual([]);
-    expect((await db.orm.select().from(schema.items)).length).toBe(0);
+    // Nothing is sent back to a mailing or a no-reply sender.
+    expect(mail.sent.filter((m) => m.to.some((t) => /supplier|stripe/.test(t)))).toEqual([]);
+    expect((await db.orm.select().from(schema.items)).length).toBe(2);
   });
 
   it("keeps a code, a sign-in link or a password reset, even from a no-reply sender with an unsubscribe header, and answers none", async () => {
@@ -817,11 +818,11 @@ describe("what the review attacked", () => {
       "Use code SAVE20 at checkout.",
       { envelopeTo: INBOUND },
     );
-    expect(promo).toEqual({ outcome: "dropped", reason: "a mailing or a notice, not a customer" });
+    expect(promo.outcome).toBe("created");
     await drain();
     // Nothing goes back to a sender that takes no answer.
-    expect(mail.sent.filter((m) => m.to.some((t) => /anthropic|bank|loja/.test(t)))).toEqual([]);
-    expect((await db.orm.select().from(schema.items)).length).toBe(3);
+    expect(mail.sent.filter((m) => m.to.some((t) => /anthropic|bank|loja|shop/.test(t)))).toEqual([]);
+    expect((await db.orm.select().from(schema.items)).length).toBe(4);
   });
 
   it("keeps an account email's sign-in link from its HTML, under its text", async () => {

@@ -316,13 +316,9 @@ export async function ingestEmail(
   if (itemId && found && (found.via === "plus" || found.via === "subject") && !(await sameCustomer(db, itemId, from))) {
     itemId = null;
   }
-  // A mailing or a notice no person sends to be answered — a newsletter, a shop's or a bank's notice
-  // — that answers no conversation: forwarding a whole mailbox here brings these, and none of them is
-  // a customer. Never a message, never an alert, never an answer.
-  if (!itemId && isBulkMail(read, from)) {
-    console.info("email: dropped a mailing or a notice that answers no conversation");
-    return { outcome: "dropped", reason: "a mailing or a notice, not a customer" };
-  }
+  // A mailing or a notice no person sends to be answered (a newsletter, a shop's or a bank's notice)
+  // is kept like any message: an email that reaches the inbox is never thrown away.
+  if (!itemId && isBulkMail(read, from)) console.info("email: kept a mailing or a notice that answers no conversation");
   // 6. A mailbox answering by itself — an out-of-office, a returned email — never becomes a
   // conversation and never gets an answer, or two mailboxes could write to each other for ever. It
   // is kept as a note on the item it answers, for the business to read; answering none, it goes. A

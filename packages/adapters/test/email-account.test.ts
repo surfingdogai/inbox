@@ -462,10 +462,10 @@ describe("a code or a sign-in link for an account the business holds", () => {
     expect(code.outcome).toBe("created");
     expect(await s.flags(idOf(code))).not.toHaveProperty("account");
     expect((await s.entries(idOf(code)))[0]?.bodyText).not.toContain(LINKS_HEADING);
-    expect(await promo("p2", "Designing your autumn window")).toEqual({
-      outcome: "dropped",
-      reason: "a mailing or a notice, not a customer",
-    });
+    // A mailing is kept too (an email is never thrown away), and named no sign-in.
+    const window = await promo("p2", "Designing your autumn window");
+    expect(window.outcome).toBe("created");
+    expect(await s.flags(idOf(window))).not.toHaveProperty("account");
     await s.drain();
     expect(s.sent.some((r) => r.user.includes("Our autumn sale"))).toBe(true);
     const [alert] = s.alerts("OUTONO20");
