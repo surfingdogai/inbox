@@ -26,8 +26,38 @@ export async function isAccountItem(db: Db, itemId: string): Promise<boolean> {
 }
 
 /**
- * Whether the caller reads what mail for an account the business holds says: a person at the business
- * only. Not the owner's AI, which a customer's words can steer, and not a key handed to another system.
+ * Mail only a person at the business reads: an account's (`flags.account`) or a notice
+ * (`flags.notice`). No rule acts on it, no webhook or event stream carries it, no key or AI reads its
+ * words, and nothing of it goes to a shared list.
+ */
+export function isOwnerOnly(flags: Pick<ItemFlags, "account" | "notice">): boolean {
+  return flags.account === true || flags.notice === true;
+}
+
+/** The same test in SQL, of the `flags` column named (`items.flags`, say). */
+export function ownerOnlySql(column = "flags"): string {
+  return `(COALESCE(json_extract(${column}, '$.account'), 0) = 1 OR COALESCE(json_extract(${column}, '$.notice'), 0) = 1)`;
+}
+
+/** A notice that waits under Notices, one the owner has not moved to the inbox, in SQL. */
+export function noticeListedSql(column = "flags"): string {
+  return `(COALESCE(json_extract(${column}, '$.notice'), 0) = 1 AND COALESCE(json_extract(${column}, '$.inInbox'), 0) <> 1)`;
+}
+
+/** Whether the item is the owner's alone (`isOwnerOnly`), read from the database. */
+export async function isOwnerOnlyItem(db: Db, itemId: string): Promise<boolean> {
+  const { rows } = await db.client.query({
+    sql: `SELECT 1 FROM items WHERE id = ? AND ${ownerOnlySql()}`,
+    params: [itemId],
+    method: "all",
+  });
+  return rows.length > 0;
+}
+
+/**
+ * Whether the caller reads what owner-only mail says (an account's, a notice): a person at the
+ * business only. Not the owner's AI, which a customer's words can steer, and not a key handed to
+ * another system.
  */
 export function readsAccountMail(caller: Caller): boolean {
   return isPerson(caller);
@@ -37,10 +67,19 @@ export function readsAccountMail(caller: Caller): boolean {
 export const ACCOUNT_WITHHELD =
   "A code or a sign-in link for an account the business holds: only a person at the business reads it, in the inbox.";
 
+/** The same for a notice: that an email from a system came, never what it says. */
+export const NOTICE_WITHHELD =
+  "An email from a system (a receipt, an account's or a newsletter's mail): only a person at the business reads it, in the inbox.";
+
+/** What anyone but a person at the business reads in place of an owner-only item's words. */
+export function withheldText(flags: Pick<ItemFlags, "account" | "notice">): string {
+  return flags.account ? ACCOUNT_WITHHELD : NOTICE_WITHHELD;
+}
+
 /** The item as anyone but a person at the business reads it: its subject and its words withheld. */
 export function withheldItem(item: Item): Item {
-  if (item.type !== "message" || !item.flags.account) return item;
-  return { ...item, subject: null, payload: { text: ACCOUNT_WITHHELD } };
+  if (item.type !== "message" || !isOwnerOnly(item.flags)) return item;
+  return { ...item, subject: null, payload: { text: withheldText(item.flags) } };
 }
 
 /** Changes flags (needs_human, priority) as its own event, so version and history stay honest. */

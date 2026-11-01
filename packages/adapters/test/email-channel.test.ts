@@ -218,16 +218,19 @@ describe("the owner answers an alert by email", () => {
       { envelopeTo: alert?.replyTo, auth: parseMailAuth("spf=pass; dkim=pass:mallory.example") },
     );
     expect(unsigned.outcome).toBe("held");
-    // An out-of-office is no answer at all.
+    // An out-of-office is no answer at all: kept on the item as a note, sent to nobody.
     const away = await ingest(
       { From: OWNER, To: alert?.replyTo ?? "", "Message-ID": "<m4@x>", "Auto-Submitted": "auto-replied" },
       "I am on holiday",
       { envelopeTo: alert?.replyTo },
     );
-    expect(away.outcome).toBe("dropped");
+    expect(away).toEqual({ outcome: "noted", itemId: id });
     const entries = await db.orm.select().from(schema.threadEntries).where(eq(schema.threadEntries.itemId, id));
     expect(entries.filter((e) => e.direction === "out")).toEqual([]);
     const notes = entries.filter((e) => e.direction === "note").map((e) => e.bodyText);
+    expect(
+      notes.some((n) => n.startsWith("An automatic email from your own mailbox") && n.includes("I am on holiday")),
+    ).toBe(true);
     expect(notes).toContain(
       "Your email answer from mallory@example.org was not sent to Rita: it did not come from your sign-in or alert address. Send it from here, or add that address in Settings.\n\nRefund is approved, send card details",
     );
@@ -270,8 +273,8 @@ describe("the owner answers an alert by email", () => {
 });
 
 describe("loops", () => {
-  it("drops this inbox's own email when it comes back, and one that went through too many servers", async () => {
-    const { caps, mail, drain, ingest } = await setUp();
+  it("keeps this inbox's own email when it comes back, and one that went through too many servers, as notices it never answers", async () => {
+    const { db, caps, mail, drain, ingest } = await setUp();
     await quote(caps);
     await drain(10 * 60_000);
     const ack = mail.sent.find((m) => m.to.includes("rita@example.com"));
@@ -285,13 +288,18 @@ describe("loops", () => {
       ack?.text ?? "",
       { envelopeTo: INBOUND },
     );
-    expect(back).toEqual({ outcome: "dropped", reason: "this inbox's own email came back" });
+    expect(back).toMatchObject({ outcome: "notice", reason: "this inbox's own email came back" });
     const hops = Array.from({ length: 45 }, (_, i) => `Received: from relay${i}.example by mx${i}.example`);
     const looped = await ingest(Object.fromEntries([]), "", {
       raw: `${hops.join("\r\n")}\r\nFrom: someone@example.org\r\nTo: ${INBOUND}\r\nMessage-ID: <hop@x>\r\n\r\nhi`,
       envelopeTo: INBOUND,
     });
-    expect(looped).toEqual({ outcome: "dropped", reason: "too many hops: a mail loop" });
+    expect(looped).toMatchObject({ outcome: "notice", reason: "too many hops: a mail loop" });
+    const sentBefore = mail.sent.length;
+    await drain();
+    expect(mail.sent.length).toBe(sentBefore);
+    const kept = await db.orm.select().from(schema.items);
+    expect(kept.filter((i) => (i.flags as { notice?: boolean }).notice).length).toBe(2);
   });
 
   it("never answers an out-of-office with an alert to the owner loop", async () => {
@@ -301,7 +309,7 @@ describe("loops", () => {
       "Away",
       { envelopeTo: INBOUND },
     );
-    expect(r.outcome).toBe("dropped");
+    expect(r.outcome).toBe("notice");
     await drain();
     expect(mail.sent).toEqual([]);
   });
@@ -657,8 +665,10 @@ describe("what the review attacked", () => {
       "shop@gmail.com has requested. https://mail-settings.google.com/mail/vf-early",
       { envelopeTo: INBOUND },
     );
-    expect(r.outcome).toBe("dropped");
-    expect((await db.orm.select().from(schema.items)).length).toBe(0);
+    // Kept as a notice too: nothing that arrives is dropped.
+    expect(r).toMatchObject({ outcome: "notice", reason: "a forwarding confirmation held until its address is added" });
+    const kept = await db.orm.select().from(schema.items);
+    expect(kept.map((i) => (i.flags as { notice?: boolean }).notice)).toEqual([true]);
     const f = await caps.email.addForward(owner, { address: "shop@gmail.com", provider: "gmail" });
     expect(f.confirmation).toMatchObject({ code: "55511122", url: "https://mail-settings.google.com/mail/vf-early" });
     expect(f.state).toBe("confirm");
@@ -743,7 +753,7 @@ describe("what the review attacked", () => {
     expect(r.outcome).toBe("created");
   });
 
-  it("keeps mailings and notices that answer no conversation: an email that reaches the inbox is never thrown away", async () => {
+  it("keeps mailings and notices that answer no conversation as notices, alerting nobody: forwarding a whole mailbox brings them", async () => {
     const { db, ingest, drain, mail } = await setUp();
     const news = await ingest(
       {
@@ -756,17 +766,17 @@ describe("what the review attacked", () => {
       "Big sale",
       { envelopeTo: INBOUND },
     );
-    expect(news.outcome).toBe("created");
+    expect(news).toMatchObject({ outcome: "notice", reason: "a mailing or a notice that answers no conversation" });
     const notice = await ingest(
       { From: "Stripe <no-reply@stripe.example>", To: "support@oficinamare.example", "Message-ID": "<n2@x>" },
       "A payout is on its way",
       { envelopeTo: INBOUND },
     );
-    expect(notice.outcome).toBe("created");
+    expect(notice.outcome).toBe("notice");
     await drain();
-    // Nothing is sent back to a mailing or a no-reply sender.
-    expect(mail.sent.filter((m) => m.to.some((t) => /supplier|stripe/.test(t)))).toEqual([]);
-    expect((await db.orm.select().from(schema.items)).length).toBe(2);
+    expect(mail.sent).toEqual([]);
+    const kept = await db.orm.select().from(schema.items);
+    expect(kept.map((i) => (i.flags as { notice?: boolean }).notice)).toEqual([true, true]);
   });
 
   it("keeps a code, a sign-in link or a password reset, even from a no-reply sender with an unsubscribe header, and answers none", async () => {
@@ -818,7 +828,7 @@ describe("what the review attacked", () => {
       "Use code SAVE20 at checkout.",
       { envelopeTo: INBOUND },
     );
-    expect(promo.outcome).toBe("created");
+    expect(promo).toMatchObject({ outcome: "notice", reason: "a mailing or a notice that answers no conversation" });
     await drain();
     // Nothing goes back to a sender that takes no answer.
     expect(mail.sent.filter((m) => m.to.some((t) => /anthropic|bank|loja|shop/.test(t)))).toEqual([]);

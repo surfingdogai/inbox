@@ -190,6 +190,9 @@ export const catalogueItemsQuery = z.object({
 export const listItemsQuery = listItemsInput.extend({
   needs_human: boolQuery.optional(),
   mail_failed: boolQuery.optional().describe("Only items with an email that could not be sent."),
+  notices: boolQuery
+    .optional()
+    .describe("Only notices: emails from systems that nobody answers, for a person at the business."),
   open_only: boolQuery.default(true).describe("Hide closed items."),
   sandbox: boolQuery.default(false),
   limit: limitQuery,
@@ -928,6 +931,29 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
       write: true,
     }),
     async (c) => c.json(await caps.removeSpamModel(c.get("caller"))),
+  );
+
+  app.post(
+    "/items/:id/move-to-inbox",
+    owner({
+      tags: ["owner"],
+      summary: "Move a notice to the inbox: listed there as a conversation, still yours alone",
+      responses: json("Moved", z.looseObject({})),
+      write: true,
+    }),
+    async (c) =>
+      c.json(await caps.moveNoticeToInbox(c.get("caller"), getItemInput.parse({ item_id: c.req.param("id") }))),
+  );
+
+  app.delete(
+    "/items/:id/notice",
+    owner({
+      tags: ["owner"],
+      summary: "Delete a notice, with everything it holds: it cannot be undone",
+      responses: json("Deleted", z.looseObject({})),
+      write: true,
+    }),
+    async (c) => c.json(await caps.deleteNotice(c.get("caller"), getItemInput.parse({ item_id: c.req.param("id") }))),
   );
 
   app.post(

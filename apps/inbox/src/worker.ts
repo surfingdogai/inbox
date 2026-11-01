@@ -178,9 +178,9 @@ export default {
       // once the operator confirmed whose they are: a second signal only (ADR-028 §7).
       ...(env.EMAIL_AUTHSERV_ID ? { authResultsFrom: env.EMAIL_AUTHSERV_ID.split(",") } : {}),
     });
-    // Too many right now: a temporary failure, which the sending server retries, never a bounce.
+    // Too many right now: a temporary failure, which the sending server retries, never a bounce. Anything
+    // else was kept: nothing that arrives is refused.
     if (result.outcome === "limited") throw new Error(`inbound email limited: retry in ${result.retryAfterSec}s`);
-    if (result.outcome === "rejected") message.setReject(result.reason);
     await inbox.runner.runDue(db, { workerId: "email", join: false });
   },
 } satisfies ExportedHandler<Bindings>;

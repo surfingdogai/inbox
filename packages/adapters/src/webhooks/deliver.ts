@@ -4,7 +4,7 @@ import {
   deliverJobPrefix,
   eventBaseUrl,
   hiddenTransitions,
-  isAccountItem,
+  isOwnerOnlyItem,
   type JobHandler,
   offerRows,
   offerView,
@@ -206,10 +206,10 @@ export function webhookDeliverHandler(deps: DeliverDeps): JobHandler {
       await db.batch([haltStatement(delivery.id, delivery.attempts, "the event is no longer in events_v1")]);
       return { note: `event ${delivery.eventId} is gone` };
     }
-    // A code or a sign-in link for an account the business holds goes to the owner only, a replay too.
-    if (await isAccountItem(db, event.itemId)) {
-      await db.batch([haltStatement(delivery.id, delivery.attempts, "mail for an account the business holds")]);
-      return { note: "mail for an account the business holds: not sent" };
+    // A code or a sign-in link for an account the business holds, or a notice, goes to the owner only, a replay too.
+    if (await isOwnerOnlyItem(db, event.itemId)) {
+      await db.batch([haltStatement(delivery.id, delivery.attempts, "owner-only mail")]);
+      return { note: "owner-only mail: not sent" };
     }
 
     // The same resolution the cursor uses, from the same function: host URL, then the address in

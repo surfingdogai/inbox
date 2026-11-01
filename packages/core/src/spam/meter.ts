@@ -23,7 +23,9 @@ export type MeterKey =
   | "released"
   | "brought_back"
   | "marked"
-  | "trap_over_cap";
+  | "trap_over_cap"
+  /** A notice kept unscreened, past what its sender's domain sends in a day (the email door's count). */
+  | "notice_flood";
 
 export function countStatement(key: MeterKey, now: number, n = 1): Statement {
   return {

@@ -95,6 +95,11 @@ export function notifyHandler(
     const item = rowToItem(row);
     // A message put aside as spam (by the owner, or as it arrived: ADR-026 §7) tells nobody.
     if (row.state === "spam") return { note: "not sent: spam" };
+    // A notice alerts nobody and is answered by nothing: once the owner moves it to the inbox, only a
+    // person's own answer goes to its sender, and the owner hears of what comes after.
+    if (item.flags.notice && !(item.flags.inInbox && (p.to === "owner" || p.event === "answer" || p.entry))) {
+      return { note: "not sent: a notice" };
+    }
     // Held by the spam filter, or put aside (ADR-041): the business is told nothing, and the sender
     // only that their request arrived — unless a bot sent it, when nobody is written to at all.
     const gate = row.screen ? await gateOf(db, item.id) : null;

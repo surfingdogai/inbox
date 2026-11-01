@@ -11,7 +11,7 @@ import { USER_AGENT } from "../version";
 import { actorMeta, type Caller, type EventActor, eventActor, isCustomer, nowOf } from "../write/caller";
 import { deliverJobPrefix, jobStatement, WEBHOOK_DELIVERY_KIND, WEBHOOK_FANOUT_KIND } from "../write/common";
 import { WriteError } from "../write/errors";
-import { readsAccountMail } from "../write/flags";
+import { ownerOnlySql, readsAccountMail } from "../write/flags";
 import type * as S from "./setup-types";
 import { MAX_WEBHOOK_HEADERS, reservedWebhookHeader } from "./setup-types";
 
@@ -768,8 +768,8 @@ export class WebhookCapabilities {
       limit: input.limit,
       ...(input.types ? { types: input.types } : {}),
       ...(input.since ? { since: Date.parse(input.since) } : {}),
-      // Mail for an account the business holds is a person's at the business to read: no other caller
-      // learns it came, since the item it points at holds a code or a sign-in link.
+      // Mail for an account the business holds, or a notice, is a person's at the business to read: no
+      // other caller learns it came, since the item it points at holds a code, a link or a system's mail.
       account: readsAccountMail(caller),
     });
     const last = rows[rows.length - 1];
@@ -782,7 +782,7 @@ export class WebhookCapabilities {
     after?: string | undefined;
     since?: number | undefined;
     types?: readonly string[] | undefined;
-    /** Whether events on mail for an account the business holds (`flags.account`) are read: never by a webhook. */
+    /** Whether events on owner-only mail (`flags.account`, `flags.notice`) are read: never by a webhook. */
     account?: boolean | undefined;
     limit: number;
   }): Promise<EventRow[]> {
@@ -818,7 +818,7 @@ export class WebhookCapabilities {
       }
       if (ors.length) where.push(`(${ors.join(" OR ")})`);
     }
-    if (!opts.account) where.push("item_id NOT IN (SELECT id FROM items WHERE json_extract(flags, '$.account') = 1)");
+    if (!opts.account) where.push(`item_id NOT IN (SELECT id FROM items WHERE ${ownerOnlySql()})`);
     params.push(opts.limit);
     const { rows } = await this.db.client.query({
       sql: `SELECT id, type, created_at, item_id, item_type, item_state, item_version, sandbox, actor_kind, actor_id, actor_name, channel

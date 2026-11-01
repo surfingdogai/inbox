@@ -540,7 +540,8 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
     if (result.outcome === "limited") {
       return c.json(result, 429, { "Retry-After": String(Math.max(1, Math.ceil(result.retryAfterSec))) });
     }
-    return c.json(result, result.outcome === "rejected" ? 422 : 200);
+    // Anything else was kept: nothing that arrives is refused (a notice, at least).
+    return c.json(result, 200);
   });
   // A payment platform tells this inbox of a payment (ADR-023): Stripe signs it, Mollie names the
   // link in the address. Nothing in the body is believed: the connection checks the signature and

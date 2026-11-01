@@ -219,9 +219,8 @@ describe("inbound email", () => {
     expect(Number(res.headers.get("retry-after"))).toBeGreaterThan(0);
   });
 
-  it("never turns an automatic reply or a returned email into an item", async () => {
+  it("never turns an automatic reply or a returned email into a conversation: kept as notices, nobody alerted", async () => {
     const { db, inbox } = await setup();
-    const before = (await db.client.query({ sql: "SELECT COUNT(*) FROM items", method: "all" })).rows[0]?.[0];
     const auto = await ingestEmail(db, inbox.caps, {
       raw: mime({
         from: "Ana <ana@example.com>",
@@ -240,10 +239,14 @@ describe("inbound email", () => {
       }),
       envelopeFrom: "<>",
     });
-    expect(auto.outcome).toBe("dropped");
-    expect(bounce.outcome).toBe("dropped");
-    const after = (await db.client.query({ sql: "SELECT COUNT(*) FROM items", method: "all" })).rows[0]?.[0];
-    expect(after).toBe(before);
+    expect(auto.outcome).toBe("notice");
+    expect(bounce.outcome).toBe("notice");
+    const { rows } = await db.client.query({
+      sql: `SELECT COUNT(*) FROM items WHERE json_extract(flags, '$.notice') = 1
+              AND id NOT IN (SELECT json_extract(payload, '$.itemId') FROM jobs WHERE json_extract(payload, '$.itemId') IS NOT NULL)`,
+      method: "all",
+    });
+    expect(Number(rows[0]?.[0])).toBe(2);
   });
 });
 

@@ -446,7 +446,7 @@ export class Shard {
     if (result.outcome === "limited") {
       return plain(429, "Too many right now.", { "retry-after": String(result.retryAfterSec) });
     }
-    if (result.outcome === "rejected") return plain(422, result.reason);
+    // Anything else was kept: nothing that arrives is refused (a notice, at least).
     return Response.json({ outcome: result.outcome }, { status: 200 });
   }
 

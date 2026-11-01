@@ -7,6 +7,7 @@ export {
   type SpamVerdictView,
 } from "./capability";
 export { CHIPS, chipOf, kindSentence, reasons, sentenceOf, WARN_CHIPS, warnSentence } from "./copy";
+export { SHARED_MAIL_PROVIDERS } from "./data";
 export { answerSignals, type DecideInput, type Decision, decide } from "./decide";
 export {
   firstLine,

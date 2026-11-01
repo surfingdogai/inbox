@@ -5,7 +5,7 @@ import type { SecretBox } from "../secrets/box";
 import { readSettings } from "../settings/schema";
 import { type Caller, isOwnerInPerson, isPerson } from "../write/caller";
 import { WriteError } from "../write/errors";
-import { isAccountItem } from "../write/flags";
+import { isOwnerOnlyItem } from "../write/flags";
 import type { ItemSpamSummary } from "../write/views";
 import { chipOf } from "./copy";
 import { DISPOSABLE_MAIL, SHARED_MAIL_PROVIDERS } from "./data";
@@ -960,8 +960,8 @@ export class SpamCapabilities implements SpamDeps {
   async share(itemId: string, now: number): Promise<{ readonly note: string }> {
     const port = this.sharedPort;
     if (!port) return { note: "no shared list here" };
-    // A code or a sign-in link for an account the business holds is the owner's: never told to the list.
-    if (await isAccountItem(this.db, itemId)) return { note: "mail for an account the business holds: not shared" };
+    // A code or a sign-in link for an account the business holds, or a notice, is the owner's: never told to the list.
+    if (await isOwnerOnlyItem(this.db, itemId)) return { note: "owner-only mail: not shared" };
     const { rows } = await this.db.client.query({
       sql: `SELECT v.verdict, v.cause, v.certain, v.learning, v.answer, v.quotes, v.signals, v.owner_verdict, i.screen,
                    COALESCE(i.sandbox, 0)
@@ -1227,8 +1227,13 @@ async function partyOf(db: Db, itemId: string): Promise<string | null> {
   return v === undefined || v === null ? null : String(v);
 }
 
-/** Everything an item put aside holds, gone: its history, its conversation, its files, its print. */
-function deleteItemStatements(id: string): Statement[] {
+/**
+ * Everything an item holds, gone: its history, its conversation, its files, its print. Only an item
+ * that `where` holds of (put aside, by default): each statement asks it, so nothing of an item that
+ * moved on meanwhile is touched.
+ */
+export function deleteItemStatements(id: string, where = "screen = 'aside'"): Statement[] {
+  const still = `EXISTS (SELECT 1 FROM items WHERE id = ? AND ${where})`;
   const byItem = [
     "action_links",
     "blobs",
@@ -1252,15 +1257,16 @@ function deleteItemStatements(id: string): Statement[] {
   ];
   return [
     {
-      sql: "DELETE FROM mail_attachment_chunks WHERE attachment_id IN (SELECT id FROM mail_attachments WHERE item_id = ?)",
-      params: [id],
+      sql: `DELETE FROM mail_attachment_chunks WHERE attachment_id IN (SELECT id FROM mail_attachments WHERE item_id = ?) AND ${still}`,
+      params: [id, id],
       method: "run",
     },
-    { sql: "DELETE FROM mail_attachments WHERE item_id = ?", params: [id], method: "run" },
-    { sql: "DELETE FROM thread_entries WHERE item_id = ?", params: [id], method: "run" },
-    { sql: "DELETE FROM item_events WHERE item_id = ?", params: [id], method: "run" },
-    ...byItem.map((table) => ({ sql: `DELETE FROM ${table} WHERE item_id = ?`, params: [id], method: "run" as const })),
-    { sql: "DELETE FROM items WHERE id = ? AND screen = 'aside'", params: [id], method: "run" },
+    ...["mail_attachments", "thread_entries", "item_events", ...byItem].map((table) => ({
+      sql: `DELETE FROM ${table} WHERE item_id = ? AND ${still}`,
+      params: [id, id],
+      method: "run" as const,
+    })),
+    { sql: `DELETE FROM items WHERE id = ? AND ${where}`, params: [id], method: "run" },
   ];
 }
 

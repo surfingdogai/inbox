@@ -110,6 +110,15 @@ export const itemFlagsSchema = z.object({
    * words, and the spam filter reads it here, never with AI.
    */
   account: z.boolean().optional(),
+  /**
+   * An email from a system that answers no conversation (the email door says so): a receipt, an
+   * account's or a newsletter's mail, an out-of-office, a returned email, this inbox's own email come
+   * back. Kept, always, and the owner's alone as `account` is; nothing answers it and nobody is alerted.
+   * The owner reads it under Notices.
+   */
+  notice: z.boolean().optional(),
+  /** A notice the owner moved to the inbox: listed there as a conversation, still the owner's alone. */
+  inInbox: z.boolean().optional(),
 });
 export type ItemFlags = z.infer<typeof itemFlagsSchema>;
 

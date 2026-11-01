@@ -107,7 +107,7 @@ import {
   type Settings,
   settingsWriteSchema,
 } from "../settings/schema";
-import { SpamCapabilities, type SpamStatus, type SpamVerdictView } from "../spam/capability";
+import { deleteItemStatements, SpamCapabilities, type SpamStatus, type SpamVerdictView } from "../spam/capability";
 import { chipOf, kindSentence, reasons } from "../spam/copy";
 import type { ModelCard, ModelChoice, ModelTest } from "../spam/model";
 import type { ScreenInput } from "../spam/types";
@@ -136,7 +136,15 @@ import { findIdempotent } from "../write/common";
 import { hiddenTransitions } from "../write/corrections";
 import type { CreateResult } from "../write/create";
 import { type FieldProblem, fromZod, notYoursError, WriteError } from "../write/errors";
-import { ACCOUNT_WITHHELD, readsAccountMail, withheldItem } from "../write/flags";
+import {
+  isOwnerOnly,
+  noticeListedSql,
+  ownerOnlySql,
+  readsAccountMail,
+  setFlags,
+  withheldItem,
+  withheldText,
+} from "../write/flags";
 import { type OnceOptions, type OnceResult, once } from "../write/idempotency";
 import { heldReplyStatements, namesOtherMoney } from "../write/limits";
 import { isAutomation } from "../write/offers";
@@ -1629,9 +1637,13 @@ export class Capabilities {
     if (input.state && !spamList) conditions.push(eq(items.state, input.state));
     if (input.needs_human !== undefined) conditions.push(eq(items.needsHuman, input.needs_human ? 1 : 0));
     if (input.open_only && !input.state) conditions.push(sql`${items.closedAt} IS NULL`);
-    // Mail for an account the business holds is listed for a person at the business only: the owner's
-    // AI or another system never finds it, by a search for its code either.
-    if (!readsAccountMail(caller)) conditions.push(sql`COALESCE(json_extract(${items.flags}, '$.account'), 0) <> 1`);
+    // Mail for an account the business holds, or a notice, is listed for a person at the business only:
+    // the owner's AI or another system never finds it, by a search for its code either.
+    if (!readsAccountMail(caller)) conditions.push(sql.raw(`NOT ${ownerOnlySql("items.flags")}`));
+    // A notice (an email from a system that answers no conversation) is listed under Notices alone, until
+    // the owner moves it to the inbox; put aside, it is under Spam with everything else put aside.
+    if (input.notices) conditions.push(sql.raw(noticeListedSql("items.flags")));
+    else if (!spamList) conditions.push(sql.raw(`NOT ${noticeListedSql("items.flags")}`));
     // What the spam filter holds or is still screening waits under Held (ADR-041), not on the desk:
     // listed only when asked for by its screen.
     if (spamList) conditions.push(sql`(${items.state} = 'spam' OR ${items.screen} = 'aside')`);
@@ -1770,8 +1782,9 @@ export class Capabilities {
     // Mail for an account the business holds, read by anyone but a person at the business: that it
     // came, by whom and when, never its words, its subject or the owner's alert quoting them.
     const stored = rowToItem(row);
-    const withheld = stored.flags.account === true && !readsAccountMail(caller);
+    const withheld = isOwnerOnly(stored.flags) && !readsAccountMail(caller);
     const item = withheld ? withheldItem(stored) : stored;
+    const hiddenWords = withheldText(stored.flags);
     const [events, thread, partyViews, receipts, hidden, mail] = await Promise.all([
       this.db.orm.select().from(itemEvents).where(eq(itemEvents.itemId, item.id)).orderBy(itemEvents.seq),
       this.db.orm
@@ -1834,7 +1847,7 @@ export class Capabilities {
         direction: t.direction,
         channel: t.channel,
         actor: `${t.actorKind}:${t.actorId ?? ""}`,
-        body: withheld ? ACCOUNT_WITHHELD : t.bodyText,
+        body: withheld ? hiddenWords : t.bodyText,
         at: new Date(t.createdAt).toISOString(),
         ...(delivery.has(t.id) ? { delivery: delivery.get(t.id) as EntryDelivery } : {}),
         // What came attached to the email (ADR-026 §7): the owner downloads what was kept.
@@ -1846,8 +1859,8 @@ export class Capabilities {
         id: m.id,
         recipient: m.recipient,
         template: m.template,
-        subject: withheld ? ACCOUNT_WITHHELD : m.subject,
-        body: withheld ? ACCOUNT_WITHHELD : m.bodyText,
+        subject: withheld ? hiddenWords : m.subject,
+        body: withheld ? hiddenWords : m.bodyText,
         status: m.status,
         skip_reason: m.skipReason,
         last_error: m.lastError,
@@ -1956,6 +1969,38 @@ export class Capabilities {
   async startSpamFilterNow(caller: Caller, input: T.StartSpamFilterInput): Promise<SpamStatus> {
     requireBusiness(caller);
     return this.spam.startNow(caller, input, nowOf(caller));
+  }
+
+  /**
+   * A notice moved to the inbox, by a person at the business: listed there as a conversation from now
+   * on, still the owner's alone (no rule, webhook, key or AI reads it, and nothing answers it by itself).
+   */
+  async moveNoticeToInbox(caller: Caller, input: T.GetItemInput): Promise<{ moved: boolean }> {
+    const item = await this.ownNotice(caller, input.item_id);
+    if (item.flags.inInbox) return { moved: false };
+    await setFlags(this.db, caller, {
+      itemId: item.id,
+      flags: { inInbox: true },
+      reason: "Moved from Notices to the inbox",
+    });
+    return { moved: true };
+  }
+
+  /** A notice deleted, by a person at the business, with everything it holds: it cannot be undone. */
+  async deleteNotice(caller: Caller, input: T.GetItemInput): Promise<{ deleted: boolean }> {
+    const item = await this.ownNotice(caller, input.item_id);
+    await this.db.batch(deleteItemStatements(item.id, noticeListedSql()));
+    const [left] = await this.db.orm.select({ id: items.id }).from(items).where(eq(items.id, item.id));
+    return { deleted: !left };
+  }
+
+  /** A notice still under Notices, for a person at the business; anyone else finds no such item. */
+  private async ownNotice(caller: Caller, itemId: string): Promise<Item> {
+    requireBusiness(caller);
+    const [row] = await this.db.orm.select().from(items).where(eq(items.id, itemId));
+    const item = row ? rowToItem(row) : null;
+    if (!item?.flags.notice || !readsAccountMail(caller)) throw new WriteError("not_found", "no such notice");
+    return item;
   }
 
   /** Let it in: a held request goes on, and its sender comes straight in from now on. A person only. */
@@ -2175,6 +2220,13 @@ export class Capabilities {
     const [row] = await this.db.orm.select().from(items).where(eq(items.id, input.item_id));
     if (!row) throw new WriteError("not_found", "no such item");
     const item = rowToItem(row);
+    // Owner-only mail (an account's, a notice) is answered by a person at the business or by nothing:
+    // never by the owner's AI, a rule or another system, which do not read it either.
+    if (!input.internal && isOwnerOnly(item.flags) && !readsAccountMail(caller)) {
+      throw new WriteError("not_allowed", "Only a person at the business answers this email, in the inbox.", {
+        details: { reason: "person_only" },
+      });
+    }
     // A reply from the owner's AI names no other customer and carries no secret (`access/leaks.ts`).
     if (!input.internal) await assertNoLeak(this.db, caller, row.partyId, [input.body]);
     // Who wrote it, as the request says: an email nobody typed says it was sent automatically.

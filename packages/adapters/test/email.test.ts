@@ -107,8 +107,9 @@ describe("email door", () => {
       ),
     });
     expect(viaToken).toEqual({ outcome: "replied", itemId });
+    // One with no sender at all is kept all the same, as a notice nobody can answer.
     const noSender = await ingestEmail(db, caps, { raw: mime({ To: "hello@oficinamare.pt", Subject: "x" }, "y") });
-    expect(noSender.outcome).toBe("rejected");
+    expect(noSender).toMatchObject({ outcome: "notice", reason: "an email with no sender" });
   });
 
   it("keeps an out-of-office on the item it answers, and lets it answer nothing (ADR-018 N14)", async () => {
@@ -185,7 +186,7 @@ describe("email door", () => {
     expect(await state()).toBe("received");
   });
 
-  it("never makes an item of an out-of-office or a returned email that answers none, and never answers one", async () => {
+  it("keeps an out-of-office or a returned email that answers none as a notice, and never answers one", async () => {
     const { db, caps } = await freshDb();
     const before = (await db.orm.select().from(schema.items)).length;
     const ooo = await ingestEmail(db, caps, {
@@ -200,7 +201,7 @@ describe("email door", () => {
         "I am away.",
       ),
     });
-    expect(ooo).toEqual({ outcome: "dropped", reason: "automatic email that answers no item" });
+    expect(ooo).toMatchObject({ outcome: "notice", reason: "an automatic email that answers no conversation" });
     // A returned email: a delivery report from the mailer daemon, with an empty return path.
     const bounce = await ingestEmail(db, caps, {
       raw: [
@@ -220,8 +221,11 @@ describe("email door", () => {
       ].join("\r\n"),
       envelopeFrom: "",
     });
-    expect(bounce.outcome).toBe("dropped");
-    expect((await db.orm.select().from(schema.items)).length).toBe(before);
+    expect(bounce.outcome).toBe("notice");
+    const kept = await db.orm.select().from(schema.items);
+    expect(kept.length).toBe(before + 2);
+    expect(kept.slice(before).every((i) => (i.flags as { notice?: boolean }).notice === true)).toBe(true);
+    // Nobody is alerted, no rule runs, nothing answers either.
     expect(await db.orm.select().from(schema.jobs)).toEqual([]);
   });
 

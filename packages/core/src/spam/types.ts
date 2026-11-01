@@ -90,6 +90,17 @@ export interface EmailFacts {
    * The item is marked so (`flags.account`).
    */
   readonly account?: boolean | undefined;
+  /**
+   * An email from a system that answers no conversation (a receipt, a newsletter, an out-of-office):
+   * read here only, never by the AI check, never told to the shared list, and counted by its domain.
+   * The item is marked so (`flags.notice`).
+   */
+  readonly notice?: boolean | undefined;
+  /**
+   * A notice past what one sender's domain sends in a day (the email door counts them): kept with the
+   * least work, so it is not screened at all.
+   */
+  readonly flood?: boolean | undefined;
   /** The email's own words, where the item keeps more under them (an account's links): what is read. */
   readonly words?: string | undefined;
 }

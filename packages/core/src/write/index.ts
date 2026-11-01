@@ -2,7 +2,19 @@ export * from "./caller";
 export { type CorrectionFacts, correctionFacts, deadCorrections, hiddenTransitions } from "./corrections";
 export { type CreateInput, type CreateResult, createItem } from "./create";
 export * from "./errors";
-export { ACCOUNT_WITHHELD, isAccountItem, readsAccountMail, setFlags, withheldItem } from "./flags";
+export {
+  ACCOUNT_WITHHELD,
+  isAccountItem,
+  isOwnerOnly,
+  isOwnerOnlyItem,
+  NOTICE_WITHHELD,
+  noticeListedSql,
+  ownerOnlySql,
+  readsAccountMail,
+  setFlags,
+  withheldItem,
+  withheldText,
+} from "./flags";
 export {
   IDEMPOTENCY_TTL_MS,
   type OnceOptions,

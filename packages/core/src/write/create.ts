@@ -332,7 +332,11 @@ export async function createItem(
     ...(caller.viaNetwork ? { carried: true } : {}),
     // A code or a sign-in link for an account the business holds, as the email door saw it: the owner's alone.
     ...(input.screen?.email?.account ? { account: true } : {}),
+    // An email from a system that answers no conversation (the email door says so): kept, the owner's alone.
+    ...(input.screen?.email?.notice ? { notice: true } : {}),
   });
+  // A notice moves nothing: no alert, no rule, no webhook. The owner reads it under Notices.
+  const notice = flags.notice === true;
   const anonymous = isCustomer(caller) && !caller.actor.partyId;
   const accessToken = anonymous ? randomToken(24) : undefined;
   const accessTokenHash = accessToken ? await hashText(accessToken) : null;
@@ -516,7 +520,7 @@ export async function createItem(
   }
   // Held until the sender confirms or a person lets it in: nobody is alerted, no rule runs, no webhook
   // goes. The acknowledgement still does, as it would for anyone (unless a bot sent it).
-  if (!held) {
+  if (!held && !notice) {
     statements.push(
       jobStatement("notify", { to: "owner", itemId: id, event: "create", eventId }, now, {
         dedupeKey: `notify:${eventId}:owner`,
@@ -534,7 +538,7 @@ export async function createItem(
       }),
     );
   }
-  if (!held) {
+  if (!held && !notice) {
     // A first contact's answers land in a second batch; the rules wait a moment for them (§8.1).
     const rulesDelay = Math.max(0, Math.min(identity?.rulesDelayMs ?? 0, 60_000));
     const rulesAt = Math.max(deadline ?? 0, rulesDelay ? now + rulesDelay : 0);

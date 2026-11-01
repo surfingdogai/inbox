@@ -520,14 +520,19 @@ function securitySignals(
 
 export async function screenAtDoor(deps: SpamDeps, ctx: DoorContext): Promise<DoorScreen> {
   if (!isCustomer(ctx.caller) || !SCREENED_TYPES.has(ctx.type)) return NOT_SCREENED;
+  // A flood of notices from one domain is kept with the least work: not screened at all, and counted.
+  if (ctx.screen.email?.notice && ctx.screen.email.flood) {
+    return { ...NOT_SCREENED, statements: () => [countStatement("notice_flood", ctx.now)] };
+  }
   const db = deps.db;
   const now = ctx.now;
   const settings = await readSettings(db);
   const business = await businessContext(db, settings);
   const run = await running(deps, now);
   // Mail for an account the business holds (the email door says so only of mail its domain vouched
-  // for): read here alone, never by the AI; the links its item keeps under its words are not read twice.
-  const account = ctx.screen.email?.account === true;
+  // for), or a notice: read here alone, never by the AI; the links its item keeps under its words are
+  // not read twice.
+  const ownerOnly = ctx.screen.email?.account === true || ctx.screen.email?.notice === true;
   const words = ctx.type === "message" ? ctx.screen.email?.words : undefined;
   const reading = await readingOf(
     ctx.type,
@@ -555,9 +560,9 @@ export async function screenAtDoor(deps: SpamDeps, ctx: DoorContext): Promise<Do
     passes,
     carriedFor: ctx.caller.carriedFor,
   });
-  // One service sends its codes from many addresses (`no-reply-<random>@`): an account's mail is
+  // One service sends its codes from many addresses (`no-reply-<random>@`): an account's mail or a notice is
   // counted by its domain, so the same notice a third time is one sender's, never a wave.
-  const sender = account ? byDomain(handles) : handles;
+  const sender = ownerOnly ? byDomain(handles) : handles;
   // A platform's key is on no list: it signs for all of the platform's users.
   const thumbprint = sender.platform ? undefined : agent?.thumbprint;
   const listed = await listOf(db, { email: reading.email, thumbprint });
@@ -677,7 +682,7 @@ export async function screenAtDoor(deps: SpamDeps, ctx: DoorContext): Promise<Do
   const certain = signals.some((s) => s.x === 1) || decidedAtDoor(signals);
   const enough = reading.note ? reading.text.length >= 20 : reading.text.length >= 20 || reading.domains.length > 0;
   let pending = false;
-  if (run.on.size > 0 && !certain && enough && !ctx.sandbox && !account) {
+  if (run.on.size > 0 && !certain && enough && !ctx.sandbox && !ownerOnly) {
     const room = await aiRoom(deps, settings, now);
     if (room === "room") {
       const cached = reading.print
@@ -717,7 +722,8 @@ export async function screenAtDoor(deps: SpamDeps, ctx: DoorContext): Promise<Do
     sender,
     answer,
     known: false,
-    share: sharedPort?.contributes === true && !ctx.sandbox,
+    // Owner-only mail is never told to the shared list.
+    share: sharedPort?.contributes === true && !ctx.sandbox && !ownerOnly,
   });
 }
 

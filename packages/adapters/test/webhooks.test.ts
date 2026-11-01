@@ -472,6 +472,34 @@ describe("delivery", () => {
     expect(queued).toEqual([]);
   });
 
+  it("never carries a notice, fanned out, moved to the inbox or replayed", async () => {
+    const { db } = await freshDb();
+    const box = createSecretBox([KEY]);
+    if (!box) throw new Error("no box");
+    const ep = await addEndpoint(db, box, { url: "https://hooks.example.com/all", events: ["*"], style: "full" });
+    const notice = await createItem(db, customer(T0), {
+      ...message("Your D-U-N-S Number is 123456789."),
+      screen: { door: "email", email: { serverMarked: false, notice: true } },
+    });
+    await createItem(db, customer(T0), message());
+    // The owner moves it to the inbox: an event for the owner alone too.
+    await setFlags(db, owner(T0), { itemId: notice.view.item.id, flags: { inInbox: true } });
+    const net = receiver(() => 200);
+    const runner = runnerWith({ secrets: box, fetchImpl: net.fetchImpl });
+    await drain(runner, db, T0);
+    expect(net.calls).toHaveLength(1);
+    expect(net.calls[0]?.body).not.toContain("D-U-N-S");
+    expect(net.calls[0]?.body).not.toContain(notice.view.item.id);
+
+    const replayed = await new WebhookCapabilities(db, box).replayMissing(owner(T0 + 60_000), {
+      webhook_id: ep.id,
+      since: new Date(T0 - 60_000).toISOString(),
+    });
+    expect(replayed.matched).toBeGreaterThan(0);
+    await drain(runner, db, T0 + 60_000);
+    expect(net.calls.some((c) => c.body.includes("D-U-N-S") || c.body.includes(notice.view.item.id))).toBe(false);
+  });
+
   it("counts a redirect as a failure and never follows it", async () => {
     const { db } = await freshDb();
     const box = createSecretBox([KEY]);

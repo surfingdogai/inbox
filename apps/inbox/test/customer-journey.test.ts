@@ -754,7 +754,7 @@ describe("a customer's privacy, end to end", () => {
       }).replace("MIME-Version: 1.0", "Auto-Submitted: auto-replied\r\nMIME-Version: 1.0"),
     );
     expect(await ooo.json()).toEqual({ outcome: "noted", itemId: second });
-    // One that answers nothing of ours is not kept at all.
+    // One that answers nothing of ours is kept as a notice: no item on her desk, nothing answered.
     const stray = await inbound(
       s,
       replyMime({
@@ -764,9 +764,10 @@ describe("a customer's privacy, end to end", () => {
         body: "I am away until Monday.",
       }).replace("MIME-Version: 1.0", "Auto-Submitted: auto-replied\r\nMIME-Version: 1.0"),
     );
-    expect((await stray.json()) as { outcome: string }).toMatchObject({ outcome: "dropped" });
+    const kept = (await stray.json()) as { outcome: string; itemId: string };
+    expect(kept).toMatchObject({ outcome: "notice" });
     await drain(s);
-    expect((await counts(s)).items).toBe(itemsBefore);
+    expect((await counts(s)).items).toBe(itemsBefore + 1);
     expect(s.sent.length).toBe(sentBeforeOoo);
 
     // 7. The owner exports her: every item, its history, conversation and emails; the code never.
@@ -788,10 +789,11 @@ describe("a customer's privacy, end to end", () => {
         emails: { template: string; text: string }[];
       }[];
     };
-    expect(doc.customer.items).toBe(2);
+    // Her two requests, and the notice her mailbox sent by itself: everything held about her.
+    expect(doc.customer.items).toBe(3);
     expect(doc.customer.networks_off?.via).toBe("customer");
     expect(JSON.stringify(doc.parties)).toContain(rita);
-    expect(doc.items.map((i) => i.item.id).sort()).toEqual([first, second].sort());
+    expect(doc.items.map((i) => i.item.id).sort()).toEqual([first, second, kept.itemId].sort());
     const one = doc.items.find((i) => i.item.id === first);
     const two = doc.items.find((i) => i.item.id === second);
     expect(one?.events.length).toBeGreaterThan(1);
@@ -846,7 +848,8 @@ describe("a customer's privacy, end to end", () => {
     }
     expect(await stateOf(s, first)).toBe("confirmed");
     expect(await stateOf(s, second)).toBe("confirmed");
-    expect((await counts(s)).items).toBe(itemsBefore);
+    // Her notice too: its structure stays, its words are gone with the rest.
+    expect((await counts(s)).items).toBe(itemsBefore + 1);
     expect(
       Number((await s.db.client.query({ sql: "SELECT COUNT(*) FROM item_events", method: "all" })).rows[0]?.[0]),
     ).toBe(eventsBefore);

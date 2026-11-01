@@ -31,6 +31,9 @@ export const ROUTE_SCOPES: Readonly<Record<string, readonly string[]>> = {
   "POST /items/:id/let-in": ["inbox:write"],
   "POST /items/:id/looks-fine": ["inbox:write"],
   "POST /items/:id/spam": ["inbox:write"],
+  // A notice is a person's at the business to move or delete, checked by the capability whatever the scopes.
+  "POST /items/:id/move-to-inbox": ["inbox:write"],
+  "DELETE /items/:id/notice": ["inbox:write"],
   "POST /items/:id/always-put-aside": ["inbox:write"],
   "POST /items/:id/transitions": ["inbox:write"],
   "GET /items/:id/offers": ["inbox:read"],
@@ -280,6 +283,9 @@ export const PHONE_OPERATIONS: ReadonlySet<string> = new Set([
   "POST /items/:id/let-in",
   "POST /items/:id/looks-fine",
   "POST /items/:id/spam",
+  // A notice moved to the inbox, or deleted.
+  "POST /items/:id/move-to-inbox",
+  "DELETE /items/:id/notice",
 ]);
 
 /** Where the owner REST door is mounted; the map above is keyed on paths below it. */

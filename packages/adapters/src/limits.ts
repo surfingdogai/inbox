@@ -92,6 +92,12 @@ export const LIMITS = {
    */
   email: { capacity: 200, perMs: 400 / 3_600_000 } satisfies Limit,
   /**
+   * Notices from one sender's domain (emails from systems that answer no conversation, ADR-026 §6):
+   * two hundred a day. Never a refusal, since nothing that arrives is dropped: past it a notice is
+   * kept with the least work, unscreened and found only by the cheap thread lookups, and counted.
+   */
+  notices: { capacity: 200, perMs: 200 / 86_400_000 } satisfies Limit,
+  /**
    * A file uploaded for a request (ADR-039 §2): up to 10 MB each, kept in the business's database for an
    * hour. Thirty at once and sixty an hour per address: six files on each of ten requests.
    */

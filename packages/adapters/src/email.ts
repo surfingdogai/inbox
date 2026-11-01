@@ -20,6 +20,7 @@ import {
   plusAddress,
   readSettings,
   recogniseConfirmation,
+  SHARED_MAIL_PROVIDERS,
   schema,
   setFlags,
   signInAddresses,
@@ -40,17 +41,25 @@ import { consume, EVERYONE } from "./limits";
  *
  * 1. a forwarding check of this inbox's own coming back proves the forward works, and stops there;
  * 2. an email of this inbox's own coming back any other way (its mark, `X-Inbox-Loop`), or one that
- *    has been passed around too often, is dropped: never answered, never kept;
- * 3. a second delivery of an email already kept (its Message-ID) is a duplicate;
+ *    has been passed around too often, is kept as a notice and never answered;
+ * 3. a second delivery of an email already kept (its Message-ID) is a duplicate, whatever it is;
  * 4. a mail provider asking to confirm forwarding is kept on the forward for the owner to see;
  * 5. an answer to an owner's alert (`name+o…@`) from the owner's own address becomes the business's
- *    reply to the customer; from anyone else, nothing;
+ *    reply to the customer; from anyone else, a note for the owner, sent to nobody;
  * 6. an automatic email (an out-of-office, a returned email) is a note on the item it answers;
  * 7. anything else lands on the item it answers — its conversation's address (`name+t…@`), the ids it
  *    names, then the older plus address or subject token — or becomes a new message, put aside as
  *    spam when what it carries says so. What it had attached is kept within limits. A code, a sign-in
  *    link or a password reset from a sender that takes no answer, on the domain it names, is the
  *    owner's alone, with its links.
+ *
+ * Nothing that arrives is ever dropped (the founder, 1 November 2026: "don't throw any e-mail away, we
+ * keep everything"). What answers no conversation and no person sent to be answered — a mailing, a
+ * receipt, an account's notice, an automatic email, the inbox's own email come back, a forwarding
+ * confirmation for no address being set up, one with no sender — is kept as a notice (`flags.notice`):
+ * the owner's alone, as an account's mail is, alerting nobody and answered by nothing. Only an email the
+ * gateway refuses as larger than the whole system takes (25 MiB, `apps/email-gateway/worker.ts`) is
+ * not kept, and its sender is told by a bounce.
  *
  * Quoted history is stripped from the stored text; the raw message is kept by the caller if wanted.
  */
@@ -179,18 +188,20 @@ export type IngestResult =
   | { readonly outcome: "duplicate"; readonly itemId: string | null }
   /** An automatic email (an out-of-office, a returned email) kept as a note on the item it answers. */
   | { readonly outcome: "noted"; readonly itemId: string }
-  /** An automatic email that answers no item: not kept, never answered, never refused (a refusal would bounce). */
-  | { readonly outcome: "dropped"; readonly reason: string }
   /**
-   * Too many from this sender, or for the whole mailbox, right now: nothing kept. A temporary
+   * An email from a system that answers no conversation, kept as a notice (`flags.notice`): the owner
+   * reads it under Notices; nobody is alerted and nothing answers it.
+   */
+  | { readonly outcome: "notice"; readonly itemId: string; readonly reason: string }
+  /**
+   * Too many from this sender, or for the whole mailbox, right now: nothing kept yet. A temporary
    * failure, so the sending server tries again later (`retryAfterSec`), never a bounce.
    */
-  | { readonly outcome: "limited"; readonly reason: string; readonly retryAfterSec: number }
-  | { readonly outcome: "rejected"; readonly reason: string };
+  | { readonly outcome: "limited"; readonly reason: string; readonly retryAfterSec: number };
 
 export const SUBJECT_TOKEN = /\[SDI-([0-9A-HJKMNP-TV-Z]{6,26})\]/i;
 
-/** An email that has passed through this many servers is going round in circles: it is dropped. */
+/** An email that has passed through this many servers is going round in circles: a notice, never answered. */
 export const MAX_HOPS = 40;
 
 export async function parseEmail(raw: InboundEmail["raw"]): Promise<Email> {
@@ -216,18 +227,20 @@ export async function ingestEmail(
   }
   let parsed: Email | null = null;
   if (!envelope) {
-    // Without an envelope sender (a forward, some webhooks), the From is who is counted.
+    // Without an envelope sender (a forward, some webhooks), the From is who is counted. With neither,
+    // the whole mailbox's bucket alone counts it.
     parsed = await parseEmail(mail.raw);
     const sender = parsed.from?.address?.toLowerCase();
-    if (!sender) return { outcome: "rejected", reason: "no sender" };
-    const one = await consume(db, "emailSender", await senderBucket(sender), now());
-    if (!one.allowed) return limitedMail(one.retryAfterSec);
+    if (sender) {
+      const one = await consume(db, "emailSender", await senderBucket(sender), now());
+      if (!one.allowed) return limitedMail(one.retryAfterSec);
+    }
   }
   const everyone = await consume(db, "email", EVERYONE, now());
   if (!everyone.allowed) return limitedMail(everyone.retryAfterSec);
   parsed ??= await parseEmail(mail.raw);
-  const from = parsed.from?.address?.toLowerCase();
-  if (!from) return { outcome: "rejected", reason: "no sender" };
+  // Who sent it: its From, else its envelope's sender.
+  const from = parsed.from?.address?.trim().toLowerCase() || envelope;
   const settings = await readSettings(db);
   const recipients = recipientsOf(parsed, mail.envelopeTo);
   const subject = (parsed.subject ?? "").trim();
@@ -239,6 +252,20 @@ export async function ingestEmail(
         mail.authResultsFrom,
       )
     : mail.auth;
+  const notice = (reason: string, more: { heading?: string; flood?: boolean } = {}) =>
+    keepNotice(db, caps, { parsed: parsed as Email, mail, from, auth, reason, now, opts, ...more });
+  // 3. The same email again, looked for first: a second delivery of anything already kept, a notice
+  // included, adds nothing.
+  const messageId = parsed.messageId?.trim() || null;
+  if (messageId) {
+    const [dup] = await db.orm
+      .select({ itemId: schema.threadEntries.itemId })
+      .from(schema.threadEntries)
+      .where(eq(schema.threadEntries.messageId, messageId));
+    if (dup) return { outcome: "duplicate", itemId: dup.itemId };
+  }
+  // An email that names nobody who sent it is kept all the same: nobody can be answered.
+  if (!from) return notice("an email with no sender");
 
   // 1. A forwarding check coming back through the business's forward (ADR-026 §2).
   const check = await checkOf(db, parsed, recipients);
@@ -247,23 +274,14 @@ export async function ingestEmail(
     console.info("email: a forwarding check came back");
     return { outcome: "forwarding", forwardId: check.forwardId, what: "check" };
   }
-  // 2. Our own email back again, or one passed around until it loops: never kept, never answered.
+  // 2. Our own email back again, or one passed around until it loops: kept as a notice, never answered.
   if (header(parsed, LOOP_HEADER) === (await loopMark(db, now()))) {
-    console.info("email: dropped an email this inbox sent, which came back to it");
-    return { outcome: "dropped", reason: "this inbox's own email came back" };
+    console.info("email: kept an email this inbox sent, which came back to it, as a notice");
+    return notice("this inbox's own email came back", { heading: OWN_NOTE });
   }
   if ((parsed.headers ?? []).filter((h) => h.key === "received").length > MAX_HOPS) {
-    console.info("email: dropped an email that went through too many servers");
-    return { outcome: "dropped", reason: "too many hops: a mail loop" };
-  }
-  // 3. The same email again.
-  const messageId = parsed.messageId?.trim() || null;
-  if (messageId) {
-    const [dup] = await db.orm
-      .select({ itemId: schema.threadEntries.itemId })
-      .from(schema.threadEntries)
-      .where(eq(schema.threadEntries.messageId, messageId));
-    if (dup) return { outcome: "duplicate", itemId: dup.itemId };
+    console.info("email: kept an email that went through too many servers as a notice");
+    return notice("too many hops: a mail loop", { heading: LOOP_NOTE });
   }
   const plain = parsed.text ?? htmlToText(parsed.html ?? "");
   // 4. A provider asking to confirm forwarding to this inbox: shown to the owner, never acted on.
@@ -275,13 +293,13 @@ export async function ingestEmail(
     const kept = await keepConfirmation(db, confirmation, now());
     if (kept === "held") {
       console.info("email: a mail provider's forwarding confirmation is held for the address it names");
-      return { outcome: "dropped", reason: "a forwarding confirmation held until its address is added" };
+      return notice("a forwarding confirmation held until its address is added");
     }
     if (kept) {
       console.info("email: a mail provider asks the owner to confirm forwarding");
       return { outcome: "forwarding", forwardId: kept.id, what: "confirmation" };
     }
-    return { outcome: "dropped", reason: "a forwarding confirmation for no address being set up" };
+    return notice("a forwarding confirmation for no address being set up");
   }
   // Mail to an address the business forwards here: its forward works.
   await forwardsSeen(db, recipients, now());
@@ -305,41 +323,56 @@ export async function ingestEmail(
     }
   }
 
+  // A mailing or a notice no person sends to be answered — a newsletter, a shop's or a bank's notice
+  // — or an automatic email. Past a day's worth of these from one sender's domain (one sender's, for an
+  // automatic email or a domain many people share), one is still kept, with the least work: found by
+  // its conversation's address and the ids it names only, unscreened.
+  const bulk = isBulkMail(read, from);
+  const automatic = isAutomaticMail(parsed, mail.envelopeFrom);
+  const flood =
+    !tokenItem &&
+    (bulk || automatic) &&
+    !(await consume(db, "notices", await noticeBucket(from, { byDomain: bulk }), now())).allowed;
+  if (flood) console.info("email: a notice past its domain's day of notices, kept with the least work");
+
   // An item whose customer was erased is answered by nothing: a reply to it starts afresh (a new
   // item the business can answer), and nothing is written back onto what was erased.
   const found = tokenItem
     ? { id: tokenItem, via: "token" as const }
-    : await findThreadItem(db, parsed, mail.envelopeTo);
+    : await findThreadItem(db, parsed, mail.envelopeTo, { idsOnly: flood });
   let itemId = found && !(await erasedItem(db, found.id)) ? found.id : null;
   // The older ways in — the item's id in a plus address or a subject — are only as secret as the id,
   // which an agent or a customer may have seen: they join a thread only from the customer's own address.
   if (itemId && found && (found.via === "plus" || found.via === "subject") && !(await sameCustomer(db, itemId, from))) {
     itemId = null;
   }
-  // A mailing or a notice no person sends to be answered (a newsletter, a shop's or a bank's notice)
-  // is kept like any message: an email that reaches the inbox is never thrown away.
-  if (!itemId && isBulkMail(read, from)) console.info("email: kept a mailing or a notice that answers no conversation");
+  // That answers no conversation: forwarding a whole mailbox here brings these, and none of them is a
+  // customer. Kept as a notice, the owner's alone: never an alert, never an answer.
+  if (!itemId && bulk) {
+    console.info("email: kept a mailing or a notice that answers no conversation as a notice");
+    return notice("a mailing or a notice that answers no conversation", { flood });
+  }
+  // A code, a sign-in link or a password reset from a sender that takes no answer, on the domain it
+  // names, is the owner's alone (`flags.account`): kept with the links it carries, since a button's
+  // link is often in the HTML part only; no rule answers it, no webhook carries it, no AI reads it.
+  const account = isAccountNotice(read, from, auth);
   // 6. A mailbox answering by itself — an out-of-office, a returned email — never becomes a
   // conversation and never gets an answer, or two mailboxes could write to each other for ever. It
-  // is kept as a note on the item it answers, for the business to read; answering none, it goes. A
-  // returned email also marks the email it returns as not delivered, for a person to see.
-  if (isAutomaticMail(parsed, mail.envelopeFrom)) {
+  // is kept as a note on the item it answers, for the business to read; answering none, as a notice
+  // (an account's code sent the same way is the account's, below). A returned email also marks the
+  // email it returns as not delivered, for a person to see.
+  if (automatic && (itemId || !account)) {
     const [row] = itemId
       ? await db.orm.select({ id: schema.items.id }).from(schema.items).where(eq(schema.items.id, itemId))
       : [];
     if (!row) {
-      console.info("email: dropped an automatic email (an out-of-office or a returned email) that answers no item");
-      return { outcome: "dropped", reason: "automatic email that answers no item" };
+      console.info(
+        "email: kept an automatic email (an out-of-office or a returned email) that answers no item as a notice",
+      );
+      return notice("an automatic email that answers no conversation", { heading: AUTOMATIC_NOTICE, flood });
     }
     const at = now();
-    await db.batch([
-      {
-        sql: `INSERT OR IGNORE INTO thread_entries (id, item_id, direction, channel, actor_kind, actor_id, party_id, subject, body_text, body_format, message_id, created_at)
-              VALUES (?, ?, 'note', 'email', 'system', NULL, NULL, ?, ?, 'text', ?, ?)`,
-        params: [ulid(at), row.id, subject || null, `${AUTOMATIC_NOTE}\n\n${text}`.slice(0, 20_000), messageId, at],
-        method: "run",
-      },
-    ]);
+    await noteOn(db, row.id, { subject, text: `${AUTOMATIC_NOTE}\n\n${text}`, messageId, at });
     const returned = returnedReason(parsed);
     if (returned) await mailReturned(db, row.id, returned, at);
     return { outcome: "noted", itemId: row.id };
@@ -379,10 +412,6 @@ export async function ingestEmail(
   // sender the business knows is only ever labelled, even one a server marked.
   const spam = spamVerdict(parsed);
   const files = (parsed.attachments ?? []).filter((a) => !a.related);
-  // A code, a sign-in link or a password reset from a sender that takes no answer, on the domain it
-  // names, is the owner's alone (`flags.account`): kept with the links it carries, since a button's
-  // link is often in the HTML part only; no rule answers it, no webhook carries it, no AI reads it.
-  const account = isAccountNotice(read, from, auth);
   // Its links are kept for the business's people even where the receiving server said nothing of its
   // sender, never where it found the sender forged: only the owner-alone handling above needs its word.
   const keepLinks = account || (auth?.dmarc !== "fail" && looksLikeAccountNotice(read, from));
@@ -390,7 +419,7 @@ export async function ingestEmail(
     caller,
     {
       body: keepLinks ? withLinks(words, linksOf(parsed)) : text,
-      ...(subject ? { subject } : {}),
+      ...(subject ? { subject: subject.slice(0, MAX_SUBJECT) } : {}),
       contact: { email: from, ...(parsed.from?.name ? { name: parsed.from.name } : {}) },
       ...(messageId ? { idempotency_key: messageId } : {}),
     },
@@ -481,9 +510,10 @@ async function checkOf(
  * alert carried), the email is from an address the business's people sign in with or are alerted at,
  * no receiving server found it forged (when one said), a person wrote it (an out-of-office never
  * answers a customer), and what is left once the quoted alert is cut names none of the owner's own
- * addresses (ADR-026 §6). An out-of-office is dropped. Any other answer that fails is kept on the item
- * as a note for the owner (`held`), who is told why and asked to answer in the inbox: nothing is sent
- * to the customer, and nothing is sent back by email (two mailboxes could answer each other for ever).
+ * addresses (ADR-026 §6). An out-of-office is a note on the item, sent to nobody. Any other answer that
+ * fails is kept on the item as a note for the owner (`held`), who is told why and asked to answer in the
+ * inbox: nothing is sent to the customer, and nothing is sent back by email (two mailboxes could answer
+ * each other for ever). An answer about a customer who was erased is kept as a notice.
  */
 async function ownerAnswer(
   db: Db,
@@ -499,10 +529,21 @@ async function ownerAnswer(
     opts: IngestOptions;
   },
 ): Promise<IngestResult> {
-  if (isAutomaticMail(o.parsed, o.mail.envelopeFrom)) {
-    return { outcome: "dropped", reason: "an automatic reply to an alert" };
+  // Nothing is written back onto what was erased: kept, as a notice.
+  if (await erasedItem(db, o.itemId)) {
+    return keepNotice(db, caps, { ...o, reason: "an answer to an alert about a customer who was erased" });
   }
-  if (await erasedItem(db, o.itemId)) return { outcome: "dropped", reason: "the customer was erased" };
+  // An out-of-office from the owner's own mailbox answers no customer: a note on the item, sent to nobody.
+  if (isAutomaticMail(o.parsed, o.mail.envelopeFrom)) {
+    const plain = o.parsed.text ?? htmlToText(o.parsed.html ?? "");
+    await noteOn(db, o.itemId, {
+      subject: o.parsed.subject?.trim() || null,
+      text: `${OWNER_AUTOMATIC_NOTE}\n\n${cut(stripQuotedReply(plain).trim() || "(empty message)")}`,
+      messageId: o.parsed.messageId?.trim() || null,
+      at: o.now(),
+    });
+    return { outcome: "noted", itemId: o.itemId };
+  }
   const settings = await readSettings(db);
   const owners = await ownerAddresses(db, settings);
   const sender = baseAddress(o.from);
@@ -538,14 +579,27 @@ async function ownerAnswer(
       words: words || written,
     });
   }
-  if (!words) return { outcome: "dropped", reason: "an empty answer" };
+  if (!words) {
+    console.info("email: held an answer to an alert that had no words");
+    return hold(db, caps, o, {
+      reason: "an answer to an alert with no words",
+      note: `Your email answer had no words, so nothing was sent to ${firstName}. Send it from here instead.`,
+      words: "",
+    });
+  }
   const { rows: theirs } = await db.client.query({
     sql: "SELECT id, role FROM users WHERE lower(email) = ? AND role IN ('owner', 'staff') LIMIT 1",
     params: [sender],
     method: "all",
   });
   const user = theirs[0] ?? (await firstOwner(db));
-  if (!user) return { outcome: "dropped", reason: "nobody signs in here" };
+  if (!user) {
+    return hold(db, caps, o, {
+      reason: "an answer to an alert, and nobody signs in here to send it as",
+      note: `Your email answer was not sent to ${firstName}: nobody signs in to this inbox to send it as.`,
+      words,
+    });
+  }
   const messageId = o.parsed.messageId?.trim() || null;
   const kind = String(user[1]) === "staff" ? ("staff" as const) : ("owner" as const);
   const caller: Caller = {
@@ -605,37 +659,45 @@ async function firstOwner(db: Db): Promise<readonly unknown[] | undefined> {
 }
 
 /**
- * An answer to an alert that is not sent: its words are kept on the item as a note, with why, and
- * the item asks for a person. Once per email (its Message-ID), so a second delivery adds nothing.
+ * An answer to an alert that is not sent: its words, and what it had attached, are kept on the item as
+ * a note, with why, and the item asks for a person. Once per email (its Message-ID), so a second
+ * delivery adds nothing.
  */
 async function hold(
   db: Db,
   caps: Capabilities,
-  o: { parsed: Email; itemId: string; now: () => number },
+  o: { parsed: Email; itemId: string; from: string; now: () => number; opts: IngestOptions },
   h: { reason: string; note: string; words: string },
 ): Promise<IngestResult> {
   const messageId = o.parsed.messageId?.trim() || null;
+  const body = cut(h.words ? `${h.note}\n\n${h.words}` : h.note);
   const user = await firstOwner(db);
-  if (!user) return { outcome: "dropped", reason: h.reason };
-  const caller: Caller = {
-    actor: { kind: "owner", id: String(user[0]), channel: "email" },
-    tier: "verified_principal",
-    sandbox: false,
-    now: o.now,
-    ...(messageId ? { idempotency: { scope: "email:owner:held", key: messageId } } : {}),
-  };
-  try {
-    await caps.reply(caller, {
-      item_id: o.itemId,
-      internal: true,
-      body: cut(h.words ? `${h.note}\n\n${h.words}` : h.note),
-      ...(messageId ? { idempotency_key: `held:${messageId}` } : {}),
-    } as Parameters<Capabilities["reply"]>[1]);
-  } catch (error) {
-    if (error instanceof WriteError && error.code === "idempotency_mismatch")
-      return { outcome: "duplicate", itemId: o.itemId };
-    throw error;
+  if (!user) {
+    // Nobody signs in here to write it as: the note is the inbox's own, kept once by its Message-ID.
+    await noteOn(db, o.itemId, { subject: null, text: body, messageId, at: o.now() });
+  } else {
+    const caller: Caller = {
+      actor: { kind: "owner", id: String(user[0]), channel: "email" },
+      tier: "verified_principal",
+      sandbox: false,
+      now: o.now,
+      ...(messageId ? { idempotency: { scope: "email:owner:held", key: messageId } } : {}),
+    };
+    try {
+      await caps.reply(caller, {
+        item_id: o.itemId,
+        internal: true,
+        body,
+        ...(messageId ? { idempotency_key: `held:${messageId}` } : {}),
+      } as Parameters<Capabilities["reply"]>[1]);
+    } catch (error) {
+      if (error instanceof WriteError && error.code === "idempotency_mismatch")
+        return { outcome: "duplicate", itemId: o.itemId };
+      throw error;
+    }
   }
+  // What it had attached stays with the note, for the owner; it is not sent on.
+  await attach(db, o.itemId, o.parsed, null, o.now(), "note", { sender: o.from, maxBytes: o.opts.attachmentsMaxBytes });
   const system: Caller = {
     actor: { kind: "system", id: "email", channel: "system" },
     tier: "verified_principal",
@@ -938,25 +1000,29 @@ function decodeMaybe(base64: string): string {
   }
 }
 
-/** Keeps an email's attachments on its newest thread entry of `direction` on the item. */
+/**
+ * Keeps an email's attachments on its newest thread entry of `direction` on the item. On a note (a
+ * held answer), only once: a note that holds files already took this email's.
+ */
 async function attach(
   db: Db,
   itemId: string,
   parsed: Email,
   messageId: string | null,
   now: number,
-  direction: "in" | "out",
+  direction: "in" | "out" | "note",
   who: { sender: string; maxBytes?: number | undefined },
 ): Promise<{ filename: string }[]> {
   const files = (parsed.attachments ?? []).filter((a) => !a.related && !/^message\//i.test(a.mimeType));
   if (files.length === 0) return [];
   const { rows } = await db.client.query({
     sql: messageId
-      ? "SELECT id FROM thread_entries WHERE item_id = ? AND message_id = ? LIMIT 1"
-      : "SELECT id FROM thread_entries WHERE item_id = ? AND direction = ? ORDER BY created_at DESC, id DESC LIMIT 1",
+      ? "SELECT id, attachments FROM thread_entries WHERE item_id = ? AND message_id = ? LIMIT 1"
+      : "SELECT id, attachments FROM thread_entries WHERE item_id = ? AND direction = ? ORDER BY created_at DESC, id DESC LIMIT 1",
     params: messageId ? [itemId, messageId] : [itemId, direction],
     method: "all",
   });
+  if (direction === "note" && rows[0]?.[1] !== null && rows[0]?.[1] !== undefined) return [];
   const entryId = rows[0]?.[0] ? String(rows[0][0]) : null;
   return keepAttachments(db, {
     itemId,
@@ -984,6 +1050,7 @@ async function findThreadItem(
   db: Db,
   parsed: Email,
   envelopeTo: string | undefined,
+  opts: { readonly idsOnly?: boolean } = {},
 ): Promise<{ id: string; via: "refs" | "plus" | "subject" } | null> {
   const references = (parsed.references ?? "").split(/\s+/).filter(Boolean);
   const named = [parsed.inReplyTo, ...(references.length > 20 ? [references[0], ...references.slice(-19)] : references)]
@@ -1018,6 +1085,8 @@ async function findThreadItem(
       if (hit) return { id: hit, via: "refs" };
     }
   }
+  // A flood of notices is found by the ids it names alone (`idsOnly`).
+  if (opts.idsOnly) return null;
   const recipients = [
     envelopeTo,
     ...(parsed.to ?? []).map((t) => t.address),
@@ -1080,6 +1149,17 @@ async function senderBucket(address: string): Promise<string> {
   return `h:${(await sha256Hex(new TextEncoder().encode(address.slice(0, 320)))).slice(0, 32)}`;
 }
 
+/**
+ * The bucket notices are counted under (`notices`), a hash as for a sender: one sender's domain's, or,
+ * for an automatic email or a domain many people share (gmail.com), the sender's own.
+ */
+export async function noticeBucket(from: string, o: { readonly byDomain?: boolean } = {}): Promise<string> {
+  const domain = splitAddress(from)?.domain?.toLowerCase();
+  return domain && o.byDomain !== false && !SHARED_MAIL_PROVIDERS.has(domain)
+    ? senderBucket(`@${domain}`)
+    : senderBucket(from);
+}
+
 function limitedMail(retryAfterSec: number): IngestResult {
   console.info("email: too many emails right now; answered with a temporary failure");
   return {
@@ -1103,6 +1183,135 @@ function cut(text: string, max = MAX_TEXT): string {
 
 /** What heads an automatic email kept on its item, for the owner reading it. */
 export const AUTOMATIC_NOTE = "An automatic email from the customer's mailbox (an out-of-office or a returned email):";
+/** The same, from the owner's own mailbox answering an alert. */
+export const OWNER_AUTOMATIC_NOTE =
+  "An automatic email from your own mailbox (an out-of-office), answering the alert about this item. Nothing was sent to the customer:";
+/** What heads a notice the inbox kept for why it is one, where its own words would not say. */
+export const AUTOMATIC_NOTICE =
+  "An automatic email (an out-of-office or a returned email) that answers no conversation. Nobody answers it:";
+export const OWN_NOTE = "An email this inbox sent, which came back to it. Nobody answers it:";
+export const LOOP_NOTE =
+  "An email that went through too many servers, as mail going round in circles does. Nobody answers it:";
+
+/** The longest subject an item keeps. */
+const MAX_SUBJECT = 500;
+/** An address as an item's contact keeps one: something@somewhere, no spaces or angle brackets. */
+const CONTACT_EMAIL = /^[^\s@<>()",;:]{1,64}@[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i;
+
+/** A note for the owner on an item, the inbox's own, kept once by the email's Message-ID. */
+async function noteOn(
+  db: Db,
+  itemId: string,
+  n: { subject: string | null; text: string; messageId: string | null; at: number },
+): Promise<void> {
+  await db.batch([
+    {
+      sql: `INSERT OR IGNORE INTO thread_entries (id, item_id, direction, channel, actor_kind, actor_id, party_id, subject, body_text, body_format, message_id, created_at)
+            VALUES (?, ?, 'note', 'email', 'system', NULL, NULL, ?, ?, 'text', ?, ?)`,
+      params: [
+        ulid(n.at),
+        itemId,
+        n.subject?.slice(0, MAX_SUBJECT) || null,
+        n.text.slice(0, 20_000),
+        n.messageId,
+        n.at,
+      ],
+      method: "run",
+    },
+  ]);
+}
+
+/**
+ * An email kept as a notice (`flags.notice`): a new message, the owner's alone, that alerts nobody, runs
+ * no rule, reaches no webhook, key or AI, and is answered by nothing. Its words are kept with the links
+ * it carries (unless the receiving server found its sender forged), and what it had attached within
+ * the usual limits. The spam filter reads it here, never with AI, and tells nothing of it to the shared
+ * list; past a day's worth from one domain (`flood`) it is not screened, and none of its links are read.
+ * Once per email (its Message-ID), so a second delivery adds nothing.
+ */
+async function keepNotice(
+  db: Db,
+  caps: Capabilities,
+  o: {
+    parsed: Email;
+    mail: InboundEmail;
+    from: string | null;
+    auth: MailAuth | undefined;
+    reason: string;
+    heading?: string | undefined;
+    flood?: boolean | undefined;
+    now: () => number;
+    opts: IngestOptions;
+  },
+): Promise<IngestResult> {
+  const { parsed, from } = o;
+  const messageId = parsed.messageId?.trim() || null;
+  const plain = parsed.text ?? htmlToText(parsed.html ?? "");
+  const words = stripQuotedReply(plain).trim() || "(empty message)";
+  const said = o.heading ? `${o.heading}\n\n${words}` : words;
+  const links = !o.flood && o.auth?.dmarc !== "fail" ? linksOf(parsed) : [];
+  const subject = (parsed.subject ?? "").trim().slice(0, MAX_SUBJECT);
+  const name = parsed.from?.name?.trim().slice(0, 200);
+  const email = from && CONTACT_EMAIL.test(from) ? from : null;
+  const who = email ?? from ?? "unknown";
+  const caller: Caller = {
+    actor: { kind: "customer_human", id: `email:${who}`, channel: "email" },
+    tier: o.mail.authenticated ? "verified_principal" : "anonymous",
+    sandbox: false,
+    now: o.now,
+    ...(messageId ? { idempotency: { scope: `email:${who}`, key: messageId } } : {}),
+  };
+  const files = (parsed.attachments ?? []).filter((a) => !a.related);
+  const replyTo = parsed.replyTo?.[0]?.address?.toLowerCase();
+  const created = await caps.sendMessage(
+    caller,
+    {
+      body: links.length ? withLinks(said, links) : cut(said),
+      ...(subject ? { subject } : {}),
+      ...(email || name ? { contact: { ...(email ? { email } : {}), ...(name ? { name } : {}) } } : {}),
+      ...(messageId ? { idempotency_key: messageId } : {}),
+    },
+    {
+      screen: {
+        door: "email",
+        email: {
+          serverMarked: spamVerdict(parsed) !== null,
+          ...(o.auth ? { auth: o.auth } : {}),
+          ...(name ? { displayName: name } : {}),
+          ...(replyTo && replyTo !== from ? { replyTo } : {}),
+          ...(parsed.html && !o.flood ? { html: parsed.html.slice(0, 200_000) } : {}),
+          attachments: { count: files.length, types: files.slice(0, 10).map((a) => a.mimeType || "file") },
+          ...(links.length ? { words: cut(said) } : {}),
+          notice: true,
+          ...(o.flood ? { flood: true } : {}),
+        },
+      },
+    },
+  );
+  const view = (created as { view: { item: { id: string } }; replayed?: boolean }).view;
+  // The same email again, kept already (two deliveries at once): nothing more of it.
+  if ((created as { replayed?: boolean }).replayed) return { outcome: "duplicate", itemId: view.item.id };
+  if (messageId)
+    await db.client
+      .query({
+        sql: "UPDATE thread_entries SET message_id = ?, raw_blob_key = ? WHERE item_id = ? AND message_id IS NULL",
+        params: [messageId, o.mail.rawBlobKey ?? null, view.item.id],
+        method: "run",
+      })
+      .catch(() => undefined);
+  const { rows: put } = await db.client.query({
+    sql: "SELECT state FROM items WHERE id = ?",
+    params: [view.item.id],
+    method: "all",
+  });
+  // Put aside by the spam filter's own checks, as any email would be: under Spam, its files not kept.
+  if (put[0]?.[0] === "spam") return { outcome: "spam", itemId: view.item.id, reason: "Put aside by the spam filter." };
+  await attach(db, view.item.id, parsed, messageId, o.now(), "in", {
+    sender: from ?? "",
+    maxBytes: o.opts.attachmentsMaxBytes,
+  });
+  return { outcome: "notice", itemId: view.item.id, reason: o.reason };
+}
 
 /**
  * An email no person wrote: an automatic reply (`isAutomaticReply`), or a returned email — a

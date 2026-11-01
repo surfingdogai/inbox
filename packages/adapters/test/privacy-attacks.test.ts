@@ -101,7 +101,7 @@ describe("erasing a customer who wrote by email", () => {
 });
 
 describe("a customer who writes again after being erased", () => {
-  it("starts a new conversation the business can answer; an out-of-office to an old email is dropped", async () => {
+  it("starts a new conversation the business can answer; an out-of-office to an old email is a notice, kept off what was erased", async () => {
     const { db, caps } = await freshDb();
     const first = await ingestEmail(
       db,
@@ -146,7 +146,8 @@ describe("a customer who writes again after being erased", () => {
       },
       { now: () => T0 + 60 * 60_000 },
     );
-    expect(away.outcome).toBe("dropped");
+    expect(away.outcome).toBe("notice");
+    expect((away as { itemId: string }).itemId).not.toBe(itemId);
     // She writes to it herself: a new item, from her, that the business can answer by email.
     const again = await ingestEmail(
       db,

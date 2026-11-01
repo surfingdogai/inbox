@@ -498,6 +498,12 @@ export const listItemsInput = z.object({
     .describe(
       "Only items with an email that was not sent: one that failed, or one to the customer never sent (no address, nothing to send from, no mail service, the day's acknowledgements used). A test item's are left out.",
     ),
+  notices: z
+    .boolean()
+    .optional()
+    .describe(
+      "Only notices: emails from systems, like receipts, account and newsletter mail, that nobody answers. Listed for a person at the business only, and left out of every other list.",
+    ),
   ...paging,
 });
 
