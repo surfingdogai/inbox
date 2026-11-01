@@ -160,6 +160,13 @@ or network:
   `readPayTo` (`PAY_TO_METHODS`, `stripePayRecipient`, `STRIPE_PAY_CURRENCIES`; `vectors/profile.json`); and a
   listing's `pay_with` entry may carry `to` and `currencies`, from a member's manifest only. A 0.12 reader ignores
   `pay_to` and the new members, and reads `stripe_pay` as a token it does not know.
+- 0.13.1 (optional for a network and for an inbox): kinds of business. `vocab/business-kinds.json` version 1
+  (`BUSINESS_KINDS`, `businessKind`, `isBusinessKind`, `KIND_LABEL_MAX`), 574 kinds with their names in five
+  languages, and `kindCategories`, how an inbox publishes a business's kind in its profile's `categories`. A
+  0.13 reader reads `categories` as before.
+
+A version number is given when a change merges, in the order changes merge. Work in progress names no number, so
+two changes built side by side never claim the same one.
 
 ## Stays (0.11)
 
@@ -254,7 +261,7 @@ public page its hosts were read from; and the names under a host, and the first 
 own pages. Not listed: delivery apps and stay marketplaces (Uber Eats, DoorDash, Deliveroo, Booking.com, Airbnb,
 Expedia…). Some listed platforms charge the business per booking or order; that is between the business and the
 platform. A token is never removed or renamed.
-`vocab/business-kinds.json` (0.12, additive) lists kinds of business, from a tattoo studio to a surf house: each
+`vocab/business-kinds.json` (0.13.1, additive) lists kinds of business, from a tattoo studio to a surf house: each
 with its name in English, Portuguese (Portugal), Spanish, French and German, the setup an inbox starts it from
 (`preset`: one of the inbox's rule presets, or `general`, whose rules follow what agents may do) and the directory
 categories it falls under (slugs of `vocab/categories.json`). An inbox publishes a business's kind in its profile's
