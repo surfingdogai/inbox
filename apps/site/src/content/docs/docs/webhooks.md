@@ -132,7 +132,7 @@ Four fields, and only the first is required:
 - **`url`** — `https` only, and a public host. An IP address, `localhost` or an internal name is refused, which is also why a tunnel (`ngrok`, `cloudflared`) is the way to develop against a machine under your desk. On a Node server the name is resolved at every delivery, and a name that resolves to a private or loopback address is refused then, with the reason in the delivery's error. `integrations.webhooks.allowPrivateTargets` in Settings lifts both rules for a machine you control;
 - **`events`** — the patterns you want; `["*"]`, everything, is the default;
 - **`payload_style`** — thin or full, see [thin and full](#thin-and-full) at the bottom of this page. Thin is the default and the right answer for almost everyone; full sends the customer's data to that address;
-- **`headers`** — up to five extra headers sent with every delivery, for a receiver that checks a header rather than the signature: n8n's and Make's webhook triggers, Pipedream, a gateway. `{"Authorization": "Bearer …"}` or `{"Authorization": "Basic …"}` is the usual one. The values are sealed like the signing secret and never shown again; the endpoint lists only the names. `PATCH` merges: a name with a value sets it, a name with `null` removes it. Headers the delivery sets itself (`content-type`, `user-agent`, `webhook-*`, `sdi-*` and the connection's own) are refused.
+- **`headers`** — up to five extra headers sent with every delivery, for a receiver that checks a header rather than the signature: n8n's and Make's webhook triggers, Pipedream, a gateway. `{"Authorization": "Bearer …"}` is what n8n's Header Auth checks, `{"x-make-apikey": "…"}` what a Make custom webhook's API key checks, and `{"Authorization": "Basic …"}` the other usual one. The values are sealed like the signing secret and never shown again; the endpoint lists only the names. `PATCH` merges: a name with a value sets it, a name with `null` removes it. Headers the delivery sets itself (`content-type`, `user-agent`, `webhook-*`, `sdi-*` and the connection's own) are refused.
 
 The answer is `201` with a `Location` header naming the new endpoint. Send an `Idempotency-Key` header and a retried request returns the same endpoint and the same secret instead of making a second one.
 
@@ -298,7 +298,38 @@ A **thin** event carries a pointer: the ids, the type, the new state, the versio
 
 Thin is the default, for two reasons. A thin transition event never goes stale: if a delivery succeeds ten hours late, it still says "booking `01K5…` changed, go and look", whereas a full event would be telling you about a state that has moved on twice since. (A `<type>.message` event is the exception in both styles: a message does not change the item, so its `state` and `version` are the item's as they stand when we send.) And a thin event does not copy a customer's name, email address and phone number to a URL that somebody pasted into a form once, possibly into a no-code tool logging every request body.
 
-Choose full when the receiver genuinely cannot call back — a Zapier or Make step that can only read what it is handed, or a Slack message that needs the customer's name in it. Choose it knowing what it means: `payload_style: "full"` sends your customers' names, email addresses and phone numbers to that address, on every event, for as long as the endpoint exists. To fetch an item from a thin event, `GET` the `data.url` with an owner API key ([API](/docs/api/)); you get the same item, as it stands now.
+Choose full when the receiver genuinely cannot call back — a Zapier or Make step that can only read what it is handed, or a Slack message that needs the customer's name in it. Choose it knowing what it means: `payload_style: "full"` sends your customers' names, email addresses and phone numbers to that address, on every event, for as long as the endpoint exists. To fetch an item from a thin event, `GET` the `data.url` with a key of yours ([API](/docs/api/)); a key with the **Automation tool** preset is enough, and you get the same item, as it stands now.
+
+## n8n, Zapier and Make
+
+**n8n.** Tested on 1 November 2026 with n8n 2.45.7 running on our own machine, against an inbox running there too: a new message and a new booking reached n8n's Webhook trigger, which checked the header and the signature and answered `204`; n8n then read each item with an Automation tool key, replied to the message and confirmed the booking. A delivery sent while n8n was down arrived on its third attempt, five minutes later; a signature made with another secret, a timestamp ten minutes off either way and a body re-serialised after signing were each answered `400`; after a rotation, n8n holding only the old secret and then only the new one both verified. The flow:
+
+1. In Settings → Keys, a key with the **Automation tool** preset. In n8n, a **Header Auth** credential for it: name `Authorization`, value `Bearer sdi_own_…`.
+2. A **Webhook** node: method `POST`; Authentication **Header Auth**, with a credential of its own (name `Authorization`, value `Bearer` and a long random string); Respond **Using 'Respond to Webhook' Node**; the option **Raw Body** on. Add the endpoint at its production URL, with the same header: `"headers": {"Authorization": "Bearer <that string>"}`.
+3. A **Code** node that checks the signature over the raw body, below. n8n's Crypto node cannot: it takes the secret as text, and the key is the bytes the `whsec_` value encodes. On your own n8n, the Code node loads `crypto` only with `NODE_FUNCTION_ALLOW_BUILTIN=crypto` set.
+4. An **If** on `ok`, and a **Respond to Webhook** node on each side: `204` when it passed, `400` when not, before the slow part.
+5. **HTTP Request** nodes with the key's credential: `GET` the event's `data.url`, then `POST` to `/v1/owner/items/{id}/replies` with `{"body": "…"}`, or to `/v1/owner/items/{id}/transitions` with `{"event": "confirm"}`, each with an `Idempotency-Key` header of `{{ $('Webhook').first().json.headers['webhook-id'] }}`. A retried delivery then gets its first answer back (`Idempotent-Replayed: true`) and nothing is done twice. Leave alone the events whose `data.actor.id` is the key's own id: they are the flow's own writes coming back.
+
+```js
+const crypto = require('crypto');
+const secret = 'whsec_…'; // the endpoint's signing secret, shown once when you added it
+const h = $input.first().json.headers;
+const raw = (await this.helpers.getBinaryDataBuffer(0, 'data')).toString('utf8');
+const id = h['webhook-id'], ts = h['webhook-timestamp'], sig = h['webhook-signature'] ?? '';
+const key = Buffer.from(secret.replace(/^whsec_/, ''), 'base64');
+const expected = Buffer.from(crypto.createHmac('sha256', key).update(`${id}.${ts}.${raw}`).digest('base64'));
+const fresh = Math.abs(Date.now() / 1000 - Number(ts)) <= 300;
+const ok = fresh && sig.split(' ').some((v) => {
+  const s = Buffer.from(v.slice(3));
+  return v.startsWith('v1,') && s.length === expected.length && crypto.timingSafeEqual(s, expected);
+});
+return [{ json: { ok, webhookId: id, event: ok ? JSON.parse(raw) : null } }];
+```
+
+**Zapier and Make.** Built, not yet verified on a live account: no flow has run with a Zapier or a Make account yet. They take the same deliveries, and call back the same way:
+
+- **Make**: a **Custom webhook**, with an API key; add the endpoint with `"headers": {"x-make-apikey": "<that key>"}`. Make answers `200` with `Accepted`, which counts as delivered. An **HTTP** module reads a thin event's `data.url`, and posts a reply or a move, with `Authorization: Bearer sdi_own_…` and the event's `id` (the same as `webhook-id`) as the `Idempotency-Key`.
+- **Zapier**: **Webhooks by Zapier**, with **Catch Hook**, or **Catch Raw Hook**, which hands on the headers and the raw body too. A Webhooks by Zapier `GET` step with the key reads a thin event's `data.url`, and a `POST` step replies or moves the item, with the event's `id` as the `Idempotency-Key`; or choose `payload_style: "full"`, knowing what it sends.
 
 ## If you cannot receive a webhook
 
@@ -329,6 +360,6 @@ curl -s "https://your-inbox.example.com/v1/owner/events?cursor=01K5RJ3B4C5D6E7F8
 }
 ```
 
-Events come back oldest first, and the ids are ULIDs, so they sort in the order things happened. The stream trails live by a few seconds: an event's id is minted a moment before its write commits, so holding the newest few seconds back is what lets you treat `next_cursor` as a hard watermark and never miss a row that landed out of order. Send the `next_cursor` of your last page as `cursor` on the next call; omit `cursor` to start at the beginning of time, and expect `null` when you have caught up. There is nothing to acknowledge, so re-reading from an older id is free — which is what makes this the way to backfill after an outage, or to build a copy of your data from scratch. `limit` is 1 to 100 and defaults to 50; `types` takes the same patterns a subscription does, comma-separated or repeated; `since` takes an ISO instant when you would rather start from a time than from an id.
+Events come back oldest first, and the ids are ULIDs, so they sort in the order things happened. The stream trails live by a few seconds: an event's id is minted a moment before its write commits, so holding the newest few seconds back is what lets you treat `next_cursor` as a hard watermark and never miss a row that landed out of order. Send the `next_cursor` of your last page as `cursor` on the next call; omit `cursor` to start at the beginning of time, and expect `null` when you have caught up: then keep the cursor you sent and send it again next time, since a call without one starts at the beginning again. There is nothing to acknowledge, so re-reading from an older id is free — which is what makes this the way to backfill after an outage, or to build a copy of your data from scratch. `limit` is 1 to 100 and defaults to 50; `types` takes the same patterns a subscription does, comma-separated or repeated; `since` takes an ISO instant when you would rather start from a time than from an id.
 
 Every event you would have received as a webhook appears here, as the same thin event, whether or not an endpoint exists. The owner MCP exposes it as `list_events`, so the AI you already connected can read the stream too.

@@ -708,8 +708,8 @@ function WebhookForm({
       <div>
         <span className="label">Extra headers · optional</span>
         <div className="hint">
-          For a receiver that checks a header rather than the signature, such as an n8n or Make webhook: for example
-          Authorization with the value it expects. Values are sealed and never shown again.
+          For a receiver that checks a header rather than the signature: Authorization with the value an n8n webhook's
+          Header Auth expects, or x-make-apikey with a Make webhook's API key. Values are sealed and never shown again.
         </div>
         <div className="stack sub">
           {headers.map((h, i) => (

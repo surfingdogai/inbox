@@ -50,7 +50,9 @@ export const NOT_FOR_AI_SCOPES: readonly Scope[] = ["customers:erase", "money:wr
 
 /**
  * Ready-made scope sets, one per kind of system a key is pasted into. None includes
- * `settings:write` or `keys:write`: a key in Zapier or a shop's admin cannot reconfigure the inbox.
+ * `settings:write` or `keys:write`. A key never mints keys; with `security.enforceScopes` on, a key in
+ * Zapier or a shop's admin cannot reconfigure the inbox either. Off, as out of the box, such a call goes
+ * through and is recorded (log first: an Automation tool key's `PUT /settings` did, 1 November 2026).
  */
 export const KEY_PRESETS = [
   {

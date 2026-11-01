@@ -69,12 +69,28 @@ describe("the table of integrations", () => {
     ]);
     // A connection this release ships is built, not yet verified on a live account: none has run with a
     // business's real account. What reaches the inbox works, but for Meta's custom connectors for
-    // Muse, which follow Meta's own roll-out.
+    // Muse, which follow Meta's own roll-out. Of the automations, n8n ran end to end; Zapier and Make
+    // have run with no account of either, so they are built.
+    const UNRUN = ["Zapier and Make"];
     for (const g of TABLE)
       for (const r of g.rows) {
-        const want = SYSTEM_GROUPS.includes(g.id) ? "built" : r.assistant === "meta-muse" ? "rolling" : "works";
+        const want =
+          SYSTEM_GROUPS.includes(g.id) || UNRUN.includes(r.name)
+            ? "built"
+            : r.assistant === "meta-muse"
+              ? "rolling"
+              : "works";
         expect(r.state, r.name).toBe(want);
       }
+    expect(TABLE.find((g) => g.id === "automations")?.rows.map((r) => [r.name, r.state])).toEqual([
+      ["n8n", "works"],
+      ["Zapier and Make", "built"],
+    ]);
+    // What ran is said where the rows point, with its date.
+    const hooks = docOf("/docs/webhooks/#n8n-zapier-and-make");
+    expect(hooks.anchored).toBe(true);
+    expect(hooks.text).toContain("**n8n.** Tested on 1 November 2026 with n8n 2.45.7");
+    expect(hooks.text).toContain(`**Zapier and Make.** ${STATE_LABEL.built}`);
     expect(read("src/lib/assistants.ts")).toContain("custom connectors follow Meta's roll-out.");
     for (const r of COMING.find((g) => g.id === "company")?.rows ?? []) expect(r.state, r.name).toBe("partner");
     for (const r of COMING.find((g) => g.id === "standard")?.rows ?? []) expect(r.state, r.name).toBe("standard");

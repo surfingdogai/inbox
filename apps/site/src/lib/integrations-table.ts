@@ -4,8 +4,9 @@
  * and its state, in the words of src/lib/integrations.ts (STATE_LABEL): Built, not yet verified on a
  * live account, for a connection this release (0.2.0) ships with nothing to set but the owner's own
  * account, on a hosted inbox and on one's own server alike, until it has run with a business's real
- * account; Works, for what reaches the inbox today (the assistants, any agent, automations), and for
- * a connection once it has run with one; Rolling out, for what its maker is still rolling out (Meta's
+ * account, and for Zapier and Make until a flow has run with an account of each; Works, for what
+ * reaches the inbox today (the assistants, any agent, n8n, which ran end to end), and for a connection
+ * once it has run with one; Rolling out, for what its maker is still rolling out (Meta's
  * custom connectors for Muse); Built, waiting for the partner, for what is built and waits on another
  * company; Built, waiting for the standard, for what waits on a draft standard. Never a date. A row
  * of a connection on the /inbox row takes that connection's state, so a state is set in one place.
@@ -227,7 +228,14 @@ export const TABLE: readonly TableGroup[] = [
     id: "automations",
     title: "Automations",
     rows: [
-      works("Zapier, Make and n8n", "Signed webhooks for every booking, order, quote and message", "/docs/webhooks/"),
+      // n8n ran end to end on 1 November 2026 (docs/webhooks.md, "n8n, Zapier and Make"); Zapier and
+      // Make have not run with an account of either, so they are built until one has.
+      works(
+        "n8n",
+        "Signed webhooks in; replies and moves back with an Automation tool key",
+        "/docs/webhooks/#n8n-zapier-and-make",
+      ),
+      shipped("Zapier and Make", "The same signed webhooks and key", "/docs/webhooks/#n8n-zapier-and-make"),
     ],
   },
 ];

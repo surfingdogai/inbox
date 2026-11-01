@@ -336,7 +336,7 @@ export const webhookHeadersSchema = z
     message: "a header is named twice",
   })
   .describe(
-    `Up to ${MAX_WEBHOOK_HEADERS} extra headers sent with every delivery, e.g. {"Authorization": "Bearer …"} for an n8n or Make webhook that checks a header. The values are sealed like the signing secret and never shown again; only the names are.`,
+    `Up to ${MAX_WEBHOOK_HEADERS} extra headers sent with every delivery, e.g. {"Authorization": "Bearer …"} for an n8n webhook's Header Auth, or {"x-make-apikey": "…"} for a Make webhook's API key. The values are sealed like the signing secret and never shown again; only the names are.`,
   );
 
 export const createWebhookInput = z.object({

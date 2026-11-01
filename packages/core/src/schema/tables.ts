@@ -1158,8 +1158,9 @@ export const webhooks = sqliteTable("webhooks", {
   disabledAt: integer("disabled_at"),
   lastError: text("last_error"),
   /**
-   * Extra request headers the owner asked for (an `Authorization` for an n8n or Make webhook, say),
-   * sealed by the secret box like the signing secret: the values are never returned. Null for none.
+   * Extra request headers the owner asked for (an `Authorization` for an n8n webhook, an `x-make-apikey`
+   * for a Make one, say), sealed by the secret box like the signing secret: the values are never
+   * returned. Null for none.
    */
   headersEnc: text("headers_enc"),
   /** The names of those headers, in the clear, so Settings can say which are set. */
