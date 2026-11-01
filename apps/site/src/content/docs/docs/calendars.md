@@ -35,7 +35,7 @@ You give an email and an **app password**, never your usual password:
 | **Nextcloud** | Settings → Security → Devices & sessions → Create new app password. Give your Nextcloud's address too. |
 | **Other** | Your provider's settings. The server is found from your email's domain (its DNS `_caldavs._tcp` record, then `/.well-known/caldav`); if it is not, add its address under **More options**. |
 
-Every calendar for events in the account blocks busy times until you choose otherwise, and bookings go to the first one you can write to. **Change** changes both.
+Every calendar for events in the account blocks busy times until you choose otherwise, and bookings go to the first one you can write to. **Change** changes both. A calendar you add to the account later is listed under **Change** within about six hours, and blocks busy times once you tick it there.
 
 Gmail and Outlook addresses are told at once where they connect instead: their calendars do not open with an app password.
 
