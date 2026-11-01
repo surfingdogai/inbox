@@ -11,6 +11,7 @@ import {
   RETURN_KIND,
 } from "../lib/format";
 import type { Item, ItemOf, Money } from "../lib/types";
+import { Linked } from "./Linked";
 import { StayFields, StayQuoteBlock, StayQuoteComposer } from "./Stay";
 
 /**
@@ -93,7 +94,7 @@ function Typed({ item, tz, platform }: { item: Item; tz: string | undefined; pla
     case "message":
       return (
         <F label="Message" wide prose>
-          {item.payload.text}
+          <Linked text={item.payload.text} />
         </F>
       );
     case "refund":
