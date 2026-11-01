@@ -116,7 +116,7 @@ const withFile = (b: string) =>
   ].join("\r\n");
 
 describe("a server's mark", () => {
-  it("puts a stranger's email aside as it arrives, keeping none of its files", async () => {
+  it("puts a stranger's email aside as it arrives, naming its files and keeping none", async () => {
     const s = await setup();
     const r = await s.ingest(
       { From: "Deals <deals@bulk.example>", Subject: "Invoice", "X-Spam-Flag": "YES" },
@@ -134,7 +134,15 @@ describe("a server's mark", () => {
       .select()
       .from(schema.threadEntries)
       .where(eq(schema.threadEntries.itemId, idOf(r)));
-    expect(entry?.attachments ?? []).toEqual([]);
+    const named = (entry?.attachments ?? []) as { state: string }[];
+    expect(named.length).toBeGreaterThan(0);
+    expect(named.every((a) => a.state === "aside")).toBe(true);
+    const { rows } = await s.db.client.query({
+      sql: "SELECT COUNT(*) FROM mail_attachment_chunks c JOIN mail_attachments a ON a.id = c.attachment_id WHERE a.item_id = ?",
+      params: [idOf(r)],
+      method: "all",
+    });
+    expect(Number(rows[0]?.[0])).toBe(0);
   });
 
   it("only labels an email from a sender the business has answered", async () => {

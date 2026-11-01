@@ -99,12 +99,13 @@ export function useStopNetworks(itemId: string) {
   return useMutation({ mutationFn: (partyId: string) => api.stopNetworks(partyId, itemId), onSuccess: invalidate });
 }
 
-/** Moves a notice to the inbox, or deletes it: the lists and the counts are read again. */
+/** Moves a notice to the inbox, or deletes it, or all of its sender's: the lists and the counts are read again. */
 export function useNoticeActions(itemId: string) {
   const invalidate = useInvalidateItem(itemId);
   const move = useMutation({ mutationFn: () => api.moveNoticeToInbox(itemId), onSuccess: invalidate });
   const remove = useMutation({ mutationFn: () => api.deleteNotice(itemId), onSuccess: invalidate });
-  return { move, remove };
+  const removeAll = useMutation({ mutationFn: () => api.deleteNoticesFrom(itemId), onSuccess: invalidate });
+  return { move, remove, removeAll };
 }
 
 /** Erases one customer: the first call asks what it would erase (a 409 with `confirm`), the second does it. */

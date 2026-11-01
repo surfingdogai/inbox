@@ -232,7 +232,7 @@ export function ItemDetailView({
         {isNotice(item) && (
           <div className="notice-bar">
             <p className="screen-top">{NOTICE_LINE}</p>
-            <NoticeActs itemId={item.id} leaveOnDelete />
+            <NoticeActs itemId={item.id} leaveOnDelete all />
           </div>
         )}
         {wasNotice(item) && <p className="hint">{MOVED_LINE}</p>}

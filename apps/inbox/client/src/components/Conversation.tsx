@@ -163,6 +163,8 @@ function Files({ files }: { files: NonNullable<ThreadEntry["attachments"]> }) {
     too_large: "not kept: too large",
     refused: "not kept: a program file",
     full: "not kept: no room left for files",
+    too_many: "not kept: more files than one email keeps",
+    aside: "not kept: its email was put aside as spam",
     removed: "removed",
   };
   return (

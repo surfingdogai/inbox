@@ -296,6 +296,9 @@ export const api = {
     call<{ moved: boolean }>("POST", `${item(id)}/move-to-inbox`, { body: {}, idempotent: true }),
   /** A notice deleted, with everything it holds. */
   deleteNotice: (id: string) => call<{ deleted: boolean }>("DELETE", `${item(id)}/notice`),
+  /** Every notice from this notice's sender deleted, 500 at a time. */
+  deleteNoticesFrom: (id: string) =>
+    call<{ deleted: number; more: boolean; sender: string | null }>("DELETE", `${item(id)}/notices-from-sender`),
   transition: (id: string, body: TransitionBody) =>
     call<TransitionResult>("POST", `${item(id)}/transitions`, { body, idempotent: true }),
   reply: (id: string, body: ReplyBody) =>

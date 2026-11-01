@@ -11,6 +11,9 @@ export const NOTICES_TOP =
 export const NOTICES_EMPTY = "No notices.";
 /** On a notice itself, above its email. */
 export const NOTICE_LINE = "A notice: an email from a system. Nobody answers it, and only you read it.";
+/** On a notice itself: every notice from its sender (its domain), deleted at once. */
+export const DELETE_ALL_LABEL = "Delete all from this sender";
+export const DELETE_ALL_ASK = "Delete every notice from this sender for good?";
 /** On a notice you moved to the inbox. */
 export const MOVED_LINE = "Moved from Notices. Still yours alone: nothing answers it by itself.";
 

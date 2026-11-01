@@ -346,7 +346,7 @@ export const itemDetailSchema = itemViewSchema.extend({
             filename: z.string(),
             contentType: z.string(),
             size: z.number().int(),
-            state: z.enum(["kept", "too_large", "refused", "full", "removed"]),
+            state: z.enum(["kept", "too_large", "refused", "full", "too_many", "aside", "removed"]),
           }),
         )
         .optional()

@@ -14,6 +14,8 @@ export const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
 /** At most this much from one email, and at most this many files. */
 export const EMAIL_ATTACHMENTS_MAX_BYTES = 15 * 1024 * 1024;
 export const ATTACHMENTS_PER_EMAIL = 10;
+/** The files one email names, kept or not; past this, one line says how many more it had. */
+export const NAMED_PER_EMAIL = 100;
 /** All the attachments one inbox keeps; past this, new ones are named but not kept. */
 export const INBOX_ATTACHMENTS_MAX_BYTES = 100 * 1024 * 1024;
 /**
@@ -35,7 +37,12 @@ export const ATTACHMENT_CHUNK_BYTES = 256 * 1024;
 const RUNS =
   /\.(exe|com|bat|cmd|scr|pif|msi|msp|msix|appx|appxbundle|msixbundle|jar|js|jse|vbs|vbe|wsf|wsh|wsc|ps1|psm1|psd1|msh|msh1|msh2|mshxml|hta|cpl|msc|lnk|url|reg|inf|scf|iso|img|vhd|vhdx|dmg|pkg|app|apk|sh|bash|command|docm|xlsm|pptm|dotm|xltm|xlam|ppam|xll|one|onepkg|chm|cab|appref-ms|settingcontent-ms|library-ms|gadget|application|xbap)$/i;
 
-export type AttachmentState = "kept" | "too_large" | "refused" | "full" | "removed";
+/**
+ * What became of a file: `kept`, or named only — `too_large`, `refused` (a file that runs), `full`,
+ * `too_many` (past the files one email keeps), `aside` (its email was put aside as spam: nothing of
+ * it is opened or kept), `removed` (a person deleted it).
+ */
+export type AttachmentState = "kept" | "too_large" | "refused" | "full" | "too_many" | "aside" | "removed";
 
 export interface AttachmentInput {
   readonly filename: string | null | undefined;
@@ -135,10 +142,16 @@ export async function keepAttachments(
     readonly inboxMaxBytes?: number | undefined;
     /** Who sent them (their address): what one sender, and one sender's domain, may leave in a day. */
     readonly sender?: string | null | undefined;
+    /** Its email was put aside as spam: every file is named, none kept. */
+    readonly aside?: boolean | undefined;
   },
 ): Promise<AttachmentRef[]> {
   const out: AttachmentRef[] = [];
-  const files = o.attachments.filter((a) => !a.related).slice(0, ATTACHMENTS_PER_EMAIL);
+  // Every file is named, those past the email's ten too, so none goes without a trace; past a hundred
+  // named, one line says how many more there were.
+  const all = o.attachments.filter((a) => !a.related);
+  const files = all.slice(0, NAMED_PER_EMAIL);
+  const unnamed = all.slice(NAMED_PER_EMAIL);
   let stored = await keptBytes(db);
   let thisEmail = 0;
   const cap = o.inboxMaxBytes ?? INBOX_ATTACHMENTS_MAX_BYTES;
@@ -149,20 +162,34 @@ export async function keepAttachments(
   const shared = senderDomain !== null && SHARED_DOMAINS.test(senderDomain);
   let bySender = senderKey ? await keptSince(db, "sender", senderKey, o.now) : 0;
   let byDomain = senderDomain && !shared ? await keptSince(db, "sender_domain", senderDomain, o.now) : 0;
-  for (const file of files) {
+  const rest = unnamed.length
+    ? [
+        {
+          filename: `${unnamed.length} more file${unnamed.length === 1 ? "" : "s"}`,
+          mimeType: "application/octet-stream",
+          content: new Uint8Array(0),
+        } satisfies AttachmentInput,
+      ]
+    : [];
+  for (const [index, file] of [...files, ...rest].entries()) {
     const contentType = cleanType(file.mimeType);
     const filename = safeFilename(file.filename, contentType);
     const bytes = bytesOf(file.content);
-    const size = bytes.byteLength;
-    const state: AttachmentState = RUNS.test(filename)
-      ? "refused"
-      : size > ATTACHMENT_MAX_BYTES || thisEmail + size > EMAIL_ATTACHMENTS_MAX_BYTES
-        ? "too_large"
-        : stored + size > cap ||
-            bySender + size > SENDER_ATTACHMENTS_PER_DAY ||
-            byDomain + size > DOMAIN_ATTACHMENTS_PER_DAY
-          ? "full"
-          : "kept";
+    const size =
+      index >= files.length ? unnamed.reduce((sum, a) => sum + bytesOf(a.content).byteLength, 0) : bytes.byteLength;
+    const state: AttachmentState = o.aside
+      ? "aside"
+      : index >= ATTACHMENTS_PER_EMAIL
+        ? "too_many"
+        : RUNS.test(filename)
+          ? "refused"
+          : size > ATTACHMENT_MAX_BYTES || thisEmail + size > EMAIL_ATTACHMENTS_MAX_BYTES
+            ? "too_large"
+            : stored + size > cap ||
+                bySender + size > SENDER_ATTACHMENTS_PER_DAY ||
+                byDomain + size > DOMAIN_ATTACHMENTS_PER_DAY
+              ? "full"
+              : "kept";
     const id = ulid(o.now);
     const chunks = state === "kept" ? Math.max(1, Math.ceil(size / ATTACHMENT_CHUNK_BYTES)) : 0;
     const statements: Statement[] = [

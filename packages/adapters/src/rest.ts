@@ -956,6 +956,19 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
     async (c) => c.json(await caps.deleteNotice(c.get("caller"), getItemInput.parse({ item_id: c.req.param("id") }))),
   );
 
+  app.delete(
+    "/items/:id/notices-from-sender",
+    owner({
+      tags: ["owner"],
+      summary:
+        "Delete every notice from this notice's sender (its domain, or its address on a domain many people share), 500 at a time: it cannot be undone",
+      responses: json("Deleted", z.looseObject({})),
+      write: true,
+    }),
+    async (c) =>
+      c.json(await caps.deleteNoticesFrom(c.get("caller"), getItemInput.parse({ item_id: c.req.param("id") }))),
+  );
+
   app.post(
     "/items/:id/let-in",
     owner({

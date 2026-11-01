@@ -37,6 +37,7 @@ import type { AttachmentRef } from "../email/attachments";
 import { networksStopped } from "../identity/stops";
 import type { IdentityAnswer } from "../identity/types";
 import { mailForItem, senderOf } from "../jobs/mail-log";
+import { fromSenderSql, noticeSender } from "../jobs/notices";
 import { FoodCapabilities } from "../kitchen/capability";
 import { tableDeposits } from "../kitchen/deposits";
 import { applyPosState, elsewhereStep, posStatusStep, registerFoodResolver } from "../kitchen/pos";
@@ -1850,8 +1851,9 @@ export class Capabilities {
         body: withheld ? hiddenWords : t.bodyText,
         at: new Date(t.createdAt).toISOString(),
         ...(delivery.has(t.id) ? { delivery: delivery.get(t.id) as EntryDelivery } : {}),
-        // What came attached to the email (ADR-026 §7): the owner downloads what was kept.
-        ...(Array.isArray(t.attachments) && t.attachments.length
+        // What came attached to the email (ADR-026 §7): the owner downloads what was kept. Owner-only
+        // mail's files are not named to anyone else either.
+        ...(!withheld && Array.isArray(t.attachments) && t.attachments.length
           ? { attachments: t.attachments as readonly AttachmentRef[] }
           : {}),
       })),
@@ -1880,6 +1882,14 @@ export class Capabilities {
    */
   async transitionItem(caller: Caller, input: T.TransitionItemInput): Promise<TransitionResult> {
     requireBusiness(caller);
+    const ownerOnly = await this.ownerOnlyFlags(input.item_id);
+    if (ownerOnly) {
+      // Owner-only mail (an account's, a notice) is acted on by a person at the business: the owner's AI
+      // or another system may only put it aside as spam, and reads none of it in what comes back.
+      if (!readsAccountMail(caller) && input.event !== "mark_spam") throw personOnly();
+      // A notice under Notices is answered by nobody: moved to the inbox first, it is a conversation.
+      if (input.event === "answer" && ownerOnly.notice && !ownerOnly.inInbox) throw noticeUnanswered();
+    }
     // Held by the spam filter (ADR-041): a person acting on it lets it in first; nobody else acts on it.
     await this.releaseForPerson(caller, input.item_id, input.event);
     // The owner's AI's words on a transition can reach the customer: none of another's (`access/leaks.ts`).
@@ -1906,7 +1916,9 @@ export class Capabilities {
       if ((input.event === "mark_spam" || input.event === "unspam") && !r.replayed) {
         await this.spam.afterOwnerMark(caller, input.item_id, input.event, nowOf(caller));
       }
-      return r;
+      return ownerOnly && !readsAccountMail(caller)
+        ? { ...r, view: { ...r.view, item: withheldItem(r.view.item) } }
+        : r;
     }
     try {
       return await transitionItem(this.db, c, request);
@@ -1920,6 +1932,13 @@ export class Capabilities {
       if (!late && !retried) throw error;
       return transitionItem(this.db, c, { ...request, event: "record_cancel_late" });
     }
+  }
+
+  /** The item's flags when it is owner-only mail (`isOwnerOnly`): an account's, or a notice. */
+  private async ownerOnlyFlags(itemId: string): Promise<ItemFlags | null> {
+    const [row] = await this.db.orm.select({ flags: items.flags }).from(items).where(eq(items.id, itemId));
+    const flags = (row?.flags ?? {}) as ItemFlags;
+    return isOwnerOnly(flags) ? flags : null;
   }
 
   /**
@@ -1992,6 +2011,39 @@ export class Capabilities {
     await this.db.batch(deleteItemStatements(item.id, noticeListedSql()));
     const [left] = await this.db.orm.select({ id: items.id }).from(items).where(eq(items.id, item.id));
     return { deleted: !left };
+  }
+
+  /**
+   * Every notice still under Notices from the same sender as this one (its domain, or its address on a
+   * domain many people share), deleted by a person at the business, with everything each holds: a
+   * flood cleared in one press. At most `NOTICES_DELETED_AT_ONCE` a call; `more` says some are left.
+   */
+  async deleteNoticesFrom(
+    caller: Caller,
+    input: T.GetItemInput,
+  ): Promise<{ deleted: number; more: boolean; sender: string | null }> {
+    const item = await this.ownNotice(caller, input.item_id);
+    const [party] = await this.db.orm
+      .select({ contact: parties.contact })
+      .from(parties)
+      .where(eq(parties.id, item.partyId));
+    const who = noticeSender((party?.contact as { email?: string } | null)?.email);
+    // A notice that names nobody is deleted alone.
+    if (!who) {
+      const one = await this.deleteNotice(caller, input);
+      return { deleted: one.deleted ? 1 : 0, more: false, sender: null };
+    }
+    const match = fromSenderSql(who, "json_extract(p.contact, '$.email')");
+    const { rows } = await this.db.client.query({
+      sql: `SELECT i.id FROM items i JOIN parties p ON p.id = i.party_id
+             WHERE ${noticeListedSql("i.flags")} AND ${match.sql}
+             ORDER BY i.created_at, i.id LIMIT ?`,
+      params: [...match.params, NOTICES_DELETED_AT_ONCE + 1],
+      method: "all",
+    });
+    const ids = rows.slice(0, NOTICES_DELETED_AT_ONCE).map((r) => String(r[0]));
+    for (const id of ids) await this.db.batch(deleteItemStatements(id, noticeListedSql()));
+    return { deleted: ids.length, more: rows.length > ids.length, sender: who.domain ?? who.address ?? null };
   }
 
   /** A notice still under Notices, for a person at the business; anyone else finds no such item. */
@@ -2220,13 +2272,12 @@ export class Capabilities {
     const [row] = await this.db.orm.select().from(items).where(eq(items.id, input.item_id));
     if (!row) throw new WriteError("not_found", "no such item");
     const item = rowToItem(row);
-    // Owner-only mail (an account's, a notice) is answered by a person at the business or by nothing:
-    // never by the owner's AI, a rule or another system, which do not read it either.
-    if (!input.internal && isOwnerOnly(item.flags) && !readsAccountMail(caller)) {
-      throw new WriteError("not_allowed", "Only a person at the business answers this email, in the inbox.", {
-        details: { reason: "person_only" },
-      });
-    }
+    // Owner-only mail (an account's, a notice) is answered, or noted on, by a person at the business or
+    // by nothing: never by the owner's AI, a rule or another system, which do not read it either.
+    if (isOwnerOnly(item.flags) && !readsAccountMail(caller)) throw personOnly();
+    // A notice under Notices is answered by nobody: a person moves it to the inbox first, and is told so,
+    // never left thinking an answer went that did not.
+    if (!input.internal && item.flags.notice && !item.flags.inInbox) throw noticeUnanswered();
     // A reply from the owner's AI names no other customer and carries no secret (`access/leaks.ts`).
     if (!input.internal) await assertNoLeak(this.db, caller, row.partyId, [input.body]);
     // Who wrote it, as the request says: an email nobody typed says it was sent automatically.
@@ -2810,8 +2861,25 @@ function withToken(caller: Caller, token: string | undefined): Caller {
   return token ? { ...caller, accessToken: token } : caller;
 }
 
+/** The notices one press deletes at most (`deleteNoticesFrom`): the rest go with the next. */
+export const NOTICES_DELETED_AT_ONCE = 500;
+
 function requireBusiness(caller: Caller): void {
   if (isCustomer(caller)) throw new WriteError("not_allowed", "owner operations need an owner or staff principal");
+}
+
+/** Owner-only mail (an account's, a notice), acted on by anyone but a person at the business. */
+function personOnly(): WriteError {
+  return new WriteError("not_allowed", "Only a person at the business reads or answers this email, in the inbox.", {
+    details: { reason: "person_only" },
+  });
+}
+
+/** An answer to a notice still under Notices: nothing would go, so nothing is taken. */
+function noticeUnanswered(): WriteError {
+  return new WriteError("wrong_state", "This is a notice: nobody answers it. Move it to the inbox to answer it.", {
+    details: { reason: "notice" },
+  });
 }
 
 function page<R>(rows: R[], limit: number, id: (r: R) => string): Page<R> {

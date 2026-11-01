@@ -46,6 +46,30 @@ async function setup() {
   const owner = { authorization: `Bearer ${(await createApiKey(db, { kind: "owner", name: "cli" })).key}` };
   const ingest = (message: string) =>
     ingestEmail(db, inbox.caps, { raw: message, envelopeTo: INBOUND, auth: { dmarc: "pass" } }, { now: () => T0 });
+  // D&B's statement, with its file: a notice too.
+  const filed = await ingest(
+    [
+      "From: D&B <donotreply@iresearch.dnb.com>",
+      "To: support@oficinamare.example",
+      "Subject: Your D&B statement",
+      "Message-ID: <statement@iresearch.dnb.com>",
+      "MIME-Version: 1.0",
+      'Content-Type: multipart/mixed; boundary="b1"',
+      "",
+      "--b1",
+      "Content-Type: text/plain; charset=utf-8",
+      "",
+      "Your statement is attached.",
+      "--b1",
+      'Content-Type: application/pdf; name="statement.pdf"',
+      'Content-Disposition: attachment; filename="statement.pdf"',
+      "Content-Transfer-Encoding: base64",
+      "",
+      btoa("%PDF-1.4 statement"),
+      "--b1--",
+      "",
+    ].join("\r\n"),
+  );
   const dnb = await ingest(
     raw(
       {
@@ -81,8 +105,13 @@ async function setup() {
       "Could you rebuild my rear wheel this week?",
     ),
   );
-  if (dnb.outcome !== "notice" || news.outcome !== "notice" || customer.outcome !== "created") {
-    throw new Error(`not as expected: ${JSON.stringify([dnb, news, customer])}`);
+  if (
+    dnb.outcome !== "notice" ||
+    news.outcome !== "notice" ||
+    filed.outcome !== "notice" ||
+    customer.outcome !== "created"
+  ) {
+    throw new Error(`not as expected: ${JSON.stringify([dnb, news, filed, customer])}`);
   }
   const drain = async () => {
     await Promise.allSettled(pending.splice(0));
@@ -98,6 +127,7 @@ async function setup() {
     drain,
     notice: dnb.itemId,
     newsletter: news.itemId,
+    statement: filed.itemId,
     other: customer.itemId,
     party: row?.partyId ?? "",
   };
@@ -231,6 +261,107 @@ describe("notices", () => {
     await s.drain();
     const entries = await s.db.orm.select().from(schema.threadEntries).where(eq(schema.threadEntries.itemId, s.notice));
     expect(entries.map((e) => e.direction)).toEqual(["in"]);
+  }, 60_000);
+
+  it("are acted on, and their files opened, by a person at the business only: a key or the AI may only put one aside", async () => {
+    const s = await setup();
+    const get = (path: string, who: Record<string, string>) => s.app.request(req("GET", path, who));
+    const zap = await mintKey(s.app, s.owner, "automation");
+    const reader = await mintKey(s.app, s.owner, "read_only");
+    for (const event of [
+      { event: "answer", input: { note: "AI answer via transition" } },
+      { event: "close" },
+      { event: "ask_info", input: { note: "Which case?" } },
+    ]) {
+      const res = await s.app.request(req("POST", `/v1/owner/items/${s.notice}/transitions`, zap, event));
+      const said = await res.text();
+      expect(res.status, said).toBe(403);
+      expect(said).toContain("person_only");
+      expect(said).not.toContain(DUNS);
+      expect(said).not.toContain("Resolved Inquiry");
+    }
+    // A note is a person's to write on one too.
+    expect(
+      (
+        await s.app.request(
+          req("POST", `/v1/owner/items/${s.notice}/replies`, zap, { body: "Filed under D&B.", internal: true }),
+        )
+      ).status,
+    ).toBe(403);
+    // Its files: named to nobody else, opened by nobody else.
+    const files = await read(await get(`/v1/owner/items/${s.statement}/attachments`, s.owner));
+    const fileId = (JSON.parse(files) as { attachments: { id: string; filename: string }[] }).attachments[0]?.id ?? "";
+    expect(files).toContain("statement.pdf");
+    expect((await get(`/v1/owner/attachments/${fileId}`, s.owner)).status).toBe(200);
+    for (const key of [zap, reader]) {
+      expect((await get(`/v1/owner/items/${s.statement}/attachments`, key)).status).toBe(403);
+      expect((await get(`/v1/owner/attachments/${fileId}`, key)).status).toBe(403);
+      expect(await read(await get(`/v1/owner/items/${s.statement}`, key))).not.toContain("statement.pdf");
+    }
+    // The owner's AI, over the owner MCP: refused as well.
+    const mcp = await connectOwner(s.app, `Bearer ${await aiToken(s.db)}`);
+    const moved = await mcp.callTool({
+      name: "transition_item",
+      arguments: { item_id: s.notice, event: "answer", input: { note: "Done." } },
+    });
+    expect(moved.isError).toBe(true);
+    expect(JSON.stringify(moved)).not.toContain(DUNS);
+    await mcp.close();
+    // Putting one aside is all another system may do, and it reads nothing of it in the answer.
+    const aside = await s.app.request(
+      req("POST", `/v1/owner/items/${s.newsletter}/transitions`, zap, { event: "mark_spam" }),
+    );
+    const asideSaid = await read(aside);
+    expect(asideSaid).not.toContain("Big sale");
+    await s.drain();
+    const { rows } = await s.db.client.query({
+      sql: "SELECT COUNT(*) FROM outbound_mail WHERE item_id IN (?, ?)",
+      params: [s.notice, s.statement],
+      method: "all",
+    });
+    expect(Number(rows[0]?.[0])).toBe(0);
+  }, 60_000);
+
+  it("are never answered under Notices, a person told so at once; moved to the inbox, only a person answers one", async () => {
+    const s = await setup();
+    const reply = (who: Record<string, string>, internal: boolean) =>
+      s.app.request(req("POST", `/v1/owner/items/${s.notice}/replies`, who, { body: "Thanks!", internal }));
+    const refused = await reply(s.owner, false);
+    const said = await refused.text();
+    expect(refused.status, said).toBe(409);
+    expect(said).toContain("Move it to the inbox to answer it");
+    const viaTransition = await s.app.request(
+      req("POST", `/v1/owner/items/${s.notice}/transitions`, s.owner, { event: "answer", input: { note: "Thanks!" } }),
+    );
+    expect(viaTransition.status).toBe(409);
+    // A note for the team is kept.
+    expect((await reply(s.owner, true)).status).toBe(200);
+    await s.drain();
+    expect(s.mailOut.sent.filter((m) => m.to.some((t) => t.includes("dnb.com")))).toEqual([]);
+
+    await read(await s.app.request(req("POST", `/v1/owner/items/${s.notice}/move-to-inbox`, s.owner, {})));
+    const zap = await mintKey(s.app, s.owner, "automation");
+    const keyed = await s.app.request(
+      req("POST", `/v1/owner/items/${s.notice}/transitions`, zap, { event: "answer", input: { note: "Auto" } }),
+    );
+    expect(keyed.status).toBe(403);
+    await s.drain();
+    expect(s.mailOut.sent.filter((m) => m.to.some((t) => t.includes("dnb.com")))).toEqual([]);
+  }, 60_000);
+
+  it("from one sender are deleted together, in one press, by a person at the business; another sender's stay", async () => {
+    const s = await setup();
+    const zap = await mintKey(s.app, s.owner, "automation");
+    expect((await s.app.request(req("DELETE", `/v1/owner/items/${s.notice}/notices-from-sender`, zap))).status).toBe(
+      404,
+    );
+    const done = await s.app.request(req("DELETE", `/v1/owner/items/${s.notice}/notices-from-sender`, s.owner));
+    expect(JSON.parse(await read(done))).toEqual({ deleted: 2, more: false, sender: "dnb.com" });
+    const left = await read(await s.app.request(req("GET", "/v1/owner/items?notices=true&open_only=false", s.owner)));
+    expect(left).not.toContain(s.notice);
+    expect(left).not.toContain(s.statement);
+    expect(left).toContain(s.newsletter);
+    expect(await read(await s.app.request(req("GET", "/v1/owner/items?open_only=false", s.owner)))).toContain(s.other);
   }, 60_000);
 
   it("are moved to the inbox, still the owner's alone, or deleted, by a person at the business only", async () => {

@@ -130,9 +130,27 @@ and let the owner answer notifications by email.
      and nothing of it goes to the shared list; the local spam checks still run. It alerts nobody. The
      owner reads notices under Notices, out of every other list, and moves one to the inbox (a
      conversation from then on, still the owner's alone) or deletes it. A notice that answers a
-     conversation lands on it as any reply does. Past 200 notices a day from one sender's domain, one is
-     still kept, with the least work: unscreened, found only by its conversation's address and the ids it
-     names, its links not read, and counted (`notice_flood`). The only email not kept is one larger than
+     conversation lands on it as any reply does. Whether an email is a notice is read from its shape
+     alone, never its words: a code or a sign-in link is an account's mail, alerting the owner, only when
+     the receiving server vouched for its domain; from anyone else it is a notice. A website form's email
+     (a sender that takes no answer, no list's headers, and a `Reply-To` naming someone else who does) is
+     a person's message, screened as any other. The owner's AI and an integration key may only mark
+     owner-only mail as spam: they move none, answer none, write no note on one, and open none of its
+     files; a person's answer to a notice still under Notices is refused (`409 wrong_state`, reason
+     `notice`) until it is moved to the inbox, so no answer is taken that would not go. No phone is told of
+     a notice, and no lock screen shows owner-only mail's words. An automatic email to an alert's address
+     from anyone but the business's own address is a notice; what a stranger's answer to an alert
+     attached is kept with a notice, never on the customer's item. Past 200 notices a day from one domain
+     the receiving server vouched for (DMARC passed, or its own DKIM; `mail.bank.example` counts as
+     `bank.example`), one is still kept, with the least work: only the certain spam checks are made (a
+     server's spam mark, the owner's block list, a forged sender), it is found only by its conversation's
+     address and the ids it names, its links are kept, and it is counted (`notice_flood`). Mail nothing
+     vouched for spends no domain's day, a real sender's included, and is always screened in full. The
+     day a flood starts, the owner is emailed once (`notices_day`): how many came and from whom, and that
+     a notice's *Delete all from this sender* clears one sender's (its domain's, or its address's on a
+     domain many people share), 500 a press. A flood's notices are kept whole: a hosted inbox that fills
+     answers every email, a customer's too, with a temporary failure (`507`) until room is made. The only
+     email not kept is one larger than
      the whole system takes, 25 MiB: the gateway (`apps/email-gateway/worker.ts`, `MAX_BYTES`) and
      `POST /v1/email/inbound` refuse it, so its sender gets a bounce and knows. A sender over its rate
      limit gets a temporary failure and sends again later.
@@ -150,10 +168,12 @@ and let the owner answer notifications by email.
      forwarding confirmation for no address being set up, and an email with no sender.
    - Spam: a new email that a server it passed through marked as spam (`X-Spam-Flag`, `X-Spam-Status`,
      Microsoft's spam level) is made in the spam state as it arrives: no alert, no rule, no webhook,
-     nothing answered, none of its files kept. It waits under Spam in the owner app. A failed DMARC check
+     nothing answered, and its files named on it (`aside`), none kept, so none opens; Not spam later does
+     not bring them back, since nothing of them was kept. It waits under Spam in the owner app. A failed DMARC check
      alone is not spam: Email Routing already refuses mail whose sender's policy asks for that, and the
      business's own forward breaks SPF for many honest `p=none` senders. The words are never judged.
-   - Attachments: kept for the owner, at most 10 files and 15 MB an email, 10 MB a file, 100 MB an inbox
+   - Attachments: kept for the owner, at most 10 files and 15 MB an email (the eleventh on is named,
+     `too_many`, and a hundred at most are named, then one line for how many more), 10 MB a file, 100 MB an inbox
      (50 MB on a hosted one), and 20 MB a day from one sender and from one sender's domain (except the big
      mail providers' domains, counted by sender), in 256 KiB pieces (no database's value limit is near). A
      file that runs (`.exe`, `.js`, `.one`, `.xll`, macro documents, disk images…), tested on the name as it

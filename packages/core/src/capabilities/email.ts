@@ -22,6 +22,7 @@ import { senderOf } from "../jobs/mail-log";
 import { readSettings } from "../settings/schema";
 import { type Caller, isCustomer, isOwnerAssistant, isOwnerInPerson, isPerson, nowOf } from "../write/caller";
 import { WriteError } from "../write/errors";
+import { isOwnerOnlyItem, readsAccountMail } from "../write/flags";
 
 /**
  * The email channel, as the owner sees and sets it (ADR-026): the inbox's own address, the
@@ -314,7 +315,20 @@ export class EmailChannelCapabilities {
 
   async attachments(caller: Caller, itemId: string): Promise<AttachmentRef[]> {
     requireBusiness(caller);
+    await this.personForOwnerOnly(caller, itemId);
     return attachmentsOf(this.db, itemId);
+  }
+
+  /**
+   * What came with owner-only mail (an account's, a notice) is a person's at the business to see: not
+   * the owner's AI, not a key handed to another system, whatever their scopes.
+   */
+  private async personForOwnerOnly(caller: Caller, itemId: string): Promise<void> {
+    if (!readsAccountMail(caller) && (await isOwnerOnlyItem(this.db, itemId))) {
+      throw new WriteError("not_allowed", "Only a person at the business opens what came with this email.", {
+        details: { reason: "person_only" },
+      });
+    }
   }
 
   /** A person at the business deletes one kept file: its bytes go, the conversation says so. */
@@ -338,6 +352,7 @@ export class EmailChannelCapabilities {
     requireBusiness(caller);
     const a = await readAttachment(this.db, id);
     if (!a) throw new WriteError("not_found", "no such attachment, or it was not kept");
+    await this.personForOwnerOnly(caller, a.itemId);
     // What the spam filter put aside or holds keeps its files shut until a person brings it back (ADR-041 §4.3).
     const { rows } = await this.db.client.query({
       sql: "SELECT state, screen FROM items WHERE id = ?",

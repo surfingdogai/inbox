@@ -1,8 +1,16 @@
-import { type Caller, createRunner, LINKS_HEADING, schema, ulid } from "@surfingdog/core";
+import {
+  ACCOUNT_WITHHELD,
+  type Caller,
+  createRunner,
+  LINKS_HEADING,
+  phonePushOneHandler,
+  schema,
+  ulid,
+} from "@surfingdog/core";
 import { logMailOut } from "@surfingdog/platform";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { AUTOMATIC_NOTICE, type IngestResult, ingestEmail, noticeBucket, OWN_NOTE } from "../src/email";
+import { AUTOMATIC_NOTICE, type IngestResult, ingestEmail, type MailAuth, noticeBucket, OWN_NOTE } from "../src/email";
 import { consume } from "../src/limits";
 import { freshDb } from "./db";
 
@@ -36,8 +44,37 @@ const agent: Caller = {
   now: () => T,
 };
 
-/** An inbox with its own address, an owner who signs in, and a rule that answers every new message. */
-async function setUp() {
+/** What the receiving server found of a sender that is who it says: DMARC passed. */
+const VOUCHED: MailAuth = { dmarc: "pass" };
+
+/** An email with files: its words, then each file. */
+const withFiles = (h: Record<string, string>, body: string, files: { name: string; bytes: string }[]) =>
+  [
+    ...Object.entries(h).map(([k, v]) => `${k}: ${v}`),
+    "MIME-Version: 1.0",
+    'Content-Type: multipart/mixed; boundary="b1"',
+    "",
+    "--b1",
+    "Content-Type: text/plain; charset=utf-8",
+    "",
+    body,
+    ...files.flatMap((f) => [
+      "--b1",
+      `Content-Type: application/pdf; name="${f.name}"`,
+      `Content-Disposition: attachment; filename="${f.name}"`,
+      "Content-Transfer-Encoding: base64",
+      "",
+      btoa(f.bytes),
+    ]),
+    "--b1--",
+    "",
+  ].join("\r\n");
+
+/**
+ * An inbox with its own address, an owner who signs in, and a rule that answers every new message;
+ * `phone`: and a phone of the owner's that hears of everything, with details.
+ */
+async function setUp(opts: { phone?: boolean } = {}) {
   const { db, caps } = await freshDb();
   await db.client.query({
     sql: "INSERT INTO users (id, email, role, created_at) VALUES ('user_owner', ?, 'owner', ?)",
@@ -67,7 +104,15 @@ async function setUp() {
   });
   const mail = logMailOut();
   caps.attachMail(mail);
-  const runner = createRunner({ mailOut: mail });
+  if (opts.phone) {
+    await db.client.query({
+      sql: `INSERT INTO phone_devices (id, user_id, name, platform, key_jwk, key_thumbprint, notify, push_state, confirmed_at, created_at)
+            VALUES ('ph_1', 'user_owner', 'Pixel', 'android', '{}', 'tp_1', '{"details":true}', 'on', ?, ?)`,
+      params: [T - 86_400_000, T - 86_400_000],
+      method: "run",
+    });
+  }
+  const runner = createRunner({ mailOut: mail, ...(opts.phone ? { phones: caps.phones } : {}) });
   let clock = T;
   const drain = async (advance = 60_000) => {
     clock += advance;
@@ -89,7 +134,13 @@ async function setUp() {
         method: "all",
       })
     ).rows.map((r) => String(r[0]));
-  return { db, caps, mail, drain, ingest, item, entries, jobsFor, at: () => clock };
+  /** Whether the spam filter read it (its verdict), and whether it was put aside. */
+  const verdicts = async (id: string) =>
+    (await db.client.query({ sql: "SELECT 1 FROM spam_verdicts WHERE item_id = ?", params: [id], method: "all" })).rows
+      .length;
+  const kinds = async (kind: string) =>
+    (await db.client.query({ sql: "SELECT payload FROM jobs WHERE kind = ?", params: [kind], method: "all" })).rows;
+  return { db, caps, mail, drain, ingest, item, entries, jobsFor, verdicts, kinds, at: () => clock };
 }
 
 const idOf = (r: IngestResult): string => {
@@ -306,42 +357,292 @@ describe("a conversation", () => {
   });
 });
 
+describe("what an email says", () => {
+  it("never takes it out of Notices: a code nothing vouched for is a notice; one its domain vouched for alerts the owner, the owner's alone", async () => {
+    const s = await setUp();
+    const code = (id: string) => ({
+      From: "Bank <noreply@bank.example>",
+      To: "support@oficinamare.example",
+      Subject: "Your verification code",
+      "Message-ID": `<${id}@bank.example>`,
+    });
+    const unvouched = await s.ingest(code("c1"), "Your verification code is 481516.");
+    await expectNotice(s, unvouched);
+    const vouched = await s.ingest(code("c2"), "Your verification code is 271828.", { auth: VOUCHED });
+    expect(vouched.outcome).toBe("created");
+    expect((await s.item(idOf(vouched)))?.flags).toMatchObject({ account: true });
+    expect((await s.item(idOf(vouched)))?.flags).not.toHaveProperty("notice");
+    await s.drain();
+    expect(s.mail.sent.filter((m) => m.to.includes(OWNER)).map((m) => m.subject)).toEqual([
+      expect.stringContaining("Your verification code"),
+    ]);
+  });
+
+  it("is a person's message when a website form sends it from a no-reply address, its answers going to the person", async () => {
+    const s = await setUp();
+    const form = await s.ingest(
+      {
+        From: "Webflow <no-reply-forms@webflow.com>",
+        "Reply-To": "Maria Costa <maria@example.com>",
+        To: "support@oficinamare.example",
+        Subject: "New form submission on Oficina Maré",
+        "Message-ID": "<form1@webflow.com>",
+      },
+      "Name: Maria Costa\nMessage: Can you service a cargo bike on Saturday?",
+      { auth: VOUCHED },
+    );
+    expect(form.outcome).toBe("created");
+    expect((await s.item(idOf(form)))?.flags).not.toHaveProperty("notice");
+    await s.drain();
+    expect(s.mail.sent.some((m) => m.to.includes(OWNER) && m.text.includes("cargo bike"))).toBe(true);
+    // A mailing with a Reply-To, or one whose Reply-To takes no answer either, is still a notice.
+    await expectNotice(
+      s,
+      await s.ingest(
+        {
+          From: "Shop <no-reply@shop.example>",
+          "Reply-To": "hello@shop.example",
+          "List-Unsubscribe": "<https://shop.example/u>",
+          To: "support@oficinamare.example",
+          Subject: "Autumn sale",
+          "Message-ID": "<sale@shop.example>",
+        },
+        "Up to 30% off.",
+      ),
+    );
+    await expectNotice(
+      s,
+      await s.ingest(
+        {
+          From: "Stripe <no-reply@stripe.example>",
+          "Reply-To": "noreply@stripe.example",
+          To: "support@oficinamare.example",
+          Subject: "Your payout",
+          "Message-ID": "<payout@stripe.example>",
+        },
+        "A payout is on its way.",
+      ),
+    );
+  });
+});
+
+describe("what an email carries", () => {
+  it("names every file it had: those past ten too, and those of one put aside, none of whose files is kept", async () => {
+    const s = await setUp();
+    const twelve = Array.from({ length: 12 }, (_, i) => ({ name: `statement-${i + 1}.pdf`, bytes: `%PDF-${i}` }));
+    const r = await ingestEmail(
+      s.db,
+      s.caps,
+      {
+        raw: withFiles(
+          {
+            From: "Bank <noreply@bank.example>",
+            To: INBOUND,
+            Subject: "Your statements",
+            "Message-ID": "<st@bank.example>",
+          },
+          "Your statements are attached.",
+          twelve,
+        ),
+        envelopeTo: INBOUND,
+        auth: VOUCHED,
+      },
+      { now: s.at },
+    );
+    const id = await expectNotice(s, r);
+    const [entry] = await s.entries(id);
+    const files = (entry?.attachments ?? []) as { filename: string; state: string }[];
+    expect(files.map((f) => f.state)).toEqual([...Array(10).fill("kept"), "too_many", "too_many"]);
+    expect(files.at(-1)?.filename).toBe("statement-12.pdf");
+    const aside = await ingestEmail(
+      s.db,
+      s.caps,
+      {
+        raw: withFiles(
+          {
+            From: "Deals <no-reply@deals.example>",
+            To: INBOUND,
+            Subject: "Invoice",
+            "Message-ID": "<inv@deals.example>",
+            "X-Spam-Flag": "YES",
+          },
+          "See the invoice.",
+          [{ name: "invoice.pdf", bytes: "%PDF" }],
+        ),
+        envelopeTo: INBOUND,
+      },
+      { now: s.at },
+    );
+    expect(aside.outcome).toBe("spam");
+    const [put] = await s.entries(idOf(aside));
+    const named = (put?.attachments ?? []) as { filename: string; state: string }[];
+    expect(named.map((f) => [f.filename, f.state])).toEqual([["invoice.pdf", "aside"]]);
+  });
+});
+
+describe("the owner's phone", () => {
+  it("hears nothing of a notice, a system's later email on it neither, and never reads a code on its lock screen", async () => {
+    const s = await setUp({ phone: true });
+    const first = await s.ingest(
+      {
+        From: "Amazon Web Services <no-reply-aws@amazon.com>",
+        To: "support@oficinamare.example",
+        Subject: "[Case 2] New correspondence added",
+        "Message-ID": "<case2.1@amazonses.com>",
+      },
+      "We are looking into it.",
+    );
+    const id = await expectNotice(s, first);
+    const second = await s.ingest(
+      {
+        From: "Amazon Web Services <no-reply-aws@amazon.com>",
+        To: "support@oficinamare.example",
+        Subject: "Re: [Case 2] New correspondence added",
+        "Message-ID": "<case2.2@amazonses.com>",
+        "In-Reply-To": "<case2.1@amazonses.com>",
+      },
+      "Your case is resolved.",
+    );
+    expect(second).toEqual({ outcome: "replied", itemId: id });
+    // The alert's job, then, a moment later, the phone's.
+    await s.drain(10 * 60_000);
+    await s.drain(10 * 60_000);
+    const { rows: pushes } = await s.db.client.query({
+      sql: "SELECT status, last_error FROM jobs WHERE kind = 'phone_push'",
+      params: [],
+      method: "all",
+    });
+    expect(pushes).toEqual([["done", "a notice: no notification"]]);
+    expect(await s.kinds("phone_push_one")).toEqual([]);
+    expect(s.mail.sent).toEqual([]);
+
+    // A code its domain vouched for: the phone hears it came, never what it says.
+    const code = await s.ingest(
+      {
+        From: "Bank <noreply@bank.example>",
+        To: "support@oficinamare.example",
+        Subject: "Your verification code",
+        "Message-ID": "<code@bank.example>",
+      },
+      "Your verification code is 481516.",
+      { auth: VOUCHED },
+    );
+    expect((await s.item(idOf(code)))?.flags).toMatchObject({ account: true });
+    const sent: Uint8Array[] = [];
+    const phones = {
+      listeners: async () => [{ id: "ph_1", notify: JSON.stringify({ details: true }) }],
+      deliver: async (_device: string, bytes: Uint8Array) => {
+        sent.push(bytes);
+        return { note: "sent" };
+      },
+    } as unknown as Parameters<typeof phonePushOneHandler>[0];
+    await phonePushOneHandler(phones)(
+      { id: "j1", kind: "phone_push_one", payload: { deviceId: "ph_1", itemId: idOf(code), event: "create" } } as never,
+      { db: s.db, now: s.at() } as never,
+    );
+    expect(sent).toHaveLength(1);
+    const payload = JSON.parse(new TextDecoder().decode(sent[0]));
+    expect(payload.text).toBe(ACCOUNT_WITHHELD);
+    expect(JSON.stringify(payload)).not.toContain("481516");
+  });
+});
+
 describe("a flood of notices from one domain", () => {
-  it("is kept, every one, past a day's worth: unscreened, found by the ids it names only, and counted", async () => {
+  it("is kept, every one, past a day's worth: with only the certain checks, its links, found by the ids it names only, and counted; the owner hears of it once", async () => {
     const s = await setUp();
     const usual = await s.ingest(
-      { From: "no-reply-1@flood.example", To: INBOUND, Subject: "Notice 1", "Message-ID": "<f1@flood.example>" },
+      { From: "no-reply-1@mail.flood.example", To: INBOUND, Subject: "Notice 1", "Message-ID": "<f1@flood.example>" },
       "Your report is ready.",
+      { auth: VOUCHED },
     );
     const usualId = await expectNotice(s, usual);
-    // The rest of the day's two hundred, spent.
+    // The rest of the day's two hundred, spent: `mail.flood.example` counts as `flood.example`.
     const bucket = await noticeBucket("anyone@flood.example");
     for (let i = 0; i < 200; i++) await consume(s.db, "notices", bucket, s.at());
     const past = await s.ingest(
       { From: "no-reply-2@flood.example", To: INBOUND, Subject: "Notice 202", "Message-ID": "<f202@flood.example>" },
       "Your report is ready. https://flood.example/report",
+      { auth: VOUCHED },
     );
     const pastId = await expectNotice(s, past);
     expect(pastId).not.toBe(usualId);
-    expect((await s.entries(pastId))[0]?.bodyText).not.toContain(LINKS_HEADING);
-    const verdicts = async (id: string) =>
-      (await s.db.client.query({ sql: "SELECT 1 FROM spam_verdicts WHERE item_id = ?", params: [id], method: "all" }))
-        .rows.length;
-    expect(await verdicts(usualId)).toBe(1);
-    expect(await verdicts(pastId)).toBe(0);
+    // Its links are kept: nothing of what it says is thrown away.
+    expect((await s.entries(pastId))[0]?.bodyText).toContain(`${LINKS_HEADING}\nhttps://flood.example/report`);
+    expect(await s.verdicts(usualId)).toBe(1);
+    expect(await s.verdicts(pastId)).toBe(0);
     const { rows } = await s.db.client.query({
       sql: "SELECT n FROM spam_days WHERE key = 'notice_flood'",
       params: [],
       method: "all",
     });
     expect(Number(rows[0]?.[0])).toBe(1);
+    // A server's spam mark still puts one aside, flood or not.
+    const marked = await s.ingest(
+      {
+        From: "no-reply-3@flood.example",
+        To: INBOUND,
+        Subject: "Notice 203",
+        "Message-ID": "<f203@flood.example>",
+        "X-Spam-Flag": "YES",
+      },
+      "Claim your prize.",
+      { auth: VOUCHED },
+    );
+    expect(marked.outcome).toBe("spam");
+    // The owner hears of the day's flood once, however many more come.
+    await s.ingest(
+      { From: "no-reply-4@flood.example", To: INBOUND, Subject: "Notice 204", "Message-ID": "<f204@flood.example>" },
+      "Your report is ready.",
+      { auth: VOUCHED },
+    );
+    await s.drain();
+    const told = s.mail.sent.filter((m) => m.to.includes(OWNER));
+    expect(told).toHaveLength(1);
+    expect(told[0]?.subject).toMatch(/notices today, most from flood\.example/);
+    expect(told[0]?.text).toContain("Delete all from this sender");
     // Another domain is counted on its own.
     await expectNotice(
       s,
       await s.ingest(
         { From: "no-reply@other.example", To: INBOUND, Subject: "Hello", "Message-ID": "<o1@other.example>" },
         "A receipt. https://other.example/r",
+        { auth: VOUCHED },
       ),
     );
+  });
+
+  it("is never one a stranger can start: mail nothing vouched for spends no domain's day, and is screened in full", async () => {
+    const s = await setUp();
+    const bucket = await noticeBucket("anyone@bank.example");
+    for (let i = 0; i < 199; i++) await consume(s.db, "notices", bucket, s.at());
+    // Forged, and said nothing of: screened in full, and the bank's last notice of the day still its own.
+    for (const [n, auth] of [{ dmarc: "fail" }, undefined].entries()) {
+      const forged = await s.ingest(
+        {
+          From: `no-reply-${n}@bank.example`,
+          To: INBOUND,
+          Subject: "Statement",
+          "Message-ID": `<forged${n}@x.example>`,
+        },
+        "Your statement is ready. https://bank.example.evil.example/s",
+        auth ? { auth } : {},
+      );
+      expect(await s.verdicts(idOf(forged))).toBe(1);
+    }
+    const real = await s.ingest(
+      { From: "no-reply@bank.example", To: INBOUND, Subject: "Statement", "Message-ID": "<real1@bank.example>" },
+      "Your statement is ready. https://bank.example/statements/9911",
+      { auth: VOUCHED },
+    );
+    expect(await s.verdicts(await expectNotice(s, real))).toBe(1);
+    expect((await s.entries(idOf(real)))[0]?.bodyText).toContain("https://bank.example/statements/9911");
+    // The bank's own next one is past its day: kept, with the least work.
+    const next = await s.ingest(
+      { From: "no-reply@bank.example", To: INBOUND, Subject: "Statement", "Message-ID": "<real2@bank.example>" },
+      "Another statement. https://bank.example/statements/9912",
+      { auth: VOUCHED },
+    );
+    expect(await s.verdicts(await expectNotice(s, next))).toBe(0);
+    expect((await s.entries(idOf(next)))[0]?.bodyText).toContain("https://bank.example/statements/9912");
   });
 });

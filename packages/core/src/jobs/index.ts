@@ -25,6 +25,7 @@ import { SPAM_SHARE_KIND } from "../spam/shared";
 import { SCREEN_DEADLINE_MS } from "../spam/types";
 import { isOwnerOnlyItem } from "../write/flags";
 import { LIFECYCLE_SWEEP_KIND, lifecycleSweepHandler } from "./lifecycle";
+import { NOTICES_DAY_KIND, noticesDayHandler } from "./notices";
 import { type NotifyPayload, notifyHandler, OWNER_DIGEST_KIND, ownerDigestHandler } from "./notify";
 import type { JobHandler } from "./runner";
 import { JobRunner } from "./runner";
@@ -32,6 +33,7 @@ import { ensureJob } from "./schedule";
 
 export * from "./lifecycle";
 export * from "./mail-log";
+export * from "./notices";
 export * from "./notify";
 export * from "./runner";
 export * from "./schedule";
@@ -67,6 +69,8 @@ export function createRunner(deps: {
     .register(OWNER_DIGEST_KIND, ownerDigestHandler(deps.mailOut, deps.baseUrl ? { baseUrl: deps.baseUrl } : {}))
     // The live "forwarding works" check (ADR-026 §2): an email to the business's own address.
     .register(EMAIL_CHECK_KIND, emailCheckHandler(deps.mailOut, { baseUrl: deps.baseUrl }))
+    // A day's flood of notices, told to the owner once (ADR-026 §6).
+    .register(NOTICES_DAY_KIND, noticesDayHandler(deps.mailOut, { baseUrl: deps.baseUrl }))
     .register("rules", async (job, { db, now }) => {
       const p = job.payload as { itemId: string; eventId: string; trigger: string };
       // Held or put aside by the spam filter (ADR-041): no rule runs. Still being screened, inside its

@@ -7,6 +7,7 @@ import { ensureJob } from "../jobs/schedule";
 import { machines } from "../machine/tables";
 import { business, items, products, services } from "../schema/tables";
 import { gateOf, holdsBack } from "../spam/screen";
+import { isOwnerOnly, withheldText } from "../write/flags";
 import { rowToItem } from "../write/views";
 import { buildPushPayload, encodePayload, HELD_SOON_EVENT } from "./payload";
 import type { PhoneCapabilities } from "./phones";
@@ -87,6 +88,8 @@ export function phonePushFanoutHandler(phones: PhoneCapabilities): JobHandler {
     if (!row) return { note: "item gone" };
     const item = rowToItem(row);
     if (item.flags.sandbox) return { note: "test item: no notification" };
+    // A notice alerts nobody, a phone neither, until the owner moves it to the inbox.
+    if (item.flags.notice && !item.flags.inInbox) return { note: "a notice: no notification" };
     // Held or put aside by the spam filter (ADR-041): no phone is told — but once, of a booking request
     // it holds for a time within 48 hours, while it is still held.
     const gate = await gateOf(db, item.id);
@@ -182,6 +185,9 @@ export function phonePushOneHandler(phones: PhoneCapabilities): JobHandler {
     // A held booking request's one notification never names its sender or says their words, whatever
     // the phone shows of others: it may be a scam's, and it waits in Held for a person to look (§12).
     const details = prefs.details && p.event !== HELD_SOON_EVENT;
+    // Owner-only mail's words (an account's code or sign-in link, a notice) never reach a lock screen:
+    // the phone says it came, and the inbox shows it once opened.
+    const ownerOnly = isOwnerOnly(item.flags);
     const { tz } = await timezoneOf(db);
     const fallback =
       item.type === "message"
@@ -199,7 +205,7 @@ export function phonePushOneHandler(phones: PhoneCapabilities): JobHandler {
       event: p.event,
       details,
       who: details ? await displayName(db, item.partyId) : null,
-      text: details ? await newestWords(db, item.id, fallback) : null,
+      text: details ? (ownerOnly ? withheldText(item.flags) : await newestWords(db, item.id, fallback)) : null,
       offered: await catalogueName(db, item),
       free: fit ? fit.free : null,
       timezone: tz,

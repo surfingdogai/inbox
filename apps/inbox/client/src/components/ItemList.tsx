@@ -298,6 +298,8 @@ function SpamEmpty() {
 /** A row under Notices: who and what, quietly, with Move to inbox and Delete on the row itself. */
 function NoticeRow({ view, selected, tz }: { view: ItemView; selected: boolean; tz: string | undefined }) {
   const { item } = view;
+  // No AI reads a notice: the spam filter's own warning is the one there is, so it shows on the row.
+  const warned = deskChip(view);
   return (
     <div className="row screen-row" data-selected={selected ? "true" : undefined}>
       <i className={`dot dot-${TYPE_CLASS[item.type]}`} />
@@ -305,6 +307,7 @@ function NoticeRow({ view, selected, tz }: { view: ItemView; selected: boolean; 
         <div className="row-line">
           <span className="who">{partyName(view.party)}</span>
           <span className="screen-what"> · {titleFor(item, ownerLocale(tz))}</span>
+          {warned && <span className="spam-chip">{warned}</span>}
         </div>
       </Link>
       <time className="row-time" dateTime={item.createdAt} title={item.createdAt}>

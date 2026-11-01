@@ -347,7 +347,7 @@ describe("a code or a sign-in link for an account the business holds", () => {
     expect(await s.deliveries(idOf(r))).toBeGreaterThan(0);
   }, 30_000);
 
-  it("is an ordinary email when nothing vouched for its sender: screened by the AI, quoted a few lines, its links kept only for the business's people unless forged", async () => {
+  it("is a notice when nothing vouched for its sender: the owner's alone, never read by the AI or told to the shared list, its links kept unless forged", async () => {
     const s = await setUp();
     const phish = (id: string, auth: MailAuth | null) =>
       s.ingest(
@@ -375,22 +375,23 @@ describe("a code or a sign-in link for an account the business holds", () => {
     await s.drain();
     await s.drain();
     for (const r of [none, failed, elsewhere]) {
-      expect(r.outcome).toBe("created");
-      expect(await s.flags(idOf(r))).not.toHaveProperty("account");
+      expect(r.outcome).toBe("notice");
+      const flags = await s.flags(idOf(r));
+      expect(flags).toMatchObject({ notice: true });
+      expect(flags).not.toHaveProperty("account");
       const [entry] = await s.entries(idOf(r));
       // Shown to the business's people in the inbox, as a sign-in button's link must be; never a forged sender's.
       if (r === failed) expect(entry?.bodyText).not.toContain(LINKS_HEADING);
       else expect(entry?.bodyText).toContain(`${LINKS_HEADING}\nhttps://acme-secure.example/verify?u=1`);
+      // No webhook carries it, and the rule that thanks everyone answered none.
+      expect(await s.deliveries(idOf(r))).toBe(0);
+      expect((await s.entries(idOf(r))).map((e) => e.direction)).toEqual(["in"]);
     }
-    // The AI was sent each, and the shared list asked of each.
-    for (const id of ["v1", "v2", "v3"]) expect(s.sent.some((r) => r.user.includes(`account ${id} is`))).toBe(true);
-    expect(s.shared.lookups).toBe(3);
-    // Each alert quotes twelve lines, as for anyone, and lists no links.
-    for (const alert of s.alerts("Verify your account")) {
-      expect(alert.text).toContain("> …");
-      expect(alert.text).not.toContain(LINKS_HEADING);
-      expect(alert.text).not.toContain("verify?u=1");
-    }
+    // The AI was sent none; nothing of them is told to the shared list.
+    for (const id of ["v1", "v2", "v3"]) expect(s.sent.some((r) => r.user.includes(`account ${id} is`))).toBe(false);
+    expect(s.shared.reports).toBe(0);
+    // Nobody is alerted.
+    expect(s.alerts("Verify your account")).toEqual([]);
   }, 30_000);
 
   it("delivers the same notice a third and a fifth time, from a new no-reply address each time", async () => {
@@ -457,20 +458,22 @@ describe("a code or a sign-in link for an account the business holds", () => {
         ),
         { dkim: ["loja.example"], dmarc: "pass" },
       );
-    // A discount code is kept (a code is never dropped), and screened as any email; "designing" names no sign-in.
-    const code = await promo("p1", "Código de desconto exclusivo: OUTONO20");
-    expect(code.outcome).toBe("created");
-    expect(await s.flags(idOf(code))).not.toHaveProperty("account");
-    expect((await s.entries(idOf(code)))[0]?.bodyText).not.toContain(LINKS_HEADING);
-    expect(await promo("p2", "Designing your autumn window")).toMatchObject({
-      outcome: "notice",
-      reason: "a mailing or a notice that answers no conversation",
-    });
+    // A discount code is a mailing all the same: what it says never makes it anything but a notice.
+    const subjects = [
+      "Código de desconto exclusivo: OUTONO20",
+      "Designing your autumn window",
+      "Ihre Bestellbestätigung",
+      "O seu código de envio",
+    ];
+    for (const [n, subject] of subjects.entries()) {
+      const r = await promo(`p${n}`, subject);
+      expect(r).toMatchObject({ outcome: "notice", reason: "a mailing or a notice that answers no conversation" });
+      expect(await s.flags(idOf(r))).not.toHaveProperty("account");
+    }
     await s.drain();
-    expect(s.sent.some((r) => r.user.includes("Our autumn sale"))).toBe(true);
-    const [alert] = s.alerts("OUTONO20");
-    expect(alert?.text).toContain("> …");
-    expect(alert?.text).not.toContain(LINKS_HEADING);
+    // No AI read either, and nobody was alerted.
+    expect(s.sent.some((r) => r.user.includes("Our autumn sale"))).toBe(false);
+    expect(s.alerts("OUTONO20")).toEqual([]);
   }, 30_000);
 });
 

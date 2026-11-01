@@ -520,9 +520,15 @@ function securitySignals(
 
 export async function screenAtDoor(deps: SpamDeps, ctx: DoorContext): Promise<DoorScreen> {
   if (!isCustomer(ctx.caller) || !SCREENED_TYPES.has(ctx.type)) return NOT_SCREENED;
-  // A flood of notices from one domain is kept with the least work: not screened at all, and counted.
+  // A flood of notices from one domain is kept with the least work, and counted: only the checks that
+  // are free and certain are made. One a server marked as spam, from a sender the owner blocked, or
+  // whose sender was found forged is screened in full, as any other email is.
   if (ctx.screen.email?.notice && ctx.screen.email.flood) {
-    return { ...NOT_SCREENED, statements: () => [countStatement("notice_flood", ctx.now)] };
+    const certain =
+      ctx.screen.email.serverMarked === true ||
+      ctx.screen.email.auth?.dmarc === "fail" ||
+      (await listOf(deps.db, { email: ctx.contact?.email })) === "block";
+    if (!certain) return { ...NOT_SCREENED, statements: () => [countStatement("notice_flood", ctx.now)] };
   }
   const db = deps.db;
   const now = ctx.now;
