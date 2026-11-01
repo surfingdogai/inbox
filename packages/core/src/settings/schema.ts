@@ -22,6 +22,7 @@ import { z } from "zod";
 import { areaSettingsSchema } from "../area/index";
 import type { Db } from "../db";
 import { kitchenSettingsSchema } from "../kitchen/settings";
+import { LOOK_ACCENTS, LOOK_THEMES } from "../look/palette";
 import { menuSettingsSchema } from "../menu/schema";
 import { settings as settingsTable } from "../schema/tables";
 import { workSettingsSchema } from "../trades/settings";
@@ -965,6 +966,35 @@ const sections = {
     })
     .prefault({})
     .describe("What the spam filter keeps, and the emails it sends the owner."),
+  /**
+   * How the business looks to its customers (`look/palette.ts`), the owner's in person
+   * (`OWNER_ONLY_SETTINGS`). The logo is a file in the inbox's own database: only its door changes
+   * `logo` (`look/capability.ts`), so the settings never name a file that is not there.
+   */
+  look: z
+    .object({
+      theme: z
+        .enum(LOOK_THEMES)
+        .default("standard")
+        .describe("standard (as it was), minimal (white, thin lines), dark, or warm (soft off-white)."),
+      accent: z
+        .enum(LOOK_ACCENTS)
+        .default("ink")
+        .describe("The colour of buttons and links: ink (the theme's own), blue, teal, green, violet, plum or ochre."),
+      logo: z
+        .object({
+          id: z.string().regex(/^[0-9A-Za-z_-]{1,64}$/),
+          type: z.enum(["image/png", "image/jpeg", "image/webp"]),
+          sha256: z.string().regex(/^[0-9a-f]{64}$/),
+          width: z.number().int().min(16).max(2048),
+          height: z.number().int().min(16).max(2048),
+        })
+        .nullable()
+        .default(null)
+        .describe("Set by uploading it in Settings → Look."),
+    })
+    .prefault({})
+    .describe("How the business looks to its customers: its pages, its emails, and the owner app."),
   testMode: z.boolean().default(false),
 };
 

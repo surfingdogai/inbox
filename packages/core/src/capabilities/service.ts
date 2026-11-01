@@ -2287,8 +2287,16 @@ export class Capabilities {
     return this.writeSettings(caller, input, false);
   }
 
-  /** `updateSettings`, or, `asHost`, the host's own write of what its policy sets, past the policy's lock. */
-  private async writeSettings(caller: Caller, input: T.UpdateSettingsInput, asHost: boolean): Promise<SettingsView> {
+  /**
+   * `updateSettings`, or, `asHost`, the host's own write of what its policy sets, past the policy's lock.
+   * `logo`: the logo's own door (`look.setLogo`), the only write that may change `look.logo`.
+   */
+  private async writeSettings(
+    caller: Caller,
+    input: T.UpdateSettingsInput,
+    asHost: boolean,
+    opts: { readonly logo?: boolean } = {},
+  ): Promise<SettingsView> {
     requireBusiness(caller);
     const now = nowOf(caller);
     const [row] = await this.db.orm
@@ -2407,6 +2415,14 @@ export class Capabilities {
     }
     const before = parseStoredSettings(stored).settings;
     const after = parseStoredSettings(merged).settings;
+    // The logo is a file the inbox keeps: only its upload names it, so the settings never point at a
+    // file that is not there, or at a customer's.
+    if (!opts.logo && changedSettings(before, after, [{ path: ["look", "logo"] }]).length) {
+      const message = "the logo changes by uploading it (Settings → Look)";
+      throw new WriteError("invalid_input", message, {
+        fields: [{ path: "doc.look.logo", problem: "invalid", message }],
+      });
+    }
     // What a held network or the held listing comes back to is the host's to keep (`settings/policy.ts`):
     // nobody else writes it but through what a hold lets them choose (`hold` above). Where nothing
     // holds the networks (a copy of a hosted inbox opened on a server of the owner's own), a value

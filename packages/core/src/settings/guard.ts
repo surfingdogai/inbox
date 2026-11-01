@@ -77,6 +77,9 @@ export const OWNER_ONLY_SETTINGS: readonly Watched[] = [
   // What the spam filter keeps and how much of the owner's own model it may use (ADR-041): a
   // message put aside must never get the owner's AI to change how long the evidence is kept.
   { path: ["spam"] },
+  // How the business looks to its customers (its pages, its emails): a customer's message must never
+  // get the owner's AI to restyle what every customer sees.
+  { path: ["look"] },
 ];
 
 function at(doc: unknown, path: readonly string[]): unknown {

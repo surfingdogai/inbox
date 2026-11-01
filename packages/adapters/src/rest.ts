@@ -1492,7 +1492,7 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
       tags: ["owner"],
       summary: "Change settings",
       description:
-        "The document you send is merged over the current one: sections and keys left out keep their values, and null removes a key so its default applies again. Networks are a map keyed by https origin; adding one leaves the others as they are. The security section can only be changed by the owner in the owner app.",
+        "The document you send is merged over the current one: sections and keys left out keep their values, and null removes a key so its default applies again. Networks are a map keyed by https origin; adding one leaves the others as they are. The security section can only be changed by the owner in the owner app. The look is the owner's, in the owner app; its logo changes only by uploading it (PUT /v1/owner/look/logo).",
       responses: json("Settings", R.settingsViewSchema),
       write: true,
     }),
