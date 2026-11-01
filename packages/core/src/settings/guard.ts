@@ -64,7 +64,7 @@ export const OWNER_ONLY_SETTINGS: readonly Watched[] = [
   // How the business is paid, as it tells every agent (`payments`): a customer's message must never get the owner's
   // AI to declare a way to pay the business does not take.
   { path: ["payments"] },
-  // What the business says of itself to every agent and network (spec 0.13): its own words, what kind of place it is,
+  // What the business says of itself to every agent and network (spec 0.14): its own words, what kind of place it is,
   // what it cooks, how it takes tables, how dear it is and what it offers. A customer's message must never get the
   // owner's AI to rewrite the business's description or claim a feature it does not have.
   { path: ["directory", "description"] },

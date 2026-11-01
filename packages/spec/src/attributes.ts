@@ -17,7 +17,7 @@ export function attributeEntry(key: string): AttributeEntry | undefined {
 }
 
 /**
- * The keys a business may declare of itself, true or left out (spec 0.13): every `bool` key that needs no proof from
+ * The keys a business may declare of itself, true or left out (spec 0.14): every `bool` key that needs no proof from
  * a register (never halal, kosher or a certification) and is not derived from something else the network reads
  * (`crawlable: never`, like `open_24h` from published hours). A set (`cuisine`) is said by its own field.
  */

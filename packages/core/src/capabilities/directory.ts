@@ -9,6 +9,7 @@ import {
   profileHoursSchema,
   profileSchema,
   profileServiceSchema,
+  profileSourceSchema,
   publishedPayments,
   readPayTo,
 } from "@surfingdog/spec";
@@ -227,9 +228,13 @@ export async function directoryProfile(
     if (checked?.success) kept[key] = checked.data;
   }
   if (input.settings) {
-    const sources = profileSources(input.settings, Object.keys(kept));
-    const checked = profileSchema.shape.sources.safeParse(sources);
-    if (checked.success && checked.data && Object.keys(checked.data).length) kept.sources = checked.data;
+    // Each source is checked alone, as a network checks it: one it would reject is left out on its own.
+    const sources = Object.fromEntries(
+      Object.entries(profileSources(input.settings, Object.keys(kept))).filter(
+        ([, s]) => profileSourceSchema.safeParse(s).success,
+      ),
+    );
+    if (Object.keys(sources).length) kept.sources = sources;
   }
   const profile = profileSchema.safeParse(kept);
   return profile.success ? profile.data : undefined;
@@ -243,7 +248,7 @@ function orderedAttributes(keys: readonly string[]): string[] {
 }
 
 /**
- * The attributes the inbox can vouch for from what it holds (spec 0.13), never from what it guesses:
+ * The attributes the inbox can vouch for from what it holds (spec 0.14), never from what it guesses:
  *
  * - food: a dish on the menu, on sale and listed, tagged vegan gives `vegan_options` (and `vegetarian_options`, which
  *   a vegan dish is), tagged vegetarian gives `vegetarian_options`, and tagged gluten-free gives
@@ -306,7 +311,7 @@ const SOURCE_OF: Readonly<Record<string, { readonly setup: readonly string[]; re
 };
 
 /**
- * Where each field the profile publishes came from (`profile.sources`, spec 0.13): read from the business's own
+ * Where each field the profile publishes came from (`profile.sources`, spec 0.14): read from the business's own
  * website by a setup plan and not yet checked by the owner (`via: website`, the page and when it was read), or said
  * by the owner (`via: business`, when they saved it, `directory.saved`). A field with neither names no source, and is
  * the business's own word.

@@ -642,20 +642,22 @@ export const placeCategoryResponseSchema = z.object({
 });
 export type PlaceCategoryResponse = z.infer<typeof placeCategoryResponseSchema>;
 
-/** One attribute as `GET /v1/attributes` and `list_attributes` give it (§4.10). */
+/**
+ * One attribute as `GET /v1/attributes` and `list_attributes` give it (§4.10). A key of `vocab/attributes.json`'s type
+ * `set` (version 2: `cuisine`) is given as an `enum`, its values its vocabulary's slugs and `values_from` naming the
+ * vocabulary: a filter names one as key=value, and a reader written before version 2 reads it as any enum.
+ */
 export const attributeKeySchema = z.object({
   key: z.string().regex(/^[a-z][a-z0-9_]*$/),
   group: z.string(),
-  type: z
-    .enum(["bool", "enum", "set"])
-    .describe(
-      "bool: true or false; enum: one of its values; set (version 2): up to five values of another vocabulary.",
-    ),
+  type: z.enum(["bool", "enum"]),
   values: z.array(z.string()).optional().describe('The values of an "enum" key; a filter names one as key=value.'),
   values_from: z
     .string()
     .optional()
-    .describe('A "set" key\'s vocabulary (cuisines.json for cuisine); a filter names one of its values as key=value.'),
+    .describe(
+      "Since attributes version 2: the vocabulary an enum key's values come from (cuisines.json for cuisine, of which a business names up to five).",
+    ),
   labels: z.record(z.string(), z.string()).describe("Language → label."),
   filterable: z.boolean().optional().describe("false: shown in the list, never filterable or shown yet."),
 });
@@ -681,10 +683,9 @@ export type AttributesResponse = z.infer<typeof attributesResponseSchema>;
 /**
  * The file `vocab/attributes.json` (§4.10): every attribute key, its type (version 2 adds `set`: up to five values of
  * another vocabulary, named by `values_from`, as `cuisine` holds slugs of `vocab/cuisines.json`), the group it belongs
- * to, the categories it applies to
- * (group slugs, or `*`), whether a crawler may read it (`declared`: from the business's own structured data;
- * `seen`: also from an explicit statement on its own pages; `never`), whether it needs a proof a register would give
- * (never filterable or shown until one exists), and its labels.
+ * to, the categories it applies to (group slugs, or `*`), whether a crawler may read it (`declared`: from the
+ * business's own structured data; `seen`: also from an explicit statement on its own pages; `never`), whether it needs
+ * a proof a register would give (never filterable or shown until one exists), and its labels.
  */
 export const attributeVocabularySchema = z.object({
   description: z.string().optional(),

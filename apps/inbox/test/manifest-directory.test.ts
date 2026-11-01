@@ -140,7 +140,7 @@ describe("the profile the manifest carries", () => {
         { name: "Board rental", type: "booking" },
         { name: "Ding repair", type: "quote_request" },
       ],
-      // Spec 0.13: the description is the business's own word, as the owner saved it.
+      // Spec 0.14: the description is the business's own word, as the owner saved it.
       sources: { description: { via: "business", at: "2026-10-06T10:00:00.000Z" } },
     });
     // No contact of any person leaves in it.

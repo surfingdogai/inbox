@@ -1,5 +1,5 @@
 {
-  "description": "What a network keeps from a manifest's profile (ADR-017 Amendment 2, A2.5): each case's profile, read at now, gives kept. Every field is checked alone and dropped alone; categories use vocab/categories.json at vocabulary_version. Hours are kept only with a zone the network knows and at least one good window (a window may close at 24:00); closures that ended before now in that zone are dropped. Protocol 0.2: place_category keeps an Overture place category id this network knows and does not exclude, with at most two alternates none of which is an ancestor or descendant of another; attributes keeps keys of vocab/attributes.json with a value of their type that apply to its categories (applies_to: group slugs, place category ids on its path, or *), never one that needs a proof or is derived; price_band a whole number from 1 to 4; currencies up to five ISO 4217 codes; each absent when nothing is kept. payments keeps up to 64 tokens of vocab/payments.json (a synonym read as its token, any capitals and accents), with card for a card brand, each once, in the vocabulary's order; absent when none is kept. Spec 0.11: lodging is kept when its kind (vocab/lodging.json, any capitals), check_in_from and check_out_until (HH:MM), confirmation (request, instant_some or instant) and answer_hours (1 to 168) are good, and dropped whole otherwise; within it rooms (1 to 5,000) and a registration (at most 60 characters once cleaned, never cut) are dropped alone. Spec 0.13: description holds up to 600 characters; cuisines keeps up to five slugs of vocab/cuisines.json (a label, synonym, schema.org string or OSM value in any of its languages, any capitals and accents, read as its slug), each once, in the profile's order, where the attribute cuisine applies to its categories as attributes do, and a diet the vocabulary names (vegan, vegetarian) as its attribute, true, unless attributes names that key; reservations is one of required, recommended, accepted and walk_in_only as written; sources keeps, for a field it kept (a description or list that is not empty), via business or website, a url only when http or https and at most 2048 characters, and at, an RFC 3339 date-time, in UTC to the second; an entry without a good via or at is dropped alone. Each absent when nothing is kept. From the network.",
+  "description": "What a network keeps from a manifest's profile (ADR-017 Amendment 2, A2.5): each case's profile, read at now, gives kept. Every field is checked alone and dropped alone; categories use vocab/categories.json at vocabulary_version. Hours are kept only with a zone the network knows and at least one good window (a window may close at 24:00); closures that ended before now in that zone are dropped. Protocol 0.2: place_category keeps an Overture place category id this network knows and does not exclude, with at most two alternates none of which is an ancestor or descendant of another; attributes keeps keys of vocab/attributes.json with a value of their type that apply to its categories (applies_to: group slugs, place category ids on its path, or *), never one that needs a proof or is derived; price_band a whole number from 1 to 4; currencies up to five ISO 4217 codes; each absent when nothing is kept. payments keeps up to 64 tokens of vocab/payments.json (a synonym read as its token, any capitals and accents), with card for a card brand, each once, in the vocabulary's order; absent when none is kept. Spec 0.13: pay_to keeps, of its first eight entries, one per method this network knows that payments names too (stripe_pay), with its address read as a Stripe profile handle (@ and 1 to 50 lower-case letters, digits, _, . or -, starting and ending with a letter or digit; any capitals, the @ added) or profile id (profile_ and up to 100 letters, digits or _), and the currencies of it the method moves (USD, GBP, USDC, in that order, any capitals); anything else is dropped alone, and pay_to is absent when none is kept. Spec 0.11: lodging is kept when its kind (vocab/lodging.json, any capitals), check_in_from and check_out_until (HH:MM), confirmation (request, instant_some or instant) and answer_hours (1 to 168) are good, and dropped whole otherwise; within it rooms (1 to 5,000) and a registration (at most 60 characters once cleaned, never cut) are dropped alone. Spec 0.14: description holds up to 600 characters; cuisines keeps up to five slugs of vocab/cuisines.json its first 50 terms name (a slug, label, synonym, schema.org string or OSM value in any of its languages, any capitals and accents, read as its slug), each once, in the profile's order, where the attribute cuisine applies to its categories as attributes do, and a diet the vocabulary names (vegan, vegetarian) as its attribute, true, unless attributes names that key; reservations is one of required, recommended, accepted and walk_in_only as written; sources keeps, for a field it kept (a description or list that is not empty), via business or website, a url only when http or https and at most 2048 characters (else the url alone is dropped), and at, an RFC 3339 date-time from the year 2000, in UTC to the second; an entry without a good via or at is dropped alone. Each absent when nothing is kept. From the network.",
   "vocabulary_version": 4,
   "cases": [
     {
@@ -744,6 +744,253 @@
       }
     },
     {
+      "name": "0.13: pay_to keeps Stripe Pay's handle, in lower case, with the currencies it moves, for a way payments names",
+      "now": "2026-12-01T10:00:00Z",
+      "profile": {
+        "name": "Harbour Coffee",
+        "payments": ["card", "Stripe Pay"],
+        "pay_to": [
+          {
+            "method": "stripe_pay",
+            "to": "@Harbour",
+            "currencies": ["gbp", "EUR", "USD"]
+          }
+        ]
+      },
+      "kept": {
+        "name": "Harbour Coffee",
+        "description": "",
+        "categories": [],
+        "tags": [],
+        "languages": [],
+        "address": {},
+        "geo": null,
+        "hours": null,
+        "services": [],
+        "payments": ["card", "stripe_pay"],
+        "pay_to": [
+          {
+            "method": "stripe_pay",
+            "to": "@harbour",
+            "currencies": ["USD", "GBP"]
+          }
+        ]
+      }
+    },
+    {
+      "name": "0.13: pay_to drops alone an entry payments do not name, an unknown method, an address that is not a handle or a profile id, one with no currency Stripe Pay moves, and a second entry for the same method",
+      "now": "2026-12-01T10:00:00Z",
+      "profile": {
+        "name": "Harbour Coffee",
+        "payments": ["card", "stripe_pay", "venmo"],
+        "pay_to": [
+          {
+            "method": "venmo",
+            "to": "@harbour",
+            "currencies": ["USD"]
+          },
+          {
+            "method": "stripe_pay",
+            "to": "https://stripe.com/@harbour",
+            "currencies": ["GBP"]
+          },
+          {
+            "method": "stripe_pay",
+            "to": "@harbour",
+            "currencies": ["EUR"]
+          },
+          {
+            "method": "stripe_pay",
+            "to": "profile_61TpVxQ2bC",
+            "currencies": ["USDC"]
+          },
+          {
+            "method": "stripe_pay",
+            "to": "@other",
+            "currencies": ["GBP"]
+          }
+        ]
+      },
+      "kept": {
+        "name": "Harbour Coffee",
+        "description": "",
+        "categories": [],
+        "tags": [],
+        "languages": [],
+        "address": {},
+        "geo": null,
+        "hours": null,
+        "services": [],
+        "payments": ["card", "venmo", "stripe_pay"],
+        "pay_to": [
+          {
+            "method": "stripe_pay",
+            "to": "profile_61TpVxQ2bC",
+            "currencies": ["USDC"]
+          }
+        ]
+      }
+    },
+    {
+      "name": "0.13: pay_to for a way the payments do not name is dropped whole",
+      "now": "2026-12-01T10:00:00Z",
+      "profile": {
+        "name": "Harbour Coffee",
+        "payments": ["card"],
+        "pay_to": [
+          {
+            "method": "stripe_pay",
+            "to": "@harbour",
+            "currencies": ["GBP"]
+          }
+        ]
+      },
+      "kept": {
+        "name": "Harbour Coffee",
+        "description": "",
+        "categories": [],
+        "tags": [],
+        "languages": [],
+        "address": {},
+        "geo": null,
+        "hours": null,
+        "services": [],
+        "payments": ["card"]
+      }
+    },
+    {
+      "name": "0.14: cuisines of vocab/cuisines.json by slug, label, synonym or schema.org string, each once, the first five; a diet named as a cuisine is its attribute; anything else dropped alone",
+      "now": "2026-12-01T10:00:00Z",
+      "profile": {
+        "name": "Tasca Noodle",
+        "categories": ["restaurant"],
+        "cuisines": [
+          "Ramen",
+          "japonesa",
+          "RAMEN",
+          "Pizzeria",
+          "vegan",
+          "klingon",
+          7,
+          "Sushi",
+          "Latin American",
+          "tacos",
+          "thai"
+        ]
+      },
+      "kept": {
+        "name": "Tasca Noodle",
+        "description": "",
+        "categories": ["restaurant"],
+        "tags": [],
+        "languages": [],
+        "address": {},
+        "geo": null,
+        "hours": null,
+        "services": [],
+        "attributes": {
+          "vegan_options": true
+        },
+        "cuisines": ["ramen", "japanese", "pizza", "sushi", "latin_american"]
+      }
+    },
+    {
+      "name": "0.14: cuisines and a diet named as one are said only of a place that serves food; an attribute it gives keeps its own value",
+      "now": "2026-12-01T10:00:00Z",
+      "profile": {
+        "name": "Ramen Barbers",
+        "categories": ["hair-beauty"],
+        "cuisines": ["ramen", "vegan"]
+      },
+      "kept": {
+        "name": "Ramen Barbers",
+        "description": "",
+        "categories": ["hair-beauty"],
+        "tags": [],
+        "languages": [],
+        "address": {},
+        "geo": null,
+        "hours": null,
+        "services": []
+      }
+    },
+    {
+      "name": "0.14: a diet named as a cuisine never overrides what its attributes say",
+      "now": "2026-12-01T10:00:00Z",
+      "profile": {
+        "name": "Café Sol",
+        "place_category": {
+          "primary": "coffee_shop"
+        },
+        "attributes": {
+          "vegan_options": false
+        },
+        "cuisines": ["vegan", "vegetarian", "Breakfast"]
+      },
+      "kept": {
+        "name": "Café Sol",
+        "description": "",
+        "categories": [],
+        "tags": [],
+        "languages": [],
+        "address": {},
+        "geo": null,
+        "hours": null,
+        "services": [],
+        "place_category": {
+          "primary": "coffee_shop",
+          "alternates": []
+        },
+        "attributes": {
+          "vegan_options": false,
+          "vegetarian_options": true
+        },
+        "cuisines": ["breakfast"]
+      }
+    },
+    {
+      "name": "0.14: reservations is one of required, recommended, accepted or walk_in_only",
+      "now": "2026-12-01T10:00:00Z",
+      "profile": {
+        "name": "Tasca",
+        "categories": ["restaurant"],
+        "reservations": "recommended"
+      },
+      "kept": {
+        "name": "Tasca",
+        "description": "",
+        "categories": ["restaurant"],
+        "tags": [],
+        "languages": [],
+        "address": {},
+        "geo": null,
+        "hours": null,
+        "services": [],
+        "reservations": "recommended"
+      }
+    },
+    {
+      "name": "0.14: any other reservations is dropped alone",
+      "now": "2026-12-01T10:00:00Z",
+      "profile": {
+        "name": "Tasca",
+        "reservations": "Recommended",
+        "price_band": 2
+      },
+      "kept": {
+        "name": "Tasca",
+        "description": "",
+        "categories": [],
+        "tags": [],
+        "languages": [],
+        "address": {},
+        "geo": null,
+        "hours": null,
+        "services": [],
+        "price_band": 2
+      }
+    },
+    {
       "name": "0.11: a place to stay's lodging, every field",
       "now": "2026-12-01T10:00:00Z",
       "profile": {
@@ -864,7 +1111,138 @@
       }
     },
     {
-      "name": "0.13: a place that serves food: its cuisines, how it takes tables, its own words in up to 600 characters, and where each came from",
+      "name": "0.11: lodging with its rooms, and its registration as cleaned",
+      "now": "2026-12-01T10:00:00Z",
+      "profile": {
+        "name": "Casa do Mar",
+        "lodging": {
+          "kind": "rental",
+          "rooms": 3,
+          "check_in_from": "16:00",
+          "check_out_until": "10:00",
+          "confirmation": "request",
+          "answer_hours": 48,
+          "registration": " 12345/AL "
+        }
+      },
+      "kept": {
+        "name": "Casa do Mar",
+        "description": "",
+        "categories": [],
+        "tags": [],
+        "languages": [],
+        "address": {},
+        "geo": null,
+        "hours": null,
+        "services": [],
+        "lodging": {
+          "kind": "rental",
+          "rooms": 3,
+          "check_in_from": "16:00",
+          "check_out_until": "10:00",
+          "confirmation": "request",
+          "answer_hours": 48,
+          "registration": "12345/AL"
+        }
+      }
+    },
+    {
+      "name": "0.14: sources are via business or website at an RFC 3339 time, a page only as a web address (else dropped alone); each dropped alone, as is a source of a field the profile does not hold",
+      "now": "2026-12-01T10:00:00Z",
+      "profile": {
+        "name": "Tasca Noodle",
+        "description": "Ramen and gyoza by the river.",
+        "categories": ["restaurant"],
+        "cuisines": ["ramen"],
+        "attributes": {
+          "vegan_options": true,
+          "takeaway": true
+        },
+        "sources": {
+          "cuisines": {
+            "via": "website",
+            "url": "https://tasca.example/menu",
+            "at": "2026-10-20T09:00:00+01:00"
+          },
+          "description": {
+            "via": "business",
+            "at": "2026-10-28T10:00:00Z"
+          },
+          "attributes": {
+            "via": "website",
+            "url": "https://tasca.example/",
+            "at": "2026-10-20T08:00:00.999Z"
+          },
+          "reservations": {
+            "via": "business",
+            "at": "2026-10-28T10:00:00Z"
+          },
+          "name": {
+            "via": "website",
+            "url": "javascript:alert(1)",
+            "at": "2026-10-20T08:00:00Z"
+          },
+          "url": {
+            "via": "model",
+            "at": "2026-10-20T08:00:00Z"
+          },
+          "price_band": {
+            "via": "business",
+            "at": "yesterday"
+          },
+          "categories": {
+            "via": "business",
+            "at": "1999-12-31T23:59:59Z"
+          },
+          "nope": {
+            "via": "business",
+            "at": "2026-10-28T10:00:00Z"
+          },
+          "attributes.wifi": {
+            "via": "business",
+            "at": "2026-10-28T10:00:00Z"
+          }
+        }
+      },
+      "kept": {
+        "name": "Tasca Noodle",
+        "description": "Ramen and gyoza by the river.",
+        "categories": ["restaurant"],
+        "tags": [],
+        "languages": [],
+        "address": {},
+        "geo": null,
+        "hours": null,
+        "services": [],
+        "attributes": {
+          "vegan_options": true,
+          "takeaway": true
+        },
+        "cuisines": ["ramen"],
+        "sources": {
+          "cuisines": {
+            "via": "website",
+            "url": "https://tasca.example/menu",
+            "at": "2026-10-20T08:00:00Z"
+          },
+          "description": {
+            "via": "business",
+            "at": "2026-10-28T10:00:00Z"
+          },
+          "attributes": {
+            "via": "website",
+            "url": "https://tasca.example/",
+            "at": "2026-10-20T08:00:00Z"
+          },
+          "name": {
+            "via": "website",
+            "at": "2026-10-20T08:00:00Z"
+          }
+        }
+      }
+    },
+    {
+      "name": "0.14: a place that serves food: its cuisines, how it takes tables, its own words in up to 600 characters, and where each came from",
       "now": "2026-12-01T10:00:00Z",
       "profile": {
         "name": "Tasca do Ramen",
@@ -922,7 +1300,7 @@
       }
     },
     {
-      "name": "0.13: a cuisine is read as its slug from a label or synonym in any of the vocabulary's languages, with any capitals and accents, each once, the first five; vegan or vegetarian named as a cuisine is its diet attribute; anything else is dropped alone",
+      "name": "0.14: a cuisine is read as its slug from a label or synonym in any of the vocabulary's languages, with any capitals and accents, each once, the first five; vegan or vegetarian named as a cuisine is its diet attribute; anything else is dropped alone",
       "now": "2026-12-01T10:00:00Z",
       "profile": {
         "name": "Mercado Sabores",
@@ -946,7 +1324,7 @@
       }
     },
     {
-      "name": "0.13: a diet named as a cuisine never overrides the profile's own attribute; walk_in_only says no tables are booked",
+      "name": "0.14: a diet named as a cuisine never overrides the profile's own attribute; walk_in_only says no tables are booked",
       "now": "2026-12-01T10:00:00Z",
       "profile": {
         "name": "Green Fork",
@@ -975,7 +1353,7 @@
       }
     },
     {
-      "name": "0.13: cuisines are kept where the attribute cuisine applies, a place category's path included",
+      "name": "0.14: cuisines are kept where the attribute cuisine applies, a place category's path included",
       "now": "2026-12-01T10:00:00Z",
       "profile": {
         "name": "Noodle Bar Ko",
@@ -1002,7 +1380,7 @@
       }
     },
     {
-      "name": "0.13: cuisines of a business the attribute cuisine does not apply to, a cuisines value that is not a list, and reservations other than the four are dropped alone",
+      "name": "0.14: cuisines of a business the attribute cuisine does not apply to, a cuisines value that is not a list, and reservations other than the four are dropped alone",
       "now": "2026-12-01T10:00:00Z",
       "profile": {
         "name": "Studio Nove",
@@ -1023,7 +1401,7 @@
       }
     },
     {
-      "name": "0.13: a cuisines value that is not a list keeps none, and reservations must be one of the four as written",
+      "name": "0.14: a cuisines value that is not a list keeps none, and reservations must be one of the four as written",
       "now": "2026-12-01T10:00:00Z",
       "profile": {
         "name": "Studio Dez",
@@ -1044,7 +1422,7 @@
       }
     },
     {
-      "name": "0.13: sources keep, for each field kept, the business or its website, an http or https page, and the time in UTC to the second; an entry for a field not kept, of another via or without a good time is dropped alone, and a page that is not http or https alone",
+      "name": "0.14: sources keep, for each field kept, the business or its website, an http or https page, and the time in UTC to the second; an entry for a field not kept, of another via or without a good time is dropped alone, and a page that is not http or https alone",
       "now": "2026-12-01T10:00:00Z",
       "profile": {
         "name": "Kaya Yoga",
@@ -1114,7 +1492,7 @@
       }
     },
     {
-      "name": "0.13: sources that is not an object keeps none",
+      "name": "0.14: sources that is not an object keeps none",
       "now": "2026-12-01T10:00:00Z",
       "profile": {
         "name": "Ana's Salon",

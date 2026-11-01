@@ -17,7 +17,7 @@ import {
 import profileVectors from "../vectors/profile.json" with { type: "json" };
 import attributes from "../vocab/attributes.json" with { type: "json" };
 
-/** The cuisines vocabulary (spec 0.13) and attributes.json version 2, which files a cuisine as `cuisine=<slug>`. */
+/** The cuisines vocabulary (spec 0.14) and attributes.json version 2, which files a cuisine as `cuisine=<slug>`. */
 describe("vocab/cuisines.json", () => {
   const v = cuisineVocabularySchema.parse(CUISINES_VOCABULARY);
 
@@ -122,7 +122,7 @@ describe("reading a profile's cuisines", () => {
   });
 });
 
-describe("a profile's 0.13 fields", () => {
+describe("a profile's 0.14 fields", () => {
   it("names at most five cuisine slugs, one of four ways to take tables, 600 characters of its own words, and sources", () => {
     expect(profileSchema.shape.cuisines.safeParse(["ramen", "japanese"]).success).toBe(true);
     expect(profileSchema.shape.cuisines.safeParse(["a", "b", "c", "d", "e", "f"]).success).toBe(false);

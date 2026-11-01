@@ -1,7 +1,7 @@
 import { isPlainObject, LISTING_FIELDS, parseStoredSettings } from "./schema";
 
 /**
- * When the owner last said each listing field (`directory.saved`, spec 0.13): stamped by the inbox on the write that
+ * When the owner last said each listing field (`directory.saved`, spec 0.14): stamped by the inbox on the write that
  * changes it, or that clears the note that it was only read from the business's website (the owner checked it, so it
  * is now the business's own word). What a write itself sends for `saved` is never taken: the stamps are the inbox's,
  * so a network is told the truth about when the business said what it says.

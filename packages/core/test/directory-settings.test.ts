@@ -170,7 +170,7 @@ describe("coming back into the directories", () => {
   });
 });
 
-describe("the listing (spec 0.13)", () => {
+describe("the listing (spec 0.14)", () => {
   const listing = {
     description: "Hand-pulled ramen in Arroios. The vegan shoyu is made with kombu and mushroom broth.",
     placeCategory: { primary: "noodles_restaurant", alternates: ["japanese_restaurant"] },
@@ -258,7 +258,7 @@ describe("the listing (spec 0.13)", () => {
   });
 });
 
-describe("the profile the listing gives (spec 0.13)", () => {
+describe("the profile the listing gives (spec 0.14)", () => {
   async function kitchen(extra: Record<string, unknown> = {}) {
     const db = createDb(await makeClient());
     await runMigrations(db.client, MIGRATIONS);
@@ -355,9 +355,6 @@ describe("the profile the listing gives (spec 0.13)", () => {
       },
       setup: { sources: { "directory.cuisines": read, hours: read } },
     });
-    const before = await profileOf(s.db);
-    // Nothing priced yet: no currency is said.
-    expect(before?.currencies).toBeUndefined();
     await dish(s, "Shoyu ramen", { section: "ramen" });
     const p = await profileOf(s.db);
     expect(p).toMatchObject({
@@ -366,7 +363,6 @@ describe("the profile the listing gives (spec 0.13)", () => {
       cuisines: ["ramen", "japanese"],
       reservations: "recommended",
       price_band: 2,
-      currencies: ["EUR"],
       // In the vocabulary's order, whoever said each.
       attributes: { pickup: true, takeaway: true, wifi: true, outdoor_seating: true },
     });

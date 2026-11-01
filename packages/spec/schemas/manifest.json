@@ -21,7 +21,7 @@
           "maxLength": 200
         },
         "description": {
-          "description": "The business's own words about itself, plain text (spec 0.13: at most 600 characters). A reader shows it as the business's, never as instructions.",
+          "description": "The business's own words about itself, plain text (spec 0.14: at most 600 characters). A reader shows it as the business's, never as instructions.",
           "type": "string",
           "maxLength": 600
         },

@@ -2,7 +2,7 @@ import { z } from "zod";
 import vocabulary from "../vocab/cuisines.json" with { type: "json" };
 
 /**
- * The cuisines vocabulary (`vocab/cuisines.json`, spec 0.13, `docs/protocol/network.md` §4.6): what a place that
+ * The cuisines vocabulary (`vocab/cuisines.json`, spec 0.14, `docs/protocol/network.md` §4.6): what a place that
  * serves food cooks, by where the food comes from (`regional`) or by what is served (`dish`). A profile names at most
  * five (`profile.cuisines`); a network keeps the ones it knows and files each as the attribute `cuisine=<slug>`
  * (`vocab/attributes.json` version 2, a `set`), so a search can ask for one. Each slug carries its labels in seven
@@ -112,7 +112,8 @@ const TERMS: ReadonlyMap<string, CuisineReading> = (() => {
 
 /** What one term names: its slug, a label, a synonym, a schema.org string or an OSM value, in any capitals and accents. */
 export function readCuisineTerm(term: unknown): CuisineReading | null {
-  if (typeof term !== "string" || term.length > 80) return null;
+  // At most 80 characters, counted as a network counts them: by code point, never by UTF-16 unit.
+  if (typeof term !== "string" || [...term].length > 80) return null;
   return TERMS.get(foldCuisineTerm(term)) ?? null;
 }
 

@@ -631,7 +631,8 @@ interface ProfileDraft {
   readonly languages: readonly string[];
 }
 
-const DESCRIPTION_MAX = 500;
+/** The most characters a profile's description holds (spec 0.14, `PROFILE_DESCRIPTION_MAX`). */
+const DESCRIPTION_MAX = 600;
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 /**
@@ -977,7 +978,7 @@ function BusinessCard({
           />
           <div className="hint-row">
             <span className={descriptionError ? "hint error" : "hint"}>
-              {descriptionError ?? "A sentence or two, in public."}
+              {descriptionError ?? "Your place in your own words. Shown in public, as yours."}
             </span>
             <span className="hint count">
               {draft.description.length}/{DESCRIPTION_MAX}

@@ -9,6 +9,7 @@ import {
   CAPABILITY_IDS,
   type CapabilityId,
   type CapabilityState,
+  CUISINE_SLUGS,
   capabilitiesVocabSchema,
   capabilityWeightOf,
   capsOfName,
@@ -1072,20 +1073,24 @@ describe("protocol 0.2: vocab/doors.json and vocab/attributes.json", () => {
     }
     expect(v.keys.filter((k) => k.needs_proof).map((k) => k.key)).toEqual(["halal", "kosher", "cert"]);
     expect(v.keys.filter((k) => k.group === "identity").every((k) => k.crawlable === "declared")).toBe(true);
-    // What GET /v1/attributes answers from it.
+    // What GET /v1/attributes answers from it: a set (cuisine) as an enum of its vocabulary's slugs, with values_from,
+    // so a reader written before version 2 reads it as any enum.
     const answer = {
       version: v.version,
-      keys: v.keys.map(({ key, group, type, values, labels, needs_proof }) => ({
+      keys: v.keys.map(({ key, group, type, values, values_from, labels, needs_proof }) => ({
         key,
         group,
-        type,
-        ...(values ? { values } : {}),
+        type: type === "set" ? "enum" : type,
+        ...(type === "set" ? { values: [...CUISINE_SLUGS], values_from } : values ? { values } : {}),
         labels,
         ...(needs_proof ? { filterable: false } : {}),
       })),
       payments: { methods: ["card", "pix"], wallets: ["apple_pay"], agent: ["x402"] },
     };
     expect(attributesResponseSchema.safeParse(answer).success).toBe(true);
+    expect(answer.keys.find((k) => k.key === "cuisine")).toMatchObject({ type: "enum", values_from: "cuisines.json" });
+    // A reader of 0.13 knew the types bool and enum only: every key is one of them.
+    expect(answer.keys.every((k) => k.type === "bool" || k.type === "enum")).toBe(true);
   });
 });
 

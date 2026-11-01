@@ -134,7 +134,7 @@ export const MAX_SUGGESTED_SERVICES = 30;
 
 /**
  * The listing fields of `directory` whose save time the inbox keeps (`directory.saved`), so a network is told when the
- * business last said each (`profile.sources`, spec 0.13).
+ * business last said each (`profile.sources`, spec 0.14).
  */
 export const LISTING_FIELDS = [
   "description",
@@ -777,8 +777,9 @@ const sections = {
         .or(z.literal(""))
         .default("")
         .describe("The business's own website, if it has one."),
-      // The listing (spec 0.13): what agents can match on, each a choice in Settings → Business, never a typed code.
-      // What the business says of itself to every agent, so only the owner in person changes any of it (`guard.ts`).
+      // The listing (spec 0.14): what agents can match on, each a choice of a vocabulary, never free text but the
+      // description. What the business says of itself to every agent, so only the owner in person changes any of it
+      // (`guard.ts`). Settings → Business has the description; the rest has no picker there yet.
       placeCategory: z
         .object({
           primary: placeCategoryId,

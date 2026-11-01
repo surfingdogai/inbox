@@ -12,7 +12,7 @@ import type { Caller } from "../src/write/index";
 import { confirming, makeClient, resetTables } from "./harness";
 
 /**
- * The profile a manifest publishes to every network (spec 0.13) is built from an allow-list: the business's own data
+ * The profile a manifest publishes to every network (spec 0.14) is built from an allow-list: the business's own data
  * and nothing else. An inbox full of customers, their messages, the people who work there, what is in stock and the
  * owner's own notes gives a profile with only the allowed keys, and none of those words in it. Node and workerd.
  */
@@ -126,7 +126,7 @@ describe("the directory profile is business data only", () => {
           base: { from: "device", point: { lat: 38.7216, lng: -9.1355 }, label: "Where I was on 21 Oct" },
           zones: [{ name: "Arroios", mode: "radius", radiusKm: 3 }],
         },
-        payments: { accepted: ["card", "mb_way"] },
+        payments: { accepted: ["card", "mb_way"], currencies: ["GBP"] },
         directory: {
           description: "Hand-pulled ramen in Arroios.",
           categories: ["restaurant"],
@@ -200,9 +200,10 @@ describe("the directory profile is business data only", () => {
       name: settings.business.name,
       languages: settings.business.languages,
       timezone: settings.business.timezone,
-      currency: settings.business.currency,
       directory: settings.directory,
       payments: settings.payments.accepted,
+      currency: settings.business.currency,
+      currencies: settings.payments.currencies,
       settings,
       now: T0,
     });
