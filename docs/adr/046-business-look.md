@@ -32,10 +32,13 @@ sees.
    (`PUT`/`DELETE /v1/owner/look/logo`): a settings write that touches `look.logo` is refused from
    anyone, so the settings never name a file that is not there, or someone else's.
 4. **The logo lives in the inbox's own database.** A PNG, JPEG or WebP of up to 512 KB and 16 to 2048
-   pixels a side, told by its first bytes (never its name or its Content-Type), with its metadata
-   taken out, kept as one `blobs` row of kind `logo` with its chunks: the same store as request files,
-   on every runtime, with no bucket and no migration. Nothing that sweeps, counts or erases request
-   files touches it. A downloaded copy of the inbox keeps it.
+   pixels a side, told by its first bytes (never its name or its Content-Type), kept as one `blobs`
+   row of kind `logo` with its chunks: the same store as request files, on every runtime, with no
+   bucket and no migration. Everyone sees it, so only what draws the picture is kept (a strict list
+   per format) and every other block goes, Content Credentials (C2PA) and blocks of a maker's own
+   among them: they can name who made it, or carry thumbnails of what it was made from. A request's
+   files keep their own, shorter list. Nothing that sweeps, counts or erases request files touches
+   it. A downloaded copy of the inbox keeps it.
 5. **Customers load it from `/p/logo/<sha16>.<ext>`.** The name is the first 16 of its SHA-256, so a
    new picture is a new address: it is kept a year (`immutable`), and an old one is simply not found.
    It sits under the public page's door, so it takes that door's limit and reaches exactly as far: on
@@ -43,15 +46,21 @@ sees.
    policy allows images from its own address and nowhere else (`img-src 'self'`). The owner app reads
    it through `/v1/owner/look/logo`, which works before the inbox is live and with a key.
 6. **Pages take the theme; emails stay light.** A customer's page takes the theme's tones, the
-   accent's buttons, links and focus ring, and the logo above the name, which stays the text. A page
-   inside the business's own website (`?embed=1`) takes the theme and accent, not the header. An error
-   or refusal page keeps the default look, so nothing is read for it. An email gets an HTML part only
-   once the look is chosen, written from the final text (the text stays the email, and the only part
-   the mail log keeps): the logo or the name, each link as a thin button or a link in the accent, on
-   a light page whatever the theme, since a mail app that darkens a dark email again turns it odd.
-   Inline styles only, no web font, no script. The owner's own emails stay text.
+   accent's buttons, links and focus ring, and the logo above the name, which stays the text. On a
+   dark page (Dark, or Standard on a dark device) the logo sits on a small white plate, as in
+   Settings and in the owner app at night: most logos are drawn in dark ink. A page inside the
+   business's own website (`?embed=1`) takes the theme and accent, not the header. An error or
+   "too many" page takes the look too, and the default when the look cannot be read. An email gets an
+   HTML part only once the look is chosen, written from the final text (the text stays the email, and
+   the only part the mail log keeps): the logo or the name, on a light page whatever the theme, since
+   a mail app that darkens a dark email again turns it odd. Only the inbox's own answer links
+   (`<public address>/c/<token>`, whole) are thin buttons in the accent; every other address, a name
+   a stranger typed into the form among them, stays a link that shows all of itself. Inline styles
+   only, no web font, no script. The owner's own emails stay text.
 7. **In the owner app, the owner's own Day or Night still wins.** The business's theme decides only
-   what Auto turns into; the accent colours the app's buttons, links and focus ring.
+   what the switch's third choice turns into: System, as before, while the theme is Standard; Auto,
+   following the theme, once another is chosen. The accent colours the app's buttons, links and
+   focus ring.
 
 ## Not decided here
 
@@ -59,3 +68,5 @@ sees.
   change and a published fact. Not for now.
 - Whether an inbox that never chooses a look sends HTML too. Not for now: text, as before.
 - The logo on the owner's sign-in page, which would need it on `GET /v1/business`. The Sun stays.
+- A second logo for dark pages, for a business whose logo is drawn in white: until then it sits on
+  the white plate, where a white logo does not show.
