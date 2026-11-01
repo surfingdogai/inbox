@@ -140,6 +140,7 @@ export function notifyHandler(
                 await ownerStayMail(db, item, p.event, who),
               ),
               now,
+              { account: item.flags.account === true },
             )
           : await customerMail(db, item, p, {
               jobKey: job.id,
@@ -670,6 +671,14 @@ function firstName(who: string): string {
  */
 export const OWNER_ALERTS_PER_HOUR = 20;
 
+/**
+ * Alerts about an account's code or sign-in link (`flags.account`) in an hour, at most. They are
+ * never held by the cap above: the owner needs a code now, not at the end of the hour. They count
+ * apart from the others, so neither holds the other back; past this many, a flood of notices that
+ * only look real is held for the digest like any other alert.
+ */
+export const OWNER_ACCOUNT_ALERTS_PER_HOUR = 30;
+
 /** The job that sends the hour's digest. */
 export const OWNER_DIGEST_KIND = "owner_digest";
 
@@ -677,19 +686,28 @@ const HOUR = 3_600_000;
 
 /**
  * An owner alert as it will be stored: itself while the hour has room, else held back for the
- * hour's digest, which it queues (once per clock hour, at the end of it).
+ * hour's digest, which it queues (once per clock hour, at the end of it). `account`: an alert about
+ * an account's code or sign-in link, whose room is its own (`OWNER_ACCOUNT_ALERTS_PER_HOUR`).
  */
-export async function capOwnerAlerts(db: Db, mail: ComposedMail, now: number): Promise<ComposedMail> {
+export async function capOwnerAlerts(
+  db: Db,
+  mail: ComposedMail,
+  now: number,
+  opts: { readonly account?: boolean } = {},
+): Promise<ComposedMail> {
   if (mail.skip) return mail;
   const since = now - HOUR;
   const { rows } = await db.client.query({
-    sql: `SELECT COUNT(*) FROM outbound_mail
-           WHERE status IN ('queued', 'retrying', 'sent') AND updated_at >= ? AND created_at >= ?
-             AND recipient = 'owner' AND template LIKE 'owner.%' AND template <> 'owner.digest'`,
+    sql: `SELECT COUNT(*), COALESCE(SUM(CASE WHEN json_extract(i.flags, '$.account') = 1 THEN 1 ELSE 0 END), 0)
+            FROM outbound_mail m LEFT JOIN items i ON i.id = m.item_id
+           WHERE m.status IN ('queued', 'retrying', 'sent') AND m.updated_at >= ? AND m.created_at >= ?
+             AND m.recipient = 'owner' AND m.template LIKE 'owner.%' AND m.template <> 'owner.digest'`,
     params: [since, since],
     method: "all",
   });
-  if (Number(rows[0]?.[0] ?? 0) < OWNER_ALERTS_PER_HOUR) return mail;
+  const account = Number(rows[0]?.[1] ?? 0);
+  const others = Number(rows[0]?.[0] ?? 0) - account;
+  if (opts.account ? account < OWNER_ACCOUNT_ALERTS_PER_HOUR : others < OWNER_ALERTS_PER_HOUR) return mail;
   const bucket = Math.floor(now / HOUR);
   await ensureJob(db, OWNER_DIGEST_KIND, `${OWNER_DIGEST_KIND}:${bucket}`, {
     now,
