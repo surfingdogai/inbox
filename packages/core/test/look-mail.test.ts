@@ -122,6 +122,18 @@ describe("the business's look in its emails to customers", () => {
     expect(alert?.html).toBeUndefined();
   });
 
+  it("keeps the logo in its emails when there is one for dark pages: an email is light", async () => {
+    const s = await setup({ theme: "dark", accent: "teal", logo: true });
+    const dark = (await s.caps.look.setLogo(owner(T0 + 1), logoPng(90, 30), "logoDark")).doc.look.logoDark;
+    await s.book();
+    await s.drain(T0 + 2 * MIN);
+    const html = s.to("rita@example.com")[0]?.html ?? "";
+    expect(html).toContain(`<img src="${BASE}/p/logo/${s.logo?.sha256.slice(0, 16)}.png" alt="Oficina Maré"`);
+    expect(dark?.sha256).toBeTruthy();
+    expect(html).not.toContain(dark?.sha256.slice(0, 16));
+    expect(html).toContain("background:#ffffff");
+  });
+
   it("never makes a button of a link a stranger typed, even in the email that asks them to confirm", async () => {
     const s = await setup({ accent: "teal", logo: true });
     const evil = "https://evil.example/pay?x=1";

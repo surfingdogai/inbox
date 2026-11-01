@@ -69,11 +69,14 @@ export const ROUTE_SCOPES: Readonly<Record<string, readonly string[]>> = {
   "DELETE /attachments/:id": ["inbox:write"],
   "GET /settings": [READ_SETUP],
   "PUT /settings": ["settings:write"],
-  // The business's logo reads like the settings; changing it is the owner's in person, checked by the
-  // capability whatever the scopes.
+  // The business's logos read like the settings; changing them is the owner's in person, checked by
+  // the capability whatever the scopes.
   "GET /look/logo": [READ_SETUP],
   "PUT /look/logo": ["*"],
   "DELETE /look/logo": ["*"],
+  "GET /look/logo-dark": [READ_SETUP],
+  "PUT /look/logo-dark": ["*"],
+  "DELETE /look/logo-dark": ["*"],
   "GET /receipts": [READ_SETUP],
   // The owner's in person, checked by the capability whatever the scopes: never the AI, never a key.
   "POST /receipt-keys/rotate": ["*"],

@@ -72,6 +72,23 @@ describe("Settings → Look, on the page", () => {
     expect(plain).toContain('<p class="biz">Studio Kalinda</p>');
     expect(plain).toContain("--p-accent:#111111");
   });
+
+  it("shows the logo for dark pages on Dark, with no plate, and the logo on every other theme", () => {
+    const preview = (theme: "dark" | "standard") =>
+      renderToStaticMarkup(
+        createElement(LookPreview, {
+          theme,
+          accent: "teal",
+          business: "Studio Kalinda",
+          logoUrl: "blob:day",
+          logoDarkUrl: "blob:night",
+        }),
+      );
+    expect(preview("dark")).toContain(
+      '<p class="biz"><img class="for-night" src="blob:night" alt="Studio Kalinda"/></p>',
+    );
+    expect(preview("standard")).toContain('<p class="biz"><img src="blob:day" alt="Studio Kalinda"/></p>');
+  });
 });
 
 describe("the rail's head", () => {
@@ -100,6 +117,18 @@ describe("the rail's head", () => {
     expect(wide).toContain("rail-mark");
     // A logo that could not be fetched: the Inbox mark, as with none.
     expect(head({ ...square, url: null, waiting: false })).toContain("<svg");
+  });
+
+  it("holds the logo for dark pages beside the logo, for the stylesheet to show at night", () => {
+    const night = { url: "blob:n", waiting: false, width: 96, height: 96 };
+    const both = head({ ...square, night });
+    expect(both).toContain('<img class="rail-logo for-day" src="blob:x" alt=""/>');
+    expect(both).toContain('<img class="rail-logo for-night" src="blob:n" alt=""/>');
+    // Neither shows until both are here; one that could not be fetched leaves the logo, as before.
+    expect(head({ ...square, night: { ...night, url: null, waiting: true } })).toContain("is-waiting");
+    const lost = head({ ...square, night: { ...night, url: null, waiting: false } });
+    expect(lost).toContain('<img class="rail-logo" src="blob:x" alt=""/>');
+    expect(lost).not.toContain("for-night");
   });
 });
 

@@ -112,20 +112,26 @@ export function AccentDots({
   );
 }
 
-/** What a customer's page looks like with this look: the logo, or the name without one, a heading, a line, a button, a link. */
+/**
+ * What a customer's page looks like with this look: the logo, or the name without one, a heading, a
+ * line, a button, a link. On Dark, the logo for dark pages when there is one, with no plate.
+ */
 export function LookPreview({
   theme,
   accent,
   business,
   logoUrl,
+  logoDarkUrl,
 }: {
   theme: LookTheme;
   accent: LookAccent;
   business: string;
   logoUrl: string | null;
+  logoDarkUrl?: string | null | undefined;
 }) {
   const tones = tonesOf(theme);
   const a = accentTone(theme, accent);
+  const dark = theme === "dark" && logoUrl && logoDarkUrl ? logoDarkUrl : null;
   return (
     <figure className="look-figure">
       <figcaption className="label">What your customers see</figcaption>
@@ -141,7 +147,15 @@ export function LookPreview({
           "--p-accent-fg": a.label,
         })}
       >
-        <p className="biz">{logoUrl ? <img src={logoUrl} alt={business} /> : business}</p>
+        <p className="biz">
+          {dark ? (
+            <img className="for-night" src={dark} alt={business} />
+          ) : logoUrl ? (
+            <img src={logoUrl} alt={business} />
+          ) : (
+            business
+          )}
+        </p>
         <p className="h">Your booking</p>
         <p className="t">Tuesday at 10:00, for an hour.</p>
         <p className="acts">

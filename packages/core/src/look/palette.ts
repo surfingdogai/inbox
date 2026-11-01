@@ -82,6 +82,9 @@ export const ACCENT_LABELS: Readonly<Record<LookAccent, string>> = {
   ochre: "Ochre",
 };
 
+/** Which logo: the logo, or the one for dark pages (`logoDark`), for a logo drawn in white. */
+export type LogoSlot = "logo" | "logoDark";
+
 /** The business's logo, as the look names it: its file under `/p/logo/`, and its size in pixels. */
 export interface LookLogo {
   /** `<the first 16 of its sha256><.png|.jpg|.webp>`: a new picture is a new name. */
@@ -94,9 +97,11 @@ export interface Look {
   readonly theme: LookTheme;
   readonly accent: LookAccent;
   readonly logo: LookLogo | null;
+  /** The logo for dark pages, for one drawn in white: there in place of the logo, with no plate. Only with a logo. */
+  readonly logoDark: LookLogo | null;
 }
 
-export const DEFAULT_LOOK: Look = { theme: "standard", accent: "ink", logo: null };
+export const DEFAULT_LOOK: Look = { theme: "standard", accent: "ink", logo: null, logoDark: null };
 
 /** Whether the look is the one every inbox starts with: nothing anyone sees changes then. */
 export function isDefaultLook(look: Look): boolean {
@@ -124,13 +129,21 @@ export function logoFile(logo: StoredLogo): string {
 
 /** The look in a settings document. */
 export function lookOf(settings: {
-  readonly look: { readonly theme: LookTheme; readonly accent: LookAccent; readonly logo: StoredLogo | null };
+  readonly look: {
+    readonly theme: LookTheme;
+    readonly accent: LookAccent;
+    readonly logo: StoredLogo | null;
+    readonly logoDark?: StoredLogo | null | undefined;
+  };
 }): Look {
-  const { theme, accent, logo } = settings.look;
+  const { theme, accent, logo, logoDark } = settings.look;
+  const named = (l: StoredLogo): LookLogo => ({ file: logoFile(l), width: l.width, height: l.height });
   return {
     theme,
     accent,
-    logo: logo ? { file: logoFile(logo), width: logo.width, height: logo.height } : null,
+    logo: logo ? named(logo) : null,
+    // It goes with the logo: without one, the name heads every page, dark or light.
+    logoDark: logo && logoDark ? named(logoDark) : null,
   };
 }
 

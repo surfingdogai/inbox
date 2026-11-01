@@ -1,3 +1,4 @@
+import type { LogoSlot } from "@surfingdog/core/look";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./api";
 import { countsFrom } from "./filters";
@@ -49,8 +50,8 @@ export const qk = {
   keys: ["keys"] as const,
   spam: ["spam"] as const,
   spamModel: ["spam", "model"] as const,
-  /** The logo's picture, by the first 16 of its hash: a new picture is a new key. */
-  logo: (v: string) => ["look", "logo", v] as const,
+  /** A logo's picture, by the first 16 of its hash: a new picture is a new key. */
+  logo: (v: string, slot: LogoSlot = "logo") => ["look", slot, v] as const,
   deliveries: (id: string) => ["deliveries", id] as const,
 };
 

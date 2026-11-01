@@ -310,3 +310,74 @@ describe("the logo, kept", () => {
     await expect(caps.look.ownerFile(zapier)).resolves.toMatchObject({ type: "image/png" });
   });
 });
+
+describe("the logo for dark pages", () => {
+  it("is taken once there is a logo, by the same rules, and kept beside it", async () => {
+    const { db, caps } = await setup();
+    await expect(caps.look.setLogo(owner, logoPng(120, 40), "logoDark")).rejects.toMatchObject({
+      code: "wrong_state",
+      details: { reason: "no_logo" },
+    });
+    expect(await logoRows(db)).toEqual([]);
+
+    const logo = (await caps.look.setLogo(owner, logoPng(120, 40))).doc.look.logo;
+    // The same checks: never what its name says, and its metadata taken out.
+    await expect(
+      caps.look.setLogo(at(T0 + 500), ascii('<svg xmlns="http://www.w3.org/2000/svg"/>'), "logoDark"),
+    ).rejects.toMatchObject({ code: "invalid_input", message: LOGO_WORDS.type });
+    const dark = (await caps.look.setLogo(at(T0 + 1000), logoPng(90, 30), "logoDark")).doc.look.logoDark;
+    expect(dark).toMatchObject({ type: "image/png", width: 90, height: 30 });
+    expect((await logoRows(db)).map((r) => r.key).sort()).toEqual([logo?.id, dark?.id].sort());
+    const bytes = await readLogo(db, dark?.id ?? "");
+    expect(bytes && contains(bytes, SECRET_PLACE)).toBe(false);
+
+    // Both are served by their names; each to the owner app by its own door.
+    const look = await caps.look.view();
+    expect(look.logo?.file).toBe(`${logo?.sha256.slice(0, 16)}.png`);
+    expect(look.logoDark).toEqual({ file: `${dark?.sha256.slice(0, 16)}.png`, width: 90, height: 30 });
+    const served = await caps.look.file(look.logoDark?.file ?? "");
+    expect(served && (await sha256Hex(served.bytes))).toBe(dark?.sha256);
+    await expect(caps.look.file(look.logo?.file ?? "")).resolves.toMatchObject({ type: "image/png" });
+    const mine = await caps.look.ownerFile(zapier, "logoDark");
+    expect(mine && (await sha256Hex(mine.bytes))).toBe(dark?.sha256);
+
+    // A new logo leaves the one for dark pages as it was, and a new one of those leaves the logo.
+    const logo2 = (await caps.look.setLogo(at(T0 + 2000), logoPng(300, 60))).doc.look;
+    expect(logo2.logoDark?.id).toBe(dark?.id);
+    const dark2 = (await caps.look.setLogo(at(T0 + 3000), logoPng(60, 60), "logoDark")).doc.look;
+    expect(dark2.logo?.id).toBe(logo2.logo?.id);
+    expect((await logoRows(db)).map((r) => r.key).sort()).toEqual([logo2.logo?.id, dark2.logoDark?.id].sort());
+    expect(await caps.look.file(`${dark?.sha256.slice(0, 16)}.png`)).toBeNull();
+  });
+
+  it("removed, leaves the logo; the logo removed takes it too", async () => {
+    const { db, caps } = await setup();
+    const logo = (await caps.look.setLogo(owner, logoPng(120, 40))).doc.look.logo;
+    await caps.look.setLogo(at(T0 + 1000), logoPng(90, 30), "logoDark");
+    const without = (await caps.look.removeLogo(at(T0 + 2000), "logoDark")).doc.look;
+    expect(without.logo?.id).toBe(logo?.id);
+    expect(without.logoDark).toBeNull();
+    expect((await logoRows(db)).map((r) => r.key)).toEqual([logo?.id]);
+    expect(await caps.look.ownerFile(owner, "logoDark")).toBeNull();
+
+    await caps.look.setLogo(at(T0 + 3000), logoPng(90, 30), "logoDark");
+    const none = (await caps.look.removeLogo(at(T0 + 4000))).doc.look;
+    expect(none.logo).toBeNull();
+    expect(none.logoDark).toBeNull();
+    expect(await logoRows(db)).toEqual([]);
+    expect(await chunkKeys(db)).toEqual([]);
+  });
+
+  it("is the owner's in person too", async () => {
+    const { db, caps } = await setup();
+    await caps.look.setLogo(owner, logoPng(120, 40));
+    for (const caller of [ownerAi, zapier]) {
+      await expect(caps.look.setLogo(caller, logoPng(90, 30), "logoDark")).rejects.toMatchObject({
+        code: "not_allowed",
+        details: { reason: "owner_in_person" },
+      });
+      await expect(caps.look.removeLogo(caller, "logoDark")).rejects.toMatchObject({ code: "not_allowed" });
+    }
+    expect((await readSettings(db)).look.logoDark).toBeNull();
+  });
+});

@@ -8,6 +8,7 @@ import {
   DEFAULT_LOOK,
   isDefaultLook,
   type Look,
+  type LookLogo,
   langFromHeader,
   logoBox,
   type PageField,
@@ -267,12 +268,23 @@ const LOGO_MAX_H = 40;
 
 /**
  * The logo in place of the business's name, which is its alt. From the inbox's own address
- * (`/p/logo/<file>`), the only image a page loads.
+ * (`/p/logo/<file>`), the only images a page loads. With a logo for dark pages, that one on a Dark
+ * page, and on a Standard one when the device is dark: the browser picks it, and loads only it.
  */
 function logoImg(look: Look, name: string): string {
   if (!look.logo) return "";
-  const box = logoBox(look.logo.width, look.logo.height, LOGO_MAX_W, LOGO_MAX_H);
-  return `<img src="/p/logo/${esc(look.logo.file)}" alt="${esc(name)}" width="${box.width}" height="${box.height}">`;
+  const size = (logo: LookLogo) => {
+    const box = logoBox(logo.width, logo.height, LOGO_MAX_W, LOGO_MAX_H);
+    return `width="${box.width}" height="${box.height}"`;
+  };
+  const img = (logo: LookLogo) => `<img src="/p/logo/${esc(logo.file)}" alt="${esc(name)}" ${size(logo)}>`;
+  const dark = look.logoDark;
+  if (dark && look.theme === "dark") return img(dark);
+  if (dark && look.theme === "standard") {
+    const source = `<source media="(prefers-color-scheme: dark)" srcset="/p/logo/${esc(dark.file)}" ${size(dark)}>`;
+    return `<picture>${source}${img(look.logo)}</picture>`;
+  }
+  return img(look.logo);
 }
 
 /**
@@ -284,7 +296,8 @@ function logoImg(look: Look, name: string): string {
  *   on a dark one (for Standard, as the device is). Ink is the theme's own ink, the button as it was.
  * - Minimal's button is a thin outline, its weights lighter, its lines 1px.
  * - On a dark page (Dark, or Standard on a dark device) the logo sits on a small white plate, as in
- *   Settings: most logos are drawn in dark ink, and would all but vanish on the dark ground.
+ *   Settings: most logos are drawn in dark ink, and would all but vanish on the dark ground. With a
+ *   logo for dark pages there is no plate: that one is drawn for the dark ground.
  */
 export function lookCss(look: Look): string {
   if (isDefaultLook(look)) return "";
@@ -312,8 +325,9 @@ export function lookCss(look: Look): string {
   }
   if (look.logo) {
     out.push(".biz img{display:block;max-width:100%;height:auto;margin:0 0 .5rem}");
-    if (look.theme === "dark") out.push(LOGO_PLATE);
-    else if (look.theme === "standard") out.push(`@media (prefers-color-scheme:dark){${LOGO_PLATE}}`);
+    // The logo for dark pages is drawn for the dark ground: no plate under it.
+    if (!look.logoDark && look.theme === "dark") out.push(LOGO_PLATE);
+    if (!look.logoDark && look.theme === "standard") out.push(`@media (prefers-color-scheme:dark){${LOGO_PLATE}}`);
   }
   return `\n${out.join("\n")}\n`;
 }

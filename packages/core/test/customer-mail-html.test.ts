@@ -9,7 +9,7 @@ import { ACCENT_TONES, DEFAULT_LOOK, type Look, logoBox, THEME_TONES } from "../
  */
 const BASE = "https://inbox.example.org";
 const FILE = "0123456789abcdef.png";
-const look = (o: Partial<Look> = {}): Look => ({ theme: "standard", accent: "teal", logo: null, ...o });
+const look = (o: Partial<Look> = {}): Look => ({ theme: "standard", accent: "teal", logo: null, logoDark: null, ...o });
 const withLogo = (width: number, height: number, o: Partial<Look> = {}) =>
   look({ logo: { file: FILE, width, height }, ...o });
 /** An answer link as the inbox makes it: its jti and its mac, 22 characters each. */

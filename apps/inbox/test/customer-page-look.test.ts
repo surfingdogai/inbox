@@ -54,16 +54,22 @@ async function setup() {
     );
     expect(res.status).toBe(200);
   };
-  const logo = async (bytes: Uint8Array) => {
+  const logo = async (bytes: Uint8Array, slot: "logo" | "logoDark" = "logo") => {
     const res = await inbox.app.request(
-      new Request(`${BASE}/v1/owner/look/logo`, {
+      new Request(`${BASE}/v1/owner/look/${slot === "logo" ? "logo" : "logo-dark"}`, {
         method: "PUT",
         headers: { ...auth, "content-type": "application/octet-stream" },
         body: bytes as BodyInit,
       }),
     );
     expect(res.status).toBe(200);
-    return ((await res.json()) as { doc: { look: { logo: { sha256: string } } } }).doc.look.logo;
+    return ((await res.json()) as { doc: { look: Record<typeof slot, { sha256: string }> } }).doc.look[slot];
+  };
+  const removeDark = async () => {
+    const res = await inbox.app.request(
+      new Request(`${BASE}/v1/owner/look/logo-dark`, { method: "DELETE", headers: auth }),
+    );
+    expect(res.status).toBe(200);
   };
   /** One visitor asking again and again, until the page says it is too many. */
   const tooMany = async (path: string) => {
@@ -75,7 +81,7 @@ async function setup() {
     }
     throw new Error("never refused");
   };
-  return { page, look, logo, tooMany };
+  return { page, look, logo, removeDark, tooMany };
 }
 
 const styleOf = (html: string) => /<style>([\s\S]*?)<\/style>/.exec(html)?.[1] ?? "";
@@ -170,6 +176,39 @@ describe("a customer's page in the business's look", () => {
       await s.look({ theme });
       expect(styleOf((await s.page("/p/quote")).html)).not.toContain(plate);
     }
+  });
+
+  it("shows the logo for dark pages where the ground is dark, with no plate; removed, the plate is back", async () => {
+    const s = await setup();
+    const plate = ".biz img{box-sizing:content-box;padding:4px 6px;border-radius:4px;background:#fff}";
+    const day = `/p/logo/${(await s.logo(logoPng(400, 80))).sha256.slice(0, 16)}.png`;
+    const night = `/p/logo/${(await s.logo(logoPng(300, 100), "logoDark")).sha256.slice(0, 16)}.png`;
+    // Standard follows the device: the logo by day, the one for dark pages when it is dark.
+    const standard = (await s.page("/p/quote")).html;
+    expect(standard).toContain(
+      `<p class="biz"><picture><source media="(prefers-color-scheme: dark)" srcset="${night}" width="120" height="40"><img src="${day}" alt="Studio Kalinda" width="200" height="40"></picture></p>`,
+    );
+    expect(styleOf(standard)).not.toContain(plate);
+    // Dark: that one alone.
+    await s.look({ theme: "dark" });
+    const dark = (await s.page("/p/quote")).html;
+    expect(dark).toContain(`<p class="biz"><img src="${night}" alt="Studio Kalinda" width="120" height="40"></p>`);
+    expect(dark).not.toContain(day);
+    expect(styleOf(dark)).not.toContain(plate);
+    expect((await s.page(night)).res.headers.get("content-type")).toBe("image/png");
+    // The light themes keep the logo.
+    for (const theme of ["minimal", "warm"]) {
+      await s.look({ theme });
+      const html = (await s.page("/p/quote")).html;
+      expect(html).toContain(`<p class="biz"><img src="${day}"`);
+      expect(html).not.toContain(night);
+    }
+    // Removed: the logo on its plate again.
+    await s.look({ theme: "dark" });
+    await s.removeDark();
+    const again = (await s.page("/c/privacy")).html;
+    expect(again).toContain(`<p class="biz"><img src="${day}"`);
+    expect(styleOf(again)).toContain(plate);
   });
 
   it("keeps the look on a page that says something went wrong, or that it is too many", async () => {

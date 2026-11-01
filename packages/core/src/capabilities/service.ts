@@ -704,7 +704,7 @@ export class Capabilities {
     this.spam = new SpamCapabilities(db, secrets);
     this.people.attachSpam(this.spam);
     this.look = new LookCapabilities(db, {
-      writeLogo: (caller, logo) => this.writeSettings(caller, { doc: { look: { logo } } }, false, { logo: true }),
+      writeLogo: (caller, logos) => this.writeSettings(caller, { doc: { look: logos } }, false, { logo: true }),
     });
     this.customer = new CustomerDoors(db, {
       access: this.access,
@@ -2402,7 +2402,7 @@ export class Capabilities {
 
   /**
    * `updateSettings`, or, `asHost`, the host's own write of what its policy sets, past the policy's lock.
-   * `logo`: the logo's own door (`look.setLogo`), the only write that may change `look.logo`.
+   * `logo`: the logos' own door (`look.setLogo`), the only write that may change `look.logo` and `look.logoDark`.
    */
   private async writeSettings(
     caller: Caller,
@@ -2530,12 +2530,15 @@ export class Capabilities {
     }
     const before = parseStoredSettings(stored).settings;
     const after = parseStoredSettings(merged).settings;
-    // The logo is a file the inbox keeps: only its upload names it, so the settings never point at a
-    // file that is not there, or at a customer's.
-    if (!opts.logo && changedSettings(before, after, [{ path: ["look", "logo"] }]).length) {
+    // The logos are files the inbox keeps: only their uploads name them, so the settings never point
+    // at a file that is not there, or at a customer's.
+    const logos = opts.logo
+      ? []
+      : changedSettings(before, after, [{ path: ["look", "logo"] }, { path: ["look", "logoDark"] }]);
+    if (logos.length) {
       const message = "the logo changes by uploading it (Settings → Look)";
       throw new WriteError("invalid_input", message, {
-        fields: [{ path: "doc.look.logo", problem: "invalid", message }],
+        fields: logos.map((path) => ({ path: `doc.${path}`, problem: "invalid", message })),
       });
     }
     // What a held network or the held listing comes back to is the host's to keep (`settings/policy.ts`):

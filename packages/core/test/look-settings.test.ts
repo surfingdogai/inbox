@@ -68,14 +68,14 @@ async function setup() {
 
 describe("the look setting", () => {
   it("starts as the look every inbox had: Standard, Ink, no logo", () => {
-    expect(DEFAULT_SETTINGS.look).toEqual({ theme: "standard", accent: "ink", logo: null });
+    expect(DEFAULT_SETTINGS.look).toEqual({ theme: "standard", accent: "ink", logo: null, logoDark: null });
     expect(lookOf(DEFAULT_SETTINGS)).toEqual(DEFAULT_LOOK);
     expect(isDefaultLook(lookOf(DEFAULT_SETTINGS))).toBe(true);
   });
 
   it("drops a bad stored value alone: the rest of the look stands", () => {
     const { settings, ignored } = parseStoredSettings({ look: { theme: "neon", accent: "teal", logo: LOGO } });
-    expect(settings.look).toEqual({ theme: "standard", accent: "teal", logo: LOGO });
+    expect(settings.look).toEqual({ theme: "standard", accent: "teal", logo: LOGO, logoDark: null });
     expect(ignored).toEqual(["look.theme"]);
     expect(parseStoredSettings({ look: { accent: "red" } }).settings.look.accent).toBe("ink");
     expect(parseStoredSettings({ look: { logo: { ...LOGO, type: "image/svg+xml" } } }).settings.look.logo).toBeNull();
@@ -87,11 +87,22 @@ describe("the look setting", () => {
       theme: "dark",
       accent: "ink",
       logo: { file: "abababababababab.png", width: 120, height: 40 },
+      logoDark: null,
     });
     expect(isDefaultLook(look)).toBe(false);
     expect(lookOf(parseStoredSettings({ look: { logo: { ...LOGO, type: "image/jpeg" } } }).settings).logo?.file).toBe(
       "abababababababab.jpg",
     );
+  });
+
+  it("names the logo for dark pages beside the logo, and never without it", () => {
+    const DARK = { ...LOGO, id: "logo_fedcba9876543210", sha256: "cd".repeat(32), width: 90, height: 30 };
+    const both = lookOf(parseStoredSettings({ look: { logo: LOGO, logoDark: DARK } }).settings);
+    expect(both.logoDark).toEqual({ file: "cdcdcdcdcdcdcdcd.png", width: 90, height: 30 });
+    // Alone it names nothing: the name heads every page, dark or light, as with no logo at all.
+    const alone = lookOf(parseStoredSettings({ look: { logoDark: DARK } }).settings);
+    expect(alone.logoDark).toBeNull();
+    expect(isDefaultLook(alone)).toBe(true);
   });
 });
 
@@ -112,7 +123,7 @@ describe("who changes the look", () => {
 
     await caps.updateSettings(owner, { doc: { look: { theme: "warm" } } });
     await caps.updateSettings(owner, { doc: { look: { accent: "plum" } } });
-    expect((await readSettings(db)).look).toEqual({ theme: "warm", accent: "plum", logo: null });
+    expect((await readSettings(db)).look).toEqual({ theme: "warm", accent: "plum", logo: null, logoDark: null });
   });
 
   it("sends the look back as it was: nothing changed, nothing refused", async () => {
@@ -136,5 +147,10 @@ describe("who changes the look", () => {
       fields: [{ path: "doc.look.logo", message: "the logo changes by uploading it (Settings → Look)" }],
     });
     expect((await readSettings(db)).look.logo).toBeNull();
+    await expect(caps.updateSettings(owner, { doc: { look: { logoDark: LOGO } } })).rejects.toMatchObject({
+      code: "invalid_input",
+      fields: [{ path: "doc.look.logoDark", message: "the logo changes by uploading it (Settings → Look)" }],
+    });
+    expect((await readSettings(db)).look.logoDark).toBeNull();
   });
 });

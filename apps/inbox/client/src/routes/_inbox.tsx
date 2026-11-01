@@ -48,11 +48,15 @@ function InboxLayout() {
   const tz = business.data?.timezone ?? settings.data?.doc.business.timezone;
   // On a phone the list is the home, so a kitchen's pause is there too.
   const phone = usePhone();
-  // The business's look (Settings → Look): its theme and accent on the app, its logo in the rail.
+  // The business's look (Settings → Look): its theme and accent on the app, its logo in the rail,
+  // and at night its logo for dark pages, when it has one.
   useLookSync();
   const kept = settings.data?.doc.look.logo;
+  const keptDark = kept ? settings.data?.doc.look.logoDark : null;
   const shown = useLogoUrl(kept?.sha256);
-  const logo = kept ? { ...shown, width: kept.width, height: kept.height } : null;
+  const shownDark = useLogoUrl(keptDark?.sha256, "logoDark");
+  const night = keptDark ? { ...shownDark, width: keptDark.width, height: keptDark.height } : null;
+  const logo = kept ? { ...shown, width: kept.width, height: kept.height, night } : null;
 
   return (
     <SpamActionsProvider>

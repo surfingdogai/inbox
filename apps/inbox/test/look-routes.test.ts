@@ -37,9 +37,9 @@ async function setup() {
   });
   const owner = await createApiKey(db, { kind: "owner", name: "t" });
   const crm = await createApiKey(db, { kind: "integration", name: "CRM", scopes: ["*"] });
-  const put = (bytes: Uint8Array, key: string | null = owner.key) =>
+  const put = (bytes: Uint8Array, key: string | null = owner.key, path = "/v1/owner/look/logo") =>
     inbox.app.request(
-      new Request(`${BASE}/v1/owner/look/logo`, {
+      new Request(`${BASE}${path}`, {
         method: "PUT",
         headers: {
           "content-type": "application/octet-stream",
@@ -55,7 +55,8 @@ async function setup() {
   return { db, put, call, crm: crm.key };
 }
 
-type View = { doc: { look: { logo: { sha256: string; width: number; height: number } | null } } };
+type Kept = { sha256: string; width: number; height: number } | null;
+type View = { doc: { look: { logo: Kept; logoDark: Kept } } };
 
 describe("the logo's doors", () => {
   it("take a PNG from the owner, and serve it cleaned to everyone, kept for good", async () => {
@@ -118,5 +119,42 @@ describe("the logo's doors", () => {
     expect(((await removed.json()) as View).doc.look.logo).toBeNull();
     expect((await s.call("GET", `/p/logo/${name}`, null)).status).toBe(404);
     expect((await s.call("GET", "/v1/owner/look/logo")).status).toBe(404);
+  });
+
+  it("take a logo for dark pages once there is a logo, serve it the same way, and remove it alone", async () => {
+    const s = await setup();
+    const DARK = "/v1/owner/look/logo-dark";
+    const early = await s.put(logoPng(90, 30), undefined, DARK);
+    expect(early.status).toBe(409);
+    expect(((await early.json()) as { details: { reason: string } }).details.reason).toBe("no_logo");
+
+    const logo = ((await (await s.put(logoPng(160, 48))).json()) as View).doc.look.logo;
+    const res = await s.put(logoPng(90, 30), undefined, DARK);
+    expect(res.status).toBe(200);
+    const dark = ((await res.json()) as View).doc.look.logoDark;
+    expect(dark).toMatchObject({ width: 90, height: 30 });
+    const pub = await s.call("GET", `/p/logo/${dark?.sha256.slice(0, 16)}.png`, null);
+    expect(pub.status).toBe(200);
+    expect(pub.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
+    expect(pub.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(contains(new Uint8Array(await pub.arrayBuffer()), SECRET_PLACE)).toBe(false);
+    const mine = await s.call("GET", DARK);
+    expect(mine.status).toBe(200);
+    expect(await sha256Hex(new Uint8Array(await mine.arrayBuffer()))).toBe(dark?.sha256);
+
+    // The same refusals as the logo's.
+    expect((await s.put(ascii("<svg/>"), undefined, DARK)).status).toBe(422);
+    expect((await s.put(new Uint8Array(600 * 1024), undefined, DARK)).status).toBe(413);
+    expect((await s.put(logoPng(90, 30), s.crm, DARK)).status).toBe(403);
+    expect((await s.call("DELETE", DARK, s.crm)).status).toBe(403);
+
+    const removed = await s.call("DELETE", DARK);
+    expect(removed.status).toBe(200);
+    const after = ((await removed.json()) as View).doc.look;
+    expect(after.logoDark).toBeNull();
+    expect(after.logo?.sha256).toBe(logo?.sha256);
+    expect((await s.call("GET", `/p/logo/${dark?.sha256.slice(0, 16)}.png`, null)).status).toBe(404);
+    expect((await s.call("GET", DARK)).status).toBe(404);
+    expect((await s.call("GET", `/p/logo/${logo?.sha256.slice(0, 16)}.png`, null)).status).toBe(200);
   });
 });

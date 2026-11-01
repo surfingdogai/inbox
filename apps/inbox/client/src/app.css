@@ -247,18 +247,33 @@ a {
   display: none;
 }
 /* At night, on a small white plate: most logos are drawn in dark ink. */
-:root[data-theme="dark"] img.rail-logo {
+:root[data-theme="dark"] img.rail-logo:not(.for-night) {
   box-sizing: content-box;
   padding: 2px 4px;
   border-radius: 4px;
   background: #ffffff;
 }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) img.rail-logo {
+  :root:not([data-theme="light"]) img.rail-logo:not(.for-night) {
     box-sizing: content-box;
     padding: 2px 4px;
     border-radius: 4px;
     background: #ffffff;
+  }
+}
+/* With a logo for dark pages: the logo by day, that one at night, with no plate. */
+:root[data-theme="light"] img.rail-logo.for-night,
+:root[data-theme="dark"] img.rail-logo.for-day {
+  display: none;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) img.rail-logo.for-night {
+    display: none;
+  }
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) img.rail-logo.for-day {
+    display: none;
   }
 }
 .rail-link {
@@ -3803,6 +3818,20 @@ pre.found-code {
 .look-logo-frame .fine {
   color: #6b6e96;
 }
+/* The logo for dark pages: a smaller line under the logo, on a dark ground, as it is seen. */
+.look-logo.is-dark .look-logo-frame {
+  width: 112px;
+  height: 40px;
+  padding: 6px;
+  border-color: #2a2a2a;
+  background: #141414;
+}
+.look-logo.is-dark img {
+  max-height: 28px;
+}
+.look-logo.is-dark .look-logo-frame .fine {
+  color: #a3a3a3;
+}
 .look-logo-acts {
   display: flex;
   align-items: center;
@@ -3988,8 +4017,8 @@ fieldset:disabled .look-dot {
   max-height: 28px;
   margin-bottom: 6px;
 }
-/* On Dark, as its pages show it: on a small white plate. */
-.look-preview[data-look="dark"] .biz img {
+/* On Dark, as its pages show it: on a small white plate, unless it is the logo for dark pages. */
+.look-preview[data-look="dark"] .biz img:not(.for-night) {
   box-sizing: content-box;
   padding: 3px 5px;
   border-radius: 4px;

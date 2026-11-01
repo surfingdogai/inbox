@@ -68,5 +68,22 @@ sees.
   change and a published fact. Not for now.
 - Whether an inbox that never chooses a look sends HTML too. Not for now: text, as before.
 - The logo on the owner's sign-in page, which would need it on `GET /v1/business`. The Sun stays.
-- A second logo for dark pages, for a business whose logo is drawn in white: until then it sits on
-  the white plate, where a white logo does not show.
+- A second logo for dark pages, for a business whose logo is drawn in white: decided the same day,
+  in the amendment below.
+
+## Amendment, 1 November 2026: a logo for dark pages
+
+The founder's answer, the same day: a logo drawn in white vanished on the white plate, so there is
+an optional second one.
+
+1. **`look.logoDark`, the same rules as the logo.** A PNG, JPEG or WebP of up to 512 KB and 16 to
+   2048 pixels a side, told by its first bytes, everything but the picture taken out, kept the same
+   way and served the same way, at `/p/logo/<sha16>.<ext>`. Its own door, the owner's in person:
+   `PUT`, `DELETE` and `GET /v1/owner/look/logo-dark`. It goes with the logo: refused until there is
+   one (409 `no_logo`), and removing the logo removes it too.
+2. **Used wherever the ground is dark, with no plate.** A Dark customer page shows it alone; a
+   Standard one gives the browser both in a `<picture>`, which shows and loads this one when the
+   device is dark; the owner app holds both in the rail and shows this one at night or on the Dark
+   theme. Removing it brings the plate back. Settings → Look shows it on a dark ground, one small
+   line under the logo, once there is a logo.
+3. **Emails stay light**, and keep the logo.

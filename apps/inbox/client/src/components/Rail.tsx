@@ -127,28 +127,38 @@ export function Rail({
 export interface RailLogo extends LogoShown {
   readonly width: number;
   readonly height: number;
+  /** The logo for dark pages (Settings → Look): in its place at night, with no plate. */
+  readonly night?: RailLogo | null | undefined;
 }
 
 /**
  * The business at the top of the rail: its logo when it has one (Settings → Look), which says its
  * name (kept for screen readers only), else the Inbox mark and its name. Its place is kept while it
- * loads. Where the rail is icons only, a logo wider than it is tall would be a smudge: the Inbox mark
+ * loads. With a logo for dark pages, both are there and the stylesheet shows the one for the hour.
+ * Where the rail is icons only, a logo wider than it is tall would be a smudge: the Inbox mark
  * stands in there.
  */
 export function RailHead({ name, logo }: { name: string; logo?: RailLogo | null | undefined }) {
   const wide = logo ? logo.width / logo.height > 1.5 : false;
   const cls = wide ? "rail-logo is-wide" : "rail-logo";
+  const night = logo?.night ?? null;
+  // Both are here before either shows, so the hour's logo is never another's for a moment.
+  const waiting = Boolean(logo?.waiting || (logo?.url && night?.waiting));
+  const shown = Boolean(logo?.url) && !waiting;
   return (
     <div className="h" title={name}>
-      {logo?.url ? (
-        <img className={cls} src={logo.url} alt="" />
-      ) : logo?.waiting ? (
+      {shown && logo?.url ? (
+        <>
+          <img className={night?.url ? `${cls} for-day` : cls} src={logo.url} alt="" />
+          {night?.url && <img className={`${cls} for-night`} src={night.url} alt="" />}
+        </>
+      ) : waiting && logo ? (
         <span className={`${cls} is-waiting`} style={{ aspectRatio: `${logo.width} / ${logo.height}` }} />
       ) : (
         <Inbox className="icon" aria-hidden="true" />
       )}
-      {wide && (logo?.url || logo?.waiting) && <Inbox className="icon rail-mark" aria-hidden="true" />}
-      <span className={logo?.url || logo?.waiting ? "sr-only" : "label"}>{name}</span>
+      {wide && (shown || waiting) && <Inbox className="icon rail-mark" aria-hidden="true" />}
+      <span className={shown || waiting ? "sr-only" : "label"}>{name}</span>
     </div>
   );
 }

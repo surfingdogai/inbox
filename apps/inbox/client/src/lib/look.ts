@@ -3,6 +3,7 @@ import {
   accentIn,
   LOOK_ACCENTS,
   LOOK_THEMES,
+  type LogoSlot,
   type LookAccent,
   type LookTheme,
   THEME_TONES,
@@ -181,6 +182,7 @@ export function accentTone(theme: LookTheme, accent: LookAccent): { readonly acc
 export const LOGO_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
 export const LOGO_MAX_BYTES = 512 * 1024;
 export const LOGO_HINT = "PNG, JPEG or WebP, up to 512 KB. Shown on your pages, in your emails and here.";
+export const LOGO_DARK_HINT = "Optional, for a logo drawn in white: shown on dark pages in place of the logo.";
 
 /** Why a picture would be refused, before it is sent; null when the inbox may take it. */
 export function logoProblem(file: { readonly type: string; readonly size: number }): string | null {
@@ -197,12 +199,12 @@ export interface LogoShown {
   readonly waiting: boolean;
 }
 
-/** The logo, fetched once per picture (the owner's key or cookie goes with it, so never a plain `src`). */
-export function useLogoUrl(sha256: string | null | undefined): LogoShown {
+/** A logo, fetched once per picture (the owner's key or cookie goes with it, so never a plain `src`). */
+export function useLogoUrl(sha256: string | null | undefined, slot: LogoSlot = "logo"): LogoShown {
   const v = sha256 ? sha256.slice(0, 16) : null;
   const file = useQuery({
-    queryKey: qk.logo(v ?? ""),
-    queryFn: async () => (await api.logo(v ?? "")).blob,
+    queryKey: qk.logo(v ?? "", slot),
+    queryFn: async () => (await api.logo(v ?? "", slot)).blob,
     enabled: v !== null,
     staleTime: Number.POSITIVE_INFINITY,
     retry: false,
@@ -221,11 +223,11 @@ export function useLogoUrl(sha256: string | null | undefined): LogoShown {
   return { url, waiting: v !== null && url === null && !file.isError };
 }
 
-/** Upload and remove the logo; the answer is the settings, as a save's is. */
-export function useLogoWrite() {
+/** Upload and remove a logo; the answer is the settings, as a save's is. */
+export function useLogoWrite(slot: LogoSlot = "logo") {
   const qc = useQueryClient();
   const saved = (data: SettingsDoc) => qc.setQueryData(qk.settings, data);
-  const upload = useMutation({ mutationFn: (file: Blob) => api.setLogo(file), onSuccess: saved });
-  const remove = useMutation({ mutationFn: () => api.removeLogo(), onSuccess: saved });
+  const upload = useMutation({ mutationFn: (file: Blob) => api.setLogo(file, slot), onSuccess: saved });
+  const remove = useMutation({ mutationFn: () => api.removeLogo(slot), onSuccess: saved });
   return { upload, remove };
 }

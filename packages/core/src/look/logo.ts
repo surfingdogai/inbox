@@ -12,7 +12,7 @@ import { imageSize, type PictureType } from "./size";
  * The business's logo, kept in the inbox's own database as a request's files are (`attachments/store.ts`):
  * one `blobs` row of `kind = 'logo'` and its bytes in `attachment_chunks`, so it is there on every
  * runtime with nothing to set up. It never runs out and belongs to no request or customer; the
- * settings name it (`look.logo`), and only one is kept.
+ * settings name it (`look.logo`), and only one is kept, with at most one for dark pages (`look.logoDark`).
  *
  * What is taken is checked from its first bytes, never from its name or the type it was sent as:
  * a PNG, JPEG or WebP picture (an SVG can carry a script, so it is never one), within a size, with
@@ -144,15 +144,16 @@ export async function dropLogo(db: Db, id: string): Promise<void> {
 }
 
 /**
- * Removes every logo kept up to `upTo` but the one the settings name as it runs: the one replaced,
- * and any a write that stopped half way left behind. Which one the settings name is read in the same
- * statement, so a settings write that lands meanwhile never loses its file. One kept later is another
- * upload's, still on its way, and is left to it.
+ * Removes every logo kept up to `upTo` but the two the settings name as it runs (the logo, and the
+ * one for dark pages): the one replaced, and any a write that stopped half way left behind. Which
+ * ones the settings name is read in the same statement, so a settings write that lands meanwhile
+ * never loses its file. One kept later is another upload's, still on its way, and is left to it.
  */
 export async function dropLogos(db: Db, upTo: number): Promise<void> {
   await db.batch(
     dropStatements(
-      "created_at <= ? AND key IS NOT (SELECT json_extract(doc, '$.look.logo.id') FROM settings LIMIT 1)",
+      `created_at <= ? AND key IS NOT (SELECT json_extract(doc, '$.look.logo.id') FROM settings LIMIT 1)
+        AND key IS NOT (SELECT json_extract(doc, '$.look.logoDark.id') FROM settings LIMIT 1)`,
       [upTo],
     ),
   );

@@ -1,3 +1,4 @@
+import type { LogoSlot } from "@surfingdog/core/look";
 import { authHeaders } from "./auth";
 import { attachmentName } from "./download";
 import type {
@@ -231,6 +232,12 @@ async function download(path: string, fallbackName: string): Promise<{ blob: Blo
   if (res.status === 401) unauthorizedHandler?.();
   throw new ApiProblem(problem);
 }
+
+/** Where each logo is kept: the logo, and the one for dark pages. */
+const LOGO_PATH: Readonly<Record<LogoSlot, string>> = {
+  logo: "/v1/owner/look/logo",
+  logoDark: "/v1/owner/look/logo-dark",
+};
 
 /** A file sent as the body of a PUT (the logo): the answer, or the problem, as `call`. */
 async function putBytes<T>(path: string, blob: Blob): Promise<T> {
@@ -541,11 +548,11 @@ export const api = {
   testSpamModel: () => call<ModelTest>("POST", "/v1/owner/spam/model/test", { body: {} }),
   removeSpamModel: () => call<ModelCard>("DELETE", "/v1/owner/spam/model"),
 
-  // ---- the business's look (Settings → Look): theme and accent are settings; the logo is a file ----
-  setLogo: (file: Blob) => putBytes<SettingsDoc>("/v1/owner/look/logo", file),
-  removeLogo: () => call<SettingsDoc>("DELETE", "/v1/owner/look/logo"),
-  /** The logo as kept, to show here; `v`, its hash, fetches a new one anew. */
-  logo: (v: string) => download(`/v1/owner/look/logo?v=${encodeURIComponent(v)}`, "logo"),
+  // ---- the business's look (Settings → Look): theme and accent are settings; the logos are files ----
+  setLogo: (file: Blob, slot: LogoSlot = "logo") => putBytes<SettingsDoc>(LOGO_PATH[slot], file),
+  removeLogo: (slot: LogoSlot = "logo") => call<SettingsDoc>("DELETE", LOGO_PATH[slot]),
+  /** A logo as kept, to show here; `v`, its hash, fetches a new one anew. */
+  logo: (v: string, slot: LogoSlot = "logo") => download(`${LOGO_PATH[slot]}?v=${encodeURIComponent(v)}`, "logo"),
 
   // ---- keys: one named, scoped, revocable key per system that connects ----
   keys: () => call<KeyList>("GET", "/v1/owner/api-keys"),

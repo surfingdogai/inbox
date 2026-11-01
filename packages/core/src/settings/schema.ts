@@ -152,6 +152,15 @@ const placeCategoryId = z
   .max(80)
   .regex(/^[a-z0-9]+(_[a-z0-9]+)*$/, "a place category id, like hair_salon");
 
+/** A logo as the settings name it: its file in the inbox's own database (`look/logo.ts`). */
+const storedLogo = z.object({
+  id: z.string().regex(/^[0-9A-Za-z_-]{1,64}$/),
+  type: z.enum(["image/png", "image/jpeg", "image/webp"]),
+  sha256: z.string().regex(/^[0-9a-f]{64}$/),
+  width: z.number().int().min(16).max(2048),
+  height: z.number().int().min(16).max(2048),
+});
+
 const disabledNetwork = (): NetworkEntry => networkEntrySchema.parse({});
 /** The most currencies a business takes besides its own: a profile names five at most (`profile.currencies`). */
 export const MAX_OTHER_CURRENCIES = 4;
@@ -1041,8 +1050,8 @@ const sections = {
     .describe("What the spam filter keeps, and the emails it sends the owner."),
   /**
    * How the business looks to its customers (`look/palette.ts`), the owner's in person
-   * (`OWNER_ONLY_SETTINGS`). The logo is a file in the inbox's own database: only its door changes
-   * `logo` (`look/capability.ts`), so the settings never name a file that is not there.
+   * (`OWNER_ONLY_SETTINGS`). The logos are files in the inbox's own database: only their door changes
+   * `logo` and `logoDark` (`look/capability.ts`), so the settings never name a file that is not there.
    */
   look: z
     .object({
@@ -1054,17 +1063,13 @@ const sections = {
         .enum(LOOK_ACCENTS)
         .default("ink")
         .describe("The colour of buttons and links: ink (the theme's own), blue, teal, green, violet, plum or ochre."),
-      logo: z
-        .object({
-          id: z.string().regex(/^[0-9A-Za-z_-]{1,64}$/),
-          type: z.enum(["image/png", "image/jpeg", "image/webp"]),
-          sha256: z.string().regex(/^[0-9a-f]{64}$/),
-          width: z.number().int().min(16).max(2048),
-          height: z.number().int().min(16).max(2048),
-        })
+      logo: storedLogo.nullable().default(null).describe("Set by uploading it in Settings → Look."),
+      logoDark: storedLogo
         .nullable()
         .default(null)
-        .describe("Set by uploading it in Settings → Look."),
+        .describe(
+          "The logo for dark pages, for one drawn in white: shown there with no plate. Set by uploading it in Settings → Look, after the logo.",
+        ),
     })
     .prefault({})
     .describe("How the business looks to its customers: its pages, its emails, and the owner app."),
