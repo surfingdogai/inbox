@@ -2821,7 +2821,6 @@ function mergeChoices(old: readonly ConnectionChoice[], fresh: readonly Connecti
   });
 }
 
-/** What a connection cannot do for its account now; nothing when its kind does not say, or says it badly. */
 /** What a connection made by one of a definition's ways is called: the way's title, else its label. */
 function presetTitle(def: ConnectorDefinition | undefined, preset: string | null | undefined): string | undefined {
   if (!preset) return undefined;
@@ -2829,6 +2828,7 @@ function presetTitle(def: ConnectorDefinition | undefined, preset: string | null
   return way ? (way.title ?? way.label) : undefined;
 }
 
+/** What a connection cannot do for its account now; nothing when its kind does not say, or says it badly. */
 function withheldOf(def: ConnectorDefinition, extra: Readonly<Record<string, unknown>> | undefined): Withheld {
   try {
     const w = def.withheld?.({ extra: extra ?? {} }) ?? {};

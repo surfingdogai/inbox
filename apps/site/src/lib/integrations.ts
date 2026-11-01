@@ -279,7 +279,7 @@ export const INTEGRATIONS: readonly Integration[] = [
     href: "/docs/payments/#stripe",
     state: "tested",
     tested:
-      "Tested on 1 November 2026 against Stripe's test mode, with a test secret key standing in for a restricted one (the check that refuses secret keys was set aside for the test): connected, with the inbox adding its webhook; a payment link for an accepted order; a declined card; paid, as told by Stripe's signed webhook and as found by the inbox's own sync; the link closed on cancel and on disconnect; a refund made in Stripe and recorded in the inbox. Not yet with a restricted key, a bank payment that clears later, or on a live account.",
+      "Tested on 1 November 2026 against Stripe's test mode, with a test secret key standing in for a restricted one (the check that refuses secret keys was set aside for the test): connected, with the inbox adding its webhook; a payment link for an accepted order; a declined card; paid, as found by the inbox's own sync, and as told by Stripe's own event, which we fetched from Stripe and passed on signed with the webhook's secret, since Stripe could not reach our machine; the link closed on cancel and on disconnect; a refund made in Stripe and recorded in the inbox. Not yet with a restricted key, a webhook Stripe delivers itself, a bank payment that clears later, or on a live account.",
     brand: { owner: "Stripe", guidelines: "https://stripe.com/legal/marks" },
   },
   {

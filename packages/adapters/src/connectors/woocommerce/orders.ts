@@ -439,7 +439,6 @@ async function createLink(ctx: RunContext, req: PayLinkRequest): Promise<PayLink
   return linkOf(store, await settleTotals(ctx, store, keys, wc, order));
 }
 
-/** A private note on the order, for the business: where it came from, and what the order says of delivery. */
 /** The first words of the private note on an order this inbox made: what `noted` looks for. */
 function noteHead(reference: string): string {
   return `Order ${reference} from your agent inbox.`;
@@ -464,6 +463,7 @@ async function noted(ctx: RunContext, store: Store, keys: Keys, id: unknown, ref
   }
 }
 
+/** A private note on the order, for the business: where it came from, and what the order says of delivery. */
 async function noteOn(ctx: RunContext, store: Store, keys: Keys, id: unknown, order: ShopOrder, reference: string) {
   if (!Number.isInteger(id)) return;
   const how =

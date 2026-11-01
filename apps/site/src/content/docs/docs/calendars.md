@@ -39,7 +39,7 @@ Every calendar for events in the account blocks busy times until you choose othe
 
 Gmail and Outlook addresses are told at once where they connect instead: their calendars do not open with an app password.
 
-**Other CalDAV calendars.** Tested on 1 November 2026 against a real CalDAV server (Radicale 3.9, run on our own machine), connected the Other way with an app password and the server's address under More options: busy times from two calendars, with repeating events, Europe/Lisbon and America/New_York times and all-day events; bookings written, moved and removed; a read-only calendar refused for bookings; a changed password reported, then connected again in place. Not yet with iCloud's, Fastmail's or Nextcloud's own servers, nor with a server found from the email alone.
+**Other CalDAV calendars.** Tested on 1 November 2026 against a real CalDAV server (Radicale 3.9, run on our own machine), connected the Other way with an app password and the server's address under More options: busy times from two calendars, with repeating events, Europe/Lisbon and America/New_York times and all-day events; bookings written, moved and removed; a read-only calendar refused for bookings; a changed password marking the connection failing, its last busy times still blocking, then connected again in place. Not yet with iCloud's, Fastmail's or Nextcloud's own servers, nor with a server found from the email alone.
 
 ## A calendar link
 

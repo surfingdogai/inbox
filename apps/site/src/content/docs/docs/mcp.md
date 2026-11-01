@@ -52,7 +52,7 @@ Counted per person where we can tell people apart: by a directory key, else by t
 
 ## Tested with
 
-Tested on 1 November 2026 with Gemini CLI 0.66 and the MCP Inspector 2.13: a search on this server; and, against an inbox run on our own machine, a booking request and its status through the business's MCP, and the owner's inbox through the owner MCP, with a key and with an OAuth sign-in. Claude Code 2.1.72 connected to this server and to the inbox's two, and found the owner's sign-in; no Claude model ran yet.
+Tested on 1 November 2026 with Gemini CLI 0.66 and the MCP Inspector 2.13: a search on this server; and, against an inbox run on our own machine, a booking request and its status through the business's MCP, and the owner's inbox through the owner MCP, with a key, and with a token from the inbox's own OAuth sign-in, which a script of ours went through rather than either client. Claude Code 2.1.72 connected to this server and to the inbox's two, and found the owner's sign-in; no Claude model ran yet.
 
 ## More
 
