@@ -14,8 +14,10 @@ Cloudflare Email Routing → this Worker → the inbox the address is for. Nothi
 
 The receiving server's verdict (`spf=…; dkim=…; dmarc=…`) is passed on only when `TRUSTED_AUTHSERV` names
 whose Authentication-Results to read (e.g. `mx.cloudflare.net`), and then only the topmost field of the
-message as it came. Set it only once a real delivery showed Email Routing puts its own results on top of
-every message; unset, no verdict is passed and the inboxes judge nothing by one.
+message as it came. Email Routing checks DMARC before it calls the Worker and puts its own
+`Authentication-Results: mx.cloudflare.net` on top of every message (Cloudflare's Email Handler docs,
+"Authentication results"), so ours names `mx.cloudflare.net`; unset, no verdict is passed and the inboxes judge
+nothing by one.
 
 What the sending server is told: taken; a temporary failure (it retries for days) when the inbox or the
 router cannot take it now, or the signature is not accepted (ours to fix, never a bounce); refused, with
