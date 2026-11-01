@@ -85,10 +85,13 @@ export interface EmailFacts {
   readonly html?: string | undefined;
   readonly attachments?: { readonly count: number; readonly types: readonly string[] } | undefined;
   /**
-   * A code, a sign-in link or a password reset for an account the business holds: read here only,
-   * never by the AI check or against the host's shared list. The item is marked so (`flags.account`).
+   * A code, a sign-in link or a password reset for an account the business holds, from the domain the
+   * receiving server vouched for: read here only, never by the AI check, and counted by its domain.
+   * The item is marked so (`flags.account`).
    */
   readonly account?: boolean | undefined;
+  /** The email's own words, where the item keeps more under them (an account's links): what is read. */
+  readonly words?: string | undefined;
 }
 
 /**

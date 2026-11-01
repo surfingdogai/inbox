@@ -456,20 +456,20 @@ describe("delivery", () => {
     expect(net.calls).toHaveLength(1);
     expect(net.calls[0]?.body).not.toContain("t0k3n");
 
-    // A replay of everything since queues its events too; each delivery stops before anything is sent.
-    await new WebhookCapabilities(db, box).replayMissing(owner(T0 + 60_000), {
+    // A replay of everything since leaves its events out: the other message's are matched, none of its.
+    const replayed = await new WebhookCapabilities(db, box).replayMissing(owner(T0 + 60_000), {
       webhook_id: ep.id,
       since: new Date(T0 - 60_000).toISOString(),
     });
+    expect(replayed.matched).toBeGreaterThan(0);
     await drain(runner, db, T0 + 60_000);
     expect(net.calls.some((c) => c.body.includes("t0k3n") || c.body.includes(notice.view.item.id))).toBe(false);
-    const stopped = await rows(
+    const queued = await rows(
       db,
-      "SELECT d.status, d.last_error FROM webhook_deliveries d JOIN events_v1 e ON e.id = d.event_id WHERE e.item_id = ?",
+      "SELECT d.status FROM webhook_deliveries d JOIN events_v1 e ON e.id = d.event_id WHERE e.item_id = ?",
       [notice.view.item.id],
     );
-    expect(stopped.length).toBeGreaterThan(0);
-    expect(stopped.every((r) => r[0] === "failed" && r[1] === "mail for an account the business holds")).toBe(true);
+    expect(queued).toEqual([]);
   });
 
   it("counts a redirect as a failure and never follows it", async () => {

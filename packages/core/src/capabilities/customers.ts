@@ -18,6 +18,7 @@ import { mailboxRefs } from "../spam/handles";
 import { canonicalJson } from "../util/canonical";
 import { type Caller, isCustomer, isOwnerAssistant, isOwnerInPerson, nowOf } from "../write/caller";
 import { WriteError } from "../write/errors";
+import { ACCOUNT_WITHHELD, readsAccountMail, withheldItem } from "../write/flags";
 import { rowToItem } from "../write/views";
 
 /**
@@ -268,14 +269,19 @@ export class CustomerData {
       created_at: iso(r[10]),
       closed_at: r[4] === "open" ? null : iso(r[11]),
     }));
+    // Mail for an account the business holds, exported by anyone but a person at the business: that it
+    // came, never its words or the owner's alert quoting them (`getItem` reads it the same way).
+    const person = readsAccountMail(caller);
+    const withheld = <T extends { subject: unknown; text: unknown }>(item: Item, rows: T[]) =>
+      item.flags.account && !person ? rows.map((r) => ({ ...r, subject: null, text: ACCOUNT_WITHHELD })) : rows;
     const itemsOut = itemRows
       .map((r) => rowToItem(r))
       .sort((a, b) => a.id.localeCompare(b.id))
       .map((item) => ({
-        item,
+        item: person ? item : withheldItem(item),
         events: ev.get(item.id) ?? [],
-        thread: th.get(item.id) ?? [],
-        emails: em.get(item.id) ?? [],
+        thread: withheld(item, th.get(item.id) ?? []),
+        emails: withheld(item, em.get(item.id) ?? []),
         receipts: rc.get(item.id) ?? [],
         offers: of.get(item.id) ?? [],
       }));

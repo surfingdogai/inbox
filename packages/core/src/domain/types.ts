@@ -105,8 +105,9 @@ export const itemFlagsSchema = z.object({
   untrustedInstructions: z.boolean().optional(),
   /**
    * A code, a sign-in link or a password reset for an account the business holds under its address,
-   * from a sender that takes no answer (the email door says so). It is the owner's alone: no rule acts
-   * on it, no webhook carries it, and the spam filter reads it here, never with AI or a shared list.
+   * from a sender that takes no answer, on the domain it names (the email door says so). It is the
+   * owner's alone: no rule acts on it, no webhook carries it, only a person at the business reads its
+   * words, and the spam filter reads it here, never with AI.
    */
   account: z.boolean().optional(),
 });

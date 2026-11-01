@@ -525,9 +525,13 @@ export async function screenAtDoor(deps: SpamDeps, ctx: DoorContext): Promise<Do
   const settings = await readSettings(db);
   const business = await businessContext(db, settings);
   const run = await running(deps, now);
+  // Mail for an account the business holds (the email door says so only of mail its domain vouched
+  // for): read here alone, never by the AI; the links its item keeps under its words are not read twice.
+  const account = ctx.screen.email?.account === true;
+  const words = ctx.type === "message" ? ctx.screen.email?.words : undefined;
   const reading = await readingOf(
     ctx.type,
-    ctx.payload,
+    words === undefined ? ctx.payload : { ...ctx.payload, text: words },
     ctx.message,
     ctx.subject,
     ctx.contact,
@@ -544,13 +548,16 @@ export async function screenAtDoor(deps: SpamDeps, ctx: DoorContext): Promise<Do
       reading.email !== undefined &&
       emailAuthenticated(ctx.screen.email, reading.email));
   const unsigned = reading.email !== undefined && !vouched;
-  const sender = await handlesOf(deps.secrets, {
+  const handles = await handlesOf(deps.secrets, {
     email: reading.email,
     ...(reading.email ? { authenticated: !unsigned } : {}),
     agent,
     passes,
     carriedFor: ctx.caller.carriedFor,
   });
+  // One service sends its codes from many addresses (`no-reply-<random>@`): an account's mail is
+  // counted by its domain, so the same notice a third time is one sender's, never a wave.
+  const sender = account ? byDomain(handles) : handles;
   // A platform's key is on no list: it signs for all of the platform's users.
   const thumbprint = sender.platform ? undefined : agent?.thumbprint;
   const listed = await listOf(db, { email: reading.email, thumbprint });
@@ -617,9 +624,7 @@ export async function screenAtDoor(deps: SpamDeps, ctx: DoorContext): Promise<Do
   // a keyed fingerprint only, for the same senders the repeats are counted for.
   // A sender's domain is looked up only where a mail server vouched for the address: one typed at a
   // form or given by an assistant may be anyone's.
-  // Mail for an account the business holds is read here alone: nothing of it goes to the list or the AI.
-  const account = ctx.screen.email?.account === true;
-  const sharedPort = account ? null : deps.shared();
+  const sharedPort = deps.shared();
   const mailVouched =
     ctx.screen.email !== undefined &&
     reading.email !== undefined &&
@@ -768,6 +773,12 @@ function countsAgainst(signals: readonly Signal[]): boolean {
  */
 const ANYONE = "item:";
 const printSender = (sender: SenderHandles, itemId: string) => sender.first?.ref ?? `${ANYONE}${itemId}`;
+
+/** The handles with repeats counted by the sender's mail domain, where it has one of its own. */
+function byDomain(sender: SenderHandles): SenderHandles {
+  const domain = sender.handles.find((h) => h.kind === "mail_domain");
+  return domain ? { ...sender, first: domain } : sender;
+}
 
 /**
  * The print of a stranger's request, and one more new conversation under each of their handles. A

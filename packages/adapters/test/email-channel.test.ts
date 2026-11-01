@@ -847,7 +847,8 @@ describe("what the review attacked", () => {
       "--b1--",
       "",
     ].join("\r\n");
-    const r = await ingestEmail(db, caps, { raw, envelopeTo: INBOUND }, { now: () => T });
+    // Its domain vouched for by the receiving server: a look-alike nothing vouched for keeps no links.
+    const r = await ingestEmail(db, caps, { raw, envelopeTo: INBOUND, auth: { dmarc: "pass" } }, { now: () => T });
     expect(r.outcome).toBe("created");
     const [entry] = await db.orm.select().from(schema.threadEntries);
     expect(entry?.bodyText).toContain("Links in this email:\nhttps://claude.example/magic-link?t=abc&s=1");

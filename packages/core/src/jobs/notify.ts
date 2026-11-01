@@ -8,7 +8,7 @@ import { isAutomated, type MailWithdrawal, renderCustomerMail } from "../custome
 import type { OfferTerms } from "../customer/offer";
 import type { Db } from "../db";
 import type { Item } from "../domain/types";
-import { customerReplyTo, inboundOf, ownerReplyTo } from "../email/channel";
+import { customerReplyTo, inboundOf, LINKS_HEADING, ownerReplyTo } from "../email/channel";
 import { machines } from "../machine/tables";
 import { lawOf } from "../negotiation/holidays";
 import { items, parties } from "../schema/tables";
@@ -194,6 +194,7 @@ export function notifyHandler(
       to: [address],
       subject: logged.subject,
       // The log keeps the links cut (`cutLinks`); only the email the customer gets carries them whole.
+      // The same for an account's code or link: the owner's alert quotes it, its copy in the log never.
       text:
         logged.recipient === "customer"
           ? await fillArrival(
@@ -206,7 +207,9 @@ export function notifyHandler(
                 itemId: logged.itemId,
               }),
             )
-          : logged.bodyText,
+          : item.flags.account
+            ? fillAccountQuote(logged.bodyText, await lastWordsOf(db, item.id))
+            : logged.bodyText,
       headers,
     };
     const sent = await sendLogged(db, mailOut, logged, mail, { final: job.attempts >= job.maxAttempts, now, kind });
@@ -558,9 +561,9 @@ function ownerMail(
 ): ComposedMail {
   const appUrl = settings.notifications.appUrl ?? "";
   // A customer who wrote is quoted, so the owner can answer from their mailbox; a few lines at most.
-  // A code or a sign-in link for an account the business holds is quoted whole, with its links: the
-  // owner needs it now, wherever in the email it is.
-  const said = o.words ? (item.flags.account ? quoteAll(o.words) : quoteFor(o.words)) : [];
+  // A code or a sign-in link for an account the business holds is quoted as the email goes, longer and
+  // with its links (`fillAccountQuote`): the owner needs it now, wherever in the email it is.
+  const said = o.words ? (item.flags.account ? [ACCOUNT_QUOTE] : quoteFor(o.words)) : [];
   const answer = o.byEmail
     ? `Reply to this email to answer ${firstName(who)}.${o.business ? ` It is sent as ${oneLine(o.business)}.` : ""}`
     : "Reply in your inbox to answer.";
@@ -601,20 +604,39 @@ async function lastWordsOf(db: Db, itemId: string): Promise<string | null> {
 }
 
 /** Words quoted in an alert: at most twelve lines and 1,200 characters, each line marked as quoted. */
-function quoteFor(words: string): string[] {
+function quoteFor(words: string, most = { lines: 12, chars: 1_200 }): string[] {
   const lines = words.replace(/\r\n/g, "\n").split("\n");
-  let kept = lines.slice(0, 12).join("\n");
-  const cut = kept.length > 1_200 || lines.length > 12;
-  if (kept.length > 1_200) kept = kept.slice(0, 1_200);
+  let kept = lines.slice(0, most.lines).join("\n");
+  const cut = kept.length > most.chars || lines.length > most.lines;
+  if (kept.length > most.chars) kept = kept.slice(0, most.chars);
   return [...kept.split("\n").map((l) => `> ${l}`.trimEnd()), ...(cut ? ["> …"] : [])];
 }
 
-/** Words quoted whole, each line marked as quoted: an account's email, as the item keeps it. */
-function quoteAll(words: string): string[] {
-  return words
-    .replace(/\r\n/g, "\n")
-    .split("\n")
-    .map((l) => `> ${l}`.trimEnd());
+/**
+ * Where the owner's alert quotes an account's email, in the copy the mail log keeps: the code and the
+ * links are written in only as the email goes (`fillAccountQuote`), so the log never holds them.
+ */
+const ACCOUNT_QUOTE = "> [The email, with its code or its links: quoted in the email to you, kept on the item only.]";
+
+/**
+ * An alert about an account's email as it goes: its words quoted where the log's copy says
+ * (`ACCOUNT_QUOTE`), sixty lines and 4,000 characters at most, then the links it carries, whole: what
+ * the owner needs, wherever in the email it was, and never the whole of a long email.
+ */
+function fillAccountQuote(text: string, words: string | null): string {
+  const lines = text.split("\n");
+  const at = lines.indexOf(ACCOUNT_QUOTE);
+  if (at < 0) return text;
+  const said = (words ?? "").replace(/\r\n/g, "\n");
+  // The links the email door wrote under the words: only http(s) links, ten at most, or no block at all.
+  const start = said.lastIndexOf(`\n\n${LINKS_HEADING}\n`);
+  const links = start < 0 ? [] : said.slice(start + LINKS_HEADING.length + 3).split("\n");
+  const block = links.length > 0 && links.length <= 10 && links.every((l) => /^https?:\/\/\S+$/i.test(l));
+  const quoted = [
+    ...quoteFor(block ? said.slice(0, start) : said, { lines: 60, chars: 4_000 }),
+    ...(block ? [">", `> ${LINKS_HEADING}`, ...links.map((l) => `> ${l}`)] : []),
+  ];
+  return [...lines.slice(0, at), ...(said.trim() ? quoted : []), ...lines.slice(at + 1)].join("\n");
 }
 
 /** How an alert names the customer in "answer …": their first name, else as named. */

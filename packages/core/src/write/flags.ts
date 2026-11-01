@@ -2,11 +2,11 @@ import type { Statement } from "@surfingdog/platform";
 import { eq } from "drizzle-orm";
 import { ownerClock } from "../customer/audience";
 import type { Db } from "../db";
-import { type ItemFlags, itemFlagsSchema } from "../domain/types";
+import { type Item, type ItemFlags, itemFlagsSchema } from "../domain/types";
 import { ulid } from "../ids";
 import { items } from "../schema/tables";
 import { readSettings } from "../settings/schema";
-import { actorMeta, type Caller, nowOf, permissionKind } from "./caller";
+import { actorMeta, type Caller, isPerson, nowOf, permissionKind } from "./caller";
 import { diagnoseFailure, eventStatement, hasEventListeners, webhookFanoutStatement } from "./common";
 import { hiddenTransitions } from "./corrections";
 import { WriteError } from "./errors";
@@ -23,6 +23,24 @@ export async function isAccountItem(db: Db, itemId: string): Promise<boolean> {
     method: "all",
   });
   return rows.length > 0;
+}
+
+/**
+ * Whether the caller reads what mail for an account the business holds says: a person at the business
+ * only. Not the owner's AI, which a customer's words can steer, and not a key handed to another system.
+ */
+export function readsAccountMail(caller: Caller): boolean {
+  return isPerson(caller);
+}
+
+/** What anyone else reads in place of each of its words: that it came, never its code or its link. */
+export const ACCOUNT_WITHHELD =
+  "A code or a sign-in link for an account the business holds: only a person at the business reads it, in the inbox.";
+
+/** The item as anyone but a person at the business reads it: its subject and its words withheld. */
+export function withheldItem(item: Item): Item {
+  if (item.type !== "message" || !item.flags.account) return item;
+  return { ...item, subject: null, payload: { text: ACCOUNT_WITHHELD } };
 }
 
 /** Changes flags (needs_human, priority) as its own event, so version and history stay honest. */

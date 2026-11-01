@@ -19,6 +19,8 @@ export function inboundOf(settings: Settings): string | null {
 export const LOOP_HEADER = "X-Inbox-Loop";
 /** The header a forwarding check carries, with its token. */
 export const CHECK_HEADER = "X-Inbox-Check";
+/** What heads the links an account's email carries, kept under its words (`flags.account`). */
+export const LINKS_HEADING = "Links in this email:";
 
 const marks = new WeakMap<Db, string>();
 

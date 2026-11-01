@@ -134,6 +134,7 @@ import { findIdempotent } from "../write/common";
 import { hiddenTransitions } from "../write/corrections";
 import type { CreateResult } from "../write/create";
 import { type FieldProblem, fromZod, notYoursError, WriteError } from "../write/errors";
+import { ACCOUNT_WITHHELD, readsAccountMail, withheldItem } from "../write/flags";
 import { type OnceOptions, type OnceResult, once } from "../write/idempotency";
 import { heldReplyStatements, namesOtherMoney } from "../write/limits";
 import { isAutomation } from "../write/offers";
@@ -1284,7 +1285,8 @@ export class Capabilities {
       (input.access_token !== undefined &&
         row.accessTokenHash !== null &&
         (await hashText(input.access_token)) === row.accessTokenHash);
-    const item = rowToItem(row);
+    // A key at the business reads mail for an account the business holds here as through its own door.
+    const item = isCustomer(caller) || readsAccountMail(caller) ? rowToItem(row) : withheldItem(rowToItem(row));
     // A customer reads it in the business's words and language, with what we proposed and who we wait on.
     const audience = isCustomer(caller) ? await this.customer.audienceOf(item, c) : null;
     const customerView = audience ? await this.customer.present(item, audience, nowOf(c)) : null;
@@ -1617,6 +1619,9 @@ export class Capabilities {
     if (input.state && !spamList) conditions.push(eq(items.state, input.state));
     if (input.needs_human !== undefined) conditions.push(eq(items.needsHuman, input.needs_human ? 1 : 0));
     if (input.open_only && !input.state) conditions.push(sql`${items.closedAt} IS NULL`);
+    // Mail for an account the business holds is listed for a person at the business only: the owner's
+    // AI or another system never finds it, by a search for its code either.
+    if (!readsAccountMail(caller)) conditions.push(sql`COALESCE(json_extract(${items.flags}, '$.account'), 0) <> 1`);
     // What the spam filter holds or is still screening waits under Held (ADR-041), not on the desk:
     // listed only when asked for by its screen.
     if (spamList) conditions.push(sql`(${items.state} = 'spam' OR ${items.screen} = 'aside')`);
@@ -1752,7 +1757,11 @@ export class Capabilities {
     requireBusiness(caller);
     const [row] = await this.db.orm.select().from(items).where(eq(items.id, input.item_id));
     if (!row) throw new WriteError("not_found", "no such item");
-    const item = rowToItem(row);
+    // Mail for an account the business holds, read by anyone but a person at the business: that it
+    // came, by whom and when, never its words, its subject or the owner's alert quoting them.
+    const stored = rowToItem(row);
+    const withheld = stored.flags.account === true && !readsAccountMail(caller);
+    const item = withheld ? withheldItem(stored) : stored;
     const [events, thread, partyViews, receipts, hidden, mail] = await Promise.all([
       this.db.orm.select().from(itemEvents).where(eq(itemEvents.itemId, item.id)).orderBy(itemEvents.seq),
       this.db.orm
@@ -1815,7 +1824,7 @@ export class Capabilities {
         direction: t.direction,
         channel: t.channel,
         actor: `${t.actorKind}:${t.actorId ?? ""}`,
-        body: t.bodyText,
+        body: withheld ? ACCOUNT_WITHHELD : t.bodyText,
         at: new Date(t.createdAt).toISOString(),
         ...(delivery.has(t.id) ? { delivery: delivery.get(t.id) as EntryDelivery } : {}),
         // What came attached to the email (ADR-026 §7): the owner downloads what was kept.
@@ -1827,8 +1836,8 @@ export class Capabilities {
         id: m.id,
         recipient: m.recipient,
         template: m.template,
-        subject: m.subject,
-        body: m.bodyText,
+        subject: withheld ? ACCOUNT_WITHHELD : m.subject,
+        body: withheld ? ACCOUNT_WITHHELD : m.bodyText,
         status: m.status,
         skip_reason: m.skipReason,
         last_error: m.lastError,

@@ -2,7 +2,7 @@ export * from "./caller";
 export { type CorrectionFacts, correctionFacts, deadCorrections, hiddenTransitions } from "./corrections";
 export { type CreateInput, type CreateResult, createItem } from "./create";
 export * from "./errors";
-export { isAccountItem, setFlags } from "./flags";
+export { ACCOUNT_WITHHELD, isAccountItem, readsAccountMail, setFlags, withheldItem } from "./flags";
 export {
   IDEMPOTENCY_TTL_MS,
   type OnceOptions,

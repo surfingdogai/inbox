@@ -11,6 +11,7 @@ import {
   inboundOf,
   keepAttachments,
   keepConfirmation,
+  LINKS_HEADING,
   LOOP_HEADER,
   lookupForms,
   loopMark,
@@ -48,7 +49,8 @@ import { consume, EVERYONE } from "./limits";
  * 7. anything else lands on the item it answers — its conversation's address (`name+t…@`), the ids it
  *    names, then the older plus address or subject token — or becomes a new message, put aside as
  *    spam when what it carries says so. What it had attached is kept within limits. A code, a sign-in
- *    link or a password reset from a sender that takes no answer is the owner's alone, with its links.
+ *    link or a password reset from a sender that takes no answer, on the domain it names, is the
+ *    owner's alone, with its links.
  *
  * Quoted history is stripped from the stored text; the raw message is kept by the caller if wanted.
  */
@@ -381,14 +383,17 @@ export async function ingestEmail(
   // sender the business knows is only ever labelled, even one a server marked.
   const spam = spamVerdict(parsed);
   const files = (parsed.attachments ?? []).filter((a) => !a.related);
-  // A code, a sign-in link or a password reset from a sender that takes no answer is the owner's alone
-  // (`flags.account`): kept with the links it carries, since a button's link is often in the HTML
-  // part only; no rule answers it, no webhook carries it, and no AI reads it.
-  const account = isAccountNotice(read, from);
+  // A code, a sign-in link or a password reset from a sender that takes no answer, on the domain it
+  // names, is the owner's alone (`flags.account`): kept with the links it carries, since a button's
+  // link is often in the HTML part only; no rule answers it, no webhook carries it, no AI reads it.
+  const account = isAccountNotice(read, from, auth);
+  // Its links are kept for the business's people even where the receiving server said nothing of its
+  // sender, never where it found the sender forged: only the owner-alone handling above needs its word.
+  const keepLinks = account || (auth?.dmarc !== "fail" && looksLikeAccountNotice(read, from));
   const created = await caps.sendMessage(
     caller,
     {
-      body: account ? withLinks(words, linksOf(parsed)) : text,
+      body: keepLinks ? withLinks(words, linksOf(parsed)) : text,
       ...(subject ? { subject } : {}),
       contact: { email: from, ...(parsed.from?.name ? { name: parsed.from.name } : {}) },
       ...(messageId ? { idempotency_key: messageId } : {}),
@@ -405,6 +410,8 @@ export async function ingestEmail(
             : {}),
           ...(parsed.html ? { html: parsed.html.slice(0, 200_000) } : {}),
           attachments: { count: files.length, types: files.slice(0, 10).map((a) => a.mimeType || "file") },
+          // The words before the links block, so a link is not counted twice.
+          ...(keepLinks ? { words: text } : {}),
           ...(account ? { account: true } : {}),
         },
       },
@@ -792,16 +799,39 @@ function takesNoAnswer(parsed: Pick<Email, "headers">, from: string): boolean {
 }
 
 /**
- * A code, a sign-in link or a password reset sent the way a notice is (`isAccountMail`, from a sender
- * that takes no answer or with a list's headers): an account the business holds, writing to it. A
- * person's email with the same words ("I can't sign in") is theirs, and answered like any other.
+ * A code, a sign-in link or a password reset sent the way only an account's notice is: in the words
+ * such a notice uses (`ACCOUNT_NOTICE_SUBJECT`, `ACCOUNT_BODY`), from a sender that takes no answer or
+ * with a list's headers, and from the domain it names, as the receiving server found (`vouchedFrom`):
+ * an account the business holds, writing to it. Anyone can write those words, add those headers or
+ * forge a From, so a look-alike is an ordinary email, screened like any other; so is a person's email
+ * with the same words ("I can't sign in"), answered like any other.
  */
-export function isAccountNotice(parsed: Pick<Email, "headers" | "subject" | "text">, from: string): boolean {
-  return isAccountMail(parsed) && takesNoAnswer(parsed, from);
+export function isAccountNotice(
+  parsed: Pick<Email, "headers" | "subject" | "text">,
+  from: string,
+  auth: MailAuth | undefined,
+): boolean {
+  return looksLikeAccountNotice(parsed, from) && vouchedFrom(from, auth);
 }
 
-/** What heads the links an account's email carries, under its text. */
-export const LINKS_HEADING = "Links in this email:";
+/** An account's notice by its words and its sender alone, before anything is known of who sent it. */
+export function looksLikeAccountNotice(parsed: Pick<Email, "headers" | "subject" | "text">, from: string): boolean {
+  const words =
+    ACCOUNT_NOTICE_SUBJECT.test(parsed.subject ?? "") || ACCOUNT_BODY.test((parsed.text ?? "").slice(0, 4000));
+  return words && takesNoAnswer(parsed, from);
+}
+
+/**
+ * Whether the receiving server found the From's own domain behind the email: DMARC passed, or a DKIM
+ * signature of that domain, with DMARC not failing. Where it said nothing, nothing was found.
+ */
+function vouchedFrom(from: string, auth: MailAuth | undefined): boolean {
+  if (!auth || auth.dmarc === "fail") return false;
+  if (auth.dmarc === "pass") return true;
+  const domain = splitAddress(from)?.domain ?? "";
+  return domain !== "" && (auth.dkim ?? []).some((d) => d === domain || domain.endsWith(`.${d}`));
+}
+
 /** The links kept of one email, and the longest one kept: past that it is no address to open. */
 const MAX_LINKS = 10;
 const MAX_LINK = 2_000;
@@ -854,9 +884,18 @@ function withLinks(text: string, links: readonly string[]): string {
   return `${cut(text, MAX_TEXT - block.length - LINKS_HEADING.length - 2)}\n\n${LINKS_HEADING}${block}`;
 }
 
-/** Words a subject uses for a code, a sign-in link or a password reset, in the languages the inbox speaks. */
+/**
+ * Words a subject uses for a code, a sign-in link or a password reset, in the languages the inbox
+ * speaks: loose, since such mail is only ever kept, never dropped, for them.
+ */
 const ACCOUNT_SUBJECT =
-  /verif|confirm (?:your |the |this )?(?:e-?mail|address|account|sign)|sign[- ]?in|log[- ]?in (?:link|code)|login (?:link|code)|(?:secure|magic|sign-in|login|access) link|one[- ]time (?:code|password|passcode|link)|\bpasscode\b|\botp\b|(?:security|access|login|sign-in|confirmation|authentication|auth|verification) code|your code\b|password reset|reset (?:your )?password|two[- ]factor|\b2fa\b|código|codigo|verifica|iniciar sess|inicia(?:r)? sesión|redefinir (?:a )?senha|restablecer (?:la )?contraseña|code de (?:vérification|sécurité|connexion|confirmation)|lien de connexion|réinitialis|bestätig|sicherheitscode|anmelde|passwort zurück/i;
+  /verif|confirm (?:your |the |this )?(?:e-?mail|address|account|sign)|\bsign[- ]?in\b|log[- ]?in (?:link|code)|login (?:link|code)|(?:secure|magic|sign-in|login|access) link|one[- ]time (?:code|password|passcode|link)|\bpasscode\b|\botp\b|(?:security|access|login|sign-in|confirmation|authentication|auth|verification) code|your code\b|password reset|reset (?:your )?password|two[- ]factor|\b2fa\b|código|codigo|verifica|iniciar sess|inicia(?:r)? sesión|redefinir (?:a )?senha|restablecer (?:la )?contraseña|code de (?:vérification|sécurité|connexion|confirmation)|lien de connexion|réinitialis|bestätig|sicherheitscode|anmelde|passwort zurück/i;
+/**
+ * The same words, as only an account's notice uses them: whole words, and a code named for what it
+ * is, never a shop's "código de desconto" or "your code SAVE20".
+ */
+const ACCOUNT_NOTICE_SUBJECT =
+  /\b(?:verify|verification|confirm (?:your |the |this )?(?:e-?mail|address|account)|sign[- ]?in|log[- ]?in (?:link|code)|(?:secure|magic|sign[- ]?in|login|access) link|one[- ]time (?:code|password|passcode|link)|passcode|otp|(?:security|access|login|sign[- ]?in|confirmation|authentication|auth|verification) code|password reset|reset (?:your )?password|two[- ]factor|2fa)\b|c[óo]digo de (?:verifica[çc][ãa]o|verificaci[óo]n|acesso|acceso|seguran[çc]a|seguridad|confirma[çc][ãa]o|confirmaci[óo]n)|iniciar sess[ãa]o|inicia(?:r)? sesi[óo]n|redefinir (?:a )?senha|restablecer (?:la )?contraseña|code de (?:vérification|sécurité|connexion|confirmation)|lien de connexion|réinitialis(?:er|ation) (?:de )?(?:votre )?mot de passe|bestätigungscode|sicherheitscode|anmeldecode|passwort zurücksetzen/i;
 /** The same, said in the body: phrases a mailing does not use. */
 const ACCOUNT_BODY =
   /(?:verification|security|one-time|confirmation|login|sign-in|authentication) code|(?:sign-in|login|magic|secure) link|código de (?:verificação|verificación|acesso|segurança|seguridad|confirmação|confirmación)|code de (?:vérification|sécurité|connexion)|bestätigungscode|sicherheitscode/i;

@@ -3,6 +3,7 @@ import {
   createRunner,
   type JudgePort,
   type JudgeRequest,
+  LINKS_HEADING,
   NO_MATCH,
   type SharedSpamPort,
   schema,
@@ -11,21 +12,25 @@ import {
 import { logMailOut } from "@surfingdog/platform";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { ingestEmail, isAccountNotice, LINKS_HEADING, linksOf } from "../src/email";
+import { ingestEmail, isAccountNotice, linksOf, type MailAuth } from "../src/email";
 import { WEBHOOK_DELIVERY_KIND, WEBHOOK_FANOUT_KIND, webhookFanoutHandler } from "../src/webhooks/index";
 import { freshDb } from "./db";
 
 /**
  * A code, a sign-in link or a password reset for an account the business holds, from a sender that
- * takes no answer: the owner gets it whole, with the links its email carries (a sign-in button's link
- * is often only in the HTML part), and nothing else does. No rule answers it, no webhook carries it,
- * no AI reads it, and nothing of it goes to the host's shared list. Anyone else's email is as before.
+ * takes no answer, on the domain the receiving server vouched for: the owner gets it, with the links
+ * its email carries (a sign-in button's link is often only in the HTML part), and nothing else does.
+ * No rule answers it, no webhook carries it, no AI reads it, its alert's copy in the mail log holds
+ * neither code nor link, and a person's Spam on it is never told to the host's shared list. A
+ * look-alike nothing vouched for, and anyone else's email, is as before.
  */
 
 const INBOUND = "oficina-mare@in.example.net";
 const OWNER = "rui@personal.example";
 const T = Date.parse("2026-11-01T09:00:00Z");
 const LINK = "https://app.acmecloud.example/magic-link#t0k3n-9f2c&s=1";
+/** What the receiving server found of a sender that is who it says: DMARC passed. */
+const VOUCHED: MailAuth = { spf: "pass", dkim: ["mail.acmecloud.example"], dmarc: "pass" };
 
 const owner: Caller = {
   actor: { kind: "owner", id: "user_owner", channel: "owner_ui" },
@@ -73,10 +78,10 @@ const SIGN_IN_HTML = [
   "</body></html>",
 ].join("\n");
 
-const signIn = (id: string) =>
+const signIn = (id: string, local = "no-reply-wJOazRuV1tbG") =>
   raw(
     {
-      From: "Acme <no-reply-wJOazRuV1tbG@mail.acmecloud.example>",
+      From: `Acme <${local}@mail.acmecloud.example>`,
       To: "support@oficinamare.example",
       Subject: "Your secure link to Acme is here",
       "Message-ID": `<${id}@mail.acmecloud.example>`,
@@ -179,8 +184,9 @@ async function setUp() {
     clock += advance;
     for (let i = 0; i < 20; i++) if ((await runner.runDue(db, { now: clock, limit: 50 })).claimed === 0) return;
   };
-  const ingest = (message: string) =>
-    ingestEmail(db, caps, { raw: message, envelopeTo: INBOUND }, { now: () => clock });
+  /** As the receiving server found its sender: `null` when it said nothing. */
+  const ingest = (message: string, auth: MailAuth | null = VOUCHED) =>
+    ingestEmail(db, caps, { raw: message, envelopeTo: INBOUND, ...(auth ? { auth } : {}) }, { now: () => clock });
   const q = async (sql: string, params: string[] = []) => (await db.client.query({ sql, params, method: "all" })).rows;
   const entries = (itemId: string) =>
     db.orm.select().from(schema.threadEntries).where(eq(schema.threadEntries.itemId, itemId));
@@ -192,7 +198,10 @@ async function setUp() {
         ])
       )[0]?.[0],
     );
-  return { db, caps, mail, drain, ingest, q, entries, deliveries, sent, shared };
+  const flags = async (itemId: string) =>
+    (await db.orm.select().from(schema.items).where(eq(schema.items.id, itemId)))[0]?.flags;
+  const alerts = (subject: string) => mail.sent.filter((m) => m.to.includes(OWNER) && m.subject.includes(subject));
+  return { db, caps, mail, drain, ingest, q, entries, deliveries, flags, alerts, sent, shared };
 }
 
 const idOf = (r: unknown) => (r as { itemId: string }).itemId;
@@ -225,21 +234,25 @@ describe("a code or a sign-in link for an account the business holds", () => {
     );
     expect(entry?.bodyText).not.toContain("open.gif");
     expect(entry?.bodyText).not.toContain("logo.png");
-    const [row] = await s.db.orm
-      .select()
-      .from(schema.items)
-      .where(eq(schema.items.id, idOf(notice)));
-    expect(row?.flags).toMatchObject({ account: true });
+    expect(await s.flags(idOf(notice))).toMatchObject({ account: true });
 
     // The owner's alert quotes all of it, the link included; a customer's is cut as it always was.
-    const alert = s.mail.sent.find((m) => m.to.includes(OWNER) && m.subject.includes("Your secure link"));
-    expect(alert?.text).toContain(`> ${LINK}`);
+    const [alert] = s.alerts("Your secure link");
     expect(alert?.text).toContain("> Privacy | Terms");
+    expect(alert?.text).toContain(`>\n> ${LINKS_HEADING}\n> https://acmecloud.example\n> ${LINK}\n`);
     expect(alert?.text).not.toContain("> …");
-    const theirs = s.mail.sent.find((m) => m.to.includes(OWNER) && m.subject.includes("Wheel rebuild"));
+    const [theirs] = s.alerts("Wheel rebuild");
     expect(theirs?.text).toContain("> Thank you,");
     expect(theirs?.text).toContain("> …");
     expect(theirs?.text).not.toContain("Porto");
+    // The mail log's copy of that alert holds neither the link nor the words: the item does.
+    const logged = await s.q("SELECT body_text FROM outbound_mail WHERE item_id = ? AND recipient = 'owner'", [
+      idOf(notice),
+    ]);
+    expect(logged).toHaveLength(1);
+    expect(String(logged[0]?.[0])).not.toContain("magic-link");
+    expect(String(logged[0]?.[0])).not.toContain("button below");
+    expect(String(logged[0]?.[0])).toContain("kept on the item only");
 
     // Nothing goes back to the sender: the rule that thanks everyone thanked only the customer.
     expect(s.mail.sent.filter((m) => m.to.some((t) => t.includes("acmecloud")))).toEqual([]);
@@ -250,10 +263,11 @@ describe("a code or a sign-in link for an account the business holds", () => {
     expect(await s.deliveries(idOf(notice))).toBe(0);
     expect(await s.deliveries(idOf(customer))).toBeGreaterThan(0);
 
-    // The AI read the customer's email, never the account's; the shared list was asked of one email.
+    // The AI read the customer's email, never the account's; the shared list was asked of both, by
+    // a fingerprint that holds no word.
     expect(s.sent.length).toBeGreaterThan(0);
     expect(s.sent.every((r) => !r.user.includes("button below") && !r.user.includes("acmecloud"))).toBe(true);
-    expect(s.shared.lookups).toBe(1);
+    expect(s.shared.lookups).toBe(2);
     // The filter read it here, and let it through: a rule could have answered it, and none did.
     const [verdict] = await s.q("SELECT ai, verdict FROM spam_verdicts WHERE item_id = ?", [idOf(notice)]);
     expect(verdict).toEqual(["none", "deliver"]);
@@ -329,12 +343,134 @@ describe("a code or a sign-in link for an account the business holds", () => {
     const thread = await s.entries(idOf(r));
     expect(thread.map((e) => e.direction)).toEqual(["in", "out"]);
     expect(thread[0]?.bodyText).not.toContain(LINKS_HEADING);
-    const [row] = await s.db.orm
-      .select()
-      .from(schema.items)
-      .where(eq(schema.items.id, idOf(r)));
-    expect(row?.flags).not.toHaveProperty("account");
+    expect(await s.flags(idOf(r))).not.toHaveProperty("account");
     expect(await s.deliveries(idOf(r))).toBeGreaterThan(0);
+  }, 30_000);
+
+  it("is an ordinary email when nothing vouched for its sender: screened by the AI, quoted a few lines, its links kept only for the business's people unless forged", async () => {
+    const s = await setUp();
+    const phish = (id: string, auth: MailAuth | null) =>
+      s.ingest(
+        raw(
+          {
+            From: "Acme Security <noreply@acme-secure.example>",
+            To: "support@oficinamare.example",
+            Subject: "Verify your account",
+            "Message-ID": `<${id}@acme-secure.example>`,
+            "List-Unsubscribe": "<https://acme-secure.example/u>",
+          },
+          [
+            {
+              type: "text/plain",
+              body: CUSTOMER_TEXT.replace("Hello,", `Your account ${id} is on hold. Verify it below.`),
+            },
+            { type: "text/html", body: '<a href="https://acme-secure.example/verify?u=1">Verify now</a>' },
+          ],
+        ),
+        auth,
+      );
+    const none = await phish("v1", null);
+    const failed = await phish("v2", { dkim: [], dmarc: "fail" });
+    const elsewhere = await phish("v3", { dkim: ["mailer.example"], dmarc: "none" });
+    await s.drain();
+    await s.drain();
+    for (const r of [none, failed, elsewhere]) {
+      expect(r.outcome).toBe("created");
+      expect(await s.flags(idOf(r))).not.toHaveProperty("account");
+      const [entry] = await s.entries(idOf(r));
+      // Shown to the business's people in the inbox, as a sign-in button's link must be; never a forged sender's.
+      if (r === failed) expect(entry?.bodyText).not.toContain(LINKS_HEADING);
+      else expect(entry?.bodyText).toContain(`${LINKS_HEADING}\nhttps://acme-secure.example/verify?u=1`);
+    }
+    // The AI was sent each, and the shared list asked of each.
+    for (const id of ["v1", "v2", "v3"]) expect(s.sent.some((r) => r.user.includes(`account ${id} is`))).toBe(true);
+    expect(s.shared.lookups).toBe(3);
+    // Each alert quotes twelve lines, as for anyone, and lists no links.
+    for (const alert of s.alerts("Verify your account")) {
+      expect(alert.text).toContain("> …");
+      expect(alert.text).not.toContain(LINKS_HEADING);
+      expect(alert.text).not.toContain("verify?u=1");
+    }
+  }, 30_000);
+
+  it("delivers the same notice a third and a fifth time, from a new no-reply address each time", async () => {
+    const s = await setUp();
+    const ids: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      const r = await s.ingest(signIn(`w${i}`, `no-reply-${i}Xq${i}Lm`));
+      expect(r.outcome).toBe("created");
+      ids.push(idOf(r));
+      await s.drain(2 * 60_000);
+    }
+    const verdicts = await s.q(
+      `SELECT verdict, signals FROM spam_verdicts WHERE item_id IN (${ids.map(() => "?").join(",")})`,
+      ids,
+    );
+    expect(verdicts.map((v) => v[0])).toEqual(["deliver", "deliver", "deliver", "deliver", "deliver"]);
+    expect(verdicts.some((v) => /same_text|near_same|wave|same_link_domain/.test(String(v[1])))).toBe(false);
+    expect(s.alerts("Your secure link")).toHaveLength(5);
+  }, 30_000);
+
+  it("reads the email's own words, its links once: what the item keeps under them adds no points", async () => {
+    const s = await setUp();
+    const r = await s.ingest(
+      raw(
+        {
+          From: "Acme <no-reply@mail.acmecloud.example>",
+          To: "support@oficinamare.example",
+          Subject: "Your secure link to Acme is here",
+          "Message-ID": "<once@mail.acmecloud.example>",
+        },
+        [
+          { type: "text/plain", body: "Click the button below to sign in to Acme.\n\nIt expires in an hour." },
+          {
+            type: "text/html",
+            body: `<a href="${LINK.replace("&", "&amp;")}">Sign in</a> <a href="https://acmecloud.example/help">Help</a>`,
+          },
+        ],
+      ),
+    );
+    const [entry] = await s.entries(idOf(r));
+    expect(entry?.bodyText).toContain(`${LINKS_HEADING}\n${LINK}\nhttps://acmecloud.example/help`);
+    const [verdict] = await s.q("SELECT signals FROM spam_verdicts WHERE item_id = ?", [idOf(r)]);
+    expect(String(verdict?.[0])).not.toContain("many_links");
+  }, 30_000);
+
+  it("never takes a shop's mailing for one, though its domain is vouched for", async () => {
+    const s = await setUp();
+    const promo = (id: string, subject: string) =>
+      s.ingest(
+        raw(
+          {
+            From: "Loja <news@loja.example>",
+            To: "support@oficinamare.example",
+            Subject: subject,
+            "Message-ID": `<${id}@loja.example>`,
+            "List-Unsubscribe": "<https://loja.example/u>",
+          },
+          [
+            {
+              type: "text/plain",
+              body: CUSTOMER_TEXT.replace("Hello,", "Our autumn sale is on: https://loja.example/sale"),
+            },
+          ],
+        ),
+        { dkim: ["loja.example"], dmarc: "pass" },
+      );
+    // A discount code is kept (a code is never dropped), and screened as any email; "designing" names no sign-in.
+    const code = await promo("p1", "Código de desconto exclusivo: OUTONO20");
+    expect(code.outcome).toBe("created");
+    expect(await s.flags(idOf(code))).not.toHaveProperty("account");
+    expect((await s.entries(idOf(code)))[0]?.bodyText).not.toContain(LINKS_HEADING);
+    expect(await promo("p2", "Designing your autumn window")).toEqual({
+      outcome: "dropped",
+      reason: "a mailing or a notice, not a customer",
+    });
+    await s.drain();
+    expect(s.sent.some((r) => r.user.includes("Our autumn sale"))).toBe(true);
+    const [alert] = s.alerts("OUTONO20");
+    expect(alert?.text).toContain("> …");
+    expect(alert?.text).not.toContain(LINKS_HEADING);
   }, 30_000);
 });
 
@@ -359,18 +495,33 @@ describe("the links an email carries", () => {
     ]);
   });
 
-  it("are read only of a notice: a code from a sender that takes no answer or with a list's headers", () => {
+  it("are read only of a notice: a code from a sender that takes no answer or with a list's headers, on its own domain", () => {
     const code = { subject: "Your verification code", text: "Use 481516." };
-    expect(isAccountNotice({ ...code, headers: [] }, "noreply@bank.example")).toBe(true);
-    expect(
-      isAccountNotice(
-        { ...code, headers: [{ key: "list-id", originalKey: "List-Id", value: "<x>" }] },
-        "accounts@bank.example",
-      ),
-    ).toBe(true);
-    expect(isAccountNotice({ ...code, headers: [] }, "rita@example.com")).toBe(false);
-    expect(isAccountNotice({ subject: "20% off", text: "Use code SAVE20.", headers: [] }, "noreply@shop.example")).toBe(
-      false,
+    const pass: MailAuth = { dmarc: "pass" };
+    const list = [{ key: "list-id", originalKey: "List-Id", value: "<x>" }];
+    expect(isAccountNotice({ ...code, headers: [] }, "noreply@bank.example", pass)).toBe(true);
+    expect(isAccountNotice({ ...code, headers: list }, "accounts@bank.example", pass)).toBe(true);
+    // A DKIM signature of the From's own domain, or of the domain above it, vouches as DMARC does.
+    expect(isAccountNotice({ ...code, headers: [] }, "noreply@mail.bank.example", { dkim: ["bank.example"] })).toBe(
+      true,
     );
+    expect(isAccountNotice({ ...code, headers: [] }, "rita@example.com", pass)).toBe(false);
+    // Nothing said, a failed DMARC, or a signature of another domain vouches for nothing.
+    expect(isAccountNotice({ ...code, headers: [] }, "noreply@bank.example", undefined)).toBe(false);
+    expect(
+      isAccountNotice({ ...code, headers: [] }, "noreply@bank.example", { dkim: ["bank.example"], dmarc: "fail" }),
+    ).toBe(false);
+    expect(isAccountNotice({ ...code, headers: [] }, "noreply@bank.example", { dkim: ["mailer.example"] })).toBe(false);
+    // A mailing's words are not a notice's, though its domain is vouched for.
+    for (const subject of [
+      "20% off",
+      "Código de desconto exclusivo: OUTONO20",
+      "Designing your autumn window",
+      "Your code for 10% off",
+    ]) {
+      expect(isAccountNotice({ subject, text: "Use code SAVE20.", headers: list }, "news@shop.example", pass)).toBe(
+        false,
+      );
+    }
   });
 });
