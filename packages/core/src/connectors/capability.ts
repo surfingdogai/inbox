@@ -2096,7 +2096,7 @@ export class ConnectorCapabilities {
       catalogue: null,
       note: connected.note ?? null,
     };
-    const presetLabel = preset ? def.presets?.find((p) => p.id === preset)?.label : undefined;
+    const presetLabel = presetTitle(def, preset);
     const title = name?.trim() || presetLabel || def.title;
     // A new payment platform sends the links of its mode from now on; the one that did stops making
     // new ones (what it sent keeps working, and it still hears of their payments).
@@ -2383,7 +2383,7 @@ export class ConnectorCapabilities {
     const row = await this.rowOrNull(connectorId);
     if (row?.status !== "error") return null;
     const def = this.definitions.get(row.kind);
-    const presetLabel = row.config.preset ? def?.presets?.find((p) => p.id === row.config.preset)?.label : undefined;
+    const presetLabel = presetTitle(def, row.config.preset);
     const name = row.name || presetLabel || def?.title || row.kind;
     // A payment platform is named as it is ("Stripe"), never as a calendar.
     const payments = def?.group === "payments";
@@ -2446,7 +2446,7 @@ export class ConnectorCapabilities {
       }),
     ]);
     const l = links.rows[0] ?? [];
-    const presetLabel = row.config.preset ? def?.presets?.find((p) => p.id === row.config.preset)?.label : undefined;
+    const presetLabel = presetTitle(def, row.config.preset);
     const pays = def?.payments && def.capabilities.includes("pay_links") ? await this.payments.counts(row.id) : null;
     const agentPay =
       pays && this.agentPay.takes(row.kind, def?.payments)
@@ -2545,7 +2545,7 @@ export class ConnectorCapabilities {
 
   private payConnectionOf(row: ConnectorRow, def: ConnectorDefinition, ctx: RunContext): PayConnection {
     if (!def.payments) throw new Error(`${def.kind} takes no payments`);
-    const presetLabel = row.config.preset ? def.presets?.find((p) => p.id === row.config.preset)?.label : undefined;
+    const presetLabel = presetTitle(def, row.config.preset);
     return {
       id: row.id,
       kind: row.kind,
@@ -2822,6 +2822,13 @@ function mergeChoices(old: readonly ConnectionChoice[], fresh: readonly Connecti
 }
 
 /** What a connection cannot do for its account now; nothing when its kind does not say, or says it badly. */
+/** What a connection made by one of a definition's ways is called: the way's title, else its label. */
+function presetTitle(def: ConnectorDefinition | undefined, preset: string | null | undefined): string | undefined {
+  if (!preset) return undefined;
+  const way = def?.presets?.find((p) => p.id === preset);
+  return way ? (way.title ?? way.label) : undefined;
+}
+
 function withheldOf(def: ConnectorDefinition, extra: Readonly<Record<string, unknown>> | undefined): Withheld {
   try {
     const w = def.withheld?.({ extra: extra ?? {} }) ?? {};

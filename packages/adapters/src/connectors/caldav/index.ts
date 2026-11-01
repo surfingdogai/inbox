@@ -93,6 +93,8 @@ export const CALDAV_PRESETS = [
   {
     id: "other",
     label: "Other",
+    // A connection is named by its way: "Other" names no calendar the owner has.
+    title: "CalDAV",
     values: {},
     note: "Any calendar that speaks CalDAV.",
   },

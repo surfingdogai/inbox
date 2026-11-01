@@ -158,6 +158,12 @@ export interface FormField {
 export interface ConnectorPreset {
   readonly id: string;
   readonly label: string;
+  /**
+   * What a connection made this way is called, where the label names no platform: the calendar
+   * card's "Other" way connects any CalDAV server, and "busy in your Other calendar" names nothing
+   * the owner has. The label when left out.
+   */
+  readonly title?: string | undefined;
   readonly values: Readonly<Record<string, string>>;
   readonly fields?: Readonly<Record<string, Partial<FieldHints>>> | undefined;
   readonly note?: string | undefined;

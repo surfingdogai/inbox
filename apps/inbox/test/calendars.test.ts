@@ -271,6 +271,48 @@ describe("Settings → Integrations", () => {
   });
 });
 
+describe("any other CalDAV server", () => {
+  it("names the connection CalDAV, never Other, in Settings and when a time is busy", async () => {
+    // Found against a real CalDAV server (Radicale): connected by the Other way, the connection was
+    // "Other" in Settings and the owner was told "that time is busy in your Other calendar".
+    const s = await setup();
+    const created = await s.app.request(
+      req("POST", "/v1/bookings", {
+        payload: {
+          reservationFor: { serviceId: s.serviceId, name: "Haircut" },
+          startTime: `${DAY}T10:00:00Z`,
+          endTime: `${DAY}T11:00:00Z`,
+        },
+        contact: { name: "Rita Amaral", email: "rita@example.com" },
+      }),
+    );
+    expect(created.status, await created.clone().text()).toBe(201);
+    const itemId = ((await created.json()) as { view: { item: { id: string } } }).view.item.id;
+    const connected = await s.app.request(
+      req(
+        "POST",
+        "/v1/owner/integrations",
+        {
+          kind: "caldav",
+          preset: "other",
+          values: { username: APPLE_ID, password: APP_PASSWORD, server: "https://caldav.icloud.com" },
+        },
+        s.owner,
+      ),
+    );
+    expect(connected.status, await connected.clone().text()).toBe(201);
+    const view = (await connected.json()) as { id: string; title: string; name: string };
+    expect(view).toMatchObject({ title: "CalDAV", name: "CalDAV" });
+    await s.inbox.app.request(req("POST", `/v1/owner/integrations/${view.id}/sync`, {}, s.owner));
+    await drain(s.inbox, s.db, s.pending);
+    const refused = await s.app.request(
+      req("POST", `/v1/owner/items/${itemId}/transitions`, { event: "confirm" }, s.owner),
+    );
+    expect(refused.status).toBe(409);
+    expect(((await refused.json()) as { detail: string }).detail).toBe("that time is busy in your CalDAV calendar");
+  });
+});
+
 describe("an iCloud calendar, end to end", () => {
   it("connects, takes the busy hour off the free times, and keeps a confirmed booking in step", async () => {
     const s = await setup();
