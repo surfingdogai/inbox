@@ -153,7 +153,8 @@ export const upsertPropertyInput = z.object({
   house_rules: z
     .object({
       chips: z.array(z.string().max(40)).max(10),
-      quiet: z.tuple([hhmm, hhmm]).optional(),
+      // Its rest is never, as an opening window's (capabilities/setup-types.ts): portable JSON Schema.
+      quiet: z.tuple([hhmm, hhmm], z.never()).optional(),
       text: z.string().max(500).optional(),
     })
     .optional(),

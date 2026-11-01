@@ -64,11 +64,23 @@ export type Condition =
   | { path: string; op: z.infer<typeof opSchema>; value?: unknown }
   | { fn: FnName; args?: Record<string, unknown> };
 
+/**
+ * `not` is required, by the check rather than by its schema: the JSON Schema an AI is given for a tool
+ * that takes a condition (upsert_rule, test_rule) must not loop back to itself through a required
+ * field, or Gemini refuses every request while the owner's MCP is connected ("ref loops are only
+ * supported if they include optional or nullable property values"). `all` and `any` loop through an
+ * array that may be empty, which it takes.
+ */
+const notCondition = () =>
+  z
+    .object({ not: conditionSchema.optional() })
+    .refine((c) => c.not !== undefined, { message: "not needs a condition", path: ["not"] });
+
 const conditionUnion = () =>
   z.union([
     z.object({ all: z.array(conditionSchema).max(20) }),
     z.object({ any: z.array(conditionSchema).max(20) }),
-    z.object({ not: conditionSchema }),
+    notCondition(),
     z.object({ path: z.string().min(1).max(120), op: opSchema, value: z.unknown().optional() }),
     z.object({ fn: z.enum(FN_NAMES), args: z.record(z.string(), z.unknown()).optional() }),
   ]);

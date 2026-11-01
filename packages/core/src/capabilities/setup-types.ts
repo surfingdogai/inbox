@@ -28,9 +28,11 @@ export function patchOf<T extends z.ZodRawShape>(schema: z.ZodObject<T>): z.ZodO
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "use HH:MM");
 /** A closing time: HH:MM, or 24:00 for a window that runs to midnight (`["00:00","24:00"]` is the whole day). */
 const closing = z.string().regex(/^(([01]\d|2[0-3]):[0-5]\d|24:00)$/, "use HH:MM, or 24:00 for midnight");
-const range = z
-  .tuple([hhmm, closing])
-  .refine(([a, b]) => a < b, { message: "closing time must be after opening time" });
+// A tuple's rest is never rather than left out: left out, its JSON Schema says `items: false`, a bare
+// boolean that strict MCP clients (the MCP Inspector's --strict) refuse as unportable; never says the
+// same as `{"not": {}}`, and checks the same. The cast keeps its type the pair it is.
+const pair = z.tuple([hhmm, closing], z.never()) as unknown as z.ZodTuple<[typeof hhmm, typeof closing], null>;
+const range = pair.refine(([a, b]) => a < b, { message: "closing time must be after opening time" });
 const day = z.array(range).max(6);
 export const weeklySchema = z
   .object({ mon: day, tue: day, wed: day, thu: day, fri: day, sat: day, sun: day })
