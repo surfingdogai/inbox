@@ -23,6 +23,7 @@ import {
 import { gateOf, holdsBack, SPAM_SCREEN_KIND, stillScreening } from "../spam/screen";
 import { SPAM_SHARE_KIND } from "../spam/shared";
 import { SCREEN_DEADLINE_MS } from "../spam/types";
+import { isAccountItem } from "../write/flags";
 import { LIFECYCLE_SWEEP_KIND, lifecycleSweepHandler } from "./lifecycle";
 import { type NotifyPayload, notifyHandler, OWNER_DIGEST_KIND, ownerDigestHandler } from "./notify";
 import type { JobHandler } from "./runner";
@@ -72,6 +73,8 @@ export function createRunner(deps: {
       // deadline: it waits for the verdict, or for the deadline, whichever comes first.
       const gate = await gateOf(db, p.itemId);
       if (holdsBack(gate)) return { note: "held by the spam filter: no rule runs" };
+      // A code or a sign-in link for an account the business holds: no rule answers it or acts on it.
+      if (await isAccountItem(db, p.itemId)) return { note: "mail for an account the business holds: no rule runs" };
       if (gate && stillScreening(gate, now)) {
         await ensureJob(db, "rules", `rules:${p.eventId}:wait`, {
           now,

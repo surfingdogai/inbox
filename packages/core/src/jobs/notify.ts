@@ -558,7 +558,9 @@ function ownerMail(
 ): ComposedMail {
   const appUrl = settings.notifications.appUrl ?? "";
   // A customer who wrote is quoted, so the owner can answer from their mailbox; a few lines at most.
-  const said = o.words ? quoteFor(o.words) : [];
+  // A code or a sign-in link for an account the business holds is quoted whole, with its links: the
+  // owner needs it now, wherever in the email it is.
+  const said = o.words ? (item.flags.account ? quoteAll(o.words) : quoteFor(o.words)) : [];
   const answer = o.byEmail
     ? `Reply to this email to answer ${firstName(who)}.${o.business ? ` It is sent as ${oneLine(o.business)}.` : ""}`
     : "Reply in your inbox to answer.";
@@ -605,6 +607,14 @@ function quoteFor(words: string): string[] {
   const cut = kept.length > 1_200 || lines.length > 12;
   if (kept.length > 1_200) kept = kept.slice(0, 1_200);
   return [...kept.split("\n").map((l) => `> ${l}`.trimEnd()), ...(cut ? ["> …"] : [])];
+}
+
+/** Words quoted whole, each line marked as quoted: an account's email, as the item keeps it. */
+function quoteAll(words: string): string[] {
+  return words
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((l) => `> ${l}`.trimEnd());
 }
 
 /** How an alert names the customer in "answer …": their first name, else as named. */

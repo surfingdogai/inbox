@@ -47,7 +47,8 @@ import { consume, EVERYONE } from "./limits";
  * 6. an automatic email (an out-of-office, a returned email) is a note on the item it answers;
  * 7. anything else lands on the item it answers — its conversation's address (`name+t…@`), the ids it
  *    names, then the older plus address or subject token — or becomes a new message, put aside as
- *    spam when what it carries says so. What it had attached is kept within limits.
+ *    spam when what it carries says so. What it had attached is kept within limits. A code, a sign-in
+ *    link or a password reset from a sender that takes no answer is the owner's alone, with its links.
  *
  * Quoted history is stripped from the stored text; the raw message is kept by the caller if wanted.
  */
@@ -283,7 +284,10 @@ export async function ingestEmail(
   // Mail to an address the business forwards here: its forward works.
   await forwardsSeen(db, recipients, now());
 
-  const text = cut(withAccountLinks(parsed, stripQuotedReply(plain).trim() || "(empty message)"));
+  const words = stripQuotedReply(plain).trim() || "(empty message)";
+  const text = cut(words);
+  // What the account notices are read by: the text part, or the HTML's words when there is none.
+  const read = { headers: parsed.headers, subject: parsed.subject, text: plain };
   // 5. and 7. The conversation's own address, or the alert's.
   let tokenItem: string | null = null;
   for (const token of tokensIn(recipients)) {
@@ -313,7 +317,7 @@ export async function ingestEmail(
   // A mailing or a notice no person sends to be answered — a newsletter, a shop's or a bank's notice
   // — that answers no conversation: forwarding a whole mailbox here brings these, and none of them is
   // a customer. Never a message, never an alert, never an answer.
-  if (!itemId && isBulkMail(parsed, from)) {
+  if (!itemId && isBulkMail(read, from)) {
     console.info("email: dropped a mailing or a notice that answers no conversation");
     return { outcome: "dropped", reason: "a mailing or a notice, not a customer" };
   }
@@ -377,10 +381,14 @@ export async function ingestEmail(
   // sender the business knows is only ever labelled, even one a server marked.
   const spam = spamVerdict(parsed);
   const files = (parsed.attachments ?? []).filter((a) => !a.related);
+  // A code, a sign-in link or a password reset from a sender that takes no answer is the owner's alone
+  // (`flags.account`): kept with the links it carries, since a button's link is often in the HTML
+  // part only; no rule answers it, no webhook carries it, and no AI reads it.
+  const account = isAccountNotice(read, from);
   const created = await caps.sendMessage(
     caller,
     {
-      body: text,
+      body: account ? withLinks(words, linksOf(parsed)) : text,
       ...(subject ? { subject } : {}),
       contact: { email: from, ...(parsed.from?.name ? { name: parsed.from.name } : {}) },
       ...(messageId ? { idempotency_key: messageId } : {}),
@@ -397,6 +405,7 @@ export async function ingestEmail(
             : {}),
           ...(parsed.html ? { html: parsed.html.slice(0, 200_000) } : {}),
           attachments: { count: files.length, types: files.slice(0, 10).map((a) => a.mimeType || "file") },
+          ...(account ? { account: true } : {}),
         },
       },
     },
@@ -767,6 +776,11 @@ export function isBulkMail(parsed: Pick<Email, "headers" | "subject" | "text">, 
   // A code, a sign-in link or a password reset for an account the business holds under this address:
   // its owner needs it, though it comes from a no-reply sender, often with an unsubscribe header.
   if (isAccountMail(parsed)) return false;
+  return takesNoAnswer(parsed, from);
+}
+
+/** A list's headers, or a sender that says it takes no answer: how a mailing or a notice is sent. */
+function takesNoAnswer(parsed: Pick<Email, "headers">, from: string): boolean {
   for (const h of parsed.headers ?? []) {
     if (h.key === "list-unsubscribe" || h.key === "list-id" || h.key === "list-post") return true;
   }
@@ -775,6 +789,69 @@ export function isBulkMail(parsed: Pick<Email, "headers" | "subject" | "text">, 
     /(^|[-_.])(no-?reply|do-?not-?reply|donotreply)([-_.]|$)/.test(local) ||
     /^(notifications?|mailer|bounces?)$/.test(local)
   );
+}
+
+/**
+ * A code, a sign-in link or a password reset sent the way a notice is (`isAccountMail`, from a sender
+ * that takes no answer or with a list's headers): an account the business holds, writing to it. A
+ * person's email with the same words ("I can't sign in") is theirs, and answered like any other.
+ */
+export function isAccountNotice(parsed: Pick<Email, "headers" | "subject" | "text">, from: string): boolean {
+  return isAccountMail(parsed) && takesNoAnswer(parsed, from);
+}
+
+/** What heads the links an account's email carries, under its text. */
+export const LINKS_HEADING = "Links in this email:";
+/** The links kept of one email, and the longest one kept: past that it is no address to open. */
+const MAX_LINKS = 10;
+const MAX_LINK = 2_000;
+
+/**
+ * The http(s) links an email carries, each once: where its HTML's anchors go (a sign-in button's link
+ * is often only there), then those written in its text. An image's source, a tracking pixel's
+ * included, is never one.
+ */
+export function linksOf(parsed: Pick<Email, "html" | "text">): string[] {
+  const found: string[] = [];
+  // An anchor's attributes are read a thousand characters deep at most, so no run of tags is slow.
+  for (const m of (parsed.html ?? "")
+    .slice(0, 200_000)
+    .matchAll(/<a\b[^>]{0,1000}?\shref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/gi)) {
+    found.push(decodeHref(m[1] ?? m[2] ?? m[3] ?? ""));
+  }
+  for (const m of (parsed.text ?? "").slice(0, 200_000).matchAll(/https?:\/\/[^\s<>"'`]+/gi)) {
+    found.push(m[0].replace(/[.,;:!?)\]}]+$/, ""));
+  }
+  const out: string[] = [];
+  for (const link of found.map((l) => l.trim())) {
+    if (!/^https?:\/\/\S+$/i.test(link) || link.length > MAX_LINK || out.includes(link)) continue;
+    out.push(link);
+    if (out.length >= MAX_LINKS) break;
+  }
+  return out;
+}
+
+/** An href as written in HTML, its character references read (`&amp;` is `&`). */
+function decodeHref(href: string): string {
+  const char = (n: number) => (n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : "");
+  return href
+    .replace(/&#x([0-9a-f]{1,6});/gi, (_, h: string) => char(Number.parseInt(h, 16)))
+    .replace(/&#(\d{1,7});/g, (_, d: string) => char(Number(d)))
+    .replace(/&amp;/gi, "&");
+}
+
+/**
+ * A message's text with the links its email carries under it, one a line. The links take at most half
+ * of what an item holds, and the text is cut to leave them room: they are never the part cut.
+ */
+function withLinks(text: string, links: readonly string[]): string {
+  let block = "";
+  for (const link of links) {
+    if (block.length + link.length + 1 > MAX_TEXT / 2) break;
+    block += `\n${link}`;
+  }
+  if (!block) return cut(text);
+  return `${cut(text, MAX_TEXT - block.length - LINKS_HEADING.length - 2)}\n\n${LINKS_HEADING}${block}`;
 }
 
 /** Words a subject uses for a code, a sign-in link or a password reset, in the languages the inbox speaks. */
@@ -983,10 +1060,10 @@ function limitedMail(retryAfterSec: number): IngestResult {
  * only have the sending server retry it for days.
  */
 const MAX_TEXT = 20_000;
-function cut(text: string): string {
-  if (text.length <= MAX_TEXT) return text;
+function cut(text: string, max = MAX_TEXT): string {
+  if (text.length <= max) return text;
   const note = "\n\n[The rest of this email was cut: it was too long to keep.]";
-  return `${text.slice(0, MAX_TEXT - note.length)}${note}`;
+  return `${text.slice(0, max - note.length)}${note}`;
 }
 
 /** What heads an automatic email kept on its item, for the owner reading it. */
@@ -1048,22 +1125,6 @@ export function stripQuotedReply(text: string): string {
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
-}
-
-/**
- * An account email's links, written under its text for its owner: a sign-in button's address is
- * often only in the HTML. Only http(s), at most ten, none longer than 2,000 characters.
- */
-function withAccountLinks(parsed: Pick<Email, "subject" | "text" | "html">, text: string): string {
-  if (!isAccountMail(parsed)) return text;
-  const links: string[] = [];
-  for (const m of (parsed.html ?? "").matchAll(/<a\b[^>]*?\shref\s*=\s*(?:"([^"]*)"|'([^']*)')/gi)) {
-    const url = (m[1] ?? m[2] ?? "").replace(/&amp;/g, "&").trim();
-    if (!/^https?:\/\/\S+$/i.test(url) || url.length > 2000 || text.includes(url) || links.includes(url)) continue;
-    links.push(url);
-    if (links.length === 10) break;
-  }
-  return links.length ? `${text}\n\nLinks in this email:\n${links.join("\n")}` : text;
 }
 
 export function htmlToText(html: string): string {

@@ -617,7 +617,9 @@ export async function screenAtDoor(deps: SpamDeps, ctx: DoorContext): Promise<Do
   // a keyed fingerprint only, for the same senders the repeats are counted for.
   // A sender's domain is looked up only where a mail server vouched for the address: one typed at a
   // form or given by an assistant may be anyone's.
-  const sharedPort = deps.shared();
+  // Mail for an account the business holds is read here alone: nothing of it goes to the list or the AI.
+  const account = ctx.screen.email?.account === true;
+  const sharedPort = account ? null : deps.shared();
   const mailVouched =
     ctx.screen.email !== undefined &&
     reading.email !== undefined &&
@@ -664,13 +666,13 @@ export async function screenAtDoor(deps: SpamDeps, ctx: DoorContext): Promise<Do
   const veto = namesOwnOffer(reading.normalised, business.offers);
 
   // The AI check: a stranger's first contact, with a filter on, nothing certain (what the door saw
-  // putting it aside alone is as certain), enough words, room left.
+  // putting it aside alone is as certain), enough words, room left, and no account's code in it.
   let ai: AiOutcome = "none";
   let answer: CheckedAnswer | null = null;
   const certain = signals.some((s) => s.x === 1) || decidedAtDoor(signals);
   const enough = reading.note ? reading.text.length >= 20 : reading.text.length >= 20 || reading.domains.length > 0;
   let pending = false;
-  if (run.on.size > 0 && !certain && enough && !ctx.sandbox) {
+  if (run.on.size > 0 && !certain && enough && !ctx.sandbox && !account) {
     const room = await aiRoom(deps, settings, now);
     if (room === "room") {
       const cached = reading.print

@@ -12,6 +12,19 @@ import { hiddenTransitions } from "./corrections";
 import { WriteError } from "./errors";
 import { type ItemView, rowToItem, viewFor } from "./views";
 
+/**
+ * Whether the item is mail for an account the business holds (`flags.account`): a code, a sign-in
+ * link, a password reset. It goes to the owner only, never to a rule, a webhook or a shared list.
+ */
+export async function isAccountItem(db: Db, itemId: string): Promise<boolean> {
+  const { rows } = await db.client.query({
+    sql: "SELECT 1 FROM items WHERE id = ? AND json_extract(flags, '$.account') = 1",
+    params: [itemId],
+    method: "all",
+  });
+  return rows.length > 0;
+}
+
 /** Changes flags (needs_human, priority) as its own event, so version and history stay honest. */
 export async function setFlags(
   db: Db,

@@ -2,6 +2,7 @@ import {
   connectorPushStatements,
   gateOf,
   holdsBack,
+  isAccountItem,
   type JobHandler,
   matchesEvent,
   schema,
@@ -60,6 +61,8 @@ export function webhookFanoutHandler(): JobHandler {
     if (!p?.eventId) return { note: "no event id" };
     // Held or put aside by the spam filter (ADR-041): nothing goes until a person or the sender lets it in.
     if (p.itemId && holdsBack(await gateOf(db, p.itemId))) return { note: "held by the spam filter" };
+    // A code or a sign-in link for an account the business holds goes to the owner only.
+    if (p.itemId && (await isAccountItem(db, p.itemId))) return { note: "mail for an account the business holds" };
     const event = await readEvent(db, p.eventId);
     const eventType = event?.type ?? p.eventType;
     if (!eventType) return { note: `event ${p.eventId} is gone` };

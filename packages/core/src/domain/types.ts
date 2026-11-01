@@ -103,6 +103,12 @@ export const itemFlagsSchema = z.object({
   spamLabel: z.string().max(40).optional(),
   /** Its words speak to an assistant or a filter: the owner's AI reads them as untrusted, with that said. */
   untrustedInstructions: z.boolean().optional(),
+  /**
+   * A code, a sign-in link or a password reset for an account the business holds under its address,
+   * from a sender that takes no answer (the email door says so). It is the owner's alone: no rule acts
+   * on it, no webhook carries it, and the spam filter reads it here, never with AI or a shared list.
+   */
+  account: z.boolean().optional(),
 });
 export type ItemFlags = z.infer<typeof itemFlagsSchema>;
 

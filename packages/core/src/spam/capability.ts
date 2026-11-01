@@ -5,6 +5,7 @@ import type { SecretBox } from "../secrets/box";
 import { readSettings } from "../settings/schema";
 import { type Caller, isOwnerInPerson, isPerson } from "../write/caller";
 import { WriteError } from "../write/errors";
+import { isAccountItem } from "../write/flags";
 import type { ItemSpamSummary } from "../write/views";
 import { chipOf } from "./copy";
 import { DISPOSABLE_MAIL, SHARED_MAIL_PROVIDERS } from "./data";
@@ -959,6 +960,8 @@ export class SpamCapabilities implements SpamDeps {
   async share(itemId: string, now: number): Promise<{ readonly note: string }> {
     const port = this.sharedPort;
     if (!port) return { note: "no shared list here" };
+    // A code or a sign-in link for an account the business holds is the owner's: never told to the list.
+    if (await isAccountItem(this.db, itemId)) return { note: "mail for an account the business holds: not shared" };
     const { rows } = await this.db.client.query({
       sql: `SELECT v.verdict, v.cause, v.certain, v.learning, v.answer, v.quotes, v.signals, v.owner_verdict, i.screen,
                    COALESCE(i.sandbox, 0)

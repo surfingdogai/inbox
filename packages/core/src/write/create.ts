@@ -330,6 +330,8 @@ export async function createItem(
     ...(door?.flags ?? {}),
     sandbox: caller.sandbox || input.flags?.sandbox === true,
     ...(caller.viaNetwork ? { carried: true } : {}),
+    // A code or a sign-in link for an account the business holds, as the email door saw it: the owner's alone.
+    ...(input.screen?.email?.account ? { account: true } : {}),
   });
   const anonymous = isCustomer(caller) && !caller.actor.partyId;
   const accessToken = anonymous ? randomToken(24) : undefined;

@@ -84,6 +84,11 @@ export interface EmailFacts {
   /** The HTML part, for links that show one address and go to another. */
   readonly html?: string | undefined;
   readonly attachments?: { readonly count: number; readonly types: readonly string[] } | undefined;
+  /**
+   * A code, a sign-in link or a password reset for an account the business holds: read here only,
+   * never by the AI check or against the host's shared list. The item is marked so (`flags.account`).
+   */
+  readonly account?: boolean | undefined;
 }
 
 /**
