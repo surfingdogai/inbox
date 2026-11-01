@@ -143,3 +143,9 @@ export function accentIn(accent: LookAccent, tones: ThemeTones): { readonly acce
   const a = ACCENT_TONES[accent];
   return tones.scheme === "dark" ? { accent: a.night, label: a.nightFg } : { accent: a.day, label: a.dayFg };
 }
+
+/** The size a logo is shown at: within `maxW` × `maxH`, its own shape kept, never made larger. */
+export function logoBox(width: number, height: number, maxW: number, maxH: number): { width: number; height: number } {
+  const scale = Math.min(1, maxW / width, maxH / height);
+  return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
+}

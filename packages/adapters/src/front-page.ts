@@ -12,7 +12,7 @@ import {
   type LinkActResult,
 } from "@surfingdog/core";
 import { type Context, Hono } from "hono";
-import { pageLang, renderCustomerPage } from "./customer-page";
+import { pageLang, renderCustomerPage, sendPage } from "./customer-page";
 import { publicLogo } from "./look";
 import { HOST_SESSION_COOKIE, SESSION_COOKIE } from "./session";
 
@@ -20,12 +20,13 @@ import { HOST_SESSION_COOKIE, SESSION_COOKIE } from "./session";
  * The business's own page (the web form door, ADR-010), served by the inbox in the business's name:
  * `GET /` for a visitor (the owner, signed in, still gets their app there), and `/p/book`,
  * `/p/quote`, `/p/message`, `/p/sent`. Core builds each page as data; this writes it out with the
- * same renderer, headers and rules as the pages behind the links in its emails — no script, no web
- * font, nothing fetched from anywhere else. A GET never writes; a POST writes once, then sends the
- * browser on (303). The app spends every POST from the same `create` limit as the API's creates
- * (index.ts). A form whose hidden field came back filled is thanked like any other and kept aside for
- * the owner, never dropped (ADR-041 §4.1). With `?embed=1` the same pages sit inside the business's
- * own website: the form alone, and only its own site may frame it (app.ts).
+ * same renderer, headers, look and rules as the pages behind the links in its emails — no script, no
+ * web font, no image but the business's logo, nothing fetched from anywhere else. A GET never
+ * writes; a POST writes once, then sends the browser on (303). The app spends every POST from the
+ * same `create` limit as the API's creates (index.ts). A form whose hidden field came back filled is
+ * thanked like any other and kept aside for the owner, never dropped (ADR-041 §4.1). With `?embed=1`
+ * the same pages sit inside the business's own website: the form alone, and only its own site may
+ * frame it (app.ts).
  */
 export interface FrontPageDeps {
   readonly caps: Capabilities;
@@ -51,7 +52,7 @@ export function hasOwnerSession(request: Request): boolean {
 /** `GET /` for a visitor: the front page. */
 export async function frontHomePage(deps: FrontPageDeps, c: Context): Promise<Response> {
   const lang = await pageLang(deps.caps, c.req.header("accept-language") ?? null);
-  return renderCustomerPage(c, await frontHome(deps.caps, lang), FRONT_HEADERS);
+  return sendPage(c, deps.caps, await frontHome(deps.caps, lang), FRONT_HEADERS);
 }
 
 /** The front page may be kept a minute by a browser: nothing personal is on it. */
@@ -85,8 +86,9 @@ export function frontPage(deps: FrontPageDeps): Hono {
     // Bookings taken at a platform: a booking page here would offer times the platform never sees.
     const elsewhere = await deps.caps.doorElsewhere("booking");
     if (elsewhere) return c.redirect(elsewhere, 303);
-    return renderCustomerPage(
+    return sendPage(
       c,
+      deps.caps,
       await frontBookView(
         deps.caps,
         await langOf(c),
@@ -96,13 +98,17 @@ export function frontPage(deps: FrontPageDeps): Hono {
     );
   });
   app.get("/quote", async (c) =>
-    renderCustomerPage(c, await frontAskView(deps.caps, await langOf(c), "quote", { now: now(), embed: embedOf(c) })),
+    sendPage(c, deps.caps, await frontAskView(deps.caps, await langOf(c), "quote", { now: now(), embed: embedOf(c) })),
   );
   app.get("/message", async (c) =>
-    renderCustomerPage(c, await frontAskView(deps.caps, await langOf(c), "message", { now: now(), embed: embedOf(c) })),
+    sendPage(
+      c,
+      deps.caps,
+      await frontAskView(deps.caps, await langOf(c), "message", { now: now(), embed: embedOf(c) }),
+    ),
   );
   app.get("/sent", async (c) =>
-    renderCustomerPage(c, await frontSent(deps.caps, await langOf(c), c.req.query("k") ?? "", { embed: embedOf(c) })),
+    sendPage(c, deps.caps, await frontSent(deps.caps, await langOf(c), c.req.query("k") ?? "", { embed: embedOf(c) })),
   );
 
   const act =
@@ -112,7 +118,7 @@ export function frontPage(deps: FrontPageDeps): Hono {
       if (form === null) return c.body(null, 413);
       // A filled hidden field is the spam filter's to decide (ADR-041 §4.1): thanked like anyone, never dropped.
       const result = await run(lang, form, embedOf(c));
-      return "redirect" in result ? c.redirect(result.redirect, 303) : renderCustomerPage(c, result.page);
+      return "redirect" in result ? c.redirect(result.redirect, 303) : sendPage(c, deps.caps, result.page);
     };
 
   app.post(

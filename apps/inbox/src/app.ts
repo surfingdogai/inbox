@@ -520,12 +520,14 @@ export function createInbox(deps: AppDeps): Inbox {
     referrerPolicy: "strict-origin-when-cross-origin",
   });
   // The page a link in the business's email opens (`/c/…`) is stricter: nothing but its own inline
-  // style, forms only to itself, and no Referer, so the link's token never reaches another site.
+  // style and the business's logo from its own address, forms only to itself, and no Referer, so the
+  // link's token never reaches another site.
   const pageHeaders = secureHeaders({
     ...common,
     contentSecurityPolicy: {
       defaultSrc: ["'none'"],
       styleSrc: ["'unsafe-inline'"],
+      imgSrc: ["'self'"],
       formAction: ["'self'"],
       baseUri: ["'none'"],
       frameAncestors: ["'none'"],

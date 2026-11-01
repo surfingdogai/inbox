@@ -1,11 +1,18 @@
 import {
+  accentIn,
   type Capabilities,
   type CustomerLang,
   type CustomerPage,
   copyFor,
   customerLang,
+  DEFAULT_LOOK,
+  isDefaultLook,
+  type Look,
   langFromHeader,
+  logoBox,
   type PageField,
+  STANDARD_NIGHT,
+  THEME_TONES,
 } from "@surfingdog/core";
 import { type Context, Hono } from "hono";
 
@@ -16,8 +23,9 @@ import { type Context, Hono } from "hono";
  * browser back to the page (303), which shows what was done.
  *
  * Core builds the page as data (`caps.customer.linkView` / `linkAct`); this only writes it out as
- * HTML, every value escaped. No script, no web font, no image, nothing fetched from anywhere else,
- * and the token never leaves in a Referer.
+ * HTML, every value escaped, in the business's look (`lookCss`). No script, no web font, and no image
+ * but the business's own logo, from its own address; nothing fetched from anywhere else, and the
+ * token never leaves in a Referer.
  */
 export interface CustomerPageDeps {
   readonly caps: Capabilities;
@@ -30,7 +38,7 @@ export const CUSTOMER_PAGE_HEADERS: Readonly<Record<string, string>> = {
   "Referrer-Policy": "no-referrer",
   "X-Robots-Tag": "noindex, nofollow",
   "Content-Security-Policy":
-    "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+    "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
   "X-Content-Type-Options": "nosniff",
 };
 
@@ -61,7 +69,7 @@ export function customerPage(deps: CustomerPageDeps): Hono {
       lang: c.req.query("l") ?? null,
       acceptLanguage: c.req.header("accept-language") ?? null,
     });
-    return renderCustomerPage(c, page, { "Cache-Control": "public, max-age=300" });
+    return sendPage(c, deps.caps, page, { "Cache-Control": "public, max-age=300" });
   });
 
   app.get("/:token", async (c) => {
@@ -70,7 +78,7 @@ export function customerPage(deps: CustomerPageDeps): Hono {
       from: c.req.query("from"),
       acceptLanguage: c.req.header("accept-language") ?? null,
     });
-    return renderCustomerPage(c, page);
+    return sendPage(c, deps.caps, page);
   });
 
   app.post("/:token", async (c) => {
@@ -83,7 +91,7 @@ export function customerPage(deps: CustomerPageDeps): Hono {
     if ("redirect" in result) {
       return new Response(null, { status: 303, headers: { Location: result.redirect, ...CUSTOMER_PAGE_HEADERS } });
     }
-    return renderCustomerPage(c, result.page);
+    return sendPage(c, deps.caps, result.page);
   });
 
   return app;
@@ -127,10 +135,24 @@ export async function pageLang(caps: Capabilities, acceptLanguage: string | null
   return langFromHeader(acceptLanguage) ?? customerLang(null, (await caps.getBusinessProfile()).languages);
 }
 
+/**
+ * A customer's page in the business's look (`caps.look`). A page said on an error or a refusal keeps
+ * the default look (`renderCustomerPage`), so nothing is read for it.
+ */
+export async function sendPage(
+  c: Context,
+  caps: Capabilities,
+  page: CustomerPage,
+  headers: Readonly<Record<string, string>> = {},
+): Promise<Response> {
+  return renderCustomerPage(c, page, headers, await caps.look.view());
+}
+
 export function renderCustomerPage(
   c: Context,
   page: CustomerPage,
   headers: Readonly<Record<string, string>> = {},
+  look: Look = DEFAULT_LOOK,
 ): Response {
   // The business's name, else the address the customer typed: never the software's.
   const name = page.business || new URL(c.req.url).host;
@@ -138,7 +160,7 @@ export function renderCustomerPage(
   // Inside the business's own website (`?embed=1`): the form alone, the site around it is theirs.
   const embed = page.embed === true;
   const body = [
-    embed ? "" : `<header><p class="biz">${esc(name)}</p></header>`,
+    embed ? "" : `<header><p class="biz">${logoImg(look)}${esc(name)}</p></header>`,
     `<h1>${esc(page.heading)}</h1>`,
     page.error ? `<p class="error" role="alert">${esc(page.error)}</p>` : "",
     ...(page.paragraphs ?? []).map((p) => `<p>${esc(p)}</p>`),
@@ -175,7 +197,7 @@ export function renderCustomerPage(
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
 <title>${esc(title)}</title>
-<style>${STYLE}</style>${page.jsonLd ? `\n<script type="application/ld+json">${dataJson(page.jsonLd)}</script>` : ""}
+<style>${STYLE}${lookCss(look)}</style>${page.jsonLd ? `\n<script type="application/ld+json">${dataJson(page.jsonLd)}</script>` : ""}
 </head>
 <body>
 <main>
@@ -239,6 +261,57 @@ function fieldHtml(field: PageField, index: number): string {
           .join("")}</fieldset>`,
     )
     .join("\n");
+}
+
+/** The logo's largest size at the head of a page, in CSS pixels. */
+const LOGO_MAX_W = 200;
+const LOGO_MAX_H = 40;
+
+/**
+ * The logo above the business's name: decoration, so its alt is empty and the name stays the text.
+ * From the inbox's own address (`/p/logo/<file>`), the only image a page loads.
+ */
+function logoImg(look: Look): string {
+  if (!look.logo) return "";
+  const box = logoBox(look.logo.width, look.logo.height, LOGO_MAX_W, LOGO_MAX_H);
+  return `<img src="/p/logo/${esc(look.logo.file)}" alt="" width="${box.width}" height="${box.height}">`;
+}
+
+/**
+ * The business's look over STYLE, in the same `<style>`: a later `:root` wins over STYLE's own, so
+ * STYLE stays as it was, and the default look adds nothing at all.
+ *
+ * - A theme other than Standard sets its own tones, and its scheme alone: it does not follow the device.
+ * - The accent colours buttons, links and the focus ring: its day tone on a light page, its night tone
+ *   on a dark one (for Standard, as the device is). Ink is the theme's own ink, the button as it was.
+ * - Minimal's button is a thin outline, its weights lighter, its lines 1px.
+ */
+export function lookCss(look: Look): string {
+  if (isDefaultLook(look)) return "";
+  const out: string[] = [];
+  if (look.theme !== "standard") {
+    const t = THEME_TONES[look.theme];
+    const a = accentIn(look.accent, t);
+    out.push(
+      `:root{color-scheme:${t.scheme};--fg:${t.fg};--bg:${t.bg};--muted:${t.muted};--rule:${t.rule};--err:${t.err};--btn:${a.accent};--btn-fg:${a.label};--accent:${a.accent}}`,
+    );
+  } else if (look.accent !== "ink") {
+    const day = accentIn(look.accent, THEME_TONES.standard);
+    const night = accentIn(look.accent, STANDARD_NIGHT);
+    out.push(
+      `:root{--btn:${day.accent};--btn-fg:${day.label};--accent:${day.accent}}`,
+      `@media (prefers-color-scheme:dark){:root{--btn:${night.accent};--btn-fg:${night.label};--accent:${night.accent}}}`,
+    );
+  }
+  if (look.accent !== "ink") out.push("a{color:var(--accent)}:focus-visible{outline-color:var(--accent)}");
+  if (look.theme === "minimal") {
+    out.push(
+      "button{background:transparent;color:var(--accent);border:1px solid var(--accent);font-weight:500}",
+      ".biz,legend{font-weight:500}blockquote{border-left-width:1px}",
+    );
+  }
+  if (look.logo) out.push(".biz img{display:block;max-width:100%;height:auto;margin:0 0 .5rem}");
+  return `\n${out.join("\n")}\n`;
 }
 
 const ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
