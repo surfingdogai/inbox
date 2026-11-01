@@ -261,18 +261,23 @@ a {
     background: #ffffff;
   }
 }
-/* With a logo for dark pages: the logo by day, that one at night, with no plate. */
+/* With a logo for dark pages: the logo by day, that one at night, with no plate; the mark that
+   stands in for a wide one follows its hour. */
 :root[data-theme="light"] img.rail-logo.for-night,
-:root[data-theme="dark"] img.rail-logo.for-day {
+:root[data-theme="light"] .rail-mark.for-night,
+:root[data-theme="dark"] img.rail-logo.for-day,
+:root[data-theme="dark"] .rail-mark.for-day {
   display: none;
 }
 @media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) img.rail-logo.for-night {
+  :root:not([data-theme="dark"]) img.rail-logo.for-night,
+  :root:not([data-theme="dark"]) .rail-mark.for-night {
     display: none;
   }
 }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) img.rail-logo.for-day {
+  :root:not([data-theme="light"]) img.rail-logo.for-day,
+  :root:not([data-theme="light"]) .rail-mark.for-day {
     display: none;
   }
 }

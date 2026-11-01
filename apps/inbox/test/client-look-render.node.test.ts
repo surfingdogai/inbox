@@ -130,6 +130,22 @@ describe("the rail's head", () => {
     expect(lost).toContain('<img class="rail-logo" src="blob:x" alt=""/>');
     expect(lost).not.toContain("for-night");
   });
+
+  it("reads each logo's own shape: the Inbox mark stands in at the hour of the wide one", () => {
+    const wordmark = { url: "blob:w", waiting: false, width: 400, height: 80 };
+    // A square logo by day, a wordmark at night: the mark at night only.
+    const nights = head({ ...square, night: wordmark });
+    expect(nights).toContain('<img class="rail-logo for-day" src="blob:x" alt=""/>');
+    expect(nights).toContain('<img class="rail-logo is-wide for-night" src="blob:w" alt=""/>');
+    expect(nights).toMatch(/class="[^"]*rail-mark for-night"/);
+    // The other way round: by day only.
+    const days = head({ ...wordmark, night: square });
+    expect(days).toContain('<img class="rail-logo is-wide for-day" src="blob:w" alt=""/>');
+    expect(days).toContain('<img class="rail-logo for-night" src="blob:x" alt=""/>');
+    expect(days).toMatch(/class="[^"]*rail-mark for-day"/);
+    // Both wide: the mark at every hour.
+    expect(head({ ...wordmark, night: wordmark })).toMatch(/class="[^"]*rail-mark"/);
+  });
 });
 
 describe("the theme switch", () => {
