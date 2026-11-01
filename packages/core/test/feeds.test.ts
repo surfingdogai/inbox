@@ -660,3 +660,20 @@ describe("what a product is, beside its price (ADR-029)", () => {
     });
   });
 });
+
+describe("parseFeed, variants of one group in XML", () => {
+  it("keeps each variant by its own id, never its group's: a variant without one is never its group", () => {
+    const item = (inner: string) =>
+      `<item><g:item_group_id>TEE</g:item_group_id>${inner}<g:price>20.00 EUR</g:price></item>`;
+    const result = parseFeed(
+      `<rss xmlns:g="http://base.google.com/ns/1.0"><channel>${[
+        item("<title>Tee S</title><g:sku>TEE-S</g:sku>"),
+        item("<title>Tee M</title><g:sku>TEE-M</g:sku>"),
+        item("<title>Tee L</title><link>https://shop.example/tee?size=l</link>"),
+        item("<title>Tee XL</title>"),
+      ].join("")}</channel></rss>`,
+    );
+    expect(result.products.map((p) => p.externalId)).toEqual(["TEE-S", "TEE-M", "https://shop.example/tee?size=l"]);
+    expect(result.skipped.map((s) => [s.row, s.reason])).toEqual([[4, "no_id"]]);
+  });
+});

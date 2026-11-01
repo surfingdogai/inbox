@@ -885,7 +885,9 @@ const XML_FIELDS: Readonly<Record<string, readonly string[]>> = {
   condition: ["condition"],
   noGtin: ["identifier_exists"],
   sourceCategory: ["google_product_category", "product_type"],
-  externalId: ["id", "item_group_id", "guid", "sku", "mpn"],
+  // Never item_group_id: every variant of a group shares it, so a variant without an id of its own would
+  // become its group and the others duplicates of it.
+  externalId: ["id", "guid", "sku", "mpn"],
   name: ["title", "name"],
   description: ["description", "summary", "content"],
   sku: ["mpn", "sku", "gtin", "identifier"],
