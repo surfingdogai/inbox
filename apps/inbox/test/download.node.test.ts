@@ -15,6 +15,7 @@ import {
 import { logMailOut, runMigrations } from "@surfingdog/platform";
 import { nodeSnapshot, nodeSqliteClient } from "@surfingdog/platform/node";
 import { afterEach, describe, expect, it } from "vitest";
+import { logoPng } from "../../../packages/core/test/look-files";
 import { unzip } from "../../../packages/core/test/unzip";
 import { createInbox } from "../src/app";
 import { confirmed, futureDay, nextDay } from "./harness";
@@ -98,6 +99,16 @@ describe("a download of a real inbox", () => {
     expect((await call(inbox.app, "POST", "/v1/owner/setup/plan", owner, salon)).status).toBe(200);
     const settings = { email: { inboundSecret: INBOUND }, notifications: { ownerEmail: OWNER, appUrl: BASE } };
     expect((await call(inbox.app, "PUT", "/v1/owner/settings", owner, { doc: settings })).status).toBe(200);
+    // The business's logo (Settings → Look).
+    const logo = await inbox.app.request(
+      new Request(`${BASE}/v1/owner/look/logo`, {
+        method: "PUT",
+        headers: { authorization: `Bearer ${owner}` },
+        body: logoPng(160, 48) as BodyInit,
+      }),
+    );
+    expect(logo.status).toBe(200);
+    const logoSha = ((await logo.json()) as { doc: { look: { logo: { sha256: string } } } }).doc.look.logo.sha256;
     const hook = await call(inbox.app, "POST", "/v1/owner/webhooks", owner, {
       url: "https://hooks.example.com/salon",
       headers: { Authorization: "Bearer zapier-secret-123" },
@@ -229,6 +240,8 @@ describe("a download of a real inbox", () => {
       background: () => {},
     });
     const key2 = (await createApiKey(copy, { kind: "owner", name: "cli" })).key;
+    // The logo came along: it is the business's own, shown as it was.
+    expect((await fresh.app.request(`https://inbox.salaorosa.pt/p/logo/${logoSha.slice(0, 16)}.png`)).status).toBe(200);
     const same = async (p: string) => {
       const before = await (await call(inbox.app, "GET", p, owner)).json();
       const after = await (await call(fresh.app, "GET", p, key2)).json();

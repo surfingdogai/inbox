@@ -72,7 +72,9 @@ export const DOWNLOAD_TABLES: Readonly<Record<string, DownloadTable>> = {
   outbound_mail: { note: "Every email the inbox sent; the links in them answer only at the inbox that sent them." },
   mail_refs: {},
   action_links: { note: "The links in emails to customers, which answer only at the inbox that sent them." },
-  blobs: { note: "Where attachments are kept. The files themselves are not in this download." },
+  blobs: {
+    note: "Where attachments and the business's logo are kept. The files customers sent are not in this download; the logo is.",
+  },
   mail_attachments: { note: "What came attached to customers' emails, and what became of each file." },
   mail_attachment_chunks: { note: "The attached files themselves, in pieces." },
   mail_tokens: {
@@ -88,7 +90,8 @@ export const DOWNLOAD_TABLES: Readonly<Record<string, DownloadTable>> = {
   },
   attachment_chunks: {
     leftOut: "The files customers sent with their requests: open each from its request in the app.",
-    strip: empty("attachment_chunks"),
+    // The business's logo stays: it is the business's own, and the copy shows it as this inbox does.
+    strip: () => ["DELETE FROM attachment_chunks WHERE key NOT IN (SELECT key FROM blobs WHERE kind = 'logo')"],
   },
   // The networks this inbox reports to.
   network_status: {},
