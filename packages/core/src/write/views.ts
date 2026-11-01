@@ -241,13 +241,17 @@ const TYPE_WORD: Record<ItemType, string> = {
   stay: "Stay",
 };
 
+/**
+ * Where an item stands, in the business's own sentence (`describe`): its owner reads it, in the owner's MCP
+ * and its emails, so the customer is "the customer" here, never "you".
+ */
 const STATE_WORD: Record<string, string> = {
   requested: "requested, waiting for the business to confirm",
   received: "received, waiting for the business",
-  needs_info: "waiting for more details from you",
-  proposed: "the business proposed another time; accept or decline it",
+  needs_info: "waiting for more details from the customer",
+  proposed: "waiting for the customer's answer to the other time the business proposed",
   confirmed: "confirmed",
-  quoted: "quoted; accept or decline the quote",
+  quoted: "quoted, waiting for the customer's answer",
   accepted: "accepted",
   awaiting_payment: "accepted, waiting for payment",
   payment_failed: "accepted; the payment failed",
@@ -259,7 +263,7 @@ const STATE_WORD: Record<string, string> = {
   declined: "declined by the business",
   expired: "expired without an answer",
   cancelled: "cancelled",
-  cancelled_by_customer: "cancelled by you",
+  cancelled_by_customer: "cancelled by the customer",
   cancelled_by_business: "cancelled by the business",
   no_show: "recorded as a no-show",
   open: "open, waiting for a reply",
