@@ -150,7 +150,9 @@ Read back with the key, by webhook and on each sync:
 - **refunded**: the order's refunds, in all, which mark done a refund the inbox owes. Read whenever the
   order is `processing`, `completed` or `refunded` (a full refund is no longer paid, and is still a refund).
 - **Closing a link** cancels the store's order while it is still `pending` or `failed` (WooCommerce emails
-  nobody for that), and leaves one paid or on hold meanwhile.
+  the customer nothing for that; its own admin gets its "Cancelled order" email, which WooCommerce 11.2
+  sends for pending → cancelled too, seen on a real store on 1 November 2026), and leaves one paid or on
+  hold meanwhile.
 - A store has no test mode of its own: every fact is live, and connecting WooCommerce makes it the
   connection that makes links for real orders (Stripe's and Mollie's switch off, ADR-023).
 

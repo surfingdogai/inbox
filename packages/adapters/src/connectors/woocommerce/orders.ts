@@ -465,7 +465,9 @@ async function noteOn(ctx: RunContext, store: Store, keys: Keys, id: unknown, or
 /**
  * The link is no longer wanted (the order changed or ended, or was paid another way): an order the
  * store still waits to be paid for (`pending`, `failed`) is cancelled there, which WooCommerce emails
- * nobody about; one paid or on its way meanwhile is left alone, and found paid on the next look.
+ * the customer nothing about (its own admin gets its "Cancelled order" email, pending to cancelled
+ * included, as of WooCommerce 11.2); one paid or on its way meanwhile is left alone, and found paid on
+ * the next look.
  */
 async function closeLink(ctx: RunContext, link: { readonly externalId: string }): Promise<void> {
   const store = storeOf(ctx);
