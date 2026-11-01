@@ -82,6 +82,11 @@ describe("MCP doors", () => {
     // The business answers its customer in its own voice.
     expect(text).toMatch(/^Your booking "Full service" .* is with us; we will confirm it or suggest another time\./);
     expect(text).toContain(structured.accessToken);
+    // The text names the item's id too: some assistants read only the text (Gemini's CLI passes no
+    // structuredContent to its model), and the six-character reference is not what get_item_status takes.
+    expect(text).toContain(
+      `Its item_id, for get_item_status and every later call about it: ${structured.view.item.id}.`,
+    );
 
     const bad = await confirmedTool((p) => client.callTool(p), {
       name: "create_booking",

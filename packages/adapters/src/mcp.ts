@@ -163,13 +163,21 @@ async function run(fn: () => Promise<{ text: string; structured: unknown }>): Pr
 export const TOKEN_WITHHELD_NOTE =
   "The access token was in the first answer. A retry shows it again only when it is signed by your own agent key that made the item, or sent with the same random idempotency_key (a fresh random UUID, or 32 random hex digits, that nobody else sent), directly rather than through a network, within the key's 30 days. This retry could not prove it is yours that way. If that answer was lost, this item cannot be read or cancelled from here: tell your person the request reached the business, and that to change or cancel it they contact the business. Next time, make every idempotency_key a fresh random UUID.";
 
-const humanOf = (r: {
-  view: { human: string };
-  accessToken?: string | undefined;
-  accessTokenWithheld?: true | undefined;
-  replayed?: boolean;
-}) =>
-  `${r.view.human}${r.accessToken ? ` Access token (keep it): ${r.accessToken}.` : ""}${r.replayed ? " (Same request as before; nothing new was created.)" : ""}${r.accessTokenWithheld ? ` ${TOKEN_WITHHELD_NOTE}` : ""}`;
+/**
+ * The answer to a request, in the business's words. A created item also names its id: the answer's
+ * text is all some assistants read (Gemini's CLI passes no structuredContent to its model), and the
+ * six-character reference in the sentence is not what get_item_status takes.
+ */
+const humanOf = (
+  r: {
+    view: { human: string; item?: { id: string } };
+    accessToken?: string | undefined;
+    accessTokenWithheld?: true | undefined;
+    replayed?: boolean;
+  },
+  created = false,
+) =>
+  `${r.view.human}${created && r.view.item ? ` Its item_id, for get_item_status and every later call about it: ${r.view.item.id}.` : ""}${r.accessToken ? ` Access token (keep it): ${r.accessToken}.` : ""}${r.replayed ? " (Same request as before; nothing new was created.)" : ""}${r.accessTokenWithheld ? ` ${TOKEN_WITHHELD_NOTE}` : ""}`;
 
 /** The owner's side of `humanOf`: the sentence without the subject a customer may have written (`untrusted.ts`). */
 const ownerHumanOf = (r: {
@@ -484,7 +492,7 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
         run(async () => {
           const r = await caps.requestQuote(caller, args);
           return {
-            text: `${humanOf(r)}${identityText(r.identity, args.contact?.name, { created: true })}`,
+            text: `${humanOf(r, true)}${identityText(r.identity, args.contact?.name, { created: true })}`,
             structured: r,
           };
         }),
@@ -503,7 +511,7 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
           const r = await caps.createBooking(caller, args);
           // A table for more than the business books online is a request for a price (ADR-040).
           return ok(
-            `${r.note ? `${r.note} ` : ""}${humanOf(r)}${identityText(r.identity, args.contact?.name, { created: true })}`,
+            `${r.note ? `${r.note} ` : ""}${humanOf(r, true)}${identityText(r.identity, args.contact?.name, { created: true })}`,
             r,
           );
         } catch (error) {
@@ -523,7 +531,7 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
       async (args) => {
         try {
           const r = await caps.createOrder(caller, args);
-          return ok(`${humanOf(r)}${identityText(r.identity, args.contact?.name, { created: true })}`, r);
+          return ok(`${humanOf(r, true)}${identityText(r.identity, args.contact?.name, { created: true })}`, r);
         } catch (error) {
           return confirmOrFailed(error);
         }
@@ -713,7 +721,7 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
           return {
             text:
               "view" in r
-                ? `${humanOf(r as { view: { human: string } })}${identityText((r as { identity?: IdentityAnswer }).identity, args.contact?.name, { created: true })}`
+                ? `${humanOf(r as { view: { human: string; item?: { id: string } } }, true)}${identityText((r as { identity?: IdentityAnswer }).identity, args.contact?.name, { created: true })}`
                 : (r as { human: string }).human,
             structured: r,
           };

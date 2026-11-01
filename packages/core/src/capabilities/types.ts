@@ -191,7 +191,14 @@ export const createOrderInput = z.object({
   ...carried,
 });
 
-export const getItemStatusInput = z.object({ item_id: z.string().min(1), access_token: accessToken, ...carried });
+export const getItemStatusInput = z.object({
+  item_id: z
+    .string()
+    .min(1)
+    .describe("The item's id, from the answer that created it (view.item.id): not its six-character reference."),
+  access_token: accessToken,
+  ...carried,
+});
 
 /**
  * A customer's assistant pays an accepted order directly (ADR-042): with the one-time token its platform
