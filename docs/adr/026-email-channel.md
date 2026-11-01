@@ -111,25 +111,43 @@ and let the owner answer notifications by email.
    that names one of the inbox's or the owner's addresses, a line of underscores, a quoted header in any
    language mail programs write (`De :`, `Da:`, `Van:`, `Od:`, …) or an attribution line, also wrapped. An
    answer whose words still name the owner's own address is not sent. What the owner attached is kept on
-   the item and not sent on, and the item says so. An out-of-office is dropped. Any other answer that is
-   not sent is kept on the item as a note for the owner saying why, and the item asks for a person:
-   nothing goes to the customer, and nothing is emailed back (two mailboxes could answer each other).
+   the item and not sent on, and the item says so. An out-of-office is kept on the item as a note, sent
+   to nobody. Any other answer that is not sent (one with no words too) is kept on the item as a note for
+   the owner saying why, with what it had attached, and the item asks for a person: nothing goes to the
+   customer, and nothing is emailed back (two mailboxes could answer each other). One about a customer who
+   was erased is kept as a notice (§7).
 
 6. **The owner's sign-in address is never shown to a customer.** Not as From, not as Reply-To, not in a
    body. The runtime drops a policy Reply-To that is the owner's address; every reply address is a token
    address.
 
 7. **Protection.**
+   - Nothing that arrives is dropped (the founder, 1 November 2026: "don't throw any e-mail away, we keep
+     everything"). Answering, alerting and processing may be skipped; keeping may not. What answers no
+     conversation and no person sent to be answered is kept as a **notice** (`flags.notice`): a message
+     the owner's alone exactly as an account's mail is, so no rule runs on it, nothing answers
+     it, no webhook, event stream, integration key or owner AI reads it, the AI spam check never reads it
+     and nothing of it goes to the shared list; the local spam checks still run. It alerts nobody. The
+     owner reads notices under Notices, out of every other list, and moves one to the inbox (a
+     conversation from then on, still the owner's alone) or deletes it. A notice that answers a
+     conversation lands on it as any reply does. Past 200 notices a day from one sender's domain, one is
+     still kept, with the least work: unscreened, found only by its conversation's address and the ids it
+     names, its links not read, and counted (`notice_flood`). The only email not kept is one larger than
+     the whole system takes, 25 MiB: the gateway (`apps/email-gateway/worker.ts`, `MAX_BYTES`) and
+     `POST /v1/email/inbound` refuse it, so its sender gets a bounce and knows. A sender over its rate
+     limit gets a temporary failure and sends again later.
    - Loops: every email carries the inbox's mark (`X-Inbox-Loop`, a hash of its own id); one that comes
-     back is dropped. So is one that passed through more than forty servers. Out-of-office and returned
-     emails never become conversations and are never answered (ADR-018 N14); RFC 3834 headers go on
-     everything the inbox sends.
+     back is kept as a notice, never answered. So is one that passed through more than forty servers.
+     Out-of-office and returned emails never become conversations and are never answered (ADR-018 N14):
+     kept on the item they answer as a note, else as a notice; RFC 3834 headers go on everything the inbox
+     sends.
    - Bounces: a returned email (a delivery report, a mailer daemon) is kept as a note on the item it
      answers, the email it returns is marked failed with the server's status, and the item asks for a
      person.
    - Mailings and notices: one with a list's headers (`List-Unsubscribe`, `List-Id`, `List-Post`) or from
-     a sender that takes no answer (`noreply@`, `notifications@`, …) that answers no conversation is
-     dropped: forwarding a whole mailbox brings these, and none is a customer.
+     a sender that takes no answer (`noreply@`, `notifications@`, …) that answers no conversation is kept
+     as a notice: forwarding a whole mailbox brings these, and none is a customer. So is a mail provider's
+     forwarding confirmation for no address being set up, and an email with no sender.
    - Spam: a new email that a server it passed through marked as spam (`X-Spam-Flag`, `X-Spam-Status`,
      Microsoft's spam level) is made in the spam state as it arrives: no alert, no rule, no webhook,
      nothing answered, none of its files kept. It waits under Spam in the owner app. A failed DMARC check

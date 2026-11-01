@@ -15,7 +15,7 @@ Events are emitted for what the Inbox itself records, whoever caused it: a custo
 
 Sandbox items ([Concepts](/docs/concepts/)) produce events too — every event says so in `data.sandbox` — so you can build against a test item without touching anything real.
 
-An email that gives you a way into an account you hold — a sign-in code or link, or a password reset, from the service's own domain — is never an event, on a webhook or in the polling stream, and a key or your AI reading items never sees what it says: only a person at the business reads it, in the app.
+An email that gives you a way into an account you hold — a sign-in code or link, or a password reset, from the service's own domain — is never an event, on a webhook or in the polling stream, and a key or your AI reading items never sees what it says: only a person at the business reads it, in the app. The same holds for a notice: an email from a system (a receipt, an account's or a newsletter's mail) that answers no conversation, kept under Notices.
 
 Every event also says who caused it and through which door: `data.actor` is `{kind, id, name}`, where `kind` is `owner`, `owner_ai` (your AI, over OAuth), `integration` (a key you made for another system), `connector`, `rule`, `system`, `customer_agent` or `customer_human`, `id` is the user, AI app or key id, and `name` is the key's or AI app's name; `data.channel` is the door (`rest`, `mcp_owner`, `mcp_public`, `email`, `owner_ui`, …). A customer's id is never sent. **A two-way sync should skip the events whose `data.actor.id` is its own key's id**: those are its own writes coming back, and acting on them again is how two systems end up in a loop.
 
