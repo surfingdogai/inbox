@@ -2549,7 +2549,7 @@ businesses to join know the rules they join under.
   is under age, the inbox closes it with the outcome `order.id_refused`. It writes no row on either
   side (§3), so it counts against neither the business nor the person: not in a score, not in a count
   of kept or broken promises, not in a customer's record. It is not a closure labelled the customer's
-  (A5.3), so it is never late. A listing counts it as its own outcome.
+  (A5.3), so it is never late. A listing counts it as its own outcome once the network takes it.
 - A customer who says the order was never handed over may still report it (`order.not_received`),
   and the report counts as A5.4 says. A refund the business then owes is a promise of its own and
   counts as any refund does (A3.2).
@@ -2567,9 +2567,10 @@ businesses to join know the rules they join under.
 
 Rules version 11 (`"0.2.4"`) keeps every member and number of version 10. It adds `order.variants`,
 `order.free_times`, a line in `never_used`, and the outcome `order.id_refused` (no row on either side,
-by the inbox, reserved), and rewrites `summary`. A listing's outcomes gain `order.id_refused`. A
-product search result gains `variants` and the key `group:<business>:<group>`, both only for one
-business's product group. Version 10's document stays as it was published, but for `next`.
+by the inbox, reserved), and rewrites `summary`. A listing's outcomes gain `order.id_refused` once a
+network takes it. A product search result gains `variants` and the key `group:<business>:<group>`,
+both only for one business's product group. Version 10's document stays as it was published, but for
+`next`.
 
 **Decisions.** A2.5 holds: a filter only leaves businesses out, and a free time is a filter. R25
 holds: a business is never marked for an ID it refused, nor a person for one they could not show.
