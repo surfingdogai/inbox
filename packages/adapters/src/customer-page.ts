@@ -158,7 +158,7 @@ export function renderCustomerPage(
   // Inside the business's own website (`?embed=1`): the form alone, the site around it is theirs.
   const embed = page.embed === true;
   const body = [
-    embed ? "" : `<header><p class="biz">${logoImg(look)}${esc(name)}</p></header>`,
+    embed ? "" : `<header><p class="biz">${look.logo ? logoImg(look, name) : esc(name)}</p></header>`,
     `<h1>${esc(page.heading)}</h1>`,
     page.error ? `<p class="error" role="alert">${esc(page.error)}</p>` : "",
     ...(page.paragraphs ?? []).map((p) => `<p>${esc(p)}</p>`),
@@ -266,13 +266,13 @@ const LOGO_MAX_W = 200;
 const LOGO_MAX_H = 40;
 
 /**
- * The logo above the business's name: decoration, so its alt is empty and the name stays the text.
- * From the inbox's own address (`/p/logo/<file>`), the only image a page loads.
+ * The logo in place of the business's name, which is its alt. From the inbox's own address
+ * (`/p/logo/<file>`), the only image a page loads.
  */
-function logoImg(look: Look): string {
+function logoImg(look: Look, name: string): string {
   if (!look.logo) return "";
   const box = logoBox(look.logo.width, look.logo.height, LOGO_MAX_W, LOGO_MAX_H);
-  return `<img src="/p/logo/${esc(look.logo.file)}" alt="" width="${box.width}" height="${box.height}">`;
+  return `<img src="/p/logo/${esc(look.logo.file)}" alt="${esc(name)}" width="${box.width}" height="${box.height}">`;
 }
 
 /**

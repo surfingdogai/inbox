@@ -128,9 +128,10 @@ export interface RailLogo extends LogoShown {
 }
 
 /**
- * The business at the top of the rail: its logo when it has one (Settings → Look), else the Inbox
- * mark, and its name. Its place is kept while it loads. Where the rail is icons only, a logo wider
- * than it is tall would be a smudge: the Inbox mark stands in there.
+ * The business at the top of the rail: its logo when it has one (Settings → Look), which says its
+ * name (kept for screen readers only), else the Inbox mark and its name. Its place is kept while it
+ * loads. Where the rail is icons only, a logo wider than it is tall would be a smudge: the Inbox mark
+ * stands in there.
  */
 export function RailHead({ name, logo }: { name: string; logo?: RailLogo | null | undefined }) {
   const wide = logo ? logo.width / logo.height > 1.5 : false;
@@ -145,7 +146,7 @@ export function RailHead({ name, logo }: { name: string; logo?: RailLogo | null 
         <Inbox className="icon" aria-hidden="true" />
       )}
       {wide && (logo?.url || logo?.waiting) && <Inbox className="icon rail-mark" aria-hidden="true" />}
-      <span className="label">{name}</span>
+      <span className={logo?.url || logo?.waiting ? "sr-only" : "label"}>{name}</span>
     </div>
   );
 }

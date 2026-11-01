@@ -112,7 +112,7 @@ export function AccentDots({
   );
 }
 
-/** What a customer's page looks like with this look: the logo or the name, a heading, a line, a button, a link. */
+/** What a customer's page looks like with this look: the logo, or the name without one, a heading, a line, a button, a link. */
 export function LookPreview({
   theme,
   accent,
@@ -141,10 +141,7 @@ export function LookPreview({
           "--p-accent-fg": a.label,
         })}
       >
-        <p className="biz">
-          {logoUrl && <img src={logoUrl} alt="" />}
-          {business}
-        </p>
+        <p className="biz">{logoUrl ? <img src={logoUrl} alt={business} /> : business}</p>
         <p className="h">Your booking</p>
         <p className="t">Tuesday at 10:00, for an hour.</p>
         <p className="acts">

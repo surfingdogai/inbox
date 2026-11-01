@@ -141,7 +141,7 @@ describe("a customer's page in the business's look", () => {
     const { html } = await s.page("/p/quote");
     // The name stays the text: the logo is decoration, its alt empty, at most 200 × 40.
     expect(html).toContain(
-      `<p class="biz"><img src="/p/logo/${file}" alt="" width="200" height="40">Studio Kalinda</p>`,
+      `<p class="biz"><img src="/p/logo/${file}" alt="Studio Kalinda" width="200" height="40"></p>`,
     );
     expect(styleOf(html)).toContain(".biz img{display:block;");
     // The logo it loads is there.
@@ -191,11 +191,11 @@ describe("a customer's page in the business's look", () => {
     const s = await setup();
     const small = await s.logo(logoPng(32, 32));
     expect((await s.page("/p/quote")).html).toContain(
-      `<img src="/p/logo/${small.sha256.slice(0, 16)}.png" alt="" width="32" height="32">`,
+      `<img src="/p/logo/${small.sha256.slice(0, 16)}.png" alt="Studio Kalinda" width="32" height="32">`,
     );
     const tall = await s.logo(logoPng(120, 240));
     expect((await s.page("/p/quote")).html).toContain(
-      `<img src="/p/logo/${tall.sha256.slice(0, 16)}.png" alt="" width="20" height="40">`,
+      `<img src="/p/logo/${tall.sha256.slice(0, 16)}.png" alt="Studio Kalinda" width="20" height="40">`,
     );
   });
 

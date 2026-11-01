@@ -57,11 +57,11 @@ describe("Settings → Look, on the page", () => {
     expect(html).toContain('class="look-dots" style="--m-bg:#141414;--m-fg:#ececec;--m-rule:#2a2a2a"');
   });
 
-  it("shows what customers see: the logo above the name, a button and a link in the accent", () => {
+  it("shows what customers see: the logo in place of the name, a button and a link in the accent", () => {
     const html = renderToStaticMarkup(
       createElement(LookPreview, { theme: "minimal", accent: "blue", business: "Studio Kalinda", logoUrl: "blob:x" }),
     );
-    expect(html).toContain('<p class="biz"><img src="blob:x" alt=""/>Studio Kalinda</p>');
+    expect(html).toContain('<p class="biz"><img src="blob:x" alt="Studio Kalinda"/></p>');
     expect(html).toContain("--p-accent:#2357b5");
     expect(html).toContain('data-look="minimal"');
     expect(html).toContain("Emails stay light, whatever the theme.");
@@ -69,6 +69,7 @@ describe("Settings → Look, on the page", () => {
       createElement(LookPreview, { theme: "standard", accent: "ink", business: "Studio Kalinda", logoUrl: null }),
     );
     expect(plain).not.toContain("<img");
+    expect(plain).toContain('<p class="biz">Studio Kalinda</p>');
     expect(plain).toContain("--p-accent:#111111");
   });
 });
@@ -78,10 +79,11 @@ describe("the rail's head", () => {
   const head = (logo: Parameters<typeof RailHead>[0]["logo"]) =>
     renderToStaticMarkup(createElement(RailHead, { name: "Studio Kalinda", logo }));
 
-  it("shows the business's logo where the Inbox mark is, and its name beside it", () => {
+  it("shows the business's logo where the Inbox mark is, its name kept for screen readers only", () => {
     const html = head(square);
     expect(html).toContain('<img class="rail-logo" src="blob:x" alt=""/>');
-    expect(html).toContain('<span class="label">Studio Kalinda</span>');
+    expect(html).toContain('<span class="sr-only">Studio Kalinda</span>');
+    expect(html).not.toContain('<span class="label">');
     expect(html).not.toContain("<svg");
     const plain = head(null);
     expect(plain).not.toContain("<img");
