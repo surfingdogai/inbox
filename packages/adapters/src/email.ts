@@ -283,7 +283,7 @@ export async function ingestEmail(
   // Mail to an address the business forwards here: its forward works.
   await forwardsSeen(db, recipients, now());
 
-  const text = cut(stripQuotedReply(plain).trim() || "(empty message)");
+  const text = cut(withAccountLinks(parsed, stripQuotedReply(plain).trim() || "(empty message)"));
   // 5. and 7. The conversation's own address, or the alert's.
   let tokenItem: string | null = null;
   for (const token of tokensIn(recipients)) {
@@ -1048,6 +1048,22 @@ export function stripQuotedReply(text: string): string {
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+/**
+ * An account email's links, written under its text for its owner: a sign-in button's address is
+ * often only in the HTML. Only http(s), at most ten, none longer than 2,000 characters.
+ */
+function withAccountLinks(parsed: Pick<Email, "subject" | "text" | "html">, text: string): string {
+  if (!isAccountMail(parsed)) return text;
+  const links: string[] = [];
+  for (const m of (parsed.html ?? "").matchAll(/<a\b[^>]*?\shref\s*=\s*(?:"([^"]*)"|'([^']*)')/gi)) {
+    const url = (m[1] ?? m[2] ?? "").replace(/&amp;/g, "&").trim();
+    if (!/^https?:\/\/\S+$/i.test(url) || url.length > 2000 || text.includes(url) || links.includes(url)) continue;
+    links.push(url);
+    if (links.length === 10) break;
+  }
+  return links.length ? `${text}\n\nLinks in this email:\n${links.join("\n")}` : text;
 }
 
 export function htmlToText(html: string): string {

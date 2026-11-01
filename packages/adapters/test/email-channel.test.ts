@@ -824,6 +824,36 @@ describe("what the review attacked", () => {
     expect((await db.orm.select().from(schema.items)).length).toBe(3);
   });
 
+  it("keeps an account email's sign-in link from its HTML, under its text", async () => {
+    const { db, caps } = await setUp();
+    const raw = [
+      "From: Anthropic <no-reply-x1@mail.anthropic.example>",
+      "To: support@oficinamare.example",
+      "Subject: Your secure link to Claude is here",
+      "Message-ID: <l1@x>",
+      "List-Unsubscribe: <https://mail.anthropic.example/u>",
+      "MIME-Version: 1.0",
+      'Content-Type: multipart/alternative; boundary="b1"',
+      "",
+      "--b1",
+      "Content-Type: text/plain; charset=utf-8",
+      "",
+      "Sign in to Claude. Click the button below to finish signing in.",
+      "--b1",
+      "Content-Type: text/html; charset=utf-8",
+      "",
+      '<p>Sign in to Claude</p><a href="https://claude.example/magic-link?t=abc&amp;s=1">Sign in</a>' +
+        '<a href="javascript:alert(1)">x</a><img src="https://t.example/pixel.gif"><a href="mailto:x@y.example">mail</a>',
+      "--b1--",
+      "",
+    ].join("\r\n");
+    const r = await ingestEmail(db, caps, { raw, envelopeTo: INBOUND }, { now: () => T });
+    expect(r.outcome).toBe("created");
+    const [entry] = await db.orm.select().from(schema.threadEntries);
+    expect(entry?.bodyText).toContain("Links in this email:\nhttps://claude.example/magic-link?t=abc&s=1");
+    expect(entry?.bodyText).not.toMatch(/javascript:|pixel\.gif|mailto:/);
+  });
+
   it("a hosted Gmail forward with plus addresses still gives every customer an address that reaches the conversation", async () => {
     const s = await setUp();
     await provedForward(s, "oficinamare@gmail.com");
