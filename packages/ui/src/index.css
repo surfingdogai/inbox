@@ -164,7 +164,7 @@
   --hairline-strong: rgba(43, 36, 32, 0.18);
   --input-border: rgba(43, 36, 32, 0.18);
   --glass-fallback: rgba(255, 252, 246, 0.88);
-  --field-alpha: 0.32;
+  --field-alpha: 0.2;
 }
 /* The accent takes the primary button, links and focus; chosen chips stay ink, a state, not the brand. */
 :root[data-accent] {
@@ -408,6 +408,15 @@
   left: 4vw;
   bottom: -14vw;
   background: var(--tangerine);
+}
+/* Warm's light is its own, sand and apricot, so the ground still reads as its off-white. */
+:root[data-look="warm"]:not([data-theme="dark"]) .sky .f1,
+:root[data-look="warm"]:not([data-theme="dark"]) .sky .f3 {
+  background: #e8c99a;
+}
+:root[data-look="warm"]:not([data-theme="dark"]) .sky .f2,
+:root[data-look="warm"]:not([data-theme="dark"]) .sky .f4 {
+  background: #f1b58a;
 }
 
 /* ------------------------------------------------------------------ */

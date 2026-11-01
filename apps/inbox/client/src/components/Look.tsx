@@ -76,11 +76,18 @@ export function AccentDots({
   disabled?: boolean | undefined;
   onChoose: (accent: LookAccent) => void;
 }) {
+  const tones = tonesOf(theme);
   return (
     <fieldset className="chips-field" disabled={disabled}>
       <legend className="label">Accent</legend>
       <div className="look-dots-row">
-        <div role="radiogroup" aria-label="Accent" className="look-dots">
+        {/* On the theme's own ground, as customers see them, whatever this app's ground is now. */}
+        <div
+          role="radiogroup"
+          aria-label="Accent"
+          className="look-dots"
+          style={vars({ "--m-bg": tones.bg, "--m-fg": tones.fg, "--m-rule": tones.rule })}
+        >
           {LOOK_ACCENTS.map((a) => (
             <label key={a} className="look-dot" title={ACCENT_LABELS[a]}>
               <input

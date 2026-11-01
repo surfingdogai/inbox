@@ -50,7 +50,9 @@ function InboxLayout() {
   const phone = usePhone();
   // The business's look (Settings → Look): its theme and accent on the app, its logo in the rail.
   useLookSync();
-  const logo = useLogoUrl(settings.data?.doc.look.logo?.sha256);
+  const kept = settings.data?.doc.look.logo;
+  const shown = useLogoUrl(kept?.sha256);
+  const logo = kept ? { ...shown, width: kept.width, height: kept.height } : null;
 
   return (
     <SpamActionsProvider>

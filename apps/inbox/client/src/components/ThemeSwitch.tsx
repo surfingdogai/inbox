@@ -1,19 +1,31 @@
 import { type LucideIcon, Monitor, Moon, Sun } from "lucide-react";
-import { type ThemeMode, useTheme } from "../lib/theme";
+import { type ThemeMode, useLookTheme, useTheme } from "../lib/theme";
 
-const MODES: readonly { key: ThemeMode; label: string; title: string; Icon: LucideIcon }[] = [
-  { key: "system", label: "Auto", title: "As the business's look; Standard follows the device", Icon: Monitor },
-  { key: "light", label: "Day", title: "Day", Icon: Sun },
-  { key: "dark", label: "Night", title: "Night", Icon: Moon },
-];
+type Mode = { key: ThemeMode; label: string; title: string; Icon: LucideIcon };
 
-/** Day, night or Auto (as the business's look, `lib/theme.ts`). `compact` shows icons only. */
+/**
+ * System, day and night. Once the business chose a theme (Settings → Look), System is Auto: it
+ * follows that theme (`lib/theme.ts`), not the device.
+ */
+function useModes(): readonly Mode[] {
+  const auto = useLookTheme() !== null;
+  return [
+    auto
+      ? { key: "system", label: "Auto", title: "As your business's look", Icon: Monitor }
+      : { key: "system", label: "System", title: "System", Icon: Monitor },
+    { key: "light", label: "Day", title: "Day", Icon: Sun },
+    { key: "dark", label: "Night", title: "Night", Icon: Moon },
+  ];
+}
+
+/** Day, night or the system's choice (Auto, with a theme chosen). `compact` shows icons only. */
 export function ThemeSwitch({ compact, className }: { compact?: boolean | undefined; className?: string | undefined }) {
   const [mode, setMode] = useTheme();
+  const modes = useModes();
   return (
     <fieldset className={className ? `seg ${className}` : "seg"}>
       <legend className="sr-only">Theme</legend>
-      {MODES.map(({ key, label, title, Icon }) => (
+      {modes.map(({ key, label, title, Icon }) => (
         <button
           key={key}
           type="button"
@@ -30,12 +42,13 @@ export function ThemeSwitch({ compact, className }: { compact?: boolean | undefi
   );
 }
 
-/** On a phone: one button that steps through Auto, day and night, its icon the mode now. */
+/** On a phone: one button that steps through system (or Auto), day and night, its icon the mode now. */
 export function ThemeButton({ className }: { className?: string | undefined }) {
   const [mode, setMode] = useTheme();
-  const at = MODES.findIndex((m) => m.key === mode);
-  const now = MODES[at] ?? MODES[0];
-  const next = MODES[(at + 1) % MODES.length] ?? MODES[0];
+  const modes = useModes();
+  const at = modes.findIndex((m) => m.key === mode);
+  const now = modes[at] ?? modes[0];
+  const next = modes[(at + 1) % modes.length] ?? modes[0];
   if (!now || !next) return null;
   const Icon = now.Icon;
   return (

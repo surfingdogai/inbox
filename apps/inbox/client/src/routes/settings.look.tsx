@@ -1,12 +1,11 @@
-import type { LookAccent, LookTheme } from "@surfingdog/core/look";
 import { createFileRoute } from "@tanstack/react-router";
 import { type ChangeEvent, useRef, useState } from "react";
 import { ErrorState, Toast } from "../components/Feedback";
 import { SectionHead } from "../components/Form";
 import { AccentDots, LookPreview, ThemeSwatches } from "../components/Look";
 import { problemOf } from "../lib/api";
-import { LOGO_HINT, LOGO_TYPES, logoProblem, useLogoUrl, useLogoWrite } from "../lib/look";
-import { useBusiness, useSaveSettings, useSettings } from "../lib/queries";
+import { LOGO_HINT, LOGO_TYPES, logoProblem, useLogoUrl, useLogoWrite, useLookChoice } from "../lib/look";
+import { useBusiness, useSettings } from "../lib/queries";
 
 export const Route = createFileRoute("/settings/look")({
   component: LookPage,
@@ -14,18 +13,25 @@ export const Route = createFileRoute("/settings/look")({
 
 /**
  * Settings → Look: the business's logo, its theme and its accent, on its pages, in its emails and
- * here. A picture to choose, swatches and dots to press: nothing to type. Each press saves; only the
- * owner, signed in, may change it, and the inbox says so to anyone else.
+ * here. A picture to choose, swatches and dots to press: nothing to type. A choice saves itself a
+ * moment later (`useLookChoice`); only the owner, signed in, may change it, and the inbox says so to
+ * anyone else.
  */
 function LookPage() {
   const settings = useSettings();
   const business = useBusiness();
-  const save = useSaveSettings();
   const logo = useLogoWrite();
   const input = useRef<HTMLInputElement>(null);
   const [notice, setNotice] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
   const kept = settings.data?.doc.look.logo ?? null;
-  const logoUrl = useLogoUrl(kept?.sha256);
+  const shownLogo = useLogoUrl(kept?.sha256);
+  const logoUrl = shownLogo.url;
+  const failed = (e: unknown) => setNotice({ tone: "danger", text: problemOf(e).detail });
+  const savedLook = settings.data?.doc.look;
+  const [look, choose] = useLookChoice(
+    { theme: savedLook?.theme ?? "standard", accent: savedLook?.accent ?? "ink" },
+    failed,
+  );
 
   if (settings.isError) {
     return (
@@ -45,14 +51,7 @@ function LookPage() {
       </section>
     );
   }
-  const { look } = settings.data.doc;
-  const version = settings.data.version;
   const name = business.data?.name || settings.data.doc.business.name || "Your business";
-  const failed = (e: unknown) => setNotice({ tone: "danger", text: problemOf(e).detail });
-  const choose = (patch: { theme?: LookTheme; accent?: LookAccent }) => {
-    setNotice(null);
-    save.mutate({ doc: { look: patch }, expected_version: version }, { onError: failed });
-  };
   const picked = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -89,14 +88,18 @@ function LookPage() {
       <section className="card glass stack look-settings" aria-labelledby="look-h">
         <SectionHead title="Look" />
         <p className="lede small" id="look-h">
-          How your business looks to customers: your pages, your emails, and this app.
+          How your business looks: on your pages, in your emails, and here.
         </p>
 
         <div className="look-logo">
           <span className="label">Logo</span>
           <div className="look-logo-row">
             <div className="look-logo-frame">
-              {logoUrl ? <img src={logoUrl} alt="Your logo" /> : <span className="fine">No logo</span>}
+              {logoUrl ? (
+                <img src={logoUrl} alt="Your logo" />
+              ) : shownLogo.waiting ? null : (
+                <span className="fine">No logo</span>
+              )}
             </div>
             <div className="look-logo-acts">
               <button
@@ -126,8 +129,22 @@ function LookPage() {
           />
         </div>
 
-        <ThemeSwatches theme={look.theme} accent={look.accent} onChoose={(theme) => choose({ theme })} />
-        <AccentDots theme={look.theme} accent={look.accent} onChoose={(accent) => choose({ accent })} />
+        <ThemeSwatches
+          theme={look.theme}
+          accent={look.accent}
+          onChoose={(theme) => {
+            setNotice(null);
+            choose({ theme });
+          }}
+        />
+        <AccentDots
+          theme={look.theme}
+          accent={look.accent}
+          onChoose={(accent) => {
+            setNotice(null);
+            choose({ accent });
+          }}
+        />
         <LookPreview theme={look.theme} accent={look.accent} business={name} logoUrl={logoUrl} />
       </section>
     </>

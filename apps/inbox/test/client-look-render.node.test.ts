@@ -3,10 +3,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { AccentDots, LookPreview, ThemeSwatches } from "../client/src/components/Look";
 import { RailHead } from "../client/src/components/Rail";
+import { ThemeSwitch } from "../client/src/components/ThemeSwitch";
 
 /**
  * Settings → Look and the rail, rendered: four named theme radios and seven named accent radios with
- * the chosen one checked, what customers see, and the logo in the rail where the Inbox mark is.
+ * the chosen one checked, what customers see, the logo in the rail where the Inbox mark is, and the
+ * theme switch as it always read while the theme is Standard.
  */
 
 /** The radios of one group, in order: each one's value, and whether it is checked. */
@@ -49,9 +51,10 @@ describe("Settings → Look, on the page", () => {
       expect(html).toContain(`<span class="sr-only">${name}</span>`);
     }
     expect(html).toContain('<span class="look-chosen" aria-hidden="true">Plum</span>');
-    // On Dark each dot is the night tone, and Ink the theme's own ink.
+    // On Dark each dot is the night tone, and Ink the theme's own ink, on Dark's own ground.
     expect(html).toContain("--d:#e29ad6");
     expect(html).toContain("--d:#ececec");
+    expect(html).toContain('class="look-dots" style="--m-bg:#141414;--m-fg:#ececec;--m-rule:#2a2a2a"');
   });
 
   it("shows what customers see: the logo above the name, a button and a link in the accent", () => {
@@ -71,13 +74,38 @@ describe("Settings → Look, on the page", () => {
 });
 
 describe("the rail's head", () => {
+  const square = { url: "blob:x", waiting: false, width: 96, height: 96 };
+  const head = (logo: Parameters<typeof RailHead>[0]["logo"]) =>
+    renderToStaticMarkup(createElement(RailHead, { name: "Studio Kalinda", logo }));
+
   it("shows the business's logo where the Inbox mark is, and its name beside it", () => {
-    const html = renderToStaticMarkup(createElement(RailHead, { name: "Studio Kalinda", logo: "blob:x" }));
+    const html = head(square);
     expect(html).toContain('<img class="rail-logo" src="blob:x" alt=""/>');
     expect(html).toContain('<span class="label">Studio Kalinda</span>');
     expect(html).not.toContain("<svg");
-    const plain = renderToStaticMarkup(createElement(RailHead, { name: "Studio Kalinda", logo: null }));
+    const plain = head(null);
     expect(plain).not.toContain("<img");
     expect(plain).toContain("<svg");
+  });
+
+  it("keeps the logo's place while it loads, and the Inbox mark ready for a wide one where the rail is icons only", () => {
+    const waiting = head({ ...square, url: null, waiting: true });
+    expect(waiting).toContain('<span class="rail-logo is-waiting" style="aspect-ratio:96 / 96"></span>');
+    expect(waiting).not.toContain("<svg");
+    // A wordmark: the mark is there, shown by the stylesheet only where the rail is icons only.
+    const wide = head({ url: "blob:x", waiting: false, width: 360, height: 96 });
+    expect(wide).toContain('<img class="rail-logo is-wide" src="blob:x" alt=""/>');
+    expect(wide).toContain("rail-mark");
+    // A logo that could not be fetched: the Inbox mark, as with none.
+    expect(head({ ...square, url: null, waiting: false })).toContain("<svg");
+  });
+});
+
+describe("the theme switch", () => {
+  it("reads System, as it always did, while the business's theme is Standard", () => {
+    const html = renderToStaticMarkup(createElement(ThemeSwitch, {}));
+    expect(html).toContain('title="System"');
+    expect(html).toContain("<span>System</span>");
+    expect(html).not.toContain("Auto");
   });
 });

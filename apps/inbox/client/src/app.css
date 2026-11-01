@@ -238,6 +238,29 @@ a {
   max-width: 96px;
   object-fit: contain;
 }
+/* Its place while it loads: the same size, nothing in it. */
+.rail-logo.is-waiting {
+  display: block;
+}
+/* Stands in for a wide logo where the rail is icons only (below). */
+.rail-mark {
+  display: none;
+}
+/* At night, on a small white plate: most logos are drawn in dark ink. */
+:root[data-theme="dark"] img.rail-logo {
+  box-sizing: content-box;
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) img.rail-logo {
+    box-sizing: content-box;
+    padding: 2px 4px;
+    border-radius: 4px;
+    background: #ffffff;
+  }
+}
 .rail-link {
   display: flex;
   align-items: center;
@@ -1310,6 +1333,12 @@ textarea.json-editor {
     height: 24px;
     max-width: none;
   }
+  .rail-logo.is-wide {
+    display: none;
+  }
+  .rail-mark {
+    display: block;
+  }
   .rail .label,
   .rail-link .n,
   .rail .foot .pill {
@@ -1422,8 +1451,9 @@ textarea.json-editor {
   border-color: currentcolor;
   background: color-mix(in oklab, var(--ink) 7%, transparent);
 }
+/* Ink, as it always was; the business's accent once it chose one (`--link` is set only then). */
 .pick:focus-visible {
-  outline: 2px solid var(--focus, currentcolor);
+  outline: 2px solid var(--link, currentcolor);
   outline-offset: 2px;
 }
 
@@ -3865,11 +3895,20 @@ pre.found-code {
   gap: 14px;
   margin: 8px 0 4px;
 }
+/* The dots on a small plate of the chosen theme's ground: each passes on its own theme, not on this app's. */
 .look-dots {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--m-rule);
+  border-radius: 9999px;
+  background: var(--m-bg);
+}
+.look-dots:has(input:focus-visible) {
+  outline: 2px solid color-mix(in srgb, var(--focus) 65%, transparent);
+  outline-offset: 2px;
 }
 .look-dot {
   position: relative;
@@ -3879,17 +3918,14 @@ pre.found-code {
 .look-dot > span[aria-hidden] {
   width: 14px;
   height: 14px;
-  border: 1px solid var(--hairline-strong);
+  border: 1px solid var(--m-rule);
   border-radius: 9999px;
   background: var(--d);
 }
+/* The one chosen, ringed in the theme's own ink; the plate's ring says the group has the focus. */
 .look-dot:has(input:checked) > span[aria-hidden] {
-  outline: 2px solid var(--ink);
+  outline: 2px solid var(--m-fg);
   outline-offset: 2px;
-}
-.look-dot:has(input:focus-visible) > span[aria-hidden] {
-  outline: 2px solid color-mix(in srgb, var(--focus) 65%, transparent);
-  outline-offset: 3px;
 }
 @media (pointer: coarse) {
   .look-dot::before {
@@ -3951,6 +3987,13 @@ fieldset:disabled .look-dot {
   max-width: 160px;
   max-height: 28px;
   margin-bottom: 6px;
+}
+/* On Dark, as its pages show it: on a small white plate. */
+.look-preview[data-look="dark"] .biz img {
+  box-sizing: content-box;
+  padding: 3px 5px;
+  border-radius: 4px;
+  background: #ffffff;
 }
 .look-preview .h {
   font-size: 15px;

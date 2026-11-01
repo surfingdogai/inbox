@@ -9,9 +9,9 @@ import {
   type ThemeTones,
 } from "@surfingdog/core/look";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
-import { qk, useSettings } from "./queries";
+import { qk, useSaveSettings, useSettings } from "./queries";
 import { applyTheme, readTheme } from "./theme";
 import type { SettingsDoc } from "./types";
 
@@ -102,6 +102,71 @@ export function useLookSync(): void {
   }, [theme, accent]);
 }
 
+/** How long a choice waits for the next one before it is saved: arrow keys step through every one. */
+const SAVE_AFTER_MS = 300;
+
+/**
+ * The theme and accent as the owner picks them (Settings → Look): shown at once, saved one at a
+ * time. Arrow keys move a radio group's choice on every press, so a save waits for a pause and for
+ * the save before it, then sends the latest choice with the version the settings have then. The
+ * choice goes back only when that last save fails, and `failed` hears why.
+ */
+export function useLookChoice(
+  saved: LookChoice,
+  failed: (error: unknown) => void,
+): [LookChoice, (patch: Partial<LookChoice>) => void] {
+  const qc = useQueryClient();
+  const { mutateAsync } = useSaveSettings();
+  const [choice, setChoice] = useState<LookChoice | null>(null);
+  const shown = choice ?? saved;
+  // What the next save sends, whether one is on its way, and the wait: kept across renders, so a
+  // render never sends anything by itself.
+  const pending = useRef<LookChoice | null>(null);
+  const sending = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const latest = useRef({ mutateAsync, failed });
+  latest.current = { mutateAsync, failed };
+
+  const send = useCallback(async () => {
+    if (sending.current) return;
+    sending.current = true;
+    try {
+      while (pending.current) {
+        const next = pending.current;
+        pending.current = null;
+        const version = qc.getQueryData<SettingsDoc>(qk.settings)?.version;
+        try {
+          await latest.current.mutateAsync({ doc: { look: next }, expected_version: version });
+        } catch (error) {
+          if (!pending.current) latest.current.failed(error);
+        }
+      }
+      // All sent: what is shown is the settings' own again, saved or, after a failure, as they were.
+      setChoice(null);
+    } finally {
+      sending.current = false;
+    }
+  }, [qc]);
+
+  // Leaving the page sends what is waiting rather than dropping it.
+  useEffect(
+    () => () => {
+      clearTimeout(timer.current);
+      void send();
+    },
+    [send],
+  );
+
+  const choose = (patch: Partial<LookChoice>) => {
+    const next = { ...(pending.current ?? shown), ...patch };
+    setChoice(next);
+    pending.current = next;
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => void send(), SAVE_AFTER_MS);
+  };
+  return [shown, choose];
+}
+
 /** A theme's tones as the owner sees them chosen here: Standard by day, as customers mostly do. */
 export function tonesOf(theme: LookTheme): ThemeTones {
   return THEME_TONES[theme];
@@ -124,8 +189,16 @@ export function logoProblem(file: { readonly type: string; readonly size: number
   return null;
 }
 
-/** The logo as an address this page can show (a blob URL), fetched once per picture; null without one. */
-export function useLogoUrl(sha256: string | null | undefined): string | null {
+/** The logo as this page shows it: its address once it is here, and whether it is still on its way. */
+export interface LogoShown {
+  /** A blob URL; null until it is here, and with no logo. */
+  readonly url: string | null;
+  /** The settings name a logo that has not arrived yet: its place is kept, not filled with another mark. */
+  readonly waiting: boolean;
+}
+
+/** The logo, fetched once per picture (the owner's key or cookie goes with it, so never a plain `src`). */
+export function useLogoUrl(sha256: string | null | undefined): LogoShown {
   const v = sha256 ? sha256.slice(0, 16) : null;
   const file = useQuery({
     queryKey: qk.logo(v ?? ""),
@@ -145,7 +218,7 @@ export function useLogoUrl(sha256: string | null | undefined): string | null {
     setUrl(made);
     return () => URL.revokeObjectURL(made);
   }, [blob]);
-  return url;
+  return { url, waiting: v !== null && url === null && !file.isError };
 }
 
 /** Upload and remove the logo; the answer is the settings, as a save's is. */

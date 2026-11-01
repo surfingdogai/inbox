@@ -56,6 +56,19 @@ function subscribe(fn: () => void): () => void {
   };
 }
 
+/** The business's theme as <html> carries it (`data-look`), null for Standard; in step as it changes. */
+export function useLookTheme(): string | null {
+  return useSyncExternalStore(subscribeLook, readLook, () => null);
+}
+
+const readLook = () => document.documentElement.getAttribute("data-look");
+
+function subscribeLook(fn: () => void): () => void {
+  const watch = new MutationObserver(fn);
+  watch.observe(document.documentElement, { attributes: true, attributeFilter: ["data-look"] });
+  return () => watch.disconnect();
+}
+
 export function useTheme(): [ThemeMode, (mode: ThemeMode) => void] {
   const mode = useSyncExternalStore(subscribe, readTheme, () => "system" as const);
   return [mode, setTheme];

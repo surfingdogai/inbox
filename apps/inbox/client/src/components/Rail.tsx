@@ -16,6 +16,7 @@ import type { MouseEvent, ReactNode } from "react";
 import { signOut } from "../lib/auth";
 import { type Counts, countFor, FILTERS, type Filter, showHeld } from "../lib/filters";
 import { TYPE_CLASS } from "../lib/format";
+import type { LogoShown } from "../lib/look";
 import { ThemeSwitch } from "./ThemeSwitch";
 
 /** The filters without a type carry an icon, so the rail still reads when it collapses to icons. */
@@ -45,8 +46,8 @@ export function Rail({
   testMode: boolean;
   /** A connected calendar that stopped syncing: what it says, so the owner connects it again. */
   failing?: { readonly title: string; readonly error: string | null } | undefined;
-  /** The business's logo, as an address this page can show (`useLogoUrl`). */
-  logo?: string | null | undefined;
+  /** The business's logo (Settings → Look): as shown (`useLogoUrl`), and its size. */
+  logo?: RailLogo | null | undefined;
 }) {
   const navigate = useNavigate();
   const leave = async () => {
@@ -121,11 +122,29 @@ export function Rail({
   );
 }
 
-/** The business at the top of the rail: its logo when it has one (Settings → Look), else the Inbox mark, and its name. */
-export function RailHead({ name, logo }: { name: string; logo?: string | null | undefined }) {
+export interface RailLogo extends LogoShown {
+  readonly width: number;
+  readonly height: number;
+}
+
+/**
+ * The business at the top of the rail: its logo when it has one (Settings → Look), else the Inbox
+ * mark, and its name. Its place is kept while it loads. Where the rail is icons only, a logo wider
+ * than it is tall would be a smudge: the Inbox mark stands in there.
+ */
+export function RailHead({ name, logo }: { name: string; logo?: RailLogo | null | undefined }) {
+  const wide = logo ? logo.width / logo.height > 1.5 : false;
+  const cls = wide ? "rail-logo is-wide" : "rail-logo";
   return (
     <div className="h" title={name}>
-      {logo ? <img className="rail-logo" src={logo} alt="" /> : <Inbox className="icon" aria-hidden="true" />}
+      {logo?.url ? (
+        <img className={cls} src={logo.url} alt="" />
+      ) : logo?.waiting ? (
+        <span className={`${cls} is-waiting`} style={{ aspectRatio: `${logo.width} / ${logo.height}` }} />
+      ) : (
+        <Inbox className="icon" aria-hidden="true" />
+      )}
+      {wide && (logo?.url || logo?.waiting) && <Inbox className="icon rail-mark" aria-hidden="true" />}
       <span className="label">{name}</span>
     </div>
   );
