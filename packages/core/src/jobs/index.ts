@@ -24,6 +24,7 @@ import { gateOf, holdsBack, SPAM_SCREEN_KIND, stillScreening } from "../spam/scr
 import { SPAM_SHARE_KIND } from "../spam/shared";
 import { SCREEN_DEADLINE_MS } from "../spam/types";
 import { isOwnerOnlyItem } from "../write/flags";
+import { ACCOUNT_CLEAR_KIND, accountClearHandler } from "./account-clear";
 import { LIFECYCLE_SWEEP_KIND, lifecycleSweepHandler } from "./lifecycle";
 import { NOTICES_DAY_KIND, noticesDayHandler } from "./notices";
 import { type NotifyPayload, notifyHandler, OWNER_DIGEST_KIND, ownerDigestHandler } from "./notify";
@@ -31,6 +32,7 @@ import type { JobHandler } from "./runner";
 import { JobRunner } from "./runner";
 import { ensureJob } from "./schedule";
 
+export * from "./account-clear";
 export * from "./lifecycle";
 export * from "./mail-log";
 export * from "./notices";
@@ -121,6 +123,8 @@ export function createRunner(deps: {
       return { note: `${r.outcome} ${p.outcome ?? p.kind} receipt ${r.receipt.id}` };
     })
     .register("review_fact", async () => ({ note: "review facts arrive in a later release" }))
+    // An account's code or sign-in link, a day after it came: removed from what the inbox keeps.
+    .register(ACCOUNT_CLEAR_KIND, accountClearHandler())
     .register(
       LIFECYCLE_SWEEP_KIND,
       withSpamDaily(

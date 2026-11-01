@@ -21,6 +21,7 @@ import { WriteError } from "../write/errors";
 import { legacyRows } from "../write/offers";
 import { transitionItem } from "../write/transition";
 import { rowToItem } from "../write/views";
+import { queueAccountClears } from "./account-clear";
 import { autoHeaders, mailByJob, mailDomain, senderOf, sendLogged, storeMail, threadHeaders } from "./mail-log";
 import type { JobHandler } from "./runner";
 import { ensureJob } from "./schedule";
@@ -45,7 +46,9 @@ import { ensureJob } from "./schedule";
  * - receipts issued before receipts had a `sha` get one;
  * - a first contact's key goes to the customer a day after they first booked or ordered, in an
  *   email of its own with a line about the booking network (ADR-017 §2.1), while the business keeps
- *   `customers.emailKey` on; seven days on nothing of a first contact is left.
+ *   `customers.emailKey` on; seven days on nothing of a first contact is left;
+ * - an account's code or sign-in link (`flags.account`) has its clearing queued, due a day after it
+ *   came (`account-clear.ts`).
  *
  * A booking or an order promised before outcomes were recorded (`legacy_promise`, set by the
  * outcomes migration) is never completed or lapsed here: its customer made it under the rules of
@@ -151,6 +154,7 @@ export function lifecycleSweepHandler(
         ? await sendKeysAlone(db, opts.mailOut, opts.secrets ?? null, settings, now, batch, opts.baseUrl)
         : 0;
     await prunePending(db, now);
+    const clearing = await queueAccountClears(db, now, batch);
 
     const full =
       (ended.length === batch && completed.done > 0) ||
@@ -158,7 +162,8 @@ export function lifecycleSweepHandler(
       (unanswered.length === batch && requests.done > 0) ||
       (stale.length === batch && offers.done > 0) ||
       (unchanged.length === batch && changes.done > 0) ||
-      backfilled === batch;
+      backfilled === batch ||
+      clearing === batch;
     if (full || hashed === SHA_BATCH) {
       await ensureJob(db, LIFECYCLE_SWEEP_KIND, `${sweepKey(now)}:${link + 1}`, {
         now,
@@ -174,7 +179,7 @@ export function lifecycleSweepHandler(
     ];
     const expired = requests.done + offers.done + changes.done;
     return {
-      note: `${completed.done} completed, ${lapsed.done} lapsed, ${hashed} receipt sha(s)${expired ? `, ${expired} expired` : ""}${backfilled ? `, ${backfilled} offer(s) kept` : ""}${keyed ? `, ${keyed} key email(s)` : ""}${alerted ? `, ${alerted} refund(s) due` : ""}${full || hashed === SHA_BATCH ? ", more to do" : ""}${skipped.length ? `; skipped ${skipped.join(" | ")}` : ""}`,
+      note: `${completed.done} completed, ${lapsed.done} lapsed, ${hashed} receipt sha(s)${expired ? `, ${expired} expired` : ""}${backfilled ? `, ${backfilled} offer(s) kept` : ""}${keyed ? `, ${keyed} key email(s)` : ""}${alerted ? `, ${alerted} refund(s) due` : ""}${clearing ? `, ${clearing} account email(s) to clear` : ""}${full || hashed === SHA_BATCH ? ", more to do" : ""}${skipped.length ? `; skipped ${skipped.join(" | ")}` : ""}`,
     };
   };
 }
