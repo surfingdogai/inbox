@@ -6,6 +6,7 @@ import { type ApiProblem, api } from "../lib/api";
 import { saveFile } from "../lib/download";
 import { actorWord, channelWord, deliveryWord, formatDateTime, initials, partyName } from "../lib/format";
 import type { Party, ThreadEntry } from "../lib/types";
+import { Linked } from "./Linked";
 
 /** Thread entries in, out and internal notes, then a reply box that also takes a private note. */
 export function Conversation({
@@ -127,7 +128,9 @@ function Entry({
       </span>
       <div>
         <div className="who">{who}</div>
-        <div className="b row-glass">{entry.body}</div>
+        <div className="b row-glass">
+          <Linked text={entry.body} />
+        </div>
         {entry.attachments && entry.attachments.length > 0 && <Files files={entry.attachments} />}
         {entry.direction === "out" && <Delivery entry={entry} tz={tz} />}
       </div>

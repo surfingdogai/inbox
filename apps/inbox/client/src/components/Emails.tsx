@@ -3,6 +3,7 @@ import { MailCheck, Mail as MailIcon, MailWarning } from "lucide-react";
 import { useState } from "react";
 import { deliveryWord, formatDateTime, mailWord } from "../lib/format";
 import type { Mail } from "../lib/types";
+import { Linked } from "./Linked";
 
 /**
  * Every email about the item, to the customer and to the owner, and what became of each: sent,
@@ -39,7 +40,11 @@ export function Emails({ mail, tz }: { mail: readonly Mail[]; tz: string | undef
               <time className="when" dateTime={m.created_at}>
                 {formatDateTime(m.created_at, tz)}
               </time>
-              {open === m.id && <pre className="mail-body row-glass">{m.body}</pre>}
+              {open === m.id && (
+                <pre className="mail-body row-glass">
+                  <Linked text={m.body} />
+                </pre>
+              )}
             </li>
           );
         })}
