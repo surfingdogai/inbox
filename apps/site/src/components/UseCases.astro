@@ -1,17 +1,17 @@
 ---
 import { CASES, caseHref } from "../lib/cases";
-import { integration, STATE_LABEL } from "../lib/integrations";
+import { integration, UNTRIED } from "../lib/integrations";
 import Marked from "./Marked.astro";
 import Shot from "./Shot.astro";
 
 /**
  * Five kinds of business, each on the system it already runs (src/lib/cases.ts): what reaches the
  * owner, then what the inbox does with that system, in one sentence. Examples, and labelled so, with
- * where their connections stand in the built state's words; each links to its own short page, which
- * keeps the detail.
+ * where their connections stand in the built state's words, true of a tested one too; each links to
+ * its own short page, which keeps the detail and says where its system stands.
  */
-/** Said of the examples' connections while every one of them is built. */
-const built = CASES.every((c) => c.works.every((id) => integration(id).state === "built"));
+/** Said of the examples' connections while none of them has run with a business's real account. */
+const built = CASES.every((c) => c.works.every((id) => ["built", "tested"].includes(integration(id).state)));
 ---
 
 <section class="section" id="use-cases" aria-labelledby="cases-h" data-reveal>
@@ -22,7 +22,7 @@ const built = CASES.every((c) => c.works.every((id) => integration(id).state ===
         <h2 class="h-section" id="cases-h">On the systems they already run</h2>
         <p class="lede">
           Five kinds of business, one inbox. These are examples of what it does, not customers{
-            built ? `; each connection they name is ${STATE_LABEL.built.replace(/^Built/, "built")}.` : "."
+            built ? `; each connection they name is ${UNTRIED}.` : "."
           }
         </p>
       </div>

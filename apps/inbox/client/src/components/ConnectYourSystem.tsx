@@ -71,8 +71,10 @@ export function ConnectYourSystem({
                 <span className="int-text">
                   <span className="int-name">{c.title}</span>
                   <span className="int-line">{lodging && c.id === "calendar" ? c.line : (hint ?? c.line)}</span>
-                  {/* Built from the platform's documentation: said plainly until a live account has confirmed it. */}
-                  {state === "unverified" && <span className="int-line">{SOURCE_WORDS.unverified}.</span>}
+                  {/* Built from the platform's documentation, or tested against it: said plainly until a live account has confirmed it. */}
+                  {(state === "unverified" || state === "tested") && (
+                    <span className="int-line">{SOURCE_WORDS[state]}.</span>
+                  )}
                 </span>
                 {tag && <span className="int-tag">{tag}</span>}
               </>

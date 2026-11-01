@@ -1,8 +1,9 @@
 ---
 /**
  * Where a connection stands, in its one set of words (STATE_LABEL, src/lib/integrations.ts): a small
- * dot and the label, quiet beside a name. Filled for what works, a ring for what is built and not yet
- * verified or still rolling out, a fainter ring for what waits on a partner or a standard. `of` names
+ * dot and the label, quiet beside a name. Filled for what works, a ring for what is tested against
+ * the real platform, built and not yet verified, or still rolling out, a fainter ring for what waits
+ * on a partner or a standard. `of` names
  * the connection before it, for a line that stands on its own ("Flipdish: Built, …").
  */
 import { STATE_LABEL, type State } from "../lib/integrations";
@@ -46,7 +47,8 @@ const { state, of } = Astro.props;
   .st-works::before {
     background: var(--c-success);
   }
-  .st-rolling::before {
+  .st-rolling::before,
+  .st-tested::before {
     border: 1px solid var(--c-success);
   }
   .st-built::before {

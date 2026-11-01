@@ -31,6 +31,8 @@ WooCommerce and its associated designs are trademarks of Automattic Inc.
 
 The calendar, shop, kitchen, stay, trade and payment connections (iCloud and the other CalDAV calendars, Google, Outlook, Cal.com, Calendly, WooCommerce, Shopify, Square, Beds24, Hostaway, GloriaFood, Flipdish, ServiceM8, Stripe and Mollie) are built from each one's documentation and tested against a stand-in; not yet verified on a live account.
 
+Stripe, WooCommerce and CalDAV, the way the other CalDAV calendars connect, have since run end to end against the real platform, on 1 November 2026: Stripe in its test mode, and a WooCommerce store and a CalDAV server run on our own machine; none yet on a live account. Each one's page says what ran: [Stripe](/docs/payments/), [WooCommerce](/docs/connectors/woocommerce/), [CalDAV](/docs/calendars/#icloud-fastmail-nextcloud-and-other-caldav-calendars).
+
 On a hosted inbox, Google says **Soon** until Google has checked our sign-in, and Sign in with Calendly or Square says **Soon** until our app is there; their tokens work meanwhile.
 
 Already take bookings or orders on another site? Settings → General sends agents there for that: [Booked or ordered elsewhere](/docs/connectors/elsewhere/).

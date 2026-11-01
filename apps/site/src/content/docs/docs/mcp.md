@@ -50,6 +50,10 @@ Counted per person where we can tell people apart: by a directory key, else by t
 - Free times: 60 an hour per person, 10 from one place to one business, 60 per business.
 - One JSON-RPC message per request, at most 16 KB.
 
+## Tested with
+
+Tested on 1 November 2026 with Gemini CLI 0.66 and the MCP Inspector 2.13: a search on this server; and, against an inbox run on our own machine, a booking request and its status through the business's MCP, and the owner's inbox through the owner MCP, with a key and with an OAuth sign-in. Claude Code 2.1.72 connected to this server and to the inbox's two, and found the owner's sign-in; no Claude model ran yet.
+
 ## More
 
 - In plain words, for an AI: [network.surfingdog.ai/llms.txt](https://network.surfingdog.ai/llms.txt).

@@ -112,12 +112,15 @@ describe("the platform pages", () => {
     for (const r of coming) expect(r.href, r.name).not.toMatch(/^\/integrations\//);
     const comingNames = coming.map((r) => r.name.toLowerCase().split(/[ ,]/)[0]);
     for (const p of PLATFORMS) expect(comingNames, p.slug).not.toContain(p.slug);
-    // And the table sends every name that has a page to it.
-    for (const r of ROWS.filter((x) => (x.state === "built" || x.state === "works") && x.connectors)) {
+    // And the table sends every name that has a page to it: a page whose connections are its connector, and its
+    // preset where the page's has one (iCloud's page is not the page of every CalDAV calendar).
+    for (const r of ROWS.filter((x) => ["built", "tested", "works"].includes(x.state) && x.connectors)) {
       const pages = PLATFORMS.filter((p) =>
         p.ids.some((id) => {
           const i = INTEGRATIONS.find((x) => x.id === id);
-          return r.connectors?.some((c) => c.kind === i?.connector);
+          return r.connectors?.some(
+            (c) => c.kind === i?.connector && (!i?.preset || !c.preset || c.preset === i.preset),
+          );
         }),
       );
       if (pages.length > 0)
@@ -283,9 +286,17 @@ describe("the platform pages", () => {
     expect(page).toContain('<p class="pf-state"><ConnectionState state={state} /></p>');
     expect(page.indexOf("pf-state")).toBeGreaterThan(page.indexOf('id="pf-title"'));
     expect(page.indexOf("pf-state")).toBeLessThan(page.indexOf("<GuideAnswer"));
-    for (const p of PLATFORMS) expect(leastReady(p.ids.map((id) => integration(id).state)), p.slug).toBe("built");
-    // The line at its foot is said while a page's connections are built, payments too.
+    // Stripe and WooCommerce ran end to end against the platform itself on 1 November 2026; the rest are built.
+    for (const p of PLATFORMS)
+      expect(leastReady(p.ids.map((id) => integration(id).state)), p.slug).toBe(
+        ["stripe", "woocommerce"].includes(p.slug) ? "tested" : "built",
+      );
+    // The line at its foot is said while a page's connections are built, payments too; once they are tested, what ran.
     expect(page).toContain("{untried && <p>{untried}</p>}");
+    expect(page).toContain("{tested.map((t) => <p>{t}</p>)}");
+    expect(page).toMatch(
+      /const tested = state === "tested" \? connections\.flatMap\(\(i\) => \(i\.tested \? \[i\.tested\] : \[\]\)\) : \[\];/,
+    );
     expect(page).toContain('untriedOf(p.name.replace("®", ""))');
     expect(page).toMatch(/state !== "built"\s*\?\s*null/);
     expect(untriedOf("Beds24")).toMatch(

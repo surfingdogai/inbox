@@ -7,7 +7,7 @@ Your Inbox offers times from the opening hours you set. A calendar you connect m
 
 Settings → Integrations → **Calendar** (iCloud, Fastmail, Nextcloud, any other that speaks CalDAV, a calendar link, or Google), **Cal.com** or [**Calendly**](/docs/connectors/calendly/).
 
-iCloud, Fastmail, Nextcloud and the other CalDAV calendars, a Google or Outlook calendar link, Google Calendar and Cal.com are built from each one's documentation and tested against a stand-in; not yet verified on a live account.
+iCloud, Fastmail, Nextcloud and the other CalDAV calendars, a Google or Outlook calendar link, Google Calendar and Cal.com are built from each one's documentation and tested against a stand-in; not yet verified on a live account. The Other way, which the other CalDAV calendars connect by, has since run end to end against a real CalDAV server, as [below](#icloud-fastmail-nextcloud-and-other-caldav-calendars) says.
 
 ## What it does, and what it never does
 
@@ -38,6 +38,8 @@ You give an email and an **app password**, never your usual password:
 Every calendar for events in the account blocks busy times until you choose otherwise, and bookings go to the first one you can write to. **Change** changes both. A calendar you add to the account later is listed under **Change** within about six hours, and blocks busy times once you tick it there.
 
 Gmail and Outlook addresses are told at once where they connect instead: their calendars do not open with an app password.
+
+**Other CalDAV calendars.** Tested on 1 November 2026 against a real CalDAV server (Radicale 3.9, run on our own machine), connected the Other way with an app password and the server's address under More options: busy times from two calendars, with repeating events, Europe/Lisbon and America/New_York times and all-day events; bookings written, moved and removed; a read-only calendar refused for bookings; a changed password reported, then connected again in place. Not yet with iCloud's, Fastmail's or Nextcloud's own servers, nor with a server found from the email alone.
 
 ## A calendar link
 

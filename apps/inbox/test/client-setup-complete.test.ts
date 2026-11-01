@@ -16,6 +16,7 @@ import {
   SYNC_CARDS,
   sourceRows,
   sourceState,
+  TESTED_REAL,
   VERIFIED_LIVE,
 } from "../client/src/lib/bring";
 import {
@@ -345,10 +346,20 @@ describe("the setup's offer", () => {
     const rows = sourceRows(cards, [...SOURCE_CARDS.products, ...SOURCE_CARDS.rooms, ...SOURCE_CARDS.menu]);
     const by = Object.fromEntries(rows.map((r) => [r.name, r]));
     expect(VERIFIED_LIVE.size).toBe(0);
-    for (const name of ["Shopify", "WooCommerce", "Square", "Beds24", "Hostaway", "GloriaFood", "Flipdish"]) {
+    for (const name of ["Shopify", "Square", "Beds24", "Hostaway", "GloriaFood", "Flipdish"]) {
       expect(by[name]?.words, name).toBe("Built, not yet verified on a live account");
       expect(by[name]?.hint, name).toBeNull();
     }
+    // Run end to end against the platform itself on 1 November 2026 (a WooCommerce store on our own machine,
+    // Stripe's test mode), never yet on a live account: said so, in the site's words.
+    expect([...TESTED_REAL].sort()).toEqual(["stripe", "woocommerce"]);
+    expect(SOURCE_WORDS.tested).toBe("Tested against the real platform, not yet on a live account");
+    expect(by.WooCommerce?.state).toBe("tested");
+    expect(by.WooCommerce?.words).toBe(SOURCE_WORDS.tested);
+    expect(by.WooCommerce?.hint).toBeNull();
+    const stripe = cards.find((c) => c.id === "stripe");
+    expect(stripe && sourceState(stripe.ways)).toBe("tested");
+    expect(sourceRows(cards, ["woocommerce"], { canConnect: false })[0]?.words).toBe(SOURCE_WORDS.setup);
     // Partners that let only approved apps connect: waiting on them, with what the server says.
     for (const name of [
       "Mews",
@@ -384,6 +395,7 @@ describe("the setup's offer", () => {
     const google = rows.find((r) => r.name === "Google Calendar");
     expect(google?.words).toBe(SOURCE_WORDS.setup);
     expect(google?.hint).toContain("Google client");
+    // CalDAV's Other way ran against a real CalDAV server, but iCloud's, Fastmail's and Nextcloud's did not: built.
     expect(rows.find((r) => r.key === "calendar_other")?.words).toBe(SOURCE_WORDS.unverified);
     // A place to stay's calendar is its channels' links, never Google's.
     const stay = sourceRows(cards, ["calendar"], { lodging: true });

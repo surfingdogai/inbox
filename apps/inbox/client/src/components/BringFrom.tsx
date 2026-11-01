@@ -6,9 +6,9 @@ import { useIntegrations } from "../lib/queries";
 /**
  * "Bring them from what you already use": the systems a part of the setup can come from (a shop's catalogue, a
  * till's menu, a property system's rooms, a booking platform's times), a line each, with how far along each one is
- * said plainly: built and not yet verified on a live account, waiting for the partner, needing setup on this server,
- * or on its way. One that can be connected opens its card in Settings → Integrations in a new tab, so the setup stays
- * where it is.
+ * said plainly: tested against the real platform or built, and not yet verified on a live account, waiting for the
+ * partner, needing setup on this server, or on its way. One that can be connected opens its card in Settings →
+ * Integrations in a new tab, so the setup stays where it is.
  */
 export function BringFrom({
   ids,
@@ -61,7 +61,7 @@ export function BringFrom({
 }
 
 function Row({ row }: { row: SourceRow }) {
-  const open = row.state === "ready" || row.state === "unverified";
+  const open = row.state === "ready" || row.state === "tested" || row.state === "unverified";
   const href = row.card ? `/settings/integrations?open=${encodeURIComponent(row.card)}` : "/settings/integrations";
   return (
     <li className="src-row">

@@ -9,7 +9,7 @@ Your WooCommerce® shop already has your products, your stock, your checkout and
 
 WooCommerce and its associated designs are trademarks of Automattic Inc.
 
-Built from WooCommerce's documentation and tested against a stand-in; not yet verified on a live account.
+Tested on 1 November 2026 against a real WooCommerce 11.2.1 store (WordPress 7.1, run on our own machine): connected by its Approve page and by its keys; products, variations, sale prices, stock and pictures in; stock changes followed; orders written in, one paid at the store's own checkout by bank transfer and marked paid once the shop took it as received, then completed and refunded, others cancelled from either side; tax included in prices and added at checkout; disconnected. Not yet on a business's live shop.
 
 Settings → Integrations → **WooCommerce** → **Connect your shop**.
 

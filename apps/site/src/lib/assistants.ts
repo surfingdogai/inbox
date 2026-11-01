@@ -389,7 +389,9 @@ export const ASSISTANTS: readonly Assistant[] = [
     signIn:
       "OAuth 2.0, which your inbox runs itself. Gemini asks for a server with a publicly trusted certificate on a public address, which every inbox has.",
     plans: "Custom apps in the Gemini app; MCP servers in Gemini Enterprise for teams.",
-    notes: [],
+    notes: [
+      "Gemini CLI 0.66, Google's command-line agent, was tested against an inbox on 1 November 2026: it booked through the business's MCP, read the booking back, worked the owner's inbox through the owner MCP, and searched surfingdog.ai/mcp. Custom apps in the Gemini app have not been tried yet.",
+    ],
     source: {
       label: "Google: Connect and manage custom apps for Gemini",
       href: "https://support.google.com/gemini/answer/17209137",

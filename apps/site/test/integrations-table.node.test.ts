@@ -3,8 +3,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { builtInConnectors } from "../../../packages/adapters/src/connectors/index";
 import { ASSISTANTS } from "../src/lib/assistants";
-import { INTEGRATIONS, STATE_LABEL, SYSTEMS, UNTRIED_LINE } from "../src/lib/integrations";
-import { COMING, ROWS, type Row, SYSTEM_GROUPS, TABLE } from "../src/lib/integrations-table";
+import { INTEGRATIONS, STATE_LABEL, SYSTEMS, TESTED_LINE, UNTRIED_LINE } from "../src/lib/integrations";
+import { CALDAV_TESTED, COMING, ROWS, type Row, SYSTEM_GROUPS, TABLE } from "../src/lib/integrations-table";
 import { PLATFORMS } from "../src/lib/platforms";
 
 /**
@@ -68,20 +68,48 @@ describe("the table of integrations", () => {
       "Built; off while the standard is a draft (on your own server, `INBOX_UCP_LODGING=on`)",
     ]);
     // A connection this release ships is built, not yet verified on a live account: none has run with a
-    // business's real account. What reaches the inbox works, but for Meta's custom connectors for
-    // Muse, which follow Meta's own roll-out. Of the automations, n8n ran end to end; Zapier and Make
-    // have run with no account of either, so they are built.
+    // business's real account. Three ran end to end against the platform itself on 1 November 2026, and
+    // are tested: WooCommerce® and CalDAV's Other way on its own software on our machine, Stripe in its
+    // test mode. What reaches the inbox works, but for Meta's custom connectors for Muse, which follow
+    // Meta's own roll-out. Of the automations, n8n ran end to end; Zapier and Make have run with no
+    // account of either, so they are built.
     const UNRUN = ["Zapier and Make"];
+    const TESTED = ["WooCommerce®", "Stripe", "Other CalDAV calendars"];
     for (const g of TABLE)
       for (const r of g.rows) {
-        const want =
-          SYSTEM_GROUPS.includes(g.id) || UNRUN.includes(r.name)
+        const want = TESTED.includes(r.name)
+          ? "tested"
+          : SYSTEM_GROUPS.includes(g.id) || UNRUN.includes(r.name)
             ? "built"
             : r.assistant === "meta-muse"
               ? "rolling"
               : "works";
         expect(r.state, r.name).toBe(want);
       }
+    // Of the CalDAV calendars, only the Other way ran: Fastmail and Nextcloud stay built, apart from it.
+    const calendars = TABLE.find((g) => g.id === "calendars")?.rows.map((r) => [r.name, r.state]);
+    expect(calendars).toContainEqual(["Fastmail and Nextcloud", "built"]);
+    expect(calendars).toContainEqual(["Other CalDAV calendars", "tested"]);
+    expect(calendars).toContainEqual(["iCloud Calendar", "built"]);
+    // A tested row says what ran, where and when, word for word as the page or doc it links to says it.
+    for (const r of ROWS) {
+      if (r.state !== "tested") {
+        expect(r.tested, r.name).toBeUndefined();
+        continue;
+      }
+      expect(r.tested, r.name).toMatch(/^Tested on 1 November 2026 against /);
+      const slug = r.href.match(/^\/integrations\/([a-z0-9-]+)\/$/)?.[1];
+      if (slug) {
+        // A platform's own page says it at its foot, from its connections' lines (src/lib/integrations.ts).
+        const of = INTEGRATIONS.filter((i) => r.connectors?.some((c) => c.kind === i.connector));
+        expect(of.map((i) => i.tested).join(" "), r.name).toBe(r.tested);
+        expect(PLATFORMS.find((p) => p.slug === slug)?.ids, r.name).toEqual(of.map((i) => i.id));
+      } else {
+        expect(docOf(r.href).anchored, r.name).toBe(true);
+        expect(docOf(r.href).text, r.name).toContain(r.tested);
+      }
+    }
+    expect(ROWS.find((r) => r.name === "Other CalDAV calendars")?.tested).toBe(CALDAV_TESTED);
     expect(TABLE.find((g) => g.id === "automations")?.rows.map((r) => [r.name, r.state])).toEqual([
       ["n8n", "works"],
       ["Zapier and Make", "built"],
@@ -97,6 +125,7 @@ describe("the table of integrations", () => {
     // In the one set of words, wherever a state is said.
     expect(STATE_LABEL).toEqual({
       works: "Works",
+      tested: "Tested against the real platform, not yet on a live account",
       built: "Built, not yet verified on a live account",
       partner: "Built, waiting for the partner",
       standard: "Built, waiting for the standard",
@@ -105,15 +134,15 @@ describe("the table of integrations", () => {
     const page = read(PAGE);
     expect(page).toContain("<ConnectionState state={r.state} />");
     expect(page.match(/<ConnectionState /g)?.length).toBe(2);
-    for (const k of ["built", "works", "rolling", "partner", "standard"])
+    for (const k of ["built", "tested", "works", "rolling", "partner", "standard"])
       expect(page, k).toContain(`{STATE_LABEL.${k}}`);
     expect(page).not.toMatch(/>\s*(Works|Coming|Rolling out)\s*</);
     expect(page.indexOf(">More coming<")).toBeGreaterThan(page.indexOf("TABLE.map"));
     expect(page.indexOf("COMING.map")).toBeGreaterThan(page.indexOf(">More coming<"));
   });
 
-  it("says built, or works, only of connectors ready with nothing set, on a hosted inbox and on one's own server", () => {
-    for (const r of ROWS.filter((x) => (x.state === "built" || x.state === "works") && x.connectors)) {
+  it("says built, tested, or works, only of connectors ready with nothing set, on a hosted inbox and on one's own server", () => {
+    for (const r of ROWS.filter((x) => ["built", "tested", "works"].includes(x.state) && x.connectors)) {
       for (const c of r.connectors ?? []) {
         for (const host of Object.keys(HOSTS) as Host[]) {
           expect(
@@ -229,6 +258,10 @@ describe("the table of integrations", () => {
     expect(page).toContain("const lastSystem = TABLE.filter((g) => SYSTEM_GROUPS.includes(g.id)).at(-1)?.id;");
     expect(page).toContain("{g.id === lastSystem && (");
     expect(page.match(/\{UNTRIED_LINE\}/g)?.length).toBe(1);
+    // Under it, while one of them is tested, what that means.
+    expect(page.match(/\{TESTED_LINE\}/g)?.length).toBe(1);
+    expect(page).toContain("{g.id === lastSystem && anyTested && (");
+    expect(TESTED_LINE.startsWith(`${STATE_LABEL.tested}: `)).toBe(true);
     expect(page).not.toMatch(/NOT_YET_REAL|None of these connections/);
     expect(UNTRIED_LINE).toMatch(
       /^Built, not yet verified on a live account\. We built each from its platform's documentation or the standard it follows, and tested it against a stand-in/,

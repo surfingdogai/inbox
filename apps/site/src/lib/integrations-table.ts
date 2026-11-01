@@ -4,7 +4,10 @@
  * and its state, in the words of src/lib/integrations.ts (STATE_LABEL): Built, not yet verified on a
  * live account, for a connection this release (0.2.0) ships with nothing to set but the owner's own
  * account, on a hosted inbox and on one's own server alike, until it has run with a business's real
- * account, and for Zapier and Make until a flow has run with an account of each; Works, for what
+ * account, and for Zapier and Make until a flow has run with an account of each; Tested against the
+ * real platform, not yet on a live account, for one that has run end to end against the platform
+ * itself (Stripe's test mode, a WooCommerce® store and a CalDAV server run on our own machine), its
+ * line (`tested`) saying what ran, where and when, word for word as the doc it links to; Works, for what
  * reaches the inbox today (the assistants, any agent, n8n, which ran end to end), and for a connection
  * once it has run with one; Rolling out, for what its maker is still rolling out (Meta's
  * custom connectors for Muse); Built, waiting for the partner, for what is built and waits on another
@@ -37,6 +40,8 @@ export interface Row {
   readonly href: string;
   /** The connectors it stands for, where it is one. */
   readonly connectors?: readonly RowConnector[];
+  /** What ran against the platform itself, where and when, as the doc or page it links to says: tested only. */
+  readonly tested?: string;
   /** An assistant's page (src/lib/assistants.ts), for a row of assistants. */
   readonly assistant?: string;
 }
@@ -53,14 +58,33 @@ export interface TableGroup {
  */
 const shipped = (name: string, does: string, href: string, connectors?: readonly RowConnector[]): Row => {
   const of = INTEGRATIONS.filter((i) => connectors?.some((c) => c.kind === i.connector && c.preset === i.preset));
+  const state = of.length > 0 ? leastReady(of.map((i) => i.state)) : "built";
+  const tested = of.flatMap((i) => (i.tested ? [i.tested] : [])).join(" ");
   return {
     name,
     does,
-    state: of.length > 0 ? leastReady(of.map((i) => i.state)) : "built",
+    state,
     href,
     ...(connectors ? { connectors } : {}),
+    ...(state === "tested" ? { tested } : {}),
   };
 };
+/**
+ * A connection this release ships that is on no name of the /inbox row, and has run end to end against
+ * the platform itself: tested, with its line.
+ */
+const tested = (name: string, does: string, href: string, line: string, connectors: readonly RowConnector[]): Row => ({
+  name,
+  does,
+  state: "tested",
+  href,
+  connectors,
+  tested: line,
+});
+
+/** What ran of the CalDAV way that any other CalDAV server connects by, word for word as docs/calendars.md says it. */
+export const CALDAV_TESTED =
+  "Tested on 1 November 2026 against a real CalDAV server (Radicale 3.9, run on our own machine), connected the Other way with an app password and the server's address under More options: busy times from two calendars, with repeating events, Europe/Lisbon and America/New_York times and all-day events; bookings written, moved and removed; a read-only calendar refused for bookings; a changed password reported, then connected again in place. Not yet with iCloud's, Fastmail's or Nextcloud's own servers, nor with a server found from the email alone.";
 const works = (name: string, does: string, href: string): Row => ({ name, does, state: "works", href });
 const waiting = (
   state: "partner" | "standard",
@@ -98,15 +122,16 @@ export const TABLE: readonly TableGroup[] = [
       shipped("Microsoft Outlook", "Busy times, from its published link", "/integrations/calendars/", [
         { kind: "ics", preset: "outlook" },
       ]),
-      shipped(
-        "Fastmail, Nextcloud and other CalDAV calendars",
+      shipped("Fastmail and Nextcloud", "Busy times in, bookings out", "/integrations/calendars/", [
+        { kind: "caldav", preset: "fastmail" },
+        { kind: "caldav", preset: "nextcloud" },
+      ]),
+      tested(
+        "Other CalDAV calendars",
         "Busy times in, bookings out",
-        "/integrations/calendars/",
-        [
-          { kind: "caldav", preset: "fastmail" },
-          { kind: "caldav", preset: "nextcloud" },
-          { kind: "caldav", preset: "other" },
-        ],
+        "/docs/calendars/#icloud-fastmail-nextcloud-and-other-caldav-calendars",
+        CALDAV_TESTED,
+        [{ kind: "caldav", preset: "other" }],
       ),
       shipped("Cal.com", "Busy times in, bookings out", "/integrations/calcom/", [{ kind: "calcom" }]),
       shipped("Calendly", "Busy times in; bookings out on its paid plans", "/integrations/calendly/", [

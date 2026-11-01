@@ -34,6 +34,14 @@ export const SYNC_CARDS: Readonly<Record<"times" | "work", readonly string[]>> =
  */
 export const VERIFIED_LIVE: ReadonlySet<string> = new Set<string>();
 
+/**
+ * Connectors that have run end to end against the platform itself, never yet with a business's real account: Stripe
+ * in its test mode, and WooCommerce as its own software on our own machine (1 November 2026; the site's docs say what
+ * ran). Per kind, so a kind is here only when every way of it ran: CalDAV is not, as only its Other way did, never
+ * iCloud's, Fastmail's or Nextcloud's own servers.
+ */
+export const TESTED_REAL: ReadonlySet<string> = new Set<string>(["stripe", "woocommerce"]);
+
 /** The inbox's own, not another platform's (a private calendar link of its bookings): nothing to verify elsewhere. */
 const OWN_KINDS: ReadonlySet<string> = new Set(["ics_feed"]);
 
@@ -50,11 +58,12 @@ export const PARTNER_KINDS: ReadonlySet<string> = new Set([
   "jobber",
 ]);
 
-export type SourceState = "ready" | "unverified" | "partner" | "setup" | "soon";
+export type SourceState = "ready" | "tested" | "unverified" | "partner" | "setup" | "soon";
 
 /** What each state says, in the owner's words. */
 export const SOURCE_WORDS: Readonly<Record<SourceState, string>> = {
   ready: "Ready",
+  tested: "Tested against the real platform, not yet on a live account",
   unverified: "Built, not yet verified on a live account",
   partner: "Waiting for the partner",
   setup: "Needs setup on this server",
@@ -74,11 +83,16 @@ export interface SourceRow {
   readonly hint: string | null;
 }
 
-/** How far along a platform is, from its ways: one that can be connected is ready, verified live or not. */
+/**
+ * How far along a platform is, from its ways: one that can be connected is ready, verified live or not; tested when
+ * every way that can be connected has run against the platform itself.
+ */
 export function sourceState(ways: readonly Pick<GalleryWay, "kind" | "status">[]): SourceState {
   const ready = ways.filter((w) => w.status === "ready");
-  if (ready.length)
-    return ready.some((w) => VERIFIED_LIVE.has(w.kind) || OWN_KINDS.has(w.kind)) ? "ready" : "unverified";
+  if (ready.length) {
+    if (ready.some((w) => VERIFIED_LIVE.has(w.kind) || OWN_KINDS.has(w.kind))) return "ready";
+    return ready.every((w) => TESTED_REAL.has(w.kind)) ? "tested" : "unverified";
+  }
   if (ways.some((w) => PARTNER_KINDS.has(w.kind))) return "partner";
   if (ways.some((w) => w.status === "setup")) return "setup";
   return "soon";
@@ -112,13 +126,10 @@ export function sourceRows(
     if (ways.length === 0 || seen.has(key)) return;
     seen.add(key);
     const found = sourceState(ways);
-    const locked = opts.canConnect === false && (found === "ready" || found === "unverified");
+    const connectable = found === "ready" || found === "tested" || found === "unverified";
+    const locked = opts.canConnect === false && connectable;
     const state: SourceState = locked ? "setup" : found;
-    const hint = locked
-      ? NO_SECRET_KEY
-      : state === "ready" || state === "unverified"
-        ? null
-        : (ways.find((w) => w.hint)?.hint ?? null);
+    const hint = locked ? NO_SECRET_KEY : connectable ? null : (ways.find((w) => w.hint)?.hint ?? null);
     rows.push({ key, name, line: card.line, card: card.id, state, words: SOURCE_WORDS[state], hint });
   };
   for (const id of ids) {

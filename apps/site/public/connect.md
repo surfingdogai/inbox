@@ -56,7 +56,9 @@ Below, `<inbox>` is the inbox's own address, such as `inbox.theirdomain.com`.
   Job tools: ServiceM8 (requests the owner takes on become jobs). The owner connects each in
   Settings → Integrations, in person; you see them with `list_integrations`. These, the calendars
   and the payments above, were built from each one's documentation and tested against a stand-in;
-  not yet verified on a live account: say so when you offer them. Mews, apaleo, Cloudbeds, Smoobu, Toast, Lightspeed, Clover, Deliverect, Jobber, Housecall
+  not yet verified on a live account: say so when you offer them. WooCommerce and Stripe have since
+  also run end to end against the real platform (a WooCommerce store run on our own machine, and
+  Stripe's test mode), on 1 November 2026, and still not on a live account. Mews, apaleo, Cloudbeds, Smoobu, Toast, Lightspeed, Clover, Deliverect, Jobber, Housecall
   Pro and Fergus are built and switched off until what each needs is in place: say so, and do not
   offer them. See https://surfingdog.ai/docs/integrations/. WooCommerce and its associated designs
   are trademarks of Automattic Inc.

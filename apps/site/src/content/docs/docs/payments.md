@@ -7,7 +7,9 @@ Connect your own Stripe or Mollie account, and the orders you accept get a link 
 
 Settings → Integrations → **Stripe** or **Mollie**.
 
-Stripe and Mollie are built from each one's documentation and tested against a stand-in; not yet verified on a live account.
+**Stripe.** Tested on 1 November 2026 against Stripe's test mode, with a test secret key standing in for a restricted one (the check that refuses secret keys was set aside for the test): connected, with the inbox adding its webhook; a payment link for an accepted order; a declined card; paid, as told by Stripe's signed webhook and as found by the inbox's own sync; the link closed on cancel and on disconnect; a refund made in Stripe and recorded in the inbox. Not yet with a restricted key, a bank payment that clears later, or on a live account.
+
+**Mollie.** Built from its documentation and tested against a stand-in; not yet verified on a live account.
 
 ## What it does, and what it never does
 
@@ -61,6 +63,8 @@ Settings → Payments → **Stripe Pay**: type your Stripe profile handle (`@you
 - **Agents confirm first.** An agent is told to confirm your handle, the amount, the currency and which of its person's Stripe financial accounts pays it before anything is sent, as Stripe's guidance asks. Stripe documents no note on a transfer, so the agent adds the order's reference if Stripe lets it, and either way tells you it paid in a message that gives the reference.
 - **Never for a test order**, nor for an order in a currency you did not tick. An order is never in USDC, so it is offered Stripe Pay in USD or GBP; if your prices are in neither, the tab says no order will offer it.
 - **Only you set it**, signed in or with your own full owner key: your AI and keys you give to other systems cannot change where you are paid.
+
+Tested on 1 November 2026: a handle and its currencies save, a handle that is not one is refused, and your manifest and an accepted order's status show them. No Stripe Pay transfer has run yet.
 
 ## For agents
 

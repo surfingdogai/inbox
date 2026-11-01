@@ -6,7 +6,7 @@ import ConnectionState from "../../components/ConnectionState.astro";
 import Marked from "../../components/Marked.astro";
 import Layout from "../../layouts/Layout.astro";
 import { inline } from "../../lib/inline";
-import { APPLE_NOTICE, STATE_LABEL, UNTRIED_LINE, WOO_NOTICE } from "../../lib/integrations";
+import { APPLE_NOTICE, STATE_LABEL, TESTED_LINE, UNTRIED_LINE, WOO_NOTICE } from "../../lib/integrations";
 import { COMING, SYSTEM_GROUPS, TABLE } from "../../lib/integrations-table";
 
 const site = Astro.site?.toString() ?? "https://surfingdog.ai/";
@@ -36,6 +36,8 @@ const ld = [
 const external = (href: string) => /^https?:\/\//.test(href);
 /** The one line said of the systems' connections sits under the last group of them. */
 const lastSystem = TABLE.filter((g) => SYSTEM_GROUPS.includes(g.id)).at(-1)?.id;
+/** And, under it, what the tested state means, while any of them is tested. */
+const anyTested = TABLE.some((g) => SYSTEM_GROUPS.includes(g.id) && g.rows.some((r) => r.state === "tested"));
 ---
 
 <Layout title={TITLE} description={DESCRIPTION} image="/art/og-inbox-v1.png" ld={ld}>
@@ -44,7 +46,8 @@ const lastSystem = TABLE.filter((g) => SYSTEM_GROUPS.includes(g.id)).at(-1)?.id;
     <h1 class="h-page" id="it-h">Inbox integrations</h1>
     <p class="lede">
       What your inbox connects to, each with your own account. <b>{STATE_LABEL.built}</b>: in this release, with
-      nothing to set but your account. <b>{STATE_LABEL.works}</b>: works today.
+      nothing to set but your account. <b>{STATE_LABEL.tested}</b>: the same, and run end to end against the
+      platform itself; its page says what ran. <b>{STATE_LABEL.works}</b>: works today.
       <b>{STATE_LABEL.rolling}</b>: works where its maker has rolled it out. <b>{STATE_LABEL.partner}</b> and
       <b>{STATE_LABEL.standard}</b>: off until another company agrees, or the standard is final. No dates.
     </p>
@@ -83,6 +86,11 @@ const lastSystem = TABLE.filter((g) => SYSTEM_GROUPS.includes(g.id)).at(-1)?.id;
             {g.id === lastSystem && (
               <tr class="it-untried">
                 <td colspan="3">{UNTRIED_LINE}</td>
+              </tr>
+            )}
+            {g.id === lastSystem && anyTested && (
+              <tr class="it-untried">
+                <td colspan="3">{TESTED_LINE}</td>
               </tr>
             )}
           </tbody>

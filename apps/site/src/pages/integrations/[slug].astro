@@ -5,7 +5,8 @@
 // the questions owners ask (shown, and given as FAQPage data in the same words), related platforms and
 // the guides that answer its wider questions. Under its heading, its state in the site's one set of
 // words (src/lib/integrations.ts); at its foot, while it is built and not yet verified, that it was
-// built from its platform's documentation and tested against a stand-in.
+// built from its platform's documentation and tested against a stand-in, and once it is tested against
+// the real platform, what ran, where and when, in its `tested` line.
 import ConnectionState from "../../components/ConnectionState.astro";
 import Faqs from "../../components/Faqs.astro";
 import GuideAnswer from "../../components/GuideAnswer.astro";
@@ -41,6 +42,8 @@ const connections = p.ids.map(integration);
 const state = leastReady(connections.map((i) => i.state));
 /** Said while they are built: of one on its own page, of several (the calendars) together. */
 const untried = state !== "built" ? null : connections.length > 1 ? UNTRIED_LINE : untriedOf(p.name.replace("®", ""));
+/** Said once its connections are tested: what ran against the platform itself, where and when. */
+const tested = state === "tested" ? connections.flatMap((i) => (i.tested ? [i.tested] : [])) : [];
 const sources = [...new Map(p.theirs.facts.flatMap((f) => f.sources).map((s) => [s.href, s])).values()];
 const ld = [
   {
@@ -138,6 +141,7 @@ const ld = [
 
     <div class="pf-notes">
       {untried && <p>{untried}</p>}
+      {tested.map((t) => <p>{t}</p>)}
       <p>
         We built these connections ourselves; the names are their owners' trademarks, and none endorses us.{
           notices.map((n) => ` ${n}`)

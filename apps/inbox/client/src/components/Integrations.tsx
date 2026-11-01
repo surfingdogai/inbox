@@ -400,9 +400,9 @@ function Tile({
             ? `${instead} takes payment now`
             : (state.hint ?? card.line)}
         </span>
-        {/* Built from the platform's documentation: said plainly until a live account has confirmed it. */}
-        {how === "unverified" && connections.length === 0 && (
-          <span className="int-line">{SOURCE_WORDS.unverified}.</span>
+        {/* Built from the platform's documentation, or tested against it: said plainly until a live account has confirmed it. */}
+        {(how === "unverified" || how === "tested") && connections.length === 0 && (
+          <span className="int-line">{SOURCE_WORDS[how]}.</span>
         )}
       </span>
       {soon ? (

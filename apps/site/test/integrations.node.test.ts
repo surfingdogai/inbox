@@ -14,6 +14,7 @@ import {
   noticesOf,
   STATE_LABEL,
   SYSTEMS,
+  TESTED_LINE,
   UNTRIED,
   UNTRIED_LINE,
   untried,
@@ -137,19 +138,45 @@ describe("the Connects to row", () => {
   });
 
   it("says of every connection, once under them, that it is built, not yet verified on a live account", () => {
-    // None has run with a business's real account yet: every one is built, in the built state's words.
-    for (const i of INTEGRATIONS) expect(i.state, i.id).toBe("built");
+    // None has run with a business's real account yet. Stripe (its test mode) and WooCommerce (a store of its own
+    // software on our machine) ran end to end against the platform itself on 1 November 2026, so they are tested;
+    // every other one is built, in the built state's words.
+    const TESTED = ["woocommerce", "stripe"];
+    for (const i of INTEGRATIONS) expect(i.state, i.id).toBe(TESTED.includes(i.id) ? "tested" : "built");
     expect(STATE_LABEL.built).toBe("Built, not yet verified on a live account");
     expect(STATE_LABEL.built.endsWith(UNTRIED)).toBe(true);
+    expect(STATE_LABEL.tested).toBe("Tested against the real platform, not yet on a live account");
     expect(leastReady(["works", "built"])).toBe("built");
     expect(leastReady(["works", "works"])).toBe("works");
     expect(leastReady(["built", "partner"])).toBe("partner");
-    // Each one's own doc says it of that one, word for word, beside its name: payments too.
+    expect(leastReady(["works", "tested"])).toBe("tested");
+    expect(leastReady(["tested", "built"])).toBe("built");
+    // A tested one says what ran, where and when, and what has not run yet; a built one says nothing of the kind.
+    for (const i of INTEGRATIONS) {
+      if (i.state !== "tested") {
+        expect(i.tested, i.id).toBeUndefined();
+        continue;
+      }
+      expect(i.tested, i.id).toMatch(/^Tested on 1 November 2026 against [^.]+/);
+      expect(i.tested, i.id).toMatch(/\. Not yet [^.]*\.$/);
+      expect(i.tested, i.id).not.toMatch(/\b(verified|works)\b/i);
+    }
+    // Each one's own doc says it of that one, word for word, beside its name: payments too. A built one says it has
+    // not run with a real account; a tested one, its line.
     for (const i of INTEGRATIONS) {
       const text = docAt(i.href.split("#")[0] ?? "").text;
-      const says = text.split(/\n\n|\n(?=[-|])/).some((p) => p.includes(UNTRIED) && p.includes(word(i.name)));
+      const paragraphs = text.split(/\n\n|\n(?=[-|])/);
+      if (i.state === "tested") {
+        const says = paragraphs.some((p) => p.includes(i.tested ?? "?") && p.includes(word(i.name)));
+        expect(says, `${i.id}: its doc should say its tested line beside its name`).toBe(true);
+        continue;
+      }
+      const says = paragraphs.some((p) => p.includes(UNTRIED) && p.includes(word(i.name)));
       expect(says, `${i.id}: its doc should say "${UNTRIED}" beside its name`).toBe(true);
     }
+    expect(TESTED_LINE).toBe(
+      "Tested against the real platform, not yet on a live account: run end to end against the platform itself, in its test mode or as its own software on our own machine. Each one's page says what ran, and when.",
+    );
     // A connector the owner app marks as new from its documentation is one of the systems.
     const systems = INTEGRATIONS.filter((i) => SYSTEMS.includes(i.group));
     for (const i of INTEGRATIONS) if (byKind("hosted", i.connector)?.fresh) expect(systems, i.id).toContain(i);
@@ -158,6 +185,11 @@ describe("the Connects to row", () => {
     const lines = overview.split("\n").filter((l) => l.includes(UNTRIED));
     expect(lines.length).toBe(1);
     for (const i of INTEGRATIONS) expect(lines[0], i.id).toContain(word(i.name));
+    // And the tested ones once more, as having run end to end against the real platform, never on a live account.
+    const ran = overview.split("\n").filter((l) => l.includes("run end to end against the real platform"));
+    expect(ran.length).toBe(1);
+    for (const i of INTEGRATIONS.filter((x) => x.state === "tested")) expect(ran[0], i.id).toContain(word(i.name));
+    expect(ran[0]).toContain("none yet on a live account");
     // The line the site says, open and closed, starts with the state's own words.
     expect(untried(true)).toBe(
       "Built, not yet verified on a live account. We built each from its platform's documentation or the standard it follows, and tested it against a stand-in; the beta is where they first run with a business's real account.",
@@ -176,7 +208,14 @@ describe("the Connects to row", () => {
     expect(markup.indexOf("{UNTRIED_LINE}")).toBeGreaterThan(markup.indexOf('id="ww-systems"'));
     expect(markup.indexOf("{UNTRIED_LINE}")).toBeGreaterThan(markup.indexOf('id="ww-payments"'));
     expect(markup.indexOf("{UNTRIED_LINE}")).toBeLessThan(markup.indexOf('id="ww-assistants"'));
-    expect(row).toContain('const allBuilt = items.length > 0 && items.every((i) => i.state === "built");');
+    // Said of them all while none has run with a business's real account, the tested ones too, which say so
+    // beside their names.
+    expect(row).toContain(
+      'const allBuilt = items.length > 0 && items.every((i) => i.state === "built" || i.state === "tested");',
+    );
+    expect(row.match(/\{tested\(i\) && <span class="ww-tag">tested against the real platform<\/span>\}/g)?.length).toBe(
+      2,
+    );
     expect(row).toContain('<p class="ww-note ww-untried">{UNTRIED_LINE}</p>');
     expect(row).toContain('<p class="ww-label" id="ww-systems">Connects to</p>');
     expect(row).not.toMatch(
@@ -194,6 +233,9 @@ describe("the Connects to row", () => {
     const connect = read("public/connect.md").replace(/\s+/g, " ");
     expect(connect).toContain(
       "These, the calendars and the payments above, were built from each one's documentation and tested against a stand-in; not yet verified on a live account: say so when you offer them.",
+    );
+    expect(connect).toContain(
+      "WooCommerce and Stripe have since also run end to end against the real platform (a WooCommerce store run on our own machine, and Stripe's test mode), on 1 November 2026, and still not on a live account.",
     );
   });
 
@@ -380,7 +422,7 @@ describe("the examples", () => {
     const section = read("src/components/UseCases.astro");
     expect(section).toContain('<p class="eyebrow">Examples</p>');
     expect(section).toContain("These are examples of what it does, not customers");
-    expect(section).toContain("each connection they name is $" + '{STATE_LABEL.built.replace(/^Built/, "built")}');
+    expect(section).toContain("each connection they name is $" + "{UNTRIED}");
     expect(section).not.toContain("what it does today");
     const page = read("src/pages/inbox/for/[slug].astro");
     expect(page).toContain("What the inbox does, shown on a made-up business.");

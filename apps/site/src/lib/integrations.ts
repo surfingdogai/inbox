@@ -19,14 +19,18 @@ export type Group = "calendars" | "shops" | "stays" | "food" | "trades" | "payme
  * the row of names on /inbox and on each business page, each platform's own page, and each
  * connection's doc (test/integrations.node.test.ts holds them to these words). A connection is
  * verified once it has run with a business's real account; none this release ships has yet, so each
- * is `built`, and becomes `works` in this file, with its doc, the day it has. `partner` is built and
- * waits on another company; `standard`, on a standard still in draft; `rolling`, on its maker's
- * roll-out (an assistant's, never ours).
+ * is `built`, and becomes `works` in this file, with its doc, the day it has. `tested` is built and
+ * has run end to end against the platform itself (its test mode, or its own software run on our own
+ * machine), never yet with a business's real account: its `tested` line says what ran, where and
+ * when, word for word as its doc says it. `partner` is built and waits on another company;
+ * `standard`, on a standard still in draft; `rolling`, on its maker's roll-out (an assistant's, never
+ * ours).
  */
-export type State = "works" | "built" | "partner" | "standard" | "rolling";
+export type State = "works" | "tested" | "built" | "partner" | "standard" | "rolling";
 
 export const STATE_LABEL: Readonly<Record<State, string>> = {
   works: "Works",
+  tested: "Tested against the real platform, not yet on a live account",
   built: "Built, not yet verified on a live account",
   partner: "Built, waiting for the partner",
   standard: "Built, waiting for the standard",
@@ -34,7 +38,7 @@ export const STATE_LABEL: Readonly<Record<State, string>> = {
 };
 
 /** From most ready to least: a page of several connections is as ready as its least ready one. */
-const READINESS: readonly State[] = ["works", "rolling", "built", "partner", "standard"];
+const READINESS: readonly State[] = ["works", "rolling", "tested", "built", "partner", "standard"];
 export const leastReady = (states: readonly State[]): State =>
   states.reduce<State>((a, b) => (READINESS.indexOf(b) > READINESS.indexOf(a) ? b : a), "works");
 
@@ -65,16 +69,25 @@ export interface Integration {
    * adds no bookings. Said beside the name.
    */
   readonly only?: "busy times";
-  /** Where it stands (STATE_LABEL): built until it has run with a business's real account. */
-  readonly state: "works" | "built";
+  /**
+   * Where it stands (STATE_LABEL): built until it has run with a business's real account, or tested
+   * once it has run end to end against the platform itself.
+   */
+  readonly state: "works" | "tested" | "built";
+  /**
+   * What ran against the platform itself, where and when, said once and word for word in its doc and
+   * at the foot of its page: only for a connection that is tested.
+   */
+  readonly tested?: string;
   readonly brand: Brand;
 }
 
 /**
  * How a connection's own doc says it has not run with a real account yet, word for word: the doc of
- * every calendar, shop, kitchen, stay, trade and payment connection says it beside its name, and
- * docs/integrations.md once for them all (test/integrations.node.test.ts keeps them in step). It is
- * the built state's own words (STATE_LABEL.built). Assistants and automations say nothing of the kind.
+ * every calendar, shop, kitchen, stay, trade and payment connection that is built says it beside its
+ * name, and docs/integrations.md once for them all (test/integrations.node.test.ts keeps them in
+ * step); one that is tested says its `tested` line instead. It is the built state's own words
+ * (STATE_LABEL.built). Assistants and automations say nothing of the kind.
  */
 export const UNTRIED = "not yet verified on a live account";
 
@@ -98,6 +111,12 @@ export const untriedOne = (platform: string, pilotOpen: boolean): string =>
     ? `${STATE_LABEL.built}. We built it from ${platform}'s documentation and tested it against a stand-in; the beta is where it first runs with a business's real account.`
     : `${STATE_LABEL.built}. We built it from ${platform}'s documentation and tested it against a stand-in.`;
 export const untriedOf = (platform: string): string => untriedOne(platform, HOSTED_PILOT_OPEN);
+
+/**
+ * The tested state, said once under the connections where any is tested: what the label means, and
+ * where each one's own line is. Never a date: each one's line has its own.
+ */
+export const TESTED_LINE = `${STATE_LABEL.tested}: run end to end against the platform itself, in its test mode or as its own software on our own machine. Each one's page says what ran, and when.`;
 
 /** The notice WooCommerce's guidelines ask for near the name. */
 export const WOO_NOTICE = "WooCommerce and its associated designs are trademarks of Automattic Inc.";
@@ -176,7 +195,9 @@ export const INTEGRATIONS: readonly Integration[] = [
     group: "shops",
     connector: "woocommerce",
     href: "/docs/connectors/woocommerce/",
-    state: "built",
+    state: "tested",
+    tested:
+      "Tested on 1 November 2026 against a real WooCommerce 11.2.1 store (WordPress 7.1, run on our own machine): connected by its Approve page and by its keys; products, variations, sale prices, stock and pictures in; stock changes followed; orders written in, one paid at the store's own checkout by bank transfer and marked paid once the shop took it as received, then completed and refunded, others cancelled from either side; tax included in prices and added at checkout; disconnected. Not yet on a business's live shop.",
     brand: {
       owner: "Automattic",
       guidelines: "https://woocommerce.com/trademark-guidelines/",
@@ -256,7 +277,9 @@ export const INTEGRATIONS: readonly Integration[] = [
     group: "payments",
     connector: "stripe",
     href: "/docs/payments/#stripe",
-    state: "built",
+    state: "tested",
+    tested:
+      "Tested on 1 November 2026 against Stripe's test mode, with a test secret key standing in for a restricted one (the check that refuses secret keys was set aside for the test): connected, with the inbox adding its webhook; a payment link for an accepted order; a declined card; paid, as told by Stripe's signed webhook and as found by the inbox's own sync; the link closed on cancel and on disconnect; a refund made in Stripe and recorded in the inbox. Not yet with a restricted key, a bank payment that clears later, or on a live account.",
     brand: { owner: "Stripe", guidelines: "https://stripe.com/legal/marks" },
   },
   {
