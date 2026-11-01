@@ -94,8 +94,11 @@ shipping details**: the inbox wrote them, and has no need to read them back.
   connection reads at once, so the full read would never finish. Variations 100 a page.
 - What changed is read with `modified_after` (GMT): a stock change saves the product, so it is seen; a
   changed variable product has all its variations read; and the bin is read too, so a product binned
-  comes off sale within minutes, a variable one with all its variations. Anything else gone (deleted
-  for good) comes off sale at the next full pass.
+  comes off sale within minutes, a variable one with all its variations. WooCommerce bins a product's
+  variations with it and lists them only when asked for `status=trash`, so a binned product's are read
+  from the bin (seen on a real store, WooCommerce 11.2, 1 November 2026: read without it, the list was
+  empty and they stayed on sale until the next full pass). Anything else gone (deleted for good) comes
+  off sale at the next full pass.
 - **Currencies.** Every amount here is in hundredths. A store in a currency with no minor unit (yen,
   won, dong, Chilean pesos) is exact in them, and takes them back as a decimal in its own currency, so
   it is connected like any other: shops in Japan, Korea and Vietnam are not shut out by a rule made for

@@ -58,7 +58,7 @@ export interface WooVariation {
   id: number;
   sku: string;
   price: string;
-  status: "publish" | "private";
+  status: "publish" | "private" | "trash";
   purchasable: boolean;
   manage_stock: boolean | "parent";
   stock_quantity: number | null;
@@ -365,6 +365,13 @@ export function fakeWooStore(
   });
 
   // A variation's page is its product's, with its options in the query, as WooCommerce links it.
+  /**
+   * A variation's status as WooCommerce holds it: binning a product bins its variations with it
+   * (`WC_Post_Data::trash_post` → `delete_variations( $id, false )`), so a binned product's are in the bin too.
+   */
+  const variationStatus = (v: WooVariation, parent?: WooProduct): WooVariation["status"] =>
+    parent?.status === "trash" ? "trash" : v.status;
+
   const variationView = (v: WooVariation, parent?: WooProduct) => ({
     id: v.id,
     ...(parent
@@ -379,7 +386,7 @@ export function fakeWooStore(
     sku: v.sku,
     price: v.price,
     regular_price: v.price,
-    status: v.status,
+    status: variationStatus(v, parent),
     purchasable: v.purchasable,
     manage_stock: v.manage_stock,
     stock_quantity: v.stock_quantity,
@@ -636,8 +643,15 @@ export function fakeWooStore(
     if (what === "products" && sub === "variations" && method === "GET") {
       const p = store.products.find((x) => x.id === id);
       if (!p) return wooError(404, "woocommerce_rest_product_invalid_id", "Invalid ID.");
+      // `status` as for products: `any` (the default) leaves out what is in the bin.
+      const status = q.get("status") ?? "any";
       return paged(
-        (p.variations ?? []).map((v) => variationView(v, p)),
+        (p.variations ?? [])
+          .filter((v) => {
+            const now = variationStatus(v, p);
+            return status === "any" ? now !== "trash" : now === status;
+          })
+          .map((v) => variationView(v, p)),
         q,
         fields,
       );

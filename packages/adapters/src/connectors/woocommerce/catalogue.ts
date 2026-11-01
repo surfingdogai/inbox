@@ -20,7 +20,9 @@ import { keysOf, storeOf } from "./state";
  *   on every save, a stock change included); a variable product changed has all its variations read,
  *   and products moved to the bin since are read too, and come in off sale (a full pass takes off sale
  *   whatever it no longer sees, the bin and products deleted for good alike). A variable product moved
- *   to the bin has its variations read too, and they come in off sale.
+ *   to the bin has its variations read too, from the bin, and they come in off sale: WooCommerce bins a
+ *   product's variations with it (`WC_Post_Data::trash_post`), and lists them only when asked for
+ *   `status=trash` (seen on WooCommerce 11.2, 1 November 2026).
  * - **A page is small enough to read** whatever a store writes in its descriptions: 25 products a
  *   page (a page builder's description can be tens of kilobytes each), read up to 8 MB.
  * - **What it is** (ADR-029): its barcode from `global_unique_id` (WooCommerce's GTIN, UPC, EAN or
@@ -53,15 +55,22 @@ interface Cursor {
   /** The next page of products, or null once they are all listed. */
   readonly page: number | null;
   /**
-   * Variable products whose variations are still to read: id, name, whether it is published, and the
-   * link to its first picture when it has one.
+   * Variable products whose variations are still to read: id, name, where it is (`Shelf`), and the link
+   * to its first picture when it has one.
    */
   readonly parents: readonly Parent[];
   /** The next page of the first parent's variations. */
   readonly vpage: number;
 }
 
-type Parent = readonly [number, string, 0 | 1] | readonly [number, string, 0 | 1, string];
+/** Where a variable product is: not on sale (0), published (1), or in the bin with its variations (2). */
+type Shelf = 0 | 1 | 2;
+
+type Parent = readonly [number, string, Shelf] | readonly [number, string, Shelf, string];
+
+function shelfOf(raw: unknown): Shelf {
+  return raw === 1 ? 1 : raw === 2 ? 2 : 0;
+}
 
 const START: Cursor = { phase: "all", page: 1, parents: [], vpage: 1 };
 
@@ -76,8 +85,8 @@ function parseCursor(raw: string | null): Cursor {
           .map(
             (p): Parent =>
               typeof p[3] === "string" && p[3] && p[3].length <= LINK_MAX
-                ? [Number(p[0]), String(p[1]).slice(0, 120), p[2] === 1 ? 1 : 0, p[3]]
-                : [Number(p[0]), String(p[1]).slice(0, 120), p[2] === 1 ? 1 : 0],
+                ? [Number(p[0]), String(p[1]).slice(0, 120), shelfOf(p[2]), p[3]]
+                : [Number(p[0]), String(p[1]).slice(0, 120), shelfOf(p[2])],
           )
       : [];
     const vpage = Number(c.vpage);
@@ -134,16 +143,28 @@ async function page(
   const c = parseCursor(p.cursor);
   const [parent, ...rest] = c.parents;
   if (parent) {
-    const [id, parentName, published, parentImage] = parent;
+    const [id, parentName, shelf, parentImage] = parent;
     let answer: Awaited<ReturnType<typeof call>>;
     try {
       answer = await call(ctx.http, store, keys, "GET", `/wc/v3/products/${id}/variations`, {
-        query: { per_page: VARIATION_PAGE_SIZE, page: c.vpage, orderby: "id", order: "asc", _fields: VARIATION_FIELDS },
+        query: {
+          per_page: VARIATION_PAGE_SIZE,
+          page: c.vpage,
+          // In the bin with their product: listed only when the bin is asked for.
+          ...(shelf === 2 ? { status: "trash" } : {}),
+          orderby: "id",
+          order: "asc",
+          _fields: VARIATION_FIELDS,
+        },
         maxBytes: PAGE_MAX_BYTES,
       });
     } catch (error) {
-      // Deleted for good since it was listed: its variations go off sale at the next full pass.
-      if (error instanceof ConnectorError && error.code === "not_found") {
+      // Deleted for good since it was listed: its variations go off sale at the next full pass. So do a
+      // binned product's, from a store that will not list its bin.
+      if (
+        error instanceof ConnectorError &&
+        (error.code === "not_found" || (shelf === 2 && error.code === "refused"))
+      ) {
         return { products: [], cursor: encode({ ...c, parents: rest, vpage: 1 }) };
       }
       throw error;
@@ -151,7 +172,7 @@ async function page(
     const list = Array.isArray(answer.json) ? (answer.json as Raw[]) : [];
     const products = list
       .filter((v) => Number.isInteger(v.id))
-      .map((v) => variationOf(v, parentName, published, currency, parentImage ?? null));
+      .map((v) => variationOf(v, parentName, shelf, currency, parentImage ?? null));
     const more = c.vpage < totalPages(answer.headers) && list.length > 0;
     const next: Cursor = more ? { ...c, vpage: c.vpage + 1 } : { ...c, parents: rest, vpage: 1 };
     return { products, cursor: encode(next) };
@@ -186,7 +207,7 @@ async function page(
       // In the bin: off sale, whatever it was; a variable one's variations are read next, off sale too.
       if (item.type === "variable") {
         const name = typeof item.name === "string" ? plain(item.name).slice(0, 120) : "";
-        parents.push(parentOf(item, name, 0));
+        parents.push(parentOf(item, name, 2));
       } else if (item.type !== "grouped" && item.type !== "external") {
         products.push({ ...simpleOf(item, currency), available: false });
       }
@@ -224,9 +245,9 @@ function simpleOf(p: Raw, currency: string | null): CatalogueProduct {
 }
 
 /** A variable product as its variations are read after it: with its picture, for those that have none. */
-function parentOf(p: Raw, name: string, published: 0 | 1): Parent {
+function parentOf(p: Raw, name: string, shelf: Shelf): Parent {
   const image = firstImage(p);
-  return image && image.length <= LINK_MAX ? [Number(p.id), name, published, image] : [Number(p.id), name, published];
+  return image && image.length <= LINK_MAX ? [Number(p.id), name, shelf, image] : [Number(p.id), name, shelf];
 }
 
 /** The link to a product's first picture (`images[0].src`), when it has one. */
@@ -253,7 +274,7 @@ function textOf(v: unknown): string | null {
 function variationOf(
   v: Raw,
   parentName: string,
-  published: 0 | 1,
+  shelf: Shelf,
   currency: string | null,
   parentImage: string | null,
 ): CatalogueProduct {
@@ -271,7 +292,7 @@ function variationOf(
     sku: typeof v.sku === "string" && v.sku.trim() ? v.sku.trim().slice(0, 100) : null,
     price: priceOf(v, currency),
     stock: stockOf(v),
-    available: published === 1 && v.status === "publish" && v.purchasable === true,
+    available: shelf === 1 && v.status === "publish" && v.purchasable === true,
     ...identityOf(v, textOf((v.image as { src?: unknown } | null | undefined)?.src) ?? parentImage),
   };
 }

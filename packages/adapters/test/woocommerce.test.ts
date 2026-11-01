@@ -567,6 +567,11 @@ describe("the store's catalogue", () => {
       ["trash", "true"],
     ]);
     expect(asked[0]?.url.searchParams.get("modified_after")).toBe(new Date(since).toISOString().slice(0, 19));
+    // WooCommerce bins a product's variations with it, and lists them only from the bin.
+    const binned = store.platform.seen.filter((r) => r.url.pathname === "/wp-json/wc/v3/products/63/variations");
+    expect(binned.map((r) => r.url.searchParams.get("status"))).toEqual(["trash"]);
+    const live = store.platform.seen.filter((r) => r.url.pathname === "/wp-json/wc/v3/products/50/variations");
+    expect(live.every((r) => !r.url.searchParams.has("status"))).toBe(true);
   });
 
   it("reads a store whose page builder writes long descriptions: small pages, each read whole", async () => {
