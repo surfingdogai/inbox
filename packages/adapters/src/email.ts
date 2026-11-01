@@ -761,9 +761,12 @@ export function spamVerdict(parsed: Pick<Email, "headers">): string | null {
  * `List-Post`), or a sender that says it takes no answer (`noreply@`, `do-not-reply@`,
  * `notifications@`, `mailer@`, `bounces@`).
  */
-export function isBulkMail(parsed: Pick<Email, "headers">, from: string): boolean {
+export function isBulkMail(parsed: Pick<Email, "headers" | "subject" | "text">, from: string): boolean {
   // A mail provider's own email about forwarding (Yahoo's link, say) reaches the owner as it came.
   if (confirmationSender(from)) return false;
+  // A code, a sign-in link or a password reset for an account the business holds under this address:
+  // its owner needs it, though it comes from a no-reply sender, often with an unsubscribe header.
+  if (isAccountMail(parsed)) return false;
   for (const h of parsed.headers ?? []) {
     if (h.key === "list-unsubscribe" || h.key === "list-id" || h.key === "list-post") return true;
   }
@@ -772,6 +775,22 @@ export function isBulkMail(parsed: Pick<Email, "headers">, from: string): boolea
     /(^|[-_.])(no-?reply|do-?not-?reply|donotreply)([-_.]|$)/.test(local) ||
     /^(notifications?|mailer|bounces?)$/.test(local)
   );
+}
+
+/** Words a subject uses for a code, a sign-in link or a password reset, in the languages the inbox speaks. */
+const ACCOUNT_SUBJECT =
+  /verif|confirm (?:your |the |this )?(?:e-?mail|address|account|sign)|sign[- ]?in|log[- ]?in (?:link|code)|login (?:link|code)|(?:secure|magic|sign-in|login|access) link|one[- ]time (?:code|password|passcode|link)|\bpasscode\b|\botp\b|(?:security|access|login|sign-in|confirmation|authentication|auth|verification) code|your code\b|password reset|reset (?:your )?password|two[- ]factor|\b2fa\b|código|codigo|verifica|iniciar sess|inicia(?:r)? sesión|redefinir (?:a )?senha|restablecer (?:la )?contraseña|code de (?:vérification|sécurité|connexion|confirmation)|lien de connexion|réinitialis|bestätig|sicherheitscode|anmelde|passwort zurück/i;
+/** The same, said in the body: phrases a mailing does not use. */
+const ACCOUNT_BODY =
+  /(?:verification|security|one-time|confirmation|login|sign-in|authentication) code|(?:sign-in|login|magic|secure) link|código de (?:verificação|verificación|acesso|segurança|seguridad|confirmação|confirmación)|code de (?:vérification|sécurité|connexion)|bestätigungscode|sicherheitscode/i;
+
+/**
+ * Mail that gives the business a way into an account it holds under this address: a verification
+ * code, a sign-in link, a password reset. It is never a mailing to drop, whoever sends it.
+ */
+export function isAccountMail(parsed: Pick<Email, "subject" | "text">): boolean {
+  if (ACCOUNT_SUBJECT.test(parsed.subject ?? "")) return true;
+  return ACCOUNT_BODY.test((parsed.text ?? "").slice(0, 4000));
 }
 
 /**

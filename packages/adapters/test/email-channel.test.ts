@@ -768,6 +768,62 @@ describe("what the review attacked", () => {
     expect((await db.orm.select().from(schema.items)).length).toBe(0);
   });
 
+  it("keeps a code, a sign-in link or a password reset, even from a no-reply sender with an unsubscribe header, and answers none", async () => {
+    const { db, ingest, drain, mail } = await setUp();
+    const link = await ingest(
+      {
+        From: "Anthropic <no-reply-wJOazRuV1tbG@mail.anthropic.example>",
+        To: "support@oficinamare.example",
+        Subject: "Your secure link to Claude is here",
+        "Message-ID": "<a1@x>",
+        "List-Unsubscribe": "<https://mail.anthropic.example/u>",
+      },
+      "Click the link below to sign in.",
+      { envelopeTo: INBOUND },
+    );
+    expect(link.outcome).toBe("created");
+    const code = await ingest(
+      {
+        From: "Bank <noreply@bank.example>",
+        To: "support@oficinamare.example",
+        Subject: "Message",
+        "Message-ID": "<a2@x>",
+      },
+      "Your verification code is 481516. It expires in 10 minutes.",
+      { envelopeTo: INBOUND },
+    );
+    expect(code.outcome).toBe("created");
+    const pt = await ingest(
+      {
+        From: "Loja <nao-responder@loja.example>",
+        To: "support@oficinamare.example",
+        Subject: "O seu código de acesso",
+        "Message-ID": "<a3@x>",
+        "List-Id": "<loja>",
+      },
+      "Use 2207.",
+      { envelopeTo: INBOUND },
+    );
+    expect(pt.outcome).toBe("created");
+    // A mailing that only mentions a code is still a mailing.
+    const promo = await ingest(
+      {
+        From: "Shop <no-reply@shop.example>",
+        To: "support@oficinamare.example",
+        Subject: "20% off this weekend",
+        "Message-ID": "<a4@x>",
+        "List-Unsubscribe": "<https://shop.example/u>",
+      },
+      "Use code SAVE20 at checkout.",
+      { envelopeTo: INBOUND },
+    );
+    expect(promo).toEqual({ outcome: "dropped", reason: "a mailing or a notice, not a customer" });
+    await drain();
+    // Nothing goes back to a sender that takes no answer.
+    expect(mail.sent.filter((m) => m.to.some((t) => /anthropic|bank|loja/.test(t)))).toEqual([]);
+    expect((await db.orm.select().from(schema.items)).length).toBe(3);
+  });
+
   it("a hosted Gmail forward with plus addresses still gives every customer an address that reaches the conversation", async () => {
     const s = await setUp();
     await provedForward(s, "oficinamare@gmail.com");
