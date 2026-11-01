@@ -646,7 +646,7 @@ export class Capabilities {
     this.receipts = new ReceiptCapabilities(db, secrets, baseUrl);
     this.catalogue = new CatalogueCapabilities(db, secrets ? this.receipts.keys : null, () => this.catalogueContext());
     this.access = new AccessCapabilities(db);
-    this.people = new IdentityCapabilities(db, secrets);
+    this.people = new IdentityCapabilities(db, secrets, baseUrl);
     this.phones = new PhoneCapabilities(db, secrets);
     this.baseUrl = baseUrl;
     this.discoveryFetch = outbound?.discovery ?? outbound?.fetch;

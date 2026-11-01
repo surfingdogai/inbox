@@ -2,6 +2,7 @@ import type { CustomerMailKind, MailOut, OutboundMail } from "@surfingdog/platfo
 import { eq } from "drizzle-orm";
 import { type BusinessFacts, businessFacts } from "../customer/audience";
 import { oneLine } from "../customer/format";
+import { customerHtmlPart } from "../customer/html";
 import { customerLang } from "../customer/lang";
 import { confirmLink, cutLinks, fillLinks, linksForEmail } from "../customer/links";
 import { isAutomated, type MailWithdrawal, renderCustomerMail } from "../customer/mail";
@@ -9,6 +10,7 @@ import type { OfferTerms } from "../customer/offer";
 import type { Db } from "../db";
 import type { Item } from "../domain/types";
 import { customerReplyTo, inboundOf, LINKS_HEADING, ownerReplyTo } from "../email/channel";
+import { lookOf } from "../look/palette";
 import { machines } from "../machine/tables";
 import { lawOf } from "../negotiation/holidays";
 import { items, parties } from "../schema/tables";
@@ -187,29 +189,39 @@ export function notifyHandler(
         : await ownerReplyTo(db, settings, item.id, now);
     // The business's name with the conversation's address, so the customer's reply shows who it goes to.
     const replyName = logged.recipient === "customer" && replyTo ? sender.from.name?.trim() : undefined;
+    // The log keeps the links cut (`cutLinks`); only the email the customer gets carries them whole.
+    const text =
+      logged.recipient === "customer"
+        ? await fillArrival(
+            db,
+            opts.secrets ?? null,
+            item,
+            logged.template,
+            await fillLinks(db, opts.secrets ?? null, logged.bodyText, {
+              mailKey: logged.jobKey,
+              itemId: logged.itemId,
+            }),
+          )
+        : // The same for an account's code or link: the owner's alert quotes it, its copy in the log never.
+          item.flags.account
+          ? fillAccountQuote(logged.bodyText, await lastWordsOf(db, item.id))
+          : logged.bodyText;
     const mail: OutboundMail = {
       ...sender,
       ...(replyTo ? { replyTo } : {}),
       ...(replyName ? { replyToName: replyName } : {}),
       to: [address],
       subject: logged.subject,
-      // The log keeps the links cut (`cutLinks`); only the email the customer gets carries them whole.
-      // The same for an account's code or link: the owner's alert quotes it, its copy in the log never.
-      text:
-        logged.recipient === "customer"
-          ? await fillArrival(
-              db,
-              opts.secrets ?? null,
-              item,
-              logged.template,
-              await fillLinks(db, opts.secrets ?? null, logged.bodyText, {
-                mailKey: logged.jobKey,
-                itemId: logged.itemId,
-              }),
-            )
-          : item.flags.account
-            ? fillAccountQuote(logged.bodyText, await lastWordsOf(db, item.id))
-            : logged.bodyText,
+      text,
+      // The customer's email in the business's look, once it chose one; the owner's stays text.
+      ...(logged.recipient === "customer"
+        ? customerHtmlPart(text, lookOf(settings), {
+            business: sender.from.name?.trim() || facts.name,
+            lang: logged.lang,
+            base: publicUrl,
+            subject: logged.subject,
+          })
+        : {}),
       headers,
     };
     const sent = await sendLogged(db, mailOut, logged, mail, { final: job.attempts >= job.maxAttempts, now, kind });

@@ -2,12 +2,14 @@ import type { MailOut, SqlInput, Statement } from "@surfingdog/platform";
 import { eq } from "drizzle-orm";
 import { businessFacts } from "../customer/audience";
 import { keyMail, privacyUrl } from "../customer/disclosure";
+import { customerHtmlPart } from "../customer/html";
 import { customerLang } from "../customer/lang";
 import { cutLinks, networksLink } from "../customer/links";
 import type { Db } from "../db";
 import type { ItemType } from "../domain/types";
 import { keysDeliveredStatement, keysDueAlone, keysFor, prunePending } from "../identity/pending";
 import { itemStopped } from "../identity/stops";
+import { lookOf } from "../look/palette";
 import { lawOf } from "../negotiation/holidays";
 import { insertOfferStatement } from "../negotiation/offers";
 import { receiptSha } from "../receipts/sign";
@@ -353,6 +355,13 @@ async function sendKeysAlone(
           to: [email],
           subject: mail.subject,
           text: mail.text,
+          // In the business's look, once it chose one, as its other emails to the customer.
+          ...customerHtmlPart(mail.text, lookOf(settings), {
+            business: sender.from.name?.trim() || facts.name,
+            lang,
+            base: publicUrl,
+            subject: mail.subject,
+          }),
           headers: {
             ...(await threadHeaders(db, itemId, row.messageRef)),
             ...autoHeaders({ automatic: true, template: "key" }),

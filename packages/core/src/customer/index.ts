@@ -14,6 +14,7 @@ export {
 export { DISCLOSURE, type DisclosureCopy, keyMail, privacyPage, privacyUrl } from "./disclosure";
 export { dateText, dayText, localDate, moneyIn, oneLine, shortRef, timeText, whenText, zoneName } from "./format";
 export { FRONT_COPY, type FrontCopy, frontCopy } from "./front-copy";
+export { type CustomerMailHtml, customerHtmlPart, customerMailHtml, mailLogoUrl } from "./html";
 export { CUSTOMER_LANGS, type CustomerLang, customerLang, langFromHeader } from "./lang";
 export {
   cutLinks,

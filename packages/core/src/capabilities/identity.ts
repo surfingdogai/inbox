@@ -1,6 +1,7 @@
 import type { MailOut, Statement } from "@surfingdog/platform";
 import { businessFacts, partyLocale } from "../customer/audience";
 import { copyFor, vars } from "../customer/copy";
+import { customerHtmlPart } from "../customer/html";
 import { type CustomerLang, customerLang } from "../customer/lang";
 import type { Db } from "../db";
 import { payloadSchemas } from "../domain/types";
@@ -23,6 +24,7 @@ import {
 } from "../identity/types";
 import { ulid } from "../ids";
 import { autoHeaders, mailHeldBack, senderOf } from "../jobs/mail-log";
+import { lookOf } from "../look/palette";
 import { directoryNetworks, mayReceiveEmails, verifiedNetworks } from "../network";
 import { secretHash } from "../protocol/credentials";
 import type { SecretBox } from "../secrets/box";
@@ -58,6 +60,8 @@ export class IdentityCapabilities {
   constructor(
     private readonly db: Db,
     private readonly secrets: SecretBox | null,
+    /** The inbox's public address, for the logo in the code email; else the settings'. */
+    private readonly baseUrl?: string | undefined,
   ) {}
 
   /** The host's network calls (`@surfingdog/adapters`). */
@@ -354,10 +358,23 @@ export class IdentityCapabilities {
       if (!sender) throw cannot();
       const req = await createCode(this.db, target, settings, now);
       const lang = customerLang(await partyLocale(this.db, target.partyId), facts.languages);
+      const words = codeMail({
+        business: facts.name,
+        minutes: settings.customers.otp.ttlMinutes,
+        code: req.code,
+        lang,
+      });
       const mail = {
         ...sender,
         to: [req.email],
-        ...codeMail({ business: facts.name, minutes: settings.customers.otp.ttlMinutes, code: req.code, lang }),
+        ...words,
+        // In the business's look, once it chose one, as its other emails to the customer.
+        ...customerHtmlPart(words.text, lookOf(settings), {
+          business: sender.from.name?.trim() || facts.name,
+          lang,
+          base: this.baseUrl ?? settings.notifications.appUrl,
+          subject: words.subject,
+        }),
         headers: autoHeaders({ automatic: true, template: "code" }),
       };
       // Held back by the transport (a suppressed address, a cap): said the same way, so whoever asks

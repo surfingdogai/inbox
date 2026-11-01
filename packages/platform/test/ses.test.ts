@@ -57,6 +57,63 @@ describe("the message", () => {
     expect(new TextDecoder().decode(Uint8Array.from(atob(body), (c) => c.charCodeAt(0)))).toBe("Olá Rita,\n\nSim.");
   });
 
+  it("is the text alone when there is no HTML, as it always was", () => {
+    const mime = buildMime(
+      { from: { address: "support@oficinamare.example" }, to: ["rita@example.com"], subject: "Hi", text: "Hello" },
+      { now: Date.parse("2026-10-19T09:00:00Z") },
+    );
+    expect(mime).toBe(
+      [
+        "From: <support@oficinamare.example>",
+        "To: <rita@example.com>",
+        "Subject: Hi",
+        "Date: Mon, 19 Oct 2026 09:00:00 +0000",
+        "MIME-Version: 1.0",
+        "Content-Type: text/plain; charset=utf-8",
+        "Content-Transfer-Encoding: base64",
+        "",
+        "SGVsbG8=",
+        "",
+      ].join("\r\n"),
+    );
+  });
+
+  it("sends the text and the HTML as two parts of one message, the text first", () => {
+    const html = `<!doctype html><p>Olá ${"x".repeat(300)}</p>`;
+    const mime = buildMime(
+      {
+        from: { address: "support@oficinamare.example" },
+        to: ["rita@example.com"],
+        subject: "Hi",
+        text: "Olá Rita",
+        html,
+      },
+      { now: Date.parse("2026-10-19T09:00:00Z") },
+    );
+    const boundary = /^Content-Type: multipart\/alternative; boundary="(=_sd_[0-9a-f]{24})"$/m.exec(mime)?.[1] ?? "";
+    expect(boundary).not.toBe("");
+    const [head, ...rest] = mime.split(`--${boundary}`);
+    expect(head).toContain("MIME-Version: 1.0");
+    expect(rest.at(-1)).toBe("--\r\n");
+    const parts = rest.slice(0, -1).map((p) => {
+      const [headers = "", body = ""] = p.replace(/^\r\n/, "").split("\r\n\r\n");
+      const bytes = Uint8Array.from(atob(body.replace(/\r\n/g, "")), (c) => c.charCodeAt(0));
+      return { headers, body, text: new TextDecoder().decode(bytes) };
+    });
+    expect(parts.map((p) => p.headers.split("\r\n")[0])).toEqual([
+      "Content-Type: text/plain; charset=utf-8",
+      "Content-Type: text/html; charset=utf-8",
+    ]);
+    expect(parts.map((p) => p.text)).toEqual(["Olá Rita", html]);
+    // Neither part holds the boundary, and every line is within the limit.
+    for (const p of parts) expect(p.body).not.toContain(boundary);
+    for (const line of mime.split("\r\n")) expect(line.length).toBeLessThanOrEqual(78);
+    // A boundary of its own for each message.
+    expect(
+      buildMime({ from: { address: "a@b.example" }, to: ["c@d.example"], subject: "s", text: "t", html }, { now: 0 }),
+    ).not.toContain(boundary);
+  });
+
   it("sends from its own address through SES v2, signed, in the region asked", async () => {
     const calls: { url: string; init: RequestInit }[] = [];
     const fake = (async (url: string, init: RequestInit) => {

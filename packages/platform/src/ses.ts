@@ -142,9 +142,18 @@ function mailbox(address: string, name?: string | undefined): string {
 const OWN_HEADERS =
   /^(from|sender|reply-to|return-path|to|cc|bcc|subject|date|mime-version|content-type|content-transfer-encoding|message-id|resent-[a-z-]+)$/i;
 
-/** The raw message, text only, UTF-8 in base64 lines of 76. */
+/** A part's body: UTF-8 in base64 lines of 76. */
+function base64Lines(text: string): string[] {
+  return base64(enc.encode(text)).match(/.{1,76}/g) ?? [];
+}
+
+/**
+ * The raw message, UTF-8 in base64 lines of 76: the text alone, or, with `html`, the text and the
+ * HTML as two parts of one `multipart/alternative`, the text first. The boundary is drawn for each
+ * message, and `_` is never in base64, so no part can hold it.
+ */
 export function buildMime(mail: OutboundMail, o: { readonly now: number }): string {
-  const lines = [
+  const head = [
     `From: ${mailbox(mail.from.address, mail.from.name)}`,
     `To: ${mail.to.map((t) => `<${oneLine(t)}>`).join(", ")}`,
     ...(mail.replyTo ? [`Reply-To: ${mailbox(oneLine(mail.replyTo).trim(), mail.replyToName)}`] : []),
@@ -154,13 +163,26 @@ export function buildMime(mail: OutboundMail, o: { readonly now: number }): stri
     ...Object.entries(mail.headers ?? {})
       .filter(([k]) => /^[!-9;-~]+$/.test(k) && !OWN_HEADERS.test(k))
       .map(([k, v]) => `${k}: ${oneLine(v)}`),
-    "Content-Type: text/plain; charset=utf-8",
+  ];
+  const text = ["Content-Type: text/plain; charset=utf-8", "Content-Transfer-Encoding: base64"];
+  if (!mail.html) return [...head, ...text, "", ...base64Lines(mail.text), ""].join("\r\n");
+  const boundary = `=_sd_${hex(crypto.getRandomValues(new Uint8Array(12)))}`;
+  return [
+    ...head,
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    "",
+    `--${boundary}`,
+    ...text,
+    "",
+    ...base64Lines(mail.text),
+    `--${boundary}`,
+    "Content-Type: text/html; charset=utf-8",
     "Content-Transfer-Encoding: base64",
     "",
-    ...(base64(enc.encode(mail.text)).match(/.{1,76}/g) ?? []),
+    ...base64Lines(mail.html),
+    `--${boundary}--`,
     "",
-  ];
-  return lines.join("\r\n");
+  ].join("\r\n");
 }
 
 /** What SES answered when it did not send: its HTTP status and its error type (`SendingPausedException`, …). */
