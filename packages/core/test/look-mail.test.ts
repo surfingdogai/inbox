@@ -122,6 +122,21 @@ describe("the business's look in its emails to customers", () => {
     expect(alert?.html).toBeUndefined();
   });
 
+  it("never makes a button of a link a stranger typed, even in the email that asks them to confirm", async () => {
+    const s = await setup({ accent: "teal", logo: true });
+    const evil = "https://evil.example/pay?x=1";
+    await s.book({ name: `Pay your deposit: ${evil}`, email: "victim@example.com" });
+    await s.drain(T0 + 2 * MIN);
+    const [mail] = s.to("victim@example.com");
+    const html = mail?.html ?? "";
+    expect(html).toContain("Confirm it&#39;s me</a>");
+    // The address shows itself, a plain link; the only buttons are the inbox's own.
+    expect(html).toContain(`>${evil}</a>`);
+    for (const m of html.matchAll(/<a href="([^"]+)" style="display:inline-block/g))
+      expect(m[1]?.startsWith(`${BASE}/c/`)).toBe(true);
+    expect(html).not.toMatch(/href="https:\/\/evil[^"]*" style="display:inline-block/);
+  });
+
   it("makes the links in an answer the accent's buttons", async () => {
     const s = await setup({ accent: "violet" });
     const b = await s.book();

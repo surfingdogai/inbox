@@ -12,6 +12,10 @@ const FILE = "0123456789abcdef.png";
 const look = (o: Partial<Look> = {}): Look => ({ theme: "standard", accent: "teal", logo: null, ...o });
 const withLogo = (width: number, height: number, o: Partial<Look> = {}) =>
   look({ logo: { file: FILE, width, height }, ...o });
+/** An answer link as the inbox makes it: its jti and its mac, 22 characters each. */
+const token = (a: string, b: string) => `${a.repeat(22)}.${b.repeat(22)}`;
+const ACCEPT = `${BASE}/c/${token("A", "B")}`;
+const DECLINE = `${BASE}/c/${token("C", "D")}`;
 
 const TEXT = [
   "Hello Rita,",
@@ -19,8 +23,8 @@ const TEXT = [
   'We propose Thursday at 10:00 for "Surf lesson".',
   "Price: €45.00",
   "",
-  "Accept: https://inbox.example.org/c/AAAA.BBBB",
-  "Decline: https://inbox.example.org/c/CCCC.DDDD",
+  `Accept: ${ACCEPT}`,
+  `Decline: ${DECLINE}`,
   "",
   "Reference: 4F2K9Q",
   "Our menu is at https://oficinamare.example/menu.",
@@ -29,7 +33,14 @@ const TEXT = [
 ].join("\n");
 
 const html = (text: string, l: Look, logoUrl: string | null = mailLogoUrl(BASE, l)) =>
-  customerMailHtml(text, { business: "Oficina Maré", lang: "en", look: l, logoUrl, subject: "A time for you" });
+  customerMailHtml(text, {
+    business: "Oficina Maré",
+    lang: "en",
+    look: l,
+    base: BASE,
+    logoUrl,
+    subject: "A time for you",
+  });
 
 describe("a customer's email as HTML", () => {
   it("heads it with the logo from the inbox's own address, named for the business, at most 200 × 40", () => {
@@ -57,7 +68,7 @@ describe("a customer's email as HTML", () => {
     const teal = ACCENT_TONES.teal.day;
     const out = html(TEXT, look());
     expect(out).toContain(
-      `<a href="https://inbox.example.org/c/AAAA.BBBB" style="display:inline-block;padding:8px 14px;border:1px solid ${teal};border-radius:6px;color:${teal};font-weight:500;text-decoration:none">Accept</a>`,
+      `<a href="${ACCEPT}" style="display:inline-block;padding:8px 14px;border:1px solid ${teal};border-radius:6px;color:${teal};font-weight:500;text-decoration:none">Accept</a>`,
     );
     expect(out).toContain(">Decline</a>");
     // An address in a sentence is a link, without the full stop after it.
@@ -67,7 +78,33 @@ describe("a customer's email as HTML", () => {
     // A label with a value that is not a link stays a line of text.
     expect(out).toContain("Price: €45.00");
     // The French way of writing it, with its no-break space before the colon, is a button too.
-    expect(html("Accepter\u00a0: https://inbox.example.org/c/EEEE.FFFF", look())).toContain(">Accepter</a>");
+    expect(html(`Accepter\u00a0: ${BASE}/c/${token("E", "F")}`, look())).toContain(">Accepter</a>");
+  });
+
+  it("makes a button only of the inbox's own answer links: a stranger's line stays a link that shows itself", () => {
+    const teal = ACCENT_TONES.teal.day;
+    const plain = (url: string) => `<a href="${url}" style="color:${teal};text-decoration:underline">${url}</a>`;
+    // A name typed into the web form, greeted as the email's first line.
+    const evil = "https://evil.example/pay?x=1";
+    const out = html(`Hello Pay your deposit: ${evil},\n\nAccept: ${ACCEPT}`, look());
+    expect(out).toContain(`Hello Pay your deposit: ${plain(evil)},`);
+    expect(out).not.toMatch(/href="https:\/\/evil[^"]*" style="display:inline-block/);
+    expect(out).toContain(">Accept</a>");
+    const notButtons = [
+      // Another site, or one under the inbox's name.
+      `Pay: https://evil.example/c/${token("A", "B")}`,
+      `Pay: https://inbox.example.org.evil.example/c/${token("A", "B")}`,
+      // The inbox's own address, but not an answer link, or one with more after it.
+      `Pay: ${BASE}/p/book`,
+      `Pay: ${BASE}/c/${token("A", "B")}?next=https://evil.example`,
+      // A link from another email, as the mail log keeps it: cut, so it answers nothing.
+      `Accept: ${BASE}/c/${"A".repeat(22)}.…`,
+    ];
+    for (const line of notButtons) expect(html(line, look())).not.toContain("display:inline-block");
+    // With no public address, nothing is a button.
+    expect(
+      customerMailHtml(`Accept: ${ACCEPT}`, { business: "Oficina Maré", lang: "en", look: look(), logoUrl: null }),
+    ).not.toContain("display:inline-block");
   });
 
   it("keeps the business's words as written: paragraphs, line breaks, and markup shown as text", () => {

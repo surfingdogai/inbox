@@ -9,8 +9,10 @@ import { accentIn, isDefaultLook, type Look, logoBox, THEME_TONES, type ThemeTon
  * - Always light, whatever the theme: a dark email turns odd in a mail app that darkens it again.
  *   Dark sends Standard's day tones; Minimal and Warm their own.
  * - Inline styles only, a 600px table, the system's own fonts: no `<style>`, no web font, no script.
- * - A line that is a label and a link (`Accept: https://…`, `Accepter : https://…`) is a thin outlined
- *   button; any other address in the text is a link, underlined.
+ * - A line that is a label and one of the inbox's own answer links (`Accept: <base>/c/<token>`, the
+ *   French `Accepter : …` too) is a thin outlined button. Only those: a stranger's name or a pasted
+ *   address can be made to look like such a line, so any other address stays a link, underlined,
+ *   showing all of itself.
  * - Every word of the business's and its customer's is escaped.
  */
 export interface CustomerMailHtml {
@@ -18,6 +20,8 @@ export interface CustomerMailHtml {
   readonly business: string;
   readonly lang: string;
   readonly look: Look;
+  /** The inbox's public address, the one its links use: only a link of its own is a button. */
+  readonly base?: string | null | undefined;
   /** The logo's absolute address (`mailLogoUrl`), or null for the name in text. */
   readonly logoUrl: string | null;
   readonly subject?: string | undefined;
@@ -31,6 +35,8 @@ const LOGO_MAX_H = 40;
 
 /** A label and a link on one line: `Label: https://…`, the French `Label : https://…` among them. */
 const BUTTON_LINE = /^(.{1,60}?)[ \u00a0]?: (https?:\/\/\S+)$/;
+/** A whole answer link's token, as `fillLinks` makes it for the email it was minted for; a cut one is not. */
+const WHOLE_TOKEN = /^[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{22}$/;
 /** An address in running text. What ends a sentence after it is not part of it. */
 const URL_IN_TEXT = /https?:\/\/[^\s<>"']+/g;
 const TRAILING = /[.,;:!?)\]'"»]+$/;
@@ -55,6 +61,7 @@ export function customerHtmlPart(
       business: o.business,
       lang: o.lang,
       look,
+      base: o.base,
       logoUrl: mailLogoUrl(o.base, look),
       subject: o.subject,
     }),
@@ -90,7 +97,7 @@ export function customerMailHtml(text: string, o: CustomerMailHtml): string {
       : "";
   const rows = [
     header ? `<tr><td style="padding:0 0 14px;border-bottom:1px solid ${tones.rule}">${header}</td></tr>` : "",
-    `<tr><td style="padding:${header ? "20px" : "0"} 0 0;font:15px/1.55 ${FONT};color:${tones.fg}">${body(text, accent)}</td></tr>`,
+    `<tr><td style="padding:${header ? "20px" : "0"} 0 0;font:15px/1.55 ${FONT};color:${tones.fg}">${body(text, accent, o.base)}</td></tr>`,
   ].join("");
   return `<!doctype html>
 <html lang="${esc(o.lang)}">
@@ -113,8 +120,15 @@ ${rows}
 </html>`;
 }
 
+/** Whether an address is one of the inbox's own answer links: `<base>/c/<token>`, and nothing more. */
+function isOwnLink(url: string, base: string | null | undefined): boolean {
+  if (!base) return false;
+  const own = `${base.replace(/\/+$/, "")}/c/`;
+  return url.startsWith(own) && WHOLE_TOKEN.test(url.slice(own.length));
+}
+
 /** The text as paragraphs: a blank line starts one, a single newline is a line break. */
-function body(text: string, accent: string): string {
+function body(text: string, accent: string, base: string | null | undefined): string {
   const out: string[] = [];
   for (const block of text.replace(/\r\n?/g, "\n").split(/\n(?:[ \t]*\n)+/)) {
     if (!block.trim()) continue;
@@ -125,7 +139,7 @@ function body(text: string, accent: string): string {
     };
     for (const line of block.split("\n")) {
       const button = BUTTON_LINE.exec(line.trim());
-      if (button) {
+      if (button && isOwnLink(button[2] ?? "", base)) {
         flush();
         const label = (button[1] ?? "").trimEnd();
         out.push(
