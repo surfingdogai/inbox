@@ -13,6 +13,9 @@ import { ensureJob } from "../jobs/schedule";
  * A file arrives before the request that names it: it is kept for an hour (`expires_at`), and a
  * request takes it by clearing that and naming its item. What no request took by then, and what an
  * erasure marked deleted, is removed by the sweep with its bytes.
+ *
+ * The business's logo is kept the same way, as `kind = 'logo'` (`look/logo.ts`): every query here
+ * reads attachments only, so the sweep, the allowances and an erasure leave it be.
  */
 
 /** 512 KB a piece: under every runtime's largest value (D1 takes 2 MB a row). */
@@ -169,14 +172,20 @@ export async function isUnclaimed(db: Db, id: string, now: number): Promise<bool
 export async function readFile(db: Db, id: string): Promise<{ file: StoredFile; bytes: Uint8Array } | null> {
   const file = await fileRow(db, id);
   if (!file) return null;
+  const bytes = await readChunks(db, id, file.ref.size);
+  return bytes ? { file, bytes } : null;
+}
+
+/** The pieces kept under `key`, put back together as `size` bytes; null when one is missing. */
+export async function readChunks(db: Db, key: string, size: number): Promise<Uint8Array | null> {
   const { rows } = await db.client.query({
     sql: "SELECT seq, data FROM attachment_chunks WHERE key = ? ORDER BY seq",
-    params: [id],
+    params: [key],
     method: "all",
   });
-  const count = Math.max(1, Math.ceil(file.ref.size / CHUNK_BYTES));
+  const count = Math.max(1, Math.ceil(size / CHUNK_BYTES));
   if (rows.length !== count) return null;
-  const out = new Uint8Array(file.ref.size);
+  const out = new Uint8Array(size);
   let at = 0;
   for (const [i, r] of rows.entries()) {
     if (Number(r[0]) !== i) return null;
@@ -185,7 +194,7 @@ export async function readFile(db: Db, id: string): Promise<{ file: StoredFile; 
     out.set(piece, at);
     at += piece.byteLength;
   }
-  return at === out.byteLength ? { file, bytes: out } : null;
+  return at === out.byteLength ? out : null;
 }
 
 /** A BLOB as each runtime hands it back: bytes, an ArrayBuffer, or numbers. */

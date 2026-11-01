@@ -13,6 +13,7 @@ import {
 } from "@surfingdog/core";
 import { type Context, Hono } from "hono";
 import { pageLang, renderCustomerPage } from "./customer-page";
+import { publicLogo } from "./look";
 import { HOST_SESSION_COOKIE, SESSION_COOKIE } from "./session";
 
 /**
@@ -76,6 +77,9 @@ export function frontPage(deps: FrontPageDeps): Hono {
   });
 
   const embedOf = (c: Context) => c.req.query("embed") === "1";
+
+  // The business's logo, for its pages and its emails (`look.ts`).
+  app.get("/logo/:file", (c) => publicLogo(deps.caps, c));
 
   app.get("/book", async (c) => {
     // Bookings taken at a platform: a booking page here would offer times the platform never sees.

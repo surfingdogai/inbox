@@ -40,6 +40,7 @@ import { mailForItem, senderOf } from "../jobs/mail-log";
 import { FoodCapabilities } from "../kitchen/capability";
 import { tableDeposits } from "../kitchen/deposits";
 import { applyPosState, elsewhereStep, posStatusStep, registerFoodResolver } from "../kitchen/pos";
+import { LookCapabilities } from "../look/capability";
 import { type DraftView, draftIsStale, draftRow, draftView, dropDraftStatement } from "../negotiation/drafts";
 import { type OfferView, offerRows, offerView } from "../negotiation/offers";
 import { rewardProblems } from "../negotiation/rewards";
@@ -467,6 +468,11 @@ export class Capabilities {
    * for known phrases only.
    */
   readonly spam: SpamCapabilities;
+  /**
+   * The business's look: its logo, theme and accent, on its pages, in its emails and in the owner
+   * app. The logo is a file kept here, changed only through `look.setLogo`.
+   */
+  readonly look: LookCapabilities;
 
   private readonly baseUrl: string | undefined;
   /** How the discovery check reaches its network (`checkDiscovery`): the host's outbound fetch, or none in a demo. */
@@ -687,6 +693,9 @@ export class Capabilities {
     registerSyncStep(elsewhereStep);
     this.spam = new SpamCapabilities(db, secrets);
     this.people.attachSpam(this.spam);
+    this.look = new LookCapabilities(db, {
+      writeLogo: (caller, logo) => this.writeSettings(caller, { doc: { look: { logo } } }, false, { logo: true }),
+    });
     this.customer = new CustomerDoors(db, {
       access: this.access,
       people: this.people,

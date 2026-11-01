@@ -78,6 +78,7 @@ import { z } from "zod";
 import { ownerOperation, PHONE_OPERATIONS, routeScopes } from "./access";
 import { lookupMx } from "./connectors/dns";
 import { foodOwnerRoutes, foodPublicRoutes } from "./food";
+import { lookOwnerRoutes } from "./look";
 import { publicOrigin } from "./origin";
 import { forbidden, problemResponse, unauthorized } from "./problem";
 import * as R from "./responses";
@@ -2244,6 +2245,8 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
   stayOwnerRoutes(app, caps);
   // Trades (ADR-039): a request's files and its job tool.
   tradesOwnerRoutes(app, caps);
+  // The business's look: its logo (Settings → Look).
+  lookOwnerRoutes(app, caps);
   // A kitchen (ADR-040): the menu, allergens, sold out, tables, pause, progress, orders taken elsewhere.
   foodOwnerRoutes(app, caps);
   return app;

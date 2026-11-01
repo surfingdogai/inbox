@@ -278,7 +278,7 @@ function decodeName(raw: string): string {
 }
 
 /** The body's bytes, read only up to `max`; null past it. */
-async function readBody(request: Request, max: number): Promise<Uint8Array | null> {
+export async function readBody(request: Request, max: number): Promise<Uint8Array | null> {
   const reader = request.body?.getReader();
   if (!reader) return new Uint8Array(0);
   const chunks: Uint8Array[] = [];
