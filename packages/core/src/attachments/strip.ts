@@ -13,6 +13,16 @@ import type { AttachmentType } from "@surfingdog/spec";
  * - **WebP**: the `EXIF` and `XMP ` chunks go, and the extended header's flags say so.
  * - **PDF**: kept as sent. A PDF is a document, shown only as a download, never inline.
  *
+ * `strict` keeps only what draws the picture and the rest goes, whatever it is: for what everyone
+ * sees (the business's logo), where an unknown block (Content Credentials, a maker's own) could name
+ * who made it, or carry thumbnails of what it was made from.
+ *
+ * - **JPEG**: SOI, the JFIF APP0, the ICC profile (APP2), the Adobe APP14, the tables, the frame and
+ *   the scans, EOI.
+ * - **PNG**: IHDR, PLTE, tRNS, the colour chunks (gAMA, cHRM, sRGB, iCCP, sBIT, bKGD), pHYs, IDAT,
+ *   IEND, and an animation's acTL, fcTL and fdAT.
+ * - **WebP**: VP8, VP8L, VP8X, ALPH, ICCP, ANIM and ANMF.
+ *
  * A file that is not what its first bytes promised (cut short, a length that runs past its end) is
  * refused: `StripError`.
  */
@@ -32,14 +42,19 @@ export interface Stripped {
   readonly removed: number;
 }
 
-export function stripMetadata(type: AttachmentType, bytes: Uint8Array): Stripped {
+export function stripMetadata(
+  type: AttachmentType,
+  bytes: Uint8Array,
+  opts: { readonly strict?: boolean } = {},
+): Stripped {
+  const strict = opts.strict === true;
   switch (type) {
     case "image/jpeg":
-      return stripJpeg(bytes);
+      return stripJpeg(bytes, strict);
     case "image/png":
-      return stripPng(bytes);
+      return stripPng(bytes, strict);
     case "image/webp":
-      return stripWebp(bytes);
+      return stripWebp(bytes, strict);
     case "application/pdf":
       return { bytes, orientation: null, removed: 0 };
   }
@@ -138,7 +153,20 @@ const EXIF_HEADER = new Uint8Array([0x45, 0x78, 0x69, 0x66, 0x00, 0x00]);
 
 /* --- JPEG -------------------------------------------------------------------- */
 
-function stripJpeg(src: Uint8Array): Stripped {
+/**
+ * What draws a JPEG, for `strict`: the tables (DHT, DAC, DQT, DRI, DNL), the frame (SOF0–15 but the
+ * reserved JPG), the scans, and the JFIF, ICC and Adobe segments by their names.
+ */
+function jpegDraws(marker: number, body: Uint8Array): boolean {
+  if (marker >= 0xc0 && marker <= 0xcf) return marker !== 0xc8;
+  if (marker === 0xda || marker === 0xdb || marker === 0xdc || marker === 0xdd) return true;
+  if (marker === 0xe0) return startsWith(body, 0, "JFIF\0");
+  if (marker === 0xe2) return startsWith(body, 0, "ICC_PROFILE\0");
+  if (marker === 0xee) return startsWith(body, 0, "Adobe");
+  return false;
+}
+
+function stripJpeg(src: Uint8Array, strict: boolean): Stripped {
   if (src.length < 4 || src[0] !== 0xff || src[1] !== 0xd8) throw new StripError("not a JPEG");
   const keep: Uint8Array[] = [src.subarray(0, 2)];
   let orientation: number | null = null;
@@ -169,8 +197,9 @@ function stripJpeg(src: Uint8Array): Stripped {
     const end = at + 2 + length;
     if (end > src.length) throw new StripError("a JPEG segment runs past the file");
     const body = src.subarray(at + 4, end);
-    const drop =
-      marker === 0xe1 || marker === 0xed || marker === 0xfe || (marker === 0xe2 && startsWith(body, 0, "MPF\0"));
+    const drop = strict
+      ? !jpegDraws(marker, body)
+      : marker === 0xe1 || marker === 0xed || marker === 0xfe || (marker === 0xe2 && startsWith(body, 0, "MPF\0"));
     if (drop) {
       if (marker === 0xe1 && startsWith(body, 0, "Exif\0\0") && orientation === null) {
         orientation = tiffOrientation(body.subarray(6));
@@ -214,6 +243,23 @@ function stripJpeg(src: Uint8Array): Stripped {
 /* --- PNG --------------------------------------------------------------------- */
 
 const PNG_DROP = new Set(["eXIf", "tEXt", "zTXt", "iTXt", "tIME"]);
+const PNG_DRAWS = new Set([
+  "IHDR",
+  "PLTE",
+  "tRNS",
+  "gAMA",
+  "cHRM",
+  "sRGB",
+  "iCCP",
+  "sBIT",
+  "bKGD",
+  "pHYs",
+  "IDAT",
+  "IEND",
+  "acTL",
+  "fcTL",
+  "fdAT",
+]);
 
 let CRC_TABLE: Uint32Array | null = null;
 function crc32(parts: readonly Uint8Array[]): number {
@@ -234,7 +280,7 @@ function be32(n: number): Uint8Array {
   return new Uint8Array([(n >>> 24) & 0xff, (n >>> 16) & 0xff, (n >>> 8) & 0xff, n & 0xff]);
 }
 
-function stripPng(src: Uint8Array): Stripped {
+function stripPng(src: Uint8Array, strict: boolean): Stripped {
   if (src.length < 8) throw new StripError("not a PNG");
   const keep: Uint8Array[] = [src.subarray(0, 8)];
   let orientation: number | null = null;
@@ -247,7 +293,7 @@ function stripPng(src: Uint8Array): Stripped {
     const end = at + 12 + length;
     if (end > src.length) throw new StripError("a PNG chunk runs past the file");
     const type = String.fromCharCode(src[at + 4] ?? 0, src[at + 5] ?? 0, src[at + 6] ?? 0, src[at + 7] ?? 0);
-    if (PNG_DROP.has(type)) {
+    if (strict ? !PNG_DRAWS.has(type) : PNG_DROP.has(type)) {
       if (type === "eXIf" && orientation === null) {
         let tiff = src.subarray(at + 8, at + 8 + length);
         if (startsWith(tiff, 0, "Exif\0\0")) tiff = tiff.subarray(6);
@@ -279,7 +325,9 @@ function le32(n: number): Uint8Array {
   return new Uint8Array([n & 0xff, (n >>> 8) & 0xff, (n >>> 16) & 0xff, (n >>> 24) & 0xff]);
 }
 
-function stripWebp(src: Uint8Array): Stripped {
+const WEBP_DRAWS = new Set(["VP8 ", "VP8L", "VP8X", "ALPH", "ICCP", "ANIM", "ANMF"]);
+
+function stripWebp(src: Uint8Array, strict: boolean): Stripped {
   if (src.length < 12 || !startsWith(src, 0, "RIFF") || !startsWith(src, 8, "WEBP")) throw new StripError("not a WebP");
   const riffEnd = Math.min(src.length, 8 + u32le(src, 4));
   const chunks: Uint8Array[] = [];
@@ -292,7 +340,7 @@ function stripWebp(src: Uint8Array): Stripped {
     const size = u32le(src, at + 4);
     const end = at + 8 + size + (size & 1);
     if (at + 8 + size > riffEnd) throw new StripError("a WebP chunk runs past the file");
-    if (fourcc === "EXIF" || fourcc === "XMP ") {
+    if (strict ? !WEBP_DRAWS.has(fourcc) : fourcc === "EXIF" || fourcc === "XMP ") {
       if (fourcc === "EXIF" && orientation === null) {
         let tiff = src.subarray(at + 8, at + 8 + size);
         if (startsWith(tiff, 0, "Exif\0\0")) tiff = tiff.subarray(6);

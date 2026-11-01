@@ -4,7 +4,7 @@ import type { Db } from "../db";
 import { readSettings, type Settings } from "../settings/schema";
 import { type Caller, isCustomer, nowOf } from "../write/caller";
 import { WriteError } from "../write/errors";
-import { dropLogo, dropLogos, prepareLogo, putLogo, readLogo } from "./logo";
+import { dropLogo, dropLogos, hasLogo, prepareLogo, putLogo, readLogo } from "./logo";
 import { type Look, logoFile, lookOf } from "./palette";
 
 /**
@@ -70,7 +70,12 @@ export class LookCapabilities {
       await dropLogo(this.db, id);
       throw error;
     }
-    await dropLogos(this.db, now, id);
+    await dropLogos(this.db, now);
+    // Two uploads at once: the other's clean-up may have run while this one's settings write was on
+    // its way, and taken this file with the one it replaced. Once the settings name it, it is kept again.
+    if (!(await hasLogo(this.db, id)) && (await readSettings(this.db)).look.logo?.id === id) {
+      await putLogo(this.db, clean, now, id);
+    }
     return view;
   }
 

@@ -23,7 +23,7 @@ export function lookOwnerRoutes(app: Hono<CallerEnv>, caps: Capabilities): void 
     describeRoute({
       tags: ["owner"],
       summary: "Upload the business's logo",
-      description: `The picture's bytes as the body: PNG, JPEG or WebP (told by its first bytes), up to ${LOGO_MAX_BYTES / 1024} KB, 16 to 2048 pixels a side. Its metadata is taken out. It replaces the logo there was. The owner in person only: refused (403 owner_in_person) to the owner's AI and to integration keys. Answers the settings, with look.logo.`,
+      description: `The picture's bytes as the body: PNG, JPEG or WebP (told by its first bytes), up to ${LOGO_MAX_BYTES / 1024} KB, 16 to 2048 pixels a side. Only what draws the picture is kept: its metadata, Content Credentials and any other block are taken out. It replaces the logo there was. The owner in person only: refused (403 owner_in_person) to the owner's AI and to integration keys. Answers the settings, with look.logo.`,
       security: [{ ownerKey: [] }],
       responses: {
         ...settingsAnswer("Settings"),

@@ -16,7 +16,8 @@ import { imageSize, type PictureType } from "./size";
  *
  * What is taken is checked from its first bytes, never from its name or the type it was sent as:
  * a PNG, JPEG or WebP picture (an SVG can carry a script, so it is never one), within a size, with
- * its metadata taken out.
+ * everything but the picture taken out (`stripMetadata`, strict): everyone sees it, and a block left
+ * in, its Content Credentials say, could name who made it.
  */
 
 /** One piece: a logo is small. */
@@ -74,17 +75,19 @@ export async function prepareLogo(bytes: Uint8Array): Promise<CleanLogo> {
   if (!fits(size.width) || !fits(size.height)) throw refused(LOGO_WORDS.size);
   let clean: Uint8Array;
   try {
-    clean = stripMetadata(kind, bytes).bytes;
+    clean = stripMetadata(kind, bytes, { strict: true }).bytes;
   } catch (error) {
     if (error instanceof StripError) throw refused(LOGO_WORDS.damaged);
     throw error;
   }
+  // Cleaning can add a few bytes (a WebP's orientation is written again with its header): the logo
+  // is kept in one piece, so what is kept must fit one too.
+  if (clean.byteLength > LOGO_MAX_BYTES) throw refused(LOGO_WORDS.tooLarge, "too_large");
   return { type: kind, bytes: clean, sha256: await sha256Hex(clean), width: size.width, height: size.height };
 }
 
-/** Keeps a logo's bytes, then its row: no row, no logo. Answers its id. */
-export async function putLogo(db: Db, logo: CleanLogo, now: number): Promise<string> {
-  const id = `logo_${randomToken(18)}`;
+/** Keeps a logo's bytes, then its row: no row, no logo. Answers its id; `id` keeps one again under its own. */
+export async function putLogo(db: Db, logo: CleanLogo, now: number, id = `logo_${randomToken(18)}`): Promise<string> {
   await db.batch([
     {
       sql: "INSERT OR REPLACE INTO attachment_chunks (key, seq, data, created_at) VALUES (?, 0, ?, ?)",
@@ -94,13 +97,23 @@ export async function putLogo(db: Db, logo: CleanLogo, now: number): Promise<str
   ]);
   await db.batch([
     {
-      sql: `INSERT INTO blobs (key, size, content_type, sha256, kind, item_id, party_id, name, expires_at, sent_by, created_at)
+      sql: `INSERT OR REPLACE INTO blobs (key, size, content_type, sha256, kind, item_id, party_id, name, expires_at, sent_by, created_at)
             VALUES (?, ?, ?, ?, 'logo', NULL, NULL, ?, NULL, NULL, ?)`,
       params: [id, logo.bytes.byteLength, logo.type, logo.sha256, `logo${EXTENSION[logo.type]}`, now],
       method: "run",
     },
   ]);
   return id;
+}
+
+/** Whether a logo's row is still kept. */
+export async function hasLogo(db: Db, id: string): Promise<boolean> {
+  const { rows } = await db.client.query({
+    sql: "SELECT 1 FROM blobs WHERE key = ? AND kind = 'logo' AND deleted_at IS NULL",
+    params: [id],
+    method: "all",
+  });
+  return rows.length > 0;
 }
 
 /** A logo's bytes; null when it is gone, or a piece of it is. */
@@ -131,13 +144,16 @@ export async function dropLogo(db: Db, id: string): Promise<void> {
 }
 
 /**
- * Removes every logo kept up to `upTo` but `keep`: the one replaced, and any a write that stopped
- * half way left behind. One kept later is another upload's, still on its way, and is left to it.
+ * Removes every logo kept up to `upTo` but the one the settings name as it runs: the one replaced,
+ * and any a write that stopped half way left behind. Which one the settings name is read in the same
+ * statement, so a settings write that lands meanwhile never loses its file. One kept later is another
+ * upload's, still on its way, and is left to it.
  */
-export async function dropLogos(db: Db, upTo: number, keep?: string): Promise<void> {
+export async function dropLogos(db: Db, upTo: number): Promise<void> {
   await db.batch(
-    keep === undefined
-      ? dropStatements("created_at <= ?", [upTo])
-      : dropStatements("key <> ? AND created_at <= ?", [keep, upTo]),
+    dropStatements(
+      "created_at <= ? AND key IS NOT (SELECT json_extract(doc, '$.look.logo.id') FROM settings LIMIT 1)",
+      [upTo],
+    ),
   );
 }

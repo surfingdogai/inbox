@@ -1,6 +1,7 @@
 import { runMigrations, sha256Hex } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { sweepFiles } from "../src/attachments/store";
+import { orientationTiff, stripMetadata } from "../src/attachments/strip";
 import { Capabilities } from "../src/capabilities/service";
 import { createDb, type Db } from "../src/db";
 import { LookCapabilities } from "../src/look/capability";
@@ -11,7 +12,7 @@ import { readSettings } from "../src/settings/schema";
 import type { Caller, Principal } from "../src/write/index";
 import { makeClient, resetTables } from "./harness";
 import { jpeg, logoPng, riff, segment, vp8, vp8l, vp8x, webpChunk } from "./look-files";
-import { ascii, concat, contains, heic, pdf, SECRET_PLACE } from "./trades-files";
+import { ascii, concat, contains, heic, pdf, pngChunk, SECRET_PLACE } from "./trades-files";
 
 /**
  * The business's logo: its size read from the header alone, what is taken and what is refused (never
@@ -100,6 +101,54 @@ describe("what is taken as a logo", () => {
     await expect(prepareLogo(vp8x(200, 50))).resolves.toMatchObject({ type: "image/webp", height: 50 });
   });
 
+  it("keeps only what draws the picture: Content Credentials, and any block it does not know, go", async () => {
+    const CREDIT = "Made by Ana Lopes from shop-front-original.jpg";
+    const has = (bytes: Uint8Array, ...what: string[]) => what.every((w) => contains(bytes, w));
+    // PNG: a C2PA chunk (caBX) and a private one go; the colour and size chunks stay.
+    const png = concat(
+      [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+      pngChunk("IHDR", Uint8Array.from([0, 0, 0, 120, 0, 0, 0, 40, 8, 6, 0, 0, 0])),
+      pngChunk("sRGB", Uint8Array.from([0])),
+      pngChunk("pHYs", Uint8Array.from([0, 0, 0x0b, 0x13, 0, 0, 0x0b, 0x13, 1])),
+      pngChunk("caBX", ascii(`jumb c2pa ${CREDIT}`)),
+      pngChunk("prVt", ascii(CREDIT)),
+      pngChunk("IDAT", Uint8Array.from([0x78, 0x9c, 0x63, 0, 0, 0, 2, 0, 1])),
+      pngChunk("IEND", new Uint8Array(0)),
+    );
+    const cleanPng = (await prepareLogo(png)).bytes;
+    expect(has(cleanPng, "IHDR", "sRGB", "pHYs", "IDAT", "IEND")).toBe(true);
+    expect(contains(cleanPng, CREDIT) || contains(cleanPng, "caBX") || contains(cleanPng, "prVt")).toBe(false);
+    // JPEG: APP11 (JUMBF, where C2PA lives), APP4 and a JFXX thumbnail go; JFIF, ICC and Adobe stay.
+    const plain = jpeg(400, 100);
+    const jfifEnd = 2 + 18;
+    const jpg = concat(
+      plain.subarray(0, jfifEnd),
+      segment(0xe0, concat(ascii("JFXX\0"), [0x10], ascii(CREDIT))),
+      segment(0xe2, concat(ascii("ICC_PROFILE\0"), [1, 1], ascii("colour profile bytes"))),
+      segment(0xe4, ascii(CREDIT)),
+      segment(0xeb, concat(ascii("JP"), [0, 0, 0, 0, 0, 1], ascii(`jumb c2pa ${CREDIT}`))),
+      segment(0xee, concat(ascii("Adobe"), [0, 100, 0, 0, 0, 0, 1])),
+      plain.subarray(jfifEnd),
+    );
+    const cleanJpg = (await prepareLogo(jpg)).bytes;
+    expect(has(cleanJpg, "JFIF", "ICC_PROFILE", "colour profile bytes", "Adobe")).toBe(true);
+    expect(contains(cleanJpg, CREDIT) || contains(cleanJpg, "JFXX")).toBe(false);
+    expect(imageSize("image/jpeg", cleanJpg)).toEqual({ width: 400, height: 100 });
+    // WebP: a C2PA chunk and an unknown one go; the colour profile stays.
+    const webp = riff(
+      webpChunk("VP8X", [0x20, 0, 0, 0, 199, 0, 0, 49, 0, 0]),
+      webpChunk("ICCP", Array.from(ascii("colour profile bytes"))),
+      webpChunk("VP8 ", [1, 2, 3, 4, 5, 6]),
+      webpChunk("C2PA", Array.from(ascii(`jumb c2pa ${CREDIT}`))),
+      webpChunk("XYZW", Array.from(ascii(CREDIT))),
+    );
+    const cleanWebp = (await prepareLogo(webp)).bytes;
+    expect(has(cleanWebp, "VP8X", "ICCP", "colour profile bytes", "VP8 ")).toBe(true);
+    expect(contains(cleanWebp, CREDIT) || contains(cleanWebp, "C2PA")).toBe(false);
+    // A request's files keep the blocks they always did: the strict cleaning is the logo's.
+    expect(contains(stripMetadata("image/png", png).bytes, "caBX")).toBe(true);
+  });
+
   it("is never what a name or a declared type says: an SVG, a PDF, a HEIC, a fake PNG are refused", async () => {
     const refused = async (bytes: Uint8Array, message: string) =>
       expect(prepareLogo(bytes)).rejects.toMatchObject({ code: "invalid_input", status: 422, message });
@@ -122,6 +171,23 @@ describe("what is taken as a logo", () => {
     const error = await prepareLogo(big.slice(0, LOGO_MAX_BYTES + 1)).catch((e: unknown) => e);
     expect(error).toMatchObject({ code: "invalid_input", message: LOGO_WORDS.tooLarge });
     expect(isTooLarge(error)).toBe(true);
+  });
+
+  it("is at most 512 KB once cleaned too, so what is kept is always whole", async () => {
+    // A WebP of exactly 512 KB whose orientation, a bare TIFF, is written again with its header.
+    const head = [
+      webpChunk("VP8X", [0x08, 0, 0, 0, 199, 0, 0, 49, 0, 0]),
+      webpChunk("EXIF", Array.from(orientationTiff(6))),
+    ];
+    const used = 12 + head.reduce((n, c) => n + c.byteLength, 0) + 8;
+    const webp = riff(...head, webpChunk("VP8 ", new Array(LOGO_MAX_BYTES - used).fill(0)));
+    expect(webp.byteLength).toBe(LOGO_MAX_BYTES);
+    const error = await prepareLogo(webp).catch((e: unknown) => e);
+    expect(error).toMatchObject({ code: "invalid_input", message: LOGO_WORDS.tooLarge });
+    expect(isTooLarge(error)).toBe(true);
+    // A byte or two less, and it fits.
+    const smaller = riff(...head, webpChunk("VP8 ", new Array(LOGO_MAX_BYTES - used - 8).fill(0)));
+    await expect(prepareLogo(smaller)).resolves.toMatchObject({ type: "image/webp", width: 200 });
   });
 });
 
@@ -172,6 +238,59 @@ describe("the logo, kept", () => {
     await expect(look.setLogo(owner, logoPng(120, 40))).rejects.toThrow("the settings changed meanwhile");
     expect(await logoRows(db)).toEqual([]);
     expect(await chunkKeys(db)).toEqual([]);
+  });
+
+  it("keeps the file the settings name when two uploads cross, in either order", async () => {
+    type WriteLogo = ConstructorParameters<typeof LookCapabilities>[1]["writeLogo"];
+    const crossed = async (order: "a_lands_between" | "a_lands_after") => {
+      const { db, caps } = await setup();
+      await caps.updateSettings(owner, { doc: { business: { name: "Oficina Maré" } } });
+      const write = (caps.look as unknown as { deps: { writeLogo: WriteLogo } }).deps.writeLogo;
+      // Each upload waits, by its time, before its settings write and again before its clean-up.
+      const gates = new Map<string, () => void>();
+      const gate = (name: string) => new Promise<void>((open) => gates.set(name, open));
+      const reached = async (name: string) => {
+        while (!gates.has(name)) await new Promise((r) => setTimeout(r, 1));
+      };
+      const open = async (name: string) => {
+        await reached(name);
+        gates.get(name)?.();
+      };
+      const look = new LookCapabilities(db, {
+        writeLogo: async (caller, logo) => {
+          const t = String(caller.now?.() ?? 0);
+          await gate(`write ${t}`);
+          const view = await write(caller, logo);
+          await gate(`drop ${t}`);
+          return view;
+        },
+      });
+      const a = look.setLogo(at(T0 + 100), logoPng(120, 40));
+      const b = look.setLogo(at(T0 + 101), logoPng(300, 60));
+      await open(`write ${T0 + 101}`);
+      if (order === "a_lands_between") {
+        // B names its logo, then A names its own before B clears the old ones.
+        await reached(`drop ${T0 + 101}`);
+        await open(`write ${T0 + 100}`);
+        await open(`drop ${T0 + 100}`);
+        await a;
+        await open(`drop ${T0 + 101}`);
+        await b;
+      } else {
+        // B names its logo and clears the old ones, A's among them, while A's write is on its way.
+        await open(`drop ${T0 + 101}`);
+        await b;
+        await open(`write ${T0 + 100}`);
+        await open(`drop ${T0 + 100}`);
+        await a;
+      }
+      const named = (await readSettings(db)).look.logo;
+      expect(named?.width).toBe(120);
+      const file = await caps.look.file(`${named?.sha256.slice(0, 16)}.png`);
+      expect(file && (await sha256Hex(file.bytes))).toBe(named?.sha256);
+    };
+    await crossed("a_lands_between");
+    await crossed("a_lands_after");
   });
 
   it("is the owner's in person: the owner's AI and another system's key change nothing", async () => {
