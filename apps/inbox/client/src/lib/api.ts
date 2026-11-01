@@ -291,6 +291,11 @@ export const api = {
   verifyKey: (key: string) => call<SettingsDoc>("GET", "/v1/owner/settings", { key }),
   listItems: (params: ListParams) => call<Page<ItemView>>("GET", "/v1/owner/items", { query: { ...params } }),
   getItem: (id: string) => call<ItemDetail>("GET", item(id)),
+  /** A notice moved to the inbox, as a conversation: still yours alone. */
+  moveNoticeToInbox: (id: string) =>
+    call<{ moved: boolean }>("POST", `${item(id)}/move-to-inbox`, { body: {}, idempotent: true }),
+  /** A notice deleted, with everything it holds. */
+  deleteNotice: (id: string) => call<{ deleted: boolean }>("DELETE", `${item(id)}/notice`),
   transition: (id: string, body: TransitionBody) =>
     call<TransitionResult>("POST", `${item(id)}/transitions`, { body, idempotent: true }),
   reply: (id: string, body: ReplyBody) =>

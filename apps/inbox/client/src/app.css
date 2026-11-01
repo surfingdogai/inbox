@@ -4029,3 +4029,25 @@ fieldset:disabled .look-dot {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+/* ------------------------------------------------------------------ */
+/*  Notices: emails from systems, kept for the owner, answered by none. */
+/*  As quiet as Held and Spam: the same rows, one line above them.      */
+/* ------------------------------------------------------------------ */
+.notice-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+.notice-bar > .screen-top {
+  padding: 0;
+}
+.notice-acts {
+  align-items: center;
+}
+.notice-ask {
+  font-size: 12px;
+  color: var(--ink-2);
+}

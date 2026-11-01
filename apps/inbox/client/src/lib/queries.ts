@@ -99,6 +99,14 @@ export function useStopNetworks(itemId: string) {
   return useMutation({ mutationFn: (partyId: string) => api.stopNetworks(partyId, itemId), onSuccess: invalidate });
 }
 
+/** Moves a notice to the inbox, or deletes it: the lists and the counts are read again. */
+export function useNoticeActions(itemId: string) {
+  const invalidate = useInvalidateItem(itemId);
+  const move = useMutation({ mutationFn: () => api.moveNoticeToInbox(itemId), onSuccess: invalidate });
+  const remove = useMutation({ mutationFn: () => api.deleteNotice(itemId), onSuccess: invalidate });
+  return { move, remove };
+}
+
 /** Erases one customer: the first call asks what it would erase (a 409 with `confirm`), the second does it. */
 export function useEraseCustomer(itemId: string) {
   const invalidate = useInvalidateItem(itemId);
@@ -145,15 +153,18 @@ export function useCounts(sandbox: boolean) {
   return useQuery({
     queryKey: qk.counts(sandbox),
     queryFn: async () => {
-      const [open, everything, held] = await Promise.all([
+      const [open, everything, held, notices] = await Promise.all([
         api.listItems({ open_only: true, sandbox, limit: 100 }),
         api.listItems({ open_only: false, sandbox, limit: 100 }),
         // What the spam filter holds (ADR-041): an older server without it answers as for everything.
         api
           .listItems({ screen: "held", open_only: false, sandbox, limit: 100 })
           .catch(() => ({ items: [], next_cursor: null })),
+        api
+          .listItems({ notices: true, open_only: false, sandbox, limit: 100 })
+          .catch(() => ({ items: [], next_cursor: null })),
       ]);
-      return countsFrom(open, everything, held);
+      return countsFrom(open, everything, held, notices);
     },
     staleTime: 15_000,
   });

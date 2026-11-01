@@ -5,6 +5,7 @@ import { problemOf } from "../lib/api";
 import { type Filter, filterLabel, paramsFor, visibleIn, withQuery } from "../lib/filters";
 import { partyName, relativeTime, slotShort, snippetFor, TYPE_CLASS, titleFor } from "../lib/format";
 import { ownerLocale } from "../lib/geo";
+import { NOTICES_EMPTY, NOTICES_TOP } from "../lib/notices";
 import { useEmailChannel, useItemPages, useSettings, useSpam } from "../lib/queries";
 import {
   ACT_LABEL,
@@ -22,6 +23,7 @@ import {
 } from "../lib/spam";
 import type { ItemView } from "../lib/types";
 import { ErrorState, SkeletonRows, Sun } from "./Feedback";
+import { NoticeActs } from "./Notices";
 import { StatePill } from "./Pills";
 import { useSpamActions } from "./SpamActions";
 
@@ -83,6 +85,7 @@ export function ItemList({
       <ForwardConfirm />
       {head}
       {screened && <ScreenTop filter={filter} />}
+      {filter === "notices" && <p className="screen-top">{NOTICES_TOP}</p>}
       <div className="search">
         <Search className="icon" aria-hidden="true" />
         <input
@@ -107,6 +110,8 @@ export function ItemList({
         {views.map((v) =>
           screened ? (
             <ScreenRow key={v.item.id} view={v} filter={filter} selected={v.item.id === selected} tz={tz} />
+          ) : filter === "notices" ? (
+            <NoticeRow key={v.item.id} view={v} selected={v.item.id === selected} tz={tz} />
           ) : (
             <Row key={v.item.id} view={v} selected={v.item.id === selected} tz={tz} />
           ),
@@ -220,6 +225,13 @@ function Empty({ filter, q, label }: { filter: Filter; q: string | undefined; la
     );
   }
   if (filter === "spam") return <SpamEmpty />;
+  if (filter === "notices") {
+    return (
+      <div className="state">
+        <h3>{NOTICES_EMPTY}</h3>
+      </div>
+    );
+  }
   if (filter === "held") {
     return (
       <div className="state">
@@ -279,6 +291,26 @@ function SpamEmpty() {
     <div className="state">
       <h3>{SPAM_EMPTY}</h3>
       <p className="fine">{keepLine(keep)}</p>
+    </div>
+  );
+}
+
+/** A row under Notices: who and what, quietly, with Move to inbox and Delete on the row itself. */
+function NoticeRow({ view, selected, tz }: { view: ItemView; selected: boolean; tz: string | undefined }) {
+  const { item } = view;
+  return (
+    <div className="row screen-row" data-selected={selected ? "true" : undefined}>
+      <i className={`dot dot-${TYPE_CLASS[item.type]}`} />
+      <Link to="/items/$id" params={{ id: item.id }} search={(prev) => prev} className="row-text screen-open">
+        <div className="row-line">
+          <span className="who">{partyName(view.party)}</span>
+          <span className="screen-what"> · {titleFor(item, ownerLocale(tz))}</span>
+        </div>
+      </Link>
+      <time className="row-time" dateTime={item.createdAt} title={item.createdAt}>
+        {relativeTime(item.createdAt)}
+      </time>
+      <NoticeActs itemId={item.id} />
     </div>
   );
 }

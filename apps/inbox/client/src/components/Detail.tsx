@@ -17,6 +17,7 @@ import {
 } from "../lib/format";
 import { ownerLocale } from "../lib/geo";
 import { usePhone } from "../lib/media";
+import { isNotice, MOVED_LINE, NOTICE_LINE, wasNotice } from "../lib/notices";
 import { useItem, useItemPayments, useReply, useSettings, useTransition } from "../lib/queries";
 import { actsFor } from "../lib/spam";
 import type { Party, Transition } from "../lib/types";
@@ -31,6 +32,7 @@ import { EventIcon } from "./EventIcon";
 import { DetailSkeleton, ErrorState, Toast } from "./Feedback";
 import { Details, Fields } from "./Fields";
 import { JobBlock } from "./Job";
+import { NoticeActs } from "./Notices";
 import { OrderBlock } from "./OrderBlock";
 import { AgentPayments, Payments, RefundAt } from "./Payments";
 import { StatePill, TypePill } from "./Pills";
@@ -127,7 +129,9 @@ export function ItemDetailView({
     offered.filter(
       (t) =>
         !(t.event === "mark_spam" && spamActs.includes("spam")) &&
-        !(t.event === "unspam" && spamActs.includes("not_spam")),
+        !(t.event === "unspam" && spamActs.includes("not_spam")) &&
+        // A notice is answered by nobody: moved to the inbox, it is a conversation you may answer.
+        !(t.event === "answer" && isNotice(item)),
     ),
   ).map((t) =>
     openLink && t.event === "record_payment"
@@ -225,6 +229,13 @@ export function ItemDetailView({
         </div>
         <span className={clsx("rule card-rule", `rule-${TYPE_CLASS[item.type]}`)} aria-hidden="true" />
         <WhoLine party={party} channel={item.channel} />
+        {isNotice(item) && (
+          <div className="notice-bar">
+            <p className="screen-top">{NOTICE_LINE}</p>
+            <NoticeActs itemId={item.id} leaveOnDelete />
+          </div>
+        )}
+        {wasNotice(item) && <p className="hint">{MOVED_LINE}</p>}
         {query.data.spam && (
           <WhyHere view={query.data} tz={tz} acts={spamActs} onAct={(a) => spam.act(query.data, a)} />
         )}
@@ -298,6 +309,7 @@ export function ItemDetailView({
         onSend={send}
         sending={reply.isPending}
         error={reply.error ? problemOf(reply.error) : null}
+        notesOnly={isNotice(item)}
       />
       <Timeline events={events} type={item.type} tz={tz} />
       {phone && <ActionBar transitions={transitions} tones={tones} onPick={pick} more={item.type === "stay"} />}

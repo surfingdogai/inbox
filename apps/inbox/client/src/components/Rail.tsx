@@ -9,6 +9,7 @@ import {
   LogOut,
   type LucideIcon,
   MailX,
+  Newspaper,
   Settings,
   ShieldOff,
 } from "lucide-react";
@@ -27,6 +28,7 @@ const ICONS: Partial<Record<Filter, LucideIcon>> = {
   unsent: MailX,
   held: Hourglass,
   spam: ShieldOff,
+  notices: Newspaper,
 };
 
 /** The filters rail: what needs you, everything, each type with its count, and what is done. */

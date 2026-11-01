@@ -18,6 +18,7 @@ export function Conversation({
   onSend,
   sending,
   error,
+  notesOnly = false,
 }: {
   entries: readonly ThreadEntry[];
   party: Party | undefined;
@@ -27,9 +28,12 @@ export function Conversation({
   onSend: (body: string, internal: boolean) => Promise<void>;
   sending: boolean;
   error: ApiProblem | null;
+  /** Only notes for the team: a notice is answered by nobody. */
+  notesOnly?: boolean;
 }) {
   const [text, setText] = useState("");
-  const [internal, setInternal] = useState(false);
+  const [chosen, setInternal] = useState(false);
+  const internal = notesOnly || chosen;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -68,13 +72,15 @@ export function Conversation({
           aria-describedby={error ? "reply-error" : undefined}
         />
         <div className="rowx">
-          <label className="check">
-            <span className="switch">
-              <input type="checkbox" checked={internal} onChange={(e) => setInternal(e.target.checked)} />
-              <span />
-            </span>
-            Internal note
-          </label>
+          {!notesOnly && (
+            <label className="check">
+              <span className="switch">
+                <input type="checkbox" checked={internal} onChange={(e) => setInternal(e.target.checked)} />
+                <span />
+              </span>
+              Internal note
+            </label>
+          )}
           <span className="sp" />
           <button type="submit" className="btn btn-primary btn-sm" disabled={!text.trim() || sending}>
             {sending ? <span className="spinner" aria-hidden="true" /> : <Send className="icon" aria-hidden="true" />}

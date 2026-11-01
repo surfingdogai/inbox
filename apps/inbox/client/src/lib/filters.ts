@@ -2,10 +2,10 @@ import type { ItemType, ItemView, ListParams, Page } from "./types";
 
 /**
  * The rail: what the owner should look at, everything open, one type, what is done, items with an
- * email to the customer that could not be sent, and messages put aside as spam (by the owner, or as
- * they arrived: ADR-026 §7).
+ * email to the customer that could not be sent, messages put aside as spam (by the owner, or as
+ * they arrived: ADR-026 §7), and notices: emails from systems that nobody answers.
  */
-export type Filter = "needs" | "all" | "done" | "unsent" | "held" | "spam" | ItemType;
+export type Filter = "needs" | "all" | "done" | "unsent" | "held" | "spam" | "notices" | ItemType;
 
 export const FILTERS: readonly { readonly key: Filter; readonly label: string; readonly type?: ItemType }[] = [
   { key: "needs", label: "Needs you" },
@@ -22,6 +22,9 @@ export const FILTERS: readonly { readonly key: Filter; readonly label: string; r
   // while something is held.
   { key: "held", label: "Held" },
   { key: "spam", label: "Spam" },
+  // Emails from systems (receipts, account and newsletter mail) that answer no conversation: kept for
+  // you, out of every other list, and answered by nobody.
+  { key: "notices", label: "Notices" },
 ];
 
 export function parseFilter(value: unknown): Filter | undefined {
@@ -49,6 +52,8 @@ export function paramsFor(filter: Filter, q: string | undefined, sandbox: boolea
     case "spam":
       // Everything put aside: by you, by a mail server as it arrived, and by the spam filter.
       return { ...base, state: "spam", open_only: false };
+    case "notices":
+      return { ...base, notices: true, open_only: false };
     default:
       return { ...base, type: filter, open_only: true };
   }
@@ -78,9 +83,17 @@ export interface Counts {
   /** What the spam filter holds for the sender or a person (ADR-041): the rail shows Held only then. */
   readonly held: number;
   readonly heldMore: boolean;
+  /** Notices waiting under Notices: counted quietly, never as something that needs you. */
+  readonly notices: number;
+  readonly noticesMore: boolean;
 }
 
-export function countsFrom(open: Page<ItemView>, everything: Page<ItemView>, held?: Page<ItemView>): Counts {
+export function countsFrom(
+  open: Page<ItemView>,
+  everything: Page<ItemView>,
+  held?: Page<ItemView>,
+  notices?: Page<ItemView>,
+): Counts {
   const byType: Record<ItemType, number> = { message: 0, quote_request: 0, booking: 0, order: 0, refund: 0, stay: 0 };
   const needsByType: Record<ItemType, number> = {
     message: 0,
@@ -108,6 +121,8 @@ export function countsFrom(open: Page<ItemView>, everything: Page<ItemView>, hel
     doneMore: everything.next_cursor !== null,
     held: held?.items.length ?? 0,
     heldMore: (held?.next_cursor ?? null) !== null,
+    notices: notices?.items.length ?? 0,
+    noticesMore: (notices?.next_cursor ?? null) !== null,
   };
 }
 
@@ -128,6 +143,8 @@ export function countFor(counts: Counts | undefined, filter: Filter): string {
       return suffix(counts.done, counts.doneMore);
     case "held":
       return counts.held > 0 ? suffix(counts.held, counts.heldMore) : "";
+    case "notices":
+      return counts.notices > 0 ? suffix(counts.notices, counts.noticesMore) : "";
     case "unsent":
     case "spam":
       // Not counted: the rail's counts come from the open items, and Spam shouts nothing.
