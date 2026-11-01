@@ -432,6 +432,54 @@ describe("idempotency on every owner write", () => {
     expect(JSON.parse(stolenText)).toMatchObject({ id, secret: null });
   });
 
+  it("gives an automation's retried write back its first answer, keyed by the event's id", async () => {
+    // The flow docs/webhooks.md describes, as n8n ran it on 1 November 2026: a webhook for a new
+    // message, a reply with the event's id as the Idempotency-Key, and the same reply again when the
+    // delivery is retried, by then on an answered message.
+    const { app, owner, serviceId } = await setup();
+    const n8n = await mintKey(app, owner, { name: "n8n", preset: "automation" });
+    const asN8n = { authorization: `Bearer ${n8n.key}` };
+    const started = await app.request(
+      req("POST", "/v1/messages", { body: "Do you sell Brooks saddles?", contact: { name: "João" } }),
+    );
+    const id = ((await started.json()) as { view: { item: { id: string } } }).view.item.id;
+    const reply = { body: "Thanks, we got it.", written_by: "automation" };
+    const keyed = { ...asN8n, "idempotency-key": "01K5RJ3B4C5D6E7F8G9H0JKMNP" };
+    const first = await app.request(req("POST", `/v1/owner/items/${id}/replies`, reply, keyed));
+    expect(first.status, await first.clone().text()).toBe(200);
+    expect(first.headers.get("idempotent-replayed")).toBeNull();
+    const again = await app.request(req("POST", `/v1/owner/items/${id}/replies`, reply, keyed));
+    expect(again.status, await again.clone().text()).toBe(200);
+    expect(again.headers.get("idempotent-replayed")).toBe("true");
+    expect(((await again.json()) as { view: { item: { state: string } } }).view.item.state).toBe("answered");
+    const detail = (await (await app.request(req("GET", `/v1/owner/items/${id}`, undefined, owner))).json()) as {
+      thread: { direction: string }[];
+    };
+    expect(detail.thread.filter((t) => t.direction === "out")).toHaveLength(1);
+    // And a reply on the answered message, which is no transition.
+    const later = { ...asN8n, "idempotency-key": "01K5RJ3B4C5D6E7F8G9H0JKMNR" };
+    const more = { body: "We have them in stock.", written_by: "automation" };
+    expect(
+      (await app.request(req("POST", `/v1/owner/items/${id}/replies`, more, later))).headers.get("idempotent-replayed"),
+    ).toBeNull();
+    const moreAgain = await app.request(req("POST", `/v1/owner/items/${id}/replies`, more, later));
+    expect(moreAgain.status).toBe(200);
+    expect(moreAgain.headers.get("idempotent-replayed")).toBe("true");
+
+    // A move along says so too.
+    const booking = await book(app, serviceId);
+    const confirm = { ...asN8n, "idempotency-key": "01K5RJ3B4C5D6E7F8G9H0JKMNQ" };
+    const moved = await app.request(
+      req("POST", `/v1/owner/items/${booking}/transitions`, { event: "confirm" }, confirm),
+    );
+    expect(moved.status, await moved.clone().text()).toBe(200);
+    const movedAgain = await app.request(
+      req("POST", `/v1/owner/items/${booking}/transitions`, { event: "confirm" }, confirm),
+    );
+    expect(movedAgain.status).toBe(200);
+    expect(movedAgain.headers.get("idempotent-replayed")).toBe("true");
+  });
+
   it("refuses an Idempotency-Key longer than the field allows", async () => {
     const { app, owner } = await setup();
     const res = await app.request(

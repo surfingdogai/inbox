@@ -1013,8 +1013,12 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
     async (c) => c.json(await caps.alwaysPutAside(c.get("caller"), getItemInput.parse({ item_id: c.req.param("id") }))),
   );
 
+  /** A retried write gets its first answer back, said as every other door says it (docs/api.md, Idempotency). */
+  const replayedHeader = (r: object): Record<string, string> =>
+    "replayed" in r && r.replayed === true ? { "Idempotent-Replayed": "true" } : {};
   /** A transition answers 200, or 202 when what automation offered was kept as a draft for the owner. */
-  const movedOrDrafted = (c: Context<CallerEnv>, r: { drafted?: unknown }) => c.json(r, r.drafted ? 202 : 200);
+  const movedOrDrafted = (c: Context<CallerEnv>, r: { drafted?: unknown }) =>
+    c.json(r, r.drafted ? 202 : 200, replayedHeader(r));
 
   app.post(
     "/items/:id/transitions",
@@ -1206,7 +1210,7 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
         withIdem(c, { ...c.req.valid("json"), item_id: c.req.param("id") }) as never,
       );
       // A reply from your AI or a key without money:write naming money you have not offered: kept as a note (202).
-      return c.json(r, "held" in r && r.held ? 202 : 200);
+      return c.json(r, "held" in r && r.held ? 202 : 200, replayedHeader(r));
     },
   );
 

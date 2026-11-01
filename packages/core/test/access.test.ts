@@ -353,6 +353,55 @@ describe("idempotency for setup writes", () => {
   });
 });
 
+describe("idempotency for an automation's replies", () => {
+  /**
+   * Found running the n8n flow docs/webhooks.md describes (1 November 2026): the flow answers a new
+   * message with the event's id as its idempotency key, and its retry, after the first reply had
+   * answered the message, was refused `idempotency_mismatch` rather than given the first answer.
+   */
+  it("replays a reply retried with its key after the message it answered moved on", async () => {
+    const { caps } = await setup();
+    const started = (await caps.sendMessage(
+      {
+        actor: { kind: "customer_agent", id: "anon:1", channel: "rest" },
+        tier: "anonymous",
+        sandbox: false,
+        now: () => T0,
+      },
+      { body: "Can you look at my gears this week?", contact: { name: "Marta" } },
+    )) as { view: { item: { id: string } } };
+    const id = started.view.item.id;
+    const reply = {
+      item_id: id,
+      body: "Thank you: we will answer today.",
+      internal: false,
+      written_by: "automation" as const,
+    };
+    const first = (await caps.reply(zapier, { ...reply, idempotency_key: "evt_1" })) as {
+      view: { item: { state: string; version: number } };
+      replayed: boolean;
+    };
+    expect(first.view.item.state).toBe("answered");
+    expect(first.replayed).toBe(false);
+    const again = (await caps.reply(zapier, { ...reply, idempotency_key: "evt_1" })) as typeof first;
+    expect(again.replayed).toBe(true);
+    expect(again.view.item.version).toBe(first.view.item.version);
+    // Another reply under that key is still another request.
+    await expect(
+      caps.reply(zapier, { ...reply, body: "Something else", idempotency_key: "evt_1" }),
+    ).rejects.toMatchObject({ code: "idempotency_mismatch" });
+    // A reply on the answered message (no transition) replays too, and the thread has each reply once.
+    const note = { ...reply, body: "We have a slot on Thursday.", idempotency_key: "evt_2" };
+    expect(await caps.reply(zapier, note)).not.toHaveProperty("replayed");
+    expect(await caps.reply(zapier, note)).toMatchObject({ replayed: true });
+    const detail = await caps.getItem(owner, { item_id: id });
+    expect(detail.thread.filter((t) => t.direction === "out").map((t) => t.body)).toEqual([
+      "Thank you: we will answer today.",
+      "We have a slot on Thursday.",
+    ]);
+  });
+});
+
 describe("attribution", () => {
   it("names who caused each event in the history, the stream and its meta", async () => {
     const { db, caps } = await setup();

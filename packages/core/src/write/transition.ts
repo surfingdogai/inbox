@@ -158,12 +158,22 @@ export interface TransitionResult {
 
 const MAX_ATTEMPTS = 3;
 
+/**
+ * What a transition's idempotency key is stored with: the same request under the same key replays
+ * its answer, another is refused. Exported for a write that is a transition only while the item is
+ * in one state (a reply that answers an open message), so its retry can tell it made one.
+ */
+export async function transitionRequestHash(
+  idem: NonNullable<Caller["idempotency"]>,
+  input: TransitionInput,
+): Promise<string> {
+  const { extraStatements: _extra, hashInput, meta: _meta, ...hashed } = input;
+  return hashJson({ op: "transition", scope: idem.scope, input: hashInput ?? hashed });
+}
+
 export async function transitionItem(db: Db, caller: Caller, input: TransitionInput): Promise<TransitionResult> {
   const idem = caller.idempotency;
-  const { extraStatements: _extra, hashInput, meta: _meta, ...hashed } = input;
-  const requestHash = idem
-    ? await hashJson({ op: "transition", scope: idem.scope, input: hashInput ?? hashed })
-    : undefined;
+  const requestHash = idem ? await transitionRequestHash(idem, input) : undefined;
   for (let attempt = 1; ; attempt++) {
     try {
       return await attempt_(db, caller, input, requestHash);

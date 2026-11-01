@@ -151,7 +151,12 @@ import { heldReplyStatements, namesOtherMoney } from "../write/limits";
 import { isAutomation } from "../write/offers";
 import { withdrawalOf } from "../write/returns";
 import { appendThreadEntry } from "../write/thread";
-import { type TransitionResult, transitionItem } from "../write/transition";
+import {
+  type TransitionInput,
+  type TransitionResult,
+  transitionItem,
+  transitionRequestHash,
+} from "../write/transition";
 import { customerItem, type ItemSpamSummary, type ItemView, type PartyView, rowToItem, viewFor } from "../write/views";
 import {
   askedForAPrice,
@@ -2291,9 +2296,9 @@ export class Capabilities {
       writtenBy !== "person" &&
       isAutomation(caller) &&
       (await namesOtherMoney(this.db, item, await offerRows(this.db, item.id), input.body));
+    const keyed = withIdempotencyKey(caller, input.idempotency_key);
     if (held) {
-      const keyed = withIdempotencyKey(caller, input.idempotency_key);
-      const { result } = await once(
+      const { result, replayed } = await once(
         this.db,
         keyed,
         "items.reply",
@@ -2325,20 +2330,28 @@ export class Capabilities {
           };
         },
       );
-      return result;
+      return replayed ? { ...result, replayed: true } : result;
     }
-    if (!input.internal && item.type === "message" && item.state === "open") {
-      return transitionItem(this.db, withIdempotencyKey(caller, input.idempotency_key), {
-        itemId: item.id,
-        event: "answer",
-        input: { note: input.body },
-        ...(writtenBy ? { writtenBy } : {}),
-      });
+    const answer: TransitionInput = {
+      itemId: item.id,
+      event: "answer",
+      input: { note: input.body },
+      ...(writtenBy ? { writtenBy } : {}),
+    };
+    // A reply to an open message answers it, a transition. Its retry finds the message answered, so
+    // the key it was stored under, and not the state, says it was one: the retry gets the first answer
+    // back, as a webhook receiver retrying with the event's id expects, never `idempotency_mismatch`.
+    const answered = async () => {
+      if (!keyed.idempotency) return false;
+      const hit = await findIdempotent(this.db, keyed.idempotency);
+      return hit !== undefined && hit.requestHash === (await transitionRequestHash(keyed.idempotency, answer));
+    };
+    if (!input.internal && item.type === "message" && (item.state === "open" || (await answered()))) {
+      return transitionItem(this.db, keyed, answer);
     }
     // Not a transition, so not stored in a batch: the key is held around the append instead, and a
     // retried note is written once.
-    const keyed = withIdempotencyKey(caller, input.idempotency_key);
-    const { result } = await once(
+    const { result, replayed } = await once(
       this.db,
       keyed,
       "items.reply",
@@ -2356,7 +2369,8 @@ export class Capabilities {
         return viewFor(item, permissionKind(caller), undefined, hidden.get(item.id), await this.ownerClock());
       },
     );
-    return result;
+    // Said on a retry, as a transition's answer says it (`Idempotent-Replayed` on REST).
+    return replayed ? { ...result, replayed: true } : result;
   }
 
   /**
