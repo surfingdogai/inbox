@@ -654,10 +654,13 @@ describe("the price: Free, and Pro at $10", () => {
     expect(terms).toContain(
       "If it still can't be paid, Pro ends and your inbox is Free again. Nothing in your inbox is deleted.",
     );
-    expect(terms).toContain("We may give an inbox Pro for free until a date");
+    expect(terms).not.toContain("We may give an inbox Pro for free until a date");
     expect(terms).toContain("**Ending the service.**");
     expect(terms).toContain("or what you paid for Pro in the 12 months before the claim, if that is more");
     const privacy = flat(body(`${HOSTED_DIR}/privacy.md`));
+    // The starting details are the owner's to change; no review step is claimed.
+    expect(privacy).toContain("They are your inbox's starting details, and yours to change in Settings.");
+    expect(privacy).not.toContain("You check them before anything is used.");
     expect(privacy).not.toMatch(/pilot|future price/i);
     expect(privacy).toContain("**If you choose Pro**");
     expect(privacy).toContain("Stripe gets your email address and your domain");
@@ -669,19 +672,16 @@ describe("the price: Free, and Pro at $10", () => {
       "On Pro, with its AI check on, the spam filters send Google, through its Gemini API, the masked text of new senders' messages they cannot decide by themselves",
     );
     expect(privacy).toContain("whether and when you turned its AI check on or off");
-    // A Pro we give: the owner is told, and its AI check waits for them.
-    expect(terms).toContain("We tell you by email, and Settings → Spam says until when.");
-    expect(terms).toContain(
-      "Its filters are on, but its AI check stays off until you turn it on in Settings → Spam: until then nothing goes to Google.",
-    );
+    // Pro is always paid: the terms offer no Pro for free.
+    expect(terms).not.toMatch(/Pro for free|trying the beta/);
     // The filters ship with Pro: nothing says they are coming, or that Pro changes nothing.
     expect(terms).not.toMatch(/which are coming|filters \(coming\)|Pro changes nothing/);
-    expect(terms).toContain(
-      "Until that AI check is switched on for hosted inboxes, the filters look for known phrases, and Settings → Spam says so.",
-    );
+    // The AI check runs for Pro: nothing says it is still to come.
+    expect(terms).not.toMatch(/Until that AI check is switched on/);
     expect(terms).toContain(SUPPORT);
-    for (const page of ["terms.md", "privacy.md", "processing.md"])
-      expect(front(`${HOSTED_DIR}/${page}`).updated, page).toBe("28 October 2026");
+    for (const page of ["terms.md", "privacy.md"])
+      expect(front(`${HOSTED_DIR}/${page}`).updated, page).toBe("1 November 2026");
+    expect(front(`${HOSTED_DIR}/processing.md`).updated).toBe("28 October 2026");
     expect(front(`${HOSTED_DIR}/terms.md`).description).not.toMatch(/pilot/i);
   });
 

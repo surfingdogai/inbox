@@ -2,7 +2,7 @@
 title: Hosted inbox privacy notice
 description: What we keep about you, the business owner, when you set up a hosted inbox, and why.
 eyebrow: Privacy · hosted inbox
-updated: 28 October 2026
+updated: 1 November 2026
 order: 3
 ---
 
@@ -12,7 +12,7 @@ This notice is about you, the person who sets up a hosted inbox, and about your 
 
 - **Your email address**, stored encrypted, and a keyed hash of it to find your account. We use it to sign you in, to send you codes and notices about your inbox, and to tell you about changes to the service. Basis: our contract with you.
 - **Your domain and the hostname you chose**, and what our checks see in its DNS (the record you added, your DNS provider's name servers, whether the certificate was issued). Basis: our contract with you.
-- **What we read from your public website** to fill in your inbox's starting details: your kind of business, hours, services and other facts your site publishes, each with where and when we read it. You check them before anything is used. Basis: our contract with you, and our legitimate interest in saving you the typing.
+- **What we read from your public website** to fill in your inbox's starting details: your kind of business, hours, services and other facts your site publishes, each with where and when we read it. They are your inbox's starting details, and yours to change in Settings. Basis: our contract with you, and our legitimate interest in saving you the typing.
 - **The steps you took and when**: that a card was shown, a code sent, a record seen, the inbox gone live. Counts and times, nothing more, kept by us, with no analytics company involved. Basis: our legitimate interest in knowing where setup gets stuck.
 - **Usage counts**: confirmed items, items, emails sent and the size of your inbox, per month. Basis: our contract with you.
 - **If you choose Pro**: your inbox's customer and subscription at Stripe, whether Pro runs and until when, and who in your account chose it and when. Stripe holds your card and payment details; we never see them. If we give your inbox Pro for free: until when, when we told you, and whether and when you turned its AI check on or off. Basis: our contract with you.
