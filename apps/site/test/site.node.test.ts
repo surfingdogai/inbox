@@ -712,8 +712,8 @@ describe("the home page and the three products", () => {
       next: "Version 7 is announced, and takes effect on 23 Oct 2026.",
     });
     expect(rulesLine({ version: 7, status: "announced" })).toBeNull();
-    // The fallback is what is in force once the network publishes version 10: since 31 October 2026.
-    expect(rulesFallback()).toEqual({ now: "Version 10 (0.2.3), in force since 31 Oct 2026.", next: "" });
+    // The fallback is what is in force once the network publishes version 11: since 1 November 2026.
+    expect(rulesFallback()).toEqual({ now: "Version 11 (0.2.4), in force since 1 Nov 2026.", next: "" });
     // The network page says the same line, read the same way, rather than a version written into it.
     const network = read("src/pages/network.astro");
     expect(network).toContain("<b>{rules.now}</b>");

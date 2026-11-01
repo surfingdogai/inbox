@@ -12,8 +12,10 @@ as one customer or only against the business, and version 7's order amended befo
 effect, with bounds on what a network takes), decided, rules version 8 (§15); Amendment 5 (13
 October 2026: a score counts only what the business cannot make up, a record ranks from three
 customers who confirmed it, late closures, and this network's own reads of a door), decided, rules
-version 9; and Amendment 6 (31 October 2026: words that name a kind of business find that kind
-first), decided, rules version 10 (§15). The decisions are
+version 9; Amendment 6 (31 October 2026: words that name a kind of business find that kind
+first), decided, rules version 10; and Amendment 7 (1 November 2026: a business's variants take one
+place in product search, a live free time only filters, and an ID refused at handover counts against
+nobody), decided, rules version 11 (§15). The decisions are
 the founder's; a number marked *default* is a proposal he may change without a new ADR (§14 lists every
 number and whose it is). The first ranking was withdrawn on 22 September 2026 before it had been
 designed as a whole, and the directory has since been neutral (newest verified first; near a place,
@@ -1015,6 +1017,14 @@ business; cursors that survive the hourly reorder; SMS codes, booking deposits, 
   in the rest of its text is left out, the answer saying when none of that kind is there (A6.1,
   A6.2). Its rules are named 0.2.3. Ours had two members when it published it, both its own inboxes,
   and no other business, so nobody was owed §11's notice, and it took effect the day it was published.
+- **Version 11 (Amendment 7), decided 1 November 2026:** in product search, a business's variants of
+  one product take one place (A7.1); a live free time only decides whether a business is in a
+  search's results, never its place (A7.2); and an order refused at handover because the buyer could
+  not show ID or is under age counts against nobody (A7.3). Catalogue version 1 has no product groups,
+  no search asks for a free time yet, and the protocol does not define the ID refusal yet: each rule
+  applies from the day its part of the protocol arrives, with no notice. Its rules are named 0.2.4.
+  Ours had two members when it was decided, both its own inboxes, and no other business: published
+  while that holds, it takes effect the day it is published, and its changelog entry says so.
 
 ## Amendment 1 (23 Sep 2026)
 
@@ -2487,3 +2497,82 @@ Version 9's document stays as it was published, but for `next`.
 words still find it. Nothing about the order can be bought.
 
 **Text changed:** the header, A6, §15 (version 10).
+
+## Amendment 7 (1 Nov 2026): variants, free times and an ID refused at handover — rules version 11
+
+**Status: decided (1 Nov 2026)**, as rules version 11 (`"0.2.4"`): version 10 (`"0.2.3"`) amended.
+A network publishes it by its own notice: in force the moment it publishes it when no business but
+its own inboxes is a member of that network then, otherwise at 00:00 UTC on the sixteenth day after
+the day it published it (§11); and never before version 10 takes effect, since it amends it. Ours had
+two members when it was decided, both its own inboxes, and no other business. Published while that
+holds, it takes effect the day it is published, and its changelog entry says so. Every member and
+number of version 10 is kept, but for the ones below.
+
+**Why.** Three things come with later versions of the protocol: product groups in a catalogue
+(catalogue version 2), live free times in a search, and an ID check when an age-restricted order is
+handed over. Each changes what a search shows or what an outcome counts for. Decided now, before any
+business but our own inboxes is a member, none of them owes a notice when it arrives, and the first
+businesses to join know the rules they join under.
+
+### A7.1 Variants of one business show as one result
+
+- **Rule.** In product search (`search_products`, `GET /v1/products`), the offers one business lists
+  as variants of one product (its sizes, colours or flavours: one product group in its catalogue)
+  are one product. The business takes one place with them, whatever their barcodes. Its offer there
+  is the cheapest the search found, and `variants` says how many it found: "3 variants from 4.50
+  EUR". A business never takes more than one place with the variants of one product. Every filter
+  applies to each offer first, so a filter only leaves variants out.
+- A search by barcode (`gtin`, and `get_offers`) reads that barcode in one multipack, where a business
+  already has one place, at its lowest price, as before. In a search by words, a variant whose barcode
+  another business also sells is shown in its business's group, not in that barcode's product;
+  `get_offers` still lists every business that offers the barcode.
+- **Today.** Catalogue version 1, the only one networks read, has no product groups. So ours groups
+  nothing yet, and no answer changes: one barcode in one multipack is one product, each business once
+  in it, and an offer with no barcode is its business's own. When catalogue version 2 adds the group,
+  the rule applies to a business's offers from the first catalogue it sends with groups, and owes no
+  notice.
+
+### A7.2 A live free time only filters
+
+- **Rule.** When a search asks for businesses with a free time (a live answer from each business's own
+  inbox), having one only decides whether a business is in the results. It never changes their order:
+  nothing for having more free times, an earlier one, or an inbox that answers sooner. The results
+  come in the order they would without the free time (`order.free_times`).
+- No free time a network reads is kept, and none enters a score, a record, reach or the hour's order
+  (`never_used`).
+- **Today.** No search asks for a free time yet. `request_booking` reads one business's free times when
+  a person's assistant asks, and our network keeps none of them.
+
+### A7.3 An ID refused at handover counts against nobody
+
+- **Rule.** When an age-restricted order is refused at handover because the buyer could not show ID or
+  is under age, the inbox closes it with the outcome `order.id_refused`. It writes no row on either
+  side (§3), so it counts against neither the business nor the person: not in a score, not in a count
+  of kept or broken promises, not in a customer's record. It is not a closure labelled the customer's
+  (A5.3), so it is never late. A listing counts it as its own outcome.
+- A customer who says the order was never handed over may still report it (`order.not_received`),
+  and the report counts as A5.4 says. A refund the business then owes is a promise of its own and
+  counts as any refund does (A3.2).
+- **No ID data.** A network takes `order.id_refused`, and an acknowledgement of it, only when they
+  carry nothing their schemas do not name, so no document, number, date of birth or age is ever
+  stored with it.
+- **Reserved.** The protocol does not define the outcome yet: the ID check at handover comes in a
+  later version. Until it does, a network refuses `order.id_refused` as it refuses any outcome it
+  does not know. When the protocol defines it, together with a way for an order's promise to say that
+  it needs an ID check at handover, a network takes it on such an order only, and it counts as above
+  from the first one. Without that limit, a business could close any order it failed as an ID refused,
+  and A5.3 would not catch it.
+
+### A7 in the rules version
+
+Rules version 11 (`"0.2.4"`) keeps every member and number of version 10. It adds `order.variants`,
+`order.free_times`, a line in `never_used`, and the outcome `order.id_refused` (no row on either side,
+by the inbox, reserved), and rewrites `summary`. A listing's outcomes gain `order.id_refused`. A
+product search result gains `variants` and the key `group:<business>:<group>`, both only for one
+business's product group. Version 10's document stays as it was published, but for `next`.
+
+**Decisions.** A2.5 holds: a filter only leaves businesses out, and a free time is a filter. R25
+holds: a business is never marked for an ID it refused, nor a person for one they could not show.
+Nothing about the order can be bought.
+
+**Text changed:** the header, A7, §15 (version 11).
