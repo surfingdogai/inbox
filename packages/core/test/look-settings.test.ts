@@ -28,13 +28,13 @@ const owner: Caller = {
   now: () => T0,
 };
 /** The owner's AI over OAuth. */
-const claude: Caller = {
-  actor: { kind: "owner_ai", id: "client_claude", channel: "mcp_owner" },
+const ownerAi: Caller = {
+  actor: { kind: "owner_ai", id: "client_assistant", channel: "mcp_owner" },
   actsAs: "owner",
   principal: principal({
     via: "oauth",
-    id: "client_claude",
-    name: "Claude",
+    id: "client_assistant",
+    name: "Assistant",
     scopes: ["inbox:read", "inbox:write", "settings:read", "settings:write", "offline_access"],
     userId: "user_1",
   }),
@@ -98,7 +98,7 @@ describe("the look setting", () => {
 describe("who changes the look", () => {
   it("is the owner in person: the owner's AI and another system's key are refused", async () => {
     const { db, caps } = await setup();
-    for (const caller of [claude, zapier]) {
+    for (const caller of [ownerAi, zapier]) {
       await expect(caps.updateSettings(caller, { doc: { look: { theme: "dark" } } })).rejects.toMatchObject({
         code: "not_allowed",
         details: { reason: "owner_in_person" },
@@ -118,15 +118,15 @@ describe("who changes the look", () => {
   it("sends the look back as it was: nothing changed, nothing refused", async () => {
     const { caps } = await setup();
     await caps.updateSettings(owner, { doc: { look: { theme: "minimal" } } });
-    const view = await caps.getSettings(claude);
-    await expect(caps.updateSettings(claude, { doc: { look: view.doc.look } })).resolves.toMatchObject({
+    const view = await caps.getSettings(ownerAi);
+    await expect(caps.updateSettings(ownerAi, { doc: { look: view.doc.look } })).resolves.toMatchObject({
       doc: { look: { theme: "minimal" } },
     });
   });
 
   it("never points the logo anywhere through the settings, whoever asks", async () => {
     const { db, caps } = await setup();
-    for (const caller of [owner, claude, zapier]) {
+    for (const caller of [owner, ownerAi, zapier]) {
       await expect(caps.updateSettings(caller, { doc: { look: { logo: LOGO } } })).rejects.toMatchObject({
         code: expect.stringMatching(/^(invalid_input|not_allowed)$/),
       });

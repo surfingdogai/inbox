@@ -35,10 +35,10 @@ const at = (now: number): Caller => ({
   now: () => now,
 });
 const owner = at(T0);
-const claude: Caller = {
-  actor: { kind: "owner_ai", id: "client_claude", channel: "mcp_owner" },
+const ownerAi: Caller = {
+  actor: { kind: "owner_ai", id: "client_assistant", channel: "mcp_owner" },
   actsAs: "owner",
-  principal: principal({ via: "oauth", id: "client_claude", name: "Claude", userId: "user_1" }),
+  principal: principal({ via: "oauth", id: "client_assistant", name: "Assistant", userId: "user_1" }),
   tier: "verified_principal",
   sandbox: false,
   now: () => T0,
@@ -176,7 +176,7 @@ describe("the logo, kept", () => {
 
   it("is the owner's in person: the owner's AI and another system's key change nothing", async () => {
     const { db, caps } = await setup();
-    for (const caller of [claude, zapier]) {
+    for (const caller of [ownerAi, zapier]) {
       await expect(caps.look.setLogo(caller, logoPng(120, 40))).rejects.toMatchObject({
         code: "not_allowed",
         details: { reason: "owner_in_person", where: "Settings → Look" },
@@ -185,7 +185,7 @@ describe("the logo, kept", () => {
     }
     expect(await logoRows(db)).toEqual([]);
     await caps.look.setLogo(owner, logoPng(120, 40));
-    await expect(caps.look.removeLogo(claude)).rejects.toMatchObject({ code: "not_allowed" });
+    await expect(caps.look.removeLogo(ownerAi)).rejects.toMatchObject({ code: "not_allowed" });
     expect((await readSettings(db)).look.logo).not.toBeNull();
     // Any person or key at the business may see it.
     await expect(caps.look.ownerFile(zapier)).resolves.toMatchObject({ type: "image/png" });
