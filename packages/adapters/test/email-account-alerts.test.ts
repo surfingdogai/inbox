@@ -1,6 +1,7 @@
 import {
   type Caller,
   createRunner,
+  OWNER_ACCOUNT_ALERTS_PER_DOMAIN,
   OWNER_ACCOUNT_ALERTS_PER_HOUR,
   OWNER_ALERTS_PER_HOUR,
   OWNER_DIGEST_KIND,
@@ -13,8 +14,9 @@ import { freshDb } from "./db";
 /**
  * The owner's alert about an account's code or sign-in link is never held for the end of the hour by
  * the cap of 20 alerts: the owner needs a code now. Those alerts count apart from the others, so
- * neither holds the other back, and have a bound of their own, 30 an hour, so a flood of notices
- * that only look real cannot fill the owner's mailbox. Node and workerd.
+ * neither holds the other back, and have a bound of their own, 30 an hour and 5 from any one sender's
+ * domain, so a flood of notices that only look real cannot fill the owner's mailbox, nor take the room
+ * of another sender's code. Node and workerd.
  */
 
 const INBOUND = "oficina-mare@in.example.net";
@@ -46,6 +48,18 @@ const notice = (i: number) =>
     `Your sign-in code is ${100000 + i}.`,
   );
 
+/** A sign-in code from one domain, from a mailbox of its own each time. */
+const flood = (i: number) =>
+  raw(
+    {
+      From: `Flood <no-reply@m${i}.flood.example>`,
+      To: "support@oficinamare.example",
+      Subject: `Your sign-in code for Flood ${i}`,
+      "Message-ID": `<f${i}@m${i}.flood.example>`,
+    },
+    `Your sign-in code is ${200000 + i}.`,
+  );
+
 /** A customer's question, each from a place of their own. */
 const question = (i: number) =>
   raw(
@@ -75,8 +89,9 @@ async function setUp() {
   caps.attachMail(mail);
   const runner = createRunner({ mailOut: mail });
   let clock = T;
-  const drain = async () => {
-    clock += 60_000;
+  /** A minute on, or to `at`, and every job due by then. */
+  const drain = async (at = clock + 60_000) => {
+    clock = at;
     for (let i = 0; i < 40; i++) if ((await runner.runDue(db, { now: clock, limit: 100 })).claimed === 0) return;
   };
   const ingest = async (message: string) => {
@@ -103,7 +118,7 @@ async function setUp() {
         })
       ).rows[0]?.[0],
     );
-  return { drain, ingest, toOwner, held, digests };
+  return { drain, ingest, toOwner, held, digests, mail };
 }
 
 describe("an account's sign-in alert", () => {
@@ -147,5 +162,27 @@ describe("an account's sign-in alert", () => {
     await s.ingest(question(1));
     await s.drain();
     expect(s.toOwner(/Question/)).toHaveLength(1);
+  }, 60_000);
+
+  it("is bounded for each sender's domain too: one sender's flood never holds back another's code", async () => {
+    const s = await setUp();
+    const extra = 3;
+    for (let i = 0; i < OWNER_ACCOUNT_ALERTS_PER_DOMAIN + extra; i++) await s.ingest(flood(i));
+    await s.drain();
+    expect(s.toOwner(/Flood/)).toHaveLength(OWNER_ACCOUNT_ALERTS_PER_DOMAIN);
+    expect(await s.held()).toBe(extra);
+    // Another sender's codes reach the owner at once, though the flood's room is spent.
+    for (let i = 0; i < 2; i++) await s.ingest(notice(i));
+    await s.drain();
+    expect(s.toOwner(/Service/)).toHaveLength(2);
+    expect(await s.held()).toBe(extra);
+    // The hour's digest names those held back, and says only what is true of them.
+    await s.drain(T + 2 * 3_600_000);
+    const [digest] = s.toOwner(/more new request/);
+    expect(digest?.text).toContain(
+      `${extra} more requests and messages came in this hour than this inbox sends alerts for.`,
+    );
+    expect(digest?.text).not.toContain(`${OWNER_ALERTS_PER_HOUR} alerts`);
+    expect(digest?.text).toContain("Your sign-in code for Flood 7");
   }, 60_000);
 });

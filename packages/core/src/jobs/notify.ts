@@ -17,6 +17,7 @@ import { items, parties } from "../schema/tables";
 import type { SecretBox } from "../secrets/box";
 import { stripePayOf } from "../settings/payments";
 import { readSettings, type Settings } from "../settings/schema";
+import { emailDomain, registrableDomain } from "../spam/normalise";
 import { gateOf, holdsBack } from "../spam/screen";
 import { stayLang } from "../stays/copy";
 import { ARRIVAL_MARKER, ARRIVAL_STATES, ARRIVAL_TEMPLATE, renderStayMail, stayLinks } from "../stays/mail";
@@ -140,7 +141,7 @@ export function notifyHandler(
                 await ownerStayMail(db, item, p.event, who),
               ),
               now,
-              { account: item.flags.account === true },
+              item.flags.account === true ? { account: await senderDomainOf(db, item.partyId) } : {},
             )
           : await customerMail(db, item, p, {
               jobKey: job.id,
@@ -679,35 +680,58 @@ export const OWNER_ALERTS_PER_HOUR = 20;
  */
 export const OWNER_ACCOUNT_ALERTS_PER_HOUR = 30;
 
+/**
+ * Of those, at most this many from one sender's domain: anyone can send a notice from a domain of
+ * their own, so one sender's flood never takes the room of another's code.
+ */
+export const OWNER_ACCOUNT_ALERTS_PER_DOMAIN = 5;
+
 /** The job that sends the hour's digest. */
 export const OWNER_DIGEST_KIND = "owner_digest";
 
 const HOUR = 3_600_000;
 
+/** The domain the item's sender registered (`mail.acme.example` → `acme.example`), or "" with no address. */
+async function senderDomainOf(db: Db, partyId: string): Promise<string> {
+  const domain = emailDomain((await contactOf(db, partyId))?.email);
+  return domain ? registrableDomain(domain) : "";
+}
+
 /**
  * An owner alert as it will be stored: itself while the hour has room, else held back for the
  * hour's digest, which it queues (once per clock hour, at the end of it). `account`: an alert about
- * an account's code or sign-in link, whose room is its own (`OWNER_ACCOUNT_ALERTS_PER_HOUR`).
+ * an account's code or sign-in link, from that sender's domain, whose room is its own
+ * (`OWNER_ACCOUNT_ALERTS_PER_HOUR`, `OWNER_ACCOUNT_ALERTS_PER_DOMAIN`).
  */
 export async function capOwnerAlerts(
   db: Db,
   mail: ComposedMail,
   now: number,
-  opts: { readonly account?: boolean } = {},
+  opts: { readonly account?: string } = {},
 ): Promise<ComposedMail> {
   if (mail.skip) return mail;
   const since = now - HOUR;
+  // The sender's address ends in the domain, or in one of its own (`@acme.example`, `.acme.example`).
+  const domain = (opts.account ?? "").replace(/[\\%_]/g, "\\$&");
   const { rows } = await db.client.query({
-    sql: `SELECT COUNT(*), COALESCE(SUM(CASE WHEN json_extract(i.flags, '$.account') = 1 THEN 1 ELSE 0 END), 0)
-            FROM outbound_mail m LEFT JOIN items i ON i.id = m.item_id
+    sql: `SELECT COUNT(*), COALESCE(SUM(CASE WHEN json_extract(i.flags, '$.account') = 1 THEN 1 ELSE 0 END), 0),
+                 COALESCE(SUM(CASE WHEN json_extract(i.flags, '$.account') = 1 AND ? <> ''
+                   AND (lower(json_extract(p.contact, '$.email')) LIKE '%@' || ? ESCAPE '\\'
+                     OR lower(json_extract(p.contact, '$.email')) LIKE '%.' || ? ESCAPE '\\') THEN 1 ELSE 0 END), 0)
+            FROM outbound_mail m LEFT JOIN items i ON i.id = m.item_id LEFT JOIN parties p ON p.id = i.party_id
            WHERE m.status IN ('queued', 'retrying', 'sent') AND m.updated_at >= ? AND m.created_at >= ?
              AND m.recipient = 'owner' AND m.template LIKE 'owner.%' AND m.template <> 'owner.digest'`,
-    params: [since, since],
+    params: [domain, domain, domain, since, since],
     method: "all",
   });
   const account = Number(rows[0]?.[1] ?? 0);
   const others = Number(rows[0]?.[0] ?? 0) - account;
-  if (opts.account ? account < OWNER_ACCOUNT_ALERTS_PER_HOUR : others < OWNER_ALERTS_PER_HOUR) return mail;
+  const fromDomain = Number(rows[0]?.[2] ?? 0);
+  const room =
+    opts.account === undefined
+      ? others < OWNER_ALERTS_PER_HOUR
+      : account < OWNER_ACCOUNT_ALERTS_PER_HOUR && fromDomain < OWNER_ACCOUNT_ALERTS_PER_DOMAIN;
+  if (room) return mail;
   const bucket = Math.floor(now / HOUR);
   await ensureJob(db, OWNER_DIGEST_KIND, `${OWNER_DIGEST_KIND}:${bucket}`, {
     now,
@@ -742,7 +766,8 @@ export function ownerDigestHandler(mailOut: MailOut, opts: { baseUrl?: string } 
       const appUrl = settings.notifications.appUrl ?? "";
       const shown = rows.slice(-30);
       const text = [
-        `${rows.length} more request${rows.length === 1 ? "" : "s"} and message${rows.length === 1 ? "" : "s"} came in this hour than the ${OWNER_ALERTS_PER_HOUR} alerts an hour this inbox sends. Each one is in your inbox; ${rows.length > shown.length ? `the last ${shown.length}` : rows.length === 1 ? "it is" : "they are"}:`,
+        // No number: an alert is held past the hour's 20, or past the room a sign-in code has of its own.
+        `${rows.length} more request${rows.length === 1 ? "" : "s"} and message${rows.length === 1 ? "" : "s"} came in this hour than this inbox sends alerts for. Each one is in your inbox; ${rows.length > shown.length ? `the last ${shown.length}` : rows.length === 1 ? "it is" : "they are"}:`,
         "",
         ...shown.map(
           (r) => `- ${oneLine(String(r[1] ?? ""))}${appUrl && r[0] ? ` ${appUrl}/items/${String(r[0])}` : ""}`,
