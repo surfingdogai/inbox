@@ -718,6 +718,24 @@ describe("an order the inbox accepts, written into the store", () => {
     expect(store.orders.size).toBe(2);
   });
 
+  it("writes its note on an order made before whose answer was lost, once", async () => {
+    const { store, ctx } = await pizzaria();
+    const order = shopOrder([margherita()]);
+    // The store made the order; its answer never came back (seen on a real store behind a proxy).
+    store.quirks.losesNextOrderAnswer = true;
+    await expect(woo.payments?.createLink(ctx, payRequest(order))).rejects.toMatchObject({ code: "unreachable" });
+    const [made] = [...store.orders.values()];
+    expect(made?.notes).toEqual([]);
+    // Asked again, it finds that order, and writes the note it never wrote; asked again, not twice.
+    const link = await woo.payments?.createLink(ctx, payRequest(order));
+    expect(link?.externalId).toBe(String(made?.id));
+    await woo.payments?.createLink(ctx, payRequest(order));
+    expect(store.orders.size).toBe(1);
+    expect(made?.notes).toEqual([
+      { note: "Order 4F2K9Q from your agent inbox. Delivery, 2026-10-24T19:30:00-03:00.", customer_note: false },
+    ]);
+  });
+
   it("writes a store's tax-inclusive prices without tax, at the store's own rate, so it comes to what was accepted", async () => {
     const store = fakeWooStore({ host: "deshpande-hardware.example.in", name: "Deshpande Hardware", currency: "INR" });
     Object.assign(store.settings, { calcTaxes: true, pricesIncludeTax: true, rate: 0.18 });

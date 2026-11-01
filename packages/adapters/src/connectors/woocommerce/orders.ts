@@ -432,11 +432,38 @@ async function createLink(ctx: RunContext, req: PayLinkRequest): Promise<PayLink
     });
     wc = (made.json ?? {}) as Raw;
     await noteOn(ctx, store, keys, wc.id, order, req.reference);
+  } else if (!(await noted(ctx, store, keys, wc.id, req.reference))) {
+    // Made before, and its answer lost on the way back: its note was never written.
+    await noteOn(ctx, store, keys, wc.id, order, req.reference);
   }
   return linkOf(store, await settleTotals(ctx, store, keys, wc, order));
 }
 
 /** A private note on the order, for the business: where it came from, and what the order says of delivery. */
+/** The first words of the private note on an order this inbox made: what `noted` looks for. */
+function noteHead(reference: string): string {
+  return `Order ${reference} from your agent inbox.`;
+}
+
+/**
+ * Whether the store's order already has this inbox's private note. Asked only of an order found again
+ * after an answer that never came back; true when the store would not say, so a note is never written twice.
+ */
+async function noted(ctx: RunContext, store: Store, keys: Keys, id: unknown, reference: string): Promise<boolean> {
+  if (!Number.isInteger(id)) return true;
+  try {
+    const answer = await call(ctx.http, store, keys, "GET", `/wc/v3/orders/${String(id)}/notes`, {
+      query: { type: "internal", _fields: "note" },
+      maxBytes: 256 * 1024,
+    });
+    const list = Array.isArray(answer.json) ? (answer.json as { note?: unknown }[]) : [];
+    return list.some((n) => typeof n?.note === "string" && plain(n.note).startsWith(noteHead(reference)));
+  } catch (error) {
+    if (error instanceof ConnectorError) return true;
+    throw error;
+  }
+}
+
 async function noteOn(ctx: RunContext, store: Store, keys: Keys, id: unknown, order: ShopOrder, reference: string) {
   if (!Number.isInteger(id)) return;
   const how =
@@ -447,10 +474,7 @@ async function noteOn(ctx: RunContext, store: Store, keys: Keys, id: unknown, or
         : order.delivery === "digital"
           ? "Digital"
           : null;
-  const parts = [
-    `Order ${reference} from your agent inbox.`,
-    how ? `${how}${order.when ? `, ${order.when}` : ""}.` : "",
-  ];
+  const parts = [noteHead(reference), how ? `${how}${order.when ? `, ${order.when}` : ""}.` : ""];
   try {
     await call(ctx.http, store, keys, "POST", `/wc/v3/orders/${String(id)}/notes`, {
       query: { _fields: "id" },

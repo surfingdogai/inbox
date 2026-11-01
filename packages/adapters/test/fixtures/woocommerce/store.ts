@@ -134,8 +134,17 @@ export interface FakeWooStore {
     rate: number;
     decimals: number;
   };
-  /** Faults a store's host can have. */
-  quirks: { plainPermalinks: boolean; dropsAuthHeader: boolean; noWooCommerce: boolean; firewallPage: boolean };
+  /**
+   * Faults a store's host can have. `losesNextOrderAnswer`: the next order is made, and its answer is
+   * lost on the way back (a 502 from the host's proxy instead), once.
+   */
+  quirks: {
+    plainPermalinks: boolean;
+    dropsAuthHeader: boolean;
+    noWooCommerce: boolean;
+    firewallPage: boolean;
+    losesNextOrderAnswer: boolean;
+  };
   /** The pair the store made by hand in its admin, for the keys way. */
   readonly manual: { readonly key: string; readonly secret: string };
   /** Turns a key pair into one the store knows, with a permission. */
@@ -224,7 +233,13 @@ export function fakeWooStore(
       rate: 0,
       decimals: 2,
     },
-    quirks: { plainPermalinks: false, dropsAuthHeader: false, noWooCommerce: false, firewallPage: false },
+    quirks: {
+      plainPermalinks: false,
+      dropsAuthHeader: false,
+      noWooCommerce: false,
+      firewallPage: false,
+      losesNextOrderAnswer: false,
+    },
     manual,
     addKey(key, secret, permissions = "read_write") {
       store.keys.set(key, { secret, permissions, description: "Agent inbox" });
@@ -703,6 +718,10 @@ export function fakeWooStore(
         order_key: `wc_order_${(nextId * 7919).toString(36)}`,
       };
       store.orders.set(o.id, o);
+      if (store.quirks.losesNextOrderAnswer) {
+        store.quirks.losesNextOrderAnswer = false;
+        return new Response("Bad Gateway", { status: 502, headers: { "content-type": "text/html" } });
+      }
       return json(only(orderView(o, dp), fields), 201);
     }
     if (what === "orders" && idRaw && !sub) {
@@ -724,6 +743,17 @@ export function fakeWooStore(
         if (typeof input.status === "string") o.status = input.status;
         return json(only(orderView(o, dp), fields));
       }
+    }
+    if (what === "orders" && sub === "notes" && method === "GET") {
+      const o = store.orders.get(id);
+      if (!o) return wooError(404, "woocommerce_rest_shop_order_invalid_id", "Invalid ID.");
+      // Newest first, as WooCommerce lists them; `type=internal` the private ones.
+      const type = q.get("type") ?? "any";
+      const list = [...o.notes]
+        .reverse()
+        .filter((n) => type === "any" || (type === "internal" ? !n.customer_note : n.customer_note))
+        .map((n, i) => only({ id: i + 1, note: n.note, customer_note: n.customer_note }, fields));
+      return json(list);
     }
     if (what === "orders" && sub === "notes" && method === "POST") {
       const o = store.orders.get(id);
