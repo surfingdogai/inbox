@@ -1,4 +1,4 @@
-Surfing Dog Inbox é o app para celular da Surfing Dog Inbox do seu negócio. Novos pedidos de reserva, pedidos de compra, pedidos de orçamento e mensagens chegam ao celular como notificações, e você responde dali mesmo. Sua caixa de entrada continua no seu próprio site.
+Surfing Dog Inbox é o app para celular da Surfing Dog Inbox do seu negócio. Novos pedidos de reserva, pedidos de compra, pedidos de orçamento e mensagens chegam ao celular como notificações, e você responde dali mesmo. O app se conecta direto à sua caixa de entrada, no seu próprio servidor ou hospedada pela Surfing Dog.
 
 O que ele faz
 • Notificações de pedidos de reserva e de hospedagem, pedidos de compra, pedidos de orçamento e mensagens. Escolha quais quer receber e defina um horário de silêncio que as segura até de manhã.
@@ -8,11 +8,11 @@ O que ele faz
 • "Today": as reservas do dia num relance.
 • Quando o filtro de spam da sua caixa de entrada retém algo, veja o motivo e libere ou marque como spam.
 • Todas as caixas de entrada de que você cuida em um só app, para quem cuida de mais de um negócio.
-• Funciona offline: o que você fizer fica guardado no celular e é enviado quando a conexão voltar.
+• Funciona offline: se você aceitar, recusar, propor outro horário ou responder, isso fica guardado no celular e é enviado quando a conexão voltar.
 • Abre com a digital, o rosto ou o bloqueio de tela. Um "Accept" em uma notificação abre o pedido e pede antes a digital ou o rosto; nada é feito até você tocar no app.
 
 Conecte com uma leitura
-Você precisa de uma Surfing Dog Inbox, no seu próprio servidor ou hospedada pela Surfing Dog, e de um bloqueio de tela no celular.
+Você precisa de uma Surfing Dog Inbox e de um bloqueio de tela no celular.
 1. Em um computador, abra sua caixa de entrada → Settings → Phone → Add a phone. Aparece um código.
 2. No app, toque em "Scan the code". O app pergunta se deve se conectar à sua caixa de entrada e mostra dois dígitos.
 3. Confira os mesmos dois dígitos no computador e clique em "Confirm". Nada para digitar.

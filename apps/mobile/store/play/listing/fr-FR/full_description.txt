@@ -1,4 +1,4 @@
-Surfing Dog Inbox est l'application mobile de la Surfing Dog Inbox de votre entreprise. Les nouvelles demandes de réservation, commandes, demandes de devis et messages arrivent sur votre téléphone sous forme de notifications, et vous y répondez depuis celui-ci. Votre boîte de réception reste sur votre propre site.
+Surfing Dog Inbox est l'application mobile de la Surfing Dog Inbox de votre entreprise. Les nouvelles demandes de réservation, commandes, demandes de devis et messages arrivent sur votre téléphone sous forme de notifications, et vous y répondez depuis celui-ci. L'application se connecte directement à votre boîte de réception, sur votre propre serveur ou hébergée par Surfing Dog.
 
 Ce qu'elle fait
 • Des notifications pour les demandes de réservation et de séjour, les commandes, les demandes de devis et les messages. Choisissez lesquelles recevoir, et fixez des heures de silence qui les gardent jusqu'au matin.
@@ -8,11 +8,11 @@ Ce qu'elle fait
 • « Today » : les réservations du jour en un coup d'œil.
 • Quand le filtre anti-spam de votre boîte de réception retient quelque chose, voyez pourquoi, puis laissez-le passer ou marquez-le comme spam.
 • Toutes les boîtes de réception dont vous vous occupez dans une seule application, pour qui gère plus d'une entreprise.
-• Fonctionne hors connexion : ce que vous faites attend sur le téléphone et part dès que la connexion revient.
+• Fonctionne hors connexion : si vous acceptez, refusez, proposez un autre horaire ou répondez, cela attend sur le téléphone et part dès que la connexion revient.
 • S'ouvre avec votre empreinte, votre visage ou le verrouillage de l'écran. Un « Accept » depuis une notification ouvre la demande et demande d'abord votre empreinte ou votre visage ; rien n'est fait tant que vous n'appuyez pas dans l'application.
 
 Connectez-la en un scan
-Il vous faut une Surfing Dog Inbox, sur votre propre serveur ou hébergée par Surfing Dog, et un verrouillage de l'écran sur le téléphone.
+Il vous faut une Surfing Dog Inbox et un verrouillage de l'écran sur le téléphone.
 1. Sur un ordinateur, ouvrez votre boîte de réception → Settings → Phone → Add a phone. Un code s'affiche.
 2. Dans l'application, touchez « Scan the code ». Elle demande s'il faut se connecter à votre boîte de réception et affiche deux chiffres.
 3. Vérifiez les deux mêmes chiffres sur l'ordinateur et appuyez sur « Confirm ». Rien à saisir.

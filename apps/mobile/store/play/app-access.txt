@@ -1,5 +1,6 @@
-No account, code, email or payment is needed.
-1. Open the app. On the first screen, Connect your inbox, tap Try the demo.
-2. The app opens Oficina Maré, a made-up bike shop we run at demo.surfingdog.ai, with example bookings, orders, quote requests and messages. It is set up again every night.
-3. Look round Inbox, any request, Today and Settings. The demo is read-only: Accept, Reply and the switches say so and send nothing.
+No account, code or payment is needed.
+1. On the first screen, tap Try the demo.
+2. It opens Oficina Maré, a made-up bike shop at demo.surfingdog.ai: example bookings, orders, quotes and messages, reset nightly.
+3. Look round Inbox, a request, Today and Settings. It is read-only: Accept, Reply and the switches send nothing.
 4. To leave: Leave, at the top of the inbox.
+5. A real inbox on video (connecting, a notification, an Accept): <video link>

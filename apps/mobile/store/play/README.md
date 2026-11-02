@@ -28,14 +28,16 @@ manifest's permissions are the ones `data-safety.md` covers, and that the target
    (`signing.md`, `apps/mobile/README.md` → Build it yourself).
 2. **No self-update on Play**: the Play copy's screens are built without the update check or any link
    to the download page, and the Android build refuses screens that have them (`technical.md`).
-3. **A way in for the reviewer**: "Try the demo" on the first screen (`app-content.md` → App access).
+3. **A way in for the reviewer**: "Try the demo" on the first screen, and a short video of a real inbox
+   (`app-content.md` → App access). The demo's doors answer only once the inbox server with them is
+   deployed; `app-content.md` has the check.
 
 ## Decided
 
 1. **The account**: an organisation account, Surfing Dog, Lda, D-U-N-S 449647554.
 2. **Signing**: Google makes and keeps the app signing key; we keep the upload key (`signing.md`). The
    Play copy and the download page's do not install over each other.
-3. **Reviewer access**: the demo shop, read-only.
+3. **Reviewer access**: the demo shop, read-only, and a video of a real inbox.
 
 ## Still for the account holder
 
@@ -47,6 +49,8 @@ manifest's permissions are the ones `data-safety.md` covers, and that the target
 2. **Countries**: all, or a list. Nothing in the app is country-specific; developer verification
    (`technical.md`) already limits the download APK in four countries.
 3. **Automated uploads later** (a Play Developer API service account in CI), or uploads by hand.
+4. **The review inbox** (`app-content.md`): build it before the first review, or only if Play's review
+   asks for more than the demo and the video.
 
 ## The account holder's steps, in order
 
@@ -54,12 +58,13 @@ manifest's permissions are the ones `data-safety.md` covers, and that the target
 |---|---|---|---|
 | 1 | **D-U-N-S number** for Surfing Dog, Lda: 449647554. | Done | |
 | 2 | **Play Console developer account, type Organisation**, for Surfing Dog, Lda: D-U-N-S, the website surfingdog.ai (verified in Search Console), a private contact, and the public developer email and phone. | US$25 once | Google's verification a few days |
-| 3 | **The upload key**: made (`signing.md`). Keep the keystore and its password in two places offline. | Done | |
+| 3 | **The upload key**: made (`signing.md`). Keep the keystore, its certificate and its password in two places offline. | Done | |
 | 4 | **The signed bundle**: built from the `play` flavour with the upload key (`signing.md` → Building the bundle), checked: signed by the upload certificate only, minSdk 24, targetSdk 36, not debuggable. | Done for 1.0.1 | |
 | 5 | In Play Console, **create the app**: name "Surfing Dog Inbox", default language English (United States), App, Free. Play App Signing: let Google make the app signing key. | Free | 30 minutes |
-| 6 | **App content**: privacy policy URL, App access (`app-access.txt`), Ads, Content rating, Target audience, Data safety, and the rest, from `app-content.md` and `data-safety.md`. | Free | About an hour |
+| 6 | **App content**: the privacy policy URL first (Play refuses to release a bundle that asks for the camera until it is saved), then App access (`app-access.txt`), Ads, Content rating, Target audience, Data safety, and the rest, from `app-content.md` and `data-safety.md`. | Free | About an hour |
 | 7 | **Store listing**: paste the text from `listing/` for each language, upload the icon, the feature graphic and the screenshots from `graphics/` (`screenshots.md`), category Business, contact email hello@surfingdog.ai, website https://surfingdog.ai. | Free | About an hour |
-| 8 | Add the **app signing key's SHA-1** (Play Console → App integrity) to the Firebase API key's Android restriction (`signing.md` → Firebase). | Free | 10 minutes |
-| 9 | Upload the signed `.aab` to the **internal testing** track; install it from Play on two real phones; connect, get a notification, accept from it. | Free | A day |
-| 10 | Promote to **production** and send for review. Organisation accounts are not held to the 12-tester, 14-day closed test that new personal accounts need. | Free | Review: usually a few days, up to 7 or more for a new app |
-| 11 | Before sending for review: the privacy gaps (`privacy-policy.md`), since Play's review reads the policy. The day it is live: `phone-page.md`. | Free | Under an hour each |
+| 8 | Upload the signed `.aab` to the **internal testing** track. Play makes the app signing key then. | Free | Minutes |
+| 9 | Add the **app signing key's SHA-1** (Play Console → App integrity, shown once the first bundle is up) to the Firebase API key's Android restriction (`signing.md` → Firebase). | Free | 10 minutes |
+| 10 | Install it from Play on two real phones; connect, get a notification, accept from it. Record that once for the reviewer (`app-content.md` → App access). | Free | A day |
+| 11 | Promote to **production** and send for review. Organisation accounts are not held to the 12-tester, 14-day closed test that new personal accounts need. | Free | Review: usually a few days, up to 7 or more for a new app |
+| 12 | Before sending for review: the privacy gaps (`privacy-policy.md`), since Play's review reads the policy; the demo answering (`app-content.md`); the video's link in App access. The day it is live: `phone-page.md`. | Free | Under an hour each |

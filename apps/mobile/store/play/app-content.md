@@ -58,20 +58,53 @@ sign-in and no screen lock (`DemoClient` in `src/lib/client.ts`; the shop's door
 `apps/inbox/src/demo.ts`). The shop holds made-up examples only, is set up again every night, and never
 shows what anyone else sent it. Nothing pressed in the demo is sent anywhere.
 
+Before the app is sent for review, the demo must answer: its doors (`/demo/phone/*`) are there once
+the inbox server that has them is deployed to demo.surfingdog.ai. Check, changing nothing:
+
+```sh
+curl -s https://demo.surfingdog.ai/demo/phone/me | jq -r .business.name        # Oficina Maré, not a 404
+curl -s https://demo.surfingdog.ai/demo/phone/items | jq '.items | length'      # more than 0
+```
+
+The demo is read-only and sends no notifications, so it cannot show what the listing is about:
+connecting, a notification arriving, and an Accept or a Reply that goes. A short video shows those on a
+real phone: the phone's own screen recording of connecting to a test inbox (the two digits), a
+notification arriving, and an Accept from it. The test inbox holds made-up requests only, never a real
+customer's, with Show details off. It goes up unlisted, from a Surfing Dog account, and its short link
+(`youtu.be/…`) replaces `<video link>` in `app-access.txt`.
+
 In Play Console → App content → App access → Add instructions:
 
 - **Name**: Try the demo (no sign-in)
 - **Username, password**: leave empty
-- **Any other information required to access your app**: the text in `app-access.txt`, as it is:
+- **Any other information required to access your app**: the text in `app-access.txt` with the video's
+  link in it, 500 characters at most:
 
-> No account, code, email or payment is needed.
-> 1. Open the app. On the first screen, Connect your inbox, tap Try the demo.
-> 2. The app opens Oficina Maré, a made-up bike shop we run at demo.surfingdog.ai, with example
->    bookings, orders, quote requests and messages. It is set up again every night.
-> 3. Look round Inbox, any request, Today and Settings. The demo is read-only: Accept, Reply and the
->    switches say so and send nothing.
+> No account, code or payment is needed.
+> 1. On the first screen, tap Try the demo.
+> 2. It opens Oficina Maré, a made-up bike shop at demo.surfingdog.ai: example bookings, orders, quotes
+>    and messages, reset nightly.
+> 3. Look round Inbox, a request, Today and Settings. It is read-only: Accept, Reply and the switches
+>    send nothing.
 > 4. To leave: Leave, at the top of the inbox.
+> 5. A real inbox on video (connecting, a notification, an Accept): `<video link>`
 
-Notifications cannot be seen in the demo (it sends none). If Play's review asks for them, the answer is
-a review inbox of our own, connected once on a reviewer's phone by a person with the computer; that is
-not built, and needs its own security review, as it touches pairing.
+## The review inbox: specified, not built
+
+Play asks for "all other resources needed to review your app". If its review answers "need login
+credentials" or "functionality not accessible", or if the account holder wants it in place before the
+first review, the way in is a review inbox. It is built only when the account holder says so.
+
+- **What it is**: a hosted Surfing Dog Inbox of its own, for a made-up business, holding made-up
+  requests only: never the demo shop, never a real business. Its made-up customers' addresses end in
+  `.invalid`, which takes no mail, so a Reply reaches no one. It is set up again every night, like the demo.
+- **The way in**: a QR code, an image linked from App access (Play names a QR code as something it
+  accepts), made from that inbox's Settings → Phone → Add a phone, that confirms itself: no two digits, no computer. It
+  works on that inbox only, for at most five phones, until a date set when it is made (the end of the
+  review). Each phone it connects is listed in Settings → Phone, and removed when the review is over.
+- **Notifications**: a made-up request arrives a minute after a phone connects, then every ten minutes
+  while one is connected, so the reviewer sees one arrive and can Accept it from the notification.
+- **The risk**: a code that confirms itself is what pairing is built to prevent. It must be impossible
+  on any other inbox: off by default, on only for an inbox the hosted platform marks as its review
+  inbox, refused everywhere else (self-hosted inboxes included), rate-limited and logged. It needs its own
+  security review before it ships, as it touches pairing.

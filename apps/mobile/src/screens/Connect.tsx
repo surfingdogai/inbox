@@ -232,7 +232,7 @@ export function Connect({
           </button>
         )}
         <p className="fine">
-          Your inbox stays on your own website.
+          Your inbox, on your own server or hosted by Surfing Dog.
           <br />
           This app opens it on your phone.
         </p>

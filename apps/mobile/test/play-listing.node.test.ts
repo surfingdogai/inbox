@@ -90,7 +90,10 @@ describe("the answers given to Play still match the app", () => {
     const access = read(play, "app-access.txt");
     expect(access).toContain("Try the demo");
     expect(access).toContain("demo.surfingdog.ai");
-    expect(length(access)).toBeLessThanOrEqual(500);
+    // Play's field takes 500 characters, the video's link included (a youtu.be link, or a full one).
+    expect(access).toContain("<video link>");
+    const withLink = access.replace("<video link>", "https://www.youtube.com/watch?v=XXXXXXXXXXX");
+    expect(length(withLink)).toBeLessThanOrEqual(500);
     // The button it names is on the first screen, and the demo it names is the app's.
     expect(read(mobile, "src/screens/Connect.tsx")).toContain("Try the demo");
     expect(read(mobile, "src/lib/client.ts")).toContain('"https://demo.surfingdog.ai"');

@@ -146,6 +146,24 @@ def screensDir = file("src/main/assets/public")
     }
 }
 
+// The Play bundle signed with the upload key is the one that goes to Google Play, and it never goes
+// without notifications: without google-services.json the google-services plugin is left out below
+// and the bundle would build, sign and upload with no Firebase in it. CI's unsigned bundle may.
+def playSigned = System.getenv("ANDROID_UPLOAD_KEYSTORE")
+def checkPlayNotifications = tasks.register("checkPlayNotifications") {
+    description = "Fails a Play bundle signed with the upload key when google-services.json is missing."
+    def services = file("google-services.json")
+    def signed = playSigned as boolean
+    doLast {
+        if (signed && !(services.exists() && services.length() > 0))
+            throw new GradleException("A signed Play bundle needs notifications: put google-services.json in " +
+                "apps/mobile/android/app/ (store/play/signing.md → Building the bundle).")
+    }
+}
+tasks.configureEach { t ->
+    if (t.name == "prePlayReleaseBuild") t.dependsOn(checkPlayNotifications)
+}
+
 repositories {
     flatDir{
         dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'

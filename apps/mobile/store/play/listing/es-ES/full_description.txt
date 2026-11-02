@@ -1,4 +1,4 @@
-Surfing Dog Inbox es la app para el móvil de la Surfing Dog Inbox de tu negocio. Las nuevas solicitudes de reserva, pedidos, solicitudes de presupuesto y mensajes llegan a tu móvil como notificaciones, y los respondes desde ahí. Tu bandeja de entrada sigue en tu propia web.
+Surfing Dog Inbox es la app para el móvil de la Surfing Dog Inbox de tu negocio. Las nuevas solicitudes de reserva, pedidos, solicitudes de presupuesto y mensajes llegan a tu móvil como notificaciones, y los respondes desde ahí. La app se conecta directamente a tu bandeja de entrada, en tu propio servidor o alojada por Surfing Dog.
 
 Qué hace
 • Notificaciones de solicitudes de reserva y de estancia, pedidos, solicitudes de presupuesto y mensajes. Elige cuáles quieres recibir y fija unas horas de silencio que las guardan hasta la mañana.
@@ -8,11 +8,11 @@ Qué hace
 • "Today": las reservas del día de un vistazo.
 • Cuando el filtro de spam de tu bandeja de entrada retiene algo, mira por qué y déjalo pasar o márcalo como spam.
 • Todas las bandejas de entrada que llevas en una sola app, para quien lleva más de un negocio.
-• Funciona sin conexión: lo que hagas espera en el móvil y se envía cuando vuelvas a tener conexión.
+• Funciona sin conexión: si aceptas, rechazas, propones otra hora o respondes, eso espera en el móvil y se envía cuando vuelvas a tener conexión.
 • Se abre con tu huella, tu cara o el bloqueo de pantalla. Un "Accept" desde una notificación abre la solicitud y pide antes tu huella o tu cara; no se hace nada hasta que lo pulses en la app.
 
 Conéctala con un escaneo
-Necesitas una Surfing Dog Inbox, en tu propio servidor o alojada por Surfing Dog, y un bloqueo de pantalla en el móvil.
+Necesitas una Surfing Dog Inbox y un bloqueo de pantalla en el móvil.
 1. En un ordenador, abre tu bandeja de entrada → Settings → Phone → Add a phone. Aparece un código.
 2. En la app, toca "Scan the code". Te pregunta si quieres conectarla a tu bandeja de entrada y muestra dos dígitos.
 3. Comprueba los mismos dos dígitos en el ordenador y pulsa "Confirm". No hay nada que escribir.

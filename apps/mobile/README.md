@@ -1,7 +1,7 @@
 # Surfing Dog Inbox for Android
 
-The owner's phone app (ADR-028): new requests on the phone, answered from there. The inbox stays on the
-business's own website; the app connects to it with a QR code from Settings → Phone.
+The owner's phone app (ADR-028): new requests on the phone, answered from there. The inbox is on the
+business's own server or hosted by Surfing Dog; the app connects to it with a QR code from Settings → Phone.
 
 ## Get the app
 
@@ -138,6 +138,9 @@ ANDROID_VERSION_CODE=10001 ANDROID_VERSION_NAME=1.0.1 \
 ANDROID_UPLOAD_KEYSTORE=… ANDROID_UPLOAD_STORE_PASSWORD=… ANDROID_UPLOAD_KEY_PASSWORD=… \
   ./gradlew bundlePlayRelease                      # app/build/outputs/bundle/playRelease/app-play-release.aab
 ```
+
+A bundle signed with the upload key needs `google-services.json` in `app/`, or the build stops: Google
+Play's copy never goes without notifications.
 
 Build the screens again with `sync` before the next APK: each copy refuses the other's.
 

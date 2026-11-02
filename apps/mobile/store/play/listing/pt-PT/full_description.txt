@@ -1,4 +1,4 @@
-Surfing Dog Inbox é a app para telemóvel da Surfing Dog Inbox do seu negócio. Novos pedidos de reserva, encomendas, pedidos de orçamento e mensagens chegam ao telemóvel como notificações, e responde a partir daí. A sua caixa de entrada continua no seu próprio site.
+Surfing Dog Inbox é a app para telemóvel da Surfing Dog Inbox do seu negócio. Novos pedidos de reserva, encomendas, pedidos de orçamento e mensagens chegam ao telemóvel como notificações, e responde a partir daí. A app liga-se diretamente à sua caixa de entrada, no seu próprio servidor ou alojada pela Surfing Dog.
 
 O que faz
 • Notificações de pedidos de reserva e de estadia, encomendas, pedidos de orçamento e mensagens. Escolha quais quer receber e defina horas de silêncio que as guardam até de manhã.
@@ -8,11 +8,11 @@ O que faz
 • "Today": as reservas do dia num relance.
 • Quando o filtro de spam da sua caixa de entrada retém alguma coisa, veja porquê e deixe entrar ou marque como spam.
 • Todas as caixas de entrada de que trata numa só app, para quem gere mais do que um negócio.
-• Funciona sem rede: o que fizer fica à espera no telemóvel e é enviado quando voltar a ter ligação.
+• Funciona sem rede: se aceitar, recusar, propor outra hora ou responder, isso fica à espera no telemóvel e é enviado quando voltar a ter ligação.
 • Abre com a impressão digital, o rosto ou o bloqueio de ecrã. Um "Accept" numa notificação abre o pedido e pede primeiro a impressão digital ou o rosto; nada é feito até o premir na app.
 
 Ligue-a com uma leitura
-Precisa de uma Surfing Dog Inbox, no seu próprio servidor ou alojada pela Surfing Dog, e de um bloqueio de ecrã no telemóvel.
+Precisa de uma Surfing Dog Inbox e de um bloqueio de ecrã no telemóvel.
 1. Num computador, abra a sua caixa de entrada → Settings → Phone → Add a phone. Aparece um código.
 2. Na app, toque em "Scan the code". A app pergunta se quer ligar-se à sua caixa de entrada e mostra dois dígitos.
 3. Confira os mesmos dois dígitos no computador e prima "Confirm". Não há nada para escrever.

@@ -13,7 +13,7 @@ export function OfflineBanner({ cachedAt, inbox, queued }: { cachedAt: number | 
     const at = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(
       new Date(cachedAt),
     );
-    text = `You're offline. This is how things were at ${at}. Anything you do is sent when you're back${waiting}.`;
+    text = `You're offline. This is how things were at ${at}. Answers and replies are sent when you're back${waiting}.`;
   }
   return (
     <div className="banner" role="status">

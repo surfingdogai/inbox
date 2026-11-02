@@ -1,4 +1,4 @@
-Surfing Dog Inbox is the phone app for your business's Surfing Dog Inbox. New booking requests, orders, quote requests and messages reach your phone as notifications, and you answer them from there. Your inbox stays on your own website.
+Surfing Dog Inbox is the phone app for your business's Surfing Dog Inbox. New booking requests, orders, quote requests and messages reach your phone as notifications, and you answer them from there. The app connects straight to your inbox, on your own server or hosted by Surfing Dog.
 
 What it does
 • Notifications for booking and stay requests, orders, quote requests and messages. Choose which kinds, and set quiet hours that hold them until morning.
@@ -8,11 +8,11 @@ What it does
 • Today: the day's bookings at a glance.
 • When your inbox's spam filter holds something, see why, then let it in or mark it as spam.
 • Every inbox you look after in one app, for people who look after more than one business.
-• Works offline: what you do waits on the phone and is sent when you're back.
+• Works offline: an accept, a decline, another time or a reply waits on the phone and is sent when you're back.
 • Opens with your fingerprint, face or screen lock. An Accept from a notification opens the request and asks for your fingerprint or face first; nothing is done until you press it in the app.
 
 Connect it in one scan
-You need a Surfing Dog Inbox, on your own server or hosted by Surfing Dog, and a screen lock on the phone.
+You need a Surfing Dog Inbox and a screen lock on the phone.
 1. On a computer, open your inbox → Settings → Phone → Add a phone. A code appears.
 2. In the app, tap Scan the code. It asks to connect to your inbox and shows two digits.
 3. Check the same two digits on the computer and press Confirm. Nothing to type.

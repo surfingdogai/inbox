@@ -52,11 +52,21 @@ The Gradle build reads the key from the environment only (`app/build.gradle`, si
 
 ## Building the bundle
 
-`apps/mobile/README.md` → Build it yourself: `pnpm --filter @surfingdog/mobile sync:play`, then
-`./gradlew bundlePlayRelease` with the upload key and the release's numbers in the environment
+`apps/mobile/README.md` → Build it yourself: `pnpm --filter @surfingdog/mobile sync:play`, put
+`google-services.json` (the Firebase config for `ai.surfingdog.inbox`) in `apps/mobile/android/app/`,
+then `./gradlew bundlePlayRelease` with the upload key and the release's numbers in the environment
 (`ANDROID_VERSION_CODE`, `ANDROID_VERSION_NAME`; major × 10000 + minor × 100 + patch, the same as the
-download page's copy of that version). The bundle carries R8's `mapping.txt` inside it, so Play's crash
-view is readable without uploading it separately.
+download page's copy of that version). With the upload key set and no `google-services.json`, the build
+stops (`checkPlayNotifications`): a bundle without it would install and run on Play with no
+notifications. The bundle carries R8's `mapping.txt` inside it, so Play's crash view is readable without
+uploading it separately.
+
+Before it goes up, check it:
+
+```sh
+keytool -printcert -jarfile app-play-release.aab | grep SHA256   # the upload key's SHA-256 above, and only it
+unzip -p app-play-release.aab base/resources.pb | grep -ac google_app_id   # 1 or more: Firebase is in it
+```
 
 CI (workflow `android`) builds the Play bundle unsigned on every change, to show it still builds and that
 its screens carry no update check. It never holds the upload key: uploading stays a person's job, and the

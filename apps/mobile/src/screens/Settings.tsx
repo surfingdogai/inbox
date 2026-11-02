@@ -307,7 +307,7 @@ export function Settings() {
                 <small>
                   {app.demo
                     ? "The demo: made-up examples, set up again every night."
-                    : "Your inbox stays on your own website."}
+                    : "Your inbox, on your own server or hosted by Surfing Dog."}
                 </small>
               </span>
               {app.demo ? (
