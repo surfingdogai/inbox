@@ -72,12 +72,12 @@ describe("each assistant's steps", () => {
   it("cover the nine assistants, each with its maker's page, and say not yet where there is no way", () => {
     // In reach order: what works first, "not yet" last.
     expect(ASSISTANT_STEPS.map((a) => a.name)).toEqual([
-      "Claude",
-      "Gemini",
-      "Le Chat",
       "ChatGPT",
       "Grok",
       "Meta AI and Muse",
+      "Claude",
+      "Gemini",
+      "Le Chat",
       "Perplexity",
       "Copilot",
       "dots",

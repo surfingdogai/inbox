@@ -53,52 +53,6 @@ export interface AssistantSteps {
 
 const STEPS: readonly AssistantSteps[] = [
   {
-    slug: "claude",
-    name: "Claude",
-    maker: "Anthropic",
-    reach: "works",
-    steps: [
-      "Settings, then Connectors: Add custom connector.",
-      `Name it ${CONNECTOR_NAME} and paste ${MCP_URL}. No sign-in.`,
-      "In a chat, switch it on from the tools menu and ask.",
-    ],
-    source: {
-      label: "Claude Help Center: custom connectors",
-      href: "https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp",
-    },
-  },
-  {
-    slug: "gemini",
-    name: "Gemini",
-    maker: "Google",
-    reach: "works",
-    steps: [
-      "On a computer, gemini.google.com: Settings, then Connected apps.",
-      `Under Custom apps, Add a custom app: paste ${MCP_URL} and approve it.`,
-      "It then works in the Gemini app on your phone too.",
-    ],
-    source: {
-      label: "Google: connect custom apps to Gemini",
-      href: "https://support.google.com/gemini/answer/17209137",
-    },
-  },
-  {
-    slug: "le-chat",
-    name: "Le Chat",
-    maker: "Mistral",
-    reach: "works",
-    steps: [
-      "Connectors, then Add Connector, then the Custom MCP Connector tab.",
-      `Name it ${CONNECTOR_NAME.replaceAll(" ", "")}, with no spaces, paste ${MCP_URL} and Connect. No sign-in.`,
-      "In a chat, switch its tools on and ask.",
-    ],
-    note: "An account's owner adds connectors on Free, Pro and Student; on a team plan, its admin.",
-    source: {
-      label: "Mistral: MCP connectors",
-      href: "https://docs.mistral.ai/le-chat/knowledge-integrations/connectors/mcp-connectors",
-    },
-  },
-  {
     slug: "chatgpt",
     name: "ChatGPT",
     maker: "OpenAI",
@@ -138,6 +92,54 @@ const STEPS: readonly AssistantSteps[] = [
     ],
     note: "Muse is in the US and Canada.",
     source: { label: "Meta: the Muse developer platform", href: "https://muse.ai/platform" },
+  },
+  {
+    slug: "claude",
+    name: "Claude",
+    maker: "Anthropic",
+    reach: "unconfirmed",
+    steps: [
+      "Settings, then Connectors: Add custom connector.",
+      `Name it ${CONNECTOR_NAME} and paste ${MCP_URL}. No sign-in.`,
+      "In a chat, switch it on from the tools menu and ask.",
+    ],
+    note: "Not yet run against this server: these steps are its maker's own, read, not tried.",
+    source: {
+      label: "Claude Help Center: custom connectors",
+      href: "https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp",
+    },
+  },
+  {
+    slug: "gemini",
+    name: "Gemini",
+    maker: "Google",
+    reach: "unconfirmed",
+    steps: [
+      "On a computer, gemini.google.com: Settings, then Connected apps.",
+      `Under Custom apps, Add a custom app: paste ${MCP_URL} and approve it.`,
+      "It then works in the Gemini app on your phone too.",
+    ],
+    note: "Not yet run against this server: these steps are its maker's own, read, not tried.",
+    source: {
+      label: "Google: connect custom apps to Gemini",
+      href: "https://support.google.com/gemini/answer/17209137",
+    },
+  },
+  {
+    slug: "le-chat",
+    name: "Le Chat",
+    maker: "Mistral",
+    reach: "unconfirmed",
+    steps: [
+      "Connectors, then Add Connector, then the Custom MCP Connector tab.",
+      `Name it ${CONNECTOR_NAME.replaceAll(" ", "")}, with no spaces, paste ${MCP_URL} and Connect. No sign-in.`,
+      "In a chat, switch its tools on and ask.",
+    ],
+    note: "Not yet run against this server: these steps are its maker's own, read, not tried. An account's owner adds connectors on Free, Pro and Student; on a team plan, its admin.",
+    source: {
+      label: "Mistral: MCP connectors",
+      href: "https://docs.mistral.ai/le-chat/knowledge-integrations/connectors/mcp-connectors",
+    },
   },
   {
     slug: "perplexity",
