@@ -32,7 +32,7 @@ import { DOOR_SHARE_SHOWN, doorHistoryPublic } from "../lib/door-history";
 import { CARRY_PROMISE, HOSTED_KEEPS } from "../lib/gateway";
 import { HOSTED_PILOT_OPEN } from "../lib/hosted";
 
-const UPDATED = "31 October 2026";
+const UPDATED = "2 November 2026";
 ---
 
 <Layout
@@ -304,12 +304,19 @@ const UPDATED = "31 October 2026";
       <h2 class="h-section" id="phone-h">The phone app</h2>
       <p>
         Surfing Dog Inbox for Android talks to the inboxes you connect it to, and to Google for notifications. It
-        sends us nothing about how you use it, and no crash reports.
+        sends us nothing about how you use it, and no crash reports. What you do in the app (accepting, proposing a
+        time, declining, replies, your notification choices) goes to that inbox, as it would from a computer.
       </p>
       <ul>
         <li>
           <b>Your inbox</b> gets the phone's maker and model as its name, the phone's public keys and its push token.
-          You see each phone, and remove it, in Settings → Phone.
+          You see each phone, and remove it, in Settings → Phone. When a phone is removed, in the app or in Settings →
+          Phone, your inbox also asks the relay to forget it.
+        </li>
+        <li>
+          <b>Signing in by email</b>, instead of scanning: the address you type goes to your inbox, which emails you a
+          link. To find your inbox, the app first asks your email's domain for <code>/.well-known/agent-inbox.json</code>,
+          at the domain and at <code>inbox.</code> in front of it.
         </li>
         <li>
           <b>The camera</b> reads the code from your inbox inside the app. The picture never leaves the phone.
@@ -322,9 +329,15 @@ const UPDATED = "31 October 2026";
           installation ID, when each message arrives and how big it is, under Google's own privacy policy.
         </li>
         <li>
-          <b>Updates.</b> At most twice a day the app reads <code>surfingdog.ai/phone/latest.json</code> to see
-          whether a new version is out: an ordinary request, logged as any visit to this website is. The app itself
-          comes from GitHub, under GitHub's privacy statement.
+          <b>Updates.</b> A copy from Google Play is updated by Google Play and reads nothing from us. A copy from the
+          download page reads <code>surfingdog.ai/phone/latest.json</code> at most twice a day to see whether a new
+          version is out: an ordinary request, logged as any visit to this website is. The app comes from Google Play,
+          under Google's privacy policy, or from GitHub, through this site's download page, under GitHub's privacy
+          statement.
+        </li>
+        <li>
+          <b>The demo.</b> "Try the demo" reads made-up examples from our demo shop at <code>demo.surfingdog.ai</code>. It
+          sends nothing about you, and nothing you press in the demo is sent anywhere.
         </li>
         <li>
           <b>On the phone</b>, what the app keeps is encrypted with a key in the phone's Android Keystore, and is never
