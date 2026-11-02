@@ -3,8 +3,10 @@ import { createApiKey } from "@surfingdog/adapters";
 import { type Db, schema, ulid } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
 import {
+  GOOGLE_ID_CLAIMS,
   GOOGLE_PROBE,
   GOOGLE_TOKEN,
+  googleIdToken,
   ICLOUD_CALENDARS,
   ICLOUD_HOME_SET,
   ICLOUD_PRINCIPAL,
@@ -79,7 +81,12 @@ function platforms(): Platforms {
       }
       if (method === "DELETE") return new Response(null, { status: icloud.delete(url.toString()) ? 204 : 404 });
     }
-    if (url.host === "oauth2.googleapis.com" && url.pathname === "/token") return json(GOOGLE_TOKEN);
+    // The app runs on the real clock, so Google's ID token is minted for now, never for a fixed date.
+    if (url.host === "oauth2.googleapis.com" && url.pathname === "/token")
+      return json({
+        ...GOOGLE_TOKEN,
+        id_token: googleIdToken({ ...GOOGLE_ID_CLAIMS, iat: nowSeconds(), exp: nowSeconds() + 3600 }),
+      });
     if (url.host === "www.googleapis.com") {
       if (url.pathname === "/calendar/v3/calendars/primary/events" && method === "GET") return json(GOOGLE_PROBE);
       if (url.pathname === "/calendar/v3/freeBusy") return json({ calendars: { primary: { busy: [] } } });
@@ -153,6 +160,8 @@ async function connectIcloud(s: Awaited<ReturnType<typeof setup>>, password = AP
     ),
   );
 }
+
+const nowSeconds = () => Math.floor(Date.now() / 1000);
 
 describe("Settings → Integrations", () => {
   it("shows every card, with Google ready only when the inbox has a client, the payment platforms ready, and what is being built saying soon", async () => {
