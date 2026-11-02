@@ -1,0 +1,32 @@
+Surfing Dog Inbox é a app para telemóvel da Surfing Dog Inbox do seu negócio. Novos pedidos de reserva, encomendas, pedidos de orçamento e mensagens chegam ao telemóvel como notificações, e responde a partir daí. A sua caixa de entrada continua no seu próprio site.
+
+O que faz
+• Notificações de pedidos de reserva e de estadia, encomendas, pedidos de orçamento e mensagens. Escolha quais quer receber e defina horas de silêncio que as guardam até de manhã.
+• As notificações não mostram o nome do cliente, a não ser que ative "Show details".
+• Aceite, proponha outra hora ou recuse, sempre com confirmação antes de seguir. A outra hora escolhe-se entre os horários livres que a sua caixa de entrada oferece.
+• Responda ao cliente a partir do pedido.
+• "Today": as reservas do dia num relance.
+• Quando o filtro de spam da sua caixa de entrada retém alguma coisa, veja porquê e deixe entrar ou marque como spam.
+• Todas as caixas de entrada de que trata numa só app, para quem gere mais do que um negócio.
+• Funciona sem rede: o que fizer fica à espera no telemóvel e é enviado quando voltar a ter ligação.
+• Abre com a impressão digital, o rosto ou o bloqueio de ecrã. Um "Accept" numa notificação abre o pedido e pede primeiro a impressão digital ou o rosto; nada é feito até o premir na app.
+
+Ligue-a com uma leitura
+Precisa de uma Surfing Dog Inbox, no seu próprio servidor ou alojada pela Surfing Dog, e de um bloqueio de ecrã no telemóvel.
+1. Num computador, abra a sua caixa de entrada → Settings → Phone → Add a phone. Aparece um código.
+2. Na app, toque em "Scan the code". A app pergunta se quer ligar-se à sua caixa de entrada e mostra dois dígitos.
+3. Confira os mesmos dois dígitos no computador e prima "Confirm". Não há nada para escrever.
+Sem câmara? A app pode pedir à sua caixa de entrada que lhe envie por email um link para iniciar sessão.
+
+Privacidade
+• As notificações são cifradas pela sua caixa de entrada só para o seu telemóvel. Passam pelo relay de notificações da Surfing Dog e pelo Firebase Cloud Messaging da Google, que não as conseguem ler.
+• A câmara só lê o código da sua caixa de entrada. A imagem nunca sai do telemóvel.
+• O que a app guarda no telemóvel é cifrado com uma chave no Android Keystore e nunca entra em cópias de segurança.
+• Sem anúncios, sem estatísticas de utilização, sem relatórios de erros.
+O que a app envia, e a quem (em inglês): surfingdog.ai/privacy
+
+Bom saber
+• A app está em inglês.
+• As notificações precisam dos serviços Google Play. Em alguns telemóveis (Xiaomi, Oppo, Huawei), permita a atividade em segundo plano da Surfing Dog Inbox, senão as notificações podem esperar até a abrir.
+• Android 7.0 ou posterior.
+• Código aberto, licença MIT: github.com/surfingdogai/inbox

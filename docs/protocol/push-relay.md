@@ -121,6 +121,14 @@ that does not know `d` yet tries each. A message no key opens is dropped. What `
 only: its action only opens the item in the app, with the action chosen, after the owner's fingerprint
 or face; the app reads the item from the inbox before it shows anything to accept.
 
+**On an iPhone** (`"platform": "ios"`, token the APNs device token in hex) the relay sends an APNs alert
+push, since iOS shows a notification only when the push carries one: a placeholder that names nobody,
+`mutable-content`, and the same `sd`, `d` and `p` beside it. Priority 10 for `urgency: high`, else 5;
+the TTL as `apns-expiration`; the collapse key as `apns-collapse-id`. The app's notification service
+extension decrypts `p` and replaces the placeholder before anything is shown
+(`apps/mobile/ios/Native/NotificationService`); when it cannot, the placeholder is what shows. The body
+stays within APNs' 4 KB: `p` is at most 3414 characters.
+
 ## What the relay keeps
 
 Inboxes (origin, or the hosted tenant), and per device: its id, the inbox, the platform, the push token

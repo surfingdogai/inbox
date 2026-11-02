@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useApp } from "../context";
+import { lockWords } from "../lib/native";
 import { Mark } from "./icons";
 
 /**
@@ -9,6 +10,7 @@ import { Mark } from "./icons";
  */
 export function Lock({ insecure, onUnlock }: { insecure: boolean; onUnlock: () => Promise<boolean> }) {
   const { native } = useApp();
+  const words = lockWords(native.platform);
   const [tried, setTried] = useState(false);
   const unlock = async () => {
     if (insecure) {
@@ -28,12 +30,9 @@ export function Lock({ insecure, onUnlock }: { insecure: boolean; onUnlock: () =
     return (
       <div className="lock screen">
         <Mark />
-        <h2>Set a screen lock first</h2>
-        <p>
-          Your inbox opens only on a phone with a PIN, pattern or password. Set one in the phone's settings, then come
-          back.
-        </p>
-        {tried && <p>This phone still has no screen lock.</p>}
+        <h2>Set a {words.noun} first</h2>
+        <p>Your inbox opens only on a phone with {words.kinds}. Set one in the phone's settings, then come back.</p>
+        {tried && <p>This phone still has no {words.noun}.</p>}
         <button type="button" className="btn primary" style={{ minWidth: 200 }} onClick={() => void unlock()}>
           I've set one
         </button>

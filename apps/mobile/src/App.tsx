@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { readItemLink, readPhoneLink } from "../../../packages/core/src/phones/links";
 import type { ItemDetail, ItemView } from "../../inbox/client/src/lib/types";
 import { AppContext, type App as AppValue, type Route } from "./context";
-import { InboxClient, type PhoneMe, type PhoneSpam } from "./lib/client";
+import { InboxClient, type PhoneMe, type PhoneSpam, sendQueued } from "./lib/client";
 import { type Native, native as nativeOf } from "./lib/native";
 import { Box, type KV, Outbox, type QueuedAction } from "./lib/offline";
 import { setUpPush } from "./lib/push";
@@ -141,7 +141,11 @@ export function App({ deps }: { deps: Deps }) {
       const last = deps.kv.getItem(`sdi.${ACTIVE}`);
       const lock = await native.canAuthenticate().catch(() => false);
       const secure = await native.deviceSecure().catch(() => true);
+      // The link the app was opened with (a code handed over, a sign-in link, a notification), read
+      // before the app is ready: once ready, nothing else would make the app look for it again.
+      const launch = await CapApp.getLaunchUrl().catch(() => undefined);
       if (!alive) return;
+      if (launch?.url) pendingLink.current = launch.url;
       setBox(opened);
       setInboxes(list);
       setActive(list.find((e) => e.alias === last) ?? list[0] ?? null);
@@ -149,8 +153,6 @@ export function App({ deps }: { deps: Deps }) {
       setInsecure(!secure && list.length > 0);
       setLocked(lock && list.length > 0);
       setReady(true);
-      const launch = await CapApp.getLaunchUrl().catch(() => undefined);
-      if (launch?.url) pendingLink.current = launch.url;
     })();
     return () => {
       alive = false;
@@ -169,7 +171,8 @@ export function App({ deps }: { deps: Deps }) {
   }, [deps.appInfo]);
   const checkUpdate = useRef<() => void>(() => undefined);
   checkUpdate.current = () => {
-    if (!appInfo) return;
+    // Only the Android app is installed from the download page; on an iPhone the App Store updates it.
+    if (!appInfo || native.platform !== "android") return;
     void checkForUpdate(deps.fetch, deps.kv, appInfo.build)
       .then(setUpdate)
       .catch(() => undefined);
@@ -177,6 +180,20 @@ export function App({ deps }: { deps: Deps }) {
   useEffect(() => {
     if (ready && !locked && !insecure && appInfo) checkUpdate.current();
   }, [ready, locked, insecure, appInfo]);
+
+  // An inbox that moved to a new address (a hosted inbox now live at the business's own name): the
+  // list and the inbox in front follow it, and the owner is told where it is now.
+  useEffect(
+    () =>
+      sessions.onMove((moved) => {
+        void sessions.list().then((list) => {
+          setInboxes(list);
+          setActive((a) => (a?.alias === moved.alias ? (list.find((e) => e.alias === moved.alias) ?? a) : a));
+        });
+        toast(`${moved.name} is now at ${new URL(moved.origin).host}.`);
+      }),
+    [sessions, toast],
+  );
 
   /** Everything of one inbox goes from the phone: tokens, keys, cached items, what waited to send. */
   const wipe = useCallback(
@@ -262,18 +279,8 @@ export function App({ deps }: { deps: Deps }) {
     async (announce = true) => {
       if (!outbox) return;
       const clients = new Map(inboxes.map((e) => [e.alias, new InboxClient(e, sessions, deps.fetch)]));
-      const r = await outbox.flush(async (a) => {
-        const c = clients.get(a.alias);
-        if (!c) return { ok: false, offline: false, reason: "That inbox is no longer on this phone." };
-        try {
-          if (a.kind === "reply") await c.reply(a.itemId, String(a.body.body ?? ""), a.key);
-          else await c.transition(a.itemId, a.body, a.key);
-          return { ok: true };
-        } catch (error) {
-          const e = error instanceof InboxError ? error : new InboxError(String(error), 500, "client");
-          return { ok: false, offline: e.offline, reason: e.message };
-        }
-      });
+      // What the inbox did not answer now (offline, busy, or an unlock not given) waits for next time.
+      const r = await outbox.flush((a) => sendQueued(clients.get(a.alias), a));
       for (const f of r.refused) toast(`${f.action.label}: ${f.reason}`);
       setQueued(await outbox.list());
       if (r.sent > 0 && announce) {
@@ -300,7 +307,8 @@ export function App({ deps }: { deps: Deps }) {
       await flush(false);
       const left = await outbox.list();
       setQueued(left);
-      if (left.some((a) => a.itemId === itemId)) toast("Saved. It goes when you're back online.");
+      // Kept on the phone: offline, the inbox not answering just now, or an unlock not given.
+      if (left.some((a) => a.itemId === itemId)) toast("Saved on this phone. It goes as soon as your inbox answers.");
     },
     [outbox, active, flush, toast],
   );

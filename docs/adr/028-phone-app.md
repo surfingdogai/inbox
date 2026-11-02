@@ -120,3 +120,25 @@ file itself.
   browser; it installs nothing itself and asks for no permission to. A test build never asks.
 - **Android's back button** closes an open sheet, then goes back a screen, then puts the app in the
   background.
+
+## Amendment 2 (31 Oct 2026): the iPhone app, prepared
+
+Proposed. The iPhone app is prepared and not yet built (`apps/mobile/IOS.md`): building it needs Xcode
+and the organisation's Apple Developer account.
+
+- **The same app.** `@capacitor/ios` beside Android, the same bundled screens, and one native plugin,
+  `InboxNative`, with the same methods on both (`ios/Native/App`).
+- **Keys.** The device key in the Secure Enclave, made only on an iPhone with a passcode
+  (`WhenPasscodeSetThisDeviceOnly`), used only with Face ID, Touch ID or the passcode (`userPresence`),
+  and deleted by iOS when the passcode is removed. The five minutes after an unlock are counted by the
+  app, which keeps the unlock's context that long; on Android the Keystore counts them. The screens'
+  secrets in the Keychain `WhenUnlockedThisDeviceOnly`; the push keys `AfterFirstUnlockThisDeviceOnly`,
+  in an access group shared with the notification service extension only.
+- **Notifications.** APNs behind the same relay, encrypted the same way: an alert push with a placeholder
+  that names nobody, which the extension replaces with the decrypted words. iOS cannot drop a message no
+  key opens without Apple's filtering entitlement, so the placeholder shows instead.
+- **What iOS cannot do.** A screenshot cannot be prevented; the app covers its screens before the app
+  switcher's picture and while the screen is recorded or mirrored. §6's "never in a screenshot" holds on
+  Android only. The iPhone's own name needs an entitlement: an iPhone connects as "iPhone".
+- **No update line.** The App Store updates the app; the line that points at the Android download page
+  shows on Android only.

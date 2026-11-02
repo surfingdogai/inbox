@@ -7,7 +7,9 @@ Many inboxes on one machine, for whoever runs Surfing Dog Inbox for other people
   here. It applies the rules for the inbox's state and passes the rest to the shard that holds it.
 - **Setup address.** It only ever serves the inbox's owner: their app and sign-in. Agent doors,
   the manifest and the customer's pages answer 404. Every answer is `noindex`. Once the inbox is
-  live at the business's own name, the owner's pages there move (308) and nothing else is served.
+  live at the business's own name, the owner's pages there move (308) and nothing else is served:
+  the rest answers 404 with the new address in `details.moved_to`, which the owner's phone app,
+  connected at the setup address, follows.
 - **Shards.** Each shard keeps one SQLite file per inbox, the ones in use open up to a cap, and
   runs jobs only for the inboxes that have one due. A watchdog thread ends a shard whose event loop
   is stuck and records which inbox was running. An inbox that stalls its shard three times in an
