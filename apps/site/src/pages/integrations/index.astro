@@ -6,7 +6,14 @@ import ConnectionState from "../../components/ConnectionState.astro";
 import Marked from "../../components/Marked.astro";
 import Layout from "../../layouts/Layout.astro";
 import { inline } from "../../lib/inline";
-import { APPLE_NOTICE, STATE_LABEL, TESTED_LINE, UNTRIED_LINE, WOO_NOTICE } from "../../lib/integrations";
+import {
+  APPLE_NOTICE,
+  ASSISTANTS_LINE,
+  STATE_LABEL,
+  TESTED_LINE,
+  UNTRIED_LINE,
+  WOO_NOTICE,
+} from "../../lib/integrations";
 import { COMING, SYSTEM_GROUPS, TABLE } from "../../lib/integrations-table";
 
 const site = Astro.site?.toString() ?? "https://surfingdog.ai/";
@@ -91,6 +98,11 @@ const anyTested = TABLE.some((g) => SYSTEM_GROUPS.includes(g.id) && g.rows.some(
             {g.id === lastSystem && anyTested && (
               <tr class="it-untried">
                 <td colspan="3">{TESTED_LINE}</td>
+              </tr>
+            )}
+            {g.id === "assistants" && (
+              <tr class="it-untried">
+                <td colspan="3">{ASSISTANTS_LINE}</td>
               </tr>
             )}
           </tbody>

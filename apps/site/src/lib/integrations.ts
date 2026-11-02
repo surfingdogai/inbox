@@ -87,7 +87,7 @@ export interface Integration {
  * every calendar, shop, kitchen, stay, trade and payment connection that is built says it beside its
  * name, and docs/integrations.md once for them all (test/integrations.node.test.ts keeps them in
  * step); one that is tested says its `tested` line instead. It is the built state's own words
- * (STATE_LABEL.built). Assistants and automations say nothing of the kind.
+ * (STATE_LABEL.built). The assistants have a line of their own (ASSISTANTS_LINE).
  */
 export const UNTRIED = "not yet verified on a live account";
 
@@ -307,6 +307,15 @@ export const ASSISTANT_LINKS: readonly { readonly slug: string; readonly name: s
     { slug: "grok", name: "Grok", guidelines: "https://x.ai/legal/brand-guidelines" },
     { slug: "meta-muse", name: "Meta Muse", guidelines: "https://about.meta.com/brand/resources/meta/company-brand/" },
   ];
+
+/**
+ * What is true of the assistants, said once under them wherever they are listed (the /integrations
+ * table, the row of names on /inbox, /inbox/assistants): none of them has run against an inbox yet,
+ * so each is built (the founder, 2 November 2026), and Meta Muse rolling out as Meta rolls out its
+ * custom connectors. What did run is said where it ran, word for word (docs/mcp.md, "Tested with"):
+ * Gemini CLI and the MCP Inspector, against an inbox on our own machine.
+ */
+export const ASSISTANTS_LINE = `${STATE_LABEL.built}. The inbox serves the remote MCP server and the sign-in each assistant's maker documents, and none of these has run against an inbox yet. Gemini CLI and the MCP Inspector have, against an inbox on our own machine; the MCP docs say what ran.`;
 
 export function integration(id: string): Integration {
   const found = INTEGRATIONS.find((i) => i.id === id);

@@ -15,6 +15,13 @@ export const CHECKED = "30 September 2026";
 export const OWNER_CHECKED = "12 October 2026";
 export const OWNER_AS_OF = "as of October 2026";
 
+/**
+ * Said on the page of an assistant that has not run against an inbox yet (ASSISTANTS_LINE in
+ * src/lib/integrations.ts), after who has not: its steps are its maker's, read, not tried.
+ */
+const NOT_RUN =
+  "not run against an inbox yet: these steps are its maker's own, and the inbox serves the remote MCP server and the sign-in they describe.";
+
 /** One thing an assistant does with businesses today, and where we read it. */
 export interface OwnerFact {
   readonly text: string;
@@ -231,7 +238,7 @@ export const ASSISTANTS: readonly Assistant[] = [
     signIn:
       "Grok and Grok Bot sign in with OAuth, which your inbox runs itself (the owner MCP registers Grok on its own), or with an API key sent in a header: give Grok the header Authorization and the value Bearer sdi_own_… .",
     plans: "Custom connectors on grok.com are on xAI's paid plans. Grok Bot is in early beta.",
-    notes: [],
+    notes: [`Neither Grok nor Grok Bot has ${NOT_RUN}`],
     source: { label: "xAI: Grok Bot documentation", href: "https://docs.x.ai/grok-bot/teams-and-enterprises" },
     owner: {
       question: "Can Grok book or order with your business?",
@@ -272,7 +279,7 @@ export const ASSISTANTS: readonly Assistant[] = [
       "OAuth 2.1, which your inbox runs itself; ChatGPT registers on its own, so there is nothing to set up by hand.",
     plans:
       "Paid plans only. OpenAI lists developer mode with full MCP, which booking needs, on Business, Enterprise and Edu.",
-    notes: [],
+    notes: [`ChatGPT has ${NOT_RUN}`],
     source: { label: "OpenAI Help Center", href: "https://help.openai.com" },
     post: {
       label: "OpenAI's dots can book a table. Can it book with you?",
@@ -336,7 +343,10 @@ export const ASSISTANTS: readonly Assistant[] = [
     signIn:
       "OAuth 2.1 with a Client ID Metadata Document: Claude identifies itself, so nothing needs registering. An owner API key works too, in Claude Code.",
     plans: "Custom connectors are on every Claude plan.",
-    notes: [],
+    notes: [
+      `The Claude app has ${NOT_RUN}`,
+      "Claude Code 2.1.72 connected to an inbox's two MCP servers, run on our own machine, on 1 November 2026, and found the owner's sign-in; no Claude model ran yet.",
+    ],
     source: { label: "Anthropic Help Center", href: "https://support.claude.com" },
     owner: {
       question: "Can Claude book or order with your business?",
@@ -450,7 +460,7 @@ export const ASSISTANTS: readonly Assistant[] = [
     signIn:
       "OAuth 2.1 with dynamic client registration, which your inbox runs itself, or an owner API key in the Authorization header.",
     plans: "Copilot Studio agents. The Copilot app itself takes no server of your own yet.",
-    notes: [],
+    notes: [`Copilot Studio has ${NOT_RUN}`],
     source: {
       label: "Microsoft Learn: connect an agent to an existing MCP server",
       href: "https://learn.microsoft.com/en-us/microsoft-copilot-studio/mcp-add-existing-server-to-agent",

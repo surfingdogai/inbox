@@ -44,6 +44,8 @@ In the history and in every event, the AI appears as itself: actor `owner_ai` wi
 
 Endpoints: `/oauth/authorize`, `/oauth/token`, `/oauth/register`, `/oauth/revoke`. The authorization step needs an owner session in the browser, which comes from a sign-in email (`POST /auth/magic-link`; then the page its link opens, whose button posts to `/auth/verify`, or its six-digit code posted to `/auth/code`; the first address to sign in on a fresh instance becomes its owner). The owner app offers both ways in: the sign-in email, which creates that session, and an owner API key for people who only ever use the API.
 
+**What has run.** On 1 November 2026, Gemini CLI 0.66 and the MCP Inspector 2.13 worked an inbox run on our own machine through the owner MCP, with a key and with a token from its OAuth sign-in, which a script of ours went through rather than either client. Claude Code 2.1.72 connected and found the sign-in; no Claude model ran yet. The steps below for Claude, ChatGPT, Gemini, Grok and Copilot Studio are their makers' own, and none of them has run against an inbox yet.
+
 ### Claude
 
 In Claude, go to Settings, then Connectors, and add a custom connector with your owner MCP URL, `https://<your-instance>/mcp/owner`. Claude fetches the metadata, sends you to your instance to sign in and approve the scopes, and connects. Claude uses a Client ID Metadata Document, so nothing needs to be registered by hand.

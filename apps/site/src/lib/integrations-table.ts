@@ -8,11 +8,14 @@
  * real platform, not yet on a live account, for one that has run end to end against the platform
  * itself (Stripe's test mode, a WooCommerce® store and a CalDAV server run on our own machine), its
  * line (`tested`) saying what ran, where and when, word for word as the doc it links to; Works, for what
- * reaches the inbox today (the assistants, any agent, n8n, which ran end to end), and for a connection
- * once it has run with one; Rolling out, for what its maker is still rolling out (Meta's
- * custom connectors for Muse); Built, waiting for the partner, for what is built and waits on another
- * company; Built, waiting for the standard, for what waits on a draft standard. Never a date. A row
- * of a connection on the /inbox row takes that connection's state, so a state is set in one place.
+ * has run end to end against an inbox (any other agent, over MCP as Gemini CLI and the MCP Inspector did,
+ * REST or email; n8n), and for a connection once it has run with one; Built, not yet verified, too, for
+ * the assistants none of which has run against an inbox yet (ChatGPT, Claude, Gemini's app, Copilot
+ * Studio, Grok), with their own line under them (ASSISTANTS_LINE); Rolling out, for what its maker is
+ * still rolling out (Meta's custom connectors for Muse); Built, waiting for the partner, for what is
+ * built and waits on another company; Built, waiting for the standard, for what waits on a draft
+ * standard. Never a date. A row of a connection on the /inbox row takes that connection's state, so a
+ * state is set in one place.
  * The calendar, shop, kitchen, stay, trade and payment groups (SYSTEM_GROUPS) carry the one line said
  * of their connections, under the last of them.
  *
@@ -99,7 +102,8 @@ const waiting = (
   href,
   ...(connectors ? { connectors } : {}),
 });
-const assistant = (slug: string, name: string, does: string, state: State = "works"): Row => ({
+/** An assistant's row: built until it has run against an inbox (ASSISTANTS_LINE), then works. */
+const assistant = (slug: string, name: string, does: string, state: State = "built"): Row => ({
   name,
   does,
   state,

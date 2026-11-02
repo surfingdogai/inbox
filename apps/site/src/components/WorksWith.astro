@@ -5,14 +5,23 @@
  * payment accounts it is paid into; one fine line under those two said of their connections alone,
  * in the built state's words (each built from its platform's documentation and tested against a
  * stand-in, none yet verified on a live account), true of the tested ones too; and a row of the
- * assistants it is reached from, each linked to its own page. Names only, in one style; a name that
+ * assistants it is reached from, each linked to its own page, with their own line under them
+ * (ASSISTANTS_LINE: none has run against an inbox yet). Names only, in one style; a name that
  * has run end to end against the platform itself is tagged "tested against the real platform", and its
  * page says what ran; a name is tagged "not yet verified" only when one shown works. The credit lines
  * the names need close it.
  * `items` narrows the rows, for a business page; `assistants` leaves the last row out; `noted`, the
  * credit lines its page already gives. The systems row ends with a link to all of them, and what is coming.
  */
-import { ASSISTANT_LINKS, INTEGRATIONS, type Integration, noticesOf, SYSTEMS, UNTRIED_LINE } from "../lib/integrations";
+import {
+  ASSISTANT_LINKS,
+  ASSISTANTS_LINE,
+  INTEGRATIONS,
+  type Integration,
+  noticesOf,
+  SYSTEMS,
+  UNTRIED_LINE,
+} from "../lib/integrations";
 import { pageOf, platformHref } from "../lib/platforms";
 
 interface Props {
@@ -125,6 +134,7 @@ const hrefOf = (i: Integration) => {
           ))}
           <li class="ww-tag">each page says what it needs</li>
         </ul>
+        <p class="ww-note ww-untried">{ASSISTANTS_LINE}</p>
       </div>
     )
   }

@@ -6,6 +6,7 @@ import Layout from "../../layouts/Layout.astro";
 import { ASSISTANTS, CHECKED } from "../../lib/assistants";
 import { MCP_URL } from "../../lib/gateway";
 import { HOSTED_CTA } from "../../lib/hosted";
+import { ASSISTANTS_LINE } from "../../lib/integrations";
 
 const url = new URL(Astro.url.pathname, Astro.site).toString();
 const ld = {
@@ -77,7 +78,9 @@ const ld = {
         request or a booking request through it, unless you switch that off in Settings → Networks.
       </li>
     </ul>
-    <p class="muted fine">Checked {CHECKED} against each assistant's own documentation, linked on its page.</p>
+    <p class="muted fine">
+      Checked {CHECKED} against each assistant's own documentation, linked on its page. {ASSISTANTS_LINE}
+    </p>
     <p class="fine">
       New to this? Start with <a class="link" href="/blog/what-ai-assistants-need-from-your-business/">what a personal AI
       assistant needs from your business</a>.

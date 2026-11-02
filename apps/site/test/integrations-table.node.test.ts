@@ -3,7 +3,14 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { builtInConnectors } from "../../../packages/adapters/src/connectors/index";
 import { ASSISTANTS } from "../src/lib/assistants";
-import { INTEGRATIONS, STATE_LABEL, SYSTEMS, TESTED_LINE, UNTRIED_LINE } from "../src/lib/integrations";
+import {
+  ASSISTANTS_LINE,
+  INTEGRATIONS,
+  STATE_LABEL,
+  SYSTEMS,
+  TESTED_LINE,
+  UNTRIED_LINE,
+} from "../src/lib/integrations";
 import { CALDAV_TESTED, COMING, ROWS, type Row, SYSTEM_GROUPS, TABLE } from "../src/lib/integrations-table";
 import { PLATFORMS } from "../src/lib/platforms";
 
@@ -70,9 +77,10 @@ describe("the table of integrations", () => {
     // A connection this release ships is built, not yet verified on a live account: none has run with a
     // business's real account. Three ran end to end against the platform itself on 1 November 2026, and
     // are tested: WooCommerce® and CalDAV's Other way on its own software on our machine, Stripe in its
-    // test mode. What reaches the inbox works, but for Meta's custom connectors for Muse, which follow
-    // Meta's own roll-out. Of the automations, n8n ran end to end; Zapier and Make have run with no
-    // account of either, so they are built.
+    // test mode. Of the assistants none has run against an inbox yet, so each is built (2 November
+    // 2026), but for Meta's custom connectors for Muse, which follow Meta's own roll-out; any other agent
+    // works, over MCP as Gemini CLI and the MCP Inspector did. Of the automations, n8n ran end to end;
+    // Zapier and Make have run with no account of either, so they are built.
     const UNRUN = ["Zapier and Make"];
     const TESTED = ["WooCommerce®", "Stripe", "Other CalDAV calendars"];
     for (const g of TABLE)
@@ -83,9 +91,20 @@ describe("the table of integrations", () => {
             ? "built"
             : r.assistant === "meta-muse"
               ? "rolling"
-              : "works";
+              : r.assistant
+                ? "built"
+                : "works";
         expect(r.state, r.name).toBe(want);
       }
+    expect(TABLE.find((g) => g.id === "assistants")?.rows.map((r) => [r.name, r.state])).toEqual([
+      ["ChatGPT", "built"],
+      ["Claude", "built"],
+      ["Gemini", "built"],
+      ["Microsoft Copilot Studio", "built"],
+      ["Grok and Grok Bot", "built"],
+      ["Meta Muse", "rolling"],
+      ["Any other agent", "works"],
+    ]);
     // Of the CalDAV calendars, only the Other way ran: Fastmail and Nextcloud stay built, apart from it.
     const calendars = TABLE.find((g) => g.id === "calendars")?.rows.map((r) => [r.name, r.state]);
     expect(calendars).toContainEqual(["Fastmail and Nextcloud", "built"]);
@@ -199,6 +218,39 @@ describe("the table of integrations", () => {
       expect(row?.state, i.id).toBe(i.state);
     }
     expect(new Set(ROWS.map((r) => r.name)).size).toBe(ROWS.length);
+  });
+
+  it("says under the assistants, wherever they are listed, that none has run against an inbox yet, and what has", () => {
+    expect(ASSISTANTS_LINE).toBe(
+      "Built, not yet verified on a live account. The inbox serves the remote MCP server and the sign-in each assistant's maker documents, and none of these has run against an inbox yet. Gemini CLI and the MCP Inspector have, against an inbox on our own machine; the MCP docs say what ran.",
+    );
+    expect(ASSISTANTS_LINE.startsWith(`${STATE_LABEL.built}. `)).toBe(true);
+    // Under the assistants' group on /integrations, once.
+    const page = read(PAGE);
+    expect(page.match(/\{ASSISTANTS_LINE\}/g)?.length).toBe(1);
+    expect(page).toContain('{g.id === "assistants" && (');
+    // Under the row of names on /inbox, after the assistants' names, and on /inbox/assistants.
+    const row = read("src/components/WorksWith.astro");
+    expect(row.indexOf("{ASSISTANTS_LINE}")).toBeGreaterThan(row.indexOf('id="ww-assistants"'));
+    expect(read("src/pages/inbox/assistants.astro")).toContain("{ASSISTANTS_LINE}");
+    // What did run is said where the line points, word for word as it ran, and on Gemini's page; each of
+    // the five that has not says so on its own page, and in the doc on connecting one's AI.
+    const mcp = docOf("/docs/mcp/#tested-with");
+    expect(mcp.anchored).toBe(true);
+    expect(mcp.text).toContain("Tested on 1 November 2026 with Gemini CLI 0.66 and the MCP Inspector 2.13");
+    expect(mcp.text).toContain("no Claude model ran yet");
+    const notes = (slug: string) => ASSISTANTS.find((a) => a.slug === slug)?.notes.join(" ") ?? "";
+    expect(notes("gemini")).toContain("Gemini CLI 0.66");
+    expect(notes("gemini")).toContain("Custom apps in the Gemini app have not been tried yet.");
+    for (const slug of ["chatgpt", "claude", "microsoft-copilot", "grok"])
+      expect(notes(slug), slug).toContain("not run against an inbox yet");
+    expect(notes("claude")).toContain("no Claude model ran yet");
+    const connect = docOf("/docs/connect-your-ai/").text;
+    expect(connect).toContain("**What has run.** On 1 November 2026, Gemini CLI 0.66 and the MCP Inspector 2.13");
+    expect(connect).toContain("none of them has run against an inbox yet");
+    // Nowhere does a page or a doc call one of the five working.
+    for (const f of [PAGE, "src/components/WorksWith.astro", "src/pages/inbox/assistants.astro"])
+      expect(read(f), f).not.toMatch(/(ChatGPT|Claude|Gemini|Copilot|Grok)[^.<]{0,40}\bworks\b/);
   });
 
   it("lists the assistants that reach the inbox, each linked to its own page", () => {
