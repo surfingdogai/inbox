@@ -44,7 +44,7 @@ async function credentialsOf(path: string): Promise<{ key: string; token: string
     const token = `sdi_at_${ulid().toLowerCase()}${ulid().toLowerCase()}`;
     await db.client.query({
       sql: `INSERT INTO oauth_tokens (token_hash, kind, client_id, user_id, scope, family_id, expires_at, created_at)
-            VALUES (?, 'access', 'https://app.example.org/client.json', ?, 'items:read', ?, ?, ?)`,
+            VALUES (?, 'access', 'https://app.example.org/client.json', ?, 'inbox:read', ?, ?, ?)`,
       params: [await hashKey(token), String(user?.[0]), ulid(), Date.now() + 3_600_000, Date.now()],
       method: "run",
     });

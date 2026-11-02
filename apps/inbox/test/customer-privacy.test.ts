@@ -159,13 +159,26 @@ describe("the owner's doors to one customer", () => {
   it("erases only with the confirm it gave, for the owner or a key given customers:erase", async () => {
     const s = await setup();
     const { party } = await s.book();
-    // A key without the scope is refused, even though scopes are only logged by default.
+    // A key without the scope is refused, and told the scope a key would need.
     const crm = await createApiKey(s.db, { kind: "integration", name: "CRM", scopes: ["inbox:read", "inbox:write"] });
-    const refused = await s.app.request(
-      post(`/v1/owner/customers/${party}/erase`, {}, { authorization: `Bearer ${crm.key}` }),
-    );
+    const asCrm = { authorization: `Bearer ${crm.key}` };
+    const refused = await s.app.request(post(`/v1/owner/customers/${party}/erase`, {}, asCrm));
     expect(refused.status).toBe(403);
-    expect(await refused.json()).toMatchObject({ code: "not_allowed", details: { reason: "owner_only" } });
+    expect(await refused.json()).toMatchObject({
+      code: "not_allowed",
+      details: { reason: "outside_scopes", required_scopes: ["customers:erase"] },
+    });
+    // With the owner's switch off it reaches the erasure, which refuses it whatever the switch says.
+    await s.app.request(
+      new Request(`${BASE}/v1/owner/settings`, {
+        method: "PUT",
+        headers: { ...s.auth, "content-type": "application/json" },
+        body: JSON.stringify({ doc: { security: { enforceScopes: false } } }),
+      }),
+    );
+    const still = await s.app.request(post(`/v1/owner/customers/${party}/erase`, {}, asCrm));
+    expect(still.status).toBe(403);
+    expect(await still.json()).toMatchObject({ code: "not_allowed", details: { reason: "owner_only" } });
     // The owner, without confirm: what it would erase, and nothing done.
     const asked = await s.app.request(
       new Request(`${BASE}/v1/owner/customers/${party}/erase`, { method: "POST", headers: s.auth }),

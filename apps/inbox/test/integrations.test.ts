@@ -141,43 +141,80 @@ describe("keys and scopes", () => {
     expect((await app.request(req("GET", "/v1/owner/items", undefined, asZap))).status).toBe(401);
   });
 
-  it("records a call outside a key's scopes and lets it through, until the owner switches enforcement on", async () => {
+  it("refuses a call outside a key's scopes out of the box, and lets it through only while the owner has that off", async () => {
     const { app, owner } = await setup();
     const zap = await mintKey(app, owner, { name: "Zapier", preset: "automation" });
     const asZap = { authorization: `Bearer ${zap.key}` };
-    const service = { name: "Wash" };
-    expect((await app.request(req("POST", "/v1/owner/services", service, asZap))).status).toBe(201);
-    expect((await app.request(req("POST", "/v1/owner/services", service, asZap))).status).toBe(201);
-
     const keys = async () =>
       (await (await app.request(req("GET", "/v1/owner/api-keys", undefined, owner))).json()) as {
         items: { id: string; refusals: { operation: string; scope: string; count: number; enforced: boolean }[] }[];
+        security: { enforce_scopes: boolean };
       };
-    const refusals = (await keys()).items.find((k) => k.id === zap.id)?.refusals;
-    expect(refusals).toEqual([
-      expect.objectContaining({ operation: "POST /services", scope: "catalogue:write", count: 2, enforced: false }),
-    ]);
+    const refusalsOfZap = async () => (await keys()).items.find((k) => k.id === zap.id)?.refusals ?? [];
+    expect((await keys()).security.enforce_scopes).toBe(true);
 
-    // Only the owner can switch it on: the key itself cannot, whatever its scopes.
-    const bySelf = await app.request(
-      req("PUT", "/v1/owner/settings", { doc: { security: { enforceScopes: true } } }, asZap),
+    // An Automation tool key changing the settings, as one did while scopes were only logged: refused,
+    // with why, and nothing changed.
+    const before = (await (await app.request(req("GET", "/v1/owner/settings", undefined, owner))).json()) as {
+      version: number;
+    };
+    const put = await app.request(
+      req("PUT", "/v1/owner/settings", { doc: { booking: { autoExpireHours: 6 } } }, asZap),
     );
-    expect(bySelf.status).toBe(403);
-    const on = await app.request(
-      req("PUT", "/v1/owner/settings", { doc: { security: { enforceScopes: true } } }, owner),
-    );
-    expect(on.status).toBe(200);
-
-    const refused = await app.request(req("POST", "/v1/owner/services", service, asZap));
-    expect(refused.status).toBe(403);
-    expect(await refused.json()).toMatchObject({
+    expect(put.status).toBe(403);
+    expect(await put.json()).toMatchObject({
       code: "not_allowed",
-      details: { required_scopes: ["catalogue:write"] },
+      detail:
+        'Refused: the key "Zapier" was not given the scope settings:write, which PUT /settings needs. Nothing was done. It holds inbox:read inbox:write events:read. The owner makes a key with settings:write in Settings → Keys, for this system to use instead.',
+      details: {
+        reason: "outside_scopes",
+        required_scopes: ["settings:write"],
+        held_scopes: ["inbox:read", "inbox:write", "events:read"],
+        where: "Settings → Keys",
+      },
     });
-    expect((await keys()).items.find((k) => k.id === zap.id)?.refusals[0]).toMatchObject({ count: 3, enforced: true });
+    const after = (await (await app.request(req("GET", "/v1/owner/settings", undefined, owner))).json()) as {
+      version: number;
+      doc: { booking: { autoExpireHours: number } };
+    };
+    expect(after.version).toBe(before.version);
+    expect(after.doc.booking.autoExpireHours).not.toBe(6);
+    const service = { name: "Wash" };
+    expect((await app.request(req("POST", "/v1/owner/services", service, asZap))).status).toBe(403);
+    expect(await refusalsOfZap()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ operation: "PUT /settings", scope: "settings:write", count: 1, enforced: true }),
+        expect.objectContaining({ operation: "POST /services", scope: "catalogue:write", count: 1, enforced: true }),
+      ]),
+    );
     // In scope, and the owner, go on as before.
     expect((await app.request(req("GET", "/v1/owner/items", undefined, asZap))).status).toBe(200);
+    expect((await app.request(req("GET", "/v1/owner/events", undefined, asZap))).status).toBe(200);
     expect((await app.request(req("POST", "/v1/owner/services", service, owner))).status).toBe(201);
+
+    // Only the owner loosens it: the key itself cannot, whatever its scopes.
+    const bySelf = await app.request(
+      req("PUT", "/v1/owner/settings", { doc: { security: { enforceScopes: false } } }, asZap),
+    );
+    expect(bySelf.status).toBe(403);
+    const off = await app.request(
+      req("PUT", "/v1/owner/settings", { doc: { security: { enforceScopes: false } } }, owner),
+    );
+    expect(off.status).toBe(200);
+    expect((await keys()).security.enforce_scopes).toBe(false);
+    // Off, the call goes through and is only recorded.
+    expect((await app.request(req("POST", "/v1/owner/services", service, asZap))).status).toBe(201);
+    expect((await refusalsOfZap()).find((r) => r.operation === "POST /services")).toMatchObject({
+      count: 2,
+      enforced: false,
+    });
+    // Back on, refused again.
+    await app.request(req("PUT", "/v1/owner/settings", { doc: { security: { enforceScopes: true } } }, owner));
+    expect((await app.request(req("POST", "/v1/owner/services", service, asZap))).status).toBe(403);
+    expect((await refusalsOfZap()).find((r) => r.operation === "POST /services")).toMatchObject({
+      count: 3,
+      enforced: true,
+    });
   });
 
   it("checks a key's scopes when it reaches an existing item through the public door too", async () => {
@@ -185,22 +222,24 @@ describe("keys and scopes", () => {
     const itemId = await book(app, serviceId);
     const shop = await mintKey(app, owner, { name: "Shop", scopes: ["catalogue:write"] });
     const asShop = { authorization: `Bearer ${shop.key}` };
-    // Logged first: the call goes through, and the owner sees it under the key.
-    expect((await app.request(req("GET", `/v1/items/${itemId}`, undefined, asShop))).status).toBe(200);
-    const listed = (await (await app.request(req("GET", "/v1/owner/api-keys", undefined, owner))).json()) as {
-      items: { id: string; refusals: { operation: string; scope: string }[] }[];
-    };
-    expect(listed.items.find((k) => k.id === shop.id)?.refusals).toEqual([
-      expect.objectContaining({ operation: "public:get_item_status", scope: "inbox:read" }),
-    ]);
-    // Enforced, the public door refuses what the owner door would.
-    await app.request(req("PUT", "/v1/owner/settings", { doc: { security: { enforceScopes: true } } }, owner));
-    expect((await app.request(req("GET", `/v1/items/${itemId}`, undefined, asShop))).status).toBe(403);
+    // The public door refuses what the owner door would, and the owner sees it under the key.
+    const read = await app.request(req("GET", `/v1/items/${itemId}`, undefined, asShop));
+    expect(read.status).toBe(403);
+    expect(await read.json()).toMatchObject({ details: { reason: "outside_scopes", required_scopes: ["inbox:read"] } });
     const injected = await app.request(req("POST", "/v1/messages", { item_id: itemId, body: "from the key" }, asShop));
     expect(injected.status).toBe(403);
     expect((await app.request(req("POST", `/v1/items/${itemId}/cancel`, {}, asShop))).status).toBe(403);
+    const listed = (await (await app.request(req("GET", "/v1/owner/api-keys", undefined, owner))).json()) as {
+      items: { id: string; refusals: { operation: string; scope: string; enforced: boolean }[] }[];
+    };
+    expect(listed.items.find((k) => k.id === shop.id)?.refusals).toContainEqual(
+      expect.objectContaining({ operation: "public:get_item_status", scope: "inbox:read", enforced: true }),
+    );
     // A customer with the item's token, and the owner, are untouched.
     expect((await app.request(req("GET", `/v1/items/${itemId}`, undefined, owner))).status).toBe(200);
+    // With the owner's switch off, the call goes through, recorded.
+    await app.request(req("PUT", "/v1/owner/settings", { doc: { security: { enforceScopes: false } } }, owner));
+    expect((await app.request(req("GET", `/v1/items/${itemId}`, undefined, asShop))).status).toBe(200);
   });
 
   it("names the operation by its route, even behind a host's catch-all", async () => {
@@ -210,7 +249,9 @@ describe("keys and scopes", () => {
     const zap = await mintKey(app, owner, { name: "Zapier", preset: "automation" });
     const asZap = { authorization: `Bearer ${zap.key}` };
     expect((await app.request(req("GET", "/v1/owner/items", undefined, asZap))).status).toBe(200);
-    expect((await app.request(req("GET", "/v1/owner/services", undefined, asZap))).status).toBe(200);
+    const refused = await app.request(req("GET", "/v1/owner/services", undefined, asZap));
+    expect(refused.status).toBe(403);
+    expect(((await refused.json()) as { detail: string }).detail).toContain("which GET /services needs");
     const listed = (await (await app.request(req("GET", "/v1/owner/api-keys", undefined, owner))).json()) as {
       items: { id: string; refusals: { operation: string }[] }[];
     };
@@ -270,8 +311,13 @@ describe("keys and scopes", () => {
       ["confirm", { kind: "owner_ai", id: claude.clientId, name: "Claude" }, "rest"],
     ]);
 
-    // Its default consent does not cover the catalogue: recorded under the AI app, not refused.
-    expect((await app.request(req("POST", "/v1/owner/services", { name: "Wash" }, claude.auth))).status).toBe(201);
+    // The consent it was given before (no catalogue) does not cover adding a service: refused, with
+    // how the owner gives it more, and listed under the AI app.
+    const wash = await app.request(req("POST", "/v1/owner/services", { name: "Wash" }, claude.auth));
+    expect(wash.status).toBe(403);
+    expect(((await wash.json()) as { detail: string }).detail).toBe(
+      'Refused: the AI app "Claude" was not granted the scope catalogue:write, which POST /services needs. Nothing was done. It holds inbox:read inbox:write settings:read. The owner grants more in Settings → Keys: disconnect the app there, then connect it again and allow the scope.',
+    );
     const keys = (await (await app.request(req("GET", "/v1/owner/api-keys", undefined, owner))).json()) as {
       ai_clients: { id: string; name: string; refusals: { operation: string; scope: string }[] }[];
     };
@@ -280,9 +326,12 @@ describe("keys and scopes", () => {
         kind: "owner_ai",
         id: claude.clientId,
         name: "Claude",
-        refusals: [expect.objectContaining({ operation: "POST /services", scope: "catalogue:write" })],
+        refusals: [expect.objectContaining({ operation: "POST /services", scope: "catalogue:write", enforced: true })],
       },
     ]);
+    // Granted the catalogue, as an app that asks for no scopes now is, it adds one.
+    const granted = await oauthToken(db, "inbox:read inbox:write catalogue:write settings:read offline_access");
+    expect((await app.request(req("POST", "/v1/owner/services", { name: "Wash" }, granted.auth))).status).toBe(201);
   });
 
   it("stops an expired key, and slows a runaway integration key but never the owner", async () => {

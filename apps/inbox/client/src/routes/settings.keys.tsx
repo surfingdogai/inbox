@@ -54,7 +54,7 @@ function SecurityCard({ list }: { list: KeyList | undefined }) {
   const save = useSaveSettings();
   const qc = useQueryClient();
   const [notice, setNotice] = useState<Notice | null>(null);
-  const enforceScopes = settings.data?.doc.security.enforceScopes ?? list?.security.enforce_scopes ?? false;
+  const enforceScopes = settings.data?.doc.security.enforceScopes ?? list?.security.enforce_scopes ?? true;
   const savedContact = settings.data?.doc.security.contact ?? "";
   const [contact, setContact] = useState<string | null>(null);
   const change = (patch: Record<string, unknown>, done: string) => {
@@ -90,16 +90,16 @@ function SecurityCard({ list }: { list: KeyList | undefined }) {
           change(
             { enforceScopes: on },
             on
-              ? "Calls outside a key's scopes are now refused."
-              : "Calls outside a key's scopes go through again and are only recorded.",
+              ? "Calls outside a key's scopes are refused again."
+              : "Calls outside a key's scopes now go through, and are only recorded.",
           )
         }
       >
         Refuse calls outside a key's scopes
       </Switch>
       <p className="hint">
-        Off, such a call still goes through and is recorded under its key below, so you can see what would break before
-        anything does. A later release turns this on for everyone.
+        On to start with: a key or an AI app that calls something outside its scopes is refused, told which scope it
+        needs, and listed under it below. Off, such a call goes through and is only listed.
       </p>
       <form
         className="stack"
@@ -306,7 +306,7 @@ function KeysCard() {
       {keys.isSuccess && rows.length === 0 && !adding && (
         <div className="state">
           <h3>No keys yet</h3>
-          <p>Create one for the first system you connect, or let your AI create it for you.</p>
+          <p>Create one for the first system you connect. Your AI can tell you which preset it needs.</p>
         </div>
       )}
       {adding && keys.data && (
@@ -452,7 +452,7 @@ function Refusals({ refusals }: { refusals: readonly RefusalView[] }) {
     <ul className="hint">
       {refusals.map((r) => (
         <li key={r.operation}>
-          {r.enforced ? "Refused" : "Would be refused"}: {r.operation} needs {r.scope} ({r.count}×, last{" "}
+          {r.enforced ? "Refused" : "Went through"}: {r.operation} needs {r.scope} ({r.count}×, last{" "}
           {relativeTime(r.last_at)})
         </li>
       ))}
@@ -652,8 +652,9 @@ function AiAppsCard({ list }: { list: KeyList }) {
     <section className="card glass stack">
       <SectionHead title="AI apps outside their scopes" />
       <p className="hint">
-        These apps connected with a sign-in and called something you did not grant them. Nothing was refused unless the
-        switch above is on. To grant more, connect the app again and allow the scopes it asks for.
+        These apps connected with a sign-in and called something you did not grant them. While the switch above is on,
+        each such call is refused. To grant more, disconnect the app and connect it again, allowing the scopes it asks
+        for.
       </p>
       <div className="stack">
         {list.ai_clients.map((a) => (

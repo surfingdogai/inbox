@@ -12,8 +12,8 @@ until they answer.
 connected, do Step 4 of https://surfingdog.ai/install.md first. Call `get_profile` to check. This
 work uses the scopes `inbox:read`, `inbox:write`, `events:read`, `catalogue:write`,
 `availability:write`, `settings:read`, `setup:run` and `integrations:write`. If the person's client
-lets them choose scopes when they connect, they grant these. If the owner has switched on refusing
-calls outside scopes and a call is refused, they reconnect with these scopes.
+lets them choose scopes when they connect, they grant these. A call outside the scopes they granted
+is refused, so when one is, they disconnect you in Settings → Keys and connect you again with these.
 
 **What only the person does.** Making or revoking a key, adding or changing a webhook endpoint, and
 changing where alerts and emails go are done by the person, in the owner app. The inbox refuses
@@ -100,9 +100,10 @@ work around it in a way that pretends it exists.
    | `calendar_sync` | adds `availability:write` | A flow that also writes closed days |
    | `read_only` | `inbox:read events:read settings:read` | Reports and dashboards |
 
-   Today a call outside a key's scopes still goes through, and it is logged. The owner can switch
-   on refusing such calls in Settings → Keys, and a later release will refuse them for everyone.
-   Pick the narrow preset anyway: the owner sees every call outside it.
+   A call outside a key's scopes is refused (`403 not_allowed`, `details.reason: "outside_scopes"`,
+   with the scope it needed) and listed under the key in Settings → Keys. When a system needs more,
+   ask the person for a key with that preset or those scopes; never ask them to switch the refusal
+   off, and never use another system's key.
 3. **Ask first** before you change a setting in another system, send an email for the person, or
    turn on anything that costs money, such as a paid Zapier plan.
 4. **Other platforms' secrets stay out of the inbox.** A Shopify token or a HubSpot key goes into

@@ -11,8 +11,9 @@ import { once, pruneIdempotencyKeys, withIdempotencyKey } from "../src/write/ind
 import { makeClient, openWeekdays, resetTables } from "./harness";
 
 /**
- * Keys, scopes, idempotency and attribution at the core (ADR-004, log first). The doors are covered
- * in apps/inbox/test/integrations.test.ts; this is the policy underneath them, on both runtimes.
+ * Keys, scopes, idempotency and attribution at the core (ADR-004; scopes refused out of the box). The
+ * doors are covered in apps/inbox/test/integrations.test.ts; this is the policy underneath them, on
+ * both runtimes.
  */
 const T0 = Date.parse("2026-09-21T10:00:00Z");
 const KEY = "2f8c1d0a6b4e37925c8f01ad6e3b47f0";
@@ -71,47 +72,175 @@ async function setup(): Promise<{ db: Db; caps: Capabilities }> {
   return { db, caps: new Capabilities(db, createSecretBox([KEY])) };
 }
 
-describe("the scope check (log first)", () => {
-  it("lets a call outside the scopes through and records it, per principal and operation", async () => {
-    const { db, caps } = await setup();
-    await caps.access.requireScope(zapier, ["catalogue:write"], "POST /services");
-    await caps.access.requireScope(zapier, ["catalogue:write"], "POST /services");
-    await caps.access.requireScope(zapier, ["inbox:read"], "GET /items"); // in scope: nothing recorded
-    await caps.access.requireScope(claude, ["settings:write"], "mcp:update_settings");
-    await caps.access.requireScope(owner, ["settings:write"], "PUT /settings"); // the owner holds everything
+/** The settings row as an inbox from before this release left it: a document, or none at all. */
+async function storeSettings(db: Db, doc: Record<string, unknown> | null): Promise<void> {
+  await db.client.query({ sql: "DELETE FROM settings", method: "run" });
+  if (doc === null) return;
+  await db.client.query({
+    sql: "INSERT INTO settings (id, schema_version, doc, version, updated_at) VALUES ('singleton', 1, ?, 3, ?)",
+    params: [JSON.stringify(doc), T0],
+    method: "run",
+  });
+}
 
+const refusalsOf = async (db: Db, id: string) =>
+  (
+    await db.client.query({
+      sql: "SELECT principal_kind, operation, scope, count, enforced FROM scope_refusals WHERE principal_id = ?",
+      params: [id],
+      method: "all",
+    })
+  ).rows;
+
+describe("the scope check (refused out of the box)", () => {
+  it("refuses a call outside the scopes, says why in words its maker can act on, and records it", async () => {
+    const { db, caps } = await setup();
+    const refused = caps.access.requireScope(zapier, ["settings:write"], "PUT /settings");
+    await expect(refused).rejects.toMatchObject({
+      code: "not_allowed",
+      details: {
+        reason: "outside_scopes",
+        required_scopes: ["settings:write"],
+        held_scopes: ["inbox:read", "inbox:write", "events:read"],
+        ask_owner: true,
+        where: "Settings → Keys",
+      },
+    });
+    await expect(refused).rejects.toThrow(
+      'Refused: the key "Zapier" was not given the scope settings:write, which PUT /settings needs. Nothing was done. It holds inbox:read inbox:write events:read. The owner makes a key with settings:write in Settings → Keys, for this system to use instead.',
+    );
+    // An AI app is told how its owner grants more.
+    await expect(caps.access.requireScope(claude, ["catalogue:write"], "mcp:upsert_service")).rejects.toThrow(
+      'Refused: the AI app "Claude" was not granted the scope catalogue:write, which mcp:upsert_service needs. Nothing was done. It holds inbox:read inbox:write settings:read. The owner grants more in Settings → Keys: disconnect the app there, then connect it again and allow the scope.',
+    );
+    // What only the owner does names no scope to ask for; nor what no AI app is ever given.
+    const ownerOnly = caps.access.requireScope(zapier, ["*"], "PUT /spam/ai");
+    await expect(ownerOnly).rejects.toThrow(
+      'Refused: the key "Zapier" cannot call PUT /spam/ai, which only the owner does, in person. Nothing was done.',
+    );
+    await expect(ownerOnly).rejects.toMatchObject({ details: { reason: "owner_only", required_scopes: ["*"] } });
+    await expect(
+      caps.access.requireScope(claude, ["customers:erase"], "POST /customers/:id/erase"),
+    ).rejects.toMatchObject({
+      message:
+        'Refused: the AI app "Claude" cannot call POST /customers/:id/erase, which only the owner does, in person. Nothing was done.',
+      details: { reason: "owner_only" },
+    });
+    // A key may be given it, and is told so.
+    await expect(caps.access.requireScope(zapier, ["customers:erase"], "POST /customers/:id/erase")).rejects.toThrow(
+      "The owner makes a key with customers:erase in Settings → Keys",
+    );
+    // In scope, and the owner in person, pass and leave nothing.
+    await caps.access.requireScope(zapier, ["inbox:read"], "GET /items");
+    await caps.access.requireScope(zapier, ["events:read", "inbox:read"], "GET /events");
+    await caps.access.requireScope(owner, ["settings:write"], "PUT /settings");
+    expect(await refusalsOf(db, "key_zap")).toEqual(
+      expect.arrayContaining([
+        ["integration", "PUT /settings", "settings:write", 1, 1],
+        ["integration", "PUT /spam/ai", "*", 1, 1],
+        ["integration", "POST /customers/:id/erase", "customers:erase", 1, 1],
+      ]),
+    );
+    expect(await refusalsOf(db, "key_zap")).toHaveLength(3);
+    expect(await refusalsOf(db, "sess_1")).toEqual([]);
     const list = await caps.access.listKeys(owner);
     expect(list.ai_clients).toContainEqual({
       kind: "owner_ai",
       id: "client_claude",
       name: "Claude",
-      refusals: [expect.objectContaining({ operation: "mcp:update_settings", scope: "settings:write", count: 1 })],
+      refusals: expect.arrayContaining([
+        expect.objectContaining({ operation: "mcp:upsert_service", scope: "catalogue:write", enforced: true }),
+        expect.objectContaining({ operation: "POST /customers/:id/erase", scope: "customers:erase", enforced: true }),
+      ]),
     });
-    const { rows } = await db.client.query({
-      sql: "SELECT principal_kind, operation, scope, count, enforced FROM scope_refusals WHERE principal_id = 'key_zap'",
-      method: "all",
-    });
-    expect(rows).toEqual([["integration", "POST /services", "catalogue:write", 2, 0]]);
-    expect(list.security).toEqual({ ai_may_create_keys: false, enforce_scopes: false });
+    expect(list.security).toEqual({ ai_may_create_keys: false, enforce_scopes: true });
   });
 
-  it("refuses once the owner enforces scopes, and records that it did", async () => {
+  it("gives the new default to every inbox that never touched the switch, and keeps the choice of one that did", async () => {
     const { db, caps } = await setup();
+    const refusedHere = async () =>
+      caps.access.requireScope(zapier, ["catalogue:write"], "POST /services").then(
+        () => false,
+        () => true,
+      );
+    // Never written; written without a security section; with only a security contact; with the retired
+    // switch alone: each reads the default, and refuses.
+    for (const doc of [
+      null,
+      { schemaVersion: 1, booking: { autoExpireHours: 48 } },
+      { schemaVersion: 1, security: { contact: "security@example.com" } },
+      { schemaVersion: 1, security: { aiMayCreateKeys: false } },
+      // A value this version cannot read is left out, and its default applies.
+      { schemaVersion: 1, security: { enforceScopes: "yes" } },
+    ]) {
+      await storeSettings(db, doc);
+      expect(await refusedHere(), JSON.stringify(doc)).toBe(true);
+      expect((await caps.access.listKeys(owner)).security.enforce_scopes, JSON.stringify(doc)).toBe(true);
+    }
+    // An owner who switched it on keeps it on; one who switched it off keeps logging first.
+    await storeSettings(db, { schemaVersion: 1, security: { enforceScopes: true } });
+    expect(await refusedHere()).toBe(true);
+    await storeSettings(db, { schemaVersion: 1, security: { enforceScopes: false, contact: "security@example.com" } });
+    expect(await refusedHere()).toBe(false);
+    expect((await caps.access.listKeys(owner)).security.enforce_scopes).toBe(false);
+    // Nothing was rewritten to get there.
+    const { rows } = await db.client.query({ sql: "SELECT doc FROM settings", method: "all" });
+    expect(JSON.parse(String(rows[0]?.[0]))).toEqual({
+      schemaVersion: 1,
+      security: { enforceScopes: false, contact: "security@example.com" },
+    });
+  });
+
+  it("lets the owner loosen it: off, a call outside the scopes goes through and is only recorded", async () => {
+    const { db, caps } = await setup();
+    await caps.updateSettings(owner, { doc: { security: { enforceScopes: false } } });
+    await caps.access.requireScope(zapier, ["catalogue:write"], "POST /services");
+    await caps.access.requireScope(zapier, ["catalogue:write"], "POST /services");
+    await caps.access.requireScope(claude, ["settings:write"], "mcp:update_settings");
+    expect(await refusalsOf(db, "key_zap")).toEqual([["integration", "POST /services", "catalogue:write", 2, 0]]);
+    expect(await refusalsOf(db, "client_claude")).toEqual([
+      ["owner_ai", "mcp:update_settings", "settings:write", 1, 0],
+    ]);
+    expect((await caps.access.listKeys(owner)).security.enforce_scopes).toBe(false);
+    // Back on, the same call is refused, and the record says so.
     await caps.updateSettings(owner, { doc: { security: { enforceScopes: true } } });
     await expect(caps.access.requireScope(zapier, ["catalogue:write"], "POST /services")).rejects.toMatchObject({
       code: "not_allowed",
-      details: { required_scopes: ["catalogue:write"] },
+      details: { reason: "outside_scopes", required_scopes: ["catalogue:write"] },
     });
-    const { rows } = await db.client.query({
-      sql: "SELECT operation, scope, count, enforced FROM scope_refusals WHERE principal_id = 'key_zap'",
-      method: "all",
+    expect(await refusalsOf(db, "key_zap")).toEqual([["integration", "POST /services", "catalogue:write", 3, 1]]);
+    // A website's forms key is refused everything else even while the switch is off.
+    await caps.updateSettings(owner, { doc: { security: { enforceScopes: false } } });
+    const forms: Caller = {
+      ...zapier,
+      actor: { kind: "integration", id: "key_forms", channel: "rest" },
+      principal: principal({
+        via: "api_key",
+        keyKind: "integration",
+        id: "key_forms",
+        name: "Website",
+        scopes: ["forms:submit"],
+      }),
+    };
+    await expect(caps.access.requireScope(forms, ["inbox:read"], "GET /items")).rejects.toMatchObject({
+      code: "not_allowed",
     });
-    expect(rows).toEqual([["POST /services", "catalogue:write", 1, 1]]);
-    // In scope still passes.
-    await caps.access.requireScope(zapier, ["inbox:read"], "GET /items");
   });
 
-  it("never refuses because the record could not be written, while scopes are only logged", async () => {
+  it("never lets a key or the owner's AI loosen it, and takes an unchanged section back as no change", async () => {
+    const { caps } = await setup();
+    for (const who of [zapier, claude]) {
+      await expect(caps.updateSettings(who, { doc: { security: { enforceScopes: false } } })).rejects.toMatchObject({
+        code: "not_allowed",
+        details: { reason: "owner_in_person" },
+      });
+      // The value it read, sent back: nothing to refuse, and nothing written for the owner.
+      await caps.updateSettings(who, { doc: { security: { enforceScopes: true } } });
+    }
+    expect((await caps.access.listKeys(owner)).security.enforce_scopes).toBe(true);
+  });
+
+  it("never refuses because the record could not be written, and still refuses while scopes are enforced", async () => {
     const { db, caps } = await setup();
     // A database that takes every query but the refusal record.
     const client = new Proxy(db.client, {
@@ -125,12 +254,13 @@ describe("the scope check (log first)", () => {
       },
     });
     const access = new AccessCapabilities({ ...db, client });
-    await expect(access.requireScope(zapier, ["catalogue:write"], "POST /services")).resolves.toBeUndefined();
-    // Enforced, the refusal still stands without its record.
-    await caps.updateSettings(owner, { doc: { security: { enforceScopes: true } } });
+    // Enforced, as out of the box, the refusal stands without its record.
     await expect(access.requireScope(zapier, ["catalogue:write"], "POST /services")).rejects.toMatchObject({
       code: "not_allowed",
     });
+    // Switched off, the call goes through without it.
+    await caps.updateSettings(owner, { doc: { security: { enforceScopes: false } } });
+    await expect(access.requireScope(zapier, ["catalogue:write"], "POST /services")).resolves.toBeUndefined();
   });
 });
 
@@ -173,7 +303,7 @@ describe("keys", () => {
     await expect(caps.updateSettings(claude, { doc: { security: { aiMayCreateKeys: true } } })).rejects.toMatchObject({
       code: "not_allowed",
     });
-    await expect(caps.updateSettings(zapier, { doc: { security: { enforceScopes: true } } })).rejects.toMatchObject({
+    await expect(caps.updateSettings(zapier, { doc: { security: { enforceScopes: false } } })).rejects.toMatchObject({
       code: "not_allowed",
     });
     // The retired switch, set by the owner, lets the AI in no more than before.

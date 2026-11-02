@@ -400,6 +400,90 @@ describe("OAuth 2.1 for the owner MCP", () => {
     expect(afterReuse.status).toBe(401); // the family was revoked on reuse
   });
 
+  it("offers an app that asks for no scopes all an AI may hold but keys:write, so refusing outside them breaks no setup", async () => {
+    const db = await freshDb();
+    const mail = logMailOut();
+    const app = createApp({ db, mailOut: mail, ownerEmails: ["owner@oficinamare.pt"] });
+    const cookie = await signIn(app, mail, "owner@oficinamare.pt");
+    const reg = await app.request(`${ORIGIN}/oauth/register`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ client_name: "Claude", redirect_uris: ["https://claude.ai/api/mcp/auth_callback"] }),
+    });
+    const { client_id } = (await reg.json()) as { client_id: string };
+    const verifier = "v".repeat(43);
+    // No scope asked for.
+    const params = new URLSearchParams({
+      response_type: "code",
+      client_id,
+      redirect_uri: "https://claude.ai/api/mcp/auth_callback",
+      code_challenge: await pkceChallenge(verifier),
+      code_challenge_method: "S256",
+    });
+    const page = await (await app.request(`${ORIGIN}/oauth/authorize?${params}`, { headers: { cookie } })).text();
+    // The consent page lists what it may do, each in words: the setup as well as the inbox.
+    for (const words of [
+      "read items and conversations",
+      "change services and products",
+      "change opening hours and closed days",
+      "add, change and apply rules",
+      "change settings and the business profile",
+    ])
+      expect(page, words).toContain(words);
+    expect(page).not.toContain("create and revoke integration keys");
+    const decided = await app.request(`${ORIGIN}/oauth/authorize/decision`, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/x-www-form-urlencoded", origin: ORIGIN },
+      body: new URLSearchParams({ ...Object.fromEntries(params), decision: "allow" }).toString(),
+    });
+    const code = new URL(decided.headers.get("location") ?? "").searchParams.get("code") ?? "";
+    const token = await app.request(`${ORIGIN}/oauth/token`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code,
+        client_id,
+        redirect_uri: "https://claude.ai/api/mcp/auth_callback",
+        code_verifier: verifier,
+      }).toString(),
+    });
+    const tokens = (await token.json()) as { access_token: string; scope: string };
+    expect(tokens.scope.split(" ")).toEqual([
+      "inbox:read",
+      "inbox:write",
+      "events:read",
+      "catalogue:write",
+      "availability:write",
+      "settings:read",
+      "settings:write",
+      "setup:run",
+      "integrations:write",
+      "offline_access",
+    ]);
+    // With scopes refused, as out of the box, it still sets the business up.
+    const auth = { authorization: `Bearer ${tokens.access_token}`, "content-type": "application/json" };
+    const service = await app.request(`${ORIGIN}/v1/owner/services`, {
+      method: "POST",
+      headers: auth,
+      body: JSON.stringify({ name: "Wash" }),
+    });
+    expect(service.status, await service.clone().text()).toBe(201);
+    const hours = await app.request(`${ORIGIN}/v1/owner/availability`, {
+      method: "PUT",
+      headers: auth,
+      body: JSON.stringify({ weekly: { mon: [["09:00", "17:00"]] } }),
+    });
+    expect(hours.status, await hours.clone().text()).toBe(200);
+    // Keys stay the owner's in person.
+    const key = await app.request(`${ORIGIN}/v1/owner/api-keys`, {
+      method: "POST",
+      headers: auth,
+      body: JSON.stringify({ name: "Shop", preset: "shop_sync" }),
+    });
+    expect(key.status).toBe(403);
+  });
+
   it("tells the owner what a self-registered app really is, and refuses an Allow from another site", async () => {
     const db = await freshDb();
     const mail = logMailOut();

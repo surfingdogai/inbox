@@ -29,6 +29,15 @@ import { userFromCookie } from "./session";
 export const OWNER_SCOPES: readonly string[] = SCOPE_NAMES.filter(
   (s) => !(NOT_FOR_AI_SCOPES as readonly string[]).includes(s),
 );
+/**
+ * What an AI app that asks for no scopes is offered: every scope an AI app may be granted but
+ * `keys:write`, which no AI uses (keys are the owner's in person, whatever an app holds). It was
+ * `inbox:read inbox:write settings:read` while a call outside the scopes still went through; now that
+ * one is refused (`security.enforceScopes`, on out of the box since 2 November 2026), an app that asked
+ * for nothing could no longer set the business up, which is what an owner connects it for. The
+ * consent page lists each one, and the owner allows them, or not.
+ */
+export const DEFAULT_AI_SCOPES: readonly string[] = OWNER_SCOPES.filter((s) => s !== "keys:write");
 export const ACCESS_TTL_MS = 3_600_000;
 export const REFRESH_TTL_MS = 30 * 86_400_000;
 export const CODE_TTL_MS = 10 * 60_000;
@@ -356,7 +365,7 @@ async function validateAuthorize(
   const requested = (q.scope ?? "").split(/\s+/).filter(Boolean);
   const scopes = requested.length
     ? requested.filter((s) => (OWNER_SCOPES as readonly string[]).includes(s))
-    : ["inbox:read", "inbox:write", "settings:read", "offline_access"];
+    : [...DEFAULT_AI_SCOPES];
   if (scopes.length === 0)
     return { ok: false, error: "invalid_scope", description: `Scopes must be among ${OWNER_SCOPES.join(", ")}.` };
   return { ok: true, client, redirectUri, scopes };

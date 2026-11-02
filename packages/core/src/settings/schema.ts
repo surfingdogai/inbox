@@ -625,11 +625,16 @@ const sections = {
         .boolean()
         .default(false)
         .describe("Retired: the owner's AI cannot create or revoke keys, whatever this says."),
+      /**
+       * On out of the box since 2 November 2026 (it was off, "log first", before): a call outside a
+       * key's or an AI app's scopes is refused. An inbox whose document never named it reads the
+       * default, so it is on there too; one whose owner switched it, on or off, keeps what they chose.
+       */
       enforceScopes: z
         .boolean()
-        .default(false)
+        .default(true)
         .describe(
-          "Refuse a call outside the scopes of the key or AI app that makes it. Off, such a call goes through and is recorded under Settings → Keys; a later release turns this on for everyone.",
+          "Refuse a call outside the scopes of the key or AI app that makes it (on out of the box): it gets 403 not_allowed, saying which scope it needs, and is recorded under Settings → Keys. Off, such a call goes through and is only recorded there.",
         ),
       /**
        * Where someone who finds a security problem in this inbox reports it, as

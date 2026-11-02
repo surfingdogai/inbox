@@ -59,3 +59,28 @@ What a link in an email does when it is opened, and what reaches a log, changed:
   `onOwnerEmailChange`; a server's operator can run `set-owner-email` instead. The same step-up
   helper (`sendStepUp`, `checkStepUp`) guards a download, and anything else that moves an inbox away
   from its owner.
+
+## Scopes refused out of the box (2 Nov 2026)
+
+Scopes were logged first: a call outside a key's or an AI app's scopes went through and was
+recorded, and `security.enforceScopes` turned the refusal on. An Automation tool key could change
+the settings that way. The founder decided on 2 November 2026 that refusing is the default.
+
+- **`security.enforceScopes` defaults to on.** A call outside the scopes gets `403 not_allowed`,
+  `details.reason: "outside_scopes"`, with `required_scopes` and `held_scopes`, and a sentence that
+  names the key or app, the scope, what it holds and where the owner gives more. A call only the
+  owner makes, or one needing a scope no AI app is given, is `reason: "owner_only"` instead, naming
+  no scope to ask for. It is still recorded under Settings → Keys, now as refused.
+- **An inbox that never touched the switch gets the new default**, since its document does not name
+  it. One whose owner set it, on or off, keeps what they chose. Nothing is rewritten.
+- **The owner can loosen it** in Settings → Keys, "Refuse calls outside a key's scopes": off, such a
+  call goes through and is only recorded, as before. A website's forms key is refused everything
+  but `forms:submit` either way.
+- **An AI app that asks for no scopes is offered every scope an AI app may hold but `keys:write`**,
+  instead of `inbox:read inbox:write settings:read`, which, refused, would no longer let it set the
+  business up. The consent page lists each. An app given the old default keeps it until it is
+  connected again.
+- Our own callers were checked first: the owner app and the owner's own keys hold everything; a
+  phone holds `inbox:read inbox:write` and is held to `PHONE_OPERATIONS`, all within them; the email
+  gateway, connectors, feeds, the demo and the seeds call as the inbox itself, with no principal; the
+  n8n flow's calls are the Automation tool preset's.

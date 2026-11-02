@@ -1278,7 +1278,7 @@ export const apiKeys = sqliteTable("api_keys", {
 });
 
 /**
- * What a key, or an AI app, called outside its scopes (ADR-004, log first). One row per principal
+ * What a key, or an AI app, called outside its scopes (ADR-004), refused or not. One row per principal
  * and operation, counted, so a loop does not grow the table. `enforced` says whether the last such
  * call was refused (scopes enforced) or only recorded.
  */

@@ -797,7 +797,7 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
 
     /**
      * Every owner tool runs through here: the caller's scopes are checked against the tool's entry
-     * in `TOOL_SCOPES` first (recorded, and refused when the owner enforces scopes), then the tool.
+     * in `TOOL_SCOPES` first (recorded, and refused unless the owner switched that off), then the tool.
      */
     const guarded = (name: string, fn: () => Promise<{ text: string; structured: unknown }>) =>
       run(async () => {

@@ -581,10 +581,10 @@ connector pointing at:
 https://inbox.theirdomain.com/mcp/owner
 ```
 
-It signs in with OAuth. If the client lets them choose, grant the scopes the work needs; today a
-call outside the granted scopes still goes through and is listed under Settings → Keys, where they
-can see it and switch on refusing such calls. The public tools, for their customers' agents, are at
-`/mcp` and need no sign-in. How a customer's agent says who it carries — the person's pass, their
+It signs in with OAuth. If the client lets them choose, grant the scopes the work needs: a call
+outside the granted scopes is refused (`403 not_allowed`, `details.reason: "outside_scopes"`) and
+listed under Settings → Keys. A client that asks for none is offered every scope but `keys:write`.
+The public tools, for their customers' agents, are at `/mcp` and need no sign-in. How a customer's agent says who it carries — the person's pass, their
 details, a one-time code when asked — is in https://surfingdog.ai/for-agents.md, which every inbox's
 manifest links under `agent_policy.guide`.
 

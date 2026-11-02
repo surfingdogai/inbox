@@ -60,8 +60,9 @@ async function claudeToken(db: Db): Promise<string> {
     kind: "access",
     clientId: "client_claude",
     userId: "user_1",
+    // Every scope an AI app may hold, so what stops it is the leak check, not a scope.
     scope:
-      "inbox:read inbox:write events:read settings:read settings:write integrations:write keys:write setup:run offline_access",
+      "inbox:read inbox:write events:read catalogue:write availability:write settings:read settings:write integrations:write keys:write setup:run offline_access",
     familyId: ulid(),
     expiresAt: Date.now() + 3_600_000,
     createdAt: T0,

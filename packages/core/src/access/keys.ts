@@ -12,6 +12,7 @@ import {
   holdsScope,
   KEY_PRESETS,
   KEY_SCOPES,
+  NOT_FOR_AI_SCOPES,
   type RevokeApiKeyInput,
   SCOPES,
   type Scope,
@@ -142,10 +143,47 @@ type RefusalRow = typeof scopeRefusals.$inferSelect;
 const KEY_NOTE = "Store this key now. It is shown once and never again; if it is lost, revoke it and create another.";
 
 /**
- * Keys and scopes (ADR-004): the owner, and with the owner's leave the owner's AI, mints a named,
- * scoped, revocable key per system it connects; every owner route and tool checks the caller's
- * scopes through `requireScope`, which records a call outside them and, when `security.enforceScopes` is
- * on, refuses it.
+ * The refusal of a call outside a principal's scopes, in words its maker can act on: who was refused,
+ * the scope the call needed, what it holds, and where the owner gives more. Nothing was done.
+ */
+function outsideScopesError(
+  p: { readonly via: string; readonly name: string; readonly scopes: readonly string[] },
+  anyOf: readonly string[],
+  operation: string,
+): WriteError {
+  const scope = anyOf[0] ?? "*";
+  const app = p.via === "oauth";
+  const who = `${app ? "the AI app" : "the key"} "${p.name.slice(0, 80)}"`;
+  const held = p.scopes.filter((s) => s !== "offline_access");
+  const details = {
+    required_scopes: [...anyOf],
+    held_scopes: [...p.scopes],
+    ask_owner: true,
+  };
+  // What only the owner does, or what no AI app is ever given (erasing a customer, money): there is no
+  // scope to ask for, so none is named.
+  const ownersOnly = anyOf.every((s) => s === "*" || (app && (NOT_FOR_AI_SCOPES as readonly string[]).includes(s)));
+  if (ownersOnly) {
+    return new WriteError(
+      "not_allowed",
+      `Refused: ${who} cannot call ${operation}, which only the owner does, in person. Nothing was done.`,
+      { details: { reason: "owner_only", ...details, where: "the owner app" } },
+    );
+  }
+  const message = `Refused: ${who} was not ${app ? "granted" : "given"} the scope ${scope}, which ${operation} needs. Nothing was done. It holds ${held.length ? held.join(" ") : "no scope"}. ${
+    app
+      ? "The owner grants more in Settings → Keys: disconnect the app there, then connect it again and allow the scope."
+      : `The owner makes a key with ${scope} in Settings → Keys, for this system to use instead.`
+  }`;
+  return new WriteError("not_allowed", message, {
+    details: { reason: "outside_scopes", ...details, where: "Settings → Keys" },
+  });
+}
+
+/**
+ * Keys and scopes (ADR-004): the owner mints a named, scoped, revocable key per system it connects;
+ * every owner route and tool checks the caller's scopes through `requireScope`, which records a call
+ * outside them and, while `security.enforceScopes` is on (out of the box), refuses it.
  */
 /** Scopes a key is given on its own, for one job, and that let it do nothing else (ADR-041 §4.2). */
 const SELF_CONTAINED_SCOPES: readonly string[] = ["forms:submit"];
@@ -156,20 +194,20 @@ export class AccessCapabilities {
   /**
    * The one scope check. Passes when the caller holds any of `anyOf` (or `*`), or is an internal
    * caller with no principal. Otherwise the call is recorded against its key or AI app, and refused
-   * only when the owner has switched enforcement on.
+   * (403 `not_allowed`, `details.reason: "outside_scopes"`) unless the owner switched enforcement off.
    */
   async requireScope(caller: Caller, anyOf: readonly string[], operation: string): Promise<void> {
     const p = caller.principal;
     if (!p || isCustomer(caller) || anyOf.length === 0 || holdsScope(p.scopes, anyOf)) return;
     // A key that holds only a scope kept to itself (a website's forms key, ADR-041 §4.2) lives on a
-    // public web server: it is refused everything else whether or not scopes are enforced yet.
+    // public web server: it is refused everything else, even where the owner switched enforcement off.
     const enforce =
       (p.scopes.length > 0 && p.scopes.every((s) => SELF_CONTAINED_SCOPES.includes(s))) ||
       (await readSettings(this.db)).security.enforceScopes;
     const now = nowOf(caller);
     const scope = anyOf[0] ?? "*";
-    // Recording is the point of log-first, but never itself a reason to refuse: a record that
-    // cannot be written leaves the call as the setting says, allowed while scopes are only logged.
+    // The record is what the owner reads, but never itself a reason to refuse: a record that cannot
+    // be written leaves the call as the setting says, refused while scopes are enforced, allowed if not.
     await this.db.client
       .query({
         sql: `INSERT INTO scope_refusals (principal_id, operation, principal_kind, principal_name, scope, count, enforced, first_at, last_at)
@@ -190,13 +228,7 @@ export class AccessCapabilities {
         method: "run",
       })
       .catch(() => undefined);
-    if (enforce) {
-      throw new WriteError(
-        "not_allowed",
-        `${p.via === "oauth" ? "This AI app was" : "This key was"} not given the scope ${scope}, which ${operation} needs. The owner can grant it in Settings → Keys${p.via === "oauth" ? " by connecting the app again with that scope" : ", on a new key"}.`,
-        { details: { required_scopes: anyOf, held_scopes: p.scopes } },
-      );
-    }
+    if (enforce) throw outsideScopesError(p, anyOf, operation);
   }
 
   async listKeys(caller: Caller): Promise<KeyList> {

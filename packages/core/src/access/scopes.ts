@@ -6,9 +6,10 @@ import { isoDateTime } from "../domain/types";
  * consented to; an integration key carries the ones it was minted with; the owner in person holds
  * `*`. Every owner route and tool names the scopes that let a caller through (any one of them).
  *
- * Log first: in this release a call outside its scopes goes through and is recorded, per key or AI
- * app, for the owner to see under Settings → Keys. `security.enforceScopes` turns the refusal on;
- * a later release turns it on for everyone.
+ * A call outside its scopes is refused (403 `not_allowed`, `details.reason: "outside_scopes"`) and
+ * recorded, per key or AI app, for the owner to see under Settings → Keys. That is
+ * `security.enforceScopes`, on out of the box since 2 November 2026; an owner who switches it off goes
+ * back to logging first: such a call goes through and is only recorded.
  */
 export const SCOPES = {
   "inbox:read": "read items and conversations",
@@ -50,9 +51,9 @@ export const NOT_FOR_AI_SCOPES: readonly Scope[] = ["customers:erase", "money:wr
 
 /**
  * Ready-made scope sets, one per kind of system a key is pasted into. None includes
- * `settings:write` or `keys:write`. A key never mints keys; with `security.enforceScopes` on, a key in
- * Zapier or a shop's admin cannot reconfigure the inbox either. Off, as out of the box, such a call goes
- * through and is recorded (log first: an Automation tool key's `PUT /settings` did, 1 November 2026).
+ * `settings:write` or `keys:write`. A key never mints keys, and with `security.enforceScopes` on, as out
+ * of the box, a key in Zapier or a shop's admin cannot reconfigure the inbox either: an Automation tool
+ * key's `PUT /settings` went through while scopes were only logged (1 November 2026), and is refused now.
  */
 export const KEY_PRESETS = [
   {

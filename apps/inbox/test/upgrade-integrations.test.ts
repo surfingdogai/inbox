@@ -84,8 +84,8 @@ async function previousOwnerKey(db: Db): Promise<string> {
   return key;
 }
 
-/** An AI app connected through the consent page before this release, with the default scopes. */
-async function previousOAuth(db: Db, userId = "user_1"): Promise<string> {
+/** An AI app connected through the consent page before this release, with the default scopes (or `scope`). */
+async function previousOAuth(db: Db, userId = "user_1", scope = DEFAULT_CONSENT): Promise<string> {
   const token = `sdi_at_${ulid()}${ulid()}`;
   await db.client.query({
     sql: "INSERT INTO oauth_clients (id, name, redirect_uris, kind, created_at) VALUES ('client_claude', 'Claude', '[\"https://claude.ai/cb\"]', 'cimd', ?) ON CONFLICT DO NOTHING",
@@ -94,7 +94,7 @@ async function previousOAuth(db: Db, userId = "user_1"): Promise<string> {
   });
   await db.client.query({
     sql: "INSERT INTO oauth_tokens (token_hash, kind, client_id, user_id, scope, family_id, expires_at, created_at) VALUES (?, 'access', 'client_claude', ?, ?, ?, ?, ?)",
-    params: [await hashKey(token), userId, DEFAULT_CONSENT, ulid(), Date.now() + 3_600_000, T0],
+    params: [await hashKey(token), userId, scope, ulid(), Date.now() + 3_600_000, T0],
     method: "run",
   });
   return token;
@@ -304,7 +304,7 @@ describe("upgrading to keys, scopes and attribution", () => {
     expect(r.isError, text(r)).toBeFalsy();
   });
 
-  it("lets an AI connected with the default consent use every tool it had, recording instead of refusing", async () => {
+  it("holds an AI connected with the old default consent to it, saying why, and lets it all through while refusing is off", async () => {
     const db = await freshDb();
     const serviceId = await seedBusiness(db);
     const token = await previousOAuth(db);
@@ -349,6 +349,10 @@ describe("upgrading to keys, scopes and attribution", () => {
       update_settings: { doc: { booking: { autoExpireHours: 36 } } },
       delete_webhook: { webhook_id: webhookId },
     };
+    // Refused out of the box: every tool its grant covers works as it did; every other one is refused on
+    // its scope, saying which, and does nothing.
+    const grant = DEFAULT_CONSENT.split(" ");
+    const outside: string[] = [];
     for (const [name, required] of Object.entries(PREVIOUS_TOOLS)) {
       const t = listed.get(name);
       expect(t, name).toBeDefined();
@@ -356,20 +360,56 @@ describe("upgrading to keys, scopes and attribution", () => {
       const now = (t?.inputSchema as { required?: string[] } | undefined)?.required ?? [];
       expect([...now].sort(), name).toEqual([...required].sort());
       const r = await mcp.callTool({ name, arguments: args[name] ?? {} });
-      // Some calls fail on their own merits (an id that does not exist); none on its scopes. Those
-      // that point the inbox's data somewhere are the owner's, and refused as such, never on scopes.
-      expect(text(r), name).not.toMatch(/not given the scope|not_allowed/);
+      const scopes = TOOL_SCOPES[name] ?? ["*"];
+      if (scopes.some((x) => grant.includes(x))) {
+        // Some calls fail on their own merits (an id that does not exist); none on its scopes.
+        expect(text(r), name).not.toMatch(/not granted the scope|not_allowed/);
+        continue;
+      }
+      outside.push(name);
+      expect(r.isError, name).toBe(true);
+      expect(text(r), name).toContain(`Refused: the AI app "Claude" was not granted the scope ${scopes[0]}`);
+      expect(text(r), name).toContain("disconnect the app there, then connect it again and allow the scope");
+    }
+    expect(outside).toContain("upsert_service");
+    expect(outside).toContain("set_opening_hours");
+    expect(outside).toContain("update_settings");
+    expect(outside).not.toContain("transition_item");
+    expect(outside).not.toContain("reply");
+    // Nothing a refused tool would have written was written.
+    const [{ n: services } = { n: 0 }] = (
+      await db.client.query({ sql: "SELECT count(*) AS n FROM services WHERE name = 'Board'", method: "all" })
+    ).rows.map((r) => ({ n: Number(r[0]) }));
+    expect(services).toBe(0);
+    const refused = await db.client.query({
+      sql: "SELECT principal_kind, principal_id, operation, enforced FROM scope_refusals ORDER BY operation",
+      method: "all",
+    });
+    expect(refused.rows.map((r) => String(r[2]))).toEqual(outside.map((n) => `mcp:${n}`).sort());
+    expect(
+      refused.rows.every((r) => String(r[0]) === "owner_ai" && String(r[1]) === "client_claude" && Number(r[3]) === 1),
+    ).toBe(true);
+
+    // The owner switches refusing off: every tool it had goes through again, as before this release,
+    // recorded instead of refused.
+    await new Capabilities(db).updateSettings(
+      { actor: { kind: "owner", id: "owner", channel: "owner_ui" }, tier: "verified_principal", sandbox: false },
+      { doc: { security: { enforceScopes: false } } },
+    );
+    for (const name of Object.keys(PREVIOUS_TOOLS)) {
+      const r = await mcp.callTool({ name, arguments: args[name] ?? {} });
+      // Those that point the inbox's data somewhere are the owner's, and refused as such, never on scopes.
+      expect(text(r), name).not.toMatch(/not granted the scope|not_allowed/);
       if (OWNER_ONLY_TOOLS.has(name)) {
         expect(r.isError, name).toBe(true);
         expect(text(r), name).toContain("Only the owner can");
       }
     }
-    // Recorded for the owner to see, one row per tool, none refused.
     const { rows } = await db.client.query({
       sql: "SELECT principal_kind, principal_id, enforced FROM scope_refusals",
       method: "all",
     });
-    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.length).toBe(outside.length);
     expect(
       rows.every((r) => String(r[0]) === "owner_ai" && String(r[1]) === "client_claude" && Number(r[2]) === 0),
     ).toBe(true);
@@ -377,7 +417,8 @@ describe("upgrading to keys, scopes and attribution", () => {
 
   it("takes back the whole settings document an AI read, security and masked secret included", async () => {
     const db = await freshDb();
-    const token = await previousOAuth(db);
+    // It asked for settings:write when it connected: an echo needs it, now that scopes are refused.
+    const token = await previousOAuth(db, "user_1", `${DEFAULT_CONSENT} settings:write`);
     const caps = new Capabilities(db);
     const owner = {
       actor: { kind: "owner" as const, id: "owner", channel: "owner_ui" as const },
@@ -395,7 +436,7 @@ describe("upgrading to keys, scopes and attribution", () => {
     // The shape the previous release returned, secret key included; the value is not the secret.
     expect(read.doc.email?.inboundSecret).toBe("(redacted)");
     expect(read.redacted).toEqual(["email.inboundSecret"]);
-    expect(read.doc.security).toEqual({ aiMayCreateKeys: false, enforceScopes: false });
+    expect(read.doc.security).toEqual({ aiMayCreateKeys: false, enforceScopes: true });
     const echoed = await mcp.callTool({
       name: "update_settings",
       arguments: {
@@ -416,7 +457,7 @@ describe("upgrading to keys, scopes and attribution", () => {
       arguments: { doc: { ...read.doc, security: { aiMayCreateKeys: true, enforceScopes: false } } },
     });
     expect(grant.isError).toBe(true);
-    expect((await readSettings(db)).security.aiMayCreateKeys).toBe(false);
+    expect((await readSettings(db)).security).toMatchObject({ aiMayCreateKeys: false, enforceScopes: true });
   });
 
   it("lets an owner app tab from before the upgrade save General without wiping the inbound secret", async () => {
