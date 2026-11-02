@@ -2,13 +2,22 @@ import { App as CapApp } from "@capacitor/app";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { readItemLink, readPhoneLink } from "../../../packages/core/src/phones/links";
 import type { ItemDetail, ItemView } from "../../inbox/client/src/lib/types";
+import { checkForUpdate } from "./channel";
 import { AppContext, type App as AppValue, type Route } from "./context";
-import { InboxClient, type PhoneMe, type PhoneSpam, sendQueued } from "./lib/client";
+import {
+  DEMO_ENTRY,
+  DEMO_READ_ONLY,
+  DemoClient,
+  InboxClient,
+  type PhoneMe,
+  type PhoneSpam,
+  sendQueued,
+} from "./lib/client";
 import { type Native, native as nativeOf } from "./lib/native";
 import { Box, type KV, Outbox, type QueuedAction } from "./lib/offline";
 import { setUpPush } from "./lib/push";
 import { type Fetch, type InboxEntry, InboxError, Sessions } from "./lib/session";
-import { checkForUpdate, NO_UPDATE, type UpdateState } from "./lib/update";
+import { NO_UPDATE, type UpdateState } from "./lib/update";
 import { needsYou } from "./lib/view";
 import { Connect } from "./screens/Connect";
 import { Inbox } from "./screens/Inbox";
@@ -92,6 +101,8 @@ export function App({ deps }: { deps: Deps }) {
   const [box, setBox] = useState<Box | null>(null);
   const [inboxes, setInboxes] = useState<InboxEntry[]>([]);
   const [active, setActive] = useState<InboxEntry | null>(null);
+  /** "Try the demo" (lib/client.ts): the demo shop in front, read-only, and nothing of it kept on the phone. */
+  const [demo, setDemo] = useState(false);
   const [views, setViews] = useState<ItemView[]>([]);
   const [me, setMe] = useState<PhoneMe | null>(null);
   const [spam, setSpam] = useState<PhoneSpam | null>(null);
@@ -115,8 +126,8 @@ export function App({ deps }: { deps: Deps }) {
 
   const route = stack[stack.length - 1] ?? { name: "inbox" };
   const client = useMemo(
-    () => (active ? new InboxClient(active, sessions, deps.fetch) : null),
-    [active, sessions, deps.fetch],
+    () => (demo ? new DemoClient(sessions, deps.fetch) : active ? new InboxClient(active, sessions, deps.fetch) : null),
+    [demo, active, sessions, deps.fetch],
   );
   const outbox = useMemo(() => (box ? new Outbox(box) : null), [box]);
 
@@ -171,7 +182,8 @@ export function App({ deps }: { deps: Deps }) {
   }, [deps.appInfo]);
   const checkUpdate = useRef<() => void>(() => undefined);
   checkUpdate.current = () => {
-    // Only the Android app is installed from the download page; on an iPhone the App Store updates it.
+    // Only the Android app from the download page looks: on an iPhone the App Store updates it, and the
+    // copy from Google Play is built without the check (channel.play.ts), since Play updates it.
     if (!appInfo || native.platform !== "android") return;
     void checkForUpdate(deps.fetch, deps.kv, appInfo.build)
       .then(setUpdate)
@@ -226,7 +238,8 @@ export function App({ deps }: { deps: Deps }) {
       setOffline(false);
       setCachedAt(null);
       setListLoaded(true);
-      await box.put(`list.${active.alias}`, { at: Date.now(), views: page.items });
+      // The demo's examples are never kept on the phone: leaving it leaves nothing behind.
+      if (!demo) await box.put(`list.${active.alias}`, { at: Date.now(), views: page.items });
       setNeedCounts((c) => ({ ...c, [active.alias]: page.items.filter(needsYou).length }));
       client
         .me()
@@ -248,7 +261,7 @@ export function App({ deps }: { deps: Deps }) {
         if (list.length === 0) setStack([{ name: "connect" }]);
         return;
       }
-      const cached = await box.get<{ at: number; views: ItemView[] }>(`list.${active.alias}`);
+      const cached = demo ? null : await box.get<{ at: number; views: ItemView[] }>(`list.${active.alias}`);
       if (cached) {
         setViews(cached.views);
         setListLoaded(true);
@@ -261,7 +274,7 @@ export function App({ deps }: { deps: Deps }) {
     } finally {
       setLoading(false);
     }
-  }, [client, box, active, toast, native, wipe]);
+  }, [client, box, active, demo, toast, native, wipe]);
 
   useEffect(() => {
     if (!ready || locked || insecure) return;
@@ -270,8 +283,8 @@ export function App({ deps }: { deps: Deps }) {
     setSpam(null);
     setListLoaded(false);
     void refresh();
-    if (active) deps.kv.setItem(`sdi.${ACTIVE}`, active.alias);
-  }, [ready, locked, insecure, active, refresh, deps.kv]);
+    if (active && !demo) deps.kv.setItem(`sdi.${ACTIVE}`, active.alias);
+  }, [ready, locked, insecure, active, demo, refresh, deps.kv]);
 
   // ---- what was done offline goes when the inbox can be reached ----
   // `announce`: say so when something waiting from offline went. An action pressed online is not that.
@@ -302,6 +315,11 @@ export function App({ deps }: { deps: Deps }) {
   const act = useCallback(
     async (itemId: string, kind: "transition" | "reply", body: Record<string, unknown>, label: string) => {
       if (!outbox || !active) return;
+      // The demo changes nothing: said at once, and nothing is kept to send later.
+      if (demo) {
+        toast(DEMO_READ_ONLY);
+        return;
+      }
       // Kept first, with the idempotency key it will carry on every try, then sent.
       await outbox.add({ alias: active.alias, itemId, kind, body, label });
       await flush(false);
@@ -310,7 +328,7 @@ export function App({ deps }: { deps: Deps }) {
       // Kept on the phone: offline, the inbox not answering just now, or an unlock not given.
       if (left.some((a) => a.itemId === itemId)) toast("Saved on this phone. It goes as soon as your inbox answers.");
     },
-    [outbox, active, flush, toast],
+    [outbox, active, demo, flush, toast],
   );
 
   const loadItem = useCallback(
@@ -318,10 +336,10 @@ export function App({ deps }: { deps: Deps }) {
       if (!client || !box || !active) return null;
       try {
         const detail = await client.item(id);
-        await box.put(`item.${active.alias}.${id}`, { at: Date.now(), detail } satisfies KeptItem);
+        if (!demo) await box.put(`item.${active.alias}.${id}`, { at: Date.now(), detail } satisfies KeptItem);
         return detail;
       } catch (error) {
-        const kept = await box.get<KeptItem>(`item.${active.alias}.${id}`);
+        const kept = demo ? null : await box.get<KeptItem>(`item.${active.alias}.${id}`);
         if (kept?.detail) return kept.detail;
         const fromList = views.find((v) => v.item.id === id);
         if (fromList) return { ...fromList, events: [], thread: [], mail: [], draft: null } as ItemDetail;
@@ -334,7 +352,7 @@ export function App({ deps }: { deps: Deps }) {
         return null;
       }
     },
-    [client, box, active, views, toast],
+    [client, box, active, demo, views, toast],
   );
 
   /**
@@ -343,6 +361,8 @@ export function App({ deps }: { deps: Deps }) {
    */
   const connected = useCallback(
     async (entry: InboxEntry) => {
+      // A real inbox connected from the demo: the demo is left behind.
+      setDemo(false);
       const list = await sessions.list();
       setInboxes(list);
       setActive(list.find((e) => e.alias === entry.alias) ?? entry);
@@ -356,11 +376,24 @@ export function App({ deps }: { deps: Deps }) {
     [sessions, native, deps.fetch, toast],
   );
 
+  /** "Try the demo" on the first screen: the demo shop opens, read-only; nothing is set up on the phone. */
+  const tryDemo = useCallback(() => {
+    setDemo(true);
+    setActive(DEMO_ENTRY);
+    setStack([{ name: "inbox" }]);
+  }, []);
+  const leaveDemo = useCallback(() => {
+    setDemo(false);
+    setActive(inboxes[0] ?? null);
+    setStack([{ name: inboxes.length ? "inbox" : "connect" }]);
+  }, [inboxes]);
+
   const removeActive = useCallback(async () => {
+    if (demo) return leaveDemo();
     if (!active) return;
     const list = await wipe(active, "remove");
     setStack([{ name: list.length ? "inbox" : "connect" }]);
-  }, [active, wipe]);
+  }, [demo, leaveDemo, active, wipe]);
 
   // A code handed over by the page a QR code opens (intent://pair…): Connect asks before it pairs.
   const [handed, setHanded] = useState<ReturnType<typeof readPhoneLink>>(null);
@@ -469,7 +502,7 @@ export function App({ deps }: { deps: Deps }) {
       return;
     }
     if (stack.length > 1) back();
-    else if (inboxes.length > 0 && route.name !== "inbox") setStack([{ name: "inbox" }]);
+    else if ((inboxes.length > 0 || demo) && route.name !== "inbox") setStack([{ name: "inbox" }]);
     else void CapApp.minimizeApp().catch(() => undefined);
   };
   const onBack = useCallback((handler: () => boolean) => {
@@ -530,6 +563,9 @@ export function App({ deps }: { deps: Deps }) {
     inboxes,
     active,
     client,
+    demo,
+    tryDemo,
+    leaveDemo,
     me,
     spam,
     views,
@@ -586,9 +622,9 @@ export function App({ deps }: { deps: Deps }) {
       </AppContext.Provider>
     );
   const screen =
-    inboxes.length === 0 || route.name === "connect" ? (
+    (inboxes.length === 0 && !demo) || route.name === "connect" ? (
       <Connect
-        canGoBack={inboxes.length > 0}
+        canGoBack={inboxes.length > 0 || demo}
         allowLocal={deps.allowLocal}
         handed={handed}
         onHandled={() => setHanded(null)}
@@ -606,7 +642,7 @@ export function App({ deps }: { deps: Deps }) {
     ) : (
       <Inbox />
     );
-  const showBanner = offline && inboxes.length > 0 && route.name !== "connect";
+  const showBanner = offline && (inboxes.length > 0 || demo) && route.name !== "connect";
   return (
     <AppContext.Provider value={value}>
       <div className={`shell${showBanner ? " offline" : ""}`}>

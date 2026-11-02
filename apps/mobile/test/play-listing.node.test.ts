@@ -15,6 +15,10 @@ const read = (...parts: string[]) => readFileSync(path.join(...parts), "utf8");
 const length = (text: string) => [...text.replace(/\n$/, "")].length;
 
 const LOCALES = ["en-US", "pt-PT", "pt-BR", "es-ES", "fr-FR"];
+/** The versionCode of the app's version (major × 10000 + minor × 100 + patch), which names its release notes. */
+const version = (JSON.parse(read(mobile, "package.json")) as { version: string }).version;
+const [major = 0, minor = 0, patch = 0] = version.split(".").map(Number);
+const CODE = major * 10_000 + minor * 100 + patch;
 
 describe("the Google Play listing", () => {
   it("has every locale, and nothing else", () => {
@@ -26,7 +30,8 @@ describe("the Google Play listing", () => {
       const title = read(listing, locale, "title.txt");
       const short = read(listing, locale, "short_description.txt");
       const full = read(listing, locale, "full_description.txt");
-      const notes = read(listing, locale, "changelogs", "10000.txt");
+      // fastlane `supply` reads a release's notes from changelogs/<its versionCode>.txt.
+      const notes = read(listing, locale, "changelogs", `${CODE}.txt`);
 
       it("keeps to Play's limits", () => {
         expect(title.trim()).toBe("Surfing Dog Inbox");
@@ -81,9 +86,20 @@ describe("the answers given to Play still match the app", () => {
     expect(target).toBeGreaterThanOrEqual(36);
   });
 
+  it("tells Play's reviewer how to get in, in a few lines", () => {
+    const access = read(play, "app-access.txt");
+    expect(access).toContain("Try the demo");
+    expect(access).toContain("demo.surfingdog.ai");
+    expect(length(access)).toBeLessThanOrEqual(500);
+    // The button it names is on the first screen, and the demo it names is the app's.
+    expect(read(mobile, "src/screens/Connect.tsx")).toContain("Try the demo");
+    expect(read(mobile, "src/lib/client.ts")).toContain('"https://demo.surfingdog.ai"');
+  });
+
   it("keeps every file the pack's README lists", () => {
     for (const f of [
       "README.md",
+      "app-access.txt",
       "data-safety.md",
       "app-content.md",
       "privacy-policy.md",

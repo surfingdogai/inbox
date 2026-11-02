@@ -225,6 +225,12 @@ export function Connect({
         <button type="button" className="btn quiet" disabled={!secure} onClick={() => setByEmail(true)}>
           Email me a sign-in link instead
         </button>
+        {/* No inbox yet: a look round the demo shop first (lib/client.ts → DemoClient), no lock needed. */}
+        {!canGoBack && (
+          <button type="button" className="btn quiet" onClick={app.tryDemo}>
+            Try the demo
+          </button>
+        )}
         <p className="fine">
           Your inbox stays on your own website.
           <br />

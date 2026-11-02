@@ -8,7 +8,7 @@ import {
   type PayTo,
   type WorkProfile,
 } from "@surfingdog/spec";
-import { and, desc, eq, gt, inArray, isNotNull, lt, or, type SQL, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNotNull, lt, lte, or, type SQL, sql } from "drizzle-orm";
 import { z } from "zod";
 import { AccessCapabilities } from "../access/keys";
 import { assertNoLeak, PUBLISHED, stringsIn } from "../access/leaks";
@@ -1633,9 +1633,18 @@ export class Capabilities {
 
   // ---- owner -----------------------------------------------------------------
 
-  async listItems(caller: Caller, input: T.ListItemsInput): Promise<Page<ItemView>> {
+  /**
+   * `createdAtMost` is for the host's own code, never a door's: only what was created by then (the
+   * public demo's phone lists the examples it was set up with, and nothing a tester sent since).
+   */
+  async listItems(
+    caller: Caller,
+    input: T.ListItemsInput,
+    opts: { readonly createdAtMost?: number | undefined } = {},
+  ): Promise<Page<ItemView>> {
     requireBusiness(caller);
     const conditions = [eq(items.sandbox, input.sandbox ? 1 : 0)];
+    if (opts.createdAtMost !== undefined) conditions.push(lte(items.createdAt, opts.createdAtMost));
     // Spam is everything put aside (ADR-041 §11.1): by a person, by the email door as it arrived, and by
     // the spam filter — a held booking a person sent to Spam keeps its own state.
     const spamList = input.state === "spam" && !input.screen;

@@ -63,4 +63,9 @@ relay keeps the push token (encrypted) until the phone is removed or nothing rea
 
 **The update check.** A copy installed from the download page reads `surfingdog.ai/phone/latest.json`
 at most twice a day (`src/lib/update.ts`): an ordinary request carrying nothing but what any request
-carries. The copy on Google Play must not do this (`technical.md`, blocker 2), so it is not in the form.
+carries. The copy on Google Play is built without it (`src/channel.play.ts`, `technical.md`), so it is
+not in the form.
+
+**Try the demo.** It reads the demo shop's made-up examples from `demo.surfingdog.ai` (`DemoClient` in
+`src/lib/client.ts`): ordinary requests, with no token, no key and nothing about the person. Nothing
+pressed in the demo is sent; the demo refuses it on the phone. It adds no row to the form.

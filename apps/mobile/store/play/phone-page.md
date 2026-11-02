@@ -44,13 +44,14 @@ the inbox or the app has to change for it.
    > when a new version is ready and opens this page; install it over the one you have and your
    > connections stay.
 
-   With choice A in `signing.md` (one certificate), add: "You can switch between the two at any time:
-   both are signed with the same certificate, so one installs over the other and your connections stay."
-   With choice B, instead: "The copy on Google Play is signed by Google, so it does not install over a
-   downloaded copy: remove one before installing the other, then connect again."
+   Google makes the Play copy's signing key (`signing.md`), so add: "The copy on Google Play is signed
+   by Google, so it does not install over a downloaded copy: remove one before installing the other,
+   then connect again."
 
-4. **Check the file.** With choice A it stays as it is. With choice B the certificate list gets a second
-   row: "On Google Play, signing certificate SHA-256: …" (from Play Console → App integrity).
+4. **Check the file.** The certificate list gets a second row: "On Google Play, signing certificate
+   SHA-256: …" (from Play Console → App integrity → App signing). The line "Every copy of the app we
+   publish is signed with the same certificate" becomes "Every copy from this page is signed with the
+   same certificate".
 
 5. **"iPhone soon."** Unchanged until the iPhone app exists.
 

@@ -1,8 +1,9 @@
 name: android
 
 # The phone app (apps/mobile, ADR-028): its screens built and bundled, the JVM tests of its native code,
-# and a test build a person can install (the `internal` build type: built as a release is, so not
-# debuggable, and shrunk), kept as the run's artifact for 14 days. A second job runs the Keystore tests on
+# and a test build a person can install (the `internal` build type of the download page's copy, the
+# `direct` flavour: built as a release is, so not debuggable, and shrunk), kept as the run's artifact
+# for 14 days. The Google Play copy's bundle is built too, unsigned, to show it still builds. A second job runs the Keystore tests on
 # an emulator, then installs that very APK there and checks that it opens. Nothing is published to any
 # store from here. The public app is built by workflow android-release, from a tag, with the release
 # key; a test build is signed with the test key, so it never installs over the public app.
@@ -110,14 +111,14 @@ jobs:
         env:
           ANDROID_VERSION_CODE: ${{ github.run_number }}
           ANDROID_VERSION_NAME: 0.1.${{ github.run_number }}
-        run: ./gradlew --no-daemon --stacktrace testDebugUnitTest assembleInternal
+        run: ./gradlew --no-daemon --stacktrace testDirectDebugUnitTest assembleDirectInternal
 
       - name: the APK's name
         id: apk
         run: |
           short="$(git rev-parse --short HEAD)"
           name="surfingdog-inbox-${{ github.run_number }}-${short}"
-          mv apps/mobile/android/app/build/outputs/apk/internal/app-internal.apk "${name}.apk"
+          mv apps/mobile/android/app/build/outputs/apk/direct/internal/app-direct-internal.apk "${name}.apk"
           echo "name=${name}" >> "$GITHUB_OUTPUT"
           sha256sum "${name}.apk"
           echo "- APK: \`${name}.apk\`, sha256 \`$(sha256sum "${name}.apk" | cut -d' ' -f1)\`" >> "$GITHUB_STEP_SUMMARY"
@@ -163,6 +164,14 @@ jobs:
             grep -E "^(package|targetSdkVersion|uses-permission)" "$checks/badging.txt" || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+      # The Google Play copy (the `play` flavour) still builds, from screens built without the update
+      # check, which the build itself refuses otherwise (app/build.gradle → checkPlayScreens). Unsigned:
+      # only the upload key signs a bundle for Play (apps/mobile/store/play/signing.md), never CI.
+      - name: the Google Play bundle builds, without the update check
+        run: |
+          pnpm --filter @surfingdog/mobile sync:play
+          (cd apps/mobile/android && ./gradlew --no-daemon --stacktrace bundlePlayRelease)
+          ls -l apps/mobile/android/app/build/outputs/bundle/playRelease/app-play-release.aab
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.apk.outputs.name }}
@@ -224,7 +233,7 @@ jobs:
             adb shell svc power stayon true
             adb shell input keyevent 82
             adb shell locksettings set-pin 1111
-            ./gradlew --no-daemon :app:connectedDebugAndroidTest
+            ./gradlew --no-daemon :app:connectedDirectDebugAndroidTest
             sh ../scripts/smoke-apk.sh ../../../apk/*.apk
       - uses: actions/upload-artifact@v4
         if: failure()

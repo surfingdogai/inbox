@@ -142,3 +142,22 @@ and the organisation's Apple Developer account.
   Android only. The iPhone's own name needs an entitlement: an iPhone connects as "iPhone".
 - **No update line.** The App Store updates the app; the line that points at the Android download page
   shows on Android only.
+
+## Amendment 3 (2 Nov 2026): the Android app on Google Play
+
+Proposed. The Android app goes on Google Play beside the download page (`apps/mobile/store/play/`).
+
+- **Two copies, two Android flavours.** `direct` is the APK on surfingdog.ai/phone, signed with the
+  release key, as before. `play` is the bundle for Google Play, signed with an upload key; Google signs
+  what it delivers with an app signing key it makes and keeps (Play App Signing). The two carry
+  different certificates, so neither installs over the other: moving from the APK to Play means
+  removing the app and connecting again, once.
+- **No update line on Play.** An app from Play may update only through Play. The Play copy's screens
+  are built without the update check (`vite build --mode play` swaps `src/channel.ts` for
+  `src/channel.play.ts`), and the Android build refuses to pack either copy's screens into the other.
+  Both copies share the version numbers: `1.0.1` is versionCode `10001` on Play and on the page.
+- **Try the demo.** With no inbox connected, the first screen offers the demo shop at
+  demo.surfingdog.ai, read-only, with nothing to connect: no code, no sign-in, no key and no screen
+  lock. The demo instance answers `/demo/phone/*` for anyone with the examples it is set up with every
+  night and nothing anyone sent since; the app sends no write there and keeps nothing of it. It is how
+  Play's reviewer, and anyone curious, sees the app before having an inbox.

@@ -20,7 +20,7 @@ inbox or uninstalling clears it; no usage data or crash reports.
    statement." Once on Play:
    > The app comes from Google Play, under Google's privacy policy, or from GitHub, through this site's
    > download page, under GitHub's privacy statement.
-2. **The update check is only for the download copy** (after blocker 2 in `technical.md`):
+2. **The update check is only for the download copy** (the Play copy is built without it, `technical.md`):
    > **Updates.** A copy from Google Play is updated by Google Play and reads nothing from us. A copy from
    > the download page reads `surfingdog.ai/phone/latest.json` at most twice a day…
 3. **The email sign-in.** Not mentioned today:
@@ -33,6 +33,9 @@ inbox or uninstalling clears it; no usage data or crash reports.
    > goes to that inbox, as it would from a computer.
 5. **Removing a phone clears the relay too** (true in `packages/core/src/phones/phones.ts`):
    > When a phone is removed, in the app or in Settings → Phone, your inbox also asks the relay to forget it.
+6. **Try the demo** (new in 1.0.1):
+   > **The demo.** "Try the demo" reads made-up examples from our demo shop at demo.surfingdog.ai. It sends
+   > nothing about you, and nothing you press in the demo is sent anywhere.
 
 None of these changes what the app does; each makes the page say all of it. Apply them in the site
 change that adds the Google Play button (`phone-page.md`), on the day the listing is live, and move

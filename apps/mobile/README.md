@@ -8,6 +8,26 @@ business's own website; the app connects to it with a QR code from Settings → 
 The public app is on [surfingdog.ai/phone](https://surfingdog.ai/phone): the APK, its SHA-256, the
 signing certificate and the steps to install it. The app says when a new version is ready.
 
+It is being prepared for Google Play too (`store/play/`). Two copies come from the same code, as two
+Android flavours:
+
+- **`direct`**, the APK on the download page, signed with the release key. It reads
+  `surfingdog.ai/phone/latest.json` and says when a new version is ready there (`src/lib/update.ts`).
+- **`play`**, the bundle for Google Play, signed with the upload key; Google signs what it delivers
+  with its own app signing key (Play App Signing). Play updates it, so it never looks for an update:
+  its screens are built with `vite build --mode play`, which leaves the update check and every link to
+  the download page out (`src/channel.play.ts` in place of `src/channel.ts`), and the Android build
+  refuses to pack screens built for the other copy (`checkPlayScreens`, `checkDirectScreens`).
+
+The two are signed differently, so neither installs over the other: someone moving from the APK to
+Google Play removes the app and connects again, once.
+
+**Try the demo.** With no inbox connected yet, the first screen offers "Try the demo": the app opens
+Surfing Dog's demo bike shop (https://demo.surfingdog.ai) read-only, with no code, no sign-in and no key
+on the phone. It shows the examples the shop is set up with every night, never what anyone sent it
+since, and nothing pressed there is sent (`DemoClient` in `src/lib/client.ts`; the shop's doors are
+`/demo/phone/*` in `apps/inbox/src/demo.ts`). It is how Play's reviewer gets in (`store/play/app-content.md`).
+
 ## Install a test build
 
 Every push that touches the app builds a test APK in GitHub Actions (workflow **android**): the
@@ -61,10 +81,11 @@ prints them.
 
 ## Releases
 
-The public app is built by the workflow **android-release** (`.github/workflows/android-release.yml`),
+The download page's copy is built by the workflow **android-release** (`.github/workflows/android-release.yml`),
 only from a tag `android-v<version>` on `main` whose version is `version` in this folder's
 `package.json`. versionName is that version; versionCode is major × 10000 + minor × 100 + patch
-(`1.0.0` → `10000`), above every test build.
+(`1.0.0` → `10000`), above every test build. The Google Play bundle of the same version carries the same
+two numbers (`store/play/signing.md`).
 
 **The release key** signs every public build for good: a phone installs an update only from the same
 key, so a lost key means everyone uninstalls and connects again. It is a PKCS12 keystore, alias
@@ -102,18 +123,30 @@ You need Node 22 or later, pnpm, JDK 21 and the Android SDK (Android Studio inst
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm --filter @surfingdog/mobile build             # the screens, into apps/mobile/dist
-pnpm --filter @surfingdog/mobile exec cap sync android
+pnpm --filter @surfingdog/mobile sync              # the download page's screens, into the Android project
 cd apps/mobile/android
-./gradlew testDebugUnitTest assembleInternal       # JVM tests, then app/build/outputs/apk/internal/app-internal.apk
-./gradlew :app:connectedDebugAndroidTest           # Keystore tests, on a phone or an emulator with a screen lock
+./gradlew testDirectDebugUnitTest assembleDirectInternal  # JVM tests, then app/build/outputs/apk/direct/internal/app-direct-internal.apk
+./gradlew :app:connectedDirectDebugAndroidTest     # Keystore tests, on a phone or an emulator with a screen lock
 ```
+
+The Google Play bundle, from the Play copy's screens (`store/play/signing.md` for the upload key):
+
+```sh
+pnpm --filter @surfingdog/mobile sync:play         # the screens without the update check
+cd apps/mobile/android
+ANDROID_VERSION_CODE=10001 ANDROID_VERSION_NAME=1.0.1 \
+ANDROID_UPLOAD_KEYSTORE=… ANDROID_UPLOAD_STORE_PASSWORD=… ANDROID_UPLOAD_KEY_PASSWORD=… \
+  ./gradlew bundlePlayRelease                      # app/build/outputs/bundle/playRelease/app-play-release.aab
+```
+
+Build the screens again with `sync` before the next APK: each copy refuses the other's.
 
 Put your own `google-services.json` in `apps/mobile/android/app/` for notifications.
 
 To try the screens in a browser with a made-up business: `pnpm --filter @surfingdog/mobile dev`, then
 open `http://localhost:5174/?demo` (add `&screen=item`, `today`, `settings`, `inboxes`, `connect`, `held`, `spam`,
-`propose` or `confirm`, and `&offline` for the offline banner). The demo never ships in the app.
+`propose` or `confirm`, and `&offline` for the offline banner). That made-up business never ships in the
+app; "Try the demo" in the app reads the demo shop instead.
 
 A debug build (`assembleDebug`, for development) may connect to an inbox on your own computer over plain
 http (`http://10.0.2.2:8787` from the emulator); the test build and a release only ever over https. The
@@ -126,6 +159,8 @@ debug build is debuggable: never use it as your everyday app.
 - `src/lib/native.ts` and `android/app/src/main/java/ai/surfingdog/inbox/`: the Keystore, the
   fingerprint or face, and push (decrypted in `PushService`, shown by `Notifier`).
 - `docs/protocol/push-relay.md`: how an inbox reaches the phone through the relay.
+- `src/channel.ts` and `src/channel.play.ts`: what differs between the download page's copy and Google
+  Play's (the update check and its line).
 - `store/play/`: the Google Play listing in English, Portuguese, Spanish and French, its Data safety and
   content answers, signing, screenshots and the steps to publish. Nothing is on Google Play yet.
 

@@ -361,6 +361,75 @@ describe("demo mode", { timeout: 30_000 }, () => {
     }
   });
 
+  it("lets the phone app look round its examples, with no sign-in, and shows nothing anyone typed", async () => {
+    const s = await demoInbox();
+    const t = Date.now();
+    await visit(s);
+    const get = (path: string) => s.app.request(`${BASE}${path}`);
+
+    // No token, no code, no key: the shop's name and its examples, as the phone reads an inbox.
+    const me = await get("/demo/phone/me");
+    expect(me.status).toBe(200);
+    expect(me.headers.get("cache-control")).toBe("no-store");
+    expect(await me.json()).toMatchObject({
+      business: { name: "Oficina Maré", timezone: TZ },
+      read_only: true,
+    });
+    const open = await get("/demo/phone/items?open_only=true&limit=40");
+    expect(open.status).toBe(200);
+    const page = (await open.json()) as {
+      items: { item: { id: string; createdAt: string; closedAt: string | null }; transitions: unknown[] }[];
+      next_cursor: string | null;
+    };
+    expect(page.items.length).toBeGreaterThanOrEqual(5);
+    expect(page.next_cursor).toBeNull();
+    // Only what the shop was set up with: nothing that came in since, and nothing closed in this list.
+    for (const v of page.items) {
+      expect(Date.parse(v.item.createdAt)).toBeLessThan(t);
+      expect(v.item.closedAt).toBeNull();
+    }
+    const recent = (await (await get("/demo/phone/items?open_only=false&limit=60")).json()) as typeof page;
+    expect(recent.items.length).toBeGreaterThan(page.items.length);
+    expect(recent.items.every((v) => Date.parse(v.item.createdAt) < t)).toBe(true);
+    const held = await get("/demo/phone/items?open_only=false&limit=40&screen=held");
+    expect(held.status).toBe(200);
+    const aside = await get("/demo/phone/items?open_only=false&limit=40&state=spam");
+    expect(aside.status).toBe(200);
+    expect(((await aside.json()) as typeof page).items.length).toBeGreaterThan(0);
+
+    // An example opens with its history; anything a tester sent is not there at all.
+    const first = page.items[0]?.item.id ?? "";
+    const one = await get(`/demo/phone/items/${first}`);
+    expect(one.status).toBe(200);
+    expect(await one.json()).toMatchObject({ item: { id: first }, events: expect.any(Array) });
+    const fresh = await s.db.client.query({
+      sql: "SELECT id FROM items WHERE created_at >= ?",
+      params: [t],
+      method: "all",
+    });
+    expect(fresh.rows.length).toBeGreaterThan(0);
+    for (const [id] of fresh.rows) {
+      const r = await get(`/demo/phone/items/${String(id)}`);
+      expect(r.status).toBe(404);
+      expect(((await r.json()) as { detail: string }).detail).toBe("The demo shows only its examples.");
+    }
+    expect((await get("/demo/phone/items/nope")).status).toBe(404);
+
+    // Nothing a tester typed reaches the phone, from any list or any example.
+    const bodies = [JSON.stringify(page), JSON.stringify(recent)];
+    for (const v of recent.items) bodies.push(await (await get(`/demo/phone/items/${v.item.id}`)).text());
+    for (const body of bodies) for (const secret of Object.values(PII)) expect(body, secret).not.toContain(secret);
+
+    // Read-only: there is no door here to change anything with.
+    for (const path of [`/demo/phone/items/${first}/transitions`, `/demo/phone/items/${first}/replies`]) {
+      expect((await s.app.request(post(path, { event: "confirm" }))).status, path).toBe(404);
+    }
+    const before = await s.db.client.query({ sql: "SELECT id, state, version FROM items ORDER BY id", method: "all" });
+    await get("/demo/phone/items?open_only=false&limit=60");
+    const after = await s.db.client.query({ sql: "SELECT id, state, version FROM items ORDER BY id", method: "all" });
+    expect(after.rows).toEqual(before.rows);
+  });
+
   it("marks the examples it is set up with, and says why a request waits for the shop", async () => {
     const s = await demoInbox();
     const seeded = await liveFeed(s.db, Date.now());
@@ -559,7 +628,7 @@ describe("demo mode off", () => {
     const db = await freshDb();
     const inbox = createInbox({ db, background: () => {} });
     await inbox.prepare();
-    for (const path of ["/demo/live", "/demo/live.json", "/demo/live.js"]) {
+    for (const path of ["/demo/live", "/demo/live.json", "/demo/live.js", "/demo/phone/me", "/demo/phone/items"]) {
       expect((await inbox.app.request(`${BASE}${path}`)).status, path).toBe(404);
     }
     expect(await db.orm.select({ id: schema.business.id }).from(schema.business)).toEqual([]);

@@ -134,11 +134,13 @@ export function Settings() {
                 <span className="two">
                   <span>{noBuild || noInbox ? "Notifications aren't available" : "Notifications are off"}</span>
                   <small>
-                    {noBuild
-                      ? "This version of the app can't get notifications yet."
-                      : noInbox
-                        ? `${inboxName} can't send notifications yet.`
-                        : "Allow them to hear about new requests."}
+                    {app.demo
+                      ? "The demo sends no notifications."
+                      : noBuild
+                        ? "This version of the app can't get notifications yet."
+                        : noInbox
+                          ? `${inboxName} can't send notifications yet.`
+                          : "Allow them to hear about new requests."}
                   </small>
                 </span>
                 {!noBuild && !noInbox && (
@@ -302,9 +304,17 @@ export function Settings() {
             <div>
               <span className="two">
                 <span>{app.active ? new URL(app.active.origin).host : ""}</span>
-                <small>Your inbox stays on your own website.</small>
+                <small>
+                  {app.demo
+                    ? "The demo: made-up examples, set up again every night."
+                    : "Your inbox stays on your own website."}
+                </small>
               </span>
-              {confirmRemove === "inbox" ? (
+              {app.demo ? (
+                <button type="button" className="btn quiet sm" onClick={app.leaveDemo}>
+                  Leave the demo
+                </button>
+              ) : confirmRemove === "inbox" ? (
                 <button type="button" className="btn link" onClick={() => void app.removeActive()}>
                   Remove {inboxName}?
                 </button>

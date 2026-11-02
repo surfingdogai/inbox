@@ -1,4 +1,4 @@
-import type { NotifyPrefs } from "../../../../packages/core/src/phones/prefs";
+import { DEFAULT_PREFS, type NotifyPrefs } from "../../../../packages/core/src/phones/prefs";
 import type { ItemDetail, ItemView, Page } from "../../../inbox/client/src/lib/types";
 import type { QueuedAction, SendResult } from "./offline";
 import { type Fetch, type InboxEntry, InboxError, movedTo, type Sessions } from "./session";
@@ -36,6 +36,23 @@ export interface Slots {
   readonly slots: readonly { readonly startTime: string }[];
 }
 
+/** An inbox's answer: its JSON, or its refusal as an InboxError with the inbox's own sentence. */
+async function answer<T>(res: Response): Promise<T> {
+  if (res.ok) return (await res.json()) as T;
+  let detail = `The inbox answered ${res.status}.`;
+  let code = `http_${res.status}`;
+  let details: Record<string, unknown> | undefined;
+  try {
+    const p = (await res.json()) as { detail?: string; code?: string; details?: Record<string, unknown> };
+    detail = p.detail ?? detail;
+    code = p.code ?? code;
+    details = p.details && typeof p.details === "object" ? p.details : undefined;
+  } catch {
+    // not JSON
+  }
+  throw new InboxError(detail, res.status, code, details);
+}
+
 export class InboxClient {
   private at: InboxEntry;
 
@@ -58,7 +75,7 @@ export class InboxClient {
    * address could have said itself; when the new address cannot be reached or is not that inbox, the
    * old address's answer stands.
    */
-  private async call<T>(
+  protected async call<T>(
     method: string,
     path: string,
     opts: { body?: unknown; idempotencyKey?: string; auth?: boolean } = {},
@@ -100,19 +117,7 @@ export class InboxClient {
     };
     let res = await send(false);
     if (res.status === 401 && opts.auth !== false) res = await send(true);
-    if (res.ok) return (await res.json()) as T;
-    let detail = `The inbox answered ${res.status}.`;
-    let code = `http_${res.status}`;
-    let details: Record<string, unknown> | undefined;
-    try {
-      const p = (await res.json()) as { detail?: string; code?: string; details?: Record<string, unknown> };
-      detail = p.detail ?? detail;
-      code = p.code ?? code;
-      details = p.details && typeof p.details === "object" ? p.details : undefined;
-    } catch {
-      // not JSON
-    }
-    throw new InboxError(detail, res.status, code, details);
+    return answer<T>(res);
   }
 
   /** What needs the owner (open items a rule flagged, or nobody has answered), or everything open. */
@@ -202,6 +207,76 @@ export class InboxClient {
 
   removePhone(id: string): Promise<{ removed: true }> {
     return this.call("DELETE", `/v1/phone/phones/${encodeURIComponent(id)}`);
+  }
+}
+
+/**
+ * "Try the demo" (store/play/app-content.md → App access): the app on Surfing Dog's demo bike shop,
+ * read-only. The shop holds made-up examples and is set up again every night. No code, no sign-in and
+ * no key on the phone: the demo's own doors (`/demo/phone/*`, apps/inbox/src/demo.ts) answer anyone,
+ * and only read. Nothing pressed in the demo is sent anywhere, and the app says so.
+ */
+export const DEMO_ORIGIN = "https://demo.surfingdog.ai";
+export const DEMO_ENTRY: InboxEntry = {
+  alias: "demo",
+  origin: DEMO_ORIGIN,
+  name: "Oficina Maré",
+  deviceId: "demo",
+  addedAt: 0,
+};
+export const DEMO_READ_ONLY = "This is the demo: it shows examples, and nothing you press is sent.";
+
+/** Where the demo answers what the phone asks a real inbox, or null when it is not a read. */
+export function demoPath(method: string, path: string): string | null {
+  if (method !== "GET") return null;
+  const [p = "", q] = path.split("?");
+  const query = q ? `?${q}` : "";
+  if (p === "/v1/owner/items") return `/demo/phone/items${query}`;
+  const item = /^\/v1\/owner\/items\/([^/]+)$/.exec(p);
+  if (item) return `/demo/phone/items/${item[1]}`;
+  // The shop's free times are on its public door, as at every inbox.
+  if (p === "/v1/availability") return path;
+  return null;
+}
+
+export class DemoClient extends InboxClient {
+  constructor(
+    sessions: Sessions,
+    private readonly get: Fetch = (input, init) => fetch(input, init),
+  ) {
+    super(DEMO_ENTRY, sessions, get);
+  }
+
+  /** Reads only, with no token: anything else is refused here, before it leaves the phone. */
+  protected override call<T>(method: string, path: string): Promise<T> {
+    const at = demoPath(method, path);
+    if (!at) return Promise.reject(new InboxError(DEMO_READ_ONLY, 403, "demo"));
+    return this.read<T>(at);
+  }
+
+  private async read<T>(path: string): Promise<T> {
+    let res: Response;
+    try {
+      res = await this.get(`${DEMO_ORIGIN}${path}`, { headers: { accept: "application/json" } });
+    } catch {
+      throw new InboxError("You're offline, or the demo can't be reached.", 0, "network");
+    }
+    return answer<T>(res);
+  }
+
+  /** The shop, as Settings and the inbox name it. The demo sends no notifications. */
+  override async me(): Promise<PhoneMe> {
+    const shop = await this.read<{ business: { name: string; timezone: string } }>("/demo/phone/me");
+    return {
+      phone: { id: "demo", name: "This phone", push: "off", confirmed: true },
+      notify: DEFAULT_PREFS,
+      business: shop.business,
+      push_available: false,
+    };
+  }
+
+  override keepRelayDevice(): Promise<void> {
+    return Promise.resolve();
   }
 }
 

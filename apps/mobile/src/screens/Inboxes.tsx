@@ -23,7 +23,7 @@ export function Inboxes() {
         <div className="sub">For people who look after more than one business</div>
       </header>
       <main className="body">
-        {app.inboxes.map((e, i) => {
+        {(app.demo && app.active ? [app.active] : app.inboxes).map((e, i) => {
           const n = app.needCounts[e.alias];
           return (
             <button

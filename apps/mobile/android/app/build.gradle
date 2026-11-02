@@ -25,6 +25,12 @@ android {
     // ANDROID_RELEASE_KEYSTORE_PASSWORD and ANDROID_RELEASE_KEY_ALIAS. Without them a release build is
     // unsigned, and nothing can install it.
     def releaseKeystore = System.getenv("ANDROID_RELEASE_KEYSTORE")
+    // The upload key (store/play/signing.md): Google Play signs the copy it delivers with an app signing
+    // key Google made and keeps (Play App Signing), and takes only bundles signed with this key. It is
+    // kept off the repository, with its passwords: ANDROID_UPLOAD_KEYSTORE (the file),
+    // ANDROID_UPLOAD_STORE_PASSWORD, ANDROID_UPLOAD_KEY_PASSWORD and ANDROID_UPLOAD_KEY_ALIAS (default
+    // upload). Without them the Play bundle is unsigned, and Play refuses it.
+    def uploadKeystore = System.getenv("ANDROID_UPLOAD_KEYSTORE")
     // The test key: AGP's own debug key, unless ANDROID_TEST_KEYSTORE names a debug keystore (password
     // android, alias androiddebugkey). Workflow android hands over the repository's DEBUG_KEYSTORE_BASE64
     // that way, by path, since where AGP keeps its debug key depends on the machine.
@@ -48,15 +54,39 @@ android {
                 keyPassword = System.getenv("ANDROID_RELEASE_KEYSTORE_PASSWORD")
             }
         }
+        upload {
+            if (uploadKeystore) {
+                storeFile = file(uploadKeystore)
+                storePassword = System.getenv("ANDROID_UPLOAD_STORE_PASSWORD")
+                keyAlias = System.getenv("ANDROID_UPLOAD_KEY_ALIAS") ?: "upload"
+                keyPassword = System.getenv("ANDROID_UPLOAD_KEY_PASSWORD")
+            }
+        }
+    }
+    // Two copies of the app (store/play/signing.md). `direct` is the APK on surfingdog.ai/phone, signed
+    // with the release key, which says when a new version is ready there. `play` is the bundle for
+    // Google Play, signed with the upload key: Play installs and updates it, so its screens carry no
+    // update check (vite build --mode play) and this build refuses any that do (checkScreens below).
+    // A build type's own key comes first: the test build and the debug build sign as before.
+    flavorDimensions = ["channel"]
+    productFlavors {
+        direct {
+            dimension = "channel"
+            if (releaseKeystore) signingConfig = signingConfigs.release
+        }
+        play {
+            dimension = "channel"
+            if (uploadKeystore) signingConfig = signingConfigs.upload
+        }
     }
     buildTypes {
-        // The public app (apps/mobile/README.md → Releases): shrunk, not debuggable, signed with the
-        // release key. Built only by the workflow android-release, from a tag on main.
+        // The public app (apps/mobile/README.md → Releases): shrunk, not debuggable, signed with its
+        // copy's key (above). The download page's is built only by the workflow android-release, from a
+        // tag on main; Google Play's bundle as store/play/signing.md says.
         release {
             debuggable false
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            signingConfig = (releaseKeystore ? signingConfigs.release : null)
         }
         // The test build a person installs by hand (ADR-028): built as the release is, so not debuggable
         // (no `run-as`, no debugger reading tokens from memory) and shrunk, but signed with the test key
@@ -72,6 +102,47 @@ android {
             signingConfig signingConfigs.debug
             matchingFallbacks = ['release']
         }
+    }
+}
+
+// Google Play takes the release bundle only: the test builds and the debug build are the download
+// page's copy.
+androidComponents {
+    beforeVariants(selector().all()) { variant ->
+        if (variant.flavorName == "play" && variant.buildType != "release") variant.enable = false
+    }
+}
+
+// The screens (apps/mobile/dist, copied here by `cap sync`) are built for one copy or the other, and
+// say which in channel.json (vite.config.ts). Each copy packs only its own: the Play bundle can never
+// carry the download page's update check, nor the APK go without it.
+def screensDir = file("src/main/assets/public")
+["direct", "play"].each { channel ->
+    def named = channel.capitalize()
+    def check = tasks.register("check${named}Screens") {
+        description = "Fails unless the screens in src/main/assets/public were built for the ${channel} copy."
+        def marker = new File(screensDir, "channel.json")
+        def dir = screensDir
+        doLast {
+            def built = marker.exists() ? new groovy.json.JsonSlurper().parse(marker).channel : null
+            if (built != channel) {
+                def script = channel == "play" ? "sync:play" : "sync"
+                throw new GradleException("The screens in app/src/main/assets/public are the ${built ?: "unknown"} copy's, " +
+                    "not the ${channel} copy's. Build them for it first: pnpm --filter @surfingdog/mobile ${script}")
+            }
+            if (channel == "play") {
+                def looking = []
+                dir.eachFileRecurse(groovy.io.FileType.FILES) { f ->
+                    if (f.name ==~ /.*\.(js|html)/ && (f.text.contains("latest.json") || f.text.contains("surfingdog.ai/phone")))
+                        looking << f.name
+                }
+                if (looking) throw new GradleException("The Play copy's screens look for an update (${looking.join(", ")}): " +
+                    "Google Play updates the app, nothing else may.")
+            }
+        }
+    }
+    tasks.configureEach { t ->
+        if (t.name ==~ /merge${named}[A-Z]\w*Assets/) t.dependsOn(check)
     }
 }
 

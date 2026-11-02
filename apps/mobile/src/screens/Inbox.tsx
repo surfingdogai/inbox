@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { stateWord } from "../../../inbox/client/src/lib/format";
 import type { ItemView } from "../../../inbox/client/src/lib/types";
+import { UpdateLine } from "../channel";
 import { useApp } from "../context";
 import {
   ago,
@@ -17,7 +18,6 @@ import {
 import { CheckIcon, ChevronDown, SearchIcon } from "./icons";
 import { Nav } from "./Nav";
 import { CannotReach } from "./Offline";
-import { UpdateLine } from "./Update";
 
 /** The inbox (the approved Main screen): what needs the owner, everything open, and what was handled. */
 export function Inbox() {
@@ -78,6 +78,14 @@ export function Inbox() {
       </header>
       <main className="body">
         <UpdateLine />
+        {app.demo && (
+          <div className="update-line demo-line" role="note">
+            <span>The demo: made-up requests to a bike shop. Nothing you press is sent.</span>
+            <button type="button" className="go" onClick={app.leaveDemo}>
+              Leave
+            </button>
+          </div>
+        )}
         {shown.length === 0 && !app.loading && !app.listLoaded && app.offline && <CannotReach inbox={name} />}
         {shown.length === 0 && !app.loading && app.listLoaded && (
           <div className="empty">

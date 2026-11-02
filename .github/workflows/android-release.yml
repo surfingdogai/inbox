@@ -1,7 +1,7 @@
 name: android-release
 
-# The public Android app (apps/mobile, ADR-028), from a tag `android-v<version>` on main whose version
-# is the one in apps/mobile/package.json:
+# The public Android app (apps/mobile, ADR-028), the download page's copy (the `direct` flavour), from a
+# tag `android-v<version>` on main whose version is the one in apps/mobile/package.json:
 #
 #   git tag android-v1.0.0 <commit on main> && git push origin android-v1.0.0
 #
@@ -120,7 +120,7 @@ jobs:
           ANDROID_RELEASE_KEYSTORE="$keystore" \
           ANDROID_RELEASE_KEYSTORE_PASSWORD="$RELEASE_KEYSTORE_PASSWORD" \
           ANDROID_RELEASE_KEY_ALIAS=surfingdog-inbox \
-            ./gradlew --no-daemon --stacktrace testDebugUnitTest assembleRelease
+            ./gradlew --no-daemon --stacktrace testDirectDebugUnitTest assembleDirectRelease
 
       - name: the APK, checked
         env:
@@ -128,8 +128,8 @@ jobs:
           CODE: ${{ steps.version.outputs.code }}
           NAME: ${{ steps.version.outputs.name }}
         run: |
-          apk=apps/mobile/android/app/build/outputs/apk/release/app-release.apk
-          [ -f "$apk" ] || { echo "::error::no signed app-release.apk (an unsigned one means the release key was not used)"; ls -R apps/mobile/android/app/build/outputs/apk || true; exit 1; }
+          apk=apps/mobile/android/app/build/outputs/apk/direct/release/app-direct-release.apk
+          [ -f "$apk" ] || { echo "::error::no signed app-direct-release.apk (an unsigned one means the release key was not used)"; ls -R apps/mobile/android/app/build/outputs/apk || true; exit 1; }
           bt="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
           echo "build-tools: $bt"
           "$bt/apksigner" verify --verbose --print-certs "$apk" > signers.txt || { cat signers.txt; echo "::error::apksigner: the APK does not verify"; exit 1; }

@@ -1,9 +1,12 @@
 import { type CallerEnv, ensureNetworkPing } from "@surfingdog/adapters";
 import {
+  type Caller,
+  type Capabilities,
   type Db,
   ensureJob,
   ensureLifecycleSweep,
   type JobHandler,
+  listItemsInput,
   type RuleDefinition,
   readSettings,
   schema,
@@ -614,6 +617,14 @@ const obj = (v: unknown): Obj => (v !== null && typeof v === "object" && !Array.
 const str = (v: unknown): string | undefined => (typeof v === "string" && v.length > 0 ? v : undefined);
 
 /**
+ * When the shop was set up: it is seeded this long after its business row is dated, so what was
+ * created by then is an example, and anything later came from someone trying the demo.
+ */
+export function examplesUntil(businessCreatedAt: number | undefined): number {
+  return (businessCreatedAt ?? Number.NEGATIVE_INFINITY) + SHOWCASE_HISTORY_MS;
+}
+
+/**
  * What the live view shows: the last `limit` items, each as a type, the catalogue's name for what
  * was asked for, a booking's time, the state, how it arrived and when. No name, email address,
  * phone number, message, note or anything else a person wrote ever leaves this function: the
@@ -651,8 +662,7 @@ export async function liveFeed(db: Db, now: number, limit = 20): Promise<LiveFee
     readSettings(db),
   ]);
   const tz = biz[0]?.timezone || "UTC";
-  // The shop was seeded this long after its business row is dated: what came in before then is an example.
-  const seededAt = (biz[0]?.createdAt ?? Number.NEGATIVE_INFINITY) + SHOWCASE_HISTORY_MS;
+  const seededAt = examplesUntil(biz[0]?.createdAt);
   const serviceName = new Map(services.map((s) => [s.id, s.name]));
   const why = { now, minNoticeMin: settings.booking.minNoticeMin };
   const productName = new Map<string, string>();
@@ -892,6 +902,86 @@ export const LIVE_JS = `(() => {
 /** How long one reading of the feed serves every viewer: the pages poll every four seconds. */
 export const LIVE_FRESH_MS = 2_000;
 
+// ---- the phone app's demo ----------------------------------------------------------------
+
+/**
+ * The phone app's "Try the demo" (apps/mobile, store/play/app-content.md → App access): the shop's
+ * examples as the phone shows an inbox, to anyone, with no sign-in, no code and no key on the phone.
+ * These doors only read: there is nothing here to change anything with.
+ *
+ * Only the examples the shop is set up with every night are listed or opened. What anyone sent since
+ * is whatever they typed about whomever they liked, so it is never here, as it is never on the live
+ * view; the examples are made up, and so is every name, address and message the phone shows.
+ */
+export type DemoPhoneCaps = Pick<Capabilities, "listItems" | "getItem">;
+
+/** The most examples one answer lists: every one the shop is set up with fits in one. */
+export const DEMO_PHONE_LIMIT = 100;
+
+/** What the phone is told when it opens anything but an example. */
+export const DEMO_PHONE_ONLY_EXAMPLES = "The demo shows only its examples.";
+
+/** Who the demo's phone reads as: the owner on a phone, as a phone sees the inbox. It only ever reads. */
+function demoPhoneCaller(now: number): Caller {
+  return {
+    actor: { kind: "owner", id: "demo-phone", channel: "rest" },
+    tier: "verified_principal",
+    sandbox: false,
+    now: () => now,
+  };
+}
+
+async function shopOf(db: Db): Promise<{ name: string; timezone: string; until: number } | null> {
+  const [biz] = await db.orm
+    .select({ name: schema.business.name, timezone: schema.business.timezone, createdAt: schema.business.createdAt })
+    .from(schema.business)
+    .limit(1);
+  return biz ? { name: biz.name, timezone: biz.timezone || "UTC", until: examplesUntil(biz.createdAt) } : null;
+}
+
+/**
+ * The list the phone asks for (`/v1/owner/items` on a real inbox), of the examples only: open or
+ * not, what needs the owner, what the spam filter holds, or what was put aside. One page always.
+ */
+export async function demoPhoneItems(caps: DemoPhoneCaps, db: Db, query: URLSearchParams, now: number) {
+  const shop = await shopOf(db);
+  if (!shop) return { items: [], next_cursor: null };
+  const flag = (k: string) => (query.has(k) ? query.get(k) === "true" : undefined);
+  const needs = flag("needs_human");
+  const limit = Math.min(DEMO_PHONE_LIMIT, Math.max(1, Number.parseInt(query.get("limit") ?? "", 10) || 50));
+  const input = listItemsInput.parse({
+    open_only: flag("open_only") ?? true,
+    ...(needs === undefined ? {} : { needs_human: needs }),
+    ...(query.get("screen") === "held" ? { screen: "held" } : {}),
+    ...(query.get("state") === "spam" ? { state: "spam" } : {}),
+    limit,
+  });
+  const page = await caps.listItems(demoPhoneCaller(now), input, { createdAtMost: shop.until });
+  return { items: page.items, next_cursor: null };
+}
+
+/** One example as the phone opens it, or null for anything that is not one. */
+export async function demoPhoneItem(caps: DemoPhoneCaps, db: Db, id: string, now: number) {
+  const shop = await shopOf(db);
+  if (!shop || id.length > 64) return null;
+  const [row] = await db.orm
+    .select({ createdAt: schema.items.createdAt, sandbox: schema.items.sandbox })
+    .from(schema.items)
+    .where(eq(schema.items.id, id));
+  if (!row || row.createdAt > shop.until || row.sandbox) return null;
+  return caps.getItem(demoPhoneCaller(now), { item_id: id });
+}
+
+/** The shop, as the phone names it, and when it is set up again. */
+export async function demoPhoneShop(db: Db, now: number) {
+  const shop = await shopOf(db);
+  return {
+    business: { name: shop?.name || "Demo shop", timezone: shop?.timezone ?? "UTC" },
+    read_only: true,
+    next_reset: nextNightly(now),
+  };
+}
+
 /**
  * Keeps work another request may be waiting on running past this request's own end: on Workers,
  * `waitUntil` carries it on if the client leaves (for up to 30 seconds). Node has nothing to extend.
@@ -920,6 +1010,8 @@ export function demoRoutes(deps: {
   db: Db;
   now?: (() => number) | undefined;
   active: () => Promise<boolean>;
+  /** The inbox's own reads, for the phone app's "Try the demo"; without them those doors are not there. */
+  caps?: DemoPhoneCaps | undefined;
 }): Hono<CallerEnv> {
   const clock = () => (deps.now ? deps.now() : Date.now());
   let cached: { at: number; feed: Promise<LiveFeed> } | null = null;
@@ -953,5 +1045,47 @@ export function demoRoutes(deps: {
     c.header("Cache-Control", "public, max-age=300");
     return c.body(LIVE_JS, 200, { "Content-Type": "text/javascript; charset=utf-8" });
   });
+
+  // The phone app's "Try the demo": the examples, read the way the phone reads an inbox. Each answer
+  // is shared for `LIVE_FRESH_MS` like the feed, so a crowd costs about one reading of each.
+  const caps = deps.caps;
+  if (caps) {
+    const readings = new Map<string, { at: number; value: Promise<unknown> }>();
+    const shared = (c: Context, key: string, read: (now: number) => Promise<unknown>): Promise<unknown> => {
+      const now = clock();
+      const had = readings.get(key);
+      if (had && now - had.at < LIVE_FRESH_MS && now >= had.at) return had.value;
+      // Only a few kinds of question are ever asked; anything past that is someone else's script.
+      if (readings.size >= 200) readings.clear();
+      const value = read(now);
+      readings.set(key, { at: now, value });
+      value.catch(() => {
+        if (readings.get(key)?.value === value) readings.delete(key);
+      });
+      outlive(c, value);
+      return value;
+    };
+    routes.get("/phone/me", async (c) => {
+      c.header("Cache-Control", "no-store");
+      return c.json(await shared(c, "me", (now) => demoPhoneShop(deps.db, now)));
+    });
+    routes.get("/phone/items", async (c) => {
+      c.header("Cache-Control", "no-store");
+      const q = new URL(c.req.url).searchParams;
+      const asked = new URLSearchParams();
+      for (const k of ["open_only", "needs_human", "screen", "state", "limit"]) {
+        const v = q.get(k);
+        if (v !== null) asked.set(k, v.slice(0, 8));
+      }
+      return c.json(await shared(c, `items?${asked}`, (now) => demoPhoneItems(caps, deps.db, asked, now)));
+    });
+    routes.get("/phone/items/:id", async (c) => {
+      c.header("Cache-Control", "no-store");
+      const id = c.req.param("id");
+      const detail = await shared(c, `item:${id}`, (now) => demoPhoneItem(caps, deps.db, id, now));
+      if (!detail) return c.json({ detail: DEMO_PHONE_ONLY_EXAMPLES, code: "not_found" }, 404);
+      return c.json(detail);
+    });
+  }
   return routes;
 }

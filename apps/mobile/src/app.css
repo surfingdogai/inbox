@@ -1010,6 +1010,15 @@ fieldset.group legend {
   border-color: transparent;
   color: var(--warn-ink);
 }
+/* "Try the demo": the same quiet line, while the app shows the demo shop. */
+.demo-line .go {
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
 
 /* ---- the spam filter (ADR-041 §12): quiet, ink and greys, never red ---- */
 .spam-foot {

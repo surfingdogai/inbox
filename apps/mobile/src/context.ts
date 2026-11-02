@@ -29,6 +29,10 @@ export interface App {
   readonly inboxes: readonly InboxEntry[];
   readonly active: InboxEntry | null;
   readonly client: InboxClient | null;
+  /** "Try the demo": the app on the demo shop, read-only, with nothing on the phone (lib/client.ts). */
+  readonly demo: boolean;
+  tryDemo(): void;
+  leaveDemo(): void;
   readonly me: PhoneMe | null;
   /** The spam filter as this inbox has it: null until read, or from an inbox without one. */
   readonly spam: PhoneSpam | null;

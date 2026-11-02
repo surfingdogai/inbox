@@ -767,8 +767,9 @@ export function createInbox(deps: AppDeps): Inbox {
     ucpLodging: deps.ucpLodging,
   });
 
-  // The live view exists only in a demo; anywhere else /demo/* is a 404 like any unknown path.
-  if (demo) app.route("/demo", demoRoutes({ db: deps.db, now: deps.now, active: demoActive }));
+  // The live view, and the phone app's "Try the demo", exist only in a demo; anywhere else /demo/* is
+  // a 404 like any unknown path.
+  if (demo) app.route("/demo", demoRoutes({ db: deps.db, now: deps.now, active: demoActive, caps }));
 
   app.notFound((c) => c.json({ error: "not_found", path: new URL(c.req.url).pathname }, 404));
   return { app, runner, caps, prepare };
