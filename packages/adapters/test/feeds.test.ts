@@ -221,7 +221,7 @@ describe("the import job", () => {
         const [id, kind, payload, runAt] = r as [string, string, string, number];
         return { id, kind, payload: JSON.parse(payload) as unknown, runAt: Number(runAt) };
       });
-    const price = async () => (await caps.listProducts({ limit: 5 })).items[0]?.price.value;
+    const price = async () => (await caps.listProducts({ limit: 5 })).items[0]?.price?.value;
     expect(await price()).toBe(8_000);
 
     // At the sale's start, the feed down: the sale's price all the same.

@@ -1829,7 +1829,7 @@ adds `versions` and `policies` to it (below).
   are `"multipack": 12`; a case's own barcode (indicator 1 to 8) with `"multipack": 1` is one case. A
   reader that does not know it ignores it, as it ignores any member it does not know; one that knows it
   keeps a pack apart from single units of the same barcode (below), and may give its price per unit, the
-  price divided by `multipack`. This inbox has no setting for it yet, so its own feed does not carry it.
+  price divided by `multipack`. This inbox's own feed carries it from catalogue version 2, where the owner sets it.
 - `catalogue` says what a reader compares: the listed `count`, the latest change, whether prices include
   tax (`null`: not said), and `rev`, which moves with any write to any product and with any of these.
 - Never in it: where a product came from, a source's own ids, a location, a barcode that did not pass,

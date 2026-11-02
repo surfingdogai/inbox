@@ -1,42 +1,61 @@
-import { sha256Hex } from "@surfingdog/platform";
 import {
-  CATALOGUE_DESCRIPTION_MAX,
-  CATALOGUE_NAME_MAX,
+  ageLabel,
+  type CatalogueAvailabilityV2,
   type CatalogueItem,
-  type CatalogueListedItem,
-  isPlaceholderTitle,
+  type CatalogueListedItemV2,
+  catalogueItemV1Of,
   normaliseGtin,
+  unitPriceOf,
 } from "@surfingdog/spec";
 import type { products } from "../schema/tables";
-import { canonicalJson } from "../util/canonical";
+import {
+  availabilityV2,
+  catalogueItemV2,
+  listableV2Why,
+  type NotListedV2Why,
+  publishableUrl,
+  wasPriceRefusal,
+} from "./v2";
 
 /**
- * One public view of a product (ADR-029): what the business's own doors (`GET /v1/products`, MCP
- * `list_products`) and its signed catalogue feed (`GET /v1/catalogue/changes`) say of it, made in
- * one place so they never say different things.
+ * One public view of a product (ADR-029, catalogue version 2): what the business's own doors
+ * (`GET /v1/products`, MCP `list_products`) and its signed catalogue feed (`GET /v1/catalogue/changes`)
+ * say of it, made from the same helpers (`v2.ts`) so they never say different things.
  *
  * Never public: where it came from (`source`, which for a feed is its address, query string and any
  * key in it included), the source's own id, its location, a barcode that did not pass the check or
  * waits for the owner (`gtin_given`), what a source said its category was, its dates of creation,
- * and the owner's floors and rewards. The doors also give its stock count and its order-time terms;
- * the feed gives neither: a network is told in stock, out of stock or on sale, never a count (D3).
+ * its record of prices, the owner's few-left mark, and the owner's floors and rewards. The doors also
+ * give its stock count and its order-time terms; the feed gives neither: a network is told whether it
+ * can be had, never a count (D3).
  */
 
 export type ProductRow = typeof products.$inferSelect;
-export type ProductAvailability = CatalogueListedItem["availability"];
+export type ProductAvailability = CatalogueAvailabilityV2;
 
 /** The domains the business's own site lives on: a product's page is published only on one of them. */
 export interface CatalogueContext {
   readonly sites: readonly string[];
 }
 
-/** A product at the public doors. */
+/** What the doors' view needs besides the row: the moment, the groups' titles, and the record of prices. */
+export interface ProductDoorContext extends CatalogueContext {
+  readonly now?: number | undefined;
+  readonly groups?: ReadonlyMap<string, { readonly title: string }> | undefined;
+  readonly history?:
+    | ReadonlyMap<string, readonly { readonly at: number; readonly value: number; readonly currency: string }[]>
+    | undefined;
+}
+
+/** A product at the public doors. Members past `negotiable` are given only when they say something. */
 export interface PublicProduct {
   readonly id: string;
   readonly sku: string | null;
   readonly name: string;
   readonly description: string | null;
-  readonly price: { readonly value: number; readonly currency: string };
+  /** The price; for `from` the lowest and for `range` the lowest; null for a price on request (`quote`). */
+  readonly price: { readonly value: number; readonly currency: string } | null;
+  readonly price_model: CatalogueListedItemV2["price_model"];
   readonly availability: ProductAvailability;
   readonly gtin: string | null;
   readonly no_gtin: boolean;
@@ -45,12 +64,34 @@ export interface PublicProduct {
   readonly condition: string;
   readonly url: string | null;
   readonly image_url: string | null;
+  /** Pictures and videos, the main picture first; empty when there are none. */
+  readonly media: CatalogueListedItemV2["media"];
   readonly updated_at: string;
   /** At the door only: what an order is held to, and never sent to a network. */
   readonly stock: number | null;
   readonly active: number;
   readonly withdrawal: string;
   readonly negotiable: number;
+  readonly group?: { readonly id: string; readonly title: string; readonly position: number };
+  readonly options?: CatalogueListedItemV2["options"];
+  readonly price_max?: { readonly value: number; readonly currency: string };
+  /** The "was" price, only while the 30-day rule holds by the inbox's own record of prices. */
+  readonly list_price?: { readonly value: number; readonly currency: string };
+  /** The net quantity sold, and the price per reference quantity worked out from the price. */
+  readonly unit_price?: NonNullable<CatalogueListedItemV2["unit_price"]> & {
+    readonly amount: { readonly value: number; readonly currency: string };
+  };
+  readonly tax_included?: boolean;
+  readonly available_from?: string;
+  readonly available_until?: string;
+  readonly multipack?: number;
+  readonly is_bundle?: boolean;
+  /** Sold only above an age, ID checked at handover, with the words to show beside it. */
+  readonly age_restricted?: NonNullable<CatalogueListedItemV2["age_restricted"]> & { readonly label: string };
+  readonly fulfil_methods?: readonly string[];
+  readonly shipping_profile?: string;
+  readonly weight?: { readonly value: number; readonly unit: string };
+  readonly return_policy?: string;
 }
 
 /**
@@ -91,10 +132,20 @@ function onSite(url: string | null, sites: readonly string[]): string | null {
   }
 }
 
-/** In stock (counted, above 0), out of stock (counted, 0), or on sale with no count kept. */
-export function availabilityOf(row: Pick<ProductRow, "stock">): ProductAvailability {
-  if (row.stock === null || row.stock === undefined) return "on_sale";
-  return row.stock > 0 ? "in_stock" : "out_of_stock";
+/** Whether it can be had, never a count: as `availabilityV2` says at this moment. */
+export function availabilityOf(
+  row: Pick<ProductRow, "stock"> & Partial<Pick<ProductRow, "availability" | "availableFrom" | "fewLeft">>,
+  now = Date.now(),
+): ProductAvailability {
+  return availabilityV2(
+    {
+      stock: row.stock,
+      availability: row.availability ?? null,
+      availableFrom: row.availableFrom ?? null,
+      fewLeft: row.fewLeft ?? null,
+    },
+    now,
+  );
 }
 
 /** The barcode as published: the stored one, read again by the same check, or none. */
@@ -106,14 +157,29 @@ function publicGtin(gtin: string | null): string | null {
 
 const iso = (ms: number) => new Date(ms).toISOString();
 
-export function publicProduct(row: ProductRow, ctx: CatalogueContext): PublicProduct {
+export function publicProduct(row: ProductRow, ctx: ProductDoorContext): PublicProduct {
+  const now = ctx.now ?? Date.now();
+  const fixed = row.priceModel === "fixed";
+  const price = row.priceModel === "quote" ? null : { value: row.price.value, currency: row.price.currency };
+  const group = row.groupId ? ctx.groups?.get(row.groupId) : undefined;
+  const unit =
+    fixed && price && row.unitPrice
+      ? unitPriceOf({ value: Math.max(1, price.value), currency: price.currency }, row.unitPrice)
+      : null;
+  const availability = availabilityOf(row, now);
+  const was =
+    fixed && row.listPrice && ctx.history && wasPriceRefusal(row, ctx.history.get(row.id) ?? []) === null
+      ? row.listPrice
+      : null;
+  const age = row.ageRestricted;
   return {
     id: row.id,
     sku: row.sku,
     name: row.name,
     description: row.description,
-    price: { value: row.price.value, currency: row.price.currency },
-    availability: availabilityOf(row),
+    price,
+    price_model: row.priceModel as PublicProduct["price_model"],
+    availability,
     gtin: publicGtin(row.gtin),
     no_gtin: row.noGtin === 1,
     brand: row.brand,
@@ -121,64 +187,84 @@ export function publicProduct(row: ProductRow, ctx: CatalogueContext): PublicPro
     condition: row.condition,
     url: onSite(row.url, ctx.sites),
     image_url: row.imageUrl,
+    media: [
+      ...(publishableUrl(row.imageUrl) ? [{ type: "image" as const, url: row.imageUrl }] : []),
+      ...(row.media ?? []).filter((m) => publishableUrl(m.url)),
+    ].slice(0, 10),
     updated_at: iso(row.updatedAt),
     stock: row.stock,
     active: row.active,
     withdrawal: row.withdrawal,
     negotiable: row.negotiable,
+    ...(group && row.groupId && row.options?.length
+      ? { group: { id: row.groupId, title: group.title, position: row.groupPosition ?? 1 }, options: row.options }
+      : {}),
+    ...(row.priceModel === "range" && row.priceMax ? { price_max: row.priceMax } : {}),
+    ...(was ? { list_price: was } : {}),
+    ...(unit && row.unitPrice && !("problem" in unit)
+      ? { unit_price: { ...row.unitPrice, amount: { value: unit.amount, currency: unit.currency } } }
+      : {}),
+    ...(row.taxIncluded !== null ? { tax_included: row.taxIncluded === 1 } : {}),
+    ...((availability === "preorder" || availability === "backorder") && row.availableFrom !== null
+      ? { available_from: iso(row.availableFrom) }
+      : {}),
+    ...(row.availableUntil !== null ? { available_until: iso(row.availableUntil) } : {}),
+    ...(row.multipack !== null && row.multipack >= 2 ? { multipack: row.multipack } : {}),
+    ...(row.isBundle === 1 ? { is_bundle: true } : {}),
+    ...(age
+      ? {
+          age_restricted: {
+            min_age: age.min_age,
+            kind: age.kind,
+            ...(age.by_country && Object.keys(age.by_country).length ? { by_country: age.by_country } : {}),
+            check: "id_at_handover" as const,
+            label: ageLabel(age.min_age),
+          },
+        }
+      : {}),
+    ...(row.fulfilMethods?.length ? { fulfil_methods: row.fulfilMethods } : {}),
+    ...(row.shippingProfileId ? { shipping_profile: row.shippingProfileId } : {}),
+    ...(row.weight ? { weight: row.weight } : {}),
+    ...(row.returnPolicyId ? { return_policy: row.returnPolicyId } : {}),
   };
 }
 
 /**
  * Why a product is not listed on networks, or null when it is: off sale, kept off networks by the
- * owner, priced at nothing, in something that is no ISO currency, or named as a template's sample.
+ * owner, priced at nothing (a price on request has none, and is listed), in something that is no ISO
+ * currency, named as a template's sample, past the last day it could be ordered, or of a kind networks
+ * keep off (tobacco and nicotine, cannabis, weapons) or that the vocabulary does not know.
  */
-export type NotListedWhy = "off_sale" | "kept_off" | "price_zero" | "currency" | "sample_name";
+export type NotListedWhy = NotListedV2Why;
 
-export function listableWhy(row: Pick<ProductRow, "active" | "listed" | "price" | "name">): NotListedWhy | null {
-  if (row.active !== 1) return "off_sale";
-  if (row.listed !== 1) return "kept_off";
-  if (!(row.price.value > 0)) return "price_zero";
-  if (!/^[A-Z]{3}$/.test(row.price.currency)) return "currency";
-  if (isPlaceholderTitle(row.name)) return "sample_name";
-  return null;
+export function listableWhy(
+  row: Pick<ProductRow, "active" | "listed" | "price" | "name"> &
+    Partial<Pick<ProductRow, "priceModel" | "availableUntil" | "ageRestricted">>,
+  now = Date.now(),
+): NotListedWhy | null {
+  return listableV2Why(
+    {
+      ...row,
+      priceModel: row.priceModel ?? "fixed",
+      availableUntil: row.availableUntil ?? null,
+      ageRestricted: row.ageRestricted ?? null,
+    },
+    now,
+  );
 }
 
 /**
- * The SQL twin of `listableWhy() === null`, for the counts a ping and a page carry without reading
- * every row. `vocab/placeholder-titles.json`'s names are compared as `isPlaceholderTitle` does.
+ * What a version 1 reader is given of one product: its version 2 item as version 1 says it
+ * (`catalogueItemV1Of`), without the business's policies or groups, which version 1 does not carry.
  */
-export function listableSql(placeholders: readonly string[]): { sql: string; params: string[] } {
-  return {
-    sql: `active = 1 AND listed = 1 AND json_extract(price, '$.value') > 0
-          AND length(json_extract(price, '$.currency')) = 3
-          AND replace(lower(trim(name)), '’', '''') NOT IN (${placeholders.map(() => "?").join(", ")})`,
-    params: [...placeholders],
-  };
-}
-
-/** What a network may list of one product, or that it is withdrawn. */
-export async function catalogueItem(row: ProductRow, ctx: CatalogueContext): Promise<CatalogueItem> {
-  if (listableWhy(row) !== null) return { id: row.id, state: "withdrawn", updated_at: iso(row.updatedAt) };
-  const p = publicProduct(row, ctx);
-  const body = {
-    id: p.id,
-    state: "listed" as const,
-    sku: p.sku,
-    name: p.name.slice(0, CATALOGUE_NAME_MAX),
-    description: p.description === null ? null : p.description.slice(0, CATALOGUE_DESCRIPTION_MAX),
-    price: p.price,
-    availability: p.availability,
-    gtin: p.gtin,
-    no_gtin: p.no_gtin,
-    brand: p.brand,
-    mpn: p.mpn,
-    condition: (["new", "used", "refurbished"].includes(p.condition)
-      ? p.condition
-      : "new") as CatalogueListedItem["condition"],
-    url: p.url,
-    image_url: p.image_url?.startsWith("https://") ? p.image_url : null,
-  };
-  const hash = (await sha256Hex(new TextEncoder().encode(canonicalJson(body)))).slice(0, 16);
-  return { ...body, updated_at: p.updated_at, hash };
+export async function catalogueItem(row: ProductRow, ctx: CatalogueContext, now = Date.now()): Promise<CatalogueItem> {
+  const built = await catalogueItemV2(row, {
+    sites: ctx.sites,
+    now,
+    policies: null,
+    groups: new Map(),
+    history: new Map(),
+  });
+  const v1 = await catalogueItemV1Of(built.item, { as_of: iso(now) });
+  return v1 ?? { id: row.id, state: "withdrawn", updated_at: iso(row.updatedAt) };
 }

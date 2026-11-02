@@ -1,4 +1,5 @@
 import type { Statement } from "@surfingdog/platform";
+import { optionKeyOf } from "@surfingdog/spec";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import {
   identityChanged,
@@ -7,10 +8,11 @@ import {
   type SourceIdentity,
   type StoredIdentity,
 } from "../catalogue/identity";
+import { priceRecordStatement } from "../catalogue/v2";
 import type { Db } from "../db";
 import type { Money } from "../domain/types";
 import { ulid } from "../ids";
-import { products } from "../schema/tables";
+import { productGroups, products } from "../schema/tables";
 
 /**
  * The catalogue a feed or a shop sends in (ADR-015 §7.3, ADR-030 §3), written by one function so a
@@ -32,6 +34,11 @@ import { products } from "../schema/tables";
  *   `listed`: those are the owner's.
  * - **Every write that changes what the signed catalogue feed shows moves `catalogue_seq`**
  *   (`NEXT_CATALOGUE_SEQ`); a product only marked seen keeps its place.
+ * - **Variants stay variants** (catalogue version 2): rows that name one group (`variant.group`, a feed's
+ *   `item_group_id`) are kept as one product group with each variant's options, never flattened, while
+ *   the group holds as a reader reads it (`groupsThatHold`): every variant names the same option keys and
+ *   no two are alike, at most 250. A group that does not hold comes in as products of their own. A batch
+ *   that names no group at all leaves the groups as they are.
  */
 
 /** One product as a source sends it in, with its identity (`SourceIdentity`) when the source gives one. */
@@ -44,6 +51,118 @@ export interface CatalogueRow extends SourceIdentity {
   readonly stock: number | null;
   /** False takes it off sale; null when the source says nothing either way. */
   readonly available: boolean | null;
+  /** The product group it is a variant of, and its options, when the source names one. */
+  readonly variant?: {
+    readonly group: string;
+    readonly title?: string | undefined;
+    readonly options: readonly { readonly key: string; readonly name: string; readonly value: string }[];
+  };
+}
+
+/** A group of a batch, as it is kept: its id here, and each of its variants' place in it. */
+interface KeptGroup {
+  readonly id: string;
+  readonly positions: ReadonlyMap<string, number>;
+}
+
+/** The longest run of whole words every name starts with: a group's title when the source gives none. */
+function commonTitle(names: readonly string[]): string {
+  const words = names.map((n) => n.split(/\s+/));
+  const first = words[0] ?? [];
+  let n = 0;
+  while (n < first.length && words.every((w) => w[n] === first[n])) n++;
+  const title = first
+    .slice(0, n)
+    .join(" ")
+    .replace(/[\s,;:–—-]+$/, "")
+    .trim();
+  return (title || names[0] || "").slice(0, 150);
+}
+
+/**
+ * The groups of a batch that hold as a reader of catalogue version 2 reads them (`readCatalogueGroups`):
+ * every variant names the same option keys, each key by one name, no two variants alike, at most 250.
+ */
+function groupsThatHold(rows: readonly CatalogueRow[]): Map<string, CatalogueRow[]> {
+  const byGroup = new Map<string, CatalogueRow[]>();
+  for (const r of rows) {
+    if (!r.variant) continue;
+    const list = byGroup.get(r.variant.group) ?? [];
+    list.push(r);
+    byGroup.set(r.variant.group, list);
+  }
+  const keys = (r: CatalogueRow) =>
+    (r.variant?.options ?? [])
+      .map((o) => o.key)
+      .sort()
+      .join("\u0000");
+  const values = (r: CatalogueRow) =>
+    JSON.stringify(
+      [...(r.variant?.options ?? [])].sort((a, b) => (a.key < b.key ? -1 : 1)).map((o) => [o.key, o.value]),
+    );
+  for (const [group, list] of byGroup) {
+    const first = list[0] as CatalogueRow;
+    const same = list.every((r) => keys(r) === keys(first));
+    const distinct = new Set(list.map(values)).size === list.length;
+    if (!same || !distinct || list.length > 250) byGroup.delete(group);
+  }
+  return byGroup;
+}
+
+/** Each group of the batch that holds, made or found under the source by its own id. */
+async function keepGroups(
+  db: Db,
+  source: string,
+  holding: ReadonlyMap<string, readonly CatalogueRow[]>,
+  now: number,
+): Promise<Map<string, KeptGroup>> {
+  const out = new Map<string, KeptGroup>();
+  if (!holding.size) return out;
+  const existing = await db.orm
+    .select({ id: productGroups.id, externalId: productGroups.externalId, title: productGroups.title })
+    .from(productGroups)
+    .where(eq(productGroups.source, source));
+  const byExternal = new Map(existing.map((g) => [g.externalId, g]));
+  const statements: Statement[] = [];
+  for (const [group, list] of holding) {
+    const title = list.find((r) => r.variant?.title)?.variant?.title ?? commonTitle(list.map((r) => r.name));
+    const found = byExternal.get(group);
+    const id = found?.id ?? ulid(now);
+    if (!found) {
+      statements.push({
+        sql: `INSERT INTO product_groups (id, title, source, external_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+              ON CONFLICT (source, external_id) DO NOTHING`,
+        params: [id, title, source, group, now, now],
+        method: "run",
+      });
+    } else if (found.title !== title) {
+      // A new title moves each variant in the feed, since each carries it.
+      statements.push(
+        {
+          sql: "UPDATE product_groups SET title = ?, updated_at = ? WHERE id = ?",
+          params: [title, now, id],
+          method: "run",
+        },
+        {
+          sql: `UPDATE products SET catalogue_seq = ${NEXT_CATALOGUE_SEQ}, updated_at = ? WHERE group_id = ?`,
+          params: [now, id],
+          method: "run",
+        },
+      );
+    }
+    out.set(group, { id, positions: new Map(list.map((r, i) => [r.externalId, i + 1])) });
+  }
+  for (const slice of chunks(statements, 40)) await db.batch(slice);
+  // Two reads of one source at once: the group the other made is the one kept.
+  const again = await db.orm
+    .select({ id: productGroups.id, externalId: productGroups.externalId })
+    .from(productGroups)
+    .where(eq(productGroups.source, source));
+  for (const g of again) {
+    const kept = g.externalId ? out.get(g.externalId) : undefined;
+    if (kept && g.externalId) out.set(g.externalId, { ...kept, id: g.id });
+  }
+  return out;
 }
 
 export interface CatalogueWrite {
@@ -91,6 +210,17 @@ export async function upsertCatalogue(
     if (product.externalId) incoming.set(product.externalId, product);
   }
   if (incoming.size === 0) return { created: 0, updated: 0, unchanged: 0, priceless: 0 };
+  // Variants (catalogue version 2): only a batch that names a group says anything of groups.
+  const managesGroups = [...incoming.values()].some((r) => r.variant);
+  const groups = managesGroups
+    ? await keepGroups(db, p.source, groupsThatHold([...incoming.values()]), p.now)
+    : new Map();
+  const placeOf = (r: CatalogueRow): { groupId: string | null; position: number | null; options: string | null } => {
+    const g = r.variant ? groups.get(r.variant.group) : undefined;
+    if (!g || !r.variant) return { groupId: null, position: null, options: null };
+    const options = r.variant.options.map((o) => ({ key: optionKeyOf(o.key) ?? o.key, name: o.name, value: o.value }));
+    return { groupId: g.id, position: g.positions.get(r.externalId) ?? null, options: JSON.stringify(options) };
+  };
   const existing = await db.orm
     .select({
       id: products.id,
@@ -109,6 +239,9 @@ export async function upsertCatalogue(
       url: products.url,
       imageUrl: products.imageUrl,
       sourceCategory: products.sourceCategory,
+      groupId: products.groupId,
+      groupPosition: products.groupPosition,
+      options: products.options,
     })
     .from(products)
     .where(eq(products.source, p.source));
@@ -151,14 +284,17 @@ export async function upsertCatalogue(
         // catalogue; the unique index (migration 5) is what the loser updates against.
         sql: `INSERT INTO products (id, sku, name, description, price, stock, source, external_id, active,
                                     gtin, gtin_given, brand, mpn, condition, url, image_url, source_category,
+                                    group_id, group_position, options,
                                     catalogue_seq, seen_at, created_at, updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${NEXT_CATALOGUE_SEQ}, ?, ?, ?)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${NEXT_CATALOGUE_SEQ}, ?, ?, ?)
               ON CONFLICT (source, external_id) WHERE external_id IS NOT NULL
               DO UPDATE SET name = excluded.name, description = excluded.description,
                             price = excluded.price, stock = excluded.stock, active = excluded.active,
                             gtin = excluded.gtin, gtin_given = excluded.gtin_given, brand = excluded.brand,
                             mpn = excluded.mpn, condition = excluded.condition, url = excluded.url,
                             image_url = excluded.image_url, source_category = excluded.source_category,
+                            group_id = excluded.group_id, group_position = excluded.group_position,
+                            options = excluded.options,
                             catalogue_seq = excluded.catalogue_seq, seen_at = excluded.seen_at,
                             updated_at = excluded.updated_at`,
         params: [
@@ -172,6 +308,10 @@ export async function upsertCatalogue(
           product.externalId,
           active,
           ...identityParams(ident),
+          ...(() => {
+            const place = placeOf(product);
+            return [place.groupId, place.position, place.options];
+          })(),
           p.seenAt,
           p.now,
           p.now,
@@ -182,7 +322,13 @@ export async function upsertCatalogue(
       created++;
       continue;
     }
-    if (!changed(current, product, stored, active, sku) && !identityChanged(current, ident)) {
+    const place = managesGroups ? placeOf(product) : null;
+    const moved =
+      place !== null &&
+      (place.groupId !== current.groupId ||
+        place.position !== current.groupPosition ||
+        place.options !== (current.options ? JSON.stringify(current.options) : null));
+    if (!changed(current, product, stored, active, sku) && !identityChanged(current, ident) && !moved) {
       unchanged++;
       seenOnly.push(current.id);
       continue;
@@ -190,6 +336,7 @@ export async function upsertCatalogue(
     statements.push({
       sql: `UPDATE products SET sku = ?, name = ?, description = ?, price = ?, stock = ?, active = ?,
               gtin = ?, gtin_given = ?, brand = ?, mpn = ?, condition = ?, url = ?, image_url = ?, source_category = ?,
+              ${place ? "group_id = ?, group_position = ?, options = ?," : ""}
               catalogue_seq = ${NEXT_CATALOGUE_SEQ}, seen_at = ?, updated_at = ?
              WHERE id = ?`,
       params: [
@@ -200,6 +347,7 @@ export async function upsertCatalogue(
         product.stock,
         active,
         ...identityParams(ident),
+        ...(place ? [place.groupId, place.position, place.options] : []),
         p.seenAt,
         p.now,
         id,
@@ -220,6 +368,8 @@ export async function upsertCatalogue(
   }
   // D1 counts every statement of a batch against one invocation's budget: the writes go in slices.
   for (const slice of chunks(statements, 40)) await db.batch(slice);
+  // The record of prices a "was" price is checked against: each price this batch wrote that is new.
+  if (created + updated > 0) await db.batch([priceRecordStatement(p.now, { since: p.now })]);
   return { created, updated, unchanged, priceless };
 }
 

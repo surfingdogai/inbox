@@ -50,6 +50,12 @@ export const DOWNLOAD_TABLES: Readonly<Record<string, DownloadTable>> = {
   services: {},
   resources: {},
   products: {},
+  // Catalogue version 2: the products' groups, the record of their prices, and the business's own
+  // shipping rate tables and return policies. Nothing in them lets anyone in.
+  product_groups: {},
+  product_prices: {},
+  shipping_profiles: {},
+  return_policies: {},
   price_floors: {},
   availability_rules: { note: "Opening hours and closed days." },
   rules: {},

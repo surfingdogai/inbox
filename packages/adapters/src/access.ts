@@ -96,6 +96,15 @@ export const ROUTE_SCOPES: Readonly<Record<string, readonly string[]>> = {
   "POST /products/:id/barcode": ["catalogue:write"],
   "GET /catalogue": [READ_SETUP, "catalogue:write"],
   "POST /catalogue/sku-barcodes": ["catalogue:write"],
+  // Catalogue version 2: product groups are no money and no promise; shipping rates and return policies
+  // are the owner's in person (the capability refuses anyone else), so a key needs the owner's own scope.
+  "GET /product-groups": [READ_SETUP, "catalogue:write"],
+  "POST /product-groups": ["catalogue:write"],
+  "GET /catalogue/policies": [READ_SETUP, "catalogue:write"],
+  "PUT /catalogue/shipping-profiles/:id": ["*"],
+  "DELETE /catalogue/shipping-profiles/:id": ["*"],
+  "PUT /catalogue/return-policies/:id": ["*"],
+  "DELETE /catalogue/return-policies/:id": ["*"],
   // The owner's in person, checked by the capability whatever the scopes: never the AI, never a key.
   "GET /catalogue/floors": ["*"],
   "PUT /catalogue/floors": ["*"],
@@ -220,6 +229,7 @@ export const TOOL_SCOPES: Readonly<Record<string, readonly string[]>> = {
   list_products: [READ_SETUP, "catalogue:write"],
   upsert_product: ["catalogue:write"],
   archive_product: ["catalogue:write"],
+  upsert_product_group: ["catalogue:write"],
   get_availability: [READ_SETUP, "availability:write"],
   set_opening_hours: ["availability:write"],
   clear_service_hours: ["availability:write"],

@@ -39,10 +39,12 @@ import {
   patchOf,
   paymentLabel,
   payOrderInput,
+  productGroupInput,
   productIdInput,
   productInput,
   profileInput,
   provideDetailsInput,
+  quoteShippingInput,
   replayMissingInput,
   replyInput,
   requestQuoteInput,
@@ -249,9 +251,26 @@ function callerOf(ctx: { authInfo?: { extra?: Record<string, unknown> } | undefi
 /** A product's availability in the words a tool's text gives it (`on_sale`: available, its stock not counted). */
 const AVAILABILITY_WORDS = {
   in_stock: "in stock",
+  limited: "few left",
   out_of_stock: "out of stock",
   on_sale: "available, stock not counted",
+  preorder: "pre-order",
+  backorder: "on back-order, comes later",
+  made_to_order: "made to order",
 } as const;
+
+/** A product's price in the words a tool's text gives it, as its price model means it (catalogue version 2). */
+function productPriceText(p: {
+  readonly price: { readonly value: number; readonly currency: string } | null;
+  readonly price_model: string;
+  readonly price_max?: { readonly value: number; readonly currency: string } | undefined;
+  readonly list_price?: { readonly value: number; readonly currency: string } | undefined;
+}): string {
+  if (p.price === null || p.price_model === "quote") return "price on request";
+  if (p.price_model === "range" && p.price_max) return `${moneyText(p.price)} to ${moneyText(p.price_max)}`;
+  if (p.price_model === "from") return `from ${moneyText(p.price)}`;
+  return p.list_price ? `${moneyText(p.price)} (was ${moneyText(p.list_price)})` : moneyText(p.price);
+}
 
 const readOnly = { readOnlyHint: true, idempotentHint: true } as const;
 const writes = { readOnlyHint: false, idempotentHint: true, destructiveHint: false } as const;
@@ -433,7 +452,7 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
       {
         title: "Products",
         description:
-          "Orderable products with prices in minor units, each with its barcode (gtin, 14 digits) where it has one and whether it is in stock. ids: read the live price of products a network showed you, before your person agrees; gtin: the products with that barcode, in any of its lengths. The price here is the one that counts.",
+          "Orderable products with prices in minor units, each with its barcode (gtin, 14 digits) where it has one and whether it can be had (never a count). A variant names its group and options; price_model says how a price is meant (only fixed is ordered at it: from, range and quote go to the business to price); an age-restricted product carries the label to show (ID checked at handover: 18+). ids: read the live price of products a network showed you, before your person agrees; gtin: the products with that barcode, in any of its lengths. The price here is the one that counts.",
         inputSchema: listProductsInput,
         annotations: readOnly,
       },
@@ -453,10 +472,41 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
               page.items
                 .map((p) => {
                   const gtin = p.gtin ? `, gtin ${p.gtin}` : "";
-                  return `${p.name} ${moneyText(p.price)} (id ${p.id}${gtin}, ${AVAILABILITY_WORDS[p.availability]})`;
+                  const age = p.age_restricted ? `, ${p.age_restricted.label}` : "";
+                  return `${p.name} ${productPriceText(p)} (id ${p.id}${gtin}, ${AVAILABILITY_WORDS[p.availability]}${age})`;
                 })
                 .join("; ") || none,
             structured: page,
+          };
+        }),
+    );
+    server.registerTool(
+      "quote_shipping",
+      {
+        title: "Shipping quote",
+        description:
+          "What shipping a basket to a place costs, by the business's own rate tables (a read, never an order): for each shipping profile its products ship under, the zone the place is in and each service with its fee in minor units (null with why: id_check, currency, weight_missing, too_heavy, over_bands). Products that do not ship, or whose price is not fixed, are listed in unquoted. An age-restricted product goes only by a service whose carrier checks ID at handover. The fee is still the business's to confirm on the order.",
+        inputSchema: quoteShippingInput,
+        annotations: readOnly,
+      },
+      (args) =>
+        run(async () => {
+          const q = await caps.quoteShipping(args);
+          const lines = q.quotes.map((g) => {
+            if (g.why === "no_profile") return "The business has not set shipping rates for these products.";
+            if (g.why === "not_shipped_there") return "The business does not ship these products there.";
+            const services = g.services
+              .map(
+                (sv) =>
+                  `${sv.name}: ${sv.fee ? moneyText(sv.fee) : `not available (${sv.why})`}, ${sv.transit_days.min}–${sv.transit_days.max} days`,
+              )
+              .join("; ");
+            return `${g.zone}: ${services}`;
+          });
+          const unquoted = q.unquoted.map((u) => `${u.product_id}: ${u.why.replace(/_/g, " ")}`);
+          return {
+            text: [...lines, ...unquoted, ...q.notes].join(" ") || "Nothing to quote.",
+            structured: q,
           };
         }),
     );
@@ -1172,6 +1222,26 @@ export function createOwnerMcpHandler({ caps, version }: McpDeps): McpHttpHandle
         guarded("archive_product", async () => {
           const r = await once(idempotency_key, "products.archive", input, (c) => caps.setup.archiveProduct(c, input));
           return { text: `Product archived.${again(r.replayed)}`, structured: r.result };
+        }),
+    );
+    server.registerTool(
+      "upsert_product_group",
+      {
+        title: "Make or rename a product group",
+        description:
+          "A product with variants (sizes, colours, roasts): without group_id makes the group, with it renames it. Then give each variant its group_id and options (upsert_product), every variant the same option keys and no two alike. Prices, ages and shipping stay the owner's.",
+        inputSchema: productGroupInput.extend({ idempotency_key: idempotencyKey }),
+        annotations: writes,
+      },
+      ({ idempotency_key, ...input }) =>
+        guarded("upsert_product_group", async () => {
+          const r = await once(idempotency_key, "product_groups.upsert", input, (c) =>
+            caps.setup.upsertProductGroup(c, input),
+          );
+          return {
+            text: `Product group ${r.result.title} (${r.result.id}).${again(r.replayed)}`,
+            structured: r.result,
+          };
         }),
     );
     server.registerTool(

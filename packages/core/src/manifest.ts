@@ -42,7 +42,8 @@ export function buildManifest(input: {
   carried?: { readonly accepted: boolean } | undefined;
   /**
    * Whether the business lists its products on networks now (ADR-029): then the manifest names its
-   * signed feed and its products by id (`catalogue`), where a network reads them. Absent, it lists none.
+   * signed feed and its products by id (`catalogue`), where a network reads them, the catalogue versions
+   * it serves (`[1, 2]`) and its signed policies document. Absent, it lists none.
    * Named only on an https origin, which is all a network reads a catalogue from (the spec's
    * `catalogue` URLs are https): an instance answering over plain http, such as one just installed on
    * a laptop, leaves it out and serves the rest of its manifest.
@@ -93,8 +94,17 @@ export function buildManifest(input: {
           })),
         }
       : {}),
+    // Both catalogue versions, and the signed policies document version 2 items name (§4.18 as amended):
+    // a reader that names no version reads version 1, as every reader did before version 2.
     ...(input.catalogue && origin.startsWith("https://")
-      ? { catalogue: { feed: `${origin}/v1/catalogue/changes`, items: `${origin}/v1/catalogue/items` } }
+      ? {
+          catalogue: {
+            feed: `${origin}/v1/catalogue/changes`,
+            items: `${origin}/v1/catalogue/items`,
+            versions: [1, 2],
+            policies: `${origin}/v1/catalogue/policies`,
+          },
+        }
       : {}),
     ...(input.stay && (input.itemTypes ?? []).includes("stay") && !elsewhere.some((d) => d.item_type === "stay")
       ? { stay: input.stay }

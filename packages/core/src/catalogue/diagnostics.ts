@@ -1,11 +1,17 @@
-import { gtinDisplay, isPlaceholderTitle, normaliseGtin } from "@surfingdog/spec";
+import {
+  CATALOGUE_V2_PROBLEMS,
+  type CatalogueProblem,
+  gtinDisplay,
+  isPlaceholderTitle,
+  normaliseGtin,
+} from "@surfingdog/spec";
 import type { ProductRow } from "./publish";
 
 /**
  * What needs a look (ADR-029, Track 1): plain words for the owner beside each product, Merchant
  * Center style, computed on read and never stored. A barcode that did not pass the check and why, a
  * barcode the owner's AI proposed, why a product is on no network, and each network's own reason for
- * holding one back. Pictures, descriptions, ranges and unit prices come later.
+ * holding one back; and what catalogue version 2 withholds or leaves out, in a network's own codes and words.
  */
 
 export type NoteCode =
@@ -20,13 +26,22 @@ export type NoteCode =
   | "price_missing"
   | "price_zero"
   | "sample_name"
-  | "network_held";
+  | "network_held"
+  /** What catalogue version 2 withholds or leaves out of it (`problem`: a code of `CATALOGUE_V2_PROBLEMS`). */
+  | "catalogue_problem";
 
 export interface ProductNote {
   readonly code: NoteCode;
   readonly words: string;
   /** What the owner can do about it in one tap, where there is one. */
   readonly action?: "confirm_barcode";
+  /** For `catalogue_problem`: the code, as a network's held reasons and `check_catalogue` name it. */
+  readonly problem?: CatalogueProblem;
+}
+
+/** Whether a version 2 problem keeps the product off networks (`hold`), rather than leaving a member out. */
+export function isHold(code: CatalogueProblem): boolean {
+  return CATALOGUE_V2_PROBLEMS[code].effect === "hold";
 }
 
 /** A network's reason for holding one product back, from its answer to a signed ping. */
@@ -35,7 +50,8 @@ export interface HeldReason {
   readonly why: string;
 }
 
-type NoteRow = Pick<ProductRow, "name" | "price" | "active" | "listed" | "source" | "gtin" | "gtinGiven">;
+type NoteRow = Pick<ProductRow, "name" | "price" | "active" | "listed" | "source" | "gtin" | "gtinGiven"> &
+  Partial<Pick<ProductRow, "priceModel">>;
 
 /** Where a barcode is put right: there is no box to type one in here (ADR-029). */
 const FIX_AT_SOURCE =
@@ -97,14 +113,19 @@ const hostOf = (origin: string) => {
 };
 
 /** One product's notes, in the order the owner should read them. */
-export function productNotes(row: NoteRow, held: readonly HeldReason[]): ProductNote[] {
+export function productNotes(
+  row: NoteRow,
+  held: readonly HeldReason[],
+  v2: readonly CatalogueProblem[] = [],
+): ProductNote[] {
   const out: ProductNote[] = [];
   if (row.gtinGiven) {
     const note = barcodeNote(row.gtinGiven);
     // A proposal shows even beside a barcode it would replace; a problem only where there is none.
     if (note && (note.code === "gtin_proposed" || !row.gtin)) out.push(note);
   }
-  if (row.price.value <= 0) {
+  // A price on request has none to look at.
+  if (row.price.value <= 0 && row.priceModel !== "quote") {
     if (row.active !== 1 && row.source !== "builtin") {
       out.push({ code: "price_missing", words: "No price yet, so it is on no network." });
     } else if (row.active === 1) {
@@ -113,6 +134,10 @@ export function productNotes(row: NoteRow, held: readonly HeldReason[]): Product
   }
   if (row.active === 1 && isPlaceholderTitle(row.name)) {
     out.push({ code: "sample_name", words: "Its name looks like a template's sample." });
+  }
+  for (const code of v2) {
+    const words = CATALOGUE_V2_PROBLEMS[code].words;
+    out.push({ code: "catalogue_problem", problem: code, words: isHold(code) ? `On no network: ${words}` : words });
   }
   for (const h of held) {
     out.push({ code: "network_held", words: `${hostOf(h.network)} holds it back: ${h.why}` });

@@ -137,9 +137,9 @@ describe("pages", () => {
     expect(again.seen.flat()).toEqual([...(seen[1] as string[]), ...added.map((r) => r.id)]);
   });
 
-  it("refuse a cursor they did not give", async () => {
+  it("refuse a cursor they did not give, with the spec's code", async () => {
     const { caps } = await setup();
-    await expect(read(caps, "not-a-cursor")).rejects.toMatchObject({ code: "invalid_input" });
+    expect(await read(caps, "not-a-cursor")).toMatchObject({ status: 422, code: "cursor_invalid" });
   });
 
   it("give archived, kept-off and zero-priced products as withdrawn, never their details", async () => {

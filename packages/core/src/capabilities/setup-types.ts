@@ -1,4 +1,19 @@
+import {
+  AGE_BY_COUNTRY_MAX,
+  AGE_MAX,
+  AGE_MIN,
+  CATALOGUE_GROUP_POSITION_MAX,
+  CATALOGUE_MULTIPACK_MAX,
+  CATALOGUE_OPTIONS_MAX,
+  catalogueFulfilMethodSchema,
+  catalogueMediaSchema,
+  catalogueOptionSchema,
+  cataloguePriceModelSchema,
+  catalogueUnitPriceSchema,
+  catalogueWeightSchema,
+} from "@surfingdog/spec";
 import { z } from "zod";
+import { policyIdSchema } from "../catalogue/policies";
 import { isoDateTime, withdrawalFlagSchema } from "../domain/types";
 import { presetKeySchema } from "../rules/presets/index";
 import { ruleDefinitionSchema } from "../rules/schema";
@@ -129,11 +144,17 @@ export const updateServiceInput = patchOf(serviceInput).extend({
 });
 export const serviceIdInput = z.object({ service_id: z.string().min(1) });
 
+/** A price of catalogue version 2's: at least 1 minor unit, never 0 (the founder, 2 November 2026). */
+const listedMoney = z.object({ value: z.number().int().min(1), currency: currencySchema });
+
 export const productInput = z.object({
   sku: z.string().max(64).optional(),
   name: z.string().min(1).max(200),
-  description: z.string().max(2000).optional(),
-  price: z.object({ value: z.number().int().min(0), currency: currencySchema }),
+  description: z.string().max(5000).optional(),
+  price: z
+    .object({ value: z.number().int().min(0), currency: currencySchema })
+    .optional()
+    .describe("In minor units. Required, but for a price on request (price_model quote), which has none."),
   stock: z.number().int().min(0).nullable().optional().describe("null = not tracked"),
   active: z.boolean().default(true),
   withdrawal: withdrawalFlagSchema
@@ -188,9 +209,137 @@ export const productInput = z.object({
     .boolean()
     .optional()
     .describe("false keeps it off networks; it stays on sale at your own doors. Only the owner sets it."),
+  /* Catalogue version 2 (protocol §4.18 as amended). Money, age and policy: the owner's in person. */
+  group_id: z
+    .string()
+    .min(1)
+    .max(64)
+    .nullable()
+    .optional()
+    .describe("The product group it is a variant of (upsert_product_group), with options; null takes it out."),
+  group_position: z
+    .number()
+    .int()
+    .min(1)
+    .max(CATALOGUE_GROUP_POSITION_MAX)
+    .optional()
+    .describe("Where it comes among its group's variants, from 1; the next one when left out."),
+  options: z
+    .array(catalogueOptionSchema)
+    .min(1)
+    .max(CATALOGUE_OPTIONS_MAX)
+    .nullable()
+    .optional()
+    .describe(
+      "What sets this variant apart: [{key, name, value}], key from vocab/option-keys.json (color, size, flavour…) or your own lower-case word. Every variant of a group names the same keys, and no two are alike.",
+    ),
+  price_model: cataloguePriceModelSchema
+    .optional()
+    .describe(
+      "fixed (the price), from (the lowest), range (to price_max) or quote (on request, no price). The owner's.",
+    ),
+  price_max: listedMoney.nullable().optional().describe("range only: the highest price, above price. The owner's."),
+  list_price: listedMoney
+    .nullable()
+    .optional()
+    .describe(
+      "fixed only: the 'was' price, above price; kept only when it held at or above it for the 30 days before the price went below it. The owner's.",
+    ),
+  unit_price: catalogueUnitPriceSchema
+    .nullable()
+    .optional()
+    .describe(
+      "fixed only: the net quantity sold, {measure: {value, unit}, reference: {value, unit}} (500 g per 1 kg). The owner's.",
+    ),
+  tax_included: z
+    .boolean()
+    .nullable()
+    .optional()
+    .describe(
+      "Whether this product's prices include tax, where it is not what your catalogue says; null for the catalogue's. The owner's.",
+    ),
+  availability: z
+    .enum(["preorder", "backorder", "made_to_order"])
+    .nullable()
+    .optional()
+    .describe(
+      "Where the stock cannot say it: preorder (until available_from), backorder (orderable at none), made_to_order; null, as its stock says. The owner's.",
+    ),
+  available_from: isoDateTime.nullable().optional().describe("preorder (required) or backorder: when it comes."),
+  available_until: isoDateTime.nullable().optional().describe("The last moment it can be ordered: a season's end."),
+  few_left: z
+    .number()
+    .int()
+    .min(1)
+    .max(10_000)
+    .nullable()
+    .optional()
+    .describe("Publish 'few left' at or below this many in stock (never the count); null never. The owner's."),
+  multipack: z
+    .number()
+    .int()
+    .min(1)
+    .max(CATALOGUE_MULTIPACK_MAX)
+    .nullable()
+    .optional()
+    .describe("This many identical units of one item sold together; null or 1 for one. The owner's."),
+  is_bundle: z
+    .boolean()
+    .optional()
+    .describe("Different items sold together at one price (a hamper, a kit). The owner's."),
+  media: z
+    .array(catalogueMediaSchema)
+    .max(9)
+    .nullable()
+    .optional()
+    .describe("More pictures and videos after image_url, [{type, url, alt?}], linked and never copied."),
+  age_restricted: z
+    .object({
+      min_age: z.number().int().min(AGE_MIN).max(AGE_MAX),
+      kind: z
+        .string()
+        .regex(/^[a-z][a-z0-9_]{0,39}$/)
+        .describe("A kind of vocab/age-kinds.json: alcohol, blades, fireworks, tobacco_nicotine…"),
+      by_country: z
+        .record(z.string().regex(/^[A-Z]{2}$/), z.number().int().min(AGE_MIN).max(AGE_BY_COUNTRY_MAX))
+        .optional(),
+    })
+    .nullable()
+    .optional()
+    .describe(
+      "Sold only above an age, ID checked at handover; you pick the age. Tobacco and nicotine, cannabis and weapons stay on sale here and are kept off networks. Only the owner in person sets it.",
+    ),
+  fulfil_methods: z
+    .array(catalogueFulfilMethodSchema)
+    .min(1)
+    .max(6)
+    .nullable()
+    .optional()
+    .describe(
+      "How it reaches the buyer: pickup, reserve_pickup, local_delivery, shipping, dine_in, digital. The owner's.",
+    ),
+  shipping_profile: policyIdSchema
+    .nullable()
+    .optional()
+    .describe("A shipping profile of yours; null for the default. The owner's."),
+  weight: catalogueWeightSchema
+    .nullable()
+    .optional()
+    .describe("As packed, {value, unit} in g, kg, oz or lb. The owner's."),
+  return_policy: policyIdSchema
+    .nullable()
+    .optional()
+    .describe("A return policy of yours; null for the default. The owner's."),
 });
 export const updateProductInput = patchOf(productInput).extend({ product_id: z.string().min(1) });
 export const productIdInput = z.object({ product_id: z.string().min(1) });
+
+/** A product group: made without group_id, renamed with it. Its title is the product's, without any option. */
+export const productGroupInput = z.object({
+  group_id: z.string().min(1).max(64).optional(),
+  title: z.string().trim().min(1).max(150).describe("The product's title, without any variant's options: Moka pot."),
+});
+export type ProductGroupInput = z.infer<typeof productGroupInput>;
 
 /**
  * The owner's floors (ADR-018 §4): the lowest price the owner's AI, rules and another system's key

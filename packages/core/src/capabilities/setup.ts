@@ -3,6 +3,16 @@ import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
 import { assertNoLeak, PUBLISHED, stringsIn } from "../access/leaks";
 import { isOwnerOrSystem } from "../access/outbound";
 import { NEXT_CATALOGUE_SEQ, storedLink } from "../catalogue/identity";
+import { priceRecordStatement } from "../catalogue/v2";
+import {
+  changedOwnerField,
+  checkProductV2,
+  mergedRow,
+  V2_OWNER_FIELDS,
+  v2InsertValues,
+  v2Owners,
+  v2PatchColumns,
+} from "../catalogue/writes";
 import { businessFacts } from "../customer/audience";
 import { customerLang } from "../customer/lang";
 import type { Db } from "../db";
@@ -21,6 +31,7 @@ import {
   business,
   itemEvents,
   items,
+  productGroups,
   products,
   rules as rulesTable,
   services,
@@ -328,13 +339,32 @@ export class SetupCapabilities {
       throw listingOwners(input.listed === false ? "listed" : "no_gtin");
     }
     const ident = productIdentity(caller, input, null);
+    // Catalogue version 2: the money, age and policy fields are the owner's in person.
+    const own = changedOwnerField(input, null);
+    if (own && !isPerson(caller)) throw v2Owners(own);
+    const price =
+      input.price ?? (input.price_model === "quote" ? { value: 0, currency: await this.currency() } : undefined);
+    if (!price) {
+      throw new WriteError(
+        "invalid_input",
+        "price: give a price in minor units, or make its price on request (price_model quote)",
+        {
+          fields: [{ path: "price", problem: "missing", message: "a price, or price_model quote" }],
+        },
+      );
+    }
+    const draft = mergedRow(
+      { ...EMPTY_PRODUCT, id, name: input.name, price, stock: input.stock ?? null, createdAt: now, updatedAt: now },
+      input,
+    );
+    const { groupPosition } = await checkProductV2(this.db, draft, now, { ...input, price });
     try {
       await this.db.orm.insert(products).values({
         id,
         sku: input.sku ?? null,
         name: input.name,
         description: input.description ?? null,
-        price: input.price,
+        price,
         stock: input.stock ?? null,
         active: input.active && !held ? 1 : 0,
         ...(input.withdrawal ? { withdrawal: input.withdrawal } : {}),
@@ -345,6 +375,8 @@ export class SetupCapabilities {
         ...(input.condition ? { condition: input.condition } : {}),
         ...(input.no_gtin === true ? { noGtin: 1 } : {}),
         ...(input.listed === false ? { listed: 0 } : {}),
+        ...v2InsertValues(input),
+        ...(groupPosition !== undefined ? { groupPosition } : {}),
         catalogueSeq: sql.raw(NEXT_CATALOGUE_SEQ),
         createdAt: now,
         updatedAt: now,
@@ -352,6 +384,7 @@ export class SetupCapabilities {
     } catch (error) {
       throw skuTaken(error);
     }
+    await this.db.batch([priceRecordStatement(now, { id })]);
     return this.product(id);
   }
 
@@ -383,6 +416,16 @@ export class SetupCapabilities {
     }
     if (patch.negotiable !== undefined && !isPerson(caller)) {
       if ((await this.product(product_id)).negotiable !== (patch.negotiable ? 1 : 0)) throw negotiableOwners();
+    }
+    // Catalogue version 2: the money, age and policy fields are the owner's in person, and the product as
+    // the write leaves it is checked as a network would read it.
+    let groupPosition: number | undefined;
+    if (V2_TOUCHED.some((k) => patch[k] !== undefined) || patch.price !== undefined) {
+      const stored = await this.product(product_id);
+      const own = changedOwnerField(patch, stored);
+      if (own && !isPerson(caller)) throw v2Owners(own);
+      const now = nowOf(caller);
+      ({ groupPosition } = await checkProductV2(this.db, mergedRow(stored, patch), now, patch));
     }
     if (isOwnerAssistant(caller) && (patch.price !== undefined || patch.active === true)) {
       const stored = await this.product(product_id);
@@ -417,6 +460,10 @@ export class SetupCapabilities {
           image_url: ident.imageUrl,
           no_gtin: patch.no_gtin === undefined ? undefined : patch.no_gtin ? 1 : 0,
           listed: patch.listed === undefined ? undefined : patch.listed ? 1 : 0,
+          ...v2PatchColumns(patch),
+          ...(groupPosition !== undefined ? { group_position: groupPosition } : {}),
+          // Out of its group: no position in it either.
+          ...(patch.group_id === null ? { group_position: null, options: null } : {}),
         },
         nowOf(caller),
         "product_id",
@@ -424,7 +471,57 @@ export class SetupCapabilities {
     } catch (error) {
       throw skuTaken(error);
     }
+    if (patch.price !== undefined) await this.db.batch([priceRecordStatement(nowOf(caller), { id: product_id })]);
     return this.product(product_id);
+  }
+
+  /** The business's product groups, by title: the products each variant of them names (`group_id`). */
+  async listProductGroups(caller: Caller): Promise<(typeof productGroups.$inferSelect)[]> {
+    requireOwner(caller);
+    return this.db.orm.select().from(productGroups).orderBy(asc(productGroups.title), asc(productGroups.id));
+  }
+
+  /**
+   * A product group (catalogue version 2): made without `group_id`, renamed with it. Its variants are the
+   * products that name it, each with its options. A new title moves every variant in the feed, since each
+   * carries it. The owner, or their AI: a title is no money and no promise.
+   */
+  async upsertProductGroup(caller: Caller, input: S.ProductGroupInput): Promise<typeof productGroups.$inferSelect> {
+    requireOwner(caller);
+    await this.published(caller, [input.title]);
+    const now = nowOf(caller);
+    if (!input.group_id) {
+      const id = ulid(now);
+      await this.db.orm.insert(productGroups).values({ id, title: input.title, createdAt: now, updatedAt: now });
+      return this.productGroup(id);
+    }
+    const group = await this.productGroup(input.group_id);
+    if (group.title !== input.title) {
+      await this.db.batch([
+        {
+          sql: "UPDATE product_groups SET title = ?, updated_at = ? WHERE id = ?",
+          params: [input.title, now, group.id],
+          method: "run",
+        },
+        {
+          sql: `UPDATE products SET catalogue_seq = ${NEXT_CATALOGUE_SEQ}, updated_at = ? WHERE group_id = ?`,
+          params: [now, group.id],
+          method: "run",
+        },
+      ]);
+    }
+    return this.productGroup(group.id);
+  }
+
+  private async productGroup(id: string): Promise<typeof productGroups.$inferSelect> {
+    const [row] = await this.db.orm.select().from(productGroups).where(eq(productGroups.id, id));
+    if (!row) throw unknown("group_id", "unknown product group");
+    return row;
+  }
+
+  /** The business's own currency, for a price on request kept without one. */
+  private async currency(): Promise<string> {
+    return (await this.profile()).currency;
   }
 
   async archiveProduct(caller: Caller, input: { product_id: string }): Promise<ProductRow> {
@@ -858,6 +955,62 @@ function requireOwnerInPerson(caller: Caller, what: string): void {
     { details: { reason: "owner_in_person", ask_owner: true } },
   );
 }
+
+/** The version 2 fields a product write may carry: any of them has the product checked again. */
+const V2_TOUCHED = ["group_id", "group_position", "options", "media", ...V2_OWNER_FIELDS] as const;
+
+/** A product as a new row starts, before what the write gives: version 1's and version 2's defaults. */
+const EMPTY_PRODUCT: typeof products.$inferSelect = {
+  id: "",
+  locationId: null,
+  sku: null,
+  name: "",
+  description: null,
+  price: { value: 0, currency: "EUR" },
+  stock: null,
+  source: "builtin",
+  externalId: null,
+  active: 1,
+  withdrawal: "standard",
+  negotiable: 1,
+  gtin: null,
+  gtinGiven: null,
+  noGtin: 0,
+  brand: null,
+  mpn: null,
+  condition: "new",
+  url: null,
+  imageUrl: null,
+  sourceCategory: null,
+  listed: 1,
+  catalogueSeq: 0,
+  createdAt: 0,
+  updatedAt: 0,
+  seenAt: null,
+  menu: null,
+  soldOutOn: null,
+  groupId: null,
+  groupPosition: null,
+  options: null,
+  priceModel: "fixed",
+  priceMax: null,
+  listPrice: null,
+  unitPrice: null,
+  taxIncluded: null,
+  availability: null,
+  availableFrom: null,
+  availableUntil: null,
+  fewLeft: null,
+  multipack: null,
+  isBundle: 0,
+  media: null,
+  ageRestricted: null,
+  fulfilMethods: null,
+  shippingProfileId: null,
+  weight: null,
+  returnPolicyId: null,
+  timedAt: 0,
+};
 
 function unknown(path: string, message: string): WriteError {
   return new WriteError("invalid_input", message, { fields: [{ path, problem: "invalid", message }] });

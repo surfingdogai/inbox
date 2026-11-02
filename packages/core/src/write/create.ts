@@ -240,6 +240,7 @@ export async function createItem(
           input.type,
           parsed.data as Record<string, unknown>,
           isCustomer(caller) ? input.pricing : undefined,
+          nowOf(caller),
         )
       : { payload: parsed.data as Record<string, unknown>, unpriced: false };
   // What is stored is read back through the same schema: a priced payload it would refuse (a total

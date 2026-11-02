@@ -171,6 +171,66 @@ export const products = sqliteTable(
     menu: text("menu", { mode: "json" }),
     /** The business's local date (YYYY-MM-DD) it was marked sold out for: back on sale the next day. */
     soldOutOn: text("sold_out_on"),
+    /*
+     * Catalogue version 2 (0035, ADR-next, protocol §4.18 as amended). Every one is the owner's or its
+     * source's, and absent means what version 1 always meant: one fixed price, available as its stock says.
+     */
+    /** The product group it is a variant of (`product_groups`), with `options`; null for a product of its own. */
+    groupId: text("group_id"),
+    /** Where it comes among its group's variants, from 1; null for a product of its own. */
+    groupPosition: integer("group_position"),
+    /** What sets it apart in its group, `[{key, name, value}]` (`vocab/option-keys.json`); null with no group. */
+    options: text("options", { mode: "json" }).$type<{ key: string; name: string; value: string }[]>(),
+    /** `fixed` (the price), `from` (the lowest), `range` (to `price_max`) or `quote` (no price at all). */
+    priceModel: text("price_model").notNull().default("fixed"),
+    /** `range` only: the highest price, above `price`. */
+    priceMax: text("price_max", { mode: "json" }).$type<{ value: number; currency: string }>(),
+    /** `fixed` only: the "was" price, published only while the 30-day rule holds (`wasPriceOf`). */
+    listPrice: text("list_price", { mode: "json" }).$type<{ value: number; currency: string }>(),
+    /** `fixed` only: the net quantity sold, `{measure, reference}`; the price per unit is worked out. */
+    unitPrice: text("unit_price", { mode: "json" }).$type<{
+      measure: { value: number; unit: string };
+      reference: { value: number; unit: string };
+    }>(),
+    /** 1 or 0 where this product's prices are not what `settings.catalogue.taxIncluded` says; else null. */
+    taxIncluded: integer("tax_included"),
+    /**
+     * How it is available where its stock does not say: `preorder` (until `available_from`), `backorder`
+     * (orderable at none) or `made_to_order`; null, as its stock says (`in_stock`, `limited`, `out_of_stock`,
+     * `on_sale`).
+     */
+    availability: text("availability"),
+    /** Milliseconds: when a pre-order or a back-order comes. */
+    availableFrom: integer("available_from"),
+    /** Milliseconds: the last moment it can be ordered; past it, it is withdrawn from the feed. */
+    availableUntil: integer("available_until"),
+    /** The owner's own few-left mark: at or below it (and above 0), `limited`. Null: never published. */
+    fewLeft: integer("few_left"),
+    /** This many identical units of one item sold together (spec 0.12.1); null for one. */
+    multipack: integer("multipack"),
+    /** 1: different items sold together at one price (a hamper, a set menu). */
+    isBundle: integer("is_bundle").notNull().default(0),
+    /** Pictures and videos after the main picture (`image_url`), `[{type, url, alt?}]`, linked, never copied. */
+    media: text("media", { mode: "json" }).$type<{ type: "image" | "video"; url: string; alt?: string }[]>(),
+    /** `{min_age, kind, by_country?}`: sold only above an age, ID checked at handover. The owner's in person. */
+    ageRestricted: text("age_restricted", { mode: "json" }).$type<{
+      min_age: number;
+      kind: string;
+      by_country?: Record<string, number>;
+    }>(),
+    /** How it reaches the buyer (`pickup`, `shipping`…); null when the owner has not said. */
+    fulfilMethods: text("fulfil_methods", { mode: "json" }).$type<string[]>(),
+    /** A shipping profile (`shipping_profiles.id`); null for the default. The owner's in person. */
+    shippingProfileId: text("shipping_profile_id"),
+    /** As packed for sending, `{value, unit}`: what a weight rate is worked out from. */
+    weight: text("weight", { mode: "json" }).$type<{ value: number; unit: string }>(),
+    /** A return policy (`return_policies.id`); null for the default. The owner's in person. */
+    returnPolicyId: text("return_policy_id"),
+    /**
+     * The last moment the feed gave it a new position because time passed (its `available_until`, a
+     * pre-order's `available_from`), so it is given one once for each (`catalogueClockStatements`).
+     */
+    timedAt: integer("timed_at").notNull().default(0),
   },
   (t) => [
     unique("products_sku").on(t.sku),
@@ -178,8 +238,76 @@ export const products = sqliteTable(
     index("products_catalogue_seq").on(t.catalogueSeq, t.id),
     index("products_gtin").on(t.gtin).where(sql`${t.gtin} IS NOT NULL`),
     index("products_source_seen").on(t.source, t.seenAt),
+    index("products_group").on(t.groupId, t.groupPosition).where(sql`${t.groupId} IS NOT NULL`),
+    index("products_until").on(t.availableUntil).where(sql`${t.availableUntil} IS NOT NULL`),
+    index("products_from").on(t.availableFrom).where(sql`${t.availableFrom} IS NOT NULL`),
   ],
 );
+
+/**
+ * A product and its variants (0035, catalogue version 2): one row a product, its variants the products
+ * that name it (`products.group_id`), each with its options. `title` is the product's, without any
+ * variant's options. A feed's own group id is kept as `external_id` under its `source`, so a re-import
+ * finds the group again; a group somebody made here is `builtin`.
+ */
+export const productGroups = sqliteTable(
+  "product_groups",
+  {
+    id: id(),
+    title: text("title").notNull(),
+    source: text("source").notNull().default("builtin"),
+    externalId: text("external_id"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex("product_groups_source_external").on(t.source, t.externalId)],
+);
+
+/**
+ * Every price a product had, from `at` until the next (0035): the inbox's own record, which a "was"
+ * price is checked against before it is published (`wasPriceOf`, the 30-day rule). A row is added only
+ * when the price differs from the last one kept (`priceRecordStatement`). Never public.
+ */
+export const productPrices = sqliteTable(
+  "product_prices",
+  {
+    productId: text("product_id").notNull(),
+    at: integer("at").notNull(),
+    value: integer("value").notNull(),
+    currency: text("currency").notNull(),
+  },
+  (t) => [index("product_prices_product").on(t.productId, t.at)],
+);
+
+/**
+ * The business's own shipping rate tables (0035; `shippingProfileSchema` of the spec's policies
+ * document): where it ships, by which services, at what rates. `zones` is the spec's shape, JSON. One
+ * may be the default (`is_default`). The owner's in person.
+ */
+export const shippingProfiles = sqliteTable("shipping_profiles", {
+  id: id(),
+  name: text("name").notNull(),
+  isDefault: integer("is_default").notNull().default(0),
+  zones: text("zones", { mode: "json" }).notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+/**
+ * The business's return policies (0035; `returnPolicySchema`): `terms` is the spec's shape without its
+ * id, name and default, JSON. `follows_settings` 1: its window and who pays the postage are read from the
+ * settings' `returns` as they are now (the policy the migration made of them, `standard`), until the
+ * owner writes its terms. The owner's in person.
+ */
+export const returnPolicies = sqliteTable("return_policies", {
+  id: id(),
+  name: text("name").notNull(),
+  isDefault: integer("is_default").notNull().default(0),
+  terms: text("terms", { mode: "json" }).notNull(),
+  followsSettings: integer("follows_settings").notNull().default(0),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
 
 /**
  * The lowest price the owner lets automation go to, per product or service (0016, ADR-018 §4): the

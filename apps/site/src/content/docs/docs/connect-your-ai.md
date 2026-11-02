@@ -91,7 +91,8 @@ There are 44 owner tools:
 | `stop_customer_networks` | For a customer who asks not to be known to booking networks: from then on nothing about them goes to any network. |
 | `get_profile`, `update_profile` | The business's name, domain, time zone, currency and languages. The currency is yours to change. |
 | `list_services`, `upsert_service`, `archive_service` | Bookable services. A price is per booking unless it is per person. A service your AI adds with a price is saved unpublished for you to check; it cannot change a price or publish a priced service. |
-| `list_products`, `upsert_product`, `archive_product` | Products. A product your AI adds is saved unpublished for you to check; it cannot change a price or publish a product. |
+| `list_products`, `upsert_product`, `archive_product` | Products. A product your AI adds is saved unpublished for you to check; it cannot change a price or publish a product, nor how a price is meant, a "was" or unit price, an age, or a product's shipping and return terms. |
+| `upsert_product_group` | A product with variants (sizes, colours, roasts): your AI may make the group and give each variant its options. |
 | `get_availability`, `set_opening_hours`, `clear_service_hours`, `set_closures` | Opening hours and closed days. |
 | `list_rules`, `list_rule_presets`, `apply_rule_preset`, `upsert_rule`, `delete_rule`, `test_rule` | What happens on its own. |
 | `list_webhooks`, `create_webhook`, `update_webhook`, `rotate_webhook_secret`, `delete_webhook`, `send_test_event`, `list_webhook_deliveries`, `replay_webhook_delivery`, `replay_missing_webhook_deliveries`, `list_events` | Where events go, and the event stream. Adding, changing, rotating or removing an endpoint is yours, in Settings → Integrations: your AI can list, test, replay and pause one. See [Webhooks](/docs/webhooks/). |

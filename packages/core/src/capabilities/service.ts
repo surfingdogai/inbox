@@ -1,4 +1,5 @@
 import type { MailOut, Statement } from "@surfingdog/platform";
+import type { ReturnPolicy as SpecReturnPolicy } from "@surfingdog/spec";
 import {
   type DiscoveryAnswer,
   type DoorElsewhere,
@@ -13,9 +14,22 @@ import { z } from "zod";
 import { AccessCapabilities } from "../access/keys";
 import { assertNoLeak, PUBLISHED, stringsIn } from "../access/leaks";
 import { isOwnerOrSystem, mayDirectDataOut, ownerOnlyError } from "../access/outbound";
-import { type CatalogueStatus, type HeldReason, productNotes, skuBarcodes } from "../catalogue/diagnostics";
+import { type CatalogueStatus, type HeldReason, isHold, productNotes, skuBarcodes } from "../catalogue/diagnostics";
 import { CatalogueCapabilities } from "../catalogue/feed";
 import { NEXT_CATALOGUE_SEQ } from "../catalogue/identity";
+import {
+  deletePolicy,
+  loadPolicies,
+  type PoliciesState,
+  policyOwners,
+  putReturnPolicy,
+  putShippingProfile,
+  type QuoteShippingInput,
+  quoteBasket,
+  type ReturnPolicyInput,
+  type ShippingProfileInput,
+  type ShippingQuoteAnswer,
+} from "../catalogue/policies";
 import {
   type CatalogueContext,
   listableWhy,
@@ -23,6 +37,7 @@ import {
   publicProduct,
   siteDomains,
 } from "../catalogue/publish";
+import { priceHistory } from "../catalogue/v2";
 import { type OrderPayment, payNowLabel } from "../connectors/agent-pay";
 import { ConnectorCapabilities, registerSyncStep } from "../connectors/capability";
 import { registerPosOrderApplier } from "../connectors/hooks";
@@ -65,6 +80,7 @@ import {
   items,
   parties,
   partyContacts,
+  productGroups,
   products,
   services,
   settings as settingsTable,
@@ -223,18 +239,81 @@ export interface BusinessProfile {
   readonly work?: WorkProfile | undefined;
   /** How a kitchen takes orders and tables (ADR-040, spec `kitchenProfileSchema`): absent when it does not. */
   readonly kitchen?: KitchenProfile | undefined;
+  /**
+   * Some products are sold only above an age, with ID checked at handover (catalogue version 2): the words
+   * an agent shows ("ID checked at handover: 18+" beside each), and the ages. Absent when none is.
+   */
+  readonly age_check?: AgeCheckProfile | undefined;
 }
 
-/** schema.org `MerchantReturnPolicy`: a finite window, how things come back, who pays, a full refund. */
+/**
+ * schema.org `MerchantReturnPolicy`, of the business's default return policy (catalogue version 2's policies
+ * document): its window (finite, unlimited, or no returns, then no days), how things come back, who pays,
+ * and what the buyer has for it. Faulty goods are always the business's (`itemDefectReturnFees`).
+ */
 export interface ReturnPolicy {
   readonly "@type": "MerchantReturnPolicy";
-  readonly returnPolicyCategory: "https://schema.org/MerchantReturnFiniteReturnWindow";
-  readonly merchantReturnDays: number;
-  readonly returnMethod: "https://schema.org/ReturnByMail";
-  readonly returnFees: "https://schema.org/FreeReturn" | "https://schema.org/ReturnFeesCustomerResponsibility";
+  readonly returnPolicyCategory:
+    | "https://schema.org/MerchantReturnFiniteReturnWindow"
+    | "https://schema.org/MerchantReturnUnlimitedWindow"
+    | "https://schema.org/MerchantReturnNotPermitted";
+  readonly merchantReturnDays?: number | undefined;
+  readonly returnMethod?: "https://schema.org/ReturnByMail" | "https://schema.org/ReturnInStore" | undefined;
+  readonly returnFees?:
+    | "https://schema.org/FreeReturn"
+    | "https://schema.org/ReturnFeesCustomerResponsibility"
+    | undefined;
   readonly itemDefectReturnFees: "https://schema.org/FreeReturn";
-  readonly refundType: "https://schema.org/FullRefund";
+  readonly refundType?:
+    | "https://schema.org/FullRefund"
+    | "https://schema.org/ExchangeRefund"
+    | "https://schema.org/StoreCreditRefund"
+    | undefined;
   readonly returnPolicyCountry?: string | undefined;
+}
+
+/** The profile's return policy, from the policies document's default (`standard`, the settings', unless the owner wrote another). */
+function schemaReturnPolicy(policies: PoliciesState, country: string | undefined): ReturnPolicy {
+  const fallback: Omit<SpecReturnPolicy, "id" | "name"> = {
+    eligibility: "window",
+    window_days: 14,
+    resolutions: ["refund"],
+    methods: ["by_post"],
+    return_postage: "customer",
+  };
+  const p = policies.return_policies.find((r) => r.default) ?? policies.return_policies[0] ?? fallback;
+  const S = "https://schema.org/";
+  const country_ = country ? { returnPolicyCountry: country } : {};
+  if (p.eligibility === "not_accepted") {
+    return {
+      "@type": "MerchantReturnPolicy",
+      returnPolicyCategory: `${S}MerchantReturnNotPermitted`,
+      itemDefectReturnFees: `${S}FreeReturn`,
+      ...country_,
+    };
+  }
+  const byPost = p.methods.includes("by_post");
+  return {
+    "@type": "MerchantReturnPolicy",
+    returnPolicyCategory:
+      p.eligibility === "unlimited" ? `${S}MerchantReturnUnlimitedWindow` : `${S}MerchantReturnFiniteReturnWindow`,
+    ...(p.eligibility === "window" && p.window_days !== undefined ? { merchantReturnDays: p.window_days } : {}),
+    returnMethod: byPost ? `${S}ReturnByMail` : `${S}ReturnInStore`,
+    returnFees: !byPost || p.return_postage === "business" ? `${S}FreeReturn` : `${S}ReturnFeesCustomerResponsibility`,
+    itemDefectReturnFees: `${S}FreeReturn`,
+    refundType: p.resolutions.includes("refund")
+      ? `${S}FullRefund`
+      : p.resolutions.includes("exchange")
+        ? `${S}ExchangeRefund`
+        : `${S}StoreCreditRefund`,
+    ...country_,
+  };
+}
+
+/** What the profile says of age-restricted products: the sentence agents show, and the ages the owner set. */
+export interface AgeCheckProfile {
+  readonly sentence: string;
+  readonly min_ages: readonly number[];
 }
 
 export interface Trader {
@@ -876,19 +955,7 @@ export class Capabilities {
       item_types: itemTypes,
       // Price counters (ADR-018 Q1): off out of the box, and a price of the customer's own goes to a person.
       price_negotiable: s.negotiation.priceCounters,
-      return_policy: {
-        "@type": "MerchantReturnPolicy",
-        returnPolicyCategory: "https://schema.org/MerchantReturnFiniteReturnWindow",
-        merchantReturnDays: s.returns.days,
-        returnMethod: "https://schema.org/ReturnByMail",
-        returnFees:
-          s.returns.postage === "business"
-            ? "https://schema.org/FreeReturn"
-            : "https://schema.org/ReturnFeesCustomerResponsibility",
-        itemDefectReturnFees: "https://schema.org/FreeReturn",
-        refundType: "https://schema.org/FullRefund",
-        ...(s.commerce.legal.country ? { returnPolicyCountry: s.commerce.legal.country } : {}),
-      },
+      return_policy: schemaReturnPolicy(await loadPolicies(this.db, s), s.commerce.legal.country || undefined),
       ...(s.commerce.legal.legalName.trim() ? { trader: traderOf(s.commerce.legal) } : {}),
       ...(elsewhere.length ? { doors_elsewhere: elsewhere } : {}),
       ...this.declaredPayments(s.payments),
@@ -896,6 +963,24 @@ export class Capabilities {
       // How a trade takes work (ADR-039): where it goes, emergencies, call-out. Never the area's base.
       ...(itemTypes.includes("quote_request") && workProfile(s) ? { work: workProfile(s) ?? undefined } : {}),
       ...(await this.kitchenProfileOf()),
+      ...(await this.ageCheckOf()),
+    };
+  }
+
+  /** The profile's `age_check`: the ages the owner set on the products on sale, when any is age-restricted. */
+  private async ageCheckOf(): Promise<{ age_check?: AgeCheckProfile }> {
+    const { rows } = await this.db.client.query({
+      sql: `SELECT DISTINCT json_extract(age_restricted, '$.min_age') FROM products
+             WHERE active = 1 AND age_restricted IS NOT NULL ORDER BY 1`,
+      method: "all",
+    });
+    const ages = rows.map((r) => Number(r[0])).filter((n) => Number.isInteger(n));
+    if (!ages.length) return {};
+    return {
+      age_check: {
+        sentence: `Some products are sold only above an age, with ID checked at handover: ${ages.map((a) => `${a}+`).join(", ")}.`,
+        min_ages: ages,
+      },
     };
   }
 
@@ -981,8 +1066,28 @@ export class Capabilities {
         .limit(input.limit + 1),
       this.catalogueContext(),
     ]);
+    // What the page's products name: their groups' titles, and the record a "was" price is checked against.
+    const groupIds = [...new Set(rows.flatMap((r) => (r.groupId ? [r.groupId] : [])))];
+    const [groupRows, history] = await Promise.all([
+      groupIds.length
+        ? this.db.orm
+            .select({ id: productGroups.id, title: productGroups.title })
+            .from(productGroups)
+            .where(inArray(productGroups.id, groupIds))
+        : Promise.resolve([]),
+      priceHistory(
+        this.db,
+        rows.filter((r) => r.listPrice !== null).map((r) => r.id),
+      ),
+    ]);
+    const door = {
+      ...ctx,
+      now: Date.now(),
+      groups: new Map(groupRows.map((g) => [g.id, { title: g.title }])),
+      history,
+    };
     return page(
-      rows.map((r) => publicProduct(r, ctx)),
+      rows.map((r) => publicProduct(r, door)),
       input.limit,
       (r) => r.id,
     );
@@ -1008,13 +1113,16 @@ export class Capabilities {
     }
     const counts = { listed: 0, needs_look: 0, kept_off: 0, off_sale: 0 };
     const withNotes: CatalogueStatus["products"][number][] = [];
+    // What catalogue version 2 withholds or leaves out of each product, in a network's own codes and words.
+    const now = Date.now();
+    const v2 = await this.catalogue.problems(now);
     for (const row of rows) {
       if (row.active !== 1) counts.off_sale++;
       else if (row.listed !== 1) counts.kept_off++;
-      else if (listableWhy(row) === null) counts.listed++;
+      else if (listableWhy(row, now) === null && !v2.get(row.id)?.some(isHold)) counts.listed++;
       // A product the owner keeps off networks, or archived with a price, has nothing to look at here.
       if (row.listed !== 1 || (row.active !== 1 && row.price.value > 0)) continue;
-      const notes = productNotes(row, heldBy.get(row.id) ?? []);
+      const notes = productNotes(row, heldBy.get(row.id) ?? [], v2.get(row.id) ?? []);
       if (notes.length === 0) continue;
       counts.needs_look++;
       withNotes.push({ id: row.id, name: row.name, notes });
@@ -1080,6 +1188,59 @@ export class Capabilities {
     }
     await this.updateSettings(caller, { doc: { catalogue: { skuBarcodes: input.use ? "used" : "not_now" } } });
     return { used };
+  }
+
+  /**
+   * The business's shipping profiles and return policies (catalogue version 2), as its policies document
+   * publishes them, for the owner's page. The owner, their AI or a key may read them; only the owner in
+   * person writes them (`putShippingProfile`, `putReturnPolicy`, `deletePolicy`).
+   */
+  async getPolicies(caller: Caller): Promise<PoliciesState> {
+    if (isCustomer(caller)) throw new WriteError("not_allowed", "this needs the owner");
+    return loadPolicies(this.db);
+  }
+
+  /**
+   * One shipping profile, the owner's in person (its rates are money). Every age-restricted product moves
+   * in the feed with it: whether one may ship depends on its profile having a service that checks ID.
+   */
+  async putShippingProfile(caller: Caller, input: ShippingProfileInput): Promise<PoliciesState> {
+    if (isCustomer(caller)) throw new WriteError("not_allowed", "this needs the owner");
+    if (!isPerson(caller)) throw policyOwners("zones");
+    const now = nowOf(caller);
+    const state = await putShippingProfile(this.db, input, now);
+    await this.db.client.query({
+      sql: `UPDATE products SET catalogue_seq = ${NEXT_CATALOGUE_SEQ}, updated_at = ? WHERE age_restricted IS NOT NULL`,
+      params: [now],
+      method: "run",
+    });
+    return state;
+  }
+
+  /** One return policy, the owner's in person: what every agent tells a buyer before they buy. */
+  async putReturnPolicy(caller: Caller, input: ReturnPolicyInput): Promise<PoliciesState> {
+    if (isCustomer(caller)) throw new WriteError("not_allowed", "this needs the owner");
+    if (!isPerson(caller)) throw policyOwners("terms");
+    return putReturnPolicy(this.db, input, nowOf(caller));
+  }
+
+  /** Takes a shipping profile or a return policy away, the owner's in person; refused while a product names it. */
+  async deletePolicy(
+    caller: Caller,
+    input: { readonly kind: "shipping" | "returns"; readonly id: string },
+  ): Promise<PoliciesState> {
+    if (isCustomer(caller)) throw new WriteError("not_allowed", "this needs the owner");
+    if (!isPerson(caller)) throw policyOwners("id");
+    return deletePolicy(this.db, input.kind, input.id);
+  }
+
+  /**
+   * What shipping a basket to a place costs by the business's own rate tables (`quoteShipping`): a pure
+   * read, for anyone, as the policies document would quote it. Nothing is written and nothing is promised:
+   * an order's delivery fee is still the business's to confirm.
+   */
+  async quoteShipping(input: QuoteShippingInput): Promise<ShippingQuoteAnswer> {
+    return quoteBasket(this.db, input);
   }
 
   /** The business's own site, for the product pages the public view may name (`publish.ts`). */

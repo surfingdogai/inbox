@@ -1,9 +1,13 @@
 import {
   CATALOGUE_SIGNATURE_HEADER,
   type Caller,
+  cataloguePageV2Schema,
+  cataloguePoliciesSchema,
   MANIFEST_PATH,
   manifestSchema,
   type PublicJwk,
+  readCatalogueItemV2,
+  readCataloguePolicies,
   schema,
   ulid,
   verifyCatalogueSignature,
@@ -84,6 +88,8 @@ describe("GET /v1/catalogue/changes", () => {
     expect((await s.manifest()).catalogue).toEqual({
       feed: `${ORIGIN}/v1/catalogue/changes`,
       items: `${ORIGIN}/v1/catalogue/items`,
+      versions: [1, 2],
+      policies: `${ORIGIN}/v1/catalogue/policies`,
     });
     await s.caps.updateSettings(owner, { doc: { catalogue: { listed: false } } });
     const res = await s.app.request(`${ORIGIN}/v1/catalogue/changes`);
@@ -111,10 +117,73 @@ describe("GET /v1/catalogue/changes", () => {
     expect((await s.manifest()).catalogue).toBeUndefined();
   });
 
-  it("refuses a cursor it did not give, and a limit past 500", async () => {
+  it("refuses a cursor it did not give, and a limit past 500, each with the spec's code", async () => {
     const s = await setup();
-    expect((await s.app.request(`${ORIGIN}/v1/catalogue/changes?after=zzz`)).status).toBe(422);
-    expect((await s.app.request(`${ORIGIN}/v1/catalogue/changes?limit=501`)).status).toBe(422);
+    const after = await s.app.request(`${ORIGIN}/v1/catalogue/changes?after=zzz`);
+    expect(after.status).toBe(422);
+    expect(await after.json()).toMatchObject({ code: "cursor_invalid" });
+    const limit = await s.app.request(`${ORIGIN}/v1/catalogue/changes?limit=501`);
+    expect(limit.status).toBe(422);
+    expect(await limit.json()).toMatchObject({ code: "limit_invalid" });
+  });
+});
+
+describe("catalogue version 2 at the door", () => {
+  it("serves version 2 when asked, signed, its items read whole against its signed policies document", async () => {
+    const s = await setup();
+    const url = `${ORIGIN}/v1/catalogue/changes?version=2&limit=500`;
+    const res = await s.app.request(url);
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    const page = cataloguePageV2Schema.parse(JSON.parse(body));
+    const keys = (await s.manifest()).receipt_keys.keys as unknown as PublicJwk[];
+    expect(
+      await verifyCatalogueSignature(res.headers.get(CATALOGUE_SIGNATURE_HEADER) as string, keys, body),
+    ).toMatchObject({
+      url,
+      rev: page.catalogue.rev,
+    });
+    const pol = await s.app.request(`${ORIGIN}/v1/catalogue/policies`);
+    expect(pol.status).toBe(200);
+    expect(pol.headers.get("cache-control")).toBe("public, max-age=300");
+    const polBody = await pol.text();
+    const doc = cataloguePoliciesSchema.parse(JSON.parse(polBody));
+    expect(doc.rev).toBe(page.catalogue.policies_rev);
+    expect(
+      await verifyCatalogueSignature(pol.headers.get(CATALOGUE_SIGNATURE_HEADER) as string, keys, polBody),
+    ).toMatchObject({ as_of: doc.as_of, rev: doc.rev });
+    const again = await s.app.request(`${ORIGIN}/v1/catalogue/policies`, {
+      headers: { "If-None-Match": pol.headers.get("etag") as string },
+    });
+    expect(again.status).toBe(304);
+    const read = readCataloguePolicies(doc);
+    for (const item of page.items) {
+      expect(readCatalogueItemV2(item, { as_of: page.as_of, policies: read })).toMatchObject({
+        state: "listed",
+        dropped: [],
+      });
+    }
+  });
+
+  it("answers a version it does not serve, and a cursor of the other version, with the spec's codes", async () => {
+    const s = await setup();
+    const v3 = await s.app.request(`${ORIGIN}/v1/catalogue/changes?version=3`);
+    expect(v3.status).toBe(422);
+    expect(await v3.json()).toMatchObject({ code: "version_unsupported" });
+    const items = await s.app.request(`${ORIGIN}/v1/catalogue/items?version=2&ids=${s.id},nope`);
+    expect(await items.json()).toMatchObject({ version: 2, items: [{ id: s.id, state: "listed" }], missing: ["nope"] });
+  });
+
+  it("quotes shipping by the business's own rates, a read anyone may make", async () => {
+    const s = await setup();
+    const res = await s.app.request(`${ORIGIN}/v1/shipping/quote`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lines: [{ product_id: s.id, quantity: 1 }], destination: { country: "BR" } }),
+    });
+    expect(res.status).toBe(200);
+    // No shipping profile yet: the business has not set rates.
+    expect(await res.json()).toMatchObject({ quotes: [{ why: "no_profile", product_ids: [s.id] }], unquoted: [] });
   });
 });
 

@@ -523,15 +523,21 @@ export const businessProfileSchema = profileSchema.extend({
     .looseObject({
       "@type": z.literal("MerchantReturnPolicy"),
       returnPolicyCategory: z.string(),
-      merchantReturnDays: z.number().int(),
-      returnMethod: z.string(),
-      returnFees: z.string(),
+      merchantReturnDays: z.number().int().optional(),
+      returnMethod: z.string().optional(),
+      returnFees: z.string().optional(),
       itemDefectReturnFees: z.string(),
-      refundType: z.string(),
+      refundType: z.string().optional(),
       returnPolicyCountry: z.string().optional(),
     })
     .optional()
-    .describe("The business's return policy, as schema.org's MerchantReturnPolicy: the days, who pays to send back."),
+    .describe(
+      "The business's default return policy, as schema.org's MerchantReturnPolicy: a window of days, unlimited or none (MerchantReturnNotPermitted, no days), how things come back and who pays. Faulty goods are always the business's.",
+    ),
+  age_check: z
+    .looseObject({ sentence: z.string(), min_ages: z.array(z.number().int()) })
+    .optional()
+    .describe("Some products are sold only above an age, ID checked at handover: the words to show, and the ages."),
   trader: z
     .looseObject({
       legal_name: z.string(),
@@ -638,14 +644,26 @@ export const productSchema = z.looseObject({ ...productFields, withdrawal: withd
 /** A product at the public doors: these fields and no others, never where it came from. */
 export const publicProductSchema = z.object({
   ...productFields,
+  price: money
+    .nullable()
+    .describe(
+      "Minor units. For price_model from, the lowest; range, the lowest (to price_max); quote: null, asked for.",
+    ),
+  price_model: z
+    .enum(["fixed", "from", "range", "quote"])
+    .describe(
+      "fixed: the price; from: the lowest; range: to price_max; quote: on request. Only fixed is ordered at its price.",
+    ),
   withdrawal: withdrawalOf,
   negotiable: z
     .number()
     .int()
     .describe("1: a customer may suggest a price of their own for it where the business takes one; 0: never."),
   availability: z
-    .enum(["in_stock", "out_of_stock", "on_sale"])
-    .describe("in_stock or out_of_stock where the stock is counted; on_sale where it is not."),
+    .enum(["in_stock", "limited", "out_of_stock", "on_sale", "preorder", "backorder", "made_to_order"])
+    .describe(
+      "in_stock, limited (few left, by the owner's own mark) or out_of_stock where the stock is counted; on_sale where it is not; preorder (comes at available_from), backorder (orderable, comes later) or made_to_order. Never a count.",
+    ),
   gtin: nullableString.describe("Its barcode as 14 digits, check digit verified, or null."),
   no_gtin: z.boolean().describe("The business says it has no barcode."),
   brand: nullableString,
@@ -653,7 +671,95 @@ export const publicProductSchema = z.object({
   condition: z.string().describe("new, used or refurbished."),
   url: nullableString.describe("Its page on the business's own site, or null."),
   image_url: nullableString.describe("A link to its picture, or null."),
+  media: z
+    .array(z.object({ type: z.enum(["image", "video"]), url: z.string(), alt: z.string().optional() }))
+    .describe("Pictures and videos, linked, the main picture first; empty when there are none."),
   updated_at: z.string().describe("When it last changed, ISO 8601."),
+  group: z
+    .object({ id: z.string(), title: z.string(), position: z.number().int() })
+    .optional()
+    .describe("The product it is a variant of: list_products by this id lists every variant's own price."),
+  options: z
+    .array(z.object({ key: z.string(), name: z.string(), value: z.string() }))
+    .optional()
+    .describe("What sets this variant apart: [{key, name, value}] (color, size, flavour…)."),
+  price_max: money.optional().describe("range only: the highest price."),
+  list_price: money
+    .optional()
+    .describe("The 'was' price: given only when it held for the 30 days before the price went below it."),
+  unit_price: z
+    .looseObject({
+      measure: z.object({ value: z.number(), unit: z.string() }),
+      reference: z.object({ value: z.number(), unit: z.string() }),
+      amount: money,
+    })
+    .optional()
+    .describe("The net quantity sold, and its price per reference quantity (amount): 4.50 for 500 g is 9.00 per 1 kg."),
+  tax_included: z
+    .boolean()
+    .optional()
+    .describe("Whether its prices include tax, where it is not what the business says of all of them."),
+  available_from: z.string().optional().describe("preorder or backorder: when it comes, ISO 8601."),
+  available_until: z.string().optional().describe("The last moment it can be ordered, ISO 8601."),
+  multipack: z.number().int().optional().describe("This many identical units of one item, sold together."),
+  is_bundle: z.boolean().optional().describe("Different items sold together at one price."),
+  age_restricted: z
+    .looseObject({ min_age: z.number().int(), kind: z.string(), check: z.literal("id_at_handover"), label: z.string() })
+    .optional()
+    .describe("Sold only above min_age (by_country where it differs), ID checked at handover; show label beside it."),
+  fulfil_methods: z
+    .array(z.string())
+    .optional()
+    .describe("How it reaches the buyer: pickup, shipping, local_delivery…"),
+  shipping_profile: z
+    .string()
+    .optional()
+    .describe("Its shipping profile (GET /v1/catalogue/policies); absent, the default."),
+  weight: z
+    .object({ value: z.number(), unit: z.string() })
+    .optional()
+    .describe("As packed: what a weight rate is worked out from."),
+  return_policy: z.string().optional().describe("Its return policy (GET /v1/catalogue/policies); absent, the default."),
+});
+
+/** A product group (catalogue version 2): the product, its variants the products that name it. */
+export const productGroupSchema = z.looseObject({
+  id: z.string(),
+  title: z.string(),
+  source: z.string(),
+  externalId: z.string().nullable(),
+});
+
+/** The owner's shipping profiles and return policies, as the policies document publishes them. */
+export const ownerPoliciesSchema = z.looseObject({
+  shipping_profiles: z.array(z.looseObject({ id: z.string(), name: z.string() })),
+  return_policies: z.array(z.looseObject({ id: z.string(), name: z.string(), eligibility: z.string() })),
+  rev: z.string(),
+});
+
+/** `POST /v1/shipping/quote`, MCP `quote_shipping`: a basket's shipping by the business's own rates. */
+export const shippingQuoteSchema = z.looseObject({
+  quotes: z.array(
+    z.looseObject({
+      profile: z.string().nullable(),
+      zone: z.string().nullable(),
+      product_ids: z.array(z.string()),
+      services: z.array(
+        z.looseObject({
+          id: z.string(),
+          name: z.string(),
+          tracked: z.boolean(),
+          id_check: z.boolean(),
+          transit_days: z.object({ min: z.number().int(), max: z.number().int() }),
+          fee: money.nullable(),
+          why: z.string().optional(),
+        }),
+      ),
+      why: z.string().optional(),
+    }),
+  ),
+  unquoted: z.array(z.looseObject({ product_id: z.string(), why: z.string() })),
+  notes: z.array(z.string()),
 });
 
 /** The owner's view of their products on networks (`GET /v1/owner/catalogue`, ADR-029). */

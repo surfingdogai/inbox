@@ -409,7 +409,7 @@ export class CustomerDoors {
     if (!parsed.success) return false;
     const now = nowOf(caller);
     if (type === "booking" && Date.parse((parsed.data as PayloadOf<"booking">).startTime) <= now) return false;
-    const priced = await priceFromCatalogue(this.db, type, parsed.data as Record<string, unknown>, pricing);
+    const priced = await priceFromCatalogue(this.db, type, parsed.data as Record<string, unknown>, pricing, now);
     // A price a person has still to set binds nobody yet: the confirm step comes with ours.
     if (priced.unpriced) return false;
     const total = priced.payload.totalPrice as Money | undefined;

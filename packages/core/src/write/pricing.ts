@@ -39,9 +39,11 @@ export async function priceFromCatalogue(
   type: ItemType,
   payload: Record<string, unknown>,
   pricing?: PricingFor,
+  /** The moment of the request: a product past its last day to order (`available_until`) is not ordered. */
+  now: number = Date.now(),
 ): Promise<Priced> {
   if (type === "booking") return priceBooking(db, payload as PayloadOf<"booking">, pricing);
-  if (type === "order") return priceOrder(db, payload as PayloadOf<"order">, pricing);
+  if (type === "order") return priceOrder(db, payload as PayloadOf<"order">, pricing, now);
   return { payload, unpriced: false };
 }
 
@@ -148,7 +150,8 @@ export async function linePricing(
     found.flatMap((p) => (p ? [p.id] : [])),
   );
   return found.map((p, i) => {
-    if (!p) return null;
+    // A price that is not fixed (from, a range, on request) is no price to hold anyone to: a person prices it.
+    if (p?.priceModel !== "fixed") return null;
     const currency = p.price.currency.toUpperCase();
     const menu = o.options === false ? null : menuOf(p.menu);
     const delta = menu ? priceOptions(menu, lines[i]?.options, currency, "").unitDelta : 0;
@@ -231,7 +234,12 @@ async function serviceTotal(db: Db, price: ServicePrice, partySize: number | und
   return { value, currency: (price.currency ?? (await businessCurrency(db))).toUpperCase() };
 }
 
-async function priceOrder(db: Db, payload: PayloadOf<"order">, pricing?: PricingFor): Promise<Priced> {
+async function priceOrder(
+  db: Db,
+  payload: PayloadOf<"order">,
+  pricing: PricingFor | undefined,
+  now: number,
+): Promise<Priced> {
   const { customerStatedPrice: _sent, personalised: _chosen, ...asked } = payload;
   const lines = asked.orderedItem.map(({ customerStatedPrice: _line, listPrice: _list, ...line }) => line);
   const catalogue = await productsFor(db, lines);
@@ -262,9 +270,20 @@ async function priceOrder(db: Db, payload: PayloadOf<"order">, pricing?: Pricing
       orderedItem.push(line);
       return;
     }
-    // A product taken off sale is not ordered: the line is refused, never priced from it.
-    if (product.active === 0) {
+    // A product taken off sale, or past the last moment it could be ordered (catalogue version 2's
+    // `available_until`), is not ordered: the line is refused, never priced from it.
+    if (product.active === 0 || (product.availableUntil !== null && product.availableUntil <= now)) {
       offSale.push({ path: `payload.orderedItem.${i}`, problem: "invalid", message: "not on sale" });
+      return;
+    }
+    // Catalogue version 2: a price that is not fixed (from, a range, on request) goes to a person, who
+    // quotes it. The line names the product as the catalogue has it, and keeps the price the customer
+    // wrote for the person to read; no rule confirms or accepts the order on it.
+    if (product.priceModel !== "fixed") {
+      unpriced = true;
+      const { sku: _sku, options: _opts, ...kept } = line;
+      const sku = product.sku !== null && product.sku.length <= 100 ? { sku: product.sku } : {};
+      orderedItem.push({ ...kept, productId: product.id, ...sku, name: clip(product.name, 200) });
       return;
     }
     // A menu item's options are priced from the business's menu (ADR-040): what each adds, per unit,
@@ -474,7 +493,11 @@ export async function heldForStock(
   }
   const added = [...wanted.values()].filter((w) => w.quantity > 0);
   if (added.some((w) => w.product.active === 0)) return "not_on_sale";
-  for (const w of added) if (w.product.stock !== null && w.quantity > w.product.stock) return "not_enough_stock";
+  for (const w of added) {
+    // A pre-order, a back-order and what is made to order are taken past the stock: it comes later.
+    if (w.product.availability !== null && UNCOUNTED.has(w.product.availability)) continue;
+    if (w.product.stock !== null && w.quantity > w.product.stock) return "not_enough_stock";
+  }
   return null;
 }
 
@@ -515,7 +538,16 @@ interface CatalogueProduct {
   readonly stock: number | null;
   /** Its menu, when it is on one (ADR-040): what each option adds is priced from it. */
   readonly menu: unknown;
+  /** How its price is meant (catalogue version 2): only `fixed` prices an order line. */
+  readonly priceModel: string;
+  /** A pre-order, a back-order or made to order, which its stock does not hold back. */
+  readonly availability: string | null;
+  /** The last moment it can be ordered, in milliseconds. */
+  readonly availableUntil: number | null;
 }
+
+/** The ways to be available an order is taken for past the stock (catalogue version 2). */
+const UNCOUNTED: ReadonlySet<string> = new Set(["preorder", "backorder", "made_to_order"]);
 
 async function productsFor(db: Db, lines: readonly { productId?: string | undefined; sku?: string | undefined }[]) {
   const ids = [...new Set(lines.flatMap((l) => (l.productId !== undefined ? [l.productId] : [])))];
@@ -531,6 +563,9 @@ async function productsFor(db: Db, lines: readonly { productId?: string | undefi
     active: products.active,
     stock: products.stock,
     menu: products.menu,
+    priceModel: products.priceModel,
+    availability: products.availability,
+    availableUntil: products.availableUntil,
   };
   for (let i = 0; i < ids.length; i += CHUNK) {
     const rows = await db.orm

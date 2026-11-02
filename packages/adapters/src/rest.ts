@@ -38,14 +38,17 @@ import {
   openReturnInput,
   payOrderInput,
   presetKeySchema,
+  productGroupInput,
   productInput,
   profileInput,
   provideDetailsInput,
+  quoteShippingInput,
   removeSpamListEntryInput,
   replayMissingInput,
   replyInput,
   requestQuoteInput,
   requestReturnInput,
+  returnPolicyInput,
   ruleInput,
   sendMessageInput,
   serviceInput,
@@ -56,6 +59,7 @@ import {
   setSpamModelInput,
   setupPlanSchema,
   setWeeklyInput,
+  shippingProfileInput,
   spamModelsInput,
   splitAddress,
   startSpamFilterInput,
@@ -179,13 +183,21 @@ export const listProductsQuery = listProductsInput.extend({
     .optional()
     .describe("Only these products, by id: `ids=a,b`, at most 50. Read the live price of what a network showed you."),
 });
-/** `GET /v1/catalogue/changes`: where to start, and how many. */
+/**
+ * `GET /v1/catalogue/changes`: the version, where to start, and how many. Taken as they come and checked
+ * by the feed, which refuses each with the spec's own code (`version_unsupported`, `cursor_invalid`,
+ * `limit_invalid`), so a reader acts on it by machine.
+ */
 export const catalogueChangesQuery = z.object({
-  after: z.string().min(1).max(200).optional().describe("The next_cursor of the page before; leave it out to start."),
-  limit: z.coerce.number().int().min(1).max(CATALOGUE_PAGE_MAX).default(CATALOGUE_PAGE_MAX),
+  version: z.string().max(8).optional().describe("The catalogue version to read: 2, or 1 (the default)."),
+  after: z.string().max(400).optional().describe("The next_cursor of the page before; leave it out to start."),
+  limit: z.string().max(8).optional().describe(`1 to ${CATALOGUE_PAGE_MAX}; ${CATALOGUE_PAGE_MAX} when absent.`),
 });
 export const catalogueItemsQuery = z.object({
-  ids: listQuery(z.string().min(1).max(64)).describe(`At most ${CATALOGUE_ITEMS_MAX} product ids: ids=a,b.`),
+  version: z.string().max(8).optional().describe("The catalogue version to read: 2, or 1 (the default)."),
+  ids: listQuery(z.string().min(1).max(1024)).describe(
+    `At most ${CATALOGUE_ITEMS_MAX} product ids: ids=a,b, each percent-encoded (version 2 ids are up to 256 characters).`,
+  ),
 });
 export const listItemsQuery = listItemsInput.extend({
   needs_human: boolQuery.optional(),
@@ -223,9 +235,31 @@ const created = <T extends { replayed: boolean }>(
   r: T,
 ) => c.json(r, r.replayed ? 200 : 201, r.replayed ? { "Idempotent-Replayed": "true" } : {});
 
-/** A catalogue page as the inbox's door answers it: signed, cached as it says, or a 304 or a 404. */
+/** The owner's view of the policies: what networks are given, and the rev that moves with any change. */
+function ownerPolicies(state: {
+  readonly shipping_profiles: readonly unknown[];
+  readonly return_policies: readonly unknown[];
+  readonly rev: string;
+}) {
+  return { shipping_profiles: state.shipping_profiles, return_policies: state.return_policies, rev: state.rev };
+}
+
+/** A catalogue page as the inbox's door answers it: signed, cached as it says, or a 304, a 404 or a 422. */
 function catalogueAnswer(c: Context, r: CatalogueResponse): Response {
   if (r.status === 304) return new Response(null, { status: 304, headers: { ETag: r.etag } });
+  if (r.status === 422) {
+    return c.json(
+      {
+        type: `https://surfingdog.ai/problems/${r.code}`,
+        title: r.code.replace(/_/g, " "),
+        status: 422,
+        code: r.code,
+        detail: r.detail,
+      },
+      422,
+      { "Content-Type": "application/problem+json", "Cache-Control": "no-store" },
+    );
+  }
   if (r.status === 404) {
     return c.json(
       {
@@ -313,7 +347,7 @@ export function publicRest(caps: Capabilities, opts: { readonly baseUrl?: string
       tags: ["public"],
       summary: "The business's products for networks, signed: what changed, page by page",
       description:
-        "For a network that lists the business's products (protocol §4.18). Every product in the order it last changed, listed (its public fields, a barcode only when it is a product's barcode, availability as in stock, out of stock or on sale, never a count) or withdrawn. Pass next_cursor as after for the next page; at next_cursor null the reader has it all, and asks from the after of that last page next time. Signed in the Catalogue-Signature header: a compact JWS (typ sdi-catalogue+jws) by a key the manifest publishes under receipt_keys, over iss (this inbox's domain), url (the address asked), body_sha256, as_of and rev. 404 not_listed while the business keeps its products off networks.",
+        "For a network that lists the business's products (protocol §4.18, as amended for catalogue version 2). Name the version you read: version=2 (schemas/catalogue-page-v2.json: groups and options, price models, 'was' and unit prices, more ways to be available, age checked at handover, shipping and returns), or version=1, which a read that names none is. Every product in the order it last changed, listed or withdrawn; never a stock count. Pass next_cursor as after for the next page, in the same version; at next_cursor null the reader has it all, and asks from the after of that last page next time. Signed in the Catalogue-Signature header: a compact JWS (typ sdi-catalogue+jws) by a key the manifest publishes under receipt_keys, over iss (this inbox's domain), url (the address asked), body_sha256, as_of and rev. 404 not_listed while the business keeps its products off networks.",
       responses: {
         200: {
           description: "One page, signed",
@@ -323,11 +357,48 @@ export function publicRest(caps: Capabilities, opts: { readonly baseUrl?: string
         },
         304: { description: "The page the reader holds (If-None-Match)" },
         404: { description: "not_listed: the business lists no products on networks now" },
-        422: { description: "A cursor this feed did not give, or a limit past 500" },
+        422: {
+          description:
+            "version_unsupported (a version this feed does not serve), cursor_invalid (a cursor it did not give, or gave for the other version), limit_invalid (outside 1 to 500)",
+        },
       },
     }),
     validator("query", catalogueChangesQuery, hook),
     async (c) => catalogueAnswer(c, await caps.catalogue.changes(c.req.valid("query"), catalogueRequest(c))),
+  );
+
+  app.get(
+    "/catalogue/policies",
+    describeRoute({
+      tags: ["public"],
+      summary: "The business's shipping profiles and return policies, signed (catalogue version 2)",
+      description:
+        "The one published shape of the shipping profiles and return policies version 2 items name by id (protocol §4.18 as amended, schemas/catalogue-policies.json): the business's own rate tables (flat, per item, by weight, by order value, free over a value) and its return policies. Signed in Catalogue-Signature as a page is, over the document's as_of and rev; read it again when a page's catalogue.policies_rev differs from your copy's rev. 404 not_listed while the business keeps its products off networks.",
+      responses: {
+        200: {
+          description: "The policies document, signed",
+          headers: {
+            [CATALOGUE_SIGNATURE_HEADER]: { description: "Compact JWS over the document", schema: { type: "string" } },
+          },
+        },
+        304: { description: "The document the reader holds (If-None-Match)" },
+        404: { description: "not_listed: the business lists no products on networks now" },
+      },
+    }),
+    async (c) => catalogueAnswer(c, await caps.catalogue.policies(catalogueRequest(c))),
+  );
+
+  app.post(
+    "/shipping/quote",
+    describeRoute({
+      tags: ["public"],
+      summary: "What shipping a basket to a place costs, by the business's own rates",
+      description:
+        "A read, never an order: for each shipping profile the basket's products ship under, the zone the place is in and each service's fee (null with why: id_check, currency, weight_missing, too_heavy…). A product that does not ship, or whose price is not fixed, is listed in unquoted. An age-restricted product goes only by a service whose carrier checks ID at handover. The fee of an order is still the business's to confirm.",
+      responses: json("Shipping quote", R.shippingQuoteSchema),
+    }),
+    validator("json", quoteShippingInput, hook),
+    async (c) => c.json(await caps.quoteShipping(c.req.valid("json")), 200, { "Cache-Control": "no-store" }),
   );
 
   app.get(
@@ -342,7 +413,10 @@ export function publicRest(caps: Capabilities, opts: { readonly baseUrl?: string
       },
     }),
     validator("query", catalogueItemsQuery, hook),
-    async (c) => catalogueAnswer(c, await caps.catalogue.items(c.req.valid("query").ids, catalogueRequest(c))),
+    async (c) => {
+      const q = c.req.valid("query");
+      return catalogueAnswer(c, await caps.catalogue.items(q.ids, catalogueRequest(c), { version: q.version }));
+    },
   );
 
   app.get(
@@ -1683,6 +1757,100 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
       return once(c, "products.barcode", input, (caller) => caps.setup.confirmBarcode(caller, input));
     },
   );
+
+  app.get(
+    "/product-groups",
+    owner({
+      tags: ["setup"],
+      summary: "Your product groups: each product with its variants",
+      responses: json("Product groups", R.listOf(R.productGroupSchema)),
+    }),
+    async (c) => c.json({ items: await caps.setup.listProductGroups(c.get("caller")) }),
+  );
+  app.post(
+    "/product-groups",
+    owner({
+      tags: ["setup"],
+      summary: "Make a product group, or rename one (group_id)",
+      description:
+        "A product with variants (catalogue version 2): make the group, then give each variant its group_id and options on the product. A new title moves every variant in the feed.",
+      responses: json("Product group", R.productGroupSchema),
+      write: true,
+    }),
+    validator("json", productGroupInput, hook),
+    async (c) => {
+      const input = c.req.valid("json");
+      return once(c, "product_groups.upsert", input, (caller) => caps.setup.upsertProductGroup(caller, input));
+    },
+  );
+
+  app.get(
+    "/catalogue/policies",
+    owner({
+      tags: ["setup"],
+      summary: "Your shipping profiles and return policies, as networks are given them",
+      responses: json("Policies", R.ownerPoliciesSchema),
+    }),
+    async (c) => c.json(ownerPolicies(await caps.getPolicies(c.get("caller")))),
+  );
+  app.put(
+    "/catalogue/shipping-profiles/:id",
+    owner({
+      tags: ["setup"],
+      summary: "Set a shipping profile: where you ship, by which services, at your own rates",
+      description:
+        "Your own rate tables (flat, per_item, by_weight, by_order_value, each with free_over), as the policies document publishes them. You buy and print your own labels; no carrier is called. The owner in person only (403 not_allowed for the owner's AI and integration keys). A profile a network would leave any part of out is refused with that part's code (422).",
+      responses: json("Policies", R.ownerPoliciesSchema),
+      write: true,
+    }),
+    validator("json", shippingProfileInput.omit({ id: true }), hook),
+    async (c) => {
+      const input = { ...c.req.valid("json"), id: String(c.req.param("id")) };
+      return once(c, "policies.shipping", input, async (caller) =>
+        ownerPolicies(await caps.putShippingProfile(caller, shippingProfileInput.parse(input))),
+      );
+    },
+  );
+  app.put(
+    "/catalogue/return-policies/:id",
+    owner({
+      tags: ["setup"],
+      summary: "Set a return policy",
+      description:
+        "What you offer on top of the law: a window of days, unlimited, or no returns, how a return is settled and comes back, who pays the postage, any restocking fee. In the EU, the EEA and the UK (or with no country set) a policy is at least the 14 days the law gives; elsewhere it may be shorter, or no returns, shown as it is. The owner in person only.",
+      responses: json("Policies", R.ownerPoliciesSchema),
+      write: true,
+    }),
+    validator("json", returnPolicyInput.omit({ id: true }), hook),
+    async (c) => {
+      const input = { ...c.req.valid("json"), id: String(c.req.param("id")) };
+      return once(c, "policies.returns", input, async (caller) =>
+        ownerPolicies(await caps.putReturnPolicy(caller, returnPolicyInput.parse(input))),
+      );
+    },
+  );
+  for (const [path, kind] of [
+    ["/catalogue/shipping-profiles/:id", "shipping"],
+    ["/catalogue/return-policies/:id", "returns"],
+  ] as const) {
+    app.delete(
+      path,
+      owner({
+        tags: ["setup"],
+        summary: kind === "shipping" ? "Take a shipping profile away" : "Take a return policy away",
+        description:
+          "Refused while a product names it (409 wrong_state), and for the default return policy. The owner in person only.",
+        responses: json("Policies", R.ownerPoliciesSchema),
+        write: true,
+      }),
+      async (c) => {
+        const input = { kind, id: String(c.req.param("id")) };
+        return once(c, `policies.delete.${kind}`, input, async (caller) =>
+          ownerPolicies(await caps.deletePolicy(caller, input)),
+        );
+      },
+    );
+  }
 
   app.get(
     "/catalogue",

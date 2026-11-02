@@ -18,6 +18,7 @@ import {
 import { z } from "zod";
 import { basePoint, matchZone } from "../area/index";
 import { NEXT_CATALOGUE_SEQ } from "../catalogue/identity";
+import { priceRecordStatement } from "../catalogue/v2";
 import type { ConnectorCapabilities } from "../connectors/capability";
 import type { SnapshotMenuItem } from "../connectors/setup-snapshot";
 import type { Db } from "../db";
@@ -613,6 +614,8 @@ export class FoodCapabilities {
         }
       }
     }
+    // The record of prices a "was" price is checked against: each price this import wrote that is new.
+    if (kept + updated > 0) await this.db.batch([priceRecordStatement(now, { since: now })]);
     if (sections.length !== ctx.settings.menu.sections.length) {
       await this.deps.writeSettings({ menu: { sections: sections.slice(0, 50) } }, now);
     }

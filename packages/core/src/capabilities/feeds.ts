@@ -1,6 +1,7 @@
 import type { Statement } from "@surfingdog/platform";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { NEXT_CATALOGUE_SEQ } from "../catalogue/identity";
+import { priceRecordStatement } from "../catalogue/v2";
 import { deactivateUnseen, upsertCatalogue } from "../connectors/catalogue";
 import type { Db } from "../db";
 import { type FeedParseResult, type FeedPriceChange, type FeedProduct, type FeedSkip, parseFeed } from "../feeds/parse";
@@ -287,7 +288,12 @@ export class FeedCapabilities {
             method: "run" as const,
           },
     );
-    await this.db.batch([...statements, ...priceChangeJob(connectorId, known, at)]);
+    await this.db.batch([
+      ...statements,
+      // A sale that starts or ends is a price the record of prices keeps (the "was" price's 30 days).
+      ...(due.length ? [priceRecordStatement(at, { since: at })] : []),
+      ...priceChangeJob(connectorId, known, at),
+    ]);
     return { applied: due.length };
   }
 
@@ -333,6 +339,8 @@ export class FeedCapabilities {
         url: product.url,
         imageUrl: product.imageUrl,
         sourceCategory: product.sourceCategory,
+        // Its product group and options (catalogue version 2): variants come in as variants, never flattened.
+        ...(product.variant ? { variant: product.variant } : {}),
       })),
       now,
       seenAt: now,

@@ -47,6 +47,7 @@ export type {
   TradeQuote,
   WorkProfile,
 } from "@surfingdog/spec";
+// Catalogue version 2, as a reader takes it: for checking what this inbox serves (ADR-next).
 export {
   ALLERGEN_CLAIMS,
   ALLERGEN_CODES,
@@ -63,6 +64,8 @@ export {
   CATALOGUE_ITEMS_MAX,
   CATALOGUE_PAGE_MAX,
   CATALOGUE_SIGNATURE_HEADER,
+  cataloguePageV2Schema,
+  cataloguePoliciesSchema,
   checkAreaInputSchema,
   checkAreaOutputSchema,
   currencyCodeProblem,
@@ -108,6 +111,8 @@ export {
   paymentToken,
   postalPrefixSchema,
   publishedPayments,
+  readCatalogueItemV2,
+  readCataloguePolicies,
   readDoorsElsewhere,
   readPayTo,
   STRIPE_PAY_CURRENCIES,

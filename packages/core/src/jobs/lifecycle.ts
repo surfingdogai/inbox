@@ -1,5 +1,6 @@
 import type { MailOut, SqlInput, Statement } from "@surfingdog/platform";
 import { eq } from "drizzle-orm";
+import { catalogueClockStatements } from "../catalogue/v2";
 import { businessFacts } from "../customer/audience";
 import { keyMail, privacyUrl } from "../customer/disclosure";
 import { customerHtmlPart } from "../customer/html";
@@ -90,6 +91,9 @@ export function lifecycleSweepHandler(
     if (link === 0) {
       const next = (Math.floor(now / SWEEP_PERIOD_MS) + 1) * SWEEP_PERIOD_MS;
       await ensureJob(db, LIFECYCLE_SWEEP_KIND, sweepKey(next), { now, runAt: next });
+      // Time is a change to the catalogue (protocol §4.18 as amended): a product past its last day, or a
+      // pre-order that came out, moves in the feed, so the next ping's rev tells networks to read it.
+      await db.batch(catalogueClockStatements(now)).catch(() => undefined);
     }
     const settings = await readSettings(db);
     const system: Caller = {

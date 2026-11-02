@@ -57,6 +57,21 @@ export interface FeedProduct {
    * (`FeedCapabilities.applyPriceChanges`), not at the next read.
    */
   readonly priceChanges?: readonly FeedPriceChange[];
+  /**
+   * The product group the row is a variant of, when it names one (`item_group_id`, catalogue version 2),
+   * with the options Google Merchant Center's attributes give it (`color`, `size`, `material`, `pattern`,
+   * `gender`, `age_group`, `size_system`), each a key of `vocab/option-keys.json`; and the group's title
+   * when the row gives one (`item_group_title`). Absent for a row with no group, or with a group and no
+   * option to tell its variants apart.
+   */
+  readonly variant?: FeedVariant;
+}
+
+/** A row's place in a product group (`FeedProduct.variant`). */
+export interface FeedVariant {
+  readonly group: string;
+  readonly title?: string;
+  readonly options: readonly { readonly key: string; readonly name: string; readonly value: string }[];
 }
 
 export type FeedCondition = "new" | "used" | "refurbished";
@@ -116,6 +131,22 @@ export const DEFAULT_MAX_PRODUCTS = 5000;
 
 /** The columns a row's price is chosen from, beside `price` itself: a sale's price and its dates. */
 type SaleField = "salePrice" | "saleWindow" | "saleStarts" | "saleEnds";
+/** The columns a variant is read from (`FeedProduct.variant`). */
+type VariantField = "groupId" | "groupTitle" | (typeof VARIANT_OPTIONS)[number]["field"];
+
+/**
+ * Google Merchant Center's variant attributes, each the option key of `vocab/option-keys.json` it fills and
+ * the name it is shown by, in the order a variant lists them.
+ */
+const VARIANT_OPTIONS = [
+  { field: "optColor", key: "color", name: "Colour", xml: ["color"], csv: ["color", "colour"] },
+  { field: "optSize", key: "size", name: "Size", xml: ["size"], csv: ["size"] },
+  { field: "optMaterial", key: "material", name: "Material", xml: ["material"], csv: ["material"] },
+  { field: "optPattern", key: "pattern", name: "Pattern", xml: ["pattern"], csv: ["pattern"] },
+  { field: "optGender", key: "gender", name: "Gender", xml: ["gender"], csv: ["gender"] },
+  { field: "optAgeGroup", key: "age_group", name: "Age group", xml: ["age_group"], csv: ["agegroup"] },
+  { field: "optSizeSystem", key: "size_system", name: "Size system", xml: ["size_system"], csv: ["sizesystem"] },
+] as const;
 
 /**
  * What a column may be called. Google's own names come first because a feed built for Google is
@@ -128,8 +159,20 @@ type SaleField = "salePrice" | "saleWindow" | "saleStarts" | "saleEnds";
  * sale runs (`sellingPrice`): Google's `sale_price_effective_date`, or an export's own start and end.
  */
 const FIELD_ALIASES: Readonly<
-  Record<Exclude<keyof FeedProduct, "priceChanges"> | "quantity" | SaleField, readonly string[]>
+  Record<
+    Exclude<keyof FeedProduct, "priceChanges" | "variant"> | "quantity" | SaleField | VariantField,
+    readonly string[]
+  >
 > = {
+  groupId: ["itemgroupid", "groupid"],
+  groupTitle: ["itemgrouptitle", "grouptitle"],
+  optColor: VARIANT_OPTIONS[0].csv,
+  optSize: VARIANT_OPTIONS[1].csv,
+  optMaterial: VARIANT_OPTIONS[2].csv,
+  optPattern: VARIANT_OPTIONS[3].csv,
+  optGender: VARIANT_OPTIONS[4].csv,
+  optAgeGroup: VARIANT_OPTIONS[5].csv,
+  optSizeSystem: VARIANT_OPTIONS[6].csv,
   // The barcode, besides the sku it already was: `ean` and `gtin` stay sku aliases, so an agent that
   // orders by a sku equal to the barcode is still served (ADR-029).
   gtin: [
@@ -879,6 +922,10 @@ function xmlField(children: readonly XmlChild[], names: readonly string[], secti
 
 /** The XML names for each field: Google's, plus the Atom and RSS spellings. */
 const XML_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  // A variant's group, kept as a group and never as the product's id (`variant`).
+  groupId: ["item_group_id"],
+  groupTitle: ["item_group_title"],
+  ...Object.fromEntries(VARIANT_OPTIONS.map((o) => [o.field, o.xml])),
   gtin: ["gtin", "ean", "upc", "isbn", "barcode"],
   brand: ["brand"],
   mpn: ["mpn"],
@@ -1088,7 +1135,7 @@ function gtinHint(column: string): GtinHint {
  */
 function identity(
   read: (field: string) => { value: string; from: string },
-): Pick<FeedProduct, "gtin" | "brand" | "mpn" | "condition" | "noGtin" | "sourceCategory"> {
+): Pick<FeedProduct, "gtin" | "brand" | "mpn" | "condition" | "noGtin" | "sourceCategory" | "variant"> {
   const text = (field: string, max: number) => read(field).value.replace(/\s+/g, " ").trim().slice(0, max);
   const gtin = read("gtin");
   const brand = text("brand", 70);
@@ -1104,7 +1151,21 @@ function identity(
     // Google's `identifier_exists`: yes or no, which reads as availability's yes and no.
     ...(exists === null ? {} : { noGtin: !exists }),
     ...(category ? { sourceCategory: category } : {}),
+    ...variantOf(text),
   };
+}
+
+/** A row's place in a product group: its group and the options that set it apart, or nothing. */
+function variantOf(text: (field: string, max: number) => string): Pick<FeedProduct, "variant"> {
+  const group = text("groupId", 256);
+  if (!group || !/^[\x21-\x2B\x2D-\x7E]{1,256}$/.test(group)) return {};
+  const options = VARIANT_OPTIONS.flatMap((o) => {
+    const value = text(o.field, 100);
+    return value ? [{ key: o.key, name: o.name, value }] : [];
+  });
+  if (!options.length) return {};
+  const title = text("groupTitle", 150);
+  return { variant: { group, ...(title ? { title } : {}), options } };
 }
 
 /** A row's price, availability and the changes its sale's dates bring, from what it sells at and what it claims. */
