@@ -112,3 +112,28 @@ describe("the answers given to Play still match the app", () => {
     }
   });
 });
+
+describe("the graphics given to Play", () => {
+  const graphics = path.join(play, "graphics");
+  /** A PNG's size and whether it carries an alpha channel, read from its header. */
+  const png = (...parts: string[]) => {
+    const b = readFileSync(path.join(graphics, ...parts));
+    expect(b.subarray(1, 4).toString("latin1")).toBe("PNG");
+    return { width: b.readUInt32BE(16), height: b.readUInt32BE(20), alpha: b[25] === 4 || b[25] === 6 };
+  };
+
+  it("has the icon and the feature graphic at Play's sizes, the feature graphic without alpha", () => {
+    expect(png("icon-512.png")).toMatchObject({ width: 512, height: 512 });
+    expect(png("feature-graphic.png")).toEqual({ width: 1024, height: 500, alpha: false });
+  });
+
+  it("has the six phone screenshots in light and dark, 9:16 and without alpha", () => {
+    const six = ["01-inbox", "02-request", "03-propose", "04-today", "05-settings", "06-connect"].map(
+      (n) => `${n}.png`,
+    );
+    for (const theme of ["light", "dark"]) {
+      expect(readdirSync(path.join(graphics, "phone", theme)).sort()).toEqual(six);
+      for (const f of six) expect(png("phone", theme, f)).toEqual({ width: 1080, height: 1920, alpha: false });
+    }
+  });
+});

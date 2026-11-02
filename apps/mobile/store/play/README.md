@@ -10,10 +10,11 @@ change the text when the app changes, never the other way round.
 | `data-safety.md` | The Data safety answers, each traced to the code. |
 | `app-content.md` | Content rating questionnaire, target audience, ads, app access and the other declarations. |
 | `app-access.txt` | What Play's reviewer is told, to paste into App access as it is. |
-| `privacy-policy.md` | The policy URL, and five gaps on the privacy page to close on launch day. |
+| `privacy-policy.md` | The policy URL, and six gaps on the privacy page to close before the app is sent for review. |
 | `technical.md` | Target API level against Play's requirement, the App Bundle, 16 KB pages, Advertising ID, developer verification. |
 | `signing.md` | Play App Signing, the upload key, what CI needs. |
-| `screenshots.md` | Which screens, at what size, and how to capture them honestly. |
+| `screenshots.md` | Which screens, at what size, and how they are made. |
+| `graphics/` | The icon (512 × 512), the feature graphic (1024 × 500) and six phone screenshots in light and dark (1080 × 1920), from the app's real screens (`screenshots.md`). |
 | `phone-page.md` | What surfingdog.ai/phone should say once the app is on Play (drafted, not applied). |
 
 `apps/mobile/test/play-listing.node.test.ts` checks Play's length limits (title 30, short 80, full 4000,
@@ -57,8 +58,8 @@ manifest's permissions are the ones `data-safety.md` covers, and that the target
 | 4 | **The signed bundle**: built from the `play` flavour with the upload key (`signing.md` → Building the bundle), checked: signed by the upload certificate only, minSdk 24, targetSdk 36, not debuggable. | Done for 1.0.1 | |
 | 5 | In Play Console, **create the app**: name "Surfing Dog Inbox", default language English (United States), App, Free. Play App Signing: let Google make the app signing key. | Free | 30 minutes |
 | 6 | **App content**: privacy policy URL, App access (`app-access.txt`), Ads, Content rating, Target audience, Data safety, and the rest, from `app-content.md` and `data-safety.md`. | Free | About an hour |
-| 7 | **Store listing**: paste the text from `listing/` for each language, upload the icon, the feature graphic and the screenshots (`screenshots.md`), category Business, contact email hello@surfingdog.ai, website https://surfingdog.ai. | Free | About an hour, plus making the images |
+| 7 | **Store listing**: paste the text from `listing/` for each language, upload the icon, the feature graphic and the screenshots from `graphics/` (`screenshots.md`), category Business, contact email hello@surfingdog.ai, website https://surfingdog.ai. | Free | About an hour |
 | 8 | Add the **app signing key's SHA-1** (Play Console → App integrity) to the Firebase API key's Android restriction (`signing.md` → Firebase). | Free | 10 minutes |
 | 9 | Upload the signed `.aab` to the **internal testing** track; install it from Play on two real phones; connect, get a notification, accept from it. | Free | A day |
 | 10 | Promote to **production** and send for review. Organisation accounts are not held to the 12-tester, 14-day closed test that new personal accounts need. | Free | Review: usually a few days, up to 7 or more for a new app |
-| 11 | The day it is live: apply `phone-page.md` and the privacy gaps (`privacy-policy.md`) in one site change. | Free | Under an hour |
+| 11 | Before sending for review: the privacy gaps (`privacy-policy.md`), since Play's review reads the policy. The day it is live: `phone-page.md`. | Free | Under an hour each |

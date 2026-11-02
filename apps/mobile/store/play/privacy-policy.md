@@ -14,7 +14,7 @@ the phone; notifications are encrypted by the inbox and carried by the relay and
 keeps, the relay's 90 days); the update check; on-phone data encrypted and never backed up; removing an
 inbox or uninstalling clears it; no usage data or crash reports.
 
-## Gaps to close before the listing goes live (drafts, not applied)
+## Gaps to close before the app is sent for review (drafts, not applied)
 
 1. **Where the app comes from.** It says "The app itself comes from GitHub, under GitHub's privacy
    statement." Once on Play:
@@ -37,6 +37,8 @@ inbox or uninstalling clears it; no usage data or crash reports.
    > **The demo.** "Try the demo" reads made-up examples from our demo shop at demo.surfingdog.ai. It sends
    > nothing about you, and nothing you press in the demo is sent anywhere.
 
-None of these changes what the app does; each makes the page say all of it. Apply them in the site
-change that adds the Google Play button (`phone-page.md`), on the day the listing is live, and move
-`UPDATED` in `privacy.astro` to that date.
+None of these changes what the app does; each makes the page say all of it. Apply them, and move
+`UPDATED` in `privacy.astro`, before the app is sent for review: Play's review reads the policy against
+the Data safety answers, and today the page says nothing of the email sign-in (gap 3) or the demo
+(gap 6), which the form and the reviewer's instructions name. The Google Play button (`phone-page.md`)
+waits for the day the listing is live.

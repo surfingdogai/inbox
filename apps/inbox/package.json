@@ -16,6 +16,7 @@
     "key": "tsx src/node.ts create-owner-key",
     "seed:showcase": "tsx src/node.ts seed-showcase",
     "shots": "node scripts/shots.mjs",
+    "play-graphics": "node scripts/play-graphics.mjs",
     "types": "wrangler types --config ../../wrangler.jsonc ./worker-configuration.d.ts",
     "typecheck": "tsc -p tsconfig.json && tsc -p client/tsconfig.json",
     "deploy": "wrangler deploy --config ../../wrangler.jsonc",

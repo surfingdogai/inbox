@@ -3,7 +3,7 @@ Surfing Dog Inbox is the phone app for your business's Surfing Dog Inbox. New bo
 What it does
 • Notifications for booking and stay requests, orders, quote requests and messages. Choose which kinds, and set quiet hours that hold them until morning.
 • Notifications carry no customer name unless you turn on Show details.
-• Accept, propose another time or decline, each confirmed before it goes. Another time is picked from the free times your inbox offers.
+• Accept, propose another time or decline. Another time is picked from the free times your inbox offers.
 • Reply to a customer from the request.
 • Today: the day's bookings at a glance.
 • When your inbox's spam filter holds something, see why, then let it in or mark it as spam.
@@ -17,6 +17,7 @@ You need a Surfing Dog Inbox, on your own server or hosted by Surfing Dog, and a
 2. In the app, tap Scan the code. It asks to connect to your inbox and shows two digits.
 3. Check the same two digits on the computer and press Confirm. Nothing to type.
 No camera? The app can ask your inbox to email you a sign-in link.
+No inbox yet? Tap Try the demo on the first screen to look round a made-up bike shop. Nothing you press there is sent.
 
 Privacy
 • Notifications are encrypted by your inbox for your phone alone. They travel through Surfing Dog's push relay and Google's Firebase Cloud Messaging, which can't read them.

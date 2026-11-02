@@ -3,7 +3,7 @@ Surfing Dog Inbox é o app para celular da Surfing Dog Inbox do seu negócio. No
 O que ele faz
 • Notificações de pedidos de reserva e de hospedagem, pedidos de compra, pedidos de orçamento e mensagens. Escolha quais quer receber e defina um horário de silêncio que as segura até de manhã.
 • As notificações não mostram o nome do cliente, a menos que você ative "Show details".
-• Aceite, proponha outro horário ou recuse, sempre com confirmação antes de enviar. O outro horário é escolhido entre os horários livres que sua caixa de entrada oferece.
+• Aceite, proponha outro horário ou recuse. O outro horário é escolhido entre os horários livres que sua caixa de entrada oferece.
 • Responda ao cliente direto no pedido.
 • "Today": as reservas do dia num relance.
 • Quando o filtro de spam da sua caixa de entrada retém algo, veja o motivo e libere ou marque como spam.
@@ -17,6 +17,7 @@ Você precisa de uma Surfing Dog Inbox, no seu próprio servidor ou hospedada pe
 2. No app, toque em "Scan the code". O app pergunta se deve se conectar à sua caixa de entrada e mostra dois dígitos.
 3. Confira os mesmos dois dígitos no computador e clique em "Confirm". Nada para digitar.
 Sem câmera? O app pode pedir à sua caixa de entrada que envie por email um link de acesso.
+Ainda não tem uma caixa de entrada? Toque em "Try the demo" na primeira tela para conhecer uma loja de bicicletas fictícia. Nada do que você tocar ali é enviado.
 
 Privacidade
 • As notificações são criptografadas pela sua caixa de entrada só para o seu celular. Elas passam pelo relay de notificações da Surfing Dog e pelo Firebase Cloud Messaging do Google, que não conseguem lê-las.

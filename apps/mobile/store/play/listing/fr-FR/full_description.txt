@@ -3,7 +3,7 @@ Surfing Dog Inbox est l'application mobile de la Surfing Dog Inbox de votre entr
 Ce qu'elle fait
 • Des notifications pour les demandes de réservation et de séjour, les commandes, les demandes de devis et les messages. Choisissez lesquelles recevoir, et fixez des heures de silence qui les gardent jusqu'au matin.
 • Les notifications n'affichent pas le nom du client, sauf si vous activez « Show details ».
-• Acceptez, proposez un autre horaire ou refusez, avec une confirmation avant chaque envoi. L'autre horaire se choisit parmi les créneaux libres que propose votre boîte de réception.
+• Acceptez, proposez un autre horaire ou refusez. L'autre horaire se choisit parmi les créneaux libres que propose votre boîte de réception.
 • Répondez au client depuis la demande.
 • « Today » : les réservations du jour en un coup d'œil.
 • Quand le filtre anti-spam de votre boîte de réception retient quelque chose, voyez pourquoi, puis laissez-le passer ou marquez-le comme spam.
@@ -17,6 +17,7 @@ Il vous faut une Surfing Dog Inbox, sur votre propre serveur ou hébergée par S
 2. Dans l'application, touchez « Scan the code ». Elle demande s'il faut se connecter à votre boîte de réception et affiche deux chiffres.
 3. Vérifiez les deux mêmes chiffres sur l'ordinateur et appuyez sur « Confirm ». Rien à saisir.
 Pas de caméra ? L'application peut demander à votre boîte de réception de vous envoyer un lien de connexion par email.
+Pas encore de boîte de réception ? Touchez « Try the demo » sur le premier écran pour découvrir un magasin de vélos fictif. Rien de ce que vous y faites n'est envoyé.
 
 Confidentialité
 • Les notifications sont chiffrées par votre boîte de réception pour votre seul téléphone. Elles passent par le relais de notifications de Surfing Dog et par Firebase Cloud Messaging de Google, qui ne peuvent pas les lire.

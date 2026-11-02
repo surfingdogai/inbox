@@ -68,7 +68,7 @@ In Play Console → App content → App access → Add instructions:
 > 1. Open the app. On the first screen, Connect your inbox, tap Try the demo.
 > 2. The app opens Oficina Maré, a made-up bike shop we run at demo.surfingdog.ai, with example
 >    bookings, orders, quote requests and messages. It is set up again every night.
-> 3. Look round Inbox, any request, Today and Settings. The demo is read-only: Confirm, Reply and the
+> 3. Look round Inbox, any request, Today and Settings. The demo is read-only: Accept, Reply and the
 >    switches say so and send nothing.
 > 4. To leave: Leave, at the top of the inbox.
 
