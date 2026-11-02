@@ -1,0 +1,1605 @@
+{
+  "$comment": "Catalogue version 2 (protocol §4.18): the version 1 item an inbox serves a reader of version 1 for each version 2 item (catalogueItemV1Of), at as_of with the catalogue's tax_included; null: no version 1 item at all (an id over 64 characters). Version 1 says only what it can say truly, so an offer it cannot is withdrawn there. Worked out, hashes included, by packages/spec/scripts/gen-catalogue-vectors.py's own implementation. MIT.",
+  "as_of": "2026-11-02T10:00:00.000Z",
+  "cases": [
+    {
+      "name": "a variant: its own offer, by its own name",
+      "tax_included": true,
+      "v2": {
+        "id": "MOKA-6-ALU",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups, aluminium",
+        "description": "The stovetop pot, in aluminium.",
+        "group": {
+          "id": "MOKA",
+          "title": "Moka pot",
+          "position": 2
+        },
+        "options": [
+          {
+            "key": "size",
+            "name": "Size",
+            "value": "6 cups"
+          },
+          {
+            "key": "material",
+            "name": "Material",
+            "value": "Aluminium"
+          }
+        ],
+        "price_model": "fixed",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": "09506000134352",
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "media": [
+          {
+            "type": "image",
+            "url": "https://loja.example/img/moka-6.jpg",
+            "alt": "A six-cup moka pot"
+          }
+        ],
+        "fulfil_methods": ["pickup", "shipping"],
+        "shipping_profile": "standard",
+        "weight": {
+          "value": 0.65,
+          "unit": "kg"
+        },
+        "return_policy": "standard",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "c4dac54b31871524"
+      },
+      "v1": {
+        "id": "MOKA-6-ALU",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups, aluminium",
+        "description": "The stovetop pot, in aluminium.",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": "09506000134352",
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "image_url": "https://loja.example/img/moka-6.jpg",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "ddf26cf026963cfd"
+      }
+    },
+    {
+      "name": "few left reads as in stock",
+      "tax_included": true,
+      "v2": {
+        "id": "MOKA-6-ALU",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups, aluminium",
+        "description": "The stovetop pot, in aluminium.",
+        "group": {
+          "id": "MOKA",
+          "title": "Moka pot",
+          "position": 2
+        },
+        "options": [
+          {
+            "key": "size",
+            "name": "Size",
+            "value": "6 cups"
+          },
+          {
+            "key": "material",
+            "name": "Material",
+            "value": "Aluminium"
+          }
+        ],
+        "price_model": "fixed",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "limited",
+        "gtin": "09506000134352",
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "media": [
+          {
+            "type": "image",
+            "url": "https://loja.example/img/moka-6.jpg",
+            "alt": "A six-cup moka pot"
+          }
+        ],
+        "fulfil_methods": ["pickup", "shipping"],
+        "shipping_profile": "standard",
+        "weight": {
+          "value": 0.65,
+          "unit": "kg"
+        },
+        "return_policy": "standard",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "bc2fbc79955dfa71"
+      },
+      "v1": {
+        "id": "MOKA-6-ALU",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups, aluminium",
+        "description": "The stovetop pot, in aluminium.",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": "09506000134352",
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "image_url": "https://loja.example/img/moka-6.jpg",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "ddf26cf026963cfd"
+      }
+    },
+    {
+      "name": "on sale, no count",
+      "tax_included": true,
+      "v2": {
+        "id": "MOKA-6-ALU",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups, aluminium",
+        "description": "The stovetop pot, in aluminium.",
+        "group": {
+          "id": "MOKA",
+          "title": "Moka pot",
+          "position": 2
+        },
+        "options": [
+          {
+            "key": "size",
+            "name": "Size",
+            "value": "6 cups"
+          },
+          {
+            "key": "material",
+            "name": "Material",
+            "value": "Aluminium"
+          }
+        ],
+        "price_model": "fixed",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "on_sale",
+        "gtin": "09506000134352",
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "media": [
+          {
+            "type": "image",
+            "url": "https://loja.example/img/moka-6.jpg",
+            "alt": "A six-cup moka pot"
+          }
+        ],
+        "fulfil_methods": ["pickup", "shipping"],
+        "shipping_profile": "standard",
+        "weight": {
+          "value": 0.65,
+          "unit": "kg"
+        },
+        "return_policy": "standard",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "4aff21f718dcbcbd"
+      },
+      "v1": {
+        "id": "MOKA-6-ALU",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups, aluminium",
+        "description": "The stovetop pot, in aluminium.",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "on_sale",
+        "gtin": "09506000134352",
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "image_url": "https://loja.example/img/moka-6.jpg",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "322105bc478e4b7b"
+      }
+    },
+    {
+      "name": "out of stock",
+      "tax_included": true,
+      "v2": {
+        "id": "MOKA-6-ALU",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups, aluminium",
+        "description": "The stovetop pot, in aluminium.",
+        "group": {
+          "id": "MOKA",
+          "title": "Moka pot",
+          "position": 2
+        },
+        "options": [
+          {
+            "key": "size",
+            "name": "Size",
+            "value": "6 cups"
+          },
+          {
+            "key": "material",
+            "name": "Material",
+            "value": "Aluminium"
+          }
+        ],
+        "price_model": "fixed",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "out_of_stock",
+        "gtin": "09506000134352",
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "media": [
+          {
+            "type": "image",
+            "url": "https://loja.example/img/moka-6.jpg",
+            "alt": "A six-cup moka pot"
+          }
+        ],
+        "fulfil_methods": ["pickup", "shipping"],
+        "shipping_profile": "standard",
+        "weight": {
+          "value": 0.65,
+          "unit": "kg"
+        },
+        "return_policy": "standard",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "8256dc394218dc65"
+      },
+      "v1": {
+        "id": "MOKA-6-ALU",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups, aluminium",
+        "description": "The stovetop pot, in aluminium.",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "out_of_stock",
+        "gtin": "09506000134352",
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "image_url": "https://loja.example/img/moka-6.jpg",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "4d8920da695e8572"
+      }
+    },
+    {
+      "name": "a pre-order: withdrawn",
+      "tax_included": true,
+      "v2": {
+        "id": "MOKA-6-ALU",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups, aluminium",
+        "description": "The stovetop pot, in aluminium.",
+        "group": {
+          "id": "MOKA",
+          "title": "Moka pot",
+          "position": 2
+        },
+        "options": [
+          {
+            "key": "size",
+            "name": "Size",
+            "value": "6 cups"
+          },
+          {
+            "key": "material",
+            "name": "Material",
+            "value": "Aluminium"
+          }
+        ],
+        "price_model": "fixed",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "preorder",
+        "gtin": "09506000134352",
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "media": [
+          {
+            "type": "image",
+            "url": "https://loja.example/img/moka-6.jpg",
+            "alt": "A six-cup moka pot"
+          }
+        ],
+        "fulfil_methods": ["pickup", "shipping"],
+        "shipping_profile": "standard",
+        "weight": {
+          "value": 0.65,
+          "unit": "kg"
+        },
+        "return_policy": "standard",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "available_from": "2026-12-01T00:00:00.000Z",
+        "hash": "2b156dc2782b6397"
+      },
+      "v1": {
+        "id": "MOKA-6-ALU",
+        "state": "withdrawn",
+        "updated_at": "2026-11-02T09:12:00.000Z"
+      }
+    },
+    {
+      "name": "a back-order: withdrawn",
+      "tax_included": true,
+      "v2": {
+        "id": "MOKA-6-ALU",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups, aluminium",
+        "description": "The stovetop pot, in aluminium.",
+        "group": {
+          "id": "MOKA",
+          "title": "Moka pot",
+          "position": 2
+        },
+        "options": [
+          {
+            "key": "size",
+            "name": "Size",
+            "value": "6 cups"
+          },
+          {
+            "key": "material",
+            "name": "Material",
+            "value": "Aluminium"
+          }
+        ],
+        "price_model": "fixed",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "backorder",
+        "gtin": "09506000134352",
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "media": [
+          {
+            "type": "image",
+            "url": "https://loja.example/img/moka-6.jpg",
+            "alt": "A six-cup moka pot"
+          }
+        ],
+        "fulfil_methods": ["pickup", "shipping"],
+        "shipping_profile": "standard",
+        "weight": {
+          "value": 0.65,
+          "unit": "kg"
+        },
+        "return_policy": "standard",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "1a4b8257ededa97d"
+      },
+      "v1": {
+        "id": "MOKA-6-ALU",
+        "state": "withdrawn",
+        "updated_at": "2026-11-02T09:12:00.000Z"
+      }
+    },
+    {
+      "name": "made to order: withdrawn",
+      "tax_included": true,
+      "v2": {
+        "id": "MOKA-6-ALU",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups, aluminium",
+        "description": "The stovetop pot, in aluminium.",
+        "group": {
+          "id": "MOKA",
+          "title": "Moka pot",
+          "position": 2
+        },
+        "options": [
+          {
+            "key": "size",
+            "name": "Size",
+            "value": "6 cups"
+          },
+          {
+            "key": "material",
+            "name": "Material",
+            "value": "Aluminium"
+          }
+        ],
+        "price_model": "fixed",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "made_to_order",
+        "gtin": "09506000134352",
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "media": [
+          {
+            "type": "image",
+            "url": "https://loja.example/img/moka-6.jpg",
+            "alt": "A six-cup moka pot"
+          }
+        ],
+        "fulfil_methods": ["pickup", "shipping"],
+        "shipping_profile": "standard",
+        "weight": {
+          "value": 0.65,
+          "unit": "kg"
+        },
+        "return_policy": "standard",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "392933460922e849"
+      },
+      "v1": {
+        "id": "MOKA-6-ALU",
+        "state": "withdrawn",
+        "updated_at": "2026-11-02T09:12:00.000Z"
+      }
+    },
+    {
+      "name": "from: withdrawn",
+      "tax_included": true,
+      "v2": {
+        "id": "CUT",
+        "state": "listed",
+        "sku": null,
+        "name": "Haircut",
+        "description": null,
+        "price_model": "from",
+        "price": {
+          "value": 2500,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": null,
+        "no_gtin": true,
+        "brand": null,
+        "mpn": null,
+        "condition": "new",
+        "url": null,
+        "media": [],
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "4c24ef09dc0f7611"
+      },
+      "v1": {
+        "id": "CUT",
+        "state": "withdrawn",
+        "updated_at": "2026-11-02T09:12:00.000Z"
+      }
+    },
+    {
+      "name": "range: withdrawn",
+      "tax_included": true,
+      "v2": {
+        "id": "CUT",
+        "state": "listed",
+        "sku": null,
+        "name": "Haircut",
+        "description": null,
+        "price_model": "range",
+        "price": {
+          "value": 4000,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": null,
+        "no_gtin": true,
+        "brand": null,
+        "mpn": null,
+        "condition": "new",
+        "url": null,
+        "media": [],
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "price_max": {
+          "value": 12000,
+          "currency": "EUR"
+        },
+        "hash": "9ece70899d65cab2"
+      },
+      "v1": {
+        "id": "CUT",
+        "state": "withdrawn",
+        "updated_at": "2026-11-02T09:12:00.000Z"
+      }
+    },
+    {
+      "name": "quote: withdrawn",
+      "tax_included": true,
+      "v2": {
+        "id": "CUT",
+        "state": "listed",
+        "sku": null,
+        "name": "Haircut",
+        "description": null,
+        "price_model": "quote",
+        "price": null,
+        "availability": "in_stock",
+        "gtin": null,
+        "no_gtin": true,
+        "brand": null,
+        "mpn": null,
+        "condition": "new",
+        "url": null,
+        "media": [],
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "d470670743ae6dd7"
+      },
+      "v1": {
+        "id": "CUT",
+        "state": "withdrawn",
+        "updated_at": "2026-11-02T09:12:00.000Z"
+      }
+    },
+    {
+      "name": "age-restricted: withdrawn",
+      "tax_included": true,
+      "v2": {
+        "id": "MOKA-6",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups",
+        "description": "The stovetop pot, in aluminium.",
+        "price_model": "fixed",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": "09506000134352",
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "media": [
+          {
+            "type": "image",
+            "url": "https://loja.example/img/moka-6.jpg",
+            "alt": "A six-cup moka pot"
+          }
+        ],
+        "fulfil_methods": ["pickup", "shipping"],
+        "shipping_profile": "standard",
+        "weight": {
+          "value": 0.65,
+          "unit": "kg"
+        },
+        "return_policy": "standard",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "age_restricted": {
+          "min_age": 18,
+          "kind": "alcohol",
+          "check": "id_at_handover"
+        },
+        "hash": "712bcd3d702f4d2a"
+      },
+      "v1": {
+        "id": "MOKA-6",
+        "state": "withdrawn",
+        "updated_at": "2026-11-02T09:12:00.000Z"
+      }
+    },
+    {
+      "name": "past its last day: withdrawn",
+      "tax_included": true,
+      "v2": {
+        "id": "MOKA-6-ALU",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups, aluminium",
+        "description": "The stovetop pot, in aluminium.",
+        "group": {
+          "id": "MOKA",
+          "title": "Moka pot",
+          "position": 2
+        },
+        "options": [
+          {
+            "key": "size",
+            "name": "Size",
+            "value": "6 cups"
+          },
+          {
+            "key": "material",
+            "name": "Material",
+            "value": "Aluminium"
+          }
+        ],
+        "price_model": "fixed",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": "09506000134352",
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "media": [
+          {
+            "type": "image",
+            "url": "https://loja.example/img/moka-6.jpg",
+            "alt": "A six-cup moka pot"
+          }
+        ],
+        "fulfil_methods": ["pickup", "shipping"],
+        "shipping_profile": "standard",
+        "weight": {
+          "value": 0.65,
+          "unit": "kg"
+        },
+        "return_policy": "standard",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "available_until": "2026-11-01T00:00:00.000Z",
+        "hash": "40948248dcd8fcea"
+      },
+      "v1": {
+        "id": "MOKA-6-ALU",
+        "state": "withdrawn",
+        "updated_at": "2026-11-02T09:12:00.000Z"
+      }
+    },
+    {
+      "name": "a season still on",
+      "tax_included": true,
+      "v2": {
+        "id": "MOKA-6-ALU",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups, aluminium",
+        "description": "The stovetop pot, in aluminium.",
+        "group": {
+          "id": "MOKA",
+          "title": "Moka pot",
+          "position": 2
+        },
+        "options": [
+          {
+            "key": "size",
+            "name": "Size",
+            "value": "6 cups"
+          },
+          {
+            "key": "material",
+            "name": "Material",
+            "value": "Aluminium"
+          }
+        ],
+        "price_model": "fixed",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": "09506000134352",
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "media": [
+          {
+            "type": "image",
+            "url": "https://loja.example/img/moka-6.jpg",
+            "alt": "A six-cup moka pot"
+          }
+        ],
+        "fulfil_methods": ["pickup", "shipping"],
+        "shipping_profile": "standard",
+        "weight": {
+          "value": 0.65,
+          "unit": "kg"
+        },
+        "return_policy": "standard",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "available_until": "2026-12-24T23:59:59.000Z",
+        "hash": "f6da8b1609cabfa5"
+      },
+      "v1": {
+        "id": "MOKA-6-ALU",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups, aluminium",
+        "description": "The stovetop pot, in aluminium.",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": "09506000134352",
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "image_url": "https://loja.example/img/moka-6.jpg",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "ddf26cf026963cfd"
+      }
+    },
+    {
+      "name": "its own tax unlike the catalogue's: withdrawn",
+      "tax_included": true,
+      "v2": {
+        "id": "MOKA-6-ALU",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups, aluminium",
+        "description": "The stovetop pot, in aluminium.",
+        "group": {
+          "id": "MOKA",
+          "title": "Moka pot",
+          "position": 2
+        },
+        "options": [
+          {
+            "key": "size",
+            "name": "Size",
+            "value": "6 cups"
+          },
+          {
+            "key": "material",
+            "name": "Material",
+            "value": "Aluminium"
+          }
+        ],
+        "price_model": "fixed",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": "09506000134352",
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "media": [
+          {
+            "type": "image",
+            "url": "https://loja.example/img/moka-6.jpg",
+            "alt": "A six-cup moka pot"
+          }
+        ],
+        "fulfil_methods": ["pickup", "shipping"],
+        "shipping_profile": "standard",
+        "weight": {
+          "value": 0.65,
+          "unit": "kg"
+        },
+        "return_policy": "standard",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "tax_included": false,
+        "hash": "456b41fb2f820747"
+      },
+      "v1": {
+        "id": "MOKA-6-ALU",
+        "state": "withdrawn",
+        "updated_at": "2026-11-02T09:12:00.000Z"
+      }
+    },
+    {
+      "name": "its own tax as the catalogue's",
+      "tax_included": true,
+      "v2": {
+        "id": "MOKA-6-ALU",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups, aluminium",
+        "description": "The stovetop pot, in aluminium.",
+        "group": {
+          "id": "MOKA",
+          "title": "Moka pot",
+          "position": 2
+        },
+        "options": [
+          {
+            "key": "size",
+            "name": "Size",
+            "value": "6 cups"
+          },
+          {
+            "key": "material",
+            "name": "Material",
+            "value": "Aluminium"
+          }
+        ],
+        "price_model": "fixed",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": "09506000134352",
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "media": [
+          {
+            "type": "image",
+            "url": "https://loja.example/img/moka-6.jpg",
+            "alt": "A six-cup moka pot"
+          }
+        ],
+        "fulfil_methods": ["pickup", "shipping"],
+        "shipping_profile": "standard",
+        "weight": {
+          "value": 0.65,
+          "unit": "kg"
+        },
+        "return_policy": "standard",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "tax_included": true,
+        "hash": "80399be2bc78ed41"
+      },
+      "v1": {
+        "id": "MOKA-6-ALU",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups, aluminium",
+        "description": "The stovetop pot, in aluminium.",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": "09506000134352",
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "image_url": "https://loja.example/img/moka-6.jpg",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "ddf26cf026963cfd"
+      }
+    },
+    {
+      "name": "its own tax, the catalogue silent",
+      "tax_included": null,
+      "v2": {
+        "id": "MOKA-6-ALU",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups, aluminium",
+        "description": "The stovetop pot, in aluminium.",
+        "group": {
+          "id": "MOKA",
+          "title": "Moka pot",
+          "position": 2
+        },
+        "options": [
+          {
+            "key": "size",
+            "name": "Size",
+            "value": "6 cups"
+          },
+          {
+            "key": "material",
+            "name": "Material",
+            "value": "Aluminium"
+          }
+        ],
+        "price_model": "fixed",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": "09506000134352",
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "media": [
+          {
+            "type": "image",
+            "url": "https://loja.example/img/moka-6.jpg",
+            "alt": "A six-cup moka pot"
+          }
+        ],
+        "fulfil_methods": ["pickup", "shipping"],
+        "shipping_profile": "standard",
+        "weight": {
+          "value": 0.65,
+          "unit": "kg"
+        },
+        "return_policy": "standard",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "tax_included": false,
+        "hash": "456b41fb2f820747"
+      },
+      "v1": {
+        "id": "MOKA-6-ALU",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups, aluminium",
+        "description": "The stovetop pot, in aluminium.",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": "09506000134352",
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "image_url": "https://loja.example/img/moka-6.jpg",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "ddf26cf026963cfd"
+      }
+    },
+    {
+      "name": "an id of 65 characters: no version 1 item",
+      "tax_included": true,
+      "v2": {
+        "id": "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups, aluminium",
+        "description": "The stovetop pot, in aluminium.",
+        "group": {
+          "id": "MOKA",
+          "title": "Moka pot",
+          "position": 2
+        },
+        "options": [
+          {
+            "key": "size",
+            "name": "Size",
+            "value": "6 cups"
+          },
+          {
+            "key": "material",
+            "name": "Material",
+            "value": "Aluminium"
+          }
+        ],
+        "price_model": "fixed",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": "09506000134352",
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "media": [
+          {
+            "type": "image",
+            "url": "https://loja.example/img/moka-6.jpg",
+            "alt": "A six-cup moka pot"
+          }
+        ],
+        "fulfil_methods": ["pickup", "shipping"],
+        "shipping_profile": "standard",
+        "weight": {
+          "value": 0.65,
+          "unit": "kg"
+        },
+        "return_policy": "standard",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "88820f5b16eea328"
+      },
+      "v1": null
+    },
+    {
+      "name": "withdrawn with an id of 65 characters: none either",
+      "tax_included": true,
+      "v2": {
+        "id": "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+        "state": "withdrawn",
+        "updated_at": "2026-11-02T09:11:00.000Z"
+      },
+      "v1": null
+    },
+    {
+      "name": "withdrawn",
+      "tax_included": true,
+      "v2": {
+        "id": "MOKA-3-ALU",
+        "state": "withdrawn",
+        "updated_at": "2026-11-02T09:11:00.000Z"
+      },
+      "v1": {
+        "id": "MOKA-3-ALU",
+        "state": "withdrawn",
+        "updated_at": "2026-11-02T09:11:00.000Z"
+      }
+    },
+    {
+      "name": "a description of 1,200 characters: cut to 1,000",
+      "tax_included": true,
+      "v2": {
+        "id": "MOKA-6-ALU",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups, aluminium",
+        "description": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "group": {
+          "id": "MOKA",
+          "title": "Moka pot",
+          "position": 2
+        },
+        "options": [
+          {
+            "key": "size",
+            "name": "Size",
+            "value": "6 cups"
+          },
+          {
+            "key": "material",
+            "name": "Material",
+            "value": "Aluminium"
+          }
+        ],
+        "price_model": "fixed",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": "09506000134352",
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "media": [
+          {
+            "type": "image",
+            "url": "https://loja.example/img/moka-6.jpg",
+            "alt": "A six-cup moka pot"
+          }
+        ],
+        "fulfil_methods": ["pickup", "shipping"],
+        "shipping_profile": "standard",
+        "weight": {
+          "value": 0.65,
+          "unit": "kg"
+        },
+        "return_policy": "standard",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "6d16d17d857bc901"
+      },
+      "v1": {
+        "id": "MOKA-6-ALU",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups, aluminium",
+        "description": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": "09506000134352",
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "image_url": "https://loja.example/img/moka-6.jpg",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "074851783dd9eeb5"
+      }
+    },
+    {
+      "name": "a cut that would split a character: one shorter",
+      "tax_included": true,
+      "v2": {
+        "id": "MOKA-6-ALU",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups, aluminium",
+        "description": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa🍕bbbbbbbbbb",
+        "group": {
+          "id": "MOKA",
+          "title": "Moka pot",
+          "position": 2
+        },
+        "options": [
+          {
+            "key": "size",
+            "name": "Size",
+            "value": "6 cups"
+          },
+          {
+            "key": "material",
+            "name": "Material",
+            "value": "Aluminium"
+          }
+        ],
+        "price_model": "fixed",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": "09506000134352",
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "media": [
+          {
+            "type": "image",
+            "url": "https://loja.example/img/moka-6.jpg",
+            "alt": "A six-cup moka pot"
+          }
+        ],
+        "fulfil_methods": ["pickup", "shipping"],
+        "shipping_profile": "standard",
+        "weight": {
+          "value": 0.65,
+          "unit": "kg"
+        },
+        "return_policy": "standard",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "6b535022f7541d47"
+      },
+      "v1": {
+        "id": "MOKA-6-ALU",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups, aluminium",
+        "description": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": "09506000134352",
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "image_url": "https://loja.example/img/moka-6.jpg",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "f4ce0e0f5bbfae6a"
+      },
+      "note": "999 letters and a pizza slice, which is two UTF-16 code units"
+    },
+    {
+      "name": "only a video: no picture",
+      "tax_included": true,
+      "v2": {
+        "id": "MOKA-6-ALU",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups, aluminium",
+        "description": "The stovetop pot, in aluminium.",
+        "group": {
+          "id": "MOKA",
+          "title": "Moka pot",
+          "position": 2
+        },
+        "options": [
+          {
+            "key": "size",
+            "name": "Size",
+            "value": "6 cups"
+          },
+          {
+            "key": "material",
+            "name": "Material",
+            "value": "Aluminium"
+          }
+        ],
+        "price_model": "fixed",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": "09506000134352",
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "media": [
+          {
+            "type": "video",
+            "url": "https://loja.example/v/moka.mp4"
+          }
+        ],
+        "fulfil_methods": ["pickup", "shipping"],
+        "shipping_profile": "standard",
+        "weight": {
+          "value": 0.65,
+          "unit": "kg"
+        },
+        "return_policy": "standard",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "938cb692c3f6b606"
+      },
+      "v1": {
+        "id": "MOKA-6-ALU",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups, aluminium",
+        "description": "The stovetop pot, in aluminium.",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": "09506000134352",
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "image_url": null,
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "ca26c3b5b33257cc"
+      }
+    },
+    {
+      "name": "a video, then a picture: the picture",
+      "tax_included": true,
+      "v2": {
+        "id": "MOKA-6-ALU",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups, aluminium",
+        "description": "The stovetop pot, in aluminium.",
+        "group": {
+          "id": "MOKA",
+          "title": "Moka pot",
+          "position": 2
+        },
+        "options": [
+          {
+            "key": "size",
+            "name": "Size",
+            "value": "6 cups"
+          },
+          {
+            "key": "material",
+            "name": "Material",
+            "value": "Aluminium"
+          }
+        ],
+        "price_model": "fixed",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": "09506000134352",
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "media": [
+          {
+            "type": "video",
+            "url": "https://loja.example/v/moka.mp4"
+          },
+          {
+            "type": "image",
+            "url": "https://loja.example/img/moka-6.jpg"
+          }
+        ],
+        "fulfil_methods": ["pickup", "shipping"],
+        "shipping_profile": "standard",
+        "weight": {
+          "value": 0.65,
+          "unit": "kg"
+        },
+        "return_policy": "standard",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "91b361973b55253a"
+      },
+      "v1": {
+        "id": "MOKA-6-ALU",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups, aluminium",
+        "description": "The stovetop pot, in aluminium.",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": "09506000134352",
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "image_url": "https://loja.example/img/moka-6.jpg",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "ddf26cf026963cfd"
+      }
+    },
+    {
+      "name": "a pack of twelve keeps multipack",
+      "tax_included": true,
+      "v2": {
+        "id": "MOKA-6",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups",
+        "description": "The stovetop pot, in aluminium.",
+        "price_model": "fixed",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": "09506000134352",
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "media": [
+          {
+            "type": "image",
+            "url": "https://loja.example/img/moka-6.jpg",
+            "alt": "A six-cup moka pot"
+          }
+        ],
+        "fulfil_methods": ["pickup", "shipping"],
+        "shipping_profile": "standard",
+        "weight": {
+          "value": 0.65,
+          "unit": "kg"
+        },
+        "return_policy": "standard",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "multipack": 12,
+        "hash": "d440743dc7e8f1f7"
+      },
+      "v1": {
+        "id": "MOKA-6",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups",
+        "description": "The stovetop pot, in aluminium.",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": "09506000134352",
+        "no_gtin": false,
+        "multipack": 12,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "image_url": "https://loja.example/img/moka-6.jpg",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "60da46a161fe084b"
+      }
+    },
+    {
+      "name": "a bundle is an offer like any other",
+      "tax_included": true,
+      "v2": {
+        "id": "MOKA-6",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups",
+        "description": "The stovetop pot, in aluminium.",
+        "price_model": "fixed",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": null,
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "media": [
+          {
+            "type": "image",
+            "url": "https://loja.example/img/moka-6.jpg",
+            "alt": "A six-cup moka pot"
+          }
+        ],
+        "fulfil_methods": ["pickup", "shipping"],
+        "shipping_profile": "standard",
+        "weight": {
+          "value": 0.65,
+          "unit": "kg"
+        },
+        "return_policy": "standard",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "is_bundle": true,
+        "hash": "24d3d141a4b2f674"
+      },
+      "v1": {
+        "id": "MOKA-6",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups",
+        "description": "The stovetop pot, in aluminium.",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": null,
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "image_url": "https://loja.example/img/moka-6.jpg",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "c47fa7741fe03a51"
+      }
+    },
+    {
+      "name": "the was price and the unit price are left out",
+      "tax_included": true,
+      "v2": {
+        "id": "MOKA-6-ALU",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups, aluminium",
+        "description": "The stovetop pot, in aluminium.",
+        "group": {
+          "id": "MOKA",
+          "title": "Moka pot",
+          "position": 2
+        },
+        "options": [
+          {
+            "key": "size",
+            "name": "Size",
+            "value": "6 cups"
+          },
+          {
+            "key": "material",
+            "name": "Material",
+            "value": "Aluminium"
+          }
+        ],
+        "price_model": "fixed",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": "09506000134352",
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "media": [
+          {
+            "type": "image",
+            "url": "https://loja.example/img/moka-6.jpg",
+            "alt": "A six-cup moka pot"
+          }
+        ],
+        "fulfil_methods": ["pickup", "shipping"],
+        "shipping_profile": "standard",
+        "weight": {
+          "value": 0.65,
+          "unit": "kg"
+        },
+        "return_policy": "standard",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "list_price": {
+          "value": 3990,
+          "currency": "EUR"
+        },
+        "unit_price": {
+          "measure": {
+            "value": 1,
+            "unit": "ct"
+          },
+          "reference": {
+            "value": 1,
+            "unit": "ct"
+          }
+        },
+        "hash": "a194eccd613fb44b"
+      },
+      "v1": {
+        "id": "MOKA-6-ALU",
+        "state": "listed",
+        "sku": "MOKA-6",
+        "name": "Moka pot, 6 cups, aluminium",
+        "description": "The stovetop pot, in aluminium.",
+        "price": {
+          "value": 3490,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": "09506000134352",
+        "no_gtin": false,
+        "brand": "Bialetti",
+        "mpn": null,
+        "condition": "new",
+        "url": "https://loja.example/produtos/moka-6",
+        "image_url": "https://loja.example/img/moka-6.jpg",
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "ddf26cf026963cfd"
+      }
+    }
+  ]
+}

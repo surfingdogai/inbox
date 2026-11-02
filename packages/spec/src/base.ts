@@ -524,9 +524,27 @@ export const manifestSchema = z.object({
   doors_elsewhere: z.array(doorElsewhereSchema).max(6).optional(),
   /**
    * Where a network reads the business's products (network.md §4.18, spec 0.9), while its owner lists
-   * them on networks: the signed feed of changes, and products by id. Absent, it lists none.
+   * them on networks: the signed feed of changes, and products by id. Absent, it lists none. Catalogue
+   * version 2 adds `versions`, the catalogue versions the feed serves (absent: `[1]`; `[2]` alone: a read
+   * that names no version is answered `422 version_required`), and `policies`, the signed policies
+   * document its version 2 items name.
    */
-  catalogue: z.object({ feed: z.url({ protocol: /^https$/ }), items: z.url({ protocol: /^https$/ }) }).optional(),
+  catalogue: z
+    .object({
+      feed: z.url({ protocol: /^https$/ }),
+      items: z.url({ protocol: /^https$/ }),
+      versions: z
+        .array(z.int().min(1).max(99))
+        .min(1)
+        .max(8)
+        .optional()
+        .describe("The catalogue versions the feed serves, each once. Absent: [1]."),
+      policies: z
+        .url({ protocol: /^https$/ })
+        .optional()
+        .describe("The signed policies document: shipping profiles and return policies (catalogue version 2)."),
+    })
+    .optional(),
   /**
    * Spec 0.11 (ADR-037): a place to stay's door, present when `item_types` lists `stay`: whether stays
    * are on request (the property answers each with a quote) or some confirm at once from a system it

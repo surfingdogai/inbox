@@ -1,0 +1,1623 @@
+{
+  "$comment": "Catalogue version 2 (protocol §4.18): price models (models, read as catalogue-checks.json reads, at as_of), unit prices (unitPriceOf: the amount per reference in the price's minor units, a half up, or the problem), and the 'was' price rule (wasPriceOf: the EU's rule, everywhere: below it now, and at or above it for the whole 30 days before the reduction began; history is every price recorded, each from at until the next). Codes written by hand; amounts and windows worked out by packages/spec/scripts/gen-catalogue-vectors.py with exact fractions. MIT.",
+  "as_of": "2026-11-02T10:00:00.000Z",
+  "models": [
+    {
+      "name": "fixed",
+      "item": {
+        "id": "CUT",
+        "state": "listed",
+        "sku": null,
+        "name": "Haircut",
+        "description": null,
+        "price_model": "fixed",
+        "price": {
+          "value": 2500,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": null,
+        "no_gtin": true,
+        "brand": null,
+        "mpn": null,
+        "condition": "new",
+        "url": null,
+        "media": [],
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "a1d48bbbe9de8532"
+      },
+      "expect": {
+        "state": "listed",
+        "dropped": []
+      }
+    },
+    {
+      "name": "from: cuts from 25",
+      "item": {
+        "id": "CUT",
+        "state": "listed",
+        "sku": null,
+        "name": "Haircut",
+        "description": null,
+        "price_model": "from",
+        "price": {
+          "value": 2500,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": null,
+        "no_gtin": true,
+        "brand": null,
+        "mpn": null,
+        "condition": "new",
+        "url": null,
+        "media": [],
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "4c24ef09dc0f7611"
+      },
+      "expect": {
+        "state": "listed",
+        "dropped": []
+      }
+    },
+    {
+      "name": "range: repairs 40 to 120",
+      "item": {
+        "id": "CUT",
+        "state": "listed",
+        "sku": null,
+        "name": "Repair",
+        "description": null,
+        "price_model": "range",
+        "price": {
+          "value": 4000,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": null,
+        "no_gtin": true,
+        "brand": null,
+        "mpn": null,
+        "condition": "new",
+        "url": null,
+        "media": [],
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "price_max": {
+          "value": 12000,
+          "currency": "EUR"
+        },
+        "hash": "5383e1100686803a"
+      },
+      "expect": {
+        "state": "listed",
+        "dropped": []
+      }
+    },
+    {
+      "name": "quote: on request, no price",
+      "item": {
+        "id": "CUT",
+        "state": "listed",
+        "sku": null,
+        "name": "Wedding cake",
+        "description": null,
+        "price_model": "quote",
+        "price": null,
+        "availability": "in_stock",
+        "gtin": null,
+        "no_gtin": true,
+        "brand": null,
+        "mpn": null,
+        "condition": "new",
+        "url": null,
+        "media": [],
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "ae26cd8851a2cbca"
+      },
+      "expect": {
+        "state": "listed",
+        "dropped": []
+      }
+    },
+    {
+      "name": "quote with a price",
+      "item": {
+        "id": "CUT",
+        "state": "listed",
+        "sku": null,
+        "name": "Haircut",
+        "description": null,
+        "price_model": "quote",
+        "price": {
+          "value": 2500,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": null,
+        "no_gtin": true,
+        "brand": null,
+        "mpn": null,
+        "condition": "new",
+        "url": null,
+        "media": [],
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "3b2ba044cf62362f"
+      },
+      "expect": {
+        "state": "held",
+        "id": "CUT",
+        "problems": ["price_with_quote"]
+      }
+    },
+    {
+      "name": "fixed with no price",
+      "item": {
+        "id": "CUT",
+        "state": "listed",
+        "sku": null,
+        "name": "Haircut",
+        "description": null,
+        "price_model": "fixed",
+        "price": null,
+        "availability": "in_stock",
+        "gtin": null,
+        "no_gtin": true,
+        "brand": null,
+        "mpn": null,
+        "condition": "new",
+        "url": null,
+        "media": [],
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "1c64f45f309d7ded"
+      },
+      "expect": {
+        "state": "held",
+        "id": "CUT",
+        "problems": ["price_missing"]
+      }
+    },
+    {
+      "name": "from with no price",
+      "item": {
+        "id": "CUT",
+        "state": "listed",
+        "sku": null,
+        "name": "Haircut",
+        "description": null,
+        "price_model": "from",
+        "price": null,
+        "availability": "in_stock",
+        "gtin": null,
+        "no_gtin": true,
+        "brand": null,
+        "mpn": null,
+        "condition": "new",
+        "url": null,
+        "media": [],
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "6d88e7b3fa2e5585"
+      },
+      "expect": {
+        "state": "held",
+        "id": "CUT",
+        "problems": ["price_missing"]
+      }
+    },
+    {
+      "name": "from with a top price",
+      "item": {
+        "id": "CUT",
+        "state": "listed",
+        "sku": null,
+        "name": "Haircut",
+        "description": null,
+        "price_model": "from",
+        "price": {
+          "value": 2500,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": null,
+        "no_gtin": true,
+        "brand": null,
+        "mpn": null,
+        "condition": "new",
+        "url": null,
+        "media": [],
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "price_max": {
+          "value": 9000,
+          "currency": "EUR"
+        },
+        "hash": "fea7e197b04698b0"
+      },
+      "expect": {
+        "state": "held",
+        "id": "CUT",
+        "problems": ["price_max_not_range"]
+      }
+    },
+    {
+      "name": "fixed with a top price",
+      "item": {
+        "id": "CUT",
+        "state": "listed",
+        "sku": null,
+        "name": "Haircut",
+        "description": null,
+        "price_model": "fixed",
+        "price": {
+          "value": 2500,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": null,
+        "no_gtin": true,
+        "brand": null,
+        "mpn": null,
+        "condition": "new",
+        "url": null,
+        "media": [],
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "price_max": {
+          "value": 9000,
+          "currency": "EUR"
+        },
+        "hash": "667507ea0bc61562"
+      },
+      "expect": {
+        "state": "held",
+        "id": "CUT",
+        "problems": ["price_max_not_range"]
+      }
+    },
+    {
+      "name": "range with no top",
+      "item": {
+        "id": "CUT",
+        "state": "listed",
+        "sku": null,
+        "name": "Haircut",
+        "description": null,
+        "price_model": "range",
+        "price": {
+          "value": 2500,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": null,
+        "no_gtin": true,
+        "brand": null,
+        "mpn": null,
+        "condition": "new",
+        "url": null,
+        "media": [],
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "859eddf9649f7b11"
+      },
+      "expect": {
+        "state": "held",
+        "id": "CUT",
+        "problems": ["price_max_missing"]
+      }
+    },
+    {
+      "name": "range whose top is its bottom",
+      "item": {
+        "id": "CUT",
+        "state": "listed",
+        "sku": null,
+        "name": "Haircut",
+        "description": null,
+        "price_model": "range",
+        "price": {
+          "value": 2500,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": null,
+        "no_gtin": true,
+        "brand": null,
+        "mpn": null,
+        "condition": "new",
+        "url": null,
+        "media": [],
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "price_max": {
+          "value": 2500,
+          "currency": "EUR"
+        },
+        "hash": "bf040df785b7d262"
+      },
+      "expect": {
+        "state": "held",
+        "id": "CUT",
+        "problems": ["price_max_not_above"]
+      }
+    },
+    {
+      "name": "range whose top is below",
+      "item": {
+        "id": "CUT",
+        "state": "listed",
+        "sku": null,
+        "name": "Haircut",
+        "description": null,
+        "price_model": "range",
+        "price": {
+          "value": 2500,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": null,
+        "no_gtin": true,
+        "brand": null,
+        "mpn": null,
+        "condition": "new",
+        "url": null,
+        "media": [],
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "price_max": {
+          "value": 2000,
+          "currency": "EUR"
+        },
+        "hash": "2209a6303f6f752b"
+      },
+      "expect": {
+        "state": "held",
+        "id": "CUT",
+        "problems": ["price_max_not_above"]
+      }
+    },
+    {
+      "name": "range whose top is in another currency",
+      "item": {
+        "id": "CUT",
+        "state": "listed",
+        "sku": null,
+        "name": "Haircut",
+        "description": null,
+        "price_model": "range",
+        "price": {
+          "value": 2500,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": null,
+        "no_gtin": true,
+        "brand": null,
+        "mpn": null,
+        "condition": "new",
+        "url": null,
+        "media": [],
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "price_max": {
+          "value": 9000,
+          "currency": "GBP"
+        },
+        "hash": "d2f3742d9445b473"
+      },
+      "expect": {
+        "state": "held",
+        "id": "CUT",
+        "problems": ["currency_mismatch"]
+      }
+    },
+    {
+      "name": "quote with a price and a top: both named",
+      "item": {
+        "id": "CUT",
+        "state": "listed",
+        "sku": null,
+        "name": "Haircut",
+        "description": null,
+        "price_model": "quote",
+        "price": {
+          "value": 2500,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": null,
+        "no_gtin": true,
+        "brand": null,
+        "mpn": null,
+        "condition": "new",
+        "url": null,
+        "media": [],
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "price_max": {
+          "value": 9000,
+          "currency": "EUR"
+        },
+        "hash": "2d60b92766c2fdf5"
+      },
+      "expect": {
+        "state": "held",
+        "id": "CUT",
+        "problems": ["price_with_quote", "price_max_not_range"]
+      }
+    },
+    {
+      "name": "a top price of 0",
+      "item": {
+        "id": "CUT",
+        "state": "listed",
+        "sku": null,
+        "name": "Haircut",
+        "description": null,
+        "price_model": "range",
+        "price": {
+          "value": 2500,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": null,
+        "no_gtin": true,
+        "brand": null,
+        "mpn": null,
+        "condition": "new",
+        "url": null,
+        "media": [],
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "price_max": {
+          "value": 0,
+          "currency": "EUR"
+        },
+        "hash": "a289edbe711bf256"
+      },
+      "expect": {
+        "state": "held",
+        "id": "CUT",
+        "problems": ["unreadable"]
+      }
+    },
+    {
+      "name": "a price_model it does not know",
+      "item": {
+        "id": "CUT",
+        "state": "listed",
+        "sku": null,
+        "name": "Haircut",
+        "description": null,
+        "price_model": "per_hour",
+        "price": {
+          "value": 2500,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": null,
+        "no_gtin": true,
+        "brand": null,
+        "mpn": null,
+        "condition": "new",
+        "url": null,
+        "media": [],
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "hash": "5298ddd9ab3763cc"
+      },
+      "expect": {
+        "state": "held",
+        "id": "CUT",
+        "problems": ["unreadable"]
+      }
+    },
+    {
+      "name": "a was price above a fixed price",
+      "item": {
+        "id": "CUT",
+        "state": "listed",
+        "sku": null,
+        "name": "Haircut",
+        "description": null,
+        "price_model": "fixed",
+        "price": {
+          "value": 2500,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": null,
+        "no_gtin": true,
+        "brand": null,
+        "mpn": null,
+        "condition": "new",
+        "url": null,
+        "media": [],
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "list_price": {
+          "value": 3000,
+          "currency": "EUR"
+        },
+        "hash": "d0ccd6d10689af91"
+      },
+      "expect": {
+        "state": "listed",
+        "dropped": []
+      }
+    },
+    {
+      "name": "a was price beside from: dropped",
+      "item": {
+        "id": "CUT",
+        "state": "listed",
+        "sku": null,
+        "name": "Haircut",
+        "description": null,
+        "price_model": "from",
+        "price": {
+          "value": 2500,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": null,
+        "no_gtin": true,
+        "brand": null,
+        "mpn": null,
+        "condition": "new",
+        "url": null,
+        "media": [],
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "list_price": {
+          "value": 3000,
+          "currency": "EUR"
+        },
+        "hash": "2036df7d5e3c0587"
+      },
+      "expect": {
+        "state": "listed",
+        "dropped": ["list_price_not_fixed"],
+        "item": {
+          "id": "CUT",
+          "state": "listed",
+          "sku": null,
+          "name": "Haircut",
+          "description": null,
+          "price_model": "from",
+          "price": {
+            "value": 2500,
+            "currency": "EUR"
+          },
+          "availability": "in_stock",
+          "gtin": null,
+          "no_gtin": true,
+          "brand": null,
+          "mpn": null,
+          "condition": "new",
+          "url": null,
+          "media": [],
+          "updated_at": "2026-11-02T09:12:00.000Z",
+          "hash": "2036df7d5e3c0587"
+        }
+      }
+    },
+    {
+      "name": "a was price beside quote: dropped",
+      "item": {
+        "id": "CUT",
+        "state": "listed",
+        "sku": null,
+        "name": "Haircut",
+        "description": null,
+        "price_model": "quote",
+        "price": null,
+        "availability": "in_stock",
+        "gtin": null,
+        "no_gtin": true,
+        "brand": null,
+        "mpn": null,
+        "condition": "new",
+        "url": null,
+        "media": [],
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "list_price": {
+          "value": 3000,
+          "currency": "EUR"
+        },
+        "hash": "acb5619d9ff73369"
+      },
+      "expect": {
+        "state": "listed",
+        "dropped": ["list_price_not_fixed"],
+        "item": {
+          "id": "CUT",
+          "state": "listed",
+          "sku": null,
+          "name": "Haircut",
+          "description": null,
+          "price_model": "quote",
+          "price": null,
+          "availability": "in_stock",
+          "gtin": null,
+          "no_gtin": true,
+          "brand": null,
+          "mpn": null,
+          "condition": "new",
+          "url": null,
+          "media": [],
+          "updated_at": "2026-11-02T09:12:00.000Z",
+          "hash": "acb5619d9ff73369"
+        }
+      }
+    },
+    {
+      "name": "a was price equal to the price: dropped",
+      "item": {
+        "id": "CUT",
+        "state": "listed",
+        "sku": null,
+        "name": "Haircut",
+        "description": null,
+        "price_model": "fixed",
+        "price": {
+          "value": 2500,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": null,
+        "no_gtin": true,
+        "brand": null,
+        "mpn": null,
+        "condition": "new",
+        "url": null,
+        "media": [],
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "list_price": {
+          "value": 2500,
+          "currency": "EUR"
+        },
+        "hash": "df69b8e69027f57d"
+      },
+      "expect": {
+        "state": "listed",
+        "dropped": ["list_price_not_above"],
+        "item": {
+          "id": "CUT",
+          "state": "listed",
+          "sku": null,
+          "name": "Haircut",
+          "description": null,
+          "price_model": "fixed",
+          "price": {
+            "value": 2500,
+            "currency": "EUR"
+          },
+          "availability": "in_stock",
+          "gtin": null,
+          "no_gtin": true,
+          "brand": null,
+          "mpn": null,
+          "condition": "new",
+          "url": null,
+          "media": [],
+          "updated_at": "2026-11-02T09:12:00.000Z",
+          "hash": "df69b8e69027f57d"
+        }
+      }
+    },
+    {
+      "name": "a was price in another currency: dropped",
+      "item": {
+        "id": "CUT",
+        "state": "listed",
+        "sku": null,
+        "name": "Haircut",
+        "description": null,
+        "price_model": "fixed",
+        "price": {
+          "value": 2500,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": null,
+        "no_gtin": true,
+        "brand": null,
+        "mpn": null,
+        "condition": "new",
+        "url": null,
+        "media": [],
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "list_price": {
+          "value": 3000,
+          "currency": "GBP"
+        },
+        "hash": "3c97be8c1a009b31"
+      },
+      "expect": {
+        "state": "listed",
+        "dropped": ["list_price_currency"],
+        "item": {
+          "id": "CUT",
+          "state": "listed",
+          "sku": null,
+          "name": "Haircut",
+          "description": null,
+          "price_model": "fixed",
+          "price": {
+            "value": 2500,
+            "currency": "EUR"
+          },
+          "availability": "in_stock",
+          "gtin": null,
+          "no_gtin": true,
+          "brand": null,
+          "mpn": null,
+          "condition": "new",
+          "url": null,
+          "media": [],
+          "updated_at": "2026-11-02T09:12:00.000Z",
+          "hash": "3c97be8c1a009b31"
+        }
+      }
+    },
+    {
+      "name": "a unit price beside range: dropped",
+      "item": {
+        "id": "CUT",
+        "state": "listed",
+        "sku": null,
+        "name": "Haircut",
+        "description": null,
+        "price_model": "range",
+        "price": {
+          "value": 2500,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": null,
+        "no_gtin": true,
+        "brand": null,
+        "mpn": null,
+        "condition": "new",
+        "url": null,
+        "media": [],
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "price_max": {
+          "value": 9000,
+          "currency": "EUR"
+        },
+        "unit_price": {
+          "measure": {
+            "value": 1,
+            "unit": "kg"
+          },
+          "reference": {
+            "value": 1,
+            "unit": "kg"
+          }
+        },
+        "hash": "cce12797837b779c"
+      },
+      "expect": {
+        "state": "listed",
+        "dropped": ["unit_price_not_fixed"],
+        "item": {
+          "id": "CUT",
+          "state": "listed",
+          "sku": null,
+          "name": "Haircut",
+          "description": null,
+          "price_model": "range",
+          "price": {
+            "value": 2500,
+            "currency": "EUR"
+          },
+          "price_max": {
+            "value": 9000,
+            "currency": "EUR"
+          },
+          "availability": "in_stock",
+          "gtin": null,
+          "no_gtin": true,
+          "brand": null,
+          "mpn": null,
+          "condition": "new",
+          "url": null,
+          "media": [],
+          "updated_at": "2026-11-02T09:12:00.000Z",
+          "hash": "cce12797837b779c"
+        }
+      }
+    },
+    {
+      "name": "a unit price in grams per ounce: dropped",
+      "item": {
+        "id": "CUT",
+        "state": "listed",
+        "sku": null,
+        "name": "Haircut",
+        "description": null,
+        "price_model": "fixed",
+        "price": {
+          "value": 2500,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": null,
+        "no_gtin": true,
+        "brand": null,
+        "mpn": null,
+        "condition": "new",
+        "url": null,
+        "media": [],
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "unit_price": {
+          "measure": {
+            "value": 500,
+            "unit": "g"
+          },
+          "reference": {
+            "value": 1,
+            "unit": "oz"
+          }
+        },
+        "hash": "0f692c8ef61fa73b"
+      },
+      "expect": {
+        "state": "listed",
+        "dropped": ["unit_mismatch"],
+        "item": {
+          "id": "CUT",
+          "state": "listed",
+          "sku": null,
+          "name": "Haircut",
+          "description": null,
+          "price_model": "fixed",
+          "price": {
+            "value": 2500,
+            "currency": "EUR"
+          },
+          "availability": "in_stock",
+          "gtin": null,
+          "no_gtin": true,
+          "brand": null,
+          "mpn": null,
+          "condition": "new",
+          "url": null,
+          "media": [],
+          "updated_at": "2026-11-02T09:12:00.000Z",
+          "hash": "0f692c8ef61fa73b"
+        }
+      }
+    },
+    {
+      "name": "tax not included on this offer",
+      "item": {
+        "id": "CUT",
+        "state": "listed",
+        "sku": null,
+        "name": "Haircut",
+        "description": null,
+        "price_model": "fixed",
+        "price": {
+          "value": 2500,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": null,
+        "no_gtin": true,
+        "brand": null,
+        "mpn": null,
+        "condition": "new",
+        "url": null,
+        "media": [],
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "tax_included": false,
+        "hash": "caf45b2be740b45f"
+      },
+      "expect": {
+        "state": "listed",
+        "dropped": []
+      }
+    }
+  ],
+  "unit_price": [
+    {
+      "name": "500 g at 4.50, per kg",
+      "price": {
+        "value": 450,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "measure": {
+          "value": 500,
+          "unit": "g"
+        },
+        "reference": {
+          "value": 1,
+          "unit": "kg"
+        }
+      },
+      "expect": {
+        "amount": 900,
+        "currency": "EUR"
+      }
+    },
+    {
+      "name": "330 ml at 1.99, per litre",
+      "price": {
+        "value": 199,
+        "currency": "GBP"
+      },
+      "unit_price": {
+        "measure": {
+          "value": 330,
+          "unit": "ml"
+        },
+        "reference": {
+          "value": 1,
+          "unit": "l"
+        }
+      },
+      "expect": {
+        "amount": 603,
+        "currency": "GBP"
+      },
+      "note": "603.03, so 603"
+    },
+    {
+      "name": "0.75 l at 12.99, per litre",
+      "price": {
+        "value": 1299,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "measure": {
+          "value": 0.75,
+          "unit": "l"
+        },
+        "reference": {
+          "value": 1,
+          "unit": "l"
+        }
+      },
+      "expect": {
+        "amount": 1732,
+        "currency": "EUR"
+      }
+    },
+    {
+      "name": "six 330 ml cans at 5.49, per litre",
+      "price": {
+        "value": 549,
+        "currency": "GBP"
+      },
+      "unit_price": {
+        "measure": {
+          "value": 1980,
+          "unit": "ml"
+        },
+        "reference": {
+          "value": 1,
+          "unit": "l"
+        }
+      },
+      "expect": {
+        "amount": 277,
+        "currency": "GBP"
+      },
+      "note": "the measure is the whole pack: 6 × 330 ml"
+    },
+    {
+      "name": "70 cl at 15.99, per litre",
+      "price": {
+        "value": 1599,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "measure": {
+          "value": 70,
+          "unit": "cl"
+        },
+        "reference": {
+          "value": 1,
+          "unit": "l"
+        }
+      },
+      "expect": {
+        "amount": 2284,
+        "currency": "EUR"
+      }
+    },
+    {
+      "name": "half a minor unit rounds up",
+      "price": {
+        "value": 1,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "measure": {
+          "value": 2,
+          "unit": "g"
+        },
+        "reference": {
+          "value": 1,
+          "unit": "g"
+        }
+      },
+      "expect": {
+        "amount": 1,
+        "currency": "EUR"
+      },
+      "note": "0.5, so 1"
+    },
+    {
+      "name": "one and a half rounds up",
+      "price": {
+        "value": 3,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "measure": {
+          "value": 2,
+          "unit": "g"
+        },
+        "reference": {
+          "value": 1,
+          "unit": "g"
+        }
+      },
+      "expect": {
+        "amount": 2,
+        "currency": "EUR"
+      },
+      "note": "1.5, so 2"
+    },
+    {
+      "name": "15.25 oz at 4.49, per ounce",
+      "price": {
+        "value": 449,
+        "currency": "USD"
+      },
+      "unit_price": {
+        "measure": {
+          "value": 15.25,
+          "unit": "oz"
+        },
+        "reference": {
+          "value": 1,
+          "unit": "oz"
+        }
+      },
+      "expect": {
+        "amount": 29,
+        "currency": "USD"
+      }
+    },
+    {
+      "name": "15.25 oz at 4.49, per pound",
+      "price": {
+        "value": 449,
+        "currency": "USD"
+      },
+      "unit_price": {
+        "measure": {
+          "value": 15.25,
+          "unit": "oz"
+        },
+        "reference": {
+          "value": 1,
+          "unit": "lb"
+        }
+      },
+      "expect": {
+        "amount": 471,
+        "currency": "USD"
+      }
+    },
+    {
+      "name": "1 kg at KWD 2.500, per 100 g",
+      "price": {
+        "value": 2500,
+        "currency": "KWD"
+      },
+      "unit_price": {
+        "measure": {
+          "value": 1,
+          "unit": "kg"
+        },
+        "reference": {
+          "value": 100,
+          "unit": "g"
+        }
+      },
+      "expect": {
+        "amount": 250,
+        "currency": "KWD"
+      },
+      "note": "KWD has three decimals"
+    },
+    {
+      "name": "400 g at JPY 398, per 100 g",
+      "price": {
+        "value": 398,
+        "currency": "JPY"
+      },
+      "unit_price": {
+        "measure": {
+          "value": 400,
+          "unit": "g"
+        },
+        "reference": {
+          "value": 100,
+          "unit": "g"
+        }
+      },
+      "expect": {
+        "amount": 100,
+        "currency": "JPY"
+      },
+      "note": "JPY has none: 99.5, so 100"
+    },
+    {
+      "name": "120 tablets at 8.99, per 100",
+      "price": {
+        "value": 899,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "measure": {
+          "value": 120,
+          "unit": "ct"
+        },
+        "reference": {
+          "value": 100,
+          "unit": "ct"
+        }
+      },
+      "expect": {
+        "amount": 749,
+        "currency": "EUR"
+      }
+    },
+    {
+      "name": "25 m of cable at 19.99, per 10 m",
+      "price": {
+        "value": 1999,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "measure": {
+          "value": 25,
+          "unit": "m"
+        },
+        "reference": {
+          "value": 10,
+          "unit": "m"
+        }
+      },
+      "expect": {
+        "amount": 800,
+        "currency": "EUR"
+      }
+    },
+    {
+      "name": "6 ft at 12.00, per yard",
+      "price": {
+        "value": 1200,
+        "currency": "USD"
+      },
+      "unit_price": {
+        "measure": {
+          "value": 6,
+          "unit": "ft"
+        },
+        "reference": {
+          "value": 1,
+          "unit": "yd"
+        }
+      },
+      "expect": {
+        "amount": 600,
+        "currency": "USD"
+      }
+    },
+    {
+      "name": "2.5 sqm at 49.90, per sqm",
+      "price": {
+        "value": 4990,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "measure": {
+          "value": 2.5,
+          "unit": "sqm"
+        },
+        "reference": {
+          "value": 1,
+          "unit": "sqm"
+        }
+      },
+      "expect": {
+        "amount": 1996,
+        "currency": "EUR"
+      }
+    },
+    {
+      "name": "grams per ounce never mix",
+      "price": {
+        "value": 450,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "measure": {
+          "value": 500,
+          "unit": "g"
+        },
+        "reference": {
+          "value": 1,
+          "unit": "oz"
+        }
+      },
+      "expect": {
+        "problem": "unit_mismatch"
+      }
+    },
+    {
+      "name": "grams per litre never mix",
+      "price": {
+        "value": 450,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "measure": {
+          "value": 500,
+          "unit": "g"
+        },
+        "reference": {
+          "value": 1,
+          "unit": "l"
+        }
+      },
+      "expect": {
+        "problem": "unit_mismatch"
+      }
+    },
+    {
+      "name": "a unit it does not know",
+      "price": {
+        "value": 450,
+        "currency": "GBP"
+      },
+      "unit_price": {
+        "measure": {
+          "value": 1,
+          "unit": "pint"
+        },
+        "reference": {
+          "value": 1,
+          "unit": "l"
+        }
+      },
+      "expect": {
+        "problem": "unit_unknown"
+      }
+    },
+    {
+      "name": "a measure with four decimals",
+      "price": {
+        "value": 450,
+        "currency": "EUR"
+      },
+      "unit_price": {
+        "measure": {
+          "value": 0.3333,
+          "unit": "kg"
+        },
+        "reference": {
+          "value": 1,
+          "unit": "kg"
+        }
+      },
+      "expect": {
+        "problem": "unit_measure"
+      }
+    }
+  ],
+  "was_price": [
+    {
+      "name": "at 20.00 since 1 September, 15.00 from 20 October",
+      "list_price": 2000,
+      "history": [
+        {
+          "at": "2026-09-01T00:00:00.000Z",
+          "value": 2000
+        },
+        {
+          "at": "2026-10-20T00:00:00.000Z",
+          "value": 1500
+        }
+      ],
+      "expect": {
+        "shown": true,
+        "since": "2026-10-20T00:00:00.000Z"
+      }
+    },
+    {
+      "name": "the price now is the was price",
+      "list_price": 2000,
+      "history": [
+        {
+          "at": "2026-09-01T00:00:00.000Z",
+          "value": 2000
+        }
+      ],
+      "expect": {
+        "shown": false,
+        "why": "not_lower"
+      }
+    },
+    {
+      "name": "the price now is above it",
+      "list_price": 2000,
+      "history": [
+        {
+          "at": "2026-09-01T00:00:00.000Z",
+          "value": 2000
+        },
+        {
+          "at": "2026-10-20T00:00:00.000Z",
+          "value": 2100
+        }
+      ],
+      "expect": {
+        "shown": false,
+        "why": "not_lower"
+      }
+    },
+    {
+      "name": "no record at all",
+      "list_price": 2000,
+      "history": [],
+      "expect": {
+        "shown": false,
+        "why": "not_lower"
+      }
+    },
+    {
+      "name": "recorded from 1 October only",
+      "list_price": 2000,
+      "history": [
+        {
+          "at": "2026-10-01T00:00:00.000Z",
+          "value": 2000
+        },
+        {
+          "at": "2026-10-20T00:00:00.000Z",
+          "value": 1500
+        }
+      ],
+      "expect": {
+        "shown": false,
+        "why": "history_short"
+      }
+    },
+    {
+      "name": "recorded from exactly 30 days before",
+      "list_price": 2000,
+      "history": [
+        {
+          "at": "2026-09-20T00:00:00.000Z",
+          "value": 2000
+        },
+        {
+          "at": "2026-10-20T00:00:00.000Z",
+          "value": 1500
+        }
+      ],
+      "expect": {
+        "shown": true,
+        "since": "2026-10-20T00:00:00.000Z"
+      }
+    },
+    {
+      "name": "recorded from a minute short of 30 days",
+      "list_price": 2000,
+      "history": [
+        {
+          "at": "2026-09-20T00:01:00.000Z",
+          "value": 2000
+        },
+        {
+          "at": "2026-10-20T00:00:00.000Z",
+          "value": 1500
+        }
+      ],
+      "expect": {
+        "shown": false,
+        "why": "history_short"
+      }
+    },
+    {
+      "name": "18.00 for four days inside the 30",
+      "list_price": 2000,
+      "history": [
+        {
+          "at": "2026-09-01T00:00:00.000Z",
+          "value": 2000
+        },
+        {
+          "at": "2026-10-01T00:00:00.000Z",
+          "value": 1800
+        },
+        {
+          "at": "2026-10-05T00:00:00.000Z",
+          "value": 2000
+        },
+        {
+          "at": "2026-10-20T00:00:00.000Z",
+          "value": 1500
+        }
+      ],
+      "expect": {
+        "shown": false,
+        "why": "sold_below"
+      }
+    },
+    {
+      "name": "18.00 in August, before the 30 days, counts for nothing",
+      "list_price": 2000,
+      "history": [
+        {
+          "at": "2026-08-01T00:00:00.000Z",
+          "value": 1800
+        },
+        {
+          "at": "2026-08-15T00:00:00.000Z",
+          "value": 2000
+        },
+        {
+          "at": "2026-10-20T00:00:00.000Z",
+          "value": 1500
+        }
+      ],
+      "expect": {
+        "shown": true,
+        "since": "2026-10-20T00:00:00.000Z"
+      }
+    },
+    {
+      "name": "a further cut keeps the reduction's start",
+      "list_price": 2000,
+      "history": [
+        {
+          "at": "2026-09-01T00:00:00.000Z",
+          "value": 2000
+        },
+        {
+          "at": "2026-10-20T00:00:00.000Z",
+          "value": 1500
+        },
+        {
+          "at": "2026-10-27T00:00:00.000Z",
+          "value": 1200
+        }
+      ],
+      "expect": {
+        "shown": true,
+        "since": "2026-10-20T00:00:00.000Z"
+      },
+      "note": "since stays 20 October"
+    },
+    {
+      "name": "a was price below the price before: allowed",
+      "list_price": 1800,
+      "history": [
+        {
+          "at": "2026-09-01T00:00:00.000Z",
+          "value": 2000
+        },
+        {
+          "at": "2026-10-20T00:00:00.000Z",
+          "value": 1500
+        }
+      ],
+      "expect": {
+        "shown": true,
+        "since": "2026-10-20T00:00:00.000Z"
+      }
+    },
+    {
+      "name": "a was price it never had",
+      "list_price": 2500,
+      "history": [
+        {
+          "at": "2026-09-01T00:00:00.000Z",
+          "value": 2000
+        },
+        {
+          "at": "2026-10-20T00:00:00.000Z",
+          "value": 1500
+        }
+      ],
+      "expect": {
+        "shown": false,
+        "why": "history_short"
+      },
+      "note": "below 25.00 throughout, so the reduction began at the first record"
+    },
+    {
+      "name": "a dip that ends a day inside the 30",
+      "list_price": 2000,
+      "history": [
+        {
+          "at": "2026-08-01T00:00:00.000Z",
+          "value": 2000
+        },
+        {
+          "at": "2026-09-19T00:00:00.000Z",
+          "value": 1900
+        },
+        {
+          "at": "2026-09-21T00:00:00.000Z",
+          "value": 2000
+        },
+        {
+          "at": "2026-10-20T00:00:00.000Z",
+          "value": 1500
+        }
+      ],
+      "expect": {
+        "shown": false,
+        "why": "sold_below"
+      }
+    },
+    {
+      "name": "a dip that ends as the 30 days begin",
+      "list_price": 2000,
+      "history": [
+        {
+          "at": "2026-08-01T00:00:00.000Z",
+          "value": 2000
+        },
+        {
+          "at": "2026-09-19T00:00:00.000Z",
+          "value": 1900
+        },
+        {
+          "at": "2026-09-20T00:00:00.000Z",
+          "value": 2000
+        },
+        {
+          "at": "2026-10-20T00:00:00.000Z",
+          "value": 1500
+        }
+      ],
+      "expect": {
+        "shown": true,
+        "since": "2026-10-20T00:00:00.000Z"
+      }
+    },
+    {
+      "name": "one price, below it, recorded today",
+      "list_price": 2000,
+      "history": [
+        {
+          "at": "2026-10-20T00:00:00.000Z",
+          "value": 1500
+        }
+      ],
+      "expect": {
+        "shown": false,
+        "why": "history_short"
+      }
+    },
+    {
+      "name": "the record given out of order",
+      "list_price": 2000,
+      "history": [
+        {
+          "at": "2026-10-20T00:00:00.000Z",
+          "value": 1500
+        },
+        {
+          "at": "2026-09-01T00:00:00.000Z",
+          "value": 2000
+        }
+      ],
+      "expect": {
+        "shown": true,
+        "since": "2026-10-20T00:00:00.000Z"
+      },
+      "note": "a reader orders it by time"
+    }
+  ]
+}

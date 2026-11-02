@@ -1,0 +1,457 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://surfingdog.ai/spec/schemas/catalogue-policies.json",
+  "title": "GET <manifest catalogue.policies> (on the inbox): 200, shipping profiles and return policies, signed",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "number",
+      "const": 1
+    },
+    "domain": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253
+    },
+    "as_of": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+    },
+    "rev": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{16}$",
+      "description": "Changes whenever anything in the document changes; a page's catalogue.policies_rev names it."
+    },
+    "shipping_profiles": {
+      "maxItems": 50,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[\\x21-\\x2B\\x2D-\\x7E]{1,256}$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "default": {
+            "type": "boolean"
+          },
+          "zones": {
+            "minItems": 1,
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "destinations": {
+                  "minItems": 1,
+                  "maxItems": 250,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "country": {
+                        "type": "string",
+                        "pattern": "^[A-Z]{2}$"
+                      },
+                      "regions": {
+                        "minItems": 1,
+                        "maxItems": 100,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[A-Z]{2}-[A-Z0-9]{1,3}$"
+                        }
+                      },
+                      "postal_prefixes": {
+                        "minItems": 1,
+                        "maxItems": 500,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[A-Z0-9]{1,10}$"
+                        }
+                      }
+                    },
+                    "required": ["country"]
+                  }
+                },
+                "excluded": {
+                  "description": "Places inside the destinations it does not ship to.",
+                  "maxItems": 250,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "country": {
+                        "type": "string",
+                        "pattern": "^[A-Z]{2}$"
+                      },
+                      "regions": {
+                        "minItems": 1,
+                        "maxItems": 100,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[A-Z]{2}-[A-Z0-9]{1,3}$"
+                        }
+                      },
+                      "postal_prefixes": {
+                        "minItems": 1,
+                        "maxItems": 500,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[A-Z0-9]{1,10}$"
+                        }
+                      }
+                    },
+                    "required": ["country"]
+                  }
+                },
+                "services": {
+                  "minItems": 1,
+                  "maxItems": 10,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[\\x21-\\x2B\\x2D-\\x7E]{1,256}$"
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "carrier": {
+                        "description": "An id of vocab/carriers.json, when the owner says which carrier takes it.",
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]{0,39}$"
+                      },
+                      "tracked": {
+                        "type": "boolean"
+                      },
+                      "id_check": {
+                        "type": "boolean",
+                        "description": "The owner marks this service as one whose carrier checks ID at handover."
+                      },
+                      "transit_days": {
+                        "type": "object",
+                        "properties": {
+                          "min": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 90
+                          },
+                          "max": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 90
+                          }
+                        },
+                        "required": ["min", "max"]
+                      },
+                      "rate": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "basis": {
+                                "type": "string",
+                                "const": "flat"
+                              },
+                              "amount": {
+                                "type": "object",
+                                "properties": {
+                                  "value": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 1000000000000000
+                                  },
+                                  "currency": {
+                                    "type": "string",
+                                    "pattern": "^[A-Z]{3}$"
+                                  }
+                                },
+                                "required": ["value", "currency"]
+                              }
+                            },
+                            "required": ["basis", "amount"]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "basis": {
+                                "type": "string",
+                                "const": "per_item"
+                              },
+                              "amount": {
+                                "type": "object",
+                                "properties": {
+                                  "value": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 1000000000000000
+                                  },
+                                  "currency": {
+                                    "type": "string",
+                                    "pattern": "^[A-Z]{3}$"
+                                  }
+                                },
+                                "required": ["value", "currency"],
+                                "description": "For each unit ordered (a pack counts once)."
+                              }
+                            },
+                            "required": ["basis", "amount"]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "basis": {
+                                "type": "string",
+                                "const": "by_weight"
+                              },
+                              "unit": {
+                                "type": "string",
+                                "enum": ["g", "kg", "oz", "lb"]
+                              },
+                              "bands": {
+                                "minItems": 1,
+                                "maxItems": 20,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "up_to": {
+                                      "anyOf": [
+                                        {
+                                          "type": "number",
+                                          "exclusiveMinimum": 0,
+                                          "maximum": 1000000
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "amount": {
+                                      "type": "object",
+                                      "properties": {
+                                        "value": {
+                                          "type": "integer",
+                                          "minimum": 0,
+                                          "maximum": 1000000000000000
+                                        },
+                                        "currency": {
+                                          "type": "string",
+                                          "pattern": "^[A-Z]{3}$"
+                                        }
+                                      },
+                                      "required": ["value", "currency"]
+                                    }
+                                  },
+                                  "required": ["up_to", "amount"]
+                                }
+                              }
+                            },
+                            "required": ["basis", "unit", "bands"]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "basis": {
+                                "type": "string",
+                                "const": "by_order_value"
+                              },
+                              "bands": {
+                                "minItems": 1,
+                                "maxItems": 20,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "up_to": {
+                                      "anyOf": [
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "value": {
+                                              "type": "integer",
+                                              "minimum": 1,
+                                              "maximum": 1000000000000000,
+                                              "description": "Minor units of the currency's ISO 4217 exponent: 4500 is EUR 45.00, JPY 4,500, KWD 4.500. Never 0."
+                                            },
+                                            "currency": {
+                                              "type": "string",
+                                              "pattern": "^[A-Z]{3}$"
+                                            }
+                                          },
+                                          "required": ["value", "currency"]
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "amount": {
+                                      "type": "object",
+                                      "properties": {
+                                        "value": {
+                                          "type": "integer",
+                                          "minimum": 0,
+                                          "maximum": 1000000000000000
+                                        },
+                                        "currency": {
+                                          "type": "string",
+                                          "pattern": "^[A-Z]{3}$"
+                                        }
+                                      },
+                                      "required": ["value", "currency"]
+                                    }
+                                  },
+                                  "required": ["up_to", "amount"]
+                                }
+                              }
+                            },
+                            "required": ["basis", "bands"]
+                          }
+                        ]
+                      },
+                      "free_over": {
+                        "description": "An order of goods worth at least this ships free by it.",
+                        "type": "object",
+                        "properties": {
+                          "value": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1000000000000000,
+                            "description": "Minor units of the currency's ISO 4217 exponent: 4500 is EUR 45.00, JPY 4,500, KWD 4.500. Never 0."
+                          },
+                          "currency": {
+                            "type": "string",
+                            "pattern": "^[A-Z]{3}$"
+                          }
+                        },
+                        "required": ["value", "currency"]
+                      }
+                    },
+                    "required": ["id", "name", "tracked", "id_check", "transit_days", "rate"]
+                  }
+                }
+              },
+              "required": ["name", "destinations", "services"]
+            },
+            "description": "In order: a place is in the first zone that has it."
+          }
+        },
+        "required": ["id", "name", "zones"]
+      }
+    },
+    "return_policies": {
+      "maxItems": 50,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[\\x21-\\x2B\\x2D-\\x7E]{1,256}$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "default": {
+            "type": "boolean"
+          },
+          "eligibility": {
+            "type": "string",
+            "enum": ["window", "unlimited", "not_accepted"]
+          },
+          "window_days": {
+            "description": "window only: days from delivery or collection.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 365
+          },
+          "resolutions": {
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["refund", "exchange", "store_credit"]
+            },
+            "description": "What the buyer may have for a return; empty only when not_accepted."
+          },
+          "methods": {
+            "maxItems": 2,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["by_post", "in_store"]
+            },
+            "description": "How it comes back; empty only when not_accepted."
+          },
+          "return_postage": {
+            "description": "by_post: who pays to send it back.",
+            "type": "string",
+            "enum": ["customer", "business"]
+          },
+          "restocking_fee": {
+            "description": "Never charged on a legal withdrawal or a faulty item.",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "percent": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100
+                  }
+                },
+                "required": ["percent"]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "amount": {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 1000000000000000,
+                        "description": "Minor units of the currency's ISO 4217 exponent: 4500 is EUR 45.00, JPY 4,500, KWD 4.500. Never 0."
+                      },
+                      "currency": {
+                        "type": "string",
+                        "pattern": "^[A-Z]{3}$"
+                      }
+                    },
+                    "required": ["value", "currency"]
+                  }
+                },
+                "required": ["amount"]
+              }
+            ]
+          }
+        },
+        "required": ["id", "name", "eligibility", "resolutions", "methods"]
+      }
+    }
+  },
+  "required": ["version", "domain", "as_of", "rev", "shipping_profiles", "return_policies"]
+}

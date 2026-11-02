@@ -28,7 +28,11 @@ real businesses it counts (`real_businesses_verified`); a row without `real_busi
 Spec 0.9 adds, optional for a network and for an inbox, the catalogue (§4.18, [ADR-029](../adr/029-catalogue.md)):
 an inbox whose owner lists its products on networks serves a signed feed of them, its manifest names it, and
 its signed ping says when it changed; one barcode check (`vectors/gtin.json`) holds on both sides. A ping, an
-answer or a manifest without `catalogue` reads as before.
+answer or a manifest without `catalogue` reads as before. Catalogue version 2 (spec Unreleased, optional for a network and
+for an inbox; §4.18) adds product groups and their variants, price models, "was" and unit prices, more ways to be
+available, an age checked at handover, and how an offer is fulfilled, with a signed policies document of shipping
+profiles and return policies; a manifest names the versions its feed serves, a reader names the version it reads,
+and a feed may serve version 2 alone. A manifest without `catalogue.versions` serves version 1, as before.
 
 A **network** is a service that inboxes report to: it lists businesses, keeps the receipts they
 publish, gives customers a key and passes, and orders the directory by the published rules. Anyone
@@ -78,6 +82,11 @@ also gives customers keys and passes, scores, and hears reports and contests. It
 | Barcodes: how one is read, checked and classified, and the GS1 prefixes pinned | [`vectors/gtin.json`](../../packages/spec/vectors/gtin.json) (§4.18) |
 | The catalogue: a page, products by id, the switch | [`schemas/catalogue-page.json`](../../packages/spec/schemas/catalogue-page.json), [`schemas/catalogue-items.json`](../../packages/spec/schemas/catalogue-items.json), [`schemas/catalogue-switch-request.json`](../../packages/spec/schemas/catalogue-switch-request.json) (§4.18) |
 | A template's sample product names | [`vocab/placeholder-titles.json`](../../packages/spec/vocab/placeholder-titles.json) (§4.18) |
+| Catalogue version 2: a page, products by id, the policies document | [`schemas/catalogue-page-v2.json`](../../packages/spec/schemas/catalogue-page-v2.json), [`schemas/catalogue-items-v2.json`](../../packages/spec/schemas/catalogue-items-v2.json), [`schemas/catalogue-policies.json`](../../packages/spec/schemas/catalogue-policies.json) (§4.18) |
+| Canonical JSON, an item's hash, and Catalogue-Signature byte for byte | [`vectors/catalogue-signature.json`](../../packages/spec/vectors/catalogue-signature.json) (§4.18) |
+| One item read alone; price models, unit and "was" prices; product groups | [`vectors/catalogue-checks.json`](../../packages/spec/vectors/catalogue-checks.json), [`vectors/catalogue-prices.json`](../../packages/spec/vectors/catalogue-prices.json), [`vectors/catalogue-options.json`](../../packages/spec/vectors/catalogue-options.json) (§4.18) |
+| Version 1 from version 2; the policies document and shipping quotes | [`vectors/catalogue-v1.json`](../../packages/spec/vectors/catalogue-v1.json), [`vectors/catalogue-policies.json`](../../packages/spec/vectors/catalogue-policies.json) (§4.18) |
+| Option keys, age kinds, carriers | [`vocab/option-keys.json`](../../packages/spec/vocab/option-keys.json), [`vocab/age-kinds.json`](../../packages/spec/vocab/age-kinds.json), [`vocab/carriers.json`](../../packages/spec/vocab/carriers.json) (§4.18) |
 
 ## 1. Conventions
 
@@ -315,8 +324,9 @@ whether the directory shows it, and a member that is not listed has `delisted_at
 `{"version": "…", "runtime": "…", "counts": {"bookings", "orders", "quotes", "messages"},
 "manifest_sha256": "…"}` (the last 24 hours; `counts` optional; each 0 to 10⁹). A ping keeps the
 business **answering** for 24 hours, signed or not. `manifest_sha256`, optional, is the SHA-256 of
-the manifest exactly as the inbox serves it, in lowercase hex; the network reads it on a signed ping
-only. When it is not the manifest the network holds, and the network has not fetched that manifest
+the manifest exactly as the inbox serves it, in lowercase hex: over the bytes of the body as served at
+`/.well-known/agent-inbox.json`, after any content coding (`gzip`, `br`) is removed, never over a copy
+parsed and written again; the network reads it on a signed ping only. When it is not the manifest the network holds, and the network has not fetched that manifest
 in the last ten minutes nor been asked to, it fetches it at once, so a changed profile shows within
 minutes. A fetch asked for this way that fails counts for nothing: not towards `unreachable`, and it
 does not end the business's answering spell. The network makes at most 20 such fetches a minute
@@ -1780,7 +1790,8 @@ of it: never the owner's AI and never a key handed to another system.
 Absent, the business lists no products. A network reads the feed only at the URL its manifest names, on
 the business's own domain (its domain, or another host under the same registrable domain, such as the
 business's API host), https, with no redirect off it. The host proves nothing alone: every page is signed
-by a key the business's own manifest publishes, and `iss` names the business's domain.
+by a key the business's own manifest publishes, and `iss` names the business's domain. Catalogue version 2
+adds `versions` and `policies` to it (below).
 
 **`GET /v1/catalogue/changes?after=<cursor>&limit=<1..500>`** on the inbox (`schemas/catalogue-page.json`):
 
@@ -1810,7 +1821,7 @@ by a key the business's own manifest publishes, and `iss` names the business's d
 - `availability` is `in_stock` (counted, above 0), `out_of_stock` (counted, 0) or `on_sale` (not counted):
   never a count. `gtin` is 14 digits, only when it reads as a product's barcode (below); `url` only when the
   page is on the business's own site; `image_url` is a link, never a copy. `hash` is the first 16 hex digits
-  of SHA-256 over the item's canonical JSON (keys sorted), without `updated_at` and `hash`.
+  of SHA-256 over the item's canonical JSON (RFC 8785, below), without `updated_at` and `hash`.
 - `multipack` (spec 0.12.1, optional): the offer is that many identical units of one item, the one its
   `gtin` names when it has one, sold together at its `price`. An integer: 2 to 10,000 is a pack; absent or
   `1` is one, and a writer may leave it out for one. It describes the offer, and the barcode still describes
@@ -1825,7 +1836,8 @@ by a key the business's own manifest publishes, and `iss` names the business's d
   the owner's lowest prices, costs, stock counts, or anything about a customer.
 - `Cache-Control: public, max-age=60` and an `ETag`; `If-None-Match` with it is answered `304`.
   `404 not_listed` while the owner keeps the products off networks, the business is out of the directories,
-  or the inbox cannot sign. `422` for a cursor the feed did not give or a limit past 500.
+  or the inbox cannot sign. `422 cursor_invalid` for a cursor the feed did not give, `422 limit_invalid` for a
+  limit past 500, and `410 cursor_expired` for one it no longer honours (Pages and cursors, below).
 
 **`GET /v1/catalogue/items?ids=a,b`** (at most 50, `schemas/catalogue-items.json`): `{"items": […], "missing": […]}`,
 each as the feed has it, `missing` the ids the inbox has no product for. The answer has these two members and
@@ -1864,6 +1876,200 @@ barcode, and are never published. A magazine's issue (`977`) is `serial`, a book
 indicator digits 1 to 8 a case or pack of several. Two offers are one product only when their barcodes
 are the same 14 digits and their `multipack` is the same (absent and `1` alike): a pack of twelve and a
 single unit of one barcode are two products, never one list. A product with no barcode is its business's own.
+
+#### Catalogue version 2 (spec Unreleased, ADR-next, MAY)
+
+Version 2 carries what goods are sold by: a product and its variants, how a price is meant, a "was" price, a
+unit price, more ways to be available, an age checked at handover, and how an offer reaches the buyer, with its
+shipping and returns. A producer (an inbox, or a business's own system) serves it beside version 1 or alone, and
+a reader asks for the version it reads. Everything above holds for version 2 but where this says otherwise.
+The vectors decide: `vectors/catalogue-signature.json`, `catalogue-checks.json`, `catalogue-prices.json`,
+`catalogue-options.json`, `catalogue-v1.json` and `catalogue-policies.json`, written by an implementation of
+their own (`scripts/gen-catalogue-vectors.py`).
+
+**Versions.** The manifest's `catalogue` names the versions the feed serves, and the policies document:
+
+```json
+"catalogue": {"feed": "https://{inbox}/v1/catalogue/changes", "items": "https://{inbox}/v1/catalogue/items",
+              "versions": [1, 2], "policies": "https://{inbox}/v1/catalogue/policies"}
+```
+
+- Without `versions` the feed serves version 1 alone, as before. `policies` is on the business's own domain, as
+  the feed is.
+- A reader names the version it reads on every call, `version=N`: the highest the manifest lists that it reads
+  (`catalogueVersionToRead`). A version the producer does not serve is `422 version_unsupported`.
+- A producer that lists `[2]` alone answers a read that names no version `422 version_required`, so a reader of
+  version 1 never takes its offers for version 1's. One that lists `1` answers a read that names none as version 1.
+- A reader whose version for a source changes reads that source's whole feed again, from no `after`, so it never
+  holds offers of two versions. A changed version is never read as a mass change of prices.
+- An inbox that serves version 2 goes on serving version 1 for 12 months from the day it first serves version 2
+  (`CATALOGUE_V1_MONTHS_AFTER_V2`), each item as `catalogueItemV1Of` makes it (`vectors/catalogue-v1.json`):
+  version 1 says only what it can say truly. An offer whose price is not `fixed`, that is `preorder`, `backorder`
+  or `made_to_order`, that is age-restricted, that is past its `available_until`, or whose own `tax_included`
+  differs from the catalogue's, is withdrawn there. `limited` is `in_stock`, the description is cut to 1,000
+  characters without splitting one, `image_url` is the first image of `media`, each variant is an offer of its
+  own by its own name, and the hash is taken again over the version 1 item. An id over 64 characters has no
+  version 1 item at all. A version 1 page's `count` counts what it lists.
+
+**Pages and cursors, in both versions.**
+
+- One page size: `limit` is 1 to 500, 500 when absent, and a reader asks for 500. A producer gives at most `limit`
+  items and may give fewer on any page, none included: only `next_cursor: null` ends the feed. A `limit` outside 1
+  to 500 is `422 limit_invalid`.
+- Items come in the order the producer committed their last change, each id at most once a page. A producer gives
+  a position only once no change can still commit before it: a change that commits later always takes a later
+  position, so a reader that reaches the end holds every item's latest state, whatever was written while it read.
+- A cursor is opaque, at most 200 characters, and in version 2 only `A–Z a–z 0–9 . _ ~ -`, which a query string
+  carries as they are. A reader passes it back exactly. It belongs to the version it was given for: a cursor the
+  feed did not give, or gave for another version, is `422 cursor_invalid`. A producer honours a cursor for at least
+  7 days; one it no longer honours is `410 cursor_expired`, and the reader starts again from no `after`.
+- A reader keeps the `after` it asked its last page with (the page whose `next_cursor` was `null`) and asks from
+  it next time, reading that page again, which changes nothing it holds.
+
+**An offer in version 2** (`schemas/catalogue-page-v2.json`, `catalogue-items-v2.json`; `catalogueListedItemV2Schema`):
+
+```json
+{"id": "MOKA-6-ALU", "state": "listed", "sku": "MOKA-6", "name": "Moka pot, 6 cups, aluminium",
+ "description": "The stovetop pot, in aluminium.",
+ "group": {"id": "MOKA", "title": "Moka pot", "position": 2},
+ "options": [{"key": "size", "name": "Size", "value": "6 cups"}, {"key": "material", "name": "Material", "value": "Aluminium"}],
+ "price_model": "fixed", "price": {"value": 3490, "currency": "EUR"}, "availability": "in_stock",
+ "gtin": "09506000134352", "no_gtin": false, "brand": "Bialetti", "mpn": null, "condition": "new",
+ "url": "https://loja.example/produtos/moka-6",
+ "media": [{"type": "image", "url": "https://loja.example/img/moka-6.jpg", "alt": "A six-cup moka pot"}],
+ "fulfil_methods": ["pickup", "shipping"], "shipping_profile": "standard", "weight": {"value": 0.65, "unit": "kg"},
+ "return_policy": "standard", "updated_at": "2026-11-02T09:12:00.000Z", "hash": "…"}
+```
+
+A page is version 1's with `"version": 2`, these items, and `catalogue.policies_rev`, the `rev` of the policies
+document (`null` with none); `GET /v1/catalogue/items?version=2` answers `{"version": 2, "items": […], "missing": […]}`.
+Every member version 1 has means what it meant, but where this says otherwise. New and changed:
+
+- `id`: 1 to 256 printable ASCII characters (U+0021 to U+007E), never a comma or a space. `ids=` takes them comma
+  separated, each percent-encoded as a query component; a reader keeps the address under 8,000 characters, asking
+  fewer than 50 when they are long. Group, shipping profile and return policy ids are the same.
+- `name` is the offer's whole name, a variant's options in it. `description`: up to 5,000 characters.
+- `group {id, title, position}` and `options [{key, name, value}]`, together or not at all: a variant of a product
+  group, its product's `title` without the options, and where it comes among the group's variants, from 1 (ties in
+  order of id). Each option is a key of `vocab/option-keys.json` (`color`, `size`, `material`, `flavour`… with
+  their labels in five languages and the Google Merchant Center attribute each fills) or any other lower-case name
+  of the business's own; `name` is the business's own label; `value` its value. One to five options; keys and
+  values are compared exactly, as given. Every variant of a group names the same keys, each key by one name, under
+  one title, and no two variants are alike in every value; a group that fails is read as separate offers
+  (`readCatalogueGroups`, `vectors/catalogue-options.json`). A group lists at most 250 variants, and a reader holds
+  those past the 250th. Rules version 11 (ADR-017 A7.1) shows one business's group as one result, keyed
+  `group:<business>:<group.id>`.
+- `price_model`: `fixed` (the price), `from` (the lowest), `range` (from `price` to `price_max`, above it, in its
+  currency) or `quote` (on request: `price` is `null`). A listed price is never 0: at least 1 minor unit; anything
+  free stays in messages. `price.value` is always an integer count of its currency's ISO 4217 minor unit
+  (`minorUnits`): 18990 is BRL 189.90, 4500 is JPY 4,500, never "189.90". An order is placed at a listed price
+  only when it is `fixed`; any other goes to a quote first.
+- `list_price` (`fixed` only): the "was" price, above `price`, in its currency. It is shown only when the offer was
+  at or above it for the whole of the 30 days before its price first went below it, the EU's rule applied
+  everywhere (`wasPriceOf`, `vectors/catalogue-prices.json`); a further cut keeps the reduction's start. A
+  producer publishes one only when its own record of the offer's prices says so, and a reader shows one only when
+  its own record does, so a reader that has read a source for less than 30 days before the reduction shows none.
+  A reader that cannot show it drops `list_price` alone and lists the offer.
+- `unit_price` (`fixed` only): `{measure: {value, unit}, reference: {value, unit}}`, the offer's whole net
+  quantity as sold (every unit of a multipack together) and the quantity a price is given per. The amount is never
+  published: a reader works it out, price × reference ÷ measure, rounded to the nearest minor unit, a half up
+  (`unitPriceOf`): 4.50 for 500 g is 9.00 per kg. Units: `mg g kg`, `oz lb`, `ml cl l cbm`, `cm m`, `in ft yd`,
+  `sqm`, `sqft` and `ct`; a measure and its reference are in one dimension, never metric and imperial mixed.
+- `tax_included` on an offer: whether its prices include tax, where it is not what `catalogue.tax_included` says.
+- `availability`, never a count: `in_stock` (counted, more than none), `limited` (counted, more than none and at or
+  below a few-left mark the owner chose to publish; never without the owner's own mark), `out_of_stock` (counted,
+  none: it cannot be ordered now), `on_sale` (it can be ordered now, and the business keeps no count of it),
+  `preorder` (not out yet; it can be ordered now, and `available_from` says when it comes), `backorder` (none now;
+  it can be ordered and comes later, from `available_from` when it gives one) or `made_to_order` (made once
+  ordered). `available_until`: the last moment it can be ordered; past it, a reader reads the offer as withdrawn.
+- `no_gtin`: `true` when the owner says the offer has no barcode at all (bread, a print, a repair, something made to
+  order), and then `gtin` is `null`; `false` when it has one, or none was given. A reader that finds both a barcode
+  and `no_gtin: true` keeps the barcode.
+- `multipack` as in version 1. `is_bundle`: different items sold together at one price (a hamper, a set menu, a
+  kit), never also a `multipack` above 1.
+- `url`: an absolute https address on the business's own site, or `null`; never a path. `media`: up to 10 pictures
+  and videos `{type, url, alt?}`, linked and never copied, the first image the main one; empty when there are none.
+  Version 2 has no `image_url`.
+- `age_restricted {min_age, kind, by_country?, check: "id_at_handover"}`: sold only above an age, with ID checked
+  when it is handed over, by the business or a carrier service it marks `id_check`. The owner picks each offer's age,
+  12 to 21, and where it sells in a country whose age it puts otherwise, that country's, up to 25; nothing here keeps
+  a table of what any law says. `kind` is one of `vocab/age-kinds.json`. Networks show such an offer by default,
+  labelled "ID checked at handover: 18+" (`ageLabel`, `ageFor`). Tobacco and nicotine (vapes among them), cannabis
+  and weapons are kept off networks at product level, ID check or not: a reader holds every such offer and lists the
+  business's other products as before. An ID refused at handover counts against nobody (rules version 11, A7.3).
+- `fulfil_methods`: how it reaches the buyer, any of `pickup`, `reserve_pickup`, `local_delivery`, `shipping`,
+  `dine_in` and `digital`; absent, the business has not said. `shipping_profile` and `return_policy` name a profile
+  and a policy of the policies document; absent, its default. `weight {value, unit}` (`g`, `kg`, `oz` or `lb`) is
+  the offer as packed, which a weight rate is worked out from.
+- Every number an item holds is an integer, or (a measure, a weight) above 0 with at most three decimals.
+
+**Reading an item.** A reader reads each item alone (`readCatalogueItemV2`, `vectors/catalogue-checks.json`): one
+that does not read is held (`unreadable`), and the rest of the page is kept. One past its `available_until` is read
+as withdrawn. Otherwise each problem `CATALOGUE_V2_PROBLEMS` names either holds the offer back (a price that does not
+hold together, a pre-order with no date or one passed, a bundle that is also a pack, a kind kept off networks) or
+drops one field alone and lists the offer (a "was" or unit price that does not hold, a profile or policy the
+document does not have). A network tells the owner what it holds back, and why, in the owner's own words.
+
+**The hash, and canonical JSON.** `hash` is the first 16 hex digits of SHA-256 over the item's canonical JSON:
+every member it carries but `updated_at` and `hash`, a member it does not carry absent, never `null`. Canonical JSON
+is RFC 8785 (`canonicalJson`): members sorted by name as UTF-16 code units, arrays in their order, no whitespace,
+strings as ECMAScript's `JSON.stringify` writes them (only `"`, `\` and characters below U+0020 escaped; `<`, `>`,
+`&`, U+2028, U+2029 and every other character as themselves, in UTF-8), numbers as ECMAScript writes them. A reader
+that checks a hash takes it over the item as it came, members it does not know included. Go's `encoding/json`
+escapes `<`, `>` and `&` unless told not to, and U+2028 and U+2029 always: it is not canonical JSON.
+
+**The signature, in both versions.** `body_sha256` is over the bytes of the body exactly as served, after any
+content coding (`gzip`, `br`) is removed: never over a copy parsed and written again. `vectors/catalogue-signature.json`
+signs a version 2 page, products by id and a policies document with RFC 8037 A.1's key, byte for byte, and lists
+what a reader refuses: `bad_alg`, `bad_typ`, `unknown_key`, `bad_signature`, then `iss_mismatch`, `url_mismatch` and
+`body_mismatch`, in that order. A producer that replaces its signing key keeps this order: it adds the new key to
+`receipt_keys` beside the old one, and sends a signed ping, signed with the old key, carrying the new
+`manifest_sha256` (§4.1); it signs with the new key no sooner than six hours later, when every network has fetched
+the manifest by its regular fetch; and it keeps the old key published, since receipts it signed still verify by it. A
+reader that meets a `kid` it does not have fetches the manifest again, at most once an hour for a source, before it
+refuses the page as `unknown_key`.
+
+**The policies document** (`GET <catalogue.policies>`, `schemas/catalogue-policies.json`): the one published shape
+of a business's shipping profiles and return policies, which offers name by id; the orders of later versions refer
+to it and never define another. Signed in `Catalogue-Signature` as a page is, over the document's `as_of` and `rev`;
+`Cache-Control: public, max-age=300` and an `ETag`; `404 not_listed` as the feed. A reader reads it again when a
+page's `catalogue.policies_rev` differs from its copy's `rev`, and `rev` (and the feed's `rev`) moves whenever
+anything in it does.
+
+```json
+{"version": 1, "domain": "inbox.loja.example", "as_of": "…", "rev": "…",
+ "shipping_profiles": [{"id": "standard", "name": "Standard", "default": true, "zones": [
+   {"name": "Mainland", "destinations": [{"country": "PT"}], "excluded": [{"country": "PT", "regions": ["PT-20", "PT-30"]}],
+    "services": [{"id": "standard", "name": "Standard", "carrier": "ctt", "tracked": true, "id_check": false,
+                  "transit_days": {"min": 1, "max": 3},
+                  "rate": {"basis": "by_weight", "unit": "kg", "bands": [{"up_to": 2, "amount": {"value": 450, "currency": "EUR"}},
+                                                                        {"up_to": null, "amount": {"value": 990, "currency": "EUR"}}]},
+                  "free_over": {"value": 5000, "currency": "EUR"}}]}]}],
+ "return_policies": [{"id": "standard", "name": "30 days", "default": true, "eligibility": "window", "window_days": 30,
+                      "resolutions": ["refund", "exchange"], "methods": ["by_post", "in_store"], "return_postage": "customer"}]}
+```
+
+- **Shipping is the owner's own rate tables:** `flat` (0 is free), `per_item` (each unit ordered; a pack counts
+  once), `by_weight` (bands in `g`, `kg`, `oz` or `lb`) or `by_order_value` (bands of the goods' worth), each band's
+  `up_to` rising and a `null` one last, "and above"; and `free_over`, goods worth at least that ship free. The owner
+  buys and prints their own labels: no carrier is called. A place is in the first zone whose `destinations` have it
+  (a country, or within it an ISO 3166-2 region or the start of a postcode) and whose `excluded` do not. `carrier`
+  names one of `vocab/carriers.json`, whose tracking pages and domains are the only tracking links shown
+  (`trackingUrl`); `id_check` marks a service whose carrier checks ID at handover. What a basket costs to a place is
+  `quoteShipping` (`vectors/catalogue-policies.json`): every amount in one currency, never converted, and weights
+  added exactly. A reader reads the document part by part (`readCataloguePolicies`): a part that does not read or
+  hold is dropped with what was wrong, and the rest kept.
+- **A return policy** is a `window` of `window_days` from delivery or collection, `unlimited`, or `not_accepted`
+  (no returns for a change of mind); with how a return is settled (`refund`, `exchange`, `store_credit`), how it
+  comes back (`by_post`, `in_store`), who pays the postage, and any restocking fee, never charged on a legal
+  withdrawal or a faulty item. Faulty goods are always the business's, so "faulty only" is `not_accepted`. Outside
+  the EU and the UK a business may offer no returns or a window under 14 days, and a reader shows it as it is; a
+  policy never takes away a right the law gives the buyer where they live (in the EU and the UK, 14 days to withdraw
+  from a distance purchase, but where the law excepts it), and a reader says so beside any policy shorter than that.
+
+**A catalogue-only member.** A business whose products a network lists, and whose orders are taken at its own
+checkout (a UCP door, its site), lists `item_types: []` in its manifest, with its doors in `protocols` and its
+signing keys in `receipt_keys`: it registers, pings and serves its catalogue as any member does.
 
 ### 4.19 Stays (spec 0.11, MAY)
 
@@ -2267,9 +2473,10 @@ the inbox asks each network only about its own. No network ever sees another's s
 | 403 | `pass_requires_signature`, `not_your_receipt`, `report_requires_signature`, `unlinked` |
 | 404 | `unknown_pass`, `unknown_issuer`, `not_found` |
 | 409 | `person_exists`, `nonce_reused`, `already_reported`, `you_acknowledged_it` |
-| 410 | `revoked`, `cursor_expired` |
+| 410 | `revoked`, `cursor_expired` (a network's, and from catalogue version 2 a catalogue feed's, §4.18) |
 | 413 | `too_large` |
 | 422 | `unknown_key`, `unknown_ref`, `bad_alg`, `bad_typ`, `not_yet`, `report_window`, `contest_window`, `bad_code`, `code_expired`, and from rules version 8 `v2_required`, `due_too_far`, `end_too_far`, `promise_conflict`, `ref_refused` (§4.2) |
+| 422, from a catalogue feed (§4.18) | `version_required`, `version_unsupported`, `cursor_invalid`, `limit_invalid` |
 | 429 | `too_many_receipts`, `rate_limited`, `too_many_attempts` |
 
 An inbox also answers its own callers with `409 nothing_to_verify`, `409 already_verified` and

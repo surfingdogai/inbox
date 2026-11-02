@@ -5,6 +5,7 @@
  */
 export * from "./attributes";
 export * from "./base";
+export * from "./canonical";
 export * from "./conformance";
 export * from "./cuisines";
 export * from "./door-platforms";

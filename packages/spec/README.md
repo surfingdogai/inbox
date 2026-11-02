@@ -178,6 +178,30 @@ or network:
   one. Each field is checked and dropped alone, so a 0.13 reader ignores them (`vectors/profile.json`), and
   cuts or drops a description over 500 characters.
 
+- Unreleased (ADR-next; optional for a network and for an inbox): catalogue version 2 (protocol §4.18, as amended).
+  The manifest's `catalogue` gains `versions` (absent: `[1]`) and `policies`; a reader names the version it reads
+  (`version=2`, `catalogueVersionsOf`, `catalogueVersionToRead`), and a producer that lists `[2]` alone answers a read
+  that names none `422 version_required`. A page (`cataloguePageV2Schema`, `schemas/catalogue-page-v2.json`) carries
+  `catalogue.policies_rev`; products by id answer `{version, items, missing}` (`catalogueItemsV2Schema`,
+  `schemas/catalogue-items-v2.json`). An offer (`catalogueListedItemV2Schema`) gains `group {id, title, position}` and
+  `options [{key, name, value}]` (at most 250 variants a group, `CATALOGUE_GROUP_MAX`; keys from
+  `vocab/option-keys.json`, `OPTION_KEYS`, `optionKeyOf`), `price_model` (`fixed`, `from`, `range`, `quote`, whose `price`
+  is `null`), `price_max`, `list_price` (shown only under the 30-day rule, `wasPriceOf`), `unit_price
+  {measure, reference}` (`unitPriceOf`, `UNIT_PRICE_UNITS`), `tax_included`, the availabilities `limited`, `preorder`,
+  `backorder` and `made_to_order` with `available_from` and `available_until`, `is_bundle`, `media`
+  (in place of `image_url`), `age_restricted {min_age, kind, by_country, check}` (kinds from `vocab/age-kinds.json`,
+  `AGE_KINDS`; tobacco and nicotine, cannabis and weapons kept off networks, `AGE_KINDS_OFF`; `ageLabel`, `ageFor`),
+  `fulfil_methods`, `shipping_profile`, `weight` and `return_policy`; ids of up to 256 printable ASCII characters
+  (`catalogueIdV2Schema`) and descriptions of up to 5,000. The policies document (`cataloguePoliciesSchema`,
+  `schemas/catalogue-policies.json`), signed: shipping profiles of the owner's own rates (flat, per item, by weight, by
+  order value, free over a value; `readCataloguePolicies`, `quoteShipping`; carriers from `vocab/carriers.json`,
+  `CARRIERS`, `trackingUrl`) and return policies. How a reader takes each item (`readCatalogueItemV2`,
+  `CATALOGUE_V2_PROBLEMS`) and each group (`readCatalogueGroups`); the version 1 item an inbox serves for 12 months
+  (`catalogueItemV1Of`); canonical JSON, RFC 8785 (`canonicalJson`, `sha256Text`, `catalogueItemHash`). In both
+  versions: one page size, 500; the cursor rule; `cursor_invalid`, `limit_invalid` and `cursor_expired`;
+  `body_sha256` and `manifest_sha256` over the bytes as served; and the order to replace a signing key in. A version 1
+  reader reads a version 1 feed as before; a manifest without `catalogue.versions` reads as before.
+
 A version number is given when a change merges, in the order changes merge. Work in progress names no number, so
 two changes built side by side never claim the same one.
 
@@ -250,6 +274,12 @@ implementations:
 | `stay-policy.json` | a stay's cancellation preset dated for its arrival in zones across clock changes, and the fee at given instants |
 | `stay-nights.json` | a stay's nights, and its start and end with the zone's offset |
 | `doors-elsewhere-stay.json` | a stay taken elsewhere, its deep link kept or dropped, and filled in |
+| `catalogue-signature.json` | catalogue version 2 (§4.18): canonical JSON (RFC 8785), items' hashes, and `Catalogue-Signature` byte for byte with RFC 8037 A.1's key (A.4 first), with the refusals and their codes |
+| `catalogue-checks.json` | one version 2 item read alone: listed with what was dropped, held with every problem, or withdrawn |
+| `catalogue-prices.json` | price models, unit-price arithmetic, and the "was" price's 30 days |
+| `catalogue-options.json` | a business's product groups: one product, or each variant its own, and the 250 limit |
+| `catalogue-v1.json` | the version 1 item an inbox serves for each version 2 item |
+| `catalogue-policies.json` | the policies document read part by part, and shipping quotes |
 | `door-history.json` | a door's history (§4.8): the days seen answering, days checked, answered and refused, the floored share from 14 days, the last 90 days as a line, since or from…to, and the door types never shown; `summary` is informative |
 
 `vocab/categories.json` is the categories list a profile names its categories from: each slug with
@@ -282,6 +312,13 @@ categories it falls under (slugs of `vocab/categories.json`). An inbox publishes
 lacks is the business's own words, as a free tag (`kindCategories`). Some kinds also list other names people
 search for them by (`also`: "Dog groomer", "B&B"), for finding a kind only, never published. A kind is never
 removed or renamed.
+`vocab/option-keys.json`, `vocab/age-kinds.json` and `vocab/carriers.json` (catalogue version 2, Unreleased) list the
+keys a variant's options name (each with labels in five languages, the Google Merchant Center attribute it fills, and the
+other spellings read as it), the kinds of age-restricted offer (with whether a network lists them: tobacco and
+nicotine, cannabis and weapons it does not), and the carriers a shipping service names (the countries each carries
+within, its kind, whether its numbers are UPU S10, its tracking page's address where that page takes the number, and the
+domains its tracking pages are on). None keeps a table of what any law says. A key, kind or carrier is never removed or
+renamed.
 `vocab/cuisines.json` (0.14) lists the cuisines a profile's `cuisines` names and a network files as `cuisine=<slug>`,
 the network's own file byte for byte: each slug's kind (regional or dish), labels in seven languages, synonyms, the
 OpenStreetMap and schema.org words that name it and the Overture place categories whose places serve it, and the two
@@ -291,6 +328,7 @@ diets a cuisine may name instead (vegan, vegetarian), read as their attributes. 
 `receipts-v2.json`, `signatures.json`, `passes.json`, the four stay vectors and `schemas/` by
 `npx tsx scripts/gen-network-vectors.ts` (then `npx biome format --write ../spec`). `scoring.json`,
 `ordering.json`, `profile.json`, `mcp.json` and `score.json` come from the network unchanged.
-`door-history.json` is written by `python3 scripts/gen-door-history-vectors.py` (Python's standard
+The six `catalogue-*.json` vectors are written by `python3 scripts/gen-catalogue-vectors.py` (then `npx biome format
+--write vectors`), Python's standard library only, its own Ed25519 included. `door-history.json` is written by `python3 scripts/gen-door-history-vectors.py` (Python's standard
 library only: an implementation of its own, in another language than either side it checks). `packages/core/test/*-vectors.test.ts` checks
 every file against the code on Node and in workerd; the network checks the same files in Go.

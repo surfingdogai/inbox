@@ -1,0 +1,181 @@
+{
+  "description": "The option keys a catalogue version 2 variant names its options by (docs/protocol/network.md §4.18, catalogue version 2): each key's meaning, its label in five languages, the Google Merchant Center attribute it fills on an export (gmc), and other spellings a reader takes as the key (also). An option is {key, name, value}: the key is one of these, or any other lower-case name (^[a-z][a-z0-9_]{0,39}$), which is the business's own; the name is the business's own label, in its own language; the value is as the business writes it. A reader compares keys and values exactly, as given. A key is never removed or renamed.",
+  "version": 1,
+  "languages": ["en", "pt", "es", "fr", "de"],
+  "keys": [
+    {
+      "key": "color",
+      "labels": { "en": "Colour", "pt": "Cor", "es": "Color", "fr": "Couleur", "de": "Farbe" },
+      "gmc": "color",
+      "also": ["colour"]
+    },
+    {
+      "key": "size",
+      "labels": { "en": "Size", "pt": "Tamanho", "es": "Talla", "fr": "Taille", "de": "Größe" },
+      "gmc": "size",
+      "also": []
+    },
+    {
+      "key": "material",
+      "labels": { "en": "Material", "pt": "Material", "es": "Material", "fr": "Matière", "de": "Material" },
+      "gmc": "material",
+      "also": []
+    },
+    {
+      "key": "pattern",
+      "labels": { "en": "Pattern", "pt": "Padrão", "es": "Estampado", "fr": "Motif", "de": "Muster" },
+      "gmc": "pattern",
+      "also": []
+    },
+    {
+      "key": "gender",
+      "labels": { "en": "Gender", "pt": "Género", "es": "Género", "fr": "Genre", "de": "Geschlecht" },
+      "gmc": "gender",
+      "also": []
+    },
+    {
+      "key": "age_group",
+      "labels": {
+        "en": "Age group",
+        "pt": "Faixa etária",
+        "es": "Grupo de edad",
+        "fr": "Tranche d'âge",
+        "de": "Altersgruppe"
+      },
+      "gmc": "age_group",
+      "also": []
+    },
+    {
+      "key": "size_system",
+      "labels": {
+        "en": "Size system",
+        "pt": "Sistema de tamanhos",
+        "es": "Sistema de tallas",
+        "fr": "Système de tailles",
+        "de": "Größensystem"
+      },
+      "gmc": "size_system",
+      "also": []
+    },
+    {
+      "key": "flavour",
+      "labels": { "en": "Flavour", "pt": "Sabor", "es": "Sabor", "fr": "Saveur", "de": "Geschmack" },
+      "gmc": null,
+      "also": ["flavor"]
+    },
+    {
+      "key": "scent",
+      "labels": { "en": "Scent", "pt": "Aroma", "es": "Aroma", "fr": "Parfum", "de": "Duft" },
+      "gmc": null,
+      "also": []
+    },
+    {
+      "key": "weight",
+      "labels": { "en": "Weight", "pt": "Peso", "es": "Peso", "fr": "Poids", "de": "Gewicht" },
+      "gmc": null,
+      "also": []
+    },
+    {
+      "key": "volume",
+      "labels": { "en": "Volume", "pt": "Volume", "es": "Volumen", "fr": "Volume", "de": "Volumen" },
+      "gmc": null,
+      "also": []
+    },
+    {
+      "key": "pack_size",
+      "labels": { "en": "Pack size", "pt": "Embalagem", "es": "Formato", "fr": "Format", "de": "Packungsgröße" },
+      "gmc": null,
+      "also": []
+    },
+    {
+      "key": "length",
+      "labels": { "en": "Length", "pt": "Comprimento", "es": "Longitud", "fr": "Longueur", "de": "Länge" },
+      "gmc": null,
+      "also": []
+    },
+    {
+      "key": "width",
+      "labels": { "en": "Width", "pt": "Largura", "es": "Anchura", "fr": "Largeur", "de": "Breite" },
+      "gmc": null,
+      "also": []
+    },
+    {
+      "key": "capacity",
+      "labels": { "en": "Capacity", "pt": "Capacidade", "es": "Capacidad", "fr": "Capacité", "de": "Kapazität" },
+      "gmc": null,
+      "also": []
+    },
+    {
+      "key": "fit",
+      "labels": { "en": "Fit", "pt": "Corte", "es": "Corte", "fr": "Coupe", "de": "Passform" },
+      "gmc": null,
+      "also": []
+    },
+    {
+      "key": "style",
+      "labels": { "en": "Style", "pt": "Estilo", "es": "Estilo", "fr": "Style", "de": "Stil" },
+      "gmc": null,
+      "also": []
+    },
+    {
+      "key": "finish",
+      "labels": { "en": "Finish", "pt": "Acabamento", "es": "Acabado", "fr": "Finition", "de": "Oberfläche" },
+      "gmc": null,
+      "also": []
+    },
+    {
+      "key": "roast",
+      "labels": { "en": "Roast", "pt": "Torra", "es": "Tueste", "fr": "Torréfaction", "de": "Röstung" },
+      "gmc": null,
+      "also": []
+    },
+    {
+      "key": "grind",
+      "labels": { "en": "Grind", "pt": "Moagem", "es": "Molienda", "fr": "Mouture", "de": "Mahlgrad" },
+      "gmc": null,
+      "also": []
+    },
+    {
+      "key": "strength",
+      "labels": { "en": "Strength", "pt": "Intensidade", "es": "Intensidad", "fr": "Intensité", "de": "Stärke" },
+      "gmc": null,
+      "also": []
+    },
+    {
+      "key": "edition",
+      "labels": { "en": "Edition", "pt": "Edição", "es": "Edición", "fr": "Édition", "de": "Ausgabe" },
+      "gmc": null,
+      "also": []
+    },
+    {
+      "key": "format",
+      "labels": { "en": "Format", "pt": "Formato", "es": "Formato", "fr": "Format", "de": "Format" },
+      "gmc": null,
+      "also": []
+    },
+    {
+      "key": "language",
+      "labels": { "en": "Language", "pt": "Idioma", "es": "Idioma", "fr": "Langue", "de": "Sprache" },
+      "gmc": null,
+      "also": []
+    },
+    {
+      "key": "duration",
+      "labels": { "en": "Duration", "pt": "Duração", "es": "Duración", "fr": "Durée", "de": "Dauer" },
+      "gmc": null,
+      "also": []
+    },
+    {
+      "key": "ticket_type",
+      "labels": {
+        "en": "Ticket type",
+        "pt": "Tipo de bilhete",
+        "es": "Tipo de entrada",
+        "fr": "Type de billet",
+        "de": "Ticketart"
+      },
+      "gmc": null,
+      "also": ["tier"]
+    }
+  ]
+}

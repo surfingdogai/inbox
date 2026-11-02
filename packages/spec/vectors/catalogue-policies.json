@@ -1,0 +1,2133 @@
+{
+  "$comment": "Catalogue version 2 (protocol §4.18): the policies document. reads: a document read part by part (readCataloguePolicies), given as one of documents with an RFC 6902 JSON Patch applied: the problems at their paths, the ids kept and the defaults; expect null when it does not read at all. quotes: a basket's shipping to a place (quoteShipping) under eu or us, the documents of the first two reads: the profile, the zone and each service's fee, or null with why. Problems written by hand; the documents' rev and every fee worked out by packages/spec/scripts/gen-catalogue-vectors.py, weights exactly in nanograms. MIT.",
+  "documents": {
+    "eu": {
+      "version": 1,
+      "domain": "inbox.loja.example",
+      "as_of": "2026-11-02T10:00:00.000Z",
+      "rev": "d46290ccc04c5305",
+      "shipping_profiles": [
+        {
+          "id": "standard",
+          "name": "Standard",
+          "default": true,
+          "zones": [
+            {
+              "name": "Mainland",
+              "destinations": [
+                {
+                  "country": "PT"
+                }
+              ],
+              "excluded": [
+                {
+                  "country": "PT",
+                  "regions": ["PT-20", "PT-30"]
+                }
+              ],
+              "services": [
+                {
+                  "id": "standard",
+                  "name": "Standard",
+                  "carrier": "ctt",
+                  "tracked": true,
+                  "id_check": false,
+                  "transit_days": {
+                    "min": 1,
+                    "max": 3
+                  },
+                  "rate": {
+                    "basis": "by_weight",
+                    "unit": "kg",
+                    "bands": [
+                      {
+                        "up_to": 2,
+                        "amount": {
+                          "value": 450,
+                          "currency": "EUR"
+                        }
+                      },
+                      {
+                        "up_to": 10,
+                        "amount": {
+                          "value": 750,
+                          "currency": "EUR"
+                        }
+                      },
+                      {
+                        "up_to": 30,
+                        "amount": {
+                          "value": 1290,
+                          "currency": "EUR"
+                        }
+                      }
+                    ]
+                  },
+                  "free_over": {
+                    "value": 5000,
+                    "currency": "EUR"
+                  }
+                },
+                {
+                  "id": "next_day",
+                  "name": "Next day",
+                  "carrier": "dpd",
+                  "tracked": true,
+                  "id_check": true,
+                  "transit_days": {
+                    "min": 1,
+                    "max": 1
+                  },
+                  "rate": {
+                    "basis": "flat",
+                    "amount": {
+                      "value": 990,
+                      "currency": "EUR"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Islands",
+              "destinations": [
+                {
+                  "country": "PT",
+                  "regions": ["PT-20", "PT-30"]
+                }
+              ],
+              "services": [
+                {
+                  "id": "standard",
+                  "name": "Standard",
+                  "carrier": "ctt",
+                  "tracked": true,
+                  "id_check": false,
+                  "transit_days": {
+                    "min": 3,
+                    "max": 7
+                  },
+                  "rate": {
+                    "basis": "flat",
+                    "amount": {
+                      "value": 1200,
+                      "currency": "EUR"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Europe",
+              "destinations": [
+                {
+                  "country": "ES"
+                },
+                {
+                  "country": "FR"
+                },
+                {
+                  "country": "DE"
+                }
+              ],
+              "services": [
+                {
+                  "id": "standard",
+                  "name": "Standard",
+                  "tracked": true,
+                  "id_check": false,
+                  "transit_days": {
+                    "min": 3,
+                    "max": 6
+                  },
+                  "rate": {
+                    "basis": "by_order_value",
+                    "bands": [
+                      {
+                        "up_to": {
+                          "value": 5000,
+                          "currency": "EUR"
+                        },
+                        "amount": {
+                          "value": 1490,
+                          "currency": "EUR"
+                        }
+                      },
+                      {
+                        "up_to": null,
+                        "amount": {
+                          "value": 990,
+                          "currency": "EUR"
+                        }
+                      }
+                    ]
+                  },
+                  "free_over": {
+                    "value": 15000,
+                    "currency": "EUR"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "United Kingdom",
+              "destinations": [
+                {
+                  "country": "GB"
+                }
+              ],
+              "excluded": [
+                {
+                  "country": "GB",
+                  "postal_prefixes": ["BT", "IM", "JE", "GY"]
+                }
+              ],
+              "services": [
+                {
+                  "id": "tracked",
+                  "name": "Tracked",
+                  "carrier": "royal_mail",
+                  "tracked": true,
+                  "id_check": false,
+                  "transit_days": {
+                    "min": 3,
+                    "max": 6
+                  },
+                  "rate": {
+                    "basis": "per_item",
+                    "amount": {
+                      "value": 600,
+                      "currency": "EUR"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "chilled",
+          "name": "Chilled, our own van",
+          "zones": [
+            {
+              "name": "Lisbon",
+              "destinations": [
+                {
+                  "country": "PT",
+                  "postal_prefixes": ["1", "26", "27"]
+                }
+              ],
+              "services": [
+                {
+                  "id": "van",
+                  "name": "Our van",
+                  "tracked": false,
+                  "id_check": true,
+                  "transit_days": {
+                    "min": 0,
+                    "max": 1
+                  },
+                  "rate": {
+                    "basis": "flat",
+                    "amount": {
+                      "value": 0,
+                      "currency": "EUR"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "return_policies": [
+        {
+          "id": "standard",
+          "name": "30 days",
+          "default": true,
+          "eligibility": "window",
+          "window_days": 30,
+          "resolutions": ["refund", "exchange"],
+          "methods": ["by_post", "in_store"],
+          "return_postage": "customer"
+        },
+        {
+          "id": "final_sale",
+          "name": "Final sale",
+          "eligibility": "not_accepted",
+          "resolutions": [],
+          "methods": []
+        },
+        {
+          "id": "credit",
+          "name": "Store credit, in the shop",
+          "eligibility": "window",
+          "window_days": 14,
+          "resolutions": ["store_credit"],
+          "methods": ["in_store"]
+        }
+      ]
+    },
+    "us": {
+      "version": 1,
+      "domain": "inbox.hardware.example",
+      "as_of": "2026-11-02T10:00:00.000Z",
+      "rev": "e3735f2067ba8235",
+      "shipping_profiles": [
+        {
+          "id": "ground",
+          "name": "Ground",
+          "default": true,
+          "zones": [
+            {
+              "name": "Lower 48",
+              "destinations": [
+                {
+                  "country": "US"
+                }
+              ],
+              "excluded": [
+                {
+                  "country": "US",
+                  "regions": ["US-AK", "US-HI"]
+                }
+              ],
+              "services": [
+                {
+                  "id": "ground",
+                  "name": "Ground",
+                  "carrier": "usps",
+                  "tracked": true,
+                  "id_check": false,
+                  "transit_days": {
+                    "min": 2,
+                    "max": 5
+                  },
+                  "rate": {
+                    "basis": "by_weight",
+                    "unit": "lb",
+                    "bands": [
+                      {
+                        "up_to": 1,
+                        "amount": {
+                          "value": 599,
+                          "currency": "USD"
+                        }
+                      },
+                      {
+                        "up_to": 5,
+                        "amount": {
+                          "value": 899,
+                          "currency": "USD"
+                        }
+                      },
+                      {
+                        "up_to": null,
+                        "amount": {
+                          "value": 1499,
+                          "currency": "USD"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "freight",
+                  "name": "Freight",
+                  "tracked": true,
+                  "id_check": false,
+                  "transit_days": {
+                    "min": 5,
+                    "max": 10
+                  },
+                  "rate": {
+                    "basis": "by_order_value",
+                    "bands": [
+                      {
+                        "up_to": {
+                          "value": 50000,
+                          "currency": "USD"
+                        },
+                        "amount": {
+                          "value": 4900,
+                          "currency": "USD"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "return_policies": [
+        {
+          "id": "seven_days",
+          "name": "7 days",
+          "default": true,
+          "eligibility": "window",
+          "window_days": 7,
+          "resolutions": ["refund"],
+          "methods": ["by_post"],
+          "return_postage": "business",
+          "restocking_fee": {
+            "percent": 10
+          }
+        },
+        {
+          "id": "no_returns",
+          "name": "No returns",
+          "eligibility": "not_accepted",
+          "resolutions": [],
+          "methods": []
+        }
+      ]
+    }
+  },
+  "reads": [
+    {
+      "name": "a shop's document, every part reads",
+      "doc": {
+        "base": "eu",
+        "patch": []
+      },
+      "expect": {
+        "problems": [],
+        "shipping_profiles": ["standard", "chilled"],
+        "return_policies": ["standard", "final_sale", "credit"],
+        "default_shipping_profile": "standard",
+        "default_return_policy": "standard"
+      }
+    },
+    {
+      "name": "a shop outside the EU and the UK: 7 days, and no returns",
+      "doc": {
+        "base": "us",
+        "patch": []
+      },
+      "expect": {
+        "problems": [],
+        "shipping_profiles": ["ground"],
+        "return_policies": ["seven_days", "no_returns"],
+        "default_shipping_profile": "ground",
+        "default_return_policy": "seven_days"
+      }
+    },
+    {
+      "name": "two default profiles: the first stays",
+      "doc": {
+        "base": "eu",
+        "patch": [
+          {
+            "op": "add",
+            "path": "/shipping_profiles/1/default",
+            "value": true
+          }
+        ]
+      },
+      "expect": {
+        "problems": [
+          {
+            "path": "shipping_profiles[1].default",
+            "code": "default_twice"
+          }
+        ],
+        "shipping_profiles": ["standard", "chilled"],
+        "return_policies": ["standard", "final_sale", "credit"],
+        "default_shipping_profile": "standard",
+        "default_return_policy": "standard"
+      }
+    },
+    {
+      "name": "two default policies: the first stays",
+      "doc": {
+        "base": "eu",
+        "patch": [
+          {
+            "op": "add",
+            "path": "/return_policies/2/default",
+            "value": true
+          }
+        ]
+      },
+      "expect": {
+        "problems": [
+          {
+            "path": "return_policies[2].default",
+            "code": "default_twice"
+          }
+        ],
+        "shipping_profiles": ["standard", "chilled"],
+        "return_policies": ["standard", "final_sale", "credit"],
+        "default_shipping_profile": "standard",
+        "default_return_policy": "standard"
+      }
+    },
+    {
+      "name": "an id twice: the later dropped",
+      "doc": {
+        "base": "eu",
+        "patch": [
+          {
+            "op": "replace",
+            "path": "/shipping_profiles/1/id",
+            "value": "standard"
+          }
+        ]
+      },
+      "expect": {
+        "problems": [
+          {
+            "path": "shipping_profiles[1]",
+            "code": "id_twice"
+          }
+        ],
+        "shipping_profiles": ["standard"],
+        "return_policies": ["standard", "final_sale", "credit"],
+        "default_shipping_profile": "standard",
+        "default_return_policy": "standard"
+      }
+    },
+    {
+      "name": "a service in two currencies: dropped",
+      "doc": {
+        "base": "eu",
+        "patch": [
+          {
+            "op": "replace",
+            "path": "/shipping_profiles/0/zones/0/services/0/free_over",
+            "value": {
+              "value": 5000,
+              "currency": "GBP"
+            }
+          }
+        ]
+      },
+      "expect": {
+        "problems": [
+          {
+            "path": "shipping_profiles[0].zones[0].services[0]",
+            "code": "currency_mixed"
+          }
+        ],
+        "shipping_profiles": ["standard", "chilled"],
+        "return_policies": ["standard", "final_sale", "credit"],
+        "default_shipping_profile": "standard",
+        "default_return_policy": "standard"
+      },
+      "note": "the zone keeps its next-day service"
+    },
+    {
+      "name": "weight bands that fall",
+      "doc": {
+        "base": "eu",
+        "patch": [
+          {
+            "op": "replace",
+            "path": "/shipping_profiles/0/zones/0/services/0/rate/bands/1/up_to",
+            "value": 1
+          }
+        ]
+      },
+      "expect": {
+        "problems": [
+          {
+            "path": "shipping_profiles[0].zones[0].services[0]",
+            "code": "band_order"
+          }
+        ],
+        "shipping_profiles": ["standard", "chilled"],
+        "return_policies": ["standard", "final_sale", "credit"],
+        "default_shipping_profile": "standard",
+        "default_return_policy": "standard"
+      }
+    },
+    {
+      "name": "an open band first",
+      "doc": {
+        "base": "eu",
+        "patch": [
+          {
+            "op": "replace",
+            "path": "/shipping_profiles/0/zones/0/services/0/rate/bands/0/up_to",
+            "value": null
+          }
+        ]
+      },
+      "expect": {
+        "problems": [
+          {
+            "path": "shipping_profiles[0].zones[0].services[0]",
+            "code": "band_order"
+          }
+        ],
+        "shipping_profiles": ["standard", "chilled"],
+        "return_policies": ["standard", "final_sale", "credit"],
+        "default_shipping_profile": "standard",
+        "default_return_policy": "standard"
+      }
+    },
+    {
+      "name": "a weight band with four decimals",
+      "doc": {
+        "base": "eu",
+        "patch": [
+          {
+            "op": "replace",
+            "path": "/shipping_profiles/0/zones/0/services/0/rate/bands/0/up_to",
+            "value": 1.2345
+          }
+        ]
+      },
+      "expect": {
+        "problems": [
+          {
+            "path": "shipping_profiles[0].zones[0].services[0]",
+            "code": "band_order"
+          }
+        ],
+        "shipping_profiles": ["standard", "chilled"],
+        "return_policies": ["standard", "final_sale", "credit"],
+        "default_shipping_profile": "standard",
+        "default_return_policy": "standard"
+      }
+    },
+    {
+      "name": "transit days the wrong way round",
+      "doc": {
+        "base": "eu",
+        "patch": [
+          {
+            "op": "replace",
+            "path": "/shipping_profiles/0/zones/0/services/0/transit_days",
+            "value": {
+              "min": 3,
+              "max": 1
+            }
+          }
+        ]
+      },
+      "expect": {
+        "problems": [
+          {
+            "path": "shipping_profiles[0].zones[0].services[0]",
+            "code": "transit_order"
+          }
+        ],
+        "shipping_profiles": ["standard", "chilled"],
+        "return_policies": ["standard", "final_sale", "credit"],
+        "default_shipping_profile": "standard",
+        "default_return_policy": "standard"
+      }
+    },
+    {
+      "name": "a carrier it does not know: the carrier alone",
+      "doc": {
+        "base": "eu",
+        "patch": [
+          {
+            "op": "replace",
+            "path": "/shipping_profiles/0/zones/0/services/0/carrier",
+            "value": "pigeon_post"
+          }
+        ]
+      },
+      "expect": {
+        "problems": [
+          {
+            "path": "shipping_profiles[0].zones[0].services[0].carrier",
+            "code": "carrier_unknown"
+          }
+        ],
+        "shipping_profiles": ["standard", "chilled"],
+        "return_policies": ["standard", "final_sale", "credit"],
+        "default_shipping_profile": "standard",
+        "default_return_policy": "standard"
+      }
+    },
+    {
+      "name": "a profile whose only service is dropped",
+      "doc": {
+        "base": "eu",
+        "patch": [
+          {
+            "op": "replace",
+            "path": "/shipping_profiles/1/zones/0/services/0/rate",
+            "value": {
+              "basis": "flat",
+              "amount": {
+                "value": 500,
+                "currency": "GBP"
+              }
+            }
+          },
+          {
+            "op": "add",
+            "path": "/shipping_profiles/1/zones/0/services/0/free_over",
+            "value": {
+              "value": 5000,
+              "currency": "EUR"
+            }
+          }
+        ]
+      },
+      "expect": {
+        "problems": [
+          {
+            "path": "shipping_profiles[1].zones[0].services[0]",
+            "code": "currency_mixed"
+          },
+          {
+            "path": "shipping_profiles[1].zones[0]",
+            "code": "zone_empty"
+          },
+          {
+            "path": "shipping_profiles[1]",
+            "code": "profile_empty"
+          }
+        ],
+        "shipping_profiles": ["standard"],
+        "return_policies": ["standard", "final_sale", "credit"],
+        "default_shipping_profile": "standard",
+        "default_return_policy": "standard"
+      }
+    },
+    {
+      "name": "a profile that does not read",
+      "doc": {
+        "base": "eu",
+        "patch": [
+          {
+            "op": "remove",
+            "path": "/shipping_profiles/1/zones"
+          }
+        ]
+      },
+      "expect": {
+        "problems": [
+          {
+            "path": "shipping_profiles[1]",
+            "code": "unreadable"
+          }
+        ],
+        "shipping_profiles": ["standard"],
+        "return_policies": ["standard", "final_sale", "credit"],
+        "default_shipping_profile": "standard",
+        "default_return_policy": "standard"
+      }
+    },
+    {
+      "name": "free over nothing does not read",
+      "doc": {
+        "base": "eu",
+        "patch": [
+          {
+            "op": "replace",
+            "path": "/shipping_profiles/0/zones/0/services/0/free_over",
+            "value": {
+              "value": 0,
+              "currency": "EUR"
+            }
+          }
+        ]
+      },
+      "expect": {
+        "problems": [
+          {
+            "path": "shipping_profiles[0]",
+            "code": "unreadable"
+          }
+        ],
+        "shipping_profiles": ["chilled"],
+        "return_policies": ["standard", "final_sale", "credit"],
+        "default_shipping_profile": null,
+        "default_return_policy": "standard"
+      },
+      "note": "a profile reads or not as a whole, and chilled was never the default"
+    },
+    {
+      "name": "a window with no days",
+      "doc": {
+        "base": "eu",
+        "patch": [
+          {
+            "op": "remove",
+            "path": "/return_policies/0/window_days"
+          }
+        ]
+      },
+      "expect": {
+        "problems": [
+          {
+            "path": "return_policies[0]",
+            "code": "window_days_missing"
+          }
+        ],
+        "shipping_profiles": ["standard", "chilled"],
+        "return_policies": ["final_sale", "credit"],
+        "default_shipping_profile": "standard",
+        "default_return_policy": null
+      }
+    },
+    {
+      "name": "days beside unlimited: the days alone",
+      "doc": {
+        "base": "eu",
+        "patch": [
+          {
+            "op": "replace",
+            "path": "/return_policies/2/eligibility",
+            "value": "unlimited"
+          }
+        ]
+      },
+      "expect": {
+        "problems": [
+          {
+            "path": "return_policies[2].window_days",
+            "code": "window_days_unused"
+          }
+        ],
+        "shipping_profiles": ["standard", "chilled"],
+        "return_policies": ["standard", "final_sale", "credit"],
+        "default_shipping_profile": "standard",
+        "default_return_policy": "standard"
+      }
+    },
+    {
+      "name": "returns taken, by no method",
+      "doc": {
+        "base": "eu",
+        "patch": [
+          {
+            "op": "replace",
+            "path": "/return_policies/2/methods",
+            "value": []
+          }
+        ]
+      },
+      "expect": {
+        "problems": [
+          {
+            "path": "return_policies[2]",
+            "code": "terms_missing"
+          }
+        ],
+        "shipping_profiles": ["standard", "chilled"],
+        "return_policies": ["standard", "final_sale"],
+        "default_shipping_profile": "standard",
+        "default_return_policy": "standard"
+      }
+    },
+    {
+      "name": "by post, no one pays the postage",
+      "doc": {
+        "base": "eu",
+        "patch": [
+          {
+            "op": "remove",
+            "path": "/return_policies/0/return_postage"
+          }
+        ]
+      },
+      "expect": {
+        "problems": [
+          {
+            "path": "return_policies[0]",
+            "code": "postage_missing"
+          }
+        ],
+        "shipping_profiles": ["standard", "chilled"],
+        "return_policies": ["final_sale", "credit"],
+        "default_shipping_profile": "standard",
+        "default_return_policy": null
+      }
+    },
+    {
+      "name": "terms on no returns: dropped",
+      "doc": {
+        "base": "eu",
+        "patch": [
+          {
+            "op": "replace",
+            "path": "/return_policies/1/resolutions",
+            "value": ["refund"]
+          },
+          {
+            "op": "add",
+            "path": "/return_policies/1/return_postage",
+            "value": "customer"
+          }
+        ]
+      },
+      "expect": {
+        "problems": [
+          {
+            "path": "return_policies[1]",
+            "code": "not_accepted_terms"
+          }
+        ],
+        "shipping_profiles": ["standard", "chilled"],
+        "return_policies": ["standard", "final_sale", "credit"],
+        "default_shipping_profile": "standard",
+        "default_return_policy": "standard"
+      }
+    },
+    {
+      "name": "a document of another version",
+      "doc": {
+        "base": "eu",
+        "patch": [
+          {
+            "op": "replace",
+            "path": "/version",
+            "value": 2
+          }
+        ]
+      },
+      "expect": null,
+      "note": "it does not read at all"
+    }
+  ],
+  "quotes": [
+    {
+      "name": "one pot to Lisbon, 0.65 kg",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 2990,
+              "currency": "EUR"
+            },
+            "quantity": 1,
+            "weight": {
+              "value": 0.65,
+              "unit": "kg"
+            }
+          }
+        ],
+        "destination": {
+          "country": "PT",
+          "postal_code": "1100-148"
+        }
+      },
+      "expect": {
+        "profile": "standard",
+        "zone": "Mainland",
+        "services": [
+          {
+            "id": "standard",
+            "name": "Standard",
+            "carrier": "ctt",
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 1,
+              "max": 3
+            },
+            "fee": {
+              "value": 450,
+              "currency": "EUR"
+            }
+          },
+          {
+            "id": "next_day",
+            "name": "Next day",
+            "carrier": "dpd",
+            "tracked": true,
+            "id_check": true,
+            "transit_days": {
+              "min": 1,
+              "max": 1
+            },
+            "fee": {
+              "value": 990,
+              "currency": "EUR"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "two at 1.5 kg: 3 kg",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 1990,
+              "currency": "EUR"
+            },
+            "quantity": 2,
+            "weight": {
+              "value": 1.5,
+              "unit": "kg"
+            }
+          }
+        ],
+        "destination": {
+          "country": "PT",
+          "postal_code": "1100-148"
+        }
+      },
+      "expect": {
+        "profile": "standard",
+        "zone": "Mainland",
+        "services": [
+          {
+            "id": "standard",
+            "name": "Standard",
+            "carrier": "ctt",
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 1,
+              "max": 3
+            },
+            "fee": {
+              "value": 750,
+              "currency": "EUR"
+            }
+          },
+          {
+            "id": "next_day",
+            "name": "Next day",
+            "carrier": "dpd",
+            "tracked": true,
+            "id_check": true,
+            "transit_days": {
+              "min": 1,
+              "max": 1
+            },
+            "fee": {
+              "value": 990,
+              "currency": "EUR"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "40 kg: too heavy for the standard rate",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 1990,
+              "currency": "EUR"
+            },
+            "quantity": 4,
+            "weight": {
+              "value": 10,
+              "unit": "kg"
+            }
+          }
+        ],
+        "destination": {
+          "country": "PT",
+          "postal_code": "1100-148"
+        }
+      },
+      "expect": {
+        "profile": "standard",
+        "zone": "Mainland",
+        "services": [
+          {
+            "id": "standard",
+            "name": "Standard",
+            "carrier": "ctt",
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 1,
+              "max": 3
+            },
+            "fee": null,
+            "why": "too_heavy"
+          },
+          {
+            "id": "next_day",
+            "name": "Next day",
+            "carrier": "dpd",
+            "tracked": true,
+            "id_check": true,
+            "transit_days": {
+              "min": 1,
+              "max": 1
+            },
+            "fee": {
+              "value": 990,
+              "currency": "EUR"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "goods worth 59.80: standard free over 50",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 2990,
+              "currency": "EUR"
+            },
+            "quantity": 2,
+            "weight": {
+              "value": 0.65,
+              "unit": "kg"
+            }
+          }
+        ],
+        "destination": {
+          "country": "PT",
+          "postal_code": "1100-148"
+        }
+      },
+      "expect": {
+        "profile": "standard",
+        "zone": "Mainland",
+        "services": [
+          {
+            "id": "standard",
+            "name": "Standard",
+            "carrier": "ctt",
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 1,
+              "max": 3
+            },
+            "fee": {
+              "value": 0,
+              "currency": "EUR"
+            }
+          },
+          {
+            "id": "next_day",
+            "name": "Next day",
+            "carrier": "dpd",
+            "tracked": true,
+            "id_check": true,
+            "transit_days": {
+              "min": 1,
+              "max": 1
+            },
+            "fee": {
+              "value": 990,
+              "currency": "EUR"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a line with no weight",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 2990,
+              "currency": "EUR"
+            },
+            "quantity": 1,
+            "weight": {
+              "value": 0.65,
+              "unit": "kg"
+            }
+          },
+          {
+            "price": {
+              "value": 500,
+              "currency": "EUR"
+            },
+            "quantity": 1
+          }
+        ],
+        "destination": {
+          "country": "PT",
+          "postal_code": "1100-148"
+        }
+      },
+      "expect": {
+        "profile": "standard",
+        "zone": "Mainland",
+        "services": [
+          {
+            "id": "standard",
+            "name": "Standard",
+            "carrier": "ctt",
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 1,
+              "max": 3
+            },
+            "fee": null,
+            "why": "weight_missing"
+          },
+          {
+            "id": "next_day",
+            "name": "Next day",
+            "carrier": "dpd",
+            "tracked": true,
+            "id_check": true,
+            "transit_days": {
+              "min": 1,
+              "max": 1
+            },
+            "fee": {
+              "value": 990,
+              "currency": "EUR"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a line with no weight, and goods over 50: still no weight",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 5990,
+              "currency": "EUR"
+            },
+            "quantity": 1
+          }
+        ],
+        "destination": {
+          "country": "PT",
+          "postal_code": "1100-148"
+        }
+      },
+      "expect": {
+        "profile": "standard",
+        "zone": "Mainland",
+        "services": [
+          {
+            "id": "standard",
+            "name": "Standard",
+            "carrier": "ctt",
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 1,
+              "max": 3
+            },
+            "fee": null,
+            "why": "weight_missing"
+          },
+          {
+            "id": "next_day",
+            "name": "Next day",
+            "carrier": "dpd",
+            "tracked": true,
+            "id_check": true,
+            "transit_days": {
+              "min": 1,
+              "max": 1
+            },
+            "fee": {
+              "value": 990,
+              "currency": "EUR"
+            }
+          }
+        ]
+      },
+      "note": "a weight rate must know it can carry the basket before free_over"
+    },
+    {
+      "name": "1,500 g and a pound: 1.95359237 kg, the first band",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 1000,
+              "currency": "EUR"
+            },
+            "quantity": 1,
+            "weight": {
+              "value": 1500,
+              "unit": "g"
+            }
+          },
+          {
+            "price": {
+              "value": 1000,
+              "currency": "EUR"
+            },
+            "quantity": 1,
+            "weight": {
+              "value": 1,
+              "unit": "lb"
+            }
+          }
+        ],
+        "destination": {
+          "country": "PT",
+          "postal_code": "1100-148"
+        }
+      },
+      "expect": {
+        "profile": "standard",
+        "zone": "Mainland",
+        "services": [
+          {
+            "id": "standard",
+            "name": "Standard",
+            "carrier": "ctt",
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 1,
+              "max": 3
+            },
+            "fee": {
+              "value": 450,
+              "currency": "EUR"
+            }
+          },
+          {
+            "id": "next_day",
+            "name": "Next day",
+            "carrier": "dpd",
+            "tracked": true,
+            "id_check": true,
+            "transit_days": {
+              "min": 1,
+              "max": 1
+            },
+            "fee": {
+              "value": 990,
+              "currency": "EUR"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "1,550 g and a pound: 2.00359237 kg, the second",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 1000,
+              "currency": "EUR"
+            },
+            "quantity": 1,
+            "weight": {
+              "value": 1550,
+              "unit": "g"
+            }
+          },
+          {
+            "price": {
+              "value": 1000,
+              "currency": "EUR"
+            },
+            "quantity": 1,
+            "weight": {
+              "value": 1,
+              "unit": "lb"
+            }
+          }
+        ],
+        "destination": {
+          "country": "PT",
+          "postal_code": "1100-148"
+        }
+      },
+      "expect": {
+        "profile": "standard",
+        "zone": "Mainland",
+        "services": [
+          {
+            "id": "standard",
+            "name": "Standard",
+            "carrier": "ctt",
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 1,
+              "max": 3
+            },
+            "fee": {
+              "value": 750,
+              "currency": "EUR"
+            }
+          },
+          {
+            "id": "next_day",
+            "name": "Next day",
+            "carrier": "dpd",
+            "tracked": true,
+            "id_check": true,
+            "transit_days": {
+              "min": 1,
+              "max": 1
+            },
+            "fee": {
+              "value": 990,
+              "currency": "EUR"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "exactly 2 kg is the first band",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 1000,
+              "currency": "EUR"
+            },
+            "quantity": 4,
+            "weight": {
+              "value": 0.5,
+              "unit": "kg"
+            }
+          }
+        ],
+        "destination": {
+          "country": "PT",
+          "postal_code": "1100-148"
+        }
+      },
+      "expect": {
+        "profile": "standard",
+        "zone": "Mainland",
+        "services": [
+          {
+            "id": "standard",
+            "name": "Standard",
+            "carrier": "ctt",
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 1,
+              "max": 3
+            },
+            "fee": {
+              "value": 450,
+              "currency": "EUR"
+            }
+          },
+          {
+            "id": "next_day",
+            "name": "Next day",
+            "carrier": "dpd",
+            "tracked": true,
+            "id_check": true,
+            "transit_days": {
+              "min": 1,
+              "max": 1
+            },
+            "fee": {
+              "value": 990,
+              "currency": "EUR"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "the Azores, by region",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 2990,
+              "currency": "EUR"
+            },
+            "quantity": 1,
+            "weight": {
+              "value": 0.65,
+              "unit": "kg"
+            }
+          }
+        ],
+        "destination": {
+          "country": "PT",
+          "region": "PT-20"
+        }
+      },
+      "expect": {
+        "profile": "standard",
+        "zone": "Islands",
+        "services": [
+          {
+            "id": "standard",
+            "name": "Standard",
+            "carrier": "ctt",
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 3,
+              "max": 7
+            },
+            "fee": {
+              "value": 1200,
+              "currency": "EUR"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Portugal with no region: the first zone that has it",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 2990,
+              "currency": "EUR"
+            },
+            "quantity": 1,
+            "weight": {
+              "value": 0.65,
+              "unit": "kg"
+            }
+          }
+        ],
+        "destination": {
+          "country": "PT"
+        }
+      },
+      "expect": {
+        "profile": "standard",
+        "zone": "Mainland",
+        "services": [
+          {
+            "id": "standard",
+            "name": "Standard",
+            "carrier": "ctt",
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 1,
+              "max": 3
+            },
+            "fee": {
+              "value": 450,
+              "currency": "EUR"
+            }
+          },
+          {
+            "id": "next_day",
+            "name": "Next day",
+            "carrier": "dpd",
+            "tracked": true,
+            "id_check": true,
+            "transit_days": {
+              "min": 1,
+              "max": 1
+            },
+            "fee": {
+              "value": 990,
+              "currency": "EUR"
+            }
+          }
+        ]
+      },
+      "note": "a region it was not told matches no entry that names regions"
+    },
+    {
+      "name": "Spain, goods 49.90",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 4990,
+              "currency": "EUR"
+            },
+            "quantity": 1
+          }
+        ],
+        "destination": {
+          "country": "ES"
+        }
+      },
+      "expect": {
+        "profile": "standard",
+        "zone": "Europe",
+        "services": [
+          {
+            "id": "standard",
+            "name": "Standard",
+            "carrier": null,
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 3,
+              "max": 6
+            },
+            "fee": {
+              "value": 1490,
+              "currency": "EUR"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Spain, goods 50.00: the top of the first band",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 5000,
+              "currency": "EUR"
+            },
+            "quantity": 1
+          }
+        ],
+        "destination": {
+          "country": "ES"
+        }
+      },
+      "expect": {
+        "profile": "standard",
+        "zone": "Europe",
+        "services": [
+          {
+            "id": "standard",
+            "name": "Standard",
+            "carrier": null,
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 3,
+              "max": 6
+            },
+            "fee": {
+              "value": 1490,
+              "currency": "EUR"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Spain, goods 50.10",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 5010,
+              "currency": "EUR"
+            },
+            "quantity": 1
+          }
+        ],
+        "destination": {
+          "country": "ES"
+        }
+      },
+      "expect": {
+        "profile": "standard",
+        "zone": "Europe",
+        "services": [
+          {
+            "id": "standard",
+            "name": "Standard",
+            "carrier": null,
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 3,
+              "max": 6
+            },
+            "fee": {
+              "value": 990,
+              "currency": "EUR"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Spain, goods 150.00: free",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 5000,
+              "currency": "EUR"
+            },
+            "quantity": 3
+          }
+        ],
+        "destination": {
+          "country": "ES"
+        }
+      },
+      "expect": {
+        "profile": "standard",
+        "zone": "Europe",
+        "services": [
+          {
+            "id": "standard",
+            "name": "Standard",
+            "carrier": null,
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 3,
+              "max": 6
+            },
+            "fee": {
+              "value": 0,
+              "currency": "EUR"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "London, three items at 6.00 each",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 1500,
+              "currency": "EUR"
+            },
+            "quantity": 2
+          },
+          {
+            "price": {
+              "value": 800,
+              "currency": "EUR"
+            },
+            "quantity": 1
+          }
+        ],
+        "destination": {
+          "country": "GB",
+          "postal_code": "SW1A 1AA"
+        }
+      },
+      "expect": {
+        "profile": "standard",
+        "zone": "United Kingdom",
+        "services": [
+          {
+            "id": "tracked",
+            "name": "Tracked",
+            "carrier": "royal_mail",
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 3,
+              "max": 6
+            },
+            "fee": {
+              "value": 1800,
+              "currency": "EUR"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Belfast is excluded",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 1500,
+              "currency": "EUR"
+            },
+            "quantity": 1
+          }
+        ],
+        "destination": {
+          "country": "GB",
+          "postal_code": "BT1 1AA"
+        }
+      },
+      "expect": {
+        "profile": "standard",
+        "zone": null,
+        "services": [],
+        "why": "not_shipped_there"
+      }
+    },
+    {
+      "name": "the United States: not shipped there",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 1500,
+              "currency": "EUR"
+            },
+            "quantity": 1
+          }
+        ],
+        "destination": {
+          "country": "US"
+        }
+      },
+      "expect": {
+        "profile": "standard",
+        "zone": null,
+        "services": [],
+        "why": "not_shipped_there"
+      }
+    },
+    {
+      "name": "a line in pounds sterling to Spain",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 1500,
+              "currency": "GBP"
+            },
+            "quantity": 1
+          }
+        ],
+        "destination": {
+          "country": "ES"
+        }
+      },
+      "expect": {
+        "profile": "standard",
+        "zone": "Europe",
+        "services": [
+          {
+            "id": "standard",
+            "name": "Standard",
+            "carrier": null,
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 3,
+              "max": 6
+            },
+            "fee": null,
+            "why": "currency"
+          }
+        ]
+      }
+    },
+    {
+      "name": "chilled to Lisbon, by our van: free",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 1290,
+              "currency": "EUR"
+            },
+            "quantity": 2
+          }
+        ],
+        "destination": {
+          "country": "PT",
+          "postal_code": "1100-148"
+        },
+        "shipping_profile": "chilled"
+      },
+      "expect": {
+        "profile": "chilled",
+        "zone": "Lisbon",
+        "services": [
+          {
+            "id": "van",
+            "name": "Our van",
+            "carrier": null,
+            "tracked": false,
+            "id_check": true,
+            "transit_days": {
+              "min": 0,
+              "max": 1
+            },
+            "fee": {
+              "value": 0,
+              "currency": "EUR"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "chilled to Porto: not shipped there",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 1290,
+              "currency": "EUR"
+            },
+            "quantity": 2
+          }
+        ],
+        "destination": {
+          "country": "PT",
+          "postal_code": "4000-001"
+        },
+        "shipping_profile": "chilled"
+      },
+      "expect": {
+        "profile": "chilled",
+        "zone": null,
+        "services": [],
+        "why": "not_shipped_there"
+      }
+    },
+    {
+      "name": "a profile it does not have",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 1290,
+              "currency": "EUR"
+            },
+            "quantity": 1
+          }
+        ],
+        "destination": {
+          "country": "PT",
+          "postal_code": "1100-148"
+        },
+        "shipping_profile": "overnight"
+      },
+      "expect": {
+        "profile": null,
+        "zone": null,
+        "services": [],
+        "why": "no_profile"
+      }
+    },
+    {
+      "name": "two 12 oz bags: 1.5 lb",
+      "doc": "us",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 1299,
+              "currency": "USD"
+            },
+            "quantity": 2,
+            "weight": {
+              "value": 12,
+              "unit": "oz"
+            }
+          }
+        ],
+        "destination": {
+          "country": "US",
+          "region": "US-CA"
+        }
+      },
+      "expect": {
+        "profile": "ground",
+        "zone": "Lower 48",
+        "services": [
+          {
+            "id": "ground",
+            "name": "Ground",
+            "carrier": "usps",
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 2,
+              "max": 5
+            },
+            "fee": {
+              "value": 899,
+              "currency": "USD"
+            }
+          },
+          {
+            "id": "freight",
+            "name": "Freight",
+            "carrier": null,
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 5,
+              "max": 10
+            },
+            "fee": {
+              "value": 4900,
+              "currency": "USD"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "80 lb: the open band",
+      "doc": "us",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 9999,
+              "currency": "USD"
+            },
+            "quantity": 4,
+            "weight": {
+              "value": 20,
+              "unit": "lb"
+            }
+          }
+        ],
+        "destination": {
+          "country": "US"
+        }
+      },
+      "expect": {
+        "profile": "ground",
+        "zone": "Lower 48",
+        "services": [
+          {
+            "id": "ground",
+            "name": "Ground",
+            "carrier": "usps",
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 2,
+              "max": 5
+            },
+            "fee": {
+              "value": 1499,
+              "currency": "USD"
+            }
+          },
+          {
+            "id": "freight",
+            "name": "Freight",
+            "carrier": null,
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 5,
+              "max": 10
+            },
+            "fee": {
+              "value": 4900,
+              "currency": "USD"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "goods of 600 dollars: past freight's last band",
+      "doc": "us",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 30000,
+              "currency": "USD"
+            },
+            "quantity": 2,
+            "weight": {
+              "value": 1,
+              "unit": "lb"
+            }
+          }
+        ],
+        "destination": {
+          "country": "US"
+        }
+      },
+      "expect": {
+        "profile": "ground",
+        "zone": "Lower 48",
+        "services": [
+          {
+            "id": "ground",
+            "name": "Ground",
+            "carrier": "usps",
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 2,
+              "max": 5
+            },
+            "fee": {
+              "value": 899,
+              "currency": "USD"
+            }
+          },
+          {
+            "id": "freight",
+            "name": "Freight",
+            "carrier": null,
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 5,
+              "max": 10
+            },
+            "fee": null,
+            "why": "over_bands"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Hawaii is excluded",
+      "doc": "us",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 1299,
+              "currency": "USD"
+            },
+            "quantity": 1,
+            "weight": {
+              "value": 12,
+              "unit": "oz"
+            }
+          }
+        ],
+        "destination": {
+          "country": "US",
+          "region": "US-HI"
+        }
+      },
+      "expect": {
+        "profile": "ground",
+        "zone": null,
+        "services": [],
+        "why": "not_shipped_there"
+      }
+    }
+  ]
+}

@@ -605,6 +605,22 @@
         "items": {
           "type": "string",
           "format": "uri"
+        },
+        "versions": {
+          "description": "The catalogue versions the feed serves, each once. Absent: [1].",
+          "minItems": 1,
+          "maxItems": 8,
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 99
+          }
+        },
+        "policies": {
+          "description": "The signed policies document: shipping profiles and return policies (catalogue version 2).",
+          "type": "string",
+          "format": "uri"
         }
       },
       "required": ["feed", "items"]

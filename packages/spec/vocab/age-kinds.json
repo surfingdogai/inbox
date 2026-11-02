@@ -1,0 +1,133 @@
+{
+  "description": "The kinds of age-restricted product a catalogue version 2 offer's age_restricted names (docs/protocol/network.md §4.18, catalogue version 2): each kind's label in five languages, what it covers, and whether a network lists it (network). The minimum age is never here: the business sets it for each product (min_age, and by_country where it sells), checked by ID at handover, and this list keeps no table of what any law says. A kind whose network is off is kept off networks at product level, ID check or not: a reader holds every offer of that kind and lists the business's other products as before. A kind is never removed or renamed, and a kind's network never moves from off to listed without a new version of this file.",
+  "version": 1,
+  "languages": ["en", "pt", "es", "fr", "de"],
+  "kinds": [
+    {
+      "kind": "alcohol",
+      "labels": { "en": "Alcohol", "pt": "Álcool", "es": "Alcohol", "fr": "Alcool", "de": "Alkohol" },
+      "covers": "Beer, wine, cider, spirits and other drinks with alcohol in them.",
+      "network": "listed"
+    },
+    {
+      "kind": "tobacco_nicotine",
+      "labels": {
+        "en": "Tobacco and nicotine",
+        "pt": "Tabaco e nicotina",
+        "es": "Tabaco y nicotina",
+        "fr": "Tabac et nicotine",
+        "de": "Tabak und Nikotin"
+      },
+      "covers": "Cigarettes, cigars, rolling and pipe tobacco, e-cigarettes and vapes with their refills, heated tobacco and nicotine pouches.",
+      "network": "off"
+    },
+    {
+      "kind": "cannabis",
+      "labels": { "en": "Cannabis", "pt": "Canábis", "es": "Cannabis", "fr": "Cannabis", "de": "Cannabis" },
+      "covers": "Cannabis, and products made from it that contain THC. Not hemp seeds, hemp oil, hemp protein or other hemp foods.",
+      "network": "off"
+    },
+    {
+      "kind": "weapons",
+      "labels": { "en": "Weapons", "pt": "Armas", "es": "Armas", "fr": "Armes", "de": "Waffen" },
+      "covers": "Firearms and their parts, ammunition, air guns, crossbows, swords, knives sold as weapons and other offensive weapons.",
+      "network": "off"
+    },
+    {
+      "kind": "blades",
+      "labels": {
+        "en": "Knives and blades",
+        "pt": "Facas e lâminas",
+        "es": "Cuchillos y hojas",
+        "fr": "Couteaux et lames",
+        "de": "Messer und Klingen"
+      },
+      "covers": "Kitchen, craft and pocket knives, razor blades, axes and other tools with a blade, sold as tools.",
+      "network": "listed"
+    },
+    {
+      "kind": "fireworks",
+      "labels": {
+        "en": "Fireworks",
+        "pt": "Fogo de artifício",
+        "es": "Fuegos artificiales",
+        "fr": "Feux d'artifice",
+        "de": "Feuerwerk"
+      },
+      "covers": "Fireworks, sparklers, party poppers and other pyrotechnics.",
+      "network": "listed"
+    },
+    {
+      "kind": "solvents",
+      "labels": {
+        "en": "Solvents and corrosives",
+        "pt": "Solventes e corrosivos",
+        "es": "Disolventes y corrosivos",
+        "fr": "Solvants et corrosifs",
+        "de": "Lösungsmittel und Ätzendes"
+      },
+      "covers": "Solvents, lighter gas and fluid, spray paint and corrosive cleaners.",
+      "network": "listed"
+    },
+    {
+      "kind": "energy_drinks",
+      "labels": {
+        "en": "Energy drinks",
+        "pt": "Bebidas energéticas",
+        "es": "Bebidas energéticas",
+        "fr": "Boissons énergisantes",
+        "de": "Energydrinks"
+      },
+      "covers": "Drinks high in caffeine sold as energy drinks.",
+      "network": "listed"
+    },
+    {
+      "kind": "rated_media",
+      "labels": {
+        "en": "Age-rated films and games",
+        "pt": "Filmes e jogos com classificação etária",
+        "es": "Películas y juegos con calificación por edad",
+        "fr": "Films et jeux classés par âge",
+        "de": "Filme und Spiele mit Altersfreigabe"
+      },
+      "covers": "Films, video games and other media with an age rating.",
+      "network": "listed"
+    },
+    {
+      "kind": "gambling",
+      "labels": { "en": "Gambling", "pt": "Jogo", "es": "Juegos de azar", "fr": "Jeux d'argent", "de": "Glücksspiel" },
+      "covers": "Lottery tickets, scratchcards and other games of chance.",
+      "network": "listed"
+    },
+    {
+      "kind": "adult",
+      "labels": {
+        "en": "Adults only",
+        "pt": "Só para adultos",
+        "es": "Solo para adultos",
+        "fr": "Réservé aux adultes",
+        "de": "Nur für Erwachsene"
+      },
+      "covers": "Adult content and products sold to adults only.",
+      "network": "listed"
+    },
+    {
+      "kind": "medicines",
+      "labels": {
+        "en": "Age-limited medicines",
+        "pt": "Medicamentos com limite de idade",
+        "es": "Medicamentos con límite de edad",
+        "fr": "Médicaments limités par l'âge",
+        "de": "Arzneimittel mit Altersgrenze"
+      },
+      "covers": "Medicines sold without a prescription that are sold only above an age. Never a prescription-only medicine.",
+      "network": "listed"
+    },
+    {
+      "kind": "other",
+      "labels": { "en": "Other", "pt": "Outro", "es": "Otro", "fr": "Autre", "de": "Sonstiges" },
+      "covers": "Anything else the business sells only above an age.",
+      "network": "listed"
+    }
+  ]
+}

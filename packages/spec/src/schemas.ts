@@ -28,7 +28,10 @@ import {
   carryOutputSchema,
   caseAnsweredSchema,
   catalogueItemsSchema,
+  catalogueItemsV2Schema,
   cataloguePageSchema,
+  cataloguePageV2Schema,
+  cataloguePoliciesSchema,
   catalogueSwitchRequestSchema,
   catalogueSwitchResponseSchema,
   categoriesResponseSchema,
@@ -158,6 +161,18 @@ export const JSON_SCHEMAS: Record<string, { schema: z.ZodType; title: string }> 
   "listing-response": { schema: listingResponseSchema, title: "POST /v1/instances/{domain}/listing: 200" },
   "catalogue-page": { schema: cataloguePageSchema, title: "GET /v1/catalogue/changes (on the inbox): 200" },
   "catalogue-items": { schema: catalogueItemsSchema, title: "GET /v1/catalogue/items (on the inbox): 200" },
+  "catalogue-page-v2": {
+    schema: cataloguePageV2Schema,
+    title: "GET /v1/catalogue/changes?version=2 (on the inbox): 200, catalogue version 2",
+  },
+  "catalogue-items-v2": {
+    schema: catalogueItemsV2Schema,
+    title: "GET /v1/catalogue/items?version=2 (on the inbox): 200, catalogue version 2",
+  },
+  "catalogue-policies": {
+    schema: cataloguePoliciesSchema,
+    title: "GET <manifest catalogue.policies> (on the inbox): 200, shipping profiles and return policies, signed",
+  },
   "catalogue-switch-request": {
     schema: catalogueSwitchRequestSchema,
     title: "POST /v1/instances/{domain}/catalogue",

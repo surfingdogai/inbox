@@ -1,0 +1,515 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://surfingdog.ai/spec/schemas/catalogue-page-v2.json",
+  "title": "GET /v1/catalogue/changes?version=2 (on the inbox): 200, catalogue version 2",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "number",
+      "const": 2
+    },
+    "domain": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253
+    },
+    "as_of": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+    },
+    "catalogue": {
+      "type": "object",
+      "properties": {
+        "count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Products listed now."
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The latest change to any product, listed or not; null with none."
+        },
+        "tax_included": {
+          "description": "Whether the prices include tax; null when the business has not said.",
+          "type": ["boolean", "null"]
+        },
+        "rev": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{16}$",
+          "description": "Changes whenever count, updated_at or anything else the items are read with changes."
+        },
+        "policies_rev": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{16}$"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The policies document's rev: a reader whose copy has another reads it again. null: there is none."
+        }
+      },
+      "required": ["count", "updated_at", "tax_included", "rev", "policies_rev"]
+    },
+    "items": {
+      "maxItems": 500,
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[\\x21-\\x2B\\x2D-\\x7E]{1,256}$",
+                "description": "The business's own id for this offer (a variant's, when it has variants): what an order names."
+              },
+              "state": {
+                "type": "string",
+                "const": "listed"
+              },
+              "sku": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 64
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 150,
+                "description": "The offer's whole name, a variant's options in it: Moka pot, 6 cups."
+              },
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 5000
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "group": {
+                "description": "The product group it is a variant of; with options, and only with them.",
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[\\x21-\\x2B\\x2D-\\x7E]{1,256}$",
+                    "description": "The group's id, the same on every variant of it: the network's key group:<business>:<id>."
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 150,
+                    "description": "The product's title, without any variant's options: Moka pot."
+                  },
+                  "position": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 250,
+                    "description": "Where this variant comes among the group's, from 1; ties come in order of id."
+                  }
+                },
+                "required": ["id", "title", "position"]
+              },
+              "options": {
+                "description": "What sets this variant apart in its group: every variant of a group names the same keys.",
+                "minItems": 1,
+                "maxItems": 5,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9_]{0,39}$",
+                      "description": "A key of vocab/option-keys.json (color, size, flavour…), or any other lower-case name of the business's own."
+                    },
+                    "name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40,
+                      "description": "The business's own label for it, in its own language: Colour, Cor, Größe."
+                    },
+                    "value": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100,
+                      "description": "This variant's value, as the business writes it: Navy, 500 g, Medium roast."
+                    }
+                  },
+                  "required": ["key", "name", "value"]
+                }
+              },
+              "price_model": {
+                "type": "string",
+                "enum": ["fixed", "from", "range", "quote"]
+              },
+              "price": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 1000000000000000,
+                        "description": "Minor units of the currency's ISO 4217 exponent: 4500 is EUR 45.00, JPY 4,500, KWD 4.500. Never 0."
+                      },
+                      "currency": {
+                        "type": "string",
+                        "pattern": "^[A-Z]{3}$"
+                      }
+                    },
+                    "required": ["value", "currency"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "fixed: the price; from: the lowest; range: the lowest, to price_max; quote: null, the price is asked for."
+              },
+              "price_max": {
+                "description": "range only: the highest, above price, in its currency.",
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000000000000000,
+                    "description": "Minor units of the currency's ISO 4217 exponent: 4500 is EUR 45.00, JPY 4,500, KWD 4.500. Never 0."
+                  },
+                  "currency": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{3}$"
+                  }
+                },
+                "required": ["value", "currency"]
+              },
+              "list_price": {
+                "description": "fixed only: the 'was' price, above price, in its currency, shown only when the offer was at or above it for the 30 days before the price went below it.",
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000000000000000,
+                    "description": "Minor units of the currency's ISO 4217 exponent: 4500 is EUR 45.00, JPY 4,500, KWD 4.500. Never 0."
+                  },
+                  "currency": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{3}$"
+                  }
+                },
+                "required": ["value", "currency"]
+              },
+              "unit_price": {
+                "description": "fixed only: the net quantity, so a reader gives the price per kg, per litre.",
+                "type": "object",
+                "properties": {
+                  "measure": {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "number",
+                        "exclusiveMinimum": 0,
+                        "maximum": 1000000,
+                        "description": "The net quantity, above 0, at most three decimals: 500, 0.75, 15.25."
+                      },
+                      "unit": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9]{0,9}$",
+                        "description": "One of UNIT_PRICE_UNITS: g, kg, ml, l, oz, ct…"
+                      }
+                    },
+                    "required": ["value", "unit"]
+                  },
+                  "reference": {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 1000,
+                        "description": "The quantity the price is given per: 1, 10, 100…"
+                      },
+                      "unit": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9]{0,9}$"
+                      }
+                    },
+                    "required": ["value", "unit"]
+                  }
+                },
+                "required": ["measure", "reference"]
+              },
+              "tax_included": {
+                "description": "Whether this offer's prices include tax, where it is not what the catalogue says of every price.",
+                "type": "boolean"
+              },
+              "availability": {
+                "type": "string",
+                "enum": ["in_stock", "limited", "out_of_stock", "on_sale", "preorder", "backorder", "made_to_order"]
+              },
+              "available_from": {
+                "description": "preorder (required) and backorder: when it can be had from.",
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+              },
+              "available_until": {
+                "description": "The last moment it can be ordered: a season, a menu that ends.",
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+              },
+              "gtin": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^\\d{14}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Its barcode as 14 digits, check digit verified and never a shop's own code or a coupon (vectors/gtin.json), or null."
+              },
+              "no_gtin": {
+                "type": "boolean",
+                "description": "true: the owner says it has no barcode at all (bread, a print, a repair, something made to order), and gtin is null. false: it has one, or none was given."
+              },
+              "multipack": {
+                "description": "As in version 1: this many identical units of one item.",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10000
+              },
+              "is_bundle": {
+                "description": "Different items sold together at one price (a hamper, a set menu, a kit); its gtin, if any, is the bundle's own.",
+                "type": "boolean"
+              },
+              "brand": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 70
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "mpn": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 70
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "condition": {
+                "type": "string",
+                "enum": ["new", "used", "refurbished"]
+              },
+              "url": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 2048,
+                    "format": "uri"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Its page, an absolute https address on the business's own site, or null."
+              },
+              "media": {
+                "maxItems": 10,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": ["image", "video"]
+                    },
+                    "url": {
+                      "type": "string",
+                      "maxLength": 2048,
+                      "format": "uri"
+                    },
+                    "alt": {
+                      "description": "What it shows, for a person who cannot see it.",
+                      "type": "string",
+                      "maxLength": 200
+                    }
+                  },
+                  "required": ["type", "url"]
+                },
+                "description": "Pictures and videos, linked; the first image is the main one. Empty when there are none."
+              },
+              "age_restricted": {
+                "type": "object",
+                "properties": {
+                  "min_age": {
+                    "type": "integer",
+                    "minimum": 12,
+                    "maximum": 21
+                  },
+                  "kind": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]{0,39}$",
+                    "description": "A kind of vocab/age-kinds.json: alcohol, blades, fireworks…"
+                  },
+                  "by_country": {
+                    "description": "ISO 3166-1 alpha-2 country → the age there, where it is not min_age.",
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "pattern": "^[A-Z]{2}$"
+                    },
+                    "additionalProperties": {
+                      "type": "integer",
+                      "minimum": 12,
+                      "maximum": 25
+                    }
+                  },
+                  "check": {
+                    "type": "string",
+                    "const": "id_at_handover",
+                    "description": "ID is checked when it is handed over: by the business, or a carrier service it marks id_check."
+                  }
+                },
+                "required": ["min_age", "kind", "check"]
+              },
+              "fulfil_methods": {
+                "description": "How it reaches the buyer; absent, the business has not said for this offer.",
+                "minItems": 1,
+                "maxItems": 6,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": ["pickup", "reserve_pickup", "local_delivery", "shipping", "dine_in", "digital"]
+                }
+              },
+              "shipping_profile": {
+                "description": "A shipping profile of the policies document; absent, its default profile, when it ships.",
+                "type": "string",
+                "pattern": "^[\\x21-\\x2B\\x2D-\\x7E]{1,256}$"
+              },
+              "weight": {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1000000,
+                    "description": "Above 0, at most three decimals."
+                  },
+                  "unit": {
+                    "type": "string",
+                    "pattern": "^[a-z]{1,4}$",
+                    "description": "g, kg, oz or lb."
+                  }
+                },
+                "required": ["value", "unit"]
+              },
+              "return_policy": {
+                "description": "A return policy of the policies document; absent, its default policy.",
+                "type": "string",
+                "pattern": "^[\\x21-\\x2B\\x2D-\\x7E]{1,256}$"
+              },
+              "updated_at": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+              },
+              "hash": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{16}$",
+                "description": "The first 16 hex digits of SHA-256 over the item's canonical JSON (canonicalJson), every member it carries but updated_at and hash."
+              }
+            },
+            "required": [
+              "id",
+              "state",
+              "sku",
+              "name",
+              "description",
+              "price_model",
+              "price",
+              "availability",
+              "gtin",
+              "no_gtin",
+              "brand",
+              "mpn",
+              "condition",
+              "url",
+              "media",
+              "updated_at",
+              "hash"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[\\x21-\\x2B\\x2D-\\x7E]{1,256}$"
+              },
+              "state": {
+                "type": "string",
+                "const": "withdrawn"
+              },
+              "updated_at": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+              }
+            },
+            "required": ["id", "state", "updated_at"]
+          }
+        ]
+      }
+    },
+    "next_cursor": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._~-]{1,200}$",
+          "description": "Pass it as after, exactly, for the next page; null at the end."
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": ["version", "domain", "as_of", "catalogue", "items", "next_cursor"]
+}
