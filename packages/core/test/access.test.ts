@@ -1,10 +1,12 @@
 import { runMigrations } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { AccessCapabilities, mintApiKey } from "../src/access/keys";
+import { OLD_AI_DEFAULT_SCOPES } from "../src/access/scopes";
 import { Capabilities } from "../src/capabilities/service";
 import { WebhookCapabilities } from "../src/capabilities/webhooks";
 import { createDb, type Db } from "../src/db";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
+import { oauthClients, oauthTokens } from "../src/schema/tables";
 import { createSecretBox } from "../src/secrets/box";
 import type { Caller, Principal } from "../src/write/index";
 import { once, pruneIdempotencyKeys, withIdempotencyKey } from "../src/write/index";
@@ -130,6 +132,25 @@ describe("the scope check (refused out of the box)", () => {
     await expect(caps.access.requireScope(zapier, ["customers:erase"], "POST /customers/:id/erase")).rejects.toThrow(
       "The owner makes a key with customers:erase in Settings → Keys",
     );
+    // Keys are the owner's in person, for a key and an AI app alike: no key can hold keys:write, and an
+    // app that holds it is refused keys all the same, so neither is sent off to ask for it.
+    for (const [who, operation] of [
+      [zapier, "POST /api-keys"],
+      [zapier, "DELETE /api-keys/:id"],
+      [zapier, "DELETE /connected-apps/:id"],
+      [claude, "mcp:create_api_key"],
+      [claude, "mcp:revoke_api_key"],
+    ] as const) {
+      const refusal = (await caps.access
+        .requireScope(who, ["keys:write"], operation)
+        .catch((e: unknown) => e)) as Error;
+      expect(refusal, operation).toMatchObject({
+        code: "not_allowed",
+        details: { reason: "owner_only", required_scopes: ["keys:write"], where: "the owner app" },
+      });
+      expect(refusal.message, operation).toContain(`cannot call ${operation}, which only the owner does, in person.`);
+      expect(refusal.message, operation).not.toMatch(/keys:write|allow the scope/);
+    }
     // In scope, and the owner in person, pass and leave nothing.
     await caps.access.requireScope(zapier, ["inbox:read"], "GET /items");
     await caps.access.requireScope(zapier, ["events:read", "inbox:read"], "GET /events");
@@ -141,7 +162,7 @@ describe("the scope check (refused out of the box)", () => {
         ["integration", "POST /customers/:id/erase", "customers:erase", 1, 1],
       ]),
     );
-    expect(await refusalsOf(db, "key_zap")).toHaveLength(3);
+    expect(await refusalsOf(db, "key_zap")).toHaveLength(6);
     expect(await refusalsOf(db, "sess_1")).toEqual([]);
     const list = await caps.access.listKeys(owner);
     expect(list.ai_clients).toContainEqual({
@@ -345,6 +366,50 @@ describe("keys", () => {
       expires_at: "2030-01-01T00:00:00Z",
     });
     expect(later.expires_at).toBe("2030-01-01T00:00:00.000Z");
+  });
+
+  it("marks an AI app still on the old default: it reads and answers, and cannot set the business up", async () => {
+    const { db, caps } = await setup();
+    const connect = async (id: string, name: string, scope: string) => {
+      await db.orm
+        .insert(oauthClients)
+        .values({ id, name, redirectUris: [`https://${id}.example/cb`], kind: "cimd", createdAt: T0 });
+      await db.orm.insert(oauthTokens).values({
+        tokenHash: `hash_${id}`,
+        kind: "refresh",
+        clientId: id,
+        userId: "user_1",
+        scope,
+        familyId: `family_${id}`,
+        expiresAt: T0 + 30 * 86_400_000,
+        createdAt: T0,
+      });
+    };
+    // Connected before 2 November asking for nothing, so given the old default, in any order.
+    await connect("client_old", "Claude", "settings:read offline_access inbox:read inbox:write");
+    // Connected since, asking for nothing: offered every scope an AI app may hold but keys:write.
+    await connect(
+      "client_new",
+      "ChatGPT",
+      "inbox:read inbox:write events:read catalogue:write availability:write settings:read settings:write setup:run integrations:write offline_access",
+    );
+    // An app that asked for less than the old default chose it; nothing is said of it.
+    await connect("client_narrow", "Reader", "inbox:read offline_access");
+    expect(OLD_AI_DEFAULT_SCOPES).toEqual(["inbox:read", "inbox:write", "settings:read", "offline_access"]);
+    const apps = (await caps.access.listKeys(owner)).apps;
+    expect(Object.fromEntries(apps.map((a) => [a.name, a.old_default]))).toEqual({
+      Claude: true,
+      ChatGPT: false,
+      Reader: false,
+    });
+    // And what it holds is refused as such, telling it how the owner gives it more.
+    const claudeOld: Caller = {
+      ...claude,
+      principal: { ...(claude.principal as Principal), scopes: OLD_AI_DEFAULT_SCOPES },
+    };
+    await expect(caps.access.requireScope(claudeOld, ["catalogue:write"], "mcp:upsert_service")).rejects.toThrow(
+      "disconnect the app there, then connect it again and allow the scope",
+    );
   });
 });
 

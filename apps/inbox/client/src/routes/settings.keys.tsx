@@ -611,6 +611,12 @@ function ConnectedAppsCard({ list }: { list: KeyList }) {
                   a.scopes.join(" · "),
                 ].join(" · ")}
               </div>
+              {a.old_default && (
+                <div className="s">
+                  It holds only what an app that asked for nothing used to get: it can read and answer, not set your
+                  business up. To let it, disconnect it and connect it again.
+                </div>
+              )}
               {acting === a.id && disconnect.error && (
                 <div className="hint error" role="alert">
                   {problemOf(disconnect.error).detail}

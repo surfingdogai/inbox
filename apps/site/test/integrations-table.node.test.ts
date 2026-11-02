@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { builtInConnectors } from "../../../packages/adapters/src/connectors/index";
-import { ASSISTANTS } from "../src/lib/assistants";
+import { ASSISTANTS, NOT_RUN } from "../src/lib/assistants";
 import {
   ASSISTANTS_LINE,
   INTEGRATIONS,
@@ -222,9 +222,22 @@ describe("the table of integrations", () => {
 
   it("says under the assistants, wherever they are listed, that none has run against an inbox yet, and what has", () => {
     expect(ASSISTANTS_LINE).toBe(
-      "Built, not yet verified on a live account. The inbox serves the remote MCP server and the sign-in each assistant's maker documents, and none of these has run against an inbox yet. Gemini CLI and the MCP Inspector have, against an inbox on our own machine; the MCP docs say what ran.",
+      "ChatGPT, Claude, Gemini's app, Copilot Studio and Grok: built, not yet verified on a live account. The inbox serves the remote MCP server and the sign-in each one's maker documents, and none of the five has run against an inbox yet. Gemini CLI and the MCP Inspector have, against an inbox on our own machine; the MCP docs say what ran.",
     );
-    expect(ASSISTANTS_LINE.startsWith(`${STATE_LABEL.built}. `)).toBe(true);
+    expect(ASSISTANTS_LINE).toContain(`: ${STATE_LABEL.built.toLowerCase()}. `);
+    // It names the five it is said of, since it sits under the whole group: Meta Muse, rolling out, and
+    // any other agent, which works, are not among them.
+    const group = TABLE.find((g) => g.id === "assistants")?.rows ?? [];
+    expect(group.filter((r) => r.state === "built").map((r) => r.name)).toEqual([
+      "ChatGPT",
+      "Claude",
+      "Gemini",
+      "Microsoft Copilot Studio",
+      "Grok and Grok Bot",
+    ]);
+    for (const named of ["ChatGPT", "Claude", "Gemini", "Copilot Studio", "Grok"])
+      expect(ASSISTANTS_LINE.split(":")[0], named).toContain(named);
+    expect(ASSISTANTS_LINE).not.toMatch(/Muse|any other/i);
     // Under the assistants' group on /integrations, once.
     const page = read(PAGE);
     expect(page.match(/\{ASSISTANTS_LINE\}/g)?.length).toBe(1);
@@ -244,6 +257,15 @@ describe("the table of integrations", () => {
     expect(notes("gemini")).toContain("Custom apps in the Gemini app have not been tried yet.");
     for (const slug of ["chatgpt", "claude", "microsoft-copilot", "grok"])
       expect(notes(slug), slug).toContain("not run against an inbox yet");
+    // Each such note opens with who has not run, plainly, never a negative subject that turns it round
+    // ("Neither Grok nor Grok Bot has not run…").
+    const notRun = ASSISTANTS.flatMap((a) => a.notes.filter((n) => n.includes(NOT_RUN)).map((n) => [a.slug, n]));
+    expect(notRun.map(([slug]) => slug).sort()).toEqual(["chatgpt", "claude", "grok", "microsoft-copilot"]);
+    for (const [slug, n] of notRun) {
+      expect(n, slug).toMatch(/^[A-Z][\w ]* (has|have) not run against an inbox yet: /);
+      expect(n, slug).not.toMatch(/\b(neither|nor|no one|none)\b/i);
+    }
+    expect(notes("grok")).toContain("Grok and Grok Bot have not run against an inbox yet: ");
     expect(notes("claude")).toContain("no Claude model ran yet");
     const connect = docOf("/docs/connect-your-ai/").text;
     expect(connect).toContain("**What has run.** On 1 November 2026, Gemini CLI 0.66 and the MCP Inspector 2.13");

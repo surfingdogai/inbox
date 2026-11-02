@@ -309,13 +309,14 @@ export const ASSISTANT_LINKS: readonly { readonly slug: string; readonly name: s
   ];
 
 /**
- * What is true of the assistants, said once under them wherever they are listed (the /integrations
- * table, the row of names on /inbox, /inbox/assistants): none of them has run against an inbox yet,
- * so each is built (the founder, 2 November 2026), and Meta Muse rolling out as Meta rolls out its
- * custom connectors. What did run is said where it ran, word for word (docs/mcp.md, "Tested with"):
- * Gemini CLI and the MCP Inspector, against an inbox on our own machine.
+ * What is true of the five assistants that are built (the founder, 2 November 2026), said once under
+ * them wherever they are listed (the /integrations table, the row of names on /inbox,
+ * /inbox/assistants). It names them, since it sits under Meta Muse, rolling out as Meta rolls out its
+ * custom connectors, and "Any other agent", which works, too. What did run is said where it ran, word
+ * for word (docs/mcp.md, "Tested with"): Gemini CLI and the MCP Inspector, against an inbox on our own
+ * machine.
  */
-export const ASSISTANTS_LINE = `${STATE_LABEL.built}. The inbox serves the remote MCP server and the sign-in each assistant's maker documents, and none of these has run against an inbox yet. Gemini CLI and the MCP Inspector have, against an inbox on our own machine; the MCP docs say what ran.`;
+export const ASSISTANTS_LINE = `ChatGPT, Claude, Gemini's app, Copilot Studio and Grok: ${STATE_LABEL.built.toLowerCase()}. The inbox serves the remote MCP server and the sign-in each one's maker documents, and none of the five has run against an inbox yet. Gemini CLI and the MCP Inspector have, against an inbox on our own machine; the MCP docs say what ran.`;
 
 export function integration(id: string): Integration {
   const found = INTEGRATIONS.find((i) => i.id === id);

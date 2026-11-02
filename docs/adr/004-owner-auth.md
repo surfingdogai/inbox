@@ -70,7 +70,10 @@ the settings that way. The founder decided on 2 November 2026 that refusing is t
   `details.reason: "outside_scopes"`, with `required_scopes` and `held_scopes`, and a sentence that
   names the key or app, the scope, what it holds and where the owner gives more. A call only the
   owner makes, or one needing a scope no AI app is given, is `reason: "owner_only"` instead, naming
-  no scope to ask for. It is still recorded under Settings → Keys, now as refused.
+  no scope to ask for. `keys:write` is one of those for every caller: no key can hold it, and an AI
+  app that holds it is refused keys all the same. So are connecting, changing and disconnecting a
+  system, connecting a place to stay's system and sending to a job tool, which map to `*`: no scope
+  lets them through. It is still recorded under Settings → Keys, now as refused.
 - **An inbox that never touched the switch gets the new default**, since its document does not name
   it. One whose owner set it, on or off, keeps what they chose. Nothing is rewritten.
 - **The owner can loosen it** in Settings → Keys, "Refuse calls outside a key's scopes": off, such a
@@ -79,7 +82,9 @@ the settings that way. The founder decided on 2 November 2026 that refusing is t
 - **An AI app that asks for no scopes is offered every scope an AI app may hold but `keys:write`**,
   instead of `inbox:read inbox:write settings:read`, which, refused, would no longer let it set the
   business up. The consent page lists each. An app given the old default keeps it until it is
-  connected again.
+  connected again: its grant is what the owner allowed, so it is not widened. Settings → Keys says
+  beside such an app (`old_default`) that it reads and answers, not sets the business up, and that
+  connecting it again lets it.
 - Our own callers were checked first: the owner app and the owner's own keys hold everything; a
   phone holds `inbox:read inbox:write` and is held to `PHONE_OPERATIONS`, all within them; the email
   gateway, connectors, feeds, the demo and the seeds call as the inbox itself, with no principal; the

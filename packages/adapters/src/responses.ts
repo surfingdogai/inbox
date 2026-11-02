@@ -828,6 +828,11 @@ export const connectedAppSchema = z.object({
   verified: z.boolean().describe("Its details are published at its own address; otherwise it chose its own name."),
   sends_to: z.array(z.string()).describe("The hosts its sign-in comes back to, which receive its access."),
   scopes: z.array(z.string()),
+  old_default: z
+    .boolean()
+    .describe(
+      "It holds only what an app that asked for no scopes was given before 2 November 2026 (inbox:read inbox:write settings:read offline_access): it reads and answers, and cannot set the business up until it is connected again.",
+    ),
   connected_at: iso,
   last_used_at: iso.nullable(),
 });

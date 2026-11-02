@@ -128,15 +128,16 @@ export const ROUTE_SCOPES: Readonly<Record<string, readonly string[]>> = {
   "POST /feeds/:id/import": ["integrations:write"],
   "DELETE /feeds/:id": ["integrations:write"],
   "GET /integrations": [READ_SETUP, "integrations:write"],
-  // Connecting, changing and disconnecting are the owner's in person, checked by the capability
-  // whatever the scopes: an integration key and the owner's AI only list and sync.
-  "POST /integrations": ["integrations:write"],
-  "POST /integrations/authorize": ["integrations:write"],
+  // Connecting, changing, a new link and disconnecting are the owner's in person, checked by the
+  // capability whatever the scopes: an integration key and the owner's AI only list and sync. So no
+  // scope lets them through here either, and a refusal names none to ask for.
+  "POST /integrations": ["*"],
+  "POST /integrations/authorize": ["*"],
   "GET /integrations/:id": [READ_SETUP, "integrations:write"],
-  "PATCH /integrations/:id": ["integrations:write"],
+  "PATCH /integrations/:id": ["*"],
   "POST /integrations/:id/sync": ["integrations:write"],
-  "POST /integrations/:id/link": ["integrations:write"],
-  "DELETE /integrations/:id": ["integrations:write"],
+  "POST /integrations/:id/link": ["*"],
+  "DELETE /integrations/:id": ["*"],
   "GET /events": ["events:read", "inbox:read"],
   "GET /api-keys": [READ_SETUP, "keys:write"],
   "POST /api-keys": ["keys:write"],
@@ -167,13 +168,14 @@ export const ROUTE_SCOPES: Readonly<Record<string, readonly string[]>> = {
   "GET /property/today": ["inbox:read"],
   "POST /property/sync": ["integrations:write"],
   "GET /property/system/:connectorId": ["integrations:write"],
-  "POST /property/system": ["integrations:write"],
+  // Connecting the property's system is the owner's in person, checked by the capability: no scope lets it through.
+  "POST /property/system": ["*"],
   "POST /stays/:id/draft-quote": ["inbox:read"],
   // Trades (ADR-039): a request's files and where it stands in the job tool read like the item; sending it is
-  // an integration's write, and a person's only, checked by the capability.
+  // a person's only, checked by the capability, so no scope lets it through.
   "GET /items/:id/files": ["inbox:read"],
   "GET /items/:id/job-tool": ["inbox:read"],
-  "POST /items/:id/job-tool": ["integrations:write"],
+  "POST /items/:id/job-tool": ["*"],
   "GET /work": [READ_SETUP],
   // What a connected tool says about the business, to start from: read like a connection.
   "GET /integrations/:id/setup": [READ_SETUP, "integrations:write"],

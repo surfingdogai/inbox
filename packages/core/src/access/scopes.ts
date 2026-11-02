@@ -50,6 +50,14 @@ export const KEY_SCOPES = SCOPE_NAMES.filter((s) => s !== "keys:write" && s !== 
 export const NOT_FOR_AI_SCOPES: readonly Scope[] = ["customers:erase", "money:write", "forms:submit"];
 
 /**
+ * What an AI app that asked for no scopes was given while a call outside them still went through
+ * (until 2 November 2026). Its grant is kept as the owner allowed it, so an app that still holds
+ * exactly this reads and answers but is refused setting the business up; Settings → Keys says so
+ * beside it, until it is connected again and offered what an app is offered now (`DEFAULT_AI_SCOPES`).
+ */
+export const OLD_AI_DEFAULT_SCOPES: readonly Scope[] = ["inbox:read", "inbox:write", "settings:read", "offline_access"];
+
+/**
  * Ready-made scope sets, one per kind of system a key is pasted into. None includes
  * `settings:write` or `keys:write`. A key never mints keys, and with `security.enforceScopes` on, as out
  * of the box, a key in Zapier or a shop's admin cannot reconfigure the inbox either: an Automation tool

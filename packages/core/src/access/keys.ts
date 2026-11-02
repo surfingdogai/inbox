@@ -13,6 +13,7 @@ import {
   KEY_PRESETS,
   KEY_SCOPES,
   NOT_FOR_AI_SCOPES,
+  OLD_AI_DEFAULT_SCOPES,
   type RevokeApiKeyInput,
   SCOPES,
   type Scope,
@@ -121,6 +122,12 @@ export interface ConnectedAppView {
   /** Where its sign-in comes back to: the hosts that receive its access. */
   readonly sends_to: readonly string[];
   readonly scopes: readonly string[];
+  /**
+   * It holds exactly what an app that asked for no scopes was given before calls outside the scopes
+   * were refused (`OLD_AI_DEFAULT_SCOPES`): it reads and answers, and cannot set the business up until
+   * it is connected again. Settings → Keys says so beside it.
+   */
+  readonly old_default: boolean;
   readonly connected_at: string;
   readonly last_used_at: string | null;
 }
@@ -161,8 +168,11 @@ function outsideScopesError(
     ask_owner: true,
   };
   // What only the owner does, or what no AI app is ever given (erasing a customer, money): there is no
-  // scope to ask for, so none is named.
-  const ownersOnly = anyOf.every((s) => s === "*" || (app && (NOT_FOR_AI_SCOPES as readonly string[]).includes(s)));
+  // scope to ask for, so none is named. Keys are the owner's in person for everyone: no key can hold
+  // `keys:write` (KEY_SCOPES), and an AI app that holds it is still refused (`assertMayManageKeys`).
+  const ownersOnly = anyOf.every(
+    (s) => s === "*" || s === "keys:write" || (app && (NOT_FOR_AI_SCOPES as readonly string[]).includes(s)),
+  );
   if (ownersOnly) {
     return new WriteError(
       "not_allowed",
@@ -378,12 +388,15 @@ export class AccessCapabilities {
           }
         });
         const last = Math.max(0, ...all.map((u) => u.lastUsedAt ?? 0), c.lastUsedAt ?? 0);
+        const scopes = [...new Set(mine.flatMap((t) => t.scope.split(" ").filter(Boolean)))];
         return {
           id: c.id,
           name: c.name,
           verified: c.kind === "cimd",
           sends_to: [...new Set(hosts)],
-          scopes: [...new Set(mine.flatMap((t) => t.scope.split(" ").filter(Boolean)))],
+          scopes,
+          old_default:
+            scopes.length === OLD_AI_DEFAULT_SCOPES.length && OLD_AI_DEFAULT_SCOPES.every((s) => scopes.includes(s)),
           connected_at: iso(Math.min(...all.map((u) => u.createdAt))) ?? new Date(now).toISOString(),
           last_used_at: iso(last),
         };

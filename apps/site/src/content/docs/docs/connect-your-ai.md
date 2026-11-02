@@ -38,7 +38,7 @@ What it supports: authorization code with PKCE (S256, required); public clients 
 
 Anyone can register an app, because assistants register themselves when they connect, so the consent screen doesn't take an app's word for its name. It shows where the app's access goes (the host its sign-in comes back to), marks a self-registered app's name as not verified, and warns when an app calls itself Claude, ChatGPT, Gemini, Grok, Copilot or Muse but sends access somewhere else. Only that page can answer it: an Allow posted from another site is refused. Each time you allow an app the inbox emails you, and Settings → Keys lists every connected app with a Disconnect button that revokes its tokens at once. Self-registered apps nobody signed in with are forgotten after a week.
 
-Scopes: `inbox:read`, `inbox:write`, `events:read`, `catalogue:write`, `availability:write`, `settings:read`, `settings:write`, `setup:run`, `integrations:write`, `keys:write`, `offline_access`. A client that asks for none is offered every one of them but `keys:write` (keys are yours in person, whatever an app holds), and the consent screen lists each. A call outside what you allowed is refused, `403 not_allowed` with `details.reason: "outside_scopes"` and the scope it needed, and is listed under Settings → Keys; to give an app more, disconnect it there and connect it again. That is **Refuse calls outside a key's scopes**, on out of the box; off, such a call goes through and is only listed. An app that asked for none before calls outside the scopes were refused was given only `inbox:read inbox:write settings:read offline_access`: connect it again to let it set the business up.
+Scopes: `inbox:read`, `inbox:write`, `events:read`, `catalogue:write`, `availability:write`, `settings:read`, `settings:write`, `setup:run`, `integrations:write`, `keys:write`, `offline_access`. A client that asks for none is offered every one of them but `keys:write` (keys are yours in person, whatever an app holds), and the consent screen lists each. A call outside what you allowed is refused, `403 not_allowed` with `details.reason: "outside_scopes"` and the scope it needed, and is listed under Settings → Keys; to give an app more, disconnect it there and connect it again. That is **Refuse calls outside a key's scopes**, on out of the box; off, such a call goes through and is only listed. An app that asked for none before calls outside the scopes were refused was given only `inbox:read inbox:write settings:read offline_access`, and keeps that: Settings → Keys says so beside it, and connecting it again lets it set the business up.
 
 In the history and in every event, the AI appears as itself: actor `owner_ai` with the app's name, not as you.
 
@@ -72,7 +72,7 @@ In a Copilot Studio agent, add a tool, choose an existing Model Context Protocol
 
 ### Other clients
 
-Cursor, VS Code and any client that speaks Streamable HTTP with OAuth 2.1 work the same way. Clients that cannot do OAuth use an API key. Both MCP servers answer every protocol revision from 2025-03-26 to 2026-07-28. Step by step for each assistant: [Assistants](/assistants/).
+Cursor, VS Code and any other client that speaks Streamable HTTP with OAuth 2.1 take the same sign-in; Cursor and VS Code have not run against an inbox yet. Clients that cannot do OAuth use an API key. Both MCP servers answer every protocol revision from 2025-03-26 to 2026-07-28. Step by step for each assistant: [Assistants](/assistants/).
 
 ## What the owner tools do
 

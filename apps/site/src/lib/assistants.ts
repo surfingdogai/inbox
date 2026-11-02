@@ -17,9 +17,10 @@ export const OWNER_AS_OF = "as of October 2026";
 
 /**
  * Said on the page of an assistant that has not run against an inbox yet (ASSISTANTS_LINE in
- * src/lib/integrations.ts), after who has not: its steps are its maker's, read, not tried.
+ * src/lib/integrations.ts), after a plain subject and its verb ("ChatGPT has", "Grok and Grok Bot
+ * have"), never a negative one: its steps are its maker's, read, not tried.
  */
-const NOT_RUN =
+export const NOT_RUN =
   "not run against an inbox yet: these steps are its maker's own, and the inbox serves the remote MCP server and the sign-in they describe.";
 
 /** One thing an assistant does with businesses today, and where we read it. */
@@ -238,7 +239,7 @@ export const ASSISTANTS: readonly Assistant[] = [
     signIn:
       "Grok and Grok Bot sign in with OAuth, which your inbox runs itself (the owner MCP registers Grok on its own), or with an API key sent in a header: give Grok the header Authorization and the value Bearer sdi_own_… .",
     plans: "Custom connectors on grok.com are on xAI's paid plans. Grok Bot is in early beta.",
-    notes: [`Neither Grok nor Grok Bot has ${NOT_RUN}`],
+    notes: [`Grok and Grok Bot have ${NOT_RUN}`],
     source: { label: "xAI: Grok Bot documentation", href: "https://docs.x.ai/grok-bot/teams-and-enterprises" },
     owner: {
       question: "Can Grok book or order with your business?",

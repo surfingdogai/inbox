@@ -87,6 +87,51 @@ describe("scopes refused out of the box", () => {
         expect(covers(p.scopes, op), `${p.key}: ${op}`).toBe(false);
   });
 
+  it("names no scope to ask for where no scope lets a key through: keys, and connecting a system", async () => {
+    const PERSON_ONLY = [
+      "POST /integrations",
+      "POST /integrations/authorize",
+      "PATCH /integrations/:id",
+      "POST /integrations/:id/link",
+      "DELETE /integrations/:id",
+      "POST /property/system",
+      "POST /items/:id/job-tool",
+    ];
+    for (const op of PERSON_ONLY) expect(ROUTE_SCOPES[op], op).toEqual(["*"]);
+    // Listing and syncing a connection stay a key's with integrations:write.
+    for (const op of ["GET /integrations", "POST /integrations/:id/sync"])
+      expect(holdsScope(["integrations:write"], routeScopes(op)), op).toBe(true);
+
+    const db = await freshDb();
+    const owner = { authorization: `Bearer ${(await createApiKey(db, { kind: "owner", name: "cli" })).key}` };
+    const app = createInbox({
+      db,
+      secretKey: "2f8c1d0a6b4e37925c8f01ad6e3b47f0",
+      baseUrl: INBOX,
+      eventSettleMs: 0,
+    }).app;
+    const call = (method: string, path: string, headers: Record<string, string>, body?: unknown) =>
+      app.request(`${INBOX}${path}`, {
+        method,
+        headers: { ...(body === undefined ? {} : { "content-type": "application/json" }), ...headers },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+    const minted = await call("POST", "/v1/owner/api-keys", owner, { name: "Sync", scopes: ["integrations:write"] });
+    expect(minted.status).toBe(201);
+    const sync = { authorization: `Bearer ${((await minted.json()) as { key: string }).key}` };
+    for (const [method, path, body] of [
+      ["POST", "/v1/owner/integrations", { kind: "ics_feed" }],
+      ["POST", "/v1/owner/api-keys", { name: "More", preset: "read_only" }],
+    ] as const) {
+      const r = await call(method, path, sync, body);
+      expect(r.status, path).toBe(403);
+      const answer = (await r.json()) as { detail: string; details: { reason: string } };
+      expect(answer.details.reason, path).toBe("owner_only");
+      expect(answer.detail, path).toContain("which only the owner does, in person");
+      expect(answer.detail, path).not.toContain("Settings → Keys, for this system");
+    }
+  });
+
   it("runs the n8n flow end to end with an Automation tool key, and refuses it the settings", async () => {
     const db = await freshDb();
     const serviceId = ulid(T0);
