@@ -6,6 +6,7 @@ export * from "./capabilities";
 export * from "./carry";
 export * from "./catalogue";
 export * from "./catalogue-policies";
+export * from "./catalogue-problems";
 export * from "./catalogue-v2";
 export * from "./catalogue-v2-read";
 export * from "./census";

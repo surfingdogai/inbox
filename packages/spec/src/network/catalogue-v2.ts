@@ -20,11 +20,14 @@ import {
  * per offer (`tax_included`), four more ways to be available (`limited`, `preorder`, `backorder`,
  * `made_to_order`) with `available_from` and `available_until`, `is_bundle`, pictures and videos
  * (`media`), an age checked at handover (`age_restricted`), how it reaches the buyer (`fulfil_methods`)
- * with its `shipping_profile`, `weight` and `return_policy`; and ids of up to 256 characters.
+ * with its `shipping_profile`, `weight` and `return_policy`, what it says of the legal right to withdraw
+ * (`withdrawal`); and ids of up to 256 characters.
  *
- * The schemas here are the shape a producer serves. A reader checks each item alone
- * (`readCatalogueItemV2`, `catalogue-v2-read.ts`): an item that does not read, or that a check refuses, is
- * held, and every other item on the page is kept.
+ * A character, in every limit here, is one Unicode code point, as JSON Schema's `maxLength` counts and as
+ * zod counts: an emoji is one. The schemas here are the shape a producer serves, which the JSON Schemas
+ * say exactly. A reader checks each item alone (`readCatalogueItemV2`, `catalogue-v2-read.ts`): a member
+ * that only adds to an offer and does not read is dropped alone, an offer whose core does not read, or
+ * that a check refuses, is held, and every other item on the page is kept.
  */
 
 /** The catalogue versions this spec defines. A manifest without `catalogue.versions` serves version 1 only. */
@@ -32,17 +35,22 @@ export const CATALOGUE_VERSIONS = [1, 2] as const;
 export type CatalogueVersion = (typeof CATALOGUE_VERSIONS)[number];
 /** A version 2 id, of an offer, a group, a shipping profile or a return policy, at most (version 1: 64). */
 export const CATALOGUE_ID_MAX_V2 = 256;
-/** A version 2 description at most, in characters; version 1 cuts it to 1,000. */
+/** A version 2 description at most, in characters (Unicode code points); version 1 cuts it to 1,000. */
 export const CATALOGUE_DESCRIPTION_MAX_V2 = 5000;
 /** The most offers one product group lists; a reader holds those past it (by `position`, then id). */
 export const CATALOGUE_GROUP_MAX = 250;
+/** The highest `position` a variant may give: above the 250 a group lists, so the reader can hold the rest. */
+export const CATALOGUE_GROUP_POSITION_MAX = 1_000_000;
 /** The most options one variant names. */
 export const CATALOGUE_OPTIONS_MAX = 5;
 /** The most pictures and videos one offer links to. */
 export const CATALOGUE_MEDIA_MAX = 10;
 /** The longest address an item names (its page, a picture). */
 export const CATALOGUE_URL_MAX = 2048;
-/** How long an inbox that serves version 2 goes on serving version 1 pages, from the day it first serves version 2. */
+/**
+ * How long a producer that served version 1 before it served version 2 goes on serving version 1, from the
+ * day it first serves version 2. A producer that never served version 1 may list `[2]` alone from the start.
+ */
 export const CATALOGUE_V1_MONTHS_AFTER_V2 = 12;
 /** A "was" price is shown only when the offer was at or above it for this many days before the reduction began. */
 export const WAS_PRICE_DAYS = 30;
@@ -68,7 +76,26 @@ export const catalogueCursorV2Schema = z
 const isoTime = z.iso.datetime({ offset: true });
 const hex16 = z.string().regex(/^[0-9a-f]{16}$/);
 const currency = z.string().regex(/^[A-Z]{3}$/);
-const httpsUrl = z.url({ protocol: /^https$/ }).max(CATALOGUE_URL_MAX);
+
+const PCHAR = "[A-Za-z0-9\\-._~!$&'()*+,;=:@]|%[0-9A-Fa-f]{2}";
+const QCHAR = "[A-Za-z0-9\\-._~!$&'()*+,;=:@/?]|%[0-9A-Fa-f]{2}";
+const LABEL = "[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?";
+const TOP_LABEL = "[A-Za-z](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?";
+
+/**
+ * An address an item names (its page, a picture), as protocol §4.1 has a door's: `https`, written as
+ * RFC 3986 writes a URI in ASCII (anything else percent-encoded), on a host name of two labels or more
+ * whose last begins with a letter (never an IP address, nor a name a URL parser reads as one), an optional
+ * port, no user, and no space, control character or other character RFC 3986 does not take. At most 2,048
+ * characters. The JSON Schemas carry this as the field's `pattern`.
+ */
+export const CATALOGUE_URL_PATTERN = `^https://(?:${LABEL}\\.)+${TOP_LABEL}(?::[0-9]{1,5})?(?:/(?:${PCHAR}|/)*)?(?:\\?(?:${QCHAR})*)?(?:#(?:${QCHAR})*)?$`;
+export const catalogueUrlSchema = z
+  .string()
+  .max(CATALOGUE_URL_MAX)
+  .regex(new RegExp(CATALOGUE_URL_PATTERN), "an https address on a host name, as RFC 3986 writes one")
+  .meta({ format: "uri" });
+const httpsUrl = catalogueUrlSchema;
 
 /** A price: `value` an integer count of its currency's ISO 4217 minor unit, never 0 (`minorUnits`). */
 export const catalogueMoneySchema = z.object({
@@ -114,8 +141,10 @@ export const catalogueGroupSchema = z.object({
   position: z
     .int()
     .min(1)
-    .max(CATALOGUE_GROUP_MAX)
-    .describe("Where this variant comes among the group's, from 1; ties come in order of id."),
+    .max(CATALOGUE_GROUP_POSITION_MAX)
+    .describe(
+      "Where this variant comes among the group's, from 1; ties come in order of id. A reader lists the first 250 and holds the rest.",
+    ),
 });
 export type CatalogueGroup = z.infer<typeof catalogueGroupSchema>;
 
@@ -175,15 +204,17 @@ export type CatalogueMedia = z.infer<typeof catalogueMediaSchema>;
 /**
  * Sold only above an age, with ID checked when it is handed over. The business picks the age for each
  * product (`min_age`, and `by_country` where it sells in a country whose age it puts higher or lower);
- * nothing here says what any law requires. A kind of `vocab/age-kinds.json` whose `network` is `off`
- * (tobacco and nicotine, cannabis, weapons) is kept off networks, ID check or not.
+ * nothing here says what any law requires. `kind` is a kind of `vocab/age-kinds.json` (or one of its
+ * `also` spellings, read as the kind): a kind whose `network` is `off` (tobacco and nicotine, cannabis,
+ * weapons) is kept off networks, ID check or not, and a kind the vocabulary does not know is held until
+ * the business picks one it does.
  */
 export const catalogueAgeRestrictedSchema = z.object({
   min_age: z.int().min(AGE_MIN).max(AGE_MAX),
   kind: z
     .string()
     .regex(/^[a-z][a-z0-9_]{0,39}$/)
-    .describe("A kind of vocab/age-kinds.json: alcohol, blades, fireworks…"),
+    .describe("A kind of vocab/age-kinds.json, or one of its also spellings: alcohol, blades, fireworks…"),
   by_country: z
     .record(z.string().regex(/^[A-Z]{2}$/), z.int().min(AGE_MIN).max(AGE_BY_COUNTRY_MAX))
     .optional()
@@ -204,6 +235,26 @@ export const catalogueFulfilMethodSchema = z.enum([
   "digital",
 ]);
 export type CatalogueFulfilMethod = z.infer<typeof catalogueFulfilMethodSchema>;
+
+/**
+ * What the business says of the buyer's legal right to withdraw from a distance purchase (14 days in the
+ * EU and the UK): `standard`, the right runs; or the exception the law allows for this offer. Read
+ * narrowly: preset options are not personalisation, and long-life dry goods are not perishable. Absent,
+ * the business has not said.
+ */
+export const catalogueWithdrawalSchema = z.enum([
+  "standard",
+  "personalised",
+  "perishable",
+  "sealed_hygiene",
+  "sealed_media",
+  "mixed",
+  "dated_leisure",
+  "urgent_repair",
+  "digital_started",
+  "price_fluctuates",
+]);
+export type CatalogueWithdrawal = z.infer<typeof catalogueWithdrawalSchema>;
 
 /** The offer's weight as packed for sending: what a `by_weight` rate is worked out from. */
 export const catalogueWeightSchema = z.object({
@@ -226,8 +277,14 @@ export const catalogueListedItemV2Schema = z.object({
     .string()
     .min(1)
     .max(CATALOGUE_NAME_MAX)
-    .describe("The offer's whole name, a variant's options in it: Moka pot, 6 cups."),
-  description: z.string().max(CATALOGUE_DESCRIPTION_MAX_V2).nullable(),
+    .describe(
+      "The offer's whole name, a variant's options in it: Moka pot, 6 cups. At most 150 characters, each a Unicode code point.",
+    ),
+  description: z
+    .string()
+    .max(CATALOGUE_DESCRIPTION_MAX_V2)
+    .nullable()
+    .describe("At most 5,000 characters, each a Unicode code point (an emoji is one)."),
   group: catalogueGroupSchema
     .optional()
     .describe("The product group it is a variant of; with options, and only with them."),
@@ -300,11 +357,20 @@ export const catalogueListedItemV2Schema = z.object({
     .describe("How it reaches the buyer; absent, the business has not said for this offer."),
   shipping_profile: catalogueIdV2Schema
     .optional()
-    .describe("A shipping profile of the policies document; absent, its default profile, when it ships."),
+    .describe(
+      "A shipping profile of the policies document; absent, its default profile, when it ships. One the document does not have holds the offer, never the default.",
+    ),
   weight: catalogueWeightSchema.optional(),
   return_policy: catalogueIdV2Schema
     .optional()
-    .describe("A return policy of the policies document; absent, its default policy."),
+    .describe(
+      "A return policy of the policies document; absent, its default policy. One the document does not have holds the offer, never the default.",
+    ),
+  withdrawal: catalogueWithdrawalSchema
+    .optional()
+    .describe(
+      "The legal right to withdraw: standard, or the exception the law allows (perishable, personalised…); absent, not said.",
+    ),
   updated_at: isoTime,
   hash: hex16.describe(
     "The first 16 hex digits of SHA-256 over the item's canonical JSON (canonicalJson), every member it carries but updated_at and hash.",
@@ -388,6 +454,7 @@ export const ageKindsVocabSchema = z.object({
       labels,
       covers: z.string().min(1),
       network: z.enum(["listed", "off"]),
+      also: z.array(z.string().regex(/^[a-z][a-z0-9_]{0,39}$/)),
     }),
   ),
 });
@@ -412,9 +479,24 @@ export function optionKeyOf(word: string): string | null {
 /** The kinds a network keeps off at product level, ID check or not: tobacco and nicotine, cannabis, weapons. */
 export const AGE_KINDS_OFF: readonly string[] = AGE_KINDS.kinds.filter((k) => k.network === "off").map((k) => k.kind);
 
-/** Whether an age-restricted kind is kept off networks. A kind the vocabulary does not know is not. */
+const ageKindByWord = new Map<string, string>();
+for (const k of AGE_KINDS.kinds) {
+  ageKindByWord.set(k.kind, k.kind);
+  for (const a of k.also) ageKindByWord.set(a, k.kind);
+}
+
+/** The vocabulary's kind a word names (`vape` is `tobacco_nicotine`), or null for a kind it does not know. */
+export function ageKindOf(word: string): string | null {
+  return ageKindByWord.get(word.trim().toLowerCase()) ?? null;
+}
+
+/**
+ * Whether an age-restricted kind is kept off networks: one whose kind, or `also` spelling, is `off`, and
+ * one the vocabulary does not know at all, which a reader holds (`age_kind_unknown`) rather than list.
+ */
 export function ageKindIsOff(kind: string): boolean {
-  return AGE_KINDS_OFF.includes(kind);
+  const k = ageKindOf(kind);
+  return k === null || AGE_KINDS_OFF.includes(k);
 }
 
 /** The label an agent shows beside an age-restricted offer: "ID checked at handover: 18+". */

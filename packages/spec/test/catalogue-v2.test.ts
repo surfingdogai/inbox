@@ -3,15 +3,19 @@ import {
   AGE_KINDS,
   AGE_KINDS_OFF,
   ageFor,
+  ageKindIsOff,
+  ageKindOf,
   ageLabel,
   CARRIERS,
-  CATALOGUE_GROUP_MAX,
   CATALOGUE_PAGE_MAX,
   CATALOGUE_PAGE_SIZE,
   CATALOGUE_SIGNATURE_TYP,
+  CATALOGUE_URL_PATTERN,
   CATALOGUE_V2_PROBLEMS,
   type CatalogueListedItemV2,
   canonicalJson,
+  catalogueHeldSchema,
+  catalogueIdsParam,
   catalogueItemHash,
   catalogueItemsV2Schema,
   catalogueItemV1Of,
@@ -26,6 +30,9 @@ import {
   OPTION_KEYS,
   optionKeyOf,
   type PricePoint,
+  pingCatalogueAnswerSchema,
+  postcodeMatches,
+  postcodeOf,
   quoteShipping,
   readCatalogueGroups,
   readCatalogueItemV2,
@@ -60,13 +67,14 @@ const policiesOf = (doc: unknown) => {
 describe("vectors/catalogue-signature.json: canonical JSON and the hash", () => {
   for (const c of signature.canonical as Json[]) {
     it(`canonical: ${c.name}`, async () => {
-      expect(canonicalJson(c.value)).toBe(c.canonical);
+      // A value given as text is parsed first: numbers are judged by their value, never their digits.
+      expect(canonicalJson("text" in c ? JSON.parse(c.text) : c.value)).toBe(c.canonical);
       expect(await sha256Text(c.canonical)).toBe(c.sha256);
     });
   }
   for (const c of signature.hashes as Json[]) {
     it(`hash: ${c.name}`, async () => {
-      expect(await catalogueItemHash(c.item)).toBe(c.hash);
+      expect(await catalogueItemHash("text" in c ? JSON.parse(c.text) : c.item)).toBe(c.hash);
     });
   }
 
@@ -100,8 +108,18 @@ async function sign(signingInput: string): Promise<string> {
   return `${signingInput}.${b64u(new Uint8Array(await crypto.subtle.sign(ED25519, await privateKey(), enc.encode(signingInput))))}`;
 }
 
-/** A reader's check of a page, in its order: the JWS, then iss, url and body_sha256. "ok", or the code. */
-async function checkSignature(c: { jws: string; domain: string; url: string; body: string }): Promise<string> {
+/**
+ * A reader's check, in its order: the JWS, then iss (the member's registered domain), url (byte for
+ * byte) and body_sha256; then, for a page and the policies document, the signed as_of and rev against the
+ * body's own. "ok", or the code.
+ */
+async function checkSignature(c: {
+  kind: "page" | "items" | "policies";
+  jws: string;
+  domain: string;
+  url: string;
+  body: string;
+}): Promise<string> {
   const [h, p, s] = c.jws.split(".") as [string, string, string];
   const header = JSON.parse(new TextDecoder().decode(unb64u(h)));
   if (header.alg !== "EdDSA") return "bad_alg";
@@ -113,6 +131,11 @@ async function checkSignature(c: { jws: string; domain: string; url: string; bod
   if (payload.iss !== c.domain) return "iss_mismatch";
   if (payload.url !== c.url) return "url_mismatch";
   if (payload.body_sha256 !== (await sha256Text(c.body))) return "body_mismatch";
+  if (c.kind !== "items") {
+    const body = JSON.parse(c.body);
+    if (payload.as_of !== body.as_of) return "as_of_mismatch";
+    if (payload.rev !== (c.kind === "page" ? body.catalogue.rev : body.rev)) return "rev_mismatch";
+  }
   return "ok";
 }
 
@@ -132,16 +155,32 @@ describe("vectors/catalogue-signature.json: Catalogue-Signature", () => {
       expect(c.payload.body_sha256).toBe(c.body_sha256);
       const input = `${b64u(enc.encode(c.header_json))}.${b64u(enc.encode(c.payload_json))}`;
       expect(await sign(input)).toBe(c.jws);
-      expect(await checkSignature({ jws: c.jws, domain: c.payload.iss, url: c.url, body: c.body })).toBe("ok");
+      expect(await checkSignature(c)).toBe("ok");
+      // iss, and a page's or document's domain, are the member's registered domain, never the feed's host.
+      expect(c.payload.iss).toBe(c.domain);
+      if (c.kind !== "items") expect(JSON.parse(c.body).domain).toBe(c.domain);
+      if (c.ids) expect(new URL(c.url).search).toBe(`?version=2&ids=${catalogueIdsParam(c.ids)}`);
     });
   }
 
   it("each signed body is the message its schema describes", () => {
-    const [page, items, docs] = signature.signatures as Json[];
+    const [page, items, docs, api] = signature.signatures as Json[];
     expect(cataloguePageV2Schema.safeParse(JSON.parse(page.body)).success).toBe(true);
     expect(catalogueItemsV2Schema.safeParse(JSON.parse(items.body)).success).toBe(true);
     expect(cataloguePoliciesSchema.safeParse(JSON.parse(docs.body)).success).toBe(true);
+    expect(cataloguePageV2Schema.safeParse(JSON.parse(api.body)).success).toBe(true);
     expect(JSON.parse(page.body).catalogue.policies_rev).toBe(JSON.parse(docs.body).rev);
+    expect(new URL(api.url).hostname).not.toBe(api.domain);
+  });
+
+  it("ids percent-encoded but for RFC 3986's unreserved characters, upper-case hex, joined by a comma", () => {
+    expect(catalogueIdsParam(["gid://shop/ProductVariant/4471", "O'NEILL-6", "A!(B)*", "a-b._~"])).toBe(
+      "gid%3A%2F%2Fshop%2FProductVariant%2F4471,O%27NEILL-6,A%21%28B%29%2A,a-b._~",
+    );
+    // WHATWG URL parsing leaves an id written this way as it is, so a producer that signs the
+    // request target as received signs the reader's bytes.
+    const asked = `https://inbox.loja.example/v1/catalogue/items?version=2&ids=${catalogueIdsParam(["O'NEILL-6"])}`;
+    expect(new URL(asked).href).toBe(asked);
   });
 
   for (const c of signature.refused as Json[]) {
@@ -164,25 +203,36 @@ describe("vectors/catalogue-checks.json", () => {
   for (const c of checks.cases as Json[]) {
     it(c.name, () => {
       expect(
-        readCatalogueItemV2(c.item, { as_of: checks.as_of, policies: c.with_policies ? withPolicies : null }),
+        readCatalogueItemV2(c.item, {
+          as_of: checks.as_of,
+          policies: c.with_policies ? withPolicies : null,
+          site: c.site,
+        }),
       ).toEqual(expected(c));
     });
   }
 
-  it("names only codes CATALOGUE_V2_PROBLEMS defines, each with its effect", () => {
+  it("names only codes CATALOGUE_V2_PROBLEMS defines, each with its effect, in its order", () => {
+    const order = Object.keys(CATALOGUE_V2_PROBLEMS);
+    const was = (prices.was_price as Json[]).flatMap((c) => (c.expect.shown ? [] : [c.expect.why]));
+    for (const code of was)
+      expect(CATALOGUE_V2_PROBLEMS[code as keyof typeof CATALOGUE_V2_PROBLEMS].effect).toBe("drop");
     for (const c of [...(checks.cases as Json[]), ...(prices.models as Json[])]) {
-      for (const code of [...(c.expect.problems ?? []), ...(c.expect.dropped ?? [])])
-        expect(CATALOGUE_V2_PROBLEMS, code).toHaveProperty(code);
-      for (const code of c.expect.problems ?? [])
+      const problems: string[] = c.expect.problems ?? [];
+      const dropped: string[] = c.expect.dropped ?? [];
+      for (const code of [...problems, ...dropped]) expect(CATALOGUE_V2_PROBLEMS, code).toHaveProperty(code);
+      for (const code of problems)
         expect(CATALOGUE_V2_PROBLEMS[code as keyof typeof CATALOGUE_V2_PROBLEMS].effect).toBe("hold");
-      for (const code of c.expect.dropped ?? [])
+      for (const code of dropped)
         expect(CATALOGUE_V2_PROBLEMS[code as keyof typeof CATALOGUE_V2_PROBLEMS].effect).toBe("drop");
+      for (const list of [problems, dropped])
+        expect(list, c.name).toEqual([...list].sort((a, b) => order.indexOf(a) - order.indexOf(b)));
     }
   });
 
   it("every listed item's hash is its own", async () => {
     for (const c of checks.cases as Json[]) {
-      if (c.item.state !== "listed" || typeof c.item.hash !== "string") continue;
+      if (c.item?.state !== "listed" || typeof c.item.hash !== "string") continue;
       expect(await catalogueItemHash(c.item), c.name).toBe(c.item.hash);
     }
   });
@@ -213,7 +263,7 @@ function repeat(template: Json, count: number): Json[] {
     const it = structuredClone(template);
     const n = String(i).padStart(3, "0");
     it.id = `${template.id}-${n}`;
-    it.group.position = Math.min(CATALOGUE_GROUP_MAX, i + 1);
+    it.group.position = i + 1;
     it.options[0].value = `${template.options[0].value}${n}`;
     return it;
   });
@@ -236,7 +286,7 @@ describe("vectors/catalogue-options.json", () => {
 describe("vectors/catalogue-v1.json", () => {
   for (const c of v1.cases as Json[]) {
     it(c.name, async () => {
-      expect(await catalogueItemV1Of(c.v2, { as_of: v1.as_of, tax_included: c.tax_included })).toEqual(c.v1);
+      expect(await catalogueItemV1Of(c.v2, { as_of: v1.as_of })).toEqual(c.v1);
     });
   }
 });
@@ -296,6 +346,24 @@ describe("vectors/catalogue-policies.json", () => {
     );
     expect(trackingUrl("ups", "x/../y")).toBeNull();
     expect(trackingUrl("pigeon_post", "123456")).toBeNull();
+    // A carrier's own number pattern, where the vocabulary knows it, is one shape for every later version.
+    for (const c of CARRIERS.carriers) expect(c, c.id).toHaveProperty("number_pattern");
+  });
+
+  it("postcodes: by outward code in the United Kingdom, by their start elsewhere", () => {
+    expect(postcodeOf("GB", "ph20ab")).toBe("PH2 0AB");
+    expect(postcodeOf("GB", "PH20 1AA")).toBe("PH20 1AA");
+    expect(postcodeOf("PT", "1100-148")).toBe("1100148");
+    expect(postcodeMatches("GB", "PH2 0AB", "PH20")).toBe(false);
+    expect(postcodeMatches("GB", "PH20 1AA", "PH2")).toBe(false);
+    expect(postcodeMatches("GB", "PH20 1AA", "PH20")).toBe(true);
+    expect(postcodeMatches("GB", "PH20 1AA", "PH")).toBe(true);
+    expect(postcodeMatches("GB", "BA1 1AA", "B")).toBe(false);
+    expect(postcodeMatches("GB", "B1 1AA", "B")).toBe(true);
+    expect(postcodeMatches("GB", "EC1A 1BB", "EC1")).toBe(true);
+    expect(postcodeMatches("GB", "SW1A 1AA", "SW1A 1")).toBe(true);
+    expect(postcodeMatches("GB", "SW1A 2AA", "SW1A 1")).toBe(false);
+    expect(postcodeMatches("PT", "1100148", "11")).toBe(true);
   });
 });
 
@@ -330,6 +398,51 @@ describe("catalogue version 2: versions, schemas and vocabularies", () => {
     ).toBe(false);
   });
 
+  it("each version once, in zod and in the JSON Schema", () => {
+    expect(
+      manifestSchema.safeParse({ ...manifest, catalogue: { ...manifest.catalogue, versions: [2, 2] } }).success,
+    ).toBe(false);
+    const catalogue = (jsonSchemaOf("manifest") as Json).properties.catalogue.properties;
+    expect(catalogue.versions.uniqueItems).toBe(true);
+    for (const f of ["feed", "items", "policies"]) {
+      expect(catalogue[f].format, f).toBe("uri");
+      expect(new RegExp(catalogue[f].pattern, "u").test("http://agent.shop.example/v1/catalogue/changes"), f).toBe(
+        false,
+      );
+      expect(new RegExp(catalogue[f].pattern, "u").test(manifest.catalogue.feed), f).toBe(true);
+    }
+  });
+
+  it("the JSON Schemas refuse what the reader drops: an http page or picture, by the same pattern", () => {
+    for (const name of ["catalogue-page-v2", "catalogue-items-v2"]) {
+      const item = (jsonSchemaOf(name) as Json).properties.items.items.oneOf[0];
+      for (const at of [item.properties.url.anyOf[0], item.properties.media.items.properties.url]) {
+        expect(at.format, name).toBe("uri");
+        expect(at.pattern, name).toBe(new RegExp(CATALOGUE_URL_PATTERN).source);
+        const re = new RegExp(at.pattern, "u");
+        for (const c of checks.cases as Json[]) {
+          if (c.expect.dropped?.includes("url_dropped")) expect(re.test(c.item.url), c.name).toBe(false);
+          if (c.expect.state === "listed" && typeof c.item.url === "string" && !c.expect.dropped.length)
+            expect(re.test(c.item.url), c.name).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("the ping's held block carries a code and a version 2 id", () => {
+    const held = {
+      code: "age_kind_off",
+      why: "Kept off the network.",
+      count: 1,
+      sample: [{ id: "x".repeat(256), name: "Vape" }],
+    };
+    expect(catalogueHeldSchema.parse(held)).toEqual(held);
+    expect(
+      pingCatalogueAnswerSchema.safeParse({ listed: true, offers_live: 0, held: [held], checked_at: null }).success,
+    ).toBe(true);
+    expect(CATALOGUE_V2_PROBLEMS).toHaveProperty(held.code);
+  });
+
   it("no versions is version 1; both, the highest the reader reads", () => {
     const { versions: _v, policies: _p, ...old } = manifest.catalogue;
     expect(catalogueVersionsOf(old)).toEqual([1]);
@@ -348,6 +461,7 @@ describe("catalogue version 2: versions, schemas and vocabularies", () => {
   });
 
   it("has a JSON Schema for each new message, with the 256-character id", () => {
+    expect(OPTION_KEYS.keys.length).toBeGreaterThan(0);
     for (const name of ["catalogue-page-v2", "catalogue-items-v2", "catalogue-policies"])
       expect(JSON_SCHEMAS[name], name).toBeDefined();
     const item = (jsonSchemaOf("catalogue-page-v2") as Json).properties.items.items.oneOf[0];
@@ -377,7 +491,14 @@ describe("catalogue version 2: versions, schemas and vocabularies", () => {
 
   it("age kinds: tobacco and nicotine, cannabis and weapons are off, and nothing else", () => {
     expect([...AGE_KINDS_OFF].sort()).toEqual(["cannabis", "tobacco_nicotine", "weapons"]);
-    expect(new Set(AGE_KINDS.kinds.map((k) => k.kind)).size).toBe(AGE_KINDS.kinds.length);
+    const words = AGE_KINDS.kinds.flatMap((k) => [k.kind, ...k.also]);
+    expect(new Set(words).size).toBe(words.length);
+    expect(ageKindOf("Vape")).toBe("tobacco_nicotine");
+    expect(ageKindOf("firearms")).toBe("weapons");
+    expect(ageKindOf("knives")).toBeNull();
+    for (const w of ["tobacco", "nicotine", "vape", "e_cigarette", "thc", "gun", "party_balloons"])
+      expect(ageKindIsOff(w), w).toBe(true);
+    for (const w of ["alcohol", "wine", "blades"]) expect(ageKindIsOff(w), w).toBe(false);
     expect(ageLabel(18)).toBe("ID checked at handover: 18+");
     const age = { min_age: 18, kind: "alcohol", by_country: { US: 21 }, check: "id_at_handover" as const };
     expect(ageFor(age, "us")).toBe(21);

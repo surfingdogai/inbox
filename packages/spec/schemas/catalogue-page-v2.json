@@ -96,7 +96,7 @@
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 150,
-                "description": "The offer's whole name, a variant's options in it: Moka pot, 6 cups."
+                "description": "The offer's whole name, a variant's options in it: Moka pot, 6 cups. At most 150 characters, each a Unicode code point."
               },
               "description": {
                 "anyOf": [
@@ -107,7 +107,8 @@
                   {
                     "type": "null"
                   }
-                ]
+                ],
+                "description": "At most 5,000 characters, each a Unicode code point (an emoji is one)."
               },
               "group": {
                 "description": "The product group it is a variant of; with options, and only with them.",
@@ -127,8 +128,8 @@
                   "position": {
                     "type": "integer",
                     "minimum": 1,
-                    "maximum": 250,
-                    "description": "Where this variant comes among the group's, from 1; ties come in order of id."
+                    "maximum": 1000000,
+                    "description": "Where this variant comes among the group's, from 1; ties come in order of id. A reader lists the first 250 and holds the rest."
                   }
                 },
                 "required": ["id", "title", "position"]
@@ -341,6 +342,7 @@
                   {
                     "type": "string",
                     "maxLength": 2048,
+                    "pattern": "^https:\\/\\/(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?::[0-9]{1,5})?(?:\\/(?:[A-Za-z0-9\\-._~!$&'()*+,;=:@]|%[0-9A-Fa-f]{2}|\\/)*)?(?:\\?(?:[A-Za-z0-9\\-._~!$&'()*+,;=:@/?]|%[0-9A-Fa-f]{2})*)?(?:#(?:[A-Za-z0-9\\-._~!$&'()*+,;=:@/?]|%[0-9A-Fa-f]{2})*)?$",
                     "format": "uri"
                   },
                   {
@@ -362,6 +364,7 @@
                     "url": {
                       "type": "string",
                       "maxLength": 2048,
+                      "pattern": "^https:\\/\\/(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?::[0-9]{1,5})?(?:\\/(?:[A-Za-z0-9\\-._~!$&'()*+,;=:@]|%[0-9A-Fa-f]{2}|\\/)*)?(?:\\?(?:[A-Za-z0-9\\-._~!$&'()*+,;=:@/?]|%[0-9A-Fa-f]{2})*)?(?:#(?:[A-Za-z0-9\\-._~!$&'()*+,;=:@/?]|%[0-9A-Fa-f]{2})*)?$",
                       "format": "uri"
                     },
                     "alt": {
@@ -385,7 +388,7 @@
                   "kind": {
                     "type": "string",
                     "pattern": "^[a-z][a-z0-9_]{0,39}$",
-                    "description": "A kind of vocab/age-kinds.json: alcohol, blades, fireworks…"
+                    "description": "A kind of vocab/age-kinds.json, or one of its also spellings: alcohol, blades, fireworks…"
                   },
                   "by_country": {
                     "description": "ISO 3166-1 alpha-2 country → the age there, where it is not min_age.",
@@ -419,7 +422,7 @@
                 }
               },
               "shipping_profile": {
-                "description": "A shipping profile of the policies document; absent, its default profile, when it ships.",
+                "description": "A shipping profile of the policies document; absent, its default profile, when it ships. One the document does not have holds the offer, never the default.",
                 "type": "string",
                 "pattern": "^[\\x21-\\x2B\\x2D-\\x7E]{1,256}$"
               },
@@ -441,9 +444,25 @@
                 "required": ["value", "unit"]
               },
               "return_policy": {
-                "description": "A return policy of the policies document; absent, its default policy.",
+                "description": "A return policy of the policies document; absent, its default policy. One the document does not have holds the offer, never the default.",
                 "type": "string",
                 "pattern": "^[\\x21-\\x2B\\x2D-\\x7E]{1,256}$"
+              },
+              "withdrawal": {
+                "description": "The legal right to withdraw: standard, or the exception the law allows (perishable, personalised…); absent, not said.",
+                "type": "string",
+                "enum": [
+                  "standard",
+                  "personalised",
+                  "perishable",
+                  "sealed_hygiene",
+                  "sealed_media",
+                  "mixed",
+                  "dated_leisure",
+                  "urgent_repair",
+                  "digital_started",
+                  "price_fluctuates"
+                ]
               },
               "updated_at": {
                 "type": "string",

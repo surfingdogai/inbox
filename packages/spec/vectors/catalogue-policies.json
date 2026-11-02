@@ -1,11 +1,11 @@
 {
-  "$comment": "Catalogue version 2 (protocol §4.18): the policies document. reads: a document read part by part (readCataloguePolicies), given as one of documents with an RFC 6902 JSON Patch applied: the problems at their paths, the ids kept and the defaults; expect null when it does not read at all. quotes: a basket's shipping to a place (quoteShipping) under eu or us, the documents of the first two reads: the profile, the zone and each service's fee, or null with why. Problems written by hand; the documents' rev and every fee worked out by packages/spec/scripts/gen-catalogue-vectors.py, weights exactly in nanograms. MIT.",
+  "$comment": "Catalogue version 2 (protocol §4.18): the policies document. reads: a document read part by part (readCataloguePolicies), given as one of documents with an RFC 6902 JSON Patch applied: the problems at their paths, the ids kept and the defaults; expect null when it does not read at all. quotes: a basket's shipping to a place (quoteShipping) under eu or us, the documents of the first two reads: the profile, the zone and each service's fee, or null with why. An age-restricted line goes only by a service marked id_check; a British postcode matches by outward code (PH2 is never PH20). Problems written by hand; the documents' rev and every fee worked out by packages/spec/scripts/gen-catalogue-vectors.py, weights exactly in nanograms. MIT.",
   "documents": {
     "eu": {
       "version": 1,
       "domain": "inbox.loja.example",
       "as_of": "2026-11-02T10:00:00.000Z",
-      "rev": "d46290ccc04c5305",
+      "rev": "c25dc20b1046a4ce",
       "shipping_profiles": [
         {
           "id": "standard",
@@ -170,6 +170,63 @@
               ]
             },
             {
+              "name": "Highlands and islands",
+              "destinations": [
+                {
+                  "country": "GB",
+                  "postal_prefixes": ["PH20", "PH21", "KA27", "KA28", "PA20", "IV", "HS", "ZE", "KW15"]
+                }
+              ],
+              "services": [
+                {
+                  "id": "tracked",
+                  "name": "Tracked",
+                  "carrier": "royal_mail",
+                  "tracked": true,
+                  "id_check": false,
+                  "transit_days": {
+                    "min": 4,
+                    "max": 8
+                  },
+                  "rate": {
+                    "basis": "flat",
+                    "amount": {
+                      "value": 1500,
+                      "currency": "EUR"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Central London",
+              "destinations": [
+                {
+                  "country": "GB",
+                  "postal_prefixes": ["EC1", "W1", "WC2N 5"]
+                }
+              ],
+              "services": [
+                {
+                  "id": "courier",
+                  "name": "Same-day courier",
+                  "tracked": true,
+                  "id_check": true,
+                  "transit_days": {
+                    "min": 0,
+                    "max": 0
+                  },
+                  "rate": {
+                    "basis": "flat",
+                    "amount": {
+                      "value": 1200,
+                      "currency": "EUR"
+                    }
+                  }
+                }
+              ]
+            },
+            {
               "name": "United Kingdom",
               "destinations": [
                 {
@@ -231,6 +288,40 @@
                     "basis": "flat",
                     "amount": {
                       "value": 0,
+                      "currency": "EUR"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "letterbox",
+          "name": "Through the letterbox",
+          "zones": [
+            {
+              "name": "Portugal",
+              "destinations": [
+                {
+                  "country": "PT"
+                }
+              ],
+              "services": [
+                {
+                  "id": "letterbox",
+                  "name": "Letterbox",
+                  "carrier": "ctt",
+                  "tracked": false,
+                  "id_check": false,
+                  "transit_days": {
+                    "min": 2,
+                    "max": 4
+                  },
+                  "rate": {
+                    "basis": "flat",
+                    "amount": {
+                      "value": 290,
                       "currency": "EUR"
                     }
                   }
@@ -394,7 +485,7 @@
       },
       "expect": {
         "problems": [],
-        "shipping_profiles": ["standard", "chilled"],
+        "shipping_profiles": ["standard", "chilled", "letterbox"],
         "return_policies": ["standard", "final_sale", "credit"],
         "default_shipping_profile": "standard",
         "default_return_policy": "standard"
@@ -430,10 +521,10 @@
         "problems": [
           {
             "path": "shipping_profiles[1].default",
-            "code": "default_twice"
+            "code": "policies_default_twice"
           }
         ],
-        "shipping_profiles": ["standard", "chilled"],
+        "shipping_profiles": ["standard", "chilled", "letterbox"],
         "return_policies": ["standard", "final_sale", "credit"],
         "default_shipping_profile": "standard",
         "default_return_policy": "standard"
@@ -455,10 +546,10 @@
         "problems": [
           {
             "path": "return_policies[2].default",
-            "code": "default_twice"
+            "code": "policies_default_twice"
           }
         ],
-        "shipping_profiles": ["standard", "chilled"],
+        "shipping_profiles": ["standard", "chilled", "letterbox"],
         "return_policies": ["standard", "final_sale", "credit"],
         "default_shipping_profile": "standard",
         "default_return_policy": "standard"
@@ -480,10 +571,10 @@
         "problems": [
           {
             "path": "shipping_profiles[1]",
-            "code": "id_twice"
+            "code": "policies_id_twice"
           }
         ],
-        "shipping_profiles": ["standard"],
+        "shipping_profiles": ["standard", "letterbox"],
         "return_policies": ["standard", "final_sale", "credit"],
         "default_shipping_profile": "standard",
         "default_return_policy": "standard"
@@ -508,10 +599,10 @@
         "problems": [
           {
             "path": "shipping_profiles[0].zones[0].services[0]",
-            "code": "currency_mixed"
+            "code": "policies_currency_mixed"
           }
         ],
-        "shipping_profiles": ["standard", "chilled"],
+        "shipping_profiles": ["standard", "chilled", "letterbox"],
         "return_policies": ["standard", "final_sale", "credit"],
         "default_shipping_profile": "standard",
         "default_return_policy": "standard"
@@ -534,10 +625,10 @@
         "problems": [
           {
             "path": "shipping_profiles[0].zones[0].services[0]",
-            "code": "band_order"
+            "code": "policies_band_order"
           }
         ],
-        "shipping_profiles": ["standard", "chilled"],
+        "shipping_profiles": ["standard", "chilled", "letterbox"],
         "return_policies": ["standard", "final_sale", "credit"],
         "default_shipping_profile": "standard",
         "default_return_policy": "standard"
@@ -559,10 +650,10 @@
         "problems": [
           {
             "path": "shipping_profiles[0].zones[0].services[0]",
-            "code": "band_order"
+            "code": "policies_band_order"
           }
         ],
-        "shipping_profiles": ["standard", "chilled"],
+        "shipping_profiles": ["standard", "chilled", "letterbox"],
         "return_policies": ["standard", "final_sale", "credit"],
         "default_shipping_profile": "standard",
         "default_return_policy": "standard"
@@ -584,10 +675,10 @@
         "problems": [
           {
             "path": "shipping_profiles[0].zones[0].services[0]",
-            "code": "band_order"
+            "code": "policies_band_order"
           }
         ],
-        "shipping_profiles": ["standard", "chilled"],
+        "shipping_profiles": ["standard", "chilled", "letterbox"],
         "return_policies": ["standard", "final_sale", "credit"],
         "default_shipping_profile": "standard",
         "default_return_policy": "standard"
@@ -612,10 +703,10 @@
         "problems": [
           {
             "path": "shipping_profiles[0].zones[0].services[0]",
-            "code": "transit_order"
+            "code": "policies_transit_order"
           }
         ],
-        "shipping_profiles": ["standard", "chilled"],
+        "shipping_profiles": ["standard", "chilled", "letterbox"],
         "return_policies": ["standard", "final_sale", "credit"],
         "default_shipping_profile": "standard",
         "default_return_policy": "standard"
@@ -637,10 +728,10 @@
         "problems": [
           {
             "path": "shipping_profiles[0].zones[0].services[0].carrier",
-            "code": "carrier_unknown"
+            "code": "policies_carrier_unknown"
           }
         ],
-        "shipping_profiles": ["standard", "chilled"],
+        "shipping_profiles": ["standard", "chilled", "letterbox"],
         "return_policies": ["standard", "final_sale", "credit"],
         "default_shipping_profile": "standard",
         "default_return_policy": "standard"
@@ -676,18 +767,18 @@
         "problems": [
           {
             "path": "shipping_profiles[1].zones[0].services[0]",
-            "code": "currency_mixed"
+            "code": "policies_currency_mixed"
           },
           {
             "path": "shipping_profiles[1].zones[0]",
-            "code": "zone_empty"
+            "code": "policies_zone_empty"
           },
           {
             "path": "shipping_profiles[1]",
-            "code": "profile_empty"
+            "code": "policies_profile_empty"
           }
         ],
-        "shipping_profiles": ["standard"],
+        "shipping_profiles": ["standard", "letterbox"],
         "return_policies": ["standard", "final_sale", "credit"],
         "default_shipping_profile": "standard",
         "default_return_policy": "standard"
@@ -708,10 +799,10 @@
         "problems": [
           {
             "path": "shipping_profiles[1]",
-            "code": "unreadable"
+            "code": "policies_unreadable"
           }
         ],
-        "shipping_profiles": ["standard"],
+        "shipping_profiles": ["standard", "letterbox"],
         "return_policies": ["standard", "final_sale", "credit"],
         "default_shipping_profile": "standard",
         "default_return_policy": "standard"
@@ -736,15 +827,15 @@
         "problems": [
           {
             "path": "shipping_profiles[0]",
-            "code": "unreadable"
+            "code": "policies_unreadable"
           }
         ],
-        "shipping_profiles": ["chilled"],
+        "shipping_profiles": ["chilled", "letterbox"],
         "return_policies": ["standard", "final_sale", "credit"],
         "default_shipping_profile": null,
         "default_return_policy": "standard"
       },
-      "note": "a profile reads or not as a whole, and chilled was never the default"
+      "note": "a profile reads or not as a whole, and no other is ever made the default: an offer naming none has no shipping known"
     },
     {
       "name": "a window with no days",
@@ -761,14 +852,15 @@
         "problems": [
           {
             "path": "return_policies[0]",
-            "code": "window_days_missing"
+            "code": "policies_window_days_missing"
           }
         ],
-        "shipping_profiles": ["standard", "chilled"],
+        "shipping_profiles": ["standard", "chilled", "letterbox"],
         "return_policies": ["final_sale", "credit"],
         "default_shipping_profile": "standard",
         "default_return_policy": null
-      }
+      },
+      "note": "an offer that names standard is then held (return_policy_unknown), never shown another policy"
     },
     {
       "name": "days beside unlimited: the days alone",
@@ -786,10 +878,10 @@
         "problems": [
           {
             "path": "return_policies[2].window_days",
-            "code": "window_days_unused"
+            "code": "policies_window_days_unused"
           }
         ],
-        "shipping_profiles": ["standard", "chilled"],
+        "shipping_profiles": ["standard", "chilled", "letterbox"],
         "return_policies": ["standard", "final_sale", "credit"],
         "default_shipping_profile": "standard",
         "default_return_policy": "standard"
@@ -811,10 +903,10 @@
         "problems": [
           {
             "path": "return_policies[2]",
-            "code": "terms_missing"
+            "code": "policies_terms_missing"
           }
         ],
-        "shipping_profiles": ["standard", "chilled"],
+        "shipping_profiles": ["standard", "chilled", "letterbox"],
         "return_policies": ["standard", "final_sale"],
         "default_shipping_profile": "standard",
         "default_return_policy": "standard"
@@ -835,10 +927,10 @@
         "problems": [
           {
             "path": "return_policies[0]",
-            "code": "postage_missing"
+            "code": "policies_postage_missing"
           }
         ],
-        "shipping_profiles": ["standard", "chilled"],
+        "shipping_profiles": ["standard", "chilled", "letterbox"],
         "return_policies": ["final_sale", "credit"],
         "default_shipping_profile": "standard",
         "default_return_policy": null
@@ -865,10 +957,10 @@
         "problems": [
           {
             "path": "return_policies[1]",
-            "code": "not_accepted_terms"
+            "code": "policies_not_accepted_terms"
           }
         ],
-        "shipping_profiles": ["standard", "chilled"],
+        "shipping_profiles": ["standard", "chilled", "letterbox"],
         "return_policies": ["standard", "final_sale", "credit"],
         "default_shipping_profile": "standard",
         "default_return_policy": "standard"
@@ -887,7 +979,33 @@
         ]
       },
       "expect": null,
-      "note": "it does not read at all"
+      "note": "it does not read at all (policies_document_unreadable)"
+    },
+    {
+      "name": "a postcode prefix with a space",
+      "doc": {
+        "base": "eu",
+        "patch": [
+          {
+            "op": "replace",
+            "path": "/shipping_profiles/0/zones/4/destinations/0/postal_prefixes/2",
+            "value": "WC2N  5"
+          }
+        ]
+      },
+      "expect": {
+        "problems": [
+          {
+            "path": "shipping_profiles[0]",
+            "code": "policies_unreadable"
+          }
+        ],
+        "shipping_profiles": ["chilled", "letterbox"],
+        "return_policies": ["standard", "final_sale", "credit"],
+        "default_shipping_profile": null,
+        "default_return_policy": "standard"
+      },
+      "note": "at most one space, between the outward code and the inward"
     }
   ],
   "quotes": [
@@ -2127,6 +2245,614 @@
         "zone": null,
         "services": [],
         "why": "not_shipped_there"
+      }
+    },
+    {
+      "name": "a bottle of wine to Lisbon: only the service that checks ID",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 1290,
+              "currency": "EUR"
+            },
+            "quantity": 1,
+            "weight": {
+              "value": 1.3,
+              "unit": "kg"
+            },
+            "age_restricted": true
+          }
+        ],
+        "destination": {
+          "country": "PT",
+          "postal_code": "1100-148"
+        }
+      },
+      "expect": {
+        "profile": "standard",
+        "zone": "Mainland",
+        "services": [
+          {
+            "id": "standard",
+            "name": "Standard",
+            "carrier": "ctt",
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 1,
+              "max": 3
+            },
+            "fee": null,
+            "why": "id_check"
+          },
+          {
+            "id": "next_day",
+            "name": "Next day",
+            "carrier": "dpd",
+            "tracked": true,
+            "id_check": true,
+            "transit_days": {
+              "min": 1,
+              "max": 1
+            },
+            "fee": {
+              "value": 990,
+              "currency": "EUR"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "wine and a pot together: the basket goes as its wine must",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 1290,
+              "currency": "EUR"
+            },
+            "quantity": 1,
+            "weight": {
+              "value": 1.3,
+              "unit": "kg"
+            },
+            "age_restricted": true
+          },
+          {
+            "price": {
+              "value": 2990,
+              "currency": "EUR"
+            },
+            "quantity": 1,
+            "weight": {
+              "value": 0.65,
+              "unit": "kg"
+            }
+          }
+        ],
+        "destination": {
+          "country": "PT",
+          "postal_code": "1100-148"
+        }
+      },
+      "expect": {
+        "profile": "standard",
+        "zone": "Mainland",
+        "services": [
+          {
+            "id": "standard",
+            "name": "Standard",
+            "carrier": "ctt",
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 1,
+              "max": 3
+            },
+            "fee": null,
+            "why": "id_check"
+          },
+          {
+            "id": "next_day",
+            "name": "Next day",
+            "carrier": "dpd",
+            "tracked": true,
+            "id_check": true,
+            "transit_days": {
+              "min": 1,
+              "max": 1
+            },
+            "fee": {
+              "value": 990,
+              "currency": "EUR"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "wine by the letterbox: no service may take it",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 1290,
+              "currency": "EUR"
+            },
+            "quantity": 1,
+            "age_restricted": true
+          }
+        ],
+        "destination": {
+          "country": "PT",
+          "postal_code": "1100-148"
+        },
+        "shipping_profile": "letterbox"
+      },
+      "expect": {
+        "profile": "letterbox",
+        "zone": "Portugal",
+        "services": [
+          {
+            "id": "letterbox",
+            "name": "Letterbox",
+            "carrier": "ctt",
+            "tracked": false,
+            "id_check": false,
+            "transit_days": {
+              "min": 2,
+              "max": 4
+            },
+            "fee": null,
+            "why": "id_check"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Perth, PH2 0AB: the mainland",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 1500,
+              "currency": "EUR"
+            },
+            "quantity": 1
+          }
+        ],
+        "destination": {
+          "country": "GB",
+          "postal_code": "PH2 0AB"
+        }
+      },
+      "expect": {
+        "profile": "standard",
+        "zone": "United Kingdom",
+        "services": [
+          {
+            "id": "tracked",
+            "name": "Tracked",
+            "carrier": "royal_mail",
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 3,
+              "max": 6
+            },
+            "fee": {
+              "value": 600,
+              "currency": "EUR"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Newtonmore, PH20 1AA: the Highlands",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 1500,
+              "currency": "EUR"
+            },
+            "quantity": 1
+          }
+        ],
+        "destination": {
+          "country": "GB",
+          "postal_code": "PH20 1AA"
+        }
+      },
+      "expect": {
+        "profile": "standard",
+        "zone": "Highlands and islands",
+        "services": [
+          {
+            "id": "tracked",
+            "name": "Tracked",
+            "carrier": "royal_mail",
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 4,
+              "max": 8
+            },
+            "fee": {
+              "value": 1500,
+              "currency": "EUR"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Kilmarnock, KA2 7AA: the mainland",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 1500,
+              "currency": "EUR"
+            },
+            "quantity": 1
+          }
+        ],
+        "destination": {
+          "country": "GB",
+          "postal_code": "KA2 7AA"
+        }
+      },
+      "expect": {
+        "profile": "standard",
+        "zone": "United Kingdom",
+        "services": [
+          {
+            "id": "tracked",
+            "name": "Tracked",
+            "carrier": "royal_mail",
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 3,
+              "max": 6
+            },
+            "fee": {
+              "value": 600,
+              "currency": "EUR"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Arran, KA27 8AA: the islands",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 1500,
+              "currency": "EUR"
+            },
+            "quantity": 1
+          }
+        ],
+        "destination": {
+          "country": "GB",
+          "postal_code": "KA27 8AA"
+        }
+      },
+      "expect": {
+        "profile": "standard",
+        "zone": "Highlands and islands",
+        "services": [
+          {
+            "id": "tracked",
+            "name": "Tracked",
+            "carrier": "royal_mail",
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 4,
+              "max": 8
+            },
+            "fee": {
+              "value": 1500,
+              "currency": "EUR"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Paisley, written pa20aa: the mainland",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 1500,
+              "currency": "EUR"
+            },
+            "quantity": 1
+          }
+        ],
+        "destination": {
+          "country": "GB",
+          "postal_code": "pa20aa"
+        }
+      },
+      "expect": {
+        "profile": "standard",
+        "zone": "United Kingdom",
+        "services": [
+          {
+            "id": "tracked",
+            "name": "Tracked",
+            "carrier": "royal_mail",
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 3,
+              "max": 6
+            },
+            "fee": {
+              "value": 600,
+              "currency": "EUR"
+            }
+          }
+        ]
+      },
+      "note": "PA2 0AA, never PA20"
+    },
+    {
+      "name": "Dunoon, PA20 0AA: the Highlands",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 1500,
+              "currency": "EUR"
+            },
+            "quantity": 1
+          }
+        ],
+        "destination": {
+          "country": "GB",
+          "postal_code": "PA20 0AA"
+        }
+      },
+      "expect": {
+        "profile": "standard",
+        "zone": "Highlands and islands",
+        "services": [
+          {
+            "id": "tracked",
+            "name": "Tracked",
+            "carrier": "royal_mail",
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 4,
+              "max": 8
+            },
+            "fee": {
+              "value": 1500,
+              "currency": "EUR"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Inverness, IV1 1AA: a whole area",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 1500,
+              "currency": "EUR"
+            },
+            "quantity": 1
+          }
+        ],
+        "destination": {
+          "country": "GB",
+          "postal_code": "IV1 1AA"
+        }
+      },
+      "expect": {
+        "profile": "standard",
+        "zone": "Highlands and islands",
+        "services": [
+          {
+            "id": "tracked",
+            "name": "Tracked",
+            "carrier": "royal_mail",
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 4,
+              "max": 8
+            },
+            "fee": {
+              "value": 1500,
+              "currency": "EUR"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Clerkenwell, EC1A 1BB: EC1 has it",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 1500,
+              "currency": "EUR"
+            },
+            "quantity": 1
+          }
+        ],
+        "destination": {
+          "country": "GB",
+          "postal_code": "EC1A 1BB"
+        }
+      },
+      "expect": {
+        "profile": "standard",
+        "zone": "Central London",
+        "services": [
+          {
+            "id": "courier",
+            "name": "Same-day courier",
+            "carrier": null,
+            "tracked": true,
+            "id_check": true,
+            "transit_days": {
+              "min": 0,
+              "max": 0
+            },
+            "fee": {
+              "value": 1200,
+              "currency": "EUR"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "North Kensington, W10 5AA: never W1",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 1500,
+              "currency": "EUR"
+            },
+            "quantity": 1
+          }
+        ],
+        "destination": {
+          "country": "GB",
+          "postal_code": "W10 5AA"
+        }
+      },
+      "expect": {
+        "profile": "standard",
+        "zone": "United Kingdom",
+        "services": [
+          {
+            "id": "tracked",
+            "name": "Tracked",
+            "carrier": "royal_mail",
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 3,
+              "max": 6
+            },
+            "fee": {
+              "value": 600,
+              "currency": "EUR"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Trafalgar Square, WC2N 5DU: a prefix with a space",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 1500,
+              "currency": "EUR"
+            },
+            "quantity": 1
+          }
+        ],
+        "destination": {
+          "country": "GB",
+          "postal_code": "WC2N 5DU"
+        }
+      },
+      "expect": {
+        "profile": "standard",
+        "zone": "Central London",
+        "services": [
+          {
+            "id": "courier",
+            "name": "Same-day courier",
+            "carrier": null,
+            "tracked": true,
+            "id_check": true,
+            "transit_days": {
+              "min": 0,
+              "max": 0
+            },
+            "fee": {
+              "value": 1200,
+              "currency": "EUR"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Charing Cross, WC2N 6NE: not that prefix",
+      "doc": "eu",
+      "input": {
+        "lines": [
+          {
+            "price": {
+              "value": 1500,
+              "currency": "EUR"
+            },
+            "quantity": 1
+          }
+        ],
+        "destination": {
+          "country": "GB",
+          "postal_code": "WC2N 6NE"
+        }
+      },
+      "expect": {
+        "profile": "standard",
+        "zone": "United Kingdom",
+        "services": [
+          {
+            "id": "tracked",
+            "name": "Tracked",
+            "carrier": "royal_mail",
+            "tracked": true,
+            "id_check": false,
+            "transit_days": {
+              "min": 3,
+              "max": 6
+            },
+            "fee": {
+              "value": 600,
+              "currency": "EUR"
+            }
+          }
+        ]
       }
     }
   ]

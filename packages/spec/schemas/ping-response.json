@@ -437,6 +437,11 @@
           "items": {
             "type": "object",
             "properties": {
+              "code": {
+                "description": "A code of CATALOGUE_V2_PROBLEMS; a reader shows why when it does not know the code.",
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$"
+              },
               "why": {
                 "type": "string",
                 "minLength": 1,
@@ -455,7 +460,7 @@
                   "properties": {
                     "id": {
                       "type": "string",
-                      "maxLength": 64
+                      "maxLength": 256
                     },
                     "name": {
                       "type": "string",

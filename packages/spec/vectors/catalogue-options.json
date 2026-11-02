@@ -1,5 +1,5 @@
 {
-  "$comment": "Catalogue version 2 (protocol §4.18): a business's product groups (readCatalogueGroups) from its listed items (or repeat: count copies of item, the i-th, from 0, with its id and its first option's value followed by i in three digits, and group.position min(250, i + 1)): grouped, one product, its variants in order of position then id, at most 250, those past held; or ungrouped, each variant a product of its own, with the problems. Every variant names the same keys, each key by one name, under one title, and no two alike in every value, compared exactly. Written by hand; hashes by packages/spec/scripts/gen-catalogue-vectors.py. MIT.",
+  "$comment": "Catalogue version 2 (protocol §4.18): a business's product groups (readCatalogueGroups) from its listed items (or repeat: count copies of item, the i-th, from 0, with its id and its first option's value followed by i in three digits, and group.position i + 1), each read first as catalogue-checks.json reads one,: grouped, one product, its variants in order of position then id, at most 250, those past held; or ungrouped, each variant a product of its own, with the problems. Every variant names the same keys, each key by one name, under one title, and no two alike in every value, compared exactly. Written by hand; hashes by packages/spec/scripts/gen-catalogue-vectors.py. MIT.",
   "cases": [
     {
       "name": "three sizes: one product",
@@ -1011,6 +1011,126 @@
       ]
     },
     {
+      "name": "colour in one variant, color in another: one key",
+      "items": [
+        {
+          "id": "MOKA-3-ALU",
+          "state": "listed",
+          "sku": "MOKA-6",
+          "name": "Moka pot, 3 cups, aluminium",
+          "description": "The stovetop pot, in aluminium.",
+          "group": {
+            "id": "MOKA",
+            "title": "Moka pot",
+            "position": 1
+          },
+          "options": [
+            {
+              "key": "size",
+              "name": "Size",
+              "value": "3 cups"
+            },
+            {
+              "key": "colour",
+              "name": "Colour",
+              "value": "Silver"
+            }
+          ],
+          "price_model": "fixed",
+          "price": {
+            "value": 3490,
+            "currency": "EUR"
+          },
+          "availability": "in_stock",
+          "gtin": "09506000134352",
+          "no_gtin": false,
+          "brand": "Bialetti",
+          "mpn": null,
+          "condition": "new",
+          "url": "https://loja.example/produtos/moka-6",
+          "media": [
+            {
+              "type": "image",
+              "url": "https://loja.example/img/moka-6.jpg",
+              "alt": "A six-cup moka pot"
+            }
+          ],
+          "fulfil_methods": ["pickup", "shipping"],
+          "shipping_profile": "standard",
+          "weight": {
+            "value": 0.65,
+            "unit": "kg"
+          },
+          "return_policy": "standard",
+          "updated_at": "2026-11-02T09:12:00.000Z",
+          "hash": "5ad0893ad098e272"
+        },
+        {
+          "id": "MOKA-6-ALU",
+          "state": "listed",
+          "sku": "MOKA-6",
+          "name": "Moka pot, 6 cups, aluminium",
+          "description": "The stovetop pot, in aluminium.",
+          "group": {
+            "id": "MOKA",
+            "title": "Moka pot",
+            "position": 2
+          },
+          "options": [
+            {
+              "key": "size",
+              "name": "Size",
+              "value": "6 cups"
+            },
+            {
+              "key": "color",
+              "name": "Colour",
+              "value": "Silver"
+            }
+          ],
+          "price_model": "fixed",
+          "price": {
+            "value": 3490,
+            "currency": "EUR"
+          },
+          "availability": "in_stock",
+          "gtin": "09506000134352",
+          "no_gtin": false,
+          "brand": "Bialetti",
+          "mpn": null,
+          "condition": "new",
+          "url": "https://loja.example/produtos/moka-6",
+          "media": [
+            {
+              "type": "image",
+              "url": "https://loja.example/img/moka-6.jpg",
+              "alt": "A six-cup moka pot"
+            }
+          ],
+          "fulfil_methods": ["pickup", "shipping"],
+          "shipping_profile": "standard",
+          "weight": {
+            "value": 0.65,
+            "unit": "kg"
+          },
+          "return_policy": "standard",
+          "updated_at": "2026-11-02T09:12:00.000Z",
+          "hash": "e2293c52dc8e43c1"
+        }
+      ],
+      "expect": [
+        {
+          "id": "MOKA",
+          "title": "Moka pot",
+          "state": "grouped",
+          "problems": [],
+          "members": ["MOKA-3-ALU", "MOKA-6-ALU"],
+          "held": []
+        }
+      ],
+      "note": "each item is read first (readCatalogueItemV2), which takes colour as color"
+    },
+    {
       "name": "values compared exactly: Aluminium and aluminium differ",
       "items": [
         {
@@ -1550,7 +1670,7 @@
           "held": ["TEE-250", "TEE-251"]
         }
       ],
-      "note": "positions stop at 250, so the last three tie and come in order of id",
+      "note": "positions run past 250: the 251st and 252nd are held",
       "repeat": {
         "count": 252,
         "item": {

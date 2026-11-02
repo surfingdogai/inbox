@@ -79,7 +79,8 @@
                         "type": "array",
                         "items": {
                           "type": "string",
-                          "pattern": "^[A-Z0-9]{1,10}$"
+                          "pattern": "^(?=.{1,10}$)[A-Z0-9]+(?: [A-Z0-9]+)?$",
+                          "description": "The start of a postcode, upper case: 1100, PH20, EC1, SW1A 1 (an outward code, a space and the start of the inward code)."
                         }
                       }
                     },
@@ -112,7 +113,8 @@
                         "type": "array",
                         "items": {
                           "type": "string",
-                          "pattern": "^[A-Z0-9]{1,10}$"
+                          "pattern": "^(?=.{1,10}$)[A-Z0-9]+(?: [A-Z0-9]+)?$",
+                          "description": "The start of a postcode, upper case: 1100, PH20, EC1, SW1A 1 (an outward code, a space and the start of the inward code)."
                         }
                       }
                     },

@@ -164,11 +164,21 @@ export const catalogueSwitchResponseSchema = z.object({
   offers_live: z.int().min(0),
 });
 
-/** Why a network holds a product back, in its own words for the owner, with a few of them by name. */
+/**
+ * Why a network holds a product back, in its own words for the owner, with a few of them by name. From
+ * catalogue version 2, `code` says it by machine: a code of `CATALOGUE_V2_PROBLEMS` (`unreadable`,
+ * `age_kind_off`, `group_too_large`…), the same a network's `check_catalogue` gives for each item
+ * (`{id, held: code}`). A sample's id is a version 2 id, of up to 256 characters.
+ */
 export const catalogueHeldSchema = z.object({
+  code: z
+    .string()
+    .regex(/^[a-z][a-z0-9_]{0,63}$/)
+    .optional()
+    .describe("A code of CATALOGUE_V2_PROBLEMS; a reader shows why when it does not know the code."),
   why: z.string().min(1).max(200),
   count: z.int().min(1),
-  sample: z.array(z.object({ id: z.string().max(64), name: z.string().max(CATALOGUE_NAME_MAX) })).max(5),
+  sample: z.array(z.object({ id: z.string().max(256), name: z.string().max(CATALOGUE_NAME_MAX) })).max(5),
 });
 
 /** A signed ping's answer, `catalogue`: what the network lists of the business's products, and when it last checked. */

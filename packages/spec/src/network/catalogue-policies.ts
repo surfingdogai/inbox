@@ -1,5 +1,6 @@
 import { z } from "zod";
 import carriersVocab from "../../vocab/carriers.json" with { type: "json" };
+import type { CatalogueProblem } from "./catalogue-problems";
 import { type CatalogueWeight, catalogueIdV2Schema, catalogueMoneySchema } from "./catalogue-v2";
 
 /**
@@ -26,7 +27,9 @@ export type PolicyMoney = z.infer<typeof policyMoneySchema>;
 
 /**
  * Places, by country, and within it by ISO 3166-2 region or by the start of a postcode. With neither, the
- * whole country; with both, a place in either.
+ * whole country; with both, a place in either. A postcode is matched as `postcodeMatches` says: in the
+ * United Kingdom, the Isle of Man, Jersey and Guernsey (`OUTWARD_INWARD_COUNTRIES`) by outward code, so
+ * `PH2` is Perth and never `PH20`; elsewhere by its start, spaces and hyphens left out.
  */
 export const shippingDestinationSchema = z.object({
   country: z.string().regex(/^[A-Z]{2}$/),
@@ -36,7 +39,14 @@ export const shippingDestinationSchema = z.object({
     .max(100)
     .optional(),
   postal_prefixes: z
-    .array(z.string().regex(/^[A-Z0-9]{1,10}$/, "upper case, no spaces"))
+    .array(
+      z
+        .string()
+        .regex(/^(?=.{1,10}$)[A-Z0-9]+(?: [A-Z0-9]+)?$/, "upper case, at most one space")
+        .describe(
+          "The start of a postcode, upper case: 1100, PH20, EC1, SW1A 1 (an outward code, a space and the start of the inward code).",
+        ),
+    )
     .min(1)
     .max(500)
     .optional(),
@@ -162,6 +172,17 @@ export const carriersVocabSchema = z.object({
       countries: z.array(z.string().regex(/^[A-Z]{2}$/)),
       kind: z.enum(["post", "parcel", "express"]),
       s10: z.boolean(),
+      number_pattern: z
+        .string()
+        .refine((p) => {
+          try {
+            new RegExp(p);
+            return p.startsWith("^") && p.endsWith("$");
+          } catch {
+            return false;
+          }
+        }, "a regular expression from ^ to $")
+        .nullable(),
       tracking_url_template: z
         .string()
         .startsWith("https://")
@@ -200,27 +221,14 @@ export function trackingUrl(carrierId: string, number: string, given?: string | 
   }
   const n = number.trim();
   if (!c.tracking_url_template || !/^[A-Za-z0-9-]{4,40}$/.test(n)) return null;
+  if (c.number_pattern && !new RegExp(c.number_pattern).test(n)) return null;
   return c.tracking_url_template.replace("{number}", encodeURIComponent(n));
 }
 
 /* --- reading a document -------------------------------------------------------------------------- */
 
-/** What a reader found in a policies document, at a path, and dropped. */
-export type PoliciesProblemCode =
-  | "unreadable"
-  | "id_twice"
-  | "default_twice"
-  | "currency_mixed"
-  | "band_order"
-  | "transit_order"
-  | "carrier_unknown"
-  | "zone_empty"
-  | "profile_empty"
-  | "window_days_missing"
-  | "window_days_unused"
-  | "terms_missing"
-  | "postage_missing"
-  | "not_accepted_terms";
+/** What a reader found in a policies document, at a path, and dropped: a `policies_` code of `CATALOGUE_V2_PROBLEMS`. */
+export type PoliciesProblemCode = Extract<CatalogueProblem, `policies_${string}`>;
 
 export interface PoliciesProblem {
   readonly path: string;
@@ -275,18 +283,21 @@ function bandsRise(rate: ShippingRate): boolean {
  * Reads a policies document part by part, as a reader keeps it (`vectors/catalogue-policies.json`). The
  * document as a whole must read; then each profile and policy is read alone, and a part that does not
  * read or does not hold is dropped with what was wrong, the rest kept:
- * - an id a profile (or policy) already used: the later one dropped (`id_twice`);
- * - a second `default`: the first in the document stays the default (`default_twice`);
- * - a service whose amounts are in more than one currency (`currency_mixed`), whose bands do not rise or
- *   whose open band is not last, or a weight band with more than three decimals (`band_order`), or whose `transit_days.max` is below its `min`
- *   (`transit_order`): dropped; a `carrier` the vocabulary does not know: the carrier alone
- *   (`carrier_unknown`); a zone left with no service (`zone_empty`), a profile with no zone
- *   (`profile_empty`);
- * - a return policy: a `window` with no `window_days` (`window_days_missing`), one that takes returns
- *   with no resolution or no method (`terms_missing`) or by post with no `return_postage`
- *   (`postage_missing`): dropped; `window_days` beside another eligibility (`window_days_unused`) and the
- *   terms of a `not_accepted` policy (`not_accepted_terms`): the member alone.
- * Returns null when the document itself does not read.
+ * - an id a profile (or policy) already used: the later one dropped (`policies_id_twice`);
+ * - a second `default`: the first in the document stays the default (`policies_default_twice`);
+ * - a service whose amounts are in more than one currency (`policies_currency_mixed`), whose bands do
+ *   not rise or whose open band is not last, or a weight band with more than three decimals
+ *   (`policies_band_order`), or whose `transit_days.max` is below its `min` (`policies_transit_order`):
+ *   dropped; a `carrier` the vocabulary does not know: the carrier alone (`policies_carrier_unknown`); a
+ *   zone left with no service (`policies_zone_empty`), a profile with no zone (`policies_profile_empty`);
+ * - a return policy: a `window` with no `window_days` (`policies_window_days_missing`), one that takes
+ *   returns with no resolution or no method (`policies_terms_missing`) or by post with no
+ *   `return_postage` (`policies_postage_missing`): dropped; `window_days` beside another eligibility
+ *   (`policies_window_days_unused`) and the terms of a `not_accepted` policy
+ *   (`policies_not_accepted_terms`): the member alone.
+ * A part dropped is never stood in for: an offer that names it is held (`shipping_profile_unknown`,
+ * `return_policy_unknown`), and the default is only ever a part the document marks so. Returns null
+ * when the document itself does not read (`policies_document_unreadable`).
  */
 export function readCataloguePolicies(raw: unknown): PoliciesRead | null {
   const env = envelopeSchema.safeParse(raw);
@@ -298,11 +309,11 @@ export function readCataloguePolicies(raw: unknown): PoliciesRead | null {
     const path = `shipping_profiles[${pi}]`;
     const p = shippingProfileSchema.safeParse(rawProfile);
     if (!p.success) {
-      problems.push({ path, code: "unreadable" });
+      problems.push({ path, code: "policies_unreadable" });
       continue;
     }
     if (profiles.some((q) => q.id === p.data.id)) {
-      problems.push({ path, code: "id_twice" });
+      problems.push({ path, code: "policies_id_twice" });
       continue;
     }
     const zones: ShippingZone[] = [];
@@ -314,38 +325,38 @@ export function readCataloguePolicies(raw: unknown): PoliciesRead | null {
           [...moneyOf(svc.rate), ...(svc.free_over ? [svc.free_over] : [])].map((m) => m.currency),
         );
         const why: PoliciesProblemCode | null = services.some((s) => s.id === svc.id)
-          ? "id_twice"
+          ? "policies_id_twice"
           : currencies.size > 1
-            ? "currency_mixed"
+            ? "policies_currency_mixed"
             : !bandsRise(svc.rate)
-              ? "band_order"
+              ? "policies_band_order"
               : svc.transit_days.max < svc.transit_days.min
-                ? "transit_order"
+                ? "policies_transit_order"
                 : null;
         if (why) {
           problems.push({ path: at, code: why });
           continue;
         }
         if (svc.carrier !== undefined && !carrierOf(svc.carrier)) {
-          problems.push({ path: `${at}.carrier`, code: "carrier_unknown" });
+          problems.push({ path: `${at}.carrier`, code: "policies_carrier_unknown" });
           const { carrier: _c, ...rest } = svc;
           services.push(rest);
           continue;
         }
         services.push(svc);
       }
-      if (services.length === 0) problems.push({ path: `${path}.zones[${zi}]`, code: "zone_empty" });
+      if (services.length === 0) problems.push({ path: `${path}.zones[${zi}]`, code: "policies_zone_empty" });
       else zones.push({ ...zone, services });
     }
     if (zones.length === 0) {
-      problems.push({ path, code: "profile_empty" });
+      problems.push({ path, code: "policies_profile_empty" });
       continue;
     }
     let profile: ShippingProfile = { ...p.data, zones };
     if (profile.default) {
       if (defaultShipping === null) defaultShipping = profile.id;
       else {
-        problems.push({ path: `${path}.default`, code: "default_twice" });
+        problems.push({ path: `${path}.default`, code: "policies_default_twice" });
         const { default: _d, ...rest } = profile;
         profile = rest;
       }
@@ -359,11 +370,11 @@ export function readCataloguePolicies(raw: unknown): PoliciesRead | null {
     const path = `return_policies[${ri}]`;
     const r = returnPolicySchema.safeParse(rawPolicy);
     if (!r.success) {
-      problems.push({ path, code: "unreadable" });
+      problems.push({ path, code: "policies_unreadable" });
       continue;
     }
     if (policies.some((q) => q.id === r.data.id)) {
-      problems.push({ path, code: "id_twice" });
+      problems.push({ path, code: "policies_id_twice" });
       continue;
     }
     let policy: ReturnPolicy = r.data;
@@ -374,18 +385,18 @@ export function readCataloguePolicies(raw: unknown): PoliciesRead | null {
         policy.return_postage !== undefined ||
         policy.restocking_fee !== undefined
       ) {
-        problems.push({ path, code: "not_accepted_terms" });
+        problems.push({ path, code: "policies_not_accepted_terms" });
         const { return_postage: _p, restocking_fee: _f, ...rest } = policy;
         policy = { ...rest, resolutions: [], methods: [] };
       }
     } else {
       const why: PoliciesProblemCode | null =
         policy.eligibility === "window" && policy.window_days === undefined
-          ? "window_days_missing"
+          ? "policies_window_days_missing"
           : !policy.resolutions.length || !policy.methods.length
-            ? "terms_missing"
+            ? "policies_terms_missing"
             : policy.methods.includes("by_post") && policy.return_postage === undefined
-              ? "postage_missing"
+              ? "policies_postage_missing"
               : null;
       if (why) {
         problems.push({ path, code: why });
@@ -393,14 +404,14 @@ export function readCataloguePolicies(raw: unknown): PoliciesRead | null {
       }
     }
     if (policy.eligibility !== "window" && policy.window_days !== undefined) {
-      problems.push({ path: `${path}.window_days`, code: "window_days_unused" });
+      problems.push({ path: `${path}.window_days`, code: "policies_window_days_unused" });
       const { window_days: _w, ...rest } = policy;
       policy = rest;
     }
     if (policy.default) {
       if (defaultReturns === null) defaultReturns = policy.id;
       else {
-        problems.push({ path: `${path}.default`, code: "default_twice" });
+        problems.push({ path: `${path}.default`, code: "policies_default_twice" });
         const { default: _d, ...rest } = policy;
         policy = rest;
       }
@@ -425,11 +436,13 @@ export interface QuoteDestination {
   readonly postal_code?: string | null | undefined;
 }
 
-/** One line of a basket: an offer's price, how many, and its weight when it has one. */
+/** One line of a basket: an offer's price, how many, its weight when it has one, and whether it is age-restricted. */
 export interface QuoteLine {
   readonly price: { readonly value: number; readonly currency: string };
   readonly quantity: number;
   readonly weight?: CatalogueWeight | null | undefined;
+  /** The offer has `age_restricted`: only a service marked `id_check` may carry it. */
+  readonly age_restricted?: boolean | undefined;
 }
 
 export interface QuotedService {
@@ -441,7 +454,7 @@ export interface QuotedService {
   readonly transit_days: { readonly min: number; readonly max: number };
   /** The fee, or null when this service cannot take the basket, with why. */
   readonly fee: PolicyMoney | null;
-  readonly why?: "currency" | "weight_missing" | "weight_unit" | "too_heavy" | "over_bands";
+  readonly why?: "id_check" | "currency" | "weight_missing" | "weight_unit" | "too_heavy" | "over_bands";
 }
 
 export interface ShippingQuote {
@@ -476,8 +489,42 @@ function weightUnit(u: string): WeightUnit | null {
   return (WEIGHT_UNITS as readonly string[]).includes(u) ? (u as WeightUnit) : null;
 }
 
-function postcode(p: string): string {
-  return p.toUpperCase().replace(/[\s-]/g, "");
+/**
+ * The countries whose postcodes are an outward code and a three-character inward code (`PH20 1AA`): the
+ * United Kingdom, the Isle of Man, Jersey and Guernsey.
+ */
+export const OUTWARD_INWARD_COUNTRIES: readonly string[] = ["GB", "IM", "JE", "GY"];
+
+/**
+ * A postcode as a reader compares it: upper case, spaces and hyphens left out; in a country of
+ * `OUTWARD_INWARD_COUNTRIES`, written as its outward code, one space and its inward code (`ph200ab` is
+ * `PH20 0AB`), when it has an inward code.
+ */
+export function postcodeOf(country: string, postalCode: string): string {
+  const p = postalCode.toUpperCase().replace(/[\s-]/g, "");
+  if (OUTWARD_INWARD_COUNTRIES.includes(country.toUpperCase()) && /^[A-Z0-9]{2,4}[0-9][A-Z]{2}$/.test(p))
+    return `${p.slice(0, -3)} ${p.slice(-3)}`;
+  return p;
+}
+
+const isDigit = (c: string) => c >= "0" && c <= "9";
+
+/**
+ * Whether a postcode (as `postcodeOf` writes it) starts with a destination's prefix
+ * (`vectors/catalogue-policies.json`). Elsewhere, its start, spaces and hyphens left out of both. In a
+ * country of `OUTWARD_INWARD_COUNTRIES`, a prefix with a space is the start of the whole postcode (`SW1A 1`);
+ * one without is an outward code or its start, and stops where a letter meets a digit or a digit a letter:
+ * `PH2` is `PH2 0AB` and never `PH20 1AA`, `B` is Birmingham and never `BA1` (Bath), `EC1` is `EC1A 1BB`,
+ * and `PH` every PH district.
+ */
+export function postcodeMatches(country: string, postcode: string, prefix: string): boolean {
+  if (!OUTWARD_INWARD_COUNTRIES.includes(country.toUpperCase()))
+    return postcode.replace(/[\s-]/g, "").startsWith(prefix.replace(/[\s-]/g, ""));
+  if (prefix.includes(" ")) return postcode.startsWith(prefix);
+  const outward = postcode.split(" ")[0] as string;
+  if (!outward.startsWith(prefix)) return false;
+  const next = outward.charAt(prefix.length);
+  return next === "" || isDigit(next) !== isDigit(prefix.charAt(prefix.length - 1));
 }
 
 function placeIn(d: QuoteDestination, entry: ShippingDestination): boolean {
@@ -485,8 +532,13 @@ function placeIn(d: QuoteDestination, entry: ShippingDestination): boolean {
   if (!entry.regions && !entry.postal_prefixes) return true;
   const region = d.region?.toUpperCase();
   if (region && entry.regions?.includes(region)) return true;
-  const pc = d.postal_code ? postcode(d.postal_code) : "";
-  return pc !== "" && (entry.postal_prefixes ?? []).some((p) => pc.startsWith(p));
+  const pc = d.postal_code ? postcodeOf(entry.country, d.postal_code) : "";
+  return pc !== "" && (entry.postal_prefixes ?? []).some((p) => postcodeMatches(entry.country, pc, p));
+}
+
+/** Whether any service of a profile is one the owner marks as checking ID at handover. */
+export function profileChecksId(profile: ShippingProfile): boolean {
+  return profile.zones.some((z) => z.services.some((s) => s.id_check));
 }
 
 /**
@@ -495,8 +547,9 @@ function placeIn(d: QuoteDestination, entry: ShippingDestination): boolean {
  * it; and for each of its services, the fee, or null with why. A region or postcode the buyer did not
  * give matches no entry that names regions or postcodes.
  *
- * For each service, in this order: every line priced in the service's currency (`currency`: no amount is
- * ever converted); for `by_weight`, every line with a weight (`weight_missing`), in a unit it knows
+ * For each service, in this order: when a line is age-restricted, a service marked `id_check` (`id_check`:
+ * an age-restricted line goes only by a service whose carrier checks ID at handover); every line priced
+ * in the service's currency (`currency`: no amount is ever converted); for `by_weight`, every line with a weight (`weight_missing`), in a unit it knows
  * (`weight_unit`), and the basket no heavier than its last band (`too_heavy`); then goods worth at least
  * `free_over` ship free; else `flat` is its amount, `per_item` its amount for each unit, `by_weight` and
  * `by_order_value` the first band whose `up_to` is at least the basket's (`over_bands` past the last).
@@ -535,6 +588,7 @@ function quoteService(s: ShippingService, lines: readonly QuoteLine[]): QuotedSe
   const cur = moneyOf(s.rate)[0]?.currency ?? s.free_over?.currency ?? "";
   const no = (why: NonNullable<QuotedService["why"]>): QuotedService => ({ ...base, fee: null, why });
   const fee = (value: bigint): QuotedService => ({ ...base, fee: { value: Number(value), currency: cur } });
+  if (!s.id_check && lines.some((l) => l.age_restricted)) return no("id_check");
   if (lines.some((l) => l.price.currency !== cur)) return no("currency");
   const worth = lines.reduce((sum, l) => sum + BigInt(l.price.value) * BigInt(l.quantity), 0n);
   const units = lines.reduce((sum, l) => sum + BigInt(l.quantity), 0n);

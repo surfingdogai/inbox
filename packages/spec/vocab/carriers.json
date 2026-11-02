@@ -1,5 +1,5 @@
 {
-  "description": "The carriers a catalogue's shipping service may name (docs/protocol/network.md §4.18, catalogue version 2; the policies document's services[].carrier), and that an order's shipments name later: each carrier's id, name, the countries it carries parcels within (empty: worldwide), its kind (post: a country's postal operator; parcel: a parcel network; express: an express courier), whether its numbers follow the UPU S10 form (s10: two letters, nine digits, two letters, ^[A-Z]{2}[0-9]{9}[A-Z]{2}$, for its international items), the address of its own public tracking page with {number} for the tracking number (tracking_url_template; null where that page does not take the number in its address), and the registrable domains its tracking pages are on (domains). A tracking link a business gives is shown only when it is on one of its carrier's domains, or is the carrier's template filled in. No carrier here is called by any API: the business buys and prints its own labels. An id is never removed or renamed.",
+  "description": "The carriers a catalogue's shipping service may name (docs/protocol/network.md §4.18, catalogue version 2; the policies document's services[].carrier), and that an order's shipments name later: each carrier's id, name, the countries it carries parcels within (empty: worldwide), its kind (post: a country's postal operator; parcel: a parcel network; express: an express courier), whether its numbers follow the UPU S10 form (s10: two letters, nine digits, two letters, ^[A-Z]{2}[0-9]{9}[A-Z]{2}$, for its international items), the form every one of its tracking numbers takes, as a regular expression (number_pattern; null where it is not known, and then a number is only checked to be 4 to 40 letters, digits and hyphens), the address of its own public tracking page with {number} for the tracking number (tracking_url_template; null where that page does not take the number in its address), and the registrable domains its tracking pages are on (domains). A tracking link a business gives is shown only when it is on one of its carrier's domains, or is the carrier's template filled in. No carrier here is called by any API: the business buys and prints its own labels. An id is never removed or renamed.",
   "version": 1,
   "kinds": ["post", "parcel", "express"],
   "s10_pattern": "^[A-Z]{2}[0-9]{9}[A-Z]{2}$",
@@ -10,6 +10,7 @@
       "countries": [],
       "kind": "express",
       "s10": false,
+      "number_pattern": null,
       "tracking_url_template": "https://www.dhl.com/global-en/home/tracking/tracking-express.html?submit=1&tracking-id={number}",
       "domains": ["dhl.com"]
     },
@@ -19,6 +20,7 @@
       "countries": [],
       "kind": "express",
       "s10": false,
+      "number_pattern": null,
       "tracking_url_template": "https://www.ups.com/track?tracknum={number}",
       "domains": ["ups.com"]
     },
@@ -28,6 +30,7 @@
       "countries": [],
       "kind": "express",
       "s10": false,
+      "number_pattern": null,
       "tracking_url_template": "https://www.fedex.com/fedextrack/?trknbr={number}",
       "domains": ["fedex.com"]
     },
@@ -37,6 +40,7 @@
       "countries": [],
       "kind": "express",
       "s10": false,
+      "number_pattern": null,
       "tracking_url_template": null,
       "domains": ["aramex.com"]
     },
@@ -66,6 +70,7 @@
       ],
       "kind": "parcel",
       "s10": false,
+      "number_pattern": null,
       "tracking_url_template": null,
       "domains": ["dpd.com", "dpd.de", "dpd.fr", "dpd.nl", "dpd.be", "dpd.at", "dpd.pt", "dpd.ie"]
     },
@@ -93,6 +98,7 @@
       ],
       "kind": "parcel",
       "s10": false,
+      "number_pattern": null,
       "tracking_url_template": null,
       "domains": ["gls-group.eu", "gls-group.com"]
     },
@@ -102,6 +108,7 @@
       "countries": ["GB", "IT", "PL", "PT", "ES", "FR"],
       "kind": "parcel",
       "s10": false,
+      "number_pattern": null,
       "tracking_url_template": null,
       "domains": ["inpost.pl", "inpost.co.uk", "inpost.it", "inpost.pt", "inpost.es", "inpost.fr"]
     },
@@ -111,6 +118,7 @@
       "countries": ["GB"],
       "kind": "post",
       "s10": true,
+      "number_pattern": null,
       "tracking_url_template": "https://www.royalmail.com/track-your-item#/tracking-results/{number}",
       "domains": ["royalmail.com"]
     },
@@ -120,6 +128,7 @@
       "countries": ["GB"],
       "kind": "parcel",
       "s10": false,
+      "number_pattern": null,
       "tracking_url_template": "https://www.parcelforce.com/track-trace?trackNumber={number}",
       "domains": ["parcelforce.com"]
     },
@@ -129,6 +138,7 @@
       "countries": ["GB"],
       "kind": "parcel",
       "s10": false,
+      "number_pattern": null,
       "tracking_url_template": null,
       "domains": ["evri.com"]
     },
@@ -138,6 +148,7 @@
       "countries": ["GB"],
       "kind": "parcel",
       "s10": false,
+      "number_pattern": null,
       "tracking_url_template": null,
       "domains": ["dpd.co.uk"]
     },
@@ -147,6 +158,7 @@
       "countries": ["GB"],
       "kind": "parcel",
       "s10": false,
+      "number_pattern": null,
       "tracking_url_template": null,
       "domains": ["yodel.co.uk"]
     },
@@ -156,6 +168,7 @@
       "countries": ["IE"],
       "kind": "post",
       "s10": true,
+      "number_pattern": null,
       "tracking_url_template": null,
       "domains": ["anpost.com"]
     },
@@ -165,6 +178,7 @@
       "countries": ["PT"],
       "kind": "post",
       "s10": true,
+      "number_pattern": null,
       "tracking_url_template": null,
       "domains": ["ctt.pt"]
     },
@@ -174,6 +188,7 @@
       "countries": ["ES"],
       "kind": "post",
       "s10": true,
+      "number_pattern": null,
       "tracking_url_template": null,
       "domains": ["correos.es"]
     },
@@ -183,6 +198,7 @@
       "countries": ["FR"],
       "kind": "post",
       "s10": true,
+      "number_pattern": null,
       "tracking_url_template": "https://www.laposte.fr/outils/suivre-vos-envois?code={number}",
       "domains": ["laposte.fr"]
     },
@@ -192,6 +208,7 @@
       "countries": ["FR"],
       "kind": "express",
       "s10": false,
+      "number_pattern": null,
       "tracking_url_template": null,
       "domains": ["chronopost.fr"]
     },
@@ -201,6 +218,7 @@
       "countries": ["DE"],
       "kind": "post",
       "s10": true,
+      "number_pattern": null,
       "tracking_url_template": "https://www.dhl.de/de/privatkunden/pakete-empfangen/verfolgen.html?piececode={number}",
       "domains": ["dhl.de", "deutschepost.de"]
     },
@@ -210,6 +228,7 @@
       "countries": ["DE"],
       "kind": "parcel",
       "s10": false,
+      "number_pattern": null,
       "tracking_url_template": null,
       "domains": ["myhermes.de"]
     },
@@ -219,6 +238,7 @@
       "countries": ["NL"],
       "kind": "post",
       "s10": true,
+      "number_pattern": null,
       "tracking_url_template": null,
       "domains": ["postnl.nl"]
     },
@@ -228,6 +248,7 @@
       "countries": ["BE"],
       "kind": "post",
       "s10": true,
+      "number_pattern": null,
       "tracking_url_template": null,
       "domains": ["bpost.be"]
     },
@@ -237,6 +258,7 @@
       "countries": ["IT"],
       "kind": "post",
       "s10": true,
+      "number_pattern": null,
       "tracking_url_template": null,
       "domains": ["poste.it"]
     },
@@ -246,6 +268,7 @@
       "countries": ["CH"],
       "kind": "post",
       "s10": true,
+      "number_pattern": null,
       "tracking_url_template": null,
       "domains": ["post.ch"]
     },
@@ -255,6 +278,7 @@
       "countries": ["AT"],
       "kind": "post",
       "s10": true,
+      "number_pattern": null,
       "tracking_url_template": null,
       "domains": ["post.at"]
     },
@@ -264,6 +288,7 @@
       "countries": ["DK", "SE"],
       "kind": "post",
       "s10": true,
+      "number_pattern": null,
       "tracking_url_template": null,
       "domains": ["postnord.com", "postnord.se", "postnord.dk"]
     },
@@ -273,6 +298,7 @@
       "countries": ["NO"],
       "kind": "post",
       "s10": true,
+      "number_pattern": null,
       "tracking_url_template": null,
       "domains": ["posten.no"]
     },
@@ -282,6 +308,7 @@
       "countries": ["US"],
       "kind": "post",
       "s10": true,
+      "number_pattern": null,
       "tracking_url_template": "https://tools.usps.com/go/TrackConfirmAction?tLabels={number}",
       "domains": ["usps.com"]
     },
@@ -291,6 +318,7 @@
       "countries": ["CA"],
       "kind": "post",
       "s10": true,
+      "number_pattern": null,
       "tracking_url_template": "https://www.canadapost-postescanada.ca/track-reperage/en#/search?searchFor={number}",
       "domains": ["canadapost-postescanada.ca", "canadapost.ca"]
     },
@@ -300,6 +328,7 @@
       "countries": ["CA"],
       "kind": "express",
       "s10": false,
+      "number_pattern": null,
       "tracking_url_template": null,
       "domains": ["purolator.com"]
     },
@@ -309,6 +338,7 @@
       "countries": ["BR"],
       "kind": "post",
       "s10": true,
+      "number_pattern": null,
       "tracking_url_template": null,
       "domains": ["correios.com.br"]
     },
@@ -318,6 +348,7 @@
       "countries": ["AU"],
       "kind": "post",
       "s10": true,
+      "number_pattern": null,
       "tracking_url_template": null,
       "domains": ["auspost.com.au"]
     },
@@ -327,6 +358,7 @@
       "countries": ["NZ"],
       "kind": "post",
       "s10": true,
+      "number_pattern": null,
       "tracking_url_template": null,
       "domains": ["nzpost.co.nz"]
     },
@@ -336,6 +368,7 @@
       "countries": ["JP"],
       "kind": "post",
       "s10": true,
+      "number_pattern": null,
       "tracking_url_template": null,
       "domains": ["japanpost.jp"]
     },
@@ -345,6 +378,7 @@
       "countries": ["JP"],
       "kind": "parcel",
       "s10": false,
+      "number_pattern": null,
       "tracking_url_template": null,
       "domains": ["kuronekoyamato.co.jp"]
     },
@@ -354,6 +388,7 @@
       "countries": ["IN"],
       "kind": "post",
       "s10": true,
+      "number_pattern": null,
       "tracking_url_template": null,
       "domains": ["indiapost.gov.in"]
     },
@@ -363,6 +398,7 @@
       "countries": ["SG"],
       "kind": "post",
       "s10": true,
+      "number_pattern": null,
       "tracking_url_template": null,
       "domains": ["singpost.com"]
     },
@@ -372,6 +408,7 @@
       "countries": ["HK"],
       "kind": "post",
       "s10": true,
+      "number_pattern": null,
       "tracking_url_template": null,
       "domains": ["hongkongpost.hk"]
     },
@@ -381,6 +418,7 @@
       "countries": ["CN", "HK"],
       "kind": "express",
       "s10": false,
+      "number_pattern": null,
       "tracking_url_template": null,
       "domains": ["sf-express.com"]
     }

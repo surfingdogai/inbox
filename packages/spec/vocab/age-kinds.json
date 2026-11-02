@@ -1,5 +1,5 @@
 {
-  "description": "The kinds of age-restricted product a catalogue version 2 offer's age_restricted names (docs/protocol/network.md §4.18, catalogue version 2): each kind's label in five languages, what it covers, and whether a network lists it (network). The minimum age is never here: the business sets it for each product (min_age, and by_country where it sells), checked by ID at handover, and this list keeps no table of what any law says. A kind whose network is off is kept off networks at product level, ID check or not: a reader holds every offer of that kind and lists the business's other products as before. A kind is never removed or renamed, and a kind's network never moves from off to listed without a new version of this file.",
+  "description": "The kinds of age-restricted product a catalogue version 2 offer's age_restricted names (docs/protocol/network.md §4.18, catalogue version 2): each kind's label in five languages, what it covers, and whether a network lists it (network). The minimum age is never here: the business sets it for each product (min_age, and by_country where it sells), checked by ID at handover, and this list keeps no table of what any law says. Other spellings a reader takes as the kind are its also (vape is tobacco_nicotine, firearms is weapons). A kind whose network is off is kept off networks at product level, ID check or not: a reader holds every offer of that kind and lists the business's other products as before. A kind that is none of these, nor any of their also spellings, is held too (age_kind_unknown) until the business picks one: knives are blades or weapons, and the business says which. A kind is never removed or renamed, a spelling never moves to another kind, and a kind's network never moves from off to listed without a new version of this file. A reader that meets a kind a later version of this file adds holds it until it reads that version.",
   "version": 1,
   "languages": ["en", "pt", "es", "fr", "de"],
   "kinds": [
@@ -7,7 +7,8 @@
       "kind": "alcohol",
       "labels": { "en": "Alcohol", "pt": "Álcool", "es": "Alcohol", "fr": "Alcool", "de": "Alkohol" },
       "covers": "Beer, wine, cider, spirits and other drinks with alcohol in them.",
-      "network": "listed"
+      "network": "listed",
+      "also": ["alcoholic_drinks", "beer", "wine", "cider", "spirits", "liquor", "liqueur", "alcool", "alkohol"]
     },
     {
       "kind": "tobacco_nicotine",
@@ -19,19 +20,69 @@
         "de": "Tabak und Nikotin"
       },
       "covers": "Cigarettes, cigars, rolling and pipe tobacco, e-cigarettes and vapes with their refills, heated tobacco and nicotine pouches.",
-      "network": "off"
+      "network": "off",
+      "also": [
+        "tobacco",
+        "nicotine",
+        "nicotine_pouches",
+        "snus",
+        "vape",
+        "vapes",
+        "vaping",
+        "e_cigarette",
+        "e_cigarettes",
+        "ecig",
+        "ecigs",
+        "e_liquid",
+        "e_liquids",
+        "cigarette",
+        "cigarettes",
+        "cigar",
+        "cigars",
+        "heated_tobacco",
+        "shisha",
+        "hookah",
+        "smoking",
+        "tabaco",
+        "tabac",
+        "tabak"
+      ]
     },
     {
       "kind": "cannabis",
       "labels": { "en": "Cannabis", "pt": "Canábis", "es": "Cannabis", "fr": "Cannabis", "de": "Cannabis" },
       "covers": "Cannabis, and products made from it that contain THC. Not hemp seeds, hemp oil, hemp protein or other hemp foods.",
-      "network": "off"
+      "network": "off",
+      "also": ["thc", "marijuana", "marihuana", "hashish", "cannabis_edibles"]
     },
     {
       "kind": "weapons",
       "labels": { "en": "Weapons", "pt": "Armas", "es": "Armas", "fr": "Armes", "de": "Waffen" },
       "covers": "Firearms and their parts, ammunition, air guns, crossbows, swords, knives sold as weapons and other offensive weapons.",
-      "network": "off"
+      "network": "off",
+      "also": [
+        "weapon",
+        "firearm",
+        "firearms",
+        "gun",
+        "guns",
+        "ammunition",
+        "ammo",
+        "air_gun",
+        "air_guns",
+        "airgun",
+        "airguns",
+        "crossbow",
+        "crossbows",
+        "sword",
+        "swords",
+        "combat_knife",
+        "combat_knives",
+        "knife_weapon",
+        "pepper_spray",
+        "stun_gun",
+        "taser"
+      ]
     },
     {
       "kind": "blades",
@@ -43,7 +94,18 @@
         "de": "Messer und Klingen"
       },
       "covers": "Kitchen, craft and pocket knives, razor blades, axes and other tools with a blade, sold as tools.",
-      "network": "listed"
+      "network": "listed",
+      "also": [
+        "blade",
+        "razor",
+        "razor_blades",
+        "axe",
+        "axes",
+        "kitchen_knife",
+        "kitchen_knives",
+        "pocket_knife",
+        "pocket_knives"
+      ]
     },
     {
       "kind": "fireworks",
@@ -55,7 +117,8 @@
         "de": "Feuerwerk"
       },
       "covers": "Fireworks, sparklers, party poppers and other pyrotechnics.",
-      "network": "listed"
+      "network": "listed",
+      "also": ["firework", "pyrotechnics", "sparklers"]
     },
     {
       "kind": "solvents",
@@ -67,7 +130,8 @@
         "de": "Lösungsmittel und Ätzendes"
       },
       "covers": "Solvents, lighter gas and fluid, spray paint and corrosive cleaners.",
-      "network": "listed"
+      "network": "listed",
+      "also": ["solvent", "corrosives", "spray_paint", "lighter_gas", "lighter_fluid", "butane"]
     },
     {
       "kind": "energy_drinks",
@@ -79,7 +143,8 @@
         "de": "Energydrinks"
       },
       "covers": "Drinks high in caffeine sold as energy drinks.",
-      "network": "listed"
+      "network": "listed",
+      "also": ["energy_drink"]
     },
     {
       "kind": "rated_media",
@@ -91,13 +156,15 @@
         "de": "Filme und Spiele mit Altersfreigabe"
       },
       "covers": "Films, video games and other media with an age rating.",
-      "network": "listed"
+      "network": "listed",
+      "also": ["age_rated", "films", "movies", "video_games"]
     },
     {
       "kind": "gambling",
       "labels": { "en": "Gambling", "pt": "Jogo", "es": "Juegos de azar", "fr": "Jeux d'argent", "de": "Glücksspiel" },
       "covers": "Lottery tickets, scratchcards and other games of chance.",
-      "network": "listed"
+      "network": "listed",
+      "also": ["lottery", "lottery_tickets", "scratchcards", "betting"]
     },
     {
       "kind": "adult",
@@ -109,7 +176,8 @@
         "de": "Nur für Erwachsene"
       },
       "covers": "Adult content and products sold to adults only.",
-      "network": "listed"
+      "network": "listed",
+      "also": ["adults_only", "adult_content"]
     },
     {
       "kind": "medicines",
@@ -121,13 +189,15 @@
         "de": "Arzneimittel mit Altersgrenze"
       },
       "covers": "Medicines sold without a prescription that are sold only above an age. Never a prescription-only medicine.",
-      "network": "listed"
+      "network": "listed",
+      "also": ["medicine", "otc_medicines"]
     },
     {
       "kind": "other",
       "labels": { "en": "Other", "pt": "Outro", "es": "Otro", "fr": "Autre", "de": "Sonstiges" },
       "covers": "Anything else the business sells only above an age.",
-      "network": "listed"
+      "network": "listed",
+      "also": []
     }
   ]
 }

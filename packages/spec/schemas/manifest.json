@@ -600,10 +600,12 @@
       "properties": {
         "feed": {
           "type": "string",
+          "pattern": "^https:\\/\\/",
           "format": "uri"
         },
         "items": {
           "type": "string",
+          "pattern": "^https:\\/\\/",
           "format": "uri"
         },
         "versions": {
@@ -615,11 +617,13 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 99
-          }
+          },
+          "uniqueItems": true
         },
         "policies": {
           "description": "The signed policies document: shipping profiles and return policies (catalogue version 2).",
           "type": "string",
+          "pattern": "^https:\\/\\/",
           "format": "uri"
         }
       },

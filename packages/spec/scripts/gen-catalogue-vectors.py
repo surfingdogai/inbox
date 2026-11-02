@@ -25,11 +25,24 @@ import copy
 import hashlib
 import json
 import os
+import re
+import urllib.parse
 from datetime import datetime, timedelta, timezone
 from fractions import Fraction
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 VECTORS = os.path.join(HERE, "..", "vectors")
+VOCAB = os.path.join(HERE, "..", "vocab")
+
+
+def vocab(name):
+    with open(os.path.join(VOCAB, name), encoding="utf-8") as f:
+        return json.load(f)
+
+
+# The spellings each vocabulary reads as its key or kind (data, not an implementation).
+OPTION_KEY = {w: k["key"] for k in vocab("option-keys.json")["keys"] for w in [k["key"], *k["also"]]}
+AGE_KIND = {w: k["kind"] for k in vocab("age-kinds.json")["kinds"] for w in [k["kind"], *k["also"]]}
 
 
 def write(name, doc):
@@ -258,7 +271,7 @@ V2_MEMBERS = [
     "id", "state", "sku", "name", "description", "group", "options", "price_model", "price", "price_max",
     "list_price", "unit_price", "tax_included", "availability", "available_from", "available_until", "gtin",
     "no_gtin", "multipack", "is_bundle", "brand", "mpn", "condition", "url", "media", "age_restricted",
-    "fulfil_methods", "shipping_profile", "weight", "return_policy", "updated_at", "hash",
+    "fulfil_methods", "shipping_profile", "weight", "return_policy", "withdrawal", "updated_at", "hash",
 ]
 
 BASE = {
@@ -309,29 +322,49 @@ DROP = _Drop()
 
 SINGLE = dict(group=DROP, options=DROP, id="MOKA-6", name="Moka pot, 6 cups")
 
-# The fields each code drops alone (CATALOGUE_V2_PROBLEMS in catalogue-v2-read.ts).
+# The members each drop code drops alone (CATALOGUE_V2_PROBLEMS in catalogue-problems.ts), in the order
+# the registry lists them: a reader names its drops in this order, each once. A member in NONE is set to
+# its none instead of left out.
 DROPS = {
+    "sku_dropped": ["sku"],
+    "description_dropped": ["description"],
+    "group_dropped": ["group", "options"],
+    "options_without_group": ["options"],
+    "group_without_options": ["group"],
+    "option_key_twice": ["group", "options"],
+    "list_price_dropped": ["list_price"],
     "list_price_not_fixed": ["list_price"],
     "list_price_currency": ["list_price"],
     "list_price_not_above": ["list_price"],
+    "unit_price_dropped": ["unit_price"],
     "unit_price_not_fixed": ["unit_price"],
     "unit_unknown": ["unit_price"],
     "unit_mismatch": ["unit_price"],
     "unit_measure": ["unit_price"],
     "available_from_unused": ["available_from"],
+    "gtin_dropped": ["gtin"],
+    "no_gtin_dropped": ["no_gtin"],
     "gtin_and_no_gtin": ["no_gtin"],
-    "options_without_group": ["options"],
-    "group_without_options": ["group"],
-    "option_key_twice": ["group", "options"],
+    "brand_dropped": ["brand"],
+    "mpn_dropped": ["mpn"],
+    "url_dropped": ["url"],
+    "url_off_site": ["url"],
+    "media_dropped": ["media"],
+    "media_entry_dropped": [],
+    "media_alt_dropped": [],
     "shipping_profile_unused": ["shipping_profile"],
-    "shipping_profile_unknown": ["shipping_profile"],
-    "return_policy_unknown": ["return_policy"],
+    "age_shipping_unchecked": ["shipping_profile"],
+    "weight_dropped": ["weight"],
     "weight_unit": ["weight"],
+    "withdrawal_dropped": ["withdrawal"],
 }
+NONE = {"sku": None, "description": None, "gtin": None, "no_gtin": False, "brand": None, "mpn": None, "url": None, "media": []}
 
 
-def kept(it, dropped):
-    """The item as a reader keeps it: members it does not know left out, fulfil methods once, drops applied."""
+def kept(it, dropped, media=None):
+    """The item as a reader keeps it: members it does not know left out, option keys and an age's kind read
+    through their vocabularies, fulfil methods once, drops applied. media: the pictures kept, when a drop
+    left some out (written by hand)."""
     out = {k: copy.deepcopy(it[k]) for k in V2_MEMBERS if k in it}
     if "fulfil_methods" in out:
         seen = []
@@ -339,45 +372,75 @@ def kept(it, dropped):
             if m not in seen:
                 seen.append(m)
         out["fulfil_methods"] = seen
+    if "options" in out and "group_dropped" not in dropped:
+        for o in out["options"]:
+            o["key"] = OPTION_KEY.get(o["key"], o["key"])
+    if "age_restricted" in out:
+        out["age_restricted"]["kind"] = AGE_KIND[out["age_restricted"]["kind"]]
     for code in dropped:
         for f in DROPS[code]:
-            if f == "no_gtin":
-                out["no_gtin"] = False
+            if f in NONE:
+                out[f] = copy.deepcopy(NONE[f])
             else:
                 out.pop(f, None)
+        if code == "age_shipping_unchecked":
+            out["fulfil_methods"] = [m for m in out["fulfil_methods"] if m != "shipping"]
+    if media is not None:
+        out["media"] = media
     return out
 
 
-def listed(it, dropped=()):
-    k = kept(it, dropped)
+def listed(it, dropped=(), media=None):
+    order = list(DROPS)
+    assert list(dropped) == sorted(dropped, key=order.index) and len(set(dropped)) == len(dropped), dropped
+    k = kept(it, dropped, media)
     out = {"state": "listed", "dropped": list(dropped)}
     if k != it:
         out["item"] = k
     return out
 
 
-def held(_it, problems):
-    """Held, with every problem named; the id is the case's own item's (case fills it in)."""
-    return {"state": "held", "id": None, "problems": problems}
+def held(_it, problems, path=None):
+    """Held, with every problem named; the id is the case's own item's (case fills it in). path: with
+    unreadable, the JSON Pointer of the first member that does not read, in the order the schema lists them."""
+    assert (path is not None) == (problems == ["unreadable"]), (problems, path)
+    out = {"state": "held", "id": None, "problems": problems}
+    if path is not None:
+        out["path"] = path
+    return out
+
+
+def unreadable(path):
+    return held(None, ["unreadable"], path)
 
 
 def withdrawn(_it, why):
     return {"state": "withdrawn", "id": None, "why": why}
 
 
-def case(name, it, expect, policies=False):
+def case(name, it, expect, policies=False, site=None, note=None):
     if expect["state"] in ("held", "withdrawn"):
-        own = it.get("id")
+        own = it.get("id") if isinstance(it, dict) else None
         expect = dict(expect, id=own if isinstance(own, str) else None)
-        expect = {k: expect[k] for k in (["state", "id", "problems"] if expect["state"] == "held" else ["state", "id", "why"])}
+        keys = ["state", "id", "problems", "path"] if expect["state"] == "held" else ["state", "id", "why"]
+        expect = {k: expect[k] for k in keys if k in expect}
     c = {"name": name, "item": it, "expect": expect}
     if policies:
         c["with_policies"] = True
+    if site is not None:
+        c["site"] = site
+    if note:
+        c["note"] = note
     return c
 
 
 LONG_ID = "SKU-" + "x" * 252
 assert len(LONG_ID) == 256
+AGE = lambda kind, age=18, **more: dict(SINGLE, age_restricted=dict({"min_age": age, "kind": kind, "check": "id_at_handover"}, **more))  # noqa: E731
+EMOJI_5000 = "\U0001F355" * 2500 + "é" * 2500
+assert len(EMOJI_5000) == 5000 and len(EMOJI_5000.encode("utf-16-le")) // 2 == 7500
+SITE = ["loja.example"]
+PIC = {"type": "image", "url": "https://loja.example/img/moka-6.jpg", "alt": "A six-cup moka pot"}
 
 CHECKS = [
     case("a variant, every field", item(), listed(item())),
@@ -387,27 +450,40 @@ CHECKS = [
         {"id": "MOKA-3-ALU", "state": "withdrawn", "updated_at": "2026-11-02T09:11:00.000Z"},
         {"state": "withdrawn", "id": "MOKA-3-ALU", "why": "withdrawn"},
     ),
+    case(
+        "withdrawn, with an id of 257 characters",
+        {"id": LONG_ID + "x", "state": "withdrawn", "updated_at": "2026-11-02T09:11:00.000Z"},
+        unreadable("/id"),
+    ),
+    case("not an object at all", "MOKA-6-ALU", unreadable("")),
+    case("a state it does not know", item(state="archived"), unreadable("/state")),
     case("an id of 256 characters", item(id=LONG_ID), listed(item(id=LONG_ID))),
-    case("an id of 257 characters", item(id=LONG_ID + "x"), held(item(id=LONG_ID + "x"), ["unreadable"])),
-    case("an id with a comma", item(id="MOKA,6"), held(item(id="MOKA,6"), ["unreadable"])),
-    case("an id with a space", item(id="MOKA 6"), held(item(id="MOKA 6"), ["unreadable"])),
+    case("an id of 257 characters", item(id=LONG_ID + "x"), unreadable("/id")),
+    case("an id with a comma", item(id="MOKA,6"), unreadable("/id")),
+    case("an id with a space", item(id="MOKA 6"), unreadable("/id")),
     case(
         "an id that is a path, printable ASCII",
         item(id="gid://shop/ProductVariant/4471"),
         listed(item(id="gid://shop/ProductVariant/4471")),
     ),
-    case("a price of 0", item(price={"value": 0, "currency": "EUR"}), held(item(), ["unreadable"])),
+    case("a price of 0", item(price={"value": 0, "currency": "EUR"}), unreadable("/price/value")),
     case(
         "a price written as a decimal",
         item(price={"value": "34.90", "currency": "EUR"}),
-        held(item(), ["unreadable"]),
+        unreadable("/price/value"),
+    ),
+    case(
+        "the first member that does not read, in the schema's order",
+        item(name=DROP, price={"value": 0, "currency": "EUR"}, availability="3 left"),
+        unreadable("/name"),
+        note="name comes before price and availability in the schema",
     ),
     case(
         "a price in no ISO 4217 currency",
         item(price={"value": 3490, "currency": "ABC"}),
         held(item(), ["currency_unknown"]),
     ),
-    case("an availability that is a count", item(availability="3 left"), held(item(), ["unreadable"])),
+    case("an availability that is a count", item(availability="3 left"), unreadable("/availability")),
     case("few left, as the owner chose to publish", item(availability="limited"), listed(item(availability="limited"))),
     case("on sale, no count kept", item(availability="on_sale"), listed(item(availability="on_sale"))),
     case("made to order", item(availability="made_to_order"), listed(item(availability="made_to_order"))),
@@ -458,6 +534,8 @@ CHECKS = [
         item(**SINGLE, gtin=None, no_gtin=True, brand=None),
         listed(item(**SINGLE, gtin=None, no_gtin=True, brand=None)),
     ),
+    case("a barcode of 13 digits: left out", item(gtin="9506000134352"), listed(item(gtin="9506000134352"), ["gtin_dropped"])),
+    case("no_gtin missing: false", item(no_gtin=DROP), listed(item(no_gtin=DROP), ["no_gtin_dropped"])),
     case("a bundle", item(**SINGLE, is_bundle=True, gtin=None), listed(item(**SINGLE, is_bundle=True, gtin=None))),
     case(
         "a bundle that is also a pack of six",
@@ -467,55 +545,61 @@ CHECKS = [
     case("a pack of twelve", item(**SINGLE, multipack=12), listed(item(**SINGLE, multipack=12))),
     case(
         "alcohol, 18 and over, 21 in the US",
-        item(**SINGLE, age_restricted={"min_age": 18, "kind": "alcohol", "by_country": {"US": 21}, "check": "id_at_handover"}),
-        listed(
-            item(**SINGLE, age_restricted={"min_age": 18, "kind": "alcohol", "by_country": {"US": 21}, "check": "id_at_handover"})
-        ),
+        item(**AGE("alcohol", by_country={"US": 21})),
+        listed(item(**AGE("alcohol", by_country={"US": 21}))),
     ),
     case(
-        "a kitchen knife, 18 and over",
-        item(**SINGLE, age_restricted={"min_age": 18, "kind": "blades", "check": "id_at_handover"}),
-        listed(item(**SINGLE, age_restricted={"min_age": 18, "kind": "blades", "check": "id_at_handover"})),
+        "wine: read as alcohol",
+        item(**AGE("wine")),
+        listed(item(**AGE("wine"))),
+        note="an also spelling of vocab/age-kinds.json is kept as its kind",
     ),
+    case("a kitchen knife, 18 and over", item(**AGE("blades")), listed(item(**AGE("blades")))),
     case(
-        "a kind the vocabulary does not know",
-        item(**SINGLE, age_restricted={"min_age": 16, "kind": "party_balloons", "check": "id_at_handover"}),
-        listed(item(**SINGLE, age_restricted={"min_age": 16, "kind": "party_balloons", "check": "id_at_handover"})),
+        "a kind the vocabulary does not know: held until the business picks one",
+        item(**AGE("party_balloons", 16)),
+        held(item(), ["age_kind_unknown"]),
     ),
-    case(
-        "vapes, ID check or not: kept off",
-        item(**SINGLE, age_restricted={"min_age": 18, "kind": "tobacco_nicotine", "check": "id_at_handover"}),
-        held(item(), ["age_kind_off"]),
-    ),
-    case(
-        "cannabis: kept off",
-        item(**SINGLE, age_restricted={"min_age": 21, "kind": "cannabis", "check": "id_at_handover"}),
-        held(item(), ["age_kind_off"]),
-    ),
-    case(
-        "weapons: kept off",
-        item(**SINGLE, age_restricted={"min_age": 18, "kind": "weapons", "check": "id_at_handover"}),
-        held(item(), ["age_kind_off"]),
-    ),
-    case(
-        "an age under 12",
-        item(**SINGLE, age_restricted={"min_age": 11, "kind": "rated_media", "check": "id_at_handover"}),
-        held(item(), ["unreadable"]),
-    ),
-    case(
-        "an age over 21",
-        item(**SINGLE, age_restricted={"min_age": 22, "kind": "alcohol", "check": "id_at_handover"}),
-        held(item(), ["unreadable"]),
-    ),
-    case(
-        "a country's age over 25",
-        item(**SINGLE, age_restricted={"min_age": 18, "kind": "alcohol", "by_country": {"XK": 26}, "check": "id_at_handover"}),
-        held(item(), ["unreadable"]),
-    ),
+    case("knives: blades or weapons, the business says which", item(**AGE("knives")), held(item(), ["age_kind_unknown"])),
+    case("vapes, ID check or not: kept off", item(**AGE("tobacco_nicotine")), held(item(), ["age_kind_off"])),
+    case("tobacco, as a shop types it: kept off", item(**AGE("tobacco")), held(item(), ["age_kind_off"])),
+    case("nicotine: kept off", item(**AGE("nicotine")), held(item(), ["age_kind_off"])),
+    case("vape: kept off", item(**AGE("vape")), held(item(), ["age_kind_off"])),
+    case("cannabis: kept off", item(**AGE("cannabis", 21)), held(item(), ["age_kind_off"])),
+    case("weapons: kept off", item(**AGE("weapons")), held(item(), ["age_kind_off"])),
+    case("firearms: kept off", item(**AGE("firearms")), held(item(), ["age_kind_off"])),
+    case("an age under 12", item(**AGE("rated_media", 11)), unreadable("/age_restricted/min_age")),
+    case("an age over 21", item(**AGE("alcohol", 22)), unreadable("/age_restricted/min_age")),
+    case("a country's age over 25", item(**AGE("alcohol", by_country={"XK": 26})), unreadable("/age_restricted/by_country/XK")),
     case(
         "an age with no check",
-        item(**SINGLE, age_restricted={"min_age": 18, "kind": "alcohol"}),
-        held(item(), ["unreadable"]),
+        item(**dict(SINGLE, age_restricted={"min_age": 18, "kind": "alcohol"})),
+        unreadable("/age_restricted/check"),
+    ),
+    case(
+        "alcohol shipped, a profile with a service that checks ID",
+        item(**AGE("alcohol")),
+        listed(item(**AGE("alcohol"))),
+        policies=True,
+    ),
+    case(
+        "alcohol, collected or shipped by a profile that checks no ID: shipping taken out",
+        item(**AGE("alcohol"), shipping_profile="letterbox"),
+        listed(item(**AGE("alcohol"), shipping_profile="letterbox"), ["age_shipping_unchecked"]),
+        policies=True,
+    ),
+    case(
+        "alcohol, only shipped, by a profile that checks no ID",
+        item(**AGE("alcohol"), shipping_profile="letterbox", fulfil_methods=["shipping"]),
+        held(item(), ["age_shipping_only_unchecked"]),
+        policies=True,
+    ),
+    case(
+        "alcohol, no ways said: nothing to check",
+        item(**AGE("alcohol"), shipping_profile="letterbox", fulfil_methods=DROP),
+        listed(item(**AGE("alcohol"), shipping_profile="letterbox", fulfil_methods=DROP)),
+        policies=True,
+        note="a quote for it offers only services marked id_check (quoteShipping, age_restricted)",
     ),
     case("options and no group", item(group=DROP), listed(item(group=DROP), ["options_without_group"])),
     case("a group and no options", item(options=DROP), listed(item(options=DROP), ["group_without_options"])),
@@ -528,14 +612,33 @@ CHECKS = [
         ),
     ),
     case(
-        "six options",
-        item(options=[{"key": "k%d" % i, "name": "K", "value": "v"} for i in range(6)]),
-        held(item(), ["unreadable"]),
+        "colour is color",
+        item(options=[{"key": "size", "name": "Size", "value": "6 cups"}, {"key": "colour", "name": "Colour", "value": "Silver"}]),
+        listed(item(options=[{"key": "size", "name": "Size", "value": "6 cups"}, {"key": "colour", "name": "Colour", "value": "Silver"}])),
+        note="kept as color, the key of vocab/option-keys.json",
     ),
     case(
-        "a group position of 251",
+        "colour and color: one option twice",
+        item(options=[{"key": "color", "name": "Colour", "value": "Silver"}, {"key": "colour", "name": "Colour", "value": "Red"}]),
+        listed(
+            item(options=[{"key": "color", "name": "Colour", "value": "Silver"}, {"key": "colour", "name": "Colour", "value": "Red"}]),
+            ["option_key_twice"],
+        ),
+    ),
+    case(
+        "six options: shown as a product of its own",
+        item(options=[{"key": "k%d" % i, "name": "K", "value": "v"} for i in range(6)]),
+        listed(item(options=[{"key": "k%d" % i, "name": "K", "value": "v"} for i in range(6)]), ["group_dropped"]),
+    ),
+    case(
+        "an option value of 101 characters: shown as a product of its own",
+        item(options=[{"key": "size", "name": "Size", "value": "x" * 101}]),
+        listed(item(options=[{"key": "size", "name": "Size", "value": "x" * 101}]), ["group_dropped"]),
+    ),
+    case(
+        "a group position of 251 reads: the reader holds past the 250th",
         item(group={"id": "MOKA", "title": "Moka pot", "position": 251}),
-        held(item(), ["unreadable"]),
+        listed(item(group={"id": "MOKA", "title": "Moka pot", "position": 251})),
     ),
     case(
         "collect only, with a shipping profile: the profile dropped",
@@ -555,21 +658,28 @@ CHECKS = [
         policies=True,
     ),
     case(
-        "a shipping profile the policies document does not have",
+        "a shipping profile the policies document does not have: held, never the default",
         item(shipping_profile="overnight"),
-        listed(item(shipping_profile="overnight"), ["shipping_profile_unknown"]),
+        held(item(), ["shipping_profile_unknown"]),
         policies=True,
     ),
     case(
-        "a return policy the policies document does not have",
+        "a return policy the policies document does not have: held, never the default",
         item(return_policy="lifetime"),
-        listed(item(return_policy="lifetime"), ["return_policy_unknown"]),
+        held(item(), ["return_policy_unknown"]),
+        policies=True,
+    ),
+    case(
+        "collect only, naming a profile the document does not have: the profile dropped",
+        item(fulfil_methods=["pickup"], shipping_profile="overnight"),
+        listed(item(fulfil_methods=["pickup"], shipping_profile="overnight"), ["shipping_profile_unused"]),
         policies=True,
     ),
     case(
         "ids not checked without a policies document",
         item(shipping_profile="overnight", return_policy="lifetime"),
         listed(item(shipping_profile="overnight", return_policy="lifetime")),
+        note="with no document no default applies either: its shipping and returns are not known until one is read",
     ),
     case(
         "a weight in stone",
@@ -581,9 +691,35 @@ CHECKS = [
         item(weight={"value": 0.6505, "unit": "kg"}),
         listed(item(weight={"value": 0.6505, "unit": "kg"}), ["weight_unit"]),
     ),
+    case("a weight below 0", item(weight={"value": -1, "unit": "kg"}), listed(item(weight={"value": -1, "unit": "kg"}), ["weight_dropped"])),
     case("a weight in pounds", item(weight={"value": 1.5, "unit": "lb"}), listed(item(weight={"value": 1.5, "unit": "lb"}))),
-    case("a page on http", item(url="http://loja.example/produtos/moka-6"), held(item(), ["unreadable"])),
-    case("a page as a path, not an address", item(url="/produtos/moka-6"), held(item(), ["unreadable"])),
+    case("perishable: no right to withdraw", item(withdrawal="perishable"), listed(item(withdrawal="perishable"))),
+    case("the right to withdraw runs", item(withdrawal="standard"), listed(item(withdrawal="standard"))),
+    case("a withdrawal it does not know", item(withdrawal="final_sale"), listed(item(withdrawal="final_sale"), ["withdrawal_dropped"])),
+    case("a page on http: left out", item(url="http://loja.example/produtos/moka-6"), listed(item(url="http://loja.example/produtos/moka-6"), ["url_dropped"])),
+    case("a page as a path, not an address", item(url="/produtos/moka-6"), listed(item(url="/produtos/moka-6"), ["url_dropped"])),
+    case("a page with a user in it", item(url="https://shop:pw@loja.example/p"), listed(item(url="https://shop:pw@loja.example/p"), ["url_dropped"])),
+    case("a page on an IP address", item(url="https://192.0.2.10/p"), listed(item(url="https://192.0.2.10/p"), ["url_dropped"])),
+    case("a page with a space in it", item(url="https://loja.example/moka 6"), listed(item(url="https://loja.example/moka 6"), ["url_dropped"])),
+    case("https: with no //", item(url="https:loja.example/p"), listed(item(url="https:loja.example/p"), ["url_dropped"])),
+    case(
+        "a page with a port, a query and a fragment",
+        item(url="https://loja.example:8443/p?id=6&c=%C3%A9#top"),
+        listed(item(url="https://loja.example:8443/p?id=6&c=%C3%A9#top")),
+    ),
+    case("a page on the shop's own site", item(url="https://www.loja.example/p/moka-6"), listed(item(url="https://www.loja.example/p/moka-6")), site=SITE),
+    case(
+        "a page on another site: left out",
+        item(url="https://marketplace.example/p/moka-6"),
+        listed(item(url="https://marketplace.example/p/moka-6"), ["url_off_site"]),
+        site=SITE,
+    ),
+    case(
+        "a site that only ends like the shop's: another site",
+        item(url="https://notloja.example/p/moka-6"),
+        listed(item(url="https://notloja.example/p/moka-6"), ["url_off_site"]),
+        site=SITE,
+    ),
     case("no page", item(url=None), listed(item(url=None))),
     case("no pictures", item(media=[]), listed(item(media=[]))),
     case(
@@ -604,14 +740,52 @@ CHECKS = [
         ),
     ),
     case(
-        "eleven pictures",
-        item(media=[{"type": "image", "url": "https://loja.example/img/%d.jpg" % i} for i in range(11)]),
-        held(item(), ["unreadable"]),
+        "a picture on http among two: that one left out",
+        item(media=[{"type": "image", "url": "http://loja.example/img/old.jpg"}, PIC]),
+        listed(item(media=[{"type": "image", "url": "http://loja.example/img/old.jpg"}, PIC]), ["media_entry_dropped"], media=[PIC]),
     ),
-    case("media missing", item(media=DROP), held(item(), ["unreadable"])),
+    case(
+        "a picture's alt of 201 characters: the picture kept without it",
+        item(media=[dict(PIC, alt="a" * 201)]),
+        listed(item(media=[dict(PIC, alt="a" * 201)]), ["media_alt_dropped"], media=[{"type": "image", "url": PIC["url"]}]),
+    ),
+    case(
+        "eleven pictures: the first ten",
+        item(media=[{"type": "image", "url": "https://loja.example/img/%d.jpg" % i} for i in range(11)]),
+        listed(
+            item(media=[{"type": "image", "url": "https://loja.example/img/%d.jpg" % i} for i in range(11)]),
+            ["media_entry_dropped"],
+            media=[{"type": "image", "url": "https://loja.example/img/%d.jpg" % i} for i in range(10)],
+        ),
+    ),
+    case("media missing: none", item(media=DROP), listed(item(media=DROP), ["media_dropped"])),
     case("a description of 5,000 characters", item(description="a" * 5000), listed(item(description="a" * 5000))),
-    case("a description of 5,001 characters", item(description="a" * 5001), held(item(), ["unreadable"])),
-    case("price_model missing", item(price_model=DROP), held(item(), ["unreadable"])),
+    case(
+        "a description of 5,000 characters, half of them emoji",
+        item(description=EMOJI_5000),
+        listed(item(description=EMOJI_5000)),
+        note="a character is a Unicode code point: 5,000 of them here, 7,500 UTF-16 code units",
+    ),
+    case("a description of 5,001 characters: left out", item(description="a" * 5001), listed(item(description="a" * 5001), ["description_dropped"])),
+    case(
+        "a description of 5,001 characters, an emoji the last",
+        item(description="a" * 5000 + "\U0001F355"),
+        listed(item(description="a" * 5000 + "\U0001F355"), ["description_dropped"]),
+    ),
+    case(
+        "a name of 150 characters, emoji among them",
+        item(name="\U0001F355" * 150),
+        listed(item(name="\U0001F355" * 150)),
+    ),
+    case("a name of 151 characters", item(name="n" * 151), unreadable("/name")),
+    case("a SKU of 65 characters: left out", item(sku="S" * 65), listed(item(sku="S" * 65), ["sku_dropped"])),
+    case("brand missing: null", item(brand=DROP), listed(item(brand=DROP), ["brand_dropped"])),
+    case(
+        "three members that only add, each left out alone, in the registry's order",
+        item(weight={"value": 1, "unit": "st"}, url="http://loja.example/p", sku="S" * 65),
+        listed(item(weight={"value": 1, "unit": "st"}, url="http://loja.example/p", sku="S" * 65), ["sku_dropped", "url_dropped", "weight_unit"]),
+    ),
+    case("price_model missing", item(price_model=DROP), unreadable("/price_model")),
     case(
         "a member it does not know is left out, and the rest kept",
         item(image_url="https://loja.example/img/moka-6.jpg", colour_hex="#c0c0c0"),
@@ -675,8 +849,8 @@ MODELS = [
         svc(price_model="quote", price_max=EUR(9000)),
         held(svc(), ["price_with_quote", "price_max_not_range"]),
     ),
-    case("a top price of 0", svc(price_model="range", price_max=EUR(0)), held(svc(), ["unreadable"])),
-    case("a price_model it does not know", svc(price_model="per_hour"), held(svc(), ["unreadable"])),
+    case("a top price of 0", svc(price_model="range", price_max=EUR(0)), unreadable("/price_max/value")),
+    case("a price_model it does not know", svc(price_model="per_hour"), unreadable("/price_model")),
     case("a was price above a fixed price", svc(list_price=EUR(3000)), listed(svc(list_price=EUR(3000)))),
     case("a was price beside from: dropped", svc(price_model="from", list_price=EUR(3000)), listed(svc(price_model="from", list_price=EUR(3000)), ["list_price_not_fixed"])),
     case(
@@ -686,6 +860,12 @@ MODELS = [
     ),
     case("a was price equal to the price: dropped", svc(list_price=EUR(2500)), listed(svc(list_price=EUR(2500)), ["list_price_not_above"])),
     case("a was price in another currency: dropped", svc(list_price=GBP(3000)), listed(svc(list_price=GBP(3000)), ["list_price_currency"])),
+    case("a was price of 0: dropped", svc(list_price=EUR(0)), listed(svc(list_price=EUR(0)), ["list_price_dropped"])),
+    case(
+        "a unit price with no reference: dropped",
+        svc(unit_price={"measure": {"value": 1, "unit": "kg"}}),
+        listed(svc(unit_price={"measure": {"value": 1, "unit": "kg"}}), ["unit_price_dropped"]),
+    ),
     case(
         "a unit price beside range: dropped",
         svc(price_model="range", price_max=EUR(9000), unit_price={"measure": {"value": 1, "unit": "kg"}, "reference": {"value": 1, "unit": "kg"}}),
@@ -769,18 +949,24 @@ assert UNIT_PRICES[5]["expect"]["amount"] == 1 and UNIT_PRICES[6]["expect"]["amo
 
 def was_price(list_price, history):
     h = sorted(history, key=lambda p: t(p["at"]))
-    if not h or h[-1]["value"] >= list_price:
-        return {"shown": False, "why": "not_lower"}
+    if not h:
+        return {"shown": False, "why": "list_price_never_seen"}
+    if h[-1]["value"] >= list_price:
+        return {"shown": False, "why": "list_price_not_above"}
+    # The reduction began at the first of the last run of prices below it; with none before that run, the
+    # record never saw the price at or above it, and the reduction's start is not known.
     k = len(h) - 1
     while k > 0 and h[k - 1]["value"] < list_price:
         k -= 1
+    if k == 0:
+        return {"shown": False, "why": "list_price_never_seen"}
     start = t(h[k]["at"])
     window = start - timedelta(days=30)
     if t(h[0]["at"]) > window:
-        return {"shown": False, "why": "history_short"}
+        return {"shown": False, "why": "list_price_history_short"}
     for i in range(k):
         if t(h[i + 1]["at"]) > window and h[i]["value"] < list_price:
-            return {"shown": False, "why": "sold_below"}
+            return {"shown": False, "why": "list_price_sold_below"}
     return {"shown": True, "since": h[k]["at"]}
 
 
@@ -801,17 +987,17 @@ D0 = "2026-09-01T00:00:00.000Z"
 CUT = "2026-10-20T00:00:00.000Z"
 WAS = [
     wp("at 20.00 since 1 September, 15.00 from 20 October", 2000, [(D0, 2000), (CUT, 1500)], "shown"),
-    wp("the price now is the was price", 2000, [(D0, 2000)], "not_lower"),
-    wp("the price now is above it", 2000, [(D0, 2000), (CUT, 2100)], "not_lower"),
-    wp("no record at all", 2000, [], "not_lower"),
-    wp("recorded from 1 October only", 2000, [("2026-10-01T00:00:00.000Z", 2000), (CUT, 1500)], "history_short"),
+    wp("the price now is the was price", 2000, [(D0, 2000)], "list_price_not_above"),
+    wp("the price now is above it", 2000, [(D0, 2000), (CUT, 2100)], "list_price_not_above"),
+    wp("no record at all", 2000, [], "list_price_never_seen"),
+    wp("recorded from 1 October only", 2000, [("2026-10-01T00:00:00.000Z", 2000), (CUT, 1500)], "list_price_history_short"),
     wp("recorded from exactly 30 days before", 2000, [("2026-09-20T00:00:00.000Z", 2000), (CUT, 1500)], "shown"),
-    wp("recorded from a minute short of 30 days", 2000, [("2026-09-20T00:01:00.000Z", 2000), (CUT, 1500)], "history_short"),
+    wp("recorded from a minute short of 30 days", 2000, [("2026-09-20T00:01:00.000Z", 2000), (CUT, 1500)], "list_price_history_short"),
     wp(
         "18.00 for four days inside the 30",
         2000,
         [(D0, 2000), ("2026-10-01T00:00:00.000Z", 1800), ("2026-10-05T00:00:00.000Z", 2000), (CUT, 1500)],
-        "sold_below",
+        "list_price_sold_below",
     ),
     wp(
         "18.00 in August, before the 30 days, counts for nothing",
@@ -831,14 +1017,28 @@ WAS = [
         "a was price it never had",
         2500,
         [(D0, 2000), (CUT, 1500)],
-        "history_short",
-        "below 25.00 throughout, so the reduction began at the first record",
+        "list_price_never_seen",
+        "below 25.00 throughout: the record never saw it at or above, however long the record runs",
+    ),
+    wp(
+        "a sale already running when the record began",
+        2000,
+        [(D0, 1500), ("2026-10-25T00:00:00.000Z", 1400)],
+        "list_price_never_seen",
+        "a reader's first read of a shop mid-sale: never shown for this reduction",
+    ),
+    wp(
+        "back at the was price for 30 days, then a new reduction: shown",
+        2000,
+        [("2026-08-01T00:00:00.000Z", 1500), ("2026-09-15T00:00:00.000Z", 2000), (CUT, 1500)],
+        "shown",
+        "the reduction that began on 20 October is a new one",
     ),
     wp(
         "a dip that ends a day inside the 30",
         2000,
         [("2026-08-01T00:00:00.000Z", 2000), ("2026-09-19T00:00:00.000Z", 1900), ("2026-09-21T00:00:00.000Z", 2000), (CUT, 1500)],
-        "sold_below",
+        "list_price_sold_below",
     ),
     wp(
         "a dip that ends as the 30 days begin",
@@ -846,7 +1046,7 @@ WAS = [
         [("2026-08-01T00:00:00.000Z", 2000), ("2026-09-19T00:00:00.000Z", 1900), ("2026-09-20T00:00:00.000Z", 2000), (CUT, 1500)],
         "shown",
     ),
-    wp("one price, below it, recorded today", 2000, [(CUT, 1500)], "history_short"),
+    wp("one price, below it, recorded today", 2000, [(CUT, 1500)], "list_price_never_seen"),
     wp(
         "the record given out of order",
         2000,
@@ -909,12 +1109,12 @@ TEE = {
 
 
 def repeat(template, count):
-    """The i-th copy (from 0): id and the first option's value with i in three digits, position min(250, i + 1)."""
+    """The i-th copy (from 0): id and the first option's value with i in three digits, position i + 1."""
     out = []
     for i in range(count):
         it = copy.deepcopy(template)
         it["id"] = "%s-%03d" % (template["id"], i)
-        it["group"]["position"] = min(250, i + 1)
+        it["group"]["position"] = i + 1
         it["options"][0]["value"] = "%s%03d" % (template["options"][0]["value"], i)
         out.append(it)
     return out
@@ -985,6 +1185,15 @@ GROUPS = [
         [grp("ungrouped", ["MOKA-6-ALU", "MOKA-6-ALU-B"], ["group_duplicate_variant"])],
     ),
     group_case(
+        "colour in one variant, color in another: one key",
+        [
+            variant("MOKA-3-ALU", 1, "3 cups", options=[{"key": "size", "name": "Size", "value": "3 cups"}, {"key": "colour", "name": "Colour", "value": "Silver"}]),
+            variant("MOKA-6-ALU", 2, "6 cups", options=[{"key": "size", "name": "Size", "value": "6 cups"}, {"key": "color", "name": "Colour", "value": "Silver"}]),
+        ],
+        [grp("grouped", ["MOKA-3-ALU", "MOKA-6-ALU"])],
+        "each item is read first (readCatalogueItemV2), which takes colour as color",
+    ),
+    group_case(
         "values compared exactly: Aluminium and aluminium differ",
         [variant("MOKA-6-ALU", 1, "6 cups"), variant("MOKA-6-alu", 2, "6 cups", material="aluminium")],
         [grp("grouped", ["MOKA-6-ALU", "MOKA-6-alu"])],
@@ -1009,7 +1218,7 @@ GROUPS = [
             "252 variants: the last two held",
             None,
             [grp("grouped", [it["id"] for it in big_sorted[:250]], ["group_too_large"], [it["id"] for it in big_sorted[250:]], title="T-shirt", gid="TEE")],
-            "positions stop at 250, so the last three tie and come in order of id",
+            "positions run past 250: the 251st and 252nd are held",
         ),
         items=None,
         repeat={"count": 252, "item": TEE},
@@ -1029,17 +1238,11 @@ def utf16_len(s):
 
 
 def cut(s, n):
-    out, units = [], 0
-    for ch in s:
-        u = 2 if ord(ch) > 0xFFFF else 1
-        if units + u > n:
-            break
-        out.append(ch)
-        units += u
-    return "".join(out)
+    """At most n characters: Unicode code points, as a Python str counts them."""
+    return s[:n]
 
 
-def v1_of(it, as_of, tax):
+def v1_of(it, as_of):
     if len(it["id"]) > 64:
         return None
     gone = {"id": it["id"], "state": "withdrawn", "updated_at": it["updated_at"]}
@@ -1050,8 +1253,8 @@ def v1_of(it, as_of, tax):
         or it["price"] is None
         or it["availability"] not in V1_AVAIL
         or "age_restricted" in it
+        or "tax_included" in it
         or ("available_until" in it and t(it["available_until"]) <= t(as_of))
-        or ("tax_included" in it and tax is not None and it["tax_included"] != tax)
     ):
         return gone
     images = [m for m in it["media"] if m["type"] == "image"]
@@ -1082,18 +1285,18 @@ def v1_of(it, as_of, tax):
     return body
 
 
-def v1_case(name, it, tax=True, note=None, expect_state=None):
-    got = v1_of(it, AS_OF, tax)
+def v1_case(name, it, note=None, expect_state=None):
+    got = v1_of(it, AS_OF)
     if expect_state is not None:
         assert (got["state"] if got else None) == expect_state, (name, got)
-    c = {"name": name, "tax_included": tax, "v2": it, "v1": got}
+    c = {"name": name, "v2": it, "v1": got}
     if note:
         c["note"] = note
     return c
 
 
 EMOJI_DESC = "a" * 999 + "\U0001F355" + "b" * 10
-assert utf16_len(cut(EMOJI_DESC, 1000)) == 999
+assert len(cut(EMOJI_DESC, 1000)) == 1000 and utf16_len(cut(EMOJI_DESC, 1000)) == 1001
 V1 = [
     v1_case("a variant: its own offer, by its own name", item(), expect_state="listed"),
     v1_case("few left reads as in stock", item(availability="limited"), expect_state="listed"),
@@ -1112,9 +1315,13 @@ V1 = [
     ),
     v1_case("past its last day: withdrawn", item(available_until="2026-11-01T00:00:00.000Z"), expect_state="withdrawn"),
     v1_case("a season still on", item(available_until="2026-12-24T23:59:59.000Z"), expect_state="listed"),
-    v1_case("its own tax unlike the catalogue's: withdrawn", item(tax_included=False), True, expect_state="withdrawn"),
-    v1_case("its own tax as the catalogue's", item(tax_included=True), True, expect_state="listed"),
-    v1_case("its own tax, the catalogue silent", item(tax_included=False), None, expect_state="listed"),
+    v1_case(
+        "its own tax, whatever the catalogue's: withdrawn",
+        item(tax_included=False),
+        "so a change to catalogue.tax_included never changes a version 1 item",
+        expect_state="withdrawn",
+    ),
+    v1_case("its own tax, said to include it: withdrawn too", item(tax_included=True), expect_state="withdrawn"),
     v1_case("an id of 65 characters: no version 1 item", item(id="X" * 65)),
     v1_case(
         "withdrawn with an id of 65 characters: none either",
@@ -1127,9 +1334,9 @@ V1 = [
     ),
     v1_case("a description of 1,200 characters: cut to 1,000", item(description="d" * 1200), expect_state="listed"),
     v1_case(
-        "a cut that would split a character: one shorter",
+        "cut by characters: the pizza slice is the 1,000th",
         item(description=EMOJI_DESC),
-        note="999 letters and a pizza slice, which is two UTF-16 code units",
+        note="999 letters and a pizza slice are 1,000 code points (1,001 UTF-16 code units): a character is a code point",
         expect_state="listed",
     ),
     v1_case("only a video: no picture", item(media=[{"type": "video", "url": "https://loja.example/v/moka.mp4"}]), expect_state="listed"),
@@ -1140,6 +1347,7 @@ V1 = [
     ),
     v1_case("a pack of twelve keeps multipack", item(**SINGLE, multipack=12), expect_state="listed"),
     v1_case("a bundle is an offer like any other", item(**SINGLE, is_bundle=True, gtin=None), expect_state="listed"),
+    v1_case("what it says of withdrawal is left out", item(withdrawal="perishable"), expect_state="listed"),
     v1_case(
         "the was price and the unit price are left out",
         item(
@@ -1239,6 +1447,35 @@ EU_DOC = {
                     ],
                 },
                 {
+                    "name": "Highlands and islands",
+                    "destinations": [{"country": "GB", "postal_prefixes": ["PH20", "PH21", "KA27", "KA28", "PA20", "IV", "HS", "ZE", "KW15"]}],
+                    "services": [
+                        {
+                            "id": "tracked",
+                            "name": "Tracked",
+                            "carrier": "royal_mail",
+                            "tracked": True,
+                            "id_check": False,
+                            "transit_days": {"min": 4, "max": 8},
+                            "rate": {"basis": "flat", "amount": money(1500)},
+                        }
+                    ],
+                },
+                {
+                    "name": "Central London",
+                    "destinations": [{"country": "GB", "postal_prefixes": ["EC1", "W1", "WC2N 5"]}],
+                    "services": [
+                        {
+                            "id": "courier",
+                            "name": "Same-day courier",
+                            "tracked": True,
+                            "id_check": True,
+                            "transit_days": {"min": 0, "max": 0},
+                            "rate": {"basis": "flat", "amount": money(1200)},
+                        }
+                    ],
+                },
+                {
                     "name": "United Kingdom",
                     "destinations": [{"country": "GB"}],
                     "excluded": [{"country": "GB", "postal_prefixes": ["BT", "IM", "JE", "GY"]}],
@@ -1271,6 +1508,27 @@ EU_DOC = {
                             "id_check": True,
                             "transit_days": {"min": 0, "max": 1},
                             "rate": {"basis": "flat", "amount": money(0)},
+                        }
+                    ],
+                }
+            ],
+        },
+        {
+            "id": "letterbox",
+            "name": "Through the letterbox",
+            "zones": [
+                {
+                    "name": "Portugal",
+                    "destinations": [{"country": "PT"}],
+                    "services": [
+                        {
+                            "id": "letterbox",
+                            "name": "Letterbox",
+                            "carrier": "ctt",
+                            "tracked": False,
+                            "id_check": False,
+                            "transit_days": {"min": 2, "max": 4},
+                            "rate": {"basis": "flat", "amount": money(290)},
                         }
                     ],
                 }
@@ -1410,7 +1668,7 @@ def read_case(name, base, patch, problems, profiles, returns, default_shipping, 
         "expect": None
         if problems is None
         else {
-            "problems": [{"path": p, "code": code} for p, code in problems],
+            "problems": [{"path": p, "code": "policies_" + code} for p, code in problems],
             "shipping_profiles": profiles,
             "return_policies": returns,
             "default_shipping_profile": default_shipping,
@@ -1435,7 +1693,7 @@ def rem(path):
 
 
 SV = "/shipping_profiles/0/zones/0/services/0"
-ALL_P = ["standard", "chilled"]
+ALL_P = ["standard", "chilled", "letterbox"]
 ALL_R = ["standard", "final_sale", "credit"]
 S0 = "shipping_profiles[0].zones[0].services[0]"
 READS = [
@@ -1443,7 +1701,7 @@ READS = [
     read_case("a shop outside the EU and the UK: 7 days, and no returns", "us", [], [], ["ground"], ["seven_days", "no_returns"], "ground", "seven_days"),
     read_case("two default profiles: the first stays", "eu", [add_("/shipping_profiles/1/default", True)], [("shipping_profiles[1].default", "default_twice")], ALL_P, ALL_R, "standard", "standard"),
     read_case("two default policies: the first stays", "eu", [add_("/return_policies/2/default", True)], [("return_policies[2].default", "default_twice")], ALL_P, ALL_R, "standard", "standard"),
-    read_case("an id twice: the later dropped", "eu", [rep("/shipping_profiles/1/id", "standard")], [("shipping_profiles[1]", "id_twice")], ["standard"], ALL_R, "standard", "standard"),
+    read_case("an id twice: the later dropped", "eu", [rep("/shipping_profiles/1/id", "standard")], [("shipping_profiles[1]", "id_twice")], ["standard", "letterbox"], ALL_R, "standard", "standard"),
     read_case(
         "a service in two currencies: dropped",
         "eu",
@@ -1472,24 +1730,34 @@ READS = [
             ("shipping_profiles[1].zones[0]", "zone_empty"),
             ("shipping_profiles[1]", "profile_empty"),
         ],
-        ["standard"],
+        ["standard", "letterbox"],
         ALL_R,
         "standard",
         "standard",
     ),
-    read_case("a profile that does not read", "eu", [rem("/shipping_profiles/1/zones")], [("shipping_profiles[1]", "unreadable")], ["standard"], ALL_R, "standard", "standard"),
+    read_case("a profile that does not read", "eu", [rem("/shipping_profiles/1/zones")], [("shipping_profiles[1]", "unreadable")], ["standard", "letterbox"], ALL_R, "standard", "standard"),
     read_case(
         "free over nothing does not read",
         "eu",
         [rep(SV + "/free_over", money(0))],
         [("shipping_profiles[0]", "unreadable")],
-        ["chilled"],
+        ["chilled", "letterbox"],
         ALL_R,
         None,
         "standard",
-        "a profile reads or not as a whole, and chilled was never the default",
+        "a profile reads or not as a whole, and no other is ever made the default: an offer naming none has no shipping known",
     ),
-    read_case("a window with no days", "eu", [rem("/return_policies/0/window_days")], [("return_policies[0]", "window_days_missing")], ALL_P, ["final_sale", "credit"], "standard", None),
+    read_case(
+        "a window with no days",
+        "eu",
+        [rem("/return_policies/0/window_days")],
+        [("return_policies[0]", "window_days_missing")],
+        ALL_P,
+        ["final_sale", "credit"],
+        "standard",
+        None,
+        "an offer that names standard is then held (return_policy_unknown), never shown another policy",
+    ),
     read_case("days beside unlimited: the days alone", "eu", [rep("/return_policies/2/eligibility", "unlimited")], [("return_policies[2].window_days", "window_days_unused")], ALL_P, ALL_R, "standard", "standard"),
     read_case("returns taken, by no method", "eu", [rep("/return_policies/2/methods", [])], [("return_policies[2]", "terms_missing")], ALL_P, ["standard", "final_sale"], "standard", "standard"),
     read_case("by post, no one pays the postage", "eu", [rem("/return_policies/0/return_postage")], [("return_policies[0]", "postage_missing")], ALL_P, ["final_sale", "credit"], "standard", None),
@@ -1503,11 +1771,44 @@ READS = [
         "standard",
         "standard",
     ),
-    read_case("a document of another version", "eu", [rep("/version", 2)], None, None, None, None, None, "it does not read at all"),
+    read_case("a document of another version", "eu", [rep("/version", 2)], None, None, None, None, None, "it does not read at all (policies_document_unreadable)"),
+    read_case(
+        "a postcode prefix with a space",
+        "eu",
+        [rep("/shipping_profiles/0/zones/4/destinations/0/postal_prefixes/2", "WC2N  5")],
+        [("shipping_profiles[0]", "unreadable")],
+        ["chilled", "letterbox"],
+        ALL_R,
+        None,
+        "standard",
+        "at most one space, between the outward code and the inward",
+    ),
 ]
 
 # Shipping quotes: an independent implementation of quote_shipping.
 NG = {"g": 10**9, "kg": 10**12, "oz": 28349523125, "lb": 453592370000}
+
+
+OUTWARD_INWARD = ("GB", "IM", "JE", "GY")
+
+
+def postcode_of(country, pc):
+    p = re.sub(r"[\s-]", "", pc.upper())
+    if country in OUTWARD_INWARD and re.fullmatch(r"[A-Z0-9]{2,4}[0-9][A-Z]{2}", p):
+        return p[:-3] + " " + p[-3:]
+    return p
+
+
+def prefix_matches(country, pc, prefix):
+    if country not in OUTWARD_INWARD:
+        return pc.replace(" ", "").startswith(prefix.replace(" ", ""))
+    if " " in prefix:
+        return pc.startswith(prefix)
+    outward = pc.split(" ")[0]
+    if not outward.startswith(prefix):
+        return False
+    rest = outward[len(prefix):]
+    return rest == "" or rest[0].isdigit() != prefix[-1].isdigit()
 
 
 def place_in(dest, e):
@@ -1518,8 +1819,8 @@ def place_in(dest, e):
     region = (dest.get("region") or "").upper()
     if region and region in e.get("regions", []):
         return True
-    pc = (dest.get("postal_code") or "").upper().replace(" ", "").replace("-", "")
-    return pc != "" and any(pc.startswith(p) for p in e.get("postal_prefixes", []))
+    pc = postcode_of(e["country"], dest.get("postal_code") or "")
+    return pc != "" and any(prefix_matches(e["country"], pc, p) for p in e.get("postal_prefixes", []))
 
 
 def amounts(rate):
@@ -1562,6 +1863,9 @@ def quote(doc, inp):
             return dict(base, fee={"value": v, "currency": cur})
 
         lines = inp["lines"]
+        if not s["id_check"] and any(l.get("age_restricted") for l in lines):
+            out.append(no("id_check"))
+            continue
         if any(l["price"]["currency"] != cur for l in lines):
             out.append(no("currency"))
             continue
@@ -1598,10 +1902,12 @@ def quote(doc, inp):
     return {"profile": prof["id"], "zone": zone["name"], "services": out}
 
 
-def line(value, qty=1, weight=None, cur="EUR"):
+def line(value, qty=1, weight=None, cur="EUR", age=False):
     l = {"price": {"value": value, "currency": cur}, "quantity": qty}
     if weight:
         l["weight"] = {"value": weight[0], "unit": weight[1]}
+    if age:
+        l["age_restricted"] = True
     return l
 
 
@@ -1679,6 +1985,32 @@ QUOTES = [
     q("80 lb: the open band", "us", [line(9999, 4, (20, "lb"), "USD")], {"country": "US"}, check=fees(1499, 4900)),
     q("goods of 600 dollars: past freight's last band", "us", [line(30000, 2, (1, "lb"), "USD")], {"country": "US"}, check=fees(899, "over_bands")),
     q("Hawaii is excluded", "us", [line(1299, 1, (12, "oz"), "USD")], {"country": "US", "region": "US-HI"}),
+    q(
+        "a bottle of wine to Lisbon: only the service that checks ID",
+        "eu",
+        [line(1290, 1, (1.3, "kg"), age=True)],
+        LISBON,
+        check=fees("id_check", 990),
+    ),
+    q(
+        "wine and a pot together: the basket goes as its wine must",
+        "eu",
+        [line(1290, 1, (1.3, "kg"), age=True), line(2990, 1, (0.65, "kg"))],
+        LISBON,
+        check=fees("id_check", 990),
+    ),
+    q("wine by the letterbox: no service may take it", "eu", [line(1290, 1, age=True)], LISBON, profile="letterbox", check=fees("id_check")),
+    q("Perth, PH2 0AB: the mainland", "eu", [line(1500, 1)], {"country": "GB", "postal_code": "PH2 0AB"}, check=fees(600)),
+    q("Newtonmore, PH20 1AA: the Highlands", "eu", [line(1500, 1)], {"country": "GB", "postal_code": "PH20 1AA"}, check=fees(1500)),
+    q("Kilmarnock, KA2 7AA: the mainland", "eu", [line(1500, 1)], {"country": "GB", "postal_code": "KA2 7AA"}, check=fees(600)),
+    q("Arran, KA27 8AA: the islands", "eu", [line(1500, 1)], {"country": "GB", "postal_code": "KA27 8AA"}, check=fees(1500)),
+    q("Paisley, written pa20aa: the mainland", "eu", [line(1500, 1)], {"country": "GB", "postal_code": "pa20aa"}, check=fees(600), note="PA2 0AA, never PA20"),
+    q("Dunoon, PA20 0AA: the Highlands", "eu", [line(1500, 1)], {"country": "GB", "postal_code": "PA20 0AA"}, check=fees(1500)),
+    q("Inverness, IV1 1AA: a whole area", "eu", [line(1500, 1)], {"country": "GB", "postal_code": "IV1 1AA"}, check=fees(1500)),
+    q("Clerkenwell, EC1A 1BB: EC1 has it", "eu", [line(1500, 1)], {"country": "GB", "postal_code": "EC1A 1BB"}, check=fees(1200)),
+    q("North Kensington, W10 5AA: never W1", "eu", [line(1500, 1)], {"country": "GB", "postal_code": "W10 5AA"}, check=fees(600)),
+    q("Trafalgar Square, WC2N 5DU: a prefix with a space", "eu", [line(1500, 1)], {"country": "GB", "postal_code": "WC2N 5DU"}, check=fees(1200)),
+    q("Charing Cross, WC2N 6NE: not that prefix", "eu", [line(1500, 1)], {"country": "GB", "postal_code": "WC2N 6NE"}, check=fees(600)),
 ]
 assert QUOTES[16]["expect"]["why"] == "not_shipped_there" and QUOTES[21]["expect"]["why"] == "no_profile"
 
@@ -1694,6 +2026,15 @@ def canon(name, value, note=None):
     CANON.append(c)
 
 
+def canon_text(name, text, note=None):
+    """A value given as the JSON text a body carries: numbers judged by their value, never their digits."""
+    value = json.loads(text)
+    c = {"name": name, "text": text, "canonical": canonical(value), "sha256": sha256(canonical(value))}
+    if note:
+        c["note"] = note
+    CANON.append(c)
+
+
 canon("members sorted by name", {"state": "listed", "id": "a", "Z": 1, "_": 2, "a": 3})
 canon("nested, and arrays in their own order", {"b": [3, 1, 2], "a": {"y": None, "x": [{"k": 2, "j": 1}]}})
 canon("null is written; true and false", {"description": None, "no_gtin": False, "is_bundle": True})
@@ -1702,6 +2043,12 @@ canon("<, > and & as themselves", {"name": "Fish & chips <large>"}, "Go's encodi
 canon("U+2028 and U+2029 as themselves", {"name": "line para end"}, "Go's encoding/json escapes these always")
 canon("quotes, backslashes and control characters", {"s": 'a "b" \\ c\n\t\r\b\f\u0001\u001f\u007f'})
 canon("non-ASCII as UTF-8", {"name": "Café moído, 250 g", "emoji": "\U0001F355", "jp": "抹茶"})
+canon_text(
+    "numbers as text: by value, never their digits",
+    '{"w":2.50,"x":1.0,"y":1e3,"z":0.6500,"p":3490.0,"n":-0.0}',
+    "2.50 is 2.5, 1.0 is 1, 1e3 is 1000, 0.6500 is 0.65, 3490.0 is 3490, -0.0 is 0: a reader that keeps a number's own text (Go's json.Number) is not canonical",
+)
+canon_text("escapes in the text are the characters", '{"name":"Caf\\u00e9 \\u003cb\\u003e"}', "written back as Café <b>, unescaped")
 canon(
     "names compared as UTF-16 code units",
     {"ﬁ": 1, "\U0001F355": 2, "z": 3},
@@ -1724,6 +2071,17 @@ h("description null", item(description=None))
 h("a member the reader does not know counts", item(colour_hex="#c0c0c0"), "taken over the item as it came")
 h("a version 1 item", V1[0]["v1"])
 assert HASHES[1]["hash"] != HASHES[2]["hash"]
+_text = compact(item()).replace('"value":3490,', '"value":3490.0,').replace('"value":0.65,', '"value":0.6500,')
+assert "3490.0" in _text and "0.6500" in _text
+HASHES.append(
+    {
+        "name": "an item given as body text: 3490.0 and 0.6500 hash as 3490 and 0.65",
+        "text": _text,
+        "hash": item_hash(json.loads(_text)),
+        "note": "parsed first, numbers by their value: the hash of a variant, every field",
+    }
+)
+assert HASHES[-1]["hash"] == HASHES[0]["hash"]
 
 page = {
     "version": 2,
@@ -1744,15 +2102,29 @@ page = {
     ],
     "next_cursor": None,
 }
-items_answer = {"version": 2, "items": [THREE[1]], "missing": ["MOKA-1-ALU"]}
+ASKED_IDS = ["MOKA-6-ALU", "gid://shop/ProductVariant/4471", "O'NEILL-6", "A!(B)*"]
+
+
+def ids_param(ids):
+    """Each id percent-encoded but for RFC 3986's unreserved characters, hex in upper case, joined by a comma."""
+    return ",".join(urllib.parse.quote(i, safe="-._~") for i in ids)
+
+
+assert ids_param(ASKED_IDS) == "MOKA-6-ALU,gid%3A%2F%2Fshop%2FProductVariant%2F4471,O%27NEILL-6,A%21%28B%29%2A"
+items_answer = {"version": 2, "items": [THREE[1]], "missing": ASKED_IDS[1:]}
 policies_body = dict(EU_DOC, domain="inbox.loja.example")
+api_page = dict(copy.deepcopy(page), domain="loja.example")
 
 
-def signed(name, url, body_obj, rev, note=None):
+def signed(name, kind, url, body_obj, rev, domain="inbox.loja.example", ids=None, note=None):
+    """A body signed as served. domain: the member's registered domain, which iss and a page's domain name."""
     body = compact(body_obj)
-    payload = {"iss": "inbox.loja.example", "url": url, "body_sha256": sha256(body), "as_of": AS_OF, "rev": rev}
+    payload = {"iss": domain, "url": url, "body_sha256": sha256(body), "as_of": AS_OF, "rev": rev}
     hj, pj, token = jws(HEADER, payload)
-    c = {"name": name, "url": url, "body": body, "body_sha256": payload["body_sha256"], "header": HEADER, "header_json": hj, "payload": payload, "payload_json": pj, "jws": token}
+    c = {"name": name, "kind": kind, "domain": domain, "url": url}
+    if ids is not None:
+        c["ids"] = ids
+    c.update({"body": body, "body_sha256": payload["body_sha256"], "header": HEADER, "header_json": hj, "payload": payload, "payload_json": pj, "jws": token})
     if note:
         c["note"] = note
     return c
@@ -1760,16 +2132,34 @@ def signed(name, url, body_obj, rev, note=None):
 
 PAGE_URL = "https://inbox.loja.example/v1/catalogue/changes?version=2&limit=500"
 SIGNED = [
-    signed("a version 2 page", PAGE_URL, page, "3b0c51d0a7e4b8c3"),
-    signed("products by id", "https://inbox.loja.example/v1/catalogue/items?version=2&ids=MOKA-6-ALU,MOKA-1-ALU", items_answer, "3b0c51d0a7e4b8c3"),
-    signed("the policies document", "https://inbox.loja.example/v1/catalogue/policies", policies_body, EU_DOC["rev"]),
+    signed("a version 2 page", "page", PAGE_URL, page, "3b0c51d0a7e4b8c3"),
+    signed(
+        "products by id, ids with ':', '/', \"'\" and '!()*' in them",
+        "items",
+        "https://inbox.loja.example/v1/catalogue/items?version=2&ids=" + ids_param(ASKED_IDS),
+        items_answer,
+        "3b0c51d0a7e4b8c3",
+        ids=ASKED_IDS,
+        note="as_of is when it answered and rev the catalogue's then: the answer's body carries neither",
+    ),
+    signed("the policies document", "policies", "https://inbox.loja.example/v1/catalogue/policies", policies_body, EU_DOC["rev"]),
+    signed(
+        "a feed on the business's API host",
+        "page",
+        "https://api.loja.example/v1/catalogue/changes?version=2&limit=500",
+        api_page,
+        "3b0c51d0a7e4b8c3",
+        domain="loja.example",
+        note="iss and the page's domain are the member's registered domain, the host of its /.well-known/agent-inbox.json, never the feed's host",
+    ),
 ]
 GOOD = SIGNED[0]
 
 
-def refused(name, code, url=None, body=None, token=None, domain="inbox.loja.example", note=None):
+def refused(name, code, url=None, body=None, token=None, domain="inbox.loja.example", kind="page", note=None):
     c = {
         "name": name,
+        "kind": kind,
         "domain": domain,
         "url": url or GOOD["url"],
         "body": body if body is not None else GOOD["body"],
@@ -1801,6 +2191,47 @@ REFUSED = [
     refused("another alg", "bad_alg", token=resign(header={"alg": "ES256", "typ": "sdi-catalogue+jws", "kid": KID})),
     refused("a key the manifest does not publish", "unknown_key", token=resign(header={"alg": "EdDSA", "typ": "sdi-catalogue+jws", "kid": "not-a-published-key"})),
     refused("one bit of the signature flipped", "bad_signature", token=flipped),
+    refused(
+        "a receipt's typ, and the body changed: bad_typ first",
+        "bad_typ",
+        body=GOOD["body"].replace('"count":3', '"count":4'),
+        token=resign(header={"alg": "EdDSA", "typ": "sdi-receipt+jws", "kid": KID}),
+    ),
+    refused(
+        "signed for another domain, and the body changed: iss_mismatch first",
+        "iss_mismatch",
+        domain="inbox.other.example",
+        body=GOOD["body"].replace('"count":3', '"count":4'),
+    ),
+    refused(
+        "another address asked, and the body changed: url_mismatch first",
+        "url_mismatch",
+        url="https://inbox.loja.example/v1/catalogue/changes?version=2&limit=500&after=MA",
+        body=GOOD["body"].replace('"count":3', '"count":4'),
+    ),
+    refused("a page whose signed as_of is not its own", "as_of_mismatch", token=resign(payload=dict(GOOD["payload"], as_of="2026-11-02T09:00:00.000Z"))),
+    refused("a page whose signed rev is not its own", "rev_mismatch", token=resign(payload=dict(GOOD["payload"], rev="ffffffffffffffff"))),
+    refused(
+        "a page signed as of another time and another rev: as_of_mismatch first",
+        "as_of_mismatch",
+        token=resign(payload=dict(GOOD["payload"], as_of="2026-11-02T09:00:00.000Z", rev="ffffffffffffffff")),
+    ),
+    refused(
+        "a policies document whose signed rev is not its own",
+        "rev_mismatch",
+        kind="policies",
+        url=SIGNED[2]["url"],
+        body=SIGNED[2]["body"],
+        token=jws(HEADER, dict(SIGNED[2]["payload"], rev="ffffffffffffffff"))[2],
+    ),
+    refused(
+        "a feed on the API host, read as if the host were the member",
+        "iss_mismatch",
+        domain="api.loja.example",
+        url=SIGNED[3]["url"],
+        body=SIGNED[3]["body"],
+        token=SIGNED[3]["jws"],
+    ),
 ]
 
 # --- write -----------------------------------------------------------------------------------------
@@ -1810,7 +2241,7 @@ policies_for_checks = EU_DOC
 write(
     "catalogue-signature.json",
     {
-        "$comment": "Catalogue version 2 (protocol §4.18): canonical JSON (RFC 8785) as an item's hash is taken over, each value's canonical text and its SHA-256; items and their hash; and Catalogue-Signature, a compact JWS (EdDSA, typ sdi-catalogue+jws) over {iss, url, body_sha256, as_of, rev}. Ed25519 is deterministic: signing payload_json under header_json with key.private_jwk reproduces jws byte for byte. The key is RFC 8037 A.1, as in receipts.json; rfc8037 is that RFC's own A.4 example, to check an Ed25519 implementation first. refused: what a reader refuses, and the code. Written by packages/spec/scripts/gen-catalogue-vectors.py (Python's standard library, its own Ed25519). MIT.",
+        "$comment": "Catalogue version 2 (protocol §4.18): canonical JSON (RFC 8785) as an item's hash is taken over, each value (or the JSON text a body carries, parsed first: numbers by their value) with its canonical text and SHA-256; items (or an item's body text) and their hash; and Catalogue-Signature, a compact JWS (EdDSA, typ sdi-catalogue+jws) over {iss, url, body_sha256, as_of, rev}. Ed25519 is deterministic: signing payload_json under header_json with key.private_jwk reproduces jws byte for byte. The key is RFC 8037 A.1, as in receipts.json; rfc8037 is that RFC's own A.4 example, to check an Ed25519 implementation first. Each signature: its kind (page, items or policies), domain (the member's registered domain, which iss and a page's or document's domain name), the url asked and signed, byte for byte (ids: the ids products by id were asked for), and the body as served. refused: what a reader refuses, and the code: bad_alg, bad_typ, unknown_key, bad_signature, iss_mismatch, url_mismatch, body_mismatch, then for a page or the policies document as_of_mismatch and rev_mismatch, the first that applies in that order. Written by packages/spec/scripts/gen-catalogue-vectors.py (Python's standard library, its own Ed25519). MIT.",
         "key": {
             "kid": KID,
             "public_jwk": {"kty": "OKP", "crv": "Ed25519", "x": X_B64, "kid": KID},
@@ -1826,7 +2257,7 @@ write(
 write(
     "catalogue-checks.json",
     {
-        "$comment": "Catalogue version 2 (protocol §4.18): one item read alone (readCatalogueItemV2) at as_of, each with the reader's verdict: listed, with the problems that dropped a field and, when it is not the item as it came, the item as kept (members it does not know left out, fulfil_methods once each, the hash as it came); held, with every problem named; or withdrawn, and why. with_policies: read with policies, the document a page's items name (catalogue-policies.json's first). Codes written by hand; hashes by packages/spec/scripts/gen-catalogue-vectors.py. MIT.",
+        "$comment": "Catalogue version 2 (protocol §4.18): one item read alone (readCatalogueItemV2) at as_of, each with the reader's verdict: listed, with the problems that dropped a member and, when it is not the item as it came, the item as kept (members it does not know left out, a member that only adds and does not read left out or set to its none, option keys and an age's kind read through vocab/option-keys.json and vocab/age-kinds.json, fulfil_methods once each, the hash as it came); held, with every problem named and, for unreadable, path: a JSON Pointer to the first member that does not read, in the order the schema lists them; or withdrawn, and why. Problems and drops come each once, in the order CATALOGUE_V2_PROBLEMS lists them. with_policies: read with policies, the document a page's items name (catalogue-policies.json's first); without it, no profile or policy id is checked. site: the registrable domains of the business's own site, which url must be on. A character is a Unicode code point. Codes written by hand; hashes by packages/spec/scripts/gen-catalogue-vectors.py. MIT.",
         "as_of": AS_OF,
         "policies": policies_for_checks,
         "cases": CHECKS,
@@ -1845,14 +2276,14 @@ write(
 write(
     "catalogue-options.json",
     {
-        "$comment": "Catalogue version 2 (protocol §4.18): a business's product groups (readCatalogueGroups) from its listed items (or repeat: count copies of item, the i-th, from 0, with its id and its first option's value followed by i in three digits, and group.position min(250, i + 1)): grouped, one product, its variants in order of position then id, at most 250, those past held; or ungrouped, each variant a product of its own, with the problems. Every variant names the same keys, each key by one name, under one title, and no two alike in every value, compared exactly. Written by hand; hashes by packages/spec/scripts/gen-catalogue-vectors.py. MIT.",
+        "$comment": "Catalogue version 2 (protocol §4.18): a business's product groups (readCatalogueGroups) from its listed items (or repeat: count copies of item, the i-th, from 0, with its id and its first option's value followed by i in three digits, and group.position i + 1), each read first as catalogue-checks.json reads one,: grouped, one product, its variants in order of position then id, at most 250, those past held; or ungrouped, each variant a product of its own, with the problems. Every variant names the same keys, each key by one name, under one title, and no two alike in every value, compared exactly. Written by hand; hashes by packages/spec/scripts/gen-catalogue-vectors.py. MIT.",
         "cases": GROUPS,
     },
 )
 write(
     "catalogue-v1.json",
     {
-        "$comment": "Catalogue version 2 (protocol §4.18): the version 1 item an inbox serves a reader of version 1 for each version 2 item (catalogueItemV1Of), at as_of with the catalogue's tax_included; null: no version 1 item at all (an id over 64 characters). Version 1 says only what it can say truly, so an offer it cannot is withdrawn there. Worked out, hashes included, by packages/spec/scripts/gen-catalogue-vectors.py's own implementation. MIT.",
+        "$comment": "Catalogue version 2 (protocol §4.18): the version 1 item a producer serves a reader of version 1 for each version 2 item (catalogueItemV1Of), at as_of; null: no version 1 item at all (an id over 64 characters). Version 1 says only what it can say truly, so an offer it cannot is withdrawn there, and nothing but as_of (against available_until, where the producer gives the item a new position) changes what it says: an offer with its own tax_included is withdrawn whatever the catalogue's. The description is cut to 1,000 characters, Unicode code points. Worked out, hashes included, by packages/spec/scripts/gen-catalogue-vectors.py's own implementation. MIT.",
         "as_of": AS_OF,
         "cases": V1,
     },
@@ -1860,7 +2291,7 @@ write(
 write(
     "catalogue-policies.json",
     {
-        "$comment": "Catalogue version 2 (protocol §4.18): the policies document. reads: a document read part by part (readCataloguePolicies), given as one of documents with an RFC 6902 JSON Patch applied: the problems at their paths, the ids kept and the defaults; expect null when it does not read at all. quotes: a basket's shipping to a place (quoteShipping) under eu or us, the documents of the first two reads: the profile, the zone and each service's fee, or null with why. Problems written by hand; the documents' rev and every fee worked out by packages/spec/scripts/gen-catalogue-vectors.py, weights exactly in nanograms. MIT.",
+        "$comment": "Catalogue version 2 (protocol §4.18): the policies document. reads: a document read part by part (readCataloguePolicies), given as one of documents with an RFC 6902 JSON Patch applied: the problems at their paths, the ids kept and the defaults; expect null when it does not read at all. quotes: a basket's shipping to a place (quoteShipping) under eu or us, the documents of the first two reads: the profile, the zone and each service's fee, or null with why. An age-restricted line goes only by a service marked id_check; a British postcode matches by outward code (PH2 is never PH20). Problems written by hand; the documents' rev and every fee worked out by packages/spec/scripts/gen-catalogue-vectors.py, weights exactly in nanograms. MIT.",
         "documents": {"eu": EU_DOC, "us": US_DOC},
         "reads": READS,
         "quotes": QUOTES,

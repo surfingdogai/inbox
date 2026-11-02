@@ -189,18 +189,26 @@ or network:
   is `null`), `price_max`, `list_price` (shown only under the 30-day rule, `wasPriceOf`), `unit_price
   {measure, reference}` (`unitPriceOf`, `UNIT_PRICE_UNITS`), `tax_included`, the availabilities `limited`, `preorder`,
   `backorder` and `made_to_order` with `available_from` and `available_until`, `is_bundle`, `media`
-  (in place of `image_url`), `age_restricted {min_age, kind, by_country, check}` (kinds from `vocab/age-kinds.json`,
-  `AGE_KINDS`; tobacco and nicotine, cannabis and weapons kept off networks, `AGE_KINDS_OFF`; `ageLabel`, `ageFor`),
-  `fulfil_methods`, `shipping_profile`, `weight` and `return_policy`; ids of up to 256 printable ASCII characters
-  (`catalogueIdV2Schema`) and descriptions of up to 5,000. The policies document (`cataloguePoliciesSchema`,
-  `schemas/catalogue-policies.json`), signed: shipping profiles of the owner's own rates (flat, per item, by weight, by
-  order value, free over a value; `readCataloguePolicies`, `quoteShipping`; carriers from `vocab/carriers.json`,
-  `CARRIERS`, `trackingUrl`) and return policies. How a reader takes each item (`readCatalogueItemV2`,
-  `CATALOGUE_V2_PROBLEMS`) and each group (`readCatalogueGroups`); the version 1 item an inbox serves for 12 months
-  (`catalogueItemV1Of`); canonical JSON, RFC 8785 (`canonicalJson`, `sha256Text`, `catalogueItemHash`). In both
-  versions: one page size, 500; the cursor rule; `cursor_invalid`, `limit_invalid` and `cursor_expired`;
-  `body_sha256` and `manifest_sha256` over the bytes as served; and the order to replace a signing key in. A version 1
-  reader reads a version 1 feed as before; a manifest without `catalogue.versions` reads as before.
+  (in place of `image_url`; every address in the https grammar of `CATALOGUE_URL_PATTERN`, `catalogueUrlSchema`, which
+  the JSON Schemas carry as `pattern`), `age_restricted {min_age, kind, by_country, check}` (kinds from
+  `vocab/age-kinds.json`, `AGE_KINDS`, with their `also` spellings, `ageKindOf`; tobacco and nicotine, cannabis and
+  weapons kept off networks, and a kind it does not know held, `AGE_KINDS_OFF`, `ageKindIsOff`; `ageLabel`, `ageFor`),
+  `fulfil_methods`, `shipping_profile`, `weight`, `return_policy` and `withdrawal` (the legal right to withdraw, or the
+  exception the law allows); ids of up to 256 printable ASCII characters (`catalogueIdV2Schema`; `ids=` written by
+  `catalogueIdsParam`) and descriptions of up to 5,000 characters, a character a Unicode code point. The policies
+  document (`cataloguePoliciesSchema`, `schemas/catalogue-policies.json`), signed: shipping profiles of the owner's own
+  rates (flat, per item, by weight, by order value, free over a value; `readCataloguePolicies`, `quoteShipping`, which
+  takes an age-restricted line only by an ID-checked service; postcodes by `postcodeOf` and `postcodeMatches`, British
+  ones by outward code; carriers from `vocab/carriers.json`, `CARRIERS`, `trackingUrl`) and return policies. How a
+  reader takes each item (`readCatalogueItemV2`: a core member that does not read holds it, with its JSON Pointer; a
+  member that only adds is dropped alone) and each group (`readCatalogueGroups`), every problem's code in one registry
+  (`CATALOGUE_V2_PROBLEMS`, which the ping's `held[].code` names); the "was" price's codes (`wasPriceOf`); the version 1
+  item a producer that served version 1 serves for 12 months (`catalogueItemV1Of`); canonical JSON, RFC 8785
+  (`canonicalJson`, `sha256Text`, `catalogueItemHash`), numbers by their value. In both versions: one page size,
+  500; the cursor rule, and two ways to meet it; `cursor_invalid` and `limit_invalid`; `body_sha256` and
+  `manifest_sha256` over the bytes as served; the signed `url` as received, byte for byte; and the order to replace a
+  signing key in. Version 2 cursors alone expire (`cursor_expired`, after 7 days at the earliest). A version 1 reader
+  reads a version 1 feed as before; a manifest without `catalogue.versions` reads as before.
 
 A version number is given when a change merges, in the order changes merge. Work in progress names no number, so
 two changes built side by side never claim the same one.
@@ -274,8 +282,8 @@ implementations:
 | `stay-policy.json` | a stay's cancellation preset dated for its arrival in zones across clock changes, and the fee at given instants |
 | `stay-nights.json` | a stay's nights, and its start and end with the zone's offset |
 | `doors-elsewhere-stay.json` | a stay taken elsewhere, its deep link kept or dropped, and filled in |
-| `catalogue-signature.json` | catalogue version 2 (§4.18): canonical JSON (RFC 8785), items' hashes, and `Catalogue-Signature` byte for byte with RFC 8037 A.1's key (A.4 first), with the refusals and their codes |
-| `catalogue-checks.json` | one version 2 item read alone: listed with what was dropped, held with every problem, or withdrawn |
+| `catalogue-signature.json` | catalogue version 2 (§4.18): canonical JSON (RFC 8785), from values and from body text, items' hashes, and `Catalogue-Signature` byte for byte with RFC 8037 A.1's key (A.4 first), a feed on an API host and ids encoded one way, with the refusals, their codes and their order |
+| `catalogue-checks.json` | one version 2 item read alone: listed with what was dropped, held with every problem (and the path of what did not read), or withdrawn |
 | `catalogue-prices.json` | price models, unit-price arithmetic, and the "was" price's 30 days |
 | `catalogue-options.json` | a business's product groups: one product, or each variant its own, and the 250 limit |
 | `catalogue-v1.json` | the version 1 item an inbox serves for each version 2 item |
@@ -315,10 +323,10 @@ removed or renamed.
 `vocab/option-keys.json`, `vocab/age-kinds.json` and `vocab/carriers.json` (catalogue version 2, Unreleased) list the
 keys a variant's options name (each with labels in five languages, the Google Merchant Center attribute it fills, and the
 other spellings read as it), the kinds of age-restricted offer (with whether a network lists them: tobacco and
-nicotine, cannabis and weapons it does not), and the carriers a shipping service names (the countries each carries
-within, its kind, whether its numbers are UPU S10, its tracking page's address where that page takes the number, and the
-domains its tracking pages are on). None keeps a table of what any law says. A key, kind or carrier is never removed or
-renamed.
+nicotine, cannabis and weapons it does not; and the spellings read as each), and the carriers a shipping service names
+(the countries each carries within, its kind, whether its numbers are UPU S10, the form its numbers take where it is
+known, its tracking page's address where that page takes the number, and the domains its tracking pages are on). None
+keeps a table of what any law says. A key, kind or carrier is never removed or renamed, and a spelling never moves.
 `vocab/cuisines.json` (0.14) lists the cuisines a profile's `cuisines` names and a network files as `cuisine=<slug>`,
 the network's own file byte for byte: each slug's kind (regional or dish), labels in seven languages, synonyms, the
 OpenStreetMap and schema.org words that name it and the Overture place categories whose places serve it, and the two

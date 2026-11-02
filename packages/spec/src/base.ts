@@ -475,6 +475,13 @@ export const doorPlatformsVocabSchema = z.object({
   ),
 });
 
+/** An https address a manifest's `catalogue` names: `pattern` and `format` in the JSON Schema, as zod checks it. */
+const catalogueHttpsUrl = () =>
+  z
+    .url({ protocol: /^https$/ })
+    .regex(/^https:\/\//)
+    .meta({ format: "uri" });
+
 export const manifestSchema = z.object({
   spec: z.literal("surfingdog-inbox/0"),
   instance: z.url(),
@@ -531,16 +538,17 @@ export const manifestSchema = z.object({
    */
   catalogue: z
     .object({
-      feed: z.url({ protocol: /^https$/ }),
-      items: z.url({ protocol: /^https$/ }),
+      feed: catalogueHttpsUrl(),
+      items: catalogueHttpsUrl(),
       versions: z
         .array(z.int().min(1).max(99))
         .min(1)
         .max(8)
+        .refine((v) => new Set(v).size === v.length, "each version once")
+        .meta({ uniqueItems: true })
         .optional()
         .describe("The catalogue versions the feed serves, each once. Absent: [1]."),
-      policies: z
-        .url({ protocol: /^https$/ })
+      policies: catalogueHttpsUrl()
         .optional()
         .describe("The signed policies document: shipping profiles and return policies (catalogue version 2)."),
     })

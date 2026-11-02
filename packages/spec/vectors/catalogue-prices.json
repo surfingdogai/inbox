@@ -468,7 +468,8 @@
       "expect": {
         "state": "held",
         "id": "CUT",
-        "problems": ["unreadable"]
+        "problems": ["unreadable"],
+        "path": "/price_max/value"
       }
     },
     {
@@ -498,7 +499,8 @@
       "expect": {
         "state": "held",
         "id": "CUT",
-        "problems": ["unreadable"]
+        "problems": ["unreadable"],
+        "path": "/price_model"
       }
     },
     {
@@ -745,6 +747,118 @@
           "media": [],
           "updated_at": "2026-11-02T09:12:00.000Z",
           "hash": "3c97be8c1a009b31"
+        }
+      }
+    },
+    {
+      "name": "a was price of 0: dropped",
+      "item": {
+        "id": "CUT",
+        "state": "listed",
+        "sku": null,
+        "name": "Haircut",
+        "description": null,
+        "price_model": "fixed",
+        "price": {
+          "value": 2500,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": null,
+        "no_gtin": true,
+        "brand": null,
+        "mpn": null,
+        "condition": "new",
+        "url": null,
+        "media": [],
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "list_price": {
+          "value": 0,
+          "currency": "EUR"
+        },
+        "hash": "2d2dd9d7280b7967"
+      },
+      "expect": {
+        "state": "listed",
+        "dropped": ["list_price_dropped"],
+        "item": {
+          "id": "CUT",
+          "state": "listed",
+          "sku": null,
+          "name": "Haircut",
+          "description": null,
+          "price_model": "fixed",
+          "price": {
+            "value": 2500,
+            "currency": "EUR"
+          },
+          "availability": "in_stock",
+          "gtin": null,
+          "no_gtin": true,
+          "brand": null,
+          "mpn": null,
+          "condition": "new",
+          "url": null,
+          "media": [],
+          "updated_at": "2026-11-02T09:12:00.000Z",
+          "hash": "2d2dd9d7280b7967"
+        }
+      }
+    },
+    {
+      "name": "a unit price with no reference: dropped",
+      "item": {
+        "id": "CUT",
+        "state": "listed",
+        "sku": null,
+        "name": "Haircut",
+        "description": null,
+        "price_model": "fixed",
+        "price": {
+          "value": 2500,
+          "currency": "EUR"
+        },
+        "availability": "in_stock",
+        "gtin": null,
+        "no_gtin": true,
+        "brand": null,
+        "mpn": null,
+        "condition": "new",
+        "url": null,
+        "media": [],
+        "updated_at": "2026-11-02T09:12:00.000Z",
+        "unit_price": {
+          "measure": {
+            "value": 1,
+            "unit": "kg"
+          }
+        },
+        "hash": "f73cf65de8d8953b"
+      },
+      "expect": {
+        "state": "listed",
+        "dropped": ["unit_price_dropped"],
+        "item": {
+          "id": "CUT",
+          "state": "listed",
+          "sku": null,
+          "name": "Haircut",
+          "description": null,
+          "price_model": "fixed",
+          "price": {
+            "value": 2500,
+            "currency": "EUR"
+          },
+          "availability": "in_stock",
+          "gtin": null,
+          "no_gtin": true,
+          "brand": null,
+          "mpn": null,
+          "condition": "new",
+          "url": null,
+          "media": [],
+          "updated_at": "2026-11-02T09:12:00.000Z",
+          "hash": "f73cf65de8d8953b"
         }
       }
     },
@@ -1342,7 +1456,7 @@
       ],
       "expect": {
         "shown": false,
-        "why": "not_lower"
+        "why": "list_price_not_above"
       }
     },
     {
@@ -1360,7 +1474,7 @@
       ],
       "expect": {
         "shown": false,
-        "why": "not_lower"
+        "why": "list_price_not_above"
       }
     },
     {
@@ -1369,7 +1483,7 @@
       "history": [],
       "expect": {
         "shown": false,
-        "why": "not_lower"
+        "why": "list_price_never_seen"
       }
     },
     {
@@ -1387,7 +1501,7 @@
       ],
       "expect": {
         "shown": false,
-        "why": "history_short"
+        "why": "list_price_history_short"
       }
     },
     {
@@ -1423,7 +1537,7 @@
       ],
       "expect": {
         "shown": false,
-        "why": "history_short"
+        "why": "list_price_history_short"
       }
     },
     {
@@ -1449,7 +1563,7 @@
       ],
       "expect": {
         "shown": false,
-        "why": "sold_below"
+        "why": "list_price_sold_below"
       }
     },
     {
@@ -1530,9 +1644,51 @@
       ],
       "expect": {
         "shown": false,
-        "why": "history_short"
+        "why": "list_price_never_seen"
       },
-      "note": "below 25.00 throughout, so the reduction began at the first record"
+      "note": "below 25.00 throughout: the record never saw it at or above, however long the record runs"
+    },
+    {
+      "name": "a sale already running when the record began",
+      "list_price": 2000,
+      "history": [
+        {
+          "at": "2026-09-01T00:00:00.000Z",
+          "value": 1500
+        },
+        {
+          "at": "2026-10-25T00:00:00.000Z",
+          "value": 1400
+        }
+      ],
+      "expect": {
+        "shown": false,
+        "why": "list_price_never_seen"
+      },
+      "note": "a reader's first read of a shop mid-sale: never shown for this reduction"
+    },
+    {
+      "name": "back at the was price for 30 days, then a new reduction: shown",
+      "list_price": 2000,
+      "history": [
+        {
+          "at": "2026-08-01T00:00:00.000Z",
+          "value": 1500
+        },
+        {
+          "at": "2026-09-15T00:00:00.000Z",
+          "value": 2000
+        },
+        {
+          "at": "2026-10-20T00:00:00.000Z",
+          "value": 1500
+        }
+      ],
+      "expect": {
+        "shown": true,
+        "since": "2026-10-20T00:00:00.000Z"
+      },
+      "note": "the reduction that began on 20 October is a new one"
     },
     {
       "name": "a dip that ends a day inside the 30",
@@ -1557,7 +1713,7 @@
       ],
       "expect": {
         "shown": false,
-        "why": "sold_below"
+        "why": "list_price_sold_below"
       }
     },
     {
@@ -1597,7 +1753,7 @@
       ],
       "expect": {
         "shown": false,
-        "why": "history_short"
+        "why": "list_price_never_seen"
       }
     },
     {
