@@ -1,5 +1,7 @@
 import type { Statement } from "@surfingdog/platform";
+import type { ReturnPolicy } from "@surfingdog/spec";
 import { eq, inArray } from "drizzle-orm";
+import { loadPolicies } from "../catalogue/policies";
 import { businessFacts } from "../customer/audience";
 import { copyFor, vars } from "../customer/copy";
 import type { Audience } from "../customer/describe";
@@ -51,10 +53,11 @@ export async function withdrawalOf(
 ): Promise<WithdrawalRight> {
   if (item.type !== "booking" && item.type !== "order") return { available: false, until: null, why: "not_agreed" };
   const facts = await businessFacts(db, settings);
-  const [flags, concludedAt, fulfilledAt] = await Promise.all([
+  const [flags, concludedAt, fulfilledAt, days] = await Promise.all([
     flagsOf(db, item),
     concludedAtOf(db, item),
     item.type === "order" && ORDER_SENT.has(item.state) ? fulfilledAtOf(db, item) : Promise.resolve(null),
+    withdrawalDaysOf(db, item.type, item.payload, settings),
   ]);
   const p = item.payload as { paymentRef?: string; paidAmount?: Money; deliveredAt?: string; startTime?: string };
   return withdrawalRight({
@@ -69,7 +72,7 @@ export async function withdrawalOf(
       concludedAt,
       deliveredAt: p.deliveredAt ? Date.parse(p.deliveredAt) : null,
       fulfilledAt,
-      days: settings.returns.days,
+      days,
       assumedTransitDays: settings.returns.assumedTransitDays,
       law: lawOf(settings.commerce.legal.country),
       timezone: facts.timezone,
@@ -108,6 +111,64 @@ function flagsOf(db: Db, item: Item): Promise<string[]> {
   return item.type === "booking" || item.type === "order"
     ? withdrawalFlagsOf(db, item.type, item.payload)
     : Promise.resolve([]);
+}
+
+/** How long "unlimited" is held to here: ten years, past any order anyone returns. */
+const UNLIMITED_DAYS = 3650;
+
+/**
+ * The days a refund stays open on every line of an order by the return policies the business publishes
+ * (`GET /v1/catalogue/policies`): each line's product's own, else the default; the fewest of them, so
+ * each line is inside its own. A policy without a refund (an exchange, store credit) or with no returns
+ * gives none, and the settings' `returns.days` and the law's 14 days stand, as they always do.
+ */
+export async function publishedRefundDays(
+  db: Db,
+  payload: Record<string, unknown> | PayloadOf<"order">,
+  settings: Settings,
+): Promise<number> {
+  const lines = (payload as PayloadOf<"order">).orderedItem ?? [];
+  if (!lines.length) return 0;
+  const ids = [...new Set(lines.flatMap((l) => (l.productId ? [l.productId] : [])))];
+  const named = new Map<string, string | null>();
+  for (let i = 0; i < ids.length; i += 90) {
+    const rows = await db.orm
+      .select({ id: products.id, policy: products.returnPolicyId })
+      .from(products)
+      .where(inArray(products.id, ids.slice(i, i + 90)));
+    for (const r of rows) named.set(r.id, r.policy);
+  }
+  const { return_policies } = await loadPolicies(db, settings);
+  const fallback = return_policies.find((p) => p.default);
+  const daysOf = (p: ReturnPolicy | undefined): number =>
+    !p?.resolutions.includes("refund")
+      ? 0
+      : p.eligibility === "unlimited"
+        ? UNLIMITED_DAYS
+        : p.eligibility === "window"
+          ? (p.window_days ?? 0)
+          : 0;
+  let fewest = Number.POSITIVE_INFINITY;
+  for (const l of lines) {
+    const own = l.productId ? named.get(l.productId) : null;
+    fewest = Math.min(fewest, daysOf(own ? return_policies.find((p) => p.id === own) : fallback));
+  }
+  return Number.isFinite(fewest) ? fewest : 0;
+}
+
+/**
+ * The days a customer has to withdraw or return, as they are told it and as it is held: the settings'
+ * `returns.days`, and for an order never shorter than the refund window its products' published return
+ * policies give (`publishedRefundDays`), so what an agent read in the policies document is what holds.
+ */
+export async function withdrawalDaysOf(
+  db: Db,
+  type: string,
+  payload: Record<string, unknown> | PayloadOf<"order"> | PayloadOf<"booking">,
+  settings: Settings,
+): Promise<number> {
+  if (type !== "order") return settings.returns.days;
+  return Math.max(settings.returns.days, await publishedRefundDays(db, payload as PayloadOf<"order">, settings));
 }
 
 /** Each line's, or the service's, withdrawal flag from the catalogue; a line naming no product is standard. */

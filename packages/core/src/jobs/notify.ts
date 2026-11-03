@@ -23,7 +23,7 @@ import { stayLang } from "../stays/copy";
 import { ARRIVAL_MARKER, ARRIVAL_STATES, ARRIVAL_TEMPLATE, renderStayMail, stayLinks } from "../stays/mail";
 import { ownerStayMail } from "../stays/owner-mail";
 import { openArrival } from "../stays/setup";
-import { withdrawalOf } from "../write/returns";
+import { withdrawalDaysOf, withdrawalOf } from "../write/returns";
 import { describe, rowToItem } from "../write/views";
 import {
   autoHeaders,
@@ -400,7 +400,7 @@ async function customerMail(
     kind: item.type === "booking" ? "service" : "goods",
     exception: right?.exception && right.exception !== "standard" ? right.exception : null,
     law,
-    days: o.settings.returns.days,
+    days: await withdrawalDaysOf(db, item.type, item.payload, o.settings),
   };
   const answerLinks = skip
     ? null

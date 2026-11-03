@@ -15,6 +15,7 @@ import {
   catalogueWithdrawalSchema,
   cutText,
   isPlaceholderTitle,
+  normaliseGtin,
   type PricePoint,
   readCatalogueItemV2,
   unitPriceOf,
@@ -91,6 +92,37 @@ export function availabilityV2(
   return row.fewLeft !== null && row.fewLeft !== undefined && stock <= row.fewLeft ? "limited" : "in_stock";
 }
 
+/** The ages a menu may sell above (ADR-040, `menu.ageRestricted`). */
+const MENU_AGES: readonly number[] = [16, 18, 19, 20, 21];
+
+/**
+ * A menu's own age (ADR-040: a beer at 18), or null: what the kitchen's menu says of a dish or a drink,
+ * which names no kind of product. Until the owner gives the product an age restriction of its own, with
+ * its kind, it is sold at the business's doors with "ID checked at handover" and kept off networks
+ * (`age_kind_unknown`): a network lists an age only with its kind, and a guess would list a shisha as a drink.
+ */
+export function menuAgeOf(menu: unknown): number | null {
+  let m = menu;
+  if (typeof m === "string") {
+    try {
+      m = JSON.parse(m) as unknown;
+    } catch {
+      return null;
+    }
+  }
+  const age = m && typeof m === "object" ? (m as { ageRestricted?: unknown }).ageRestricted : null;
+  return typeof age === "number" && MENU_AGES.includes(age) ? age : null;
+}
+
+/** The age a product is sold above, its own or else its menu's: with its kind, or null for a menu's. */
+export function productAge(
+  row: Pick<ProductRow, "ageRestricted"> & Partial<Pick<ProductRow, "menu">>,
+): { readonly min_age: number; readonly kind: string | null } | null {
+  if (row.ageRestricted) return row.ageRestricted;
+  const menu = menuAgeOf(row.menu);
+  return menu === null ? null : { min_age: menu, kind: null };
+}
+
 /** Why a product is not listed in version 2, or null: version 1's reasons, and what version 2 adds. */
 export type NotListedV2Why =
   | "off_sale"
@@ -103,7 +135,8 @@ export type NotListedV2Why =
   | "age_kind_unknown";
 
 export function listableV2Why(
-  row: Pick<ProductRow, "active" | "listed" | "price" | "name" | "priceModel" | "availableUntil" | "ageRestricted">,
+  row: Pick<ProductRow, "active" | "listed" | "price" | "name" | "priceModel" | "availableUntil" | "ageRestricted"> &
+    Partial<Pick<ProductRow, "menu">>,
   now: number,
 ): NotListedV2Why | null {
   if (row.active !== 1) return "off_sale";
@@ -115,8 +148,9 @@ export function listableV2Why(
   }
   if (isPlaceholderTitle(row.name)) return "sample_name";
   if (row.availableUntil !== null && row.availableUntil <= now) return "available_until_passed";
-  if (row.ageRestricted) {
-    const kind = ageKindOf(row.ageRestricted.kind);
+  const age = productAge(row);
+  if (age) {
+    const kind = age.kind === null ? null : ageKindOf(age.kind);
     if (kind === null) return "age_kind_unknown";
     if (AGE_KINDS_OFF.includes(kind)) return "age_kind_off";
   }
@@ -268,8 +302,15 @@ export async function catalogueItemV2(row: ProductRow, ctx: CatalogueV2Context):
   };
 }
 
-function publicGtin(gtin: string | null): string | null {
-  return gtin && /^\d{14}$/.test(gtin) ? gtin : null;
+/**
+ * The barcode as published, by the feed and the doors alike: the stored one read again by today's check
+ * (`normaliseGtin`, its check digit, and no shop's own code or coupon), or none. A barcode stored before a
+ * check that now refuses it is never joined with another shop's product by it.
+ */
+export function publicGtin(gtin: string | null): string | null {
+  if (!gtin) return null;
+  const r = normaliseGtin(gtin, "barcode");
+  return "ok" in r ? r.ok.gtin14 : null;
 }
 
 /* --- the record of prices ------------------------------------------------------------------------ */

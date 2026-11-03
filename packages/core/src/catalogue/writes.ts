@@ -179,28 +179,40 @@ function refuse(code: CatalogueProblem | string, path: string, words?: string): 
   });
 }
 
+/** The price a product lists at: none for a price on request, whatever is kept beside it. */
+const listedPrice = (r: Pick<Row, "priceModel" | "price">): number | null =>
+  r.priceModel === "quote" ? null : r.price.value;
+
 /**
- * Checks a product as the write leaves it, and answers the group position to keep, when it joins a group
+ * Checks a product as the write leaves it (`row`: its `active` and `listed` too), against the product as
+ * it was (`before`, null for a new one), and answers the group position to keep, when it joins a group
  * without one. Each refusal names the code a network would hold or drop it for, so the inbox never stores
- * what its own feed would have to leave out: a price that does not hold together, a "was" price the 30-day
- * rule refuses by the inbox's own record, a unit price in units that do not convert, a pre-order with no
- * date, dates the wrong way round, a bundle that is also a pack, an age kind the vocabulary does not know,
- * a shipping profile or return policy there is none of, or a variant its group's other variants do not
- * agree with (`readCatalogueGroups`).
+ * what its own feed would have to leave out: a listed price made 0, a price that does not hold together,
+ * a "was" price the 30-day rule refuses by the inbox's own record, a unit price in units that do not
+ * convert, a pre-order with no date, dates the wrong way round, a bundle that is also a pack, an age kind
+ * the vocabulary does not know, a shipping profile or return policy there is none of, or a variant its
+ * group's other variants do not agree with (`readCatalogueGroups`).
  */
 export async function checkProductV2(
   db: Db,
   row: Row,
   now: number,
   input: V2Input & { price?: unknown },
+  before: Row | null,
 ): Promise<{ groupPosition?: number }> {
   const model = row.priceModel;
   if (!["fixed", "from", "range", "quote"].includes(model)) refuse("unreadable", "price_model");
-  if (model !== "quote" && !(row.price.value > 0)) {
+  // No price of 0 on a network (the founder, 2 November 2026): a write that makes a product's listed price
+  // 0 while it is on sale and listed is refused. One stored at 0 before (a free tasting, as version 1
+  // allowed) is written as it is, its price left alone, and its feed item withdrawn (`price_zero`); one
+  // kept off networks, or off sale, may be 0, as nothing of it is published.
+  const zero = listedPrice(row) !== null && !(row.price.value > 0);
+  const madeZero = before === null || listedPrice(before) !== listedPrice(row);
+  if (zero && madeZero && row.active === 1 && row.listed === 1) {
     refuse(
       "price_missing",
       "price",
-      "A listed price is at least 1 minor unit: price it, or make its price on request (price_model quote).",
+      "A listed price is at least 1 minor unit: price it, make its price on request (price_model quote), or keep it off networks (listed false).",
     );
   }
   if (model === "range") {

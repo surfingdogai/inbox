@@ -18,12 +18,15 @@ import { Capabilities } from "../src/capabilities/service";
 import { upsertCatalogue } from "../src/connectors/catalogue";
 import { createDb } from "../src/db";
 import { parseFeed } from "../src/feeds/parse";
+import { menuFieldsSchema } from "../src/menu/schema";
 import { verifyCatalogueSignature } from "../src/receipts/sign";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
 import { business, productGroups, productPrices, products } from "../src/schema/tables";
 import { createSecretBox } from "../src/secrets/box";
+import { readSettings } from "../src/settings/schema";
 import type { Caller } from "../src/write/index";
 import { priceFromCatalogue } from "../src/write/pricing";
+import { publishedRefundDays } from "../src/write/returns";
 import { makeClient, resetTables } from "./harness";
 
 /**
@@ -659,5 +662,287 @@ describe("feed imports", () => {
     expect(rows.filter((r) => r.externalId?.startsWith("MUG")).map((r) => r.groupId)).toEqual([null, null]);
     // Every price that came in is the start of its record.
     expect((await db.orm.select().from(productPrices)).length).toBe(5);
+  });
+});
+
+describe("what a page counts", () => {
+  const seqOf = async (db: Awaited<ReturnType<typeof setup>>["db"], id: string) =>
+    Number(
+      (await db.client.query({ sql: "SELECT catalogue_seq FROM products WHERE id = ?", params: [id], method: "all" }))
+        .rows[0]?.[0],
+    );
+
+  it("counts what it lists: an import that takes a price past its range's top withdraws it, and the count with it", async () => {
+    const { db, caps } = await setup();
+    const feed = (price: string) => parseFeed(`id,title,price\nLAMP,Lamp,${price} EUR`, { now: clock }).products;
+    await upsertCatalogue(db, { source: "feed:test", products: feed("40.00"), now: T0, seenAt: T0, currency: "EUR" });
+    const [lamp] = await db.orm.select().from(products);
+    if (!lamp) throw new Error("no lamp");
+    await caps.setup.updateProduct(owner, { product_id: lamp.id, price_model: "range", price_max: EUR(6000) });
+    expect((await pageV2(caps)).catalogue.count).toBe(1);
+    // The shop's price goes to 70.00, past the top the owner set: a reader holds it, so it is withdrawn.
+    clock = T0 + DAY;
+    await upsertCatalogue(db, {
+      source: "feed:test",
+      products: feed("70.00"),
+      now: clock,
+      seenAt: clock,
+      currency: "EUR",
+    });
+    const v2 = await pageV2(caps);
+    expect(v2.items).toEqual([expect.objectContaining({ id: lamp.id, state: "withdrawn" })]);
+    expect(v2.catalogue.count).toBe(0);
+    const v1 = await pageV1(caps);
+    expect(v1.catalogue.count).toBe(v1.items.filter((i) => i.state === "listed").length);
+    const status = await caps.catalogueStatus(owner);
+    expect(status.products.find((p) => p.id === lamp.id)?.notes).toEqual([
+      expect.objectContaining({ code: "catalogue_problem", problem: "price_max_not_above" }),
+    ]);
+    expect(status.counts.listed).toBe(0);
+  });
+
+  it("counts what it lists in both versions when a stored price is in no ISO currency", async () => {
+    const { db, caps } = await setup();
+    const odd = await caps.setup.createProduct(owner, { name: "Token", price: EUR(500), active: true });
+    await caps.setup.createProduct(owner, { name: "Tea", price: EUR(300), active: true });
+    await db.client.query({
+      sql: `UPDATE products SET price = json_set(price, '$.currency', 'XXA'), catalogue_seq = catalogue_seq + 10 WHERE id = ?`,
+      params: [odd.id],
+      method: "run",
+    });
+    for (const page of [await pageV2(caps), await pageV1(caps)]) {
+      const listed = page.items.filter((i) => i.state === "listed");
+      expect(listed.map((i) => i.id)).not.toContain(odd.id);
+      expect(page.catalogue.count).toBe(listed.length);
+      expect(page.catalogue.count).toBe(1);
+    }
+  });
+
+  it("moves an age-restricted product when the default shipping profile it shipped under goes", async () => {
+    const { db, caps } = await setup();
+    await caps.putShippingProfile(owner, STANDARD_SHIPPING);
+    const wine = await caps.setup.createProduct(owner, {
+      name: "Vinho Tinto",
+      price: EUR(1200),
+      age_restricted: { min_age: 18, kind: "wine" },
+      fulfil_methods: ["shipping"],
+      active: true,
+    });
+    // Shipping only, by a profile none of whose services checks ID: held.
+    const before = await pageV2(caps);
+    expect(before.items.find((i) => i.id === wine.id)?.state).toBe("withdrawn");
+    expect(before.catalogue.count).toBe(0);
+    const seq = await seqOf(db, wine.id);
+    clock = T0 + 1000;
+    await caps.deletePolicy(owner, { kind: "shipping", id: "standard" });
+    expect(await seqOf(db, wine.id)).toBeGreaterThan(seq);
+    const after = await pageV2(caps);
+    expect(after.items.find((i) => i.id === wine.id)?.state).toBe("listed");
+    expect(after.catalogue.count).toBe(1);
+  });
+});
+
+describe("a price of 0", () => {
+  it("leaves one stored at 0 as it is: renamed, given pictures, and withdrawn from the feed, never refused", async () => {
+    const { db, caps } = await setup();
+    const tasting = await caps.setup.createProduct(owner, { name: "Tasting", price: EUR(100), active: true });
+    // Stored at 0 as version 1 allowed (a free tasting).
+    await db.client.query({
+      sql: `UPDATE products SET price = json_set(price, '$.value', 0) WHERE id = ?`,
+      params: [tasting.id],
+      method: "run",
+    });
+    // The owner app's form always sends the price, as it is.
+    const renamed = await caps.setup.updateProduct(owner, {
+      product_id: tasting.id,
+      name: "Free tasting, two glasses",
+      price: EUR(0),
+      media: [{ type: "image", url: "https://cdn.loja.pt/img/tasting.jpg" }],
+    });
+    expect(renamed).toMatchObject({ name: "Free tasting, two glasses", price: EUR(0) });
+    const page = await pageV2(caps);
+    expect(page.items.find((i) => i.id === tasting.id)?.state).toBe("withdrawn");
+    expect(page.catalogue.count).toBe(0);
+    const notes = (await caps.catalogueStatus(owner)).products.find((p) => p.id === tasting.id)?.notes;
+    expect(notes).toEqual([expect.objectContaining({ code: "price_zero" })]);
+  });
+
+  it("refuses a write that makes a listed price 0, and keeps one at 0 that networks never see", async () => {
+    const { caps } = await setup();
+    const lamp = await caps.setup.createProduct(owner, { name: "Lamp", price: EUR(2000), active: true });
+    await expect(caps.setup.updateProduct(owner, { product_id: lamp.id, price: EUR(0) })).rejects.toMatchObject({
+      details: { code: "price_missing" },
+    });
+    const cake = await caps.setup.createProduct(owner, { name: "Cake", price_model: "quote", active: true });
+    await expect(caps.setup.updateProduct(owner, { product_id: cake.id, price_model: "fixed" })).rejects.toMatchObject({
+      details: { code: "price_missing" },
+    });
+    // Kept off networks, a price of 0 is the owner's to keep at their own doors.
+    const side = await caps.setup.createProduct(owner, { name: "Bread", price: EUR(0), listed: false, active: true });
+    expect(side).toMatchObject({ price: EUR(0), listed: 0 });
+  });
+});
+
+describe("one quote for one profile", () => {
+  it("quotes a product that names the default profile and one that names none as one basket", async () => {
+    const { caps } = await setup();
+    await caps.putShippingProfile(owner, STANDARD_SHIPPING);
+    const a = await caps.setup.createProduct(owner, {
+      name: "Bowl",
+      price: EUR(3000),
+      shipping_profile: "standard",
+      weight: { value: 0.5, unit: "kg" },
+      active: true,
+    });
+    const b = await caps.setup.createProduct(owner, {
+      name: "Plate",
+      price: EUR(3000),
+      weight: { value: 0.5, unit: "kg" },
+      active: true,
+    });
+    const q = await caps.quoteShipping({
+      lines: [
+        { product_id: a.id, quantity: 1 },
+        { product_id: b.id, quantity: 1 },
+      ],
+      destination: { country: "PT" },
+    });
+    // 60.00 together is over the 50.00 it ships free over: one quote, at nothing.
+    expect(q.quotes).toEqual([
+      expect.objectContaining({
+        profile: "standard",
+        product_ids: [a.id, b.id],
+        services: [expect.objectContaining({ fee: EUR(0) })],
+      }),
+    ]);
+  });
+});
+
+describe("the barcode a feed publishes", () => {
+  it("is the stored one read again by today's check, as the doors give it", async () => {
+    const { db, caps } = await setup();
+    const p = await caps.setup.createProduct(owner, { name: "Kettle", price: EUR(3000), active: true });
+    // A barcode stored before, whose check digit is wrong.
+    await db.client.query({
+      sql: "UPDATE products SET gtin = '09506000134353' WHERE id = ?",
+      params: [p.id],
+      method: "run",
+    });
+    expect((await pageV2(caps)).items.find((i) => i.id === p.id)).toMatchObject({ state: "listed", gtin: null });
+    expect((await pageV1(caps)).items.find((i) => i.id === p.id)).toMatchObject({ state: "listed", gtin: null });
+    expect((await caps.listProducts({ limit: 10 })).items.find((i) => i.id === p.id)?.gtin).toBeNull();
+  });
+});
+
+describe("a menu's own age", () => {
+  it("keeps a drink its menu sells at 18+ off networks until its kind is given, labelled at the doors and in the profile", async () => {
+    const { db, caps } = await setup();
+    const beer = await caps.setup.createProduct(owner, { name: "Super Bock", price: EUR(250), active: true });
+    const seq = Number(
+      (
+        await db.client.query({
+          sql: "SELECT catalogue_seq FROM products WHERE id = ?",
+          params: [beer.id],
+          method: "all",
+        })
+      ).rows[0]?.[0],
+    );
+    await caps.food.setMenuItem(owner, {
+      product_id: beer.id,
+      menu: menuFieldsSchema.parse({ section: "drinks", ageRestricted: 18 }),
+    });
+    const moved = Number(
+      (
+        await db.client.query({
+          sql: "SELECT catalogue_seq FROM products WHERE id = ?",
+          params: [beer.id],
+          method: "all",
+        })
+      ).rows[0]?.[0],
+    );
+    expect(moved).toBeGreaterThan(seq);
+    const page = await pageV2(caps);
+    expect(page.items.find((i) => i.id === beer.id)?.state).toBe("withdrawn");
+    expect(page.catalogue.count).toBe(0);
+    const door = (await caps.listProducts({ limit: 10 })).items.find((i) => i.id === beer.id);
+    expect(door?.age_restricted).toMatchObject({ min_age: 18, kind: null, label: "ID checked at handover: 18+" });
+    expect((await caps.getBusinessProfile()).age_check?.min_ages).toEqual([18]);
+    const notes = (await caps.catalogueStatus(owner)).products.find((p) => p.id === beer.id)?.notes;
+    expect(notes).toEqual([
+      expect.objectContaining({
+        code: "catalogue_problem",
+        problem: "age_kind_unknown",
+        words: expect.stringMatching(/menu sells it at 18\+/),
+      }),
+    ]);
+    // Its kind given: listed, with its age.
+    await caps.setup.updateProduct(owner, { product_id: beer.id, age_restricted: { min_age: 18, kind: "beer" } });
+    expect((await pageV2(caps)).items.find((i) => i.id === beer.id)).toMatchObject({
+      state: "listed",
+      age_restricted: { min_age: 18, kind: "alcohol", check: "id_at_handover" },
+    });
+  });
+});
+
+describe("the return policies the inbox holds to", () => {
+  it("holds a refund return open as long as the published policy of each line says, never less than the settings", async () => {
+    const { db, caps } = await setup();
+    await caps.putReturnPolicy(owner, {
+      id: "sixty",
+      name: "60 days",
+      default: true,
+      eligibility: "window",
+      window_days: 60,
+      resolutions: ["refund"],
+      methods: ["by_post"],
+      return_postage: "customer",
+    });
+    await caps.putReturnPolicy(owner, {
+      id: "swap",
+      name: "Exchange, 90 days",
+      eligibility: "window",
+      window_days: 90,
+      resolutions: ["exchange"],
+      methods: ["in_store"],
+    });
+    const lamp = await caps.setup.createProduct(owner, { name: "Lamp", price: EUR(2000), active: true });
+    const vase = await caps.setup.createProduct(owner, {
+      name: "Vase",
+      price: EUR(2000),
+      return_policy: "swap",
+      active: true,
+    });
+    const settings = await readSettings(db);
+    const days = (ids: string[]) =>
+      publishedRefundDays(
+        db,
+        { orderedItem: ids.map((productId) => ({ productId, name: "x", quantity: 1 })) },
+        settings,
+      );
+    expect(await days([lamp.id])).toBe(60);
+    // An exchange is no refund: the settings' days and the law's stand for that line.
+    expect(await days([vase.id])).toBe(0);
+    expect(await days([lamp.id, vase.id])).toBe(0);
+  });
+
+  it("refuses to move the business to a country whose law gives 14 days while a policy is shorter", async () => {
+    const { caps } = await setup();
+    await caps.updateSettings(owner, { doc: { commerce: { legal: { country: "BR" } } } });
+    await caps.putReturnPolicy(owner, {
+      id: "seven",
+      name: "7 days",
+      default: true,
+      eligibility: "window",
+      window_days: 7,
+      resolutions: ["exchange"],
+      methods: ["in_store"],
+    });
+    await expect(caps.updateSettings(owner, { doc: { commerce: { legal: { country: "PT" } } } })).rejects.toMatchObject(
+      { details: { code: "withdrawal_14_days", policies: ["seven"] } },
+    );
+    await expect(caps.updateSettings(owner, { doc: { commerce: { legal: { country: "" } } } })).rejects.toMatchObject({
+      details: { code: "withdrawal_14_days" },
+    });
+    await caps.updateSettings(owner, { doc: { commerce: { legal: { country: "US" } } } });
   });
 });

@@ -6,6 +6,7 @@ import {
   normaliseGtin,
 } from "@surfingdog/spec";
 import type { ProductRow } from "./publish";
+import { menuAgeOf } from "./v2";
 
 /**
  * What needs a look (ADR-029, Track 1): plain words for the owner beside each product, Merchant
@@ -51,7 +52,7 @@ export interface HeldReason {
 }
 
 type NoteRow = Pick<ProductRow, "name" | "price" | "active" | "listed" | "source" | "gtin" | "gtinGiven"> &
-  Partial<Pick<ProductRow, "priceModel">>;
+  Partial<Pick<ProductRow, "priceModel" | "ageRestricted" | "menu">>;
 
 /** Where a barcode is put right: there is no box to type one in here (ADR-029). */
 const FIX_AT_SOURCE =
@@ -135,8 +136,13 @@ export function productNotes(
   if (row.active === 1 && isPlaceholderTitle(row.name)) {
     out.push({ code: "sample_name", words: "Its name looks like a template's sample." });
   }
+  // An age its menu gives, with no kind of product said yet: what to do, in the owner's words.
+  const menuAge = row.ageRestricted ? null : menuAgeOf(row.menu);
   for (const code of v2) {
-    const words = CATALOGUE_V2_PROBLEMS[code].words;
+    const words =
+      code === "age_kind_unknown" && menuAge !== null
+        ? `Your menu sells it at ${menuAge}+, and a network shows an age only with the kind of product it is. Give it an age restriction with its kind (alcohol, for a drink) and it is listed, with "ID checked at handover: ${menuAge}+".`
+        : CATALOGUE_V2_PROBLEMS[code].words;
     out.push({ code: "catalogue_problem", problem: code, words: isHold(code) ? `On no network: ${words}` : words });
   }
   for (const h of held) {

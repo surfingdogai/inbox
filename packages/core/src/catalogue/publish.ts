@@ -4,7 +4,6 @@ import {
   type CatalogueItem,
   type CatalogueListedItemV2,
   catalogueItemV1Of,
-  normaliseGtin,
   unitPriceOf,
 } from "@surfingdog/spec";
 import type { products } from "../schema/tables";
@@ -13,6 +12,8 @@ import {
   catalogueItemV2,
   listableV2Why,
   type NotListedV2Why,
+  productAge,
+  publicGtin,
   publishableUrl,
   wasPriceRefusal,
 } from "./v2";
@@ -87,7 +88,11 @@ export interface PublicProduct {
   readonly multipack?: number;
   readonly is_bundle?: boolean;
   /** Sold only above an age, ID checked at handover, with the words to show beside it. */
-  readonly age_restricted?: NonNullable<CatalogueListedItemV2["age_restricted"]> & { readonly label: string };
+  readonly age_restricted?: Omit<NonNullable<CatalogueListedItemV2["age_restricted"]>, "kind"> & {
+    /** Null for a menu's own age (ADR-040), until the owner says what kind of product it is. */
+    readonly kind: string | null;
+    readonly label: string;
+  };
   readonly fulfil_methods?: readonly string[];
   readonly shipping_profile?: string;
   readonly weight?: { readonly value: number; readonly unit: string };
@@ -148,13 +153,6 @@ export function availabilityOf(
   );
 }
 
-/** The barcode as published: the stored one, read again by the same check, or none. */
-function publicGtin(gtin: string | null): string | null {
-  if (!gtin) return null;
-  const r = normaliseGtin(gtin, "barcode");
-  return "ok" in r ? r.ok.gtin14 : null;
-}
-
 const iso = (ms: number) => new Date(ms).toISOString();
 
 export function publicProduct(row: ProductRow, ctx: ProductDoorContext): PublicProduct {
@@ -171,7 +169,8 @@ export function publicProduct(row: ProductRow, ctx: ProductDoorContext): PublicP
     fixed && row.listPrice && ctx.history && wasPriceRefusal(row, ctx.history.get(row.id) ?? []) === null
       ? row.listPrice
       : null;
-  const age = row.ageRestricted;
+  const own = row.ageRestricted;
+  const age = productAge(row);
   return {
     id: row.id,
     sku: row.sku,
@@ -216,7 +215,7 @@ export function publicProduct(row: ProductRow, ctx: ProductDoorContext): PublicP
           age_restricted: {
             min_age: age.min_age,
             kind: age.kind,
-            ...(age.by_country && Object.keys(age.by_country).length ? { by_country: age.by_country } : {}),
+            ...(own?.by_country && Object.keys(own.by_country).length ? { by_country: own.by_country } : {}),
             check: "id_at_handover" as const,
             label: ageLabel(age.min_age),
           },
@@ -239,7 +238,7 @@ export type NotListedWhy = NotListedV2Why;
 
 export function listableWhy(
   row: Pick<ProductRow, "active" | "listed" | "price" | "name"> &
-    Partial<Pick<ProductRow, "priceModel" | "availableUntil" | "ageRestricted">>,
+    Partial<Pick<ProductRow, "priceModel" | "availableUntil" | "ageRestricted" | "menu">>,
   now = Date.now(),
 ): NotListedWhy | null {
   return listableV2Why(

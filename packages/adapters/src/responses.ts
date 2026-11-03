@@ -704,7 +704,12 @@ export const publicProductSchema = z.object({
   multipack: z.number().int().optional().describe("This many identical units of one item, sold together."),
   is_bundle: z.boolean().optional().describe("Different items sold together at one price."),
   age_restricted: z
-    .looseObject({ min_age: z.number().int(), kind: z.string(), check: z.literal("id_at_handover"), label: z.string() })
+    .looseObject({
+      min_age: z.number().int(),
+      kind: z.string().nullable().describe("What kind of product (alcohol…); null for an age its menu gives."),
+      check: z.literal("id_at_handover"),
+      label: z.string(),
+    })
     .optional()
     .describe("Sold only above min_age (by_country where it differs), ID checked at handover; show label beside it."),
   fulfil_methods: z

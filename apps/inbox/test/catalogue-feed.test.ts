@@ -1,3 +1,4 @@
+import { createApiKey } from "@surfingdog/adapters";
 import {
   CATALOGUE_SIGNATURE_HEADER,
   type Caller,
@@ -184,6 +185,63 @@ describe("catalogue version 2 at the door", () => {
     expect(res.status).toBe(200);
     // No shipping profile yet: the business has not set rates.
     expect(await res.json()).toMatchObject({ quotes: [{ why: "no_profile", product_ids: [s.id] }], unquoted: [] });
+  });
+});
+
+describe("the owner's shipping profiles and return policies", () => {
+  it("answers an id in the path that is no profile's or policy's id with a 422 naming it, never a 500", async () => {
+    const s = await setup();
+    const key = await createApiKey(s.db, { kind: "owner", name: "t" });
+    const headers = { authorization: `Bearer ${key.key}`, "content-type": "application/json" };
+    // Bodies that read: only the id is wrong.
+    const profile = {
+      name: "Standard",
+      zones: [
+        {
+          name: "Brazil",
+          destinations: [{ country: "BR" }],
+          services: [
+            {
+              id: "post",
+              name: "Post",
+              tracked: false,
+              id_check: false,
+              transit_days: { min: 2, max: 5 },
+              rate: { basis: "flat", amount: { value: 1500, currency: "BRL" } },
+            },
+          ],
+        },
+      ],
+    };
+    const policy = {
+      name: "30 days",
+      eligibility: "window",
+      window_days: 30,
+      resolutions: ["refund"],
+      methods: ["by_post"],
+    };
+    for (const [path, body] of [
+      ["shipping-profiles", profile],
+      ["return-policies", policy],
+    ] as const) {
+      for (const id of ["Standard", "two%20words", "x".repeat(65)]) {
+        const res = await s.app.request(`${ORIGIN}/v1/owner/catalogue/${path}/${id}`, {
+          method: "PUT",
+          headers: { ...headers, "Idempotency-Key": `k-${path}-${id.slice(0, 20)}` },
+          body: JSON.stringify(body),
+        });
+        expect(res.status, `${path}/${id}`).toBe(422);
+        expect(await res.json()).toMatchObject({
+          code: "invalid_input",
+          fields: [expect.objectContaining({ path: "id" })],
+        });
+      }
+      const gone = await s.app.request(`${ORIGIN}/v1/owner/catalogue/${path}/Bad%20Id`, {
+        method: "DELETE",
+        headers: { ...headers, "Idempotency-Key": `d-${path}` },
+      });
+      expect(gone.status).toBe(422);
+    }
   });
 });
 

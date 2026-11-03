@@ -160,6 +160,8 @@ export const DOWNLOAD_TABLES: Readonly<Record<string, DownloadTable>> = {
   },
   instance_meta: {
     note: "This inbox's own id, which the entries it adds to a calendar carry, so a copy knows them as its own.",
+    // What the catalogue last counted to is worked out again where the copy is opened.
+    strip: () => ["DELETE FROM instance_meta WHERE key = 'catalogue_counts'"],
   },
   // People who sign in, keys and AI apps.
   users: { note: "The people who sign in. Sign in where you open the copy with the same email address." },

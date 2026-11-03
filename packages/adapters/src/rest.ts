@@ -37,6 +37,7 @@ import {
   offerDraftInput,
   openReturnInput,
   payOrderInput,
+  policyIdSchema,
   presetKeySchema,
   productGroupInput,
   productInput,
@@ -1784,6 +1785,8 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
     },
   );
 
+  // A profile's or a policy's id in the path, checked as its body would be: a 422 naming it, never a 500.
+  const policyParam = z.object({ id: policyIdSchema });
   app.get(
     "/catalogue/policies",
     owner({
@@ -1803,9 +1806,10 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
       responses: json("Policies", R.ownerPoliciesSchema),
       write: true,
     }),
+    validator("param", policyParam, hook),
     validator("json", shippingProfileInput.omit({ id: true }), hook),
     async (c) => {
-      const input = { ...c.req.valid("json"), id: String(c.req.param("id")) };
+      const input = { ...c.req.valid("json"), id: c.req.valid("param").id };
       return once(c, "policies.shipping", input, async (caller) =>
         ownerPolicies(await caps.putShippingProfile(caller, shippingProfileInput.parse(input))),
       );
@@ -1821,9 +1825,10 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
       responses: json("Policies", R.ownerPoliciesSchema),
       write: true,
     }),
+    validator("param", policyParam, hook),
     validator("json", returnPolicyInput.omit({ id: true }), hook),
     async (c) => {
-      const input = { ...c.req.valid("json"), id: String(c.req.param("id")) };
+      const input = { ...c.req.valid("json"), id: c.req.valid("param").id };
       return once(c, "policies.returns", input, async (caller) =>
         ownerPolicies(await caps.putReturnPolicy(caller, returnPolicyInput.parse(input))),
       );
@@ -1843,8 +1848,9 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
         responses: json("Policies", R.ownerPoliciesSchema),
         write: true,
       }),
+      validator("param", policyParam, hook),
       async (c) => {
-        const input = { kind, id: String(c.req.param("id")) };
+        const input = { kind, id: c.req.valid("param").id };
         return once(c, `policies.delete.${kind}`, input, async (caller) =>
           ownerPolicies(await caps.deletePolicy(caller, input)),
         );

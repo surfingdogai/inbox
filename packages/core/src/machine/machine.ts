@@ -85,7 +85,8 @@ export type GuardId =
    */
   | "refund_amount"
   /**
-   * The owner's AI and rules approve a return only inside the owner's policy (`returns.days`, nothing
+   * The owner's AI and rules approve a return only inside the owner's policy (`returns.days`, or the
+   * refund window of the return policies it publishes when longer, nothing
    * excepted) with the goods coming back, and only while the owner lets them
    * (`negotiation.ai.mayAuthorizeReturnsInPolicy`); faulty goods always.
    */

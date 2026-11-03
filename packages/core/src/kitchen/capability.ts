@@ -361,7 +361,8 @@ export class FoodCapabilities {
     const before = await this.product(input.product_id);
     if (input.menu === null) {
       await this.db.client.query({
-        sql: "UPDATE products SET menu = NULL, updated_at = ? WHERE id = ?",
+        // What the feed shows of it follows its menu (its age): it moves to the feed's end (ADR-029).
+        sql: `UPDATE products SET menu = NULL, catalogue_seq = ${NEXT_CATALOGUE_SEQ}, updated_at = ? WHERE id = ?`,
         params: [now, before.id],
         method: "run",
       });
@@ -395,7 +396,9 @@ export class FoodCapabilities {
         ? "perishable"
         : null;
     await this.db.client.query({
-      sql: `UPDATE products SET menu = ?, ${withdrawal ? "withdrawal = ?, " : ""}updated_at = ? WHERE id = ?`,
+      // Its withdrawal and its age are what the feed shows of it: it moves to the feed's end (ADR-029).
+      sql: `UPDATE products SET menu = ?, ${withdrawal ? "withdrawal = ?, " : ""}catalogue_seq = ${NEXT_CATALOGUE_SEQ},
+              updated_at = ? WHERE id = ?`,
       params: [JSON.stringify(menu), ...(withdrawal ? [withdrawal] : []), now, before.id],
       method: "run",
     });

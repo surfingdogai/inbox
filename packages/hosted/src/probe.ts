@@ -134,12 +134,32 @@ async function probeBooking(call: Call, create: Create, result: Result): Promise
   };
 }
 
+/** A product as `GET /v1/products` gives it, as far as the order probe reads it. */
+export interface ProbeProduct {
+  readonly id: string;
+  readonly name: string;
+  readonly price: unknown;
+  readonly price_model?: string;
+  readonly active: number;
+}
+
+/**
+ * The product the order probe orders: the first on sale at a fixed price. A price on request has none
+ * (`price: null`), and a `from` or `range` price is only where it starts, which goes to a person to quote.
+ */
+export function orderableProduct(items: readonly ProbeProduct[]): ProbeProduct | { readonly none: string } {
+  const onSale = items.filter((p) => p.active !== 0);
+  if (!onSale.length) return { none: "no product to order" };
+  const fixed = onSale.find((p) => (p.price_model ?? "fixed") === "fixed" && p.price !== null && p.price !== undefined);
+  return fixed ?? { none: "no fixed-price product to order" };
+}
+
 async function probeOrder(call: Call, create: Create, result: Result): Promise<ProbeResult> {
   const products = (await (await call("GET", "/v1/products?limit=50")).json().catch(() => null)) as {
-    items?: { id: string; name: string; price: unknown; active: number }[];
+    items?: ProbeProduct[];
   } | null;
-  const product = products?.items?.find((p) => p.active !== 0);
-  if (!product) return { door: "order", ok: false, status: 0, detail: "no product to order" };
+  const product = orderableProduct(products?.items ?? []);
+  if ("none" in product) return { door: "order", ok: false, status: 0, detail: product.none };
   return await result(
     "order",
     await create("/v1/orders", {

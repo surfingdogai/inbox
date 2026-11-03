@@ -18,6 +18,7 @@ import { type CatalogueStatus, type HeldReason, isHold, productNotes, skuBarcode
 import { CatalogueCapabilities } from "../catalogue/feed";
 import { NEXT_CATALOGUE_SEQ } from "../catalogue/identity";
 import {
+  ageRestrictedMoved,
   deletePolicy,
   loadPolicies,
   type PoliciesState,
@@ -27,6 +28,7 @@ import {
   type QuoteShippingInput,
   quoteBasket,
   type ReturnPolicyInput,
+  returnPolicyTooShort,
   type ShippingProfileInput,
   type ShippingQuoteAnswer,
 } from "../catalogue/policies";
@@ -967,11 +969,17 @@ export class Capabilities {
     };
   }
 
-  /** The profile's `age_check`: the ages the owner set on the products on sale, when any is age-restricted. */
+  /**
+   * The profile's `age_check`: the ages the owner set on the products on sale, when any is age-restricted,
+   * each product's own or else its menu's (ADR-040, a beer at 18).
+   */
   private async ageCheckOf(): Promise<{ age_check?: AgeCheckProfile }> {
     const { rows } = await this.db.client.query({
-      sql: `SELECT DISTINCT json_extract(age_restricted, '$.min_age') FROM products
-             WHERE active = 1 AND age_restricted IS NOT NULL ORDER BY 1`,
+      sql: `SELECT DISTINCT age FROM (
+              SELECT COALESCE(json_extract(age_restricted, '$.min_age'),
+                              CASE WHEN json_valid(menu) THEN json_extract(menu, '$.ageRestricted') END) AS age
+                FROM products WHERE active = 1 AND (age_restricted IS NOT NULL OR menu IS NOT NULL))
+             WHERE age IS NOT NULL ORDER BY 1`,
       method: "all",
     });
     const ages = rows.map((r) => Number(r[0])).filter((n) => Number.isInteger(n));
@@ -1209,11 +1217,7 @@ export class Capabilities {
     if (!isPerson(caller)) throw policyOwners("zones");
     const now = nowOf(caller);
     const state = await putShippingProfile(this.db, input, now);
-    await this.db.client.query({
-      sql: `UPDATE products SET catalogue_seq = ${NEXT_CATALOGUE_SEQ}, updated_at = ? WHERE age_restricted IS NOT NULL`,
-      params: [now],
-      method: "run",
-    });
+    await this.db.batch([ageRestrictedMoved(now)]);
     return state;
   }
 
@@ -1231,7 +1235,7 @@ export class Capabilities {
   ): Promise<PoliciesState> {
     if (isCustomer(caller)) throw new WriteError("not_allowed", "this needs the owner");
     if (!isPerson(caller)) throw policyOwners("id");
-    return deletePolicy(this.db, input.kind, input.id);
+    return deletePolicy(this.db, input.kind, input.id, nowOf(caller));
   }
 
   /**
@@ -2724,6 +2728,27 @@ export class Capabilities {
       throw new WriteError("invalid_input", message, {
         fields: logos.map((path) => ({ path: `doc.${path}`, problem: "invalid", message })),
       });
+    }
+    // Where the business sells decides whether a return policy under the 14 days to withdraw may stand
+    // (`returnPolicyTooShort`): a country that gives the 14 days, or none said, is refused while any of
+    // the published return policies is shorter, so the policies document never says less than the law.
+    if (after.commerce.legal.country !== before.commerce.legal.country) {
+      const country = after.commerce.legal.country;
+      const short = (await loadPolicies(this.db, after)).return_policies.filter(
+        (p) => returnPolicyTooShort(p, country) !== null,
+      );
+      if (short.length) {
+        throw new WriteError(
+          "invalid_input",
+          `${country ? `In ${country.toUpperCase()}` : "With no country set"} the law gives a buyer 14 days to withdraw from a distance purchase, and ${short.length === 1 ? "your return policy" : "your return policies"} ${short.map((p) => `"${p.name}"`).join(", ")} ${short.length === 1 ? "is" : "are"} shorter. Make ${short.length === 1 ? "it" : "them"} 14 days or more first (Shipping and returns).`,
+          {
+            fields: [
+              { path: "doc.commerce.legal.country", problem: "invalid", message: "a return policy is under 14 days" },
+            ],
+            details: { code: "withdrawal_14_days", policies: short.map((p) => p.id) },
+          },
+        );
+      }
     }
     // What a held network or the held listing comes back to is the host's to keep (`settings/policy.ts`):
     // nobody else writes it but through what a hold lets them choose (`hold` above). Where nothing

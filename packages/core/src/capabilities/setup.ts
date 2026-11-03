@@ -354,10 +354,20 @@ export class SetupCapabilities {
       );
     }
     const draft = mergedRow(
-      { ...EMPTY_PRODUCT, id, name: input.name, price, stock: input.stock ?? null, createdAt: now, updatedAt: now },
+      {
+        ...EMPTY_PRODUCT,
+        id,
+        name: input.name,
+        price,
+        stock: input.stock ?? null,
+        active: input.active && !held ? 1 : 0,
+        listed: input.listed === false ? 0 : 1,
+        createdAt: now,
+        updatedAt: now,
+      },
       input,
     );
-    const { groupPosition } = await checkProductV2(this.db, draft, now, { ...input, price });
+    const { groupPosition } = await checkProductV2(this.db, draft, now, { ...input, price }, null);
     try {
       await this.db.orm.insert(products).values({
         id,
@@ -425,7 +435,12 @@ export class SetupCapabilities {
       const own = changedOwnerField(patch, stored);
       if (own && !isPerson(caller)) throw v2Owners(own);
       const now = nowOf(caller);
-      ({ groupPosition } = await checkProductV2(this.db, mergedRow(stored, patch), now, patch));
+      const after = {
+        ...mergedRow(stored, patch),
+        ...(patch.active !== undefined ? { active: patch.active ? 1 : 0 } : {}),
+        ...(patch.listed !== undefined ? { listed: patch.listed ? 1 : 0 } : {}),
+      };
+      ({ groupPosition } = await checkProductV2(this.db, after, now, patch, stored));
     }
     if (isOwnerAssistant(caller) && (patch.price !== undefined || patch.active === true)) {
       const stored = await this.product(product_id);

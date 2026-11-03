@@ -1,3 +1,4 @@
+import type { Statement } from "@surfingdog/platform";
 import {
   CATALOGUE_V2_PROBLEMS,
   type CataloguePolicies,
@@ -19,6 +20,8 @@ import { products, returnPolicies, shippingProfiles } from "../schema/tables";
 import { readSettings, type Settings } from "../settings/schema";
 import { canonicalJson, hashText } from "../util/canonical";
 import { WriteError } from "../write/errors";
+import { NEXT_CATALOGUE_SEQ } from "./identity";
+import { productAge } from "./v2";
 
 /**
  * The business's shipping profiles and return policies (catalogue version 2; protocol §4.18 as amended,
@@ -320,9 +323,16 @@ export async function putReturnPolicy(db: Db, input: ReturnPolicyInput, now: num
 /**
  * Takes a profile or a policy away. Refused while a product names it, since a product that names one the
  * document does not have is held by every reader, and never shown the default's instead; and refused for
- * the default return policy, which every product without one of its own is sold under.
+ * the default return policy, which every product without one of its own is sold under. A shipping profile
+ * gone moves every age-restricted product in the feed, as one written does (`ageRestrictedMoved`): whether
+ * one may ship depends on its profile, and the default may be the one that went.
  */
-export async function deletePolicy(db: Db, kind: "shipping" | "returns", id: string): Promise<PoliciesState> {
+export async function deletePolicy(
+  db: Db,
+  kind: "shipping" | "returns",
+  id: string,
+  now: number,
+): Promise<PoliciesState> {
   const column = kind === "shipping" ? products.shippingProfileId : products.returnPolicyId;
   const [used] = await db.orm.select({ id: products.id }).from(products).where(eq(column, id)).limit(1);
   if (used) {
@@ -347,7 +357,21 @@ export async function deletePolicy(db: Db, kind: "shipping" | "returns", id: str
       fields: [{ path: "id", problem: "invalid", message: "unknown" }],
     });
   }
+  if (kind === "shipping") await db.batch([ageRestrictedMoved(now)]);
   return loadPolicies(db);
+}
+
+/**
+ * Every age-restricted product to a new position in the feed: run when a shipping profile is written or
+ * taken away, since whether an age-restricted product may ship (a service that checks ID at handover)
+ * is read from its profile, or the default, and the item changes with it without a write of its own.
+ */
+export function ageRestrictedMoved(now: number): Statement {
+  return {
+    sql: `UPDATE products SET catalogue_seq = ${NEXT_CATALOGUE_SEQ}, updated_at = ? WHERE age_restricted IS NOT NULL`,
+    params: [now],
+    method: "run",
+  };
 }
 
 /* --- a shipping quote ---------------------------------------------------------------------------- */
@@ -431,16 +455,21 @@ export async function quoteBasket(db: Db, input: QuoteShippingInput): Promise<Sh
       unquoted.push({ product_id: p.id, why: "not_priced" });
       continue;
     }
-    if (p.ageRestricted) aged = true;
-    const key = p.shippingProfileId ?? "";
-    const g = groups.get(key) ?? { profile: p.shippingProfileId, lines: [] };
+    // A menu's own age too (ADR-040): a beer goes only by a service that checks ID.
+    const age = productAge(p) !== null;
+    if (age) aged = true;
+    // By the profile it ships under, as a reader resolves it: one that names the default and one that
+    // names none are one basket, charged once and free over its value together.
+    const profile = p.shippingProfileId ?? state.read.default_shipping_profile;
+    const key = profile ?? "";
+    const g = groups.get(key) ?? { profile, lines: [] };
     g.lines.push({
       id: p.id,
       line: {
         price: { value: p.price.value, currency: p.price.currency.toUpperCase() },
         quantity: l.quantity,
         weight: p.weight ?? null,
-        age_restricted: p.ageRestricted !== null,
+        age_restricted: age,
       },
     });
     groups.set(key, g);

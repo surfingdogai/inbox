@@ -67,7 +67,7 @@ import { findIdempotent } from "../write/common";
 import { notYoursError, WriteError } from "../write/errors";
 import { once } from "../write/idempotency";
 import { type PricingFor, priceFromCatalogue } from "../write/pricing";
-import { openReturnOf, withdrawalFlagsOf, withdrawalOf } from "../write/returns";
+import { openReturnOf, withdrawalDaysOf, withdrawalFlagsOf, withdrawalOf } from "../write/returns";
 import { RULE_SKIPPED_EVENT } from "../write/skipped";
 import { appendThreadEntry } from "../write/thread";
 import { type TransitionResult, transitionItem } from "../write/transition";
@@ -455,7 +455,7 @@ export class CustomerDoors {
     const law = lawOf(settings.commerce.legal.country);
     const words = withdrawalCopy(a.lang, law);
     const total = moneyIn(payload.totalPrice as Money, a.lang);
-    const days = String(settings.returns.days);
+    const days = String(await withdrawalDaysOf(this.db, type, payload, settings));
     const main =
       type === "booking"
         ? c.confirmStep.booking(

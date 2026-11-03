@@ -1,5 +1,4 @@
 import {
-  AGE_KINDS_OFF,
   CATALOGUE_ITEMS_MAX,
   CATALOGUE_PAGE_MAX,
   type CatalogueItem,
@@ -10,8 +9,6 @@ import {
   catalogueIdV2Schema,
   catalogueItemV1Of,
   type PingCatalogue,
-  PLACEHOLDER_TITLES,
-  profileChecksId,
 } from "@surfingdog/spec";
 import { and, asc, eq, gt, inArray, or } from "drizzle-orm";
 import type { Db } from "../db";
@@ -146,43 +143,14 @@ function limitOf(raw: string | number | undefined): number | CatalogueRefusal {
   return n;
 }
 
-/**
- * The SQL that counts what a version's page lists, the twin of `catalogueItemV2` (and, for version 1,
- * `catalogueItemV1Of`): a network compares a page's `count` with what it read, and holds a source whose
- * counts differ, so it is exact. `unchecked`: the shipping profiles none of whose services checks ID, and
- * whether the default is one; an age-restricted product that only ships by one of them is withdrawn.
- */
-function countSql(
-  version: Version,
-  now: number,
-  unchecked: { readonly ids: readonly string[]; readonly defaultUnchecked: boolean },
-): { sql: string; params: (string | number)[] } {
-  const params: (string | number)[] = [];
-  const add = (...v: (string | number)[]) => {
-    params.push(...v);
-    return v.map(() => "?").join(", ");
-  };
-  const listed = `active = 1 AND listed = 1
-    AND replace(lower(trim(name)), '’', '''') NOT IN (${add(...PLACEHOLDER_TITLES)})
-    AND (price_model = 'quote' OR (json_extract(price, '$.value') > 0 AND length(json_extract(price, '$.currency')) = 3))
-    AND (available_until IS NULL OR available_until > ${add(now)})
-    AND (age_restricted IS NULL OR json_extract(age_restricted, '$.kind') NOT IN (${add(...AGE_KINDS_OFF)}))`;
-  if (version === 2) {
-    const ids = unchecked.ids.length ? `shipping_profile_id IN (${add(...unchecked.ids)})` : "0";
-    const def = unchecked.defaultUnchecked ? "shipping_profile_id IS NULL" : "0";
-    return {
-      sql: `${listed} AND NOT (age_restricted IS NOT NULL AND json_array_length(fulfil_methods) = 1
-              AND json_extract(fulfil_methods, '$[0]') = 'shipping' AND (${ids} OR ${def}))`,
-      params,
-    };
-  }
-  return {
-    sql: `${listed} AND price_model = 'fixed' AND age_restricted IS NULL AND tax_included IS NULL
-          AND (availability IS NULL OR availability NOT IN ('made_to_order', 'preorder', 'backorder')
-               OR (availability = 'preorder' AND (available_from IS NULL OR available_from <= ${add(now)}))
-               OR (availability = 'backorder' AND stock IS NOT NULL AND stock > 0))`,
-    params,
-  };
+/** Where the counts of the catalogue as last built are kept (`instance_meta`), with what they were built from. */
+const COUNTS_KEY = "catalogue_counts";
+
+/** The counts of the catalogue as built, and the basis they hold for. */
+interface Counts {
+  readonly basis: string;
+  readonly count: number;
+  readonly count_v2: number;
 }
 
 export class CatalogueCapabilities {
@@ -204,10 +172,14 @@ export class CatalogueCapabilities {
   }
 
   /**
-   * What a reader compares (an indexed pass over `products` a version): how many each version lists, the
-   * latest change, whether prices include tax, and `rev`, which moves with any of them, with any write at
-   * all, with the policies document, and with the business's site, which decides the product pages the
-   * items name. One `rev` for both versions. Time moves the feed first (`catalogueClockStatements`).
+   * What a reader compares: how many each version lists, the latest change, whether prices include tax,
+   * and `rev`, which moves with any of them, with any write at all, with the policies document, and with
+   * the business's site, which decides the product pages the items name. One `rev` for both versions.
+   * Time moves the feed first (`catalogueClockStatements`).
+   *
+   * The counts are what the pages list, counted from the items as they are built (`countsOf`), never
+   * from a SQL twin of the reader's rules: a network holds a source whose page `count` differs from what
+   * it read, and every rule a reader holds an item for would need its twin kept in step.
    */
   async summary(
     settings?: Settings,
@@ -218,52 +190,97 @@ export class CatalogueCapabilities {
     await this.db.batch(catalogueClockStatements(now));
     const [s, c] = await Promise.all([settings ?? readSettings(this.db), ctx ?? this.context()]);
     const p = policies ?? (await loadPolicies(this.db, s));
-    const unchecked = {
-      ids: p.read.doc.shipping_profiles.filter((x) => !profileChecksId(x)).map((x) => x.id),
-      defaultUnchecked: (() => {
-        const d = p.read.doc.shipping_profiles.find((x) => x.id === p.read.default_shipping_profile);
-        return d !== undefined && !profileChecksId(d);
-      })(),
-    };
-    const v1 = countSql(1, now, unchecked);
-    const v2 = countSql(2, now, unchecked);
-    const { rows } = await this.db.client.query({
-      sql: `SELECT COALESCE(SUM(CASE WHEN ${v1.sql} THEN 1 ELSE 0 END), 0),
-                   COALESCE(SUM(CASE WHEN ${v2.sql} THEN 1 ELSE 0 END), 0),
-                   MAX(updated_at), COALESCE(MAX(catalogue_seq), 0), COUNT(*)
-              FROM products`,
-      params: [...v1.params, ...v2.params],
-      method: "all",
-    });
-    const r = rows[0] ?? [0, 0, null, 0, 0];
-    const count = Number(r[0] ?? 0);
-    const countV2 = Number(r[1] ?? 0);
-    const updated = r[2] === null || r[2] === undefined ? null : Number(r[2]);
-    const seq = Number(r[3] ?? 0);
+    const basis = await this.basis(c, p);
+    const counts = await this.countsOf(basis, c, p, now);
     const tax = s.catalogue.taxIncluded;
     const rev = (
       await bodySha256(
         canonicalJson({
-          count,
-          count_v2: countV2,
-          updated_at: updated,
-          seq,
-          rows: Number(r[4] ?? 0),
+          count: counts.count,
+          count_v2: counts.count_v2,
+          basis: basis.key,
           tax_included: tax,
-          sites: c.sites,
-          policies_rev: p.rev,
         }),
       )
     ).slice(0, 16);
     return {
-      count,
-      count_v2: countV2,
-      updated_at: updated === null ? null : iso(updated),
+      count: counts.count,
+      count_v2: counts.count_v2,
+      updated_at: basis.updated === null ? null : iso(basis.updated),
       tax_included: tax,
       rev,
-      seq,
+      seq: basis.seq,
       policies_rev: p.rev,
     };
+  }
+
+  /**
+   * What the items are built from, as one key (an indexed pass over `products`): the latest change and
+   * position, how many rows, the sum of their moments (so a write that moves neither still moves it),
+   * the policies document and the business's site. The counts of the items as built hold while it does.
+   */
+  private async basis(
+    ctx: CatalogueContext,
+    policies: PoliciesState,
+  ): Promise<{ key: string; updated: number | null; seq: number }> {
+    const { rows } = await this.db.client.query({
+      sql: `SELECT MAX(updated_at), COALESCE(MAX(catalogue_seq), 0), COUNT(*), CAST(COALESCE(SUM(updated_at), 0) AS TEXT)
+              FROM products`,
+      method: "all",
+    });
+    const r = rows[0] ?? [null, 0, 0, "0"];
+    const updated = r[0] === null || r[0] === undefined ? null : Number(r[0]);
+    const seq = Number(r[1] ?? 0);
+    const key = canonicalJson({
+      updated_at: updated,
+      seq,
+      rows: Number(r[2] ?? 0),
+      moments: String(r[3] ?? "0"),
+      sites: ctx.sites,
+      policies_rev: policies.rev,
+    });
+    return { key, updated, seq };
+  }
+
+  /**
+   * How many items each version's pages list, counted from the items as built, the very pass a page
+   * makes (`catalogueItemV2`, then `catalogueItemV1Of`): exact whatever a reader holds an item for. Kept
+   * with the basis it was built from, so a full pass is made only when something changed.
+   */
+  private async countsOf(
+    basis: { readonly key: string },
+    ctx: CatalogueContext,
+    policies: PoliciesState,
+    now: number,
+  ): Promise<Counts> {
+    const { rows } = await this.db.client.query({
+      sql: "SELECT value FROM instance_meta WHERE key = ?",
+      params: [COUNTS_KEY],
+      method: "all",
+    });
+    const kept = parseCounts(rows[0]?.[0]);
+    if (kept && kept.basis === basis.key) return kept;
+    const as_of = iso(now);
+    let count = 0;
+    let countV2 = 0;
+    for await (const page of this.everyItem(ctx, policies, now)) {
+      for (const b of page) {
+        if (b.item.state !== "listed") continue;
+        countV2++;
+        if ((await catalogueItemV1Of(b.item, { as_of }))?.state === "listed") count++;
+      }
+    }
+    const counts: Counts = { basis: basis.key, count, count_v2: countV2 };
+    // Kept only while nothing changed during the pass: else the next read counts again.
+    if ((await this.basis(ctx, policies)).key === basis.key) {
+      await this.db.client.query({
+        sql: `INSERT INTO instance_meta (key, value, created_at) VALUES (?, ?, ?)
+              ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
+        params: [COUNTS_KEY, JSON.stringify(counts), now],
+        method: "run",
+      });
+    }
+    return counts;
   }
 
   /** What the hourly signed ping says of the products: listed, with what a reader compares (version 2's count). */
@@ -407,6 +424,18 @@ export class CatalogueCapabilities {
     const settings = await readSettings(this.db);
     const [ctx, policies] = await Promise.all([this.context(), loadPolicies(this.db, settings)]);
     const out = new Map<string, readonly CatalogueProblem[]>();
+    for await (const page of this.everyItem(ctx, policies, now)) {
+      for (const b of page) if (b.problems.length) out.set(b.item.id, b.problems);
+    }
+    return out;
+  }
+
+  /** Every product as version 2 builds it, a page of the feed's order at a time. */
+  private async *everyItem(
+    ctx: CatalogueContext,
+    policies: PoliciesState,
+    now: number,
+  ): AsyncGenerator<readonly BuiltItem[]> {
     let after: Cursor | null = null;
     for (;;) {
       const rows = await this.db.orm
@@ -422,11 +451,9 @@ export class CatalogueCapabilities {
         )
         .orderBy(asc(products.catalogueSeq), asc(products.id))
         .limit(CATALOGUE_PAGE_MAX);
-      for (const b of await this.build(rows, ctx, policies, now)) {
-        if (b.problems.length) out.set(b.item.id, b.problems);
-      }
+      yield await this.build(rows, ctx, policies, now);
       const last = rows.at(-1);
-      if (!last || rows.length < CATALOGUE_PAGE_MAX) return out;
+      if (!last || rows.length < CATALOGUE_PAGE_MAX) return;
       after = { seq: last.catalogueSeq, id: last.id };
     }
   }
@@ -475,6 +502,18 @@ export class CatalogueCapabilities {
       key,
     );
     return { status: 200, body, etag: opts.etag, signature, cacheControl: opts.cacheControl };
+  }
+}
+
+function parseCounts(raw: unknown): Counts | null {
+  if (typeof raw !== "string") return null;
+  try {
+    const v = JSON.parse(raw) as Partial<Counts>;
+    return typeof v.basis === "string" && Number.isInteger(v.count) && Number.isInteger(v.count_v2)
+      ? { basis: v.basis, count: v.count as number, count_v2: v.count_v2 as number }
+      : null;
+  } catch {
+    return null;
   }
 }
 
