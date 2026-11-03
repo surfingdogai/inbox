@@ -412,6 +412,40 @@ describe("a code or a sign-in link for an account the business holds", () => {
     expect(s.alerts("Your secure link")).toHaveLength(5);
   }, 30_000);
 
+  it("never puts a vouched sign-in link aside after a run of the same company's mail: at most it is labelled, and always alerted", async () => {
+    const s = await setUp();
+    // The same company's emails the day before, from an address that takes answers: kept as ordinary emails,
+    // each with its links to the company's domain.
+    for (let i = 0; i < 8; i++) {
+      await s.ingest(
+        raw(
+          {
+            From: `Acme Support <support${i}@mail.acmecloud.example>`,
+            To: "support@oficinamare.example",
+            Subject: `Your Acme sign-in, attempt ${i}`,
+            "Message-ID": `<before${i}@mail.acmecloud.example>`,
+          },
+          [
+            { type: "text/plain", body: SIGN_IN_TEXT },
+            { type: "text/html", body: SIGN_IN_HTML },
+          ],
+        ),
+      );
+      await s.drain(3 * 60_000);
+    }
+    // Then two vouched sign-in links a few seconds apart, as a person asking twice gets.
+    const ids: string[] = [];
+    for (const n of ["late1", "late2"]) {
+      const r = await s.ingest(signIn(n, `no-reply-${n}Zz`));
+      expect(r.outcome).toBe("created");
+      ids.push(idOf(r));
+      await s.drain(25_000);
+    }
+    const verdicts = await s.q(`SELECT verdict FROM spam_verdicts WHERE item_id IN (?, ?)`, ids);
+    expect(verdicts.map((v) => v[0]).filter((v) => v === "aside" || v === "hold")).toEqual([]);
+    expect(s.alerts("Your secure link").length).toBeGreaterThanOrEqual(2);
+  }, 60_000);
+
   it("reads the email's own words, its links once: what the item keeps under them adds no points", async () => {
     const s = await setUp();
     const r = await s.ingest(

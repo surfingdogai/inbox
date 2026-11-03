@@ -715,7 +715,9 @@ export async function screenAtDoor(deps: SpamDeps, ctx: DoorContext): Promise<Do
   const decision = decide({
     type: ctx.type,
     signals,
-    trusted: letThrough,
+    // Mail for an account the business holds, from the domain it names as the receiving server found,
+    // is never put aside: a code or a sign-in link is wanted at once. At most it is labelled.
+    trusted: letThrough || ctx.screen.email?.account === true,
     veto,
     choices: run.choices,
     learning: run.learning,
