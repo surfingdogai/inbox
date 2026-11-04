@@ -47,7 +47,7 @@ export type {
   TradeQuote,
   WorkProfile,
 } from "@surfingdog/spec";
-// Catalogue version 2, as a reader takes it: for checking what this inbox serves (ADR-next).
+// Catalogue version 2, as a reader takes it: for checking what this inbox serves (ADR-047).
 export {
   ALLERGEN_CLAIMS,
   ALLERGEN_CODES,

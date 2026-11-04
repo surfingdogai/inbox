@@ -1,4 +1,4 @@
--- Catalogue version 2 (ADR-next, protocol §4.18 as amended): a product and its variants, how a price is
+-- Catalogue version 2 (ADR-047, protocol §4.18 as amended): a product and its variants, how a price is
 -- meant, a "was" price, a unit price, more ways to be available, an age checked at handover, and how a
 -- product reaches the buyer, with the business's own shipping rate tables and return policies. Additive:
 -- every column is null or a default that means what version 1 always meant (one fixed price, available

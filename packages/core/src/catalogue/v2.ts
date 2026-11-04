@@ -29,7 +29,7 @@ import { NEXT_CATALOGUE_SEQ } from "./identity";
 import type { PoliciesState } from "./policies";
 
 /**
- * A product as catalogue version 2 publishes it (protocol §4.18 as amended, ADR-next): the one place the
+ * A product as catalogue version 2 publishes it (protocol §4.18 as amended, ADR-047): the one place the
  * feed, its version 1 pages (`catalogueItemV1Of` of this) and the public doors take a product's v2 fields
  * from, so they never say different things.
  *

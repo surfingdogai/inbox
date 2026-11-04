@@ -30,7 +30,7 @@ import { publishedRefundDays } from "../src/write/returns";
 import { makeClient, resetTables } from "./harness";
 
 /**
- * Catalogue version 2 at the inbox (protocol §4.18 as amended, ADR-next): the owner's model (groups and
+ * Catalogue version 2 at the inbox (protocol §4.18 as amended, ADR-047): the owner's model (groups and
  * options, price models, "was" and unit prices, availability, age, shipping profiles and return policies),
  * the v2 feed and its v1 pages, the signed policies document, the shipping quote, and who may write what.
  * Every page is read back as a network reads it, by the spec's own reader. Node and workerd.

@@ -172,7 +172,7 @@ export const products = sqliteTable(
     /** The business's local date (YYYY-MM-DD) it was marked sold out for: back on sale the next day. */
     soldOutOn: text("sold_out_on"),
     /*
-     * Catalogue version 2 (0035, ADR-next, protocol §4.18 as amended). Every one is the owner's or its
+     * Catalogue version 2 (0035, ADR-047, protocol §4.18 as amended). Every one is the owner's or its
      * source's, and absent means what version 1 always meant: one fixed price, available as its stock says.
      */
     /** The product group it is a variant of (`product_groups`), with `options`; null for a product of its own. */
