@@ -1006,7 +1006,9 @@ describe("a café: the pause, sold out today, and progress", () => {
       ),
     );
     expect(e.message).toBe("Monsoon Café is not taking orders until 10:00.");
-    const profile = await s.caps.getBusinessProfile();
+    // The profile reads the real clock, so it is read at the test's own hour, inside the pause.
+    vi.useFakeTimers({ now: BLR_T + 5 * MIN, toFake: ["Date"] });
+    const profile = await s.caps.getBusinessProfile().finally(() => vi.useRealTimers());
     expect(profile.kitchen?.paused_until).toBeDefined();
     await s.caps.food.pause(person(BLR_T), { resume: true });
     expect(
