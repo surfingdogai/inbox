@@ -33,6 +33,8 @@ for an inbox; §4.18) adds product groups and their variants, price models, "was
 available, an age checked at handover, and how an offer is fulfilled, with a signed policies document of shipping
 profiles and return policies; a manifest names the versions its feed serves, a reader names the version it reads,
 and a feed may serve version 2 alone. A manifest without `catalogue.versions` serves version 1, as before.
+Spec 0.15.1 adds, optional for a network, the catalogue check (§4.18): how a business's catalogue stands at a
+network, and each product it holds back or changed, by code.
 
 A **network** is a service that inboxes report to: it lists businesses, keeps the receipts they
 publish, gives customers a key and passes, and orders the directory by the published rules. Anyone
@@ -83,6 +85,7 @@ also gives customers keys and passes, scores, and hears reports and contests. It
 | The catalogue: a page, products by id, the switch | [`schemas/catalogue-page.json`](../../packages/spec/schemas/catalogue-page.json), [`schemas/catalogue-items.json`](../../packages/spec/schemas/catalogue-items.json), [`schemas/catalogue-switch-request.json`](../../packages/spec/schemas/catalogue-switch-request.json) (§4.18) |
 | A template's sample product names | [`vocab/placeholder-titles.json`](../../packages/spec/vocab/placeholder-titles.json) (§4.18) |
 | Catalogue version 2: a page, products by id, the policies document | [`schemas/catalogue-page-v2.json`](../../packages/spec/schemas/catalogue-page-v2.json), [`schemas/catalogue-items-v2.json`](../../packages/spec/schemas/catalogue-items-v2.json), [`schemas/catalogue-policies.json`](../../packages/spec/schemas/catalogue-policies.json) (§4.18) |
+| The catalogue check: each product a network holds back or changed, by code | [`schemas/catalogue-check-request.json`](../../packages/spec/schemas/catalogue-check-request.json), [`schemas/catalogue-check-response.json`](../../packages/spec/schemas/catalogue-check-response.json) (§4.18) |
 | Canonical JSON, an item's hash, and Catalogue-Signature byte for byte | [`vectors/catalogue-signature.json`](../../packages/spec/vectors/catalogue-signature.json) (§4.18) |
 | One item read alone; price models, unit and "was" prices; product groups | [`vectors/catalogue-checks.json`](../../packages/spec/vectors/catalogue-checks.json), [`vectors/catalogue-prices.json`](../../packages/spec/vectors/catalogue-prices.json), [`vectors/catalogue-options.json`](../../packages/spec/vectors/catalogue-options.json) (§4.18) |
 | Version 1 from version 2; the policies document and shipping quotes | [`vectors/catalogue-v1.json`](../../packages/spec/vectors/catalogue-v1.json), [`vectors/catalogue-policies.json`](../../packages/spec/vectors/catalogue-policies.json) (§4.18) |
@@ -273,6 +276,8 @@ profile's components and `content-type`, holds no key, pass secret or session, a
 | `POST /v1/door-incidents/{id}` (0.4, MAY) | sdi-instance/1 | `{state: "fixed"}` → `{id, state, check_queued}` (§4.15) | `door-incident-*` |
 | `GET /v1/door-reports/me` (0.8.1, MAY) | sdi-agent/1 or Web Bot Auth | → the signer's own credit and reading allowance (§4.15) | `door-reports-me` |
 | `GET /report.md` (0.4, with door reports) | none | → how an agent reports, in plain words (§4.15) | |
+| `POST /v1/instances/{domain}/catalogue` (0.9, MAY) | sdi-instance/1 by that domain | `{listed}` → `{domain, listed, offers_live}` (§4.18) | `catalogue-switch-*` |
+| `POST /v1/instances/{domain}/catalogue/check` (0.15.1, MAY) | sdi-instance/1 by that domain | `{after?, limit?}`, or empty → how the catalogue stands, and each product held back or changed, by code, with `next_after` (§4.18) | `catalogue-check-*` |
 | `GET /openapi.json`, `GET /llms.txt` | none | → the public reads, described (§4.7) | |
 | `POST /v1/persons` | sdi-instance/1 | `{request_id, email, agent?}` → `201` | `persons-*` |
 | `POST /v1/presentations` | sdi-instance/1 | one of `pass`, `key`, `agent_key` → `200` | `presentations-*` |
@@ -1866,9 +1871,63 @@ entry whose `code` it does not know is shown by its `why`.
 
 **The switch, at once.** `POST /v1/instances/{domain}/catalogue {"listed": true|false}`, signed sdi-instance/1
 (`schemas/catalogue-switch-request.json`), when the owner's answer for that network changes, and by the
-hourly tick while what the network was last told differs; `200 {listed, offers_live}`. A network never told
+hourly tick while what the network was last told differs; `200 {domain, listed, offers_live}`. A network never told
 lists no products, so an inbox that wants them listed tells it once. `false` withdraws every offer at once.
 `429` waits for the next hour; a network that lists no products answers `404`, and is asked again a day later.
+
+**The check** (`check_catalogue`, spec 0.15.1, MAY). `POST /v1/instances/{domain}/catalogue/check`, signed
+sdi-instance/1 by that domain (`schemas/catalogue-check-request.json`), `{"after": "<id>", "limit": 1..500}`, each
+optional (`limit` 500 when absent), or an empty body: how the catalogue stands at the network and, by code, each
+product it holds back or changed, so a producer acts on them by machine. Only the business itself may ask: another
+domain's signature is `401 unknown_instance`, and a body not of that form, or a `limit` outside 1 to 500, is
+`400 bad_payload`; sdi-instance/1's failures (§3) and the limit of signed calls (§4) are as for any signed call, and
+a network that does not offer the check answers `404`. `200` (`schemas/catalogue-check-response.json`):
+
+```json
+{"domain": "inbox.loja.example", "listed": true, "state": "live", "version": 2,
+ "offers_live": 209, "offers_later": 1, "offers_held": 2,
+ "policies": {"rev": "9f2c4e1a7b3d5068", "problems": []},
+ "items": [
+   {"id": "01JC…", "held": "unreadable", "why": "It does not read as catalogue version 2 …", "path": "/price/value"},
+   {"id": "01JD…", "held": "age_kind_off", "why": "Tobacco and nicotine, cannabis and weapons are kept off …",
+    "also": ["shipping_profile_unknown"]},
+   {"id": "01JE…", "dropped": ["list_price_never_seen"], "later": "search_later"}
+ ],
+ "next_after": null, "checked_at": "2026-11-04T09:14:03.218734Z",
+ "description": "Each product this network holds back …"}
+```
+
+- `state` is `pending` (switched on, not yet read through), `live`, `held` (the whole catalogue, with `why` in words
+  for the owner and no code) or `off`, and `listed` is false only when it is `off`. `version` is the catalogue
+  version the network reads the feed at (`1` until a read chooses `2`). `offers_live` counts the products it keeps
+  live, whatever `state` is, except those it keeps for its search to show later (`offers_later`, `later` below); its
+  search shows them only while `state` is `live`, and the ping's `offers_live` is 0 otherwise. `offers_held` counts
+  the products it holds back one by one. `checked_at` is when it last confirmed what it holds (as in the ping, but
+  kept once `off`), or `null` before it has; `description` says how to read the answer, in words.
+- `policies` is `null` until a read at version 2 has asked for the policies document the manifest names, and again
+  once one finds the manifest names none; else `{rev?, problem?, problems}`: the `rev` of the copy it holds, `problem`
+  `policies_document_unreadable` when its last read of it failed (any copy it held is kept), and `problems` `[{path,
+  code}]`, each part of that copy it dropped, as `readCataloguePolicies` gives them (`shipping_profiles[1]`,
+  `policies_unreadable`…).
+- `items`, at most `limit`, in the network's order of `id`: each product it holds back, `{id, held, why, path?,
+  also?}`, and each it keeps live with a member dropped, a warning, its group read apart or for its search to show
+  later, `{id, dropped?, group?, later?}`. `id` is as the network keeps it, up to 1,024 bytes, so one too long for
+  version 2 is still told (`unreadable`, `path` `/id`). `held` is a code of `CATALOGUE_V2_PROBLEMS` that holds
+  (`unreadable`, `age_kind_off`, `group_too_large`…) or one of the network's own, `why` its words for the owner,
+  `path`, for a product that did not read, its JSON Pointer (Reading an item, below), and `also`, beside a code of
+  `CATALOGUE_V2_PROBLEMS`, its other codes that hold it. The Surfing Dog network's own are `over_cap` (past the
+  50,000 products it keeps for one business) and `placeholder` (no name, or one of `vocab/placeholder-titles.json`),
+  and at version 1 `price`, `gtin`, `multipack`, `availability` and `condition`, each when that member is not as
+  version 1 has it. `dropped` holds the codes of members dropped and of a warning (`hash_mismatch`), `group` the code
+  its product group was read apart for (`group_title_differs`…), and `later` is `search_later`, the Surfing Dog
+  network's, for an offer its search shows only once it reads version 2 (a price from, a range or on request, a
+  pre-order, back-order or made to order, an age limit, or a tax of its own) or, until it is withdrawn, one past its
+  last day to order.
+- While there are more, `next_after` is the last item's `id`, passed as `after` for the rest; at the end it is
+  `null`. A business whose catalogue the network has no record of (never switched on) is `off`, with `listed` false,
+  `version` 0, `policies` and `checked_at` `null` and `items` `[]`; one switched `off` keeps its `version`,
+  `policies` and `checked_at`. A reader ignores a member it does not know, and shows a held item's `why` for a code
+  it does not know.
 
 **Barcodes** (`normaliseGtin`, `@surfingdog/spec`; `vectors/gtin.json`, which the network's own code runs too):
 spaces, hyphens and full stops removed, a leading `(01)` or the `01` of a 16-digit scan dropped; a barcode a
@@ -2080,7 +2139,9 @@ registry's order.
   networks or not known, a profile or policy the document does not have) or drops one member alone and lists the
   offer (a "was" or unit price that does not hold, a profile beside no shipping, a weight in no unit it knows).
 - A network tells the owner what it holds back, and why: in the signed ping's answer, each `held` entry with its
-  `code` (below), and in its own `check_catalogue`, each item's `{id, held: code}`.
+  `code`, and in `check_catalogue` (above), each product it holds back, `{id, held: code}`, and each it keeps live
+  with a member dropped, a warning or its group read apart, by those codes (`dropped`, `group`), or for its search to
+  show later (`later`).
 
 **The hash, and canonical JSON.** `hash` is the first 16 hex digits of SHA-256 over the item's canonical JSON:
 every member it carries but `updated_at` and `hash`, a member it does not carry absent, never `null`. Canonical JSON

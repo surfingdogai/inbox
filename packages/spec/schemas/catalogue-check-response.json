@@ -1,0 +1,191 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://surfingdog.ai/spec/schemas/catalogue-check-response.json",
+  "title": "POST /v1/instances/{domain}/catalogue/check: 200",
+  "type": "object",
+  "properties": {
+    "domain": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253
+    },
+    "listed": {
+      "type": "boolean",
+      "description": "False only when state is off."
+    },
+    "state": {
+      "type": "string",
+      "enum": ["pending", "live", "held", "off"],
+      "description": "pending: switched on, not yet read through; held: the whole catalogue, with why and no code; off: switched off, or no record of its catalogue."
+    },
+    "why": {
+      "description": "Why the whole catalogue is held, in words for the owner.",
+      "type": "string"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "The catalogue version the network reads the feed at: 1 until a read chooses 2; 0 with no record of its catalogue."
+    },
+    "offers_live": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "The products it keeps live, whatever state is, except those counted in offers_later; its search shows them only while state is live."
+    },
+    "offers_later": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "The products it keeps live for its search to show later (later)."
+    },
+    "offers_held": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "The products it holds back one by one."
+    },
+    "policies": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "rev": {
+              "description": "The rev of the copy of the policies document it holds.",
+              "type": "string"
+            },
+            "problem": {
+              "description": "policies_document_unreadable: its last read of it failed; any copy it held is kept.",
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}$"
+            },
+            "problems": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "The part, as readCataloguePolicies names it (shipping_profiles[1])."
+                  },
+                  "code": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                  }
+                },
+                "required": ["path", "code"]
+              },
+              "description": "Each part of that copy it dropped, and why (policies_unreadable…)."
+            }
+          },
+          "required": ["problems"]
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Null until a read at version 2 has asked for the policies document the manifest names, and again once one finds the manifest names none."
+    },
+    "items": {
+      "maxItems": 500,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "description": "The producer's id for the product, as the network keeps it: up to 1,024 bytes, so one too long for version 2 is still told (unreadable, path /id)."
+          },
+          "held": {
+            "description": "Why it is held back: a code of CATALOGUE_V2_PROBLEMS that holds, or one of the network's own (the Surfing Dog network's: over_cap, placeholder, and at version 1 price, gtin, multipack, availability, condition). Absent for a product it keeps live.",
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          },
+          "why": {
+            "description": "The held code's words for the owner.",
+            "type": "string"
+          },
+          "path": {
+            "description": "For a product that did not read: a JSON Pointer (RFC 6901) to the first member that did not read.",
+            "type": "string"
+          },
+          "also": {
+            "description": "Beside a code of CATALOGUE_V2_PROBLEMS: its other codes that hold it, in the registry's order.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}$"
+            }
+          },
+          "dropped": {
+            "description": "A product it keeps live: the codes of the members it dropped, and of a warning (hash_mismatch).",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}$"
+            }
+          },
+          "group": {
+            "description": "A product it keeps live: the code its product group was read apart for (group_title_differs…).",
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          },
+          "later": {
+            "description": "search_later (the Surfing Dog network's): a product it keeps live, which its search shows only once it reads catalogue version 2, or, until it is withdrawn, one past its last day to order.",
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          }
+        },
+        "required": ["id"]
+      },
+      "description": "At most limit, in the network's order of id: each product it holds back, and each it keeps live with a member dropped, a warning, its group read apart, or for its search to show later."
+    },
+    "next_after": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "While there are more, the last item's id: pass it as after. Null at the end."
+    },
+    "checked_at": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "When it last confirmed what it holds, kept once switched off; null before it has."
+    },
+    "description": {
+      "type": "string",
+      "description": "How to read the answer, in words."
+    }
+  },
+  "required": [
+    "domain",
+    "listed",
+    "state",
+    "version",
+    "offers_live",
+    "offers_later",
+    "offers_held",
+    "policies",
+    "items",
+    "next_after",
+    "checked_at",
+    "description"
+  ]
+}

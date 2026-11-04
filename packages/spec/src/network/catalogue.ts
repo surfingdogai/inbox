@@ -2,8 +2,8 @@ import { z } from "zod";
 
 /**
  * The catalogue (protocol §4.18, spec 0.9, optional for a network; ADR-029): what an inbox whose
- * owner lists its products on networks serves, signed, and the three small calls that tell a
- * network about it. The network pulls; the inbox never writes its catalogue to a network.
+ * owner lists its products on networks serves, signed, and the small calls between it and a
+ * network. The network pulls; the inbox never writes its catalogue to a network.
  *
  * - `GET /v1/catalogue/changes?after=<cursor>&limit=<1..500>` on the inbox: its products in
  *   `(updated_at, id)` order, each one listed or withdrawn (`cataloguePageSchema`).
@@ -14,6 +14,9 @@ import { z } from "zod";
  *   network's own `catalogue` block (`pingCatalogueAnswerSchema`).
  * - `POST /v1/instances/{domain}/catalogue` on the network, signed sdi-instance/1: the owner's switch,
  *   at once (`catalogueSwitchRequestSchema`).
+ * - `POST /v1/instances/{domain}/catalogue/check` on the network (spec 0.15.1), signed sdi-instance/1 by
+ *   that domain: how its catalogue stands there, and each product the network holds back or changed, by
+ *   code (`catalogueCheckRequestSchema`, `catalogueCheckResponseSchema`).
  */
 
 /** The JWS `typ` of a catalogue page's signature, so it is never mistaken for a receipt or a token. */
@@ -160,14 +163,143 @@ export type PingCatalogue = z.infer<typeof pingCatalogueSchema>;
 export const catalogueSwitchRequestSchema = z.object({ listed: z.boolean() });
 /** `200`: what the network now holds of the business's products. */
 export const catalogueSwitchResponseSchema = z.object({
+  domain: z.string().min(1).max(253).optional().describe("Spec 0.15.1: the domain the switch is for."),
   listed: z.boolean(),
   offers_live: z.int().min(0),
 });
 
+/** The check's most items in one answer, and its `limit` when none is given (spec 0.15.1). */
+export const CATALOGUE_CHECK_MAX = 500;
+
+const catalogueCode = z.string().regex(/^[a-z][a-z0-9_]{0,63}$/);
+
+/**
+ * `POST /v1/instances/{domain}/catalogue/check` on the network (spec 0.15.1, optional for a network),
+ * signed sdi-instance/1 by that domain: `{after?, limit?}`, or an empty body.
+ */
+export const catalogueCheckRequestSchema = z.object({
+  after: z.string().optional().describe("The next_after of the answer before, for the items after it."),
+  limit: z
+    .int()
+    .min(1)
+    .max(CATALOGUE_CHECK_MAX)
+    .optional()
+    .describe("At most this many items; 500 when absent. Outside 1 to 500 is 400 bad_payload."),
+});
+export type CatalogueCheckRequest = z.infer<typeof catalogueCheckRequestSchema>;
+
+/**
+ * One product in the check's answer: held back (`held`, `why`, and `path` or `also`), or kept live with
+ * something to tell (`dropped`, `group`, `later`).
+ */
+export const catalogueCheckItemSchema = z.object({
+  id: z
+    .string()
+    .min(1)
+    .max(1024)
+    .describe(
+      "The producer's id for the product, as the network keeps it: up to 1,024 bytes, so one too long for version 2 is still told (unreadable, path /id).",
+    ),
+  held: catalogueCode
+    .optional()
+    .describe(
+      "Why it is held back: a code of CATALOGUE_V2_PROBLEMS that holds, or one of the network's own " +
+        "(the Surfing Dog network's: over_cap, placeholder, and at version 1 price, gtin, multipack, availability, condition). " +
+        "Absent for a product it keeps live.",
+    ),
+  why: z.string().optional().describe("The held code's words for the owner."),
+  path: z
+    .string()
+    .optional()
+    .describe("For a product that did not read: a JSON Pointer (RFC 6901) to the first member that did not read."),
+  also: z
+    .array(catalogueCode)
+    .optional()
+    .describe("Beside a code of CATALOGUE_V2_PROBLEMS: its other codes that hold it, in the registry's order."),
+  dropped: z
+    .array(catalogueCode)
+    .optional()
+    .describe("A product it keeps live: the codes of the members it dropped, and of a warning (hash_mismatch)."),
+  group: catalogueCode
+    .optional()
+    .describe("A product it keeps live: the code its product group was read apart for (group_title_differs…)."),
+  later: catalogueCode
+    .optional()
+    .describe(
+      "search_later (the Surfing Dog network's): a product it keeps live, which its search shows only once it reads catalogue version 2, " +
+        "or, until it is withdrawn, one past its last day to order.",
+    ),
+});
+export type CatalogueCheckItem = z.infer<typeof catalogueCheckItemSchema>;
+
+/** The check's `200`: how the catalogue stands at the network, and each product it holds back or changed, by code. */
+export const catalogueCheckResponseSchema = z.object({
+  domain: z.string().min(1).max(253),
+  listed: z.boolean().describe("False only when state is off."),
+  state: z
+    .enum(["pending", "live", "held", "off"])
+    .describe(
+      "pending: switched on, not yet read through; held: the whole catalogue, with why and no code; " +
+        "off: switched off, or no record of its catalogue.",
+    ),
+  why: z.string().optional().describe("Why the whole catalogue is held, in words for the owner."),
+  version: z
+    .int()
+    .min(0)
+    .describe(
+      "The catalogue version the network reads the feed at: 1 until a read chooses 2; 0 with no record of its catalogue.",
+    ),
+  offers_live: z
+    .int()
+    .min(0)
+    .describe(
+      "The products it keeps live, whatever state is, except those counted in offers_later; its search shows them only while state is live.",
+    ),
+  offers_later: z.int().min(0).describe("The products it keeps live for its search to show later (later)."),
+  offers_held: z.int().min(0).describe("The products it holds back one by one."),
+  policies: z
+    .object({
+      rev: z.string().optional().describe("The rev of the copy of the policies document it holds."),
+      problem: catalogueCode
+        .optional()
+        .describe("policies_document_unreadable: its last read of it failed; any copy it held is kept."),
+      problems: z
+        .array(
+          z.object({
+            path: z.string().describe("The part, as readCataloguePolicies names it (shipping_profiles[1])."),
+            code: catalogueCode,
+          }),
+        )
+        .describe("Each part of that copy it dropped, and why (policies_unreadable…)."),
+    })
+    .nullable()
+    .describe(
+      "Null until a read at version 2 has asked for the policies document the manifest names, and again once one finds the manifest names none.",
+    ),
+  items: z
+    .array(catalogueCheckItemSchema)
+    .max(CATALOGUE_CHECK_MAX)
+    .describe(
+      "At most limit, in the network's order of id: each product it holds back, and each it keeps live with a member dropped, " +
+        "a warning, its group read apart, or for its search to show later.",
+    ),
+  next_after: z
+    .string()
+    .min(1)
+    .max(1024)
+    .nullable()
+    .describe("While there are more, the last item's id: pass it as after. Null at the end."),
+  checked_at: isoTime
+    .nullable()
+    .describe("When it last confirmed what it holds, kept once switched off; null before it has."),
+  description: z.string().describe("How to read the answer, in words."),
+});
+export type CatalogueCheckResponse = z.infer<typeof catalogueCheckResponseSchema>;
+
 /**
  * Why a network holds a product back, in its own words for the owner, with a few of them by name. From
  * catalogue version 2, `code` says it by machine: a code of `CATALOGUE_V2_PROBLEMS` (`unreadable`,
- * `age_kind_off`, `group_too_large`…), the same a network's `check_catalogue` gives for each item
+ * `age_kind_off`, `group_too_large`…), as a network's `check_catalogue` gives one for each item held for it
  * (`{id, held: code}`). A sample's id is a version 2 id, of up to 256 characters.
  */
 export const catalogueHeldSchema = z.object({

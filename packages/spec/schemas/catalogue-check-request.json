@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://surfingdog.ai/spec/schemas/catalogue-check-request.json",
+  "title": "POST /v1/instances/{domain}/catalogue/check",
+  "type": "object",
+  "properties": {
+    "after": {
+      "description": "The next_after of the answer before, for the items after it.",
+      "type": "string"
+    },
+    "limit": {
+      "description": "At most this many items; 500 when absent. Outside 1 to 500 is 400 bad_payload.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+    }
+  }
+}

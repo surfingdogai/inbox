@@ -4,6 +4,12 @@
   "title": "POST /v1/instances/{domain}/catalogue: 200",
   "type": "object",
   "properties": {
+    "domain": {
+      "description": "Spec 0.15.1: the domain the switch is for.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253
+    },
     "listed": {
       "type": "boolean"
     },

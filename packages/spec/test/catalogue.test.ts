@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  CATALOGUE_CHECK_MAX,
   CATALOGUE_MULTIPACK_MAX,
   CATALOGUE_SIGNATURE_TYP,
+  catalogueCheckRequestSchema,
+  catalogueCheckResponseSchema,
   catalogueItemsSchema,
   cataloguePageSchema,
   catalogueSwitchRequestSchema,
@@ -106,7 +109,14 @@ describe("a catalogue page", () => {
 
   it("is signed with its own typ, and has a JSON Schema for each message", () => {
     expect(CATALOGUE_SIGNATURE_TYP).toBe("sdi-catalogue+jws");
-    for (const name of ["catalogue-page", "catalogue-items", "catalogue-switch-request", "catalogue-switch-response"]) {
+    for (const name of [
+      "catalogue-page",
+      "catalogue-items",
+      "catalogue-switch-request",
+      "catalogue-switch-response",
+      "catalogue-check-request",
+      "catalogue-check-response",
+    ]) {
       expect(JSON_SCHEMAS[name], name).toBeDefined();
     }
   });
@@ -137,6 +147,9 @@ describe("the calls around it", () => {
   it("the switch, and the manifest's catalogue member", () => {
     expect(catalogueSwitchRequestSchema.parse({ listed: false })).toEqual({ listed: false });
     expect(catalogueSwitchResponseSchema.parse({ listed: true, offers_live: 0 }).offers_live).toBe(0);
+    // The network's answer names the domain too (spec 0.15.1).
+    const answer = { domain: "inbox.loja.example", listed: true, offers_live: 212 };
+    expect(catalogueSwitchResponseSchema.parse(answer)).toEqual(answer);
     const manifest = manifestSchema.parse({
       spec: "surfingdog-inbox/0",
       instance: "https://inbox.loja.example",
@@ -151,5 +164,87 @@ describe("the calls around it", () => {
       },
     });
     expect(manifest.catalogue?.feed).toBe("https://inbox.loja.example/v1/catalogue/changes");
+  });
+});
+
+describe("the check (0.15.1)", () => {
+  it("asks with after and limit, each optional, or nothing", () => {
+    expect(catalogueCheckRequestSchema.parse({})).toEqual({});
+    expect(catalogueCheckRequestSchema.parse({ after: "MOKA-6", limit: 2 })).toEqual({ after: "MOKA-6", limit: 2 });
+    expect(CATALOGUE_CHECK_MAX).toBe(500);
+    for (const limit of [0, 501, 2.5])
+      expect(catalogueCheckRequestSchema.safeParse({ limit }).success, `${limit}`).toBe(false);
+  });
+
+  it("reads an answer as the network gives it: held items by code, listed ones with what it changed", () => {
+    const answer = {
+      domain: "inbox.loja.example",
+      listed: true,
+      state: "live",
+      version: 2,
+      offers_live: 5,
+      offers_later: 4,
+      offers_held: 5,
+      policies: {
+        rev: "9f2c4e1a7b3d5068",
+        problems: [{ path: "shipping_profiles[1]", code: "policies_unreadable" }],
+      },
+      items: [
+        {
+          id: "BEANS",
+          dropped: ["list_price_never_seen", "hash_mismatch"],
+          later: "search_later",
+        },
+        {
+          id: "FREE",
+          held: "unreadable",
+          why: "It does not read as catalogue version 2: the member at the path given is missing or not as the spec has it.",
+          path: "/price/value",
+        },
+        {
+          id: "VAPE",
+          held: "age_kind_off",
+          why: "Tobacco and nicotine, cannabis and weapons are kept off the network, ID check or not.",
+          also: ["shipping_profile_unknown"],
+        },
+      ],
+      next_after: "VAPE",
+      checked_at: "2026-11-04T09:14:03.218734Z",
+      description: "Each product this network holds back, or lists with a member dropped, in order of id.",
+    };
+    expect(catalogueCheckResponseSchema.parse(answer)).toEqual(answer);
+    // A member it does not know is no reason to refuse the answer.
+    expect(catalogueCheckResponseSchema.safeParse({ ...answer, a_member_of_later: 1 }).success).toBe(true);
+    // A network's own code reads as any code; one past the cap that did not read keeps its path.
+    const own = {
+      ...answer,
+      items: [
+        { id: "MUG-2", held: "over_cap", why: "It is past the 50000 products one business lists here." },
+        { id: "MUG-3", held: "over_cap", why: "It is past the 50000 products one business lists here.", path: "/name" },
+      ],
+    };
+    expect(catalogueCheckResponseSchema.safeParse(own).success).toBe(true);
+    // The policies document's failed read, as its code.
+    const failed = { ...answer, policies: { problem: "policies_document_unreadable", problems: [] } };
+    expect(catalogueCheckResponseSchema.safeParse(failed).success).toBe(true);
+  });
+
+  it("reads the answer for a business whose catalogue the network has no record of", () => {
+    const off = {
+      domain: "inbox.loja.example",
+      listed: false,
+      state: "off",
+      version: 0,
+      offers_live: 0,
+      offers_later: 0,
+      offers_held: 0,
+      policies: null,
+      items: [],
+      next_after: null,
+      checked_at: null,
+      description: "Each product this network holds back, in order of id.",
+    };
+    expect(catalogueCheckResponseSchema.parse(off)).toEqual(off);
+    expect(catalogueCheckResponseSchema.safeParse({ ...off, state: "gone" }).success).toBe(false);
   });
 });

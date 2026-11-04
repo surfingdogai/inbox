@@ -209,6 +209,16 @@ or network:
   `manifest_sha256` over the bytes as served; the signed `url` as received, byte for byte; and the order to replace a
   signing key in. Version 2 cursors alone expire (`cursor_expired`, after 7 days at the earliest). A version 1 reader
   reads a version 1 feed as before; a manifest without `catalogue.versions` reads as before.
+- 0.15.1 (optional for a network and for an inbox): the catalogue check (protocol §4.18, ADR-047 as amended).
+  `POST /v1/instances/{domain}/catalogue/check`, signed sdi-instance/1 by that domain, `{after?, limit?}` or an empty
+  body (`catalogueCheckRequestSchema`, `schemas/catalogue-check-request.json`; `limit` 1 to `CATALOGUE_CHECK_MAX`,
+  500), answers how the catalogue stands at the network (`state`, `version`, `offers_live`, `offers_later`,
+  `offers_held`, `policies`, `checked_at`) and, in the network's order of id, each product it holds back (`held`, a
+  code of `CATALOGUE_V2_PROBLEMS` or the network's own, with `why`, `path` and `also`) or keeps live with a member
+  dropped, a warning, its group read apart or for its search to show later (`dropped`, `group`, `later`), paged by
+  `next_after` (`catalogueCheckResponseSchema`, `catalogueCheckItemSchema`, `schemas/catalogue-check-response.json`).
+  Protocol §4's table lists it, and the switch, `POST /v1/instances/{domain}/catalogue` (0.9), whose answer carries
+  `domain` too (`catalogueSwitchResponseSchema`, optional). Nothing a 0.15.0 reader reads changes.
 
 A version number is given when a change merges, in the order changes merge. Work in progress names no number, so
 two changes built side by side never claim the same one.

@@ -97,5 +97,24 @@ And of this design:
 
 - Prescription-only medicines (excluded until decided). Price tiers, price per hour or per person, subscriptions,
   rentals, dated sessions, translations, categories, properties and lead times are later fields.
-- How the network's `check_catalogue` lists `{id, held: code}` per item, and the owner's screens for options, prices,
-  ages, shipping and returns, belong to the builds that read and write version 2; the codes are this spec's.
+- The owner's screens for options, prices, ages, shipping and returns belong to the builds that read and write
+  version 2; the codes are this spec's. How the network's `check_catalogue` lists each item was left to the build
+  too, and is now specified as the network answers it, in the amendment below.
+
+## Amendment, 4 November 2026: the check, published
+
+A producer that builds only from the published files could not call `check_catalogue`: the protocol named it once,
+with neither its address nor its answer. It is now specified as the Surfing Dog network answers it, in protocol
+§4.18 ("The check", `@surfingdog/spec` 0.15.1, `schemas/catalogue-check-request.json` and
+`catalogue-check-response.json`), and listed in §4's table beside the switch, which was missing from it too, with
+the `domain` the switch's answer carries.
+
+1. **`POST /v1/instances/{domain}/catalogue/check`, signed by the business itself,** `{after?, limit?}` (1 to 500,
+   500 when absent), or an empty body. Another domain's signature is `401 unknown_instance`.
+2. **The answer** says how the catalogue stands (`state`, `version`, the offers kept live, kept for search later and
+   held one by one, the policies document's problems, `checked_at`) and lists, in the network's order of id, each
+   product held back, by its code (`CATALOGUE_V2_PROBLEMS`, or a network's own, such as the Surfing Dog network's
+   `over_cap` and `placeholder`), and each kept live with a member dropped, a warning, its group read apart or for
+   search to show later, paged by `next_after`.
+
+Nothing else changes.

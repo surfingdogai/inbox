@@ -27,6 +27,8 @@ import {
   capabilitiesVocabSchema,
   carryOutputSchema,
   caseAnsweredSchema,
+  catalogueCheckRequestSchema,
+  catalogueCheckResponseSchema,
   catalogueItemsSchema,
   catalogueItemsV2Schema,
   cataloguePageSchema,
@@ -180,6 +182,14 @@ export const JSON_SCHEMAS: Record<string, { schema: z.ZodType; title: string }> 
   "catalogue-switch-response": {
     schema: catalogueSwitchResponseSchema,
     title: "POST /v1/instances/{domain}/catalogue: 200",
+  },
+  "catalogue-check-request": {
+    schema: catalogueCheckRequestSchema,
+    title: "POST /v1/instances/{domain}/catalogue/check",
+  },
+  "catalogue-check-response": {
+    schema: catalogueCheckResponseSchema,
+    title: "POST /v1/instances/{domain}/catalogue/check: 200",
   },
   "persons-request": { schema: personIssuanceRequestSchema, title: "POST /v1/persons" },
   "persons-response": { schema: personIssuedSchema, title: "POST /v1/persons: 201" },
