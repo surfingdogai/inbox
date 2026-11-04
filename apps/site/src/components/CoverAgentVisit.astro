@@ -1,0 +1,483 @@
+---
+/**
+ * The cover for "What makes a website agent-ready": an agent's visit as a thin transit line with
+ * four stations, in the order the checklist gives them, each with the address the agent asks for.
+ *
+ *  1. Let in (robots.txt): a closed gate across the line, grey and dashed, swings down and open.
+ *  2. Understand (JSON-LD): scattered dashes settle into neat fields.
+ *  3. Act (/mcp): a chip comes back, "Booked · ref".
+ *  4. Follow up (reschedule_booking): a loop takes the agent back, and the chip reads
+ *     "Moved to 11:00".
+ *
+ * Not a dot walking down a ticking list, which four other covers already are. Built the way
+ * CoverPay.astro is: the markup is the composed frame at t = STILL and the clock starts there,
+ * reduced motion is that frame, and it stops when nobody is looking. Every selector starts with
+ * .cav and every keyframe is cav-*, so nothing leaks. Colours are the design tokens; nothing in it
+ * is a warning colour, the closed gate included.
+ */
+interface Props {
+  alt: string;
+}
+const { alt } = Astro.props;
+const STATIONS = [
+  { x: 110, name: "LET IN", at: "robots.txt" },
+  { x: 250, name: "UNDERSTAND", at: "JSON-LD" },
+  { x: 390, name: "ACT", at: "/mcp" },
+  { x: 530, name: "FOLLOW UP", at: "reschedule_booking" },
+];
+/** The fields a page's data settles into: a key and a value a row, as [y, key length, value length]. */
+const ROWS: readonly (readonly [number, number, number])[] = [
+  [86, 18, 34],
+  [100, 22, 26],
+  [114, 14, 38],
+];
+---
+
+<figure class="cav" role="img" aria-label={alt}>
+  <svg viewBox="0 0 640 360" aria-hidden="true" focusable="false">
+    <path d="M40,180 H600" class="cav-rail"></path>
+    <path d="M40,180 H530" pathLength="1" class="cav-lit"></path>
+    <path d="M530,188 C530,268 390,268 390,188" class="cav-loop"></path>
+
+    {
+      STATIONS.map((s, i) => (
+        <g class="cav-stop" data-stop={i}>
+          <text x={s.x} y="138" class="cav-cap" text-anchor="middle">
+            {s.name}
+          </text>
+          <text x={s.x} y="156" class="cav-at" text-anchor="middle">
+            {s.at}
+          </text>
+          <circle cx={s.x} cy="180" r="9" class="halo" />
+          <circle cx={s.x} cy="180" r="6" class="ring" />
+          <circle cx={s.x} cy="180" r="3.4" class="fill" />
+        </g>
+      ))
+    }
+
+    <line x1="88" y1="164" x2="88" y2="196" class="cav-gate" style="transform:rotate(-90deg);opacity:0.55"></line>
+
+    <g class="cav-card">
+      <rect x="205" y="72" width="90" height="56" rx="10" class="bg"></rect>
+      {
+        ROWS.map(([y, k, v], i) => (
+          <>
+            <line x1="216" y1={y} x2={216 + k} y2={y} class="cav-key" data-row={i} />
+            <line x1="244" y1={y} x2={244 + v} y2={y} class="cav-val" data-row={i} />
+          </>
+        ))
+      }
+    </g>
+
+    <g class="cav-chip">
+      <rect x="328" y="80" width="124" height="30" rx="10" class="bg"></rect>
+      <path d="M342,95.4 L345.2,98.6 L351.2,91.4" class="tick"></path>
+      <text x="358" y="99.4" class="cav-lab cav-booked" style="opacity:0">Booked · ref</text>
+      <text x="358" y="99.4" class="cav-lab cav-moved">Moved to 11:00</text>
+    </g>
+
+    <g class="cav-agent" style="opacity:0">
+      <circle cx="0" cy="0" r="11" class="glow"></circle>
+      <circle cx="0" cy="0" r="5.5" class="core"></circle>
+    </g>
+  </svg>
+</figure>
+
+<style is:global>
+  .cav {
+    --cav-ink: var(--ink);
+    --cav-ink2: var(--ink-2);
+    --cav-ink3: var(--ink-3);
+    --cav-glass: var(--glass-bg);
+    --cav-violet: var(--violet);
+    --cav-violet-i: var(--violet-ink);
+    --cav-lagoon: var(--lagoon);
+    --cav-palm: var(--palm);
+    --cav-palm-i: var(--palm-ink);
+    --cav-ease: var(--ease-out-soft, cubic-bezier(0.2, 0.8, 0.2, 1));
+    display: block;
+    margin: 0;
+    width: 100%;
+    aspect-ratio: 640 / 360;
+    container-type: inline-size;
+  }
+  .cav svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .cav text {
+    font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+    fill: var(--cav-ink2);
+  }
+  .cav .cav-cap {
+    font-size: 11px;
+    letter-spacing: 0.11em;
+  }
+  .cav .cav-at {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 10.5px;
+    fill: var(--cav-ink3);
+  }
+  .cav .cav-lab {
+    font-size: 12px;
+    font-weight: 600;
+    fill: var(--cav-ink);
+  }
+  .cav .cav-rail {
+    fill: none;
+    stroke: var(--cav-violet);
+    stroke-opacity: 0.4;
+    stroke-width: 1.3;
+    stroke-dasharray: 1.5 6;
+    stroke-linecap: round;
+  }
+  .cav .cav-lit {
+    fill: none;
+    stroke: var(--cav-violet);
+    stroke-opacity: 0.55;
+    stroke-width: 1.3;
+    stroke-dasharray: 1 1;
+    stroke-linecap: round;
+  }
+  .cav .cav-loop {
+    fill: none;
+    stroke: var(--cav-lagoon);
+    stroke-opacity: 0.5;
+    stroke-width: 1.2;
+    stroke-dasharray: 1.5 5;
+    stroke-linecap: round;
+  }
+  .cav .cav-stop .ring {
+    fill: var(--cav-glass);
+    stroke: var(--cav-ink3);
+    stroke-opacity: 0.7;
+    stroke-width: 1.2;
+  }
+  .cav .cav-stop .fill {
+    fill: var(--cav-palm);
+  }
+  .cav .cav-stop .halo {
+    fill: none;
+    stroke: var(--cav-palm);
+    stroke-opacity: 0;
+    stroke-width: 1.2;
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+  }
+  .cav .cav-stop.wake .halo {
+    animation: cav-halo 0.7s var(--cav-ease);
+  }
+  @keyframes cav-halo {
+    0% {
+      stroke-opacity: 0.55;
+      transform: scale(0.8);
+    }
+    100% {
+      stroke-opacity: 0;
+      transform: scale(1.8);
+    }
+  }
+  .cav .cav-gate {
+    stroke: var(--cav-ink3);
+    stroke-opacity: 0.7;
+    stroke-width: 2;
+    stroke-dasharray: 3 3;
+    stroke-linecap: round;
+    transform-box: view-box;
+    transform-origin: 88px 196px;
+  }
+  .cav .cav-card .bg,
+  .cav .cav-chip .bg {
+    fill: var(--cav-glass);
+    stroke: var(--cav-violet);
+    stroke-opacity: 0.45;
+    stroke-width: 1.1;
+  }
+  .cav .cav-chip .bg {
+    stroke: var(--cav-palm);
+    stroke-opacity: 0.6;
+  }
+  .cav .cav-key,
+  .cav .cav-val {
+    stroke-width: 2;
+    stroke-linecap: round;
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+  }
+  .cav .cav-key {
+    stroke: var(--cav-ink3);
+    stroke-opacity: 0.6;
+  }
+  .cav .cav-val {
+    stroke: var(--cav-violet-i);
+    stroke-opacity: 0.7;
+  }
+  .cav .cav-chip .tick {
+    fill: none;
+    stroke: var(--cav-palm-i);
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .cav .cav-agent .core {
+    fill: var(--cav-violet);
+  }
+  .cav .cav-agent .glow {
+    fill: var(--cav-violet);
+    fill-opacity: 0.16;
+  }
+  @container (max-width: 600px) {
+    .cav .cav-cap {
+      font-size: 12.5px;
+    }
+    .cav .cav-at {
+      font-size: 11.5px;
+    }
+    .cav .cav-lab {
+      font-size: 13.5px;
+    }
+  }
+  @container (max-width: 400px) {
+    .cav .cav-cap {
+      font-size: 15px;
+      letter-spacing: 0.05em;
+    }
+    .cav .cav-at {
+      font-size: 14px;
+    }
+    .cav .cav-lab {
+      font-size: 14.5px;
+    }
+  }
+  .cav.cav-still,
+  .cav.cav-still * {
+    animation: none !important;
+    transition: none !important;
+  }
+  .cav.cav-paused * {
+    animation-play-state: paused !important;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cav * {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+</style>
+
+<script>
+  // @ts-nocheck — a compact hand-written ES5 drawing machine, the same shape as CoverPay's.
+  (function () {
+    "use strict";
+    function ease(x) {
+      x = x < 0 ? 0 : x > 1 ? 1 : x;
+      return 1 - Math.pow(1 - x, 3);
+    }
+    function ramp(t, a, b) {
+      return ease((t - a) / (b - a));
+    }
+    function bez3(a, b, c, d, u) {
+      var v = 1 - u;
+      return [
+        v * v * v * a[0] + 3 * v * v * u * b[0] + 3 * v * u * u * c[0] + u * u * u * d[0],
+        v * v * v * a[1] + 3 * v * v * u * b[1] + 3 * v * u * u * c[1] + u * u * u * d[1],
+      ];
+    }
+    var XS = [110, 250, 390, 530],
+      LOOPED = [[530, 188], [530, 268], [390, 268], [390, 188]];
+    /* Where the dashes start, before they settle: [dx, dy, turn] for each key and value. */
+    var SCATTER = [
+      [[-14, -9, -24], [10, 12, 18]],
+      [[12, -12, 30], [-8, 9, -16]],
+      [[-6, 11, 20], [14, -7, -28]],
+    ];
+    /* The agent rides from x to x between the times; at the gate it waits for it to open. */
+    var T = {
+        enter: 0.3, gate: 1.0, gated: 1.5, s1: 1.9,
+        go2: 2.1, s2: 3.0, fields: 3.8,
+        go3: 4.0, s3: 4.9, booked: 5.0,
+        go4: 5.8, s4: 6.7,
+        loop: 7.0, back: 8.2, moved: 8.6, gone: 8.9,
+        exit: 11.0,
+      },
+      STOPS = [T.s1, T.s2, T.s3, T.s4],
+      LOOP = 12.2,
+      STILL = 9.4;
+    function ride(t) {
+      if (t < T.gate) return 40 + 36 * ramp(t, T.enter, T.gate);
+      if (t < T.gated) return 76;
+      if (t < T.go2) return 76 + 34 * ramp(t, T.gated, T.s1);
+      if (t < T.go3) return 110 + 140 * ramp(t, T.go2, T.s2);
+      if (t < T.go4) return 250 + 140 * ramp(t, T.go3, T.s3);
+      return 390 + 140 * ramp(t, T.go4, T.s4);
+    }
+
+    function mount(fig) {
+      if (fig.getAttribute("data-cav") === "on") return;
+      function q(s) {
+        var e = fig.querySelector(s);
+        if (!e) throw new Error("CoverAgentVisit " + s);
+        return e;
+      }
+      var stops = [].slice.call(fig.querySelectorAll(".cav-stop")),
+        keys = [].slice.call(fig.querySelectorAll(".cav-key")),
+        vals = [].slice.call(fig.querySelectorAll(".cav-val")),
+        lit = q(".cav-lit"),
+        gate = q(".cav-gate"),
+        chip = q(".cav-chip"),
+        booked = q(".cav-booked"),
+        moved = q(".cav-moved"),
+        agent = q(".cav-agent");
+      if (stops.length !== 4 || keys.length !== 3 || vals.length !== 3) throw new Error("CoverAgentVisit parts");
+      fig.setAttribute("data-cav", "on");
+
+      function op(e, v) {
+        e.style.opacity = v;
+      }
+      function render(t) {
+        var g = 1 - ramp(t, T.exit, LOOP),
+          x = ride(t),
+          u,
+          p;
+        /* the line lights behind the agent */
+        u = t < T.loop ? (x - 40) / 490 : 1;
+        lit.style.strokeDashoffset = 1 - u;
+        op(lit, g);
+        stops.forEach(function (s, i) {
+          op(s.querySelector(".fill"), g * ramp(t, STOPS[i], STOPS[i] + 0.3));
+        });
+        /* 1. the gate opens */
+        gate.style.transform = "rotate(" + -90 * g * ramp(t, T.gate, T.gated) + "deg)";
+        op(gate, 1 - 0.45 * g * ramp(t, T.gate, T.gated));
+        /* 2. the page's words settle into fields */
+        u = g * ramp(t, T.s2, T.fields);
+        [keys, vals].forEach(function (set, j) {
+          set.forEach(function (e, i) {
+            var s = SCATTER[i][j];
+            e.style.transform =
+              "translate(" + s[0] * (1 - u) + "px," + s[1] * (1 - u) + "px) rotate(" + s[2] * (1 - u) + "deg)";
+            e.style.strokeDasharray = u > 0.98 ? "none" : 2 + 6 * u + " " + 3 * (1 - u);
+          });
+        });
+        /* 3. a booking with its reference; 4. moved, after the loop back */
+        op(chip, g * ramp(t, T.booked, T.booked + 0.4));
+        u = ramp(t, T.back, T.moved);
+        op(booked, 1 - u);
+        op(moved, u);
+        /* the agent */
+        if (t < T.loop) {
+          agent.style.transform = "translate(" + x + "px,180px)";
+          op(agent, ramp(t, T.enter, T.enter + 0.2) * (1 - ramp(t, T.loop - 0.15, T.loop)));
+        } else {
+          p = bez3(LOOPED[0], LOOPED[1], LOOPED[2], LOOPED[3], ramp(t, T.loop, T.back));
+          agent.style.transform = "translate(" + p[0] + "px," + p[1] + "px)";
+          op(agent, ramp(t, T.loop, T.loop + 0.15) * (1 - ramp(t, T.back, T.gone)));
+        }
+      }
+
+      var timers = [],
+        fired = {};
+      function flash(el, ms) {
+        el.classList.add("wake");
+        timers.push(
+          setTimeout(function () {
+            el.classList.remove("wake");
+          }, ms),
+        );
+      }
+      function cue(t, live) {
+        function on(k, when, el) {
+          if (t < when || fired[k]) return;
+          fired[k] = true;
+          if (live) flash(el, 800);
+        }
+        STOPS.forEach(function (w, i) {
+          on("s" + i, w, stops[i]);
+        });
+        on("back", T.back, stops[2]);
+      }
+      function settle() {
+        timers.forEach(clearTimeout);
+        timers.length = 0;
+        stops.forEach(function (m) {
+          m.classList.remove("wake");
+        });
+      }
+
+      render(STILL);
+      cue(STILL, false);
+      var clock = STILL,
+        last = 0,
+        raf = 0,
+        running = false,
+        seen = true,
+        wasP = STILL,
+        mq = matchMedia("(prefers-reduced-motion:reduce)");
+      function frame(now) {
+        if (!running) return;
+        clock += Math.max(0, Math.min((now - last) / 1000, 0.05));
+        last = now;
+        var ph = clock % LOOP;
+        if (ph < wasP) fired = {};
+        wasP = ph;
+        render(ph);
+        cue(ph, true);
+        raf = requestAnimationFrame(frame);
+      }
+      function sync() {
+        if (fig.classList.contains("cav-still")) return;
+        var want = seen && !document.hidden;
+        if (want === running) return;
+        running = want;
+        if (running) {
+          fig.classList.remove("cav-paused");
+          settle();
+          last = performance.now();
+          raf = requestAnimationFrame(frame);
+        } else {
+          cancelAnimationFrame(raf);
+          fig.classList.add("cav-paused");
+        }
+      }
+      function still() {
+        fig.classList.add("cav-still");
+        running = false;
+        cancelAnimationFrame(raf);
+        settle();
+        render(STILL);
+      }
+      if (mq.matches) {
+        still();
+        return;
+      }
+      if ("IntersectionObserver" in window) {
+        new IntersectionObserver(
+          function (es) {
+            seen = es[0].isIntersecting;
+            sync();
+          },
+          { threshold: 0.01 },
+        ).observe(fig);
+      }
+      document.addEventListener("visibilitychange", sync);
+      function onMq() {
+        if (mq.matches && !fig.classList.contains("cav-still")) still();
+      }
+      if (mq.addEventListener) mq.addEventListener("change", onMq);
+      else if (mq.addListener) mq.addListener(onMq);
+      sync();
+    }
+    function mountAll() {
+      document.querySelectorAll(".cav").forEach(function (f) {
+        try {
+          mount(f);
+        } catch (err) {
+          if (window.console && console.warn) console.warn("cover agent visit", err);
+        }
+      });
+    }
+    mountAll();
+    document.addEventListener("astro:page-load", mountAll);
+  })();
+</script>

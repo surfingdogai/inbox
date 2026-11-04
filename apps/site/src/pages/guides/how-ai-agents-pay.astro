@@ -1,0 +1,23 @@
+---
+// A topic guide, beside the eight guides and outside their contract: its words are in src/lib/topics.ts,
+// its animated cover in src/components/topic-covers.ts, and its social card is made by scripts/og-topic.mjs.
+import TopicGuide from "../../components/TopicGuide.astro";
+import Layout from "../../layouts/Layout.astro";
+import { topicAlternates, topicBySlug, topicCard, topicLd } from "../../lib/topics";
+
+const t = topicBySlug("how-ai-agents-pay");
+const site = Astro.site?.toString() ?? "https://surfingdog.ai/";
+const ld = topicLd(t, site);
+const card = topicCard(t);
+---
+
+<Layout
+  title={`${t.title} · Surfing Dog`}
+  description={t.description}
+  type="article"
+  ld={ld}
+  alternates={topicAlternates(t, site)}
+  {...card}
+>
+  <TopicGuide topic={t} />
+</Layout>

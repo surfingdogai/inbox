@@ -26,6 +26,8 @@ export const TOPICS_AS_OF = "as of October 2026";
 export const TOPICS_MODIFIED = "2026-10-27";
 /** When the pages added on 31 October 2026 were written, and their sources read. */
 export const TOPICS_ADDED = "2026-10-31";
+/** When the three added on 4 November 2026 were written, and their sources read: true as of their own month. */
+export const TOPICS_NOVEMBER = "2026-11-04";
 
 /** The languages a topic guide may be written in. */
 export const TOPIC_LANGS = ["en", "es", "pt"] as const satisfies readonly Lang[];
@@ -115,6 +117,10 @@ export interface TopicSection {
   readonly list?: readonly TopicBlock[];
 }
 
+/** The topic guides' animated covers, by name: src/components/topic-covers.ts draws each. */
+export const TOPIC_COVERS = ["protocols", "pay-routes", "agent-visit"] as const;
+export type TopicCover = (typeof TOPIC_COVERS)[number];
+
 export interface Topic {
   readonly slug: string;
   /** The page's language; English when it says none. */
@@ -123,6 +129,15 @@ export interface Topic {
   readonly of?: string;
   /** When it was written, if not with the first three (TOPICS_MODIFIED). */
   readonly modified?: string;
+  /** The month it is true as of, as its words write it, when not the frame's (TOPIC_WORDS). */
+  readonly month?: string;
+  /**
+   * Its own explainer, under the heading: the animated cover it shows, what the cover shows in
+   * words, and its one idea, which its social card prints beside the cover's rest frame.
+   */
+  readonly cover?: { readonly anim: TopicCover; readonly alt: string; readonly idea: string };
+  /** Its own social card, made from the built page by scripts/og-topic.mjs; the site card when none. */
+  readonly og?: string;
   /** Its title, before " · Surfing Dog". */
   readonly title: string;
   readonly heading: string;
@@ -221,6 +236,61 @@ const S = {
     "https://support.google.com/merchants/answer/13889434",
   ),
   schemaProduct: src("schema.org: Product", "https://schema.org/Product"),
+  // Read for the three guides of November 2026, each in its own documentation.
+  acpRepo: src(
+    "ACP on GitHub: the specification",
+    "https://github.com/agentic-commerce-protocol/agentic-commerce-protocol",
+  ),
+  acpRelease: src(
+    "ACP: version 2026-04-17",
+    "https://github.com/agentic-commerce-protocol/agentic-commerce-protocol/blob/main/changelog/2026-04-17.md",
+  ),
+  acpCheckout: src(
+    "ACP: the agentic checkout",
+    "https://github.com/agentic-commerce-protocol/agentic-commerce-protocol/blob/main/rfcs/rfc.agentic_checkout.md",
+  ),
+  openaiPayment: src("OpenAI: the Delegated Payment Spec", "https://developers.openai.com/commerce/specs/payment"),
+  ucpOverview: src("UCP: the specification overview", "https://ucp.dev/latest/specification/overview/"),
+  ucpRelease: src(
+    "UCP on GitHub: release 2026-08-25",
+    "https://github.com/Universal-Commerce-Protocol/ucp/releases/tag/v2026-08-25",
+  ),
+  mcpSpec: src("MCP: the specification", "https://modelcontextprotocol.io/specification/latest"),
+  mcpAaif: src(
+    "MCP blog: MCP joins the Agentic AI Foundation, 9 December 2025",
+    "https://blog.modelcontextprotocol.io/posts/2025-12-09-mcp-joins-agentic-ai-foundation/",
+  ),
+  mcpCards: src("MCP: SEP-2127, server cards", "https://modelcontextprotocol.io/seps/2127-mcp-server-cards"),
+  a2aSpec: src("A2A: the specification", "https://a2a-protocol.org/latest/specification/"),
+  a2aAaif: src("AAIF: A2A joins the Agentic AI Foundation, 17 August 2026", "https://aaif.io/blog/a2a-joins-aaif"),
+  stripeSpt: src(
+    "Stripe Docs: shared payment tokens, for sellers",
+    "https://docs.stripe.com/agentic-commerce/concepts/shared-payment-tokens?agent-seller=seller",
+  ),
+  stripeMachine: src("Stripe Docs: machine payments", "https://docs.stripe.com/payments/machine"),
+  stripeX402: src("Stripe Docs: x402", "https://docs.stripe.com/payments/machine/x402"),
+  stripeLinks: src("Stripe Docs: Payment Links", "https://docs.stripe.com/payment-links"),
+  mollieLinks: src("Mollie Docs: payment links", "https://docs.mollie.com/docs/payment-links"),
+  mpp: src("MPP: the Machine Payments Protocol", "https://mpp.dev/"),
+  x402: src("x402", "https://www.x402.org/"),
+  x402Repo: src("x402 on GitHub", "https://github.com/x402-foundation/x402"),
+  lfX402: src(
+    "Linux Foundation: the x402 Foundation, 2 April 2026",
+    "https://www.linuxfoundation.org/press/linux-foundation-is-launching-the-x402-foundation-and-welcoming-the-contribution-of-the-x402-protocol",
+  ),
+  linkAgents: src("Link: a wallet for your agent", "https://link.com/agents"),
+  anthropicBots: src(
+    "Anthropic: its crawlers",
+    "https://support.claude.com/en/articles/8896518-does-anthropic-crawl-data-from-the-web-and-how-can-site-owners-block-the-crawler",
+  ),
+  schemaLocal: src("schema.org: LocalBusiness", "https://schema.org/LocalBusiness"),
+  llmstxt: src("llmstxt.org", "https://llmstxt.org/"),
+  cfReady: src("Cloudflare: agent readiness, 17 April 2026", "https://blog.cloudflare.com/agent-readiness/"),
+  webBotAuth: src(
+    "IETF draft: HTTP message signatures for bots",
+    "https://datatracker.ietf.org/doc/draft-meunier-web-bot-auth-architecture/",
+  ),
+  webmcp: src("WebMCP: the Community Group draft", "https://webmachinelearning.github.io/webmcp/"),
   // The same pages for the Spanish and Portuguese guides, named in the page's language, in it where
   // the company publishes one.
   openaiBotsEs: src("OpenAI: sus rastreadores, en inglés", "https://developers.openai.com/api/docs/bots"),
@@ -278,6 +348,14 @@ const GUIDE = {
   products: { label: "AI product search", href: "/guides/ai-product-search/" },
   add: { label: "Add your website", href: "/add/" },
   inbox: { label: "Surfing Dog Inbox", href: "/inbox/" },
+  protocols: { label: "Agentic commerce protocols", href: "/guides/agentic-commerce-protocols/" },
+  payRoutes: { label: "How AI agents pay a business", href: "/guides/how-ai-agents-pay/" },
+  agentReady: { label: "What makes a website agent-ready", href: "/guides/agent-ready-website/" },
+  findable: { label: "Make your agent doors findable", href: "/guides/findable-agent-doors/" },
+  llms: { label: "What llms.txt does, and doesn't", href: "/guides/llms-txt/" },
+  readyPost: { label: "Is your website ready for AI agents?", href: "/blog/is-your-website-ready-for-ai-agents/" },
+  stripe: { label: "Stripe", href: "/integrations/stripe/" },
+  mollie: { label: "Mollie", href: "/integrations/mollie/" },
 } as const;
 
 export const TOPICS: readonly Topic[] = [
@@ -410,6 +488,7 @@ export const TOPICS: readonly Topic[] = [
       GUIDE.payments,
       GUIDE.shopify,
       GUIDE.integrations,
+      GUIDE.protocols,
     ],
   },
   {
@@ -688,7 +767,7 @@ export const TOPICS: readonly Topic[] = [
         a: "With AP2 version 0.2, within instructions the person approved in advance, such as a budget or a single item. The person's limits travel with the payment as a signed mandate.",
       },
     ],
-    related: [GUIDE.payments, GUIDE.assisted, GUIDE.commerce, GUIDE.products, GUIDE.onChatgpt],
+    related: [GUIDE.payments, GUIDE.assisted, GUIDE.commerce, GUIDE.products, GUIDE.onChatgpt, GUIDE.payRoutes],
   },
   {
     slug: "ai-inbox-for-business",
@@ -1042,6 +1121,558 @@ export const TOPICS: readonly Topic[] = [
     related: [GUIDE.selling, GUIDE.sellChatgpt, GUIDE.commerce, GUIDE.shopify, GUIDE.ap2, GUIDE.onChatgpt],
   },
   {
+    slug: "agentic-commerce-protocols",
+    modified: TOPICS_NOVEMBER,
+    month: "November 2026",
+    title: "Agentic commerce protocols: ACP, UCP, MCP and A2A",
+    heading: "Agentic commerce protocols: what ACP, UCP, MCP and A2A each do, and which one you need",
+    lede: "The four as of November 2026: who runs each, where an agent finds it, how they stack, and what a business has to do about them.",
+    description:
+      "What the Agentic Commerce Protocol, UCP, MCP and A2A each do, who runs them, where an agent finds them, and which one a small business needs.",
+    answer:
+      "The Agentic Commerce Protocol (ACP), from OpenAI and Stripe, and the Universal Commerce Protocol (UCP), co-developed by Google, Shopify and others, describe a checkout an AI agent can use. MCP lets an agent call a business's tools; A2A lets two agents talk. A business usually gets them from its platform.",
+    cover: {
+      anim: "protocols",
+      alt: "A customer's agent and a business, joined by three lanes. A question runs the MCP lane and comes back with free times; a cart runs the checkout lane and comes back as an order; the cart then rides inside the MCP lane; and the business's own agent answers on the A2A lane.",
+      idea: "Four protocols, three jobs.\nMost shops get them from their platform.",
+    },
+    og: "/art/og-agentic-commerce-protocols-v1.png",
+    sections: [
+      {
+        id: "jobs",
+        heading: "Four protocols, three jobs",
+        paras: [
+          {
+            text: "They answer different questions. MCP, the Model Context Protocol, is how an agent calls a tool on a server: free times, a booking, a quote. A2A, the Agent2Agent protocol, is how one agent talks to another. ACP and UCP describe shopping: a cart, a checkout and the order. How the money moves sits underneath, in [how AI agents pay](/guides/how-ai-agents-pay/), and the person's signed approval is the [Agent Payments Protocol (AP2)](/guides/agent-payments-protocol/).",
+          },
+        ],
+        list: [
+          {
+            text: "**ACP, the checkout.** Maintained by OpenAI and Stripe, and in beta; its latest version is 2026-04-17. A seller describes itself at `/.well-known/acp.json`, and the checkout runs over REST or MCP. Open source, under Apache 2.0.",
+            sources: [S.acpRepo, S.acpRelease],
+          },
+          {
+            text: "**UCP, the checkout and more of the journey**: a catalogue, a cart, the checkout, identity linking and the order. Co-developed by Google, Shopify and others; its latest release is dated 2026-08-25. A business publishes its profile at `/.well-known/ucp`, and its checkout runs over REST, MCP or A2A, or as the business's own checkout embedded in the agent's app. Under Apache 2.0.",
+            sources: [S.ucp, S.ucpOverview, S.ucpRelease],
+          },
+          {
+            text: "**MCP, the tools.** Its current specification is dated 2026-07-28, and since 9 December 2025 it has been a project of the Agentic AI Foundation, under the Linux Foundation. An MCP server card describes a server before an agent connects to it.",
+            sources: [S.mcpSpec, S.mcpAaif, S.mcpCards],
+          },
+          {
+            text: "**A2A, agents talking to agents.** Version 1.0.0, and a project of the same foundation since 17 August 2026. An agent describes itself in an agent card at `/.well-known/agent-card.json`, and talks over JSON-RPC, gRPC or HTTP with JSON.",
+            sources: [S.a2aSpec, S.a2aAaif],
+          },
+        ],
+      },
+      {
+        id: "acp",
+        heading: "ACP, step by step",
+        paras: [
+          {
+            text: "An ACP checkout is a session the agent opens with the seller. Before it starts, the agent can read the seller's `/.well-known/acp.json`: the address of its API, the versions it speaks, whether it offers REST or MCP, and services such as carts.",
+            sources: [S.acpRelease],
+          },
+          {
+            text: "The business stays the seller: the prices, the terms and the order are its own. What happened to ChatGPT's own checkout is in [agentic commerce explained](/guides/agentic-commerce/), and is not repeated here.",
+            sources: [S.acp],
+          },
+        ],
+        list: [
+          {
+            text: "**Products.** In version 2026-04-17 the seller pushes its product records to the agent's platform through a feed, rather than the platform fetching them.",
+            sources: [S.acpRelease],
+          },
+          {
+            text: "**Create and update.** The agent creates a session from the items, then updates it with an address and a delivery option. Each time, the seller answers with the session as it now stands, totals included.",
+            sources: [S.acpCheckout],
+          },
+          {
+            text: "**Complete.** The agent completes the session with a payment token, and the seller must create an order. OpenAI's Delegated Payment Spec names Stripe's shared payment token as a compatible implementation.",
+            sources: [S.acpCheckout, S.openaiPayment],
+          },
+          {
+            text: "**Cancel.** The agent can cancel a session that isn't completed yet.",
+            sources: [S.acpCheckout],
+          },
+        ],
+      },
+      {
+        id: "ucp",
+        heading: "UCP: the same job, more of the journey",
+        paras: [
+          {
+            text: "UCP covers the steps around the checkout too: a catalogue to search, a cart, linking a buyer's account with OAuth 2.0, and the order afterwards. Before a checkout, the business compares what it supports with what the agent's platform supports, and keeps only what both do, each at the highest version both know.",
+            sources: [S.ucp, S.ucpOverview],
+          },
+          {
+            text: "Payment goes through payment handlers the business lists in its profile, Google Pay or Shop Pay for example, and an extension carries AP2 mandates. Its lodging part is a draft, with Booking.com, Expedia, Marriott and others among its co-developers ([AI hotel booking](/guides/ai-hotel-booking/)).",
+            sources: [S.ucp, S.ucpOverview],
+          },
+          {
+            text: "Shopify publishes a UCP profile for eligible stores, so their owners build nothing ([Shopify and AI assistants](/guides/shopify-ai-assistants/)).",
+          },
+        ],
+      },
+      {
+        id: "mcp",
+        heading: "MCP: a door that isn't only for shops",
+        paras: [
+          {
+            text: "Most businesses don't sell from a cart. A salon books, a plumber quotes, a guesthouse answers questions. An MCP server offers whatever tools the business has: free times and a booking, a quote request, a message. What the check counts for each is in [the bookings guide](/guides/ai-assistant-bookings/) and [the guide to messages and quotes](/guides/ai-assistant-messages-and-quotes/).",
+          },
+          {
+            text: "The protocols stack rather than compete. ACP has an MCP binding, and UCP's checkout, cart, catalogue and order run over MCP as well as REST, so one MCP server can carry a shop's checkout beside its other tools.",
+            sources: [S.acpRelease, S.ucpOverview],
+          },
+        ],
+      },
+      {
+        id: "a2a",
+        heading: "A2A: when the business has an agent of its own",
+        paras: [
+          {
+            text: "A2A is for an agent that works with other agents as a peer, rather than offering a list of tools. Its agent card says who it is, what it can do, where to reach it and how a caller signs in.",
+            sources: [S.a2aSpec],
+          },
+          {
+            text: "A business needs one only if it runs an AI agent of its own, one that plans or negotiates with other agents; AP2 builds on A2A. A business that answers questions, bookings or orders is served by an MCP door or its platform's checkout.",
+            sources: [S.ap2],
+          },
+        ],
+      },
+      {
+        id: "which",
+        heading: "Which one you need",
+        paras: [
+          {
+            text: "You don't implement these yourself: you choose a platform, or a door, that publishes them.",
+          },
+        ],
+        list: [
+          {
+            text: "**Products, on a shop platform**: the platform's UCP or ACP checkout. WooCommerce® lists both as coming soon; ask yours what it publishes, and where.",
+            sources: [S.woo],
+          },
+          {
+            text: "**Services and bookings**: an MCP door with tools that finish the job. Surfing Dog Inbox (ours, open source) is one, at an address on your own domain ([what it connects to](/integrations/)).",
+          },
+          {
+            text: "**Your own AI agent**: an A2A agent card, beside your MCP door.",
+          },
+          {
+            text: "**APIs and data, paid per call**: payment inside the request, in [how AI agents pay](/guides/how-ai-agents-pay/).",
+          },
+        ],
+      },
+      {
+        id: "see",
+        heading: "How to see which ones a site publishes",
+        paras: [
+          {
+            text: "Each has an address on the business's own domain: `/.well-known/acp.json`, `/.well-known/ucp`, `/.well-known/agent-card.json`, and for MCP a server card or a link from the site ([where readers look](/guides/findable-agent-doors/)). The [UCP and ACP checker](/check/ucp) and the [MCP server tester](/check/mcp-server) read them for you; [the full check](/check) reads them all, and [the agent-ready checklist](/guides/agent-ready-website/) puts them in order.",
+          },
+        ],
+      },
+    ],
+    faqs: [
+      {
+        q: "What is the Agentic Commerce Protocol?",
+        a: "An open standard for an AI agent's checkout with a business, maintained by OpenAI and Stripe and still in beta. The agent opens a checkout session, updates it, and completes it with a payment token; the business creates the order. Its latest version is 2026-04-17.",
+      },
+      {
+        q: "Do I need both ACP and UCP?",
+        a: "Not by hand. Both describe a checkout an agent can use, and a shop platform that publishes both covers both: ask yours which it publishes. A business that books or quotes rather than selling products may need neither, and an MCP door instead.",
+      },
+      {
+        q: "What is the difference between MCP and A2A?",
+        a: "MCP is how an agent calls tools on a server: list free times, book, ask for a quote. A2A is how two agents talk as peers, each with an agent card that says what it can do. A business offers MCP tools to customers' assistants, and needs A2A only if it runs an agent of its own.",
+      },
+      {
+        q: "Can UCP or ACP run over MCP?",
+        a: "Yes. ACP added an MCP binding in its 2026-04-17 version, and UCP's checkout, cart, catalogue and order can run over MCP as well as REST. A business can carry its checkout and its other tools on one MCP server.",
+      },
+      {
+        q: "Which agentic commerce protocol does a small shop need?",
+        a: "Usually the one its platform publishes: Shopify publishes a UCP profile for eligible stores, and elsewhere ask your platform about UCP and ACP. For questions, quotes, returns and bookings, add an MCP door. Our free check shows which doors your site has today.",
+      },
+    ],
+    related: [
+      GUIDE.commerce,
+      GUIDE.payRoutes,
+      GUIDE.agentReady,
+      GUIDE.ap2,
+      GUIDE.findable,
+      GUIDE.shopify,
+      GUIDE.integrations,
+    ],
+  },
+  {
+    slug: "how-ai-agents-pay",
+    modified: TOPICS_NOVEMBER,
+    month: "November 2026",
+    title: "How AI agents pay a business: links, tokens and x402",
+    heading: "How an AI agent pays a business: four ways the money moves, and what you need for each",
+    lede: "The four routes as of November 2026: who says yes, what the agent holds, where the money lands, and what a business needs for each.",
+    description:
+      "Four ways an AI agent pays a business: a payment link, Stripe's shared payment tokens, payment inside the request with x402 or MPP, or your own checkout.",
+    answer:
+      "An AI agent pays a business in one of four ways: a payment link its person pays; a Stripe shared payment token, limited to one seller and an amount; payment inside the request, with x402 or MPP; or a checkout made for agents. Each lands in the business's own account.",
+    cover: {
+      anim: "pay-routes",
+      alt: "A customer's agent and a business's account, joined by four roads. A link passes through the person's phone; a token limited to one seller, one amount and an expiry travels; a request is answered 402 and comes back with a coin; a cart passes through a checkout. The account ticks after each.",
+      idea: "Four ways an agent pays.\nAll of them land in your account.",
+    },
+    og: "/art/og-how-ai-agents-pay-v1.png",
+    sections: [
+      {
+        id: "routes",
+        heading: "Four routes, side by side",
+        paras: [
+          {
+            text: "What [AI agent-assisted payment](/guides/ai-agent-assisted-payments/) means, and the names of the standards, have a page of their own. This one follows the money: for each route, who says yes, what the agent holds, and where the money lands.",
+          },
+        ],
+        list: [
+          {
+            text: "**A payment link.** The person says yes by paying on your checkout page. The agent holds only the link. The money lands in your own Stripe, Mollie or other account.",
+            sources: [S.stripeLinks, S.mollieLinks],
+          },
+          {
+            text: "**A shared payment token.** The person says yes in their agent or wallet. The agent holds a token limited to your Stripe profile, an amount, a currency and an expiry. You charge it like a card, into your Stripe account.",
+            sources: [S.stripeSpt],
+          },
+          {
+            text: "**Payment inside the request.** The agent pays your server's price per call, with x402 or MPP, from a wallet or a card token it was given. The money lands in your Stripe balance or your own wallet.",
+            sources: [S.stripeMachine, S.x402],
+          },
+          {
+            text: "**An agent at your checkout.** The person says yes through the agent's platform. The agent holds a token or a mandate. The money lands through your own payment provider, reached through your shop platform.",
+          },
+        ],
+      },
+      {
+        id: "link",
+        heading: "Route 1: the payment link",
+        paras: [
+          {
+            text: "Your door, or you, creates a link in your own payment account; the agent hands it to its person, who pays on your checkout page. Stripe's and Mollie's can both be made through their APIs, and a Mollie link can carry an amount, a description and an expiry date.",
+            sources: [S.stripeLinks, S.mollieLinks],
+          },
+          {
+            text: "Nothing about it is new, and that is its strength. It works with every assistant today, the agent never holds a card, and refunds and receipts work as they always have. The cost is one step: the person has to open the link and pay.",
+          },
+          {
+            text: "Surfing Dog Inbox (ours, open source) sends one from your own [Stripe](/integrations/stripe/) or [Mollie](/integrations/mollie/) account when you accept an order, and the money goes straight to you.",
+          },
+        ],
+      },
+      {
+        id: "tokens",
+        heading: "Route 2: Stripe's shared payment tokens",
+        paras: [
+          {
+            text: "The person picks a card or a wallet in their agent. The agent asks Stripe for a shared payment token granted to your Stripe profile, with limits: a currency, a maximum amount set to the order's total, and an expiry. It sends you the token, and you charge it with a PaymentIntent, passing it as `payment_method_data[shared_payment_granted_token]`.",
+            sources: [S.stripeSpt],
+          },
+          {
+            text: "You see the card's brand and its last four digits, never its number. Once you charge it, refunds and reporting behave as for any card payment, and Stripe tells you when a token is used up, expires or is revoked. If you take payments with another processor, Stripe's Resolve API turns the token into card credentials for it, once.",
+            sources: [S.stripeSpt],
+          },
+          {
+            text: "Shared payment tokens come under Stripe's agentic commerce preview terms, for sellers in the US, Canada and select European countries. Through Stripe's machine payments, a card payment made this way is at least 0.50 USD.",
+            sources: [S.stripeSpt, S.stripeMachine],
+          },
+          {
+            text: "This is how the Agentic Commerce Protocol (ACP) pays a seller on Stripe: OpenAI's Delegated Payment Spec names Stripe's token as a compatible implementation, with more payment providers to come.",
+            sources: [S.openaiPayment],
+          },
+        ],
+      },
+      {
+        id: "x402",
+        heading: "Route 3: payment inside the request, with x402 or MPP",
+        paras: [
+          {
+            text: "Here the agent pays as part of the request itself. Your server answers HTTP 402, Payment Required, with what the call costs; the agent pays and asks again with proof of payment; your server returns what was asked for. On Stripe, the 402 answer carries a `payment-required` header.",
+            sources: [S.stripeX402],
+          },
+          {
+            text: "x402 is an open protocol, under Apache 2.0. On 2 April 2026 the Linux Foundation announced the x402 Foundation to govern it, with the protocol contributed by Coinbase. On Stripe it takes USDC on Base, settled through Coinbase's facilitator and recorded in your Stripe balance.",
+            sources: [S.x402Repo, S.lfX402, S.stripeX402],
+          },
+          {
+            text: "MPP, the Machine Payments Protocol, co-authored by Stripe and Tempo, works the same way and takes cards, through shared payment tokens, as well as stablecoins.",
+            sources: [S.mpp, S.stripeMachine],
+          },
+          {
+            text: "On Stripe, stablecoin payments are open to businesses in every US state except New York, and in more than 30 other countries on request; the smallest is 0.01 USDC. That suits APIs, data and paid tools, charged per call, more than a haircut or a sofa.",
+            sources: [S.stripeMachine],
+          },
+        ],
+      },
+      {
+        id: "checkout",
+        heading: "Route 4: an agent at your checkout",
+        paras: [
+          {
+            text: "When an assistant checks out in the chat, the payment travels inside a checkout made for agents: the payment handlers of the Universal Commerce Protocol (UCP), ACP's delegated payment, Agent Payments Protocol (AP2) mandates, or the card networks' agent tokens. Stripe says it may use tokens from the card networks' programmes, such as Mastercard Agent Pay and Visa Intelligent Commerce, on a seller's behalf.",
+            sources: [S.ucpOverview, S.stripeSpt],
+          },
+          {
+            text: "You reach these through your shop platform or payment provider, not one by one. Which protocol does what is in [agentic commerce protocols](/guides/agentic-commerce-protocols/); mandates, in [the AP2 guide](/guides/agent-payments-protocol/); what our check counts as paying, in [how AI assistants pay](/guides/ai-assistant-payments/).",
+          },
+        ],
+      },
+      {
+        id: "build",
+        heading: "If you're building the agent",
+        paras: [
+          {
+            text: "Never give it a card number. Give it a credential made for agents, or let it pass on a link. In practice, adding payments to an AI agent means one of these:",
+          },
+        ],
+        list: [
+          {
+            text: "**A wallet that issues limited credentials.** Link's wallet for agents lets a person approve each purchase or a budget, and the agent buys without seeing the card; it is available in the US, with a waitlist elsewhere. Its `link-cli` can run as an MCP server in your agent.",
+            sources: [S.linkAgents, S.stripeSpt],
+          },
+          {
+            text: "**An x402 or MPP client**, to pay per call: the agent answers a server's 402 from a wallet you fund.",
+            sources: [S.x402, S.mpp],
+          },
+          {
+            text: "**A payment link**, when the business sends one: the agent passes it on, and its person pays.",
+          },
+        ],
+      },
+      {
+        id: "need",
+        heading: "What you need, route by route",
+        paras: [],
+        list: [
+          {
+            text: "**For a payment link**: an account with a provider that makes them, such as [Stripe](/integrations/stripe/) or [Mollie](/integrations/mollie/), and a door that sends one when you accept an order.",
+          },
+          {
+            text: "**For shared payment tokens**: a Stripe account with a Stripe profile, in a country where they are offered, and a checkout or a door that takes a token.",
+          },
+          {
+            text: "**For x402 or MPP**: an API or a tool worth paying for per call, and a provider or a wallet that settles it.",
+          },
+          {
+            text: "**For an agent at your checkout**: a shop platform or provider that publishes one. The [UCP and ACP checker](/check/ucp) shows what yours publishes.",
+          },
+          {
+            text: "**For all of them**: say how you take payment, in words on your site, and add `paymentAccepted` to your business data ([your details as data](/guides/business-details-for-ai/)). The rest of the list is in [what makes a website agent-ready](/guides/agent-ready-website/).",
+          },
+        ],
+      },
+    ],
+    faqs: [
+      {
+        q: "How do AI agents pay for things?",
+        a: "In one of four ways: the agent hands its person a payment link; it passes a limited token, such as Stripe's shared payment token; it pays inside the request with x402 or MPP; or it pays through a checkout made for agents. In none of them should the agent hold a card number.",
+      },
+      {
+        q: "What is a Stripe shared payment token?",
+        a: "A credential an agent gets from Stripe and passes to a seller. It lets that one seller charge the person's card or wallet, up to a maximum amount, in one currency, before an expiry. The seller sees the card's brand and last four digits, and charges it with a PaymentIntent.",
+      },
+      {
+        q: "What is x402?",
+        a: "An open protocol for paying over HTTP: a server answers 402 Payment Required with a price, and the client pays and asks again. Coinbase contributed it to the Linux Foundation's x402 Foundation, and it is used mostly with stablecoins such as USDC.",
+      },
+      {
+        q: "Do I need crypto to be paid by an AI agent?",
+        a: "No. A payment link and Stripe's shared payment tokens are ordinary card and wallet payments. Stablecoins come in only with x402, and MPP takes cards too.",
+      },
+      {
+        q: "How do I add payments to an AI agent?",
+        a: "Never give it a card number. Use a wallet that issues limited credentials to agents, such as Link's, an x402 or MPP client to pay per call, or let the agent pass a business's payment link to its person.",
+      },
+    ],
+    related: [
+      GUIDE.assisted,
+      GUIDE.payments,
+      GUIDE.ap2,
+      GUIDE.protocols,
+      GUIDE.agentReady,
+      GUIDE.stripe,
+      GUIDE.mollie,
+      GUIDE.inbox,
+    ],
+  },
+  {
+    slug: "agent-ready-website",
+    modified: TOPICS_NOVEMBER,
+    month: "November 2026",
+    title: "Agent-ready website: what it means, and a checklist",
+    heading: "What makes a website agent-ready: a checklist in the order an agent meets it",
+    lede: "As of November 2026: the addresses an AI agent asks for, what a good answer looks like, and how to test each one yourself.",
+    description:
+      "What an agent-ready website is, and a checklist in the order an AI agent meets it: let it in, let it understand, let it act, let it follow up. Free check.",
+    answer:
+      "An agent-ready website is one an AI agent can read and use: it lets the agent in, says what the business is as data, and offers a door, such as an MCP server or a checkout, where the agent can ask, book, order or pay, then change or cancel.",
+    cover: {
+      anim: "agent-visit",
+      alt: "An agent rides a line through four stations: let in, where a closed gate opens; understand, where scattered dashes settle into fields; act, where a booking comes back with a reference; and follow up, where a loop takes it back and the booking moves to 11:00.",
+      idea: "Let it in, let it understand, let it act.\nThen let it change its mind.",
+    },
+    og: "/art/og-agent-ready-website-v1.png",
+    sections: [
+      {
+        id: "ready",
+        heading: "Readable isn't the same as ready",
+        paras: [
+          {
+            text: "A site an AI can read is a brochure: the assistant learns about you, and books somewhere else. A site that is ready lets the assistant finish the job its person gave it. [Is your website ready for AI agents?](/blog/is-your-website-ready-for-ai-agents/) explains the two questions and compares two free checks. This page is the list, in the order an agent meets it, with a test for each step.",
+          },
+        ],
+      },
+      {
+        id: "in",
+        heading: "1. Let it in",
+        paras: [],
+        list: [
+          {
+            text: "**`/robots.txt` lets the assistants' search and user agents in**: OpenAI's OAI-SearchBot and ChatGPT-User, Anthropic's Claude-SearchBot and Claude-User. GPTBot and ClaudeBot gather pages for training, and are separate settings. Test: [the AI crawler checker](/check/ai-crawlers) shows which line decides each one ([robots.txt and AI agents](/guides/robots-txt-ai-agents/)).",
+            sources: [S.openaiBots, S.anthropicBots],
+          },
+          {
+            text: "**Nothing stops it at the door**: no bot blocking or challenge page at your host or firewall for the agents you want. Test: ask an assistant to open your homepage and read out your opening hours, and ask your host what it blocks.",
+          },
+          {
+            text: "**Prices and hours in the HTML itself**, not filled in later by scripts that many crawlers never run. Test: View Page Source, and search for one of your prices ([can AI read your website?](/blog/can-ai-read-your-website/)).",
+          },
+        ],
+      },
+      {
+        id: "understand",
+        heading: "2. Let it understand",
+        paras: [],
+        list: [
+          {
+            text: "**Your details as data**: schema.org `LocalBusiness` markup with your name, address, opening hours, `priceRange` and `paymentAccepted`. Test: search the source for `application/ld+json` ([your details as data](/guides/business-details-for-ai/)).",
+            sources: [S.schemaLocal],
+          },
+          {
+            text: "**Your terms in plain words**: cancellation, refunds, deposits and delivery, on your own pages. An agent reads them before it commits its person.",
+          },
+          {
+            text: "**An `/llms.txt`**, with a line for each door. It helps an agent read your site and find your doors; it isn't a door itself. Test: [the llms.txt checker](/check/llms-txt) ([what llms.txt does, and doesn't](/guides/llms-txt/)).",
+            sources: [S.llmstxt],
+          },
+          {
+            text: "**Markdown when an agent asks for it**, if your host offers it: a page that answers `Accept: text/markdown` with a Markdown version of itself. Cloudflare's agent readiness scanner checks for it.",
+            sources: [S.cfReady],
+          },
+        ],
+      },
+      {
+        id: "act",
+        heading: "3. Let it act",
+        paras: [],
+        list: [
+          {
+            text: "**A door on your own domain**: an MCP server, a Universal Commerce Protocol (UCP) or Agentic Commerce Protocol (ACP) checkout profile, an OpenAPI document or an agent inbox. Pages, forms and email are made for people, so they aren't doors. Test: [the MCP server tester](/check/mcp-server), [the UCP and ACP checker](/check/ucp) or [the agent inbox checker](/check/agent-inbox).",
+          },
+          {
+            text: "**A door an agent can find**: a well-known address such as `/.well-known/agent-card.json` or `/.well-known/ucp`, an AI catalog at `/.well-known/ai-catalog.json`, or `<link rel=\"mcp\">` on your homepage. MCP's server card describes a server before an agent connects, and an AI catalog lists a domain's cards ([where readers look](/guides/findable-agent-doors/)).",
+            sources: [S.mcpCards],
+          },
+          {
+            text: "**Tools that finish the job**: free times, and a booking that comes back with a reference; a quote request with the details you need; an order. A tool that only emails you leaves the agent waiting ([bookings](/guides/ai-assistant-bookings/), [messages and quotes](/guides/ai-assistant-messages-and-quotes/), [selling](/guides/sell-through-ai-assistants/)).",
+          },
+          {
+            text: "**A way to pay**, or a payment link: the four routes are in [how AI agents pay a business](/guides/how-ai-agents-pay/), and the protocols behind the doors in [agentic commerce protocols](/guides/agentic-commerce-protocols/).",
+          },
+        ],
+      },
+      {
+        id: "follow",
+        heading: "4. Let it follow up",
+        paras: [],
+        list: [
+          {
+            text: "**Change, cancel, return and track**, as tools beside the booking or the order. People change their minds, and they ask the assistant that booked. Test: ask an assistant to move the booking it just made.",
+          },
+        ],
+      },
+      {
+        id: "emerging",
+        heading: "Emerging, and worth watching",
+        paras: [],
+        list: [
+          {
+            text: "**Web Bot Auth**: an IETF draft in which an agent signs each request, so a site or its firewall can tell a real assistant from a scraper that borrows its name.",
+            sources: [S.webBotAuth, S.cfReady],
+          },
+          {
+            text: "**WebMCP**: a draft from the W3C's Web Machine Learning Community Group, not a W3C standard, for a page to offer tools to an agent in the browser. The draft is dated 2 November 2026; our check reads WebMCP tools as experimental.",
+            sources: [S.webmcp],
+          },
+          {
+            text: "**Content signals**: lines in robots.txt that say whether your pages may be used for search, as input to AI answers, or for training.",
+            sources: [S.cfReady],
+          },
+        ],
+      },
+      {
+        id: "visit",
+        heading: "What a finished visit looks like",
+        paras: [
+          {
+            text: "A person asks their assistant to book a haircut at a salon on Saturday morning. The assistant reads the salon's site, finds its MCP server, and lists its tools. It asks for Saturday's free times, books 10:00, and gets back a confirmation with a reference, which it shows its person. On Friday the person asks to make it later; the assistant calls the salon's reschedule tool with that reference, and gets 11:00.",
+          },
+        ],
+      },
+      {
+        id: "check",
+        heading: "Check yours",
+        paras: [
+          {
+            text: "[Our free check](/check) reads your site the way an assistant would: it never runs JavaScript, and never books, orders or pays. It ends in a score from 0 to 100, by [published rules](/guides/#score). One thing at a time: [AI crawlers](/check/ai-crawlers), [llms.txt](/check/llms-txt), [an MCP server](/check/mcp-server), [a UCP or ACP profile](/check/ucp) and [an agent inbox](/check/agent-inbox).",
+          },
+          {
+            text: "If you'd rather not build a door, Surfing Dog Inbox (ours, open source) is one at an address on your own domain, with an MCP server that answers from your rules ([how it works](/how-it-works/)).",
+          },
+        ],
+      },
+    ],
+    faqs: [
+      {
+        q: "What is an agent-ready website?",
+        a: "One an AI agent can read and use. It lets the agent in, says what the business is as data, and offers a door, such as an MCP server or a checkout, where the agent can ask, book, order or pay, and then change or cancel.",
+      },
+      {
+        q: "Does llms.txt make my site agent-ready?",
+        a: "Not on its own. An llms.txt file helps an agent read your site and points it to your doors, but it isn't a door: an agent can't book, order or pay through it.",
+      },
+      {
+        q: "How do I check if my website is agent-ready?",
+        a: "Run our free check, which reads your site the way an assistant would and never runs JavaScript or books anything. Then ask an assistant to do what your customers want, with your name in it, and see where it stops.",
+      },
+      {
+        q: "Do I need to rebuild my website to make it agent-ready?",
+        a: "Usually not. Most steps are settings and files: robots.txt, markup for your details, an llms.txt. The door can come from your booking or shop platform, or sit beside your site at an address on your own domain.",
+      },
+      {
+        q: "What is the difference between AI-ready and agent-ready?",
+        a: "AI-ready usually means an AI can read your site and name you in its answers. Agent-ready goes further: a customer's assistant can do something there for its person, such as book, order or pay, and get an answer it can act on.",
+      },
+    ],
+    related: [
+      GUIDE.robots,
+      GUIDE.details,
+      GUIDE.llms,
+      GUIDE.findable,
+      GUIDE.bookings,
+      GUIDE.protocols,
+      GUIDE.payRoutes,
+      GUIDE.readyPost,
+    ],
+  },
+  {
     slug: "aparecer-en-chatgpt",
     lang: "es",
     of: "get-your-business-on-chatgpt",
@@ -1227,6 +1858,24 @@ const TOPIC_DIRS: Readonly<Record<TopicLang, string>> = { en: "/guides/", es: "/
 /** A topic's language. */
 export const topicLang = (t: Topic): TopicLang => t.lang ?? "en";
 
+/** The month a topic is true as of: its own, or its language's frame's. */
+export const topicMonth = (t: Topic): string => t.month ?? TOPIC_WORDS[topicLang(t)].month;
+
+/** The line over a topic's sources, dated by its own month. */
+export const topicSources = (t: Topic): string => {
+  const w = TOPIC_WORDS[topicLang(t)];
+  return t.month ? w.sources.replace(w.month, t.month) : w.sources;
+};
+
+/** The site's card, for a topic without one of its own. */
+const SITE_CARD = "/art/og-network-v1.png";
+
+/** A topic's social card, and what it shows in words: its title and its one idea. */
+export function topicCard(t: Topic): { image: string; imageAlt?: string } {
+  if (!t.og || !t.cover) return { image: SITE_CARD };
+  return { image: t.og, imageAlt: `${t.title}. ${t.cover.idea.replace(/\n/g, " ")}` };
+}
+
 /** A topic guide's address, in its own language's place. */
 export function topicHref(slug: string): string {
   const t = TOPICS.find((x) => x.slug === slug);
@@ -1294,7 +1943,7 @@ export function topicLd(t: Topic, site: string): readonly Record<string, unknown
       author: { "@type": "Organization", name: "Surfing Dog", url: site },
       publisher: { "@id": `${site}#org` },
       isPartOf: { "@type": "CollectionPage", name: words.hub.label, url: hub },
-      image: new URL("/art/og-network-v1.png", site).toString(),
+      image: new URL(topicCard(t).image, site).toString(),
       mainEntityOfPage: url,
       url,
     },

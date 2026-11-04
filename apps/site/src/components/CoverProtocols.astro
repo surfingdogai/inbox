@@ -1,0 +1,548 @@
+---
+/**
+ * The cover for "Agentic commerce protocols": four protocols, three jobs, and how they stack.
+ * A customer's agent on the left and a business on the right, joined by three thin lanes:
+ * A2A on top, MCP in the middle, the checkout (ACP · UCP) at the bottom.
+ *
+ *  1. A question runs the MCP lane and comes back: free times.
+ *  2. A cart runs the checkout lane and comes back as an order.
+ *  3. The cart then rides inside a capsule on the MCP lane: a checkout over MCP. Layers, not rivals.
+ *  4. The business's own agent appears, and a message shuttles along the A2A lane.
+ *
+ * Built the way CoverPay.astro is: the markup is the composed frame at t = STILL and the clock
+ * starts there, reduced motion is that frame, and it stops when nobody is looking. Every selector
+ * starts with .cpr and every keyframe is cpr-*, so nothing leaks. Colours are the design tokens.
+ */
+interface Props {
+  alt: string;
+}
+const { alt } = Astro.props;
+---
+
+<figure class="cpr" role="img" aria-label={alt}>
+  <svg viewBox="0 0 640 360" aria-hidden="true" focusable="false">
+    <text x="82" y="122" class="cpr-cap" text-anchor="middle">THEIR AGENT</text>
+    <text x="558" y="122" class="cpr-cap" text-anchor="middle">YOUR BUSINESS</text>
+
+    <path d="M104,166 C190,166 200,104 320,104 C440,104 450,166 536,166" class="cpr-rail cpr-a2a"></path>
+    <path d="M104,172 H536" class="cpr-rail cpr-mcp"></path>
+    <path d="M104,178 C190,178 200,240 320,240 C440,240 450,178 536,178" class="cpr-rail cpr-chk"></path>
+    <path
+      d="M104,166 C190,166 200,104 320,104 C440,104 450,166 536,166"
+      pathLength="1"
+      class="cpr-lit cpr-a2a"
+      data-lane="a2a"></path>
+    <path d="M104,172 H536" pathLength="1" class="cpr-lit cpr-mcp" data-lane="mcp"></path>
+    <path
+      d="M104,178 C190,178 200,240 320,240 C440,240 450,178 536,178"
+      pathLength="1"
+      class="cpr-lit cpr-chk"
+      data-lane="chk"></path>
+    <text x="320" y="92" class="cpr-lab" text-anchor="middle" data-lane="a2a">A2A</text>
+    <text x="320" y="161" class="cpr-lab" text-anchor="middle" data-lane="mcp">MCP</text>
+    <text x="320" y="262" class="cpr-lab" text-anchor="middle" data-lane="chk">ACP · UCP</text>
+    <text x="320" y="191" class="cpr-note" text-anchor="middle">checkout over MCP</text>
+
+    <g class="cpr-mark cpr-ai">
+      <rect x="60" y="150" width="44" height="44" rx="12" class="tint"></rect>
+      <rect x="60" y="150" width="44" height="44" rx="12" class="edge"></rect>
+      <rect x="55" y="145" width="54" height="54" rx="15" class="halo"></rect>
+      <line x1="82" y1="150" x2="82" y2="140" class="edge"></line>
+      <circle cx="82" cy="137" r="2.8" class="dot"></circle>
+      <path d="M82,160 L84.8,168.2 L93,171 L84.8,173.8 L82,182 L79.2,173.8 L71,171 L79.2,168.2 Z" class="star"></path>
+    </g>
+    <g class="cpr-mark cpr-biz">
+      <rect x="536" y="150" width="44" height="44" rx="12" class="tint"></rect>
+      <rect x="536" y="150" width="44" height="44" rx="12" class="edge"></rect>
+      <rect x="531" y="145" width="54" height="54" rx="15" class="halo"></rect>
+      <path d="M546,166 h24 l-2,-6 h-20 z M548,166 v16 h20 v-16 M554,182 v-8 h8 v8" class="glyph"></path>
+    </g>
+    <g class="cpr-own">
+      <circle cx="582" cy="148" r="9" class="bg"></circle>
+      <path d="M582,142.5 L583.4,146.6 L587.5,148 L583.4,149.4 L582,153.5 L580.6,149.4 L576.5,148 L580.6,146.6 Z" class="star"></path>
+    </g>
+
+    <g class="cpr-chip cpr-times" style="transform:translate(82px,228px)">
+      <rect x="-46" y="-13" width="92" height="26" rx="9" class="bg"></rect>
+      <text x="0" y="4.2" class="cpr-chiplab" text-anchor="middle">Free times</text>
+    </g>
+    <g class="cpr-chip cpr-order" style="transform:translate(558px,228px)">
+      <rect x="-42" y="-13" width="84" height="26" rx="9" class="bg"></rect>
+      <path d="M-28,0.4 L-24.8,3.6 L-18.8,-3.6" class="tick"></path>
+      <text x="-12" y="4.2" class="cpr-chiplab">Order</text>
+    </g>
+
+    <g class="cpr-run" style="opacity:0">
+      <circle cx="0" cy="0" r="10" class="glow"></circle>
+      <circle cx="0" cy="0" r="5" class="core"></circle>
+    </g>
+    <g class="cpr-cart" style="opacity:0">
+      <path d="M-9,-4 H9 L6.5,6 H-6.5 Z M-5.5,-4 L-2.5,-9 M5.5,-4 L2.5,-9" class="basket"></path>
+    </g>
+    <g class="cpr-capsule" style="opacity:0">
+      <rect x="-19" y="-11" width="38" height="22" rx="11" class="shell"></rect>
+      <path d="M-7,-2.5 H7 L5,5 H-5 Z M-4.3,-2.5 L-2,-6.5 M4.3,-2.5 L2,-6.5" class="basket"></path>
+    </g>
+    <g class="cpr-msg" style="opacity:0">
+      <rect x="-8" y="-5.5" width="16" height="11" rx="2.5" class="env"></rect>
+      <path d="M-8,-4.5 L0,1 L8,-4.5" class="env"></path>
+    </g>
+  </svg>
+</figure>
+
+<style is:global>
+  .cpr {
+    --cpr-ink: var(--ink);
+    --cpr-ink2: var(--ink-2);
+    --cpr-ink3: var(--ink-3);
+    --cpr-glass: var(--glass-bg);
+    --cpr-violet: var(--violet);
+    --cpr-violet-i: var(--violet-ink);
+    --cpr-lagoon: var(--lagoon);
+    --cpr-lagoon-i: var(--lagoon-ink);
+    --cpr-palm: var(--palm);
+    --cpr-palm-i: var(--palm-ink);
+    --cpr-ease: var(--ease-out-soft, cubic-bezier(0.2, 0.8, 0.2, 1));
+    display: block;
+    margin: 0;
+    width: 100%;
+    aspect-ratio: 640 / 360;
+    container-type: inline-size;
+  }
+  .cpr svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .cpr text {
+    font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+    fill: var(--cpr-ink2);
+  }
+  .cpr .cpr-cap {
+    font-size: 11px;
+    letter-spacing: 0.11em;
+  }
+  .cpr .cpr-lab {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    fill: var(--cpr-ink);
+  }
+  .cpr .cpr-note {
+    font-size: 11px;
+    fill: var(--cpr-ink3);
+  }
+  .cpr .cpr-chiplab {
+    font-size: 12px;
+    fill: var(--cpr-ink);
+  }
+  .cpr .cpr-a2a {
+    --lc: var(--cpr-lagoon);
+  }
+  .cpr .cpr-mcp {
+    --lc: var(--cpr-violet);
+  }
+  .cpr .cpr-chk {
+    --lc: var(--cpr-palm);
+  }
+  .cpr .cpr-rail {
+    fill: none;
+    stroke: var(--lc);
+    stroke-opacity: 0.42;
+    stroke-width: 1.3;
+    stroke-dasharray: 1.5 6;
+    stroke-linecap: round;
+  }
+  .cpr .cpr-lit {
+    fill: none;
+    stroke: var(--lc);
+    stroke-opacity: 0.6;
+    stroke-width: 1.2;
+    stroke-dasharray: 1 1;
+    stroke-linecap: round;
+  }
+  .cpr .cpr-ai {
+    --sc: var(--cpr-violet);
+    --si: var(--cpr-violet-i);
+  }
+  .cpr .cpr-biz {
+    --sc: var(--cpr-palm);
+    --si: var(--cpr-palm-i);
+  }
+  .cpr .cpr-mark .tint {
+    fill: var(--sc);
+    fill-opacity: 0.08;
+  }
+  .cpr .cpr-mark .edge {
+    fill: none;
+    stroke: var(--cpr-ink2);
+    stroke-opacity: 0.55;
+    stroke-width: 1.3;
+  }
+  .cpr .cpr-mark .halo {
+    fill: none;
+    stroke: var(--sc);
+    stroke-opacity: 0;
+    stroke-width: 1.3;
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+  }
+  .cpr .cpr-mark .star,
+  .cpr .cpr-mark .dot {
+    fill: var(--sc);
+    fill-opacity: 0.85;
+  }
+  .cpr .cpr-mark .glyph {
+    fill: none;
+    stroke: var(--si);
+    stroke-width: 1.5;
+    stroke-linejoin: round;
+  }
+  .cpr .cpr-mark.wake .halo {
+    animation: cpr-halo 0.66s var(--cpr-ease);
+  }
+  @keyframes cpr-halo {
+    0% {
+      stroke-opacity: 0.5;
+      transform: scale(0.84);
+    }
+    100% {
+      stroke-opacity: 0;
+      transform: scale(1.26);
+    }
+  }
+  .cpr .cpr-own {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+  }
+  .cpr .cpr-own .bg {
+    fill: var(--cpr-glass);
+    stroke: var(--cpr-lagoon);
+    stroke-opacity: 0.7;
+    stroke-width: 1.1;
+  }
+  .cpr .cpr-own .star {
+    fill: var(--cpr-lagoon);
+    fill-opacity: 0.9;
+  }
+  .cpr .cpr-chip .bg {
+    fill: var(--cpr-glass);
+    stroke: var(--cpr-violet);
+    stroke-opacity: 0.5;
+    stroke-width: 1.1;
+  }
+  .cpr .cpr-order .bg {
+    stroke: var(--cpr-palm);
+    stroke-opacity: 0.6;
+  }
+  .cpr .cpr-chip .tick {
+    fill: none;
+    stroke: var(--cpr-palm-i);
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .cpr .cpr-run .core {
+    fill: var(--cpr-violet);
+  }
+  .cpr .cpr-run .glow {
+    fill: var(--cpr-violet);
+    fill-opacity: 0.16;
+  }
+  .cpr .basket {
+    fill: none;
+    stroke: var(--cpr-palm-i);
+    stroke-width: 1.4;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+  }
+  .cpr .cpr-capsule .shell {
+    fill: var(--cpr-glass);
+    stroke: var(--cpr-violet);
+    stroke-opacity: 0.7;
+    stroke-width: 1.2;
+  }
+  .cpr .cpr-msg .env {
+    fill: none;
+    stroke: var(--cpr-lagoon-i);
+    stroke-width: 1.3;
+    stroke-linejoin: round;
+  }
+  @container (max-width: 600px) {
+    .cpr .cpr-cap,
+    .cpr .cpr-note {
+      font-size: 13px;
+    }
+    .cpr .cpr-lab,
+    .cpr .cpr-chiplab {
+      font-size: 13.5px;
+    }
+  }
+  @container (max-width: 400px) {
+    .cpr .cpr-cap {
+      font-size: 15px;
+      letter-spacing: 0.06em;
+    }
+    .cpr .cpr-note {
+      font-size: 14px;
+    }
+    .cpr .cpr-lab,
+    .cpr .cpr-chiplab {
+      font-size: 14.5px;
+    }
+  }
+  .cpr.cpr-still,
+  .cpr.cpr-still * {
+    animation: none !important;
+    transition: none !important;
+  }
+  .cpr.cpr-paused * {
+    animation-play-state: paused !important;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cpr * {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+</style>
+
+<script>
+  // @ts-nocheck — a compact hand-written ES5 drawing machine, the same shape as CoverPay's.
+  (function () {
+    "use strict";
+    function ease(x) {
+      x = x < 0 ? 0 : x > 1 ? 1 : x;
+      return 1 - Math.pow(1 - x, 3);
+    }
+    function ramp(t, a, b) {
+      return ease((t - a) / (b - a));
+    }
+    function bez3(a, b, c, d, u) {
+      var v = 1 - u;
+      return [
+        v * v * v * a[0] + 3 * v * v * u * b[0] + 3 * v * u * u * c[0] + u * u * u * d[0],
+        v * v * v * a[1] + 3 * v * v * u * b[1] + 3 * v * u * u * c[1] + u * u * u * d[1],
+      ];
+    }
+    /* The lanes the markup draws: two cubic halves each, or a straight line. */
+    var LANES = {
+      a2a: [
+        [[104, 166], [190, 166], [200, 104], [320, 104]],
+        [[320, 104], [440, 104], [450, 166], [536, 166]],
+      ],
+      chk: [
+        [[104, 178], [190, 178], [200, 240], [320, 240]],
+        [[320, 240], [440, 240], [450, 178], [536, 178]],
+      ],
+    };
+    function along(lane, u) {
+      u = u < 0 ? 0 : u > 1 ? 1 : u;
+      if (lane === "mcp") return [104 + 432 * u, 172];
+      var s = LANES[lane],
+        h = u < 0.5 ? s[0] : s[1],
+        k = u < 0.5 ? u * 2 : u * 2 - 1;
+      return bez3(h[0], h[1], h[2], h[3], k);
+    }
+    /* Shown while it travels between a and b. */
+    function vis(t, a, b) {
+      return ramp(t, a - 0.1, a + 0.1) * (1 - ramp(t, b - 0.1, b + 0.08));
+    }
+    var T = {
+        ask: 0.4, asked: 1.5, back: 1.7, times: 2.8,
+        cart: 3.4, carted: 4.7, order: 4.8,
+        cap: 5.6, capped: 6.9, note: 5.8,
+        own: 7.4, msg: 7.9, msged: 8.9, reply: 9.1, replied: 10.1,
+        exit: 12.4,
+      },
+      LOOP = 13.6,
+      STILL = 10.9;
+
+    function mount(fig) {
+      if (fig.getAttribute("data-cpr") === "on") return;
+      function q(s) {
+        var e = fig.querySelector(s);
+        if (!e) throw new Error("CoverProtocols " + s);
+        return e;
+      }
+      var lit = {},
+        lab = {};
+      [].slice.call(fig.querySelectorAll(".cpr-lit")).forEach(function (p) {
+        lit[p.getAttribute("data-lane")] = p;
+      });
+      [].slice.call(fig.querySelectorAll(".cpr-lab")).forEach(function (p) {
+        lab[p.getAttribute("data-lane")] = p;
+      });
+      var run = q(".cpr-run"),
+        cart = q(".cpr-cart"),
+        cap = q(".cpr-capsule"),
+        msg = q(".cpr-msg"),
+        times = q(".cpr-times"),
+        order = q(".cpr-order"),
+        note = q(".cpr-note"),
+        own = q(".cpr-own"),
+        ai = q(".cpr-ai"),
+        biz = q(".cpr-biz");
+      fig.setAttribute("data-cpr", "on");
+
+      function op(e, v) {
+        e.style.opacity = v;
+      }
+      function at(e, p) {
+        e.style.transform = "translate(" + p[0] + "px," + p[1] + "px)";
+      }
+      /* A lane lit as far as u: from the left, or from the right when back is set. */
+      function draw(k, u, g, back) {
+        lit[k].style.strokeDashoffset = back ? -(1 - u) : 1 - u;
+        op(lit[k], g * (u > 0 ? 1 : 0));
+        op(lab[k], 0.55 + 0.45 * g * u);
+      }
+      function render(t) {
+        var g = 1 - ramp(t, T.exit, LOOP),
+          u;
+        draw("mcp", ramp(t, T.ask, T.asked), g, false);
+        draw("chk", ramp(t, T.cart, T.carted), g, false);
+        draw("a2a", ramp(t, T.msg, T.msged), g, true);
+        /* a question out on MCP, free times back */
+        if (t < T.back) {
+          at(run, along("mcp", ramp(t, T.ask, T.asked)));
+          op(run, vis(t, T.ask, T.asked));
+        } else {
+          at(run, along("mcp", 1 - ramp(t, T.back, T.times)));
+          op(run, vis(t, T.back, T.times));
+        }
+        u = ramp(t, T.times, T.times + 0.4);
+        op(times, g * u);
+        times.style.transform = "translate(82px," + (228 + (1 - u) * 6) + "px)";
+        /* a cart on the checkout lane, an order back */
+        at(cart, along("chk", ramp(t, T.cart, T.carted)));
+        op(cart, vis(t, T.cart, T.carted));
+        u = ramp(t, T.order, T.order + 0.4);
+        op(order, g * u);
+        order.style.transform = "translate(558px," + (228 + (1 - u) * 6) + "px)";
+        /* the same cart inside MCP: the checkout rides the tools lane */
+        at(cap, along("mcp", ramp(t, T.cap, T.capped)));
+        op(cap, vis(t, T.cap, T.capped));
+        op(note, g * ramp(t, T.note, T.note + 0.5));
+        /* the business's own agent, and a message each way on A2A */
+        u = ramp(t, T.own, T.own + 0.4);
+        op(own, g * u);
+        own.style.transform = "scale(" + (0.6 + 0.4 * u) + ")";
+        if (t < T.reply) {
+          at(msg, along("a2a", 1 - ramp(t, T.msg, T.msged)));
+          op(msg, vis(t, T.msg, T.msged));
+        } else {
+          at(msg, along("a2a", ramp(t, T.reply, T.replied)));
+          op(msg, vis(t, T.reply, T.replied));
+        }
+      }
+
+      var timers = [],
+        fired = {};
+      function flash(el, ms) {
+        el.classList.add("wake");
+        timers.push(
+          setTimeout(function () {
+            el.classList.remove("wake");
+          }, ms),
+        );
+      }
+      function cue(t, live) {
+        function on(k, when, el) {
+          if (t < when || fired[k]) return;
+          fired[k] = true;
+          if (live) flash(el, 700);
+        }
+        on("ask", T.ask, ai);
+        on("asked", T.asked, biz);
+        on("times", T.times, ai);
+        on("carted", T.carted, biz);
+        on("capped", T.capped, biz);
+        on("own", T.own, biz);
+        on("msged", T.msged, ai);
+        on("replied", T.replied, biz);
+      }
+      function settle() {
+        timers.forEach(clearTimeout);
+        timers.length = 0;
+        [ai, biz].forEach(function (m) {
+          m.classList.remove("wake");
+        });
+      }
+
+      render(STILL);
+      cue(STILL, false);
+      var clock = STILL,
+        last = 0,
+        raf = 0,
+        running = false,
+        seen = true,
+        wasP = STILL,
+        mq = matchMedia("(prefers-reduced-motion:reduce)");
+      function frame(now) {
+        if (!running) return;
+        clock += Math.max(0, Math.min((now - last) / 1000, 0.05));
+        last = now;
+        var ph = clock % LOOP;
+        if (ph < wasP) fired = {};
+        wasP = ph;
+        render(ph);
+        cue(ph, true);
+        raf = requestAnimationFrame(frame);
+      }
+      function sync() {
+        if (fig.classList.contains("cpr-still")) return;
+        var want = seen && !document.hidden;
+        if (want === running) return;
+        running = want;
+        if (running) {
+          fig.classList.remove("cpr-paused");
+          settle();
+          last = performance.now();
+          raf = requestAnimationFrame(frame);
+        } else {
+          cancelAnimationFrame(raf);
+          fig.classList.add("cpr-paused");
+        }
+      }
+      function still() {
+        fig.classList.add("cpr-still");
+        running = false;
+        cancelAnimationFrame(raf);
+        settle();
+        render(STILL);
+      }
+      if (mq.matches) {
+        still();
+        return;
+      }
+      if ("IntersectionObserver" in window) {
+        new IntersectionObserver(
+          function (es) {
+            seen = es[0].isIntersecting;
+            sync();
+          },
+          { threshold: 0.01 },
+        ).observe(fig);
+      }
+      document.addEventListener("visibilitychange", sync);
+      function onMq() {
+        if (mq.matches && !fig.classList.contains("cpr-still")) still();
+      }
+      if (mq.addEventListener) mq.addEventListener("change", onMq);
+      else if (mq.addListener) mq.addListener(onMq);
+      sync();
+    }
+    function mountAll() {
+      document.querySelectorAll(".cpr").forEach(function (f) {
+        try {
+          mount(f);
+        } catch (err) {
+          if (window.console && console.warn) console.warn("cover protocols", err);
+        }
+      });
+    }
+    mountAll();
+    document.addEventListener("astro:page-load", mountAll);
+  })();
+</script>

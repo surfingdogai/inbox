@@ -9,16 +9,21 @@ import { linksIn, plain } from "../src/lib/inline";
 import { PLATFORMS } from "../src/lib/platforms";
 import {
   namesWoo,
+  TOPIC_COVERS,
   TOPIC_WORDS,
   TOPICS,
   TOPICS_AS_OF,
+  TOPICS_NOVEMBER,
   type Topic,
   topicAlternates,
   topicAt,
+  topicCard,
   topicFile,
   topicHref,
   topicLang,
   topicLd,
+  topicMonth,
+  topicSources,
   topicVersions,
 } from "../src/lib/topics";
 
@@ -67,6 +72,8 @@ const exists = (href: string): boolean => {
   if (integration) return PLATFORMS.some((x) => x.slug === integration);
   const assistant = p.match(/^\/assistants\/([a-z0-9-]+)\/$/)?.[1];
   if (assistant) return ASSISTANTS.some((a) => a.slug === assistant);
+  const post = p.match(/^\/blog\/([a-z0-9-]+)\/$/)?.[1];
+  if (post) return !anchor && existsSync(site(`src/content/blog/${post}.md`));
   const bare = p.replace(/\/+$/, "");
   return existsSync(site(`src/pages${bare}.astro`)) || existsSync(site(`src/pages${bare}/index.astro`));
 };
@@ -82,6 +89,9 @@ describe("the topic guides", () => {
       "ai-receptionist",
       "get-your-business-on-chatgpt",
       "ai-product-search",
+      "agentic-commerce-protocols",
+      "how-ai-agents-pay",
+      "agent-ready-website",
       "aparecer-en-chatgpt",
       "aparecer-no-chatgpt",
     ]);
@@ -183,10 +193,20 @@ describe("the topic guides", () => {
   it("date what moves, and give a source for what another company does", () => {
     expect(TOPICS_AS_OF).toBe("as of October 2026");
     expect(TOPIC_WORDS.en.sources).toBe("Sources, as of October 2026");
-    expect(read(COMPONENT)).toContain("<summary>{w.sources}</summary>");
+    expect(read(COMPONENT)).toContain("<summary>{topicSources(t)}</summary>");
+    // A page written in a later month says so, in its words and over its sources.
+    const november = TOPICS.filter((t) => t.month);
+    expect(november.map((t) => [t.slug, t.month, t.modified])).toEqual(
+      ["agentic-commerce-protocols", "how-ai-agents-pay", "agent-ready-website"].map((s) => [
+        s,
+        "November 2026",
+        TOPICS_NOVEMBER,
+      ]),
+    );
+    for (const t of november) expect(topicSources(t)).toBe("Sources, as of November 2026");
     for (const t of TOPICS) {
-      expect(words(t), t.slug).toContain(TOPIC_WORDS[topicLang(t)].month);
-      expect(TOPIC_WORDS[topicLang(t)].sources, t.slug).toContain(TOPIC_WORDS[topicLang(t)].month);
+      expect(words(t), t.slug).toContain(topicMonth(t));
+      expect(topicSources(t), t.slug).toContain(topicMonth(t));
       const sourced = blocks(t).filter((b) => b.sources && b.sources.length > 0);
       expect(sourced.length, t.slug).toBeGreaterThanOrEqual(4);
       for (const b of sourced)
@@ -279,6 +299,61 @@ describe("the topic guides", () => {
     }
     const styles = component.match(/<style>([\s\S]*?)<\/style>/)?.[1] ?? "";
     expect(styles).not.toMatch(/#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(|\bred\b|crimson|tomato/i);
+  });
+
+  it("give the guides of November 2026 an explainer and a social card of their own, none shared", () => {
+    const covered = TOPICS.filter((t) => t.cover);
+    expect(covered.map((t) => [t.slug, t.cover?.anim, t.og])).toEqual([
+      ["agentic-commerce-protocols", "protocols", "/art/og-agentic-commerce-protocols-v1.png"],
+      ["how-ai-agents-pay", "pay-routes", "/art/og-how-ai-agents-pay-v1.png"],
+      ["agent-ready-website", "agent-visit", "/art/og-agent-ready-website-v1.png"],
+    ]);
+    // Every page written from November on has both; a card is made for one page and never reused.
+    for (const t of TOPICS.filter((x) => (x.modified ?? "") >= TOPICS_NOVEMBER))
+      expect(Boolean(t.cover && t.og), t.slug).toBe(true);
+    expect(new Set(covered.map((t) => t.cover?.anim)).size).toBe(covered.length);
+    expect(new Set(covered.map((t) => t.og)).size).toBe(covered.length);
+    expect([...TOPIC_COVERS].sort()).toEqual(covered.map((t) => t.cover?.anim).sort());
+    const registry = read("src/components/topic-covers.ts");
+    const component = read(COMPONENT);
+    expect(component).toContain('<div class="t-cover" data-idea={t.cover.idea}>');
+    expect(component).toContain("<Cover alt={t.cover.alt} />");
+    const prefixes = new Set<string>();
+    for (const t of covered) {
+      const cover = t.cover as NonNullable<Topic["cover"]>;
+      // Its words: what it shows, for readers who can't see it, and one idea for its card.
+      expect(cover.alt.length, t.slug).toBeGreaterThan(80);
+      expect(cover.idea.split("\n").length, t.slug).toBe(2);
+      expect(topicCard(t), t.slug).toEqual({ image: t.og, imageAlt: `${t.title}. ${cover.idea.replace("\n", " ")}` });
+      const ld = topicLd(t, "https://surfingdog.ai/") as { image?: string }[];
+      expect(ld[0]?.image, t.slug).toBe(`https://surfingdog.ai${t.og}`);
+      expect(read(topicFile(t)), t.slug).toContain("const card = topicCard(t);");
+      expect(read(topicFile(t)), t.slug).toContain("{...card}");
+      // Its component: registered under its name, an image with its words, still under reduced
+      // motion, stopped off screen, everything under one prefix of its own, the design's colours only.
+      const name = registry.match(new RegExp(`"?${cover.anim}"?: (Cover[A-Za-z]+),`))?.[1];
+      expect(name, cover.anim).toBeDefined();
+      const src = read(`src/components/${name}.astro`);
+      expect(src, name).toMatch(/role="img" aria-label=\{alt\}/);
+      expect(src, name).toMatch(/prefers-reduced-motion/);
+      expect(src, name).toMatch(/IntersectionObserver/);
+      const prefix = src.match(/<figure class="([a-z]+)" role="img"/)?.[1] ?? "";
+      expect(prefix, name).toMatch(/^c[a-z]{2}$/);
+      expect(prefixes.has(prefix), name).toBe(false);
+      prefixes.add(prefix);
+      const styles = src.match(/<style is:global>([\s\S]*?)<\/style>/)?.[1] ?? "";
+      expect(styles, name).not.toMatch(/#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(|\bred\b|crimson|tomato|--flamingo/i);
+      for (const m of styles.matchAll(/^\s*\.([a-z][\w-]*)/gm))
+        expect(m[1]?.startsWith(prefix), `${name}: .${m[1]}`).toBe(true);
+      for (const m of styles.matchAll(/@keyframes ([\w-]+)/g))
+        expect(m[1]?.startsWith(`${prefix}-`), `${name}: ${m[1]}`).toBe(true);
+      // Its card: made from the built page by scripts/og-topic.mjs, a PNG of 1200×630.
+      const file = site(`public${t.og}`);
+      expect(existsSync(file), file).toBe(true);
+      const bytes = readFileSync(file);
+      expect(bytes.subarray(0, 8).toString("hex"), file).toBe("89504e470d0a1a0a");
+      expect([bytes.readUInt32BE(16), bytes.readUInt32BE(20)], file).toEqual([1200, 630]);
+    }
   });
 
   it("are written in Spanish and Portuguese where owners search in them, every version naming the others", () => {

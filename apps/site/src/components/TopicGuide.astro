@@ -1,6 +1,7 @@
 ---
 /**
- * A topic guide's body (src/lib/topics.ts): its lede where it has one, the answer in short, its sections with the source of each
+ * A topic guide's body (src/lib/topics.ts): its lede where it has one, its own animated cover where it
+ * has one (src/components/topic-covers.ts), the answer in short, its sections with the source of each
  * line about another company's product, the check, the questions (shown, and given as FAQPage data in
  * the same words by its page, with topicLd), the pages it builds on, and its sources. The same quiet
  * styles as a guide. Its page gives the layout. A guide in Spanish or Portuguese has the frame's
@@ -8,10 +9,11 @@
  */
 import { inline, linksIn } from "../lib/inline";
 import { WOO_NOTICE } from "../lib/integrations";
-import { namesWoo, TOPIC_WORDS, type Topic, topicLang } from "../lib/topics";
+import { namesWoo, TOPIC_WORDS, type Topic, topicLang, topicSources } from "../lib/topics";
 import Faqs from "./Faqs.astro";
 import GuideAnswer from "./GuideAnswer.astro";
 import GuideCheck from "./GuideCheck.astro";
+import { topicCovers } from "./topic-covers";
 
 interface Props {
   topic: Topic;
@@ -33,12 +35,21 @@ const rich = (text: string) => inline(text, english).replace(/\*\*([^*]+)\*\*/g,
 const sources = [...new Map(blocks.flatMap((b) => b.sources ?? []).map((s) => [s.href, s])).values()];
 /** Automattic's notice, on a page that names its mark. */
 const woo = namesWoo(t);
+/** Its own explainer, where it has one; its one idea rides along for its social card. */
+const Cover = t.cover ? topicCovers[t.cover.anim] : undefined;
 ---
 
 <article class="wrap wrap-read section is-head guide" aria-labelledby="t-title">
   <p class="eyebrow"><a href={w.hub.href}>{w.hub.label}</a></p>
   <h1 class="h-page" id="t-title">{t.heading}</h1>
   {t.lede && <p class="lede" set:html={rich(t.lede)} />}
+  {
+    t.cover && Cover && (
+      <div class="t-cover" data-idea={t.cover.idea}>
+        <Cover alt={t.cover.alt} />
+      </div>
+    )
+  }
   <GuideAnswer text={t.answer} label={w.inShort} />
 
   <div class="prose t-body">
@@ -111,7 +122,7 @@ const woo = namesWoo(t);
   </nav>
 
   <details class="sources">
-    <summary>{w.sources}</summary>
+    <summary>{topicSources(t)}</summary>
     <ul>
       {
         sources.map((s) => (
@@ -137,6 +148,9 @@ const woo = namesWoo(t);
   .eyebrow a:hover,
   .eyebrow a:focus-visible {
     text-decoration: underline;
+  }
+  .t-cover {
+    margin-top: var(--sp-6);
   }
   .t-body {
     font-size: var(--fs-body);

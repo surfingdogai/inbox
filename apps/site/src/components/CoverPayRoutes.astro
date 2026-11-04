@@ -1,0 +1,558 @@
+---
+/**
+ * The cover for "How AI agents pay a business": four roads from the agent to the business's own
+ * account, each with its own traveller, one after another.
+ *
+ *  1. Payment link: a link detours through the person's phone, which taps, then goes on.
+ *  2. Shared token: a token travels, limited to one seller, one amount and an expiry.
+ *  3. HTTP 402: a request reaches the account, bounces back marked 402, and returns with a coin.
+ *  4. Checkout: a cart passes through a checkout's doorway.
+ *
+ * The account ticks after each, one mark a road. No amounts. Unlike CoverPay's single line from
+ * assistant to person to business, this one is a fan: four ways, one destination.
+ *
+ * Built the way CoverPay.astro is: the markup is the composed frame at t = STILL and the clock
+ * starts there, reduced motion is that frame, and it stops when nobody is looking. Every selector
+ * starts with .cpw and every keyframe is cpw-*, so nothing leaks. Colours are the design tokens.
+ */
+interface Props {
+  alt: string;
+}
+const { alt } = Astro.props;
+/** The four roads' heights at their middle, top to bottom, and their names. */
+const ROADS = [
+  { y: 78, name: "Payment link" },
+  { y: 142, name: "Shared token" },
+  { y: 218, name: "HTTP 402" },
+  { y: 282, name: "Checkout" },
+];
+const road = (y: number) => `M104,180 C200,180 220,${y} 320,${y} C420,${y} 440,180 536,180`;
+---
+
+<figure class="cpw" role="img" aria-label={alt}>
+  <svg viewBox="0 0 640 360" aria-hidden="true" focusable="false">
+    <text x="82" y="140" class="cpw-cap" text-anchor="middle">THEIR AGENT</text>
+    <text x="558" y="140" class="cpw-cap" text-anchor="middle">YOUR ACCOUNT</text>
+
+    {ROADS.map((r) => <path d={road(r.y)} class="cpw-rail" />)}
+    {ROADS.map((r, i) => <path d={road(r.y)} pathLength="1" class="cpw-lit" data-road={i} />)}
+    {
+      ROADS.map((r, i) => (
+        <text x="320" y={r.y - 10} class="cpw-lab" text-anchor="middle" data-road={i}>
+          {r.name}
+        </text>
+      ))
+    }
+
+    <g class="cpw-phone">
+      <rect x="199" y="111" width="23" height="37" rx="5" class="body"></rect>
+      <line x1="206.5" y1="115.5" x2="214.5" y2="115.5" class="hair"></line>
+      <circle cx="210.5" cy="129" r="8" class="pulse"></circle>
+    </g>
+    <text x="320" y="166" class="cpw-note" text-anchor="middle">one seller · one amount · an expiry</text>
+    <path d="M419,241 V231 a10.5,10.5 0 0 1 21,0 V241" class="cpw-door"></path>
+
+    <g class="cpw-mark cpw-ai">
+      <rect x="60" y="158" width="44" height="44" rx="12" class="tint"></rect>
+      <rect x="60" y="158" width="44" height="44" rx="12" class="edge"></rect>
+      <rect x="55" y="153" width="54" height="54" rx="15" class="halo"></rect>
+      <path d="M82,168 L84.8,176.2 L93,179 L84.8,181.8 L82,190 L79.2,181.8 L71,179 L79.2,176.2 Z" class="star"></path>
+    </g>
+    <g class="cpw-mark cpw-acct">
+      <rect x="536" y="158" width="44" height="44" rx="12" class="tint"></rect>
+      <rect x="536" y="158" width="44" height="44" rx="12" class="edge"></rect>
+      <rect x="531" y="153" width="54" height="54" rx="15" class="halo"></rect>
+      <rect x="545" y="171" width="26" height="18" rx="3.5" class="glyph"></rect>
+      <line x1="545" y1="176.5" x2="571" y2="176.5" class="glyph"></line>
+      <line x1="549" y1="184" x2="556" y2="184" class="glyph"></line>
+    </g>
+    <g class="cpw-ticks">
+      <circle cx="543" cy="218" r="3" class="cpw-tickdot" data-road="0"></circle>
+      <circle cx="553" cy="218" r="3" class="cpw-tickdot" data-road="1"></circle>
+      <circle cx="563" cy="218" r="3" class="cpw-tickdot" data-road="2"></circle>
+      <circle cx="573" cy="218" r="3" class="cpw-tickdot" data-road="3"></circle>
+    </g>
+
+    <g class="cpw-link" style="opacity:0">
+      <rect x="-9" y="-4.5" width="10" height="9" rx="4.5" class="chain"></rect>
+      <rect x="-1" y="-4.5" width="10" height="9" rx="4.5" class="chain"></rect>
+    </g>
+    <g class="cpw-token" style="opacity:0">
+      <rect x="-10" y="-7" width="20" height="14" rx="4" class="bg"></rect>
+      <rect x="-4" y="-1.5" width="8" height="6" rx="1.5" class="lock"></rect>
+      <path d="M-2.2,-1.5 v-1.8 a2.2,2.2 0 0 1 4.4,0 v1.8" class="lock-arc"></path>
+    </g>
+    <g class="cpw-packet" style="opacity:0">
+      <circle cx="0" cy="0" r="10" class="glow"></circle>
+      <circle cx="0" cy="0" r="5" class="core"></circle>
+      <circle cx="0" cy="0" r="7.5" class="coin"></circle>
+      <g class="cpw-402">
+        <rect x="-17" y="-29" width="34" height="17" rx="6" class="bg"></rect>
+        <text x="0" y="-16.8" class="cpw-mini" text-anchor="middle">402</text>
+      </g>
+    </g>
+    <g class="cpw-cart" style="opacity:0">
+      <path d="M-9,-4 H9 L6.5,6 H-6.5 Z M-5.5,-4 L-2.5,-9 M5.5,-4 L2.5,-9" class="basket"></path>
+    </g>
+  </svg>
+</figure>
+
+<style is:global>
+  .cpw {
+    --cpw-ink: var(--ink);
+    --cpw-ink2: var(--ink-2);
+    --cpw-ink3: var(--ink-3);
+    --cpw-glass: var(--glass-bg);
+    --cpw-glassb: var(--glass-border);
+    --cpw-violet: var(--violet);
+    --cpw-violet-i: var(--violet-ink);
+    --cpw-lagoon: var(--lagoon);
+    --cpw-lagoon-i: var(--lagoon-ink);
+    --cpw-palm: var(--palm);
+    --cpw-palm-i: var(--palm-ink);
+    --cpw-sun-i: var(--sun-ink);
+    --cpw-ease: var(--ease-out-soft, cubic-bezier(0.2, 0.8, 0.2, 1));
+    display: block;
+    margin: 0;
+    width: 100%;
+    aspect-ratio: 640 / 360;
+    container-type: inline-size;
+  }
+  .cpw svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .cpw text {
+    font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+    fill: var(--cpw-ink2);
+  }
+  .cpw .cpw-cap {
+    font-size: 11px;
+    letter-spacing: 0.11em;
+  }
+  .cpw .cpw-lab {
+    font-size: 12px;
+    font-weight: 600;
+    fill: var(--cpw-ink);
+  }
+  .cpw .cpw-note {
+    font-size: 11px;
+    fill: var(--cpw-ink3);
+  }
+  .cpw .cpw-mini {
+    font-size: 10.5px;
+    font-weight: 600;
+    fill: var(--cpw-ink);
+  }
+  .cpw .cpw-rail {
+    fill: none;
+    stroke: var(--cpw-violet);
+    stroke-opacity: 0.38;
+    stroke-width: 1.3;
+    stroke-dasharray: 1.5 6;
+    stroke-linecap: round;
+  }
+  .cpw .cpw-lit {
+    fill: none;
+    stroke: var(--cpw-violet);
+    stroke-opacity: 0.5;
+    stroke-width: 1.2;
+    stroke-dasharray: 1 1;
+    stroke-linecap: round;
+  }
+  .cpw .cpw-ai {
+    --sc: var(--cpw-violet);
+    --si: var(--cpw-violet-i);
+  }
+  .cpw .cpw-acct {
+    --sc: var(--cpw-palm);
+    --si: var(--cpw-palm-i);
+  }
+  .cpw .cpw-mark .tint {
+    fill: var(--sc);
+    fill-opacity: 0.08;
+  }
+  .cpw .cpw-mark .edge {
+    fill: none;
+    stroke: var(--cpw-ink2);
+    stroke-opacity: 0.55;
+    stroke-width: 1.3;
+  }
+  .cpw .cpw-mark .halo {
+    fill: none;
+    stroke: var(--sc);
+    stroke-opacity: 0;
+    stroke-width: 1.3;
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+  }
+  .cpw .cpw-mark .star {
+    fill: var(--sc);
+    fill-opacity: 0.85;
+  }
+  .cpw .cpw-mark .glyph {
+    fill: none;
+    stroke: var(--si);
+    stroke-width: 1.5;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+  }
+  .cpw .cpw-mark.wake .halo {
+    animation: cpw-halo 0.66s var(--cpw-ease);
+  }
+  @keyframes cpw-halo {
+    0% {
+      stroke-opacity: 0.5;
+      transform: scale(0.84);
+    }
+    100% {
+      stroke-opacity: 0;
+      transform: scale(1.26);
+    }
+  }
+  .cpw .cpw-tickdot {
+    fill: var(--cpw-palm);
+    stroke: var(--cpw-palm-i);
+    stroke-opacity: 0.6;
+    stroke-width: 0.8;
+  }
+  .cpw .cpw-phone .body {
+    fill: var(--cpw-glass);
+    stroke: var(--cpw-ink3);
+    stroke-opacity: 0.6;
+    stroke-width: 1.1;
+  }
+  .cpw .cpw-phone .hair {
+    stroke: var(--cpw-ink3);
+    stroke-opacity: 0.45;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+  }
+  .cpw .cpw-phone .pulse {
+    fill: none;
+    stroke: var(--cpw-palm);
+    stroke-opacity: 0;
+    stroke-width: 1.2;
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+  }
+  .cpw .cpw-phone .pulse.wake {
+    animation: cpw-pulse 0.8s var(--cpw-ease);
+  }
+  @keyframes cpw-pulse {
+    0% {
+      stroke-opacity: 0.6;
+      transform: scale(0.7);
+    }
+    100% {
+      stroke-opacity: 0;
+      transform: scale(1.7);
+    }
+  }
+  .cpw .cpw-door {
+    fill: none;
+    stroke: var(--cpw-palm-i);
+    stroke-opacity: 0.7;
+    stroke-width: 1.3;
+    stroke-linecap: round;
+  }
+  .cpw .cpw-link .chain {
+    fill: var(--cpw-glass);
+    stroke: var(--cpw-lagoon-i);
+    stroke-width: 1.4;
+  }
+  .cpw .cpw-token .bg,
+  .cpw .cpw-402 .bg {
+    fill: var(--cpw-glass);
+    stroke: var(--cpw-violet);
+    stroke-opacity: 0.6;
+    stroke-width: 1.1;
+  }
+  .cpw .cpw-token .lock {
+    fill: var(--cpw-violet);
+    fill-opacity: 0.85;
+  }
+  .cpw .cpw-token .lock-arc {
+    fill: none;
+    stroke: var(--cpw-violet);
+    stroke-width: 1.2;
+  }
+  .cpw .cpw-packet .core {
+    fill: var(--cpw-violet);
+  }
+  .cpw .cpw-packet .glow {
+    fill: var(--cpw-violet);
+    fill-opacity: 0.16;
+  }
+  .cpw .cpw-packet .coin {
+    fill: none;
+    stroke: var(--cpw-sun-i);
+    stroke-width: 1.5;
+  }
+  .cpw .basket {
+    fill: none;
+    stroke: var(--cpw-palm-i);
+    stroke-width: 1.4;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+  }
+  @container (max-width: 600px) {
+    .cpw .cpw-cap,
+    .cpw .cpw-note {
+      font-size: 13px;
+    }
+    .cpw .cpw-lab {
+      font-size: 13.5px;
+    }
+  }
+  @container (max-width: 400px) {
+    .cpw .cpw-cap {
+      font-size: 14px;
+      letter-spacing: 0.06em;
+    }
+    .cpw .cpw-note {
+      font-size: 13.5px;
+    }
+    .cpw .cpw-lab {
+      font-size: 15px;
+    }
+  }
+  .cpw.cpw-still,
+  .cpw.cpw-still * {
+    animation: none !important;
+    transition: none !important;
+  }
+  .cpw.cpw-paused * {
+    animation-play-state: paused !important;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cpw * {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+</style>
+
+<script>
+  // @ts-nocheck — a compact hand-written ES5 drawing machine, the same shape as CoverPay's.
+  (function () {
+    "use strict";
+    function ease(x) {
+      x = x < 0 ? 0 : x > 1 ? 1 : x;
+      return 1 - Math.pow(1 - x, 3);
+    }
+    function ramp(t, a, b) {
+      return ease((t - a) / (b - a));
+    }
+    function bez3(a, b, c, d, u) {
+      var v = 1 - u;
+      return [
+        v * v * v * a[0] + 3 * v * v * u * b[0] + 3 * v * u * u * c[0] + u * u * u * d[0],
+        v * v * v * a[1] + 3 * v * v * u * b[1] + 3 * v * u * u * c[1] + u * u * u * d[1],
+      ];
+    }
+    /* The roads the markup draws: from the agent up or down to y at the middle, and on to the account. */
+    var YS = [78, 142, 218, 282];
+    function along(i, u) {
+      u = u < 0 ? 0 : u > 1 ? 1 : u;
+      var y = YS[i];
+      return u < 0.5
+        ? bez3([104, 180], [200, 180], [220, y], [320, y], u * 2)
+        : bez3([320, y], [420, y], [440, 180], [536, 180], u * 2 - 1);
+    }
+    function vis(t, a, b) {
+      return ramp(t, a - 0.1, a + 0.1) * (1 - ramp(t, b - 0.1, b + 0.08));
+    }
+    /* Each road's traveller leaves at go and arrives at in; the link pauses in the phone, the
+       request comes back from the account marked 402 and goes again with a coin. */
+    var T = {
+        link: 0.4, phone: 1.4, tap: 1.5, onward: 2.0, linked: 3.0,
+        token: 3.3, note: 3.9, tokened: 4.8,
+        req: 5.1, hit: 6.1, bounce: 6.5, coin: 6.6, again: 7.0, paid: 7.5,
+        cart: 7.8, carted: 9.2,
+        exit: 11.6,
+      },
+      ARRIVE = [T.linked, T.tokened, T.paid, T.carted],
+      LOOP = 12.8,
+      STILL = 9.9;
+
+    function mount(fig) {
+      if (fig.getAttribute("data-cpw") === "on") return;
+      function q(s) {
+        var e = fig.querySelector(s);
+        if (!e) throw new Error("CoverPayRoutes " + s);
+        return e;
+      }
+      function all(s) {
+        var out = [];
+        [].slice.call(fig.querySelectorAll(s)).forEach(function (e) {
+          out[+e.getAttribute("data-road")] = e;
+        });
+        if (out.length !== 4) throw new Error("CoverPayRoutes " + s);
+        return out;
+      }
+      var lit = all(".cpw-lit"),
+        lab = all(".cpw-lab"),
+        dots = all(".cpw-tickdot"),
+        link = q(".cpw-link"),
+        token = q(".cpw-token"),
+        packet = q(".cpw-packet"),
+        coin = packet.querySelector(".coin"),
+        tag = q(".cpw-402"),
+        cart = q(".cpw-cart"),
+        note = q(".cpw-note"),
+        pulse = q(".cpw-phone .pulse"),
+        ai = q(".cpw-ai"),
+        acct = q(".cpw-acct");
+      fig.setAttribute("data-cpw", "on");
+
+      function op(e, v) {
+        e.style.opacity = v;
+      }
+      function at(e, p) {
+        e.style.transform = "translate(" + p[0] + "px," + p[1] + "px)";
+      }
+      function render(t) {
+        var g = 1 - ramp(t, T.exit, LOOP),
+          lits = [
+            ramp(t, T.link, T.linked),
+            ramp(t, T.token, T.tokened),
+            ramp(t, T.req, T.hit),
+            ramp(t, T.cart, T.carted),
+          ],
+          u;
+        lits.forEach(function (v, i) {
+          lit[i].style.strokeDashoffset = 1 - v;
+          op(lit[i], g * (v > 0 ? 1 : 0));
+          op(lab[i], 0.55 + 0.45 * g * v);
+          op(dots[i], g * ramp(t, ARRIVE[i], ARRIVE[i] + 0.3));
+        });
+        /* 1. the link reaches the phone, waits for the tap, goes on */
+        u = t < T.onward ? 0.25 * ramp(t, T.link, T.phone) : 0.25 + 0.75 * ramp(t, T.onward, T.linked);
+        at(link, along(0, u));
+        op(link, vis(t, T.link, T.linked));
+        /* 2. the token, and what limits it */
+        at(token, along(1, ramp(t, T.token, T.tokened)));
+        op(token, vis(t, T.token, T.tokened));
+        op(note, g * ramp(t, T.note, T.note + 0.5));
+        /* 3. the request: in, answered 402, back a little, then again with a coin */
+        if (t < T.hit) u = ramp(t, T.req, T.hit);
+        else if (t < T.again) u = 1 - 0.14 * ramp(t, T.hit, T.bounce);
+        else u = 0.86 + 0.14 * ramp(t, T.again, T.paid);
+        at(packet, along(2, u));
+        op(packet, vis(t, T.req, T.paid));
+        op(tag, ramp(t, T.hit, T.hit + 0.25) * (1 - ramp(t, T.again, T.again + 0.25)));
+        op(coin, ramp(t, T.coin, T.coin + 0.3));
+        /* 4. the cart, through the checkout's door */
+        at(cart, along(3, ramp(t, T.cart, T.carted)));
+        op(cart, vis(t, T.cart, T.carted));
+      }
+
+      var timers = [],
+        fired = {};
+      function flash(el, ms) {
+        el.classList.add("wake");
+        timers.push(
+          setTimeout(function () {
+            el.classList.remove("wake");
+          }, ms),
+        );
+      }
+      function cue(t, live) {
+        function on(k, when, el, ms) {
+          if (t < when || fired[k]) return;
+          fired[k] = true;
+          if (live) flash(el, ms);
+        }
+        on("go", T.link, ai, 700);
+        on("tap", T.tap, pulse, 900);
+        on("hit", T.hit, acct, 700);
+        ARRIVE.forEach(function (w, i) {
+          on("in" + i, w, acct, 700);
+        });
+      }
+      function settle() {
+        timers.forEach(clearTimeout);
+        timers.length = 0;
+        [ai, acct, pulse].forEach(function (m) {
+          m.classList.remove("wake");
+        });
+      }
+
+      render(STILL);
+      cue(STILL, false);
+      var clock = STILL,
+        last = 0,
+        raf = 0,
+        running = false,
+        seen = true,
+        wasP = STILL,
+        mq = matchMedia("(prefers-reduced-motion:reduce)");
+      function frame(now) {
+        if (!running) return;
+        clock += Math.max(0, Math.min((now - last) / 1000, 0.05));
+        last = now;
+        var ph = clock % LOOP;
+        if (ph < wasP) fired = {};
+        wasP = ph;
+        render(ph);
+        cue(ph, true);
+        raf = requestAnimationFrame(frame);
+      }
+      function sync() {
+        if (fig.classList.contains("cpw-still")) return;
+        var want = seen && !document.hidden;
+        if (want === running) return;
+        running = want;
+        if (running) {
+          fig.classList.remove("cpw-paused");
+          settle();
+          last = performance.now();
+          raf = requestAnimationFrame(frame);
+        } else {
+          cancelAnimationFrame(raf);
+          fig.classList.add("cpw-paused");
+        }
+      }
+      function still() {
+        fig.classList.add("cpw-still");
+        running = false;
+        cancelAnimationFrame(raf);
+        settle();
+        render(STILL);
+      }
+      if (mq.matches) {
+        still();
+        return;
+      }
+      if ("IntersectionObserver" in window) {
+        new IntersectionObserver(
+          function (es) {
+            seen = es[0].isIntersecting;
+            sync();
+          },
+          { threshold: 0.01 },
+        ).observe(fig);
+      }
+      document.addEventListener("visibilitychange", sync);
+      function onMq() {
+        if (mq.matches && !fig.classList.contains("cpw-still")) still();
+      }
+      if (mq.addEventListener) mq.addEventListener("change", onMq);
+      else if (mq.addListener) mq.addListener(onMq);
+      sync();
+    }
+    function mountAll() {
+      document.querySelectorAll(".cpw").forEach(function (f) {
+        try {
+          mount(f);
+        } catch (err) {
+          if (window.console && console.warn) console.warn("cover pay routes", err);
+        }
+      });
+    }
+    mountAll();
+    document.addEventListener("astro:page-load", mountAll);
+  })();
+</script>
