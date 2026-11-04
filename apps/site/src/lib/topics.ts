@@ -270,6 +270,7 @@ const S = {
   stripeMachine: src("Stripe Docs: machine payments", "https://docs.stripe.com/payments/machine"),
   stripeX402: src("Stripe Docs: x402", "https://docs.stripe.com/payments/machine/x402"),
   stripeLinks: src("Stripe Docs: Payment Links", "https://docs.stripe.com/payment-links"),
+  stripePay: src("Stripe Docs: stripe pay, in the Stripe CLI", "https://docs.stripe.com/cli/pay"),
   mollieLinks: src("Mollie Docs: payment links", "https://docs.mollie.com/docs/payment-links"),
   mpp: src("MPP: the Machine Payments Protocol", "https://mpp.dev/"),
   x402: src("x402", "https://www.x402.org/"),
@@ -349,7 +350,7 @@ const GUIDE = {
   add: { label: "Add your website", href: "/add/" },
   inbox: { label: "Surfing Dog Inbox", href: "/inbox/" },
   protocols: { label: "Agentic commerce protocols", href: "/guides/agentic-commerce-protocols/" },
-  payRoutes: { label: "How AI agents pay a business", href: "/guides/how-ai-agents-pay/" },
+  payRoutes: { label: "Taking payment from AI agents", href: "/guides/how-ai-agents-pay/" },
   agentReady: { label: "What makes a website agent-ready", href: "/guides/agent-ready-website/" },
   findable: { label: "Make your agent doors findable", href: "/guides/findable-agent-doors/" },
   llms: { label: "What llms.txt does, and doesn't", href: "/guides/llms-txt/" },
@@ -413,7 +414,7 @@ export const TOPICS: readonly Topic[] = [
         heading: "ACP, UCP, MCP and AP2: the difference",
         paras: [
           {
-            text: "UCP and ACP describe shopping: a catalogue, a cart, a checkout, an order. MCP, the Model Context Protocol, is a general way for an assistant to call a tool on a server, a checkout among them; UCP can run over it. AP2, the Agent Payments Protocol, is for an agent paying with its person's approval, given as a mandate. A shop may publish more than one: they are doors to the same shop.",
+            text: "UCP and ACP describe shopping: a catalogue, a cart, a checkout, an order. MCP, the Model Context Protocol, is a general way for an assistant to call a tool on a server, a checkout among them; UCP can run over it. AP2, the Agent Payments Protocol, is for an agent paying with its person's approval, given as a mandate. A shop may publish more than one: they are doors to the same shop. Each, with A2A beside them, is in [agentic commerce protocols](/guides/agentic-commerce-protocols/).",
             sources: [S.ucp, S.acp],
           },
         ],
@@ -1124,13 +1125,13 @@ export const TOPICS: readonly Topic[] = [
     slug: "agentic-commerce-protocols",
     modified: TOPICS_NOVEMBER,
     month: "November 2026",
-    title: "Agentic commerce protocols: ACP, UCP, MCP and A2A",
-    heading: "Agentic commerce protocols: what ACP, UCP, MCP and A2A each do, and which one you need",
-    lede: "The four as of November 2026: who runs each, where an agent finds it, how they stack, and what a business has to do about them.",
+    title: "Agentic Commerce Protocol (ACP) vs UCP, MCP and A2A",
+    heading: "The Agentic Commerce Protocol (ACP), UCP, MCP and A2A: what each does, and which one you need",
+    lede: "The agentic commerce protocols are the Agentic Commerce Protocol (ACP) and the Universal Commerce Protocol (UCP), for a checkout an AI agent can use; MCP, for a business's own tools; and A2A, for one agent talking to another. Here is each as of November 2026: who runs it, how they stack, and which one you need.",
     description:
-      "What the Agentic Commerce Protocol, UCP, MCP and A2A each do, who runs them, where an agent finds them, and which one a small business needs.",
+      "What the Agentic Commerce Protocol (ACP), UCP, MCP and A2A each do, who runs them, where an agent finds them, and which one a small business needs.",
     answer:
-      "The Agentic Commerce Protocol (ACP), from OpenAI and Stripe, and the Universal Commerce Protocol (UCP), co-developed by Google, Shopify and others, describe a checkout an AI agent can use. MCP lets an agent call a business's tools; A2A lets two agents talk. A business usually gets them from its platform.",
+      "ACP, from OpenAI and Stripe, and UCP, co-developed by Google, Shopify and others, describe an agent's checkout. MCP lets an agent call a business's tools; A2A lets two agents talk. A shop usually gets its checkout from its platform; a business that books or quotes needs an MCP door.",
     cover: {
       anim: "protocols",
       alt: "A customer's agent and a business, joined by three lanes. A question runs the MCP lane and comes back with free times; a cart runs the checkout lane and comes back as an order; the cart then rides inside the MCP lane; and the business's own agent answers on the A2A lane.",
@@ -1311,26 +1312,26 @@ export const TOPICS: readonly Topic[] = [
     slug: "how-ai-agents-pay",
     modified: TOPICS_NOVEMBER,
     month: "November 2026",
-    title: "How AI agents pay a business: links, tokens and x402",
-    heading: "How an AI agent pays a business: four ways the money moves, and what you need for each",
-    lede: "The four routes as of November 2026: who says yes, what the agent holds, where the money lands, and what a business needs for each.",
+    title: "Taking payment from AI agents: links, tokens and x402",
+    heading: "Taking payment from an AI agent: the ways the money reaches you, and what you need for each",
+    lede: "A business takes payment from an AI agent through a payment link, a limited token such as Stripe's, payment inside the request with x402 or MPP, a checkout made for agents, or a transfer to its own account. Here is each as of November 2026: who says yes, what the agent holds, and where the money lands.",
     description:
-      "Four ways an AI agent pays a business: a payment link, Stripe's shared payment tokens, payment inside the request with x402 or MPP, or your own checkout.",
+      "How a business takes payment from an AI agent: a payment link, Stripe's shared payment tokens, x402 or MPP, a checkout, or a transfer such as Stripe Pay.",
     answer:
-      "An AI agent pays a business in one of four ways: a payment link its person pays; a Stripe shared payment token, limited to one seller and an amount; payment inside the request, with x402 or MPP; or a checkout made for agents. Each lands in the business's own account.",
+      "An AI agent pays a business in four main ways, each into the business's account: a payment link its person pays; a Stripe shared payment token, limited to one seller and an amount; x402 or MPP, inside the request; or a checkout made for agents. Between businesses, also a transfer.",
     cover: {
       anim: "pay-routes",
       alt: "A customer's agent and a business's account, joined by four roads. A link passes through the person's phone; a token limited to one seller, one amount and an expiry travels; a request is answered 402 and comes back with a coin; a cart passes through a checkout. The account ticks after each.",
-      idea: "Four ways an agent pays.\nAll of them land in your account.",
+      idea: "Four main ways an agent pays.\nAll of them land in your account.",
     },
     og: "/art/og-how-ai-agents-pay-v1.png",
     sections: [
       {
         id: "routes",
-        heading: "Four routes, side by side",
+        heading: "The routes, side by side",
         paras: [
           {
-            text: "What [AI agent-assisted payment](/guides/ai-agent-assisted-payments/) means, and the names of the standards, have a page of their own. This one follows the money: for each route, who says yes, what the agent holds, and where the money lands.",
+            text: "What [AI agent-assisted payment](/guides/ai-agent-assisted-payments/) means, and the names of the standards, have a page of their own. This one follows the money: for each route, who says yes, what the agent holds, and where the money lands. Four are the main ones; the fifth, a transfer, is mostly between businesses.",
           },
         ],
         list: [
@@ -1348,6 +1349,10 @@ export const TOPICS: readonly Topic[] = [
           },
           {
             text: "**An agent at your checkout.** The person says yes through the agent's platform. The agent holds a token or a mandate. The money lands through your own payment provider, reached through your shop platform.",
+          },
+          {
+            text: "**A transfer to your own account.** The payer says yes in its agent, to you and to the amount. With Stripe Pay, the agent sends money from the payer's Stripe financial account to your Stripe profile handle; under a bank mandate, where the scheme lets an agent use one, it pays within limits the payer set once. The money lands in your Stripe financial account or your bank.",
+            sources: [S.stripePay],
           },
         ],
       },
@@ -1376,7 +1381,7 @@ export const TOPICS: readonly Topic[] = [
             sources: [S.stripeSpt],
           },
           {
-            text: "You see the card's brand and its last four digits, never its number. Once you charge it, refunds and reporting behave as for any card payment, and Stripe tells you when a token is used up, expires or is revoked. If you take payments with another processor, Stripe's Resolve API turns the token into card credentials for it, once.",
+            text: "When you charge it through Stripe, you see the card's brand and its last four digits, not its number. Once you charge it, refunds and reporting behave as for any card payment, and Stripe tells you when a token is used up, expires or is revoked. If you take payments with another processor, Stripe's Resolve API turns the token, once, into card credentials for it. Stripe sets up what it returns for your account, and encrypts what falls under PCI rules, with a key you can't read, such as your processor's, unless you have given Stripe your PCI Attestation of Compliance.",
             sources: [S.stripeSpt],
           },
           {
@@ -1425,6 +1430,26 @@ export const TOPICS: readonly Topic[] = [
         ],
       },
       {
+        id: "transfer",
+        heading: "And a transfer to your own account",
+        paras: [
+          {
+            text: "Between businesses, the agent can send the money itself. Stripe Pay, in preview, moves money between Stripe accounts to a Stripe profile handle, such as `@yourbusiness`, and an agent sends it with `stripe pay`, a plugin for Stripe's command-line tool. It is for eligible businesses in the US and the UK, in USD, GBP or USDC, the same currency on both sides. The payer needs a funded Stripe financial account; you need a Stripe financial account, or a bank account for payouts linked to your Stripe profile.",
+            sources: [S.stripePay],
+          },
+          {
+            text: "Stripe tells the agent not to guess the recipient, and to have its person confirm the recipient, the amount, the currency and the account it pays from before it sends. Most customers have no Stripe business account, so a handle sits beside a payment link rather than replacing it.",
+            sources: [S.stripePay],
+          },
+          {
+            text: "Surfing Dog Inbox (ours, open source) keeps your handle and the currencies you take there in its settings, and shows them to agents in its manifest and beside an accepted order. The transfer never passes through it: you see the money in [Stripe](/integrations/stripe/), and record the payment on the order.",
+          },
+          {
+            text: "From a bank account, schemes with a mandate, such as Pix Automático, UPI AutoPay, PayTo and SEPA Direct Debit, let a payer set limits once, and change or withdraw them. Whether a scheme lets an agent use a mandate, and on what terms, differs from one to the next: [how AI assistants pay](/guides/ai-assistant-payments/) lists them, and your bank or provider knows yours.",
+          },
+        ],
+      },
+      {
         id: "build",
         heading: "If you're building the agent",
         paras: [
@@ -1443,6 +1468,10 @@ export const TOPICS: readonly Topic[] = [
           },
           {
             text: "**A payment link**, when the business sends one: the agent passes it on, and its person pays.",
+          },
+          {
+            text: "**Stripe Pay**, when the agent pays other businesses from its own business's Stripe financial account: in preview, with its person confirming each transfer.",
+            sources: [S.stripePay],
           },
         ],
       },
@@ -1464,6 +1493,10 @@ export const TOPICS: readonly Topic[] = [
             text: "**For an agent at your checkout**: a shop platform or provider that publishes one. The [UCP and ACP checker](/check/ucp) shows what yours publishes.",
           },
           {
+            text: "**For a transfer**: with Stripe Pay, a business in the US or the UK with a Stripe profile handle, and a Stripe financial account or a bank account for payouts linked to it; then your handle and the currencies you take there, where an agent reads them, such as your inbox's manifest. For a bank mandate, ask your bank or provider whether an agent may use one.",
+            sources: [S.stripePay],
+          },
+          {
             text: "**For all of them**: say how you take payment, in words on your site, and add `paymentAccepted` to your business data ([your details as data](/guides/business-details-for-ai/)). The rest of the list is in [what makes a website agent-ready](/guides/agent-ready-website/).",
           },
         ],
@@ -1471,12 +1504,12 @@ export const TOPICS: readonly Topic[] = [
     ],
     faqs: [
       {
-        q: "How do AI agents pay for things?",
-        a: "In one of four ways: the agent hands its person a payment link; it passes a limited token, such as Stripe's shared payment token; it pays inside the request with x402 or MPP; or it pays through a checkout made for agents. In none of them should the agent hold a card number.",
+        q: "How does a business take payment from an AI agent?",
+        a: "In four main ways: it sends a payment link the agent's person pays; it charges a limited token, such as Stripe's shared payment token; it answers a paid call with x402 or MPP; or its platform's checkout takes the agent's payment. Between businesses, an agent can also send a transfer, such as Stripe Pay. No card number is needed.",
       },
       {
         q: "What is a Stripe shared payment token?",
-        a: "A credential an agent gets from Stripe and passes to a seller. It lets that one seller charge the person's card or wallet, up to a maximum amount, in one currency, before an expiry. The seller sees the card's brand and last four digits, and charges it with a PaymentIntent.",
+        a: "A credential an agent gets from Stripe and passes to a seller. It lets that one seller charge the person's card or wallet, up to a maximum amount, in one currency, before an expiry. A seller that charges it with a PaymentIntent sees the card's brand and last four digits, not its number.",
       },
       {
         q: "What is x402?",
@@ -1484,7 +1517,7 @@ export const TOPICS: readonly Topic[] = [
       },
       {
         q: "Do I need crypto to be paid by an AI agent?",
-        a: "No. A payment link and Stripe's shared payment tokens are ordinary card and wallet payments. Stablecoins come in only with x402, and MPP takes cards too.",
+        a: "No. A payment link and Stripe's shared payment tokens are ordinary card and wallet payments. x402 is used mostly with stablecoins, MPP takes stablecoins or cards, and Stripe Pay moves USD and GBP as well as USDC.",
       },
       {
         q: "How do I add payments to an AI agent?",
@@ -1506,13 +1539,13 @@ export const TOPICS: readonly Topic[] = [
     slug: "agent-ready-website",
     modified: TOPICS_NOVEMBER,
     month: "November 2026",
-    title: "Agent-ready website: what it means, and a checklist",
+    title: "Agent-ready website: what it means, and how to test it",
     heading: "What makes a website agent-ready: a checklist in the order an agent meets it",
-    lede: "As of November 2026: the addresses an AI agent asks for, what a good answer looks like, and how to test each one yourself.",
+    lede: "An agent-ready website is one an AI agent can read and use: it lets the agent in, says what the business is as data, and gives it a door to ask, book, order or pay. Here is the checklist as of November 2026, with a test for each step.",
     description:
       "What an agent-ready website is, and a checklist in the order an AI agent meets it: let it in, let it understand, let it act, let it follow up. Free check.",
     answer:
-      "An agent-ready website is one an AI agent can read and use: it lets the agent in, says what the business is as data, and offers a door, such as an MCP server or a checkout, where the agent can ask, book, order or pay, then change or cancel.",
+      "Four steps, in the order an agent meets them: robots.txt and your host let it in; your details are on your pages as data; a door on your own domain, such as an MCP server or a checkout, lets it ask, book, order or pay; then change or cancel.",
     cover: {
       anim: "agent-visit",
       alt: "An agent rides a line through four stations: let in, where a closed gate opens; understand, where scattered dashes settle into fields; act, where a booking comes back with a reference; and follow up, where a loop takes it back and the booking moves to 11:00.",
@@ -1535,7 +1568,7 @@ export const TOPICS: readonly Topic[] = [
         paras: [],
         list: [
           {
-            text: "**`/robots.txt` lets the assistants' search and user agents in**: OpenAI's OAI-SearchBot and ChatGPT-User, Anthropic's Claude-SearchBot and Claude-User. GPTBot and ClaudeBot gather pages for training, and are separate settings. Test: [the AI crawler checker](/check/ai-crawlers) shows which line decides each one ([robots.txt and AI agents](/guides/robots-txt-ai-agents/)).",
+            text: "**`/robots.txt` lets the assistants' search and user agents in**: OpenAI's OAI-SearchBot, Anthropic's Claude-SearchBot and Claude-User. OpenAI says robots.txt rules may not apply to its ChatGPT-User, since a person starts those visits. GPTBot and ClaudeBot gather pages for training, and are separate settings. Test: [the AI crawler checker](/check/ai-crawlers) shows which line decides each one ([robots.txt and AI agents](/guides/robots-txt-ai-agents/)).",
             sources: [S.openaiBots, S.anthropicBots],
           },
           {
@@ -1584,7 +1617,7 @@ export const TOPICS: readonly Topic[] = [
             text: "**Tools that finish the job**: free times, and a booking that comes back with a reference; a quote request with the details you need; an order. A tool that only emails you leaves the agent waiting ([bookings](/guides/ai-assistant-bookings/), [messages and quotes](/guides/ai-assistant-messages-and-quotes/), [selling](/guides/sell-through-ai-assistants/)).",
           },
           {
-            text: "**A way to pay**, or a payment link: the four routes are in [how AI agents pay a business](/guides/how-ai-agents-pay/), and the protocols behind the doors in [agentic commerce protocols](/guides/agentic-commerce-protocols/).",
+            text: "**A way to pay**, or a payment link: the routes are in [taking payment from AI agents](/guides/how-ai-agents-pay/), and the protocols behind the doors in [agentic commerce protocols](/guides/agentic-commerce-protocols/).",
           },
         ],
       },
@@ -1622,7 +1655,7 @@ export const TOPICS: readonly Topic[] = [
         heading: "What a finished visit looks like",
         paras: [
           {
-            text: "A person asks their assistant to book a haircut at a salon on Saturday morning. The assistant reads the salon's site, finds its MCP server, and lists its tools. It asks for Saturday's free times, books 10:00, and gets back a confirmation with a reference, which it shows its person. On Friday the person asks to make it later; the assistant calls the salon's reschedule tool with that reference, and gets 11:00.",
+            text: "A person asks their assistant to book an eye test at an optician's on Thursday. The assistant reads the optician's site, finds its MCP server, and lists its tools. It asks for Thursday's free times, books 10:00, and gets back a confirmation with a reference, which it shows its person. On Wednesday the person asks to make it later; the assistant calls the optician's reschedule tool with that reference, and gets 11:00.",
           },
         ],
       },

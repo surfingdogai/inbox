@@ -169,6 +169,7 @@ const Cover = t.cover ? topicCovers[t.cover.anim] : undefined;
     font-weight: 600;
   }
   .t-body :global(:not(pre) > code) {
+    overflow-wrap: anywhere;
     padding: 0 4px;
     border-color: transparent;
     background: var(--row-bg);
