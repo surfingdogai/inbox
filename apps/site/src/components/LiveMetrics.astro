@@ -1,4 +1,6 @@
 ---
+import { AGENT_REQUESTS_HREF } from "../lib/agent-requests";
+
 interface Props {
   /**
    * Set everywhere except the network page: adds the pointer to it and the long provenance
@@ -123,6 +125,10 @@ try {
       }
     </div>
 
+    {/* The requests AI agents sent the network (src/lib/agent-requests.ts): filled in by the browser
+        from the same answer as the tiles, and only when there are some, linking to what counts. */}
+    <p class="agents-line" data-agent-requests hidden><a class="link" href={AGENT_REQUESTS_HREF}></a></p>
+
     <div class="glass panel lift instance">
       <div class="inst-head">
         <div>
@@ -206,6 +212,12 @@ try {
     line-height: 1.45;
     color: var(--ink-3);
   }
+  .agents-line {
+    margin: var(--sp-4) 0 0;
+    font-size: var(--fs-fine);
+    line-height: 1.45;
+    color: var(--ink-3);
+  }
   .instance {
     margin-top: var(--gap-grid);
   }
@@ -257,6 +269,8 @@ try {
 </style>
 
 <script>
+  import { agentRequestsLine, readAgentRequests } from "../lib/agent-requests";
+
   // Live numbers from the network, refreshed every minute. When it cannot be reached the tiles
   // show a dash and the pill says "warming up": never an error state on the front page.
   const STATS = "https://network.surfingdog.ai/v1/stats";
@@ -264,6 +278,16 @@ try {
   const cells = Array.from(document.querySelectorAll<HTMLElement>("[data-stat]"));
   const pill = document.querySelector<HTMLElement>("[data-network-pill]");
   const text = document.querySelector<HTMLElement>("[data-network-text]");
+  const agentsLine = document.querySelector<HTMLElement>("[data-agent-requests]");
+  const agentsLink = agentsLine?.querySelector<HTMLAnchorElement>("a");
+
+  /** The agents' line, from the answer: hidden without a count of at least one request. */
+  function agents(stats: unknown) {
+    if (!agentsLine || !agentsLink) return;
+    const requests = readAgentRequests(stats);
+    if (requests) agentsLink.textContent = agentRequestsLine(requests, format.format);
+    agentsLine.hidden = !requests;
+  }
 
   const read = (source: unknown, path: string): unknown =>
     path
@@ -302,6 +326,7 @@ try {
           cell.textContent = "—";
         }
       }
+      agents(stats);
       const api = read(stats, "status.api");
       const lag = read(stats, "status.jobs_lag_seconds");
       const at = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
@@ -314,6 +339,7 @@ try {
         delete cell.dataset.countFinal;
         cell.textContent = "—";
       }
+      agents(null);
       state("warming", "warming up");
     }
   }

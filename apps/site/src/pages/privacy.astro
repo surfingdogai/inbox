@@ -32,7 +32,7 @@ import { DOOR_SHARE_SHOWN, doorHistoryPublic } from "../lib/door-history";
 import { CARRY_PROMISE, HOSTED_KEEPS } from "../lib/gateway";
 import { HOSTED_PILOT_OPEN } from "../lib/hosted";
 
-const UPDATED = "2 November 2026";
+const UPDATED = "4 November 2026";
 ---
 
 <Layout
@@ -241,7 +241,10 @@ const UPDATED = "2 November 2026";
           with a secret key drawn at random each day, held only in our server's memory and destroyed when the day ends.
           Once the day is over, no one, us included, can work a code back to an address or match it with another day's.
           An agent's other calls to these doors are recorded the same way: which tool, when, how long and how it went,
-          with nothing of what it asked. A search on this website's own pages is not recorded, nor are the reads of a
+          with nothing of what it asked. Of these records, two totals are public, on this website and in the network's
+          API: how many requests agents sent in the last seven days, and how many different callers came on the busiest
+          day. They name no one and no search; what they count is set out on
+          <a class="link" href="/agent-requests/">its own page</a>. A search on this website's own pages is not recorded, nor are the reads of a
           search engine's crawler. The service's log leaves searches out (over the REST API they travel in the query string,
           which it does not record). The one exception is an error at our front server, under Logs and limits below.
         </li>

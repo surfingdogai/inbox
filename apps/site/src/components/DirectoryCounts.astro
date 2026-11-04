@@ -16,7 +16,12 @@
  * (/leaderboard?can=book). Each list is the same businesses its count counts: it names them, or says
  * how many more it counts and does not name. Every one of them is a business; no count sorts them
  * into kinds of real.
+ *
+ * Under them, one quiet line from the same answer: the requests AI agents sent the network in the
+ * last seven days and the busiest day's agents ("agent_requests", src/lib/agent-requests.ts),
+ * linking to the note on what counts. No block, or no requests, is no line: never a 0.
  */
+import { AGENT_REQUESTS_HREF } from "../lib/agent-requests";
 import { READY_HREF } from "../lib/ask";
 ---
 
@@ -26,6 +31,7 @@ import { READY_HREF } from "../lib/ask";
   </p>
   <ul class="c-caps" data-caps aria-label="Of the agent-ready businesses" hidden></ul>
   <p class="c-note" data-note>Live counts from the network.</p>
+  <p class="c-agents" data-agents hidden><a class="c-link" href={AGENT_REQUESTS_HREF}></a></p>
   <p class="sr" aria-live="polite" data-said></p>
 </div>
 
@@ -113,15 +119,28 @@ import { READY_HREF } from "../lib/ask";
     white-space: nowrap;
     border: 0;
   }
-  .c-note {
+  .c-note,
+  .c-agents {
     margin: 0;
     font-size: var(--fs-fine);
     letter-spacing: 0.02em;
     color: var(--ink-3);
   }
+  .c-agents :global(.ar-part) {
+    white-space: nowrap;
+  }
+  @media (max-width: 520px) {
+    .c-agents :global(.ar-part) {
+      display: block;
+    }
+    .c-agents :global(.ar-sep) {
+      display: none;
+    }
+  }
   /* The block arrives softly rather than snapping in. */
   .counts.is-in .c-caps,
-  .counts.is-in .c-note {
+  .counts.is-in .c-note,
+  .counts.is-in .c-agents {
     animation: counts-in var(--dur-slow) var(--ease) both;
   }
   @keyframes counts-in {
@@ -132,13 +151,15 @@ import { READY_HREF } from "../lib/ask";
   }
   @media (prefers-reduced-motion: reduce) {
     .counts.is-in .c-caps,
-    .counts.is-in .c-note {
+    .counts.is-in .c-note,
+    .counts.is-in .c-agents {
       animation: none;
     }
   }
 </style>
 
 <script>
+  import { paintAgentRequests, readAgentRequests } from "../lib/agent-requests";
   import { ago, countHref, countRows, readDirectory } from "../lib/ask";
 
   const root = document.querySelector<HTMLElement>("[data-counts]");
@@ -172,6 +193,16 @@ import { READY_HREF } from "../lib/ask";
       if (res.ok) stats = await res.json();
     } catch {
       stats = null;
+    }
+    // The agents' requests come in the same answer, and stand on their own: shown even when the
+    // directory's counts are not there.
+    const requests = readAgentRequests(stats);
+    const agents = root.querySelector<HTMLElement>("[data-agents]");
+    const agentsLink = agents?.querySelector<HTMLAnchorElement>("a");
+    if (requests && agents && agentsLink) {
+      // Each part whole on its line: on a phone the two stack, and no dot hangs at a line's end.
+      paintAgentRequests(agentsLink, requests, fmt.format);
+      agents.hidden = false;
     }
     const d = readDirectory(stats);
     if (!d) {

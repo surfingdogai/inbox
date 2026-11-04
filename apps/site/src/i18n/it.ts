@@ -28,6 +28,7 @@ export const it: Dict = {
       Leaderboards: "Classifiche",
       "For businesses": "Per le attività",
       "For agents": "Per gli agenti",
+      "Agent requests": "Richieste degli agenti",
       Rules: "Regole",
       About: "Chi siamo",
       FAQ: "Domande frequenti",

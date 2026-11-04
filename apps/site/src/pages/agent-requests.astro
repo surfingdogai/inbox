@@ -1,0 +1,181 @@
+---
+// apps/site/src/pages/agent-requests.astro
+// The note the agents' line links to, on the home page and the network page (src/lib/agent-requests.ts):
+// the requests AI agents sent the network in the last seven days, and exactly what is counted, what is
+// left out, and what an agent is, in the words of the network's own count (its stats_agents.go) and of
+// ADR-043. The number is read when the site is built, dated, so a reader with no JavaScript and a
+// search engine get a true figure; the browser reads it again from GET /v1/stats on this address.
+// Every sentence here must stay true of that count: change one with the other.
+import Layout from "../layouts/Layout.astro";
+import {
+  AGENT_REQUESTS_HREF,
+  AGENT_REQUESTS_WAIT,
+  agentRequestsDate,
+  agentRequestsParts,
+  readAgentRequests,
+} from "../lib/agent-requests";
+
+const site = Astro.site?.toString() ?? "https://surfingdog.ai/";
+const url = new URL(AGENT_REQUESTS_HREF, site).toString();
+const TITLE = "Requests from AI agents";
+const DESCRIPTION =
+  "How many requests AI agents sent the Surfing Dog network in the last 7 days, and exactly what is counted and what is left out.";
+
+let built: ReturnType<typeof readAgentRequests> = null;
+try {
+  const res = await fetch("https://network.surfingdog.ai/v1/stats", {
+    headers: { accept: "application/json" },
+    signal: AbortSignal.timeout(4000),
+  });
+  if (res.ok) built = readAgentRequests(await res.json());
+} catch {
+  // Unreachable at build time: the browser fills it in.
+}
+const fmt = new Intl.NumberFormat("en");
+
+const counted = [
+  "A search, a lookup, a check of a website, or a request to a business, sent by an AI agent over MCP, A2A or the REST API.",
+  "Each tool call is one request, answered or not.",
+];
+const left = [
+  "Our own traffic: our tests, our monitors and our crawler.",
+  "The steps an agent takes around its requests: connecting, listing the tools, discovery, pings and asking after a task. And calls to a tool the network does not have.",
+  "A caller whose only requests in a day were the same one, five times or more. That is most likely a monitor checking that we answer. For a lookup or a check we do not keep which business it asked about, so there the same tool counts as the same request.",
+  "People searching on this website, and search engines' crawlers: they are not agents.",
+];
+
+const ld = {
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  name: TITLE,
+  description: DESCRIPTION,
+  url,
+  isPartOf: { "@type": "WebSite", name: "Surfing Dog", url: site },
+  publisher: { "@id": `${site}#org` },
+};
+---
+
+<Layout title={`${TITLE} · Surfing Dog`} description={DESCRIPTION} ld={ld}>
+  <section class="wrap wrap-read section is-head" aria-labelledby="ar-h" data-ar>
+    <p class="eyebrow">Live count</p>
+    <h1 class="h-page" id="ar-h">{TITLE}</h1>
+    {/* The same parts paintAgentRequests writes in the browser: each whole, stacked on a phone. */}
+    <p class="lede ar-line" data-ar-line>
+      {
+        built
+          ? agentRequestsParts(built, fmt.format).map((text, i) => (
+              <>
+                {i > 0 ? <span class="ar-sep"> · </span> : null}
+                <span class="ar-part">{text}</span>
+              </>
+            ))
+          : AGENT_REQUESTS_WAIT
+      }
+    </p>
+    <p class="fine" data-ar-asof hidden={!built}>
+      {built ? <>Counted <time datetime={built.asOf}>{agentRequestsDate(built.asOf)}</time>.</> : null}
+    </p>
+  </section>
+
+  <section class="wrap wrap-read section section-tight" aria-labelledby="ar-counted-h">
+    <h2 class="h-section" id="ar-counted-h">What counts</h2>
+    {counted.map((c) => <p>{c}</p>)}
+  </section>
+
+  <section class="wrap wrap-read section section-tight" aria-labelledby="ar-left-h">
+    <h2 class="h-section" id="ar-left-h">What does not</h2>
+    <ul class="ar-list">
+      {left.map((l) => <li>{l}</li>)}
+    </ul>
+  </section>
+
+  <section class="wrap wrap-read section section-tight" aria-labelledby="ar-agents-h">
+    <h2 class="h-section" id="ar-agents-h">Agents</h2>
+    <p>
+      We count an agent by the network it calls from (its address with the last part left off), under a code that
+      changes every day, so no one, us included, can follow it from one day to the next. That also means a week's
+      agents cannot be counted, so we give the busiest day's. If the network restarted that day, each part of the day
+      is counted on its own, so no agent counts twice.
+    </p>
+    <p>Many assistants calling from one company's servers share a network, and count as one.</p>
+  </section>
+
+  <section class="wrap wrap-read section section-tight" aria-labelledby="ar-who-h">
+    <h2 class="h-section" id="ar-who-h">Who is asking, so far</h2>
+    <p>
+      On 4 November 2026, most requests came from directories and testing tools, not yet from people's own
+      assistants. A separate count of the requests from people's assistants is planned.
+    </p>
+  </section>
+
+  <section class="wrap wrap-read section section-tight" aria-labelledby="ar-privacy-h">
+    <h2 class="h-section" id="ar-privacy-h">Only totals</h2>
+    <p>
+      Of the record of agents' calls, we publish only these two totals: never a search, a business, or a caller. The count is taken at most once
+      an hour. What the network keeps of each call, and what it never keeps, is on
+      <a class="link" href="/privacy/">the privacy page</a>. The same totals are in the network's API, as
+      <code>agent_requests</code> in <a class="link" href="/v1/stats"><code>/v1/stats</code></a>.
+    </p>
+  </section>
+</Layout>
+
+<style>
+  .ar-line :global(.ar-part) {
+    white-space: nowrap;
+  }
+  @media (max-width: 520px) {
+    .ar-line :global(.ar-part) {
+      display: block;
+    }
+    .ar-line :global(.ar-sep) {
+      display: none;
+    }
+  }
+  .ar-list {
+    margin: var(--sp-3) 0 0;
+    padding-left: 1.1em;
+    color: var(--ink-2);
+  }
+  .ar-list li + li {
+    margin-top: var(--sp-2);
+  }
+  .wrap-read.section p + p {
+    margin-top: var(--sp-3);
+  }
+</style>
+
+<script>
+  import { AGENT_REQUESTS_WAIT, paintAgentRequests, readAgentRequests } from "../lib/agent-requests";
+  import { ago } from "../lib/ask";
+
+  // The count again, from this same address: a real answer replaces what the build wrote; no answer
+  // leaves it as built.
+  const line = document.querySelector<HTMLElement>("[data-ar-line]");
+  const asOf = document.querySelector<HTMLElement>("[data-ar-asof]");
+  const fmt = new Intl.NumberFormat("en");
+
+  async function paint(): Promise<void> {
+    let stats: unknown = null;
+    try {
+      const res = await fetch("/v1/stats", { headers: { accept: "application/json" }, signal: AbortSignal.timeout(8000) });
+      if (res.ok) stats = await res.json();
+    } catch {
+      return;
+    }
+    if (!stats || !line || !asOf) return;
+    const requests = readAgentRequests(stats);
+    if (!requests) {
+      line.textContent = AGENT_REQUESTS_WAIT;
+      asOf.hidden = true;
+      return;
+    }
+    paintAgentRequests(line, requests, fmt.format);
+    const t = document.createElement("time");
+    t.dateTime = requests.asOf;
+    t.title = new Date(requests.asOf).toLocaleString();
+    t.textContent = ago(requests.asOf);
+    asOf.replaceChildren("Counted ", t, ".");
+    asOf.hidden = false;
+  }
+  void paint();
+</script>
