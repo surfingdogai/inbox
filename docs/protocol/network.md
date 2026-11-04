@@ -28,7 +28,7 @@ real businesses it counts (`real_businesses_verified`); a row without `real_busi
 Spec 0.9 adds, optional for a network and for an inbox, the catalogue (§4.18, [ADR-029](../adr/029-catalogue.md)):
 an inbox whose owner lists its products on networks serves a signed feed of them, its manifest names it, and
 its signed ping says when it changed; one barcode check (`vectors/gtin.json`) holds on both sides. A ping, an
-answer or a manifest without `catalogue` reads as before. Catalogue version 2 (spec Unreleased, optional for a network and
+answer or a manifest without `catalogue` reads as before. Catalogue version 2 (spec 0.15, optional for a network and
 for an inbox; §4.18) adds product groups and their variants, price models, "was" and unit prices, more ways to be
 available, an age checked at handover, and how an offer is fulfilled, with a signed policies document of shipping
 profiles and return policies; a manifest names the versions its feed serves, a reader names the version it reads,
@@ -1881,7 +1881,7 @@ indicator digits 1 to 8 a case or pack of several. Two offers are one product on
 are the same 14 digits and their `multipack` is the same (absent and `1` alike): a pack of twelve and a
 single unit of one barcode are two products, never one list. A product with no barcode is its business's own.
 
-#### Catalogue version 2 (spec Unreleased, ADR-next, MAY)
+#### Catalogue version 2 (spec 0.15, ADR-047, MAY)
 
 Version 2 carries what goods are sold by: a product and its variants, how a price is meant, a "was" price, a
 unit price, more ways to be available, an age checked at handover, and how an offer reaches the buyer, with its

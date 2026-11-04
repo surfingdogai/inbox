@@ -178,7 +178,7 @@ or network:
   one. Each field is checked and dropped alone, so a 0.13 reader ignores them (`vectors/profile.json`), and
   cuts or drops a description over 500 characters.
 
-- Unreleased (ADR-next; optional for a network and for an inbox): catalogue version 2 (protocol §4.18, as amended).
+- 0.15 ([ADR-047](../../docs/adr/047-catalogue-v2.md); optional for a network and for an inbox): catalogue version 2 (protocol §4.18, as amended).
   The manifest's `catalogue` gains `versions` (absent: `[1]`) and `policies`; a reader names the version it reads
   (`version=2`, `catalogueVersionsOf`, `catalogueVersionToRead`), and a producer that lists `[2]` alone answers a read
   that names none `422 version_required`. A page (`cataloguePageV2Schema`, `schemas/catalogue-page-v2.json`) carries
@@ -320,7 +320,7 @@ categories it falls under (slugs of `vocab/categories.json`). An inbox publishes
 lacks is the business's own words, as a free tag (`kindCategories`). Some kinds also list other names people
 search for them by (`also`: "Dog groomer", "B&B"), for finding a kind only, never published. A kind is never
 removed or renamed.
-`vocab/option-keys.json`, `vocab/age-kinds.json` and `vocab/carriers.json` (catalogue version 2, Unreleased) list the
+`vocab/option-keys.json`, `vocab/age-kinds.json` and `vocab/carriers.json` (catalogue version 2, 0.15) list the
 keys a variant's options name (each with labels in five languages, the Google Merchant Center attribute it fills, and the
 other spellings read as it), the kinds of age-restricted offer (with whether a network lists them: tobacco and
 nicotine, cannabis and weapons it does not; and the spellings read as each), and the carriers a shipping service names

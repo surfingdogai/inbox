@@ -1,6 +1,6 @@
-# ADR-next — Catalogue version 2: variants, price models, availability, age, shipping and returns
+# ADR-047 — Catalogue version 2: variants, price models, availability, age, shipping and returns
 
-**Status:** proposed, 2 November 2026; the spec (protocol §4.18 as amended, `@surfingdog/spec` Unreleased)
+**Status:** accepted, 4 November 2026; the spec (protocol §4.18 as amended, `@surfingdog/spec` 0.15.0)
 written. Its number, the spec's version and the protocol section's are given when it merges. The network's
 intake of version 2 and the inbox's own version 2 feed are their own work. Builds on
 [ADR-029](029-catalogue.md) (the catalogue), [ADR-036](036-money-policies-schedules.md) (money in minor units)

@@ -11,7 +11,7 @@ import {
 } from "./catalogue";
 
 /**
- * Catalogue version 2 (protocol §4.18, as amended; spec Unreleased, ADR-next): what an inbox, or any
+ * Catalogue version 2 (protocol §4.18, as amended; spec 0.15, ADR-047): what an inbox, or any
  * business's own system, serves at `GET /v1/catalogue/changes?version=2` and
  * `GET /v1/catalogue/items?version=2`, and the signed policies document its items name.
  *
