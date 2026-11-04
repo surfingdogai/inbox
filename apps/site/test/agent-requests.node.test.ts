@@ -6,6 +6,7 @@ import {
   agentRequestsDate,
   agentRequestsLine,
   agentRequestsParts,
+  agentRequestsSpan,
   paintAgentRequests,
   readAgentRequests,
 } from "../src/lib/agent-requests";
@@ -21,18 +22,18 @@ const read = (path: string) => readFileSync(new URL(`../../../${path}`, import.m
 const flat = (s: string) => s.replace(/\s+/g, " ");
 const fmt = new Intl.NumberFormat("en").format;
 
-/** The network's answer on 4 November 2026, as the line reads it. */
+/** The network's answer on 4 November 2026, as the line reads it: the seven whole days to midnight. */
 const SAMPLE = {
   status: { api: "ok" },
   network: { members: 3, members_with_receipts: 1, receipts: 9, receipts_30d: 4 },
-  agent_requests: { window_days: 7, requests: 173, agents: 23, as_of: "2026-11-04T12:00:00Z" },
+  agent_requests: { window_days: 7, requests: 173, agents: 23, as_of: "2026-11-04T00:00:00Z" },
 };
 const block = (b: Record<string, unknown>) => ({ ...SAMPLE, agent_requests: { ...SAMPLE.agent_requests, ...b } });
 
 describe("the agents' line", () => {
   it("is rendered from the network's block", () => {
     const x = readAgentRequests(SAMPLE);
-    expect(x).toEqual({ windowDays: 7, requests: 173, agents: 23, asOf: "2026-11-04T12:00:00Z" });
+    expect(x).toEqual({ windowDays: 7, requests: 173, agents: 23, asOf: "2026-11-04T00:00:00Z" });
     if (!x) return;
     expect(agentRequestsLine(x, fmt)).toBe(
       "173 requests from AI agents in the last 7 days · 23 agents on the busiest day",
@@ -70,7 +71,7 @@ describe("the agents' line", () => {
   });
 
   it("says one as one, and leaves out the agents when none could be counted", () => {
-    const one = { windowDays: 7, requests: 1, agents: 1, asOf: "2026-11-04T12:00:00Z" };
+    const one = { windowDays: 7, requests: 1, agents: 1, asOf: "2026-11-04T00:00:00Z" };
     expect(agentRequestsParts(one, fmt)).toEqual([
       "1 request from an AI agent in the last 7 days",
       "1 agent on the busiest day",
@@ -113,6 +114,9 @@ describe("the agents' line", () => {
     );
     expect(live).toContain("agentsLine.hidden = !requests;");
     expect(live).toContain("agents(null);");
+    // The network page paints the parts too, so on a phone it never breaks mid-phrase.
+    expect(live).toContain("paintAgentRequests(agentsLink, requests, format.format);");
+    expect(live).not.toContain("agentRequestsLine");
     expect(AGENT_REQUESTS_HREF).toBe("/agent-requests/");
     expect(read("apps/site/src/components/Footer.astro")).toContain(
       '{ href: "/agent-requests/", label: "Agent requests" }',
@@ -130,34 +134,61 @@ describe("the note on what counts", () => {
     expect(description.length).toBeGreaterThanOrEqual(80);
     expect(description.length).toBeLessThanOrEqual(155);
     expect(page).toContain('"@type": "WebPage"');
-    expect(agentRequestsDate("2026-11-04T12:00:00Z")).toBe("4 November 2026, 12:00 UTC");
+    expect(agentRequestsDate("2026-11-04T00:00:00Z")).toBe("4 November 2026, 00:00 UTC");
     expect(agentRequestsDate("2026-11-04T09:05:00Z")).toBe("4 November 2026, 09:05 UTC");
+    const x = readAgentRequests(SAMPLE);
+    if (!x) throw new Error("no sample");
+    expect(agentRequestsSpan(x)).toBe("Over the 7 whole days to 4 November 2026, 00:00 UTC.");
+    expect(agentRequestsSpan({ ...x, windowDays: 1 })).toBe("Over the whole day to 4 November 2026, 00:00 UTC.");
+    expect(page).toContain(
+      "{agentRequestsOver(built)}<time datetime={built.asOf}>{agentRequestsDate(built.asOf)}</time>.",
+    );
+    expect(page).toContain('asOf.replaceChildren(agentRequestsOver(requests), t, ".");');
     expect(page).toContain("AGENT_REQUESTS_WAIT");
     expect(AGENT_REQUESTS_WAIT).not.toMatch(/\d/);
+    // The page is dated by its figure, for search engines; a build without one says so in its log.
+    expect(page).toContain("...(built ? { dateModified: built.asOf } : {}),");
+    expect(page).toContain("console.warn(\"agent-requests: built without the network's count");
   });
 
   it("says what counts, what does not, and what an agent is, as the network counts them", () => {
     for (const said of [
-      "A search, a lookup, a check of a website, or a request to a business, sent by an AI agent over MCP, A2A or the REST API.",
-      "Each tool call is one request, answered or not.",
+      "Any tool an agent calls, over MCP, A2A or the REST API: a search, a lookup, a check of a website or its DNS, a request to a business, a report on how a business answered, listing or updating a business, starting an inbox, reading the census or the categories, or talking with another AI in Agent Rooms.",
+      "Each tool call is one request, whether or not it found anything.",
+      "We cannot tell an AI agent from any other program: every caller of these doors counts, except those listed below.",
+      "The count covers the last 7 whole days, midnight to midnight UTC: today is counted once it is over.",
       "Our own traffic: our tests, our monitors and our crawler.",
-      "connecting, listing the tools, discovery, pings and asking after a task. And calls to a tool the network does not have.",
+      "connecting, listing the tools, discovery, pings, asking after a task and waiting for news in an Agent Room. And calls to a tool the network does not have.",
+      "Calls turned away for coming too fast.",
       "A caller whose only requests in a day were the same one, five times or more.",
       "so there the same tool counts as the same request",
+      "If the network restarted that day, each part of the day is judged on its own.",
       "People searching on this website, and search engines' crawlers: they are not agents.",
-      "We count an agent by the network it calls from (its address with the last part left off), under a code that changes every day",
-      "a week's agents cannot be counted, so we give the busiest day's",
+      "We count an agent by the network it calls from (the first three numbers of an IPv4 address, the first three groups of an IPv6 one), under a code that changes every day",
+      "a week's agents cannot be counted, so we give the busiest day's: the busiest day is the one with the most agents.",
       "so no agent counts twice",
       "Many assistants calling from one company's servers share a network, and count as one.",
       "On 4 November 2026, most requests came from directories and testing tools, not yet from people's own assistants.",
       "A separate count of the requests from people's assistants is planned.",
       "we publish only these two totals: never a search, a business, or a caller",
-      "The count is taken at most once an hour.",
+      "The count is taken once a day, after midnight UTC.",
     ]) {
       expect(page, said).toContain(said);
     }
-    // No claim it cannot back: no "users", no "people" counted as such, no "this week".
-    expect(page).not.toMatch(/this week|\busers\b|unique visitors/i);
+    // No claim it cannot back: no "users", no "people" counted as such, no "this week", no hourly count.
+    expect(page).not.toMatch(/this week|\busers\b|unique visitors|once an hour|answered or not/i);
+    // Each part of the headline wraps on a phone rather than running into the gutter.
+    expect(page).toMatch(
+      /@media \(max-width: 520px\) \{ \.ar-line :global\(\.ar-part\) \{ display: block; white-space: normal; \}/,
+    );
+    for (const file of [
+      "apps/site/src/components/DirectoryCounts.astro",
+      "apps/site/src/components/LiveMetrics.astro",
+    ]) {
+      expect(flat(read(file)), file).toMatch(
+        /@media \(max-width: 520px\) \{ \.[a-z-]+ :global\(\.ar-part\) \{ display: block; white-space: normal; \}/,
+      );
+    }
   });
 
   it("is what the privacy page and ADR-043 say is published", () => {
@@ -174,6 +205,12 @@ describe("the note on what counts", () => {
       "Totals only: never a record, a search's words, a business or a caller.",
       "a caller whose every such call in its day was the same tool with the same words, five times or more",
       "so no caller counts twice",
+      "over the last seven whole UTC days, counted once a day after midnight",
+      "calls turned away for coming too fast (`rate_limited`)",
+      "Agent Rooms' `room_wait`, its long wait for news",
+      "No caller can be told to be an AI agent rather than another program",
+      "the busiest day is the one with the most",
+      "or Agent Rooms' `Sd-Own-Traffic` for its tools at the one address",
     ]) {
       expect(adr, said).toContain(said);
     }

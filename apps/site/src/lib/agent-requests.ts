@@ -16,7 +16,11 @@ export const AGENT_REQUESTS_HREF = "/agent-requests/";
 /** What the note says while it has no count to show (none read, or no requests). */
 export const AGENT_REQUESTS_WAIT = "The count appears here once the network has one to show.";
 
-/** The block, read. `agents` is the busiest day's distinct callers: a week's cannot be counted. */
+/**
+ * The block, read. The window is `windowDays` whole UTC days, up to `asOf`, a UTC midnight: the day
+ * under way is counted once it is over. `agents` is the busiest day's distinct callers (the day with
+ * the most): a week's cannot be counted.
+ */
 export interface AgentRequests {
   windowDays: number;
   requests: number;
@@ -84,7 +88,17 @@ export function paintAgentRequests(el: HTMLElement, x: AgentRequests, format: (n
   );
 }
 
-/** The day and time a count was taken, as the note dates it: "4 November 2026, 12:00 UTC". */
+/** What leads the date of the days a count covers: "Over the 7 whole days to ". */
+export function agentRequestsOver(x: AgentRequests): string {
+  return x.windowDays === 1 ? "Over the whole day to " : `Over the ${x.windowDays} whole days to `;
+}
+
+/** The days a count covers, as the note dates them: "Over the 7 whole days to 4 November 2026, 00:00 UTC." */
+export function agentRequestsSpan(x: AgentRequests): string {
+  return `${agentRequestsOver(x)}${agentRequestsDate(x.asOf)}.`;
+}
+
+/** The end of a count's window, as the note dates it: "4 November 2026, 00:00 UTC". */
 export function agentRequestsDate(iso: string): string {
   const d = new Date(iso);
   const day = d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });

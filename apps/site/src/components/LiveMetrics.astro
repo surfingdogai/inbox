@@ -218,6 +218,19 @@ try {
     line-height: 1.45;
     color: var(--ink-3);
   }
+  /* Each part whole on its line, as on the home page: on a phone the two stack, no dot hangs. */
+  .agents-line :global(.ar-part) {
+    white-space: nowrap;
+  }
+  @media (max-width: 520px) {
+    .agents-line :global(.ar-part) {
+      display: block;
+      white-space: normal;
+    }
+    .agents-line :global(.ar-sep) {
+      display: none;
+    }
+  }
   .instance {
     margin-top: var(--gap-grid);
   }
@@ -269,7 +282,7 @@ try {
 </style>
 
 <script>
-  import { agentRequestsLine, readAgentRequests } from "../lib/agent-requests";
+  import { paintAgentRequests, readAgentRequests } from "../lib/agent-requests";
 
   // Live numbers from the network, refreshed every minute. When it cannot be reached the tiles
   // show a dash and the pill says "warming up": never an error state on the front page.
@@ -285,7 +298,7 @@ try {
   function agents(stats: unknown) {
     if (!agentsLine || !agentsLink) return;
     const requests = readAgentRequests(stats);
-    if (requests) agentsLink.textContent = agentRequestsLine(requests, format.format);
+    if (requests) paintAgentRequests(agentsLink, requests, format.format);
     agentsLine.hidden = !requests;
   }
 

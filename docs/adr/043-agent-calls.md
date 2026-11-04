@@ -62,9 +62,10 @@ search fails. Who sent it is never needed, and is never kept.
    call on that session, and never written.
 5. **Kept without a time limit.** Nothing deletes a record.
 6. **Our own traffic is marked.** Calls from our own machines, the uptime monitor, our crawler, our
-   tests and evaluation runs (which send a `Surfingdog-Own` header), and calls that carry our admin or
-   operations token are kept, flagged as ours, and left out of every count unless we ask for our own.
-   Anyone can send the header: it only moves their own calls out of the counts.
+   tests and evaluation runs (which send a `Surfingdog-Own` header, or Agent Rooms' `Sd-Own-Traffic`
+   for its tools at the one address), and calls that carry our admin or operations token are kept,
+   flagged as ours, and left out of every count unless we ask for our own. Anyone can send either
+   header: it only moves their own calls out of the counts.
 7. **Read by asking, with no page.** An admin endpoint, behind our admin token, gives the calls per day
    and door, the distinct callers per day and how many keys hashed them, the calls by tool, client and
    platform, the top searches, the searches that found nothing, the slow calls and the failures. No
@@ -76,21 +77,29 @@ search fails. Who sent it is never needed, and is never kept.
 ## Amendment, 4 November 2026: two public totals
 
 The founder's decision: "Show real requests, labelled". The network's `GET /v1/stats` gives, in its
-`agent_requests` block, two totals of the record, taken at most once an hour, and surfingdog.ai shows
-them in one line beside its live counts, linked to a note that says exactly what they count
-(`/agent-requests/`). Totals only: never a record, a search's words, a business or a caller.
+`agent_requests` block, two totals of the record over the last seven whole UTC days, counted once a
+day after midnight (the day under way is counted once it is over, so a monitor is always judged on
+its whole day), and surfingdog.ai shows them in one line beside its live counts, linked to a note that
+says exactly what they count (`/agent-requests/`). Totals only: never a record, a search's words, a
+business or a caller.
 
-- **Requests:** the calls of the last seven days that asked the directory for something (a search, a
-  lookup, a check, a request to a business), each tool call one, answered or not. Left out: our own
-  traffic (6); the protocol's handshakes and discovery (`initialize`, `tools/list`,
+- **Requests:** every tool a caller of the doors called (1): a search, a lookup, a check of a website
+  or its DNS, a request to a business or a report on how one answered, listing or updating a
+  business, starting an inbox, the census or the categories, and at the one address Agent Rooms'
+  tools; each tool call one, whether or not it found anything. No caller can be told to be an AI
+  agent rather than another program, so every caller counts but those left out. Left out: our own
+  traffic (6); the protocol's handshakes, discovery and waiting (`initialize`, `tools/list`,
   `server/discover`, `ping`, `resources/list`, `prompts/list`, every `notifications/` method,
-  `tasks/get`) and calls to a tool the directory does not serve; and a monitor, a caller whose every
-  such call in its day was the same tool with the same words, five times or more. A lookup's or a
-  check's arguments are not kept (4), so for those the same tool is the same request.
-- **Agents:** the most distinct callers of one day of the window. A caller's hash changes every day
-  (4), so a week's distinct callers cannot be counted; the busiest day's can. On a day with two keys
-  (a restart) each key's part of the day is counted on its own, so no caller counts twice. A monitor
-  is no agent, and many agents calling from one network count as one.
+  `tasks/get`, and Agent Rooms' `room_wait`, its long wait for news) and calls to a tool the directory
+  does not serve; calls turned away for coming too fast (`rate_limited`); and a monitor, a caller
+  whose every such call in its day was the same tool with the same words, five times or more (on a
+  day with two keys, each key's part of the day on its own). A lookup's or a check's arguments are
+  not kept (4), so for those the same tool is the same request.
+- **Agents:** the most distinct callers of one day of the window: the busiest day is the one with the
+  most. A caller's hash changes every day (4), so a week's distinct callers cannot be counted; the
+  busiest day's can. On a day with two keys (a restart) each key's part of the day is counted on its
+  own, so no caller counts twice. A monitor is no agent, and many agents calling from one network
+  count as one.
 
 A count of the requests from people's own assistants, apart from directories and testing tools, is
 planned, as one more key of the same block.

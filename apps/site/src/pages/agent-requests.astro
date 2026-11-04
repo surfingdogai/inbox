@@ -5,12 +5,15 @@
 // left out, and what an agent is, in the words of the network's own count (its stats_agents.go) and of
 // ADR-043. The number is read when the site is built, dated, so a reader with no JavaScript and a
 // search engine get a true figure; the browser reads it again from GET /v1/stats on this address.
-// Every sentence here must stay true of that count: change one with the other.
+// The network counts whole UTC days, once a day, so a build that day carries the day's figure: build
+// the site after the network serves the block, and with every deploy, so the indexed figure stays
+// recent. Every sentence here must stay true of that count: change one with the other.
 import Layout from "../layouts/Layout.astro";
 import {
   AGENT_REQUESTS_HREF,
   AGENT_REQUESTS_WAIT,
   agentRequestsDate,
+  agentRequestsOver,
   agentRequestsParts,
   readAgentRequests,
 } from "../lib/agent-requests";
@@ -31,16 +34,23 @@ try {
 } catch {
   // Unreachable at build time: the browser fills it in.
 }
+if (!built) {
+  // Said in the build's log: a search engine indexes this page without a figure until the next build.
+  console.warn("agent-requests: built without the network's count (no agent_requests in /v1/stats)");
+}
 const fmt = new Intl.NumberFormat("en");
 
 const counted = [
-  "A search, a lookup, a check of a website, or a request to a business, sent by an AI agent over MCP, A2A or the REST API.",
-  "Each tool call is one request, answered or not.",
+  "Any tool an agent calls, over MCP, A2A or the REST API: a search, a lookup, a check of a website or its DNS, a request to a business, a report on how a business answered, listing or updating a business, starting an inbox, reading the census or the categories, or talking with another AI in Agent Rooms.",
+  "Each tool call is one request, whether or not it found anything.",
+  "We cannot tell an AI agent from any other program: every caller of these doors counts, except those listed below.",
+  "The count covers the last 7 whole days, midnight to midnight UTC: today is counted once it is over.",
 ];
 const left = [
   "Our own traffic: our tests, our monitors and our crawler.",
-  "The steps an agent takes around its requests: connecting, listing the tools, discovery, pings and asking after a task. And calls to a tool the network does not have.",
-  "A caller whose only requests in a day were the same one, five times or more. That is most likely a monitor checking that we answer. For a lookup or a check we do not keep which business it asked about, so there the same tool counts as the same request.",
+  "The steps an agent takes around its requests: connecting, listing the tools, discovery, pings, asking after a task and waiting for news in an Agent Room. And calls to a tool the network does not have.",
+  "Calls turned away for coming too fast.",
+  "A caller whose only requests in a day were the same one, five times or more. That is most likely a monitor checking that we answer. For a lookup or a check we do not keep which business it asked about, so there the same tool counts as the same request. If the network restarted that day, each part of the day is judged on its own.",
   "People searching on this website, and search engines' crawlers: they are not agents.",
 ];
 
@@ -52,6 +62,8 @@ const ld = {
   url,
   isPartOf: { "@type": "WebSite", name: "Surfing Dog", url: site },
   publisher: { "@id": `${site}#org` },
+  // The page changes with its figure: the end of the days the build's count covers.
+  ...(built ? { dateModified: built.asOf } : {}),
 };
 ---
 
@@ -73,7 +85,7 @@ const ld = {
       }
     </p>
     <p class="fine" data-ar-asof hidden={!built}>
-      {built ? <>Counted <time datetime={built.asOf}>{agentRequestsDate(built.asOf)}</time>.</> : null}
+      {built ? <>{agentRequestsOver(built)}<time datetime={built.asOf}>{agentRequestsDate(built.asOf)}</time>.</> : null}
     </p>
   </section>
 
@@ -92,10 +104,11 @@ const ld = {
   <section class="wrap wrap-read section section-tight" aria-labelledby="ar-agents-h">
     <h2 class="h-section" id="ar-agents-h">Agents</h2>
     <p>
-      We count an agent by the network it calls from (its address with the last part left off), under a code that
-      changes every day, so no one, us included, can follow it from one day to the next. That also means a week's
-      agents cannot be counted, so we give the busiest day's. If the network restarted that day, each part of the day
-      is counted on its own, so no agent counts twice.
+      We count an agent by the network it calls from (the first three numbers of an IPv4 address, the first three
+      groups of an IPv6 one), under a code that changes every day, so no one, us included, can follow it from one day
+      to the next. That also means a week's agents cannot be counted, so we give the busiest day's: the busiest day is
+      the one with the most agents. If the network restarted that day, each part of the day is counted on its own, so
+      no agent counts twice.
     </p>
     <p>Many assistants calling from one company's servers share a network, and count as one.</p>
   </section>
@@ -111,8 +124,8 @@ const ld = {
   <section class="wrap wrap-read section section-tight" aria-labelledby="ar-privacy-h">
     <h2 class="h-section" id="ar-privacy-h">Only totals</h2>
     <p>
-      Of the record of agents' calls, we publish only these two totals: never a search, a business, or a caller. The count is taken at most once
-      an hour. What the network keeps of each call, and what it never keeps, is on
+      Of the record of agents' calls, we publish only these two totals: never a search, a business, or a caller. The count is taken once a day,
+      after midnight UTC. What the network keeps of each call, and what it never keeps, is on
       <a class="link" href="/privacy/">the privacy page</a>. The same totals are in the network's API, as
       <code>agent_requests</code> in <a class="link" href="/v1/stats"><code>/v1/stats</code></a>.
     </p>
@@ -126,6 +139,7 @@ const ld = {
   @media (max-width: 520px) {
     .ar-line :global(.ar-part) {
       display: block;
+      white-space: normal;
     }
     .ar-line :global(.ar-sep) {
       display: none;
@@ -145,8 +159,13 @@ const ld = {
 </style>
 
 <script>
-  import { AGENT_REQUESTS_WAIT, paintAgentRequests, readAgentRequests } from "../lib/agent-requests";
-  import { ago } from "../lib/ask";
+  import {
+    AGENT_REQUESTS_WAIT,
+    agentRequestsDate,
+    agentRequestsOver,
+    paintAgentRequests,
+    readAgentRequests,
+  } from "../lib/agent-requests";
 
   // The count again, from this same address: a real answer replaces what the build wrote; no answer
   // leaves it as built.
@@ -172,9 +191,8 @@ const ld = {
     paintAgentRequests(line, requests, fmt.format);
     const t = document.createElement("time");
     t.dateTime = requests.asOf;
-    t.title = new Date(requests.asOf).toLocaleString();
-    t.textContent = ago(requests.asOf);
-    asOf.replaceChildren("Counted ", t, ".");
+    t.textContent = agentRequestsDate(requests.asOf);
+    asOf.replaceChildren(agentRequestsOver(requests), t, ".");
     asOf.hidden = false;
   }
   void paint();
