@@ -588,4 +588,56 @@ describe("notices", () => {
     expect(notices).toContain(s.notice);
     expect(await read(await get("/v1/owner/items?open_only=false"))).not.toContain(s.newsletter);
   }, 60_000);
+
+  it("are counted past a hundred, as the rail counts every list: a page of a hundred with more behind it, on every runtime", async () => {
+    const s = await setup();
+    // A hundred more customers' messages, and a hundred more notices, each from a sender of its own.
+    await copies(s.db, s.other, 100, "M");
+    await copies(s.db, s.newsletter, 100, "N");
+    for (const query of ["", "&open_only=false", "&notices=true&open_only=false"]) {
+      const res = await s.app.request(req("GET", `/v1/owner/items?limit=100${query}`, s.owner));
+      const page = JSON.parse(await read(res)) as { items: unknown[]; next_cursor: string | null };
+      expect(page.items, query).toHaveLength(100);
+      expect(page.next_cursor, query).not.toBeNull();
+    }
+  }, 120_000);
 });
+
+/**
+ * `n` copies of an item, each with a party of its own (`PM…` and `ZM…` for `tag` "M"): a page of them
+ * names as many parties as it lists items.
+ */
+async function copies(db: Db, itemId: string, n: number, tag: string): Promise<void> {
+  const columns = async (table: string) =>
+    (await db.client.query({ sql: `PRAGMA table_info(${table})`, method: "all" })).rows.map((r) => String(r[1]));
+  const party = (await db.client.query({ sql: "SELECT party_id FROM items WHERE id = ?", params: [itemId] }))
+    .rows[0]?.[0];
+  const seq = "WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < ?)";
+  const pcols = await columns("parties");
+  await db.client.query({
+    sql: `${seq} INSERT INTO parties (${pcols.join(", ")})
+            SELECT ${pcols.map((c) => (c === "id" ? `printf('P${tag}%024d', n)` : c)).join(", ")}
+              FROM parties CROSS JOIN seq WHERE parties.id = ?`,
+    params: [n, String(party)],
+    method: "run",
+  });
+  // Columns the database works out itself are never written.
+  const generated = new Set(["needs_human", "sandbox", "priority", "start_at", "amount_minor", "end_at"]);
+  const icols = (await columns("items")).filter((c) => !generated.has(c));
+  const value = (c: string) =>
+    c === "id"
+      ? `printf('Z${tag}%024d', n)`
+      : c === "party_id"
+        ? `printf('P${tag}%024d', n)`
+        : c === "access_token_hash"
+          ? "NULL"
+          : c === "created_at" || c === "updated_at"
+            ? `${c} + n`
+            : c;
+  await db.client.query({
+    sql: `${seq} INSERT INTO items (${icols.join(", ")})
+            SELECT ${icols.map(value).join(", ")} FROM items CROSS JOIN seq WHERE items.id = ?`,
+    params: [n, itemId],
+    method: "run",
+  });
+}

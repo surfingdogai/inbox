@@ -1873,13 +1873,14 @@ export class Capabilities {
     );
     // Whose doing the latest change was, when it was one of the owner's rules: "answered by your rules".
     const ruled = new Set<string>();
-    if (listed.length > 0) {
-      const ids = listed.map(({ item }) => item.id);
+    const ids = listed.map(({ item }) => item.id);
+    for (let i = 0; i < ids.length; i += IN_CHUNK) {
+      const chunk = ids.slice(i, i + IN_CHUNK);
       const { rows: byRules } = await this.db.client.query({
         sql: `SELECT e.item_id FROM item_events e
-               WHERE e.item_id IN (${ids.map(() => "?").join(",")}) AND e.actor_kind = 'rule'
+               WHERE e.item_id IN (${chunk.map(() => "?").join(",")}) AND e.actor_kind = 'rule'
                  AND e.seq = (SELECT MAX(seq) FROM item_events WHERE item_id = e.item_id)`,
-        params: ids,
+        params: chunk,
         method: "all",
       });
       for (const r of byRules) ruled.add(String((r as unknown[])[0]));
@@ -2988,15 +2989,21 @@ export class Capabilities {
   private async partyViews(ids: readonly string[]): Promise<Map<string, PartyView>> {
     const unique = [...new Set(ids)];
     const out = new Map<string, PartyView>();
-    if (unique.length === 0) return out;
-    const [rows, verified] = await Promise.all([
-      this.db.orm.select().from(parties).where(inArray(parties.id, unique)),
-      this.db.orm
-        .select({ partyId: partyContacts.partyId })
-        .from(partyContacts)
-        .where(and(inArray(partyContacts.partyId, unique), isNotNull(partyContacts.verifiedAt))),
-    ]);
-    const verifiedIds = new Set(verified.map((v) => v.partyId));
+    // A page of a hundred items, with one more read to know there are more, names up to 101 parties.
+    const rows: (typeof parties.$inferSelect)[] = [];
+    const verifiedIds = new Set<string>();
+    for (let i = 0; i < unique.length; i += IN_CHUNK) {
+      const chunk = unique.slice(i, i + IN_CHUNK);
+      const [found, verified] = await Promise.all([
+        this.db.orm.select().from(parties).where(inArray(parties.id, chunk)),
+        this.db.orm
+          .select({ partyId: partyContacts.partyId })
+          .from(partyContacts)
+          .where(and(inArray(partyContacts.partyId, chunk), isNotNull(partyContacts.verifiedAt))),
+      ]);
+      rows.push(...found);
+      for (const v of verified) verifiedIds.add(v.partyId);
+    }
     for (const p of rows) {
       const contact = (p.contact ?? {}) as { email?: string; phone?: string; name?: string };
       out.set(p.id, {
@@ -3101,6 +3108,9 @@ function withToken(caller: Caller, token: string | undefined): Caller {
 
 /** The notices one press deletes at most (`deleteNoticesFrom`): the rest go with the next. */
 export const NOTICES_DELETED_AT_ONCE = 500;
+
+/** At most this many values in one `IN (…)`: D1 binds at most 100 parameters to a statement. */
+const IN_CHUNK = 90;
 
 function requireBusiness(caller: Caller): void {
   if (isCustomer(caller)) throw new WriteError("not_allowed", "owner operations need an owner or staff principal");
