@@ -86,6 +86,8 @@ export interface Counts {
   /** Notices waiting under Notices: counted quietly, never as something that needs you. */
   readonly notices: number;
   readonly noticesMore: boolean;
+  /** When each counted notice came: the inbox says how many are new (`newNotices`). */
+  readonly noticeTimes: readonly string[];
 }
 
 export function countsFrom(
@@ -123,6 +125,7 @@ export function countsFrom(
     heldMore: (held?.next_cursor ?? null) !== null,
     notices: notices?.items.length ?? 0,
     noticesMore: (notices?.next_cursor ?? null) !== null,
+    noticeTimes: (notices?.items ?? []).map((v) => v.item.createdAt),
   };
 }
 

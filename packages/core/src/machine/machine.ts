@@ -272,8 +272,9 @@ export interface Transition<S extends string = string> {
   /** The offers it makes or closes are changes to a promise (`kind: change`), not offers before one. */
   readonly change?: true;
   /**
-   * It leaves a terminal state for an open one, so the item opens again (a stay a late payment confirmed
-   * after it lapsed, while its nights were still free). Only the inbox's own jobs fire one.
+   * It leaves a state the item was closed in for an open one, so the item opens again: a stay a late
+   * payment confirmed after it lapsed, while its nights were still free (only the inbox's own jobs fire
+   * that one), or a message or a request a person brought back with Not spam.
    */
   readonly reopens?: true;
 }

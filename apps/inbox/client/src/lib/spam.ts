@@ -129,8 +129,8 @@ export function toastFor(act: SpamAct, view: ItemView, now: number = Date.now())
           ? `Label taken off. Messages from ${address} come straight to you from now on.`
           : "Label taken off. This sender comes straight to you from now on."
         : address
-          ? `Back in your inbox. Messages from ${address} won't be put aside again.`
-          : "Back in your inbox. Messages from this sender won't be put aside again.";
+          ? `${backIn(view)} Messages from ${address} won't be put aside again.`
+          : `${backIn(view)} Messages from this sender won't be put aside again.`;
     return {
       text,
       ...(domain ? { follow: { kind: "let_domain" as const, label: `Let everyone at ${domain} through` } } : {}),
@@ -149,6 +149,27 @@ export function toastFor(act: SpamAct, view: ItemView, now: number = Date.now())
       : {}),
   };
 }
+
+/**
+ * Where Not spam puts it: back in the inbox, and a notice (an email from a system) moved there, out of
+ * Notices, so it is found where it was looked for.
+ */
+function backIn(view: Pick<ItemView, "item">): string {
+  return view.item.flags.notice === true ? "Moved to your inbox." : "Back in your inbox.";
+}
+
+/**
+ * What an act that brings something into the inbox says once it is sent, with a link to it there:
+ * the list it was pressed on no longer shows it. Null for the others.
+ */
+export function doneToast(act: SpamAct, view: Pick<ItemView, "item">): string | null {
+  if (act === "not_spam") return backIn(view);
+  if (act === "let_in") return "Let in. It's in your inbox.";
+  return null;
+}
+
+/** How long a toast with a link to what was moved stays: long enough to follow it. */
+export const DONE_MS = 10_000;
 
 /** What the follow-up did, said once it is done (it has no Undo: Settings → Spam lists it). */
 export function followDone(kind: "let_domain" | "block", view: ItemView): string {

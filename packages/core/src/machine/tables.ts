@@ -1219,13 +1219,15 @@ export const quoteMachine: Machine<QuoteState> = {
       effects: ["close"],
     },
     {
-      // Back to the business to answer, with its request's clock wound again so it does not lapse at once.
+      // Back to the business to answer, with its request's clock wound again so it does not lapse at once:
+      // open again, so it is listed with what is open, where the owner looks for it.
       event: "unspam",
       label: "Not spam",
       from: ["spam"],
       to: "received",
       by: ["owner", "staff"],
       effects: [],
+      reopens: true,
     },
     {
       event: "request_info",
@@ -1366,7 +1368,16 @@ export const messageMachine: Machine<MessageState> = {
       by: ownersAndSystem,
       effects: ["close"],
     },
-    { event: "unspam", label: "Not spam", from: ["spam"], to: "open", by: ["owner", "staff"], effects: [] },
+    // Back in the inbox: open again, so it is listed with what is open, where the owner looks for it.
+    {
+      event: "unspam",
+      label: "Not spam",
+      from: ["spam"],
+      to: "open",
+      by: ["owner", "staff"],
+      effects: [],
+      reopens: true,
+    },
   ],
 };
 

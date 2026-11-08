@@ -125,6 +125,7 @@ async function setup() {
     owner,
     mailOut,
     drain,
+    ingest,
     notice: dnb.itemId,
     newsletter: news.itemId,
     statement: filed.itemId,
@@ -399,5 +400,121 @@ describe("notices", () => {
       method: "all",
     });
     expect(Number(rows[0]?.[0])).toBe(0);
+  }, 60_000);
+
+  it("put aside, and brought back with Not spam, are in the inbox where the owner looks, still the owner's alone", async () => {
+    const s = await setup();
+    const get = (path: string, who: Record<string, string>) => s.app.request(req("GET", path, who));
+    // A rule that answers every message and a webhook for every event, from now on: neither may touch it.
+    await s.db.orm.insert(schema.rules).values({
+      id: ulid(),
+      name: "Answer every message",
+      priority: 5,
+      enabled: 1,
+      definition: {
+        on: ["item.created", "item.updated"],
+        if: { path: "item.type", op: "eq", value: "message" },
+        actions: [{ action: "reply", template: "Thanks, we read every message within a day." }],
+        stop: false,
+        maxRunsPerItem: 5,
+      },
+      createdAt: T0,
+      updatedAt: T0,
+    });
+    const hook = await s.app.request(
+      req("POST", "/v1/owner/webhooks", s.owner, { url: "https://hooks.example.com/all", events: ["*"] }),
+    );
+    expect(hook.status, await hook.clone().text()).toBe(201);
+    // Dominios.PT's invoice, put aside as it arrived: a mail server marked it.
+    const invoice = await s.ingest(
+      raw(
+        {
+          From: "Dominios.PT <no-reply@dominios.pt>",
+          To: "support@oficinamare.example",
+          Subject: "Fatura FT 2026/118",
+          "Message-ID": "<ft2026-118@dominios.pt>",
+          "Auto-Submitted": "auto-generated",
+          "X-Spam-Flag": "YES",
+        },
+        "A sua fatura FT 2026/118 está disponível. https://my.dominios.pt/viewinvoice.php?id=118",
+      ),
+    );
+    expect(invoice.outcome).toBe("spam");
+    const id = "itemId" in invoice ? (invoice.itemId ?? "") : "";
+    expect(await read(await get("/v1/owner/items?state=spam&open_only=false", s.owner))).toContain(id);
+
+    // The owner says Not spam: it is in the inbox, out of Spam and out of Notices, where they looked.
+    const zap = await mintKey(s.app, s.owner, "automation");
+    expect(
+      (await s.app.request(req("POST", `/v1/owner/items/${id}/transitions`, zap, { event: "unspam" }))).status,
+    ).toBe(403);
+    const unspam = (key: string) =>
+      s.app.request(
+        req("POST", `/v1/owner/items/${id}/transitions`, { ...s.owner, "idempotency-key": key }, { event: "unspam" }),
+      );
+    const back = JSON.parse(await read(await unspam("unspam-1"))) as {
+      view: { item: { state: string; flags: object } };
+    };
+    expect(back.view.item.state).toBe("open");
+    expect(back.view.item.flags).toMatchObject({ notice: true, inInbox: true });
+    // The same press again moves nothing twice.
+    await read(await unspam("unspam-1"));
+    expect(await read(await get("/v1/owner/items", s.owner))).toContain(id);
+    expect(await read(await get("/v1/owner/items?notices=true&open_only=false", s.owner))).not.toContain(id);
+    expect(await read(await get("/v1/owner/items?state=spam&open_only=false", s.owner))).not.toContain(id);
+    const events = await s.db.client.query({
+      sql: "SELECT event, reason FROM item_events WHERE item_id = ? ORDER BY seq",
+      params: [id],
+      method: "all",
+    });
+    expect(events.rows.map((r) => [String(r[0]), r[1] === null ? null : String(r[1])])).toEqual([
+      ["create", null],
+      ["unspam", null],
+      ["flags", "Not spam: moved to the inbox"],
+    ]);
+
+    // Still nobody else's to read, list or answer: a key, a reader, the owner's AI.
+    for (const key of [zap, await mintKey(s.app, s.owner, "read_only")]) {
+      expect(await read(await get("/v1/owner/items", key))).not.toContain(id);
+      const said = await read(await get(`/v1/owner/items/${id}`, key));
+      expect(said).toContain(NOTICE_WITHHELD);
+      expect(said).not.toContain("FT 2026/118");
+      expect(await read(await get("/v1/owner/events", key))).not.toContain(id);
+    }
+    expect(
+      (await s.app.request(req("POST", `/v1/owner/items/${id}/replies`, zap, { body: "Paid", internal: false })))
+        .status,
+    ).toBe(403);
+    const mcp = await connectOwner(s.app, `Bearer ${await aiToken(s.db)}`);
+    const listed = await mcp.callTool({ name: "list_items", arguments: {} });
+    expect(JSON.stringify(listed)).not.toContain(id);
+    const seen = await mcp.callTool({ name: "get_item", arguments: { item_id: id } });
+    expect(JSON.stringify(seen)).not.toContain("FT 2026/118");
+    await mcp.close();
+
+    // No rule answered it, no webhook carried it, and nobody was alerted.
+    await s.drain();
+    const entries = await s.db.orm.select().from(schema.threadEntries).where(eq(schema.threadEntries.itemId, id));
+    expect(entries.map((e) => e.direction)).toEqual(["in"]);
+    const sent = await s.db.client.query({
+      sql: "SELECT COUNT(*) FROM outbound_mail WHERE item_id = ?",
+      params: [id],
+      method: "all",
+    });
+    expect(Number(sent.rows[0]?.[0])).toBe(0);
+    const delivered = await s.db.client.query({ sql: "SELECT COUNT(*) FROM webhook_deliveries", method: "all" });
+    expect(Number(delivered.rows[0]?.[0])).toBe(0);
+
+    // A customer's message brought back with Not spam is in the inbox as it always was: no notice flag.
+    await read(
+      await s.app.request(req("POST", `/v1/owner/items/${s.other}/transitions`, s.owner, { event: "mark_spam" })),
+    );
+    const customer = JSON.parse(
+      await read(
+        await s.app.request(req("POST", `/v1/owner/items/${s.other}/transitions`, s.owner, { event: "unspam" })),
+      ),
+    ) as { view: { item: { flags: Record<string, unknown> } } };
+    expect(customer.view.item.flags.inInbox).toBeUndefined();
+    expect(await read(await get("/v1/owner/items", s.owner))).toContain(s.other);
   }, 60_000);
 });

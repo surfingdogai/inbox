@@ -129,7 +129,9 @@ and let the owner answer notifications by email.
      it, no webhook, event stream, integration key or owner AI reads it, the AI spam check never reads it
      and nothing of it goes to the shared list; the local spam checks still run. It alerts nobody. The
      owner reads notices under Notices, out of every other list, and moves one to the inbox (a
-     conversation from then on, still the owner's alone) or deletes it. A notice that answers a
+     conversation from then on, still the owner's alone) or deletes it. A notice put aside as spam that a
+     person brings back with Not spam is moved to the inbox the same way, where they look for it (8 November
+     2026): only where it is listed changes. A notice that answers a
      conversation lands on it as any reply does. Whether an email is a notice is read from its shape
      alone, never its words: a code or a sign-in link is an account's mail, alerting the owner, only when
      the receiving server vouched for its domain; from anyone else it is a notice. A website form's email

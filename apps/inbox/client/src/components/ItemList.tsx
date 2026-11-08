@@ -23,7 +23,7 @@ import {
 } from "../lib/spam";
 import type { ItemView } from "../lib/types";
 import { ErrorState, SkeletonRows, Sun } from "./Feedback";
-import { NoticeActs } from "./Notices";
+import { markNoticesSeen, NoticeActs, NoticesLine } from "./Notices";
 import { StatePill } from "./Pills";
 import { useSpamActions } from "./SpamActions";
 
@@ -62,6 +62,12 @@ export function ItemList({
     return () => clearTimeout(timer);
   }, [draft, q, navigate]);
 
+  // Notices opened: those listed are not new any more (the line above the inbox counts from now).
+  const shownNotices = filter === "notices" ? pages.data : undefined;
+  useEffect(() => {
+    if (shownNotices) markNoticesSeen();
+  }, [shownNotices]);
+
   const { hidden } = useSpamActions();
   const listed = (pages.data?.pages ?? [])
     .flatMap((p) => p.items)
@@ -84,6 +90,7 @@ export function ItemList({
       )}
       <ForwardConfirm />
       {head}
+      {filter === "all" && !q && <NoticesLine sandbox={sandbox} />}
       {screened && <ScreenTop filter={filter} />}
       {filter === "notices" && <p className="screen-top">{NOTICES_TOP}</p>}
       <div className="search">

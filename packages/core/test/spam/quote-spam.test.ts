@@ -50,6 +50,10 @@ describe("a quote request put aside", () => {
     ];
     expect(state).toBe("received");
     expect(after).toBeGreaterThan(before);
+    // Open again: listed with what is open, where the owner looks for it, never under Done.
+    expect(await s.q("SELECT closed_at FROM items WHERE id = ?", [id])).toEqual([[null]]);
+    const open = await s.caps.listItems(owner(T0 + 3 * DAY), { limit: 50, open_only: true, sandbox: false });
+    expect(open.items.map((v) => v.item.id)).toContain(id);
     // The owner taught the filter: this sender comes straight in now.
     expect(await s.q("SELECT list, value FROM spam_lists")).toEqual([["allow", "imani@example.co.ke"]]);
   });

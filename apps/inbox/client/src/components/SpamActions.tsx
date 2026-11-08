@@ -1,8 +1,18 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { api, problemOf } from "../lib/api";
-import { alreadyDone, followDone, type SpamAct, type ToastCopy, toastFor, toastLift, UNDO_MS } from "../lib/spam";
+import {
+  alreadyDone,
+  DONE_MS,
+  doneToast,
+  followDone,
+  type SpamAct,
+  type ToastCopy,
+  toastFor,
+  toastLift,
+  UNDO_MS,
+} from "../lib/spam";
 import type { ItemView } from "../lib/types";
 
 /**
@@ -10,7 +20,8 @@ import type { ItemView } from "../lib/types";
  * and Undo for six seconds. Nothing is sent until the six seconds are up, so Undo leaves no trace
  * anywhere: no list changed, nothing taught, no rule run. Another press, an answer to the item,
  * leaving the inbox or closing the page sends what waits at once. The toast sits above an item's
- * action bar, never over its buttons.
+ * action bar, never over its buttons. Once Not spam or Let it in is sent, the toast says where the
+ * item went, with a link to it there: the list it was pressed on no longer shows it.
  */
 
 interface Pending {
@@ -27,6 +38,15 @@ interface SpamActions {
   readonly hidden: ReadonlySet<string>;
   /** Sends what waits now; true when it was an act on this item (its version may have moved). */
   readonly flush: (itemId: string) => Promise<boolean>;
+  /** Says something done elsewhere (a notice moved to the inbox), with a link to the item when given. */
+  readonly tell: (text: string, open?: string) => void;
+}
+
+/** A toast after the act: what was done, or what went wrong; `open`, the item to go to. */
+interface Said {
+  readonly text: string;
+  readonly tone: "success" | "danger";
+  readonly open?: string | undefined;
 }
 
 const Ctx = createContext<SpamActions | null>(null);
@@ -65,7 +85,7 @@ export function SpamActionsProvider({ children }: { children: ReactNode }) {
   // What was sent and is still on its way: its row stays hidden until the inbox answered.
   const [sending, setSending] = useState<ReadonlySet<string>>(new Set());
   const [lift, setLift] = useState<number | null>(null);
-  const [notice, setNotice] = useState<{ text: string; tone: "success" | "danger" } | null>(null);
+  const [notice, setNotice] = useState<Said | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const waiting = useRef<Pending | null>(null);
   const keys = useRef(0);
@@ -82,9 +102,12 @@ export function SpamActionsProvider({ children }: { children: ReactNode }) {
     [qc],
   );
 
-  /** Sends what waits now; the toast goes. */
+  /**
+   * Sends what waits now; the toast goes. `quiet`: says nothing once it is done (the page is closing, or
+   * the owner is acting on the item itself).
+   */
   const commit = useCallback(
-    async (p: Pending, keepalive = false): Promise<boolean> => {
+    async (p: Pending, keepalive = false, quiet = keepalive): Promise<boolean> => {
       if (waiting.current?.key !== p.key) return true;
       waiting.current = null;
       if (timer.current) clearTimeout(timer.current);
@@ -92,13 +115,18 @@ export function SpamActionsProvider({ children }: { children: ReactNode }) {
       const id = p.view.item.id;
       setSending((cur) => new Set([...cur, id]));
       setPending((cur) => (cur?.key === p.key ? null : cur));
+      const done = quiet ? null : doneToast(p.act, p.view);
       try {
         await send(p.view, p.act, keepalive);
+        if (done) setNotice({ tone: "success", text: done, open: id });
         return true;
       } catch (error) {
         const problem = problemOf(error);
         // Let in already, by an answer the owner gave meanwhile: what they asked for is done.
-        if (alreadyDone(p.act, problem)) return true;
+        if (alreadyDone(p.act, problem)) {
+          if (done) setNotice({ tone: "success", text: done, open: id });
+          return true;
+        }
         setNotice({ tone: "danger", text: problem.detail });
         return false;
       } finally {
@@ -118,11 +146,14 @@ export function SpamActionsProvider({ children }: { children: ReactNode }) {
     async (itemId: string) => {
       const w = waiting.current;
       if (!w) return false;
-      await commit(w);
+      // An answer to the item itself sends what waits on it: the owner is there, no link needed.
+      await commit(w, false, w.view.item.id === itemId);
       return w.view.item.id === itemId;
     },
     [commit],
   );
+
+  const tell = useCallback((text: string, open?: string) => setNotice({ tone: "success", text, open }), []);
 
   const act = useCallback(
     (view: ItemView, kind: SpamAct) => {
@@ -150,7 +181,8 @@ export function SpamActionsProvider({ children }: { children: ReactNode }) {
   /** The small choice under the toast: sends the act first, then does it. */
   const follow = async (p: Pending) => {
     const kind = p.toast.follow?.kind;
-    if (!kind || !(await commit(p))) return;
+    // Suggest another time opens the item itself: nothing more to say on the way.
+    if (!kind || !(await commit(p, false, kind === "suggest_time"))) return;
     if (kind === "suggest_time") {
       void navigate({
         to: "/items/$id",
@@ -185,15 +217,16 @@ export function SpamActionsProvider({ children }: { children: ReactNode }) {
     };
   }, [commit]);
 
-  // A notice after the act is gone after a while; one with a problem stays until dismissed.
+  // A notice after the act is gone after a while, one with a link a little later; one with a problem
+  // stays until dismissed.
   useEffect(() => {
     if (!notice || notice.tone === "danger") return;
-    const t = setTimeout(() => setNotice(null), UNDO_MS);
+    const t = setTimeout(() => setNotice(null), notice.open ? DONE_MS : UNDO_MS);
     return () => clearTimeout(t);
   }, [notice]);
 
   const hidden = useMemo(() => new Set([...sending, ...(pending ? [pending.view.item.id] : [])]), [pending, sending]);
-  const value = useMemo(() => ({ act, hidden, flush }), [act, hidden, flush]);
+  const value = useMemo(() => ({ act, hidden, flush, tell }), [act, hidden, flush, tell]);
 
   return (
     <Ctx.Provider value={value}>
@@ -218,7 +251,20 @@ export function SpamActionsProvider({ children }: { children: ReactNode }) {
         {!pending && notice && (
           <output className="toast glass-strong spam-toast">
             <i className={notice.tone === "danger" ? "dot dot-warning" : "dot"} />
-            <div className="x">{notice.text}</div>
+            <div className="x">
+              {notice.text}
+              {notice.open && (
+                <Link
+                  to="/items/$id"
+                  params={{ id: notice.open }}
+                  search={{}}
+                  className="link-button"
+                  onClick={() => setNotice(null)}
+                >
+                  Open it
+                </Link>
+              )}
+            </div>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setNotice(null)}>
               Dismiss
             </button>

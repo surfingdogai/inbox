@@ -2095,9 +2095,21 @@ export class Capabilities {
       if ((input.event === "mark_spam" || input.event === "unspam") && !r.replayed) {
         await this.spam.afterOwnerMark(caller, input.item_id, input.event, nowOf(caller));
       }
+      // Not spam on a notice brings it back to the inbox, where the person looked for it, as Move to
+      // inbox does: only where it is listed changes. It stays the owner's alone (`isOwnerOnly`): no rule,
+      // webhook, key or AI reads it, and nothing answers it by itself. A replay moves it once.
+      const moved =
+        input.event === "unspam" && ownerOnly?.notice && !ownerOnly.inInbox
+          ? await setFlags(this.db, caller, {
+              itemId: input.item_id,
+              flags: { inInbox: true },
+              reason: "Not spam: moved to the inbox",
+            })
+          : null;
+      const done = moved ? { ...r, view: moved } : r;
       return ownerOnly && !readsAccountMail(caller)
-        ? { ...r, view: { ...r.view, item: withheldItem(r.view.item) } }
-        : r;
+        ? { ...done, view: { ...done.view, item: withheldItem(done.view.item) } }
+        : done;
     }
     try {
       return await transitionItem(this.db, c, request);

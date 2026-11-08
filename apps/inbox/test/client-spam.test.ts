@@ -10,8 +10,10 @@ import {
   basicMonth,
   byWords,
   CONNECT_MODEL,
+  DONE_MS,
   defaultModel,
   deskChip,
+  doneToast,
   filterMonth,
   followDone,
   giftLine,
@@ -278,6 +280,33 @@ describe("one press, and Undo", () => {
     expect(toastFor("spam", app, now).follow?.label).toBe("Always put aside messages from this app");
     expect(followDone("block", kemal)).toBe("Messages from kemal@atolye.example will always be put aside.");
     expect(followDone("let_domain", kemal)).toBe("Everyone at atolye.example comes straight in now.");
+  });
+
+  it("says where Not spam put it, a notice moved to the inbox too, and once sent, links to it there", () => {
+    const now = Date.parse("2026-10-26T10:00:00Z");
+    const invoice = view({
+      type: "message",
+      state: "spam",
+      email: "faturacao@dominios.pt",
+      spam: { screen: "aside", sender: sender("faturacao@dominios.pt", "dominios.pt") },
+    });
+    const notice = {
+      ...invoice,
+      item: { ...invoice.item, flags: { ...invoice.item.flags, notice: true } },
+    } as ItemView;
+    expect(toastFor("not_spam", notice, now).text).toBe(
+      "Moved to your inbox. Messages from faturacao@dominios.pt won't be put aside again.",
+    );
+    expect(toastFor("not_spam", invoice, now).text).toBe(
+      "Back in your inbox. Messages from faturacao@dominios.pt won't be put aside again.",
+    );
+    // Once sent: where it is, with a link to it there, for a little longer than Undo has.
+    expect(doneToast("not_spam", notice)).toBe("Moved to your inbox.");
+    expect(doneToast("not_spam", invoice)).toBe("Back in your inbox.");
+    expect(doneToast("let_in", invoice)).toBe("Let in. It's in your inbox.");
+    expect(doneToast("spam", invoice)).toBeNull();
+    expect(doneToast("looks_fine", invoice)).toBeNull();
+    expect(DONE_MS).toBeGreaterThan(UNDO_MS);
   });
 });
 
