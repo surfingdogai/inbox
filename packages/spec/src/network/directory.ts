@@ -188,10 +188,11 @@ export const doorTypeSchema = z
 
 /**
  * Where a value comes from (§4.10): `declared` by the business (its manifest, its registration, its own structured
- * data), `seen` on its own pages or at its own door, or `probably`, read from its pages by a model or a heuristic. A
- * `probably` value never counts in a filter, except page language.
+ * data), `seen` on its own pages or at its own door, `probably`, read from its pages by a model or a heuristic, or
+ * `maps` (spec 0.16), read from public maps data on a place the network matched to the business's own site. A
+ * `probably` value never counts in a filter, except page language. A reader does not refuse a source it does not know.
  */
-export const factSourceSchema = z.enum(["declared", "seen", "probably"]);
+export const factSourceSchema = z.enum(["declared", "seen", "probably", "maps"]);
 export type FactSource = z.infer<typeof factSourceSchema>;
 
 /** A door as a listing and a card show it (§4.8). A gone door is never shown. */

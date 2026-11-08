@@ -734,7 +734,7 @@
             },
             "src": {
               "type": "string",
-              "enum": ["declared", "seen", "probably"]
+              "enum": ["declared", "seen", "probably", "maps"]
             }
           },
           "required": ["id", "label", "src"]
@@ -753,7 +753,7 @@
               },
               "src": {
                 "type": "string",
-                "enum": ["declared", "seen", "probably"]
+                "enum": ["declared", "seen", "probably", "maps"]
               }
             },
             "required": ["id", "label", "src"]
@@ -787,7 +787,7 @@
           },
           "src": {
             "type": "string",
-            "enum": ["declared", "seen", "probably"]
+            "enum": ["declared", "seen", "probably", "maps"]
           }
         },
         "required": ["v", "src"]
@@ -913,7 +913,7 @@
           "v": {},
           "src": {
             "type": "string",
-            "enum": ["declared", "seen", "probably"]
+            "enum": ["declared", "seen", "probably", "maps"]
           },
           "url": {
             "description": "The page or door it was read from.",

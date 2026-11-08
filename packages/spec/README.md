@@ -219,6 +219,11 @@ or network:
   `next_after` (`catalogueCheckResponseSchema`, `catalogueCheckItemSchema`, `schemas/catalogue-check-response.json`).
   Protocol §4's table lists it, and the switch, `POST /v1/instances/{domain}/catalogue` (0.9), whose answer carries
   `domain` too (`catalogueSwitchResponseSchema`, optional). Nothing a 0.15.0 reader reads changes.
+- 0.16 (optional for a network): a fourth source of a listing's values, `maps` (protocol §4.10, §4.11; network
+  rules version 12, ADR-017 Amendment 8). A crawled entry's position, kind and name may be read from public maps
+  data, on the one place a network matched to the business's own site, each shown with source `maps`, its date and
+  the data's credit (`factSourceSchema`, and `src` in `schemas/business.json`, `businesses.json` and the MCP tools'
+  business outputs). A reader does not refuse a source it does not know (§4.10).
 
 A version number is given when a change merges, in the order changes merge. Work in progress names no number, so
 two changes built side by side never claim the same one.

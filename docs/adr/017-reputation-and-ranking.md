@@ -13,9 +13,11 @@ effect, with bounds on what a network takes), decided, rules version 8 (§15); A
 October 2026: a score counts only what the business cannot make up, a record ranks from three
 customers who confirmed it, late closures, and this network's own reads of a door), decided, rules
 version 9; Amendment 6 (31 October 2026: words that name a kind of business find that kind
-first), decided, rules version 10; and Amendment 7 (1 November 2026: a business's variants take one
+first), decided, rules version 10; Amendment 7 (1 November 2026: a business's variants take one
 place in product search, a live free time only filters, and an ID refused at handover counts against
-nobody), decided, rules version 11 (§15). The decisions are
+nobody), decided, rules version 11; and Amendment 8 (8 November 2026: a listing's one place in public
+maps data, and a search's words read as a person writes them), decided, rules version 12 (§15). The
+decisions are
 the founder's; a number marked *default* is a proposal he may change without a new ADR (§14 lists every
 number and whose it is). The first ranking was withdrawn on 22 September 2026 before it had been
 designed as a whole, and the directory has since been neutral (newest verified first; near a place,
@@ -1025,6 +1027,15 @@ business; cursors that survive the hourly reorder; SMS codes, booking deposits, 
   applies from the day its part of the protocol arrives, with no notice. Its rules are named 0.2.4.
   Ours had two members when it was decided, both its own inboxes, and no other business: published
   while that holds, it takes effect the day it is published, and its changelog entry says so.
+- **Version 12 (Amendment 8), decided 8 November 2026:** a listing whose site the network matched to
+  its one place in public maps data reads from it the position, kind and name its own site does not
+  give, each labelled `maps`, never in a score (A8.1); a search reads a town inside a sentence, a
+  door's words wherever they are, and more words that say nothing (A8.2), is run again with its
+  kind's words when nothing matches every one (A8.3), and an empty answer near a place says what
+  there is (A8.4). A search is read under the version its hour's order was frozen under, so versions 7
+  to 11 stay as they were published. Its rules are named 0.2.5. Ours had three members when it was
+  decided, all its own inboxes, and no other business: published while that holds, it takes effect
+  the day it is published, and its changelog entry says so.
 
 ## Amendment 1 (23 Sep 2026)
 
@@ -2577,3 +2588,107 @@ holds: a business is never marked for an ID it refused, nor a person for one the
 Nothing about the order can be bought.
 
 **Text changed:** the header, A7, §15 (version 11).
+
+## Amendment 8 (8 Nov 2026): a listing's place in public maps data, and words as people write them — rules version 12
+
+**Status: decided (8 Nov 2026)**, as rules version 12 (`"0.2.5"`): version 11 (`"0.2.4"`) amended.
+A network publishes it by its own notice: in force the moment it publishes it when no business but
+its own inboxes is a member of that network then, otherwise at 00:00 UTC on the sixteenth day after
+the day it published it (§11); and never before version 11 takes effect, since it amends it. Ours had
+three members when it was decided, all its own inboxes, and no other business. Published while that
+holds, it takes effect the day it is published, and its changelog entry says so. Every member and
+number of version 11 is kept, but for the ones below.
+
+**Why.** Everyday searches found little. Most local businesses a directory lists are found on their
+own websites, and most of those publish no position and file themselves as online shops: a
+restaurant whose site sells a gift card is an online shop with no place, and no search near its town
+finds it. And a search's words were read as a search box's, not as a person writes them to an
+assistant: "a vegan bakery in Lisbon that delivers", "florist Paris delivery", "dentist Toronto
+tomorrow" read no place, and an answer with nobody near a place said only to try a larger radius,
+which often found nobody either.
+
+### A8.1 A listing's place in public maps data
+
+- **Rule.** When a network matched a business's own website to its one place in public maps data
+  (Overture Maps: the place's name on the site's own pages, with its town, postcode or phone), and
+  that place is within 50 km of where the site's own data says the business is (its point, else its
+  town's centre), or in the country it names, or the site says neither, its listing reads from that
+  place what its own site does not give, each value shown with source `maps`, its date and the data's
+  credit, © Overture Maps Foundation (protocol §4.10, §4.11):
+  - its position, when the site publishes none: before the centre of a town the site names;
+    coarsened to a cell about 5 km across, whoever claimed the listing, never shown as a point
+    (`location_precision: maps`), its distance in whole kilometres; and never a storefront by it,
+    since maps data holds offices and warehouses too;
+  - its kind, when the site files itself only as an online shop: the place's group, as the category
+    of it that its own name or line, its domain's words or the place's name names, else the group's
+    own (for florists, trades, transport, repairers and venues, only a kind a name or line names),
+    with the online shop beside it, so a search for a shop still finds it; never a group of online
+    shops or software companies;
+  - its name, when it has none but its domain (a name that is only the domain in small letters, as
+    site builders fill it in, is none), or only a model's reading of one: the place's name, when it
+    is plainly the domain's business.
+- A business with more than one place (a chain's site) reads none of it, and nor does a place known
+  from OpenStreetMap alone.
+- **Never in a score.** No score, record, reach, leaderboard or census reads it, and nor does the
+  hour's order: only what the listing shows, labelled `maps`, and what `near` and `category` read of
+  it (`order.sources`, `never_used`).
+- **Under version 12 alone.** A network builds listings so only once its directory is ordered under
+  version 12: no answer under version 11 shows, filters or places a business by it.
+
+### A8.2 Words as a person writes them
+
+- **A town inside a sentence:** after `in`, `near` or the like with more words after it ("vegan
+  bakery in Lisbon that delivers", "a guesthouse in London for two nights"), the last such in the
+  search: the clear town of a name, of 50,000 people or more, or one named with its state, province
+  or country after it; never a country there ("made in Italy shoes"), nor a name more often meant as
+  a word. A town followed by a state, province or country it is not in is a place the network does
+  not know ("florist in Paris Ontario").
+- **A state or province after a town**, of the United States, Australia or Canada, by its name or by
+  its code in capitals, names its town of that name ("Paris Texas", "London ON"); NYC, CDMX and Bali
+  name New York City, Mexico City and Denpasar. A town before words that say nothing is read
+  ("dentist Toronto tomorrow"); so are Spanish `en el`, `en la`, `en los` and `en las` and German
+  `nach` before one. A town of another country than the search's `country` is no place, and its words
+  stay words.
+- **A door's words** are read before the place, wherever they are ("florist Paris delivery",
+  "traiteur Paris devis"), and a verb right after `to`, `can`, `please`, `want` and the like asks
+  wherever it is ("a hotel in Kyoto I can book"). An appointment (cita, rendez-vous, Termin,
+  appuntamento, afspraak) asks for a booking door; send (enviar, envoyer) and deliver, with their
+  forms in other languages, for an order door. A search with only a town left once they are out
+  ("book Lisbon") is near that town.
+- **More words that say nothing about a business:** the words a person asks with, the people they ask
+  about and the days they ask for, in English, Portuguese, Spanish, French, German, Italian and Dutch;
+  and a modal verb next to a person ("can you", "I would"), never elsewhere ("trash can").
+- A product search reads its words as before.
+
+### A8.3 When nothing matches every word
+
+- **Rule.** A search near a place, in a country or for what a door does, whose words no business
+  matches every one of, and among which a run of words names a kind on its own beside other words
+  (the one that ends last, the longest of those; never a town's name), is run again with only that
+  run, its place, its door and its filters kept ("vegan bakery in Lisbon" as "bakery" near Lisbon).
+  Its `note` says which words were left out, and its next pages are that search's.
+
+### A8.4 An empty answer near a place says what there is
+
+- **Rule.** An answer that lists nobody near a place says in its `note` how many businesses of the
+  kind its words name the directory lists, and the nearest within 1000 km (the most `radius_km` may
+  be) that match everything else, with the `radius_km` that would list the nearest and all of them,
+  or that none matches that near, and then suggests no larger radius. Those are named in the note,
+  never listed.
+
+### A8 in the rules version
+
+Rules version 12 (`"0.2.5"`) keeps every member and number of version 11. It rewrites `summary`,
+`order.filters` and `order.sources`, and adds a line to `never_used`. A listing's values may carry
+the source `maps`, and a card `location_precision: maps` (protocol spec 0.16). Version 11's document
+stays as it was published, but for `next`, and so do versions 7 to 10's: a search is read, as it is
+ordered, under the version its hour's order was frozen under, which its answer names.
+
+With it, and under every version, since neither is a rule of the order: the MCP tool
+`search_businesses` takes `radius_km` beside `near`, as `GET /v1/businesses` does, and names in its
+`note` each argument it does not take, which it ignores as before (protocol §1).
+
+**Decisions.** A2.5 holds: a filter only leaves businesses out, and a search run again with its
+kind's words finds only what those words would. R25 holds. Nothing about the order can be bought.
+
+**Text changed:** the header, A8, §15 (version 12).

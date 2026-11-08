@@ -34,7 +34,10 @@ available, an age checked at handover, and how an offer is fulfilled, with a sig
 profiles and return policies; a manifest names the versions its feed serves, a reader names the version it reads,
 and a feed may serve version 2 alone. A manifest without `catalogue.versions` serves version 1, as before.
 Spec 0.15.1 adds, optional for a network, the catalogue check (§4.18): how a business's catalogue stands at a
-network, and each product it holds back or changed, by code.
+network, and each product it holds back or changed, by code. Spec 0.16 adds, optional for a network, a fourth source
+of a listing's values, `maps` (§4.10, §4.11): a crawled entry's position, kind and name read from public maps data
+on a place the network matched to the business's own site, each shown as such, with the data's credit; a reader
+does not refuse a source it does not know.
 
 A **network** is a service that inboxes report to: it lists businesses, keeps the receipts they
 publish, gives customers a key and passes, and orders the directory by the published rules. Anyone
@@ -602,6 +605,36 @@ version 7's document stays as it was published, but for `next`. A network puts v
 effect, since it amends it; when both take effect together, a version 6 network's `next` (and a
 signed ping's `next_rules`) names version 8.
 
+Versions 9 to 11 (network rules 0.2.2 to 0.2.4, ADR-017 Amendments 5 to 7) amend version 8 in turn;
+ADR-017 §15 says what each changes. Version 12 (network rules 0.2.5, ADR-017 Amendment 8, decided 8
+November 2026) amends version 11 and keeps every member and number of it, for what a search for
+businesses finds and how it reads its words:
+
+- **A listing's place in public maps data.** A listing whose site the network matched to its one
+  place in public maps data (the place's name on the site's own pages, with its town, postcode or
+  phone), within 50 km of where the site's own data says the business is, or in the country it
+  names, reads from it what its own site does not give: its position, its kind when it is only an
+  online shop, and its name when it has none but its domain, each with source `maps` (§4.10,
+  §4.11). A business with more than one place reads none of it, and no score, record, reach or
+  hour's order does (`never_used`).
+- **Words as a person writes them.** A town inside a sentence ("vegan bakery in Lisbon that
+  delivers"), with its state or province after it ("Paris Texas", "London ON"), or before words that
+  say nothing ("dentist Toronto tomorrow"); the words that ask for a door read before the place,
+  wherever they are ("florist Paris delivery"); and more words that say nothing about a business.
+  `order.filters` lists them all.
+- **When nothing matches every word,** a search near a place, in a country or for what a door does
+  is run again with only the words that name its kind, and its `note` says which were left out.
+- **An empty answer near a place** says in `note` how many of the kind the directory lists, and
+  names the nearest within 1000 km that match, with the `radius_km` that lists them, or says that
+  none does.
+
+Its document rewrites `summary`, `order.filters` and `order.sources`, and adds a line to `never_used`;
+version 11's document stays as it was published, but for `next`. A network puts version 12 in force
+the moment it publishes it when no business but its own inboxes is a member of it then, otherwise at
+00:00 UTC on the sixteenth day after the day it published it, and never before version 11 takes
+effect, since it amends it. A search is read, as it is ordered, under the version its hour's order
+was frozen under, which its answer's `rules` names: under version 11 no listing shows a `maps` value.
+
 **A reader accepts a version newer than it knows.** It reads `version`, `status`, `effective_at`,
 `summary` and `next`, which every version has, ignores the rest, and takes the receipt claims as
 `claimsFromVersion` says (`6` from version 6 on). `readRankingDocument` in `@surfingdog/spec` does
@@ -1017,9 +1050,11 @@ correction and removal, and the fields each jurisdiction asks for); until then a
 ### 4.10 Listing fields
 
 Every value a listing shows has a **source**: `declared` (the business said it: its manifest, its
-registration, its own structured data), `seen` (on its own pages or at its own door) or `probably`
-(read from its pages by a model or a heuristic). A `probably` value is shown with `~` and **never
-counts in a filter**, except page language. A filter reads `declared` and `seen` values alone.
+registration, its own structured data), `seen` (on its own pages or at its own door), `probably`
+(read from its pages by a model or a heuristic) or, since spec 0.16, `maps` (read from public maps
+data, on a place the network matched to the business's own site: §4.11). A `probably` value is shown
+with `~` and **never counts in a filter**, except page language. A filter reads `declared`, `seen`
+and `maps` values alone. A reader does not refuse a source it does not know.
 
 | Member | Meaning |
 |---|---|
@@ -1096,7 +1131,12 @@ A network may list businesses it found on their own websites. Such an entry:
 
 - shows only facts the business published on its own site or at its own doors, each with its source
   and date (`facts`), and **never a phone number, an email address, or the name of a person other
-  than the business's own name**;
+  than the business's own name**; except that, since spec 0.16, a network that matched the site to
+  its one place in public maps data (the place's name on the site's own pages, with its town, postcode
+  or phone, and the place where the site says the business is, when it says) may show that place's
+  position (coarsened as below), its kind (when the site names none but an online shop) and its name
+  (when the site gives none but its domain), each with source `maps`, its date and the data's credit;
+  never for a business with more than one place;
 - shows the town, region and country, never the street, while it is unclaimed; its distance is in
   whole kilometres, at least 1. While it is unclaimed, a network searches and sorts it by a coarse
   point (a cell a few kilometres wide, or its town's centre), never its exact one; a search radius
