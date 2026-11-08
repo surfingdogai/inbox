@@ -969,6 +969,44 @@ const MAX_LINKS = 10;
 const MAX_LINK = 2_000;
 
 /**
+ * A link in an email's text, found as the owner app finds one in a message's (`linkParts` in
+ * apps/inbox/client/src/lib/links.ts; a test holds the two together), so the list under its words
+ * leaves out each link they already show: "http(s)://" and all up to a space, a "<", a ">" or a '"',
+ * a U+FEFF kept inside (a browser drops it from a host: `https://login\uFEFF.paypal.com/` is one link).
+ */
+const LINK_IN_TEXT = /https?:\/\/(?:[^\s<>"]|\uFEFF)+/gi;
+/** What is never the end of a link, but the sentence's after it: punctuation and closing quotes. */
+const AFTER_LINK = new Set("\uFEFF.,;:!?'\"`»”’…。，、）」』】》〉");
+/** A closing bracket, and the one that opens it. */
+const OPENER = new Map([
+  [")", "("],
+  ["]", "["],
+  ["}", "{"],
+]);
+const BRACKETS = new Set("()[]{}");
+
+/**
+ * A link as written, without what follows it in the sentence: a full stop, a closing quote, or a closing
+ * bracket the link did not open, while one it did open stays (`…/wiki/Foo_(bar)`). One pass back from its
+ * end, so a run of punctuation of any length, in an email of any size, takes no longer than its length.
+ */
+function trimLink(written: string): string {
+  const count = new Map<string, number>();
+  for (const c of written) if (BRACKETS.has(c)) count.set(c, (count.get(c) ?? 0) + 1);
+  let end = written.length;
+  while (end > 0) {
+    const c = written[end - 1] ?? "";
+    const opener = OPENER.get(c);
+    if (AFTER_LINK.has(c)) end--;
+    else if (opener !== undefined && (count.get(c) ?? 0) > (count.get(opener) ?? 0)) {
+      count.set(c, (count.get(c) ?? 0) - 1);
+      end--;
+    } else break;
+  }
+  return written.slice(0, end);
+}
+
+/**
  * The http(s) links an email carries, each once: where its HTML's anchors go (a sign-in button's link
  * is often only there), then those written in its text. An image's source, a tracking pixel's
  * included, is never one.
@@ -981,9 +1019,7 @@ export function linksOf(parsed: Pick<Email, "html" | "text">): string[] {
     .matchAll(/<a\b[^>]{0,1000}?\shref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/gi)) {
     found.push(decodeHref(m[1] ?? m[2] ?? m[3] ?? ""));
   }
-  for (const m of (parsed.text ?? "").slice(0, 200_000).matchAll(/https?:\/\/[^\s<>"'`]+/gi)) {
-    found.push(m[0].replace(/[.,;:!?)\]}]+$/, ""));
-  }
+  for (const m of (parsed.text ?? "").slice(0, 200_000).matchAll(LINK_IN_TEXT)) found.push(trimLink(m[0]));
   const out: string[] = [];
   for (const link of found.map((l) => l.trim())) {
     if (!/^https?:\/\/\S+$/i.test(link) || link.length > MAX_LINK || out.includes(link)) continue;

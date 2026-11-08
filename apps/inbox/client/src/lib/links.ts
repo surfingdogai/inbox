@@ -1,3 +1,5 @@
+import { SECOND_LEVEL, SHARED_HOSTS } from "./endings";
+
 /** A run of a message's text: plain, or an http(s) link that opens in a new tab. */
 export interface LinkPart {
   readonly at: number;
@@ -6,15 +8,55 @@ export interface LinkPart {
 }
 
 /**
+ * Where a link may be written in a message: "http(s)://" and all up to a space, a "<", a ">" or a '"'.
+ * A U+FEFF (a byte-order mark, which JavaScript counts as a space) stays inside: a browser drops it from
+ * a host, so `https://login\uFEFF.paypal.com/` is one link, to the whole host, never one to `login`.
+ * The email door finds the links in an email's text the same way (`linksOf`, packages/adapters).
+ */
+const LINK_IN_TEXT = /https?:\/\/(?:[^\s<>"]|\uFEFF)+/gi;
+
+/** What is never the end of a link, but the sentence's after it: punctuation and closing quotes. */
+const AFTER_LINK = new Set("\uFEFF.,;:!?'\"`»”’…。，、）」』】》〉");
+/** A closing bracket, and the one that opens it. */
+const OPENER = new Map([
+  [")", "("],
+  ["]", "["],
+  ["}", "{"],
+]);
+const BRACKETS = new Set("()[]{}");
+
+/**
+ * A link as written, without what follows it in the sentence: a full stop, a comma, a closing quote
+ * (`«https://a.example/x»`), or a closing bracket the link did not open (`(https://a.example/x)`), while
+ * one it did open stays (`https://en.wikipedia.org/wiki/Foo_(bar)`). One pass back from its end, so no
+ * run of punctuation, however long, takes longer than its length. The email door trims the same way.
+ */
+export function trimLink(written: string): string {
+  const count = new Map<string, number>();
+  for (const c of written) if (BRACKETS.has(c)) count.set(c, (count.get(c) ?? 0) + 1);
+  let end = written.length;
+  while (end > 0) {
+    const c = written[end - 1] ?? "";
+    const opener = OPENER.get(c);
+    if (AFTER_LINK.has(c)) end--;
+    else if (opener !== undefined && (count.get(c) ?? 0) > (count.get(opener) ?? 0)) {
+      count.set(c, (count.get(c) ?? 0) - 1);
+      end--;
+    } else break;
+  }
+  return written.slice(0, end);
+}
+
+/**
  * A message's text cut into plain runs and the http(s) links in it, so a link in a message can be
  * opened from the thread. A link keeps exactly what is written; a full stop or a bracket after it
- * stays text, and so does an address no browser can open (`linkUrl`).
+ * stays text (`trimLink`), and so does an address no browser can open (`linkUrl`).
  */
 export function linkParts(text: string): LinkPart[] {
   const out: LinkPart[] = [];
   let at = 0;
-  for (const m of text.matchAll(/https?:\/\/[^\s<>"]+/gi)) {
-    const url = m[0].replace(/[.,;:!?)\]}'"]+$/, "");
+  for (const m of text.matchAll(LINK_IN_TEXT)) {
+    const url = trimLink(m[0]);
     const start = m.index ?? 0;
     if (url.length <= "https://".length || !linkUrl(url)) continue;
     if (start > at) out.push({ at, text: text.slice(at, start) });
@@ -56,9 +98,9 @@ export interface LinkRun {
   readonly text: string;
   /**
    * A piece of the host, which says where the link goes: `domain`, the name its owner registered,
-   * drawn bold (`example.pt` of `my.example.pt`, `example.co.uk`); `sub`, the names before it, drawn
-   * plain, so a long one (`my.example.pt.account-verify.evil-example.net`) never reads as the
-   * domain; `port`.
+   * drawn bold (`example.pt` of `my.example.pt`, `example.co.uk`, `someone.github.io`); `sub`, the names
+   * before it, drawn plain, so a long one (`my.example.pt.account-verify.evil-example.net`) never reads
+   * as the domain; `port`.
    */
   readonly host?: "sub" | "domain" | "port";
   readonly hidden?: true;
@@ -82,44 +124,36 @@ const HIDDEN_CHARS = /[\p{Cf}\p{Zl}\p{Zp}]/u;
  */
 const POSES_AS_HOST = /\\|[@\uFF20\uFE6B][^/?#@\uFF20\uFE6B]*\.[^/?#@\uFF20\uFE6B.]/;
 /**
- * The second-level names many countries' domains are registered under (`shop.com.pt`, `shop.co.uk`,
- * `city.gov.br`): under a two-letter country's ending, the domain is three names. Anywhere else it is
- * the last two. A name missing here draws fewer names bold, never more: never one its owner did not register.
- */
-const UNDER = new Set([
-  "ac",
-  "co",
-  "com",
-  "edu",
-  "go",
-  "gob",
-  "gouv",
-  "gov",
-  "govt",
-  "ltd",
-  "mil",
-  "ne",
-  "net",
-  "nhs",
-  "nom",
-  "or",
-  "org",
-  "plc",
-  "sch",
-]);
-
-/**
  * Where, in a host's name as the browser reaches it, the domain its owner registered starts: 0 for a
- * name that is all domain (`example.pt`, `localhost`, an IP address).
+ * name that is all domain (`example.pt`, `localhost`, an IP address). The domain is the name before
+ * the host's ending (`endingOf`).
  */
 export function domainAt(hostname: string): number {
   if (hostname.startsWith("[") || /^[\d.]+$/.test(hostname)) return 0;
   const names = (hostname.endsWith(".") ? hostname.slice(0, -1) : hostname).split(".");
-  const ending = names.at(-1) ?? "";
-  const second = names.at(-2) ?? "";
-  const take = ending.length === 2 && UNDER.has(second) ? 3 : 2;
+  const take = endingOf(names) + 1;
   if (names.length <= take) return 0;
   return names.slice(0, names.length - take).join(".").length + 1;
+}
+
+/**
+ * How many of a host's last names are its ending, the names its domain is registered under: a
+ * platform's that names each user's site under its own (`github.io`, `pages.dev`, an S3 bucket's
+ * `s3.eu-west-1.amazonaws.com`), so the user's name is in the domain; a country's second level
+ * (`co.uk`, `com.pt`); or else its last name alone (`com`, `pt`).
+ */
+function endingOf(names: readonly string[]): number {
+  const n = names.length;
+  // An S3 bucket's: from its `s3` name (`s3`, `s3-eu-west-1`, `s3-website`) to `amazonaws.com`, with at
+  // most a region and `dualstack` between.
+  const aws = names.lastIndexOf("amazonaws");
+  const awsEnd = names.slice(aws + 1).join(".");
+  if (aws > 0 && (awsEnd === "com" || awsEnd === "com.cn")) {
+    for (let i = aws - 1; i >= Math.max(0, aws - 3); i--) if (/^s3(?:-|$)/.test(names[i] ?? "")) return n - i;
+  }
+  for (const k of [4, 3, 2]) if (n >= k && SHARED_HOSTS.has(names.slice(n - k).join("."))) return k;
+  if (n >= 2 && SECOND_LEVEL.get(names[n - 1] ?? "")?.has(names[n - 2] ?? "")) return 2;
+  return 1;
 }
 
 /**
@@ -162,8 +196,10 @@ export function linkRuns(href: string): LinkRun[] {
 }
 
 /**
- * The host's pieces: as written when it is the host the browser reaches, cut where its domain starts;
- * otherwise what is written is kept for a copy, and the host reached is drawn in its place.
+ * The host's pieces: as written when it is the host the browser reaches, letter for letter, cut where
+ * its domain starts; otherwise what is written is kept for a copy, and the host reached is drawn in its
+ * place. A host written in capitals is drawn as reached, in small letters, as a browser's address bar
+ * has it: a capital I and a small l can look alike (`PaypaI.com` opens `paypai.com`).
  */
 function hostRuns(written: string, url: URL): LinkRun[] {
   const name = url.hostname;
@@ -171,7 +207,7 @@ function hostRuns(written: string, url: URL): LinkRun[] {
   const sub = name.slice(0, at);
   const domain = name.slice(at);
   const port = url.host.slice(name.length);
-  if (written.toLowerCase() === url.host && written.length === url.host.length && !HIDDEN_CHARS.test(written)) {
+  if (written === url.host && !HIDDEN_CHARS.test(written)) {
     const pieces: [NonNullable<LinkRun["host"]>, string][] = [
       ["sub", sub],
       ["domain", domain],
@@ -288,9 +324,10 @@ export function splitLinksBlock(text: string): LinksBlock | null {
 
 /**
  * The links to list under an email's words: those its words do not already show as links (the email
- * door keeps every link an email carries, those in its text too), so none is drawn twice.
+ * door keeps every link an email carries, those in its text too), so none is drawn twice. One the
+ * door kept before it trimmed as `trimLink` does (`…/clientarea.php»`) is the one its words show.
  */
 export function linksToList(block: LinksBlock): string[] {
   const shown = new Set(linkParts(block.body).flatMap((p) => (p.href ? [p.href] : [])));
-  return block.links.filter((l) => !shown.has(l));
+  return block.links.filter((l) => !shown.has(l) && !shown.has(trimLink(l)));
 }

@@ -108,6 +108,38 @@ describe("a link in a message", () => {
     expect(drawn).toContain('data-as="evil-\u2060example.\u2060net"');
   });
 
+  it("turns nothing around: a character that reorders text is drawn only inside a folded piece, which CSS isolates", () => {
+    // A U+202E in the name before an "@": it opens php.nigol.example, and drawn plain it would read
+    // "php.https://paypal.com/elpmaxe.login".
+    const spoofs = [
+      "https://a\u202e@php.nigol.example/moc.lapyap//:sptth",
+      "https://a\u202e@paypal.com/",
+      "https://evil.example/\u202emoc.elgoog/x",
+      "https://evil.example/?q=\u2067x",
+    ];
+    const BIDI = /[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/;
+    for (const href of spoofs) {
+      const [a = ""] = anchors(render(href));
+      // Every one is still there for a copy, but only ever inside a folded piece.
+      expect(textOf(a), href).toBe(href);
+      const unfolded = textOf(a.replace(/<span class="msg-link-gone">[^<]*<\/span>/g, ""));
+      expect(unfolded, href).not.toMatch(BIDI);
+      expect(shownOf(a), href).not.toMatch(BIDI);
+    }
+    expect(shownOf(render(spoofs[0] ?? ""))).toBe("php.nigol.example/moc.lapyap//:sptth");
+    // A folded piece is its own island to the bidi algorithm, in the owner app and the phone app, and two
+    // hyphens are drawn as two (`xn--`), never as the one dash the font's ligature makes of them.
+    for (const sheet of ["../client/src/app.css", "../../mobile/src/app.css"]) {
+      const css = readFileSync(path.resolve(import.meta.dirname, sheet), "utf8");
+      const rule = (selector: string) =>
+        css.slice(css.indexOf(`${selector} {`), css.indexOf("}", css.indexOf(`${selector} {`)));
+      expect(rule(".msg-link-gone"), sheet).toContain("unicode-bidi: isolate;");
+      expect(rule(".msg-link"), sheet).toContain("font-variant-ligatures: none;");
+      expect(rule(".msg-link"), sheet).toContain("unicode-bidi: isolate;");
+    }
+    expect(shownOf(render("https://xn--pypal-4ve.com/"))).toBe("xn--pypal-4ve.com");
+  });
+
   it("is never made of what is not http(s), and what the sender wrote stays text", () => {
     const html = render('javascript:alert(1) <img src=x onerror=alert(1)> "quoted"');
     expect(html).not.toContain("<a ");
@@ -121,8 +153,9 @@ describe("the links an email carried", () => {
 
   it("are a small titled list under its words, each its host and short path, opening in a new tab", () => {
     const html = render(text);
+    // The list is named by its title, as a screen reader's list of lists says it.
     expect(html).toContain(
-      '<div class="msg-links"><div class="msg-links-title">Links in this email</div><ul class="msg-links-list">',
+      '<div class="msg-links"><div class="msg-links-title">Links in this email</div><ul class="msg-links-list" aria-label="Links in this email">',
     );
     expect(html.match(/<li class="msg-links-item">/g)).toHaveLength(2);
     const links = anchors(html);

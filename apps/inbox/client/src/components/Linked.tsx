@@ -48,7 +48,8 @@ function LinksList({ links }: { links: readonly string[] }) {
   return (
     <div className="msg-links">
       <div className="msg-links-title">{LINKS_TITLE}</div>
-      <ul className="msg-links-list">
+      {/* Named by its title, as a screen reader's list of lists says it. */}
+      <ul className="msg-links-list" aria-label={LINKS_TITLE}>
         {keyed.map(({ href, key }) => (
           <li key={key} className="msg-links-item">
             <TextLink href={href} out />

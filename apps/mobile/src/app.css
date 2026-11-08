@@ -594,6 +594,8 @@ button.card {
    host in full, a long path shortened, the folded part still in the text, at no size, for a copy. */
 .msg-link {
   color: var(--link);
+  /* Two hyphens are two (`xn--`, `a--b.example`), never the one dash a font's ligature draws. */
+  font-variant-ligatures: none;
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-decoration-color: color-mix(in srgb, currentcolor 45%, transparent);
@@ -618,6 +620,8 @@ button.card {
 }
 .msg-link-gone {
   font-size: 0;
+  /* What it holds turns nothing around after it: a U+202E in a folded name never reverses the host drawn next. */
+  unicode-bidi: isolate;
 }
 /* Drawn in place of what is folded; the link's own name (its address in full) is what is read aloud. */
 .msg-link-as::before {

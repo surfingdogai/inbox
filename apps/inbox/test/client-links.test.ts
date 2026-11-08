@@ -1,3 +1,4 @@
+import { linksOf } from "@surfingdog/adapters";
 import { LINKS_HEADING as SERVER_HEADING } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
 import {
@@ -10,6 +11,7 @@ import {
   linkRuns,
   linksToList,
   splitLinksBlock,
+  trimLink,
 } from "../client/src/lib/links";
 
 /** A domain registrar's contact verification link, as its email carries it (the token made up). */
@@ -41,6 +43,61 @@ describe("linkParts", () => {
       { at: 5, text: "https://a.example/x", href: "https://a.example/x" },
       { at: 24, text: ")" },
     ]);
+  });
+
+  it("ends a link where the sentence's punctuation starts: a closing quote or a bracket it did not open is text", () => {
+    const hrefs = (text: string) => linkParts(text).flatMap((p) => (p.href ? [p.href] : []));
+    // A bracket the link opened is its own.
+    expect(hrefs("https://en.wikipedia.org/wiki/Foo_(bar)")).toEqual(["https://en.wikipedia.org/wiki/Foo_(bar)"]);
+    expect(linkParts("(see https://en.wikipedia.org/wiki/Foo_(bar)).")).toEqual([
+      { at: 0, text: "(see " },
+      { at: 5, text: "https://en.wikipedia.org/wiki/Foo_(bar)", href: "https://en.wikipedia.org/wiki/Foo_(bar)" },
+      { at: 44, text: ")." },
+    ]);
+    expect(hrefs("[https://a.example/x] {https://a.example/y}")).toEqual([
+      "https://a.example/x",
+      "https://a.example/y",
+    ]);
+    // Closing quotes, in the languages the inbox reads: never inside the address a link opens.
+    expect(linkParts("«https://my.example.pt/clientarea.php»")).toEqual([
+      { at: 0, text: "«" },
+      { at: 1, text: "https://my.example.pt/clientarea.php", href: "https://my.example.pt/clientarea.php" },
+      { at: 37, text: "»" },
+    ]);
+    for (const [open, close] of [
+      ["“", "”"],
+      ["‘", "’"],
+      ["", "…"],
+      ["", "。"],
+      ["", "，"],
+      ["", "、"],
+      ["（", "）"],
+      ["「", "」"],
+      ["`", "`"],
+      ["", "\uFEFF"],
+    ]) {
+      expect(hrefs(`${open}https://a.example/x${close} next`), close).toEqual(["https://a.example/x"]);
+    }
+    expect(trimLink("https://a.example/x)].,;:!?'\"")).toBe("https://a.example/x");
+  });
+
+  it("finds where a link ends in time that grows with its length, however much punctuation follows it", () => {
+    for (const run of [".".repeat(20_000), ")".repeat(20_000), "»".repeat(20_000), ".)".repeat(10_000)]) {
+      const started = performance.now();
+      expect(linkParts(`https://a.example/${run}x`)).toHaveLength(1);
+      expect(linkParts(`see https://a.example/${run}`)[1]?.href).toBe("https://a.example/");
+      expect(performance.now() - started, run.slice(0, 2)).toBeLessThan(1_000);
+    }
+  });
+
+  it("keeps a U+FEFF inside a link: a host it splits is the one host the browser reaches, never a shorter one", () => {
+    const hrefs = (text: string) => linkParts(text).flatMap((p) => (p.href ? [p.href] : []));
+    const split = "https://secure-login.net\uFEFF.paypal.com/signin";
+    expect(hrefs(`Sign in: ${split} today`)).toEqual([split]);
+    expect(linkDisplay(split)).toBe("secure-login.net.paypal.com/signin");
+    expect(linkName(split)).toBe("https://secure-login.net.paypal.com/signin");
+    expect(hrefs("https://login\uFEFF.paypal.com/")).toEqual(["https://login\uFEFF.paypal.com/"]);
+    expect(linkDisplay("https://login\uFEFF.paypal.com/")).toBe("login.paypal.com");
   });
 
   it("leaves an address no browser opens as text: never a link drawn from its raw, reversed letters", () => {
@@ -114,8 +171,17 @@ describe("a link on screen", () => {
     expect(linkDisplay("http://shop.example/a")).toBe("shop.example/a");
     expect(linkDisplay("https://my.example.pt/")).toBe("my.example.pt");
     expect(linkDisplay("https://shop.example/a/b/")).toBe("shop.example/a/b/");
-    expect(linkDisplay("HTTPS://WWW.Example.COM/Path")).toBe("WWW.Example.COM/Path");
     expect(linkDisplay("http://[::1]:8080/a")).toBe("[::1]:8080/a");
+  });
+
+  it("draws a host written in capitals as the browser reaches it, in small letters: a capital I is never read as an l", () => {
+    // `PaypaI.com`, with a capital i, looks like `Paypal.com` in many fonts, and opens paypai.com.
+    expect(linkDisplay("https://PaypaI.com/signin")).toBe("paypai.com/signin");
+    expect(linkDisplay("HTTPS://WWW.Example.COM/Path")).toBe("www.example.com/Path");
+    const runs = linkRuns("https://PaypaI.com/signin");
+    expect(runs.filter((r) => r.host).map((r) => (r.hidden ? r.shows : r.text))).toEqual(["", "paypai.com"]);
+    // Still copied as written.
+    expect(runs.map((r) => r.text).join("")).toBe("https://PaypaI.com/signin");
   });
 
   it("never hides the host, and never shows one that is not where the link goes", () => {
@@ -172,6 +238,92 @@ describe("a link on screen", () => {
     expect(bold("http://localhost:3000/")).toBe("localhost");
     expect(domainAt("www.paypal.com.")).toBe(4);
     expect(domainAt("paypal.com.")).toBe(0);
+  });
+
+  it("draws a platform's user's name bold with the platform's, so a page of theirs never reads as the platform's own", () => {
+    const bold = (host: string) => host.slice(domainAt(host));
+    const users = [
+      "paypal-login.github.io",
+      "apple-id.pages.dev",
+      "x.workers.dev",
+      "x.vercel.app",
+      "x.netlify.app",
+      "x.herokuapp.com",
+      "x.blogspot.com",
+      "x.myshopify.com",
+      "x.wixsite.com",
+      "x.azurewebsites.net",
+      "x.web.app",
+      "x.firebaseapp.com",
+      "x.appspot.com",
+      "x.s3.amazonaws.com",
+      "x.cloudfront.net",
+      "x.sharepoint.com",
+      "x.ngrok-free.app",
+    ];
+    for (const host of users) expect(bold(host), host).toBe(host);
+    expect(bold("paypal.com.secure-login.github.io")).toBe("secure-login.github.io");
+    expect(bold("docs.paypal-login.github.io")).toBe("paypal-login.github.io");
+    expect(bold("acct.blob.core.windows.net")).toBe("acct.blob.core.windows.net");
+    // An S3 bucket's, in any region: its name and the region's endpoint.
+    for (const host of [
+      "bucket.s3.eu-west-1.amazonaws.com",
+      "bucket.s3-eu-west-1.amazonaws.com",
+      "bucket.s3.dualstack.eu-west-1.amazonaws.com",
+      "bucket.s3-website-us-east-1.amazonaws.com",
+      "bucket.s3-website.eu-west-2.amazonaws.com",
+      "bucket.s3.cn-north-1.amazonaws.com.cn",
+    ]) {
+      expect(bold(host), host).toBe(host);
+    }
+    expect(bold("paypal.com.s3.amazonaws.com")).toBe("com.s3.amazonaws.com");
+    // The platform's own: its name alone, and nothing that only ends like one.
+    expect(bold("github.io")).toBe("github.io");
+    expect(bold("pages.github.io")).toBe("pages.github.io");
+    expect(bold("x.amazonaws.com")).toBe("amazonaws.com");
+    expect(bold("x.s3x.amazonaws.com")).toBe("amazonaws.com");
+    expect(bold("x.s3.amazonaws.com.evil.example")).toBe("evil.example");
+    expect(bold("paypal.github.io.evil.example")).toBe("evil.example");
+    expect(linkDisplay("https://paypal-login.github.io/signin")).toBe("paypal-login.github.io/signin");
+  });
+
+  it("draws three names bold under a country's ending only where it registers domains under the second", () => {
+    const bold = (host: string) => host.slice(domainAt(host));
+    // No such second level: the second name is the domain, whoever holds the name before it.
+    for (const host of [
+      "paypal.com.ch",
+      "paypal.gov.de",
+      "paypal.com.ie",
+      "paypal.co.ie",
+      "paypal.ltd.eu",
+      "paypal.com.ca",
+      "paypal.com.be",
+      "paypal.co.de",
+    ]) {
+      expect(bold(host), host).toBe(host.slice("paypal.".length));
+    }
+    // Where it does: three names.
+    for (const host of [
+      "x.com.au",
+      "x.co.jp",
+      "x.co.nz",
+      "x.com.mx",
+      "x.org.uk",
+      "x.ac.uk",
+      "x.gov.uk",
+      "x.com.br",
+      "x.co.za",
+      "x.com.tr",
+      "x.co.in",
+      "x.com.pt",
+      "x.gov.pt",
+      "x.gob.es",
+      "x.gouv.fr",
+      "x.go.jp",
+      "x.govt.nz",
+    ]) {
+      expect(bold(`www.${host}`), host).toBe(host);
+    }
   });
 
   it("never draws a path or a query that could be read as the host, nor a path not where the link goes", () => {
@@ -286,5 +438,38 @@ describe("the links listed under an email", () => {
     // An email with no words of its own: every link is listed.
     const bare = splitLinksBlock(`${LINKS_HEADING}\nhttps://a.example/x\nhttps://b.example/y`);
     expect(linksToList(bare ?? { body: "", links: [] })).toEqual(["https://a.example/x", "https://b.example/y"]);
+    // Kept before the door trimmed a closing quote: the link its words show, not listed again.
+    const kept = splitLinksBlock(
+      `Pague em «https://my.example.pt/clientarea.php».\n\n${LINKS_HEADING}\nhttps://my.example.pt/clientarea.php»`,
+    );
+    expect(linksToList(kept ?? { body: "", links: ["x"] })).toEqual([]);
+  });
+});
+
+describe("the links the email door keeps of an email's text", () => {
+  it("are the links the owner app draws in it, so the list under its words leaves out each one they show", () => {
+    const texts = [
+      "Pay here: https://my.example.pt/viewinvoice.php?id=118. Thanks!",
+      "«https://my.example.pt/clientarea.php» e “https://my.example.pt/cart.php”",
+      "See (https://a.example/x), https://en.wikipedia.org/wiki/Foo_(bar) and [https://a.example/y].",
+      "'https://a.example/q' `https://a.example/code` https://a.example/it's https://a.example/z…",
+      "请看 https://a.example/a。 https://a.example/b， https://a.example/c、 （https://a.example/d） 「https://a.example/e」",
+      '<https://a.example/angle> "https://a.example/quoted" https://a.example/x?y=1&z=2#top!',
+      `https://a.example/${".".repeat(5_000)}`,
+    ];
+    for (const text of texts) {
+      const drawn = linkParts(text).flatMap((p) => (p.href ? [p.href] : []));
+      expect(linksOf({ text }), text.slice(0, 60)).toEqual([...new Set(drawn)]);
+      const block = splitLinksBlock(`${text}\n\n${LINKS_HEADING}\n${linksOf({ text }).join("\n")}`);
+      expect(block && linksToList(block), text.slice(0, 60)).toEqual([]);
+    }
+  });
+
+  it("are found in time that grows with an email's length, however much punctuation follows a link", () => {
+    const started = performance.now();
+    // The first is too long to be an address to open; the second ends where its brackets start.
+    const text = `https://a.example/${".".repeat(20_000)}x https://b.example/${")".repeat(20_000)}`;
+    expect(linksOf({ text })).toEqual(["https://b.example/"]);
+    expect(performance.now() - started).toBeLessThan(1_000);
   });
 });
