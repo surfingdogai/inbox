@@ -1,5 +1,6 @@
 import { App as CapApp } from "@capacitor/app";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Linked } from "../../../inbox/client/src/components/Linked";
 import { formatDay, formatWhen, partyName, stateWord } from "../../../inbox/client/src/lib/format";
 import {
   ACT_LABEL,
@@ -298,10 +299,15 @@ export function Item({
         <Facts detail={detail} tz={tz} />
         {(words.length > 0 || first) && (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {first && <div className="bubble">{first}</div>}
+            {/* Their words with their links as the owner app draws them: opened in the phone's browser. */}
+            {first && (
+              <div className="bubble">
+                <Linked text={first} />
+              </div>
+            )}
             {words.map((t) => (
               <div key={t.id} className={`bubble${t.direction === "in" ? "" : " out"}`}>
-                {t.body}
+                <Linked text={t.body} />
               </div>
             ))}
           </div>

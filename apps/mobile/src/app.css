@@ -575,6 +575,7 @@ button.card {
 .bubble {
   align-self: flex-start;
   max-width: 88%;
+  min-width: 0;
   padding: 10px 14px;
   background: color-mix(in srgb, var(--card) 75%, transparent);
   border: 1px solid var(--line);
@@ -582,11 +583,85 @@ button.card {
   font-size: 14px;
   line-height: 1.45;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .bubble.out {
   align-self: flex-end;
   border-radius: 16px 16px 6px 16px;
   background: var(--violet-bg);
+}
+/* A link in what someone wrote, drawn by the owner app's own component (inbox/client Linked.tsx): its
+   host in full, a long path shortened, the folded part still in the text, at no size, for a copy. */
+.msg-link {
+  color: var(--link);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-decoration-color: color-mix(in srgb, currentcolor 45%, transparent);
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+  border-radius: 4px;
+  unicode-bidi: isolate;
+}
+.msg-link:active {
+  background: color-mix(in srgb, currentcolor 12%, transparent);
+}
+.msg-link:focus-visible {
+  outline: 2px solid currentcolor;
+  outline-offset: 2px;
+}
+.msg-link-host {
+  font-weight: 600;
+}
+.msg-link-gone {
+  font-size: 0;
+}
+/* Drawn in place of what is folded; the link's own name (its address in full) is what is read aloud. */
+.msg-link-as::before {
+  content: attr(data-as);
+}
+.msg-link-out {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  margin-left: 2px;
+  vertical-align: -1px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.msg-links {
+  display: block;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  white-space: normal;
+}
+.msg-links:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+.msg-links-title {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.msg-links-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  gap: 6px;
+}
+.msg-links-item {
+  display: block;
+  min-width: 0;
 }
 .field {
   display: flex;

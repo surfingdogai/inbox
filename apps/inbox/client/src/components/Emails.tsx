@@ -41,9 +41,9 @@ export function Emails({ mail, tz }: { mail: readonly Mail[]; tz: string | undef
                 {formatDateTime(m.created_at, tz)}
               </time>
               {open === m.id && (
-                <pre className="mail-body row-glass">
+                <div className="mail-body row-glass">
                   <Linked text={m.body} />
-                </pre>
+                </div>
               )}
             </li>
           );

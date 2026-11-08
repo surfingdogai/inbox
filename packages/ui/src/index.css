@@ -53,6 +53,8 @@
   --btn-primary-bg: var(--ink);
   --btn-primary-fg: #ffffff;
   --field-alpha: 0.5;
+  /* A link in what someone wrote (a message, an email): blue, or the business's accent once it chose one. */
+  --text-link: var(--link, #2c54d4);
 }
 
 /* Night: same light fields, dimmer; chrome stays quiet. */
@@ -90,6 +92,7 @@
     --btn-primary-bg: var(--ink);
     --btn-primary-fg: #0d0e26;
     --field-alpha: 0.28;
+    --text-link: var(--link, #a8bcff);
   }
 }
 :root[data-theme="dark"],
@@ -126,6 +129,7 @@
   --btn-primary-bg: var(--ink);
   --btn-primary-fg: #0d0e26;
   --field-alpha: 0.28;
+  --text-link: var(--link, #a8bcff);
 }
 
 /* ------------------------------------------------------------------ */
