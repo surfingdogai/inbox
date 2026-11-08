@@ -129,12 +129,13 @@ and let the owner answer notifications by email.
      it, no webhook, event stream, integration key or owner AI reads it, the AI spam check never reads it
      and nothing of it goes to the shared list; the local spam checks still run. It alerts nobody. The
      owner reads notices under Notices, out of every other list, and moves one to the inbox (a
-     conversation from then on, still the owner's alone) or deletes it. A notice put aside as spam that a
-     person brings back with Not spam is moved to the inbox the same way, where they look for it (8 November
-     2026): only where it is listed changes. A notice that answers a
-     conversation lands on it as any reply does. Whether an email is a notice is read from its shape
-     alone, never its words: a code or a sign-in link is an account's mail, alerting the owner, only when
-     the receiving server vouched for its domain; from anyone else it is a notice. A website form's email
+     conversation from then on, still the owner's alone) or deletes it. A notice put aside as spam, as it
+     arrived or by a person, is listed under Spam alone; one a person brings back with Not spam is moved to
+     the inbox the same way, where they look for it (8 November 2026): only where it is listed changes. A
+     notice that answers a conversation lands on it as any reply does. Whether an email is a notice is
+     read from its shape alone, never its words: a code or a sign-in link is an account's mail, alerting
+     the owner, only when the receiving server vouched for its domain; from anyone else it is a notice. A
+     website form's email
      (a sender that takes no answer, no list's headers, and a `Reply-To` naming someone else who does) is
      a person's message, screened as any other. The owner's AI and an integration key may only mark
      owner-only mail as spam: they move none, answer none, write no note on one, and open none of its

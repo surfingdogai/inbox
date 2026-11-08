@@ -327,6 +327,27 @@ describe("transitionItem", () => {
     expect(reopened.view.item).toMatchObject({ state: "open", version: 3 });
   });
 
+  it("opens a closed message again when it is reopened: listed with what is open, never under Done", async () => {
+    const { db } = await setup();
+    const m = await createItem(db, form(), {
+      type: "message",
+      payload: { text: "Is my wheel ready?" },
+      contact: { email: "rita@example.com" },
+    });
+    const closed = await transitionItem(db, owner, { itemId: m.view.item.id, event: "close" });
+    expect(closed.view.item.closedAt).not.toBeNull();
+    // The customer writes again, or the owner presses Reopen: open, with no time it was closed.
+    const reopened = await transitionItem(db, form(undefined, m.accessToken), {
+      itemId: m.view.item.id,
+      event: "reopen",
+    });
+    expect(reopened.view.item).toMatchObject({ state: "open", closedAt: null });
+    const [row] = await db.orm.select({ closedAt: items.closedAt }).from(items).where(eq(items.id, m.view.item.id));
+    expect(row?.closedAt).toBeNull();
+    const open = await new Capabilities(db).listItems(owner, { limit: 50, open_only: true, sandbox: false });
+    expect(open.items.map((v) => v.item.id)).toContain(m.view.item.id);
+  });
+
   it("replays a transition for the same idempotency key", async () => {
     const { db, svc1 } = await setup();
     const created = await createItem(db, agent("c1"), booking(svc1));

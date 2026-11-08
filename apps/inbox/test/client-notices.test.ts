@@ -5,6 +5,7 @@ import {
   MOVED_LINE,
   MOVED_TO_INBOX,
   NOTICES_TOP,
+  newestNotice,
   newNotices,
   noticesLine,
   RECENT_NOTICES_MS,
@@ -85,6 +86,10 @@ describe("the Notices view", () => {
     expect(readNoticesSeen("")).toBeNull();
     expect(readNoticesSeen("soon")).toBeNull();
     expect(readNoticesSeen("-5")).toBeNull();
+    // Seen is kept as when the newest notice listed came, by the inbox's clock, never the browser's.
+    expect(newestNotice(times.map((t, i) => view(`n${i}`, { notice: true }, t)))).toBe(Date.parse(times[0] ?? ""));
+    expect(newestNotice([])).toBeNull();
+    expect(newNotices(times, newestNotice([view("n0", { notice: true }, times[1])]), now)).toBe(1);
     // The rail's counts carry when each came.
     const counts = countsFrom(
       page([]),

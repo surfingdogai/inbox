@@ -1,4 +1,4 @@
-import type { Item } from "./types";
+import type { Item, ItemView } from "./types";
 
 /**
  * Notices in the owner app: emails from systems (receipts, account and newsletter mail, an
@@ -35,6 +35,19 @@ export function wasNotice(item: Pick<Item, "flags">): boolean {
 export const NOTICES_SEEN_KEY = "sdi.notices.seen";
 /** Before you ever opened Notices here, those of the last week are the new ones. */
 export const RECENT_NOTICES_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * When the newest of the notices listed came, by the inbox's clock: what "seen" is kept as, once
+ * Notices is opened. Null when none is listed.
+ */
+export function newestNotice(views: readonly Pick<ItemView, "item">[]): number | null {
+  let newest: number | null = null;
+  for (const v of views) {
+    const at = Date.parse(v.item.createdAt);
+    if (Number.isFinite(at) && (newest === null || at > newest)) newest = at;
+  }
+  return newest;
+}
 
 /** When you last opened Notices, as kept: null when never, or when what is kept is not a time. */
 export function readNoticesSeen(raw: string | null): number | null {

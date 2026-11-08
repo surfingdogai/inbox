@@ -89,7 +89,10 @@ export function NoticeActs({
 
 // ---- new notices, said quietly above the inbox -----------------------------------------------------
 
-/** When this browser last opened Notices: read once, then kept here, so every line agrees at once. */
+/**
+ * When the newest notice this browser listed under Notices came, by the inbox's own clock: read once,
+ * then kept here, so every line agrees at once, and taken from another tab as it opens Notices.
+ */
 let seenAt: number | null | undefined;
 const seenListeners = new Set<() => void>();
 
@@ -106,16 +109,29 @@ function seenSnapshot(): number | null {
 
 function onSeen(listener: () => void): () => void {
   seenListeners.add(listener);
+  // Notices opened in another tab: not new here either.
+  const elsewhere = (e: StorageEvent) => {
+    if (e.key !== NOTICES_SEEN_KEY) return;
+    seenAt = readNoticesSeen(e.newValue);
+    listener();
+  };
+  window.addEventListener("storage", elsewhere);
   return () => {
     seenListeners.delete(listener);
+    window.removeEventListener("storage", elsewhere);
   };
 }
 
-/** Notices opened now: those that came before are not new any more, on this browser. */
-export function markNoticesSeen(at: number = Date.now()): void {
-  seenAt = at;
+/**
+ * Notices opened: those listed are not new any more, on this browser. `newest` is when the newest of
+ * them came, by the inbox's clock (never the browser's, which may be off), and only ever moves on.
+ */
+export function markNoticesSeen(newest: number): void {
+  const seen = seenSnapshot();
+  if (seen !== null && newest <= seen) return;
+  seenAt = newest;
   try {
-    localStorage.setItem(NOTICES_SEEN_KEY, String(at));
+    localStorage.setItem(NOTICES_SEEN_KEY, String(newest));
   } catch {
     // A private window keeps it for this visit only.
   }

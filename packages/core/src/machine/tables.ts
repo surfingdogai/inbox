@@ -1354,9 +1354,10 @@ export const messageMachine: Machine<MessageState> = {
       from: ["answered", "closed"],
       to: "open",
       by: [...customers, ...owners, "system"],
-      // A customer's reply reopens it, however long they write.
+      // A customer's reply reopens it, however long they write: open again, listed with what is open.
       input: detailsInput,
       effects: ["notify_owner"],
+      reopens: true,
     },
     { event: "close", label: "Close", from: ["open", "answered"], to: "closed", by: owners, effects: ["close"] },
     {

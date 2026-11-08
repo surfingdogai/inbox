@@ -1821,8 +1821,9 @@ export class Capabilities {
     // the owner's AI or another system never finds it, by a search for its code either.
     if (!readsAccountMail(caller)) conditions.push(sql.raw(`NOT ${ownerOnlySql("items.flags")}`));
     // A notice (an email from a system that answers no conversation) is listed under Notices alone, until
-    // the owner moves it to the inbox; put aside, it is under Spam with everything else put aside.
-    if (input.notices) conditions.push(sql.raw(noticeListedSql("items.flags")));
+    // the owner moves it to the inbox; put aside, by the owner too, it is under Spam with everything else
+    // put aside, and only there.
+    if (input.notices) conditions.push(sql.raw(noticeListedSql("items.flags")), sql`${items.state} <> 'spam'`);
     else if (!spamList) conditions.push(sql.raw(`NOT ${noticeListedSql("items.flags")}`));
     // What the spam filter holds or is still screening waits under Held (ADR-041), not on the desk:
     // listed only when asked for by its screen.
@@ -2097,15 +2098,9 @@ export class Capabilities {
       }
       // Not spam on a notice brings it back to the inbox, where the person looked for it, as Move to
       // inbox does: only where it is listed changes. It stays the owner's alone (`isOwnerOnly`): no rule,
-      // webhook, key or AI reads it, and nothing answers it by itself. A replay moves it once.
+      // webhook, key or AI reads it, and nothing answers it by itself.
       const moved =
-        input.event === "unspam" && ownerOnly?.notice && !ownerOnly.inInbox
-          ? await setFlags(this.db, caller, {
-              itemId: input.item_id,
-              flags: { inInbox: true },
-              reason: "Not spam: moved to the inbox",
-            })
-          : null;
+        input.event === "unspam" && ownerOnly?.notice ? await this.noticeToInbox(caller, input.item_id) : null;
       const done = moved ? { ...r, view: moved } : r;
       return ownerOnly && !readsAccountMail(caller)
         ? { ...done, view: { ...done.view, item: withheldItem(done.view.item) } }
@@ -2122,6 +2117,25 @@ export class Capabilities {
       const retried = error.code === "idempotency_mismatch" && c.idempotency !== undefined;
       if (!late && !retried) throw error;
       return transitionItem(this.db, c, { ...request, event: "record_cancel_late" });
+    }
+  }
+
+  /**
+   * A notice brought back with Not spam, moved to the inbox once: a replay, or a second press racing
+   * the first, writes nothing more (`onlyChanges`), and one that lost the race to write reads it again.
+   */
+  private async noticeToInbox(caller: Caller, itemId: string): Promise<ItemView> {
+    for (let tries = 1; ; tries++) {
+      try {
+        return await setFlags(this.db, caller, {
+          itemId,
+          flags: { inInbox: true },
+          reason: "Not spam: moved to the inbox",
+          onlyChanges: true,
+        });
+      } catch (error) {
+        if (tries >= 3 || !(error instanceof WriteError) || error.code !== "version_conflict") throw error;
+      }
     }
   }
 

@@ -217,13 +217,7 @@ export function SpamActionsProvider({ children }: { children: ReactNode }) {
     };
   }, [commit]);
 
-  // A notice after the act is gone after a while, one with a link a little later; one with a problem
-  // stays until dismissed.
-  useEffect(() => {
-    if (!notice || notice.tone === "danger") return;
-    const t = setTimeout(() => setNotice(null), notice.open ? DONE_MS : UNDO_MS);
-    return () => clearTimeout(t);
-  }, [notice]);
+  const dismiss = useCallback(() => setNotice(null), []);
 
   const hidden = useMemo(() => new Set([...sending, ...(pending ? [pending.view.item.id] : [])]), [pending, sending]);
   const value = useMemo(() => ({ act, hidden, flush, tell }), [act, hidden, flush, tell]);
@@ -248,29 +242,48 @@ export function SpamActionsProvider({ children }: { children: ReactNode }) {
             </button>
           </output>
         )}
-        {!pending && notice && (
-          <output className="toast glass-strong spam-toast">
-            <i className={notice.tone === "danger" ? "dot dot-warning" : "dot"} />
-            <div className="x">
-              {notice.text}
-              {notice.open && (
-                <Link
-                  to="/items/$id"
-                  params={{ id: notice.open }}
-                  search={{}}
-                  className="link-button"
-                  onClick={() => setNotice(null)}
-                >
-                  Open it
-                </Link>
-              )}
-            </div>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setNotice(null)}>
-              Dismiss
-            </button>
-          </output>
-        )}
+        {!pending && notice && <SaidToast said={notice} onDismiss={dismiss} />}
       </div>
     </Ctx.Provider>
+  );
+}
+
+/**
+ * What was done, said after the act: gone after a while, one with a link a little later, one with a
+ * problem never by itself. While the pointer or the keyboard is on it, it stays, and its time starts
+ * again once they leave, so its link can always be reached (WCAG 2.2.1).
+ */
+function SaidToast({ said, onDismiss }: { said: Said; onDismiss: () => void }) {
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const held = hovered || focused;
+  useEffect(() => {
+    if (said.tone === "danger" || held) return;
+    const t = setTimeout(onDismiss, said.open ? DONE_MS : UNDO_MS);
+    return () => clearTimeout(t);
+  }, [said, held, onDismiss]);
+  return (
+    <output
+      className="toast glass-strong spam-toast"
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocused(false);
+      }}
+    >
+      <i className={said.tone === "danger" ? "dot dot-warning" : "dot"} />
+      <div className="x">
+        {said.text}
+        {said.open && (
+          <Link to="/items/$id" params={{ id: said.open }} search={{}} className="link-button" onClick={onDismiss}>
+            Open it
+          </Link>
+        )}
+      </div>
+      <button type="button" className="btn btn-ghost btn-sm" onClick={onDismiss}>
+        Dismiss
+      </button>
+    </output>
   );
 }

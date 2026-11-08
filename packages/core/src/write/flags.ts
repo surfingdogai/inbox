@@ -82,16 +82,31 @@ export function withheldItem(item: Item): Item {
   return { ...item, subject: null, payload: { text: withheldText(item.flags) } };
 }
 
-/** Changes flags (needs_human, priority) as its own event, so version and history stay honest. */
+/**
+ * Changes flags (needs_human, priority) as its own event, so version and history stay honest.
+ * `onlyChanges`: flags the item has already change nothing, and write no event (a press repeated, or
+ * racing another, moves a notice to the inbox once); the item is returned as it is.
+ */
 export async function setFlags(
   db: Db,
   caller: Caller,
-  input: { itemId: string; flags: Partial<ItemFlags>; reason?: string; causation?: { id: string; depth: number } },
+  input: {
+    itemId: string;
+    flags: Partial<ItemFlags>;
+    reason?: string;
+    causation?: { id: string; depth: number };
+    onlyChanges?: true;
+  },
 ): Promise<ItemView> {
   const now = nowOf(caller);
   const [row] = await db.orm.select().from(items).where(eq(items.id, input.itemId));
   if (!row) throw new WriteError("not_found", "no such item");
   const item = rowToItem(row);
+  if (input.onlyChanges && Object.entries(input.flags).every(([k, v]) => item.flags[k as keyof ItemFlags] === v)) {
+    const settings = await readSettings(db);
+    const hidden = await hiddenTransitions(db, [{ item, legacyPromise: row.legacyPromise }], settings, now);
+    return viewFor(item, permissionKind(caller), undefined, hidden.get(item.id), await ownerClock(db, settings));
+  }
   const flags = itemFlagsSchema.parse({ ...item.flags, ...input.flags });
   const seq = item.version + 1;
   const eventId = ulid();

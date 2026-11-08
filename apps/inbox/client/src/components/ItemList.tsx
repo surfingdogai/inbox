@@ -5,7 +5,7 @@ import { problemOf } from "../lib/api";
 import { type Filter, filterLabel, paramsFor, visibleIn, withQuery } from "../lib/filters";
 import { partyName, relativeTime, slotShort, snippetFor, TYPE_CLASS, titleFor } from "../lib/format";
 import { ownerLocale } from "../lib/geo";
-import { NOTICES_EMPTY, NOTICES_TOP } from "../lib/notices";
+import { NOTICES_EMPTY, NOTICES_TOP, newestNotice } from "../lib/notices";
 import { useEmailChannel, useItemPages, useSettings, useSpam } from "../lib/queries";
 import {
   ACT_LABEL,
@@ -62,11 +62,11 @@ export function ItemList({
     return () => clearTimeout(timer);
   }, [draft, q, navigate]);
 
-  // Notices opened: those listed are not new any more (the line above the inbox counts from now).
-  const shownNotices = filter === "notices" ? pages.data : undefined;
+  // Notices opened: those listed are not new any more (the line above the inbox counts what came after).
+  const newestShown = filter === "notices" ? newestNotice((pages.data?.pages ?? []).flatMap((p) => p.items)) : null;
   useEffect(() => {
-    if (shownNotices) markNoticesSeen();
-  }, [shownNotices]);
+    if (newestShown !== null) markNoticesSeen(newestShown);
+  }, [newestShown]);
 
   const { hidden } = useSpamActions();
   const listed = (pages.data?.pages ?? [])
