@@ -62,10 +62,9 @@ search fails. Who sent it is never needed, and is never kept.
    call on that session, and never written.
 5. **Kept without a time limit.** Nothing deletes a record.
 6. **Our own traffic is marked.** Calls from our own machines, the uptime monitor, our crawler, our
-   tests and evaluation runs (which send a `Surfingdog-Own` header, or Agent Rooms' `Sd-Own-Traffic`
-   for its tools at the one address), and calls that carry our admin or operations token are kept,
-   flagged as ours, and left out of every count unless we ask for our own. Anyone can send either
-   header: it only moves their own calls out of the counts.
+   tests and evaluation runs (which send a `Surfingdog-Own` header), and calls that carry our admin or
+   operations token are kept, flagged as ours, and left out of every count unless we ask for our own.
+   Anyone can send the header: it only moves their own calls out of the counts.
 7. **Read by asking, with no page.** An admin endpoint, behind our admin token, gives the calls per day
    and door, the distinct callers per day and how many keys hashed them, the calls by tool, client and
    platform, the top searches, the searches that found nothing, the slow calls and the failures. No
@@ -85,12 +84,11 @@ business or a caller.
 
 - **Requests:** every tool a caller of the doors called (1): a search, a lookup, a check of a website
   or its DNS, a request to a business or a report on how one answered, listing or updating a
-  business, starting an inbox, the census or the categories, and at the one address Agent Rooms'
-  tools; each tool call one, whether or not it found anything. No caller can be told to be an AI
-  agent rather than another program, so every caller counts but those left out. Left out: our own
-  traffic (6); the protocol's handshakes, discovery and waiting (`initialize`, `tools/list`,
-  `server/discover`, `ping`, `resources/list`, `prompts/list`, every `notifications/` method,
-  `tasks/get`, and Agent Rooms' `room_wait`, its long wait for news) and calls to a tool the directory
+  business, starting an inbox, the census or the categories; each tool call one, whether or not it
+  found anything. No caller can be told to be an AI agent rather than another program, so every
+  caller counts but those left out. Left out: our own traffic (6); the protocol's handshakes,
+  discovery and waiting (`initialize`, `tools/list`, `server/discover`, `ping`, `resources/list`,
+  `prompts/list`, every `notifications/` method and `tasks/get`) and calls to a tool the directory
   does not serve; calls turned away for coming too fast (`rate_limited`); and a monitor, a caller
   whose every such call in its day was the same tool with the same words, five times or more (on a
   day with two keys, each key's part of the day on its own). A lookup's or a check's arguments are
@@ -103,6 +101,18 @@ business or a caller.
 
 A count of the requests from people's own assistants, apart from directories and testing tools, is
 planned, as one more key of the same block.
+
+## Amendment, 8 November 2026: Agent Rooms off the one address
+
+The founder's decision: "Rooms is a side project". Since 31 October our one MCP address,
+`surfingdog.ai/mcp`, had also listed Agent Rooms' tools and passed their calls on to Rooms; those
+calls were recorded by tool name, and Rooms' own marker for its tests (`Sd-Own-Traffic`) marked a call
+as ours. The one address no longer lists them: a call of one there is a tool the directory does not
+serve. So:
+
+- only calls of the directory's own tools are requests, and the room calls recorded by name before
+  count for nothing: the totals say what the note says from the first day;
+- `Sd-Own-Traffic` no longer marks a call as ours (6).
 
 ## Consequences
 

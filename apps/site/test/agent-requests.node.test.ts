@@ -153,12 +153,12 @@ describe("the note on what counts", () => {
 
   it("says what counts, what does not, and what an agent is, as the network counts them", () => {
     for (const said of [
-      "Any tool an agent calls, over MCP, A2A or the REST API: a search, a lookup, a check of a website or its DNS, a request to a business, a report on how a business answered, listing or updating a business, starting an inbox, reading the census or the categories, or talking with another AI in Agent Rooms.",
+      "Any tool an agent calls, over MCP, A2A or the REST API: a search, a lookup, a check of a website or its DNS, a request to a business, a report on how a business answered, listing or updating a business, starting an inbox, or reading the census or the categories.",
       "Each tool call is one request, whether or not it found anything.",
       "We cannot tell an AI agent from any other program: every caller of these doors counts, except those listed below.",
       "The count covers the last 7 whole days, midnight to midnight UTC: today is counted once it is over.",
       "Our own traffic: our tests, our monitors and our crawler.",
-      "connecting, listing the tools, discovery, pings, asking after a task and waiting for news in an Agent Room. And calls to a tool the network does not have.",
+      "connecting, listing the tools, discovery, pings and asking after a task. And calls to a tool the network does not have.",
       "Calls turned away for coming too fast.",
       "A caller whose only requests in a day were the same one, five times or more.",
       "so there the same tool counts as the same request",
@@ -177,6 +177,8 @@ describe("the note on what counts", () => {
     }
     // No claim it cannot back: no "users", no "people" counted as such, no "this week", no hourly count.
     expect(page).not.toMatch(/this week|\busers\b|unique visitors|once an hour|answered or not/i);
+    // Agent Rooms is not part of the count, nor of what the page says (taken off on 8 November 2026).
+    expect(page).not.toMatch(/\bAgent Rooms?\b|room_|another AI/);
     // Each part of the headline wraps on a phone rather than running into the gutter.
     expect(page).toMatch(
       /@media \(max-width: 520px\) \{ \.ar-line :global\(\.ar-part\) \{ display: block; white-space: normal; \}/,
@@ -207,12 +209,17 @@ describe("the note on what counts", () => {
       "so no caller counts twice",
       "over the last seven whole UTC days, counted once a day after midnight",
       "calls turned away for coming too fast (`rate_limited`)",
-      "Agent Rooms' `room_wait`, its long wait for news",
+      "`prompts/list`, every `notifications/` method and `tasks/get`) and calls to a tool the directory does not serve",
       "No caller can be told to be an AI agent rather than another program",
       "the busiest day is the one with the most",
-      "or Agent Rooms' `Sd-Own-Traffic` for its tools at the one address",
+      "tests and evaluation runs (which send a `Surfingdog-Own` header), and calls that carry our admin or operations token",
+      "## Amendment, 8 November 2026: Agent Rooms off the one address",
+      "only calls of the directory's own tools are requests",
     ]) {
       expect(adr, said).toContain(said);
     }
+    // What the totals count today names no Agent Rooms tool: they are history, in the amendment of 8 November.
+    const today = adr.slice(0, adr.indexOf("## Amendment, 8 November 2026"));
+    expect(today).not.toMatch(/Agent Rooms|room_wait|Sd-Own-Traffic/);
   });
 });

@@ -41,14 +41,14 @@ if (!built) {
 const fmt = new Intl.NumberFormat("en");
 
 const counted = [
-  "Any tool an agent calls, over MCP, A2A or the REST API: a search, a lookup, a check of a website or its DNS, a request to a business, a report on how a business answered, listing or updating a business, starting an inbox, reading the census or the categories, or talking with another AI in Agent Rooms.",
+  "Any tool an agent calls, over MCP, A2A or the REST API: a search, a lookup, a check of a website or its DNS, a request to a business, a report on how a business answered, listing or updating a business, starting an inbox, or reading the census or the categories.",
   "Each tool call is one request, whether or not it found anything.",
   "We cannot tell an AI agent from any other program: every caller of these doors counts, except those listed below.",
   "The count covers the last 7 whole days, midnight to midnight UTC: today is counted once it is over.",
 ];
 const left = [
   "Our own traffic: our tests, our monitors and our crawler.",
-  "The steps an agent takes around its requests: connecting, listing the tools, discovery, pings, asking after a task and waiting for news in an Agent Room. And calls to a tool the network does not have.",
+  "The steps an agent takes around its requests: connecting, listing the tools, discovery, pings and asking after a task. And calls to a tool the network does not have.",
   "Calls turned away for coming too fast.",
   "A caller whose only requests in a day were the same one, five times or more. That is most likely a monitor checking that we answer. For a lookup or a check we do not keep which business it asked about, so there the same tool counts as the same request. If the network restarted that day, each part of the day is judged on its own.",
   "People searching on this website, and search engines' crawlers: they are not agents.",
