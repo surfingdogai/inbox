@@ -1264,6 +1264,39 @@ describe("protocol 0.2: cards, listings and the why line", () => {
   });
 });
 
+describe("spec 0.16: a listing's values from public maps data", () => {
+  const mapsCard = {
+    ...foundCard,
+    category: {
+      primary: { id: "bicycle_shop", label: "Bicycle shop", src: "maps" },
+      alternates: [{ id: "online_shop", label: "Online shop", src: "seen" }],
+      path: ["retail", "bicycle_shop"],
+      group: "repair",
+    },
+    location_precision: "maps",
+  };
+  it("a card takes src maps and location_precision, the listing's schemas say both, and an unknown source is refused", () => {
+    expect(businessCardSchema.safeParse(mapsCard).success).toBe(true);
+    expect(businessCardSchema.safeParse({ ...mapsCard, location_precision: "town" }).success).toBe(true);
+    // A reader pinned to 0.15.1 rejects maps, as this one rejects a source no version names.
+    const unknown = {
+      ...mapsCard,
+      category: { ...mapsCard.category, primary: { ...mapsCard.category.primary, src: "registry" } },
+    };
+    expect(businessCardSchema.safeParse(unknown).success).toBe(false);
+    for (const name of ["business", "businesses", "mcp-search-businesses-output", "mcp-get-business-output"]) {
+      expect(JSON.stringify(jsonSchemaOf(name)), name).toContain('"location_precision"');
+      expect(JSON.stringify(jsonSchemaOf(name)), name).toContain('"maps"');
+    }
+  });
+  it("search_businesses takes radius_km beside near, more than 0 and at most 1000", () => {
+    expect(searchBusinessesInputSchema.safeParse({ near: { lat: 38.7, lng: -9.1 }, radius_km: 30 }).success).toBe(true);
+    for (const radius_km of [0, -5, 1001]) {
+      expect(searchBusinessesInputSchema.safeParse({ radius_km }).success, String(radius_km)).toBe(false);
+    }
+  });
+});
+
 describe("protocol 0.2: register_business and update_business", () => {
   const register = {
     domain: "salon.example",

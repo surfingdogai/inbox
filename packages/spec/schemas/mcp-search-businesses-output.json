@@ -581,6 +581,10 @@
             },
             "required": ["kind"]
           },
+          "location_precision": {
+            "description": "Spec 0.16: where the network places it when not by a point of its own: town, the centre of the town its own site names; maps, its one place in public maps data, coarsened to an area about 5 km across. Its distance_km is then in whole kilometres, and it has no geo. A later network may add one.",
+            "type": "string"
+          },
           "why": {
             "description": "Why it is in this place of the list, in plain words.",
             "type": "string"

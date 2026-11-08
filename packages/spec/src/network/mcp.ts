@@ -56,7 +56,7 @@ export const searchBusinessesInputSchema = z.object({
     .max(80)
     .optional()
     .describe(
-      'A few words about what the business does or where, like "florist" or "coffee singapore". Every word must match its name, town, description, categories, tags or services, ignoring capitals and accents. Words like "open" or "near me" belong in open_now and near instead.',
+      'A few words about what the business does or where, like "florist" or "coffee singapore". Every word must match its name, town, description, categories, tags or services, ignoring capitals and accents. Words like "open" or "near me" belong in open_now and near instead. From network rules version 12 (ADR-017 Amendment 8), a search near a place, in a country or for what a door does that nothing matches with every word is run again with only the words that name its kind, and its note says which were left out.',
     ),
   near: z
     .object({
@@ -71,6 +71,14 @@ export const searchBusinessesInputSchema = z.object({
     })
     .optional()
     .describe("Only businesses within radius_km of this point, each with its distance."),
+  radius_km: z
+    .number()
+    .positive()
+    .max(1000)
+    .optional()
+    .describe(
+      "Spec 0.16: another name for near's radius_km, as GET /v1/businesses writes it: how far from near, or from a town query names, in kilometres. Give one of them.",
+    ),
   category: z
     .string()
     .max(60)

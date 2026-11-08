@@ -2629,9 +2629,9 @@ which often found nobody either.
     is plainly the domain's business.
 - A business with more than one place (a chain's site) reads none of it, and nor does a place known
   from OpenStreetMap alone.
-- **Never in a score.** No score, record, reach, leaderboard or census reads it, and nor does the
-  hour's order: only what the listing shows, labelled `maps`, and what `near` and `category` read of
-  it (`order.sources`, `never_used`).
+- **Never in a score.** No score, record, reach, leaderboard or census reads what a listing takes
+  from it, and nor does the hour's order: only what the listing shows, labelled `maps`, and what
+  `near` and `category` read of it (`order.sources`, `never_used`).
 - **Under version 12 alone.** A network builds listings so only once its directory is ordered under
   version 12: no answer under version 11 shows, filters or places a business by it.
 
@@ -2643,9 +2643,11 @@ which often found nobody either.
   or country after it; never a country there ("made in Italy shoes"), nor a name more often meant as
   a word. A town followed by a state, province or country it is not in is a place the network does
   not know ("florist in Paris Ontario").
-- **A state or province after a town**, of the United States, Australia or Canada, by its name or by
-  its code in capitals, names its town of that name ("Paris Texas", "London ON"); NYC, CDMX and Bali
-  name New York City, Mexico City and Denpasar. A town before words that say nothing is read
+- **A state or province after a town** at the end of a search, after `in` or the like, or before
+  words that say nothing, of the United States, Australia or Canada, by its name or by its code in
+  capitals, names its town of that name ("florist Paris Texas", "florist in London ON"); at the start
+  of a search it does not ("Paris Texas florist" is Paris, France, as before). NYC, CDMX and Bali name
+  New York City, Mexico City and Denpasar. A town before words that say nothing is read
   ("dentist Toronto tomorrow"); so are Spanish `en el`, `en la`, `en los` and `en las` and German
   `nach` before one. A town of another country than the search's `country` is no place, and its words
   stay words.
@@ -2665,16 +2667,17 @@ which often found nobody either.
 - **Rule.** A search near a place, in a country or for what a door does, whose words no business
   matches every one of, and among which a run of words names a kind on its own beside other words
   (the one that ends last, the longest of those; never a town's name), is run again with only that
-  run, its place, its door and its filters kept ("vegan bakery in Lisbon" as "bakery" near Lisbon).
-  Its `note` says which words were left out, and its next pages are that search's.
+  run, its place, its door and its filters kept ("vegan bakery in Lisbon" as "bakery" near Lisbon),
+  unless it names no place and a word it would leave out is a town's name. Its `note` says which
+  words were left out, and its next pages are that search's.
 
 ### A8.4 An empty answer near a place says what there is
 
-- **Rule.** An answer that lists nobody near a place says in its `note` how many businesses of the
-  kind its words name the directory lists, and the nearest within 1000 km (the most `radius_km` may
-  be) that match everything else, with the `radius_km` that would list the nearest and all of them,
-  or that none matches that near, and then suggests no larger radius. Those are named in the note,
-  never listed.
+- **Rule.** An answer to a search that asks for more than its place, and lists nobody near it, says
+  in its `note` how many businesses of the kind its words name the directory lists, and the nearest
+  within 1000 km (the most `radius_km` may be) that match everything else, with the `radius_km` that
+  would list the nearest and all of them, or that none matches that near, and then suggests no larger
+  radius. Those are named in the note, never listed.
 
 ### A8 in the rules version
 

@@ -36,8 +36,8 @@ and a feed may serve version 2 alone. A manifest without `catalogue.versions` se
 Spec 0.15.1 adds, optional for a network, the catalogue check (§4.18): how a business's catalogue stands at a
 network, and each product it holds back or changed, by code. Spec 0.16 adds, optional for a network, a fourth source
 of a listing's values, `maps` (§4.10, §4.11): a crawled entry's position, kind and name read from public maps data
-on a place the network matched to the business's own site, each shown as such, with the data's credit; a reader
-does not refuse a source it does not know.
+on a place the network matched to the business's own site, each shown as such, with the data's credit. A reader
+pinned to 0.15.1 rejects `maps`.
 
 A **network** is a service that inboxes report to: it lists businesses, keeps the receipts they
 publish, gives customers a key and passes, and orders the directory by the published rules. Anyone
@@ -613,20 +613,22 @@ businesses finds and how it reads its words:
 - **A listing's place in public maps data.** A listing whose site the network matched to its one
   place in public maps data (the place's name on the site's own pages, with its town, postcode or
   phone), within 50 km of where the site's own data says the business is, or in the country it
-  names, reads from it what its own site does not give: its position, its kind when it is only an
-  online shop, and its name when it has none but its domain, each with source `maps` (§4.10,
-  §4.11). A business with more than one place reads none of it, and no score, record, reach or
-  hour's order does (`never_used`).
+  names, or anywhere when it names neither, reads from it what its own site does not give: its
+  position, its kind when it is only an online shop, and its name when it has none but its domain,
+  or only a model's reading of one, each with source `maps` (§4.10, §4.11). A business with more
+  than one place reads none of it, and no score, record, reach or hour's order does (`never_used`).
 - **Words as a person writes them.** A town inside a sentence ("vegan bakery in Lisbon that
-  delivers"), with its state or province after it ("Paris Texas", "London ON"), or before words that
-  say nothing ("dentist Toronto tomorrow"); the words that ask for a door read before the place,
-  wherever they are ("florist Paris delivery"); and more words that say nothing about a business.
-  `order.filters` lists them all.
+  delivers") or before words that say nothing ("dentist Toronto tomorrow"), and a state or province
+  after a town read there or at the end of a search ("florist Paris Texas", "florist in London ON";
+  not at a search's start: "Paris Texas florist" is Paris, France, as before); the words that ask for
+  a door read before the place, wherever they are ("florist Paris delivery"); and more words that say
+  nothing about a business. `order.filters` lists them all.
 - **When nothing matches every word,** a search near a place, in a country or for what a door does
-  is run again with only the words that name its kind, and its `note` says which were left out.
-- **An empty answer near a place** says in `note` how many of the kind the directory lists, and
-  names the nearest within 1000 km that match, with the `radius_km` that lists them, or says that
-  none does.
+  is run again with only the words that name its kind (unless it names no place and a word it would
+  leave out is a town's name), and its `note` says which were left out.
+- **An empty answer near a place,** to a search that asks for more than its place, says in `note`
+  how many of the kind the directory lists, and names the nearest within 1000 km that match, with
+  the `radius_km` that lists them, or says that none does.
 
 Its document rewrites `summary`, `order.filters` and `order.sources`, and adds a line to `never_used`;
 version 11's document stays as it was published, but for `next`. A network puts version 12 in force
@@ -796,7 +798,7 @@ is open to every origin, without credentials.
 
 | Tool | Arguments | `structuredContent` |
 |---|---|---|
-| `search_businesses` | `query?`, `near? {lat, lng, radius_km?}`, `category?`, `item_type?`, `language?`, `open_now?`, `limit?` (1–20, 10), `cursor?` | `{businesses: [card], next_cursor, rules: {version, url}}` |
+| `search_businesses` | `query?`, `near? {lat, lng, radius_km?}`, `radius_km?` (0.16: near's `radius_km` by its `GET /v1/businesses` name; give one), `category?`, `item_type?`, `language?`, `open_now?`, `limit?` (1–20, 10), `cursor?` | `{businesses: [card], next_cursor, rules: {version, url}}` |
 | `get_business` | `domain` | a card, with `address?`, `hours?` and `outcomes` |
 | `list_categories` | none | `GET /v1/categories` |
 | `list_attributes` (0.2, optional) | none | `GET /v1/attributes` |
@@ -1054,7 +1056,7 @@ registration, its own structured data), `seen` (on its own pages or at its own d
 (read from its pages by a model or a heuristic) or, since spec 0.16, `maps` (read from public maps
 data, on a place the network matched to the business's own site: §4.11). A `probably` value is shown
 with `~` and **never counts in a filter**, except page language. A filter reads `declared`, `seen`
-and `maps` values alone. A reader does not refuse a source it does not know.
+and `maps` values alone. A reader pinned to 0.15.1 rejects `maps`.
 
 | Member | Meaning |
 |---|---|
@@ -1068,9 +1070,10 @@ and `maps` values alone. A reader does not refuse a source it does not know.
 | `category` | `{primary, alternates, path, group?}`: place categories, each `{id, label, src}`; `path` is the primary's ancestors, root first; `group` its slug of the categories list |
 | `attributes` | `{key: {v, src}}`, keys of `GET /v1/attributes` |
 | `place` | for entries that are not members: `{locality?, region?, country?, kind, service_area?, ships_to?}`; `kind` is any of `storefront`, `service_area`, `online`; a service area is a radius (at most 300 km) or up to 50 countries |
+| `location_precision` | (0.16) where the network places it when not by a point of its own: `town`, the centre of the town its own site names; `maps`, its one place in public maps data (§4.11), coarsened to an area about 5 km across; its `distance_km` is then in whole kilometres, and it has no `geo`. A later network may add one |
 | `why` | why it is in this place of the list, in plain words |
 | `found` | §4.11 |
-| `facts` (detail only) | every displayed value as `{field, v, src, url?, at, via?}` |
+| `facts` (detail only) | every displayed value as `{field, v, src, url?, at, via?}`; with `src` `maps`, `via` carries the maps data's credit |
 | `door_history` (detail only) | the history of the doors it shows, from the network's own reads (§4.8) |
 
 **Categories.** A listing's `categories` stay the slugs of the categories list (its 35 groups). A
@@ -1135,8 +1138,8 @@ A network may list businesses it found on their own websites. Such an entry:
   its one place in public maps data (the place's name on the site's own pages, with its town, postcode
   or phone, and the place where the site says the business is, when it says) may show that place's
   position (coarsened as below), its kind (when the site names none but an online shop) and its name
-  (when the site gives none but its domain), each with source `maps`, its date and the data's credit;
-  never for a business with more than one place;
+  (when the site gives none but its domain, or only a model's reading of one), each with source
+  `maps`, its date and the data's credit; never for a business with more than one place;
 - shows the town, region and country, never the street, while it is unclaimed; its distance is in
   whole kilometres, at least 1. While it is unclaimed, a network searches and sorts it by a coarse
   point (a cell a few kilometres wide, or its town's centre), never its exact one; a search radius

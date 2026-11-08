@@ -576,6 +576,10 @@
       },
       "required": ["kind"]
     },
+    "location_precision": {
+      "description": "Spec 0.16: where the network places it when not by a point of its own: town, the centre of the town its own site names; maps, its one place in public maps data, coarsened to an area about 5 km across. Its distance_km is then in whole kilometres, and it has no geo. A later network may add one.",
+      "type": "string"
+    },
     "why": {
       "description": "Why it is in this place of the list, in plain words.",
       "type": "string"
@@ -849,7 +853,7 @@
             "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
           },
           "via": {
-            "description": "How it came: model, read by a language model; business, the business's own word (its registration, or a correction it made).",
+            "description": "How it came: model, read by a language model; business, the business's own word (its registration, or a correction it made); with src maps (spec 0.16), the maps data's credit, such as © Overture Maps Foundation.",
             "type": "string"
           }
         },

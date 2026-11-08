@@ -4,7 +4,7 @@
   "type": "object",
   "properties": {
     "query": {
-      "description": "A few words about what the business does or where, like \"florist\" or \"coffee singapore\". Every word must match its name, town, description, categories, tags or services, ignoring capitals and accents. Words like \"open\" or \"near me\" belong in open_now and near instead.",
+      "description": "A few words about what the business does or where, like \"florist\" or \"coffee singapore\". Every word must match its name, town, description, categories, tags or services, ignoring capitals and accents. Words like \"open\" or \"near me\" belong in open_now and near instead. From network rules version 12 (ADR-017 Amendment 8), a search near a place, in a country or for what a door does that nothing matches with every word is run again with only the words that name its kind, and its note says which were left out.",
       "type": "string",
       "maxLength": 80
     },
@@ -30,6 +30,12 @@
         }
       },
       "required": ["lat", "lng"]
+    },
+    "radius_km": {
+      "description": "Spec 0.16: another name for near's radius_km, as GET /v1/businesses writes it: how far from near, or from a town query names, in kilometres. Give one of them.",
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 1000
     },
     "category": {
       "description": "A slug from list_categories, like hair-beauty, or a place category id like hair_salon, with every category below it. Its label or a synonym works too. Under rules before version 7 any other word matches the tags businesses gave themselves; from version 7 it is an error that names up to 5 categories to try.",

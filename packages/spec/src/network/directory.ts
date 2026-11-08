@@ -190,7 +190,7 @@ export const doorTypeSchema = z
  * Where a value comes from (§4.10): `declared` by the business (its manifest, its registration, its own structured
  * data), `seen` on its own pages or at its own door, `probably`, read from its pages by a model or a heuristic, or
  * `maps` (spec 0.16), read from public maps data on a place the network matched to the business's own site. A
- * `probably` value never counts in a filter, except page language. A reader does not refuse a source it does not know.
+ * `probably` value never counts in a filter, except page language. A reader pinned to 0.15.1 rejects `maps`.
  */
 export const factSourceSchema = z.enum(["declared", "seen", "probably", "maps"]);
 export type FactSource = z.infer<typeof factSourceSchema>;
@@ -361,7 +361,7 @@ export const listingFactSchema = z.object({
     .string()
     .optional()
     .describe(
-      "How it came: model, read by a language model; business, the business's own word (its registration, or a correction it made).",
+      "How it came: model, read by a language model; business, the business's own word (its registration, or a correction it made); with src maps (spec 0.16), the maps data's credit, such as © Overture Maps Foundation.",
     ),
 });
 export type ListingFact = z.infer<typeof listingFactSchema>;
@@ -406,6 +406,12 @@ export const listingAdditionsShape = {
   place: cardPlaceSchema
     .optional()
     .describe("For entries that are not members; a member keeps city, country and address."),
+  location_precision: z
+    .string()
+    .optional()
+    .describe(
+      "Spec 0.16: where the network places it when not by a point of its own: town, the centre of the town its own site names; maps, its one place in public maps data, coarsened to an area about 5 km across. Its distance_km is then in whole kilometres, and it has no geo. A later network may add one.",
+    ),
   why: z.string().optional().describe("Why it is in this place of the list, in plain words."),
   found: cardFoundSchema.optional(),
 } as const;
