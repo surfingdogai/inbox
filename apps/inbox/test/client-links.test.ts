@@ -12,8 +12,8 @@ import {
   splitLinksBlock,
 } from "../client/src/lib/links";
 
-/** Dominios.PT's own verification link, as its email carried it (the token made up). */
-const VERIFY = `https://my.dominios.pt/modules/addons/domain_contact_verification/public/verify.php?action=verify&token=${"9f3c1a7e".repeat(8)}&lang=portuguese-pt`;
+/** A domain registrar's contact verification link, as its email carries it (the token made up). */
+const VERIFY = `https://my.example.pt/modules/addons/domain_contact_verification/public/verify.php?action=verify&token=${"9f3c1a7e".repeat(8)}&lang=portuguese-pt`;
 
 describe("linkParts", () => {
   it("makes each http(s) link its own part, written as it is, and keeps the rest as text", () => {
@@ -61,7 +61,7 @@ describe("a link on screen", () => {
     "https://\u0430pple.com/account",
     "HTTPS://WWW.Example.COM/Path",
     "https://a.example:443/x",
-    "https://my.dominios.pt/",
+    "https://my.example.pt/",
     "https://example.com/a/b/c?utm_source=newsletter&utm_medium=email&utm_campaign=autumn-sale-2026",
     "https://app.example.com/auth/reset/3f9a8c7e6d5b4a3f2e1d0c9b8a7f6e5d4c3b2a1f",
     "https://files.example.com/d/invoice-2026-11-oficina-mare-final-version.pdf",
@@ -73,7 +73,7 @@ describe("a link on screen", () => {
     "https://example.com\\@evil.example/",
     "http://[::1]:8080/a",
     "https://",
-    "https://my.dominios.pt.account-verify-security-session-refresh.evil-example.net/clientarea.php",
+    "https://my.example.pt.account-verify-security-session-refresh.evil-example.net/clientarea.php",
     "https://login.microsoftonline.com.secure-signin.example.net/common/oauth2",
     "https://evil.example\\@paypal.com/",
     "https://evil.example?@paypal.com",
@@ -94,13 +94,13 @@ describe("a link on screen", () => {
       ).toBe(href);
   });
 
-  it("shows Dominios.PT's verification link by its host, then a path shortened in the middle", () => {
-    expect(linkDisplay(VERIFY)).toBe("my.dominios.pt/modules/addons/…/verify.php?…");
+  it("shows a registrar's verification link by its host, then a path shortened in the middle", () => {
+    expect(linkDisplay(VERIFY)).toBe("my.example.pt/modules/addons/…/verify.php?…");
     const runs = linkRuns(VERIFY);
     expect(runs[0]).toEqual({ text: "https://", hidden: true });
     // The names before its domain plain, the domain its owner registered bold.
     expect(runs[1]).toEqual({ text: "my.", host: "sub" });
-    expect(runs[2]).toEqual({ text: "dominios.pt", host: "domain" });
+    expect(runs[2]).toEqual({ text: "example.pt", host: "domain" });
     expect(runs.find((r) => r.shows === "/…")?.text).toBe("/domain_contact_verification/public");
     expect(runs.at(-1)).toEqual({
       text: VERIFY.slice(VERIFY.indexOf("?")),
@@ -112,7 +112,7 @@ describe("a link on screen", () => {
   it("shows a short link as written, without its scheme", () => {
     expect(linkDisplay("https://claude.example/magic-link?t=abc&s=1")).toBe("claude.example/magic-link?t=abc&s=1");
     expect(linkDisplay("http://shop.example/a")).toBe("shop.example/a");
-    expect(linkDisplay("https://my.dominios.pt/")).toBe("my.dominios.pt");
+    expect(linkDisplay("https://my.example.pt/")).toBe("my.example.pt");
     expect(linkDisplay("https://shop.example/a/b/")).toBe("shop.example/a/b/");
     expect(linkDisplay("HTTPS://WWW.Example.COM/Path")).toBe("WWW.Example.COM/Path");
     expect(linkDisplay("http://[::1]:8080/a")).toBe("[::1]:8080/a");
@@ -147,12 +147,12 @@ describe("a link on screen", () => {
         .filter((r) => r.host === "sub")
         .map((r) => (r.hidden ? r.shows : r.text))
         .join("");
-    const lookalike = "https://my.dominios.pt.account-verify-security-session-refresh.evil-example.net/clientarea.php";
+    const lookalike = "https://my.example.pt.account-verify-security-session-refresh.evil-example.net/clientarea.php";
     expect(bold(lookalike)).toBe("evil-example.net");
-    expect(plain(lookalike)).toBe("my.dominios.pt.account-verify-security-session-refresh.");
+    expect(plain(lookalike)).toBe("my.example.pt.account-verify-security-session-refresh.");
     expect(bold("https://login.microsoftonline.com.secure-signin.example.net/common/oauth2")).toBe("example.net");
-    expect(bold(VERIFY)).toBe("dominios.pt");
-    expect(bold("https://dominios.pt/")).toBe("dominios.pt");
+    expect(bold(VERIFY)).toBe("example.pt");
+    expect(bold("https://example.pt/")).toBe("example.pt");
     expect(bold("https://www.paypal.com@evil.example/login")).toBe("evil.example");
     expect(plain("https://www.paypal.com@evil.example/login")).toBe("");
     // Under a country's ending, the names it registers under are part of the domain.
@@ -246,10 +246,10 @@ describe("a link on screen", () => {
 describe("the links an email carried", () => {
   it("are found under the heading the server writes, and only there", () => {
     expect(LINKS_HEADING).toBe(SERVER_HEADING);
-    const text = `Please confirm your contact details.\n\n${LINKS_HEADING}\n${VERIFY}\nhttps://www.dominios.pt/`;
+    const text = `Please confirm your contact details.\n\n${LINKS_HEADING}\n${VERIFY}\nhttps://www.example.pt/`;
     expect(splitLinksBlock(text)).toEqual({
       body: "Please confirm your contact details.",
-      links: [VERIFY, "https://www.dominios.pt/"],
+      links: [VERIFY, "https://www.example.pt/"],
     });
     // An email with no words of its own: the links alone.
     expect(splitLinksBlock(`${LINKS_HEADING}\nhttps://a.example/x`)).toEqual({
@@ -276,10 +276,10 @@ describe("the links an email carried", () => {
 
 describe("the links listed under an email", () => {
   it("are those its words do not already show, so none is drawn twice", () => {
-    const invoice = `A sua fatura está disponível: https://my.dominios.pt/viewinvoice.php?id=118.\n\n${LINKS_HEADING}\nhttps://my.dominios.pt/viewinvoice.php?id=118\nhttps://my.dominios.pt/clientarea.php`;
+    const invoice = `A sua fatura está disponível: https://my.example.pt/viewinvoice.php?id=118.\n\n${LINKS_HEADING}\nhttps://my.example.pt/viewinvoice.php?id=118\nhttps://my.example.pt/clientarea.php`;
     const block = splitLinksBlock(invoice);
     expect(block).not.toBeNull();
-    expect(linksToList(block ?? { body: "", links: [] })).toEqual(["https://my.dominios.pt/clientarea.php"]);
+    expect(linksToList(block ?? { body: "", links: [] })).toEqual(["https://my.example.pt/clientarea.php"]);
     // Every link already in its words: no list at all.
     const all = splitLinksBlock(`See https://a.example/x\n\n${LINKS_HEADING}\nhttps://a.example/x`);
     expect(linksToList(all ?? { body: "", links: ["x"] })).toEqual([]);

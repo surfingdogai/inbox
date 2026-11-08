@@ -56,8 +56,8 @@ export interface LinkRun {
   readonly text: string;
   /**
    * A piece of the host, which says where the link goes: `domain`, the name its owner registered,
-   * drawn bold (`dominios.pt` of `my.dominios.pt`, `example.co.uk`); `sub`, the names before it, drawn
-   * plain, so a long one (`my.dominios.pt.account-verify.evil-example.net`) never reads as the
+   * drawn bold (`example.pt` of `my.example.pt`, `example.co.uk`); `sub`, the names before it, drawn
+   * plain, so a long one (`my.example.pt.account-verify.evil-example.net`) never reads as the
    * domain; `port`.
    */
   readonly host?: "sub" | "domain" | "port";
@@ -70,7 +70,7 @@ export const LINK_ROOM = 48;
 /** A path's last part longer than this is shortened (`longLast`). */
 const LAST_ROOM = 24;
 /**
- * A host's name (`dominios.`), or its domain, this long or shorter is never broken across two lines;
+ * A host's name (`example.`), or its domain, this long or shorter is never broken across two lines;
  * a longer one may be, so it never widens a phone's screen.
  */
 export const HOST_KEEP = 30;
@@ -110,7 +110,7 @@ const UNDER = new Set([
 
 /**
  * Where, in a host's name as the browser reaches it, the domain its owner registered starts: 0 for a
- * name that is all domain (`dominios.pt`, `localhost`, an IP address).
+ * name that is all domain (`example.pt`, `localhost`, an IP address).
  */
 export function domainAt(hostname: string): number {
   if (hostname.startsWith("[") || /^[\d.]+$/.test(hostname)) return 0;
@@ -124,7 +124,7 @@ export function domainAt(hostname: string): number {
 
 /**
  * A link cut into what is drawn and what is not: its host always, shown as the browser will reach
- * it, then its path, shortened in the middle when long (`my.dominios.pt/modules/addons/…/verify.php?…`).
+ * it, then its path, shortened in the middle when long (`my.example.pt/modules/addons/…/verify.php?…`).
  * The scheme is not drawn. A written host that is not the one reached (a name before an "@",
  * letters that look like others, a port the browser drops) is drawn as the host reached instead.
  */

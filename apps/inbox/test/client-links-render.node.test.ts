@@ -11,7 +11,7 @@ import { LINKS_HEADING, linkDisplay } from "../client/src/lib/links";
  * with proper ux"): each a link that opens in a new tab, its host on screen, the whole address in
  * the text for a copy, and the links an email carried as a small titled list.
  */
-const VERIFY = `https://my.dominios.pt/modules/addons/domain_contact_verification/public/verify.php?action=verify&token=${"9f3c1a7e".repeat(8)}&lang=portuguese-pt`;
+const VERIFY = `https://my.example.pt/modules/addons/domain_contact_verification/public/verify.php?action=verify&token=${"9f3c1a7e".repeat(8)}&lang=portuguese-pt`;
 
 const render = (text: string) => renderToStaticMarkup(createElement(Linked, { text }));
 const decode = (s: string) =>
@@ -62,10 +62,10 @@ describe("a link in a message", () => {
     const [a = ""] = anchors(html);
     // The names before its domain plain, wrapping after a dot; the domain its owner registered bold, on one line.
     expect(a).toContain(
-      '<span class="msg-link-sub"><span class="msg-link-keep">my.</span><wbr/></span><span class="msg-link-domain msg-link-keep">dominios.pt</span>',
+      '<span class="msg-link-sub"><span class="msg-link-keep">my.</span><wbr/></span><span class="msg-link-domain msg-link-keep">example.pt</span>',
     );
-    expect(boldOf(a)).toEqual(["dominios.pt"]);
-    expect(shownOf(a)).toBe("my.dominios.pt/modules/addons/…/verify.php?…");
+    expect(boldOf(a)).toEqual(["example.pt"]);
+    expect(shownOf(a)).toBe("my.example.pt/modules/addons/…/verify.php?…");
     // An ellipsis holds on to what follows it: the line wraps before a "/" instead.
     expect(a).toContain('data-as="?…\u2060"');
     expect(a.match(/<wbr\/>/g)?.length).toBeGreaterThan(0);
@@ -92,13 +92,13 @@ describe("a link in a message", () => {
   });
 
   it("never draws a long host as the one it starts with: its names plain, wrapping after a dot, its domain bold", () => {
-    const lookalike = "https://my.dominios.pt.account-verify-security-session-refresh.evil-example.net/clientarea.php";
+    const lookalike = "https://my.example.pt.account-verify-security-session-refresh.evil-example.net/clientarea.php";
     const [a = ""] = anchors(render(`Pague aqui: ${lookalike}`));
     expect(boldOf(a)).toEqual(["evil-example.net"]);
     const sub = a.slice(a.indexOf('<span class="msg-link-sub">'), a.indexOf('<span class="msg-link-domain'));
     // Each name its own piece, a place to wrap after its dot; a name too long for a phone's line may wrap inside.
     expect(sub.match(/<wbr\/>/g)).toHaveLength(4);
-    for (const name of ["my.", "dominios.", "pt."])
+    for (const name of ["my.", "example.", "pt."])
       expect(sub).toContain(`<span class="msg-link-keep">${name}</span><wbr/>`);
     expect(sub).toContain("<span>account-verify-security-session-refresh.</span><wbr/>");
     expect(textOf(a)).toBe(lookalike);
@@ -117,7 +117,7 @@ describe("a link in a message", () => {
 });
 
 describe("the links an email carried", () => {
-  const text = `Your invoice is ready.\n\n${LINKS_HEADING}\n${VERIFY}\nhttps://www.dominios.pt/faturas/2026-118.pdf`;
+  const text = `Your invoice is ready.\n\n${LINKS_HEADING}\n${VERIFY}\nhttps://www.example.pt/faturas/2026-118.pdf`;
 
   it("are a small titled list under its words, each its host and short path, opening in a new tab", () => {
     const html = render(text);
@@ -128,8 +128,8 @@ describe("the links an email carried", () => {
     const links = anchors(html);
     expect(links).toHaveLength(2);
     expect(links.map(shownOf)).toEqual([
-      "my.dominios.pt/modules/addons/…/verify.php?…",
-      "www.dominios.pt/faturas/2026-118.pdf",
+      "my.example.pt/modules/addons/…/verify.php?…",
+      "www.example.pt/faturas/2026-118.pdf",
     ]);
     for (const a of links) {
       expect(a).toContain('target="_blank"');
@@ -143,19 +143,19 @@ describe("the links an email carried", () => {
     const html = render(text);
     const copied = textOf(html);
     expect(copied).toContain(VERIFY);
-    expect(copied).toContain("https://www.dominios.pt/faturas/2026-118.pdf");
+    expect(copied).toContain("https://www.example.pt/faturas/2026-118.pdf");
     expect(copied.startsWith("Your invoice is ready.")).toBe(true);
   });
 
   it("leave out a link its words already show, and are not drawn when none is left", () => {
-    const invoice = `A sua fatura: https://my.dominios.pt/viewinvoice.php?id=118.\n\n${LINKS_HEADING}\nhttps://my.dominios.pt/viewinvoice.php?id=118\nhttps://my.dominios.pt/clientarea.php`;
+    const invoice = `A sua fatura: https://my.example.pt/viewinvoice.php?id=118.\n\n${LINKS_HEADING}\nhttps://my.example.pt/viewinvoice.php?id=118\nhttps://my.example.pt/clientarea.php`;
     const html = render(invoice);
     const links = anchors(html);
-    expect(links.map(shownOf)).toEqual(["my.dominios.pt/viewinvoice.php?id=118", "my.dominios.pt/clientarea.php"]);
+    expect(links.map(shownOf)).toEqual(["my.example.pt/viewinvoice.php?id=118", "my.example.pt/clientarea.php"]);
     expect(html.match(/<li class="msg-links-item">/g)).toHaveLength(1);
     // Every address is still in a copy.
-    expect(textOf(html)).toContain("https://my.dominios.pt/viewinvoice.php?id=118");
-    expect(textOf(html)).toContain("https://my.dominios.pt/clientarea.php");
+    expect(textOf(html)).toContain("https://my.example.pt/viewinvoice.php?id=118");
+    expect(textOf(html)).toContain("https://my.example.pt/clientarea.php");
     const once = render(
       `Entregue: https://www.ctt.pt/feapl_2/app/open/objectSearch/objectSearch.jspx?objects=RR1\n\n${LINKS_HEADING}\nhttps://www.ctt.pt/feapl_2/app/open/objectSearch/objectSearch.jspx?objects=RR1`,
     );

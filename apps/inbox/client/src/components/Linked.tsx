@@ -151,7 +151,7 @@ function HostPiece({ run }: { run: LinkRun }) {
   );
 }
 
-/** A host's names, each with the dot after it: "my.", "dominios.", "pt". */
+/** A host's names, each with the dot after it: "my.", "example.", "pt". */
 function byName(host: string): string[] {
   return host.match(/[^.]*\.|[^.]+$/g) ?? [];
 }

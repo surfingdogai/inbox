@@ -437,7 +437,7 @@ describe("notices", () => {
       req("POST", "/v1/owner/webhooks", s.owner, { url: "https://hooks.example.com/all", events: ["*"] }),
     );
     expect(hook.status, await hook.clone().text()).toBe(201);
-    // Dominios.PT's invoice, put aside as it arrived: a mail server marked it. And a customer's, the same way.
+    // A registrar's invoice, put aside as it arrived: a mail server marked it. And a customer's, the same way.
     const asideBy = async (from: string, subject: string, id: string, text: string, notice: boolean) => {
       const got = await s.ingest(
         raw(
@@ -456,10 +456,10 @@ describe("notices", () => {
       return "itemId" in got ? (got.itemId ?? "") : "";
     };
     const id = await asideBy(
-      "Dominios.PT <no-reply@dominios.pt>",
+      "Registrar <no-reply@registrar.example>",
       "Fatura FT 2026/118",
-      "ft2026-118@dominios.pt",
-      "A sua fatura FT 2026/118 está disponível. https://my.dominios.pt/viewinvoice.php?id=118",
+      "ft2026-118@registrar.example",
+      "A sua fatura FT 2026/118 está disponível. https://my.registrar.example/viewinvoice.php?id=118",
       true,
     );
     const ines = await asideBy(

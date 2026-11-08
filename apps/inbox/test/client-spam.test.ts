@@ -287,18 +287,18 @@ describe("one press, and Undo", () => {
     const invoice = view({
       type: "message",
       state: "spam",
-      email: "faturacao@dominios.pt",
-      spam: { screen: "aside", sender: sender("faturacao@dominios.pt", "dominios.pt") },
+      email: "billing@registrar.example",
+      spam: { screen: "aside", sender: sender("billing@registrar.example", "registrar.example") },
     });
     const notice = {
       ...invoice,
       item: { ...invoice.item, flags: { ...invoice.item.flags, notice: true } },
     } as ItemView;
     expect(toastFor("not_spam", notice, now).text).toBe(
-      "Moved to your inbox. Messages from faturacao@dominios.pt won't be put aside again.",
+      "Moved to your inbox. Messages from billing@registrar.example won't be put aside again.",
     );
     expect(toastFor("not_spam", invoice, now).text).toBe(
-      "Back in your inbox. Messages from faturacao@dominios.pt won't be put aside again.",
+      "Back in your inbox. Messages from billing@registrar.example won't be put aside again.",
     );
     // Once sent: where it is, with a link to it there, for a little longer than Undo has.
     expect(doneToast("not_spam", notice)).toBe("Moved to your inbox.");
