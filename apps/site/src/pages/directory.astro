@@ -133,7 +133,8 @@ import { ADD_HREF, ADD_LABEL } from "../lib/add";
 <style is:global>
   .listing {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    /* The name keeps room (12rem, or the whole card on a phone) however long the line beside it is. */
+    grid-template-columns: minmax(min(12rem, 100%), 1fr) minmax(0, auto);
     gap: var(--sp-2) var(--sp-4);
     align-items: center;
     padding: var(--sp-4) var(--sp-5);
@@ -153,9 +154,20 @@ import { ADD_HREF, ADD_LABEL } from "../lib/add";
   }
   .listing .meta {
     display: flex;
+    flex-wrap: wrap;
     gap: var(--sp-2);
     align-items: center;
+    justify-content: flex-end;
     justify-self: end;
+    min-width: 0;
+  }
+  /* A business found on its own website: what we found is a sentence, so it reads under the name. */
+  .listing.listing-found {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .listing.listing-found .meta {
+    justify-content: flex-start;
+    justify-self: start;
   }
   .listing .rec {
     display: flex;
@@ -294,6 +306,7 @@ import { ADD_HREF, ADD_LABEL } from "../lib/add";
       // Found on its own website: no pill and no record; what we found, and when, in the card's own
       // words.
       node.querySelector("[data-online]")?.remove();
+      node.querySelector(".listing")?.classList.add("listing-found");
       const doors = foundDoors(Array.isArray(b.doors) ? (b.doors as Door[]) : []);
       set("[data-takes]", doors ? `Found: ${doors}` : "");
       const found = (b.found ?? {}) as { note?: string };
