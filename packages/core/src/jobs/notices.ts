@@ -76,9 +76,12 @@ export function noticesDayHandler(mailOut: MailOut, opts: { baseUrl?: string | u
     const sender = senderOf(settings, { transport: mailOut, publicUrl, business: facts.name });
     let logged = await mailByJob(db, job.id);
     if (!logged) {
+      // Those Notices lists, as it lists them: never one put aside, by a mail server or the owner, which
+      // is under Spam alone.
       const { rows } = await db.client.query({
         sql: `SELECT lower(json_extract(p.contact, '$.email')) FROM items i JOIN parties p ON p.id = i.party_id
-               WHERE ${noticeListedSql("i.flags")} AND i.created_at >= ?`,
+               WHERE ${noticeListedSql("i.flags")} AND i.state <> 'spam'
+                 AND COALESCE(i.screen, '') NOT IN ('pending', 'held', 'aside') AND i.created_at >= ?`,
         params: [p.from],
         method: "all",
       });

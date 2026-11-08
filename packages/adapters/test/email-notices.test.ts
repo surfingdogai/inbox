@@ -590,16 +590,24 @@ describe("a flood of notices from one domain", () => {
     );
     expect(marked.outcome).toBe("spam");
     // The owner hears of the day's flood once, however many more come.
-    await s.ingest(
+    const last = await s.ingest(
       { From: "no-reply-4@flood.example", To: INBOUND, Subject: "Notice 204", "Message-ID": "<f204@flood.example>" },
       "Your report is ready.",
       { auth: VOUCHED },
     );
+    // The owner puts one in Spam before the day's email goes.
+    await s.caps.transitionItem(owner, { item_id: usualId, event: "mark_spam" });
     await s.drain();
     const told = s.mail.sent.filter((m) => m.to.includes(OWNER));
     expect(told).toHaveLength(1);
     expect(told[0]?.subject).toMatch(/notices today, most from flood\.example/);
     expect(told[0]?.text).toContain("Delete all from this sender");
+    // It counts what Notices lists, "every one kept under Notices": never one put aside, by a mail server or
+    // by the owner, which is under Spam alone.
+    const listed = await s.caps.listItems(owner, { limit: 100, notices: true, open_only: false, sandbox: false });
+    expect(listed.items.map((v) => v.item.id).sort()).toEqual([pastId, idOf(last)].sort());
+    expect(told[0]?.text).toMatch(/^2 notices came today/);
+    expect(told[0]?.subject).toMatch(/^2 notices today/);
     // Another domain is counted on its own.
     await expectNotice(
       s,
