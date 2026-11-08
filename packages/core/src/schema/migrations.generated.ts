@@ -586,4 +586,11 @@ export const MIGRATIONS: readonly Migration[] = [
       "INSERT INTO `product_prices` (`product_id`, `at`, `value`, `currency`)\nSELECT `id`, `updated_at`, json_extract(`price`, '$.value'), upper(json_extract(`price`, '$.currency'))\n  FROM `products`\n WHERE json_extract(`price`, '$.value') > 0;",
     ],
   },
+  {
+    version: 37,
+    name: "0036_open_again",
+    statements: [
+      "-- Open again, as listed: a message or a quote request opened again before a reopen cleared `closed_at`\n-- (a customer's reply to a closed conversation, the owner's Reopen, Not spam) kept the time it was\n-- closed, so it was listed under Done, out of what is open, though open. A notice brought back with Not\n-- spam then went to Done when moved to the inbox. Data only, no schema change.\n--\n-- Whatever sets `closed_at` on these two types moves the item out of these states: a message closed is\n-- `closed`, one put aside `spam`; a quote request accepted, declined or expired stays so for good, one put\n-- aside is `spam`. So an open one with a `closed_at` was opened again, and nothing closed is touched.\n-- Running it twice changes nothing more.\nUPDATE `items` SET `closed_at` = NULL\n WHERE `closed_at` IS NOT NULL\n   AND ((`type` = 'message' AND `state` IN ('open', 'answered'))\n     OR (`type` = 'quote_request' AND `state` IN ('received', 'needs_info', 'quoted')));",
+    ],
+  },
 ];
