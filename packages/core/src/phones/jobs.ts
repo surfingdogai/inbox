@@ -125,6 +125,19 @@ async function newestWords(db: Db, itemId: string, fallback: string | undefined)
   return typeof text === "string" && text.trim() ? text : (fallback ?? null);
 }
 
+/**
+ * Whether a message or a request was ever closed or put in Spam: a person (or the spam filter) dealt
+ * with it, though a reply, Reopen or Not spam has opened it again since.
+ */
+async function closedOnce(db: Db, itemId: string): Promise<boolean> {
+  const { rows } = await db.client.query({
+    sql: "SELECT 1 FROM item_events WHERE item_id = ? AND event IN ('close', 'mark_spam') LIMIT 1",
+    params: [itemId],
+    method: "all",
+  });
+  return rows.length > 0;
+}
+
 async function displayName(db: Db, partyId: string): Promise<string | null> {
   const { rows } = await db.client.query({
     sql: "SELECT display_name FROM parties WHERE id = ? AND erased_at IS NULL",
@@ -173,7 +186,10 @@ export function phonePushOneHandler(phones: PhoneCapabilities): JobHandler {
       return { note: "no longer held" };
     const awaits = awaitsOwner(item, p.event);
     // Held overnight, and dealt with since (on the computer, or by a rule): nothing to wake anyone for.
-    if (p.held && p.event === "create" && (!awaits || item.closedAt !== null)) return { note: "dealt with" };
+    // Closed or put in Spam meanwhile is dealt with though it is open again: a customer's reply that
+    // reopened it has its own notification, so the phone hears of it once.
+    if (p.held && p.event === "create" && (!awaits || item.closedAt !== null || (await closedOnce(db, item.id))))
+      return { note: "dealt with" };
     const { rows } = await db.client.query({
       sql: `SELECT COUNT(*) FROM jobs WHERE kind = ? AND status = 'done' AND done_at > ?
               AND json_extract(payload, '$.deviceId') = ?`,

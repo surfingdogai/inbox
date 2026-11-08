@@ -639,6 +639,48 @@ describe("push, end to end", () => {
     expect(relay.sent).toHaveLength(1);
   });
 
+  it("tells a phone once of a conversation closed and written to again in its quiet hours: of the reply alone", async () => {
+    const { db, caps, phones, userId, relay } = await setup();
+    const phone = await makePhone();
+    const t = await pairWith(phones, phone, (await phones.createPairing(userId, T0)).secret);
+    await phones.registerPush(t.device_id, { token: "fcm", ...phone.pushKeys }, ORIGIN, T0);
+    // T0 is 10:00 UTC; quiet from 09:00 to 12:00 UTC.
+    await phones.setNotify(t.device_id, { quiet: { on: true, from: "09:00", to: "12:00" }, tz: "UTC" });
+    const runner = createRunner({ mailOut: logMailOut(), phones });
+    const made = (await caps.sendMessage(customer, {
+      body: "Is my wheel ready?",
+      contact: { name: "Rita", email: "rita@example.com" },
+    })) as { view: { item: { id: string } }; accessToken?: string };
+    const id = made.view.item.id;
+    for (const dt of [0, 5_000, 6_000]) await runner.runDue(db, { now: T0 + dt });
+    // The owner closes it on the computer; then the customer writes again, which opens it again.
+    const owner: Caller = {
+      actor: { kind: "owner", id: userId, channel: "owner_ui" },
+      tier: "verified_principal",
+      sandbox: false,
+      now: () => T0 + 60_000,
+    };
+    await caps.transitionItem(owner, { item_id: id, event: "close" });
+    const again = await caps.sendMessage(
+      { ...customer, now: () => T0 + 120_000 },
+      { item_id: id, body: "And the front one?", ...(made.accessToken ? { access_token: made.accessToken } : {}) },
+    );
+    expect((again as { view: { item: { state: string } } }).view.item.state).toBe("open");
+    for (const dt of [120_000, 125_000, 126_000]) await runner.runDue(db, { now: T0 + dt });
+    expect(relay.sent).toHaveLength(0);
+    const held = (await db.orm.select({ kind: jobs.kind, status: jobs.status }).from(jobs)).filter(
+      (j) => j.kind === "phone_push_one" && j.status === "queued",
+    );
+    expect(held).toHaveLength(2);
+    // At the end of quiet hours: the reply's, and not the first message's as well, which was dealt with.
+    await runner.runDue(db, { now: Date.parse("2026-10-20T12:00:01Z") });
+    expect(relay.sent).toHaveLength(1);
+    const sent = relay.sent[0];
+    if (!sent) return;
+    const payload = JSON.parse(new TextDecoder().decode(await decryptPush(sent.payload, phone.push))) as PushPayload;
+    expect(payload.title).not.toBe("New message");
+  });
+
   it("marks a phone whose app is gone as lost, and refuses to set up push without a secret key", async () => {
     const { db, caps, phones, userId, relay } = await setup();
     const svc = await seedService(db);
