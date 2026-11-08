@@ -19,13 +19,13 @@ const VERIFY = `https://my.example.pt/modules/addons/domain_contact_verification
 
 describe("linkParts", () => {
   it("makes each http(s) link its own part, written as it is, and keeps the rest as text", () => {
-    const text = "Links in this email:\nhttps://claude.example/magic-link?t=abc&s=1\nhttp://shop.example/a.";
+    const text = "Links in this email:\nhttps://signin.example/magic-link?t=abc&s=1\nhttp://shop.example/a.";
     expect(linkParts(text)).toEqual([
       { at: 0, text: "Links in this email:\n" },
       {
         at: 21,
-        text: "https://claude.example/magic-link?t=abc&s=1",
-        href: "https://claude.example/magic-link?t=abc&s=1",
+        text: "https://signin.example/magic-link?t=abc&s=1",
+        href: "https://signin.example/magic-link?t=abc&s=1",
       },
       { at: 64, text: "\n" },
       { at: 65, text: "http://shop.example/a", href: "http://shop.example/a" },
@@ -113,7 +113,7 @@ describe("linkParts", () => {
 describe("a link on screen", () => {
   const LINKS = [
     VERIFY,
-    "https://claude.example/magic-link?t=abc&s=1",
+    "https://signin.example/magic-link?t=abc&s=1",
     "https://www.paypal.com@evil.example/login",
     "https://\u0430pple.com/account",
     "HTTPS://WWW.Example.COM/Path",
@@ -167,7 +167,7 @@ describe("a link on screen", () => {
   });
 
   it("shows a short link as written, without its scheme", () => {
-    expect(linkDisplay("https://claude.example/magic-link?t=abc&s=1")).toBe("claude.example/magic-link?t=abc&s=1");
+    expect(linkDisplay("https://signin.example/magic-link?t=abc&s=1")).toBe("signin.example/magic-link?t=abc&s=1");
     expect(linkDisplay("http://shop.example/a")).toBe("shop.example/a");
     expect(linkDisplay("https://my.example.pt/")).toBe("my.example.pt");
     expect(linkDisplay("https://shop.example/a/b/")).toBe("shop.example/a/b/");

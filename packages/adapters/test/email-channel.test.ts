@@ -851,11 +851,11 @@ describe("what the review attacked", () => {
       "--b1",
       "Content-Type: text/plain; charset=utf-8",
       "",
-      "Sign in to Claude. Click the button below to finish signing in.",
+      "Sign in to Example. Click the button below to finish signing in.",
       "--b1",
       "Content-Type: text/html; charset=utf-8",
       "",
-      '<p>Sign in to Claude</p><a href="https://claude.example/magic-link?t=abc&amp;s=1">Sign in</a>' +
+      '<p>Sign in to Example</p><a href="https://signin.example/magic-link?t=abc&amp;s=1">Sign in</a>' +
         '<a href="javascript:alert(1)">x</a><img src="https://t.example/pixel.gif"><a href="mailto:x@y.example">mail</a>',
       "--b1--",
       "",
@@ -864,7 +864,7 @@ describe("what the review attacked", () => {
     const r = await ingestEmail(db, caps, { raw, envelopeTo: INBOUND, auth: { dmarc: "pass" } }, { now: () => T });
     expect(r.outcome).toBe("created");
     const [entry] = await db.orm.select().from(schema.threadEntries);
-    expect(entry?.bodyText).toContain("Links in this email:\nhttps://claude.example/magic-link?t=abc&s=1");
+    expect(entry?.bodyText).toContain("Links in this email:\nhttps://signin.example/magic-link?t=abc&s=1");
     expect(entry?.bodyText).not.toMatch(/javascript:|pixel\.gif|mailto:/);
   });
 
