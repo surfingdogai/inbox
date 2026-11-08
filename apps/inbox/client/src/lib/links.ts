@@ -8,7 +8,7 @@ export interface LinkPart {
 /**
  * A message's text cut into plain runs and the http(s) links in it, so a link in a message can be
  * opened from the thread. A link keeps exactly what is written; a full stop or a bracket after it
- * stays text.
+ * stays text, and so does an address no browser can open (`linkUrl`).
  */
 export function linkParts(text: string): LinkPart[] {
   const out: LinkPart[] = [];
@@ -16,13 +16,35 @@ export function linkParts(text: string): LinkPart[] {
   for (const m of text.matchAll(/https?:\/\/[^\s<>"]+/gi)) {
     const url = m[0].replace(/[.,;:!?)\]}'"]+$/, "");
     const start = m.index ?? 0;
-    if (url.length <= "https://".length) continue;
+    if (url.length <= "https://".length || !linkUrl(url)) continue;
     if (start > at) out.push({ at, text: text.slice(at, start) });
     out.push({ at: start, text: url, href: url });
     at = start + url.length;
   }
   if (at < text.length) out.push({ at, text: text.slice(at) });
   return out;
+}
+
+/** The address a browser opens for an http(s) link, or null when it opens none (`https://paypal.com\u202e…`). */
+export function linkUrl(href: string): URL | null {
+  if (!/^https?:\/\//i.test(href)) return null;
+  try {
+    const url = new URL(href);
+    return url.host ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A link's title and its name to a screen reader: its address as the browser reaches it. The host as
+ * reached (a name before an "@" is not part of it, letters that look like others are in their ASCII
+ * form), then the path, query and fragment as the browser sends them, so nothing written to pass for
+ * another host is read out or shown on hover. The href itself stays exactly as written.
+ */
+export function linkName(href: string): string {
+  const url = linkUrl(href);
+  return url ? `${url.protocol}//${url.host}${url.pathname}${url.search}${url.hash}` : href;
 }
 
 /**
@@ -32,8 +54,13 @@ export function linkParts(text: string): LinkPart[] {
  */
 export interface LinkRun {
   readonly text: string;
-  /** The host: drawn in its own weight, since it says where the link goes. */
-  readonly host?: true;
+  /**
+   * A piece of the host, which says where the link goes: `domain`, the name its owner registered,
+   * drawn bold (`dominios.pt` of `my.dominios.pt`, `example.co.uk`); `sub`, the names before it, drawn
+   * plain, so a long one (`my.dominios.pt.account-verify.evil-example.net`) never reads as the
+   * domain; `port`.
+   */
+  readonly host?: "sub" | "domain" | "port";
   readonly hidden?: true;
   readonly shows?: string;
 }
@@ -42,8 +69,58 @@ export interface LinkRun {
 export const LINK_ROOM = 48;
 /** A path's last part longer than this is shortened (`longLast`). */
 const LAST_ROOM = 24;
+/**
+ * A host's name (`dominios.`), or its domain, this long or shorter is never broken across two lines;
+ * a longer one may be, so it never widens a phone's screen.
+ */
+export const HOST_KEEP = 30;
 /** Characters that draw nothing or turn the text around: never drawn inside a link's path. */
 const HIDDEN_CHARS = /[\p{Cf}\p{Zl}\p{Zp}]/u;
+/**
+ * What in a link's path or query could be read as its host: a "\" (the browser reads it as "/"), or an
+ * "@" before a dotted name (`/@paypal.com`, `?@paypal.com`), as an address is written. Never drawn.
+ */
+const POSES_AS_HOST = /\\|[@\uFF20\uFE6B][^/?#@\uFF20\uFE6B]*\.[^/?#@\uFF20\uFE6B.]/;
+/**
+ * The second-level names many countries' domains are registered under (`shop.com.pt`, `shop.co.uk`,
+ * `city.gov.br`): under a two-letter country's ending, the domain is three names. Anywhere else it is
+ * the last two. A name missing here draws fewer names bold, never more: never one its owner did not register.
+ */
+const UNDER = new Set([
+  "ac",
+  "co",
+  "com",
+  "edu",
+  "go",
+  "gob",
+  "gouv",
+  "gov",
+  "govt",
+  "ltd",
+  "mil",
+  "ne",
+  "net",
+  "nhs",
+  "nom",
+  "or",
+  "org",
+  "plc",
+  "sch",
+]);
+
+/**
+ * Where, in a host's name as the browser reaches it, the domain its owner registered starts: 0 for a
+ * name that is all domain (`dominios.pt`, `localhost`, an IP address).
+ */
+export function domainAt(hostname: string): number {
+  if (hostname.startsWith("[") || /^[\d.]+$/.test(hostname)) return 0;
+  const names = (hostname.endsWith(".") ? hostname.slice(0, -1) : hostname).split(".");
+  const ending = names.at(-1) ?? "";
+  const second = names.at(-2) ?? "";
+  const take = ending.length === 2 && UNDER.has(second) ? 3 : 2;
+  if (names.length <= take) return 0;
+  return names.slice(0, names.length - take).join(".").length + 1;
+}
 
 /**
  * A link cut into what is drawn and what is not: its host always, shown as the browser will reach
@@ -53,35 +130,67 @@ const HIDDEN_CHARS = /[\p{Cf}\p{Zl}\p{Zp}]/u;
  */
 export function linkRuns(href: string): LinkRun[] {
   const scheme = /^https?:\/\//i.exec(href)?.[0];
-  let url: URL | null = null;
-  try {
-    url = new URL(href);
-  } catch {
-    url = null;
-  }
-  if (!scheme || !url?.host) return [{ text: href }];
+  const url = linkUrl(href);
+  if (!scheme || !url) return [{ text: href }];
   const rest = href.slice(scheme.length);
   const end = rest.search(/[/\\?#]/);
   const written = end < 0 ? rest : rest.slice(0, end);
   const tail = end < 0 ? "" : rest.slice(end);
   const host = url.host;
-  const runs: LinkRun[] = [{ text: scheme, hidden: true }];
-  runs.push(
-    written.toLowerCase() === host && !HIDDEN_CHARS.test(written)
-      ? { text: written, host: true }
-      : { text: written, host: true, hidden: true, shows: host },
-  );
+  const runs: LinkRun[] = [{ text: scheme, hidden: true }, ...hostRuns(written, url)];
   if (!tail) return runs;
-  // A path with characters that draw nothing or turn the text around is never drawn.
-  if (HIDDEN_CHARS.test(tail)) return [...runs, { text: tail, hidden: true, shows: "/…" }];
+  // No host written before the path ("https:///evil.example/"): the browser skips the slashes, so the
+  // host drawn above is written in this tail, and its path is not what is written here.
+  if (written === "") {
+    const nothing = url.pathname === "/" && !url.search && !url.hash;
+    return [...runs, { text: tail, hidden: true, shows: nothing ? "" : "/…" }];
+  }
   const q = tail.search(/[?#]/);
   const path = q < 0 ? tail : tail.slice(0, q);
   const query = q < 0 ? "" : tail.slice(q);
+  // A path with characters that draw nothing or turn the text around, or that could be read as the
+  // host, is never drawn.
+  if (HIDDEN_CHARS.test(tail) || POSES_AS_HOST.test(path)) {
+    return [...runs, { text: tail, hidden: true, shows: path ? "/…" : queryShows(query) }];
+  }
   // A bare "/" says nothing.
   if (path === "/" && !query) return [...runs, { text: path, hidden: true }];
-  if (host.length + tail.length <= LINK_ROOM) return [...runs, { text: tail }];
+  const posing = POSES_AS_HOST.test(query);
+  if (!posing && host.length + tail.length <= LINK_ROOM) return [...runs, { text: tail }];
   const folded = query ? foldQuery(query) : null;
   return [...runs, ...shortPath(path, host.length + (folded?.shows?.length ?? 0)), ...(folded ? [folded] : [])];
+}
+
+/**
+ * The host's pieces: as written when it is the host the browser reaches, cut where its domain starts;
+ * otherwise what is written is kept for a copy, and the host reached is drawn in its place.
+ */
+function hostRuns(written: string, url: URL): LinkRun[] {
+  const name = url.hostname;
+  const at = domainAt(name);
+  const sub = name.slice(0, at);
+  const domain = name.slice(at);
+  const port = url.host.slice(name.length);
+  if (written.toLowerCase() === url.host && written.length === url.host.length && !HIDDEN_CHARS.test(written)) {
+    const pieces: [NonNullable<LinkRun["host"]>, string][] = [
+      ["sub", sub],
+      ["domain", domain],
+      ["port", port],
+    ];
+    let from = 0;
+    return pieces
+      .filter(([, piece]) => piece !== "")
+      .map(([kind, piece]) => {
+        const text = written.slice(from, from + piece.length);
+        from += piece.length;
+        return { text, host: kind };
+      });
+  }
+  return [
+    { text: written, host: "sub", hidden: true, shows: sub },
+    { text: "", host: "domain", hidden: true, shows: domain },
+    ...(port ? [{ text: "", host: "port" as const, hidden: true as const, shows: port }] : []),
+  ];
 }
 
 /** What a link shows on screen: its host and its path, shortened when long. */
@@ -93,7 +202,12 @@ export function linkDisplay(href: string): string {
 
 /** A query or a fragment, folded: "?…", or "#…" for a fragment alone. */
 function foldQuery(query: string): LinkRun {
-  return { text: query, hidden: true, shows: query.startsWith("?") ? "?…" : "#…" };
+  return { text: query, hidden: true, shows: queryShows(query) };
+}
+
+/** What a folded query or fragment draws. */
+function queryShows(query: string): string {
+  return query.startsWith("?") ? "?…" : "#…";
 }
 
 /**
@@ -159,13 +273,24 @@ export interface LinksBlock {
 
 /**
  * The links the inbox kept under an email's words, found as it writes them: the heading on its own
- * line, after a blank line or at the very start, then one http(s) link a line to the end. Null when
- * the text ends any other way, so a message that only names the heading stays as it is.
+ * line, after a blank line or at the very start, then one http(s) link a line to the end, each one a
+ * browser opens. Null when the text ends any other way, so a message that only names the heading
+ * stays as it is.
  */
 export function splitLinksBlock(text: string): LinksBlock | null {
   const at = text.lastIndexOf(LINKS_HEADING);
   if (at < 0 || (at > 0 && !text.slice(0, at).endsWith("\n\n"))) return null;
   const [first, ...links] = text.slice(at + LINKS_HEADING.length).split("\n");
-  if (first !== "" || links.length === 0 || !links.every((l) => /^https?:\/\/\S+$/i.test(l))) return null;
+  if (first !== "" || links.length === 0) return null;
+  if (!links.every((l) => /^https?:\/\/\S+$/i.test(l) && linkUrl(l) !== null)) return null;
   return { body: text.slice(0, at).replace(/\n+$/, ""), links };
+}
+
+/**
+ * The links to list under an email's words: those its words do not already show as links (the email
+ * door keeps every link an email carries, those in its text too), so none is drawn twice.
+ */
+export function linksToList(block: LinksBlock): string[] {
+  const shown = new Set(linkParts(block.body).flatMap((p) => (p.href ? [p.href] : [])));
+  return block.links.filter((l) => !shown.has(l));
 }

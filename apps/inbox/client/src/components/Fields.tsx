@@ -121,7 +121,7 @@ function BookingFields({ item, tz }: { item: ItemOf<"booking">; tz: string | und
       {p.partySize !== undefined && <F label="Party size">{p.partySize}</F>}
       {p.notes && (
         <F label="Notes" wide prose>
-          {p.notes}
+          <Linked text={p.notes} />
         </F>
       )}
     </>
@@ -171,7 +171,7 @@ function OrderFields({
       {billTo && <F label="Bill to">{billTo}</F>}
       {p.notes && (
         <F label="Notes" wide prose>
-          {p.notes}
+          <Linked text={p.notes} />
         </F>
       )}
     </>
@@ -192,7 +192,7 @@ function QuoteFields({ item, tz }: { item: ItemOf<"quote_request">; tz: string |
       {p.requestedFor && <F label="Requested for">{formatDateTime(p.requestedFor, tz)}</F>}
       {deliverTo && <F label="Deliver to">{deliverTo}</F>}
       <F label="Description" wide prose>
-        {p.description}
+        <Linked text={p.description} />
       </F>
     </>
   );
@@ -216,12 +216,12 @@ function RefundFields({ item, tz }: { item: ItemOf<"refund">; tz: string | undef
       {p.paidAmount && <F label="Refunded">{formatMoney(p.paidAmount)}</F>}
       {p.disputed && (
         <F label="Not what we sold" wide prose>
-          {p.disputed.note}
+          <Linked text={p.disputed.note} />
         </F>
       )}
       {p.reason && (
         <F label="Reason" wide prose>
-          {p.reason}
+          <Linked text={p.reason} />
         </F>
       )}
     </>

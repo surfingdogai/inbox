@@ -30,7 +30,13 @@ const shownOf = (html: string) =>
       .replace(/<span class="msg-link-gone">[^<]*<\/span>/g, "")
       .replace(/<span class="msg-link-as[^"]*" data-as="([^"]*)">/g, "$1")
       .replace(/<[^>]*>/g, "")
-      .replaceAll("\u2060", ""),
+      .replaceAll("\u2060", "")
+      .replaceAll("\u200b", ""),
+  );
+/** What is drawn bold: the domain of each link's host. */
+const boldOf = (html: string) =>
+  [...html.matchAll(/<span class="(?:msg-link-as )?msg-link-domain[^"]*"(?: data-as="([^"]*)")?>([^<]*)/g)].map((m) =>
+    decode(`${m[1] ?? ""}${m[2] ?? ""}`).replaceAll("\u2060", ""),
   );
 const anchors = (html: string) => [...html.matchAll(/<a [^>]*>[\s\S]*?<\/a>/g)].map((m) => m[0]);
 
@@ -45,6 +51,8 @@ describe("a link in a message", () => {
     expect(a).toContain(`title="${href}"`);
     expect(a).toContain(`aria-label="${href}"`);
     expect(a).toContain('class="msg-link"');
+    // Left to right, whatever the words around it.
+    expect(a).toContain('dir="ltr"');
     // The full stop after it stays text.
     expect(textOf(html)).toBe(`Please confirm: ${VERIFY}. Thanks`);
   });
@@ -52,7 +60,11 @@ describe("a link in a message", () => {
   it("shows its host, then a short path, and keeps the whole address in the text for a copy", () => {
     const html = render(`Confirm here: ${VERIFY}`);
     const [a = ""] = anchors(html);
-    expect(a).toContain('<span class="msg-link-host">my.dominios.pt</span>');
+    // The names before its domain plain, wrapping after a dot; the domain its owner registered bold, on one line.
+    expect(a).toContain(
+      '<span class="msg-link-sub"><span class="msg-link-keep">my.</span><wbr/></span><span class="msg-link-domain msg-link-keep">dominios.pt</span>',
+    );
+    expect(boldOf(a)).toEqual(["dominios.pt"]);
     expect(shownOf(a)).toBe("my.dominios.pt/modules/addons/…/verify.php?…");
     // An ellipsis holds on to what follows it: the line wraps before a "/" instead.
     expect(a).toContain('data-as="?…\u2060"');
@@ -61,11 +73,39 @@ describe("a link in a message", () => {
     expect(shownOf(html)).toBe(`Confirm here: ${linkDisplay(VERIFY)}`);
   });
 
-  it("draws the host the link reaches where the written one could pass for another", () => {
+  it("draws the host the link reaches where the written one could pass for another, and is named by it", () => {
     const html = render("Log in: https://www.paypal.com@evil.example/login");
     expect(shownOf(html)).toBe("Log in: evil.example/login");
     expect(textOf(html)).toBe("Log in: https://www.paypal.com@evil.example/login");
-    expect(html).toContain('data-as="evil.example"');
+    expect(boldOf(html)).toEqual(["evil.example"]);
+    // On hover and to a screen reader: where it goes. Its href: exactly as written.
+    const [a = ""] = anchors(html);
+    expect(a).toContain('href="https://www.paypal.com@evil.example/login"');
+    expect(a).toContain('title="https://evil.example/login"');
+    expect(a).toContain('aria-label="https://evil.example/login"');
+    expect(a).not.toMatch(/(?:title|aria-label)="[^"]*paypal/);
+    // Letters that look like others: named in the form the browser reaches.
+    const [cyrillic = ""] = anchors(render("https://\u0430pple.com/account"));
+    expect(cyrillic).toContain('aria-label="https://xn--pple-43d.com/account"');
+    expect(cyrillic).toContain('title="https://xn--pple-43d.com/account"');
+    expect(shownOf(cyrillic)).toBe("xn--pple-43d.com/account");
+  });
+
+  it("never draws a long host as the one it starts with: its names plain, wrapping after a dot, its domain bold", () => {
+    const lookalike = "https://my.dominios.pt.account-verify-security-session-refresh.evil-example.net/clientarea.php";
+    const [a = ""] = anchors(render(`Pague aqui: ${lookalike}`));
+    expect(boldOf(a)).toEqual(["evil-example.net"]);
+    const sub = a.slice(a.indexOf('<span class="msg-link-sub">'), a.indexOf('<span class="msg-link-domain'));
+    // Each name its own piece, a place to wrap after its dot; a name too long for a phone's line may wrap inside.
+    expect(sub.match(/<wbr\/>/g)).toHaveLength(4);
+    for (const name of ["my.", "dominios.", "pt."])
+      expect(sub).toContain(`<span class="msg-link-keep">${name}</span><wbr/>`);
+    expect(sub).toContain("<span>account-verify-security-session-refresh.</span><wbr/>");
+    expect(textOf(a)).toBe(lookalike);
+    // Drawn in place of a written host: the same, in what CSS draws.
+    const [drawn = ""] = anchors(render("https://www.paypal.com.secure-login-session.example.net@evil-example.net/x"));
+    expect(boldOf(drawn)).toEqual(["evil-example.net"]);
+    expect(drawn).toContain('data-as="evil-\u2060example.\u2060net"');
   });
 
   it("is never made of what is not http(s), and what the sender wrote stays text", () => {
@@ -105,6 +145,22 @@ describe("the links an email carried", () => {
     expect(copied).toContain(VERIFY);
     expect(copied).toContain("https://www.dominios.pt/faturas/2026-118.pdf");
     expect(copied.startsWith("Your invoice is ready.")).toBe(true);
+  });
+
+  it("leave out a link its words already show, and are not drawn when none is left", () => {
+    const invoice = `A sua fatura: https://my.dominios.pt/viewinvoice.php?id=118.\n\n${LINKS_HEADING}\nhttps://my.dominios.pt/viewinvoice.php?id=118\nhttps://my.dominios.pt/clientarea.php`;
+    const html = render(invoice);
+    const links = anchors(html);
+    expect(links.map(shownOf)).toEqual(["my.dominios.pt/viewinvoice.php?id=118", "my.dominios.pt/clientarea.php"]);
+    expect(html.match(/<li class="msg-links-item">/g)).toHaveLength(1);
+    // Every address is still in a copy.
+    expect(textOf(html)).toContain("https://my.dominios.pt/viewinvoice.php?id=118");
+    expect(textOf(html)).toContain("https://my.dominios.pt/clientarea.php");
+    const once = render(
+      `Entregue: https://www.ctt.pt/feapl_2/app/open/objectSearch/objectSearch.jspx?objects=RR1\n\n${LINKS_HEADING}\nhttps://www.ctt.pt/feapl_2/app/open/objectSearch/objectSearch.jspx?objects=RR1`,
+    );
+    expect(once).not.toContain("msg-links");
+    expect(anchors(once)).toHaveLength(1);
   });
 
   it("are words like any others in a message that only names the heading", () => {

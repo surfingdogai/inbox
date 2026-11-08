@@ -609,8 +609,12 @@ button.card {
   outline: 2px solid currentcolor;
   outline-offset: 2px;
 }
-.msg-link-host {
+.msg-link-domain {
   font-weight: 600;
+}
+/* A host's name, or its domain, kept on one line: a long host wraps only after a dot. */
+.msg-link-keep {
+  white-space: nowrap;
 }
 .msg-link-gone {
   font-size: 0;
