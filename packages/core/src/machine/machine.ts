@@ -274,7 +274,8 @@ export interface Transition<S extends string = string> {
   /**
    * It leaves a state the item was closed in for an open one, so the item opens again: a stay a late
    * payment confirmed after it lapsed, while its nights were still free (only the inbox's own jobs fire
-   * that one), or a message or a request a person brought back with Not spam.
+   * that one), a message or a request a person brought back with Not spam, or a closed message its
+   * customer wrote to again or the business reopened.
    */
   readonly reopens?: true;
 }

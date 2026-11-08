@@ -232,6 +232,37 @@ describe("public capabilities", () => {
     expect(detail.thread.map((t) => t.direction)).toEqual(["in", "out", "in"]);
     expect(detail.events.map((e) => e.event)).toEqual(["create", "answer", "reopen"]);
   });
+
+  it("opens a closed message again when its customer writes, listed with what is open", async () => {
+    const { caps } = await setup();
+    const started = (await caps.sendMessage(agent("m1"), {
+      body: "Do you fix e-bike batteries?",
+      contact: { email: "tomas@example.com" },
+      idempotency_key: "m1",
+    })) as { view: { item: { id: string } }; accessToken?: string };
+    const id = started.view.item.id;
+    const listed = async () =>
+      (await caps.listItems(owner, { limit: 50, open_only: true, sandbox: false })).items.map((v) => v.item.id);
+    await caps.reply(owner, { item_id: id, body: "Yes, most brands. Bring it in.", internal: false });
+    await caps.transitionItem(owner, { item_id: id, event: "close" });
+    expect(await listed()).not.toContain(id);
+    const written = await caps.sendMessage(agent("m2", started.accessToken), {
+      item_id: id,
+      body: "One more thing: do you lend a bike while it is in?",
+      access_token: started.accessToken,
+      idempotency_key: "m2",
+    });
+    // Open again, not only in its state: the customer waits on us, and the owner finds it with what is
+    // open ("All", "Needs you"), never under Done with the time it was closed.
+    expect(written).toMatchObject({ view: { item: { state: "open", closedAt: null }, waiting_on: "us" } });
+    expect(await listed()).toContain(id);
+    expect((await caps.getItem(owner, { item_id: id })).item.closedAt).toBeNull();
+    // The owner's Reopen does the same.
+    await caps.transitionItem(owner, { item_id: id, event: "close" });
+    expect(await listed()).not.toContain(id);
+    await caps.transitionItem(owner, { item_id: id, event: "reopen" });
+    expect(await listed()).toContain(id);
+  });
 });
 
 describe("owner capabilities", () => {

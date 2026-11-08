@@ -1063,7 +1063,7 @@ async function attempt_(
       ? { ...waiting, validThrough: requestExpiresAt, updatedAt: now }
       : undefined;
   if (rewound) payload.offer = pointerOf(rewound);
-  // A late payment that finds its nights still free confirms a lapsed stay after all: open again.
+  // Closed by `close`, open again by a transition that reopens it (`Transition.reopens`).
   const closedAt = effects.has("close") ? now : t.reopens ? null : row.closedAt;
   const updated: Item = {
     ...item,
