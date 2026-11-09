@@ -140,7 +140,7 @@
     },
     {
       "door": "a2a",
-      "name": "SendMessage (any agent card)",
+      "name": "SendMessage (any agent card whose endpoint answers)",
       "expect": ["message"]
     },
     {
@@ -256,7 +256,7 @@
     {
       "door": "mcp",
       "name": "checkout",
-      "expect": ["order", "pay"]
+      "expect": ["order"]
     },
     {
       "door": "a2a",
@@ -271,12 +271,12 @@
     {
       "door": "openapi",
       "name": "createCheckout",
-      "expect": ["order", "pay"]
+      "expect": ["order"]
     },
     {
       "door": "api",
       "name": "POST /cart/checkout",
-      "expect": ["order", "pay"]
+      "expect": ["order"]
     },
     {
       "door": "ucp",
@@ -350,8 +350,8 @@
     },
     {
       "door": "openapi",
-      "name": "completeCheckout",
-      "expect": ["order", "pay"]
+      "name": "createPayment",
+      "expect": ["pay"]
     },
     {
       "door": "api",
@@ -744,6 +744,12 @@
       "name": "BrowseWixRESTDocsMenu",
       "expect": [],
       "why": "A name that reads documentation meets no capability, though another word (menu) would."
+    },
+    {
+      "door": "mcp",
+      "name": "complete_checkout",
+      "expect": ["order"],
+      "why": "A name whose only payment word is checkout orders and pays nothing (score rules version 4)."
     }
   ]
 }

@@ -14,6 +14,7 @@ import names from "../vectors/capability-names.json";
 import example from "../vectors/census-edition.json";
 import vocabulary from "../vocab/capabilities.json";
 import scoreRulesV3 from "../vocab/score-rules-v3.json";
+import scoreRulesV4 from "../vocab/score-rules-v4.json";
 
 /**
  * The census's data (protocol §4.16) against its example (vectors/census-edition.json), and the vectors that say how
@@ -115,6 +116,90 @@ describe("the score rules version 3", () => {
     ])
       expect(catalogue).toContain(p);
     expect(catalogue).not.toContain("above nothing");
+  });
+});
+
+describe("the score rules version 4", () => {
+  const rules = scoreRulesSchema.parse(scoreRulesV4);
+
+  it("is in force from 9 November 2026, and retires version 3", () => {
+    expect(rules.version).toBe(4);
+    expect(rules.status).toBe("in_force");
+    expect(scoreRulesSchema.parse(scoreRulesV3).status).toBe("retired");
+    const v4 = (scoreRulesV4.changelog as { version: number; published?: string }[]).filter((c) => c.version === 4);
+    expect(v4.map((c) => c.published)).toEqual(["2026-11-09"]);
+  });
+
+  it("pays only through a way to pay the business declared itself, never a platform's standard handlers or a checkout tool", () => {
+    const pay = rules.pay;
+    expect(pay?.words).toEqual(["pay", "payment", "payments"]);
+    const shopify = pay?.platform_handlers.find((p) => p.platform === "shopify");
+    expect(shopify?.marker).toBe("dev.shopify.");
+    expect(shopify?.handlers).toEqual(["dev.shopify.card", "dev.shopify.shop_pay", "com.google.pay"]);
+    expect(pay?.platform_handlers.find((p) => p.platform === "wix")?.handlers).toEqual(["com.stripe.payments"]);
+    // A platform whose profiles name no namespace of their own: its handlers are its in a store built on it,
+    // which is one of its UCP profiles among the platform's doors.
+    for (const [platform, handlers] of [
+      ["salla", ["Apple Pay"]],
+      ["bigcommerce", ["com.google.pay"]],
+    ] as const) {
+      const h = pay?.platform_handlers.find((p) => p.platform === platform);
+      expect(h?.marker).toBeUndefined();
+      expect(h?.handlers).toEqual(handlers);
+      expect(rules.platform?.doors.find((d) => d.platform === platform && d.type === "ucp")?.site_platform).toBe(
+        platform,
+      );
+    }
+    for (const p of [
+      "declared itself or that our own read tested",
+      "only payment word is checkout",
+      "in passing",
+      "Salla's Apple Pay",
+    ])
+      expect(pay?.summary).toContain(p);
+  });
+
+  it("counts an A2A card as a door that takes requests only once its endpoint answered a harmless test call", () => {
+    for (const p of [
+      "tasks/get",
+      "A2A-Version",
+      "homepage",
+      "an MCP server is never an A2A door",
+      "readable",
+      "changes nothing",
+    ])
+      expect(rules.a2a).toContain(p);
+  });
+
+  it("tells a website platform's doors from the business's own, and its question-answering tool from a message", () => {
+    const doors = rules.platform?.doors ?? [];
+    expect(doors.find((d) => d.platform === "wix" && d.type === "mcp")).toMatchObject({
+      path: "/_api/mcp",
+      tools: ["WixREADME"],
+      counts_as: "platform",
+    });
+    expect(doors.find((d) => d.type === "shopify_mcp")?.counts_as).toBe("platform");
+    // The UCP server Shopify, BigCommerce and Jumpseller serve at one address is each one's on a store built on it.
+    for (const platform of ["shopify", "bigcommerce", "jumpseller"])
+      expect(doors.find((d) => d.platform === platform && d.path === "/api/ucp/mcp")).toMatchObject({
+        type: "mcp",
+        site_platform: platform,
+        counts_as: "mcp",
+      });
+    // Salla's, Jumpseller's and WebForger's servers say whose they are by their address and their tools.
+    expect(doors.filter((d) => d.platform === "salla" && d.type === "mcp").map((d) => [d.path, d.tools])).toEqual([
+      ["/_app/ucp/mcp", undefined],
+      ["/mcp", ["checkout-generate"]],
+    ]);
+    expect(doors.find((d) => d.platform === "webforger")?.tools).toEqual(["search_site", "get_page", "submit_inquiry"]);
+    for (const d of doors)
+      expect(d.type === "ucp" || d.type === "shopify_mcp" || !!d.path, `${d.platform} ${d.type}`).toBe(true);
+    expect(rules.platform?.answer_tools).toEqual(["ask_business"]);
+    // What else it says is version 3's, but for the payment the catalogue's raise allows.
+    expect(rules.groups).toEqual(scoreRulesSchema.parse(scoreRulesV3).groups);
+    expect((scoreRulesV4 as { commerce: { catalogue: string } }).commerce.catalogue).toContain(
+      "unless its profile names a payment handler of the business's own (pay)",
+    );
   });
 });
 

@@ -42,7 +42,7 @@
       "label": "A2A agent",
       "via": "skill",
       "spec": "https://a2a-protocol.org",
-      "how": "Any agent card can be sent a message. A skill whose name says the action meets that capability too."
+      "how": "An agent card whose endpoint answers A2A can be sent a message: a network asks it one harmless question first (tasks/get, for a task id it made up), and a card whose endpoint gives no A2A answer is read, not asked. A skill whose name says the action meets that capability too."
     },
     {
       "id": "openapi",
@@ -62,7 +62,7 @@
       "label": "UCP",
       "via": "capability",
       "spec": "https://ucp.dev",
-      "how": "The capabilities a UCP profile names, by the last part of each name (dev.ucp.shopping.checkout is checkout): checkout means orders, catalog means a catalogue and stock, order means following an order, return means returns, and payment handlers mean payment. A profile counts only on a site that shows it sells (products or offers with prices on its own pages, a cart that works, or a product for sale in the catalogue its UCP profile names): a website platform that serves the same profile on every site it hosts gives none of these on its own."
+      "how": "The capabilities a UCP profile names, by the last part of each name (dev.ucp.shopping.checkout is checkout): checkout means orders, catalog means a catalogue and stock, order means following an order, return means returns, and payment handlers of the business's own mean payment (a website platform's standard handlers, in the profile it serves for every store, do not). A profile counts only on a site that shows it sells (products or offers with prices on its own pages, a cart that works, or a product for sale in the catalogue its UCP profile names): a website platform that serves the same profile on every site it hosts gives none of these on its own."
     },
     {
       "id": "acp",
@@ -167,18 +167,20 @@
       "kind": "ask",
       "partial": "The message goes in and no answer can come back through the door.",
       "evidence": {
-        "declared": "An agent inbox that takes messages, an A2A agent card, or a tool, skill or operation that sends the business a message or opens a support request.",
+        "declared": "An agent inbox that takes messages, an A2A agent whose endpoint answered a network's test call, or a tool, skill or operation that sends the business a message or opens a support request.",
         "tested": "A network's read of the door saw it answer and list it.",
         "proven": "Signed reports from agent platforms a network recognises, saying that a message was taken, and the business's answer reached them."
       },
       "not_enough": [
         "An email address, a phone number, a chat-app link or a contact form for people.",
-        "A chat widget that only a person in a browser can use."
+        "A chat widget that only a person in a browser can use.",
+        "A question-answering tool a website platform puts on every store's door (Shopify's ask_business): it answers from the store's own pages and policies, and no message reaches the business.",
+        "An A2A agent card whose endpoint is the site's homepage, the card itself, on a site other than the business's own and the host where the business declared the card, an MCP server or nothing, or does not answer a network's test call: an agent can read it, not ask it."
       ],
       "doors": {
         "inbox": ["message"],
         "mcp": ["send_message", "contact_business", "create_support_ticket"],
-        "a2a": ["SendMessage (any agent card)"],
+        "a2a": ["SendMessage (any agent card whose endpoint answers)"],
         "openapi": ["POST /messages", "createInquiry"],
         "api": ["POST /contact"]
       }
@@ -296,18 +298,21 @@
       "kind": "pay",
       "partial": "How to pay is described and a person has to pay.",
       "evidence": {
-        "declared": "UCP payment handlers or ACP delegated payment on a site that shows it sells (products or offers with prices on its own pages, a cart that works, or a product for sale in the catalogue its UCP profile names), or a tool, skill or operation that takes a payment.",
+        "declared": "A way to pay the business declared itself or a network's read tested: payment handlers of its own in a UCP profile, or ACP delegated payment, on a site that shows it sells (products or offers with prices on its own pages, a cart that works, or a product for sale in the catalogue its UCP profile names); AP2 or x402 declared in its own door's document; or a tool, skill or operation that takes a payment, its name saying pay or payment.",
         "tested": "A network's read of the door saw it answer and list it.",
         "proven": "A signed receipt of a paid order or booking that the customer's agent counter-signed."
       },
       "not_enough": [
         "Card logos or a payment page for people.",
-        "A commerce platform's profile that every site on that platform gets, on a site with no prices and no cart."
+        "A commerce platform's profile that every site on that platform gets, on a site with no prices and no cart.",
+        "A website platform's standard payment handlers, the same in the profile it serves for every store (Shopify's dev.shopify.card, dev.shopify.shop_pay and com.google.pay; Wix's com.stripe.payments; Salla's Apple Pay; BigCommerce's com.google.pay): they are the platform's, not the business's.",
+        "A checkout tool (checkout, complete_checkout): it orders, and a checkout may end in a page where a person pays.",
+        "A door document that names x402 or AP2 in passing."
       ],
       "doors": {
         "mcp": ["pay_order", "create_payment"],
         "a2a": ["pay-invoice"],
-        "openapi": ["POST /payments", "completeCheckout"],
+        "openapi": ["POST /payments", "createPayment"],
         "api": ["POST /pay"],
         "ucp": ["payment_handlers"],
         "acp": ["delegated_payment"]
@@ -583,6 +588,12 @@
       "date": "2026-10-18",
       "change": "amended",
       "summary": "A UCP profile also counts on a site when the catalogue it names, asked by a network's read, is the site's own and lists a product for sale with a price (score rules version 3, amended 18 October 2026): the parentheses that say what shows a site sells now say so. No capability was added, renamed or removed."
+    },
+    {
+      "version": 2,
+      "date": "2026-11-09",
+      "change": "amended",
+      "summary": "Pay and message say what the business published itself or a network's read tested (score rules version 4): payment handlers of the business's own, never only a website platform's standard ones, and a tool whose name says pay or payment, never one whose only payment word is checkout; an A2A agent only once its endpoint answered a network's test call; and a website platform's question-answering tool is not message. completeCheckout is no longer an example of pay (it orders); createPayment is. No capability was added, renamed or removed."
     }
   ]
 }

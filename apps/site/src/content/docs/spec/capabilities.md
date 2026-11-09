@@ -42,13 +42,13 @@ A capability is met through a door an agent can use. Each kind of door is read b
 <dt><a href="https://modelcontextprotocol.io">MCP server</a> · read by tool</dt>
 <dd>A tool whose name says the action. A tool the server marks read-only, or one whose name only reads (get, list, search), meets only the capabilities that read.</dd>
 <dt><a href="https://a2a-protocol.org">A2A agent</a> · read by skill</dt>
-<dd>Any agent card can be sent a message. A skill whose name says the action meets that capability too.</dd>
+<dd>An agent card whose endpoint answers A2A can be sent a message: a network asks it one harmless question first (tasks/get, for a task id it made up), and a card whose endpoint gives no A2A answer is read, not asked. A skill whose name says the action meets that capability too.</dd>
 <dt><a href="https://www.openapis.org">OpenAPI</a> · read by operation</dt>
 <dd>An operation, by its method and path or its operationId. POST adds create, PUT and PATCH add update, DELETE adds delete. An operation by GET only reads.</dd>
 <dt>REST API · read by endpoint</dt>
 <dd>An endpoint the business documents for agents, read as an OpenAPI operation is.</dd>
 <dt><a href="https://ucp.dev">UCP</a> · read by capability</dt>
-<dd>The capabilities a UCP profile names, by the last part of each name (dev.ucp.shopping.checkout is checkout): checkout means orders, catalog means a catalogue and stock, order means following an order, return means returns, and payment handlers mean payment. A profile counts only on a site that shows it sells (products or offers with prices on its own pages, a cart that works, or a product for sale in the catalogue its UCP profile names): a website platform that serves the same profile on every site it hosts gives none of these on its own.</dd>
+<dd>The capabilities a UCP profile names, by the last part of each name (dev.ucp.shopping.checkout is checkout): checkout means orders, catalog means a catalogue and stock, order means following an order, return means returns, and payment handlers of the business's own mean payment (a website platform's standard handlers, in the profile it serves for every store, do not). A profile counts only on a site that shows it sells (products or offers with prices on its own pages, a cart that works, or a product for sale in the catalogue its UCP profile names): a website platform that serves the same profile on every site it hosts gives none of these on its own.</dd>
 <dt><a href="https://www.agenticcommerce.dev">ACP</a> · read by capability</dt>
 <dd>Checkout means orders. Delegated payment (delegated_payment) means payment. A profile counts only on a site that shows it sells (products or offers with prices on its own pages, a cart that works, or a product for sale in the catalogue the site's UCP profile names).</dd>
 <dt><a href="https://github.com/webmachinelearning/webmcp">WebMCP</a> (experimental) · read by tool</dt>
@@ -160,19 +160,21 @@ Send the business a question or a request in words and get an answer back throug
 
 | Evidence | What has to be seen |
 | --- | --- |
-| `declared` | An agent inbox that takes messages, an A2A agent card, or a tool, skill or operation that sends the business a message or opens a support request. |
+| `declared` | An agent inbox that takes messages, an A2A agent whose endpoint answered a network's test call, or a tool, skill or operation that sends the business a message or opens a support request. |
 | `proven` | Signed reports from agent platforms a network recognises, saying that a message was taken, and the business's answer reached them. |
 
 Not enough:
 
 - An email address, a phone number, a chat-app link or a contact form for people.
 - A chat widget that only a person in a browser can use.
+- A question-answering tool a website platform puts on every store's door (Shopify's ask_business): it answers from the store's own pages and policies, and no message reaches the business.
+- An A2A agent card whose endpoint is the site's homepage, the card itself, on a site other than the business's own and the host where the business declared the card, an MCP server or nothing, or does not answer a network's test call: an agent can read it, not ask it.
 
 Through each kind of door, for example:
 
 - Agent inbox: `message`
 - MCP server: `send_message`, `contact_business`, `create_support_ticket`
-- A2A agent: `SendMessage (any agent card)`
+- A2A agent: `SendMessage (any agent card whose endpoint answers)`
 - OpenAPI: `POST /messages`, `createInquiry`
 - REST API: `POST /contact`
 
@@ -304,19 +306,22 @@ Pay for a booking or an order, or learn exactly how payment happens: on the spot
 
 | Evidence | What has to be seen |
 | --- | --- |
-| `declared` | UCP payment handlers or ACP delegated payment on a site that shows it sells (products or offers with prices on its own pages, a cart that works, or a product for sale in the catalogue its UCP profile names), or a tool, skill or operation that takes a payment. |
+| `declared` | A way to pay the business declared itself or a network's read tested: payment handlers of its own in a UCP profile, or ACP delegated payment, on a site that shows it sells (products or offers with prices on its own pages, a cart that works, or a product for sale in the catalogue its UCP profile names); AP2 or x402 declared in its own door's document; or a tool, skill or operation that takes a payment, its name saying pay or payment. |
 | `proven` | A signed receipt of a paid order or booking that the customer's agent counter-signed. |
 
 Not enough:
 
 - Card logos or a payment page for people.
 - A commerce platform's profile that every site on that platform gets, on a site with no prices and no cart.
+- A website platform's standard payment handlers, the same in the profile it serves for every store (Shopify's dev.shopify.card, dev.shopify.shop_pay and com.google.pay; Wix's com.stripe.payments; Salla's Apple Pay; BigCommerce's com.google.pay): they are the platform's, not the business's.
+- A checkout tool (checkout, complete_checkout): it orders, and a checkout may end in a page where a person pays.
+- A door document that names x402 or AP2 in passing.
 
 Through each kind of door, for example:
 
 - MCP server: `pay_order`, `create_payment`
 - A2A agent: `pay-invoice`
-- OpenAPI: `POST /payments`, `completeCheckout`
+- OpenAPI: `POST /payments`, `createPayment`
 - REST API: `POST /pay`
 - UCP: `payment_handlers`
 - ACP: `delegated_payment`
@@ -626,6 +631,7 @@ Through each kind of door, for example:
 
 ## Changelog {#changelog}
 
+- **Version 2**, amended 9 November 2026. Pay and message say what the business published itself or a network's read tested (score rules version 4): payment handlers of the business's own, never only a website platform's standard ones, and a tool whose name says pay or payment, never one whose only payment word is checkout; an A2A agent only once its endpoint answered a network's test call; and a website platform's question-answering tool is not message. completeCheckout is no longer an example of pay (it orders); createPayment is. No capability was added, renamed or removed.
 - **Version 2**, amended 18 October 2026. A UCP profile also counts on a site when the catalogue it names, asked by a network's read, is the site's own and lists a product for sale with a price (score rules version 3, amended 18 October 2026): the parentheses that say what shows a site sells now say so. No capability was added, renamed or removed.
 - **Version 2**, published 18 October 2026. Each capability now has a definition, other words for it, what partial means for it, what has to be seen at each step of the evidence ladder, what is not enough, and how each kind of agent door meets it, with example names. Message, negotiate, book, order and pay name the kind of request a directory filters by (ask, quote, book, order, pay). The door kinds, what never counts as a door and how names are read are written down. Order, pay, the catalogue, availability, tracking and returns need something the business really sells when they rest on a UCP or ACP profile: a commerce platform's profile that every site on it gets is not enough on its own. A name that reads documentation meets nothing. No capability was added, renamed or removed: every id, label and question is as in version 1.
 - **Version 1**, amended 13 October 2026. Tested is produced: a network's own read of a door that saw it answer and list a capability in the 7 days before.

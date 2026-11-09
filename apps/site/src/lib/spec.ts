@@ -82,7 +82,16 @@ export interface SpecDoc {
 const vocabulary = JSON.parse(readFileSync(`${SPEC_DIR}vocab/capabilities.json`, "utf8")) as {
   version: number;
   published: string;
+  changelog?: { version: number; date: string }[];
 };
+
+/** The day the vocabulary in force last changed: its version's publication or its latest amendment. */
+const vocabularyRevised =
+  (vocabulary.changelog ?? [])
+    .filter((c) => c.version === vocabulary.version)
+    .map((c) => c.date)
+    .sort()
+    .at(-1) ?? vocabulary.published;
 
 export const SPEC_DOCS: readonly SpecDoc[] = [
   {
@@ -92,7 +101,7 @@ export const SPEC_DOCS: readonly SpecDoc[] = [
       "The capability vocabulary: twenty things an agent can do, what each means, the evidence for it, and how each kind of agent door carries it.",
     version: vocabulary.version,
     label: `version ${vocabulary.version}`,
-    revised: vocabulary.published,
+    revised: vocabularyRevised,
     page: "/spec/capabilities/",
     files: [
       "capabilities.json",
@@ -134,9 +143,9 @@ export const SPEC_DOCS: readonly SpecDoc[] = [
     title: "The census of what AI agents can do",
     summary:
       "How the monthly census counts what agents can do at the websites checked, and the format of its open data.",
-    version: 1,
-    label: "method version 1",
-    revised: "2026-10-18",
+    version: 2,
+    label: "method version 2",
+    revised: "2026-11-09",
     page: "/spec/census/",
     files: [
       "schemas/census-edition.json",
@@ -144,7 +153,7 @@ export const SPEC_DOCS: readonly SpecDoc[] = [
       "vectors/census-edition.json",
       "schemas/mcp-get-census-input.json",
       "schemas/mcp-get-census-output.json",
-      "vocab/score-rules-v3.json",
+      "vocab/score-rules-v4.json",
     ],
   },
 ];

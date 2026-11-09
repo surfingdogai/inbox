@@ -125,7 +125,7 @@
           },
           "real_business": {
             "type": "boolean",
-            "description": "A real business (0.8.2): a member, registered or claimed, or a site matched to its entry on public maps or in a business register. Above the rest. Absent from a network without listing rules."
+            "description": "A real business (0.8.2): a member, registered or claimed, or a site matched to its entry on public maps or in a business register. Labelled, and listed apart (?real=1); a board that orders real businesses first names real_business in its order_by. Absent from a network without listing rules."
           },
           "can_book_order_or_sign_up": {
             "type": "string",

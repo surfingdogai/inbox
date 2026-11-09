@@ -4,10 +4,11 @@ import { doorHistorySchema, doorTypeSchema, levelNameSchema, payWithSchema, trac
 
 /**
  * Capabilities and the agentic score (`docs/protocol/network.md` §4.13, optional for a network): what an AI agent can
- * do with a business through doors the business published, capability by capability, and one score over the
+ * do with a business through the doors at its site (those it published itself and, from score rules version 4, those
+ * its website platform gives every site it hosts, told apart), capability by capability, and one score over the
  * capabilities that apply to its kind of business. The vocabulary is `vocab/capabilities.json`, the rules
- * `vocab/score-rules-v2.json` (in force from 7 October 2026, amended on 8 and 12 October 2026; version 1,
- * `vocab/score-rules-v1.json`, is retired, and a network serves its own at `GET /v1/score-rules`), and
+ * `vocab/score-rules-v4.json` (in force from 9 November 2026; versions 1 to 3, `vocab/score-rules-v1.json` to
+ * `vocab/score-rules-v3.json`, are retired, and a network serves its own at `GET /v1/score-rules`), and
  * `vectors/score.json` (`vectors/score-v1.json` for version 1) pins the arithmetic. The score never changes a
  * business's place in the directory's search order.
  */
@@ -295,7 +296,92 @@ export const scoreRulesSchema = z.object({
       "Version 3 as amended on 19 October 2026 (0.8.2): who the directory lists and a leaderboard names. A local business a " +
         "network found when it is a real business (a member, registered or claimed, or a site its crawler matched to its " +
         "entry on public maps or in a business register); none whose site was found parked, empty or taken over, unless a " +
-        "member's; online shops and software companies on their doors; real businesses above the rest.",
+        "member's; online shops and software companies on their doors; real businesses labelled, and since the amendment " +
+        "of 21 October 2026 no longer ordered above the rest (rank).",
+    ),
+  pay: z
+    .object({
+      summary: z.string(),
+      words: z
+        .array(z.string())
+        .min(1)
+        .describe("A name takes a payment only with one of these words: pay, payment, payments."),
+      platform_handlers: z
+        .array(
+          z.object({
+            platform: z.string(),
+            marker: z
+              .string()
+              .optional()
+              .describe(
+                "A namespace only that platform's profiles use, among the profile's handlers or capabilities. Without one, " +
+                  "the handlers are the platform's in the profile of a site built on it (a UCP profile among platform.doors).",
+              ),
+            handlers: z
+              .array(z.string())
+              .min(1)
+              .describe("The payment handlers its profile gives the stores it hosts."),
+          }),
+        )
+        .describe("A website platform's standard payment handlers: the platform's word, not the business's."),
+    })
+    .optional()
+    .describe(
+      "Version 4: paying (pay, and the level payable) counts only for a way to pay the business declared itself or the " +
+        "network's read tested. A name whose only payment word is checkout orders; a platform's standard handlers do not pay.",
+    ),
+  a2a: z
+    .string()
+    .optional()
+    .describe(
+      "Version 4: an A2A agent card is a door that takes requests only once a harmless test call to its endpoint " +
+        "(tasks/get for a made-up task id) got an A2A JSON-RPC answer; any other card is readable.",
+    ),
+  platform: z
+    .object({
+      summary: z.string(),
+      doors: z.array(
+        z.object({
+          platform: z.string(),
+          type: z.string().describe("The door's type as a network stores it (mcp, ucp, shopify_mcp)."),
+          path: z.string().optional().describe("Its path on the site, the same on every site the platform hosts."),
+          tools: z
+            .array(z.string().min(1))
+            .optional()
+            .describe("Tools the platform's server always lists: it is the platform's when it lists every one."),
+          site_platform: z
+            .string()
+            .optional()
+            .describe(
+              "On a site built on this platform: another door of the site is one only this platform serves, the site's " +
+                "homepage says so, or for Shopify the marks only its storefronts leave. For a UCP profile, for an " +
+                "address several platforms serve (/api/ucp/mcp), and for a door with no tools listed (Wix's /_api/mcp: " +
+                "any door at that path on a Wix site); a door there on a site no read ties to a platform is the " +
+                "business's own.",
+            ),
+          marker: z
+            .string()
+            .optional()
+            .describe(
+              "For a profile: a namespace only that platform's profiles use. A profile that names a payment handler or a " +
+                "capability under it is the platform's, whatever the site.",
+            ),
+          counts_as: z
+            .string()
+            .describe("The door type it is counted as; platform: none of the protocols' (as Shopify's storefront)."),
+        }),
+      ),
+      answer_tools: z
+        .array(z.string())
+        .describe(
+          "A platform's question-answering tools (ask_business): on a platform's door no message reaches the business, so " +
+            "they are not message; a tool of that name on a door the business published itself counts as before.",
+        ),
+    })
+    .optional()
+    .describe(
+      "Version 4: the doors a website platform gives every site it hosts. They count for what an agent can do; every " +
+        "count says how many get there only through one (platform) and how many through a door of the business's own.",
     ),
   directory: z.string(),
   not_certification: z.string(),
@@ -777,10 +863,14 @@ export const LEADERBOARD_CAN = [
 ] as const;
 
 /**
- * A board's order, field by field: real businesses above the rest (0.8.2, since 19 October 2026: a member, a business
- * that registered or whose owner proved the site is theirs, or one whose site the network's crawler matched to its entry
- * on public maps or in a business register), then whether an agent can book, order or sign up at a business (yes, then partly, then no or not
- * applicable), then its agentic score, then the most recent check, then its domain.
+ * The fields a board's order may name, field by field (`order_by`): real businesses above the rest (0.8.2: a member, a
+ * business that registered or whose owner proved the site is theirs, or one whose site the network's crawler matched to
+ * its entry on public maps or in a business register), then whether an agent can book, order or sign up at a business
+ * (yes, then partly, then no or not applicable), then its agentic score, then the most recent check, then its domain. A
+ * network names the ones it orders by: Surfing Dog's has not ordered real businesses first since score rules version 3's
+ * amendment of 21 October 2026 (`can_book_order_or_sign_up`, `score`, `checked_at`, `domain`, and `score`,
+ * `checked_at`, `domain` for a board's Websites view, `?by=score`); it labels them (`real_business`) and lists them
+ * apart (`?real=1`).
  */
 export const LEADERBOARD_ORDER_BY = [
   "real_business",
@@ -818,7 +908,8 @@ export const leaderboardSchema = z.object({
         .optional()
         .describe(
           "A real business (0.8.2): a member, registered or claimed, or a site matched to its entry on public maps or in a " +
-            "business register. Above the rest. Absent from a network without listing rules.",
+            "business register. Labelled, and listed apart (?real=1); a board that orders real businesses first names " +
+            "real_business in its order_by. Absent from a network without listing rules.",
         ),
       can_book_order_or_sign_up: z
         .enum(["yes", "partly", "no"])

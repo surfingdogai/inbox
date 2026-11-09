@@ -226,6 +226,34 @@ or network:
   business outputs; the credit in a fact's `via`). A reader pinned to 0.15.1 rejects `maps`. A listing and a card
   may say `location_precision`, `town` or `maps`, when the network places it by its town's centre or by that place
   (§4.10), and `search_businesses` takes `radius_km` beside `near` (`searchBusinessesInputSchema`, §4.7).
+- 0.17 (optional for a network): the agentic score's rules, version 4 (`vocab/score-rules-v4.json`, protocol
+  §4.9, §4.13; version 3 retired, `vocab/score-rules-v3.json` as last amended). Paying, the capability `pay` and the
+  level `payable`, counts only for a way to pay the business declared itself or the network's read tested: never only
+  a website platform's standard UCP payment handlers (the rules' `pay.platform_handlers`: Shopify's three, Wix's
+  `com.stripe.payments`, Salla's `Apple Pay`, BigCommerce's `com.google.pay`; a platform whose profiles name no
+  namespace of their own has no `marker`, and its handlers are the platform's in the profile of a store built on
+  it), never a name whose only payment word is checkout (`pay.words`), never an agent payment protocol a document
+  names in passing;
+  `payable` needs a door that books or orders and pays, so an A2A skill or an API operation that takes a payment gives
+  `pay` alone. An A2A agent card is a door that takes requests, or a payment, only once its endpoint (on the business's
+  site, or on the host where the business declared the card) answered the network's test call (`tasks/get` for a
+  made-up task id, §4.8; the rules' `a2a`). A website platform's doors (`platform.doors`, by address and the
+  `tools` their server always lists, on a site built on the platform, `site_platform`, or for a UCP profile by a
+  handler or capability under the platform's `marker`) count for what an agent can do: Shopify's, Wix's, Salla's,
+  Jumpseller's, WebForger's and BigCommerce's. Wix's MCP server, like Shopify's storefront server, is no MCP door; a
+  platform's question-answering tool on a platform's door (`platform.answer_tools`: Shopify's `ask_business`) is not
+  `message`. Where a network's directory rules say a business's own door (its filters, its order's sources), they mean
+  a live door at the business's site, whoever runs it; own, in the counts, is a door the business published itself.
+  `scoreRulesSchema` describes `pay`, `a2a` and `platform` (`schemas/score-rules.json`). The capability
+  vocabulary, version 2 amended on 9 November 2026, says the same of `pay` and `message` (`completeCheckout` is no
+  longer an example of pay; `createPayment` is), and `vectors/capability-names.json` reads names so. The census, method
+  version 2 (§4.16): `agent_ready_own`, `can_own:<capability>`, `door_own:<type>`, `level_own:<name>` and their
+  `_platform` twins (a capability is the business's own on a site agent-ready through a door of its own), and a
+  site's country from its verified place in Overture Maps places data when its own pages name none (a place the
+  network's check matched to the site; each `_own` and `_platform` pair adds up to its total over the sites scored
+  under the rules in force);
+  `get_census` answers up to 400 rows (`getCensusOutputSchema`). A reader pinned to 0.16 rejects a `get_census` answer
+  of more than 200 rows, and reads every other answer as before.
 
 A version number is given when a change merges, in the order changes merge. Work in progress names no number, so
 two changes built side by side never claim the same one.

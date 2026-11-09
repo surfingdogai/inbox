@@ -10,7 +10,7 @@ import {
 } from "../../../packages/spec/src/index";
 import scoreVectors from "../../../packages/spec/vectors/score.json";
 import scoreRulesV1 from "../../../packages/spec/vocab/score-rules-v1.json";
-import scoreRulesV3 from "../../../packages/spec/vocab/score-rules-v3.json";
+import scoreRulesV4 from "../../../packages/spec/vocab/score-rules-v4.json";
 import { AGENT_EXAMPLE, exampleCard } from "../src/lib/agent-example";
 import {
   ago,
@@ -149,8 +149,8 @@ describe("the checker's pages and components", () => {
     expect(scoreRulesSchema.parse(scoreRulesV1).named).toContain(
       "when it is agent-ready (askable or above); others are counted, not named.",
     );
-    // The rules in force: version 3, amended on 19 October 2026 (listing).
-    const rules = scoreRulesSchema.parse(scoreRulesV3);
+    // The rules in force: version 4 (9 November 2026), named as version 3 amended on 19 October 2026 had it (listing).
+    const rules = scoreRulesSchema.parse(scoreRulesV4);
     expect(rules.named).toContain(
       "once it is agent-ready (askable or above). A local business we found is named once we match its site to its entry on public maps or registers, or its owner proves the site is theirs. Parked, empty or taken-over sites never are. Others are counted, not named.",
     );

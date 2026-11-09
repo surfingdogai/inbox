@@ -37,7 +37,12 @@ Spec 0.15.1 adds, optional for a network, the catalogue check (§4.18): how a bu
 network, and each product it holds back or changed, by code. Spec 0.16 adds, optional for a network, a fourth source
 of a listing's values, `maps` (§4.10, §4.11): a crawled entry's position, kind and name read from public maps data
 on a place the network matched to the business's own site, each shown as such, with the data's credit. A reader
-pinned to 0.15.1 rejects `maps`.
+pinned to 0.15.1 rejects `maps`. Spec 0.17 adds, optional for a network, score rules version 4 (§4.9, §4.13, §4.16):
+it counts paying only for a way to pay the business declared itself or a network's read tested, an A2A agent only
+once its endpoint answered a harmless test call, and tells the doors a website platform gives every site it hosts
+from the business's own, in every count; the census (method version 2) counts the agent-ready by how they get
+there, and a site's country from its verified place in open place data when its own pages name none. A reader pinned
+to 0.16 rejects a `get_census` answer of more than 200 rows.
 
 A **network** is a service that inboxes report to: it lists businesses, keeps the receipts they
 publish, gives customers a key and passes, and orders the directory by the published rules. Anyone
@@ -76,11 +81,12 @@ also gives customers keys and passes, scores, and hears reports and contests. It
 | A found entry's card, from what was crawled | [`vectors/listing.json`](../../packages/spec/vectors/listing.json) (§4.11), from the network |
 | The capability vocabulary, version 2: definitions, evidence, how each kind of door carries each capability | [`vocab/capabilities.json`](../../packages/spec/vocab/capabilities.json) (§4.13); version 1 at [`vocab/capabilities-v1.json`](../../packages/spec/vocab/capabilities-v1.json) |
 | The agentic score's rules, version 2 as amended on 8 and 12 October 2026 (version 1 retired) | [`vocab/score-rules-v2.json`](../../packages/spec/vocab/score-rules-v2.json), [`vocab/score-rules-v1.json`](../../packages/spec/vocab/score-rules-v1.json) (§4.13) |
-| The agentic score's arithmetic | [`vectors/score.json`](../../packages/spec/vectors/score.json) (version 2), [`vectors/score-v1.json`](../../packages/spec/vectors/score-v1.json) (§4.13), from the network |
+| The agentic score's arithmetic | [`vectors/score.json`](../../packages/spec/vectors/score.json) (version 2, whose arithmetic versions 3 and 4 keep), [`vectors/score-v1.json`](../../packages/spec/vectors/score-v1.json) (§4.13), from the network |
 | Door report classes | [`vocab/door-report-classes.json`](../../packages/spec/vocab/door-report-classes.json) (§4.15) |
 | Door reports, and the network's own reads of a door | [`vectors/door-reports.json`](../../packages/spec/vectors/door-reports.json) (§4.8, §4.15) |
 | How a tool's, skill's or operation's name is read as capabilities | [`vectors/capability-names.json`](../../packages/spec/vectors/capability-names.json) (§4.13), from the network |
-| The agentic score's rules, version 3 as revised on 15 and 18 October 2026: a commerce profile counts where the site sells, its own catalogue included | [`vocab/score-rules-v3.json`](../../packages/spec/vocab/score-rules-v3.json) (§4.13), from the network |
+| The agentic score's rules, version 3 as revised on 15 and 18 October 2026 (a commerce profile counts where the site sells, its own catalogue included) and amended on 19 and 21 October 2026 (who the directory lists; real businesses no longer ordered first), retired by version 4 | [`vocab/score-rules-v3.json`](../../packages/spec/vocab/score-rules-v3.json) (§4.13), from the network |
+| The agentic score's rules, version 4 (9 November 2026): paying only for a way to pay the business declared itself or a read tested, an A2A agent only once its endpoint answered, and a website platform's doors told from the business's own | [`vocab/score-rules-v4.json`](../../packages/spec/vocab/score-rules-v4.json) (§4.9, §4.13), from the network |
 | The census: an edition, and the list of them | [`schemas/census-edition.json`](../../packages/spec/schemas/census-edition.json), [`schemas/census-editions.json`](../../packages/spec/schemas/census-editions.json), an example in [`vectors/census-edition.json`](../../packages/spec/vectors/census-edition.json) (§4.16) |
 | The census for an assistant: the MCP tool `get_census` | [`schemas/mcp-get-census-input.json`](../../packages/spec/schemas/mcp-get-census-input.json), [`schemas/mcp-get-census-output.json`](../../packages/spec/schemas/mcp-get-census-output.json) (§4.16) |
 | The reporters' reading allowance: what earns credit, who is a contributor | [`vectors/door-reports.json`](../../packages/spec/vectors/door-reports.json) `contributors` (§4.15) |
@@ -273,7 +279,7 @@ profile's components and `content-type`, holds no key, pass secret or session, a
 | `POST /mcp` | none | one JSON-RPC message → its answer (§4.7) | `mcp-*` |
 | `GET /v1/score-rules` (0.3, MAY) | none | `?version=N` → the agentic score's rules (§4.13) | `score-rules` |
 | `GET /b/{domain}`, `GET /b/{domain}.json` (0.3, MAY) | none | → a check's result page, or its JSON (§4.13) | `check-result` |
-| `GET /leaderboard.json` (0.3, MAY) | none | `?category=&country=&place=&can=&ready=&real=&page=` (`real`: 0.8.2) → real businesses above the rest, then businesses where an agent can book, order or sign up, then by agentic score (§4.13) | `leaderboard` |
+| `GET /leaderboard.json` (0.3, MAY) | none | `?category=&country=&place=&can=&ready=&real=&page=` (`real`: 0.8.2) → businesses where an agent can book, order or sign up first, then by agentic score; `by=score` by score alone (§4.13) | `leaderboard` |
 | `GET /.well-known/ai-catalog.json` (0.3, SHOULD) | none | → the network's doors for agents (§4.14) | `ai-catalog` |
 | `POST /v1/door-reports` (0.4, MAY) | optional sdi-agent/1 or Web Bot Auth | `{v: 1, reports}` → `202 {accepted, ignored, next}` (§4.15) | `door-reports-*`, `door-report` |
 | `POST /v1/door-incidents/{id}` (0.4, MAY) | sdi-instance/1 | `{state: "fixed"}` → `{id, state, check_queued}` (§4.15) | `door-incident-*` |
@@ -932,7 +938,15 @@ door host's `/.well-known/` that lists the domain. Until then the network keeps 
 level, and does not show it. A claim proved by `code` (§4.12) declares no door on another host.
 
 **Probing reads and never acts.** For MCP servers at 2026-07-28 or later a network reads the server
-card or calls `tools/list` only, and calls `initialize` for older versions alone. It never makes a
+card or calls `tools/list` only, and calls `initialize` for older versions alone. An A2A agent card's
+endpoint for its JSON-RPC binding is asked one question, `tasks/get` (`GetTask` from A2A 1.0) for a
+task id the network made up, with the `A2A-Version` header (asked by the other name when the endpoint
+knows only that one: two requests at most): it reads no task that exists and changes nothing, and only
+an A2A JSON-RPC answer to it (a result, or one of A2A's own errors, the task not found) makes the card
+a door that takes requests (§4.9). An endpoint at the root of the homepage's own host is the homepage
+and is not asked; the root of another of the site's hosts is an address of its own. The question comes
+after the site's pages are read, and a bot check, a `429` or a `503` at the endpoint is that call's
+answer alone (not asked): it never ends the read or counts against the site. It never makes a
 `tools/call`, a write call, an A2A `message/send`, a checkout, a form submission or a login.
 
 **The network's own reads.** Only a network's own reads move a door between live, failing and gone.
@@ -1032,10 +1046,10 @@ A business's level is the highest level among its live doors.
 |---|---|---|
 | `listed` | known to exist; human contact only | no agent door |
 | `readable` | an AI can read its facts or catalogue | schema.org data, llms.txt, MCP read-only tools, NLWeb, a UCP or ACP catalogue, OpenAPI read operations |
-| `askable` | a door declares a request kind it answers (ask or quote) | an inbox; an A2A skill; an MCP tool or an API operation declared as ask or quote |
+| `askable` | a door declares a request kind it answers (ask or quote) | an inbox; an A2A agent whose endpoint answered the network's test call (§4.8); an MCP tool or an API operation declared as ask or quote, never a website platform's question-answering tool that answers from the store's own pages (Shopify's `ask_business`) |
 | `bookable` | a door can book | inbox booking; declared MCP or API booking operations |
-| `orderable` | a door can create an order or a cart, and none books: the same rung as `bookable`, never called `bookable` | inbox order; UCP or ACP checkout on a site that shows it sells (Product markup with a price on its pages, another door of its own that takes orders, or a product for sale in the catalogue its UCP profile names, when that catalogue is the site's own); declared MCP or API order operations |
-| `payable` | the agent can also pay | UCP payment handlers, ACP delegated payment, AP2, x402 |
+| `orderable` | a door can create an order or a cart, and none books: the same rung as `bookable`, never called `bookable` | inbox order; UCP or ACP checkout on a site that shows it sells (Product markup with a price on its pages, another door of the site that takes orders, or a product for sale in the catalogue its UCP profile names, when that catalogue is the site's own); declared MCP or API order operations |
+| `payable` | a door that books or orders also lets the agent pay, through a way to pay the business declared itself or the network's read tested | payment handlers of the business's own in its UCP profile (never only the standard handlers a website platform's profile gives the stores it hosts: Shopify's `dev.shopify.card`, `dev.shopify.shop_pay` and `com.google.pay`, Wix's `com.stripe.payments`, Salla's `Apple Pay`, BigCommerce's `com.google.pay`), ACP delegated payment, AP2 or x402 declared in its own door's document, an inbox that says it is paid, a tool an MCP server or a WebMCP page lists that takes a payment (`pay_invoice`, `create_payment`), never a name whose only payment word is checkout (`complete_checkout`): that one orders. An A2A skill or an API operation that takes a payment gives the capability `pay` (§4.13), not this level |
 
 Levels come from the network's own probes; what a business declares is a hint until a probe confirms
 it. A door behind a customer account never raises a level. A UCP or ACP profile on a site that shows
@@ -1044,7 +1058,10 @@ sale in the catalogue its UCP profile names) raises it no higher than `readable`
 may serve one on every site it hosts. A priced menu, a list of services or an offer with no price is
 no Product markup, and a catalogue that refuses a network's read, lists nothing for sale, lists nothing but a
 template's sample products or services and events, or is another business's, shows nothing. A UCP or
-ACP profile never makes a business `bookable`. **Agent-ready** means `askable` or above.
+ACP profile never makes a business `bookable`. An A2A agent card whose endpoint is the site's homepage, the
+card itself, on a site other than the business's own and the host where the business declared the card (§4.8),
+missing, a page for people, another door of the site (an MCP server is never an A2A door) or does not answer A2A is
+a document an agent can read: `readable`, its skills counting for nothing, and no way to pay (score rules version 4). **Agent-ready** means `askable` or above.
 A network lists businesses below `askable` only after its own checks for that (a working claim,
 correction and removal, and the fields each jurisdiction asks for); until then a filter below
 `askable` returns nothing. A network never shows a number for a level, only its name.
@@ -1236,8 +1253,9 @@ stays, and the answer is `refused`. `listing: "off"` hides it from search and ke
 
 ### 4.13 Capabilities and the agentic score
 
-A network MAY say, business by business, how far an AI agent can go with it through the doors it
-published, and sum that up as an **agentic score** from 0 to 100. It is about capabilities, not
+A network MAY say, business by business, how far an AI agent can go with it through the doors at its
+site (those it published itself and, from score rules version 4, those its website platform gives every site it
+hosts, told apart), and sum that up as an **agentic score** from 0 to 100. It is about capabilities, not
 standards: whatever the door (an inbox, MCP, A2A, an API, UCP or ACP), can an agent message, book,
 order, sign up, cancel or negotiate here, and the journey around those.
 
@@ -1254,7 +1272,7 @@ capability rules, never from one that logs a person in. A capability is `yes`, `
 door behind a customer account, or payment described but not done by the agent), `no`, or `na`
 when it does not apply to that kind of business.
 
-**Evidence** is a ladder: `declared` (the business's own site or door says so), `tested` (a probe
+**Evidence** is a ladder: `declared` (the business's site, or a door at it, says so), `tested` (a probe
 tried it) and `proven` (agents reported using it). Versions 1 and 2 of the rules produce `declared` alone.
 A capability read from a tool's name, a page's words or a page's marker is still `declared`, with a
 `basis` saying which (`tool_name`, `skill`, `operation`, `item_types`, `protocol`,
@@ -1337,6 +1355,40 @@ door that carries it out at once, whether or not a person at the business approv
 pay are a third of the core group each. Cancelling a cart, a basket or a checkout is not `cancel`,
 which is cancelling an order or a booking.
 
+**What the business published itself, or the network's read tested** (version 4, 9 November 2026;
+the rules' `pay`, `a2a` and `platform`). Paying counts, as `pay` and for `payable` (§4.9), only for a
+way to pay the business declared itself or the network's read tested: payment handlers in a UCP
+profile other than the standard ones a website platform's profile gives the stores it hosts (a
+platform's handlers are listed with a `marker`, a namespace only its profiles use, or, for a platform
+whose profiles name none, are the platform's in the profile of a site built on it), ACP delegated
+payment, AP2 or x402 declared in the structure of a door's own document (a document that names one in
+passing is no way to pay), an inbox that says it is paid, or a tool, skill or operation whose name
+takes a payment (`pay_invoice`, `create_payment`: a word of `pay.words` in a name the door registry
+reads as paying, never one that only reads payments) and that its server does not mark read-only.
+`payable` needs a door that books or orders and pays: an A2A skill or an API operation that takes a
+payment gives `pay`, not `payable`. A name whose only payment word is checkout orders: it never pays.
+An A2A agent card gives `message` (and what its skills name), and any way to pay its document
+declares, only once its endpoint answered the network's test call (§4.8). Some doors are a website
+platform's: the same door on every site it hosts, listed in `platform.doors` by type, path and the
+tools its server always lists (`tools`, every one of them), or, for a UCP profile and for an address
+several platforms serve (`/api/ucp/mcp`: Shopify's, BigCommerce's and Jumpseller's UCP servers), on a
+site built on that platform (`site_platform`: another door of the site is one only that platform
+serves, the site's homepage says so, or for Shopify the marks only its storefronts leave). A UCP
+profile is a platform's too when it names a payment handler or a capability under the platform's
+`marker`, whatever the site, and an entry with `site_platform` and no `tools` (Wix's `/_api/mcp`) makes
+any door at that path on a site built on the platform the platform's. A door at such an address on a
+site nothing ties to a platform is the business's own. Version 4 lists
+Shopify's, Wix's, Salla's, Jumpseller's, WebForger's and BigCommerce's. They count for what an agent
+can do there, and a network that counts the agent-ready (§4.16) says how many get there only through
+one; one that counts as no door of its protocol (`counts_as` `platform`: Shopify's storefront MCP
+server, Wix's MCP server at `/_api/mcp`) is never counted as an MCP door. A platform's question-answering tool (`answer_tools`:
+Shopify's `ask_business`, which answers from the store's knowledge base and policies, one question at
+a time) sends nothing to anyone at the business: on a platform's door it is not `message`, as a request
+kind or a capability, and a tool of that name on a door the business published itself counts as
+before. Where a network's directory rules say a business's own door (§4.4: its filters, its order's
+sources), they mean a live door at the business's site, whoever runs it, its platform's included; own,
+in these counts, is a door the business published itself. No group's weight and no grade changed.
+
 **Groups and weights** (rules versions 1 and 2): `core` 40 (message, book, order, pay; sign up too
 from version 2), `after` 30 (change,
 cancel, return, subscription, receipt), `state` 10 (availability, track), `negotiate` 5, `readable`
@@ -1362,7 +1414,8 @@ then group order, then vocabulary order; a fix worth nothing is left out. A fix 
 apply (letting an agent book brings changing, cancelling and availability) is scored with what it
 brings as `yes` too, and lists it in its `with`: its points are what the whole interaction is worth. A fix's text in the rules
 may hold `<door>`, which a network replaces with " on your <door label> door at <url>" when the
-business has a live agent door, and with nothing otherwise. `scoreOf`, `fixesOf` and
+business has a live agent door of its own (from version 4, never one its website platform gives every site it
+hosts: that one is not the business's to add a tool to), and with nothing otherwise. `scoreOf`, `fixesOf` and
 `capabilityWeightOf` in `@surfingdog/spec` are the reference; `vectors/score.json` holds the worked
 cases, a salon at 51 (C), a restaurant that takes orders it does not let an agent track or receipt at
 63 (B), a plumber at 33 (D), a shop that takes orders and no message at 42 (C), and under version 2 as amended a business of no known
@@ -1377,14 +1430,16 @@ version 1's. Each case says whether its signals say it sells goods (`goods`).
 
 **The rules are published and versioned** like the directory's own: `GET /v1/score-rules` is the
 version in force and `?version=N` any version ever published (`404` for one that never was), shaped
-as `schemas/score-rules.json` ([`vocab/score-rules-v2.json`](../../packages/spec/vocab/score-rules-v2.json)
-is version 2, in force; [`vocab/score-rules-v1.json`](../../packages/spec/vocab/score-rules-v1.json) is
-version 1, its `status` `retired`). Each version's `changelog` says what changed and why, and an
+as `schemas/score-rules.json` ([`vocab/score-rules-v4.json`](../../packages/spec/vocab/score-rules-v4.json)
+is version 4, in force since 9 November 2026; [`vocab/score-rules-v3.json`](../../packages/spec/vocab/score-rules-v3.json),
+[`vocab/score-rules-v2.json`](../../packages/spec/vocab/score-rules-v2.json) and
+[`vocab/score-rules-v1.json`](../../packages/spec/vocab/score-rules-v1.json) are versions 3, 2 and 1, their `status`
+`retired`). Each version's `changelog` says what changed and why, and an
 amendment of a version in force is an entry of its own (`amended`, the day) saying the same. A new
 version, or an amendment, is applied to every score the network keeps: each is worked out again.
 
 **The score never changes the directory's search order** (§4.4), and nobody can pay for a score or a
-place. It is not a certification: it is what was read on the business's own site and doors on the
+place. It is not a certification: it is what was read on the business's site and at its doors on the
 date shown, each capability with its door, its source and its date.
 
 **Checks and result pages.** Anyone may ask a network to check any website (`check_business`, or a
@@ -1401,13 +1456,17 @@ the counts in words; a self-reported one as its counts in words, labelled "Self-
 meter; and never puts either in the rank, which is the agentic score's.
 
 **Ranks and leaderboards.** A leaderboard (`GET /leaderboard.json`, `schemas/leaderboard.json`)
-orders, on every board: **real businesses above the rest (0.8.2: a member, a business that registered
-or whose owner proved the site is theirs, or one whose site the network's crawler matched to its entry
-on public maps or in a business register), then whether an agent can book, order or sign up here (yes, then partly, then no or not
-applicable), then agentic score, then the most recent check, then domain**, by category group,
-country and place. It says that order in words (`order`) and field by field (`order_by`), and each
-row carries `can_book_order_or_sign_up` (`yes`, `partly` or `no`) and, when the network publishes listing rules, `real_business` (`true` or `false`, 0.8.2). The score itself is unchanged by
-the order: a business that can be booked scores what its rules give it, and comes above one that
+orders, on every board: **whether an agent can book, order or sign up here (yes, then partly, then no
+or not applicable), then agentic score, then the most recent check, then domain**, by category group,
+country and place; a board's Websites view (`?by=score`) orders by agentic score alone, then the most
+recent check, then domain. It says that order in words (`order`) and field by field (`order_by`), and
+each row carries `can_book_order_or_sign_up` (`yes`, `partly` or `no`) and, when the network publishes
+listing rules, `real_business` (`true` or `false`, 0.8.2): real businesses (a member, a business that
+registered or whose owner proved the site is theirs, or one whose site the network's crawler matched to
+its entry on public maps or in a business register) are labelled and have a list of their own
+(`?real=1`). From 0.8.2 a board put them above the rest; since score rules version 3's amendment of 21
+October 2026 it does not, and its `order_by` no longer names `real_business`. The score itself is
+unchanged by the order: a business that can be booked scores what its rules give it, and comes above one that
 cannot be booked, ordered from or signed up with, whatever that one scores. It counts every business
 checked that its owner has not hidden and that is of a kind the directory lists.
 Software, API and AI companies (the group `software-ai`) are ranked among themselves, on their
@@ -1424,7 +1483,12 @@ agent-ready businesses where an agent can do that, `?ready=1` every agent-ready 
 order: the same businesses a network's `/v1/stats` counts in its `directory` block (whose
 `capabilities` count `signup` too, and `real_businesses_verified` the real businesses, given only
 while the network applies its listing rules), so a count
-links to its list. A list names those it may name and says how many more it counts and does not name;
+links to its list. From score rules version 4 the `directory` block may also say how the agent-ready get
+there: `own` and `platform`, each with `agent_ready`, `capabilities`, `levels` (from askable up) and
+`doors`, counting those that get there through a door the business published itself (a member's own
+inbox included) and those that get there only through a door their website platform gives every site it
+hosts. A network gives them only once every agent-ready business is scored under the rules in force and
+its run that works the levels out again under them is done; each pair then adds up to its total. A list names those it may name and says how many more it counts and does not name;
 the count is always the sum. A chip for a category group counts the businesses that group's board
 names, and a group nobody is named in has no chip.
 
@@ -1709,7 +1773,7 @@ reports.
 
 A network may publish, once a month, how many of the websites it checked an agent can do each thing
 with. The method Surfing Dog's network follows, with every definition, is at
-https://surfingdog.ai/spec/census/ (method version 1); another network may count by its own and say
+https://surfingdog.ai/spec/census/ (method version 2); another network may count by its own and say
 so in `method`.
 
 | Call | Auth | Answer | Schema |
@@ -1731,7 +1795,18 @@ so in `method`.
   each country and each city, an edition that names `payments` (the tokens it counts) also has
   `pay_read`, the sites whose ways to pay were read, and for each token `pay:<token>`, those that show it
   (§4.10), and `pay_declared:<token>`, those of them that declared it themselves; the difference is those
-  where it was only seen. A metric is any lower-case name with at most one key after a colon.
+  where it was only seen. From method version 2, the agent-ready, each capability, each door and
+  each level from askable up are counted again by how the sites get there: `agent_ready_own`,
+  `can_own:<capability>`, `door_own:<type>` and `level_own:<name>` through a door the business
+  published itself (a member's own inbox included), and `agent_ready_platform`, `can_platform:<capability>`,
+  `door_platform:<type>` and `level_platform:<name>` only through a door its website platform gives
+  every site it hosts (§4.13); over the sites scored under the rules in force the two add up to the
+  total of each (an edition may be taken with at most 0.1% of the agent-ready scored under older rules,
+  counted in the totals and on neither side). A capability is the business's own
+  on a site agent-ready through a door of its own, where its own doors or its own pages meet it: what
+  its pages say counts on the platform's side when only a platform's door lets an agent in. `door:a2a` counts an A2A agent only
+  once its endpoint answered the network's test call, and a platform's door that counts as no door of
+  its protocol is in no `door:` count. A metric is any lower-case name with at most one key after a colon.
 - No row holds a website's name or domain, and a breakdown key is published only with at least
   `method.min_sample` sites checked. Small counts within a published key are published as they
   are: each counts public features of websites.
@@ -1745,7 +1820,11 @@ so in `method`.
 - The data is open: `licence` names it, with the line to credit it by (`attribution`) and the credit
   for others' data the counts rest on (`credits`). Surfing Dog's census is CC BY 4.0, credited
   "Surfing Dog census, surfingdog.ai, CC BY 4.0", with "© Overture Maps Foundation" where its city
-  counts rest on Overture Maps places data; its directory stays under the ODbL 1.0. A CSV of the same
+  counts rest on Overture Maps places data, and from method version 2 its country counts too (a site
+  whose own pages name no country is counted under the country of its place there, once the network's
+  own check verified the site at that place: the place's name on the site's own pages, with its town,
+  postcode or phone); its directory
+  stays under the ODbL 1.0. A CSV of the same
   rows, `edition,scope,key,metric,value`, is a network's to offer.
 
 ### 4.17 Carried requests (spec 0.8, MAY)

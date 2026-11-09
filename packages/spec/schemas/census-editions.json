@@ -23,7 +23,7 @@
           "description": "How to credit it: \"Surfing Dog census, surfingdog.ai, CC BY 4.0\"."
         },
         "credits": {
-          "description": "Credit for others' data the counts rest on, given with the attribution: \"© Overture Maps Foundation\" when the cities are counted from Overture Maps places data.",
+          "description": "Credit for others' data the counts rest on, given with the attribution: \"© Overture Maps Foundation\" when the cities, and from method version 2 the countries of sites whose own pages name none, are counted from Overture Maps places data.",
           "type": "array",
           "items": {
             "type": "string"

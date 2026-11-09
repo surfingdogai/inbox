@@ -330,7 +330,7 @@ export const getCensusOutputSchema = z.object({
   key: z.string().nullable().describe("The key asked for, or null for the whole scope."),
   rows: z
     .array(censusRowSchema)
-    .max(200)
+    .max(400)
     .describe("The counts: every metric of one key, or the headline ones of each key."),
   truncated: z.boolean().describe("Whether more keys are in the edition than rows holds."),
   url: z.url().describe("The edition's page."),

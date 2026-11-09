@@ -7,10 +7,10 @@ Four specs, each with a version and a changelog; JSON Schemas and test vectors a
 
 | Spec | Version | Last changed |
 | --- | --- | --- |
-| [What an AI agent can do at a business](/spec/capabilities/) | version 2 | 15 October 2026 |
+| [What an AI agent can do at a business](/spec/capabilities/) | version 2 | 9 November 2026 |
 | [Agent inbox manifest](/spec/manifest/) | surfingdog-inbox/0 | 15 October 2026 |
 | [Receipts](/spec/receipts/) | claims version 2 | 27 September 2026 |
-| [The census of what AI agents can do](/spec/census/) | method version 1 | 18 October 2026 |
+| [The census of what AI agents can do](/spec/census/) | method version 2 | 9 November 2026 |
 
 ## Check yours
 

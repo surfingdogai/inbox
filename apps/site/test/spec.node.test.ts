@@ -144,7 +144,7 @@ describe("the files machines read", () => {
       capabilities: vocabulary.version,
       manifest: "surfingdog-inbox/0",
       receipts: 2,
-      census: 1,
+      census: 2,
     });
     for (const s of index.specs) expect(s.revised, s.id).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(index.specs[0]?.versions).toEqual([

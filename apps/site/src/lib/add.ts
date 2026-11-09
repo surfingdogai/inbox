@@ -19,7 +19,7 @@ export const ADD_PAGE = {
   description:
     "Add your business's website to the directory AI assistants search: check it, or let your own AI register it. Listing is free; nobody can pay for a place.",
   h1: ADD_LABEL,
-  lede: "Surfing Dog Search lists the businesses an AI assistant can already ask, book or buy from, each with its own doors. Listing is free, and nobody can pay for a place.",
+  lede: "Surfing Dog Search lists the businesses an AI assistant can already ask, book or buy from, each with its doors. Listing is free, and nobody can pay for a place.",
 } as const;
 
 /** Its questions, on the page and in its FAQPage data in the same words. */

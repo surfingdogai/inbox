@@ -53,7 +53,7 @@ export const censusMetricSchema = z
   .string()
   .regex(/^[a-z][a-z0-9_]*(:[a-z0-9_]+)?$/)
   .describe(
-    "A metric's name, or a family's with its key after a colon: checked, agent_ready, can:<capability>, door:<door type>, level:<level name>, no_ai, for a city places, and for the whole, a country and a city pay_read, pay:<payment token>, pay_declared:<payment token> today. Metrics are added, never renamed: a reader skips one it does not know.",
+    "A metric's name, or a family's with its key after a colon: checked, agent_ready, can:<capability>, door:<door type>, level:<level name>, no_ai, for a city places, and for the whole, a country and a city pay_read, pay:<payment token>, pay_declared:<payment token>; and from method version 2, by how the agent-ready get there, agent_ready_own, can_own:<capability>, door_own:<door type>, level_own:<level name> (through a door the business published itself) and agent_ready_platform, can_platform:<capability>, door_platform:<door type>, level_platform:<level name> (only through a door its website platform gives every site it hosts). Metrics are added, never renamed: a reader skips one it does not know.",
   );
 
 export const censusRowSchema = z.object({
@@ -74,7 +74,8 @@ export const censusLicenceSchema = z.object({
     .optional()
     .describe(
       'Credit for others\' data the counts rest on, given with the attribution: "© Overture Maps Foundation" when ' +
-        "the cities are counted from Overture Maps places data.",
+        "the cities, and from method version 2 the countries of sites whose own pages name none, are counted from " +
+        "Overture Maps places data.",
     ),
 });
 
