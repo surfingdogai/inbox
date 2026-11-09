@@ -241,18 +241,24 @@ counts, and the other is told it is already done.
 A booking or an order that carries a price binds your person only once they confirmed it. Send
 `create_booking` or `create_order` as usual: without `terms_sha` nothing is sent, and the answer
 (`409 confirm_terms`, or on MCP a result starting "Nothing is sent yet") holds `summary` — what,
-when, from whom, the total, whether they may withdraw, and that confirming means paying — and
-`terms_sha`. Show them the summary as it is; on their clear yes, send the same request again with
-that `terms_sha`.
+when, from whom, the total, whether they may withdraw, line by line where the lines differ (where
+no right of withdrawal is claimed, which lines cannot be returned, and what a return policy the
+business wrote gives the others), and that confirming means paying — and `terms_sha`, which also
+holds the law it is made under and, where no right is claimed, what was told of returns: if either
+changes before their yes, the answer is the summary again (`changed: true`).
+Show them the summary as it is; on their clear yes, send the same request again with that
+`terms_sha`.
 
-Your person may withdraw from an order, or from a booking they paid for, within the period the
-business states (`withdrawal` on the item's status: `available`, `until`), without giving a reason.
-`withdraw_from_contract` (`POST /v1/items/{id}/withdraw`) first returns the statement to show them
-(`confirm_withdrawal`); send `confirm_withdrawal: true` once they confirm. What they paid comes
-back; once the goods reached them, the goods go back first. It is never refused: past the period,
-or for something that cannot be returned, it goes to a person at the business, who answers. Once
-the goods reached them, `request_return` asks to send them back: `faulty`, `not_as_described` or
-`wrong_item` cost them nothing. The item's status lists each return under `refunds`, in the
+Where the business states a period to withdraw (`withdrawal` on the item's status: `available`,
+`until`; `null` where no right of withdrawal is claimed), your person may withdraw from an order,
+or from a booking they paid for, within it, without giving a reason. `withdraw_from_contract`
+(`POST /v1/items/{id}/withdraw`) first returns the statement to show them (`confirm_withdrawal`);
+send `confirm_withdrawal: true` once they confirm. What they paid comes back; once the goods
+reached them, the goods go back first. It is never refused: past the period, where none runs, or
+for something that cannot be returned, it goes to a person at the business, who answers. Once the
+goods reached them, `request_return` asks to send them back (`lines` for only some of them: an
+excepted line keeps no other from its right): `faulty`, `not_as_described` or `wrong_item` cost
+them nothing. The item's status lists each return under `refunds`, in the
 business's words.
 
 The item's status also carries the conversation (`thread`): what the business wrote to your person

@@ -45,7 +45,7 @@ The type is `<item type>.<event>`. Subscribe to the exact types you want, to a w
 | `booking.decline_change` | The change was not accepted: by you, or by the customer, who keeps what was agreed. The booking stays as it is. |
 | `booking.retract_change` | Whoever asked for the change took it back (yours only when it said it was subject to your confirmation). The booking stays as it is. |
 | `booking.expire_change` | Nobody answered the change by its deadline (`data.actor.kind` is `system`). The booking stays as it is. |
-| `booking.record_payment` | A payment or deposit was recorded for the confirmed booking: it is a paid contract the customer may withdraw from. |
+| `booking.record_payment` | A payment or deposit was recorded for the confirmed booking: it is a paid contract, which the customer may withdraw from while a right of withdrawal runs. |
 | `booking.withdraw` | The customer withdrew from a booking they paid for, within the period: cancelled, never late, and what they paid is owed back (a `refund.create` follows). |
 | `booking.record_withdrawal` | You recorded a withdrawal the customer told you of; the same. |
 | `booking.complete` | The booking happened: you marked it, or the system did `booking.autoCompleteHours` after the end (`data.actor.kind` is `system`); also your correction of a no-show. |
@@ -71,7 +71,7 @@ The type is `<item type>.<event>`. Subscribe to the exact types you want, to a w
 | `order.lapse` | Payment was requested `orders.payDays` ago and never came: the system closed the promise for the networks; the order itself stays as it was, so a late payment is still taken. |
 | `order.start_fulfilment` | You started putting the order together. |
 | `order.fulfil` | The order went out; `deliveredAt`, when you said when it arrived. |
-| `order.record_delivery` | You recorded when the goods reached the customer: their withdrawal period runs from it. |
+| `order.record_delivery` | You recorded when the goods reached the customer: any period they have to withdraw or return runs from it. |
 | `order.withdraw` | The customer withdrew from the order: before it went out it is cancelled and what was paid is owed back; after, it stays fulfilled and the goods come back. A `refund.create` follows when anything was paid or has to come back. |
 | `order.record_withdrawal` | You recorded a withdrawal the customer told you of; the same. |
 | `order.request_return` | The customer asked to send goods back; the return is its own `refund.create`. |

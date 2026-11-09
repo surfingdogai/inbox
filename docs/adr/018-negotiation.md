@@ -15,7 +15,8 @@ limits in code, a customer's own price and rewards
 receipts of network rules version 6 (§8,
 [Amendment 6](#amendment-6-26-sep-2026-the-receipts-of-rules-version-6)), which ADR-017's Amendment 3
 proposes (rules version 5 went to ADR-017's Amendment 2, accepted on 26 September 2026); the rest is
-not built yet. A number marked \* is a *default*
+not built yet. [Amendment 7](#amendment-7-7-nov-2026-the-law-by-country) later kept the EU's law to a
+business in the EU, the EEA or Gibraltar: the business's own country decides. A number marked \* is a *default*
 the founder may change without a new ADR. The legal points are research, not advice, and need
 a lawyer before they become Terms or public copy.
 
@@ -999,7 +1000,8 @@ differ from the body in these points, which await review:
   `assumedTransitDays` 7\*) and `commerce` (`customers`: `both`\*, `consumers` or `businesses`; `legal`:
   `legalName`, `address`, `country`, `phone`, `email`, `vatId`, `complaintsUrl`) are the owner's in
   person, like `negotiation`, as is the new `negotiation.ai.mayAuthorizeReturnsInPolicy` (on\*).
-  `country` (two letters) picks the law: Portugal's, the UK's (GB), else the EU's. `refundOn`,
+  `country` (two letters) picks the law: Portugal's, the UK's (GB), else the EU's (since Amendment 7
+  only in the EU, the EEA and Gibraltar, or with no country set, and none elsewhere). `refundOn`,
   `collect`, `restockingPct` and `offerCredit` wait for settlements.
 - **A return is a `refund` item** linked to its order or booking, made in the batch of the transition
   that makes it, as the same customer's (its party, access token, identity columns and
@@ -1303,6 +1305,125 @@ await review:
   every return to escape any date. Still to decide. Likewise, a return whose goods the business
   never marks as received has no refund promise at all, and the customer's only recourse is the report:
   the customer has no door to give proof of sending, which fixes the date in law.
+
+## Amendment 7 (7 Nov 2026): the law by country
+
+**Status: decided (the founder, 9 Nov 2026).** The business's own country decides the consumer law the
+inbox applies, never the buyer's or where the goods go, and what is published says no more than that.
+Amendment 4 had `commerce.legal.country` pick Portugal's law, the UK's (GB), and the EU's for every
+other country. So a business in Japan, Mexico, the United States or Australia told its customers they
+had 14 days to withdraw without giving a reason, sent them the model form of Directive 2011/83/EU Annex
+I(B), and was held by the inbox to a right its own law does not give. The decisions of this ADR stand
+where the business's country is in the EU, the EEA, Gibraltar or the UK, or none is set; this changes only
+where they apply.
+
+- **Which law.** `lawOf` reads the business's country. PT is Portugal's; GB (or UK) the UK's; a member
+  state (Greece also as EL, the EU's own code for it), Åland (AX), an outermost region with an ISO code
+  of its own (GF, GP, MQ, RE, YT, MF), an EEA state that took the directive into its law (IS, LI, NO) or
+  Gibraltar (GI), whose own law took it in too (LN 2013/177), the EU's, with its words and model form, as
+  before. No country set stays the EU's, erring toward the customer, as ADR-047's return policies already
+  do. Any other country is `other`. The list (`EU_LAW_COUNTRIES`) is now one: `returnPolicyTooShort`
+  (ADR-047) reads `lawOf` instead of its own copy, so the only change there is that Åland, the outermost
+  regions, EL, UK and GI are held to the 14 days too.
+- **A contract keeps its law.** An order or a booking records the law it is made under (`payload.law`:
+  `eu`, `pt`, `uk` or `other`), and only the inbox writes it: whatever a request or a system sends in its
+  place is replaced. It is recorded as the order or booking is asked for: the law the confirm step judged
+  the customer's yes by, else the business's country's then. It is settled as it becomes a contract (the
+  business takes the customer's request, or the customer takes the business's offer; `concludedLawOf`):
+  the law the customer was told before they confirmed their own request (or the one recorded as a person
+  at the business wrote it down for them, which binds them as written), unless that claimed no right and
+  the business's country is then in the EU, the EEA, Gibraltar or the UK; else, told nothing, the
+  business's country's then. So an order the business prices later takes the law of when the customer
+  takes its price (or the business takes the order), not of when it was asked for, and a contract is never
+  under less than its customer was told, nor under `other` where the business's country is in the EU, the
+  EEA, Gibraltar or the UK as it is made. An accepted quote's order or booking takes its business's country's
+  law as it is made.
+  `contractLawOf` judges a contract by it wherever a contract is judged: the right itself (`withdrawalOf`:
+  the status door, the guards, returns, a cancel recorded as a withdrawal, the owner's AI and the words it
+  is told), the confirmation emails (a return's by its order or booking), the withdraw link's page and
+  done page, and Portugal's tenth-day refund reminder (`alertRefundsDue`, by the refund's order or
+  booking). An owner who changes `commerce.legal.country` changes nothing for contracts already made: one
+  made under the EU's law keeps its right once the business is in Japan, and one made in Japan claims none
+  once the business is in the EU. One made before items recorded their law was told the law of its day,
+  which was never `other`: it is judged by the business's country as it is now, else the EU's, however
+  late an inbox takes this release, and so is one whose record this release cannot read (the payload
+  reads it leniently: never an item that cannot be read). There is no date in any of it. The law is part
+  of the request's terms, and so of the fingerprint the customer confirms (`terms_sha`, which
+  `agreed.terms_sha` then is): a yes to a summary told under one law, the EU's, the UK's, Portugal's or
+  none, is asked again (`changed: true`) once the business's country gives another. Return policies are
+  for contracts still to come and read the country alone; a contract made under the EU's law keeps its 14
+  days whatever they say, since `returns.days` is never under 14.
+- **No right claimed under `other`.** `withdrawalRight` answers `other_law`. That means no period, no
+  link, no **Withdraw from contract here**, no model form and no trader block in the first
+  confirmation. The status door's `withdrawal` is `null`, as it is for a request, and `next` does not
+  offer `withdraw_from_contract`. Everything that hung on the right follows by the paths a lapsed or
+  excepted contract already took:
+  - a change of mind after delivery is a `policy` return, `requested`, for the business to answer;
+  - the owner's AI may approve one while `mayAuthorizeReturnsInPolicy` is on only inside what the
+    customer was told of returning the lines it takes back (below, `payload.returnTerms`): within the days
+    told, counted from delivery, or from when the goods went out where no delivery is recorded, with no
+    floor of 14; at any time where unlimited was told; never for an excepted line; and never where
+    nothing was told (`withdrawalOf(…, { policy: true, lines })`; `return_outside_policy`), whatever the
+    owner's policies say since;
+  - a return asked for is no longer one nobody may refuse (`not_withdrawal` does not apply): the business
+    answers it under its own policy, its own promise, as it would any return;
+  - a paid order or booking the business records as cancelled stays a cancel (no `record_withdrawal`);
+  - `withdraw_from_contract` is still never refused: a return under the policy once the goods reached
+    the customer, else their message for a person, with no "can no longer be withdrawn from" reason.
+
+  Faulty goods are unchanged (`faulty`), and periods end off weekends only.
+- **What the customer is told instead.** Only what the owner wrote, before an order (the confirm step)
+  and in its first confirmation, line by line (`returnTermsOf`, `lineReturnSentences`). A line excepted by
+  its withdrawal flag (`perishable` and the rest, the owner's to set, or a kitchen's own for its dishes)
+  cannot be returned, in the plain words of `WITHDRAWAL_OTHER` ("This cannot be returned: it does not
+  keep."), as in the EU. Another is told "Under our return policy, you can return it within N days of
+  receiving it", or "at any time", from the return policy the owner wrote for its product, else the
+  default one (ADR-047). The standard policy that only follows the settings (`follows_settings`, or stands
+  in for an empty table) is not the owner's terms: its days are the settings' `returns.days`, 14 at least,
+  which nobody there is held to, so it is not told. A policy of no returns, or with no refund (exchange or
+  credit only), says nothing, and so does any booking. Where every line is told the same, one sentence
+  says it, as before; where they differ, each sentence names its lines ("…within 30 days of receiving it
+  (1 × Chain). This cannot be returned: it does not keep (1 × Cake)."). What is told is part of the terms
+  the customer confirms, so a policy the owner changes before their yes asks it again, and the order
+  records it as told (`payload.returnTerms`, by each line's product, else its sku): the first confirmation
+  tells it again and the owner's AI approves inside it, whatever the owner's policies say later. A line a
+  later change brings is judged as the policies stand then. The confirm step itself stays (C17): what,
+  when, from whom, the total and the obligation to pay.
+- **One excepted line never speaks for the others.** CRD art. 16 excepts goods, not orders, and so do the
+  return policies. Before an order binds and in its confirmations, each line is told its own: under the
+  EU's or the UK's law the excepted lines' exception and the others' right; elsewhere as above. Once the
+  goods reached the customer, a return or a withdrawal is judged on the lines it takes back
+  (`withdrawalOf(…, { lines })`): the chain of an order that also held a cake comes back within the period
+  as a withdrawal, agreed at once. This was the inbox's rule before this amendment too, and is changed for
+  every law. The contract as a whole is still judged as before where nothing names lines: the status
+  door's `withdrawal` says `excepted` (its `reason` now names each line's own), and before delivery a
+  withdrawal of an order with an excepted line goes to a person.
+- **Words.** `WITHDRAWAL_OTHER`, in EN and PT: cancel and return, never withdraw, *retratação* or
+  *livre resolução*, and never "without giving a reason". Its `modelForm` and `startsEarly` are
+  `null`, and its `noRight` says only that the page cannot cancel it. The copy test walks it like the
+  rest. A withdraw link used once the right had ended passes on what it sends (a return once the goods
+  arrived, else a message for a person), and its page then says when that was sent and that a person
+  will answer (`page.sent`), never that a copy was emailed: only a withdrawal the link made is
+  acknowledged by email.
+- **The catalogue and the profile.** Under `other` an item leaves out `withdrawal` (protocol §4.18:
+  absent, the business has not said), so no network tells a buyer of a right the inbox does not honour,
+  and so do the business's own product and service doors (`GET /v1/products`, `GET /v1/services`,
+  `list_products`, `list_services`). Its returns are its return policy's, and only the policies the owner
+  wrote are published there (`loadPolicies`, `published`): the standard one that follows the settings is
+  left out of the policies document and of the profile's `return_policy`, and an item naming it names
+  none, so with none written there is no return policy and no default, and nothing is said of returns.
+  Written, it is published, and the products naming it take a new position. Where the inbox applies the
+  right, no policy is published shorter than it: one written while the business's country was taken for
+  elsewhere (Gibraltar, Åland, an outermost region) and under 14 days, or of no returns, says the
+  settings' returns, 14 days at least. Whether items say the right is a change of its own: when the
+  country crosses that line, and once for a business elsewhere whose items said it before this, every
+  product takes a new position (`catalogueWithdrawalStatements`), so a network reads each again.
+- **Not here.** The buyer's own law is not tracked: it may give a buyer more, and the business honours
+  that itself. Other countries' own consumer rules are not modelled either (Japan's rule on returns of
+  goods bought by mail order, Brazil's seven days for purchases made away from the shop, for instance):
+  an owner there states their terms as a return policy. The settings' floor of 14 days for `returns.days`
+  stays for everyone; under `other` a customer is not told it, it is not published, and the owner's AI
+  does not approve inside it.
 
 ## Sources
 

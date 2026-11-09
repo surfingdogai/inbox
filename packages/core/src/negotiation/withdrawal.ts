@@ -45,7 +45,10 @@ export interface PeriodInput {
   readonly deliveredAt?: number | null | undefined;
   /** Goods: when they were sent (fulfilled), for when no delivery was recorded. */
   readonly fulfilledAt?: number | null | undefined;
-  /** The period in days: 14, or the business's longer `returns.days`. */
+  /**
+   * The period in days: 14, or the business's longer `returns.days`; under another country's law, the
+   * days of the return policy the owner wrote (asked of the policy only).
+   */
   readonly days: number;
   /** With no delivery recorded, the days goods are taken to have been on their way (`returns.assumedTransitDays`). */
   readonly assumedTransitDays: number;
@@ -60,12 +63,17 @@ export interface PeriodInput {
  * has not begun (goods not delivered yet), when the customer may withdraw already.
  */
 export function withdrawalUntil(i: PeriodInput): number | null {
+  // Under another country's law the period is the owner's own promise, "within N days of receiving it":
+  // with no delivery recorded it runs from when the goods went out, never from a day guessed later.
+  const transit = i.law === "other" ? 0 : i.assumedTransitDays;
   const start =
     i.kind === "service"
       ? i.concludedAt
       : (i.deliveredAt ??
-        (i.fulfilledAt !== null && i.fulfilledAt !== undefined ? i.fulfilledAt + i.assumedTransitDays * DAY : null));
+        (i.fulfilledAt !== null && i.fulfilledAt !== undefined ? i.fulfilledAt + transit * DAY : null));
   if (start === null || !Number.isFinite(start)) return null;
+  // Under another country's law there is no statutory period: only the business's own policy's days.
+  if (i.law === "other") return periodEnd(start, i.days, i.law, i.timezone);
   const statutory = periodEnd(start, 14, i.law, i.timezone);
   const policy = i.days > 14 ? periodEnd(start, i.days, i.law, i.timezone) : statutory;
   const untold = i.informed === false ? monthsLater(statutory, 12, i.law, i.timezone) : statutory;
@@ -107,7 +115,13 @@ export type NoRight =
   /** Nothing agreed yet (a request: the customer cancels it), or the contract has ended. */
   | "not_agreed"
   /** The period has run out. */
-  | "lapsed";
+  | "lapsed"
+  /**
+   * The contract was made under another country's law (`contractLawOf` is `other`): no right of
+   * withdrawal is claimed, and only a return policy the owner wrote applies (ADR-018 Amendment 7); asked
+   * of the policy, the owner wrote none that takes it back.
+   */
+  | "other_law";
 
 export interface WithdrawalRight {
   readonly available: boolean;
@@ -131,6 +145,11 @@ const ORDER_AGREED: ReadonlySet<string> = new Set([
 /** An order's states after the goods went out: the period runs from delivery. */
 export const ORDER_SENT: ReadonlySet<string> = new Set(["fulfilled", "completed"]);
 
+/** Whether a booking or an order stands as a contract: a booking confirmed, an order accepted and not ended. */
+export function contractAgreed(type: "booking" | "order", state: string): boolean {
+  return type === "booking" ? state === "confirmed" : ORDER_AGREED.has(state);
+}
+
 export interface RightInput {
   readonly type: "booking" | "order";
   readonly state: string;
@@ -144,19 +163,28 @@ export interface RightInput {
   readonly startTime?: number | undefined;
   readonly period: PeriodInput;
   readonly now: number;
+  /**
+   * Asked of the business's own return policy rather than the law (the owner's AI approving a return
+   * inside it): the same period, for any customer. Under another country's law (`other`) the period is
+   * the days of the policy its owner wrote alone (`period.days`), and none where it wrote none (0).
+   */
+  readonly policy?: boolean | undefined;
 }
 
 /**
  * Whether the customer may withdraw now, and until when (ADR-018 §7). A booking only once paid at a
  * distance and before it starts; an order from its acceptance, before delivery and for the period
- * after. Excepted, sold to a business, or past the period: no right, and why.
+ * after. Excepted, sold to a business, past the period, or under a law outside the EU, the EEA, Gibraltar
+ * and the UK (`contractLawOf`): no right, and why.
  */
 export function withdrawalRight(r: RightInput): WithdrawalRight {
-  const agreed = r.type === "booking" ? r.state === "confirmed" : ORDER_AGREED.has(r.state);
-  if (!agreed) return { available: false, until: null, why: "not_agreed" };
+  if (!contractAgreed(r.type, r.state)) return { available: false, until: null, why: "not_agreed" };
+  if (r.period.law === "other" && r.policy !== true) return { available: false, until: null, why: "other_law" };
   if (!r.consumer) return { available: false, until: null, why: "business_customer" };
   const exception = exceptionOf(r.flags);
   if (exception) return { available: false, until: null, why: "excepted", exception };
+  // Asked of the policy under another country's law: none told takes it back.
+  if (r.period.law === "other" && r.period.days <= 0) return { available: false, until: null, why: "other_law" };
   if (r.type === "booking") {
     if (!r.paid) return { available: false, until: null, why: "not_paid" };
     if (r.startTime !== undefined && r.startTime <= r.now) return { available: false, until: null, why: "started" };

@@ -5,14 +5,14 @@ import { oneLine } from "../customer/format";
 import { customerHtmlPart } from "../customer/html";
 import { customerLang } from "../customer/lang";
 import { confirmLink, cutLinks, fillLinks, linksForEmail } from "../customer/links";
-import { isAutomated, type MailWithdrawal, renderCustomerMail } from "../customer/mail";
+import { type CustomerMailInput, isAutomated, type MailWithdrawal, renderCustomerMail } from "../customer/mail";
 import type { OfferTerms } from "../customer/offer";
 import type { Db } from "../db";
 import type { Item } from "../domain/types";
 import { customerReplyTo, inboundOf, LINKS_HEADING, ownerReplyTo } from "../email/channel";
 import { lookOf } from "../look/palette";
 import { machines } from "../machine/tables";
-import { lawOf } from "../negotiation/holidays";
+import { contractLawOf } from "../negotiation/holidays";
 import { items, parties } from "../schema/tables";
 import type { SecretBox } from "../secrets/box";
 import { stripePayOf } from "../settings/payments";
@@ -23,7 +23,7 @@ import { stayLang } from "../stays/copy";
 import { ARRIVAL_MARKER, ARRIVAL_STATES, ARRIVAL_TEMPLATE, renderStayMail, stayLinks } from "../stays/mail";
 import { ownerStayMail } from "../stays/owner-mail";
 import { openArrival } from "../stays/setup";
-import { withdrawalDaysOf, withdrawalOf } from "../write/returns";
+import { toldLinesOf, withdrawalDaysOf, withdrawalOf } from "../write/returns";
 import { describe, rowToItem } from "../write/views";
 import {
   autoHeaders,
@@ -390,8 +390,11 @@ async function customerMail(
   // What waits for the customer's answer carries the links to give it: a page on this inbox, in
   // the customer's language (ADR-018 §5). Without a secret to sign them, or an address for them to
   // point at, the email asks for a reply instead.
-  // The right of withdrawal as it stands (ADR-018 §7): the confirmations carry it, and its link.
-  const law = lawOf(o.settings.commerce.legal.country);
+  // The right of withdrawal as it stands (ADR-018 §7): the confirmations carry it, and its link. The
+  // law is the one the contract was made under (`contractLawOf`): a return's, its order's or booking's.
+  const [linkedRow] = item.linkedItemId ? await db.orm.select().from(items).where(eq(items.id, item.linkedItemId)) : [];
+  const contract = item.type === "refund" && linkedRow ? rowToItem(linkedRow) : item;
+  const law = contractLawOf(o.settings.commerce.legal.country, contract);
   const right =
     item.type === "booking" || item.type === "order" ? await withdrawalOf(db, item, o.settings, o.now) : null;
   const withdrawal: MailWithdrawal = {
@@ -400,7 +403,14 @@ async function customerMail(
     kind: item.type === "booking" ? "service" : "goods",
     exception: right?.exception && right.exception !== "standard" ? right.exception : null,
     law,
-    days: await withdrawalDaysOf(db, item.type, item.payload, o.settings),
+    // None under another country's law, where no period is told.
+    days: law === "other" ? 0 : await withdrawalDaysOf(db, item.type, item.payload, o.settings),
+    // What each line is told of returns, where they differ or no right is claimed (Amendment 7): under
+    // another country's law what the order recorded its customer was told, which its first confirmation
+    // tells again; where some lines are excepted, theirs and the others' right.
+    ...(item.type === "order" && (law === "other" || right?.why === "excepted")
+      ? { lines: await toldLinesOf(db, item.payload, law) }
+      : {}),
   };
   const answerLinks = skip
     ? null
@@ -421,8 +431,7 @@ async function customerMail(
   const links = confirm ? new Map([...(answerLinks ?? []), ["confirm_me" as const, confirm]]) : answerLinks;
   // The return or refund the change made: what the email says of the money.
   const refund = item.type !== "refund" && p.eventId ? await refundMadeBy(db, item.id, p.eventId) : null;
-  const [linkedRow] = item.linkedItemId ? await db.orm.select().from(items).where(eq(items.id, item.linkedItemId)) : [];
-  const rendered = renderCustomerMail({
+  const mailInput: CustomerMailInput = {
     item,
     event: p.event,
     fromState: cause.fromState,
@@ -456,7 +465,8 @@ async function customerMail(
     returns: { respondHours: o.settings.returns.respondHours, postage: o.settings.returns.postage },
     stripePay: stripePayOf(o.settings.payments),
     now: o.now,
-  });
+  };
+  const rendered = renderCustomerMail(mailInput);
   // A payment is asked for in one email (ADR-023). Every email is written from the order as it stands
   // when it goes, so the email of the event that waits a moment for the link (the order accepted, a
   // payment that did not go through, the owner asking without a link) carries it, with its own words.

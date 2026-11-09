@@ -129,7 +129,7 @@ export const serviceInput = z.object({
   withdrawal: withdrawalFlagSchema
     .optional()
     .describe(
-      "Whether customers who paid in advance may withdraw within the legal period: standard, or dated_leisure (for a set date), urgent_repair, … Only the owner sets it.",
+      "Whether customers who paid in advance may withdraw within the legal period: standard, or dated_leisure (for a set date), urgent_repair, … The inbox applies it where your business's country is in the EU, the EEA, Gibraltar or the UK, or none is set. Only the owner sets it.",
     ),
   negotiable: z
     .boolean()
@@ -160,7 +160,7 @@ export const productInput = z.object({
   withdrawal: withdrawalFlagSchema
     .optional()
     .describe(
-      "Whether customers may return it within the legal period: standard, or the exception the law allows (perishable, personalised, sealed_hygiene, …). Only the owner sets it.",
+      "Whether customers may return it within the legal period: standard, or the exception the law allows (perishable, personalised, sealed_hygiene, …). The inbox applies the right where your business's country is in the EU, the EEA, Gibraltar or the UK, or none is set; elsewhere an exception still tells customers it cannot be returned. Only the owner sets it.",
     ),
   negotiable: z
     .boolean()

@@ -118,7 +118,7 @@ A booking or an order is the start of the job, not the end of it.
 
 **Pattern**, when the order lives in the business's own system: offer an order lookup there (by order number and email address) and a way to start a return, and list both with the other doors. The inbox cannot yet record an order that happened in another system, so its receipts cover the bookings and orders it holds itself.
 
-**Publish policies in words and in markup**, because agents read both: returns as schema.org `MerchantReturnPolicy` (how many days, who pays postage, how the refund is made), delivery as `OfferShippingDetails`, and the cancellation terms in plain words next to the booking. **Today** the inbox publishes its own return policy at `GET /v1/business` as a `MerchantReturnPolicy`, from the owner's Returns settings.
+**Publish policies in words and in markup**, because agents read both: returns as schema.org `MerchantReturnPolicy` (how many days, who pays postage, how the refund is made), delivery as `OfferShippingDetails`, and the cancellation terms in plain words next to the booking. **Today** the inbox publishes its own default return policy at `GET /v1/business` as a `MerchantReturnPolicy`: where the business's country is in the EU, the EEA, Gibraltar or the UK, or none is set, from the owner's Returns settings until they write its terms; elsewhere a policy the owner wrote, and none until they write one.
 
 The Surfing Dog agentic score rewards the full journey: an order counts for more when changing, cancelling, tracking and a receipt follow it ([the published rules](https://surfingdog.ai/v1/score-rules)). The score is a reading, not the aim. The aim is that an agent can finish what its person asked for.
 

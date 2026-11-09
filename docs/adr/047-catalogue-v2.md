@@ -31,8 +31,10 @@ The founder's, in chat, on the plan of 31 October 2026:
    check or not (`vocab/age-kinds.json`, `network: off`). A shop's other products list as before. The gate fails
    closed: the words a shop types for them (`tobacco`, `vape`, `firearms`…) are the vocabulary's `also` spellings of
    those kinds, and a kind the vocabulary does not know at all is held until the owner picks one.
-5. **Returns outside the EU and the UK:** no returns, or a window under 14 days, shown as they are. The legal right of
-   withdrawal is still enforced wherever the law gives one.
+5. **Returns outside the EU, the EEA, Gibraltar and the UK:** no returns, or a window under 14 days, shown as they
+   are. The inbox enforces the legal right of withdrawal where the business's own country is in the EU, the EEA,
+   Gibraltar or the UK, or none is set (ADR-018 Amendment 7), and elsewhere publishes only the return policies the
+   owner wrote; a buyer's own law may give more, which the business honours itself.
 6. **Age-restricted offers are shown by default,** labelled "ID checked at handover: 18+". The owner picks each
    product's age (12 to 21, and by country up to 25); we keep no table of what any law says. An ID refused at
    handover counts against nobody (rules version 11, `order.id_refused`, reserved).

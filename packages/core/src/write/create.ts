@@ -10,12 +10,14 @@ import {
   type ItemType,
   itemFlagsSchema,
   payloadSchemas,
+  type ReturnTerms,
 } from "../domain/types";
 import { type IdentityInput, identityColumns, identityStatements, planMatch } from "../identity/match";
 import { networksStopped, stopFollowsStatements, stopViaOf } from "../identity/stops";
 import type { IdentityAnswer } from "../identity/types";
 import { randomToken, ulid } from "../ids";
 import { machines } from "../machine/tables";
+import { type Law, lawOf } from "../negotiation/holidays";
 import { insertOfferStatement, pointerOf } from "../negotiation/offers";
 import { secretHash } from "../protocol/credentials";
 import { readSettings } from "../settings/schema";
@@ -86,6 +88,17 @@ export interface CreateInput {
    * of the idempotency hash.
    */
   readonly pricing?: PricingFor | undefined;
+  /**
+   * The law the confirm step judged the customer's yes by (ADR-018 Amendment 7), which the order or booking
+   * records, so a country changed between the yes and the write moves nothing. Absent, the business's
+   * country's as the item is written. Never hashed.
+   */
+  readonly law?: Law | undefined;
+  /**
+   * Under another country's law, what the confirm step told the customer of returning each line
+   * (`payload.returnTerms`), which the order records as told. Never hashed.
+   */
+  readonly returnTerms?: ReturnTerms | undefined;
   /**
    * What the inbox itself adds to a stay it makes (an estimate from the property's rates, ADR-037):
    * written after everything the request carried of the kind is dropped. Internal only; never hashed.
@@ -200,6 +213,8 @@ export async function createItem(
     identity: _identity,
     confirmed: _confirmed,
     pricing: _pricing,
+    law: _law,
+    returnTerms: _returnTerms,
     stayExtra: _extra,
     inboxAdds: _adds,
     screen: _screen,
@@ -363,6 +378,15 @@ export async function createItem(
   // so nobody is bound by a request left unanswered; one the business wrote down itself (the owner,
   // a shop's system, a connector) waits for it with none, until the customer next answers.
   const settings = NEGOTIATES.has(input.type) ? await readSettings(db) : undefined;
+  // The law an order or a booking is asked under, recorded on it (ADR-018 Amendment 7): the one its
+  // confirm step judged the yes by, else its business's country's now; never what a request carried. It
+  // is settled as it becomes a contract (`concludedLawOf`). Under another country's law an order the
+  // customer confirmed records what its summary told of returns; what a request carried is dropped.
+  if (input.type === "booking" || input.type === "order") {
+    payload.law = input.law ?? lawOf(settings?.commerce.legal.country);
+    delete payload.returnTerms;
+    if (input.type === "order" && payload.law === "other" && input.returnTerms) payload.returnTerms = input.returnTerms;
+  }
   const requestExpiresAt = settings && isCustomer(caller) ? requestExpiry(input.type, payload, settings, now) : null;
   const request = settings
     ? await requestRow({

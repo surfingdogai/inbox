@@ -152,7 +152,7 @@ describe("the confirm step before a priced request binds", () => {
     expect(e.details).toMatchObject({ changed: true });
   });
 
-  it("names every line, why something cannot be returned, and the total, for an order", async () => {
+  it("names every line, each line's right or why it cannot be returned, and the total, for an order", async () => {
     const s = await setup();
     const e = await refused(
       s.caps.createOrder(agent(), {
@@ -166,7 +166,8 @@ describe("the confirm step before a priced request binds", () => {
       }),
     );
     expect((e.details as { summary: string }).summary).toBe(
-      "Please check before you confirm: 2 × Chain — €37.00; 1 × Fresh cheese — €9.00. Total €46.00. From Oficina Maré Lda, Rua do Mar 1, Lisboa. This cannot be returned: it does not keep. Confirming means an obligation to pay €46.00.",
+      // The cheese is excepted (CRD art. 16(d)); the chain keeps its own right, and each is told its own.
+      "Please check before you confirm: 2 × Chain — €37.00; 1 × Fresh cheese — €9.00. Total €46.00. From Oficina Maré Lda, Rua do Mar 1, Lisboa. You can withdraw within 14 days of receiving it, without giving a reason (2 × Chain). This cannot be returned: it does not keep (1 × Fresh cheese). Confirming means an obligation to pay €46.00.",
     );
   });
 

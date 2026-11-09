@@ -17,6 +17,7 @@ import {
   type OfferPointer,
   type PayloadOf,
   payloadSchemas,
+  type ReturnTerms,
 } from "../domain/types";
 import { ulid } from "../ids";
 import { assertKitchenClears } from "../kitchen/guard";
@@ -26,9 +27,11 @@ import { resolveTransition, type Transition } from "../machine/machine";
 import { outcomeOf } from "../machine/outcomes";
 import { machines, noteInput } from "../machine/tables";
 import { amendmentsLive, changesLeft, promisedDatesOf } from "../negotiation/changes";
+import { concludedLawOf, LAWS, type Law, lawOf } from "../negotiation/holidays";
 import { type Breach, refundWithinLimit } from "../negotiation/limits";
 import { insertOfferStatement, type OfferRow, offerRows, openOf, pointerOf } from "../negotiation/offers";
 import { paidFor, refundDueOf, SEND_BACK_DAYS } from "../negotiation/refunds";
+import { contractAgreed } from "../negotiation/withdrawal";
 import { items, resources, services } from "../schema/tables";
 import { readSettings } from "../settings/schema";
 import { planStay, type StayPlan, stayEventFor } from "../stays/transition";
@@ -84,6 +87,7 @@ import {
   openReturnOf,
   refundFor,
   refundStatements,
+  returnTermsOf,
   withdrawalOf,
   withdrawalRefusal,
 } from "./returns";
@@ -876,7 +880,10 @@ async function attempt_(
       }
       case "withdrawal_open": {
         noticeAt = await noticeOf(db, item, t, data, caller, now);
-        const right = await withdrawalOf(db, item, settings, noticeAt);
+        // Once the goods went out, the lines coming back are what is judged.
+        const right = await withdrawalOf(db, item, settings, noticeAt, {
+          lines: data.lines as { index: number; quantity: number }[] | undefined,
+        });
         if (!right.available) {
           throw new WriteError("guard_failed", withdrawalRefusal(right, item.type, audience), {
             details: {
@@ -1037,6 +1044,11 @@ async function attempt_(
     NEGOTIATES.has(item.type) && inRequestState(t.to) && (row.requestExpiresAt !== null || isCustomer(caller))
       ? requestExpiry(item.type, payload, settings, now)
       : undefined;
+  // A booking or an order becoming a contract settles the law it is made under, and under another
+  // country's law what its customer is told of returns (ADR-018 Amendment 7); written with the move.
+  if (item.type === "booking" || item.type === "order") {
+    await settleContractTerms(db, item, t.to, payload, rows, settings);
+  }
   const offerPlan = await planOffers({
     db,
     item,
@@ -1082,7 +1094,20 @@ async function attempt_(
   let linkedEvent: { id: string; type: string; itemId: string } | undefined;
 
   if (effects.has("link_item") && item.type === "quote_request") {
-    const linked = await planLinkedItem(db, caller, item, payload, eventId, now, linkedBooking, clock, offerPlan.taken);
+    const linked = await planLinkedItem(
+      db,
+      caller,
+      item,
+      payload,
+      eventId,
+      now,
+      linkedBooking,
+      clock,
+      offerPlan.taken,
+      {
+        law: lawOf(settings.commerce.legal.country),
+      },
+    );
     linkedId = linked.id;
     statements.push(...linked.statements);
     linkedView = linked.view;
@@ -1654,9 +1679,11 @@ async function refundAmount(db: Db, item: Item, data: Record<string, unknown>): 
 
 /**
  * What the owner's AI and rules may approve (ADR-018 §4, Q2: returns inside the policy, never a
- * refund payment): faulty goods, or a return inside the owner's policy — nothing excepted, within
- * `returns.days` — and either way with the goods coming back; refunding with nothing to return is
- * money, and the owner's. Only while the owner lets them (`negotiation.ai.mayAuthorizeReturnsInPolicy`).
+ * refund payment): faulty goods, or a return inside the owner's policy — nothing it takes back excepted,
+ * within `returns.days`, or under another country's law within what the customer was told of returning
+ * those lines as the order was made (`payload.returnTerms`, Amendment 7) — and either way with the goods
+ * coming back; refunding with nothing to return is money, and the owner's. Only while the owner lets them
+ * (`negotiation.ai.mayAuthorizeReturnsInPolicy`).
  */
 async function returnAllowed(
   db: Db,
@@ -1694,10 +1721,18 @@ async function returnAllowed(
   if (r.kind === "faulty") return;
   const [row] = await db.orm.select().from(items).where(eq(items.id, r.orderItemId));
   const right = row
-    ? await withdrawalOf(db, rowToItem(row), settings, r.noticeAt ? Date.parse(r.noticeAt) : now, { policy: true })
+    ? await withdrawalOf(db, rowToItem(row), settings, r.noticeAt ? Date.parse(r.noticeAt) : now, {
+        policy: true,
+        lines: r.lines,
+      })
     : null;
   if (!right?.available) {
-    throw refuse("This return is outside the owner's return policy, so a person decides.", "return_outside_policy");
+    throw refuse(
+      right?.why === "other_law"
+        ? "No return policy the customer was told of takes this back, so a person decides."
+        : "This return is outside the owner's return policy, so a person decides.",
+      "return_outside_policy",
+    );
   }
 }
 
@@ -2733,6 +2768,42 @@ async function linkedBookingOf(db: Db, payload: Record<string, unknown>): Promis
 }
 
 /**
+ * The law a booking or an order is made under, and under another country's law what its customer is
+ * told of returns, settled as it becomes a contract (ADR-018 Amendment 7): `concludedLawOf`, from the law
+ * its confirm step judged the customer's yes by, where they confirmed one; else its business's country's
+ * now. An order made under `other` keeps what each line was told (`payload.returnTerms`) and has a line a
+ * later change brings judged as the owner's policies stand then, so its first confirmation and the
+ * owner's AI hold to what was told. One made before items recorded their law is judged as before.
+ */
+async function settleContractTerms(
+  db: Db,
+  item: Item,
+  to: string,
+  payload: Record<string, unknown>,
+  rows: readonly OfferRow[],
+  settings: Awaited<ReturnType<typeof readSettings>>,
+): Promise<void> {
+  if (item.type !== "booking" && item.type !== "order") return;
+  const recorded = (LAWS as readonly unknown[]).includes(payload.law) ? (payload.law as Law) : undefined;
+  if (recorded === undefined || !contractAgreed(item.type, to)) return;
+  let law = recorded;
+  if (!contractAgreed(item.type, item.state)) {
+    // Told it before they were bound: their own request, confirmed (or written down by a person here).
+    const told = rows.find((r) => r.by === "customer" && r.rev === 1)?.binding === true ? recorded : undefined;
+    law = concludedLawOf(settings.commerce.legal.country, told);
+    payload.law = law;
+  }
+  if (item.type !== "order") return;
+  if (law !== "other") {
+    delete payload.returnTerms;
+    return;
+  }
+  // What the confirm step told stands only for the law it was told under.
+  const kept = law === recorded ? (payload.returnTerms as ReturnTerms | undefined) : undefined;
+  payload.returnTerms = await returnTermsOf(db, (payload as PayloadOf<"order">).orderedItem, kept);
+}
+
+/**
  * An accepted quote becomes the promise, in the same batch (ADR-018 §3.3): a booking already
  * confirmed, its places claimed and its receipt queued, or an order already accepted. The business
  * confirms nothing twice, and the customer's one email is the acceptance's.
@@ -2749,6 +2820,8 @@ async function planLinkedItem(
   clock: Audience,
   /** The quote the customer accepted: the promise's own agreed offer answers it. */
   accepted: OfferRow | undefined,
+  /** The law the promise is made under, its business's country's now (ADR-018 Amendment 7), which it records. */
+  made: { readonly law: Law },
 ) {
   const q = payload.quote as QuoteTerms;
   const offered = payload.itemOffered as { name: string; serviceId?: string; productId?: string; sku?: string };
@@ -2757,6 +2830,11 @@ async function planLinkedItem(
   const b = type === "booking" ? (booking ?? (await linkedBookingOf(db, payload))) : undefined;
   const linkedPayload = b ? b.payload : orderFromQuote(q, offered, payload);
   const parsed = payloadSchemas[type].parse(linkedPayload) as Record<string, unknown>;
+  parsed.law = made.law;
+  // Under another country's law, what its first confirmation tells of returns, as the owner wrote it now.
+  delete parsed.returnTerms;
+  if (type === "order" && made.law === "other")
+    parsed.returnTerms = await returnTermsOf(db, (parsed as PayloadOf<"order">).orderedItem);
   const state = type === "booking" ? "confirmed" : "accepted";
   // The promise's agreed offer (ADR-018 §3.3): its terms as the promise holds them, answering the
   // quote the customer accepted, so a change to it later has what was agreed to start from.

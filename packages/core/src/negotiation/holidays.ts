@@ -5,14 +5,104 @@
  * weekends are known, which can only ever end a period later than the law would, never earlier.
  * Pure: the dates of a year, as YYYY-MM-DD.
  */
-export type Law = "eu" | "pt" | "uk";
+export type Law = "eu" | "pt" | "uk" | "other";
 
-/** The law a business sells under, from its country (`commerce.legal.country`): Portugal's, the UK's, or the EU's. */
+/**
+ * The countries where Directive 2011/83/EU gives a consumer 14 days to withdraw from a distance contract
+ * (ADR-018 Amendment 7): the member states (Greece also as EL, the EU's own code for it), with Åland and
+ * the outermost regions that have codes of their own (French Guiana, Guadeloupe, Martinique, Réunion,
+ * Mayotte, Saint-Martin), the EEA states that took the directive into their law (Iceland,
+ * Liechtenstein, Norway), and Gibraltar, whose own law took it in too (LN 2013/177). Portugal is among
+ * them; its own words and holidays come from `lawOf`.
+ */
+export const EU_LAW_COUNTRIES: ReadonlySet<string> = new Set([
+  "AT",
+  "BE",
+  "BG",
+  "HR",
+  "CY",
+  "CZ",
+  "DK",
+  "EE",
+  "FI",
+  "FR",
+  "DE",
+  "GR",
+  "EL",
+  "HU",
+  "IE",
+  "IT",
+  "LV",
+  "LT",
+  "LU",
+  "MT",
+  "NL",
+  "PL",
+  "PT",
+  "RO",
+  "SK",
+  "SI",
+  "ES",
+  "SE",
+  "AX",
+  "GF",
+  "GP",
+  "MQ",
+  "RE",
+  "YT",
+  "MF",
+  "IS",
+  "LI",
+  "NO",
+  "GI",
+]);
+
+/**
+ * The law a business sells under, from its own country (`commerce.legal.country`), never the buyer's or
+ * where the goods go: Portugal's, the UK's, the EU's (a member state, the EEA or Gibraltar), or another
+ * country's (`other`), whose consumer law the inbox does not hold, so it claims no right of withdrawal
+ * there and tells customers only the return policies the owner wrote. With no country set it stays the
+ * EU's, erring toward the customer, as return policies do. What it decides of a contract already asked
+ * for is `contractLawOf`'s.
+ */
 export function lawOf(country: string | null | undefined): Law {
   const c = (country ?? "").trim().toUpperCase();
   if (c === "PT") return "pt";
   if (c === "GB" || c === "UK") return "uk";
-  return "eu";
+  if (c === "" || EU_LAW_COUNTRIES.has(c)) return "eu";
+  return "other";
+}
+
+/** The laws an order or a booking records as the one it was made under (`payload.law`). */
+export const LAWS: readonly Law[] = ["eu", "pt", "uk", "other"];
+
+/**
+ * The law a booking or an order becomes a contract under (ADR-018 Amendment 7), as the business takes
+ * the customer's request or the customer takes the business's offer: the law the customer was told before
+ * they were bound (`told`: the one their confirm step judged their yes by), unless that claimed no right
+ * and the business's country now gives one; else, told nothing or told none, the business's country's
+ * now. So a contract is never under less than its customer was told, and never under `other` where the
+ * business's country gives a right as it is made.
+ */
+export function concludedLawOf(country: string | null | undefined, told: Law | undefined): Law {
+  return told !== undefined && told !== "other" ? told : lawOf(country);
+}
+
+/**
+ * The law a contract is judged under (ADR-018 Amendment 7): the one its order or booking recorded
+ * (`payload.law`: as it was asked for, and settled as it became a contract, `concludedLawOf`), so a later
+ * change of the country moves nothing, nor the day an inbox took this release. One made before items
+ * recorded it was told the law as it stood then, never `other`: its business's country's as it is now
+ * (Portugal's, the UK's), else the EU's. So is one whose record this release cannot read.
+ */
+export function contractLawOf(
+  country: string | null | undefined,
+  contract: { readonly payload?: unknown } | null | undefined,
+): Law {
+  const recorded = (contract?.payload as { law?: unknown } | null | undefined)?.law;
+  if (typeof recorded === "string" && (LAWS as readonly string[]).includes(recorded)) return recorded as Law;
+  const law = lawOf(country);
+  return law === "other" ? "eu" : law;
 }
 
 /** Easter Sunday of a year (the anonymous Gregorian algorithm), as YYYY-MM-DD. */

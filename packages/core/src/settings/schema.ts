@@ -456,7 +456,7 @@ const sections = {
             .boolean()
             .default(true)
             .describe(
-              "Your AI and rules may approve a return inside your return policy, with the goods coming back; never pay a refund, refuse a return or settle for less.",
+              "Your AI and rules may approve a return inside your return policy, with the goods coming back (where your business's country is outside the EU, the EEA, Gibraltar and the UK, only within what the customer was told of returning it as the order was made, from the return policies you wrote); never pay a refund, refuse a return or settle for less.",
             ),
         })
         .prefault({}),
@@ -475,7 +475,7 @@ const sections = {
         .max(365)
         .default(14)
         .describe(
-          "Days after delivery (or after booking, for a service) a customer may withdraw or return; 14 at least.",
+          "Days after delivery (or after booking, for a service) a customer may withdraw or return, where your business's country is in the EU, the EEA, Gibraltar or the UK, or none is set; 14 at least. Elsewhere these days are not told to customers, published or approved within: only the return policies you write (Shipping and returns) are.",
         ),
       postage: z
         .enum(["customer", "business"])
@@ -519,7 +519,7 @@ const sections = {
         .enum(["consumers", "businesses", "both"])
         .default("both")
         .describe(
-          "Who you sell to. Unless it is only businesses, a customer is taken for a consumer: they confirm the price before they order, and may withdraw.",
+          "Who you sell to. Unless it is only businesses, a customer is taken for a consumer: they confirm the price before they order, and may withdraw where your business's country is in the EU, the EEA, Gibraltar or the UK, or none is set.",
         ),
       legal: z
         .object({
@@ -530,7 +530,9 @@ const sections = {
             .regex(/^[A-Z]{2}$/, "a two-letter country code, like PT or GB")
             .or(z.literal(""))
             .default("")
-            .describe("The country whose consumer law applies to you (PT, GB, …): it picks the words and holidays."),
+            .describe(
+              "Your business's country (PT, GB, …): it decides the consumer law the inbox applies (whether customers may withdraw, the words, the holidays), never the customer's.",
+            ),
           phone: z.string().max(40).default(""),
           email: z.email().or(z.literal("")).default(""),
           vatId: z.string().max(40).default("").describe("Your VAT or tax number."),

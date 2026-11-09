@@ -547,6 +547,112 @@ describe("time is a change", () => {
   });
 });
 
+describe("what an item says of the legal right to withdraw (ADR-018 Amendment 7)", () => {
+  /** A page of one item at a time, as a reader that keeps its place reads on: what it read, and where it stands. */
+  async function readOn(caps: Caps, from?: string) {
+    const items: CataloguePageV2["items"][number][] = [];
+    let after = from;
+    for (;;) {
+      const url = `${BASE}/changes?version=2&limit=1${after ? `&after=${after}` : ""}`;
+      const r = await caps.catalogue.changes({ version: "2", limit: "1", ...(after ? { after } : {}) }, req(url));
+      if (r.status !== 200) throw new Error(`HTTP ${r.status}`);
+      const page = cataloguePageV2Schema.parse(JSON.parse(r.body));
+      items.push(...page.items);
+      // A reader keeps the `after` it asked the last page with, and asks from it next time.
+      if (!page.next_cursor) return { items, after, rev: page.catalogue.rev };
+      after = page.next_cursor;
+    }
+  }
+  const said = (items: readonly CataloguePageV2["items"][number][]) =>
+    Object.fromEntries(items.map((i) => [i.id, i.state === "listed" ? (i.withdrawal ?? null) : i.state]));
+
+  it("says it only where the inbox applies one, by the business's country, and every item moves when that turns", async () => {
+    const { caps } = await setup();
+    const pot = await caps.setup.createProduct(owner, { name: "Moka pot", price: EUR(2490), active: true });
+    const cheese = await caps.setup.createProduct(owner, {
+      name: "Fresh cheese",
+      price: EUR(590),
+      active: true,
+      withdrawal: "perishable",
+    });
+    // No country set is the EU's law: each item says what the business says of the right.
+    const eu = await readOn(caps);
+    expect(said(eu.items)).toEqual({ [pot.id]: "standard", [cheese.id]: "perishable" });
+    // Read on with nothing changed: the last page again, and nothing new.
+    expect((await readOn(caps, eu.after)).items.map((i) => i.id)).toEqual([cheese.id]);
+
+    // In Canada the inbox claims no right of withdrawal: each item moves, and says nothing of one. Its
+    // returns are its return policy's, and only a policy the owner wrote is published: with none written
+    // the document has no return policy and no default, so nothing is said of returns.
+    clock += 60_000;
+    await caps.updateSettings(owner, { doc: { commerce: { legal: { country: "CA" } } } });
+    const ca = await readOn(caps, eu.after);
+    expect(said(ca.items)).toEqual({ [pot.id]: null, [cheese.id]: null });
+    expect(ca.items.map((i) => i.id).sort()).toEqual([pot.id, cheese.id].sort());
+    for (const i of ca.items) expect(i).not.toHaveProperty("return_policy");
+    expect(ca.rev).not.toBe(eu.rev);
+    expect((await policiesOf(caps)).doc.return_policies).toEqual([]);
+    expect((await caps.getPolicies(owner)).unpublished).toEqual(["standard"]);
+
+    // A product that names the standard policy, unpublished there, stays listed and names none: its
+    // returns are not known, never the settings' stand-in. Written by the owner, it is named again.
+    clock += 60_000;
+    await caps.setup.updateProduct(owner, { product_id: pot.id, return_policy: "standard" });
+    const named = await readOn(caps, ca.after);
+    const potItem = named.items.find((i) => i.id === pot.id);
+    expect(potItem?.state).toBe("listed");
+    expect(potItem).not.toHaveProperty("return_policy");
+    clock += 60_000;
+    await caps.putReturnPolicy(owner, {
+      id: "standard",
+      name: "Thirty days",
+      default: true,
+      eligibility: "window",
+      window_days: 30,
+      resolutions: ["refund"],
+      methods: ["by_post"],
+      return_postage: "customer",
+    });
+    const written = await readOn(caps, named.after);
+    expect(written.items.find((i) => i.id === pot.id)).toMatchObject({ state: "listed", return_policy: "standard" });
+    expect((await policiesOf(caps)).doc.return_policies).toEqual([
+      expect.objectContaining({ id: "standard", default: true, window_days: 30 }),
+    ]);
+
+    // Back in the EU: each moves again, and says it again.
+    clock += 60_000;
+    await caps.updateSettings(owner, { doc: { commerce: { legal: { country: "IE" } } } });
+    const ie = await readOn(caps, written.after);
+    expect(said(ie.items)).toEqual({ [pot.id]: "standard", [cheese.id]: "perishable" });
+
+    // Gibraltar's own law gives the right too: nothing moves.
+    clock += 60_000;
+    await caps.updateSettings(owner, { doc: { commerce: { legal: { country: "GI" } } } });
+    expect((await readOn(caps, ie.after)).items).toHaveLength(1);
+  });
+
+  it("moves each item once where they said it before the inbox claimed no right outside the EU", async () => {
+    const { db, caps } = await setup();
+    // A business in Japan whose items were published, as every item was, saying the EU's right.
+    await caps.updateSettings(owner, { doc: { commerce: { legal: { country: "JP" } } } });
+    const a = await caps.setup.createProduct(owner, { name: "Teapot", price: EUR(3900), active: true });
+    const b = await caps.setup.createProduct(owner, { name: "Tea bowl", price: EUR(1900), active: true });
+    const seqs = async () =>
+      (await db.client.query({ sql: "SELECT id, catalogue_seq FROM products ORDER BY id", method: "all" })).rows.map(
+        (r) => [String(r[0]), Number(r[1])] as const,
+      );
+    const before = await seqs();
+    const top = Math.max(...before.map(([, seq]) => seq));
+    const page = await pageV2(caps);
+    expect(said(page.items)).toEqual({ [a.id]: null, [b.id]: null });
+    const moved = await seqs();
+    for (const [id, seq] of moved) expect(seq, id).toBeGreaterThan(top);
+    // Once: read again, nothing moves.
+    await pageV2(caps);
+    expect(await seqs()).toEqual(moved);
+  });
+});
+
 describe("quote_shipping", () => {
   it("quotes a basket by the owner's rate tables, free over the threshold, an age only by a service that checks ID", async () => {
     const { caps } = await setup();

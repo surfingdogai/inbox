@@ -16,6 +16,7 @@ import {
 import { asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "../db";
+import { lawOf } from "../negotiation/holidays";
 import { products, returnPolicies, shippingProfiles } from "../schema/tables";
 import { readSettings, type Settings } from "../settings/schema";
 import { canonicalJson, hashText } from "../util/canonical";
@@ -31,51 +32,20 @@ import { productAge } from "./v2";
  * Shipping v1 is the owner's own rate tables (the founder, 2 November 2026): flat, per item, by weight, by
  * order value, free over a value. The owner buys and prints their own labels; no carrier is called.
  *
- * A return policy says what the business offers on top of the law. In the EU, the EEA and the United
- * Kingdom, and wherever the business has not said which country's law it sells under, it is at least the
- * 14 days the law gives a buyer to withdraw: a window of 14 days or more, or unlimited. Elsewhere an owner
- * may offer no returns, or a window under 14 days, and it is shown as it is. The legal right to withdraw is
- * enforced by the inbox's own returns either way (`settings.returns`, never under 14 days).
+ * A return policy says what the business offers on top of the law. Where the business's country is in the
+ * EU, the EEA, Gibraltar or the United Kingdom, and wherever the business has not said which it is, it is at
+ * least the 14 days the law gives a buyer to withdraw: a window of 14 days or more, or unlimited. Elsewhere
+ * an owner may offer no returns, or a window under 14 days, and it is shown as it is. Where the inbox
+ * applies the right to withdraw (`lawOf` is not `other`), its own returns enforce it (`settings.returns`,
+ * never under 14 days), and no policy is published shorter than that; elsewhere the inbox claims no such
+ * right for a contract made there (`contractLawOf`, ADR-018 Amendment 7), and publishes and tells its
+ * customers only the policies the owner wrote, never the standard one that follows the settings. A buyer's
+ * own law may give more, which the business honours itself: the inbox does not track it.
  *
  * Only the owner in person writes any of it: never the owner's AI, never a key handed to another system.
  * A write is checked as a network reads the document (`readCataloguePolicies`): one a reader would drop
  * any part of is refused with that part's code, so the document an inbox serves always reads whole.
  */
-
-/** The countries whose law gives a buyer 14 days to withdraw from a distance purchase: the EU, the EEA, the UK. */
-export const WITHDRAWAL_14_COUNTRIES: readonly string[] = [
-  "AT",
-  "BE",
-  "BG",
-  "HR",
-  "CY",
-  "CZ",
-  "DK",
-  "EE",
-  "FI",
-  "FR",
-  "DE",
-  "GR",
-  "HU",
-  "IE",
-  "IT",
-  "LV",
-  "LT",
-  "LU",
-  "MT",
-  "NL",
-  "PL",
-  "PT",
-  "RO",
-  "SK",
-  "SI",
-  "ES",
-  "SE",
-  "IS",
-  "LI",
-  "NO",
-  "GB",
-];
 
 /** The id a policy the migration made of the settings' returns has, and one an empty table stands in for. */
 export const STANDARD_RETURN_POLICY = "standard";
@@ -110,6 +80,12 @@ export interface PoliciesState {
   readonly rev: string;
   /** As a network reads them (`readCataloguePolicies`), for checking the items that name them. */
   readonly read: PoliciesRead;
+  /**
+   * The return policies kept but not published (`loadPolicies`): under another country's law, the standard
+   * one that only follows the settings. The published view leaves them out, and an item naming one says
+   * nothing of its returns; the owner's view lists them with the rest.
+   */
+  readonly unpublished: readonly string[];
 }
 
 /** The policy `follows_settings` stands for: a window of the settings' days, by post, a refund. */
@@ -125,8 +101,31 @@ function standardTerms(s: Settings): Omit<ReturnPolicy, "id" | "name" | "default
 
 type ReturnTerms = Omit<ReturnPolicy, "id" | "name" | "default">;
 
-/** The policies as the tables keep them, read and checked as a network would. */
-export async function loadPolicies(db: Db, settings?: Settings): Promise<PoliciesState> {
+/**
+ * A policy as published under a law that gives a buyer 14 days to withdraw (ADR-018 Amendment 7): never
+ * less than the inbox applies. One written while the business's country gave no such right (Gibraltar's,
+ * Åland's or an outermost region's before this release took them as the EU's) and shorter than it, or of
+ * no returns, says the settings' returns, which the inbox holds the right to (`returns.days`, 14 at least).
+ */
+function atLeastTheLaw(terms: ReturnTerms, s: Settings): ReturnTerms {
+  if (returnPolicyTooShort(terms, s.commerce.legal.country) === null) return terms;
+  return terms.eligibility === "window" && terms.resolutions.includes("refund")
+    ? { ...terms, window_days: Math.max(14, s.returns.days) }
+    : standardTerms(s);
+}
+
+/**
+ * The policies as the tables keep them, read and checked as a network would. `published` reads them as
+ * the policies document and the business's profile publish them: under another country's law
+ * (`lawOf` is `other`) only those the owner wrote, never the standard one that only follows the settings
+ * (its days are the settings' floor of 14, which nobody there is told or held to), so with none written
+ * there is no return policy, and no default; under a law that gives the 14 days, none shorter than it.
+ */
+export async function loadPolicies(
+  db: Db,
+  settings?: Settings,
+  opts: { readonly published?: boolean } = {},
+): Promise<PoliciesState> {
   const [s, ship, ret] = await Promise.all([
     settings ?? readSettings(db),
     db.orm.select().from(shippingProfiles).orderBy(asc(shippingProfiles.createdAt), asc(shippingProfiles.id)),
@@ -139,15 +138,21 @@ export async function loadPolicies(db: Db, settings?: Settings): Promise<Policie
     zones: r.zones as ShippingProfile["zones"],
   }));
   // An inbox whose table is empty (a database made before its rows were) publishes its settings' returns.
-  const rows = ret.length
+  const stored = ret.length
     ? ret
     : [{ id: STANDARD_RETURN_POLICY, name: "Standard", isDefault: 1, terms: standardTerms(s), followsSettings: 1 }];
-  const return_policies: ReturnPolicy[] = rows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    ...(r.isDefault === 1 ? { default: true } : {}),
-    ...(r.followsSettings === 1 ? standardTerms(s) : (r.terms as ReturnTerms)),
-  }));
+  const other = lawOf(s.commerce.legal.country) === "other";
+  const unpublished = other ? stored.filter((r) => r.followsSettings === 1).map((r) => r.id) : [];
+  const rows = opts.published ? stored.filter((r) => !unpublished.includes(r.id)) : stored;
+  const return_policies: ReturnPolicy[] = rows.map((r) => {
+    const terms = r.followsSettings === 1 ? standardTerms(s) : (r.terms as ReturnTerms);
+    return {
+      id: r.id,
+      name: r.name,
+      ...(r.isDefault === 1 ? { default: true } : {}),
+      ...(opts.published && !other ? atLeastTheLaw(terms, s) : terms),
+    };
+  });
   const content = { shipping_profiles, return_policies };
   const rev = (await hashText(canonicalJson(content))).slice(0, 16);
   // Written through `putShippingProfile` and `putReturnPolicy`, which refuse what a reader would drop, so
@@ -158,7 +163,7 @@ export async function loadPolicies(db: Db, settings?: Settings): Promise<Policie
     default_return_policy: null,
     problems: [],
   };
-  return { shipping_profiles, return_policies, rev, read };
+  return { shipping_profiles, return_policies, rev, read, unpublished };
 }
 
 /** The document as served: the policies, for this domain at this moment. */
@@ -186,19 +191,20 @@ export function policyOwners(path: string): WriteError {
 }
 
 /**
- * Why a return policy cannot be offered where the business sells, or null: in the EU, the EEA and the UK,
- * and where the owner has not said which country's law applies, it is at least the 14 days to withdraw.
+ * Why a return policy cannot be offered under the law of the business's country, or null: in the EU, the
+ * EEA, Gibraltar and the UK, and where the owner has not said which country it is, it is at least the 14
+ * days to withdraw. A policy is for contracts still to come, so it is judged by the country alone.
  */
 export function returnPolicyTooShort(
   policy: Pick<ReturnPolicy, "eligibility" | "window_days">,
   country: string | null | undefined,
 ): string | null {
-  const strict = !country || WITHDRAWAL_14_COUNTRIES.includes(country.toUpperCase());
+  const strict = lawOf(country) !== "other";
   if (!strict) return null;
   if (policy.eligibility === "not_accepted")
-    return "Where you sell, the law gives a buyer 14 days to withdraw from a distance purchase: a policy cannot be no returns. Set your country in Settings if you sell under another country's law.";
+    return "The law the inbox applies to your business gives a buyer 14 days to withdraw from a distance purchase: a policy cannot be no returns. It is your country's (Settings), and the EU's while none is set.";
   if (policy.eligibility === "window" && (policy.window_days ?? 0) < 14)
-    return "Where you sell, the law gives a buyer 14 days to withdraw from a distance purchase: the window is 14 days or more. Set your country in Settings if you sell under another country's law.";
+    return "The law the inbox applies to your business gives a buyer 14 days to withdraw from a distance purchase: the window is 14 days or more. It is your country's (Settings), and the EU's while none is set.";
   return null;
 }
 
@@ -282,7 +288,25 @@ export async function putReturnPolicy(db: Db, input: ReturnPolicyInput, now: num
   check(state, { shipping_profiles: [...state.shipping_profiles], return_policies: [...others, policy] }, "terms");
   const { id, name, default: isDefault, ...terms } = policy;
   const [existing] = await db.orm.select({ id: returnPolicies.id }).from(returnPolicies).limit(1);
+  // Under another country's law the standard policy that follows the settings is not published, and an
+  // item naming it says nothing of its returns: written now, it is, so the products naming it move.
+  const [was] = await db.orm
+    .select({ follows: returnPolicies.followsSettings })
+    .from(returnPolicies)
+    .where(eq(returnPolicies.id, id));
+  const nowPublished =
+    lawOf(settings.commerce.legal.country) === "other" &&
+    (was ? was.follows === 1 : !existing && id === STANDARD_RETURN_POLICY);
   await db.batch([
+    ...(nowPublished
+      ? [
+          {
+            sql: `UPDATE products SET catalogue_seq = ${NEXT_CATALOGUE_SEQ}, updated_at = MAX(updated_at, ?) WHERE return_policy_id = ?`,
+            params: [now, id],
+            method: "run" as const,
+          },
+        ]
+      : []),
     // The first write to an inbox whose table is empty keeps the standard policy it stood in for.
     ...(!existing && id !== STANDARD_RETURN_POLICY
       ? [

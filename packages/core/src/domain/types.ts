@@ -234,6 +234,51 @@ export const personalisedSchema = z.object({
 });
 export type Personalised = z.infer<typeof personalisedSchema>;
 
+/**
+ * The consumer law an order or a booking is made under (ADR-018 Amendment 7): the EU's, Portugal's, the
+ * UK's, or another country's (`other`: no right of withdrawal claimed). Recorded as it is asked for, as
+ * the confirm step judged the customer's yes, and settled when it becomes a contract: the law the
+ * customer was told before their yes, unless that claimed no right and its business's country then gives
+ * one. Kept whatever the country becomes after. Only the inbox writes it: whatever a request or a system
+ * sends in its place is replaced. Read leniently: a value this release does not know is no law recorded
+ * (`contractLawOf` then judges it as before items recorded one), never an item that cannot be read.
+ */
+export const contractLawSchema = z.enum(["eu", "pt", "uk", "other"]);
+const recordedLawSchema = contractLawSchema.optional().catch(undefined);
+
+/** The exceptions to the right of withdrawal the law allows (`withdrawalFlagSchema` but `standard`). */
+const exceptionSchema = z.enum([
+  "personalised",
+  "perishable",
+  "sealed_hygiene",
+  "sealed_media",
+  "mixed",
+  "dated_leisure",
+  "urgent_repair",
+  "digital_started",
+  "price_fluctuates",
+]);
+
+/**
+ * What the customer of an order made under another country's law was told of returning what they bought
+ * (ADR-018 Amendment 7), before their yes and in its first confirmation, by the line it was told for:
+ * its product's id, else `sku:` and its sku, else "" for a line naming neither. A line excepted by its
+ * withdrawal flag (`exception`) cannot be returned; else the return policy the owner wrote gave `days`
+ * from receipt, or `unlimited`; neither, nothing was told. What the owner's AI may approve is judged by it,
+ * whatever the policies say later. Only the inbox writes it; a value it cannot read is none recorded.
+ */
+export const returnTermsSchema = z
+  .record(
+    z.string().max(120),
+    z.object({
+      exception: exceptionSchema.optional(),
+      days: z.union([z.number().int().min(1).max(3650), z.literal("unlimited")]).optional(),
+    }),
+  )
+  .optional()
+  .catch(undefined);
+export type ReturnTerms = NonNullable<z.infer<typeof returnTermsSchema>>;
+
 export const bookingPayloadSchema = z.object({
   reservationFor: z.object({ serviceId: z.string().min(1), name: z.string().min(1).max(200) }),
   startTime: isoDateTime,
@@ -284,6 +329,8 @@ export const bookingPayloadSchema = z.object({
       totalPrice: moneySchema.optional(),
     })
     .optional(),
+  /** The law it is made under (`contractLawSchema`). Only the inbox writes it. */
+  law: recordedLawSchema,
   offer: offerPointerSchema.optional(),
 });
 
@@ -377,6 +424,10 @@ export const orderPayloadSchema = z.object({
         .optional(),
     })
     .optional(),
+  /** The law it is made under (`contractLawSchema`). Only the inbox writes it. */
+  law: recordedLawSchema,
+  /** Under another country's law, what the customer was told of returns (`returnTermsSchema`). Only the inbox writes it. */
+  returnTerms: returnTermsSchema,
   offer: offerPointerSchema.optional(),
 });
 
@@ -399,7 +450,7 @@ export const withdrawalFlagSchema = z
     "price_fluctuates",
   ])
   .describe(
-    "Whether the customer may withdraw within the legal period: standard, or the exception the law allows (personalised, perishable, sealed_hygiene, sealed_media, mixed, dated_leisure, urgent_repair, digital_started, price_fluctuates).",
+    "Whether the customer may withdraw within the legal period: standard, or the exception the law allows (personalised, perishable, sealed_hygiene, sealed_media, mixed, dated_leisure, urgent_repair, digital_started, price_fluctuates). The inbox applies the right where the business's country is in the EU, the EEA, Gibraltar or the UK, or none is set; elsewhere an exception on a product still tells the customer it cannot be returned.",
   );
 export type WithdrawalFlag = z.infer<typeof withdrawalFlagSchema>;
 

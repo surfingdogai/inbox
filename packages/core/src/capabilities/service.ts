@@ -1,5 +1,4 @@
 import type { MailOut, Statement } from "@surfingdog/platform";
-import type { ReturnPolicy as SpecReturnPolicy } from "@surfingdog/spec";
 import {
   type DiscoveryAnswer,
   type DoorElsewhere,
@@ -60,6 +59,7 @@ import { tableDeposits } from "../kitchen/deposits";
 import { applyPosState, elsewhereStep, posStatusStep, registerFoodResolver } from "../kitchen/pos";
 import { LookCapabilities } from "../look/capability";
 import { type DraftView, draftIsStale, draftRow, draftView, dropDraftStatement } from "../negotiation/drafts";
+import { lawOf } from "../negotiation/holidays";
 import { type OfferView, offerRows, offerView } from "../negotiation/offers";
 import { rewardProblems } from "../negotiation/rewards";
 import {
@@ -197,6 +197,9 @@ import { SetupCapabilities } from "./setup";
 import type * as T from "./types";
 import { WebhookCapabilities } from "./webhooks";
 
+/** A service at the public doors: its row, with `withdrawal` only where the inbox applies the right (`lawOf` is not `other`). */
+export type PublicService = Omit<typeof services.$inferSelect, "withdrawal"> & { readonly withdrawal?: string };
+
 /**
  * The capability set: the eleven public and the owner operations, implemented once. Adapters
  * (REST, MCP, A2A, email, form, …) only translate; they never touch storage or policy.
@@ -213,8 +216,11 @@ export interface BusinessProfile {
    * delivery can be suggested; a price goes to a person at the business as the customer's message.
    */
   readonly price_negotiable: boolean;
-  /** The business's return policy (ADR-018 §6, §7), as schema.org's `MerchantReturnPolicy`. */
-  readonly return_policy: ReturnPolicy;
+  /**
+   * The business's default return policy (ADR-018 §6, §7), as schema.org's `MerchantReturnPolicy`, as its
+   * policies document publishes it; absent where it publishes no default (ADR-018 Amendment 7).
+   */
+  readonly return_policy?: ReturnPolicy | undefined;
   /** Who the business is, as the law asks before a contract (CRD art. 6(1)): only what the owner filled in. */
   readonly trader?: Trader | undefined;
   /**
@@ -275,15 +281,11 @@ export interface ReturnPolicy {
 }
 
 /** The profile's return policy, from the policies document's default (`standard`, the settings', unless the owner wrote another). */
-function schemaReturnPolicy(policies: PoliciesState, country: string | undefined): ReturnPolicy {
-  const fallback: Omit<SpecReturnPolicy, "id" | "name"> = {
-    eligibility: "window",
-    window_days: 14,
-    resolutions: ["refund"],
-    methods: ["by_post"],
-    return_postage: "customer",
-  };
-  const p = policies.return_policies.find((r) => r.default) ?? policies.return_policies[0] ?? fallback;
+function schemaReturnPolicy(policies: PoliciesState, country: string | undefined): ReturnPolicy | undefined {
+  // The default the policies document publishes; none, where the business is elsewhere and its owner has
+  // written none (ADR-018 Amendment 7): nothing is said of returns then, rather than terms nobody chose.
+  const p = policies.return_policies.find((r) => r.default);
+  if (!p) return undefined;
   const S = "https://schema.org/";
   const country_ = country ? { returnPolicyCountry: country } : {};
   if (p.eligibility === "not_accepted") {
@@ -957,7 +959,7 @@ export class Capabilities {
       item_types: itemTypes,
       // Price counters (ADR-018 Q1): off out of the box, and a price of the customer's own goes to a person.
       price_negotiable: s.negotiation.priceCounters,
-      return_policy: schemaReturnPolicy(await loadPolicies(this.db, s), s.commerce.legal.country || undefined),
+      ...(await this.returnPolicyOf(s)),
       ...(s.commerce.legal.legalName.trim() ? { trader: traderOf(s.commerce.legal) } : {}),
       ...(elsewhere.length ? { doors_elsewhere: elsewhere } : {}),
       ...this.declaredPayments(s.payments),
@@ -967,6 +969,15 @@ export class Capabilities {
       ...(await this.kitchenProfileOf()),
       ...(await this.ageCheckOf()),
     };
+  }
+
+  /** The profile's `return_policy`: the default its policies document publishes, if it publishes one. */
+  private async returnPolicyOf(s: Settings): Promise<{ return_policy?: ReturnPolicy }> {
+    const policy = schemaReturnPolicy(
+      await loadPolicies(this.db, s, { published: true }),
+      s.commerce.legal.country || undefined,
+    );
+    return policy ? { return_policy: policy } : {};
   }
 
   /**
@@ -1014,7 +1025,7 @@ export class Capabilities {
    * Active services in the order the owner gave them. `next_cursor` is the id of the last service on
    * the page; passed back as `cursor`, the next page starts right after it (keyset on sort, name, id).
    */
-  async listServices(input: T.ListServicesInput): Promise<Page<typeof services.$inferSelect>> {
+  async listServices(input: T.ListServicesInput): Promise<Page<PublicService>> {
     const conditions: SQL[] = [eq(services.active, 1)];
     if (input.cursor) {
       const [c] = await this.db.orm
@@ -1030,13 +1041,19 @@ export class Capabilities {
         ) ?? sql`1`,
       );
     }
-    const rows = await this.db.orm
-      .select()
-      .from(services)
-      .where(and(...conditions))
-      .orderBy(services.sort, services.name, services.id)
-      .limit(input.limit + 1);
-    return page(rows, input.limit, (r) => r.id);
+    const [rows, settings] = await Promise.all([
+      this.db.orm
+        .select()
+        .from(services)
+        .where(and(...conditions))
+        .orderBy(services.sort, services.name, services.id)
+        .limit(input.limit + 1),
+      readSettings(this.db),
+    ]);
+    // What the business says of the right to withdraw, only where the inbox applies one (`lawOf` is not
+    // `other`, ADR-018 Amendment 7): elsewhere the inbox claims none, so no door says `standard` for it.
+    const says = lawOf(settings.commerce.legal.country) !== "other";
+    return page(says ? rows : rows.map(({ withdrawal: _w, ...rest }) => rest), input.limit, (r) => r.id);
   }
 
   /**
@@ -1065,7 +1082,7 @@ export class Capabilities {
       if (!c) throw badCursor();
       conditions.push(or(gt(products.name, c.name), and(eq(products.name, c.name), gt(products.id, c.id))) ?? sql`1`);
     }
-    const [rows, ctx] = await Promise.all([
+    const [rows, ctx, settings] = await Promise.all([
       this.db.orm
         .select()
         .from(products)
@@ -1073,6 +1090,7 @@ export class Capabilities {
         .orderBy(products.name, products.id)
         .limit(input.limit + 1),
       this.catalogueContext(),
+      readSettings(this.db),
     ]);
     // What the page's products name: their groups' titles, and the record a "was" price is checked against.
     const groupIds = [...new Set(rows.flatMap((r) => (r.groupId ? [r.groupId] : [])))];
@@ -1093,6 +1111,8 @@ export class Capabilities {
       now: Date.now(),
       groups: new Map(groupRows.map((g) => [g.id, { title: g.title }])),
       history,
+      // As the feed: what the business says of the right to withdraw, only where the inbox applies one.
+      withdrawal: lawOf(settings.commerce.legal.country) !== "other",
     };
     return page(
       rows.map((r) => publicProduct(r, door)),
@@ -1336,7 +1356,7 @@ export class Capabilities {
     // they confirm and the booking as written hold the same price (ADR-018 §4, Q3).
     const pricing = await this.customer.pricingFor(c, input);
     // A priced request binds a consumer once they confirmed it: without that, nothing is written (CRD art. 8(2)).
-    const confirmed = await this.customer.confirmCreate(c, "booking", shown, pricing);
+    const { confirmed, law } = await this.customer.confirmCreate(c, "booking", shown, pricing);
     // A site visit names the request for a price it is for, which this customer made (ADR-039 §4).
     const visitFor = input.visit_for ? await this.visitRequest(c, input.visit_for) : null;
     const files = await this.trades.prepareFiles(c, input.attachments);
@@ -1351,6 +1371,8 @@ export class Capabilities {
         contact: input.contact,
         message: input.message,
         confirmed,
+        // The law the confirm step judged the yes by, which it records (ADR-018 Amendment 7).
+        ...(law ? { law } : {}),
         pricing,
         ...(inboxAdds ? { inboxAdds } : {}),
         ...(opts.screen ? { screen: opts.screen } : {}),
@@ -1434,7 +1456,7 @@ export class Capabilities {
     const lang = input.contact?.locale ?? caller.locale ?? "en";
     const checked = replay ? null : await this.food.checkOrder(c, input.payload, { lang });
     const pricing = await this.customer.pricingFor(c, input);
-    const confirmed = await this.customer.confirmCreate(c, "order", input, pricing);
+    const { confirmed, law, returnTerms } = await this.customer.confirmCreate(c, "order", input, pricing);
     const files = await this.trades.prepareFiles(c, input.attachments);
     // The order takes its slot and the daily places in the batch that writes it. Two orders for the
     // last place: one gets it, and the other is planned again once, then told the slot was taken.
@@ -1450,6 +1472,8 @@ export class Capabilities {
             contact: input.contact,
             message: input.message,
             confirmed,
+            ...(law ? { law } : {}),
+            ...(returnTerms ? { returnTerms } : {}),
             pricing,
             ...(inboxAdds ? { inboxAdds } : {}),
             ...(opts.screen ? { screen: opts.screen } : {}),
@@ -2756,7 +2780,7 @@ export class Capabilities {
         fields: logos.map((path) => ({ path: `doc.${path}`, problem: "invalid", message })),
       });
     }
-    // Where the business sells decides whether a return policy under the 14 days to withdraw may stand
+    // The business's country decides whether a return policy under the 14 days to withdraw may stand
     // (`returnPolicyTooShort`): a country that gives the 14 days, or none said, is refused while any of
     // the published return policies is shorter, so the policies document never says less than the law.
     if (after.commerce.legal.country !== before.commerce.legal.country) {
@@ -2767,7 +2791,7 @@ export class Capabilities {
       if (short.length) {
         throw new WriteError(
           "invalid_input",
-          `${country ? `In ${country.toUpperCase()}` : "With no country set"} the law gives a buyer 14 days to withdraw from a distance purchase, and ${short.length === 1 ? "your return policy" : "your return policies"} ${short.map((p) => `"${p.name}"`).join(", ")} ${short.length === 1 ? "is" : "are"} shorter. Make ${short.length === 1 ? "it" : "them"} 14 days or more first (Shipping and returns).`,
+          `${country ? `In ${country.toUpperCase()} the law gives` : "With no country set, the inbox applies the EU's law, which gives"} a buyer 14 days to withdraw from a distance purchase, and ${short.length === 1 ? "your return policy" : "your return policies"} ${short.map((p) => `"${p.name}"`).join(", ")} ${short.length === 1 ? "is" : "are"} shorter. Make ${short.length === 1 ? "it" : "them"} 14 days or more first (Shipping and returns).`,
           {
             fields: [
               { path: "doc.commerce.legal.country", problem: "invalid", message: "a return policy is under 14 days" },

@@ -22,7 +22,7 @@ Put it wherever a customer would look for a way to reach you: the "book" or "con
 ## What it does and doesn't do
 
 - **Your name, never ours.** The page speaks as your business, in the visitor's language (English or Portuguese today, from their browser).
-- **A priced booking binds nobody until they confirm it.** Before a booking with a price is sent, the person sees a summary (what, when, from whom, the total, their right to cancel) and confirms it with a button that says so. This is the same confirm step an agent's person goes through.
+- **A priced booking binds nobody until they confirm it.** Before a booking with a price is sent, the person sees a summary (what, when, from whom, the total, their right to cancel where the business's country is in the EU, the EEA, Gibraltar or the UK, or none is set) and confirms it with a button that says so. This is the same confirm step an agent's person goes through.
 - **You still get your inbox at the same address.** Signed in, `/` is your inbox as before. Signed out, you see your page, and **Staff sign in** at the bottom takes you to the sign-in.
 - **Bots are turned away quietly.** A hidden field only software fills in, and the same limits as the API's: 20 requests an hour from one address.
 - **Not in search results yet.** The page asks search engines not to index it for now; link it from your own site.

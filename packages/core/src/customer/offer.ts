@@ -1,4 +1,5 @@
-import type { Item, ItemOf, Money, OfferPointer, PayloadOf } from "../domain/types";
+import type { Item, ItemOf, Money, OfferPointer, PayloadOf, ReturnTerms } from "../domain/types";
+import type { Law } from "../negotiation/holidays";
 import { type TradeTerms, tradeQuoteTerms } from "../trades/quote";
 import { canonicalJson } from "../util/canonical";
 
@@ -77,6 +78,14 @@ export interface OfferTerms {
   readonly tip?: Money | undefined;
   /** A table's deposit (ADR-040), part of what the customer confirms. */
   readonly deposit?: Money | undefined;
+  /**
+   * A customer's request (ADR-018 Amendment 7): the law it is asked under (`payload.law`), as the confirm
+   * step told it, so a yes to a summary told under one law never binds under another, and what was
+   * agreed says which it was.
+   */
+  readonly law?: Law | undefined;
+  /** …and under another country's law what each line was told of returns (`payload.returnTerms`). */
+  readonly returnTerms?: ReturnTerms | undefined;
 }
 
 export interface OpenOffer {
@@ -293,6 +302,7 @@ export function bookingRequestTerms(payload: PayloadOf<"booking">): OfferTerms {
     ...(payload.partySize !== undefined ? { partySize: payload.partySize } : {}),
     ...(payload.totalPrice ? { totalPrice: payload.totalPrice } : {}),
     ...(payload.deposit ? { deposit: payload.deposit.amount } : {}),
+    ...(payload.law ? { law: payload.law } : {}),
   };
 }
 
@@ -354,6 +364,8 @@ export function orderRequestTerms(payload: PayloadOf<"order">): OfferTerms {
       ? { fulfil: { method: f.method, ...(f.slot ? { slot: f.slot.start } : {}), ...(f.fee ? { fee: f.fee } : {}) } }
       : {}),
     ...(payload.tip?.amount ? { tip: payload.tip.amount } : {}),
+    ...(payload.law ? { law: payload.law } : {}),
+    ...(payload.returnTerms ? { returnTerms: payload.returnTerms } : {}),
   };
 }
 
@@ -393,6 +405,13 @@ export function base64Url(bytes: Uint8Array): string {
 export function changedPaths(prev: OfferTerms | null | undefined, next: OfferTerms): string[] {
   if (!prev) return [];
   const same = prev.itemOffered === undefined || next.itemOffered === undefined;
+  // The law and what was told of returns are a request's (Amendment 7): compared only when both hold them.
+  const unsaid = (key: "law" | "returnTerms") => prev[key] === undefined || next[key] === undefined;
+  const skipped = [
+    ...(same ? ["itemOffered"] : []),
+    ...(unsaid("law") ? ["law"] : []),
+    ...(unsaid("returnTerms") ? ["returnTerms"] : []),
+  ];
   const out: string[] = [];
   const walk = (a: unknown, b: unknown, path: string) => {
     if (JSON.stringify(a) === JSON.stringify(b)) return;
@@ -407,7 +426,7 @@ export function changedPaths(prev: OfferTerms | null | undefined, next: OfferTer
     out.push(path);
   };
   walk(prev, next, "$");
-  return same ? out.filter((p) => p !== "$.itemOffered" && !p.startsWith("$.itemOffered.")) : out;
+  return out.filter((p) => !skipped.some((k) => p === `$.${k}` || p.startsWith(`$.${k}.`) || p.startsWith(`$.${k}[`)));
 }
 
 /** Whether any of these paths is money: a price, a total, or a whole line (with its price) come or gone. */

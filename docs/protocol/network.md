@@ -42,7 +42,9 @@ it counts paying only for a way to pay the business declared itself or a network
 once its endpoint answered a harmless test call, and tells the doors a website platform gives every site it hosts
 from the business's own, in every count; the census (method version 2) counts the agent-ready by how they get
 there, and a site's country from its verified place in open place data when its own pages name none. A reader pinned
-to 0.16 rejects a `get_census` answer of more than 200 rows.
+to 0.16 rejects a `get_census` answer of more than 200 rows. Spec 0.17.1 says whose law an offer's `withdrawal` speaks
+of (§4.18): the business's own country's, 14 days in the EU, the EEA, Gibraltar and the UK; an inbox whose business is
+elsewhere leaves it out, and publishes only the return policies its owner wrote. Nothing a 0.17.0 reader reads changes.
 
 A **network** is a service that inboxes report to: it lists businesses, keeps the receipts they
 publish, gives customers a key and passes, and orders the directory by the published rules. Anyone
@@ -2233,10 +2235,10 @@ Every member version 1 has means what it meant, but where this says otherwise. N
   offer's shipping and returns are not known. A reader checks the ids of the offers it holds again whenever it
   reads a policies document with a new `rev`.
 - `withdrawal`: what the business says of the buyer's legal right to withdraw from a distance purchase (14 days in
-  the EU and the UK): `standard` (the right runs), or the exception the law allows for this offer (`personalised`,
-  `perishable`, `sealed_hygiene`, `sealed_media`, `mixed`, `dated_leisure`, `urgent_repair`, `digital_started`,
-  `price_fluctuates`), read narrowly: preset options are not personalisation, and long-life dry goods are not
-  perishable. Absent, the business has not said.
+  the EU, the EEA, Gibraltar and the UK): `standard` (the right runs), or the exception the law allows for this
+  offer (`personalised`, `perishable`, `sealed_hygiene`, `sealed_media`, `mixed`, `dated_leisure`,
+  `urgent_repair`, `digital_started`, `price_fluctuates`), read narrowly: preset options are not personalisation,
+  and long-life dry goods are not perishable. Absent, the business has not said.
 - Every number an item holds is an integer, or (a measure, a weight) above 0 with at most three decimals, judged by
   its value and never by how the body writes it: `3490.0` is the integer 3490, and `0.6500` is 0.65, two decimals.
 
@@ -2337,11 +2339,13 @@ reader keeps the last copy that read, if any.
   (no returns for a change of mind); with how a return is settled (`refund`, `exchange`, `store_credit`), how it
   comes back (`by_post`, `in_store`), who pays the postage, and any restocking fee, never charged on a legal
   withdrawal or a faulty item. Faulty goods are always the business's, so "faulty only" is `not_accepted`. Outside
-  the EU and the UK a business may offer no returns or a window under 14 days, and a reader shows it as it is. A
-  policy never takes away a right the law gives the buyer where they live: in the EU and the UK, 14 days to
-  withdraw from a distance purchase. Beside a policy shorter than that, a reader showing an offer to a buyer there
-  says so by the offer's `withdrawal`: for `standard`, that the buyer may withdraw within 14 days of delivery; for
-  an exception, that this offer is excepted, and why; and when it says nothing, only that the law where the buyer
+  the EU, the EEA, Gibraltar and the UK a business may offer no returns or a window under 14 days, and a reader
+  shows it as it is. The business's own country decides the consumer law an inbox applies, never the buyer's: in
+  the EU, the EEA, Gibraltar and the UK, 14 days to withdraw from a distance purchase, which no policy shortens. A
+  buyer's own law may give more; the business honours that itself, since the inbox does not track it. Beside a
+  policy shorter than 14 days, a reader showing an offer to a buyer in the EU, the EEA, Gibraltar or the UK says
+  so by the offer's `withdrawal`: for `standard`, that the buyer may withdraw within 14 days of delivery; for an
+  exception, that this offer is excepted, and why; and when it says nothing, only that the law where the buyer
   lives may give a right to withdraw, never a right for that item in particular.
 
 **A catalogue-only member.** A business whose products a network lists, and whose orders are taken at its own

@@ -1,7 +1,14 @@
 import { and, asc, eq } from "drizzle-orm";
 import type { AccessCapabilities } from "../access/keys";
 import { audienceFor, type BusinessFacts, businessFacts } from "../customer/audience";
-import { confirmTermsMessage, copyFor, vars, type WithdrawalCopy, withdrawalCopy } from "../customer/copy";
+import {
+  confirmTermsMessage,
+  copyFor,
+  lineReturnSentences,
+  vars,
+  type WithdrawalCopy,
+  withdrawalCopy,
+} from "../customer/copy";
 import {
   type Audience,
   customerSees,
@@ -44,17 +51,25 @@ import {
 } from "../customer/offer";
 import type { CustomerPage, LinkActResult, PageField, PageLink } from "../customer/page";
 import type { Db } from "../db";
-import { BUSINESS_ACTORS, type Contact, type Item, type Money, type PayloadOf, payloadSchemas } from "../domain/types";
+import {
+  BUSINESS_ACTORS,
+  type Contact,
+  type Item,
+  type Money,
+  type PayloadOf,
+  payloadSchemas,
+  type ReturnTerms,
+} from "../domain/types";
 import { collectCarried } from "../identity/carried";
 import { localStanding } from "../identity/context";
 import { stopNetworks } from "../identity/stops";
 import { fulfilWords } from "../kitchen/order";
 import { tableWords } from "../kitchen/tables";
 import { kitchenWords } from "../kitchen/words";
-import { lawOf } from "../negotiation/holidays";
+import { contractLawOf, type Law, lawOf } from "../negotiation/holidays";
 import { agreedOf, legacyOfferId, offerRows, openOf } from "../negotiation/offers";
 import { rewardsOf } from "../negotiation/rewards";
-import { ORDER_SENT, type WithdrawalRight } from "../negotiation/withdrawal";
+import { exceptionOf, ORDER_SENT, type WithdrawalRight } from "../negotiation/withdrawal";
 import type { ReceiptCapabilities } from "../receipts/capabilities";
 import { items, parties, products, services } from "../schema/tables";
 import type { SecretBox } from "../secrets/box";
@@ -67,7 +82,14 @@ import { findIdempotent } from "../write/common";
 import { notYoursError, WriteError } from "../write/errors";
 import { once } from "../write/idempotency";
 import { type PricingFor, priceFromCatalogue } from "../write/pricing";
-import { openReturnOf, withdrawalDaysOf, withdrawalFlagsOf, withdrawalOf } from "../write/returns";
+import {
+  openReturnOf,
+  returnTermsOf,
+  toldLinesOf,
+  withdrawalDaysOf,
+  withdrawalFlagsOf,
+  withdrawalOf,
+} from "../write/returns";
 import { RULE_SKIPPED_EVENT } from "../write/skipped";
 import { appendThreadEntry } from "../write/thread";
 import { type TransitionResult, transitionItem } from "../write/transition";
@@ -323,16 +345,43 @@ export class CustomerDoors {
   ): Promise<CustomerWithdrawal | null> {
     if (item.type !== "booking" && item.type !== "order") return null;
     const right = await withdrawalOf(this.db, item, settings, now);
-    // Nothing agreed yet, or the contract ended: nothing to say.
-    if (right.why === "not_agreed") return null;
-    const words = withdrawalCopy(audience.lang, lawOf(settings.commerce.legal.country));
+    // Nothing agreed yet, or the contract ended: nothing to say. Nor under another country's law, where
+    // no right of withdrawal is claimed: a return goes by our own policy (ADR-018 Amendment 7).
+    if (right.why === "not_agreed" || right.why === "other_law") return null;
+    const law = contractLawOf(settings.commerce.legal.country, item);
+    const words = withdrawalCopy(audience.lang, law);
+    const reason = await this.exceptedWords(item, words, right, audience, settings, law);
     return {
       available: right.available,
       until: right.until !== null ? new Date(right.until).toISOString() : null,
       label: words.label,
       ...(right.why ? { why: right.why } : {}),
-      ...(right.exception && right.exception !== "standard" ? { reason: words.except[right.exception] } : {}),
+      ...(reason ? { reason } : {}),
     };
+  }
+
+  /**
+   * Why there is no right, where something on the contract is excepted, in the law's words: an order whose
+   * other lines keep theirs names each (`lineReturnSentences`), so an excepted line never speaks for the
+   * rest, which may still come back within the period (`request_return`).
+   */
+  private async exceptedWords(
+    item: Item,
+    words: WithdrawalCopy,
+    right: WithdrawalRight,
+    audience: Audience,
+    settings: Settings,
+    law: Law,
+  ): Promise<string | undefined> {
+    if (right.why !== "excepted" || !right.exception || right.exception === "standard") return undefined;
+    if (item.type === "order") {
+      const lines = await toldLinesOf(this.db, item.payload, law);
+      if (lines.some((l) => l.told.kind === "right")) {
+        const days = await withdrawalDaysOf(this.db, "order", item.payload, settings);
+        return lineReturnSentences(audience.lang, law, lines, days).join(" ");
+      }
+    }
+    return words.except[right.exception];
   }
 
   /** The returns and refunds of a booking or an order, oldest first, each in the business's words. */
@@ -398,33 +447,49 @@ export class CustomerDoors {
       readonly terms_sha?: string | undefined;
     },
     pricing?: PricingFor,
-  ): Promise<boolean> {
-    if (!isCustomer(caller)) return false;
+  ): Promise<{
+    readonly confirmed: boolean;
+    readonly law?: Law | undefined;
+    readonly returnTerms?: ReturnTerms | undefined;
+  }> {
+    const no = { confirmed: false } as const;
+    if (!isCustomer(caller)) return no;
     // A retry is answered from what was stored, whatever the terms have become since.
-    if (caller.idempotency && (await findIdempotent(this.db, caller.idempotency))) return input.terms_sha !== undefined;
+    if (caller.idempotency && (await findIdempotent(this.db, caller.idempotency)))
+      return { confirmed: input.terms_sha !== undefined };
     const settings = await readSettings(this.db);
-    if (settings.commerce.customers === "businesses") return false;
+    if (settings.commerce.customers === "businesses") return no;
     const parsed = payloadSchemas[type].safeParse(input.payload);
     // The create says what is wrong with it, in its own words.
-    if (!parsed.success) return false;
+    if (!parsed.success) return no;
     const now = nowOf(caller);
-    if (type === "booking" && Date.parse((parsed.data as PayloadOf<"booking">).startTime) <= now) return false;
+    if (type === "booking" && Date.parse((parsed.data as PayloadOf<"booking">).startTime) <= now) return no;
     const priced = await priceFromCatalogue(this.db, type, parsed.data as Record<string, unknown>, pricing, now);
     // A price a person has still to set binds nobody yet: the confirm step comes with ours.
-    if (priced.unpriced) return false;
+    if (priced.unpriced) return no;
     const total = priced.payload.totalPrice as Money | undefined;
-    if (!total || total.value <= 0) return false;
+    if (!total || total.value <= 0) return no;
+    // The law the request is asked under, which the summary tells and the item records, and under
+    // another country's law what each line is told of returns (ADR-018 Amendment 7). Both are part of the
+    // terms and so of their fingerprint: a yes to a summary told under one law, or before the owner changed
+    // a return policy, never binds under another; and what was agreed holds what was told.
+    const law = lawOf(settings.commerce.legal.country);
+    const returnTerms =
+      type === "order" && law === "other"
+        ? await returnTermsOf(this.db, (priced.payload as PayloadOf<"order">).orderedItem)
+        : undefined;
+    const asked = { ...priced.payload, law, ...(returnTerms ? { returnTerms } : {}) };
     const terms =
       type === "booking"
-        ? bookingRequestTerms(priced.payload as PayloadOf<"booking">)
-        : orderRequestTerms(priced.payload as PayloadOf<"order">);
+        ? bookingRequestTerms(asked as PayloadOf<"booking">)
+        : orderRequestTerms(asked as PayloadOf<"order">);
     const sha = await termsSha(type === "booking" ? "time" : "order", terms);
-    if (input.terms_sha === sha) return true;
+    if (input.terms_sha === sha) return { confirmed: true, law, ...(returnTerms ? { returnTerms } : {}) };
     const audience = await audienceFor(this.db, {
       locale: input.contact?.locale ?? caller.locale ?? null,
       settings,
     });
-    const summary = await this.confirmSummary(type, priced.payload, audience, settings, now);
+    const summary = await this.confirmSummary(type, asked, audience, settings, now, law);
     const personalised = (priced.payload as { personalised?: unknown }).personalised !== undefined;
     throw new WriteError("confirm_terms", confirmTermsMessage(summary, sha), {
       details: {
@@ -450,12 +515,12 @@ export class CustomerDoors {
     a: Audience,
     settings: Settings,
     now: number,
+    /** The law the contract would be made under, and record: its business's country's now. */
+    law: Law,
   ): Promise<string> {
     const c = copyFor(a.lang);
-    const law = lawOf(settings.commerce.legal.country);
     const words = withdrawalCopy(a.lang, law);
     const total = moneyIn(payload.totalPrice as Money, a.lang);
-    const days = String(await withdrawalDaysOf(this.db, type, payload, settings));
     const main =
       type === "booking"
         ? c.confirmStep.booking(
@@ -472,14 +537,20 @@ export class CustomerDoors {
     const trader = legal.legalName.trim()
       ? c.confirmStep.trader(vars({ business: legal.legalName.trim(), address: legal.address.trim() }))
       : "";
-    const flags = await withdrawalFlagsOf(this.db, type, payload);
-    const excepted = flags.find((f) => f !== "standard") as keyof typeof words.except | undefined;
-    const start = type === "booking" ? Date.parse((payload as PayloadOf<"booking">).startTime) : Number.NaN;
-    const withdrawal = excepted
-      ? words.except[excepted]
-      : type === "order"
-        ? words.lineGoods(vars({ days }))
-        : `${words.lineService(vars({ days }))}${start - now < settings.returns.days * 86_400_000 ? ` ${words.startsEarly}` : ""}`;
+    // An order's lines, each told the right or why there is none; under another country's law, where no
+    // right of withdrawal is claimed, that an excepted line cannot be returned, else what the return
+    // policy the owner wrote gives, if anything (`returnTerms`). A booking: its right, or nothing.
+    const withdrawal =
+      type === "order"
+        ? lineReturnSentences(
+            a.lang,
+            law,
+            await toldLinesOf(this.db, payload as PayloadOf<"order">, law),
+            law === "other" ? 0 : await withdrawalDaysOf(this.db, type, payload, settings),
+          ).join(" ")
+        : law === "other"
+          ? ""
+          : await this.rightLine(payload as PayloadOf<"booking">, words, settings, now);
     // An order for a time says how and when, the delivery fee and the tip; a table its deposit and its
     // cancellation policy (ADR-040): all of it before the customer is bound.
     const kitchen =
@@ -491,6 +562,22 @@ export class CustomerDoors {
     return [main, kitchen, personalisedLine(payload, a), trader, withdrawal, c.confirmStep.obligation(vars({ total }))]
       .filter(Boolean)
       .join(" ");
+  }
+
+  /** The right of withdrawal before a booking the law gives one for: its period, or why there is none. */
+  private async rightLine(
+    payload: PayloadOf<"booking">,
+    words: WithdrawalCopy,
+    settings: Settings,
+    now: number,
+  ): Promise<string> {
+    const [flag] = await withdrawalFlagsOf(this.db, "booking", payload);
+    const excepted = exceptionOf([flag]);
+    if (excepted) return words.except[excepted as keyof typeof words.except];
+    const days = String(await withdrawalDaysOf(this.db, "booking", payload, settings));
+    const start = Date.parse(payload.startTime);
+    const early = words.startsEarly && start - now < settings.returns.days * 86_400_000 ? ` ${words.startsEarly}` : "";
+    return `${words.lineService(vars({ days }))}${early}`;
   }
 
   // ---- withdrawal and returns ------------------------------------------------
@@ -524,14 +611,16 @@ export class CustomerDoors {
       appendOnly = true;
     }
     const settings = await readSettings(this.db);
-    const law = lawOf(settings.commerce.legal.country);
     for (let attempt = 1; ; attempt++) {
       const row = await this.loadOwned(c, input.item_id);
       const item = rowToItem(row);
       const audience = await this.audienceOf(item, c);
-      const words = withdrawalCopy(audience.lang, law);
+      const words = withdrawalCopy(audience.lang, contractLawOf(settings.commerce.legal.country, item));
+      // Once the goods reached them, the lines they name are what is judged: an excepted one keeps no other.
       const right =
-        item.type === "booking" || item.type === "order" ? await withdrawalOf(this.db, item, settings, nowOf(c)) : null;
+        item.type === "booking" || item.type === "order"
+          ? await withdrawalOf(this.db, item, settings, nowOf(c), { lines: input.lines })
+          : null;
       if (!right || right.why === "not_agreed") {
         throw new WriteError("wrong_state", copyFor(audience.lang).returns.problems.notAgreed, {
           details: { state: customerState(item) },
@@ -621,10 +710,18 @@ export class CustomerDoors {
       .where(eq(parties.id, item.partyId));
     const contact = (party?.contact ?? null) as { email?: unknown; name?: unknown } | null;
     const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+    const settings = await readSettings(this.db);
     const why =
-      right.why === "excepted" && right.exception && right.exception !== "standard"
-        ? words.except[right.exception]
-        : right.why && right.why !== "not_agreed"
+      right.why === "excepted"
+        ? await this.exceptedWords(
+            item,
+            words,
+            right,
+            audience,
+            settings,
+            contractLawOf(settings.commerce.legal.country, item),
+          )
+        : right.why && right.why !== "not_agreed" && right.why !== "other_law"
           ? words.noRight(vars({ yourNoun: copyFor(audience.lang).yourNoun[item.type] }))
           : undefined;
     return {
@@ -2128,7 +2225,7 @@ export class CustomerDoors {
 
     if (row.action === "withdraw") {
       const settings = await readSettings(this.db);
-      const w = withdrawalCopy(lang, lawOf(settings.commerce.legal.country));
+      const w = withdrawalCopy(lang, contractLawOf(settings.commerce.legal.country, item));
       const right = await withdrawalOf(this.db, item, settings, now);
       const statement = await this.statementOf(item, audience, w, right, undefined);
       const rowsOf = [
@@ -2228,8 +2325,16 @@ export class CustomerDoors {
       text = words.details.done;
     } else if (row.action === "withdraw" && row.usedAt !== null) {
       const settings = await readSettings(this.db);
-      const w = withdrawalCopy(lang, lawOf(settings.commerce.legal.country));
-      text = w.page.done(vars({ when: whenText(new Date(row.usedAt).toISOString(), tz, lang) }));
+      const w = withdrawalCopy(lang, contractLawOf(settings.commerce.legal.country, item));
+      const when = vars({ when: whenText(new Date(row.usedAt).toISOString(), tz, lang) });
+      // A withdrawal this link sent is acknowledged by email; what it could no longer do online went to a
+      // person as their message (or a return they asked for), with no copy of a withdrawal to speak of.
+      const { rows } = await this.db.client.query({
+        sql: "SELECT 1 FROM item_events WHERE item_id = ? AND event = 'withdraw' AND actor_id = ? LIMIT 1",
+        params: [item.id, `link:${row.jti}`],
+        method: "all",
+      });
+      text = rows.length ? w.page.done(when) : w.page.sent(when);
     }
     return this.plain(ctx, 200, text ?? words.alreadyDone(vars({ status: status(item, audience) })));
   }
@@ -2332,7 +2437,7 @@ export class CustomerDoors {
   private async passOnWithdrawal(ctx: LinkContext, caller: Caller, note: string): Promise<CustomerPage> {
     const { item, audience } = ctx;
     const settings = await readSettings(this.db);
-    const w = withdrawalCopy(audience.lang, lawOf(settings.commerce.legal.country));
+    const w = withdrawalCopy(audience.lang, contractLawOf(settings.commerce.legal.country, item));
     const right = await withdrawalOf(this.db, item, settings, nowOf(caller));
     const statement = await this.statementOf(item, audience, w, right, undefined);
     const text = [statement.text, note].filter(Boolean).join("\n\n");

@@ -11,7 +11,7 @@ import type { ItemType } from "../domain/types";
 import { keysDeliveredStatement, keysDueAlone, keysFor, prunePending } from "../identity/pending";
 import { itemStopped } from "../identity/stops";
 import { lookOf } from "../look/palette";
-import { lawOf } from "../negotiation/holidays";
+import { contractLawOf } from "../negotiation/holidays";
 import { insertOfferStatement } from "../negotiation/offers";
 import { receiptSha } from "../receipts/sign";
 import { items } from "../schema/tables";
@@ -195,11 +195,13 @@ export const PT_WITHDRAWAL_ALERT_DAYS = 10;
 
 /**
  * The owner is told once of each refund whose date is near and that is not paid yet: three days before
- * it, or, in Portugal, from the tenth day after a withdrawal. One email per refund, ever (its job key).
+ * it, or, for a withdrawal from a contract made under Portugal's law (`contractLawOf` of its order or
+ * booking, whatever the country is now), from the tenth day after it. One email per refund, ever (its job key).
  */
 async function alertRefundsDue(db: Db, settings: Settings, now: number, batch: number): Promise<number> {
   const { rows } = await db.client.query({
-    sql: `SELECT id, json_extract(payload, '$.refundDue'), json_extract(payload, '$.noticeAt'), json_extract(payload, '$.kind')
+    sql: `SELECT id, json_extract(payload, '$.refundDue'), json_extract(payload, '$.noticeAt'), json_extract(payload, '$.kind'),
+                 (SELECT json_extract(o.payload, '$.law') FROM items o WHERE o.id = items.linked_item_id)
             FROM items
            WHERE type = 'refund' AND state IN ('approved', 'goods_received') AND COALESCE(sandbox, 0) = 0
              AND json_extract(payload, '$.refundDue') IS NOT NULL
@@ -209,12 +211,12 @@ async function alertRefundsDue(db: Db, settings: Settings, now: number, batch: n
     params: [batch],
     method: "all",
   });
-  const pt = lawOf(settings.commerce.legal.country) === "pt";
   let alerted = 0;
   for (const r of rows) {
     const due = Date.parse(String(r[1]));
     if (!Number.isFinite(due)) continue;
     const notice = typeof r[2] === "string" ? Date.parse(r[2]) : Number.NaN;
+    const pt = contractLawOf(settings.commerce.legal.country, { payload: { law: r[4] } }) === "pt";
     const from =
       pt && r[3] === "withdrawal" && Number.isFinite(notice)
         ? Math.min(due - REFUND_ALERT_DAYS * 86_400_000, notice + PT_WITHDRAWAL_ALERT_DAYS * 86_400_000)

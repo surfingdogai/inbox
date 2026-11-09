@@ -1,4 +1,5 @@
 import type { ItemType } from "../domain/types";
+import type { Law } from "../negotiation/holidays";
 import type { CustomerLang } from "./lang";
 
 /**
@@ -183,7 +184,10 @@ export interface Copy {
   readonly page: PageCopy;
   /** Every email the business sends a customer (`customer/mail.ts` puts them together). */
   readonly email: EmailCopy;
-  /** The right of withdrawal (ADR-018 §7), in the words of the EU law; the UK's are `WITHDRAWAL_UK`. */
+  /**
+   * The right of withdrawal (ADR-018 §7), in the words of the EU law; the UK's are `WITHDRAWAL_UK`, and
+   * another country's, which claim no right, `WITHDRAWAL_OTHER`.
+   */
   readonly withdrawal: WithdrawalCopy;
   /** A return or a refund, as the customer reads it (ADR-018 §3.4). */
   readonly returns: ReturnCopy;
@@ -223,8 +227,8 @@ export interface WithdrawalCopy {
   readonly lineGoods: Say;
   /** Before a booking: `days` from booking. */
   readonly lineService: Say;
-  /** A service that starts within the period: the customer asks for it to start then. */
-  readonly startsEarly: string;
+  /** A service that starts within the period: the customer asks for it to start then. None under another country's law. */
+  readonly startsEarly: string | null;
   /** Until when, once the period has begun. */
   readonly until: Say;
   /** Why this one cannot be withdrawn from. */
@@ -240,8 +244,8 @@ export interface WithdrawalCopy {
   readonly refundOnReturn: Say;
   readonly postageCustomer: string;
   readonly postageUs: string;
-  /** The model form (Annex I(B)), with our name, address and email in it. */
-  readonly modelForm: Say;
+  /** The model form (Annex I(B)), with our name, address and email in it. None under another country's law. */
+  readonly modelForm: Say | null;
   /** Before a VAT number, in the line that says who we are. */
   readonly vatLabel: string;
   /** Our answer when it can no longer be done online: passed to a person. */
@@ -255,7 +259,10 @@ export interface WithdrawalCopy {
     contract: string;
     email: string;
     note: string;
+    /** Once the withdrawal the page sent was made: `when`, and the copy emailed. */
     done: Say;
+    /** Once what the page sent went to a person instead (it could no longer be done online): `when`. */
+    sent: Say;
     /** Nothing to withdraw from any more (the period ended, or it is excepted): it still reaches a person. */
     stillSend: string;
   }>;
@@ -293,6 +300,11 @@ export interface ReturnCopy {
   /** Under an order the customer asked us to cancel after they paid. */
   readonly refundToAsk: Say;
   readonly labels: Readonly<{ sendBack: string; cancel: string }>;
+  /**
+   * The return policy the owner wrote, before an order and in its first confirmation, where it is made
+   * under another country's law and no right of withdrawal is claimed (ADR-018 Amendment 7): `days`.
+   */
+  readonly policy: Readonly<{ window: Say; anyTime: string }>;
   readonly problems: Readonly<{
     /** Another return of the order is open: add to it. */
     returnOpen: Say;
@@ -1046,6 +1058,7 @@ const EN: Copy = {
       email: "Email for your copy",
       note: "Anything you want to tell us, like only some of the items? (optional)",
       done: (v) => `Your withdrawal was sent on ${v.when}. We have emailed you a copy.`,
+      sent: (v) => `Your message was sent on ${v.when}: a person on our team will answer.`,
       stillSend: "You can still send it: a person on our team will answer.",
     },
   },
@@ -1094,6 +1107,10 @@ const EN: Copy = {
     cancelledPaid: (v) => `We will refund ${v.amount} by ${v.deadline}, to the way you paid.`,
     refundToAsk: (v) => `We will be in touch about refunding the ${v.amount} you paid.`,
     labels: { sendBack: "Send it back", cancel: "Cancel the return" },
+    policy: {
+      window: (v) => `Under our return policy, you can return it within ${v.days} days of receiving it.`,
+      anyTime: "Under our return policy, you can return it at any time.",
+    },
     problems: {
       returnOpen: (v) => `We already have your return request (reference ${v.ref}). Write to us to add to it.`,
       noWithdrawal: (v) =>
@@ -1672,6 +1689,7 @@ const PT: Copy = {
       email: "Email para a sua cópia",
       note: "Quer dizer-nos alguma coisa, por exemplo só alguns artigos? (opcional)",
       done: (v) => `A sua retratação foi enviada em ${v.when}. Enviámos-lhe uma cópia por email.`,
+      sent: (v) => `A sua mensagem foi enviada em ${v.when}: uma pessoa da nossa equipa responde.`,
       stillSend: "Pode enviá-la na mesma: uma pessoa da nossa equipa responde.",
     },
   },
@@ -1721,6 +1739,11 @@ const PT: Copy = {
     cancelledPaid: (v) => `Devolvemos ${v.amount} até ${v.deadline}, pelo mesmo meio de pagamento.`,
     refundToAsk: (v) => `Vamos contactá-lo sobre o reembolso dos ${v.amount} que pagou.`,
     labels: { sendBack: "Devolver", cancel: "Cancelar a devolução" },
+    policy: {
+      window: (v) =>
+        `Pela nossa política de devoluções, pode devolver o que encomendou no prazo de ${v.days} dias após a receção.`,
+      anyTime: "Pela nossa política de devoluções, pode devolver o que encomendou a qualquer momento.",
+    },
     problems: {
       returnOpen: (v) => `Já temos o seu pedido de devolução (referência ${v.ref}). Escreva-nos para o completar.`,
       noWithdrawal: (v) =>
@@ -1739,14 +1762,126 @@ const PT: Copy = {
   },
 };
 
+/**
+ * Where a contract was made under another country's law than the EU's, the EEA's, Gibraltar's or the
+ * UK's (`contractLawOf` is `other`, ADR-018 Amendment 7): plain words of cancelling and returning, with no
+ * right of withdrawal claimed, no period the law gives and no model form. What the customer is told of
+ * returns is that an excepted line cannot be returned (`except`), else the return policy the owner wrote
+ * (`returns.policy`), where there is one.
+ */
+export const WITHDRAWAL_OTHER: Readonly<Record<CustomerLang, WithdrawalCopy>> = {
+  en: {
+    ...WITHDRAWAL_UK,
+    label: "Cancel or return here",
+    lineGoods: EN.returns.policy.window,
+    lineService: (v) => `Under our policy, you can cancel within ${v.days} days of booking.`,
+    startsEarly: null,
+    until: (v) => `You can cancel or return it until ${v.deadline}.`,
+    except: {
+      ...WITHDRAWAL_UK.except,
+      dated_leisure: "This cannot be cancelled: it is for a set date.",
+      urgent_repair: "This cannot be cancelled: it is an urgent repair you asked for.",
+    },
+    statement: (v) => `I would like to cancel ${v.what} (reference ${v.ref}).`,
+    modelForm: null,
+    // Not that it cannot be done online (a paid booking is still cancelled online): only not by this page.
+    noRight: (v) => `This page cannot cancel ${v.yourNoun}.`,
+    page: { ...WITHDRAWAL_UK.page, heading: "Cancel or return", done: EN.withdrawal.page.sent },
+  },
+  pt: {
+    ...PT.withdrawal,
+    label: "Cancelar ou devolver aqui",
+    confirm: "Confirmar cancelamento",
+    lineGoods: PT.returns.policy.window,
+    lineService: (v) => `Pela nossa política, pode cancelar no prazo de ${v.days} dias após a marcação.`,
+    startsEarly: null,
+    until: (v) => `Pode cancelar ou devolver até ${v.deadline}.`,
+    except: {
+      ...PT.withdrawal.except,
+      dated_leisure: "Não pode ser cancelado: é para uma data marcada.",
+      urgent_repair: "Não pode ser cancelado: é uma reparação urgente que pediu.",
+    },
+    receivedSubject: (v) => `Recebemos o seu pedido de cancelamento: ${v.what}`,
+    received: (v) => `Pediu para cancelar ${v.what} em ${v.when}. Obrigado por nos avisar. Eis o que nos enviou:`,
+    statement: (v) => `Peço o cancelamento de ${v.what} (referência ${v.ref}).`,
+    modelForm: null,
+    noRight: (v) => `Esta página não pode cancelar ${v.yourNoun}.`,
+    page: { ...PT.withdrawal.page, heading: "Cancelar ou devolver", done: PT.withdrawal.page.sent },
+  },
+};
+
 export const COPY: Readonly<Record<CustomerLang, Copy>> = { en: EN, pt: PT };
 
 export function copyFor(lang: CustomerLang): Copy {
   return COPY[lang];
 }
 
+/**
+ * What the return policies the owner wrote give a customer, where the contract is made under another
+ * country's law (ADR-018 Amendment 7): a number of days, any time, or nothing to say (none written, no
+ * returns, no refund, a booking).
+ */
+export type OwnReturnPolicy = number | "unlimited" | null;
+
+/** The business's own return policy in a sentence, in the customer's language; empty where there is none to tell. */
+export function ownReturnPolicyLine(lang: CustomerLang, policy: OwnReturnPolicy): string {
+  if (policy === null) return "";
+  const p = COPY[lang].returns.policy;
+  return policy === "unlimited" ? p.anyTime : p.window(vars({ days: String(policy) }));
+}
+
+/**
+ * What one line of an order is told of returning it (ADR-018 §7, Amendment 7): the law's right to
+ * withdraw (`right`), an exception the law allows (`except`), a return policy the owner wrote (`policy`,
+ * its days or `unlimited`), or nothing (`none`).
+ */
+export type LineReturnTold =
+  | { readonly kind: "right" }
+  | { readonly kind: "except"; readonly exception: keyof ExceptionWords }
+  | { readonly kind: "policy"; readonly days: number | "unlimited" }
+  | { readonly kind: "none" };
+
+/** An order's line, as `lineReturnSentences` names it: how many of what, and what it is told. */
+export interface LineTold {
+  readonly name: string;
+  readonly quantity: number;
+  readonly told: LineReturnTold;
+}
+
+/**
+ * What an order's lines are told of returning them, in sentences (ADR-018 §7, Amendment 7). Where every
+ * line is told the same, one sentence for the order, as ever. Where they differ, one for each thing told,
+ * naming its lines in brackets, so a line the law excepts never speaks for the others: "This cannot be
+ * returned: it does not keep (1 × Cake). You can withdraw within 14 days of receiving it, without giving a
+ * reason (1 × Chain)." A line with nothing to tell gets no sentence. `days` is the law's period, for
+ * `right`.
+ */
+export function lineReturnSentences(lang: CustomerLang, law: Law, lines: readonly LineTold[], days: number): string[] {
+  const words = withdrawalCopy(lang, law);
+  const sentenceOf = (t: LineReturnTold): string =>
+    t.kind === "right"
+      ? words.lineGoods(vars({ days: String(days) }))
+      : t.kind === "except"
+        ? words.except[t.exception]
+        : t.kind === "policy"
+          ? ownReturnPolicyLine(lang, t.days)
+          : "";
+  const groups = new Map<string, string[]>();
+  for (const l of lines) {
+    const sentence = sentenceOf(l.told);
+    groups.set(sentence, [...(groups.get(sentence) ?? []), `${l.quantity} × ${l.name.replace(/\s+/g, " ").trim()}`]);
+  }
+  if (groups.size <= 1) return [...groups.keys()].filter(Boolean);
+  return [...groups.entries()]
+    .filter(([sentence]) => sentence)
+    .map(([sentence, names]) =>
+      sentence.endsWith(".") ? `${sentence.slice(0, -1)} (${names.join(", ")}).` : `${sentence} (${names.join(", ")})`,
+    );
+}
+
 /** The right of withdrawal in the words of the customer's language and of the law the business sells under. */
-export function withdrawalCopy(lang: CustomerLang, law: "eu" | "pt" | "uk"): WithdrawalCopy {
+export function withdrawalCopy(lang: CustomerLang, law: Law): WithdrawalCopy {
+  if (law === "other") return WITHDRAWAL_OTHER[lang];
   return lang === "en" && law === "uk" ? WITHDRAWAL_UK : COPY[lang].withdrawal;
 }
 

@@ -254,6 +254,18 @@ or network:
   under the rules in force);
   `get_census` answers up to 400 rows (`getCensusOutputSchema`). A reader pinned to 0.16 rejects a `get_census` answer
   of more than 200 rows, and reads every other answer as before.
+- 0.17.1 (optional for a network and for an inbox): whose law a catalogue offer's `withdrawal` speaks of (protocol
+  §4.18, ADR-018 Amendment 7, ADR-047 decision 5). The business's own country decides the consumer law an inbox
+  applies, never the buyer's: `withdrawal` is what the business says of the buyer's legal right to withdraw from a
+  distance purchase, 14 days in the EU, the EEA, Gibraltar and the UK, and an inbox whose business's country is
+  elsewhere leaves it out of every item (absent: the business has not said), giving every product a new position once
+  when the country crosses that line, so a network reads each again. Outside the EU, the EEA, Gibraltar and the UK a
+  return policy may be no returns or a window under 14 days, shown as it is; beside a policy shorter than 14 days, a
+  reader showing an offer to a buyer in the EU, the EEA, Gibraltar or the UK says what the offer's `withdrawal`
+  supports. A buyer's own law may give more, which the business honours itself. An inbox whose business is elsewhere
+  publishes only the return policies its owner wrote: with none, its policies document has no default return policy,
+  and an offer's returns are not known. No schema, vector or vocabulary changes: nothing a 0.17.0 reader reads
+  changes.
 
 A version number is given when a change merges, in the order changes merge. Work in progress names no number, so
 two changes built side by side never claim the same one.

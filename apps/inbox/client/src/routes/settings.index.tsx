@@ -1433,7 +1433,7 @@ function AdvancedSections({
               presets={DURATION_PRESETS.returnDays}
               value={form.returnDays}
               onChange={(v) => set("returnDays", v)}
-              hint="14 at least, by law."
+              hint="14 at least, where customers may withdraw: your country in the EU, the EEA, Gibraltar or the UK, or none set. Elsewhere they are told only a return policy you write (Shipping and returns)."
               error={field("returns.days")}
             />
             <Stepper
@@ -1526,7 +1526,9 @@ function AdvancedSections({
                 {field("commerce.legal.country")}
               </div>
             ) : (
-              <div className="hint">Its consumer law, words and holidays.</div>
+              <div className="hint">
+                Its consumer law: a right to withdraw in the EU, the EEA, Gibraltar and the UK, none claimed elsewhere.
+              </div>
             )}
           </div>
           <Field id="s-vat" label="VAT number" optional error={field("commerce.legal.vatId")}>

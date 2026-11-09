@@ -70,7 +70,7 @@ export const DURATION_PRESETS = {
   orderDays: [m(3, "3 days"), m(7, "1 week"), m(14, "2 weeks"), m(30, "30 days")],
   /** `negotiation.ai.maxDelayDays`, days. */
   delayDays: [m(0, "None"), m(1, "1 day"), m(3, "3 days"), m(7, "1 week")],
-  /** `returns.days`, days (14 at least, by law). */
+  /** `returns.days`, days (14 at least, where the inbox applies a right to withdraw). */
   returnDays: [m(14, "14 days"), m(30, "30 days"), m(60, "60 days")],
   /** `returns.respondHours`, hours. */
   respondHours: [m(24, "1 day"), m(48, "2 days"), m(72, "3 days"), m(168, "1 week")],

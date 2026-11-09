@@ -136,6 +136,7 @@ export const createBookingInput = z.object({
       paymentRef: true,
       paidAmount: true,
       attachments: true,
+      law: true,
     })
     .extend({
       reservationFor: z.object({
@@ -176,6 +177,8 @@ export const createOrderInput = z.object({
       deliveredAt: true,
       attachments: true,
       schedule: true,
+      law: true,
+      returnTerms: true,
     })
     .extend({
       orderedItem: z

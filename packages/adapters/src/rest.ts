@@ -241,8 +241,14 @@ function ownerPolicies(state: {
   readonly shipping_profiles: readonly unknown[];
   readonly return_policies: readonly unknown[];
   readonly rev: string;
+  readonly unpublished: readonly string[];
 }) {
-  return { shipping_profiles: state.shipping_profiles, return_policies: state.return_policies, rev: state.rev };
+  return {
+    shipping_profiles: state.shipping_profiles,
+    return_policies: state.return_policies,
+    rev: state.rev,
+    unpublished: state.unpublished,
+  };
 }
 
 /** A catalogue page as the inbox's door answers it: signed, cached as it says, or a 304, a 404 or a 422. */
@@ -701,7 +707,7 @@ export function publicRest(caps: Capabilities, opts: { readonly baseUrl?: string
       tags: ["public"],
       summary: "Withdraw from contract here: your customer withdraws from their booking or order",
       description:
-        "Two steps (CRD art. 11a). Without confirm_withdrawal nothing is sent: the answer is 409 confirm_withdrawal with details.statement — who, which contract, where the copy goes, until when — to show your person. Send it again with confirm_withdrawal: true once they confirm: a booking paid for, or an order before its goods went out, is cancelled and what was paid is refunded (200, the refund in linked); once the goods reached them, they come back and are refunded (200, the return in linked); the business emails an acknowledgement. Never refused: where the period has ended or what was bought is excepted, it becomes a return under the business's own policy once the goods reached them (200), else your person's message for a person there (202 passed_on, saying why). GET /v1/items/{id} says whether the right runs (withdrawal).",
+        "Two steps (CRD art. 11a). Without confirm_withdrawal nothing is sent: the answer is 409 confirm_withdrawal with details.statement — who, which contract, where the copy goes, until when — to show your person. Send it again with confirm_withdrawal: true once they confirm: a booking paid for, or an order before its goods went out, is cancelled and what was paid is refunded (200, the refund in linked); once the goods reached them, they come back and are refunded (200, the return in linked); the business emails an acknowledgement. Never refused: where the period has ended, no right of withdrawal is claimed, or what was bought is excepted, it becomes a return under the business's own policy once the goods reached them (200), else your person's message for a person there (202 passed_on, saying why where there is a reason). GET /v1/items/{id} says whether the right runs (withdrawal).",
       responses: {
         ...json("Item", R.customerResultSchema),
         ...PASSED_ON,
@@ -723,7 +729,7 @@ export function publicRest(caps: Capabilities, opts: { readonly baseUrl?: string
       tags: ["public"],
       summary: "Send goods back: ask the business for a return",
       description:
-        "On an order whose goods reached your customer: reason faulty, not_as_described or wrong_item (the legal guarantee: sending it back costs them nothing), or changed_mind (a withdrawal while the period runs, agreed at once; after it, a return under the business's own policy, which it answers). lines names which, by index in orderedItem, and how many; all of them when left out. The return is in linked (201); the business answers within its respondHours, by email and on GET /v1/items/{id} (refunds). 409 wrong_state before the goods went out (cancel instead), or guard_failed when a return of the order is open already.",
+        "On an order whose goods reached your customer: reason faulty, not_as_described or wrong_item (the legal guarantee: sending it back costs them nothing), or changed_mind (a withdrawal while a period to withdraw runs, agreed at once; otherwise a return under the business's own policy, which it answers). lines names which, by index in orderedItem, and how many; all of them when left out. The return is in linked (201); the business answers within its respondHours, by email and on GET /v1/items/{id} (refunds). 409 wrong_state before the goods went out (cancel instead), or guard_failed when a return of the order is open already.",
       responses: {
         201: {
           description: "The return, in linked",
@@ -1128,7 +1134,7 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
       tags: ["owner"],
       summary: "Open a return a customer asked for by email or phone, on their fulfilled order",
       description:
-        "reason as the customer gave it, and note: what they asked, in their words (kept for you); entry_id (their message on the order) or asked_at (when they rang) dates it, so it is judged as of when they asked. A faulty item is under the legal guarantee; a change of mind within the period is a withdrawal, agreed at once; anything else is a return you answer (approve; reject only once the period to withdraw had ended when they asked). The return is in linked.",
+        "reason as the customer gave it, and note: what they asked, in their words (kept for you); entry_id (their message on the order) or asked_at (when they rang) dates it, so it is judged as of when they asked. A faulty item is under the legal guarantee; a change of mind while a period to withdraw runs is a withdrawal, agreed at once; anything else is a return you answer (approve; reject only where no period to withdraw ran when they asked). The return is in linked.",
       responses: json("Item", R.transitionResultSchema, 201),
       write: true,
     }),
@@ -1821,7 +1827,7 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
       tags: ["setup"],
       summary: "Set a return policy",
       description:
-        "What you offer on top of the law: a window of days, unlimited, or no returns, how a return is settled and comes back, who pays the postage, any restocking fee. In the EU, the EEA and the UK (or with no country set) a policy is at least the 14 days the law gives; elsewhere it may be shorter, or no returns, shown as it is. The owner in person only.",
+        "What you offer on top of the law: a window of days, unlimited, or no returns, how a return is settled and comes back, who pays the postage, any restocking fee. Where your country is in the EU, the EEA, Gibraltar or the UK (or none is set) a policy is at least the 14 days the law gives; elsewhere it may be shorter, or no returns, shown as it is. The owner in person only.",
       responses: json("Policies", R.ownerPoliciesSchema),
       write: true,
     }),

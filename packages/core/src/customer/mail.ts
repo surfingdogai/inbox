@@ -1,7 +1,17 @@
 import type { Item, Money } from "../domain/types";
 import { fulfilWords } from "../kitchen/order";
 import { kitchenWords } from "../kitchen/words";
-import { type CopyVars, cap, copyFor, type ExceptionWords, vars, withdrawalCopy } from "./copy";
+import type { Law } from "../negotiation/holidays";
+import {
+  type CopyVars,
+  cap,
+  copyFor,
+  type ExceptionWords,
+  type LineTold,
+  lineReturnSentences,
+  vars,
+  withdrawalCopy,
+} from "./copy";
 import { type Audience, personalisedLine, statusSentence, subjectIn, whatOf } from "./describe";
 import { moneyIn, oneLine, shortRef, whenText } from "./format";
 import type { CustomerLang } from "./lang";
@@ -90,11 +100,17 @@ export interface MailWithdrawal {
   /** When the period ends, once it has begun. */
   readonly until: string | null;
   readonly kind: "goods" | "service";
-  /** Why there is no right, when the product or service is excepted. */
+  /** Why there is no right, when the product or service is excepted (an order's first excepted line). */
   readonly exception?: keyof ExceptionWords | null | undefined;
-  readonly law: "eu" | "pt" | "uk";
-  /** The period in days. */
+  readonly law: Law;
+  /** The period in days (none under another country's law). */
   readonly days: number;
+  /**
+   * What each line of an order is told of returns (`lineReturnSentences`): under another country's law
+   * (`law` is `other`), what its customer was told, which its first confirmation tells instead of a right;
+   * where some lines are excepted, theirs and the others' right, named.
+   */
+  readonly lines?: readonly LineTold[] | undefined;
 }
 
 export interface MailTrader {
@@ -277,13 +293,25 @@ export function answerLines(
 /**
  * The right of withdrawal in a confirmation (ADR-018 §7): until when, or for how long once it starts,
  * and the link to withdraw; the exception when there is none. The first confirmation also carries the
- * model form and who we are (CRD arts. 6(1), 8(7)).
+ * model form and who we are (CRD arts. 6(1), 8(7)). Under another country's law no right is claimed and
+ * there is no form: the first confirmation alone tells what the customer was told before it bound
+ * (Amendment 7): that an excepted line cannot be returned, else the return policy the owner wrote, if any.
  */
 function withdrawalBlocks(input: CustomerMailInput, template: string): (readonly string[])[] {
   const w = input.withdrawal;
   if (!w || !CONFIRMATIONS.has(template)) return [];
+  if (w.law === "other") {
+    if (!FIRST_CONFIRMATIONS.has(template)) return [];
+    const said = lineReturnSentences(input.lang, "other", w.lines ?? [], 0).join(" ");
+    return said ? [[said]] : [];
+  }
   const words = withdrawalCopy(input.lang, w.law);
-  if (!w.available) return w.exception ? [[words.except[w.exception]]] : [];
+  if (!w.available) {
+    // Some lines excepted and others not: each is told its own, never the exception for all of them.
+    if (w.exception && w.lines?.some((l) => l.told.kind === "right"))
+      return [[lineReturnSentences(input.lang, w.law, w.lines, w.days).join(" ")]];
+    return w.exception ? [[words.except[w.exception]]] : [];
+  }
   const when = (iso: string) => whenText(iso, input.timezone, input.lang);
   const days = String(w.days);
   const link = input.links?.get("withdraw");
@@ -297,7 +325,7 @@ function withdrawalBlocks(input: CustomerMailInput, template: string): (readonly
       ...(link ? [`${words.label}: ${link}`] : []),
     ],
   ];
-  if (FIRST_CONFIRMATIONS.has(template)) {
+  if (FIRST_CONFIRMATIONS.has(template) && words.modelForm) {
     const t = input.trader;
     const name = t?.legalName.trim() || input.business.trim();
     const what = whatOf(input.item, input.lang) || copyFor(input.lang).yourNoun[input.item.type];
@@ -339,7 +367,7 @@ function withdrawalBody(
   input: CustomerMailInput,
   s: (extra?: Partial<CopyVars>) => CopyVars,
   what: string,
-  law: "eu" | "pt" | "uk",
+  law: Law,
 ): Body {
   const { lang, item } = input;
   const words = withdrawalCopy(lang, law);

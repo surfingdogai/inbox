@@ -11,9 +11,10 @@ import { type CatalogueWeight, catalogueIdV2Schema, catalogueMoneySchema } from 
  *
  * Shipping v1 is the owner's own rate tables only: a flat rate (0 is free), a rate per item, by weight or
  * by order value, each with an optional `free_over`. The owner buys and prints their own labels; no
- * carrier is called. A return policy says what the business offers: it never takes away a right the law
- * gives the buyer where they live (in the EU and the UK, a distance purchase may be withdrawn from within
- * 14 days of delivery, as the law excepts), and faulty goods are always the business's.
+ * carrier is called. A return policy says what the business offers on top of the law, which the business's
+ * own country decides for an inbox (in the EU, the EEA, Gibraltar and the UK, a distance purchase may be
+ * withdrawn from within 14 days of delivery, as the law excepts); a buyer's own law may give more, which the
+ * business honours itself. Faulty goods are always the business's.
  */
 
 const currency = z.string().regex(/^[A-Z]{3}$/);
@@ -122,8 +123,10 @@ export type ShippingProfile = z.infer<typeof shippingProfileSchema>;
 /**
  * A return policy: a window of days from delivery or collection (`window`), any time (`unlimited`), or
  * none (`not_accepted`: no returns for a change of mind; a faulty item is still the business's). Outside
- * the EU and the UK a business may offer no returns or a window under 14 days, and it is shown as it is;
- * the legal right of withdrawal still holds wherever the law gives one.
+ * the EU, the EEA, Gibraltar and the UK a business may offer no returns or a window under 14 days, and it is
+ * shown as it is. The business's own country decides the consumer law an inbox applies: in the EU, the EEA,
+ * Gibraltar and the UK the legal right of withdrawal holds whatever a policy says, and a buyer's own law may
+ * give more, which the business honours itself.
  */
 export const returnPolicySchema = z.object({
   id: catalogueIdV2Schema,

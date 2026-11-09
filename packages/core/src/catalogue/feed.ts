@@ -12,6 +12,7 @@ import {
 } from "@surfingdog/spec";
 import { and, asc, eq, gt, inArray, or } from "drizzle-orm";
 import type { Db } from "../db";
+import { lawOf } from "../negotiation/holidays";
 import type { KeyStore } from "../receipts/keys";
 import { b64u, bodySha256, signCatalogue, unb64u } from "../receipts/sign";
 import { productGroups, products } from "../schema/tables";
@@ -19,7 +20,14 @@ import { readSettings, type Settings } from "../settings/schema";
 import { canonicalJson } from "../util/canonical";
 import { loadPolicies, type PoliciesState, policiesDocument } from "./policies";
 import type { CatalogueContext } from "./publish";
-import { type BuiltItem, type CatalogueV2Context, catalogueClockStatements, catalogueItemV2, priceHistory } from "./v2";
+import {
+  type BuiltItem,
+  type CatalogueV2Context,
+  catalogueClockStatements,
+  catalogueItemV2,
+  catalogueWithdrawalStatements,
+  priceHistory,
+} from "./v2";
 
 /**
  * The signed catalogue feed (ADR-029, protocol §4.18 as amended for catalogue version 2): what an inbox
@@ -146,6 +154,14 @@ function limitOf(raw: string | number | undefined): number | CatalogueRefusal {
 /** Where the counts of the catalogue as last built are kept (`instance_meta`), with what they were built from. */
 const COUNTS_KEY = "catalogue_counts";
 
+/**
+ * Whether the items say the legal right to withdraw: only where the inbox applies one, by the business's
+ * own country (`lawOf` is not `other`, ADR-018 Amendment 7), never by the buyer's or where the goods go.
+ */
+function saysWithdrawal(settings: Settings): boolean {
+  return lawOf(settings.commerce.legal.country) !== "other";
+}
+
 /** The counts of the catalogue as built, and the basis they hold for. */
 interface Counts {
   readonly basis: string;
@@ -175,7 +191,8 @@ export class CatalogueCapabilities {
    * What a reader compares: how many each version lists, the latest change, whether prices include tax,
    * and `rev`, which moves with any of them, with any write at all, with the policies document, and with
    * the business's site, which decides the product pages the items name. One `rev` for both versions.
-   * Time moves the feed first (`catalogueClockStatements`).
+   * Time moves the feed first (`catalogueClockStatements`), and so does whether the items say the legal
+   * right to withdraw (`catalogueWithdrawalStatements`).
    *
    * The counts are what the pages list, counted from the items as they are built (`countsOf`), never
    * from a SQL twin of the reader's rules: a network holds a source whose page `count` differs from what
@@ -187,11 +204,14 @@ export class CatalogueCapabilities {
     policies?: PoliciesState,
     now = Date.now(),
   ): Promise<CatalogueState> {
-    await this.db.batch(catalogueClockStatements(now));
     const [s, c] = await Promise.all([settings ?? readSettings(this.db), ctx ?? this.context()]);
-    const p = policies ?? (await loadPolicies(this.db, s));
+    await this.db.batch([
+      ...catalogueClockStatements(now),
+      ...(await catalogueWithdrawalStatements(this.db, saysWithdrawal(s), now)),
+    ]);
+    const p = policies ?? (await loadPolicies(this.db, s, { published: true }));
     const basis = await this.basis(c, p);
-    const counts = await this.countsOf(basis, c, p, now);
+    const counts = await this.countsOf(basis, c, p, now, saysWithdrawal(s));
     const tax = s.catalogue.taxIncluded;
     const rev = (
       await bodySha256(
@@ -252,6 +272,7 @@ export class CatalogueCapabilities {
     ctx: CatalogueContext,
     policies: PoliciesState,
     now: number,
+    withdrawal: boolean,
   ): Promise<Counts> {
     const { rows } = await this.db.client.query({
       sql: "SELECT value FROM instance_meta WHERE key = ?",
@@ -263,7 +284,7 @@ export class CatalogueCapabilities {
     const as_of = iso(now);
     let count = 0;
     let countV2 = 0;
-    for await (const page of this.everyItem(ctx, policies, now)) {
+    for await (const page of this.everyItem(ctx, policies, now, withdrawal)) {
       for (const b of page) {
         if (b.item.state !== "listed") continue;
         countV2++;
@@ -306,7 +327,7 @@ export class CatalogueCapabilities {
     if (!this.served(settings)) return { status: 404, why: "not_listed" };
     if (!this.keys) return { status: 404, why: "cannot_sign" };
     const ctx = await this.context();
-    const policies = await loadPolicies(this.db, settings);
+    const policies = await loadPolicies(this.db, settings, { published: true });
     const summary = await this.summary(settings, ctx, policies, req.now);
     const etag = `"${summary.rev}-v${version}-${input.after ?? "0"}-${limit}"`;
     if (req.ifNoneMatch?.split(",").some((t) => t.trim() === etag)) return { status: 304, etag };
@@ -326,7 +347,7 @@ export class CatalogueCapabilities {
       .limit(limit + 1);
     const more = rows.length > limit;
     const pageRows = rows.slice(0, limit);
-    const built = await this.build(pageRows, ctx, policies, req.now);
+    const built = await this.build(pageRows, ctx, policies, req.now, saysWithdrawal(settings));
     const last = pageRows.at(-1);
     const next_cursor = more && last ? encodeCursor({ seq: last.catalogueSeq, id: last.id }, version) : null;
     const as_of = iso(req.now);
@@ -381,10 +402,12 @@ export class CatalogueCapabilities {
     if (!this.served(settings)) return { status: 404, why: "not_listed" };
     if (!this.keys) return { status: 404, why: "cannot_sign" };
     const ctx = await this.context();
-    const policies = await loadPolicies(this.db, settings);
+    const policies = await loadPolicies(this.db, settings, { published: true });
     const summary = await this.summary(settings, ctx, policies, req.now);
     const rows = wanted.length ? await this.db.orm.select().from(products).where(inArray(products.id, wanted)) : [];
-    const built = new Map((await this.build(rows, ctx, policies, req.now)).map((b) => [b.item.id, b] as const));
+    const built = new Map(
+      (await this.build(rows, ctx, policies, req.now, saysWithdrawal(settings))).map((b) => [b.item.id, b] as const),
+    );
     const found: BuiltItem[] = [];
     const missing: string[] = [];
     for (const id of wanted) {
@@ -408,7 +431,7 @@ export class CatalogueCapabilities {
     const settings = await readSettings(this.db);
     if (!this.served(settings)) return { status: 404, why: "not_listed" };
     if (!this.keys) return { status: 404, why: "cannot_sign" };
-    const state = await loadPolicies(this.db, settings);
+    const state = await loadPolicies(this.db, settings, { published: true });
     const etag = `"${state.rev}-policies"`;
     if (req.ifNoneMatch?.split(",").some((t) => t.trim() === etag)) return { status: 304, etag };
     const as_of = iso(req.now);
@@ -422,9 +445,9 @@ export class CatalogueCapabilities {
    */
   async problems(now = Date.now()): Promise<Map<string, readonly CatalogueProblem[]>> {
     const settings = await readSettings(this.db);
-    const [ctx, policies] = await Promise.all([this.context(), loadPolicies(this.db, settings)]);
+    const [ctx, policies] = await Promise.all([this.context(), loadPolicies(this.db, settings, { published: true })]);
     const out = new Map<string, readonly CatalogueProblem[]>();
-    for await (const page of this.everyItem(ctx, policies, now)) {
+    for await (const page of this.everyItem(ctx, policies, now, saysWithdrawal(settings))) {
       for (const b of page) if (b.problems.length) out.set(b.item.id, b.problems);
     }
     return out;
@@ -435,6 +458,7 @@ export class CatalogueCapabilities {
     ctx: CatalogueContext,
     policies: PoliciesState,
     now: number,
+    withdrawal: boolean,
   ): AsyncGenerator<readonly BuiltItem[]> {
     let after: Cursor | null = null;
     for (;;) {
@@ -451,7 +475,7 @@ export class CatalogueCapabilities {
         )
         .orderBy(asc(products.catalogueSeq), asc(products.id))
         .limit(CATALOGUE_PAGE_MAX);
-      yield await this.build(rows, ctx, policies, now);
+      yield await this.build(rows, ctx, policies, now, withdrawal);
       const last = rows.at(-1);
       if (!last || rows.length < CATALOGUE_PAGE_MAX) return;
       after = { seq: last.catalogueSeq, id: last.id };
@@ -463,6 +487,8 @@ export class CatalogueCapabilities {
     ctx: CatalogueContext,
     policies: PoliciesState,
     now: number,
+    /** Whether the items say the legal right to withdraw (`saysWithdrawal`). */
+    withdrawal: boolean,
   ): Promise<BuiltItem[]> {
     const groupIds = [...new Set(rows.flatMap((r) => (r.groupId ? [r.groupId] : [])))];
     const groups = new Map<string, { title: string }>();
@@ -483,6 +509,7 @@ export class CatalogueCapabilities {
       policies,
       groups,
       history,
+      withdrawal,
     };
     const out: BuiltItem[] = [];
     for (const row of rows) out.push(await catalogueItemV2(row, v2));

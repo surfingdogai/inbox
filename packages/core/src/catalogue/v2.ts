@@ -59,6 +59,12 @@ export interface CatalogueV2Context {
     string,
     readonly { readonly at: number; readonly value: number; readonly currency: string }[]
   >;
+  /**
+   * Whether the items say what the business says of the legal right to withdraw (`withdrawal`): only where
+   * the inbox applies one, by its country (`lawOf` is not `other`, ADR-018 Amendment 7). Elsewhere an item
+   * says nothing of it, and its return terms are its return policy's (`return_policy`), as published.
+   */
+  readonly withdrawal: boolean;
 }
 
 /** Whether a link is one version 2 publishes: https, on a host name, as RFC 3986 writes it. */
@@ -272,8 +278,11 @@ export async function catalogueItemV2(row: ProductRow, ctx: CatalogueV2Context):
     ...(methods ? { fulfil_methods: methods as CatalogueListedItemV2["fulfil_methods"] } : {}),
     ...(ships && row.shippingProfileId ? { shipping_profile: row.shippingProfileId } : {}),
     ...(weight ? { weight } : {}),
-    ...(row.returnPolicyId ? { return_policy: row.returnPolicyId } : {}),
-    ...(withdrawal.success ? { withdrawal: withdrawal.data } : {}),
+    // A policy kept but not published (the standard one under another country's law) is not named.
+    ...(row.returnPolicyId && !ctx.policies?.unpublished.includes(row.returnPolicyId)
+      ? { return_policy: row.returnPolicyId }
+      : {}),
+    ...(ctx.withdrawal && withdrawal.success ? { withdrawal: withdrawal.data } : {}),
   };
   const item: CatalogueListedItemV2 = {
     ...body,
@@ -364,6 +373,40 @@ export function priceRecordStatement(
     params: [now, "id" in scope ? scope.id : scope.since],
     method: "run",
   };
+}
+
+/** Where the feed keeps whether its items last said the legal right to withdraw (`instance_meta`). */
+const WITHDRAWAL_SAID_KEY = "catalogue_withdrawal";
+
+/**
+ * Whether the items say the legal right to withdraw is a change too (ADR-018 Amendment 7): they say it only
+ * while the inbox applies one there (`CatalogueV2Context.withdrawal`), so when that turns, every
+ * product takes a new position once, `rev` moves, and a network reads each item again. Items said it before
+ * this was kept, so with nothing kept they said it. Run before a page is read: while nothing turned, only
+ * the mark is read. Two reads that both see it turn move each product once, by the guard in the update.
+ */
+export async function catalogueWithdrawalStatements(db: Db, says: boolean, now: number): Promise<Statement[]> {
+  const said = says ? "said" : "unsaid";
+  const { rows } = await db.client.query({
+    sql: "SELECT value FROM instance_meta WHERE key = ?",
+    params: [WITHDRAWAL_SAID_KEY],
+    method: "all",
+  });
+  if ((rows[0]?.[0] ?? "said") === said) return [];
+  return [
+    {
+      sql: `UPDATE products SET catalogue_seq = ${NEXT_CATALOGUE_SEQ}, updated_at = MAX(updated_at, ?)
+             WHERE COALESCE((SELECT value FROM instance_meta WHERE key = ?), 'said') <> ?`,
+      params: [now, WITHDRAWAL_SAID_KEY, said],
+      method: "run",
+    },
+    {
+      sql: `INSERT INTO instance_meta (key, value, created_at) VALUES (?, ?, ?)
+            ON CONFLICT (key) DO UPDATE SET value = excluded.value WHERE value <> excluded.value`,
+      params: [WITHDRAWAL_SAID_KEY, said, now],
+      method: "run",
+    },
+  ];
 }
 
 /**

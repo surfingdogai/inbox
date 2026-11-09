@@ -3,13 +3,20 @@ import type { ReturnPolicy } from "@surfingdog/spec";
 import { eq, inArray } from "drizzle-orm";
 import { loadPolicies } from "../catalogue/policies";
 import { businessFacts } from "../customer/audience";
-import { copyFor, vars } from "../customer/copy";
+import {
+  copyFor,
+  type ExceptionWords,
+  type LineReturnTold,
+  type LineTold,
+  vars,
+  withdrawalCopy,
+} from "../customer/copy";
 import type { Audience } from "../customer/describe";
 import type { Db } from "../db";
-import type { Item, ItemType, Money, PayloadOf, RefundKind } from "../domain/types";
+import type { Item, ItemType, Money, PayloadOf, RefundKind, ReturnTerms, WithdrawalFlag } from "../domain/types";
 import { ulid } from "../ids";
 import type { Transition } from "../machine/machine";
-import { lawOf } from "../negotiation/holidays";
+import { contractLawOf, type Law } from "../negotiation/holidays";
 import {
   classifyReturn,
   type EarlierReturn,
@@ -20,8 +27,14 @@ import {
   refundDueOf,
   SEND_BACK_DAYS,
 } from "../negotiation/refunds";
-import { ORDER_SENT, type WithdrawalRight, withdrawalRight } from "../negotiation/withdrawal";
-import { items, products, services } from "../schema/tables";
+import {
+  contractAgreed,
+  exceptionOf,
+  ORDER_SENT,
+  type WithdrawalRight,
+  withdrawalRight,
+} from "../negotiation/withdrawal";
+import { items, products, returnPolicies, services } from "../schema/tables";
 import type { Settings } from "../settings/schema";
 import { actorMeta, type Caller } from "./caller";
 import { eventStatement, jobStatement, webhookFanoutStatement } from "./common";
@@ -38,27 +51,58 @@ const DAY = 86_400_000;
 /** The events of an order or a booking that end in a refund of what was paid, or a return. */
 const WITHDRAWALS: ReadonlySet<string> = new Set(["withdraw", "record_withdrawal"]);
 
+/** Lines of an order, by index, as a return or a withdrawal names them (`{ index, quantity }`). */
+type NamedLines = readonly { readonly index: number; readonly quantity?: number }[] | undefined;
+
 /**
  * Whether the customer may withdraw from a booking or an order at `at`, and until when: a consumer
  * (unless the business sells only to businesses), nothing on it excepted, a booking paid for and not
- * begun, within the period counted from delivery (goods) or the booking (a service).
+ * begun, within the period counted from delivery (goods) or the booking (a service), under the law the
+ * contract was made under (`contractLawOf`). Once an order's goods went out, `lines` judges only the
+ * lines coming back: an excepted line keeps the others from nothing (CRD art. 16 excepts goods, not
+ * orders). Under another country's law (`other`) there is no such right; asked of the business's own
+ * policy there, it is what the customer was told of returning those lines (`payload.returnTerms`): an
+ * excepted line never, else the days the owner's written policy gave, and nothing where none was told.
  */
 export async function withdrawalOf(
   db: Db,
   item: Item,
   settings: Settings,
   at: number,
-  /** The business's own return policy instead of the law: the same period, for any customer. */
-  opts: { readonly policy?: boolean } = {},
+  opts: {
+    /** The business's own return policy instead of the law (the owner's AI approving inside it), for any customer. */
+    readonly policy?: boolean;
+    /** The lines coming back, once the goods went out; all of them when none are named. */
+    readonly lines?: NamedLines;
+  } = {},
 ): Promise<WithdrawalRight> {
   if (item.type !== "booking" && item.type !== "order") return { available: false, until: null, why: "not_agreed" };
+  const law = contractLawOf(settings.commerce.legal.country, item);
+  // Under another country's law no right is claimed, and nothing more needs reading to say so.
+  if (law === "other" && opts.policy !== true)
+    return { available: false, until: null, why: contractAgreed(item.type, item.state) ? "other_law" : "not_agreed" };
   const facts = await businessFacts(db, settings);
-  const [flags, concludedAt, fulfilledAt, days] = await Promise.all([
-    flagsOf(db, item),
+  // Before the goods went out a withdrawal ends the whole order, so every line counts.
+  const lines =
+    item.type === "order"
+      ? namedLines(item.payload.orderedItem, ORDER_SENT.has(item.state) ? opts.lines : undefined)
+      : undefined;
+  const [judged, concludedAt, fulfilledAt] = await Promise.all([
+    item.type === "booking"
+      ? Promise.all([
+          withdrawalFlagsOf(db, "booking", item.payload),
+          law === "other" ? 0 : withdrawalDaysOf(db, "booking", item.payload, settings),
+        ]).then(([flags, days]) => ({ flags, days }))
+      : law === "other"
+        ? toldOf(db, item.payload.returnTerms, lines ?? [])
+        : Promise.all([
+            lineFlagsOf(db, lines ?? []),
+            withdrawalDaysOf(db, "order", { orderedItem: lines ?? [] }, settings),
+          ]).then(([flags, days]) => ({ flags, days })),
     concludedAtOf(db, item),
     item.type === "order" && ORDER_SENT.has(item.state) ? fulfilledAtOf(db, item) : Promise.resolve(null),
-    withdrawalDaysOf(db, item.type, item.payload, settings),
   ]);
+  const { flags, days } = judged;
   const p = item.payload as { paymentRef?: string; paidAmount?: Money; deliveredAt?: string; startTime?: string };
   return withdrawalRight({
     type: item.type,
@@ -67,6 +111,7 @@ export async function withdrawalOf(
     flags,
     paid: p.paymentRef !== undefined || (p.paidAmount?.value ?? 0) > 0,
     ...(item.type === "booking" ? { startTime: Date.parse(item.payload.startTime) } : {}),
+    ...(opts.policy === true ? { policy: true } : {}),
     period: {
       kind: item.type === "booking" ? "service" : "goods",
       concludedAt,
@@ -74,7 +119,7 @@ export async function withdrawalOf(
       fulfilledAt,
       days,
       assumedTransitDays: settings.returns.assumedTransitDays,
-      law: lawOf(settings.commerce.legal.country),
+      law,
       timezone: facts.timezone,
     },
     now: at,
@@ -87,6 +132,10 @@ export async function withdrawalOf(
  * asked to a person instead (`capabilities/customer.ts`).
  */
 export function withdrawalRefusal(right: WithdrawalRight, type: string, audience: Audience | undefined): string {
+  if (audience && right.why === "other_law")
+    return withdrawalCopy(audience.lang, "other").noRight(
+      vars({ yourNoun: copyFor(audience.lang).yourNoun[type as ItemType] }),
+    );
   if (audience)
     return copyFor(audience.lang).returns.problems.noWithdrawal(
       vars({ yourNoun: copyFor(audience.lang).yourNoun[type as ItemType] }),
@@ -100,17 +149,13 @@ export function withdrawalRefusal(right: WithdrawalRight, type: string, audience
       return "nothing was paid for this booking, so it is a reservation to cancel, not a contract to withdraw from: record the customer's cancellation";
     case "started":
       return "the booking has begun: settle what is left with the customer";
+    case "other_law":
+      return "this contract was made while your business's country (commerce.legal.country) was outside the EU, the EEA, Gibraltar and the UK, so no right of withdrawal is claimed for it: record the customer's cancellation, or open a return under your policy, if you agree to it";
     case "lapsed":
       return `the period to withdraw ended ${right.until !== null ? new Date(right.until).toISOString() : ""}: record the customer's cancellation, or open a return, if you agree to it`;
     default:
       return `there is no agreed ${type} to withdraw from: the customer cancels a request`;
   }
-}
-
-function flagsOf(db: Db, item: Item): Promise<string[]> {
-  return item.type === "booking" || item.type === "order"
-    ? withdrawalFlagsOf(db, item.type, item.payload)
-    : Promise.resolve([]);
 }
 
 /** How long "unlimited" is held to here: ten years, past any order anyone returns. */
@@ -140,20 +185,19 @@ export async function publishedRefundDays(
   }
   const { return_policies } = await loadPolicies(db, settings);
   const fallback = return_policies.find((p) => p.default);
-  const daysOf = (p: ReturnPolicy | undefined): number =>
-    !p?.resolutions.includes("refund")
-      ? 0
-      : p.eligibility === "unlimited"
-        ? UNLIMITED_DAYS
-        : p.eligibility === "window"
-          ? (p.window_days ?? 0)
-          : 0;
   let fewest = Number.POSITIVE_INFINITY;
   for (const l of lines) {
     const own = l.productId ? named.get(l.productId) : null;
-    fewest = Math.min(fewest, daysOf(own ? return_policies.find((p) => p.id === own) : fallback));
+    fewest = Math.min(fewest, refundDaysOf(own ? return_policies.find((p) => p.id === own) : fallback));
   }
   return Number.isFinite(fewest) ? fewest : 0;
+}
+
+/** The days a return policy keeps a refund open: its window, ten years for unlimited, none without a refund. */
+function refundDaysOf(p: Pick<ReturnPolicy, "eligibility" | "window_days" | "resolutions"> | undefined): number {
+  if (!p?.resolutions.includes("refund")) return 0;
+  if (p.eligibility === "unlimited") return UNLIMITED_DAYS;
+  return p.eligibility === "window" ? (p.window_days ?? 0) : 0;
 }
 
 /**
@@ -171,6 +215,76 @@ export async function withdrawalDaysOf(
   return Math.max(settings.returns.days, await publishedRefundDays(db, payload as PayloadOf<"order">, settings));
 }
 
+type OrderLine = PayloadOf<"order">["orderedItem"][number];
+
+/** The lines a return or a withdrawal names, from the order's own; every line when it names none. */
+export function namedLines(lines: readonly OrderLine[], named: NamedLines): OrderLine[] {
+  if (!named?.length) return [...lines];
+  const out: OrderLine[] = [];
+  for (const n of named) {
+    const l = lines[n.index];
+    if (l && !out.includes(l)) out.push(l);
+  }
+  // Naming none of its lines judges the order as a whole, as the write that follows refuses it.
+  return out.length ? out : [...lines];
+}
+
+/**
+ * The key what a line was told of returns is kept under (`payload.returnTerms`): its product's id, else
+ * `sku:` and its sku, else "" for a line naming neither, which is judged as standard under the default
+ * return policy. Kept by the line it is for rather than its place, so a change to the order's lines keeps it.
+ */
+export function returnKeyOf(line: {
+  readonly productId?: string | undefined;
+  readonly sku?: string | undefined;
+}): string {
+  return (line.productId ?? (line.sku ? `sku:${line.sku}` : "")).slice(0, 120);
+}
+
+/** The catalogue products an order's lines name, by id and by sku, for their flags and their return policies. */
+async function productsOf(
+  db: Db,
+  lines: readonly OrderLine[],
+): Promise<{
+  readonly byId: Map<string, { withdrawal: string; policy: string | null }>;
+  readonly bySku: Map<string, { withdrawal: string; policy: string | null }>;
+}> {
+  const ids = [...new Set(lines.flatMap((l) => (l.productId ? [l.productId] : [])))];
+  const skus = [...new Set(lines.flatMap((l) => (!l.productId && l.sku ? [l.sku] : [])))];
+  const byId = new Map<string, { withdrawal: string; policy: string | null }>();
+  const bySku = new Map<string, { withdrawal: string; policy: string | null }>();
+  const columns = {
+    id: products.id,
+    sku: products.sku,
+    withdrawal: products.withdrawal,
+    policy: products.returnPolicyId,
+  };
+  // At most 90 values an `IN (…)`: D1 binds at most a hundred.
+  for (let i = 0; i < ids.length; i += 90) {
+    for (const r of await db.orm
+      .select(columns)
+      .from(products)
+      .where(inArray(products.id, ids.slice(i, i + 90))))
+      byId.set(r.id, { withdrawal: r.withdrawal, policy: r.policy });
+  }
+  for (let i = 0; i < skus.length; i += 90) {
+    for (const r of await db.orm
+      .select(columns)
+      .from(products)
+      .where(inArray(products.sku, skus.slice(i, i + 90))))
+      if (r.sku !== null && !bySku.has(r.sku)) bySku.set(r.sku, { withdrawal: r.withdrawal, policy: r.policy });
+  }
+  return { byId, bySku };
+}
+
+/** Each line's withdrawal flag from the catalogue, in the order's own order: its product's, else standard. */
+export async function lineFlagsOf(db: Db, lines: readonly OrderLine[]): Promise<string[]> {
+  const { byId, bySku } = await productsOf(db, lines);
+  return lines.map(
+    (l) => (l.productId ? byId.get(l.productId) : l.sku ? bySku.get(l.sku) : undefined)?.withdrawal ?? "standard",
+  );
+}
+
 /** Each line's, or the service's, withdrawal flag from the catalogue; a line naming no product is standard. */
 export async function withdrawalFlagsOf(
   db: Db,
@@ -185,26 +299,102 @@ export async function withdrawalFlagsOf(
       .where(inArray(services.id, [serviceId]));
     return [s?.withdrawal ?? "standard"];
   }
-  const lines = (payload as PayloadOf<"order">).orderedItem;
-  const ids = [...new Set(lines.flatMap((l) => (l.productId ? [l.productId] : [])))];
-  const skus = [...new Set(lines.flatMap((l) => (!l.productId && l.sku ? [l.sku] : [])))];
-  const out: string[] = [];
-  // At most 90 values an `IN (…)`: D1 binds at most a hundred.
-  for (let i = 0; i < ids.length; i += 90) {
-    const rows = await db.orm
-      .select({ withdrawal: products.withdrawal })
-      .from(products)
-      .where(inArray(products.id, ids.slice(i, i + 90)));
-    out.push(...rows.map((r) => r.withdrawal));
-  }
-  for (let i = 0; i < skus.length; i += 90) {
-    const rows = await db.orm
-      .select({ withdrawal: products.withdrawal })
-      .from(products)
-      .where(inArray(products.sku, skus.slice(i, i + 90)));
-    out.push(...rows.map((r) => r.withdrawal));
+  return lineFlagsOf(db, (payload as PayloadOf<"order">).orderedItem);
+}
+
+/**
+ * What each line of an order made under another country's law is told of returns, where no right of
+ * withdrawal is claimed (ADR-018 Amendment 7), by `returnKeyOf`: a line excepted by its withdrawal flag
+ * (`perishable` and the rest) cannot be returned; else the return policy the owner wrote for its product,
+ * or the default one, gives its window's days or `unlimited`; else nothing is told. The standard policy
+ * that only follows the settings (`follows_settings`, or stands in for an empty table) is not the owner's
+ * to have written, and a policy of no returns, or without a refund, says nothing. What `kept` told
+ * already stands, whatever the policies say now: only the lines it does not cover are judged.
+ */
+export async function returnTermsOf(
+  db: Db,
+  lines: readonly OrderLine[],
+  kept?: ReturnTerms | undefined,
+): Promise<ReturnTerms> {
+  const out: Record<string, ReturnTerms[string]> = { ...(kept ?? {}) };
+  const wanted = lines.filter((l) => !Object.hasOwn(out, returnKeyOf(l)));
+  if (!wanted.length) return out;
+  const [{ byId, bySku }, written] = await Promise.all([
+    productsOf(db, wanted),
+    db.orm
+      .select({ id: returnPolicies.id, isDefault: returnPolicies.isDefault, terms: returnPolicies.terms })
+      .from(returnPolicies)
+      .where(eq(returnPolicies.followsSettings, 0)),
+  ]);
+  const policies = new Map(written.map((r) => [r.id, r.terms as Omit<ReturnPolicy, "id" | "name" | "default">]));
+  const fallback = written.find((r) => r.isDefault === 1)?.id;
+  for (const l of wanted) {
+    const p = l.productId ? byId.get(l.productId) : l.sku ? bySku.get(l.sku) : undefined;
+    const exception = exceptionOf([p?.withdrawal]);
+    if (exception) {
+      out[returnKeyOf(l)] = { exception: exception as Exclude<WithdrawalFlag, "standard"> };
+      continue;
+    }
+    // A line's own policy names it by its product's id; a line by sku alone, or none, has the default.
+    const named = l.productId ? (p?.policy ?? null) : null;
+    const days = refundDaysOf(named ? policies.get(named) : fallback ? policies.get(fallback) : undefined);
+    out[returnKeyOf(l)] = days >= UNLIMITED_DAYS ? { days: "unlimited" } : days > 0 ? { days } : {};
   }
   return out;
+}
+
+/**
+ * Under another country's law, what `lines` were told of returns, as `withdrawalRight` asks of the
+ * policy: the exceptions among them, and the fewest days told for the rest (none where one was told
+ * nothing). An order from before this was recorded is judged by the policies as they stand.
+ */
+async function toldOf(
+  db: Db,
+  recorded: ReturnTerms | undefined,
+  lines: readonly OrderLine[],
+): Promise<{ flags: string[]; days: number }> {
+  const told = await returnTermsOf(db, lines, recorded);
+  const flags: string[] = [];
+  let fewest = Number.POSITIVE_INFINITY;
+  for (const l of lines) {
+    const t = told[returnKeyOf(l)] ?? {};
+    if (t.exception) {
+      flags.push(t.exception);
+      continue;
+    }
+    flags.push("standard");
+    fewest = Math.min(fewest, t.days === "unlimited" ? UNLIMITED_DAYS : (t.days ?? 0));
+  }
+  return { flags, days: Number.isFinite(fewest) ? fewest : UNLIMITED_DAYS };
+}
+
+/** What a line was told of returns (`ReturnTerms`), as `lineReturnSentences` says it. */
+function toldOfTerms(t: ReturnTerms[string] | undefined): LineReturnTold {
+  if (t?.exception) return { kind: "except", exception: t.exception };
+  return t?.days !== undefined ? { kind: "policy", days: t.days } : { kind: "none" };
+}
+
+/**
+ * What each line of an order is told of returning it (`lineReturnSentences`), before it binds and in its
+ * confirmations: under another country's law what it was told, or would be (`payload.returnTerms`, else
+ * the owner's written policies as they stand); else the law's right, or the exception its withdrawal flag
+ * makes (ADR-018 §7, Amendment 7).
+ */
+export async function toldLinesOf(db: Db, payload: PayloadOf<"order">, law: Law): Promise<LineTold[]> {
+  const lines = payload.orderedItem;
+  if (law === "other") {
+    const terms = await returnTermsOf(db, lines, payload.returnTerms);
+    return lines.map((l) => ({ name: l.name, quantity: l.quantity, told: toldOfTerms(terms[returnKeyOf(l)]) }));
+  }
+  const flags = await lineFlagsOf(db, lines);
+  return lines.map((l, i) => {
+    const exception = exceptionOf([flags[i]]);
+    return {
+      name: l.name,
+      quantity: l.quantity,
+      told: exception ? { kind: "except", exception: exception as keyof ExceptionWords } : { kind: "right" },
+    };
+  });
 }
 
 /** When the contract was made: the booking first confirmed, the order first accepted (or paid); else when it was asked for. */
@@ -243,7 +433,7 @@ export async function askedWithinRight(db: Db, refund: Item, settings: Settings)
   const linked = rowToItem(row);
   if (linked.type !== "order" && linked.type !== "booking") return false;
   const notice = refund.payload.noticeAt ? Date.parse(refund.payload.noticeAt) : Date.parse(refund.createdAt);
-  return (await withdrawalOf(db, linked, settings, notice)).available;
+  return (await withdrawalOf(db, linked, settings, notice, { lines: refund.payload.lines })).available;
 }
 
 /** A return of this order or booking still being dealt with, if any. */
@@ -440,7 +630,8 @@ export async function refundFor(o: {
   }
   if (t.event === "request_return" || t.event === "open_return") {
     const reasonCode = String(data.reasonCode);
-    const right = await withdrawalOf(o.db, item, settings, o.noticeAt);
+    // Judged on the lines coming back: an excepted line keeps the others from nothing.
+    const right = await withdrawalOf(o.db, item, settings, o.noticeAt, { lines: asked });
     const kind = classifyReturn(reasonCode, right.available);
     const wants = data.wants as string | undefined;
     // A withdrawal within the period nobody may refuse: agreed from the start, as `withdraw` is.

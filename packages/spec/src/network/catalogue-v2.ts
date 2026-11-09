@@ -238,9 +238,9 @@ export type CatalogueFulfilMethod = z.infer<typeof catalogueFulfilMethodSchema>;
 
 /**
  * What the business says of the buyer's legal right to withdraw from a distance purchase (14 days in the
- * EU and the UK): `standard`, the right runs; or the exception the law allows for this offer. Read
- * narrowly: preset options are not personalisation, and long-life dry goods are not perishable. Absent,
- * the business has not said.
+ * EU, the EEA, Gibraltar and the UK): `standard`, the right runs; or the exception the law allows for this
+ * offer. Read narrowly: preset options are not personalisation, and long-life dry goods are not perishable.
+ * Absent, the business has not said.
  */
 export const catalogueWithdrawalSchema = z.enum([
   "standard",

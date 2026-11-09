@@ -42,6 +42,11 @@ export interface CatalogueContext {
 /** What the doors' view needs besides the row: the moment, the groups' titles, and the record of prices. */
 export interface ProductDoorContext extends CatalogueContext {
   readonly now?: number | undefined;
+  /**
+   * Whether the product says what the business says of the legal right to withdraw (`withdrawal`): only
+   * where the inbox applies one, by its country (`lawOf` is not `other`, ADR-018 Amendment 7), as the feed does.
+   */
+  readonly withdrawal?: boolean | undefined;
   readonly groups?: ReadonlyMap<string, { readonly title: string }> | undefined;
   readonly history?:
     | ReadonlyMap<string, readonly { readonly at: number; readonly value: number; readonly currency: string }[]>
@@ -71,7 +76,8 @@ export interface PublicProduct {
   /** At the door only: what an order is held to, and never sent to a network. */
   readonly stock: number | null;
   readonly active: number;
-  readonly withdrawal: string;
+  /** What the business says of the legal right to withdraw; absent where the inbox applies none. */
+  readonly withdrawal?: string;
   readonly negotiable: number;
   readonly group?: { readonly id: string; readonly title: string; readonly position: number };
   readonly options?: CatalogueListedItemV2["options"];
@@ -193,7 +199,7 @@ export function publicProduct(row: ProductRow, ctx: ProductDoorContext): PublicP
     updated_at: iso(row.updatedAt),
     stock: row.stock,
     active: row.active,
-    withdrawal: row.withdrawal,
+    ...(ctx.withdrawal !== false ? { withdrawal: row.withdrawal } : {}),
     negotiable: row.negotiable,
     ...(group && row.groupId && row.options?.length
       ? { group: { id: row.groupId, title: group.title, position: row.groupPosition ?? 1 }, options: row.options }
@@ -263,6 +269,8 @@ export async function catalogueItem(row: ProductRow, ctx: CatalogueContext, now 
     policies: null,
     groups: new Map(),
     history: new Map(),
+    // Version 1 says nothing of the right to withdraw.
+    withdrawal: false,
   });
   const v1 = await catalogueItemV1Of(built.item, { as_of: iso(now) });
   return v1 ?? { id: row.id, state: "withdrawn", updated_at: iso(row.updatedAt) };

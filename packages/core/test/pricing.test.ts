@@ -252,6 +252,8 @@ describe("the business sets its prices", () => {
     expect(custom.view.item.payload).toEqual({
       orderedItem: [{ name: "Child seat", quantity: 1, price: EUR(100) }],
       totalPrice: EUR(100),
+      // The law it is made under, recorded as it is asked for (ADR-018 Amendment 7).
+      law: "eu",
       // The request is the customer's first offer (ADR-018 §1), open for the business to take.
       offer: expect.objectContaining({ by: "customer", rev: 1, status: "open" }),
     });

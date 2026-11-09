@@ -179,12 +179,17 @@ export const customerItemViewSchema = z.looseObject({
         .string()
         .optional()
         .describe("Why not: excepted, lapsed, business_customer, not_paid (a booking nothing was paid for), started."),
-      reason: z.string().optional().describe("For something excepted, why, in the business's words."),
+      reason: z
+        .string()
+        .optional()
+        .describe(
+          "For something excepted, why, in the business's words; for an order whose other lines may still be returned, each line's own (those come back with request_return).",
+        ),
     })
     .nullable()
     .optional()
     .describe(
-      "For a booking or an order: whether your person may withdraw from it now (POST /v1/items/{id}/withdraw), until when, and why not.",
+      "For a booking or an order: whether your person may withdraw from it now (POST /v1/items/{id}/withdraw), until when, and why not. Null before anything is agreed and after the contract ended, and where no right of withdrawal is claimed (item.payload.law is other: the business's country was outside the EU, the EEA, Gibraltar and the UK as it was made). There, once the goods reached your person, a change of mind is a return under the business's own policy (request_return).",
     ),
   refunds: z
     .array(z.object({ item_id: z.string(), reference: z.string(), state: z.string(), human: z.string() }))
@@ -618,7 +623,7 @@ export const serviceSchema = z.looseObject({
     .string()
     .optional()
     .describe(
-      "standard: the customer may withdraw within the legal period; else the exception the law allows (dated_leisure, urgent_repair, personalised, …).",
+      "Given only where the business's country is in the EU, the EEA, Gibraltar or the UK, or none is set: standard (a customer who paid may withdraw within the legal period), else the exception the law allows (dated_leisure, urgent_repair, personalised, …). Absent elsewhere, where the inbox claims no right of withdrawal.",
     ),
 });
 
@@ -635,11 +640,19 @@ const productFields = {
 const withdrawalOf = z
   .string()
   .describe(
-    "standard: the customer may withdraw within the legal period; else the exception the law allows (perishable, personalised, sealed_hygiene, …).",
+    "standard: a customer may withdraw within the legal period, or the exception the law allows (perishable, personalised, sealed_hygiene, …). The inbox applies it where the business's country is in the EU, the EEA, Gibraltar or the UK, or none is set; elsewhere an exception still tells the customer the product cannot be returned.",
   );
 
 /** A product at the owner's door: the whole row, where it came from included. */
 export const productSchema = z.looseObject({ ...productFields, withdrawal: withdrawalOf.optional() });
+
+/** What a product says of the right to withdraw at the public doors: only where the inbox applies one. */
+const publicWithdrawalOf = z
+  .string()
+  .optional()
+  .describe(
+    "Given only where the business's country is in the EU, the EEA, Gibraltar or the UK, or none is set: standard (a customer who paid may withdraw within the legal period), else the exception the law allows (perishable, personalised, sealed_hygiene, …). Absent elsewhere, where the inbox claims no right of withdrawal.",
+  );
 
 /** A product at the public doors: these fields and no others, never where it came from. */
 export const publicProductSchema = z.object({
@@ -654,7 +667,7 @@ export const publicProductSchema = z.object({
     .describe(
       "fixed: the price; from: the lowest; range: to price_max; quote: on request. Only fixed is ordered at its price.",
     ),
-  withdrawal: withdrawalOf,
+  withdrawal: publicWithdrawalOf,
   negotiable: z
     .number()
     .int()
@@ -735,11 +748,17 @@ export const productGroupSchema = z.looseObject({
   externalId: z.string().nullable(),
 });
 
-/** The owner's shipping profiles and return policies, as the policies document publishes them. */
+/** The owner's shipping profiles and return policies, as the inbox keeps them. */
 export const ownerPoliciesSchema = z.looseObject({
   shipping_profiles: z.array(z.looseObject({ id: z.string(), name: z.string() })),
   return_policies: z.array(z.looseObject({ id: z.string(), name: z.string(), eligibility: z.string() })),
   rev: z.string(),
+  unpublished: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Return policies kept but not published: where the business's country is outside the EU, the EEA, Gibraltar and the UK, the standard one that only follows the returns settings, until the owner writes its terms. The policies document and the profile leave it out, and customers are not told it.",
+    ),
 });
 
 /** `POST /v1/shipping/quote`, MCP `quote_shipping`: a basket's shipping by the business's own rates. */
