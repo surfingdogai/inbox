@@ -22,6 +22,7 @@ import {
   looksLikeAddress,
   notYetReal,
   notYetRealLine,
+  ownLinkLine,
   READY_HREF,
   REAL_HREF,
   readDirectory,
@@ -478,6 +479,22 @@ describe("the home page and the three products", () => {
     // Nothing live says it is not yet.
     for (const c of capabilities) {
       if (c.state === "live") expect(c.label, c.id).not.toMatch(/\b(yet|coming|being built|will)\b/i);
+    }
+  });
+
+  it("the counts read the businesses bookable or orderable through their own link, and say nothing they did not read", () => {
+    const zeros = { checked: 0, agent_ready: 0, capabilities: {}, doors: {} };
+    const d = readDirectory({
+      directory: { ...zeros, checked: 5, agent_ready: 2, as_of: "2026-11-11T22:00:00Z", by_own_link: { listed: 51291, book: 45000, order: 7000 } },
+    });
+    expect(d?.byOwnLink).toEqual({ listed: 51291, book: 45000, order: 7000 });
+    expect(ownLinkLine(d!.byOwnLink!, (n) => n.toLocaleString("en-US"))).toBe(
+      "51,291 businesses an assistant can book or order from through their own booking or ordering page.",
+    );
+    expect(ownLinkLine({ listed: 1 }, String)).toBe("One business an assistant can book or order from through its own booking or ordering page.");
+    // None counted, a count it could not read, or a network that does not send it: no line.
+    for (const by_own_link of [{ listed: 0, book: 0, order: 0 }, { listed: "many" }, undefined]) {
+      expect(readDirectory({ directory: { ...zeros, as_of: "2026-11-11T22:00:00Z", by_own_link } })?.byOwnLink).toBeNull();
     }
   });
 

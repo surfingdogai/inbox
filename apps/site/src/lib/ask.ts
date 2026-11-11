@@ -44,6 +44,12 @@ export interface DirectoryStats {
    */
   real: number | null;
   capabilities: Partial<Record<CapabilityKey, number>>;
+  /**
+   * The public listings an assistant can book or order from through the business's own page on its booking or
+   * ordering software (`by_own_link`): most of them are not agent-ready, so `agent_ready` and the capability counts
+   * leave them out. Null from a network that does not count them, and when it counts none.
+   */
+  byOwnLink: { listed: number; book: number; order: number } | null;
   as_of: string;
 }
 
@@ -112,6 +118,11 @@ export function readDirectory(stats: unknown): DirectoryStats | null {
       if (n(v)) caps[k as CapabilityKey] = v as number;
     }
   }
+  const l = o.by_own_link && typeof o.by_own_link === "object" ? (o.by_own_link as Record<string, unknown>) : null;
+  const byOwnLink =
+    l && n(l.listed) && n(l.book) && n(l.order) && (l.listed as number) > 0
+      ? { listed: l.listed as number, book: l.book as number, order: l.order as number }
+      : null;
   return {
     checked: o.checked as number,
     agent_ready: o.agent_ready as number,
@@ -120,8 +131,17 @@ export function readDirectory(stats: unknown): DirectoryStats | null {
         ? (o.real_businesses_verified as number)
         : null,
     capabilities: caps,
+    byOwnLink,
     as_of: o.as_of,
   };
+}
+
+/** The line under the counts: "51,291 businesses an assistant can book or order from through their own booking or
+ *  ordering page." Said only from a count the network sent. */
+export function ownLinkLine(x: { listed: number }, format: (n: number) => string): string {
+  return x.listed === 1
+    ? "One business an assistant can book or order from through its own booking or ordering page."
+    : `${format(x.listed)} businesses an assistant can book or order from through their own booking or ordering page.`;
 }
 
 /** The rows to show, from the block. */

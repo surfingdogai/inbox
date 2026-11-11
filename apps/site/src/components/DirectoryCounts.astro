@@ -30,6 +30,7 @@ import { READY_HREF } from "../lib/ask";
     <a class="c-pair c-link" href={READY_HREF} data-label="agent-ready businesses"><b class="c-n tabular" data-n="agent_ready" aria-hidden="true">–</b> agent-ready businesses</a>
   </p>
   <ul class="c-caps" data-caps aria-label="Of the agent-ready businesses" hidden></ul>
+  <p class="c-links" data-links hidden></p>
   <p class="c-note" data-note>Live counts from the network.</p>
   <p class="c-agents" data-agents hidden><a class="c-link" href={AGENT_REQUESTS_HREF}></a></p>
   <p class="sr" aria-live="polite" data-said></p>
@@ -120,6 +121,7 @@ import { READY_HREF } from "../lib/ask";
     border: 0;
   }
   .c-note,
+  .c-links,
   .c-agents {
     margin: 0;
     font-size: var(--fs-fine);
@@ -141,6 +143,7 @@ import { READY_HREF } from "../lib/ask";
   /* The block arrives softly rather than snapping in. */
   .counts.is-in .c-caps,
   .counts.is-in .c-note,
+  .counts.is-in .c-links,
   .counts.is-in .c-agents {
     animation: counts-in var(--dur-slow) var(--ease) both;
   }
@@ -153,6 +156,7 @@ import { READY_HREF } from "../lib/ask";
   @media (prefers-reduced-motion: reduce) {
     .counts.is-in .c-caps,
     .counts.is-in .c-note,
+    .counts.is-in .c-links,
     .counts.is-in .c-agents {
       animation: none;
     }
@@ -161,7 +165,7 @@ import { READY_HREF } from "../lib/ask";
 
 <script>
   import { paintAgentRequests, readAgentRequests } from "../lib/agent-requests";
-  import { ago, countHref, countRows, readDirectory } from "../lib/ask";
+  import { ago, countHref, countRows, ownLinkLine, readDirectory } from "../lib/ask";
 
   const root = document.querySelector<HTMLElement>("[data-counts]");
   const fmt = new Intl.NumberFormat("en");
@@ -219,7 +223,8 @@ import { READY_HREF } from "../lib/ask";
       const rows = countRows(d).map((r) => `${fmt.format(r.n)} ${r.label}`);
       said.textContent =
         `${fmt.format(d.agent_ready)} agent-ready businesses.` +
-        (rows.length ? ` Of them, ${rows.join(", ")}.` : "");
+        (rows.length ? ` Of them, ${rows.join(", ")}.` : "") +
+        (d.byOwnLink ? ` ${ownLinkLine(d.byOwnLink, fmt.format)}` : "");
     }
     for (const el of Array.from(root.querySelectorAll<HTMLElement>("[data-n]"))) {
       const n = d.agent_ready;
@@ -243,6 +248,11 @@ import { READY_HREF } from "../lib/ask";
         }),
       );
       caps.hidden = false;
+    }
+    const links = root.querySelector<HTMLElement>("[data-links]");
+    if (links && d.byOwnLink) {
+      links.textContent = ownLinkLine(d.byOwnLink, fmt.format);
+      links.hidden = false;
     }
     if (note) {
       const t = document.createElement("time");
