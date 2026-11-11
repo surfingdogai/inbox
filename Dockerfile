@@ -18,7 +18,7 @@
 # The build is JavaScript, the same on every machine, so it runs once on the builder's own platform,
 # and only the small last stage is made for each architecture.
 # Both bases are pinned by digest; Dependabot proposes each new one.
-FROM --platform=$BUILDPLATFORM node:24.22.0-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5 AS build
+FROM --platform=$BUILDPLATFORM node:25.9.0-slim@sha256:81db02c4b671288a03915da9534dbd54f96d0e7c24d80ccc54f5b36b2e684370 AS build
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN corepack enable
 WORKDIR /src
@@ -26,7 +26,7 @@ COPY . .
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @surfingdog/inbox build
 
-FROM node:24.22.0-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f
+FROM node:25.9.0-alpine@sha256:bdf2cca6fe3dabd014ea60163eca3f0f7015fbd5c7ee1b0e9ccb4ced6eb02ef4
 ARG VERSION=dev
 ARG REVISION=unknown
 LABEL org.opencontainers.image.title="Surfing Dog Inbox" \
