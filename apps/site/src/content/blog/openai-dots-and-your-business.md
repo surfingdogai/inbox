@@ -46,7 +46,7 @@ Both doors answer from your rules. A table for four can confirm itself when ther
 
 OpenAI says dots won't reach Pro subscribers in the European Economic Area, Switzerland or the UK for now, and hasn't said when that will change. [Business Premium includes dots](https://www.trendingtopics.eu/dots-muse-siri-ai-europe/) in every region ChatGPT supports.
 
-A business in Lisbon, Dublin or Barcelona should still be ready. Visitors from the US bring their dots with them, and the assistants your local customers already use ([ChatGPT, Claude, Gemini and Grok](/assistants/)) connect to your inbox today.
+A business in Europe or the UK should still be ready. Visitors from the US bring their dots with them, and the assistants your local customers already use ([ChatGPT, Claude, Gemini and Grok](/assistants/)) connect to your inbox today.
 
 ## Try it
 

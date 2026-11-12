@@ -32,7 +32,7 @@ An agent inbox publishes one JSON document that says what kinds of request it ta
 | `directory` | no | `{"listed": false}` keeps the business out of networks' directories | 26 Sep 2026 |
 | `claims` | no | network host → claim token: proof that a listing on that network is the business's own | 6 Oct 2026 |
 | `catalogue` | no | where a network reads the business's products, while they are listed: `feed` and `items`, https on the business's own domain; `versions`, the catalogue versions the feed serves, each once (absent: `[1]`; `[2]` alone answers a read that names no version `422 version_required`); `policies`, the signed document of its shipping profiles and return policies ([protocol §4.18](https://github.com/surfingdogai/inbox/blob/main/docs/protocol/network.md)) | spec 0.9; `versions` and `policies` catalogue version 2 |
-| `doors_elsewhere` | no | at most 5 `{"item_type", "url", "platform"?}`: kinds of request it takes somewhere else, never one in `item_types`, each at an https address on a named host; `platform`, a token of the [door platforms](https://github.com/surfingdogai/inbox/blob/main/packages/spec/vocab/door-platforms.json) (`fresha`, `opentable`, `toast`…), names the platform the page is on | 12 Oct 2026; `platform` 20 Oct |
+| `doors_elsewhere` | no | at most 5 `{"item_type", "url", "platform"?}`: kinds of request it takes somewhere else, never one in `item_types`, each at an https address on a named host; `platform`, a token of the [door platforms](https://github.com/surfingdogai/inbox/blob/main/packages/spec/vocab/door-platforms.json) (`fresha`, `cloudbeds`, `flipdish`…), names the platform the page is on | 12 Oct 2026; `platform` 20 Oct |
 
 The JSON Schema has every bound: lengths, counts and formats.
 

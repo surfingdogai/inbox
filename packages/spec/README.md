@@ -101,8 +101,8 @@ or network:
   `vectors/gtin.json`; and the names a template gives its sample products (`vocab/placeholder-titles.json`,
   `isPlaceholderTitle`). A ping, an answer or a manifest without `catalogue` reads as before.
 - 0.10 ([ADR-035](../../docs/adr/035-doors-elsewhere-platforms.md)): a door elsewhere may name its platform. A
-  `doors_elsewhere` entry's optional `platform` is a token of `vocab/door-platforms.json` (Fresha, OpenTable,
-  TableCheck, Toast, Shopify, Cloudbeds and others: each with its hosts, the kinds of request it takes and how a
+  `doors_elsewhere` entry's optional `platform` is a token of `vocab/door-platforms.json` (Fresha, Tradify,
+  TableCheck, Flipdish, Shopify, Cloudbeds and others: each with its hosts, the kinds of request it takes and how a
   business's own page there is told apart from the platform's own pages), so an agent can say "Book at Fresha"
   rather than a host. `readDoorsElsewhere` keeps it only when the vocabulary knows it, the platform takes that kind
   and the URL is the business's own page there (one of the platform's `pages`, or past its home and its reserved

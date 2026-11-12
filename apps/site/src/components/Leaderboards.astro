@@ -1,19 +1,19 @@
 ---
 /**
- * The leaderboards, in a few links: everyone checked, and four kinds of business. They live on the
- * network (/leaderboard): real businesses at the top, then the businesses where an agent can book, order or
- * sign up, then by agentic score, and they are a separate list from the directory, whose order nobody
- * can buy. A business is named there when it is agent-ready (askable or above) and, for a local
- * business the network found, once its site is matched to its entry on public maps or registers or its
+ * The leaderboards, in a few links: everyone checked, the agent-ready, and where an agent can book, order or
+ * ask. They live on the network (/leaderboard): real businesses at the top, then the businesses where an
+ * agent can book, order or sign up, then by agentic score, and they are a separate list from the directory,
+ * whose order nobody can buy. A business is named there when it is agent-ready (askable or above) and, for a
+ * local business the network found, once its site is matched to its entry on public maps or registers or its
  * owner proves the site is theirs (the score rules' listing, amended 19 October 2026), unless its own
  * site tells AI systems not to use or train on its content; everyone else is counted, not named.
  */
 const boards = [
   { href: "/leaderboard", label: "Every business checked" },
-  { href: "/leaderboard?category=hair-beauty", label: "Hair & beauty" },
-  { href: "/leaderboard?category=restaurant", label: "Restaurants" },
-  { href: "/leaderboard?category=shop", label: "Shops" },
-  { href: "/leaderboard?category=trades", label: "Trades" },
+  { href: "/leaderboard?ready=1", label: "Agent-ready" },
+  { href: "/leaderboard?can=book", label: "Where an agent can book" },
+  { href: "/leaderboard?can=order", label: "Where an agent can order" },
+  { href: "/leaderboard?can=message", label: "Where an agent can ask" },
 ];
 ---
 

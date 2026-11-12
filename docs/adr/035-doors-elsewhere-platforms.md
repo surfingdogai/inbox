@@ -26,11 +26,11 @@ card and is never called an integration or a connection: copy says "Book at Fres
 
 ### 2. The platforms: `vocab/door-platforms.json`, version 1
 
-Each platform has a token (`fresha`, `opentable`, `toast`, `shopify`…), a name, a group (salons and wellness,
+Each platform has a token (`fresha`, `mews`, `flipdish`, `shopify`…), a name, a group (salons and wellness,
 appointments, restaurant tables, food ordering, shops and websites, trades, hotels and rentals), the kinds of request
 it takes (`booking`, `order`), its hosts, how a business's own page there is told apart from the platform's own pages,
 whether it also serves pages on the business's own domain (`own_site`), and the public page its hosts were read from
-(`source`). The list holds 35 platforms, and its examples, vectors and tests rotate businesses across continents.
+(`source`). The list's examples, vectors and tests rotate businesses across continents.
 
 A business's own page is told apart in one of two ways:
 

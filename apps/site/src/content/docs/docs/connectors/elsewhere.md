@@ -1,11 +1,11 @@
 ---
 title: Booked or ordered elsewhere
-description: Already take bookings on Fresha, OpenTable or TableCheck, or orders in your own Toast or Shopify checkout? Say where, and agents send people there, by name. Messages and price requests still come to your Inbox.
+description: Already take bookings on Fresha, Mews or TableCheck, or orders in your own Flipdish or Shopify checkout? Say where, and agents send people there, by name. Messages and price requests still come to your Inbox.
 sidebar:
   order: 90
 ---
 
-If people already book you on a booking platform, or order in your own shop's checkout, keep it that way. Tell your Inbox where, and every AI agent that finds you sends people there for that, saying where by name: **Book at Fresha**, **Order at Toast**. Messages and requests for a price still come to your Inbox.
+If people already book you on a booking platform, or order in your own shop's checkout, keep it that way. Tell your Inbox where, and every AI agent that finds you sends people there for that, saying where by name: **Book at Fresha**, **Order at Flipdish**. Messages and requests for a price still come to your Inbox.
 
 Settings → General → **What agents can do** → **Take bookings or orders on another site?**
 
