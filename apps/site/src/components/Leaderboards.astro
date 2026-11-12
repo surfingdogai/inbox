@@ -1,7 +1,7 @@
 ---
 /**
  * The leaderboards, in a few links: everyone checked, the agent-ready, and where an agent can book, order or
- * ask. They live on the network (/leaderboard): real businesses at the top, then the businesses where an
+ * message. They live on the network (/leaderboard): real businesses at the top, then the businesses where an
  * agent can book, order or sign up, then by agentic score, and they are a separate list from the directory,
  * whose order nobody can buy. A business is named there when it is agent-ready (askable or above) and, for a
  * local business the network found, once its site is matched to its entry on public maps or registers or its
@@ -13,7 +13,7 @@ const boards = [
   { href: "/leaderboard?ready=1", label: "Agent-ready" },
   { href: "/leaderboard?can=book", label: "Where an agent can book" },
   { href: "/leaderboard?can=order", label: "Where an agent can order" },
-  { href: "/leaderboard?can=message", label: "Where an agent can ask" },
+  { href: "/leaderboard?can=message", label: "Where an agent can message" },
 ];
 ---
 

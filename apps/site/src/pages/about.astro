@@ -45,15 +45,9 @@ const tools = [
 
 // Asks tried on the live directory before they were written here, each returning businesses.
 const examples = [
-  {
-    call: 'search_businesses {"query": "coffee roasters", "accepts": ["order"]}',
-    note: "coffee roasters an agent can order from",
-  },
+  { call: 'search_businesses {"query": "dentist", "accepts": ["book"]}', note: "dentists an agent can book" },
   { call: 'search_businesses {"query": "florist"}', note: "florists" },
-  {
-    call: 'search_businesses {"query": "coffee singapore"}',
-    note: "a town in the words finds a business whose site names it",
-  },
+  { call: 'search_businesses {"query": "plumber"}', note: "plumbers" },
   // A business in the directory whose check is done and public (/b/kokoroaster.com), the same site the
   // agent card's example checks. Surfing Dog's own domain is refused by the check, so it is never the example.
   { call: 'check_business {"url": "kokoroaster.com"}', note: "what an agent can do on a business's website" },

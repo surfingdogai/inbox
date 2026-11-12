@@ -56,7 +56,7 @@ export const searchBusinessesInputSchema = z.object({
     .max(80)
     .optional()
     .describe(
-      'A few words about what the business does or where, like "florist" or "coffee singapore". Every word must match its name, town, description, categories, tags or services, ignoring capitals and accents. Words like "open" or "near me" belong in open_now and near instead. From network rules version 12 (ADR-017 Amendment 8), a search near a place, in a country or for what a door does that nothing matches with every word is run again with only the words that name its kind, and its note says which were left out.',
+      'A few words about what the business does or where, like "florist" or "bike repair". Every word must match its name, town, description, categories, tags or services, ignoring capitals and accents. Words like "open" or "near me" belong in open_now and near instead. From network rules version 12 (ADR-017 Amendment 8), a search near a place, in a country or for what a door does that nothing matches with every word is run again with only the words that name its kind, and its note says which were left out.',
     ),
   near: z
     .object({

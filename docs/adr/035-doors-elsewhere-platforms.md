@@ -107,7 +107,7 @@ says Fresha), is published in the manifest, in the business profile (`GET /v1/bu
 `get_business_profile`), and in the refusal a customer's booking or order of that kind gets
 (`details.platform`, `details.place`; "This business takes bookings at Fresha (https://…), not here", followed by
 what still comes to the inbox: messages, and requests for a price when that door is open). The business's
-own page says **Book at Fresha** / **Order at Toast**; a page on the business's own website is named by its host
+own page says **Book at Fresha** / **Order at Flipdish**; a page on the business's own website is named by its host
 (`Order at shop.example.co.ke`), never by the platform behind it. Never a platform for a page on the business's own
 website that the owner did not name.
 

@@ -563,7 +563,7 @@ export const businessProfileSchema = profileSchema.extend({
         platform: z
           .string()
           .optional()
-          .describe("The platform the page is on (vocab/door-platforms.json): Book at Fresha, Order at Toast."),
+          .describe("The platform the page is on (vocab/door-platforms.json): Book at Fresha, Order at Flipdish."),
       }),
     )
     .optional()
