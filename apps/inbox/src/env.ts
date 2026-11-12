@@ -84,7 +84,7 @@ export function secretKeyFrom(
 }
 
 /**
- * INBOX_OUTBOUND_DENY: comma-separated addresses and ranges (`203.0.114.7`, `2a01:4f8::/32`) that no
+ * INBOX_OUTBOUND_DENY: comma-separated addresses and ranges (`203.0.113.7`, `2001:db8::/32`) that no
  * outbound call reaches, besides the loopback, private and other ranges no call ever does — the
  * server's own public addresses, say, or a neighbour's. `bad` holds what is not an address or a
  * range, for the server to refuse to start on: a range meant to be closed must not be silently open.

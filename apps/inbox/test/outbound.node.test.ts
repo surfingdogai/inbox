@@ -183,8 +183,8 @@ describe("outbound calls from the Node server", () => {
 
 describe("INBOX_OUTBOUND_DENY", () => {
   it("reads into the ranges pinnedFetch refuses", () => {
-    const { ranges, bad } = outboundDenyFrom(`${OWN_ADDRESS}, 2a01:4f8::/32`);
+    const { ranges, bad } = outboundDenyFrom(`${OWN_ADDRESS}, 2001:db8::/32`);
     expect(bad).toEqual([]);
-    expect(ranges).toEqual([parseAddressRange(OWN_ADDRESS), parseAddressRange("2a01:4f8::/32")]);
+    expect(ranges).toEqual([parseAddressRange(OWN_ADDRESS), parseAddressRange("2001:db8::/32")]);
   });
 });

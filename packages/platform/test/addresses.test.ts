@@ -72,14 +72,14 @@ describe("the addresses an outbound call never reaches", () => {
   });
 
   it("refuses the host's own ranges too, and keeps refusing them for a call allowed private addresses", () => {
-    const deny = [parseAddressRange("203.0.114.0/24"), parseAddressRange("2a01:4f8::1")].map((r) => {
+    const deny = [parseAddressRange("203.0.114.0/24"), parseAddressRange("2001:db9::1")].map((r) => {
       if (!r) throw new Error("a range that should parse");
       return r;
     });
     expect(refusedAddress("203.0.114.9", { deny })).toBe("denied");
     expect(refusedAddress("203.0.115.9", { deny })).toBeNull();
-    expect(refusedAddress("2a01:4f8::1", { deny })).toBe("denied");
-    expect(refusedAddress("2a01:4f8::2", { deny })).toBeNull();
+    expect(refusedAddress("2001:db9::1", { deny })).toBe("denied");
+    expect(refusedAddress("2001:db9::2", { deny })).toBeNull();
     // Written as IPv6, the same IPv4 address is still the host's own.
     expect(refusedAddress("::ffff:203.0.114.9", { deny, allowPrivate: true })).toBe("denied");
     expect(refusedAddress("203.0.114.9", { deny, allowPrivate: true })).toBe("denied");

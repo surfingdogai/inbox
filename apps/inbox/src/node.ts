@@ -267,7 +267,7 @@ const demo = flagOn(process.env.INBOX_DEMO);
 const deny = outboundDenyFrom(process.env.INBOX_OUTBOUND_DENY);
 if (deny.bad.length > 0) {
   console.error(
-    `INBOX_OUTBOUND_DENY: ${deny.bad.join(", ")} is not an address or a range (like 203.0.114.7 or 2a01:4f8::/32); fix it to start`,
+    `INBOX_OUTBOUND_DENY: ${deny.bad.join(", ")} is not an address or a range (like 203.0.113.7 or 2001:db8::/32); fix it to start`,
   );
   process.exit(1);
 }

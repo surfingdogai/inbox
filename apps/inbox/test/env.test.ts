@@ -90,10 +90,10 @@ describe("the host's settings", () => {
   it("reads INBOX_OUTBOUND_DENY as ranges, and keeps what is not one aside for the server to refuse", () => {
     expect(outboundDenyFrom(undefined)).toEqual({ ranges: [], bad: [] });
     expect(outboundDenyFrom(" , ")).toEqual({ ranges: [], bad: [] });
-    const read = outboundDenyFrom("203.0.114.7, 2a01:4f8::/32,10.0.0.0/33, office");
+    const read = outboundDenyFrom("203.0.114.7, 2001:db8::/32,10.0.0.0/33, office");
     expect(read.ranges.map((r) => [r.text, r.bits])).toEqual([
       ["203.0.114.7", 32],
-      ["2a01:4f8::/32", 32],
+      ["2001:db8::/32", 32],
     ]);
     expect(read.bad).toEqual(["10.0.0.0/33", "office"]);
   });
