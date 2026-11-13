@@ -84,7 +84,7 @@ export const searchBusinessesInputSchema = z.object({
     .max(60)
     .optional()
     .describe(
-      "A slug from list_categories, like hair-beauty, or a place category id like hair_salon, with every category below it. Its label or a synonym works too. Under rules before version 7 any other word matches the tags businesses gave themselves; from version 7 it is an error that names up to 5 categories to try.",
+      "A slug from list_categories, like hair-beauty, or a place category id like hair_salon, with every category below it. Its label or a synonym works too. Any other word is an error that names up to 5 categories to try.",
     ),
   item_type: z
     .enum(["booking", "order", "quote_request", "message"])
@@ -114,54 +114,48 @@ export const searchBusinessesInputSchema = z.object({
     .max(10)
     .optional()
     .describe(
-      'Keys from list_attributes, like "delivery" or "walk_ins", or key=value for one with values; every one must hold. This only leaves businesses out.',
+      'Keys from list_attributes, like "delivery" or "walk_ins", or key=value for one with values; every one must hold.',
     ),
   country: z
     .string()
     .regex(/^[A-Za-z]{2}$/)
     .optional()
     .describe(
-      "A country code like PT or BR: a business located there, serving it or shipping there. This only leaves businesses out.",
+      "A two-letter country code (ISO 3166-1 alpha-2): a business located there, serving it or shipping there.",
     ),
   price_band: z
     .string()
     .regex(/^[1-4](-[1-4])?$/)
     .optional()
-    .describe('1 (cheapest) to 4, as "2" or a range "1-2". This only leaves businesses out.'),
+    .describe('1 (cheapest) to 4, as "2" or a range "1-2".'),
   accepts: z
     .array(z.string().max(40))
     .max(8)
     .optional()
     .describe(
-      "What its live doors take and what it accepts as payment, all of them: ask, quote, book, order, pay, or a payment from list_attributes like card or pix. This only leaves businesses out.",
+      "What its live doors take and what it accepts as payment, all of them: ask, quote, book, order, pay, or a payment from list_attributes like card or paypal.",
     ),
-  requestable: z
-    .enum(["ask", "quote"])
-    .optional()
-    .describe("A live door that declared it answers this kind. This only leaves businesses out."),
+  requestable: z.enum(["ask", "quote"]).optional().describe("A live door that declared it answers this kind."),
   door_type: z
     .array(doorTypeSchema.or(z.literal("platform")))
     .max(5)
     .optional()
     .describe(
-      'A live door of any of these types: inbox, mcp, a2a, openapi, api, ucp, acp, nlweb, other, "platform" for any platform, or platform:<name>. This only leaves businesses out.',
+      'A live door of any of these types: inbox, mcp, a2a, openapi, api, ucp, acp, nlweb, other, "platform" for any platform, or platform:<name>.',
     ),
   level: z
     .enum(["listed", "readable", "askable", "bookable", "orderable", "payable"])
     .optional()
     .describe(
-      "At this readiness level or above: askable (an AI can ask), bookable (a door takes bookings), orderable (a door takes orders), payable. bookable and orderable are one rung, and each asks for what the doors take. Nothing below askable is listed yet. This only leaves businesses out.",
+      "At this readiness level or above: askable (an AI can ask), bookable (a door takes bookings), orderable (a door takes orders), payable. bookable and orderable are one rung, and each asks for what the doors take. Nothing below askable is listed yet.",
     ),
-  has_inbox: z
-    .boolean()
-    .optional()
-    .describe("true: with an inbox door; false: without one. This only leaves businesses out."),
+  has_inbox: z.boolean().optional().describe("true: with an inbox door; false: without one."),
   source: z
     .array(z.enum(["member", "registered", "found"]))
     .max(3)
     .optional()
     .describe(
-      "member (through its inbox), registered (by the business), found (by this network on the business's own website); any of them. This only leaves businesses out.",
+      "member (through its inbox), registered (by the business), found (by this network on the business's own website); any of them.",
     ),
   order: z
     .enum(["rank", "nearest"])
@@ -261,6 +255,12 @@ export type BusinessCard = z.infer<typeof businessCardSchema>;
 export const searchBusinessesOutputSchema = z.object({
   businesses: z.array(businessCardSchema).describe("In the directory's published order: no one can pay to move in it."),
   next_cursor: z.string().nullable().describe("Pass it as cursor for the next page; null on the last."),
+  nothing: z
+    .string()
+    .optional()
+    .describe(
+      "From rules version 12, on an answer's first page that lists no business (level askable or above) and leaves nothing to try here but other words (no filter to leave out, and no other search the answer names): one plain line, first in the answer's text too, that the directory has nothing for this search, and where when it named a place, so that the assistant tells its person and uses other sources rather than searching again with other words. note, when there is one, says more.",
+    ),
   rules: z
     .object({ version: z.int().min(1), url: z.url() })
     .describe("The rules that ordered these businesses (GET /v1/ranking?version=N)."),
@@ -274,7 +274,7 @@ export const getBusinessInputSchema = z.object({
     .string()
     .min(1)
     .max(253)
-    .describe("The business's domain, like ana-salon.example, as search_businesses gave it."),
+    .describe("The business's domain, like salon.example, as search_businesses gave it."),
 });
 export type GetBusinessInput = z.infer<typeof getBusinessInputSchema>;
 
@@ -315,7 +315,7 @@ export const getCensusInputSchema = z.object({
     .max(64)
     .optional()
     .describe(
-      "One key of the scope: a country code (GB), a group slug, a platform slug, a source, or a city slug (madrid). " +
+      "One key of the scope: a country's two-letter code in capitals, or a group, platform, source or city slug in small letters. " +
         "Without it, every key of the scope with its headline counts.",
     ),
 });
@@ -406,7 +406,7 @@ const registerFields = {
         .optional(),
     })
     .optional()
-    .describe('As a profile\'s hours: {"timezone": "Europe/Paris", "weekly": {"tue": [["09:00", "19:00"]]}}.'),
+    .describe("As a profile's hours: its time zone, its opening times by day of the week, and its closed dates."),
   currencies: z.array(z.string().max(3)).max(5).optional().describe("ISO 4217."),
   price_band: z.int().optional().describe("1 (cheapest) to 4."),
   attributes: z

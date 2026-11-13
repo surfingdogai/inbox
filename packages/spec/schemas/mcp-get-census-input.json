@@ -14,7 +14,7 @@
       "pattern": "^[a-z][a-z0-9_]{0,31}$"
     },
     "key": {
-      "description": "One key of the scope: a country code (GB), a group slug, a platform slug, a source, or a city slug (madrid). Without it, every key of the scope with its headline counts.",
+      "description": "One key of the scope: a country's two-letter code in capitals, or a group, platform, source or city slug in small letters. Without it, every key of the scope with its headline counts.",
       "type": "string",
       "maxLength": 64
     }

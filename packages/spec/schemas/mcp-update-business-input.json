@@ -222,7 +222,7 @@
           "type": "boolean"
         },
         "hours": {
-          "description": "As a profile's hours: {\"timezone\": \"Europe/Paris\", \"weekly\": {\"tue\": [[\"09:00\", \"19:00\"]]}}.",
+          "description": "As a profile's hours: its time zone, its opening times by day of the week, and its closed dates.",
           "type": "object",
           "properties": {
             "timezone": {

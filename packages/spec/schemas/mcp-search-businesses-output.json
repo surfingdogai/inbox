@@ -634,6 +634,10 @@
       "description": "Pass it as cursor for the next page; null on the last.",
       "type": ["string", "null"]
     },
+    "nothing": {
+      "description": "From rules version 12, on an answer's first page that lists no business (level askable or above) and leaves nothing to try here but other words (no filter to leave out, and no other search the answer names): one plain line, first in the answer's text too, that the directory has nothing for this search, and where when it named a place, so that the assistant tells its person and uses other sources rather than searching again with other words. note, when there is one, says more.",
+      "type": "string"
+    },
     "rules": {
       "type": "object",
       "properties": {

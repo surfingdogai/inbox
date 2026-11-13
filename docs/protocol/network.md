@@ -806,7 +806,7 @@ is open to every origin, without credentials.
 
 | Tool | Arguments | `structuredContent` |
 |---|---|---|
-| `search_businesses` | `query?`, `near? {lat, lng, radius_km?}`, `radius_km?` (0.16: near's `radius_km` by its `GET /v1/businesses` name; give one), `category?`, `item_type?`, `language?`, `open_now?`, `limit?` (1–20, 10), `cursor?` | `{businesses: [card], next_cursor, rules: {version, url}}` |
+| `search_businesses` | `query?`, `near? {lat, lng, radius_km?}`, `radius_km?` (0.16: near's `radius_km` by its `GET /v1/businesses` name; give one), `category?`, `item_type?`, `language?`, `open_now?`, `limit?` (1–20, 10), `cursor?` | `{businesses: [card], next_cursor, nothing?, rules: {version, url}}`; `nothing` (rules version 12) only on a first page that lists no business and leaves nothing to try here but other words: one plain line, first in the text too, that the directory has nothing for this search |
 | `get_business` | `domain` | a card, with `address?`, `hours?` and `outcomes` |
 | `list_categories` | none | `GET /v1/categories` |
 | `list_attributes` (0.2, optional) | none | `GET /v1/attributes` |

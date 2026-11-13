@@ -38,7 +38,7 @@
       "maximum": 1000
     },
     "category": {
-      "description": "A slug from list_categories, like hair-beauty, or a place category id like hair_salon, with every category below it. Its label or a synonym works too. Under rules before version 7 any other word matches the tags businesses gave themselves; from version 7 it is an error that names up to 5 categories to try.",
+      "description": "A slug from list_categories, like hair-beauty, or a place category id like hair_salon, with every category below it. Its label or a synonym works too. Any other word is an error that names up to 5 categories to try.",
       "type": "string",
       "maxLength": 60
     },
@@ -69,7 +69,7 @@
       "maxLength": 512
     },
     "attributes": {
-      "description": "Keys from list_attributes, like \"delivery\" or \"walk_ins\", or key=value for one with values; every one must hold. This only leaves businesses out.",
+      "description": "Keys from list_attributes, like \"delivery\" or \"walk_ins\", or key=value for one with values; every one must hold.",
       "maxItems": 10,
       "type": "array",
       "items": {
@@ -78,17 +78,17 @@
       }
     },
     "country": {
-      "description": "A country code like PT or BR: a business located there, serving it or shipping there. This only leaves businesses out.",
+      "description": "A two-letter country code (ISO 3166-1 alpha-2): a business located there, serving it or shipping there.",
       "type": "string",
       "pattern": "^[A-Za-z]{2}$"
     },
     "price_band": {
-      "description": "1 (cheapest) to 4, as \"2\" or a range \"1-2\". This only leaves businesses out.",
+      "description": "1 (cheapest) to 4, as \"2\" or a range \"1-2\".",
       "type": "string",
       "pattern": "^[1-4](-[1-4])?$"
     },
     "accepts": {
-      "description": "What its live doors take and what it accepts as payment, all of them: ask, quote, book, order, pay, or a payment from list_attributes like card or pix. This only leaves businesses out.",
+      "description": "What its live doors take and what it accepts as payment, all of them: ask, quote, book, order, pay, or a payment from list_attributes like card or paypal.",
       "maxItems": 8,
       "type": "array",
       "items": {
@@ -97,12 +97,12 @@
       }
     },
     "requestable": {
-      "description": "A live door that declared it answers this kind. This only leaves businesses out.",
+      "description": "A live door that declared it answers this kind.",
       "type": "string",
       "enum": ["ask", "quote"]
     },
     "door_type": {
-      "description": "A live door of any of these types: inbox, mcp, a2a, openapi, api, ucp, acp, nlweb, other, \"platform\" for any platform, or platform:<name>. This only leaves businesses out.",
+      "description": "A live door of any of these types: inbox, mcp, a2a, openapi, api, ucp, acp, nlweb, other, \"platform\" for any platform, or platform:<name>.",
       "maxItems": 5,
       "type": "array",
       "items": {
@@ -119,16 +119,16 @@
       }
     },
     "level": {
-      "description": "At this readiness level or above: askable (an AI can ask), bookable (a door takes bookings), orderable (a door takes orders), payable. bookable and orderable are one rung, and each asks for what the doors take. Nothing below askable is listed yet. This only leaves businesses out.",
+      "description": "At this readiness level or above: askable (an AI can ask), bookable (a door takes bookings), orderable (a door takes orders), payable. bookable and orderable are one rung, and each asks for what the doors take. Nothing below askable is listed yet.",
       "type": "string",
       "enum": ["listed", "readable", "askable", "bookable", "orderable", "payable"]
     },
     "has_inbox": {
-      "description": "true: with an inbox door; false: without one. This only leaves businesses out.",
+      "description": "true: with an inbox door; false: without one.",
       "type": "boolean"
     },
     "source": {
-      "description": "member (through its inbox), registered (by the business), found (by this network on the business's own website); any of them. This only leaves businesses out.",
+      "description": "member (through its inbox), registered (by the business), found (by this network on the business's own website); any of them.",
       "maxItems": 3,
       "type": "array",
       "items": {
