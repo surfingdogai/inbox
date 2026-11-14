@@ -559,6 +559,23 @@ export function App({ deps }: { deps: Deps }) {
     [sessions, inboxes, native, deps.allowLocal, connected, toast],
   );
 
+  // Whether the app is in front, for the sessions (no fingerprint or face is asked for in the
+  // background) and the half-minute look for asks. A listener of its own, made once, so no change of
+  // the screens' state can make it miss the app coming back; read from the app's state at the start too.
+  useEffect(() => {
+    const said = (isActive: boolean) => {
+      sessions.setFront(isActive);
+      setFront(isActive);
+    };
+    void CapApp.getState()
+      .then((s) => said(s.isActive))
+      .catch(() => undefined);
+    const sub = CapApp.addListener("appStateChange", ({ isActive }) => said(isActive));
+    return () => {
+      void sub.then((s) => s.remove()).catch(() => undefined);
+    };
+  }, [sessions]);
+
   useEffect(() => {
     const sub = CapApp.addListener("appUrlOpen", (e) => {
       // Android hands the link over before the app is back in front: when it has been away long
@@ -581,9 +598,6 @@ export function App({ deps }: { deps: Deps }) {
       void openLink(e.url);
     });
     const state = CapApp.addListener("appStateChange", async ({ isActive }) => {
-      // In the background nothing asks for the fingerprint or face, and nothing looks for asks.
-      sessions.setFront(isActive);
-      setFront(isActive);
       if (!isActive) {
         hiddenAt.current = Date.now();
         return;
@@ -605,7 +619,7 @@ export function App({ deps }: { deps: Deps }) {
       void sub.then((s) => s.remove());
       void state.then((s) => s.remove());
     };
-  }, [locked, openLink, native, sessions, inboxes.length, flush, refresh]);
+  }, [locked, openLink, native, inboxes.length, flush, refresh]);
 
   // Android's back button and back gesture: an open sheet closes, then an item goes back to the list,
   // then another tab goes back to the inbox, and from the inbox the app goes to the background.
@@ -778,6 +792,7 @@ export function App({ deps }: { deps: Deps }) {
                 }
               }
               unlockedAt.current = Date.now();
+              sessions.setFront(true);
               setLocked(false);
               return true;
             }}

@@ -243,8 +243,9 @@ export class Sessions {
    * waited on for longer than `unlockWaitMs`: a prompt that cannot show is no reason to wait for good.
    */
   private unlock(): Promise<boolean> {
-    if (!this.front) return Promise.resolve(false);
+    // One asked for already is shared, even when the prompt itself took the app out of front (an iPhone's).
     if (this.unlocking) return this.unlocking;
+    if (!this.front) return Promise.resolve(false);
     let timer: ReturnType<typeof setTimeout> | undefined;
     const gaveUp = new Promise<boolean>((resolve) => {
       timer = setTimeout(() => resolve(false), this.unlockWaitMs);

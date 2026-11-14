@@ -149,6 +149,21 @@ describe("the fingerprint or face, when it cannot show", () => {
     expect(p.prompts()).toBe(1);
   });
 
+  it("shares a prompt already showing, even when it took the app out of front (as an iPhone's does)", async () => {
+    let answer: (ok: boolean) => void = () => undefined;
+    const p = await phoneWithInbox({ authenticate: () => new Promise<boolean>((r) => (answer = r)) });
+    p.later(15 * 60_000);
+    const items = p.client().items("all");
+    for (let i = 0; i < 50 && p.prompts() === 0; i++) await new Promise((r) => setTimeout(r, 5));
+    expect(p.prompts()).toBe(1);
+    p.sessions.setFront(false);
+    const signed = p.sessions.confirmProof(p.entry, "d_other");
+    answer(true);
+    await expect(items).resolves.toMatchObject({ items: [] });
+    await expect(signed).resolves.toMatchObject({ proof: expect.any(String) });
+    expect(p.prompts()).toBe(1);
+  });
+
   it("gives up on a prompt that never answers, so the next call can ask again", async () => {
     const p = await phoneWithInbox({
       // The first prompt never shows and never answers (asked as the app went to the background).
@@ -180,8 +195,11 @@ describe("the app's half-minute look, as the app runs it", () => {
     expect(poll).toContain("askAll.current(false)");
     const effect = source.slice(source.lastIndexOf("useEffect(() => {", source.indexOf("const t = setInterval(")));
     expect(effect.slice(0, effect.indexOf("const t = setInterval("))).toContain("!front");
-    const state = source.slice(source.indexOf('CapApp.addListener("appStateChange"'));
-    expect(state.slice(0, state.indexOf("if (!isActive)"))).toContain("sessions.setFront(isActive)");
+    // A listener of its own, made once (its only dependency is the sessions), and the state read at the start.
+    const front = source.slice(source.indexOf("const said = (isActive: boolean)"), source.indexOf("}, [sessions]);"));
+    expect(front).toContain("sessions.setFront(isActive)");
+    expect(front).toContain("CapApp.getState()");
+    expect(front).toContain('CapApp.addListener("appStateChange", ({ isActive }) => said(isActive))');
   });
 
   it("asks loudly only for a notification the owner opened, and brings back what was put off", () => {
@@ -191,7 +209,7 @@ describe("the app's half-minute look, as the app runs it", () => {
     );
     expect(open).toContain("putOff.current.clear()");
     expect(open).toContain("askAll.current(true)");
-    const back = source.slice(source.indexOf('CapApp.addListener("appStateChange"'));
+    const back = source.slice(source.indexOf('CapApp.addListener("appStateChange", async'));
     expect(back.slice(0, back.indexOf("const away ="))).toContain("putOff.current.clear()");
     expect(source.match(/askAll\.current\(true\)/g)).toHaveLength(1);
   });
