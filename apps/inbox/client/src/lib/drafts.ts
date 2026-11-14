@@ -165,13 +165,35 @@ export function termsLine(t: DraftView["terms"], tz: string | undefined): string
   return parts.join(" · ");
 }
 
+/** A stay's quote holds as long once it is sent as its draft held once made: "a day", "2 days", "6 hours". */
+function holdWords(hours: number): string {
+  if (hours % 24 === 0) return hours === 24 ? "a day" : `${hours / 24} days`;
+  return hours === 1 ? "an hour" : `${hours} hours`;
+}
+
+/**
+ * Until when the customer can accept it. A stay's quote is worked out again as it goes, so it holds as
+ * long from then as the draft did from when it was made (`madeAt`): "for a day once it is sent". One the
+ * stay's arrival cut short (not a whole number of hours) holds until that same time, and any other offer
+ * goes with the date it was drafted with.
+ */
+function holdLine(until: string, stay: boolean, madeAt: string | undefined, tz: string | undefined): string {
+  const held = madeAt ? Date.parse(until) - Date.parse(madeAt) : Number.NaN;
+  const hours = Math.round(held / 3_600_000);
+  // The quote keeps whole seconds, so it is up to a second short of the hours it was made with.
+  if (stay && hours >= 1 && Math.abs(held - hours * 3_600_000) < 1_000)
+    return `They can accept it for ${holdWords(hours)} once it is sent`;
+  return `They can accept it until ${formatDateTime(until, tz)}`;
+}
+
 /**
  * Everything else the customer would read in a draft, beyond its one line (`termsLine`), each in the
  * owner's words: the people, delivery, fees, stages, tax, the tip and deposit; a stay's rate plan, what
- * it includes, what is paid when, its cancellation and whether a card holds it; and until when it holds.
- * The note is apart (`DraftView["terms"]["notes"]`): it is the draft's own words to the customer.
+ * it includes, what is paid when, its cancellation and whether a card holds it; and how long it holds
+ * (`holdLine`, from when the draft was made: `madeAt`, its `created_at`). The note is apart
+ * (`DraftView["terms"]["notes"]`): it is the draft's own words to the customer.
  */
-export function draftDetails(t: DraftView["terms"], tz: string | undefined): string[] {
+export function draftDetails(t: DraftView["terms"], tz: string | undefined, madeAt?: string): string[] {
   const out: string[] = [];
   if (t.partySize) out.push(`For ${t.partySize} ${t.partySize === 1 ? "person" : "people"}`);
   if (t.delivery)
@@ -245,6 +267,6 @@ export function draftDetails(t: DraftView["terms"], tz: string | undefined): str
   const guarantee = (t as { guarantee?: unknown }).guarantee;
   if (guarantee === "card") out.push("A card holds the booking; nothing is charged now");
   else if (guarantee === "none") out.push("No card needed to hold it");
-  if (t.validThrough) out.push(`They can accept it until ${formatDateTime(t.validThrough, tz)}`);
+  if (t.validThrough) out.push(holdLine(t.validThrough, plan !== null || schedule.length > 0, madeAt, tz));
   return out;
 }

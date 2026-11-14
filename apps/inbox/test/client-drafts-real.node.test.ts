@@ -59,7 +59,10 @@ describe("a stay's draft from the rates", () => {
     const draft = (await k.caps.getItem(owner, { item_id: id })).draft as DraftView | null;
     if (!draft) throw new Error("the rule made no draft");
     const tz = "Africa/Nairobi";
-    const details = draftDetails(draft.terms, tz);
+    const details = draftDetails(draft.terms, tz, draft.created_at);
+    // The quote is worked out again as it goes, so it holds a day from then, as the card says.
+    expect(details).toContain("They can accept it for a day once it is sent");
+    clock.now += 3 * 3_600_000;
     // What goes when it is sent: the quote the guest gets.
     const sent = await k.caps.sendOfferDraft(owner, { item_id: id });
     const q = (
@@ -71,9 +74,11 @@ describe("a stay's draft from the rates", () => {
           policy: { after: { value: number; currency: string }; noShow: { value: number; currency: string } };
           guarantee: string;
           includes: string[];
+          validThrough: string;
         };
       }
     ).quote;
+    expect(Date.parse(q.validThrough)).toBe(clock.now + 24 * 3_600_000);
     expect(q.ratePlan).toMatchObject({ name: "Bed and breakfast", refundable: true });
     expect(q.includes).toEqual(["Breakfast for 2"]);
     expect(q.guarantee).toBe("none");

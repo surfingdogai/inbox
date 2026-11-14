@@ -36,9 +36,9 @@ export function DraftCard({
         {notSentWords(draft.breaches)}
       </p>
       {/* Everything else the customer would read, and its own words to them in full: "as it is" means all of it. */}
-      {draftDetails(draft.terms, tz).length > 0 && (
+      {draftDetails(draft.terms, tz, draft.created_at).length > 0 && (
         <ul className="hint">
-          {draftDetails(draft.terms, tz).map((line) => (
+          {draftDetails(draft.terms, tz, draft.created_at).map((line) => (
             <li key={line}>{line}</li>
           ))}
         </ul>

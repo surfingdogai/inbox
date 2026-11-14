@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { orderLinesText } from "../../../packages/core/src/customer/describe";
 import { type DraftView, draftDetails, notSentWords, termsLine } from "../client/src/lib/drafts";
+import { formatDateTime } from "../client/src/lib/format";
 
 /**
  * A draft's card (the owner app's and the phone's, ADR-018 §4): "Send as it is" sends it in one tap, so
@@ -49,6 +50,24 @@ describe("a draft's card", () => {
     expect(details).toContain("Paid €120.00 now, €280.00 at the property");
     expect(details.some((d) => d.startsWith("They can accept it until"))).toBe(true);
     expect(termsLine(stay, TZ)).not.toContain("1 ×");
+  });
+
+  it("says how long a stay's quote holds from when it is sent, as it is worked out again then", () => {
+    // Made a day before it lapses (the quote keeps whole seconds): a day from when it goes.
+    const made = "2026-11-19T18:00:00.400Z";
+    expect(draftDetails(stay, TZ, made)).toContain("They can accept it for a day once it is sent");
+    const two = { ...stay, validThrough: "2026-11-19T20:00:00Z" } as DraftView["terms"];
+    expect(draftDetails(two, TZ, "2026-11-19T18:00:00Z")).toContain("They can accept it for 2 hours once it is sent");
+    // Cut short by the stay's arrival: until that same time, whenever it goes.
+    const cut = { ...stay, validThrough: "2026-11-20T13:59:00Z" } as DraftView["terms"];
+    expect(draftDetails(cut, TZ, made)).toContain(
+      `They can accept it until ${formatDateTime("2026-11-20T13:59:00Z", TZ)}`,
+    );
+    // Any other offer goes with the date it was drafted with.
+    const other = { totalPrice: { value: 4000, currency: "EUR" }, validThrough: "2026-11-20T18:00:00Z" };
+    expect(draftDetails(other as DraftView["terms"], TZ, "2026-11-19T18:00:00Z")).toContain(
+      `They can accept it until ${formatDateTime("2026-11-20T18:00:00Z", TZ)}`,
+    );
   });
 
   it("words an order change's lines as the customer reads them: each amount, each choice", () => {

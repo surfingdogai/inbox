@@ -847,7 +847,7 @@ export function DraftCard(p: {
   onDrop: (d: DraftView) => void;
 }) {
   const d = p.draft;
-  const details = draftDetails(d.terms, p.tz);
+  const details = draftDetails(d.terms, p.tz, d.created_at);
   const note = d.terms.notes?.trim();
   return (
     <section className="drafted" aria-label="A drafted offer">
@@ -925,9 +925,9 @@ function DraftReview(p: {
         <p className="sub" style={{ margin: 0 }}>
           {capitalise(byWord(d.by, d.by.kind))} would offer <b>{termsLine(d.terms, p.tz) || "an offer"}</b>.
         </p>
-        {draftDetails(d.terms, p.tz).length > 0 && (
+        {draftDetails(d.terms, p.tz, d.created_at).length > 0 && (
           <ul className="drafted-terms">
-            {draftDetails(d.terms, p.tz).map((line) => (
+            {draftDetails(d.terms, p.tz, d.created_at).map((line) => (
               <li key={line}>{line}</li>
             ))}
           </ul>

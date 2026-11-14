@@ -1238,7 +1238,7 @@ export function ownerRest(caps: Capabilities, opts: { readonly baseUrl?: string 
       tags: ["owner"],
       summary: "Send the draft your AI, a rule or another system made outside your limits, as it is",
       description:
-        "The owner in person only (signed in, or a full owner key; never the owner's MCP), so an AI cannot send its own drafts. draft_id pins the draft you read. It is the transition the draft would have made, made now by you. 409 draft_stale when the item moved since the draft was made: make your own offer instead, or drop it.",
+        "The owner in person only (signed in, or a full owner key; never the owner's MCP), so an AI cannot send its own drafts. draft_id pins the draft you read. It is the transition the draft would have made, made now by you. 409 draft_stale when the item moved since the draft was made, or a stay's quote, worked out again as it goes, would not be the one it shows: make your own offer instead, or drop it.",
       responses: json("Item", R.transitionResultSchema),
       write: true,
     }),

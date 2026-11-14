@@ -2,9 +2,22 @@ import { logMailOut } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import type { Capabilities } from "../src/capabilities/service";
 import type { Db } from "../src/db";
+import type { PayloadOf } from "../src/domain/types";
 import { createRunner } from "../src/jobs/index";
 import { mapCalendar } from "../src/property/hints";
-import { clock, contact, guest, kijaniHouse, mapleHollow, owner } from "./stay-fixtures";
+import { quoteDraftTerms } from "../src/stays/terms";
+import { transitionItem, WriteError } from "../src/write/index";
+import {
+  clock,
+  contact,
+  guest,
+  kijaniHouse,
+  mapleHollow,
+  owner,
+  ownerAi,
+  payPlatform,
+  ryokanHoshi,
+} from "./stay-fixtures";
 
 /**
  * The stays rules (ADR-037 §7): a quote from the rates is drafted for a person and never sent by a
@@ -123,5 +136,144 @@ describe("the stays rules", () => {
     // An inbox whose owner confirms each stay (hosted plans start so) never quotes on its own.
     const owned = await k.caps.setup.applyPreset(owner, { preset: "stays", confirm: "owner", replace: true });
     expect(owned.map((r) => r.name)).not.toContain("Send the quote at once when the rooms are kept for direct guests");
+  });
+});
+
+/**
+ * A stay's draft, sent as it is (ADR-018 §4): its quote is worked out again as it goes, so it goes only
+ * when that quote is the one its card showed, every term but until when it holds, which runs from when
+ * it goes. The rates changed, a payment platform connected, or new nights priced otherwise since: it
+ * does not go, and the draft waits for the owner to make their own offer or drop it.
+ */
+describe("a stay's draft, sent as it is", () => {
+  async function stale(p: Promise<unknown>): Promise<void> {
+    const error = await p.then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(WriteError);
+    expect((error as WriteError).code).toBe("draft_stale");
+    expect((error as WriteError).details).toMatchObject({ guard: "draft_terms" });
+  }
+
+  async function draftOf(db: Db, id: string): Promise<Record<string, unknown>> {
+    const { rows } = await db.client.query({
+      sql: "SELECT terms FROM offer_drafts WHERE item_id = ?",
+      params: [id],
+      method: "all",
+    });
+    return JSON.parse(String(rows[0]?.[0])) as Record<string, unknown>;
+  }
+
+  it("goes as its card showed it, a day from when it goes, however long it waited", async () => {
+    clock.now = Date.parse("2026-11-02T06:00:00Z");
+    const k = await kijaniHouse();
+    await k.caps.setup.applyPreset(owner, { preset: "stays", replace: false });
+    const id = await request(k.caps, k.rooms.garden);
+    await drain(k.db);
+    const { validThrough: shown, ...card } = await draftOf(k.db, id);
+    expect(Date.parse(String(shown))).toBe(clock.now + 24 * 3_600_000);
+    clock.now += 5 * 3_600_000;
+    const sent = await k.caps.sendOfferDraft(owner, { item_id: id });
+    expect(sent.view.item.state).toBe("quoted");
+    const quote = (sent.view.item.payload as PayloadOf<"stay">).quote;
+    if (!quote) throw new Error("no quote");
+    const { validThrough, ...terms } = quoteDraftTerms(quote);
+    expect(JSON.parse(JSON.stringify(terms))).toEqual(card);
+    expect(Date.parse(String(validThrough))).toBe(clock.now + 24 * 3_600_000);
+  });
+
+  it("does not go once the rates changed it, and waits for the owner", async () => {
+    clock.now = Date.parse("2026-11-02T06:00:00Z");
+    const k = await kijaniHouse();
+    await k.caps.setup.applyPreset(owner, { preset: "stays", replace: false });
+    const id = await request(k.caps, k.rooms.garden);
+    await drain(k.db);
+    clock.now += 30 * 60_000;
+    await k.caps.stays.setRates(owner, {
+      rate_plan_id: k.plans.bnb,
+      room_type_id: k.rooms.garden,
+      nightly: 720_000,
+      base_guests: 2,
+    });
+    clock.now += 90 * 60_000;
+    await stale(k.caps.sendOfferDraft(owner, { item_id: id }));
+    expect(await item(k.db, id)).toEqual({ state: "requested", needsHuman: true, draft: "quote" });
+    // The rates back as they were: the same quote, and it goes.
+    await k.caps.stays.setRates(owner, {
+      rate_plan_id: k.plans.bnb,
+      room_type_id: k.rooms.garden,
+      nightly: 650_000,
+      base_guests: 2,
+    });
+    expect((await k.caps.sendOfferDraft(owner, { item_id: id })).view.item.state).toBe("quoted");
+  });
+
+  it("does not go once a payment platform would ask for money now that the card said is paid there", async () => {
+    clock.now = Date.parse("2026-11-02T06:00:00Z");
+    const r = await ryokanHoshi();
+    await r.caps.setup.applyPreset(owner, { preset: "stays", replace: false });
+    const id = await request(r.caps, r.rooms.japanese);
+    await drain(r.db);
+    const card = await draftOf(r.db, id);
+    expect((card.schedule as { type: string }[]).map((s) => s.type)).toEqual(["at_property"]);
+    await payPlatform(r.db, { cards: true });
+    await stale(r.caps.sendOfferDraft(owner, { item_id: id }));
+    expect((await item(r.db, id)).state).toBe("requested");
+  });
+
+  it("holds the owner's AI's quote and its change of nights to what their cards showed", async () => {
+    clock.now = Date.parse("2026-11-02T06:00:00Z");
+    const k = await kijaniHouse();
+    const rate = (nightly: number) =>
+      k.caps.stays.setRates(owner, {
+        rate_plan_id: k.plans.bnb,
+        room_type_id: k.rooms.garden,
+        nightly,
+        base_guests: 2,
+      });
+    const made = await k.caps.stays.request(guest(), {
+      check_in: "2026-12-12",
+      check_out: "2026-12-14",
+      rooms: [{ room_type_id: k.rooms.garden, adults: 2 }],
+      contact,
+      consent: true,
+    });
+    const id = made.view.item.id;
+    const refused = (p: Promise<unknown>) =>
+      p.then(
+        () => null,
+        (e: unknown) => (e as WriteError).code,
+      );
+    // The owner's AI quotes from the rates: kept for a person, who looks at the other channels first.
+    const quote = { itemId: id, event: "quote", input: { from: "rates" } };
+    expect(await refused(transitionItem(k.db, ownerAi, quote))).toBe("outside_limits");
+    await rate(700_000);
+    await stale(k.caps.sendOfferDraft(owner, { item_id: id }));
+    await rate(650_000);
+    expect((await k.caps.sendOfferDraft(owner, { item_id: id })).view.item.state).toBe("quoted");
+    // The guest takes it; the owner's AI then offers other nights, kept for a person too.
+    const token = made.accessToken as string;
+    const ask = transitionItem(k.db, guest({ accessToken: token }), { itemId: id, event: "accept" });
+    const terms = await ask.then(
+      () => null,
+      (e: unknown) => ((e as WriteError).details as { terms_sha?: string } | undefined)?.terms_sha,
+    );
+    await transitionItem(k.db, guest({ accessToken: token }), {
+      itemId: id,
+      event: "accept",
+      input: { terms_sha: terms },
+    });
+    const change = { itemId: id, event: "propose_change", input: { checkIn: "2026-12-13", checkOut: "2026-12-15" } };
+    expect(await refused(transitionItem(k.db, ownerAi, change))).toBe("outside_limits");
+    expect(await item(k.db, id)).toMatchObject({ draft: "propose_change" });
+    await rate(720_000);
+    await stale(k.caps.sendOfferDraft(owner, { item_id: id }));
+    await rate(650_000);
+    const sent = await k.caps.sendOfferDraft(owner, { item_id: id });
+    expect((sent.view.item.payload as PayloadOf<"stay">).change?.quote?.total).toEqual({
+      value: 1_300_000,
+      currency: "KES",
+    });
   });
 });

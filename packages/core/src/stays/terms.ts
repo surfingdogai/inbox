@@ -67,6 +67,17 @@ export function quoteDraftTerms(quote: StayQuote): Record<string, unknown> {
   };
 }
 
+/**
+ * Whether a quote worked out again as its draft is sent is the one the draft's card showed (ADR-018 §4):
+ * every term the guest is sent, but until when it holds, which runs from when it goes. Its rates, a
+ * payment platform connected or a date passed since can make it another quote, which is not sent.
+ */
+export function sameDraftQuote(terms: object, quote: StayQuote): boolean {
+  const { validThrough: _shown, ...shown } = terms as { readonly validThrough?: unknown };
+  const { validThrough: _sent, ...sent } = quoteDraftTerms(quote);
+  return canonicalJson(shown) === canonicalJson(sent);
+}
+
 /** What cancelling a confirmed stay costs now, and what is owed back of what was paid. */
 export function cancellationTerms(
   quote: StayQuote,

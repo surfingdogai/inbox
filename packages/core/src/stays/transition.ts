@@ -32,7 +32,15 @@ import { checkDates, nightsOf, stayTimes } from "./nights";
 import { collectableQuote, type PriceRequest, quoteFromPrice, quoteFromRates } from "./price";
 import { stayProblems } from "./problems";
 import { type PropertySetup, readSetup } from "./store";
-import { cancellationTerms, dueNow, feeSha, quoteDraftTerms, quoteProblems, stayTermsSha } from "./terms";
+import {
+  cancellationTerms,
+  dueNow,
+  feeSha,
+  quoteDraftTerms,
+  quoteProblems,
+  sameDraftQuote,
+  stayTermsSha,
+} from "./terms";
 
 /**
  * The stays layer of the write algorithm (ADR-037 §3): the machine says which transition a stay may
@@ -257,6 +265,8 @@ interface PlanCtx {
   readonly settings: Settings;
   readonly now: number;
   readonly audience: Audience | undefined;
+  /** The terms a draft's card showed the owner, as they send it: its quote must come out the same. */
+  readonly draftTerms?: object | undefined;
 }
 
 export interface StayPlan {
@@ -968,6 +978,20 @@ async function draftForPerson(ctx: PlanCtx, quote: StayQuote | undefined, why: s
   });
 }
 
+/**
+ * A draft the owner sends goes as its card showed it, or not at all (ADR-018 §4): its quote is worked
+ * out again as it goes, and one that came out otherwise (the rates, a payment platform, a date passed)
+ * is the owner's to look at again. Until when it holds is left out: it runs from when it goes.
+ */
+function sentAsShown(ctx: PlanCtx, quote: StayQuote): void {
+  if (!ctx.draftTerms || sameDraftQuote(ctx.draftTerms, quote)) return;
+  throw new WriteError(
+    "draft_stale",
+    "The quote has changed since this draft was made, so it cannot go as it is: make your own offer, or drop it.",
+    { details: { guard: "draft_terms" } },
+  );
+}
+
 /** The times a stay is written with: its check-in and check-out in the property's zone. */
 export function timesOf(
   setup: PropertySetup,
@@ -1066,6 +1090,7 @@ async function composeQuote(
       details: { guard: "stay_quote_complete" },
     });
   }
+  sentAsShown(ctx, quote);
   for (const room of p.rooms) {
     const plan =
       setup.plans.find((x) => x.id === room.ratePlanId) ?? setup.plans.find((x) => x.id === quote.ratePlan.id);
@@ -1280,6 +1305,7 @@ async function planChange(ctx: PlanCtx, setup: PropertySetup, p: StayPayload & M
         fields: problems.map((m) => ({ path: "input.quote", problem: "invalid" as const, message: m })),
       });
     }
+    sentAsShown(ctx, quote);
   }
   // The property's own change, sent by automation, binds it on the guest's yes: only on nights the inbox
   // cannot sell twice.

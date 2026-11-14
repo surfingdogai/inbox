@@ -169,7 +169,7 @@ describe("the item screen's one-tap answers", () => {
 
   it("shows a draft's every term, and its words to the customer in full before it goes", () => {
     const card = source.slice(source.indexOf("function DraftCard("), source.indexOf("function useSheetFocus("));
-    expect(card).toContain("draftDetails(d.terms, p.tz)");
+    expect(card).toContain("draftDetails(d.terms, p.tz, d.created_at)");
     expect(card).toContain("Send as it is");
     expect(card).toContain("Read it and send");
     const review = source.slice(source.indexOf("function DraftReview("), source.indexOf("export function PriceSheet("));

@@ -2376,7 +2376,8 @@ export class Capabilities {
    * Sends the draft the owner's AI, a rule or another system made outside the owner's limits (ADR-018
    * §4), as it is: the transition it would have made, made now by the owner. Only the owner in person —
    * signed in, or with a full owner key, never through the owner's MCP — so the AI cannot approve its
-   * own drafts. A draft made on the item as it no longer stands is `draft_stale`: the owner offers afresh.
+   * own drafts. A draft made on the item as it no longer stands is `draft_stale`: the owner offers afresh;
+   * so is a stay's quote that, worked out again as it goes, would not be the one its card showed.
    */
   async sendOfferDraft(caller: Caller, input: T.OfferDraftInput): Promise<TransitionResult> {
     requireBusiness(caller);
@@ -2415,6 +2416,7 @@ export class Capabilities {
       hashInput: input,
       extraStatements: [dropDraftStatement(input.item_id, draft.id)],
       fromDraft: true,
+      draftTerms: draft.terms,
     });
   }
 

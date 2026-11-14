@@ -135,6 +135,11 @@ export interface TransitionInput {
    * limit is judged — the owner is the one sending it. Internal only.
    */
   readonly fromDraft?: boolean | undefined;
+  /**
+   * The terms the draft's card showed the owner, as they send it: a stay's quote, worked out again as it
+   * goes, must come out the same (but until when it holds), else `draft_stale`. Internal only.
+   */
+  readonly draftTerms?: object | undefined;
 }
 
 export interface TransitionResult {
@@ -171,7 +176,7 @@ export async function transitionRequestHash(
   idem: NonNullable<Caller["idempotency"]>,
   input: TransitionInput,
 ): Promise<string> {
-  const { extraStatements: _extra, hashInput, meta: _meta, ...hashed } = input;
+  const { extraStatements: _extra, hashInput, meta: _meta, draftTerms: _shown, ...hashed } = input;
   return hashJson({ op: "transition", scope: idem.scope, input: hashInput ?? hashed });
 }
 
@@ -451,7 +456,9 @@ async function attempt_(
   // A stay's own guards and effects (ADR-037): judged here, before anything is written, and written in
   // this transition's batch.
   const stay: StayPlan | undefined =
-    item.type === "stay" ? await planStay({ db, caller, item, t, payload, data, settings, now, audience }) : undefined;
+    item.type === "stay"
+      ? await planStay({ db, caller, item, t, payload, data, settings, now, audience, draftTerms: input.draftTerms })
+      : undefined;
   // What automation offers, as it would go to the customer, against the owner's limits (ADR-018 §4):
   // its catalogue lines at this customer's price on the way. Outside them it is a draft for a person,
   // written once the checks every offer passes have passed.
