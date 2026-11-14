@@ -2,7 +2,7 @@
 title: Hosted inbox privacy notice
 description: What we keep about you, the business owner, when you set up a hosted inbox, and why.
 eyebrow: Privacy · hosted inbox
-updated: 14 November 2026
+updated: 1 November 2026
 order: 3
 ---
 
@@ -15,7 +15,6 @@ This notice is about you, the person who sets up a hosted inbox, and about your 
 - **What we read from your public website** to fill in your inbox's starting details: your kind of business, hours, services and other facts your site publishes, each with where and when we read it. They are your inbox's starting details, and yours to change in Settings. Basis: our contract with you, and our legitimate interest in saving you the typing.
 - **The steps you took and when**: that a card was shown, a code sent, a record seen, the inbox gone live. Counts and times, nothing more, kept by us, with no analytics company involved. Basis: our legitimate interest in knowing where setup gets stuck.
 - **Usage counts**: confirmed items, items, emails sent and the size of your inbox, per month. Basis: our contract with you.
-- **How fast your inbox answers**: per day, how many requests came, how many were answered and by whom (you, a rule, or something else), and of those that came while you were open, how many were answered within 5, 15 and 60 minutes, with the middle time. Numbers and dates, never a word, a name or an address. Basis: our legitimate interest in knowing whether the service helps you answer your customers.
 - **If you choose Pro**: your inbox's customer and subscription at Stripe, whether Pro runs and until when, and who in your account chose it and when. Stripe holds your card and payment details; we never see them. If we give your inbox Pro for free: until when, when we told you, and whether and when you turned its AI check on or off. Basis: our contract with you.
 - **Security signals**: the bot check on the sign-up form, your address's network for rate limits, and failed code attempts. Kept briefly, and used to stop abuse and for nothing else. Basis: our legitimate interest in keeping the service safe.
 - **Google Calendar, if you connect it**: what your inbox reads from Google (which account it is, when you are busy, the events it adds for the bookings you confirm) is kept in your inbox with the rest of its data, which we process for you under the [processing agreement](/hosted/processing/). Google's access is kept encrypted; a disconnect asks Google to take it back and deletes it. What the inbox asks Google for, and why, is on our [privacy page](/privacy/#google-h). Basis: our contract with you; you ask for it by connecting.
@@ -27,7 +26,7 @@ This notice is about you, the person who sets up a hosted inbox, and about your 
 
 - A sign-up you never confirm: deleted after 24 hours. A code: 10 minutes.
 - Your account: while your inbox exists, and for the 30 days of read-only after you close it; then deleted, with backup copies gone within 30 more days.
-- The step, usage and answer counts: kept without your address once your inbox is closed.
+- The step and usage counts: kept without your address once your inbox is closed.
 - Fingerprints of spam: 30 days from the mark.
 - Reports and decisions: as long as the law asks us to keep them.
 

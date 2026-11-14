@@ -679,11 +679,8 @@ describe("the price: Free, and Pro at $10", () => {
     // The AI check runs for Pro: nothing says it is still to come.
     expect(terms).not.toMatch(/Until that AI check is switched on/);
     expect(terms).toContain(SUPPORT);
-    expect(front(`${HOSTED_DIR}/terms.md`).updated).toBe("1 November 2026");
-    // The privacy notice says the answer counts are kept (14 November 2026).
-    expect(front(`${HOSTED_DIR}/privacy.md`).updated).toBe("14 November 2026");
-    expect(privacy).toContain("**How fast your inbox answers**");
-    expect(privacy).toContain("Numbers and dates, never a word, a name or an address.");
+    for (const page of ["terms.md", "privacy.md"])
+      expect(front(`${HOSTED_DIR}/${page}`).updated, page).toBe("1 November 2026");
     expect(front(`${HOSTED_DIR}/processing.md`).updated).toBe("28 October 2026");
     expect(front(`${HOSTED_DIR}/terms.md`).description).not.toMatch(/pilot/i);
   });
