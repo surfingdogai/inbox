@@ -1,5 +1,16 @@
 import { existsSync, statSync } from "node:fs";
-import { type Db, PROMISE_STATES, type SpamUsage, spamUsage } from "@surfingdog/core";
+import {
+  AGENT_CHANNELS,
+  type AnswerDay,
+  answerDays,
+  type Db,
+  PROMISE_STATES,
+  REQUEST_CHANNELS,
+  type SpamUsage,
+  spamUsage,
+} from "@surfingdog/core";
+
+export { AGENT_CHANNELS, REQUEST_CHANNELS };
 
 /**
  * What an inbox did in a month, as counts: what it is counted by and what the control plane
@@ -18,7 +29,11 @@ import { type Db, PROMISE_STATES, type SpamUsage, spamUsage } from "@surfingdog/
  * - `spam`: the spam filter's month (ADR-041 §15.3): each filter's days on, its AI checks and their
  *   tokens (what Pro costs to run; nothing is charged by them, Pro includes the filters), and what it
  *   put aside, held, labelled, let in and brought back. A request held or put aside is not in `items`
- *   until a person or its sender lets it in.
+ *   until a person or its sender lets it in;
+ * - `answers`: how fast the inbox answered (ADR-028 Amendment 5): per day of the month, in the
+ *   business's own zone, the requests that came and how soon each was first answered, counts only
+ *   (`answerDays`). Only requests made since the door opened (`since`, the control plane's), never one
+ *   from before it.
  */
 export interface Usage {
   readonly confirmed_items: number;
@@ -27,12 +42,8 @@ export interface Usage {
   readonly mail_sent: number;
   readonly db_bytes: number;
   readonly spam: SpamUsage;
+  readonly answers: readonly AnswerDay[];
 }
-
-export const AGENT_CHANNELS = ["rest", "mcp_public", "a2a", "ucp", "acp", "arp"] as const;
-
-/** The doors a request comes through from outside: the agents' doors and the people's. */
-export const REQUEST_CHANNELS = [...AGENT_CHANNELS, "email", "form", "action_link"] as const;
 
 /** A request as `items` counts it: real, sent through a customer's door, and not spam, held or being screened. */
 const REQUEST = `COALESCE(sandbox, 0) = 0 AND state <> 'spam' AND COALESCE(screen, '') NOT IN ('pending', 'held', 'aside')
@@ -77,7 +88,7 @@ export async function usageOf(
   db: Db,
   range: { from: number; to: number },
   now: number = Date.now(),
-): Promise<Omit<Usage, "mail_sent" | "db_bytes">> {
+): Promise<Omit<Usage, "mail_sent" | "db_bytes" | "answers">> {
   const one = async (sql: string, params: unknown[]): Promise<number> => {
     const { rows } = await db.client.query({ sql, params: params as never, method: "all" });
     return Number(rows[0]?.[0] ?? 0);
@@ -101,6 +112,15 @@ export async function usageOf(
     [...PROMISED_PARAMS, range.from, range.to],
   );
   return { confirmed_items: confirmed, items, agent_items: agentItems, spam: await spamUsage(db, range, now) };
+}
+
+/**
+ * A month's answer times (`answerDays`), counting only what came since the door opened: `since`, when
+ * the control plane gives it. An inbox whose door has not opened is given the moment it asks, and so
+ * counts nothing.
+ */
+export async function answersOf(db: Db, month: string, since: number | undefined): Promise<readonly AnswerDay[]> {
+  return (await answerDays(db, { month, since })) ?? [];
 }
 
 /** Whether the inbox holds any real item that reached a promise, or any real item an agent made. */

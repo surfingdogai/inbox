@@ -124,6 +124,7 @@ export {
   workProfileSchema,
 } from "@surfingdog/spec";
 export * from "./access/index";
+export * from "./answers/index";
 export * from "./area/index";
 export * from "./attachments/index";
 export * from "./capabilities/index";

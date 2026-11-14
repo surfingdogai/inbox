@@ -416,6 +416,46 @@ describe("the admin API (C8.1)", () => {
     expect(rt.cp.events.filter((e) => e.tenant_id === t.tenantId && e.type === "first_agent_item")).toHaveLength(1);
   });
 
+  it("counts how fast requests were answered, only since the door opened, and no word of them", async () => {
+    const t = await rt.createTenant();
+    // Our own test of the doors, as an agent, before the inbox goes live: its requests are tests.
+    const probed = await rt.admin("POST", `/admin/v1/tenants/${t.tenantId}/probe`, {
+      doors: ["message", "quote_request"],
+    });
+    expect(probed.status).toBe(200);
+    await rt.setState(t, "live", { ownResolves: true });
+    const host = t.ownHost ?? "";
+    const send = async (body: string): Promise<string> => {
+      const sent = await rt.http(host, "POST", "/v1/messages", {
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ body, contact: { name: "Rita" } }),
+      });
+      expect(sent.status).toBe(201);
+      return (sent.json as { view: { item: { id: string } } }).view.item.id;
+    };
+    const asked = await send("Do you cut curly hair?");
+    const cookie = await rt.signIn(t, host);
+    const replied = await rt.http(host, "POST", `/v1/owner/items/${asked}/replies`, {
+      headers: { cookie, origin: `https://${host}`, "content-type": "application/json" },
+      body: JSON.stringify({ body: "Yes, every Saturday.", internal: false }),
+    });
+    expect(replied.status).toBe(200);
+    await send("And colour?");
+    const month = new Date().toISOString().slice(0, 7);
+    const usage = await rt.admin("GET", `/admin/v1/tenants/${t.tenantId}/usage?month=${month}`);
+    expect(usage.status).toBe(200);
+    const answers = (usage.body as { answers: { requests: number; answered: number; by_person: number }[] }).answers;
+    expect(answers.reduce((n, d) => n + d.requests, 0)).toBe(2);
+    expect(answers.reduce((n, d) => n + d.answered, 0)).toBe(1);
+    expect(answers.reduce((n, d) => n + d.by_person, 0)).toBe(1);
+    expect(JSON.stringify(usage.body)).not.toMatch(/curly|colour|Rita|Saturday/);
+    // The door opened after both came: nothing to count.
+    const opened = encodeURIComponent(new Date(Date.now() + 60_000).toISOString());
+    const since = await rt.admin("GET", `/admin/v1/tenants/${t.tenantId}/usage?month=${month}&since=${opened}`);
+    expect((since.body as { answers: unknown[] }).answers).toEqual([]);
+    expect((await rt.admin("GET", `/admin/v1/tenants/${t.tenantId}/usage?month=${month}&since=soon`)).status).toBe(422);
+  });
+
   it("deletes only a closed inbox, its file gone, its public keys handed back", async () => {
     const t = await rt.createTenant();
     const early = await rt.admin("DELETE", `/admin/v1/tenants/${t.tenantId}`);

@@ -199,3 +199,43 @@ with no computer and no QR code. A code someone was tricked into reading out ope
 - **Kept.** Migration 0037 adds `via`, `confirm_by`, `wait_until` and `stop_hash` to `phone_devices`. The
   owner's email for a phone connected says how: the computer, a link, a code, the other phone, or the
   day's wait. What a phone may do once in is unchanged (`PHONE_OPERATIONS`).
+
+## Amendment 5 (14 Nov 2026): answering fast
+
+Proposed. Most requests are answered with a price, a yes or a short sentence. The phone gives each of
+them in one or two taps, from facts and from the owner's own words, with no AI, and what a phone may do
+stays as it was (`PHONE_OPERATIONS`, unchanged; a test holds it).
+
+- **Price chips.** On a request for a price, chips with the matching prices from the inbox's public list
+  of services (`GET /v1/services`), which the app reads with no token, as any assistant does: the service
+  the request names, when it names one, else one of the same name, else one whose whole name is within
+  the request's or the other way round ("€35 · Lunch for one", "From €12 a person · Tasting menu"). A
+  service priced on request has none. `apps/mobile/src/lib/chips.ts`.
+- **The price sheet.** A chip opens it with the amount filled in (times the people, for a price per
+  person); "Send a price" opens it empty. Its Send makes the offer the item's state takes, as the inbox
+  builds it with every check it makes (`POST /v1/owner/items/{id}/offers`): for a request for a price, a
+  quote the customer, or their assistant, can accept.
+- **Drafted offers.** A draft the owner's AI, a rule or another system made outside the owner's limits
+  shows on the item with Send, which sends it as it is (`…/offers/draft/send`), and Drop it.
+- **Quick replies.** On a message, the owner's saved replies, in their own words: after a reply typed on
+  a message, the app asks "Save as a quick reply?", and Settings → Answers lists and removes them. They
+  are kept on the phone only, sealed in the offline box per inbox (`apps/mobile/src/lib/replies.ts`), and
+  go with the inbox when it is removed from the phone; they move into the inbox later, to follow the
+  owner from phone to phone. Two default chips, "Yes, we can." and "Sorry, not that day.", appear only
+  in a language we write for customers (English or Portuguese), and only when the business's own
+  languages (`GET /v1/business`) include it. The public prices and languages are kept on the phone too,
+  so the chips are there offline.
+- **Undo.** A chip, the price sheet's Send and a draft's Send wait the six seconds the spam presses wait
+  (`src/lib/undo.ts`) before anything leaves the phone; Undo drops them. Then they go through the outbox
+  with the idempotency key they were given, so an answer pressed offline goes once, when the inbox
+  answers.
+- **Answer times** (`packages/core/src/answers`). For each day, on the business's own date: the requests
+  customers and their assistants sent through the inbox's own doors, how many were answered and who
+  answered first (a person, a rule, anything else), and of those that came in opening hours and not
+  while every phone that would have told the owner was in its quiet hours, how many were first answered
+  within 5, 15 and 60 minutes, with the median. The first answer is a reply or a transition that answers
+  (a price, Accept, Propose, Decline, a question back); a note, Spam or closing without a word is none.
+  Test items (the host's own probes among them), what the spam filter held, put aside or is screening,
+  Spam, notices, account mail and the business's own entries are never counted. Counts only: a day and
+  numbers, never a word, a name or an address. A hosted inbox reports them with its monthly usage
+  (`answers` on the admin `GET …/usage`), counting only what came since its door opened (`since`).

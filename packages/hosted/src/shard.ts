@@ -34,7 +34,7 @@ import { validatePlan } from "./plan";
 import { archiveSandbox, probeDoors } from "./probe";
 import type { HostedModel } from "./spam";
 import { normalizePolicy, type PolicyPayload, policyPayloadSchema } from "./types";
-import { fileBytes, hasFirst, liveBytes, monthRange, usageOf } from "./usage";
+import { answersOf, fileBytes, hasFirst, liveBytes, monthRange, usageOf } from "./usage";
 import type { Watchdog } from "./watchdog";
 
 /**
@@ -670,7 +670,8 @@ export class Shard {
     if (action === "sandbox/archive" && method === "POST") return await this.archive(id, body);
     if (action === "handoff" && method === "POST") return await this.handoff(id, body);
     if (action === "phone-link" && method === "POST") return await this.phoneLink(id, body);
-    if (action === "usage" && method === "GET") return await this.usage(id, url.searchParams.get("month"));
+    if (action === "usage" && method === "GET")
+      return await this.usage(id, url.searchParams.get("month"), url.searchParams.get("since"));
     if (action === "networks/join" && method === "POST") return await this.joinNetworks(id);
     if (action === "jwks" && method === "GET")
       return await this.withEntry(id, async (e) => ({ status: 200, body: await e.inbox.caps.receipts.jwks() }));
@@ -945,16 +946,24 @@ export class Shard {
     });
   }
 
-  private async usage(id: string, month: string | null): Promise<AdminAnswer> {
+  /**
+   * A month's counts. `since`, an ISO 8601 time, is when the door opened: answer times count only the
+   * requests made after it (`answersOf`).
+   */
+  private async usage(id: string, month: string | null, since: string | null): Promise<AdminAnswer> {
     const m = month ?? monthOf(this.now());
     const range = monthRange(m);
     if (!range) return problem(422, "invalid_input", "month is YYYY-MM.");
+    const opened = since === null ? undefined : Date.parse(since);
+    if (opened !== undefined && !Number.isFinite(opened))
+      return problem(422, "invalid_input", "since is an ISO 8601 time.");
     return await this.withEntry(id, async (entry) => ({
       status: 200,
       body: {
         ...(await usageOf(entry.db, range, this.now())),
         mail_sent: this.o.ledger.mailSent(id, m),
         db_bytes: fileBytes(this.dbPath(id)),
+        answers: await answersOf(entry.db, m, opened),
       },
     }));
   }
