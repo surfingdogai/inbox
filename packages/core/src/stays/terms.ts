@@ -47,6 +47,26 @@ export function stayTermsSha(stay: StayTermsSubject, quote: StayQuote): Promise<
   });
 }
 
+/**
+ * A stay's quote as a draft keeps it for a person (ADR-037 §4.1, ADR-028 Amendment 5): every part the
+ * guest is sent with it — its lines, total and schedule, its rate plan, cancellation policy, guarantee
+ * and what it includes, until when it holds, and its own words to them — so the card the owner sends it
+ * from says all of it. Built from the very quote the draft holds; only its `source` stays out.
+ */
+export function quoteDraftTerms(quote: StayQuote): Record<string, unknown> {
+  return {
+    totalPrice: quote.total,
+    lines: quote.lines,
+    schedule: quote.schedule,
+    validThrough: quote.validThrough,
+    ratePlan: quote.ratePlan,
+    policy: quote.policy,
+    guarantee: quote.guarantee,
+    includes: quote.includes,
+    ...(quote.notes ? { notes: quote.notes } : {}),
+  };
+}
+
 /** What cancelling a confirmed stay costs now, and what is owed back of what was paid. */
 export function cancellationTerms(
   quote: StayQuote,

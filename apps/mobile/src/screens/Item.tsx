@@ -839,7 +839,7 @@ function Confirm(p: { title: string; text: string; yes: string; busy: boolean; o
  * then every other term (`draftDetails`). "Send as it is" sends it with the six seconds' Undo; a draft
  * with its own words to the customer opens them in full first (`DraftReview`). Drop it drops it, unsent.
  */
-function DraftCard(p: {
+export function DraftCard(p: {
   draft: DraftView;
   tz: string | undefined;
   busy: boolean;

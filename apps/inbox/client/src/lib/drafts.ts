@@ -56,6 +56,61 @@ interface ScheduleEntry {
   readonly dueAt?: string;
 }
 
+type Amount = { readonly value: number; readonly currency: string };
+
+/** A stay's cancellation policy, dated for its nights (spec `datedPolicySchema`): each step, then after, and no-show. */
+interface DatedPolicy {
+  readonly steps: readonly { readonly until: string; readonly fee: Amount }[];
+  readonly after: Amount;
+  readonly noShow: Amount;
+  readonly zone?: string;
+}
+
+const isAmount = (m: unknown): m is Amount =>
+  typeof m === "object" &&
+  m !== null &&
+  typeof (m as Amount).value === "number" &&
+  typeof (m as Amount).currency === "string";
+
+/** A stay's rate plan, as its quote holds it: its name, and whether it is refundable. */
+function ratePlanOf(t: DraftView["terms"]): { name: string; refundable: boolean } | null {
+  const p = (t as { ratePlan?: unknown }).ratePlan as { name?: unknown; refundable?: unknown } | undefined;
+  return p && typeof p.name === "string" && p.name.trim() && typeof p.refundable === "boolean"
+    ? { name: p.name.trim(), refundable: p.refundable }
+    : null;
+}
+
+function policyOf(t: DraftView["terms"]): DatedPolicy | null {
+  const p = (t as { policy?: unknown }).policy as Partial<DatedPolicy> | undefined;
+  if (!p || !Array.isArray(p.steps) || !isAmount(p.after) || !isAmount(p.noShow)) return null;
+  if (!p.steps.every((s) => typeof s?.until === "string" && isAmount(s.fee))) return null;
+  return p as DatedPolicy;
+}
+
+/**
+ * A stay's cancellation, as its guest is sent it (`policySentence`, in the owner's words and clock):
+ * "Free cancellation until Thu, Dec 10, 23:59; after that KES 6,500.00; no-show KES 6,500.00". A fee of
+ * the whole total is "the full stay", none is "nothing".
+ */
+function policyWords(p: DatedPolicy, total: Amount | undefined, tz: string | undefined): string {
+  const zone = p.zone || tz;
+  const fee = (m: Amount) =>
+    m.value === 0
+      ? "nothing"
+      : total && m.value === total.value && m.currency === total.currency
+        ? "the full stay"
+        : formatMoney(m);
+  const parts = p.steps.map((s) =>
+    s.fee.value === 0
+      ? `free cancellation until ${formatDateTime(s.until, zone)}`
+      : `until ${formatDateTime(s.until, zone)}, cancelling costs ${fee(s.fee)}`,
+  );
+  parts.push(p.steps.length ? `after that ${fee(p.after)}` : `cancelling costs ${fee(p.after)}`);
+  parts.push(`no-show ${fee(p.noShow)}`);
+  const words = parts.join("; ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 const isStayLine = (l: unknown): l is StayLine =>
   typeof l === "object" &&
   l !== null &&
@@ -112,7 +167,8 @@ export function termsLine(t: DraftView["terms"], tz: string | undefined): string
 
 /**
  * Everything else the customer would read in a draft, beyond its one line (`termsLine`), each in the
- * owner's words: the people, delivery, fees, stages, tax, the tip and deposit, and until when it holds.
+ * owner's words: the people, delivery, fees, stages, tax, the tip and deposit; a stay's rate plan, what
+ * it includes, what is paid when, its cancellation and whether a card holds it; and until when it holds.
  * The note is apart (`DraftView["terms"]["notes"]`): it is the draft's own words to the customer.
  */
 export function draftDetails(t: DraftView["terms"], tz: string | undefined): string[] {
@@ -159,6 +215,12 @@ export function draftDetails(t: DraftView["terms"], tz: string | undefined): str
     out.push(`Before tax, plus ${t.tax.lines.map((l) => `${l.name} ${formatMoney(l.amount)}`).join(" + ")}`);
   if (t.tip) out.push(`Tip ${formatMoney(t.tip)}`);
   if (t.deposit) out.push(`Deposit ${formatMoney(t.deposit)}`);
+  // A stay's rate plan and what it includes, as its quote is sent.
+  const plan = ratePlanOf(t);
+  if (plan) out.push(`${plan.name}, ${plan.refundable ? "refundable" : "not refundable"}`);
+  const raw = (t as { includes?: unknown }).includes;
+  const included = Array.isArray(raw) ? raw.filter((x): x is string => typeof x === "string" && x.trim() !== "") : [];
+  if (included.length) out.push(`Includes: ${included.map((x) => x.trim()).join(", ")}`);
   // A stay's schedule: what is paid when, as the guest's page and email say it.
   const schedule = scheduleOf(t);
   if (schedule.length)
@@ -177,6 +239,12 @@ export function draftDetails(t: DraftView["terms"], tz: string | undefined): str
         })
         .join(", ")}`,
     );
+  // A stay's cancellation, and whether a card holds it, as the guest is sent them.
+  const policy = policyOf(t);
+  if (policy) out.push(policyWords(policy, t.totalPrice, tz));
+  const guarantee = (t as { guarantee?: unknown }).guarantee;
+  if (guarantee === "card") out.push("A card holds the booking; nothing is charged now");
+  else if (guarantee === "none") out.push("No card needed to hold it");
   if (t.validThrough) out.push(`They can accept it until ${formatDateTime(t.validThrough, tz)}`);
   return out;
 }

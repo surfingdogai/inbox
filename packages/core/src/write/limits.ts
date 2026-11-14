@@ -469,12 +469,15 @@ export async function draftStatements(o: {
   return { statements, view, drafted };
 }
 
-/** The terms a business offer made by `t` leaves on the item, as the customer would be offered them. */
+/**
+ * The terms a business offer made by `t` leaves on the item, as the customer would be offered them: a
+ * draft's (its card says them), with each menu choice by the name the customer reads.
+ */
 export function offeredTerms(item: Item, t: Transition, payload: Record<string, unknown>): OfferTerms {
-  if (t.change) return changeTerms({ ...item, payload } as Item) ?? {};
+  if (t.change) return changeTerms({ ...item, payload } as Item, true) ?? {};
   if (item.type === "booking") return businessTimeTerms(payload as PayloadOf<"booking">);
   if (item.type === "order" && payload.proposed) {
-    return orderOfferTerms(payload.proposed as NonNullable<PayloadOf<"order">["proposed"]>);
+    return orderOfferTerms(payload.proposed as NonNullable<PayloadOf<"order">["proposed"]>, true);
   }
   if (item.type === "quote_request" && payload.quote) {
     return quoteOfferTerms(payload.quote as NonNullable<PayloadOf<"quote_request">["quote"]>);

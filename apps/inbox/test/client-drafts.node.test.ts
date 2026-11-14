@@ -11,7 +11,10 @@ import { type DraftView, draftDetails, notSentWords, termsLine } from "../client
  */
 const TZ = "Europe/Lisbon";
 
-/** As stays/rules.ts draftTerms and stays/transition.ts draftForPerson keep it: the quote's own lines. */
+/**
+ * A stay's draft as one kept before it carried its rate plan, policy, guarantee and inclusions: the
+ * quote's own lines and schedule (what a draft made now holds: client-drafts-real.node.test.ts).
+ */
 const stay = {
   totalPrice: { value: 40000, currency: "EUR" },
   lines: [

@@ -12,6 +12,7 @@ import { guestLang } from "./lang";
 import { nightsOf } from "./nights";
 import { quoteFromRates } from "./price";
 import { type PropertySetup, readSetup } from "./store";
+import { quoteDraftTerms } from "./terms";
 import { wantOf } from "./transition";
 
 /**
@@ -120,12 +121,12 @@ export async function stayFacts(db: Db, item: Item, now: number): Promise<StayFa
   return { ratesCover, nightsFree: nightsFreeAtOnce, nightsClosed, icalHint, freeCancellation, changeNightsFree };
 }
 
-/** The terms a drafted quote shows the owner: its total and lines, as the draft's view carries them. */
+/** The terms a drafted quote shows the owner: all the guest is sent with it (`quoteDraftTerms`). */
 export async function draftTerms(db: Db, item: Item, now: number): Promise<Record<string, unknown> | null> {
   if (item.type !== "stay") return null;
   const p = item.payload as StayPayload;
   const setup = await readSetup(db, p.propertyId);
   if (!setup) return null;
   const q = await ratesQuote(db, setup, p, now, item.partyId);
-  return q ? { totalPrice: q.total, lines: q.lines, schedule: q.schedule, validThrough: q.validThrough } : null;
+  return q ? quoteDraftTerms(q) : null;
 }

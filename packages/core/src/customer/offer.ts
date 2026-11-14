@@ -43,6 +43,12 @@ export interface OfferLine {
     readonly groupId: string;
     readonly choiceId: string;
     readonly portion?: string | undefined;
+    /**
+     * The choice's name, as the order line holds it and the customer reads it (`orderLinesText`): only
+     * in a draft's terms (`named`), for the card the owner sends it from; never in what a yes is bound
+     * to, so no fingerprint a customer or a link holds changes.
+     */
+    readonly name?: string | undefined;
   }[];
 }
 
@@ -240,9 +246,10 @@ function businessChange(item: Item): boolean {
 
 /**
  * The terms of the change the item holds (`payload.change`), whoever asked for it: the booking or the
- * order as it would be, in the same shape as what was agreed. Null when none is open.
+ * order as it would be, in the same shape as what was agreed. Null when none is open. `named`: with
+ * each choice's name, for a draft's card (`offerLine`).
  */
-export function changeTerms(item: Item): OfferTerms | null {
+export function changeTerms(item: Item, named = false): OfferTerms | null {
   if (item.type === "booking") {
     const c = item.payload.change;
     if (!c) return null;
@@ -257,7 +264,7 @@ export function changeTerms(item: Item): OfferTerms | null {
     const c = item.payload.change;
     if (!c) return null;
     return {
-      lines: c.orderedItem.map(offerLine),
+      lines: c.orderedItem.map((l) => offerLine(l, named)),
       totalPrice: c.totalPrice,
       ...(c.delivery ? { delivery: c.delivery } : {}),
     };
@@ -325,7 +332,12 @@ export function quoteOfferTerms(q: Quote): OfferTerms {
 
 type OrderLine = PayloadOf<"order">["orderedItem"][number];
 
-function offerLine(l: OrderLine): OfferLine {
+/**
+ * An order line as an offer holds it. `named`: each choice with its name too, as the line holds it, so
+ * a draft's card says the very words the customer reads when it is sent; never in a fingerprinted
+ * offer, whose terms stay as they were.
+ */
+function offerLine(l: OrderLine, named = false): OfferLine {
   return {
     ...(l.productId !== undefined ? { productId: l.productId } : {}),
     ...(l.sku !== undefined ? { sku: l.sku } : {}),
@@ -338,16 +350,20 @@ function offerLine(l: OrderLine): OfferLine {
             groupId: o.groupId,
             choiceId: o.choiceId,
             ...(o.portion ? { portion: o.portion } : {}),
+            ...(named && o.name ? { name: o.name } : {}),
           })),
         }
       : {}),
   };
 }
 
-/** The changes we suggested to an order: its lines, their total and when it would be delivered. */
-export function orderOfferTerms(p: NonNullable<PayloadOf<"order">["proposed"]>): OfferTerms {
+/**
+ * The changes we suggested to an order: its lines, their total and when it would be delivered.
+ * `named`: with each choice's name, for a draft's card (`offerLine`).
+ */
+export function orderOfferTerms(p: NonNullable<PayloadOf<"order">["proposed"]>, named = false): OfferTerms {
   return {
-    lines: p.orderedItem.map(offerLine),
+    lines: p.orderedItem.map((l) => offerLine(l, named)),
     totalPrice: p.totalPrice,
     ...(p.delivery ? { delivery: p.delivery } : {}),
   };
@@ -357,7 +373,7 @@ export function orderOfferTerms(p: NonNullable<PayloadOf<"order">["proposed"]>):
 export function orderRequestTerms(payload: PayloadOf<"order">): OfferTerms {
   const f = payload.fulfil;
   return {
-    lines: payload.orderedItem.map(offerLine),
+    lines: payload.orderedItem.map((l) => offerLine(l)),
     totalPrice: payload.totalPrice,
     ...(payload.delivery ? { delivery: payload.delivery } : {}),
     ...(f

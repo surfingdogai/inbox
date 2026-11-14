@@ -32,7 +32,7 @@ import { checkDates, nightsOf, stayTimes } from "./nights";
 import { collectableQuote, type PriceRequest, quoteFromPrice, quoteFromRates } from "./price";
 import { stayProblems } from "./problems";
 import { type PropertySetup, readSetup } from "./store";
-import { cancellationTerms, dueNow, feeSha, quoteProblems, stayTermsSha } from "./terms";
+import { cancellationTerms, dueNow, feeSha, quoteDraftTerms, quoteProblems, stayTermsSha } from "./terms";
 
 /**
  * The stays layer of the write algorithm (ADR-037 §3): the machine says which transition a stay may
@@ -935,9 +935,7 @@ export function checkGuestPlan(
  */
 async function draftForPerson(ctx: PlanCtx, quote: StayQuote | undefined, why: string): Promise<never> {
   const { db, caller, item, t, data, now } = ctx;
-  const terms = quote
-    ? { totalPrice: quote.total, lines: quote.lines, schedule: quote.schedule, validThrough: quote.validThrough }
-    : {};
+  const terms = quote ? quoteDraftTerms(quote) : {};
   await db.batch([
     {
       sql: `INSERT INTO offer_drafts (item_id, id, event, input, terms, breaches, item_version, actor_kind, actor_id, actor_name, created_at)
