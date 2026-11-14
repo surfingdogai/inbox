@@ -24,8 +24,10 @@ inbox or uninstalling clears it; no usage data or crash reports.
    > **Updates.** A copy from Google Play is updated by Google Play and reads nothing from us. A copy from
    > the download page reads `surfingdog.ai/phone/latest.json` at most twice a day…
 3. **The email sign-in.** Not mentioned today:
-   > **Signing in by email**, instead of scanning: the address you type goes to your inbox, which emails you
-   > a link. To find your inbox, the app first asks your email's domain for
+   > **Signing in with email**, instead of scanning: the address you type, and your phone's name, go to
+   > our sign-in for the inboxes we host, which emails you a code only when one of them is yours; the code
+   > works only on the phone that asked. For an inbox on your own server, the address goes to that inbox,
+   > which emails you a link: to find it, the app asks your email's domain for
    > `/.well-known/agent-inbox.json`, at the domain and at `inbox.` in front of it.
 4. **What you do in the app goes to your inbox**: decisions, replies, notification choices. Implied by
    "talks to the inboxes you connect it to", but the Data safety form declares it, so say it:

@@ -354,6 +354,43 @@ export async function demoDeps(q: URLSearchParams): Promise<Deps> {
         this: "d1",
       });
     if (path === "/v1/phone/notify") return json({ notify: JSON.parse(String(init?.body ?? "{}")) });
+    // A new phone asking this one for a yes (`?ask`, or `?ask=wait` for one waiting out its day).
+    if (path === "/v1/phone/pairings")
+      return json({
+        pairings: q.has("ask")
+          ? [
+              {
+                id: "d7",
+                phone: { id: "d7", name: "Galaxy A15", created_at: ago(1), last_seen_at: ago(1), push: "off" },
+                match: "47",
+                wait_until: q.get("ask") === "wait" ? at(1, "14:00") : null,
+              },
+            ]
+          : [],
+      });
+    if (/^\/v1\/phone\/pairings\/[^/]+\/(confirm|refuse)$/.test(path))
+      return json(path.endsWith("refuse") ? { removed: true } : { state: "paired" });
+    // Signing in with an email code, as Surfing Dog's own sign-in answers it.
+    if (url.host === "app.surfingdog.ai") {
+      if (path === "/v1/app/signin")
+        return json({ id: "demoSignIn0000000000aa", to: "a••••@atelierlumen.example", resend_in: 60 }, 202);
+      if (path.endsWith("/resend")) return json({ resend_in: 60 }, 202);
+      if (path.endsWith("/confirm"))
+        return json({
+          grant: "demo-grant",
+          expires_in: 600,
+          inboxes: [
+            { id: "tn_al", name: "Atelier Lumen", origin: ORIGIN, state: "live", can_connect: true },
+            {
+              id: "tn_cn",
+              name: "Café Norte",
+              origin: "https://inbox.cafenorte.example",
+              state: "suspended",
+              can_connect: false,
+            },
+          ],
+        });
+    }
     if (path === "/v1/phone/spam" || path === "/v1/phone/spam/emails")
       return json({
         filters: ["pitches", "scams"],
@@ -384,8 +421,17 @@ export async function demoDeps(q: URLSearchParams): Promise<Deps> {
       ? { name: "item", id: q.get("id") ?? "maya", action: screen === "item" ? undefined : screen }
       : screen === "today" || screen === "settings" || screen === "inboxes" || screen === "connect"
         ? { name: screen }
-        : screen === "held" || screen === "spam"
-          ? { name: "screened", which: screen }
-          : undefined;
-  return { native, fetch: fetchImpl, kv: localStorage, allowLocal: true, initial };
+        : screen === "signin"
+          ? { name: "connect" }
+          : screen === "held" || screen === "spam"
+            ? { name: "screened", which: screen }
+            : undefined;
+  return {
+    native,
+    fetch: fetchImpl,
+    kv: localStorage,
+    allowLocal: true,
+    initial,
+    ...(screen === "signin" ? { connectStart: "email" as const } : {}),
+  };
 }

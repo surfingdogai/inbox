@@ -1,5 +1,6 @@
 import { createContext, useContext } from "react";
 import type { ItemDetail, ItemView } from "../../inbox/client/src/lib/types";
+import type { Account } from "./lib/account";
 import type { InboxClient, PhoneMe, PhoneSpam } from "./lib/client";
 import type { Native } from "./lib/native";
 import type { QueuedAction } from "./lib/offline";
@@ -26,6 +27,8 @@ export type Route =
 export interface App {
   readonly native: Native;
   readonly sessions: Sessions;
+  /** Signing in with an email code from Surfing Dog, for an inbox it hosts (ADR-028 Amendment 4). */
+  readonly account: Account;
   readonly inboxes: readonly InboxEntry[];
   readonly active: InboxEntry | null;
   readonly client: InboxClient | null;

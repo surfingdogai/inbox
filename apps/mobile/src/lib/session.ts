@@ -7,6 +7,7 @@ import {
   sha256b64u,
 } from "../../../../packages/core/src/phones/crypto";
 import { inboxOrigin, type PhoneLink } from "../../../../packages/core/src/phones/links";
+import type { Account, GrantedInbox } from "./account";
 import { lockWords, type Native, NativeError } from "./native";
 
 /**
@@ -21,6 +22,10 @@ import { lockWords, type Native, NativeError } from "./native";
  * Pairing with a QR code takes two steps: the phone trades the code for tokens that open nothing yet,
  * shows the inbox's address and two digits, and waits for the owner to press Confirm on the computer,
  * where the same two digits show. Only then is the inbox kept on the phone.
+ *
+ * Signing in with an email code (Amendment 4) takes the same two steps when the owner already has a
+ * confirmed phone: this one shows two digits and waits for that phone's Confirm, or, when the owner
+ * doesn't have it, waits a day, kept on the phone meanwhile (`waitingUntil`) and opening nothing.
  */
 export interface InboxEntry {
   /** Where this inbox's keys are kept on the phone: one alias per inbox, never reused. */
@@ -31,17 +36,27 @@ export interface InboxEntry {
   readonly addedAt: number;
   /** The relay's id for this phone at this inbox: which inbox's key opens a notification naming it. */
   readonly relayDevice?: string | undefined;
+  /**
+   * "I don't have my other phone": when this phone is let in, unless the owner stops it from another
+   * phone or from the email. Until then the inbox opens nothing here but whether it came.
+   */
+  readonly waitingUntil?: number | undefined;
 }
 
-/** A phone that used a code and waits for the owner's Confirm on the computer. Kept in memory only. */
+/**
+ * A phone that waits for a yes: the owner's Confirm on the computer (a QR code), or on the owner's
+ * other phone (an email code, when the owner has a confirmed phone already). Kept in memory only.
+ */
 export interface PendingPhone {
   readonly alias: string;
   readonly origin: string;
   readonly name: string;
   readonly deviceId: string;
-  /** The two digits this phone worked out, which the computer must show too. */
+  /** The two digits this phone worked out, which the computer or the other phone must show too. */
   readonly match: string;
   readonly answer: TokenAnswer;
+  /** Where the yes comes from. */
+  readonly waitsOn: "computer" | "phone";
 }
 
 interface Tokens {
@@ -169,7 +184,7 @@ export class Sessions {
    * A signed statement, as the inbox checks it: what for, which inbox, a hash of the secret, when. The
    * device key signs only shortly after an unlock: past that, the owner is asked once, and it signs.
    */
-  private async proof(alias: string, purpose: "pair" | "link" | "refresh", origin: string, secret: string) {
+  private async proof(alias: string, purpose: "pair" | "link" | "refresh" | "confirm", origin: string, secret: string) {
     const statement = async () => {
       const at = this.clock();
       return { at, text: proofStatement(purpose, origin, await sha256b64u(secret), at) };
@@ -211,21 +226,42 @@ export class Sessions {
     return `ib_${b64uEncode(crypto.getRandomValues(new Uint8Array(12)))}`;
   }
 
-  /** Keeps a new inbox and its first tokens. One inbox is connected once: again replaces it. */
-  private async keep(alias: string, origin: string, answer: TokenAnswer): Promise<InboxEntry> {
+  /** The tokens a pending phone was given, in memory, so it can ask whether it came for as long as it waits. */
+  private hold(alias: string, answer: TokenAnswer): void {
+    this.access.set(alias, {
+      access: answer.access_token,
+      accessUntil: this.clock() + answer.expires_in * 1000 - 30_000,
+      refresh: answer.refresh_token,
+    });
+  }
+
+  /**
+   * Keeps a new inbox and its tokens: the ones held in memory when a pending phone refreshed them
+   * while it waited (the first refresh token is spent by then). One inbox is connected once: again
+   * replaces it.
+   */
+  private async keep(
+    alias: string,
+    origin: string,
+    answer: TokenAnswer,
+    extra: { waitingUntil?: number } = {},
+  ): Promise<InboxEntry> {
     const entry: InboxEntry = {
       alias,
       origin,
       name: answer.inbox?.name || new URL(origin).host,
       deviceId: answer.device_id,
       addedAt: this.clock(),
+      ...(extra.waitingUntil ? { waitingUntil: extra.waitingUntil } : {}),
     };
-    await this.native.secureSet(tokenKey(alias), answer.refresh_token);
-    this.access.set(alias, {
+    const held = this.access.get(alias);
+    const tokens = held ?? {
       access: answer.access_token,
       accessUntil: this.clock() + answer.expires_in * 1000 - 30_000,
       refresh: answer.refresh_token,
-    });
+    };
+    await this.native.secureSet(tokenKey(alias), tokens.refresh);
+    this.access.set(alias, tokens);
     const before = await this.list();
     // Connected again to an inbox it was connected to: the old keys and token go.
     for (const old of before.filter((e) => e.origin === origin && e.alias !== alias)) {
@@ -268,6 +304,7 @@ export class Sessions {
       // The inbox must have seen this phone's key: the digits it shows the owner are worked out from it.
       if (answer.match !== undefined && answer.match !== match)
         throw new InboxError("That inbox answered for another phone. Show a new code.", 409, "mismatch");
+      this.hold(alias, answer);
       return {
         alias,
         origin: link.origin,
@@ -275,6 +312,7 @@ export class Sessions {
         deviceId: answer.device_id,
         match,
         answer,
+        waitsOn: "computer",
       };
     } catch (error) {
       await this.native.deleteKeys(alias);
@@ -288,14 +326,24 @@ export class Sessions {
     }
   }
 
-  /** Whether the owner has confirmed this phone on the computer yet, or refused it (or let it run out). */
-  async confirmed(pending: PendingPhone): Promise<"waiting" | "confirmed" | "refused"> {
+  /** An inbox as a pending phone knows it, to ask whether it came. */
+  private static entryOf(p: { alias: string; origin: string; name: string; deviceId: string }): InboxEntry {
+    return { alias: p.alias, origin: p.origin, name: p.name, deviceId: p.deviceId, addedAt: 0 };
+  }
+
+  /**
+   * Whether this phone was let in yet: confirmed on the computer or on the owner's other phone, or at
+   * the end of its day's wait; refused (Not mine, stopped, or out of time); or still waiting.
+   */
+  async confirmed(pending: PendingPhone | InboxEntry): Promise<"waiting" | "confirmed" | "refused"> {
     let res: Response;
     try {
+      const token = await this.token(Sessions.entryOf(pending));
       res = await this.fetchImpl(`${pending.origin}/v1/phone/me`, {
-        headers: { accept: "application/json", authorization: `Bearer ${pending.answer.access_token}` },
+        headers: { accept: "application/json", authorization: `Bearer ${token}` },
       });
-    } catch {
+    } catch (error) {
+      if (error instanceof InboxError && error.code === "signed_out") return "refused";
       return "waiting";
     }
     if (res.status === 401 || res.status === 403 || res.status === 404) return "refused";
@@ -309,9 +357,120 @@ export class Sessions {
     return this.keep(pending.alias, pending.origin, pending.answer);
   }
 
-  /** Given up on, or refused: the key made for it goes. */
+  /** Given up on, or refused: the inbox forgets this phone when it can, and the key made for it goes. */
   async abandon(pending: PendingPhone): Promise<void> {
+    try {
+      if (this.access.has(pending.alias)) {
+        await this.fetchImpl(`${pending.origin}/v1/phone`, {
+          method: "DELETE",
+          headers: { authorization: `Bearer ${await this.token(Sessions.entryOf(pending))}` },
+        });
+      }
+    } catch {
+      // Offline, or gone already: it runs out of time on its own.
+    }
+    this.access.delete(pending.alias);
     await this.native.deleteKeys(pending.alias);
+  }
+
+  /**
+   * An inbox Surfing Dog hosts, for an owner who confirmed an email code on this phone (`Account`): a
+   * device key for it, a one-time link from the service for that key and a fresh verifier, redeemed at
+   * the inbox itself. Connected at once, or, when the owner has a confirmed phone already, waiting for
+   * that phone's yes with two digits on both.
+   */
+  async connectHosted(
+    account: Account,
+    grant: string,
+    inbox: GrantedInbox,
+  ): Promise<{ entry: InboxEntry } | { pending: PendingPhone }> {
+    if (!(await this.native.deviceSecure()))
+      throw new InboxError(`Set a ${lockWords(this.native.platform).noun} on this phone first.`, 400, "no_screen_lock");
+    const alias = Sessions.newAlias();
+    try {
+      const key = await this.native.deviceKey(alias);
+      const verifier = b64uEncode(crypto.getRandomValues(new Uint8Array(32)));
+      const link = await account.link(grant, inbox, await pkceS256(verifier), key);
+      const { at, proof } = await this.proof(alias, "link", link.origin, link.secret);
+      const res = await this.post(`${link.origin}/v1/phone/link/redeem`, {
+        secret: link.secret,
+        verifier,
+        device_key: key,
+        at,
+        proof,
+        name: await this.native.deviceName(),
+        platform: this.native.platform === "ios" ? "ios" : "android",
+      });
+      if (!res.ok) throw await problem(res);
+      const answer = (await res.json()) as TokenAnswer;
+      const named = { ...answer, inbox: { origin: link.origin, name: answer.inbox?.name || link.name } };
+      if (answer.state !== "pending") return { entry: await this.keep(alias, link.origin, named) };
+      const match = await pairingMatch(link.secret, await jwkThumbprint(key));
+      if (answer.match !== match)
+        throw new InboxError("That inbox answered for another phone. Sign in again.", 409, "mismatch");
+      this.hold(alias, named);
+      return {
+        pending: {
+          alias,
+          origin: link.origin,
+          name: named.inbox.name,
+          deviceId: answer.device_id,
+          match,
+          answer: named,
+          waitsOn: "phone",
+        },
+      };
+    } catch (error) {
+      this.access.delete(alias);
+      await this.native.deleteKeys(alias);
+      if (error instanceof NativeError && error.code === "no_screen_lock")
+        throw new InboxError(
+          `Set a ${lockWords(this.native.platform).noun} on this phone first.`,
+          400,
+          "no_screen_lock",
+        );
+      throw error;
+    }
+  }
+
+  /**
+   * "I don't have my other phone": this phone is let in a day from now unless the owner stops it from
+   * another phone or from the email. Kept on the phone meanwhile, opening nothing but whether it came.
+   */
+  async waitADay(pending: PendingPhone): Promise<InboxEntry> {
+    if (pending.waitsOn !== "phone") throw new InboxError("This phone waits for your computer.", 409, "wrong_state");
+    const token = await this.token(Sessions.entryOf(pending));
+    let res: Response;
+    try {
+      res = await this.fetchImpl(`${pending.origin}/v1/phone/wait`, {
+        method: "POST",
+        headers: { accept: "application/json", authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: "{}",
+      });
+    } catch {
+      throw new InboxError("Could not reach the inbox. Check the connection and try again.", 0, "network");
+    }
+    if (!res.ok) throw await problem(res);
+    const until = Date.parse(((await res.json()) as { wait_until?: string }).wait_until ?? "");
+    return this.keep(pending.alias, pending.origin, pending.answer, {
+      waitingUntil: Number.isFinite(until) ? until : this.clock() + 86_400_000,
+    });
+  }
+
+  /** A phone that waited its day was let in: the inbox opens on it as on any other. */
+  async settled(entry: InboxEntry): Promise<InboxEntry> {
+    const list = await this.list();
+    const { waitingUntil: _done, ...rest } = list.find((e) => e.alias === entry.alias) ?? entry;
+    await this.saveList(list.map((e) => (e.alias === entry.alias ? rest : e)));
+    return rest;
+  }
+
+  /**
+   * Confirm on the sheet, for a new phone that asked to connect: a statement signed with this phone's
+   * key for that phone's id, which the key signs only shortly after an unlock.
+   */
+  async confirmProof(entry: InboxEntry, phoneId: string): Promise<{ at: number; proof: string }> {
+    return this.proof(entry.alias, "confirm", entry.origin, phoneId);
   }
 
   /**

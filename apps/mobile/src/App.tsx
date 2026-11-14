@@ -4,11 +4,13 @@ import { readItemLink, readPhoneLink } from "../../../packages/core/src/phones/l
 import type { ItemDetail, ItemView } from "../../inbox/client/src/lib/types";
 import { checkForUpdate } from "./channel";
 import { AppContext, type App as AppValue, type Route } from "./context";
+import { ACCOUNT_ORIGIN, Account, readCodeLink } from "./lib/account";
 import {
   DEMO_ENTRY,
   DEMO_READ_ONLY,
   DemoClient,
   InboxClient,
+  type PhoneAsk,
   type PhoneMe,
   type PhoneSpam,
   sendQueued,
@@ -26,7 +28,7 @@ import { Item } from "./screens/Item";
 import { Lock } from "./screens/Lock";
 import { OfflineBanner } from "./screens/Offline";
 import { Screened } from "./screens/Screened";
-import { Settings } from "./screens/Settings";
+import { PhoneAskSheet, Settings, Waiting } from "./screens/Settings";
 import { Today } from "./screens/Today";
 
 export interface Deps {
@@ -39,6 +41,10 @@ export interface Deps {
   readonly initial?: Route | undefined;
   /** This build's version and versionCode (Capacitor's App.getInfo on the phone). */
   readonly appInfo?: (() => Promise<AppInfo>) | undefined;
+  /** Where signing in with an email code goes: Surfing Dog's own sign-in, unless a test says otherwise. */
+  readonly accountOrigin?: string | undefined;
+  /** Where the Connect screen opens (the screenshots): the camera, or signing in with email. */
+  readonly connectStart?: "scan" | "email" | undefined;
 }
 
 export interface AppInfo {
@@ -95,6 +101,14 @@ interface KeptItem {
 export function App({ deps }: { deps: Deps }) {
   const { native } = deps;
   const sessions = useMemo(() => new Sessions(native, deps.fetch), [native, deps.fetch]);
+  const account = useMemo(
+    () => new Account(native, deps.fetch, deps.accountOrigin ?? ACCOUNT_ORIGIN),
+    [native, deps.fetch, deps.accountOrigin],
+  );
+  /** New phones that ask this one for a yes, in the inbox in front (ADR-028 Amendment 4). */
+  const [asks, setAsks] = useState<readonly PhoneAsk[]>([]);
+  /** A code the sign-in email's button handed to the app: the Connect screen takes it. */
+  const [codeLink, setCodeLink] = useState<{ id: string; code: string } | null>(null);
   const [ready, setReady] = useState(false);
   const [locked, setLocked] = useState(false);
   const [insecure, setInsecure] = useState(false);
@@ -231,6 +245,22 @@ export function App({ deps }: { deps: Deps }) {
   // ---- the active inbox: its items, kept encrypted for offline ----
   const refresh = useCallback(async () => {
     if (!client || !box || !active) return;
+    // A phone waiting out its day opens nothing: it only asks whether it was let in, or stopped.
+    if (active.waitingUntil && !demo) {
+      const state = await sessions.confirmed(active);
+      if (state === "confirmed") {
+        const entry = await sessions.settled(active);
+        setInboxes(await sessions.list());
+        setActive(entry);
+        toast(`Connected to ${entry.name}.`);
+        void setUpPush(native, new InboxClient(entry, sessions, deps.fetch), entry.alias, true);
+      } else if (state === "refused") {
+        toast(`Connecting this phone to ${active.name} was stopped.`);
+        const list = await wipe(active, "forget");
+        if (list.length === 0) setStack([{ name: "connect" }]);
+      }
+      return;
+    }
     setLoading(true);
     try {
       const page = await client.items("all");
@@ -254,6 +284,12 @@ export function App({ deps }: { deps: Deps }) {
         .spam()
         .then(setSpam)
         .catch(() => setSpam(null));
+      // A new phone that asked to connect waits for this one's yes: the sheet asks, on any screen.
+      if (!demo)
+        client
+          .phoneAsks()
+          .then(setAsks)
+          .catch(() => setAsks([]));
     } catch (error) {
       if (error instanceof InboxError && error.code === "signed_out") {
         toast(`This phone was removed from ${active.name}. Connect it again from Settings → Phone.`);
@@ -274,13 +310,14 @@ export function App({ deps }: { deps: Deps }) {
     } finally {
       setLoading(false);
     }
-  }, [client, box, active, demo, toast, native, wipe]);
+  }, [client, box, active, demo, toast, native, wipe, sessions, deps.fetch]);
 
   useEffect(() => {
     if (!ready || locked || insecure) return;
     setViews([]);
     setMe(null);
     setSpam(null);
+    setAsks([]);
     setListLoaded(false);
     void refresh();
     if (active && !demo) deps.kv.setItem(`sdi.${ACTIVE}`, active.alias);
@@ -356,8 +393,9 @@ export function App({ deps }: { deps: Deps }) {
   );
 
   /**
-   * A phone the owner confirmed on the computer: kept, opened, and asked for notifications. A phone
-   * connected by an emailed link arrives here at once.
+   * A phone the owner confirmed on the computer, or on their other phone: kept, opened, and asked for
+   * notifications. A phone connected by an emailed link, or by a code from Surfing Dog when the owner
+   * has no other phone, arrives here at once; one waiting out its day arrives here to wait.
    */
   const connected = useCallback(
     async (entry: InboxEntry) => {
@@ -367,6 +405,8 @@ export function App({ deps }: { deps: Deps }) {
       setInboxes(list);
       setActive(list.find((e) => e.alias === entry.alias) ?? entry);
       setStack([{ name: "inbox" }]);
+      // Waiting out its day ("I don't have my other phone"): kept, opening nothing, and nothing to hear yet.
+      if (entry.waitingUntil) return;
       toast(`Connected to ${entry.name}.`);
       // Step 2 of the approved Connect screen: notifications for new requests.
       const c = new InboxClient(entry, sessions, deps.fetch);
@@ -401,6 +441,13 @@ export function App({ deps }: { deps: Deps }) {
   // ---- links: a scanned or emailed link, a notification opening an item ----
   const openLink = useCallback(
     async (url: string) => {
+      // The sign-in email's button: Connect confirms its code for the sign-in this phone started.
+      const handedCode = readCodeLink(url);
+      if (handedCode) {
+        setCodeLink(handedCode);
+        setStack([{ name: "connect" }]);
+        return;
+      }
       const phone = readPhoneLink(url, deps.allowLocal);
       if (phone) {
         if (phone.kind === "pair") {
@@ -528,7 +575,9 @@ export function App({ deps }: { deps: Deps }) {
   // Every inbox's push registration stays current: the push token changes now and then.
   const registerPush = useRef<() => void>(() => undefined);
   registerPush.current = () => {
-    for (const e of inboxes) void setUpPush(native, new InboxClient(e, sessions, deps.fetch), e.alias, false);
+    // A phone waiting out its day hears nothing yet: it is set up once it is let in.
+    for (const e of inboxes.filter((x) => !x.waitingUntil))
+      void setUpPush(native, new InboxClient(e, sessions, deps.fetch), e.alias, false);
   };
   useEffect(() => {
     native.onPushToken(() => registerPush.current());
@@ -545,21 +594,24 @@ export function App({ deps }: { deps: Deps }) {
     }
     if (offline) return;
     await Promise.all(
-      inboxes.map(async (e) => {
-        try {
-          const page = await new InboxClient(e, sessions, deps.fetch).items("all");
-          await box.put(`list.${e.alias}`, { at: Date.now(), views: page.items });
-          setNeedCounts((c) => ({ ...c, [e.alias]: page.items.filter(needsYou).length }));
-        } catch {
-          // That inbox can't be reached now: its cached count stays.
-        }
-      }),
+      inboxes
+        .filter((e) => !e.waitingUntil)
+        .map(async (e) => {
+          try {
+            const page = await new InboxClient(e, sessions, deps.fetch).items("all");
+            await box.put(`list.${e.alias}`, { at: Date.now(), views: page.items });
+            setNeedCounts((c) => ({ ...c, [e.alias]: page.items.filter(needsYou).length }));
+          } catch {
+            // That inbox can't be reached now: its cached count stays.
+          }
+        }),
     );
   }, [box, inboxes, offline, sessions, deps.fetch]);
 
   const value: AppValue = {
     native,
     sessions,
+    account,
     inboxes,
     active,
     client,
@@ -628,7 +680,12 @@ export function App({ deps }: { deps: Deps }) {
         allowLocal={deps.allowLocal}
         handed={handed}
         onHandled={() => setHanded(null)}
+        code={codeLink}
+        onCode={() => setCodeLink(null)}
+        start={deps.connectStart}
       />
+    ) : active?.waitingUntil && !demo ? (
+      <Waiting entry={active} />
     ) : route.name === "item" ? (
       <Item id={route.id} action={route.action} hint={route.hint} />
     ) : route.name === "today" ? (
@@ -648,6 +705,9 @@ export function App({ deps }: { deps: Deps }) {
       <div className={`shell${showBanner ? " offline" : ""}`}>
         {showBanner && <OfflineBanner cachedAt={cachedAt} inbox={active?.name ?? ""} queued={queued.length} />}
         {screen}
+        {asks[0] && route.name !== "connect" && (
+          <PhoneAskSheet ask={asks[0]} onDone={() => setAsks((a) => a.filter((x) => x.id !== asks[0]?.id))} />
+        )}
       </div>
       {toastText && (
         <div className="toast" role="status">

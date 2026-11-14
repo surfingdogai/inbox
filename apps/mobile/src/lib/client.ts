@@ -9,7 +9,15 @@ import { type Fetch, type InboxEntry, InboxError, movedTo, type Sessions } from 
  * carries this phone's access token; a 401 gets one fresh token and one more try.
  */
 export interface PhoneMe {
-  readonly phone: { readonly id: string; readonly name: string; readonly push: string; readonly confirmed?: boolean };
+  readonly phone: {
+    readonly id: string;
+    readonly name: string;
+    readonly push: string;
+    readonly confirmed?: boolean;
+    /** While it waits: who says yes, and when a day's wait ends. */
+    readonly waits_on?: "computer" | "phone";
+    readonly wait_until?: string;
+  };
   readonly notify: NotifyPrefs;
   readonly business: { readonly name: string; readonly timezone: string };
   readonly push_available: boolean;
@@ -29,6 +37,16 @@ export interface PhoneRow {
   readonly created_at: string;
   readonly last_seen_at: string | null;
   readonly push: string;
+}
+
+/** A new phone that asked to connect, waiting for this phone's yes (ADR-028 Amendment 4). */
+export interface PhoneAsk {
+  readonly id: string;
+  readonly phone: PhoneRow & { readonly platform?: string };
+  /** The two digits the new phone shows. */
+  readonly match: string;
+  /** "I don't have my other phone": when it is let in unless stopped; null while it waits for a yes. */
+  readonly wait_until: string | null;
 }
 
 export interface Slots {
@@ -207,6 +225,22 @@ export class InboxClient {
 
   removePhone(id: string): Promise<{ removed: true }> {
     return this.call("DELETE", `/v1/phone/phones/${encodeURIComponent(id)}`);
+  }
+
+  /** New phones that wait for this one's yes. */
+  async phoneAsks(): Promise<readonly PhoneAsk[]> {
+    return (await this.call<{ pairings: PhoneAsk[] }>("GET", "/v1/phone/pairings")).pairings;
+  }
+
+  /** Confirm, after the fingerprint or face: signed with this phone's key, which signs only after an unlock. */
+  async confirmPhone(id: string): Promise<{ state: "paired"; phone: PhoneRow }> {
+    const proof = await this.sessions.confirmProof(this.entry, id);
+    return this.call("POST", `/v1/phone/pairings/${encodeURIComponent(id)}/confirm`, { body: proof });
+  }
+
+  /** Not mine: the new phone is removed before it opens anything. */
+  refusePhone(id: string): Promise<{ removed: boolean }> {
+    return this.call("POST", `/v1/phone/pairings/${encodeURIComponent(id)}/refuse`, { body: {} });
   }
 }
 

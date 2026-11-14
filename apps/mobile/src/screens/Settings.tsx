@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { DEFAULT_PREFS, type NotifyPrefs } from "../../../../packages/core/src/phones/prefs";
 import { useApp } from "../context";
-import type { PhoneRow } from "../lib/client";
+import type { PhoneAsk, PhoneRow } from "../lib/client";
 import { setUpPush } from "../lib/push";
+import type { InboxEntry } from "../lib/session";
 import { versionLine } from "../lib/update";
 import { agoSentence, spamFiltersLine } from "../lib/view";
 import { Nav } from "./Nav";
@@ -357,6 +358,140 @@ export function Settings() {
         </section>
       </main>
       <Nav current="settings" />
+    </div>
+  );
+}
+
+/** A day and a time, as a sentence says it ("Sat 15 Nov, 14:02"). */
+function dayAndTime(at: number): string {
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(at));
+  } catch {
+    return new Date(at).toUTCString();
+  }
+}
+
+/**
+ * The confirm sheet (ADR-028 Amendment 4): a new phone asked to connect to this inbox and waits for
+ * this phone's yes. Its name is its own say, so it is quoted. Confirm asks for the fingerprint or face
+ * first, and is signed by this phone's key; "Not mine" removes the new phone. A phone waiting out its
+ * day ("I don't have my other phone") can only be stopped from here: its owner sees no digits to
+ * compare, so there is nothing to confirm.
+ */
+export function PhoneAskSheet({ ask, onDone }: { ask: PhoneAsk; onDone: () => void }) {
+  const app = useApp();
+  const [busy, setBusy] = useState(false);
+  const business = app.me?.business.name || app.active?.name || "your inbox";
+  const waiting = ask.wait_until ? Date.parse(ask.wait_until) : null;
+
+  const confirm = async () => {
+    if (!app.client) return;
+    setBusy(true);
+    try {
+      // The yes is a person's: the fingerprint or face first, never a notification's.
+      if (await app.native.canAuthenticate().catch(() => false)) {
+        const ok = await app.native
+          .authenticate("Confirm it's you", "To let a new phone open your inbox")
+          .catch(() => false);
+        if (!ok) return;
+      }
+      await app.client.confirmPhone(ask.id);
+      app.toast(`"${ask.phone.name}" can open ${business} now.`);
+      onDone();
+    } catch (e) {
+      app.toast(e instanceof Error ? e.message : "Not confirmed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const refuse = async () => {
+    if (!app.client) return;
+    setBusy(true);
+    try {
+      await app.client.refusePhone(ask.id);
+      app.toast("Stopped. That phone can't open your inbox.");
+      onDone();
+    } catch (e) {
+      app.toast(e instanceof Error ? e.message : "Not stopped. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="scrim" onClick={onDone} aria-hidden="true" />
+      <section className="sheet" role="dialog" aria-label="A new phone wants to connect">
+        <div className="grabber" aria-hidden="true" />
+        <h2>{waiting ? "A new phone connects soon" : "A new phone wants to connect"}</h2>
+        <p className="sub" style={{ margin: 0 }}>
+          A phone that calls itself <b>"{ask.phone.name}"</b> asked to connect to {business}.{" "}
+          {waiting
+            ? `It said you don't have this phone with you, so it is let in on ${dayAndTime(waiting)}, unless you stop it.`
+            : "Confirm only if you are connecting it now, and it shows these two digits:"}
+        </p>
+        {!waiting && <div className="match">{ask.match}</div>}
+        {waiting ? (
+          <>
+            <button type="button" className="btn primary" disabled={busy} onClick={() => void refuse()}>
+              Not you? Stop it
+            </button>
+            <button type="button" className="btn quiet" onClick={onDone}>
+              It's mine, let it wait
+            </button>
+          </>
+        ) : (
+          <>
+            <button type="button" className="btn primary" disabled={busy} onClick={() => void confirm()}>
+              Confirm
+            </button>
+            <button type="button" className="btn" disabled={busy} onClick={() => void refuse()}>
+              Not mine
+            </button>
+          </>
+        )}
+      </section>
+    </>
+  );
+}
+
+/**
+ * This phone waits out its day for an inbox ("I don't have my other phone"): it opens nothing until
+ * then, and the owner's other phones and email can stop it meanwhile.
+ */
+export function Waiting({ entry }: { entry: InboxEntry }) {
+  const app = useApp();
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  return (
+    <div className="connect screen">
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <h1>Connecting on {dayAndTime(entry.waitingUntil ?? Date.now())}</h1>
+        <p>
+          {entry.name} lets this phone in then, unless it is stopped from one of your phones or from the email we sent
+          you. Until then it opens nothing.
+        </p>
+      </div>
+      <div className="end">
+        <button type="button" className="btn" onClick={() => void app.refresh()}>
+          Check again
+        </button>
+        {confirmRemove ? (
+          <button type="button" className="btn link" onClick={() => void app.removeActive()}>
+            Stop waiting for {entry.name}?
+          </button>
+        ) : (
+          <button type="button" className="btn quiet" onClick={() => setConfirmRemove(true)}>
+            Stop waiting
+          </button>
+        )}
+      </div>
     </div>
   );
 }
