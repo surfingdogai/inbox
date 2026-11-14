@@ -479,7 +479,12 @@ export async function termsSummary(
     now > 0 ? `Pay now: ${money(now)}.` : "Nothing to pay now.",
     ...later,
     there > 0 ? `At the property: ${money(there)}.` : "",
-    quote.guarantee === "card" ? "A card holds the booking; nothing is charged now." : "",
+    // Nothing charged now only when nothing is paid now.
+    quote.guarantee === "card"
+      ? now > 0
+        ? "A card holds the booking."
+        : "A card holds the booking; nothing is charged now."
+      : "",
     policySentence(quote.policy, { lang, locale, total: quote.total, what: "stay" }),
   ].filter(Boolean);
   return { summary: parts.join(" "), terms_sha: await stayTermsSha(stay, quote) };

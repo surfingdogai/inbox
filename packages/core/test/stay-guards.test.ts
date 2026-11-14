@@ -368,6 +368,48 @@ describe("stays: money and nights", () => {
     expect(summary).toMatch(/Pay now: .+\. Then .+ by 6 Jan|Then .+ by Jan 6/);
   });
 
+  it("says nothing is charged now beside a card only when nothing is paid now", async () => {
+    clock.now = Date.parse("2026-11-02T06:00:00Z");
+    const k = await kijaniHouse();
+    await payPlatform(k.db, { cards: true });
+    const summaryWith = async (deposit: { kind: "percent"; value: number } | { kind: "none" }) => {
+      await k.caps.stays.upsertRatePlan(owner, {
+        id: k.plans.bnb,
+        name: "Bed and breakfast, pay ahead",
+        meal: "breakfast",
+        policy: { preset: "non_refundable" },
+        deposit,
+        balance: { when: "days_before", days: 7 },
+        guarantee: "card",
+      });
+      const made = await k.caps.stays.request(guest(), {
+        check_in: "2026-12-12",
+        check_out: "2026-12-14",
+        rooms: [{ room_type_id: k.rooms.garden, adults: 2 }],
+        contact,
+        consent: true,
+      });
+      const quoted = await transitionItem(k.db, owner, {
+        itemId: made.view.item.id,
+        event: "quote",
+        input: { from: "rates" },
+      });
+      const p = quoted.view.item.payload as StayPayload;
+      const setup = await readSetup(k.db, k.property);
+      if (!p.quote || !setup) throw new Error("no quote");
+      return (await termsSummary(setup, p, p.quote, "en")).summary;
+    };
+    // 30% now, held by a card: the guest pays now, so the card's line says no more than that it holds it.
+    const now = await summaryWith({ kind: "percent", value: 30 });
+    expect(now).toContain("Pay now: ");
+    expect(now).toContain("A card holds the booking.");
+    expect(now).not.toContain("nothing is charged now");
+    // Nothing now, the balance before arrival: the card holds it, and nothing is charged now.
+    const later = await summaryWith({ kind: "none" });
+    expect(later).toContain("Nothing to pay now.");
+    expect(later).toContain("A card holds the booking; nothing is charged now.");
+  });
+
   it("sends no stay email that would say only its policy", async () => {
     const { r, id } = await waitingDeposit();
     const [row] = (

@@ -70,6 +70,15 @@ describe("a draft's card", () => {
     );
   });
 
+  it("says nothing is charged now beside a card only when nothing is paid now", () => {
+    const deposit = { ...stay, guarantee: "card" } as DraftView["terms"];
+    expect(draftDetails(deposit, TZ)).toContain("A card holds the booking");
+    expect(draftDetails(deposit, TZ).join("\n")).not.toContain("nothing is charged now");
+    const schedule = (stay as unknown as { schedule: unknown[] }).schedule;
+    const there = { ...stay, guarantee: "card", schedule: schedule.slice(1) } as DraftView["terms"];
+    expect(draftDetails(there, TZ)).toContain("A card holds the booking; nothing is charged now");
+  });
+
   it("words an order change's lines as the customer reads them: each amount, each choice", () => {
     const line = termsLine(order, TZ);
     expect(line).toBe("2 × Bread — €4.00; 1 × Cake (Chocolate) — €10.00 · €14.00 in all");

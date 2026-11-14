@@ -261,11 +261,14 @@ export function draftDetails(t: DraftView["terms"], tz: string | undefined, made
         })
         .join(", ")}`,
     );
-  // A stay's cancellation, and whether a card holds it, as the guest is sent them.
+  // A stay's cancellation, and whether a card holds it, as the guest is sent them: nothing charged now
+  // only when nothing is paid now.
   const policy = policyOf(t);
   if (policy) out.push(policyWords(policy, t.totalPrice, tz));
   const guarantee = (t as { guarantee?: unknown }).guarantee;
-  if (guarantee === "card") out.push("A card holds the booking; nothing is charged now");
+  const paidNow = schedule.some((e) => e.type === "immediate" && e.amount.value > 0);
+  if (guarantee === "card")
+    out.push(paidNow ? "A card holds the booking" : "A card holds the booking; nothing is charged now");
   else if (guarantee === "none") out.push("No card needed to hold it");
   if (t.validThrough) out.push(holdLine(t.validThrough, plan !== null || schedule.length > 0, madeAt, tz));
   return out;

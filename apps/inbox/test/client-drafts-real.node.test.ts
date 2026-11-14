@@ -12,7 +12,7 @@ import { menuFieldsSchema } from "../../../packages/core/src/menu/schema";
 import { MIGRATIONS } from "../../../packages/core/src/schema/migrations.generated";
 import type { Caller } from "../../../packages/core/src/write/caller";
 import { confirming, makeClient, resetTables } from "../../../packages/core/test/harness";
-import { clock, contact, guest, kijaniHouse, owner } from "../../../packages/core/test/stay-fixtures";
+import { clock, contact, guest, kijaniHouse, owner, payPlatform } from "../../../packages/core/test/stay-fixtures";
 import { DraftCard as PhoneDraftCard } from "../../mobile/src/screens/Item";
 import { DraftCard } from "../client/src/components/Draft";
 import { type DraftView, draftDetails, termsLine } from "../client/src/lib/drafts";
@@ -104,6 +104,42 @@ describe("a stay's draft from the rates", () => {
       cancel?.endsWith(`; after that ${formatMoney(q.policy.after)}; no-show ${formatMoney(q.policy.noShow)}`),
     ).toBe(true);
     for (const card of cards(draft, tz)) for (const w of [line, ...details]) expect(card).toContain(html(w));
+  });
+
+  it("says a card holds it, and no more, when part of it is paid now", async () => {
+    clock.now = Date.parse("2026-11-02T06:00:00Z");
+    const k = await kijaniHouse();
+    await payPlatform(k.db, { cards: true });
+    await k.caps.stays.upsertRatePlan(owner, {
+      id: k.plans.bnb,
+      name: "Bed and breakfast, pay ahead",
+      meal: "breakfast",
+      policy: { preset: "non_refundable" },
+      deposit: { kind: "percent", value: 30 },
+      balance: { when: "days_before", days: 7 },
+      guarantee: "card",
+    });
+    await k.caps.setup.applyPreset(owner, { preset: "stays", replace: false });
+    const made = await k.caps.stays.request(guest(), {
+      check_in: "2026-12-12",
+      check_out: "2026-12-14",
+      rooms: [{ room_type_id: k.rooms.garden, adults: 2 }],
+      contact,
+      consent: true,
+    });
+    const runner = createRunner({ mailOut: logMailOut(() => {}) });
+    for (let i = 0; i < 30; i++) if ((await runner.runDue(k.db, { now: clock.now, limit: 100 })).claimed === 0) break;
+    const draft = (await k.caps.getItem(owner, { item_id: made.view.item.id })).draft as DraftView | null;
+    if (!draft) throw new Error("the rule made no draft");
+    const tz = "Africa/Nairobi";
+    const details = draftDetails(draft.terms, tz, draft.created_at);
+    const now = `Paid ${formatMoney({ value: 390_000, currency: "KES" })} now, `;
+    expect(details.find((d) => d.startsWith("Paid "))?.startsWith(now)).toBe(true);
+    expect(details).toContain("A card holds the booking");
+    for (const card of cards(draft, tz)) {
+      expect(card).toContain(html("A card holds the booking"));
+      expect(card).not.toContain("nothing is charged now");
+    }
   });
 });
 
