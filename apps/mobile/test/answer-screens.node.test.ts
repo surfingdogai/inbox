@@ -38,18 +38,20 @@ const draw = (el: ReturnType<typeof createElement>, value: App = app()) =>
 
 const chip: PriceChip = {
   serviceId: "colour",
-  label: "From €90 · Colour correction",
+  label: "€90 · Colour correction",
   amount: { value: 9000, currency: "EUR" },
   service: "Colour correction",
 };
-const sheet = (c: PriceChip | null) =>
+const sheet = (c: PriceChip | null, o: { quantity?: number; validHours?: number } = {}) =>
   createElement(PriceSheet, {
     what: "Colour correction",
     chip: c,
     currency: "EUR",
     busy: false,
+    tz: "Europe/Lisbon",
     onClose: () => undefined,
     onSend: () => undefined,
+    ...o,
   });
 
 describe("the price sheet", () => {
@@ -60,11 +62,36 @@ describe("the price sheet", () => {
     expect(html).toContain("Price, in EUR");
     expect(html).toContain('value="90.00"');
     expect(html).toContain("Note (optional)");
+    expect(html).toContain('placeholder="Anything they should know"');
     expect(html).toContain("Send · €90");
     expect(html).toContain("They can accept it, or their assistant can for them.");
     // Two fields: the amount and the note. Nothing to copy from elsewhere.
     expect(html.match(/<input/g)).toHaveLength(2);
     expect(html).toContain('inputMode="decimal"');
+    // A dialog that says what it is.
+    expect(html).toContain('aria-modal="true"');
+    expect(html).toContain('aria-labelledby="price-sheet-h"');
+  });
+
+  it("says a from price is the least the list asks, and until when the price holds", () => {
+    const html = draw(sheet({ ...chip, label: "From €90 · Colour correction", from: true }, { validHours: 48 }));
+    expect(html).toContain("Your list says from €90: the least it costs.");
+    expect(html).toMatch(/They can accept it until \w{3}, .+ \d{2}:\d{2}, or their assistant can for them\./);
+  });
+
+  it("prices every one asked for", () => {
+    const html = draw(
+      sheet(
+        {
+          ...chip,
+          amount: { value: 27000, currency: "EUR" },
+          each: { quantity: 3, price: { value: 9000, currency: "EUR" } },
+        },
+        { quantity: 3 },
+      ),
+    );
+    expect(html).toContain("For 3 × Colour correction · 3 × €90");
+    expect(html).toContain('value="270.00"');
   });
 
   it("says how a price per person was worked out", () => {
@@ -107,7 +134,12 @@ describe("the item screen's one-tap answers", () => {
 
   it("send a quick reply, a price and a draft through the six seconds' Undo, never at once", () => {
     expect(source).toMatch(/onClick=\{\(\) => press\(\{ kind: "reply", text: c\.text \}\)\}/);
-    expect(source).toMatch(/onSend=\{\(d\) => press\(\{ kind: "draft", draftId: d\.id \}\)\}/);
+    // A draft with its own words to the customer is read in full first; one without, sent as it is.
+    expect(source).toMatch(
+      /onSend=\{\(d\) => \(d\.terms\.notes\?\.trim\(\) \? setReview\(d\) : press\(\{ kind: "draft", draftId: d\.id \}\)\)\}/,
+    );
+    const review = source.slice(source.indexOf("<DraftReview"), source.indexOf("/>", source.indexOf("<DraftReview")));
+    expect(review).toContain('press({ kind: "draft", draftId: d.id })');
     const priced = source.slice(source.indexOf("<PriceSheet"), source.indexOf("/>", source.indexOf("<PriceSheet")));
     expect(priced).toMatch(/press\(\{ kind: "offer", input: priceOffer\(amount, note\), amount \}\)/);
     expect(priced).not.toContain("app.act(");
@@ -126,11 +158,22 @@ describe("the item screen's one-tap answers", () => {
     expect(send).toContain('a.act(d.item.id, "draft"');
   });
 
-  it("asks before keeping a typed reply, and only for a message", () => {
+  it("asks before keeping a typed reply, only for a message, and only for words of nobody's", () => {
     const send = source.slice(source.indexOf("const sendReply = async"), source.indexOf("const keepReply = async"));
-    expect(send).toMatch(
-      /item\.type === "message" && app\.replies && !\(await app\.replies\.has\(typed\)\)\) setAskSave\(typed\)/,
-    );
+    expect(send).toMatch(/item\.type === "message" &&\s+app\.replies &&\s+offerToSave\(typed, tracesOf\(detail\)\) &&/);
+    expect(send).toContain("setAskSave(typed)");
     expect(source).toContain("Save as a quick reply?");
+    // The Undo toast shows every word that goes.
+    expect(source).toContain(["return `Sending “$", "{p.text}”`;"].join(""));
+  });
+
+  it("shows a draft's every term, and its words to the customer in full before it goes", () => {
+    const card = source.slice(source.indexOf("function DraftCard("), source.indexOf("function useSheetFocus("));
+    expect(card).toContain("draftDetails(d.terms, p.tz)");
+    expect(card).toContain("Send as it is");
+    expect(card).toContain("Read it and send");
+    const review = source.slice(source.indexOf("function DraftReview("), source.indexOf("export function PriceSheet("));
+    expect(review).toContain("Its words to the customer, which no person here wrote:");
+    expect(review).toContain("{d.terms.notes.trim()}");
   });
 });

@@ -2,15 +2,15 @@ import { App as CapApp } from "@capacitor/app";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Linked } from "../../../inbox/client/src/components/Linked";
 import { majorText, parseMoney } from "../../../inbox/client/src/lib/actions";
-import { breachWords, type DraftView, termsLine } from "../../../inbox/client/src/lib/drafts";
+import { breachWords, type DraftView, draftDetails, termsLine } from "../../../inbox/client/src/lib/drafts";
 import {
   byWord,
   capitalise,
+  formatDateTime,
   formatDay,
   formatWhen,
   partyName,
   stateWord,
-  truncate,
 } from "../../../inbox/client/src/lib/format";
 import {
   ACT_LABEL,
@@ -28,7 +28,7 @@ import type { ItemDetail, Money } from "../../../inbox/client/src/lib/types";
 import { useApp } from "../context";
 import { type PriceChip, type PublicFacts, priceChips, priceOffer, replyChips } from "../lib/chips";
 import { DEMO_READ_ONLY, type Slots } from "../lib/client";
-import type { QuickReply } from "../lib/replies";
+import { type CustomerTraces, offerToSave, type QuickReply } from "../lib/replies";
 import { InboxError } from "../lib/session";
 import { Waiting } from "../lib/undo";
 import {
@@ -78,12 +78,24 @@ function pressWords(p: Press, detail: ItemDetail): string {
     case "spam":
       return toastFor(p.act, detail).text;
     case "reply":
-      return `Sending “${truncate(p.text, 48)}”`;
+      // The whole of it: a quick reply is short, and the owner sees every word that goes.
+      return `Sending “${p.text}”`;
     case "offer":
       return `Sending your price, ${money(p.amount)}.`;
     case "draft":
       return "Sending the drafted offer.";
   }
+}
+
+/** What of this customer a reply could carry to the next one (`offerToSave`). */
+function tracesOf(d: ItemDetail): CustomerTraces {
+  const party = d.party;
+  return {
+    name: party?.name,
+    email: party?.email,
+    phone: party?.phone,
+    text: [d.human, JSON.stringify(d.item.payload), ...d.thread.map((t) => t.body)].join(" "),
+  };
 }
 
 /**
@@ -110,6 +122,8 @@ export function Item({
   const [other, setOther] = useState<{ event: string; label: string } | null>(null);
   /** The price sheet: opened from a price chip, or with no amount ("Send a price"). */
   const [price, setPrice] = useState<PriceChip | "any" | null>(null);
+  /** A drafted offer with its own words to the customer, read in full before it is sent. */
+  const [review, setReview] = useState<DraftView | null>(null);
   const [busy, setBusy] = useState(false);
   /** The public prices and languages the chips are made from; the owner's quick replies. */
   const [facts, setFacts] = useState<PublicFacts | null>(null);
@@ -118,7 +132,7 @@ export function Item({
   const [askSave, setAskSave] = useState<string | null>(null);
   // Android's back button closes an open sheet before it leaves the item.
   const { onBack } = app;
-  const open = sheet !== null || other !== null || price !== null;
+  const open = sheet !== null || other !== null || price !== null || review !== null;
   useEffect(
     () =>
       open
@@ -126,6 +140,7 @@ export function Item({
             setSheet(null);
             setOther(null);
             setPrice(null);
+            setReview(null);
             return true;
           })
         : undefined,
@@ -191,7 +206,9 @@ export function Item({
   );
   const chips = useMemo(
     () =>
-      detail?.item.type === "message" && detail.item.closedAt === null ? replyChips(saved, facts?.languages ?? []) : [],
+      detail?.item.type === "message" && detail.item.closedAt === null
+        ? replyChips(saved, facts?.languages ?? [], detail.party?.locale)
+        : [],
     [detail, saved, facts],
   );
   // What a press needs when it is sent, read as it is then: the screen may have drawn itself again
@@ -389,8 +406,15 @@ export function Item({
       await app.act(item.id, "reply", { body: typed, internal: false }, "Reply");
       setReply("");
       await load();
-      // The owner's own words, kept to send again with one tap: asked, never kept unasked.
-      if (item.type === "message" && app.replies && !(await app.replies.has(typed))) setAskSave(typed);
+      // The owner's own words, kept to send again with one tap: asked, never kept unasked, and only for
+      // words that hold nothing of this customer (their name, address, phone, a number they asked about).
+      if (
+        item.type === "message" &&
+        app.replies &&
+        offerToSave(typed, tracesOf(detail)) &&
+        !(await app.replies.has(typed))
+      )
+        setAskSave(typed);
     } finally {
       setBusy(false);
     }
@@ -474,7 +498,7 @@ export function Item({
             draft={detail.draft}
             tz={tz}
             busy={busy}
-            onSend={(d) => press({ kind: "draft", draftId: d.id })}
+            onSend={(d) => (d.terms.notes?.trim() ? setReview(d) : press({ kind: "draft", draftId: d.id }))}
             onDrop={(d) => void dropDraft(d)}
           />
         )}
@@ -584,13 +608,32 @@ export function Item({
       {price && item.type === "quote_request" && (
         <PriceSheet
           what={item.payload.itemOffered.name}
+          quantity={item.payload.quantity}
           chip={price === "any" ? null : price}
           currency={facts?.currency ?? item.payload.budget?.currency ?? "EUR"}
+          validHours={app.me?.offer_valid_hours}
+          tz={tz}
           busy={busy}
           onClose={() => setPrice(null)}
           onSend={(amount, note) => {
             setPrice(null);
             press({ kind: "offer", input: priceOffer(amount, note), amount });
+          }}
+        />
+      )}
+      {review && (
+        <DraftReview
+          draft={review}
+          tz={tz}
+          busy={busy}
+          onClose={() => setReview(null)}
+          onSend={(d) => {
+            setReview(null);
+            press({ kind: "draft", draftId: d.id });
+          }}
+          onDrop={(d) => {
+            setReview(null);
+            void dropDraft(d);
           }}
         />
       )}
@@ -792,8 +835,9 @@ function Confirm(p: { title: string; text: string; yes: string; busy: boolean; o
 
 /**
  * What the owner's AI, a rule or another system would have offered outside the owner's limits (ADR-018
- * §4): nothing went to the customer. Send sends it as it is, with the six seconds' Undo; Drop it drops
- * it, unsent.
+ * §4): nothing went to the customer. The card shows everything the customer would read: the one line,
+ * then every other term (`draftDetails`). "Send as it is" sends it with the six seconds' Undo; a draft
+ * with its own words to the customer opens them in full first (`DraftReview`). Drop it drops it, unsent.
  */
 function DraftCard(p: {
   draft: DraftView;
@@ -803,6 +847,8 @@ function DraftCard(p: {
   onDrop: (d: DraftView) => void;
 }) {
   const d = p.draft;
+  const details = draftDetails(d.terms, p.tz);
+  const note = d.terms.notes?.trim();
   return (
     <section className="drafted" aria-label="A drafted offer">
       <div className="drafted-head">A draft waits for you</div>
@@ -810,11 +856,19 @@ function DraftCard(p: {
         {capitalise(byWord(d.by, d.by.kind))} would offer <b>{termsLine(d.terms, p.tz) || "an offer"}</b>.
         {d.breaches.length ? ` Not sent: it is ${breachWords(d.breaches)}.` : " Not sent yet."}
       </p>
+      {details.length > 0 && (
+        <ul className="drafted-terms">
+          {details.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+      )}
+      {note && <p className="sub">It also writes to them, in words no person here wrote. Read them before it goes.</p>}
       {d.stale && <p className="sub">The request has moved since, so it can't go as it is.</p>}
       <div className="spam-acts">
         {!d.stale && (
           <button type="button" className="btn sm ink" disabled={p.busy} onClick={() => p.onSend(d)}>
-            Send
+            {note ? "Read it and send" : "Send as it is"}
           </button>
         )}
         <button type="button" className="btn sm" disabled={p.busy} onClick={() => p.onDrop(d)}>
@@ -826,14 +880,89 @@ function DraftCard(p: {
 }
 
 /**
+ * A sheet's focus, as a dialog's should be: on its heading when it opens, back where it was when it
+ * closes, so a screen reader is told what opened and the owner lands where they were.
+ */
+function useSheetFocus(): (el: HTMLHeadingElement | null) => void {
+  const before = useRef<Element | null>(null);
+  useEffect(() => {
+    const was = before.current;
+    return () => {
+      if (was instanceof HTMLElement) was.focus();
+    };
+  }, []);
+  return useCallback((el: HTMLHeadingElement | null) => {
+    if (!el) return;
+    if (!before.current) before.current = document.activeElement;
+    el.focus();
+  }, []);
+}
+
+/** A drafted offer read in full before it goes: every term, and its words to the customer as they are. */
+function DraftReview(p: {
+  draft: DraftView;
+  tz: string | undefined;
+  busy: boolean;
+  onClose: () => void;
+  onSend: (d: DraftView) => void;
+  onDrop: (d: DraftView) => void;
+}) {
+  const d = p.draft;
+  const heading = useSheetFocus();
+  return (
+    <>
+      <div className="scrim" onClick={p.onClose} aria-hidden="true" />
+      <section className="sheet" role="dialog" aria-modal="true" aria-labelledby="draft-review-h">
+        <div className="grabber" aria-hidden="true" />
+        <div className="head-row">
+          <h2 id="draft-review-h" ref={heading} tabIndex={-1}>
+            The draft, in full
+          </h2>
+          <button type="button" className="icon-btn bare" aria-label="Close" onClick={p.onClose}>
+            <CloseIcon />
+          </button>
+        </div>
+        <p className="sub" style={{ margin: 0 }}>
+          {capitalise(byWord(d.by, d.by.kind))} would offer <b>{termsLine(d.terms, p.tz) || "an offer"}</b>.
+        </p>
+        {draftDetails(d.terms, p.tz).length > 0 && (
+          <ul className="drafted-terms">
+            {draftDetails(d.terms, p.tz).map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        )}
+        {d.terms.notes?.trim() && (
+          <div className="stacked">
+            <span>Its words to the customer, which no person here wrote:</span>
+            <blockquote className="bubble out">{d.terms.notes.trim()}</blockquote>
+          </div>
+        )}
+        <button type="button" className="btn primary" disabled={p.busy || d.stale} onClick={() => p.onSend(d)}>
+          Send as it is
+        </button>
+        <button type="button" className="btn" disabled={p.busy} onClick={() => p.onDrop(d)}>
+          Drop it
+        </button>
+      </section>
+    </>
+  );
+}
+
+/**
  * The price sheet (ADR-028 Amendment 5): the amount, filled in from a price chip or left for the owner,
  * and an optional note. Send makes the inbox's own offer for a request for a price, which the customer
- * and their assistant can accept.
+ * and their assistant can accept. A "from" price is the least the list asks, so the sheet says so and
+ * leaves the amount ready to change; a request for more than one is priced for all of them.
  */
 export function PriceSheet(p: {
   what: string;
+  quantity?: number | undefined;
   chip: PriceChip | null;
   currency: string;
+  /** How long the inbox lets an offer with no date of its own be accepted (its setting). */
+  validHours?: number | undefined;
+  tz?: string | undefined;
   busy: boolean;
   onClose: () => void;
   onSend: (amount: Money, note: string) => void;
@@ -843,21 +972,35 @@ export function PriceSheet(p: {
   const [note, setNote] = useState("");
   const parsed = parseMoney(amount, currency);
   const ok = parsed !== undefined && parsed.value > 0;
+  const heading = useSheetFocus();
+  const many = p.quantity && p.quantity > 1 ? Math.floor(p.quantity) : 1;
+  const until = p.validHours
+    ? formatDateTime(new Date(Date.now() + p.validHours * 3_600_000).toISOString(), p.tz)
+    : null;
   return (
     <>
       <div className="scrim" onClick={p.onClose} aria-hidden="true" />
-      <section className="sheet" role="dialog" aria-label="Send a price">
+      <section className="sheet" role="dialog" aria-modal="true" aria-labelledby="price-sheet-h">
         <div className="grabber" aria-hidden="true" />
         <div className="head-row">
-          <h2>Send a price</h2>
+          <h2 id="price-sheet-h" ref={heading} tabIndex={-1}>
+            Send a price
+          </h2>
           <button type="button" className="icon-btn bare" aria-label="Close" onClick={p.onClose}>
             <CloseIcon />
           </button>
         </div>
         <p className="sub" style={{ margin: 0 }}>
-          For {p.what}
+          For {many > 1 ? `${many} × ` : ""}
+          {p.what}
           {p.chip?.each ? ` · ${p.chip.each.quantity} × ${money(p.chip.each.price)}` : ""}
         </p>
+        {p.chip?.from && (
+          <p className="sub" style={{ margin: 0 }}>
+            Your list says from {money(p.chip.each?.price ?? p.chip.amount)}: the least it costs. Change it to their
+            price.
+          </p>
+        )}
         <label className="stacked">
           <span>Price, in {currency}</span>
           <span className="field">
@@ -865,6 +1008,9 @@ export function PriceSheet(p: {
               inputMode="decimal"
               autoComplete="off"
               value={amount}
+              onFocus={(e) => {
+                if (p.chip?.from) e.target.select();
+              }}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0"
             />
@@ -877,7 +1023,7 @@ export function PriceSheet(p: {
               value={note}
               maxLength={2000}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="It takes about two hours."
+              placeholder="Anything they should know"
             />
           </span>
         </label>
@@ -890,7 +1036,9 @@ export function PriceSheet(p: {
           {ok && parsed ? `Send · ${money(parsed)}` : "Send"}
         </button>
         <p className="sub" style={{ margin: 0, fontSize: 13 }}>
-          They can accept it, or their assistant can for them.
+          {until
+            ? `They can accept it until ${until}, or their assistant can for them.`
+            : "They can accept it, or their assistant can for them."}
         </p>
       </section>
     </>

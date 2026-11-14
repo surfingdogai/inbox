@@ -21,6 +21,8 @@ export interface PhoneMe {
   };
   readonly notify: NotifyPrefs;
   readonly business: { readonly name: string; readonly timezone: string };
+  /** How long a price the phone sends can be accepted when it gives no date: the inbox's setting (hours). */
+  readonly offer_valid_hours?: number;
   readonly push_available: boolean;
 }
 

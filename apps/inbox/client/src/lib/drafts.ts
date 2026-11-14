@@ -1,4 +1,4 @@
-import { formatMoney, formatWhen } from "./format";
+import { formatDateTime, formatMoney, formatWhen } from "./format";
 import type { ItemDetail } from "./types";
 
 /**
@@ -33,4 +33,57 @@ export function termsLine(t: DraftView["terms"], tz: string | undefined): string
   if (t.lines?.length) parts.push(t.lines.map((l) => `${l.quantity ?? 1} × ${l.name ?? ""}`.trim()).join(", "));
   if (t.totalPrice) parts.push(formatMoney(t.totalPrice));
   return parts.join(" · ");
+}
+
+/**
+ * Everything else the customer would read in a draft, beyond its one line (`termsLine`), each in the
+ * owner's words: the people, delivery, fees, stages, tax, the tip and deposit, and until when it holds.
+ * The note is apart (`DraftView["terms"]["notes"]`): it is the draft's own words to the customer.
+ */
+export function draftDetails(t: DraftView["terms"], tz: string | undefined): string[] {
+  const out: string[] = [];
+  if (t.partySize) out.push(`For ${t.partySize} ${t.partySize === 1 ? "person" : "people"}`);
+  if (t.delivery)
+    out.push(
+      `${t.delivery.method === "pickup" ? "Collected" : t.delivery.method === "digital" ? "Sent digitally" : "Delivered"}${
+        t.delivery.when ? `, ${formatDateTime(t.delivery.when, tz)}` : ""
+      }`,
+    );
+  if (t.fulfil)
+    out.push(
+      `${t.fulfil.method === "pickup" ? "Collected" : "Delivered"}${t.fulfil.slot ? `, ${t.fulfil.slot}` : ""}${
+        t.fulfil.fee ? `, fee ${formatMoney(t.fulfil.fee)}` : ""
+      }`,
+    );
+  if (t.quoteKind === "estimate") out.push("An estimate: the final price may move with the work");
+  else if (t.quoteKind === "fixed") out.push("A fixed price");
+  if (t.stages?.length)
+    out.push(
+      `Paid in stages: ${t.stages
+        .map((st) => {
+          const when =
+            st.type === "immediate"
+              ? "now"
+              : st.type === "at_property"
+                ? "on site"
+                : `by ${formatDateTime(st.due_at ?? "", tz)}`;
+          return `${st.label?.trim() ? `${st.label.trim()} ` : ""}${formatMoney(st.amount)} ${when}`;
+        })
+        .join("; ")}`,
+    );
+  if (t.callOutFee)
+    out.push(
+      `Call-out fee ${formatMoney(t.callOutFee.amount)}${t.callOutFee.creditedIfAccepted ? ", taken off the total" : ", apart from the total"}`,
+    );
+  if (t.visitFee)
+    out.push(
+      `Visit fee ${formatMoney(t.visitFee.amount)}${t.visitFee.creditedIfAccepted ? ", taken off the total" : ", apart from the total"}`,
+    );
+  if (t.tax?.included) out.push("Prices include tax");
+  else if (t.tax?.lines?.length)
+    out.push(`Before tax, plus ${t.tax.lines.map((l) => `${l.name} ${formatMoney(l.amount)}`).join(" + ")}`);
+  if (t.tip) out.push(`Tip ${formatMoney(t.tip)}`);
+  if (t.deposit) out.push(`Deposit ${formatMoney(t.deposit)}`);
+  if (t.validThrough) out.push(`They can accept it until ${formatDateTime(t.validThrough, tz)}`);
+  return out;
 }

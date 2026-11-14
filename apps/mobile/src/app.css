@@ -1227,20 +1227,22 @@ fieldset.group legend {
 .quick::-webkit-scrollbar {
   display: none;
 }
+/* A chip shows its whole text, on two lines or more: one tap sends every word of it. */
 .quick-chip {
   flex: none;
-  max-width: 80%;
+  max-width: 100%;
   min-height: 36px;
-  padding: 0 14px;
+  padding: 7px 14px;
   border: 1px solid var(--line-2);
-  border-radius: 9999px;
+  border-radius: 18px;
   background: var(--card);
   color: var(--ink);
   font: inherit;
   font-size: 14px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.35;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .quick-chip.price {
   border-color: color-mix(in srgb, var(--tangerine) 35%, transparent);
@@ -1261,6 +1263,12 @@ fieldset.group legend {
 }
 .drafted p {
   margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.drafted-terms {
+  margin: 0;
+  padding-left: 18px;
   font-size: 14px;
   line-height: 1.45;
 }

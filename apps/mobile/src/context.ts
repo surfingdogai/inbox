@@ -34,6 +34,8 @@ export interface App {
   readonly inboxes: readonly InboxEntry[];
   readonly active: InboxEntry | null;
   readonly client: InboxClient | null;
+  /** A client for any inbox on the phone, not only the one in front (a new phone's confirm sheet). */
+  clientFor(entry: InboxEntry): InboxClient;
   /** "Try the demo": the app on the demo shop, read-only, with nothing on the phone (lib/client.ts). */
   readonly demo: boolean;
   tryDemo(): void;

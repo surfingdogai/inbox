@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   chipLang,
+  chipLangs,
   DEFAULT_CHIPS,
   MAX_PRICE_CHIPS,
   type PublicService,
@@ -51,6 +52,17 @@ describe("the chips on a message", () => {
     expect(replyChips([], [])).toEqual([]);
   });
 
+  it("are in the customer's language when the business speaks it, and both when it speaks both and theirs is not known", () => {
+    expect(chipLangs(["pt", "en"], "en-GB")).toEqual(["en"]);
+    expect(chipLangs(["en", "pt"], "pt-PT")).toEqual(["pt"]);
+    expect(chipLangs(["pt", "en"], null)).toEqual(["pt", "en"]);
+    // A language the business does not speak: its own.
+    expect(chipLangs(["en"], "pt")).toEqual(["en"]);
+    expect(chipLangs(["de"], "en")).toEqual([]);
+    expect(replyChips([], ["pt", "en"], "en").map((c) => c.text)).toEqual([...DEFAULT_CHIPS.en]);
+    expect(replyChips([], ["pt", "en"]).map((c) => c.text)).toEqual([...DEFAULT_CHIPS.pt, ...DEFAULT_CHIPS.en]);
+  });
+
   it("never say the same words twice", () => {
     expect(replyChips(saved("yes, we  can."), ["en"]).map((c) => c.text)).toEqual([
       "yes, we  can.",
@@ -75,6 +87,19 @@ describe("the chips on a request for a price", () => {
         label: "From €28 · Celebration cake",
         amount: { value: 2800, currency: "EUR" },
         service: "Celebration cake",
+        from: true,
+      },
+    ]);
+  });
+
+  it("price every one asked for, whatever the price is for", () => {
+    expect(priceChips({ itemOffered: { name: "Lunch for one" }, quantity: 3 }, SERVICES, "EUR")).toEqual([
+      {
+        serviceId: "lunch",
+        label: "€35 · Lunch for one",
+        amount: { value: 10500, currency: "EUR" },
+        service: "Lunch for one",
+        each: { quantity: 3, price: { value: 3500, currency: "EUR" } },
       },
     ]);
   });

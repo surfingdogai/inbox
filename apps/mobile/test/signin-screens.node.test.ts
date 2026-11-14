@@ -12,10 +12,19 @@ import { PhoneAskSheet, Waiting } from "../src/screens/Settings";
  * The screens of signing in with an email code and of a phone that confirms a phone (ADR-028
  * Amendment 4), drawn as the app first draws them: what they say, and nothing more than they need.
  */
+const ACTIVE = {
+  alias: "ib_1",
+  origin: "https://inbox.oficinamare.pt",
+  name: "Oficina Maré",
+  deviceId: "d1",
+  addedAt: 0,
+};
 const app = {
   native: { platform: "android", deviceSecure: async () => true },
   me: { business: { name: "Oficina Maré", timezone: "Europe/Lisbon" } },
-  active: { alias: "ib_1", origin: "https://inbox.oficinamare.pt", name: "Oficina Maré", deviceId: "d1", addedAt: 0 },
+  active: ACTIVE,
+  inboxes: [ACTIVE],
+  clientFor: () => ({}),
   account: { pending: async () => null },
 } as unknown as App;
 
@@ -38,37 +47,70 @@ describe("signing in with email, on the phone", () => {
     // One field: the email. No password, no inbox address, no code to copy from elsewhere yet.
     expect(html.match(/<input/g)).toHaveLength(1);
     expect(html).toContain('autoComplete="email"');
+    expect(html).toContain('placeholder="you@example.com"');
+    // An inbox on the owner's own server is chosen here, before anything goes to Surfing Dog.
+    expect(html).toContain("My inbox is on my own server");
   });
 
-  it("offers signing in with email beside the camera, on the first screen", () => {
+  it("opens on signing in with email, with the computer's code beside it, and the camera only when chosen", () => {
     const html = draw(createElement(Connect, { canGoBack: false, allowLocal: false }));
-    expect(html).toContain("Scan the code");
-    expect(html).toContain("Sign in with email instead");
+    expect(html.indexOf("Sign in with email")).toBeLessThan(html.indexOf("Scan a code from your computer"));
+    expect(html).toMatch(/class="btn primary"[^>]*>Sign in with email</);
+    expect(html).toContain("No computer needed.");
+    expect(html).not.toContain("<video");
     expect(html).toContain("Try the demo");
+    const camera = draw(createElement(Connect, { canGoBack: false, allowLocal: false, start: "scan" }));
+    expect(camera).toContain("Scan the code");
+    expect(camera).toContain("Sign in with email instead");
   });
 
-  it("types the code only as a fallback, marked as a one-time code", () => {
+  it("types the code only as a fallback, marked as a one-time code, and never says an email went when none may have", () => {
     const source = readFileSync(path.resolve(import.meta.dirname, "../src/screens/Connect.tsx"), "utf8");
     expect(source).toContain('autoComplete="one-time-code"');
     expect(source).toContain("Reading it on another device? Type its code:");
     expect(source).toContain("I don't have my other phone");
+    // The label on screen is the field's name: nothing else stands in for it.
+    expect(source).not.toContain('aria-label="The code from the email"');
+    expect(source).not.toContain("Open the email we sent");
+    expect(source).toContain("has an inbox with us, we've sent it a code");
+    expect(source).toContain("Nothing? Check your spam folder.");
+    expect(source).toContain("To add another, sign in again.");
+    expect(source).toContain(["aria-label={`Open $", "{i.name}`}"].join(""));
   });
 });
 
 describe("a new phone asking this one", () => {
   it("shows its name as its own say, and the two digits to compare, with Confirm and Not mine", () => {
-    const html = draw(createElement(PhoneAskSheet, { ask: ask(null), onDone: () => undefined }));
+    const html = draw(
+      createElement(PhoneAskSheet, { entry: ACTIVE, ask: ask(null), many: false, onDone: () => undefined }),
+    );
     expect(html).toContain("A new phone wants to connect");
     expect(html).toContain("A phone that calls itself <b>&quot;Galaxy A15&quot;</b> asked to connect to Oficina Maré.");
     expect(html).toContain(">47<");
     expect(html).toContain(">Confirm<");
     expect(html).toContain(">Not mine<");
+    // A dialog that says what it is, and that a tap beside it never answers.
+    expect(html).toContain('aria-modal="true"');
+    expect(html).toContain('aria-labelledby="phone-ask-h"');
+    expect(html).toContain("it asks again when you next open the app");
+    expect(html).not.toMatch(/class="scrim"[^>]*onClick/);
+  });
+
+  it("names the inbox it asks about when the phone has several", () => {
+    const other = { ...ACTIVE, alias: "ib_2", origin: "https://inbox.kiri.example", name: "Kiri's Kitchen" };
+    const html = draw(
+      createElement(PhoneAskSheet, { entry: other, ask: ask(null), many: true, onDone: () => undefined }),
+    );
+    expect(html).toContain("A new phone wants to connect: Kiri&#x27;s Kitchen");
+    expect(html).toContain("asked to connect to Kiri&#x27;s Kitchen.");
   });
 
   it("only stops one that waits out its day: there are no digits to compare, so nothing to confirm", () => {
     const html = draw(
       createElement(PhoneAskSheet, {
+        entry: ACTIVE,
         ask: ask(new Date(Date.now() + 86_400_000).toISOString()),
+        many: false,
         onDone: () => undefined,
       }),
     );
@@ -82,7 +124,7 @@ describe("a new phone asking this one", () => {
     const confirm = source.slice(source.indexOf("const confirm = async"), source.indexOf("const refuse = async"));
     const asks = confirm.search(/app\.native\s*\.authenticate\(/);
     expect(asks).toBeGreaterThan(-1);
-    expect(asks).toBeLessThan(confirm.indexOf("app.client.confirmPhone("));
+    expect(asks).toBeLessThan(confirm.indexOf("client.confirmPhone("));
     const client = readFileSync(path.resolve(import.meta.dirname, "../src/lib/client.ts"), "utf8");
     expect(client).toMatch(/confirmPhone\(id: string\)[\s\S]*this\.sessions\.confirmProof\(this\.entry, id\)/);
   });
@@ -102,5 +144,13 @@ describe("the app opened by the code email's button", () => {
     const open = source.slice(source.indexOf("const openLink = useCallback"));
     expect(open.indexOf("readCodeLink(url)")).toBeGreaterThan(-1);
     expect(open.indexOf("readCodeLink(url)")).toBeLessThan(open.indexOf("readPhoneLink(url"));
+  });
+
+  it("puts in front the inbox a notification about it names, where the sheet asks", () => {
+    const source = readFileSync(path.resolve(import.meta.dirname, "../src/App.tsx"), "utf8");
+    const open = source.slice(source.indexOf("const openLink = useCallback"));
+    expect(open).toMatch(/readOpenLink\(url, deps\.allowLocal\)[\s\S]*setActive\(entry\)[\s\S]*askAll\.current\(\)/);
+    // An emailed link that waits for the owner's other phone goes to Connect's two digits.
+    expect(open).toMatch(/sessions\.redeem\(phone\)[\s\S]*setWaitingPhone\(r\.pending\)/);
   });
 });

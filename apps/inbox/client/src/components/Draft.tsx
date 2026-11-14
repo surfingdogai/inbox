@@ -1,6 +1,6 @@
 import { FilePenLine } from "lucide-react";
 import { problemOf } from "../lib/api";
-import { breachWords, type DraftView, termsLine } from "../lib/drafts";
+import { breachWords, type DraftView, draftDetails, termsLine } from "../lib/drafts";
 import { byWord } from "../lib/format";
 import { useDraft } from "../lib/queries";
 import { Toast } from "./Feedback";
@@ -35,6 +35,17 @@ export function DraftCard({
         {byWord(draft.by, draft.by.kind)} would offer: <b>{termsLine(draft.terms, tz) || "an offer"}</b>. Not sent: it
         is {breachWords(draft.breaches)}.
       </p>
+      {/* Everything else the customer would read, and its own words to them in full: "as it is" means all of it. */}
+      {draftDetails(draft.terms, tz).length > 0 && (
+        <ul className="hint">
+          {draftDetails(draft.terms, tz).map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+      )}
+      {draft.terms.notes?.trim() && (
+        <p className="hint">Its words to the customer, which no person here wrote: “{draft.terms.notes.trim()}”</p>
+      )}
       {draft.stale && (
         <p className="hint">The item has moved since, so it cannot go as it is: make your own offer, or drop it.</p>
       )}

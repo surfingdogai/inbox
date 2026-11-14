@@ -8,7 +8,7 @@ import {
 } from "../../../../packages/core/src/phones/crypto";
 import { inboxOrigin, type PhoneLink } from "../../../../packages/core/src/phones/links";
 import type { Account, GrantedInbox } from "./account";
-import { lockWords, type Native, NativeError } from "./native";
+import { type DeviceKey, lockWords, type Native, NativeError } from "./native";
 
 /**
  * The inboxes this phone is connected to, and their tokens (ADR-028). An operator who looks after
@@ -57,6 +57,8 @@ export interface PendingPhone {
   readonly answer: TokenAnswer;
   /** Where the yes comes from. */
   readonly waitsOn: "computer" | "phone";
+  /** How long "I don't have my other phone" makes it wait, in hours (a day, or three). */
+  readonly waitHours?: number | undefined;
 }
 
 interface Tokens {
@@ -72,6 +74,8 @@ interface TokenAnswer {
   readonly device_id: string;
   readonly state?: "pending" | "connected";
   readonly match?: string;
+  /** For a phone that waits for the owner's other phone: how long "I don't have my other phone" waits. */
+  readonly wait_hours?: number;
   readonly inbox?: { readonly origin: string; readonly name: string };
 }
 
@@ -404,22 +408,7 @@ export class Sessions {
       if (!res.ok) throw await problem(res);
       const answer = (await res.json()) as TokenAnswer;
       const named = { ...answer, inbox: { origin: link.origin, name: answer.inbox?.name || link.name } };
-      if (answer.state !== "pending") return { entry: await this.keep(alias, link.origin, named) };
-      const match = await pairingMatch(link.secret, await jwkThumbprint(key));
-      if (answer.match !== match)
-        throw new InboxError("That inbox answered for another phone. Sign in again.", 409, "mismatch");
-      this.hold(alias, named);
-      return {
-        pending: {
-          alias,
-          origin: link.origin,
-          name: named.inbox.name,
-          deviceId: answer.device_id,
-          match,
-          answer: named,
-          waitsOn: "phone",
-        },
-      };
+      return await this.landed(alias, link, key, named);
     } catch (error) {
       this.access.delete(alias);
       await this.native.deleteKeys(alias);
@@ -492,16 +481,50 @@ export class Sessions {
     return ((await res.json()) as { message?: string }).message ?? "A link is on its way.";
   }
 
-  /** The emailed link, opened on this phone: redeemed with the verifier and the key that asked. */
-  async redeem(link: PhoneLink): Promise<InboxEntry> {
+  /**
+   * A redeemed link's answer: the inbox kept, connected; or, when the owner has a phone already that
+   * says yes first, a phone that waits for it, showing the same two digits as that phone, which the
+   * inbox worked out from the link and this phone's key. Its tokens are held in memory meanwhile.
+   */
+  private async landed(
+    alias: string,
+    link: { origin: string; secret: string },
+    key: DeviceKey,
+    answer: TokenAnswer & { inbox: { origin: string; name: string } },
+  ): Promise<{ entry: InboxEntry } | { pending: PendingPhone }> {
+    if (answer.state !== "pending") return { entry: await this.keep(alias, link.origin, answer) };
+    const match = await pairingMatch(link.secret, await jwkThumbprint(key));
+    if (answer.match !== match)
+      throw new InboxError("That inbox answered for another phone. Sign in again.", 409, "mismatch");
+    this.hold(alias, answer);
+    return {
+      pending: {
+        alias,
+        origin: link.origin,
+        name: answer.inbox.name,
+        deviceId: answer.device_id,
+        match,
+        answer,
+        waitsOn: "phone",
+        waitHours: typeof answer.wait_hours === "number" ? answer.wait_hours : undefined,
+      },
+    };
+  }
+
+  /**
+   * The emailed link, opened on this phone: redeemed with the verifier and the key that asked.
+   * Connected; or, when the inbox has new phones wait for the owner's other phone, waiting for it.
+   */
+  async redeem(link: PhoneLink): Promise<{ entry: InboxEntry } | { pending: PendingPhone }> {
     const raw = await this.native.secureGet(verifierKey(link.origin));
     if (!raw) throw new InboxError("Ask for the link again from this phone.", 400, "no_verifier");
     const { alias, verifier } = JSON.parse(raw) as { alias: string; verifier: string };
+    const key = await this.native.deviceKey(alias);
     const { at, proof } = await this.proof(alias, "link", link.origin, link.secret);
     const res = await this.post(`${link.origin}/v1/phone/link/redeem`, {
       secret: link.secret,
       verifier,
-      device_key: await this.native.deviceKey(alias),
+      device_key: key,
       at,
       proof,
       name: await this.native.deviceName(),
@@ -509,7 +532,9 @@ export class Sessions {
     });
     if (!res.ok) throw await problem(res);
     await this.native.secureRemove(verifierKey(link.origin));
-    return this.keep(alias, link.origin, (await res.json()) as TokenAnswer);
+    const answer = (await res.json()) as TokenAnswer;
+    const named = { ...answer, inbox: { origin: link.origin, name: answer.inbox?.name || new URL(link.origin).host } };
+    return this.landed(alias, link, key, named);
   }
 
   /**

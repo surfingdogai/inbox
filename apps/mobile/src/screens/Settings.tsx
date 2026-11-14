@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DEFAULT_PREFS, type NotifyPrefs } from "../../../../packages/core/src/phones/prefs";
 import { useApp } from "../context";
 import type { PhoneAsk, PhoneRow } from "../lib/client";
@@ -303,11 +303,21 @@ export function Settings() {
                   <div key={r.id}>
                     <span className="quick-text">{r.text}</span>
                     {confirmRemove === r.id ? (
-                      <button type="button" className="btn link" onClick={() => void forget(r)}>
+                      <button
+                        type="button"
+                        className="btn link"
+                        aria-label={`Remove “${r.text}”?`}
+                        onClick={() => void forget(r)}
+                      >
                         Remove it?
                       </button>
                     ) : (
-                      <button type="button" className="btn quiet sm" onClick={() => setConfirmRemove(r.id)}>
+                      <button
+                        type="button"
+                        className="btn quiet sm"
+                        aria-label={`Remove “${r.text}”`}
+                        onClick={() => setConfirmRemove(r.id)}
+                      >
                         Remove
                       </button>
                     )}
@@ -436,20 +446,40 @@ function dayAndTime(at: number): string {
 }
 
 /**
- * The confirm sheet (ADR-028 Amendment 4): a new phone asked to connect to this inbox and waits for
- * this phone's yes. Its name is its own say, so it is quoted. Confirm asks for the fingerprint or face
- * first, and is signed by this phone's key; "Not mine" removes the new phone. A phone waiting out its
- * day ("I don't have my other phone") can only be stopped from here: its owner sees no digits to
- * compare, so there is nothing to confirm.
+ * The confirm sheet (ADR-028 Amendment 4): a new phone asked to connect to one of the inboxes on this
+ * phone (named when there are several) and waits for this phone's yes. Its name is its own say, so it
+ * is quoted. Confirm asks for the fingerprint or face first, and is signed by this phone's key; "Not
+ * mine" removes the new phone. A phone waiting out its day ("I don't have my other phone") can only be
+ * stopped from here: its owner sees no digits to compare, so there is nothing to confirm. A security
+ * question, so a tap beside it never answers it: "Later" says it asks again when the app next opens.
  */
-export function PhoneAskSheet({ ask, onDone }: { ask: PhoneAsk; onDone: () => void }) {
+export function PhoneAskSheet({
+  entry,
+  ask,
+  many,
+  onDone,
+}: {
+  entry: InboxEntry;
+  ask: PhoneAsk;
+  /** More than one inbox is on this phone: the sheet names the one asked about. */
+  many: boolean;
+  onDone: () => void;
+}) {
   const app = useApp();
   const [busy, setBusy] = useState(false);
-  const business = app.me?.business.name || app.active?.name || "your inbox";
+  const business = entry.name || "your inbox";
   const waiting = ask.wait_until ? Date.parse(ask.wait_until) : null;
+  const client = app.clientFor(entry);
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    const was = document.activeElement;
+    heading.current?.focus();
+    return () => {
+      if (was instanceof HTMLElement) was.focus();
+    };
+  }, []);
 
   const confirm = async () => {
-    if (!app.client) return;
     setBusy(true);
     try {
       // The yes is a person's: the fingerprint or face first, never a notification's.
@@ -459,7 +489,7 @@ export function PhoneAskSheet({ ask, onDone }: { ask: PhoneAsk; onDone: () => vo
           .catch(() => false);
         if (!ok) return;
       }
-      await app.client.confirmPhone(ask.id);
+      await client.confirmPhone(ask.id);
       app.toast(`"${ask.phone.name}" can open ${business} now.`);
       onDone();
     } catch (e) {
@@ -470,10 +500,9 @@ export function PhoneAskSheet({ ask, onDone }: { ask: PhoneAsk; onDone: () => vo
   };
 
   const refuse = async () => {
-    if (!app.client) return;
     setBusy(true);
     try {
-      await app.client.refusePhone(ask.id);
+      await client.refusePhone(ask.id);
       app.toast("Stopped. That phone can't open your inbox.");
       onDone();
     } catch (e) {
@@ -483,12 +512,16 @@ export function PhoneAskSheet({ ask, onDone }: { ask: PhoneAsk; onDone: () => vo
     }
   };
 
+  const title = waiting ? "A new phone connects soon" : "A new phone wants to connect";
   return (
     <>
-      <div className="scrim" onClick={onDone} aria-hidden="true" />
-      <section className="sheet" role="dialog" aria-label="A new phone wants to connect">
+      <div className="scrim" aria-hidden="true" />
+      <section className="sheet" role="dialog" aria-modal="true" aria-labelledby="phone-ask-h">
         <div className="grabber" aria-hidden="true" />
-        <h2>{waiting ? "A new phone connects soon" : "A new phone wants to connect"}</h2>
+        <h2 id="phone-ask-h" ref={heading} tabIndex={-1}>
+          {title}
+          {many ? `: ${business}` : ""}
+        </h2>
         <p className="sub" style={{ margin: 0 }}>
           A phone that calls itself <b>"{ask.phone.name}"</b> asked to connect to {business}.{" "}
           {waiting
@@ -513,6 +546,12 @@ export function PhoneAskSheet({ ask, onDone }: { ask: PhoneAsk; onDone: () => vo
             <button type="button" className="btn" disabled={busy} onClick={() => void refuse()}>
               Not mine
             </button>
+            <button type="button" className="btn quiet" disabled={busy} onClick={onDone}>
+              Later
+            </button>
+            <p className="fine" style={{ margin: 0 }}>
+              Later: it asks again when you next open the app.
+            </p>
           </>
         )}
       </section>
@@ -534,6 +573,10 @@ export function Waiting({ entry }: { entry: InboxEntry }) {
         <p>
           {entry.name} lets this phone in then, unless it is stopped from one of your phones or from the email we sent
           you. Until then it opens nothing.
+        </p>
+        <p className="fine">
+          No need to wait if you can use a computer: remove your old phone in Settings → Phone there, and sign in on
+          this one again.
         </p>
       </div>
       <div className="end">

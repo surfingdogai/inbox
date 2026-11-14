@@ -11,7 +11,8 @@ import { money } from "./view";
  *   (`GET /v1/services`, read with no token, as any assistant reads it): "€35 · Lunch for one". A tap
  *   opens the price sheet with the amount filled in;
  * - on a message, the owner's saved replies, then two default ones, only in a language we write for
- *   customers (English or Portuguese, as `customer/lang.ts`), and only for a business that speaks it.
+ *   customers (English or Portuguese, as `customer/lang.ts`), only for a business that speaks it, and in
+ *   the customer's language when the business speaks it (`chipLangs`).
  */
 
 /** A service as the inbox's public door lists it: what any assistant reads. */
@@ -43,14 +44,40 @@ export const DEFAULT_CHIPS: Readonly<Record<ChipLang, readonly string[]>> = {
   pt: ["Sim, podemos.", "Lamentamos, nesse dia não podemos."],
 };
 
+/** The language a tag names, when it is one we write for customers. */
+function langOf(tag: string | null | undefined): ChipLang | null {
+  const t = tag?.trim().toLowerCase() ?? "";
+  if (t === "en" || t.startsWith("en-") || t.startsWith("en_")) return "en";
+  if (t === "pt" || t.startsWith("pt-") || t.startsWith("pt_")) return "pt";
+  return null;
+}
+
 /** The first of the business's languages that we write for customers; null when it speaks none of them. */
 export function chipLang(languages: readonly string[]): ChipLang | null {
   for (const language of languages) {
-    const tag = language.trim().toLowerCase();
-    if (tag === "en" || tag.startsWith("en-") || tag.startsWith("en_")) return "en";
-    if (tag === "pt" || tag.startsWith("pt-") || tag.startsWith("pt_")) return "pt";
+    const lang = langOf(language);
+    if (lang) return lang;
   }
   return null;
+}
+
+/**
+ * The languages of the default chips for one customer: the customer's own (`locale`), as the inbox
+ * answers them (`customerLang`), when the business speaks it; with no locale known, every one of ours
+ * the business speaks, in its order, for the owner to choose; else the business's first. None for a
+ * business that speaks neither.
+ */
+export function chipLangs(languages: readonly string[], locale?: string | null): ChipLang[] {
+  const spoken: ChipLang[] = [];
+  for (const language of languages) {
+    const lang = langOf(language);
+    if (lang && !spoken.includes(lang)) spoken.push(lang);
+  }
+  if (spoken.length === 0) return [];
+  const theirs = langOf(locale);
+  if (theirs && spoken.includes(theirs)) return [theirs];
+  if (!theirs) return spoken;
+  return spoken.slice(0, 1);
 }
 
 /** A reply chip: the owner's saved words, or a default one. */
@@ -59,11 +86,14 @@ export interface ReplyChip {
   readonly saved: boolean;
 }
 
-/** On a message: the owner's saved replies first, then the default ones in the business's language. */
-export function replyChips(saved: readonly QuickReply[], languages: readonly string[]): ReplyChip[] {
+/** On a message: the owner's saved replies first, then the default ones in the customer's language (`chipLangs`). */
+export function replyChips(
+  saved: readonly QuickReply[],
+  languages: readonly string[],
+  locale?: string | null,
+): ReplyChip[] {
   const out: ReplyChip[] = saved.map((r) => ({ text: r.text, saved: true }));
-  const lang = chipLang(languages);
-  if (lang)
+  for (const lang of chipLangs(languages, locale))
     for (const text of DEFAULT_CHIPS[lang])
       if (!out.some((c) => sameWords(c.text, text))) out.push({ text, saved: false });
   return out;
@@ -74,11 +104,13 @@ export interface PriceChip {
   /** The service it prices. */
   readonly serviceId: string;
   readonly label: string;
-  /** The amount the sheet is filled in with: the price, times the people for a price per person. */
+  /** The amount the sheet is filled in with: the price, times the people or the number asked for. */
   readonly amount: Money;
   readonly service: string;
-  /** A price per person, for more than one: how it was worked out ("4 × €12"). */
+  /** For more than one: how it was worked out ("4 × €12"). */
   readonly each?: { readonly quantity: number; readonly price: Money } | undefined;
+  /** The list says "from": the least it costs, not its price. */
+  readonly from?: true | undefined;
 }
 
 /** A name as it is compared: no accents, no capitals, words only. */
@@ -134,14 +166,16 @@ function chipOf(s: PublicService, quantity: number | undefined, currency: string
   const p = s.price as NonNullable<PublicService["price"]>;
   const unit: Money = { value: p.value ?? 0, currency: (p.currency ?? currency).toUpperCase() };
   const perPerson = p.per === "person";
-  const people = perPerson && quantity && quantity > 1 ? quantity : 1;
+  // The people for a price per person, or how many they asked for: three haircuts are three prices.
+  const times = quantity && quantity > 1 ? Math.floor(quantity) : 1;
   const label = `${p.model === "from" ? "From " : ""}${money(unit)}${perPerson ? " a person" : ""} · ${s.name}`;
   return {
     serviceId: s.id,
     label,
-    amount: { value: unit.value * people, currency: unit.currency },
+    amount: { value: unit.value * times, currency: unit.currency },
     service: s.name,
-    ...(people > 1 ? { each: { quantity: people, price: unit } } : {}),
+    ...(times > 1 ? { each: { quantity: times, price: unit } } : {}),
+    ...(p.model === "from" ? { from: true as const } : {}),
   };
 }
 

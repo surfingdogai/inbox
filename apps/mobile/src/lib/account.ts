@@ -31,6 +31,8 @@ export interface PendingSignIn {
   readonly sentAt: number;
   readonly resendIn: number;
   readonly startedAt: number;
+  /** Codes asked for in this sign-in, the first included: three an hour at most. */
+  readonly sends?: number | undefined;
 }
 
 /** An inbox the signed-in address owns, as the service lists it. */
@@ -87,17 +89,37 @@ export function readCodeLink(url: string): { id: string; code: string } | null {
   return ID.test(id) && CODE.test(code) ? { id, code } : null;
 }
 
+/**
+ * What a notification about an inbox opens (`ai.surfingdog.inbox://open?o=<inbox>`): the inbox's
+ * origin, or null for anything else.
+ */
+export function readOpenLink(url: string, allowLocal = false): string | null {
+  if (!url.startsWith(`${APP_SCHEME}://`)) return null;
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return null;
+  }
+  if ((u.host || u.pathname.replace(/^\/+/, "")) !== "open") return null;
+  return inboxOrigin(u.searchParams.get("o") ?? "", allowLocal);
+}
+
+/** Words for the owner when the service's answer says nothing they can read. */
+const OUR_SIDE = "Something went wrong on our side. Try again.";
+
 async function problem(res: Response): Promise<AccountError> {
   try {
     const p = (await res.json()) as { detail?: string; code?: string };
-    return new AccountError(
-      p.detail || `Surfing Dog answered ${res.status}.`,
-      res.status,
-      p.code ?? `http_${res.status}`,
-    );
+    return new AccountError(p.detail || OUR_SIDE, res.status, p.code ?? `http_${res.status}`);
   } catch {
-    return new AccountError(`Surfing Dog answered ${res.status}.`, res.status, `http_${res.status}`);
+    return new AccountError(OUR_SIDE, res.status, `http_${res.status}`);
   }
+}
+
+/** A kept sign-in as the screens see it: never its verifier. */
+function shown(k: PendingSignIn): PendingSignIn {
+  return { id: k.id, to: k.to, sentAt: k.sentAt, resendIn: k.resendIn, startedAt: k.startedAt, sends: k.sends ?? 1 };
 }
 
 export class Account {
@@ -133,7 +155,7 @@ export class Account {
     });
     if (res.status !== 202) throw await problem(res);
     const a = (await res.json()) as { id?: string; to?: string; resend_in?: number };
-    if (!a.id || !ID.test(a.id)) throw new AccountError("Surfing Dog's answer did not read.", 502, "bad_answer");
+    if (!a.id || !ID.test(a.id)) throw new AccountError(OUR_SIDE, 502, "bad_answer");
     const now = this.clock();
     const kept: PendingSignIn & { verifier: string } = {
       id: a.id,
@@ -141,10 +163,11 @@ export class Account {
       sentAt: now,
       resendIn: Math.max(0, Math.min(600, Number(a.resend_in) || 60)),
       startedAt: now,
+      sends: 1,
       verifier,
     };
     await this.native.secureSet(KEEP, JSON.stringify(kept));
-    return { id: kept.id, to: kept.to, sentAt: kept.sentAt, resendIn: kept.resendIn, startedAt: kept.startedAt };
+    return shown(kept);
   }
 
   private async kept(): Promise<(PendingSignIn & { verifier: string }) | null> {
@@ -161,7 +184,7 @@ export class Account {
   /** The sign-in this phone is waiting on, if any (the app may have been closed while the email came). */
   async pending(): Promise<PendingSignIn | null> {
     const k = await this.kept();
-    return k ? { id: k.id, to: k.to, sentAt: k.sentAt, resendIn: k.resendIn, startedAt: k.startedAt } : null;
+    return k ? shown(k) : null;
   }
 
   /** "Send a new code": asked again for the same sign-in; the earlier codes keep working. */
@@ -170,9 +193,9 @@ export class Account {
     if (!k) throw new AccountError("Start again: that sign-in is too old.", 410, "gone");
     const res = await this.post(`/v1/app/signin/${k.id}/resend`, {});
     if (res.status !== 202) throw await problem(res);
-    const next = { ...k, sentAt: this.clock() };
+    const next = { ...k, sentAt: this.clock(), sends: (k.sends ?? 1) + 1 };
     await this.native.secureSet(KEEP, JSON.stringify(next));
-    return { id: next.id, to: next.to, sentAt: next.sentAt, resendIn: next.resendIn, startedAt: next.startedAt };
+    return shown(next);
   }
 
   /**
@@ -189,7 +212,7 @@ export class Account {
     const res = await this.post(`/v1/app/signin/${k.id}/confirm`, { code: typed, verifier: k.verifier });
     if (!res.ok) throw await problem(res);
     const a = (await res.json()) as { grant?: string; expires_in?: number; inboxes?: GrantedInbox[] };
-    if (typeof a.grant !== "string") throw new AccountError("Surfing Dog's answer did not read.", 502, "bad_answer");
+    if (typeof a.grant !== "string") throw new AccountError(OUR_SIDE, 502, "bad_answer");
     await this.forget();
     const inboxes = (Array.isArray(a.inboxes) ? a.inboxes : []).filter(
       (i) => typeof i.id === "string" && inboxOrigin(String(i.origin)) !== null,
@@ -224,8 +247,7 @@ export class Account {
     };
     const origin = inboxOrigin(String(a.inbox?.origin ?? ""));
     const secret = a.link?.secret ?? "";
-    if (!origin || !/^sdi_pp_[A-Za-z0-9_-]{43}$/.test(secret))
-      throw new AccountError("Surfing Dog's answer did not read.", 502, "bad_answer");
+    if (!origin || !/^sdi_pp_[A-Za-z0-9_-]{43}$/.test(secret)) throw new AccountError(OUR_SIDE, 502, "bad_answer");
     return { origin, name: a.inbox?.name || inbox.name, secret };
   }
 }

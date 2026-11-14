@@ -4,7 +4,7 @@ import { readItemLink, readPhoneLink } from "../../../packages/core/src/phones/l
 import type { ItemDetail, ItemView } from "../../inbox/client/src/lib/types";
 import { checkForUpdate } from "./channel";
 import { AppContext, type App as AppValue, type Route } from "./context";
-import { ACCOUNT_ORIGIN, Account, readCodeLink } from "./lib/account";
+import { ACCOUNT_ORIGIN, Account, readCodeLink, readOpenLink } from "./lib/account";
 import type { PublicFacts } from "./lib/chips";
 import {
   DEMO_ENTRY,
@@ -20,7 +20,7 @@ import { type Native, native as nativeOf } from "./lib/native";
 import { Box, factsName, type KV, Outbox, type QueuedAction } from "./lib/offline";
 import { setUpPush } from "./lib/push";
 import { QuickReplies } from "./lib/replies";
-import { type Fetch, type InboxEntry, InboxError, Sessions } from "./lib/session";
+import { type Fetch, type InboxEntry, InboxError, type PendingPhone, Sessions } from "./lib/session";
 import { NO_UPDATE, type UpdateState } from "./lib/update";
 import { needsYou } from "./lib/view";
 import { Connect } from "./screens/Connect";
@@ -67,6 +67,8 @@ const ACTIVE = "active";
 export const RELOCK_MS = 300_000;
 /** An Accept right after the app was unlocked asks nothing more. */
 const JUST_UNLOCKED_MS = 30_000;
+/** While the app is in front, how often it asks every inbox whether a new phone waits for its yes. */
+const ASK_EVERY_MS = 30_000;
 
 function memoryKv(): KV {
   const m = new Map<string, string>();
@@ -107,8 +109,16 @@ export function App({ deps }: { deps: Deps }) {
     () => new Account(native, deps.fetch, deps.accountOrigin ?? ACCOUNT_ORIGIN),
     [native, deps.fetch, deps.accountOrigin],
   );
-  /** New phones that ask this one for a yes, in the inbox in front (ADR-028 Amendment 4). */
-  const [asks, setAsks] = useState<readonly PhoneAsk[]>([]);
+  /**
+   * New phones that ask this one for a yes (ADR-028 Amendment 4), in every inbox on the phone: the sheet
+   * shows the first, naming its inbox, over any screen.
+   */
+  const [asks, setAsks] = useState<readonly { entry: InboxEntry; ask: PhoneAsk }[]>([]);
+  /** Asks answered or put off on this phone since the app opened: the sheet does not come back for them. */
+  const answered = useRef(new Set<string>());
+  const shownAsk = asks.find((a) => !answered.current.has(a.ask.id));
+  /** A phone that redeemed an emailed link and waits for the owner's other phone: Connect shows it. */
+  const [waitingPhone, setWaitingPhone] = useState<PendingPhone | null>(null);
   /** A code the sign-in email's button handed to the app: the Connect screen takes it. */
   const [codeLink, setCodeLink] = useState<{ id: string; code: string } | null>(null);
   const [ready, setReady] = useState(false);
@@ -292,11 +302,7 @@ export function App({ deps }: { deps: Deps }) {
         .then(setSpam)
         .catch(() => setSpam(null));
       // A new phone that asked to connect waits for this one's yes: the sheet asks, on any screen.
-      if (!demo)
-        client
-          .phoneAsks()
-          .then(setAsks)
-          .catch(() => setAsks([]));
+      if (!demo) void askAll.current();
     } catch (error) {
       if (error instanceof InboxError && error.code === "signed_out") {
         toast(`This phone was removed from ${active.name}. Connect it again from Settings → Phone.`);
@@ -324,7 +330,6 @@ export function App({ deps }: { deps: Deps }) {
     setViews([]);
     setMe(null);
     setSpam(null);
-    setAsks([]);
     setListLoaded(false);
     void refresh();
     if (active && !demo) deps.kv.setItem(`sdi.${ACTIVE}`, active.alias);
@@ -476,9 +481,27 @@ export function App({ deps }: { deps: Deps }) {
           return;
         }
         try {
-          await connected(await sessions.redeem(phone));
+          const r = await sessions.redeem(phone);
+          if ("entry" in r) await connected(r.entry);
+          else {
+            // The owner has a phone that says yes first: Connect shows the two digits and waits.
+            setWaitingPhone(r.pending);
+            setStack([{ name: "connect" }]);
+          }
         } catch (error) {
           toast(error instanceof Error ? error.message : "That link did not work.");
+        }
+        return;
+      }
+      // A notification about the inbox, not an item ("A new phone wants to connect"): that inbox in
+      // front, where the sheet asks.
+      const opened = readOpenLink(url, deps.allowLocal);
+      if (opened) {
+        const entry = inboxes.find((e) => e.origin === opened);
+        if (entry) {
+          setActive(entry);
+          setStack([{ name: "inbox" }]);
+          void askAll.current();
         }
         return;
       }
@@ -548,6 +571,7 @@ export function App({ deps }: { deps: Deps }) {
         setLocked(true);
       else {
         void flush().then(refresh);
+        void askAll.current();
         checkUpdate.current();
       }
     });
@@ -590,6 +614,34 @@ export function App({ deps }: { deps: Deps }) {
     pendingLink.current = null;
     void openLink(url);
   }, [ready, locked, insecure, openLink]);
+
+  // New phones that ask for this one's yes, in every inbox on the phone: when the app opens or comes
+  // back, after a refresh, and every half minute while it is in front.
+  const askAll = useRef<() => Promise<void>>(async () => undefined);
+  askAll.current = async () => {
+    if (demo || locked || insecure) return;
+    const open = inboxes.filter((e) => !e.waitingUntil);
+    const found = await Promise.all(
+      open.map(async (entry) => {
+        try {
+          const list = await new InboxClient(entry, sessions, deps.fetch).phoneAsks();
+          return list.map((ask) => ({ entry, ask }));
+        } catch {
+          return [];
+        }
+      }),
+    );
+    // The inbox in front first.
+    setAsks(
+      found.flat().sort((a, b) => Number(b.entry.alias === active?.alias) - Number(a.entry.alias === active?.alias)),
+    );
+  };
+  useEffect(() => {
+    if (!ready || locked || insecure || demo || inboxes.length === 0) return;
+    void askAll.current();
+    const t = setInterval(() => void askAll.current(), ASK_EVERY_MS);
+    return () => clearInterval(t);
+  }, [ready, locked, insecure, demo, inboxes.length]);
 
   // Every inbox's push registration stays current: the push token changes now and then.
   const registerPush = useRef<() => void>(() => undefined);
@@ -634,6 +686,7 @@ export function App({ deps }: { deps: Deps }) {
     inboxes,
     active,
     client,
+    clientFor: (entry) => new InboxClient(entry, sessions, deps.fetch),
     demo,
     tryDemo,
     leaveDemo,
@@ -703,6 +756,8 @@ export function App({ deps }: { deps: Deps }) {
         onHandled={() => setHanded(null)}
         code={codeLink}
         onCode={() => setCodeLink(null)}
+        waiting={waitingPhone}
+        onWaiting={() => setWaitingPhone(null)}
         start={deps.connectStart}
       />
     ) : active?.waitingUntil && !demo ? (
@@ -726,8 +781,18 @@ export function App({ deps }: { deps: Deps }) {
       <div className={`shell${showBanner ? " offline" : ""}`}>
         {showBanner && <OfflineBanner cachedAt={cachedAt} inbox={active?.name ?? ""} queued={queued.length} />}
         {screen}
-        {asks[0] && route.name !== "connect" && (
-          <PhoneAskSheet ask={asks[0]} onDone={() => setAsks((a) => a.filter((x) => x.id !== asks[0]?.id))} />
+        {shownAsk && route.name !== "connect" && (
+          <PhoneAskSheet
+            key={shownAsk.ask.id}
+            entry={shownAsk.entry}
+            ask={shownAsk.ask}
+            many={inboxes.length > 1}
+            onDone={() => {
+              // Answered, or "Later": not asked again until the app next opens.
+              answered.current.add(shownAsk.ask.id);
+              setAsks((a) => a.filter((x) => x.ask.id !== shownAsk.ask.id));
+            }}
+          />
         )}
       </div>
       {toastText && (

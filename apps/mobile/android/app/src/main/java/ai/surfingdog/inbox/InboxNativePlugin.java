@@ -2,6 +2,7 @@ package ai.surfingdog.inbox;
 
 import android.Manifest;
 import android.os.Build;
+import android.provider.Settings;
 import androidx.biometric.BiometricManager;
 import androidx.biometric.BiometricPrompt;
 import androidx.core.app.NotificationManagerCompat;
@@ -58,11 +59,26 @@ public class InboxNativePlugin extends Plugin {
     return a != null && a.matches("^[A-Za-z0-9_-]{1,64}$") ? a : null;
   }
 
+  /**
+   * The phone's name as its owner knows it: the one in Settings → About phone ("Galaxy A15", or one
+   * the owner gave it), readable by any app since Android 7.1; else its maker and model code.
+   */
   @PluginMethod
   public void deviceName(PluginCall call) {
-    String model = Build.MODEL == null ? "Phone" : Build.MODEL;
-    String maker = Build.MANUFACTURER == null ? "" : Build.MANUFACTURER;
-    String name = model.toLowerCase().startsWith(maker.toLowerCase()) || maker.isEmpty() ? model : maker + " " + model;
+    String name = null;
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N_MR1) {
+      try {
+        name = Settings.Global.getString(getContext().getContentResolver(), Settings.Global.DEVICE_NAME);
+      } catch (RuntimeException e) {
+        name = null;
+      }
+    }
+    if (name == null || name.trim().isEmpty()) {
+      String model = Build.MODEL == null ? "Phone" : Build.MODEL;
+      String maker = Build.MANUFACTURER == null ? "" : Build.MANUFACTURER;
+      name = model.toLowerCase().startsWith(maker.toLowerCase()) || maker.isEmpty() ? model : maker + " " + model;
+    }
+    name = name.trim();
     JSObject r = new JSObject();
     r.put("name", name.length() > 60 ? name.substring(0, 60) : name);
     call.resolve(r);

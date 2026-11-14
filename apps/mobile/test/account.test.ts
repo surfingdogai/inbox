@@ -1,6 +1,7 @@
 import { logMailOut } from "@surfingdog/platform";
 import { describe, expect, it } from "vitest";
 import { b64uEncode, sha256b64u } from "../../../packages/core/src/phones/crypto";
+import { readPhoneLink } from "../../../packages/core/src/phones/links";
 import { createInbox } from "../../inbox/src/app";
 import { freshDb } from "../../inbox/test/harness";
 import { clientIp } from "../../inbox/test/owner-session";
@@ -231,22 +232,61 @@ describe("signing in with an email code", () => {
     const two = device("Moto G");
     const second = (await signIn(two)).connected;
     if (!("pending" in second)) throw new Error("not waiting");
+    // None of the owner's phones would hear of it at once (notifications are off here): three days.
+    expect(second.pending.waitHours).toBe(72);
     const kept = await two.sessions.waitADay(second.pending);
-    expect(kept.waitingUntil).toBeGreaterThan(Date.now() + 23 * 3_600_000);
+    expect(kept.waitingUntil).toBeGreaterThan(Date.now() + 71 * 3_600_000);
     expect((await two.sessions.list()).map((e) => e.alias)).toEqual([kept.alias]);
     // It opens nothing meanwhile.
     await expect(new InboxClient(kept, two.sessions, fetchImpl).items("all")).rejects.toMatchObject({ status: 403 });
     expect(await two.sessions.confirmed(kept)).toBe("waiting");
     // The owner's email goes after the answer (on a Worker, once the answer is out).
-    for (let i = 0; i < 50 && !mail.sent.some((m) => m.subject.includes("in 24 hours")); i++)
+    for (let i = 0; i < 50 && !mail.sent.some((m) => m.subject.includes("in 3 days")); i++)
       await new Promise((r) => setTimeout(r, 10));
-    expect(mail.sent.some((m) => m.subject.includes("in 24 hours"))).toBe(true);
-    // A day on: let in, and an ordinary inbox on the phone from then.
-    later(24 * 3_600_000 + 1000);
+    expect(mail.sent.some((m) => m.subject.includes("in 3 days"))).toBe(true);
+    // Its days on: let in, and an ordinary inbox on the phone from then.
+    later(72 * 3_600_000 + 1000);
     expect(await two.sessions.confirmed(kept)).toBe("confirmed");
     const settled = await two.sessions.settled(kept);
     expect(settled.waitingUntil).toBeUndefined();
     expect((await two.sessions.list())[0]?.waitingUntil).toBeUndefined();
     expect((await new InboxClient(settled, two.sessions, fetchImpl).items("all")).items).toEqual([]);
+  });
+
+  it("redeems an emailed link on a second phone: in at once today, and waiting for the first phone's yes once emailed links wait", async () => {
+    const { device, signIn, fetchImpl, inbox, mail } = await setup();
+    const one = device("Pixel 8");
+    const first = (await signIn(one)).connected;
+    if (!("entry" in first)) throw new Error("first phone waited");
+    /** A phone asks its own server for a link, and opens the one the email brings. */
+    const emailed = async (d: ReturnType<typeof device>) => {
+      const links = () => mail.sent.filter((m) => m.subject === "Sign in on your phone");
+      const before = links().length;
+      await d.sessions.askForLink(ORIGIN, OWNER);
+      for (let i = 0; i < 50 && links().length === before; i++) await new Promise((r) => setTimeout(r, 10));
+      const text = links().at(-1)?.text ?? "";
+      const link = readPhoneLink(/https:\/\/\S+/.exec(text)?.[0] ?? "");
+      if (link?.kind !== "link") throw new Error(`no link in ${text}`);
+      return d.sessions.redeem(link);
+    };
+    // Today: in at once, as the app released before Amendment 4 expects of an emailed link.
+    const two = device("Galaxy A15");
+    const now = await emailed(two);
+    if (!("entry" in now)) throw new Error("an emailed link waited while emailed links do not");
+    expect((await new InboxClient(now.entry, two.sessions, fetchImpl).items("all")).items).toEqual([]);
+    // Once emailed links wait: the app keeps nothing, shows the two digits, and waits for the yes.
+    inbox.caps.phones.emailedLinksWait = true;
+    const three = device("Moto G");
+    const waits = await emailed(three);
+    if (!("pending" in waits)) throw new Error("let in with nobody's yes");
+    expect(waits.pending).toMatchObject({ waitsOn: "phone", match: expect.stringMatching(/^\d{2}$/) });
+    expect(await three.sessions.list()).toEqual([]);
+    const firstClient = new InboxClient(first.entry, one.sessions, fetchImpl);
+    const [ask] = await firstClient.phoneAsks();
+    expect(ask).toMatchObject({ match: waits.pending.match, phone: { name: "Moto G" } });
+    await firstClient.confirmPhone(ask?.id ?? "");
+    expect(await three.sessions.confirmed(waits.pending)).toBe("confirmed");
+    const entry = await three.sessions.finish(waits.pending);
+    expect((await new InboxClient(entry, three.sessions, fetchImpl).items("all")).items).toEqual([]);
   });
 });
