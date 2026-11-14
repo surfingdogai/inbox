@@ -105,7 +105,7 @@ describe("an inbox that did not open on the phone", () => {
 
   it("tells a no from the other phone from a wait that ran out", () => {
     expect(source).toContain('"Your other phone said no. New phones can\'t connect for a day."');
-    expect(source).toMatch(/const saidNo = state === "refused" && Date\.now\(\) < until - RAN_OUT_MS;/);
+    expect(source).toMatch(/const saidNo = state === "refused" && Date\.now\(\) < waitEnds - RAN_OUT_MS;/);
   });
 });
 
@@ -190,7 +190,7 @@ describe("a new phone asking this one", () => {
     expect(source).toContain("app.checkAgain()");
     const shell = readFileSync(path.resolve(import.meta.dirname, "../src/App.tsx"), "utf8");
     expect(shell).toMatch(
-      /if \(checking\.current\) toast\(`Still waiting\. It connects on \$\{dayAndTime\(active\.waitingUntil\)\}\.`\)/,
+      /else if \(checking\.current\)\s*toast\([\s\S]*`Still waiting\. It connects on \$\{dayAndTime\(active\.waitingUntil\)\}\.`/,
     );
   });
 });

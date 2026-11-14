@@ -47,6 +47,8 @@ export interface App {
   readonly loading: boolean;
   /** The active inbox cannot be reached. */
   readonly offline: boolean;
+  /** Whether the app is in front: what looks on its own (a waiting phone's look) looks only then. */
+  readonly front: boolean;
   /** When the shown list was read from the inbox, while offline; null when nothing of it is on the phone. */
   readonly cachedAt: number | null;
   /** A real list is shown: read from the inbox now, or from the phone's cache. Not yet: say so, never "All clear". */

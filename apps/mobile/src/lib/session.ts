@@ -370,17 +370,23 @@ export class Sessions {
 
   /**
    * Whether this phone was let in yet: confirmed on the computer or on the owner's other phone, or at
-   * the end of its day's wait; refused (Not mine, stopped, or out of time); or still waiting.
+   * the end of its day's wait; refused (Not mine, stopped, or out of time); or still waiting. A quiet
+   * look (the waiting screen's own, every two seconds) never asks for the fingerprint or face: when its
+   * token cannot be renewed without an unlock, it says `locked`, and only the owner's press looks again.
    */
-  async confirmed(pending: PendingPhone | InboxEntry): Promise<"waiting" | "confirmed" | "refused"> {
+  async confirmed(
+    pending: PendingPhone | InboxEntry,
+    opts: { readonly quiet?: boolean } = {},
+  ): Promise<"waiting" | "confirmed" | "refused" | "locked"> {
     let res: Response;
     try {
-      const token = await this.token(Sessions.entryOf(pending));
+      const token = await this.token(Sessions.entryOf(pending), false, opts.quiet === true);
       res = await this.fetchImpl(`${pending.origin}/v1/phone/me`, {
         headers: { accept: "application/json", authorization: `Bearer ${token}` },
       });
     } catch (error) {
       if (error instanceof InboxError && error.code === "signed_out") return "refused";
+      if (error instanceof InboxError && error.code === "locked") return "locked";
       return "waiting";
     }
     if (res.status === 401 || res.status === 403 || res.status === 404) return "refused";
@@ -394,13 +400,17 @@ export class Sessions {
     return this.keep(pending.alias, pending.origin, pending.answer);
   }
 
-  /** Given up on, or refused: the inbox forgets this phone when it can, and the key made for it goes. */
+  /**
+   * Given up on, or refused: the inbox forgets this phone when it can, and the key made for it goes.
+   * Quietly: a wait that ran out, or Cancel, never asks for the fingerprint or face to say so; a phone
+   * the inbox is not told of runs out of time there on its own.
+   */
   async abandon(pending: PendingPhone): Promise<void> {
     try {
       if (this.access.has(pending.alias)) {
         await this.fetchImpl(`${pending.origin}/v1/phone`, {
           method: "DELETE",
-          headers: { authorization: `Bearer ${await this.token(Sessions.entryOf(pending))}` },
+          headers: { authorization: `Bearer ${await this.token(Sessions.entryOf(pending), false, true)}` },
         });
       }
     } catch {

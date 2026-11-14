@@ -1,4 +1,4 @@
-import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { inboxOrigin, type PhoneLink } from "../../../../packages/core/src/phones/links";
 import { useApp } from "../context";
 import type { Granted, GrantedInbox, PendingSignIn } from "../lib/account";
@@ -87,46 +87,84 @@ export function Connect({
     onWaiting?.();
   }, [waiting, onWaiting]);
 
-  // Waiting for the yes: the owner's Confirm on the computer, asked every two seconds for five
-  // minutes, or on the owner's other phone, for fifteen.
+  // When the wait for the yes ends: five minutes for the computer's, fifteen for the other phone's.
+  // Kept with the waiting phone, so looking again (the app back in front) never moves it.
+  const waitEnds = useMemo(
+    () => (pending ? Date.now() + (pending.waitsOn === "phone" ? PHONE_WAIT_MS : WAIT_MS) : 0),
+    [pending],
+  );
+  /** The waiting phone whose look stopped: looking again needs an unlock, so only "Check now" looks. */
+  const [stoppedFor, setStoppedFor] = useState<string | null>(null);
+  const stopped = pending !== null && stoppedFor === pending.alias;
+  const front = app.front !== false;
+  const { sessions } = app;
+  const connected = useRef(app.connected);
+  connected.current = app.connected;
+
+  /** What a look found, acted on: let in, or refused, or out of time, said so. False while it waits. */
+  const settle = useCallback(
+    async (p: PendingPhone, state: "waiting" | "confirmed" | "refused"): Promise<boolean> => {
+      if (state === "confirmed") {
+        const entry = await sessions.finish(p);
+        setPending(null);
+        await connected.current(entry);
+        return true;
+      }
+      if (state === "waiting" && Date.now() <= waitEnds) return false;
+      await sessions.abandon(p);
+      setPending(null);
+      setByEmail(false);
+      // Refused well before its minutes ran out: the other phone said no (or the email's "Stop it"),
+      // and new phones then wait a day. Refused at the end of them, it only ran out of time.
+      const saidNo = state === "refused" && Date.now() < waitEnds - RAN_OUT_MS;
+      setError(
+        p.waitsOn !== "phone"
+          ? "Not connected. On your computer, show a new code and scan it again."
+          : saidNo
+            ? "Your other phone said no. New phones can't connect for a day."
+            : "Not connected. Sign in again, and confirm on your other phone.",
+      );
+      return true;
+    },
+    [sessions, waitEnds],
+  );
+
+  // Waiting for the yes, asked every two seconds, only while the app is in front, and quietly: never
+  // the fingerprint or face. Once its token can't be renewed without one, it stops: "Check now".
   useEffect(() => {
-    if (!pending) return;
+    if (!pending || stopped || !front) return;
     let alive = true;
-    const onPhone = pending.waitsOn === "phone";
-    const until = Date.now() + (onPhone ? PHONE_WAIT_MS : WAIT_MS);
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const ask = async () => {
       if (!alive) return;
-      const state = await app.sessions.confirmed(pending);
+      const state = await sessions.confirmed(pending, { quiet: true });
       if (!alive) return;
-      if (state === "confirmed") {
-        const entry = await app.sessions.finish(pending);
-        setPending(null);
-        await app.connected(entry);
+      if (state === "locked") {
+        setStoppedFor(pending.alias);
         return;
       }
-      if (state === "refused" || Date.now() > until) {
-        await app.sessions.abandon(pending);
-        setPending(null);
-        setByEmail(false);
-        // Refused well before its minutes ran out: the other phone said no (or the email's "Stop it"),
-        // and new phones then wait a day. Refused at the end of them, it only ran out of time.
-        const saidNo = state === "refused" && Date.now() < until - RAN_OUT_MS;
-        setError(
-          !onPhone
-            ? "Not connected. On your computer, show a new code and scan it again."
-            : saidNo
-              ? "Your other phone said no. New phones can't connect for a day."
-              : "Not connected. Sign in again, and confirm on your other phone.",
-        );
-        return;
-      }
-      setTimeout(() => void ask(), ASK_EVERY_MS);
+      if (await settle(pending, state)) return;
+      if (alive) timer = setTimeout(() => void ask(), ASK_EVERY_MS);
     };
     void ask();
     return () => {
       alive = false;
+      clearTimeout(timer);
     };
-  }, [pending, app]);
+  }, [pending, stopped, front, sessions, settle]);
+
+  /** "Check now": the owner's own press, so it may ask for the fingerprint or face, once. */
+  const checkNow = async (p: PendingPhone) => {
+    setBusy(true);
+    try {
+      const state = await sessions.confirmed(p);
+      if (state === "locked") return;
+      // Unlocked now: the quiet looks go on, for the rest of the wait.
+      if (!(await settle(p, state))) setStoppedFor(null);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   /** "Wait 24 hours": this phone is kept, opening nothing, until its day is over or it is stopped. */
   const waitADay = async (p: PendingPhone) => {
@@ -210,7 +248,12 @@ export function Connect({
           )}
         </div>
         {!noOtherPhone && <div className="match">{pending.match}</div>}
-        {!noOtherPhone && <p className="fine">Waiting for your other phone…</p>}
+        {!noOtherPhone &&
+          (stopped ? (
+            <CheckNow from="phone" busy={busy} onCheck={() => void checkNow(pending)} />
+          ) : (
+            <p className="fine">Waiting for your other phone…</p>
+          ))}
         {!noOtherPhone && (
           <p className="fine">
             Reinstalled the app, or changed phone? The phone you used before may be this one. Wait instead, or remove
@@ -278,7 +321,11 @@ export function Connect({
           </p>
         </div>
         <div className="match">{pending.match}</div>
-        <p className="fine">Waiting for you to confirm…</p>
+        {stopped ? (
+          <CheckNow from="computer" busy={busy} onCheck={() => void checkNow(pending)} />
+        ) : (
+          <p className="fine">Waiting for you to confirm…</p>
+        )}
         <div className="end">
           <button
             type="button"
@@ -440,6 +487,25 @@ export function Connect({
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * A waiting phone that stopped looking for its yes: looking again needs the fingerprint or face, and
+ * only the owner's press may ask for it. One line, and the press.
+ */
+export function CheckNow({ from, busy, onCheck }: { from: "phone" | "computer"; busy: boolean; onCheck: () => void }) {
+  return (
+    <>
+      <p className="fine">
+        {from === "phone"
+          ? "Tap Check now to see if your other phone said yes."
+          : "Tap Check now to see if you confirmed on your computer."}
+      </p>
+      <button type="button" className="btn" disabled={busy} onClick={onCheck}>
+        Check now
+      </button>
+    </>
   );
 }
 

@@ -273,9 +273,10 @@ export function App({ deps }: { deps: Deps }) {
   const checking = useRef(false);
   const refresh = useCallback(async () => {
     if (!client || !box || !active) return;
-    // A phone waiting out its day opens nothing: it only asks whether it was let in, or stopped.
+    // A phone waiting out its day opens nothing: it only asks whether it was let in, or stopped. The
+    // app's own look never asks for the fingerprint or face; "Check again" may, once.
     if (active.waitingUntil && !demo) {
-      const state = await sessions.confirmed(active);
+      const state = await sessions.confirmed(active, { quiet: !checking.current });
       if (state === "confirmed") {
         const entry = await sessions.settled(active);
         setInboxes(await sessions.list());
@@ -286,7 +287,12 @@ export function App({ deps }: { deps: Deps }) {
         toast(`Connecting this phone to ${active.name} was stopped.`);
         const list = await wipe(active, "forget");
         if (list.length === 0) setStack([{ name: "connect" }]);
-      } else if (checking.current) toast(`Still waiting. It connects on ${dayAndTime(active.waitingUntil)}.`);
+      } else if (checking.current)
+        toast(
+          state === "locked"
+            ? "Not checked: unlock to check."
+            : `Still waiting. It connects on ${dayAndTime(active.waitingUntil)}.`,
+        );
       return;
     }
     setLoading(true);
@@ -746,6 +752,7 @@ export function App({ deps }: { deps: Deps }) {
     views,
     loading,
     offline,
+    front,
     cachedAt,
     listLoaded,
     queued,
