@@ -673,6 +673,9 @@ describe("signing in through the host, and a phone that confirms a phone (Amendm
     const told = h.mail.sent.find((m) => m.subject.startsWith("A new phone was stopped"));
     expect(told?.text).toContain("someone else may be able to read your email");
     expect(told?.text).toContain("New phones can't connect for a day.");
+    // What to do meanwhile, in the words every screen uses: the web, from any browser, never "a computer".
+    expect(told?.text).toContain("To connect one before, use Settings → Phone on the web, from any browser:");
+    expect(told?.text).not.toContain("computer");
   });
 
   it("never shows the owner a new phone's name that is not a phone's: its kind instead, everywhere", async () => {

@@ -599,8 +599,8 @@ export function Waiting({ entry }: { entry: InboxEntry }) {
           you. Until then it opens nothing.
         </p>
         <p className="fine">
-          No need to wait: stop waiting here, remove your old phone in Settings → Phone on the web (any browser), then
-          sign in on this one again.
+          No need to wait: stop waiting here, remove your old phone in Settings → Phone on the web, from any browser,
+          then sign in on this one again.
         </p>
       </div>
       <div className="end">

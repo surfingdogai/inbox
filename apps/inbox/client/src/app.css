@@ -3527,6 +3527,15 @@ pre.found-code {
 .phone-pair-text p {
   margin: 0;
 }
+/* On a phone, a phone's Send a test and Remove go under its lines, so a phone-only owner reads them whole. */
+@media (max-width: 600px) {
+  .phone-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .phone-row > .rowx {
+    justify-content: flex-start;
+  }
+}
 /* A phone that used the code, waiting for the owner's Confirm: its name and the two digits it shows. */
 .phone-confirm p {
   margin: 0;

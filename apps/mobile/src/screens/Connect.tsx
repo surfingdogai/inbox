@@ -257,7 +257,7 @@ export function Connect({
         {!noOtherPhone && (
           <p className="fine">
             Reinstalled the app, or changed phone? The phone you used before may be this one. Wait instead, or remove
-            the old phone in Settings → Phone on the web (any browser), then sign in here again.
+            the old phone in Settings → Phone on the web, from any browser, then sign in here again.
           </p>
         )}
         {error && (

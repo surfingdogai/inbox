@@ -201,9 +201,19 @@ describe("a new phone asking this one", () => {
     expect(html).toContain("Until then it opens nothing.");
     // A phone-only owner's way not to wait, in order, with no computer needed.
     expect(html).toContain(
-      "No need to wait: stop waiting here, remove your old phone in Settings → Phone on the web (any browser), then sign in on this one again.",
+      "No need to wait: stop waiting here, remove your old phone in Settings → Phone on the web, from any browser, then sign in on this one again.",
     );
     expect(html).not.toContain("on a computer");
+    // The same words wherever the app tells an owner to remove an old phone: the Connect screen's too.
+    const connect = readFileSync(path.resolve(import.meta.dirname, "../src/screens/Connect.tsx"), "utf8");
+    expect(connect.replace(/\s+/g, " ")).toContain(
+      "remove the old phone in Settings → Phone on the web, from any browser, then sign in here again.",
+    );
+    for (const source of [
+      connect,
+      readFileSync(path.resolve(import.meta.dirname, "../src/screens/Settings.tsx"), "utf8"),
+    ])
+      expect(source).not.toContain("(any browser)");
     // Check again says it is still waiting, when it is.
     const source = readFileSync(path.resolve(import.meta.dirname, "../src/screens/Settings.tsx"), "utf8");
     expect(source).toContain("app.checkAgain()");

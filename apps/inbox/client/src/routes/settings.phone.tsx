@@ -297,7 +297,7 @@ function PhonesCard({ phones }: { phones: readonly PhoneView[] }) {
       {notice && <Toast tone={notice.tone} text={notice.text} onDismiss={() => setNotice(null)} />}
       <div className="stack">
         {phones.map((p) => (
-          <div key={p.id} className="catalogue-row row-glass">
+          <div key={p.id} className="catalogue-row row-glass phone-row">
             <div className="catalogue-main">
               <div className="t">
                 <b>{p.name}</b>

@@ -206,7 +206,7 @@ async function tellOwnerOfWait(
 /**
  * Tells the owner that a new phone was stopped ("Not mine" on one of their phones, or the email's
  * "Stop it"): it had used a sign-in code or link sent to their address, so someone may be reading
- * their email. New phones wait a day (`linksPaused`); a computer can still connect one.
+ * their email. New phones wait a day (`linksPaused`); Settings → Phone on the web can still connect one.
  */
 async function tellOwnerOfStop(
   deps: PhoneDoorDeps,
@@ -227,7 +227,7 @@ async function tellOwnerOfStop(
         "",
         "It had used a sign-in code or link sent to this address. If you didn't ask for one, someone else may be able to read your email: change your email's password now, and sign out of it everywhere else.",
         "",
-        "New phones can't connect for a day. To connect one before, use Settings → Phone on a computer:",
+        "New phones can't connect for a day. To connect one before, use Settings → Phone on the web, from any browser:",
         `${origin}/settings/phone`,
       ].join("\n")}\n`,
       what: "phone stopped email",
