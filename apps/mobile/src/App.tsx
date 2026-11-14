@@ -5,6 +5,7 @@ import type { ItemDetail, ItemView } from "../../inbox/client/src/lib/types";
 import { checkForUpdate } from "./channel";
 import { AppContext, type App as AppValue, type Route } from "./context";
 import { ACCOUNT_ORIGIN, Account, readCodeLink } from "./lib/account";
+import type { PublicFacts } from "./lib/chips";
 import {
   DEMO_ENTRY,
   DEMO_READ_ONLY,
@@ -16,8 +17,9 @@ import {
   sendQueued,
 } from "./lib/client";
 import { type Native, native as nativeOf } from "./lib/native";
-import { Box, type KV, Outbox, type QueuedAction } from "./lib/offline";
+import { Box, factsName, type KV, Outbox, type QueuedAction } from "./lib/offline";
 import { setUpPush } from "./lib/push";
+import { QuickReplies } from "./lib/replies";
 import { type Fetch, type InboxEntry, InboxError, Sessions } from "./lib/session";
 import { NO_UPDATE, type UpdateState } from "./lib/update";
 import { needsYou } from "./lib/view";
@@ -144,6 +146,11 @@ export function App({ deps }: { deps: Deps }) {
     [demo, active, sessions, deps.fetch],
   );
   const outbox = useMemo(() => (box ? new Outbox(box) : null), [box]);
+  // The owner's quick replies for the inbox in front, sealed in the box; none for the demo.
+  const replies = useMemo(
+    () => (box && active && !demo ? new QuickReplies(box, active.alias) : null),
+    [box, active, demo],
+  );
 
   const toast = useCallback((text: string) => {
     setToastText(text);
@@ -350,7 +357,7 @@ export function App({ deps }: { deps: Deps }) {
   }, [outbox, flush, refresh]);
 
   const act = useCallback(
-    async (itemId: string, kind: "transition" | "reply", body: Record<string, unknown>, label: string) => {
+    async (itemId: string, kind: QueuedAction["kind"], body: Record<string, unknown>, label: string) => {
       if (!outbox || !active) return;
       // The demo changes nothing: said at once, and nothing is kept to send later.
       if (demo) {
@@ -367,6 +374,18 @@ export function App({ deps }: { deps: Deps }) {
     },
     [outbox, active, demo, flush, toast],
   );
+
+  /** The chips' facts: read from the inbox's public door, else the copy kept on the phone (never the demo's). */
+  const facts = useCallback(async (): Promise<PublicFacts | null> => {
+    if (!client || !box || !active) return null;
+    try {
+      const read = await client.facts();
+      if (!demo) await box.put(factsName(active.alias), read);
+      return read;
+    } catch {
+      return demo ? null : await box.get<PublicFacts>(factsName(active.alias));
+    }
+  }, [client, box, active, demo]);
 
   const loadItem = useCallback(
     async (id: string): Promise<ItemDetail | null> => {
@@ -638,6 +657,8 @@ export function App({ deps }: { deps: Deps }) {
     countAll,
     loadItem,
     act,
+    replies,
+    facts,
     connected,
     removeActive,
     toast,

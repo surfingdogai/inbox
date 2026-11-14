@@ -3,6 +3,7 @@ import { DEFAULT_PREFS, type NotifyPrefs } from "../../../../packages/core/src/p
 import { useApp } from "../context";
 import type { PhoneAsk, PhoneRow } from "../lib/client";
 import { setUpPush } from "../lib/push";
+import type { QuickReply } from "../lib/replies";
 import type { InboxEntry } from "../lib/session";
 import { versionLine } from "../lib/update";
 import { agoSentence, spamFiltersLine } from "../lib/view";
@@ -28,7 +29,8 @@ const TIMES = Array.from(
 /**
  * Settings → Notifications (the approved screen), for the inbox in front: one switch per kind, quiet
  * hours that hold notifications until morning, whether names reach the lock screen, and the phones,
- * with a test. Kept per phone, on the inbox, so each phone of a business can differ.
+ * with a test. Kept per phone, on the inbox, so each phone of a business can differ. Answers lists the
+ * owner's quick replies for the inbox, kept on this phone (ADR-028 Amendment 5).
  */
 export function Settings() {
   const app = useApp();
@@ -36,7 +38,26 @@ export function Settings() {
   const [phones, setPhones] = useState<{ phones: PhoneRow[]; this: string } | null>(null);
   const [push, setPush] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
+  const [quick, setQuick] = useState<readonly QuickReply[]>([]);
   const inboxName = app.me?.business.name || app.active?.name || "This inbox";
+  const { replies } = app;
+  useEffect(() => {
+    let alive = true;
+    replies
+      ?.list()
+      .then((r) => {
+        if (alive) setQuick(r);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [replies]);
+  const forget = async (r: QuickReply) => {
+    if (!replies) return;
+    setQuick(await replies.remove(r.id));
+    setConfirmRemove(null);
+  };
 
   useEffect(() => {
     if (app.me) setPrefs(app.me.notify);
@@ -261,6 +282,43 @@ export function Settings() {
                   />
                 </div>
               ))}
+            </div>
+          </section>
+        )}
+        {replies && (
+          <section className="group" aria-labelledby="answers-h">
+            <h2 id="answers-h">Answers</h2>
+            <div className="rows">
+              {quick.length === 0 ? (
+                <div>
+                  <span className="two">
+                    <span>No quick replies yet</span>
+                    <small>
+                      After you type a reply to a message, you can save it here and send it again with one tap.
+                    </small>
+                  </span>
+                </div>
+              ) : (
+                quick.map((r) => (
+                  <div key={r.id}>
+                    <span className="quick-text">{r.text}</span>
+                    {confirmRemove === r.id ? (
+                      <button type="button" className="btn link" onClick={() => void forget(r)}>
+                        Remove it?
+                      </button>
+                    ) : (
+                      <button type="button" className="btn quiet sm" onClick={() => setConfirmRemove(r.id)}>
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                ))
+              )}
+              <div>
+                <span className="two">
+                  <small>Quick replies stay on this phone, for {inboxName}. They go only when you tap one.</small>
+                </span>
+              </div>
             </div>
           </section>
         )}

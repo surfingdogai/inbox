@@ -1,5 +1,6 @@
 import { DEFAULT_PREFS, type NotifyPrefs } from "../../../../packages/core/src/phones/prefs";
 import type { ItemDetail, ItemView, Page } from "../../../inbox/client/src/lib/types";
+import type { PublicFacts, PublicService } from "./chips";
 import type { QueuedAction, SendResult } from "./offline";
 import { type Fetch, type InboxEntry, InboxError, movedTo, type Sessions } from "./session";
 
@@ -187,10 +188,49 @@ export class InboxClient {
     });
   }
 
+  /**
+   * The price sheet's Send: the offer an item's state takes, built as the inbox builds it (a quote for
+   * a request for a price), with every check it makes (`POST /v1/owner/items/{id}/offers`).
+   */
+  offer(id: string, body: Record<string, unknown>, idempotencyKey: string): Promise<unknown> {
+    return this.call("POST", `/v1/owner/items/${encodeURIComponent(id)}/offers`, { body, idempotencyKey });
+  }
+
+  /** A draft your AI, a rule or another system made outside your limits, sent as it is. */
+  sendDraft(id: string, draftId: string, idempotencyKey: string): Promise<unknown> {
+    return this.call("POST", `/v1/owner/items/${encodeURIComponent(id)}/offers/draft/send`, {
+      body: { draft_id: draftId },
+      idempotencyKey,
+    });
+  }
+
+  /** The draft dropped, unsent: only that one, never a newer one. */
+  dropDraft(id: string, draftId: string): Promise<{ dropped: boolean }> {
+    const q = new URLSearchParams({ draft_id: draftId });
+    return this.call("DELETE", `/v1/owner/items/${encodeURIComponent(id)}/offers/draft?${q}`);
+  }
+
   /** Free start times for a service, from the business's own public door (at most 14 days). */
   slots(serviceId: string, from: string, to: string): Promise<Slots> {
     const q = new URLSearchParams({ service_id: serviceId, from, to });
     return this.call<Slots>("GET", `/v1/availability?${q}`, { auth: false });
+  }
+
+  /**
+   * What the chips are made from, from the business's own public door with no token, as any assistant
+   * reads it: its services and their prices, and the languages and currency it gave.
+   */
+  async facts(now: number = Date.now()): Promise<PublicFacts> {
+    const [services, business] = await Promise.all([
+      this.call<{ items: PublicService[] }>("GET", "/v1/services?limit=100", { auth: false }),
+      this.call<{ languages?: string[]; currency?: string }>("GET", "/v1/business", { auth: false }),
+    ]);
+    return {
+      services: services.items ?? [],
+      languages: business.languages ?? [],
+      currency: business.currency ?? "EUR",
+      at: now,
+    };
   }
 
   me(): Promise<PhoneMe> {
@@ -268,8 +308,8 @@ export function demoPath(method: string, path: string): string | null {
   if (p === "/v1/owner/items") return `/demo/phone/items${query}`;
   const item = /^\/v1\/owner\/items\/([^/]+)$/.exec(p);
   if (item) return `/demo/phone/items/${item[1]}`;
-  // The shop's free times are on its public door, as at every inbox.
-  if (p === "/v1/availability") return path;
+  // The shop's free times, prices and languages are on its public door, as at every inbox.
+  if (p === "/v1/availability" || p === "/v1/services" || p === "/v1/business") return path;
   return null;
 }
 
@@ -332,6 +372,8 @@ export async function sendQueued(c: InboxClient | undefined, a: QueuedAction): P
   if (!c) return { ok: false, offline: false, reason: "That inbox is no longer on this phone." };
   try {
     if (a.kind === "reply") await c.reply(a.itemId, String(a.body.body ?? ""), a.key);
+    else if (a.kind === "offer") await c.offer(a.itemId, a.body, a.key);
+    else if (a.kind === "draft") await c.sendDraft(a.itemId, String(a.body.draft_id ?? ""), a.key);
     else await c.transition(a.itemId, a.body, a.key);
     return { ok: true };
   } catch (error) {

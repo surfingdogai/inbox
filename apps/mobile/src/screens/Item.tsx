@@ -1,7 +1,17 @@
 import { App as CapApp } from "@capacitor/app";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Linked } from "../../../inbox/client/src/components/Linked";
-import { formatDay, formatWhen, partyName, stateWord } from "../../../inbox/client/src/lib/format";
+import { majorText, parseMoney } from "../../../inbox/client/src/lib/actions";
+import { breachWords, type DraftView, termsLine } from "../../../inbox/client/src/lib/drafts";
+import {
+  byWord,
+  capitalise,
+  formatDay,
+  formatWhen,
+  partyName,
+  stateWord,
+  truncate,
+} from "../../../inbox/client/src/lib/format";
 import {
   ACT_LABEL,
   actsFor,
@@ -14,9 +24,11 @@ import {
   UNDO_MS,
   warnSentence,
 } from "../../../inbox/client/src/lib/spam";
-import type { ItemDetail } from "../../../inbox/client/src/lib/types";
+import type { ItemDetail, Money } from "../../../inbox/client/src/lib/types";
 import { useApp } from "../context";
-import type { Slots } from "../lib/client";
+import { type PriceChip, type PublicFacts, priceChips, priceOffer, replyChips } from "../lib/chips";
+import { DEMO_READ_ONLY, type Slots } from "../lib/client";
+import type { QuickReply } from "../lib/replies";
 import { InboxError } from "../lib/session";
 import { Waiting } from "../lib/undo";
 import {
@@ -50,9 +62,36 @@ const ONE_PRESS = new Set([
 ]);
 
 /**
+ * One press that waits six seconds for its Undo: Let it in, Not spam, Looks fine or Spam (ADR-041 §12);
+ * or an answer sent with one tap (ADR-028 Amendment 5): a quick reply, the price sheet's price, a draft
+ * sent as it is. Nothing of it leaves the phone before its six seconds are up.
+ */
+type Press =
+  | { readonly kind: "spam"; readonly act: SpamAct }
+  | { readonly kind: "reply"; readonly text: string }
+  | { readonly kind: "offer"; readonly input: Record<string, unknown>; readonly amount: Money }
+  | { readonly kind: "draft"; readonly draftId: string };
+
+/** What the Undo toast says while a press waits. */
+function pressWords(p: Press, detail: ItemDetail): string {
+  switch (p.kind) {
+    case "spam":
+      return toastFor(p.act, detail).text;
+    case "reply":
+      return `Sending “${truncate(p.text, 48)}”`;
+    case "offer":
+      return `Sending your price, ${money(p.amount)}.`;
+    case "draft":
+      return "Sending the drafted offer.";
+  }
+}
+
+/**
  * One request (the approved Item screen): who and what, the customer's words, an optional reply, and
  * the three answers: accept, propose another time, decline. Opened from a notification's action, the
- * action waits on a confirm sheet: nothing is done until the owner presses it here.
+ * action waits on a confirm sheet: nothing is done until the owner presses it here. Above the reply,
+ * one-tap answers built from facts (ADR-028 Amendment 5): on a request for a price, the matching prices
+ * from the inbox's public list, each opening the price sheet; on a message, the owner's quick replies.
  */
 export function Item({
   id,
@@ -69,16 +108,24 @@ export function Item({
   const [reply, setReply] = useState("");
   const [sheet, setSheet] = useState<"propose" | "confirm" | "decline" | "more" | null>(null);
   const [other, setOther] = useState<{ event: string; label: string } | null>(null);
+  /** The price sheet: opened from a price chip, or with no amount ("Send a price"). */
+  const [price, setPrice] = useState<PriceChip | "any" | null>(null);
   const [busy, setBusy] = useState(false);
+  /** The public prices and languages the chips are made from; the owner's quick replies. */
+  const [facts, setFacts] = useState<PublicFacts | null>(null);
+  const [saved, setSaved] = useState<readonly QuickReply[]>([]);
+  /** Words the owner just typed and sent, while the app asks whether to keep them as a quick reply. */
+  const [askSave, setAskSave] = useState<string | null>(null);
   // Android's back button closes an open sheet before it leaves the item.
   const { onBack } = app;
-  const open = sheet !== null || other !== null;
+  const open = sheet !== null || other !== null || price !== null;
   useEffect(
     () =>
       open
         ? onBack(() => {
             setSheet(null);
             setOther(null);
+            setPrice(null);
             return true;
           })
         : undefined,
@@ -102,7 +149,51 @@ export function Item({
   }, [detail, load]);
   const actions = useMemo(() => (detail ? actionsFor(detail, tz) : null), [detail, tz]);
   const spamActs = useMemo(() => (detail ? actsFor(detail) : []), [detail]);
-  const [undo, setUndo] = useState<{ act: SpamAct; text: string } | null>(null);
+  const [undo, setUndo] = useState<{ text: string } | null>(null);
+  // The chips' facts, for a message or a request for a price: from the inbox's public door, or as kept.
+  const type = detail?.item.type;
+  const { facts: readFacts, replies } = app;
+  useEffect(() => {
+    if (type !== "message" && type !== "quote_request") return;
+    let alive = true;
+    readFacts()
+      .then((f) => {
+        if (alive) setFacts(f);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [type, readFacts]);
+  useEffect(() => {
+    let alive = true;
+    replies
+      ?.list()
+      .then((r) => {
+        if (alive) setSaved(r);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [replies]);
+  /** A request for a price the owner can answer with one: its quote is a transition it takes now. */
+  const canPrice =
+    detail?.item.type === "quote_request" &&
+    detail.item.closedAt === null &&
+    detail.transitions.some((t) => t.event === "quote");
+  const prices = useMemo(
+    () =>
+      detail?.item.type === "quote_request" && facts
+        ? priceChips(detail.item.payload, facts.services, facts.currency)
+        : [],
+    [detail, facts],
+  );
+  const chips = useMemo(
+    () =>
+      detail?.item.type === "message" && detail.item.closedAt === null ? replyChips(saved, facts?.languages ?? []) : [],
+    [detail, saved, facts],
+  );
   // What a press needs when it is sent, read as it is then: the screen may have drawn itself again
   // many times in its six seconds, and that must never send it.
   const appRef = useRef(app);
@@ -110,11 +201,34 @@ export function Item({
   const detailRef = useRef(detail);
   detailRef.current = detail;
 
-  /** Sends what waited for Undo: the filter's own calls, or the item's transition where it is one. */
-  const send = async (act: SpamAct) => {
+  /**
+   * Sends what waited for Undo: an answer, kept on the phone first with the idempotency key it carries on
+   * every try (sent now, or as soon as the inbox answers); the filter's own calls; or the item's
+   * transition where it is one.
+   */
+  const send = async (p: Press) => {
     const a = appRef.current;
     const d = detailRef.current;
     if (!d || !a.client) return;
+    if (p.kind !== "spam") {
+      if (p.kind === "reply") await a.act(d.item.id, "reply", { body: p.text, internal: false }, "Reply");
+      else if (p.kind === "offer")
+        await a.act(
+          d.item.id,
+          "offer",
+          { input: p.input, expected_version: d.item.version },
+          `Price ${money(p.amount)}`,
+        );
+      else await a.act(d.item.id, "draft", { draft_id: p.draftId }, "The drafted offer");
+      void a.refresh();
+      const next = await a.loadItem(d.item.id);
+      if (next) {
+        detailRef.current = next;
+        setDetail(next);
+      }
+      return;
+    }
+    const act = p.act;
     const key = crypto.randomUUID();
     const screen = d.spam?.screen ?? null;
     try {
@@ -151,9 +265,9 @@ export function Item({
   };
   const sendRef = useRef(send);
   sendRef.current = send;
-  const waiting = useRef<Waiting<SpamAct> | null>(null);
-  waiting.current ??= new Waiting<SpamAct>(
-    (act) => sendRef.current(act),
+  const waiting = useRef<Waiting<Press> | null>(null);
+  waiting.current ??= new Waiting<Press>(
+    (p) => sendRef.current(p),
     UNDO_MS,
     () => setUndo(null),
   );
@@ -178,18 +292,31 @@ export function Item({
   // The answer buttons along the bottom: the Undo toast sits above them, never over them.
   const barRef = useRef<HTMLDivElement | null>(null);
   const [lift, setLift] = useState<number | null>(null);
-  const spamAct = (act: SpamAct) => {
+  const press = (p: Press) => {
     if (!detail) return;
-    waiting.current?.start(act);
+    // The demo sends nothing: said at once, with nothing to undo.
+    if (p.kind !== "spam" && app.demo) {
+      app.toast(DEMO_READ_ONLY);
+      return;
+    }
+    waiting.current?.start(p);
     const bar = barRef.current?.getBoundingClientRect();
     setLift(toastLift(bar && bar.height > 0 ? bar.top : null, window.innerHeight));
-    setUndo({ act, text: toastFor(act, detail).text });
+    setUndo({ text: pressWords(p, detail) });
   };
+  const spamAct = (act: SpamAct) => press({ kind: "spam", act });
   const cancelAct = () => waiting.current?.undo();
   useEffect(() => {
     if (action && actions?.primary?.event === action) setSheet("confirm");
     else if (action === "propose" && actions?.propose) setSheet("propose");
   }, [action, actions]);
+  // Opened to send a price (the screenshots): the sheet, with the first matching price, once.
+  const pricedOnce = useRef(false);
+  useEffect(() => {
+    if (action !== "price" || pricedOnce.current || !canPrice || !facts) return;
+    pricedOnce.current = true;
+    setPrice(prices[0] ?? "any");
+  }, [action, canPrice, facts, prices]);
 
   if (!detail)
     return (
@@ -255,12 +382,42 @@ export function Item({
   };
 
   const sendReply = async () => {
-    if (!reply.trim()) return;
+    const typed = reply.trim();
+    if (!typed) return;
     setBusy(true);
     try {
-      await app.act(item.id, "reply", { body: reply.trim(), internal: false }, "Reply");
+      await app.act(item.id, "reply", { body: typed, internal: false }, "Reply");
       setReply("");
       await load();
+      // The owner's own words, kept to send again with one tap: asked, never kept unasked.
+      if (item.type === "message" && app.replies && !(await app.replies.has(typed))) setAskSave(typed);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const keepReply = async () => {
+    const typed = askSave;
+    setAskSave(null);
+    if (!typed || !app.replies) return;
+    setSaved(await app.replies.add(typed));
+    app.toast("Saved as a quick reply.");
+  };
+
+  /** The draft dropped, unsent: the owner makes their own answer, or none. */
+  const dropDraft = async (d: DraftView) => {
+    if (app.demo) {
+      app.toast(DEMO_READ_ONLY);
+      return;
+    }
+    if (!app.client) return;
+    setBusy(true);
+    try {
+      await app.client.dropDraft(item.id, d.id);
+      app.toast("Dropped. Nothing was sent.");
+      await load();
+    } catch (e) {
+      app.toast(e instanceof Error ? e.message : "Not dropped.");
     } finally {
       setBusy(false);
     }
@@ -312,6 +469,48 @@ export function Item({
             ))}
           </div>
         )}
+        {detail.draft && item.closedAt === null && (
+          <DraftCard
+            draft={detail.draft}
+            tz={tz}
+            busy={busy}
+            onSend={(d) => press({ kind: "draft", draftId: d.id })}
+            onDrop={(d) => void dropDraft(d)}
+          />
+        )}
+        {(chips.length > 0 || canPrice) && (
+          <fieldset className="quick">
+            <legend className="sr-only">{canPrice ? "Prices" : "Quick replies"}</legend>
+            {chips.map((c) => (
+              <button
+                key={c.text}
+                type="button"
+                className="quick-chip"
+                disabled={busy}
+                onClick={() => press({ kind: "reply", text: c.text })}
+              >
+                {c.text}
+              </button>
+            ))}
+            {canPrice &&
+              prices.map((p) => (
+                <button
+                  key={p.serviceId}
+                  type="button"
+                  className="quick-chip price"
+                  disabled={busy}
+                  onClick={() => setPrice(p)}
+                >
+                  {p.label}
+                </button>
+              ))}
+            {canPrice && (
+              <button type="button" className="quick-chip" disabled={busy} onClick={() => setPrice("any")}>
+                {prices.length ? "Another price" : "Send a price"}
+              </button>
+            )}
+          </fieldset>
+        )}
         {item.closedAt === null && (
           <label className="field">
             <span className="sr-only">Reply</span>
@@ -329,6 +528,17 @@ export function Item({
               </button>
             )}
           </label>
+        )}
+        {askSave && (
+          <div className="save-ask" role="status">
+            <span className="save-ask-text">Save as a quick reply?</span>
+            <button type="button" className="btn link" onClick={() => void keepReply()}>
+              Save
+            </button>
+            <button type="button" className="btn quiet sm" onClick={() => setAskSave(null)}>
+              Not now
+            </button>
+          </div>
         )}
       </main>
       {actions && (actions.primary || actions.propose || actions.decline) && item.closedAt === null && (
@@ -369,6 +579,19 @@ export function Item({
           onSend={(startTime, endTime, note, label) =>
             void run("propose", label, { startTime, endTime, ...(note ? { note } : {}) })
           }
+        />
+      )}
+      {price && item.type === "quote_request" && (
+        <PriceSheet
+          what={item.payload.itemOffered.name}
+          chip={price === "any" ? null : price}
+          currency={facts?.currency ?? item.payload.budget?.currency ?? "EUR"}
+          busy={busy}
+          onClose={() => setPrice(null)}
+          onSend={(amount, note) => {
+            setPrice(null);
+            press({ kind: "offer", input: priceOffer(amount, note), amount });
+          }}
         />
       )}
       {sheet === "confirm" && actions?.primary && (
@@ -562,6 +785,113 @@ function Confirm(p: { title: string; text: string; yes: string; busy: boolean; o
         <button type="button" className="btn quiet" onClick={p.onNo}>
           Not now
         </button>
+      </section>
+    </>
+  );
+}
+
+/**
+ * What the owner's AI, a rule or another system would have offered outside the owner's limits (ADR-018
+ * §4): nothing went to the customer. Send sends it as it is, with the six seconds' Undo; Drop it drops
+ * it, unsent.
+ */
+function DraftCard(p: {
+  draft: DraftView;
+  tz: string | undefined;
+  busy: boolean;
+  onSend: (d: DraftView) => void;
+  onDrop: (d: DraftView) => void;
+}) {
+  const d = p.draft;
+  return (
+    <section className="drafted" aria-label="A drafted offer">
+      <div className="drafted-head">A draft waits for you</div>
+      <p>
+        {capitalise(byWord(d.by, d.by.kind))} would offer <b>{termsLine(d.terms, p.tz) || "an offer"}</b>.
+        {d.breaches.length ? ` Not sent: it is ${breachWords(d.breaches)}.` : " Not sent yet."}
+      </p>
+      {d.stale && <p className="sub">The request has moved since, so it can't go as it is.</p>}
+      <div className="spam-acts">
+        {!d.stale && (
+          <button type="button" className="btn sm ink" disabled={p.busy} onClick={() => p.onSend(d)}>
+            Send
+          </button>
+        )}
+        <button type="button" className="btn sm" disabled={p.busy} onClick={() => p.onDrop(d)}>
+          Drop it
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * The price sheet (ADR-028 Amendment 5): the amount, filled in from a price chip or left for the owner,
+ * and an optional note. Send makes the inbox's own offer for a request for a price, which the customer
+ * and their assistant can accept.
+ */
+export function PriceSheet(p: {
+  what: string;
+  chip: PriceChip | null;
+  currency: string;
+  busy: boolean;
+  onClose: () => void;
+  onSend: (amount: Money, note: string) => void;
+}) {
+  const currency = (p.chip?.amount.currency ?? p.currency).toUpperCase();
+  const [amount, setAmount] = useState(p.chip ? majorText(p.chip.amount.value, currency) : "");
+  const [note, setNote] = useState("");
+  const parsed = parseMoney(amount, currency);
+  const ok = parsed !== undefined && parsed.value > 0;
+  return (
+    <>
+      <div className="scrim" onClick={p.onClose} aria-hidden="true" />
+      <section className="sheet" role="dialog" aria-label="Send a price">
+        <div className="grabber" aria-hidden="true" />
+        <div className="head-row">
+          <h2>Send a price</h2>
+          <button type="button" className="icon-btn bare" aria-label="Close" onClick={p.onClose}>
+            <CloseIcon />
+          </button>
+        </div>
+        <p className="sub" style={{ margin: 0 }}>
+          For {p.what}
+          {p.chip?.each ? ` · ${p.chip.each.quantity} × ${money(p.chip.each.price)}` : ""}
+        </p>
+        <label className="stacked">
+          <span>Price, in {currency}</span>
+          <span className="field">
+            <input
+              inputMode="decimal"
+              autoComplete="off"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="0"
+            />
+          </span>
+        </label>
+        <label className="stacked">
+          <span>Note (optional)</span>
+          <span className="field">
+            <input
+              value={note}
+              maxLength={2000}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="It takes about two hours."
+            />
+          </span>
+        </label>
+        <button
+          type="button"
+          className="btn primary"
+          disabled={!ok || p.busy}
+          onClick={() => ok && parsed && p.onSend(parsed, note.trim())}
+        >
+          {ok && parsed ? `Send · ${money(parsed)}` : "Send"}
+        </button>
+        <p className="sub" style={{ margin: 0, fontSize: 13 }}>
+          They can accept it, or their assistant can for them.
+        </p>
       </section>
     </>
   );

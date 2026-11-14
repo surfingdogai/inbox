@@ -1,3 +1,4 @@
+import { minorUnitsOf } from "../../../inbox/client/src/lib/currencies";
 import { HOLD_WORDS } from "../../../inbox/client/src/lib/food-words";
 import {
   formatClock,
@@ -86,17 +87,18 @@ export function agoSentence(iso: string, now: number = Date.now()): string {
   return days < 30 ? `${days} days ago` : `on ${short}`;
 }
 
-/** Money as the design writes it: "€48" for a whole amount, "€36.50" otherwise. */
+/** Money as the design writes it: "€48" for a whole amount, "€36.50" otherwise; ¥4500 in yen, which has no cents. */
 export function money(m: Parameters<typeof formatMoney>[0]): string {
   if (!m) return "";
-  if (m.value % 100 !== 0) return formatMoney(m);
+  const unit = 10 ** minorUnitsOf(m.currency);
+  if (m.value % unit !== 0) return formatMoney(m);
   try {
     return new Intl.NumberFormat(undefined, {
       style: "currency",
       currency: m.currency,
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
-    }).format(m.value / 100);
+    }).format(m.value / unit);
   } catch {
     return formatMoney(m);
   }

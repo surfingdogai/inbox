@@ -39,6 +39,11 @@ function keysOf(kv: KV): string[] {
 /** An item's details are kept this long after they were last read, then dropped. */
 export const ITEM_KEEP_MS = 30 * 86_400_000;
 
+/** One inbox's quick replies (`replies.ts`), kept in the box. */
+export const repliesName = (alias: string): string => `replies.${alias}`;
+/** The public prices and languages one inbox's chips are made from (`chips.ts`), kept in the box for offline. */
+export const factsName = (alias: string): string => `facts.${alias}`;
+
 const KEY_NAME = "cache.key";
 const PREFIX = "sdi.cache.";
 
@@ -111,13 +116,16 @@ export class Box {
   }
 
   /**
-   * One inbox removed from this phone: its list, every item of it, and what it had waiting to send,
-   * so nothing of its customers stays readable here. When it was the last inbox, the cache's key goes
-   * too: what is left of the cache can then be read by nobody.
+   * One inbox removed from this phone: its list, every item of it, its quick replies and public facts,
+   * and what it had waiting to send, so nothing of its customers or of the owner's words for them stays
+   * readable here. When it was the last inbox, the cache's key goes too: what is left of the cache can
+   * then be read by nobody.
    */
   async forgetInbox(alias: string, secure: SecureStore, last: boolean): Promise<void> {
     this.remove(`list.${alias}`);
     this.removePrefix(`item.${alias}.`);
+    this.remove(repliesName(alias));
+    this.remove(factsName(alias));
     const outbox = new Outbox(this);
     await outbox.dropFor(alias);
     if (last) {
@@ -140,13 +148,16 @@ export class Box {
   }
 }
 
-/** One thing the owner did that has not reached the inbox yet. */
+/**
+ * One thing the owner did that has not reached the inbox yet: a transition, a reply, a price from the
+ * price sheet (an offer), or a draft sent as it is.
+ */
 export interface QueuedAction {
   readonly id: string;
   /** The inbox (its alias on this phone). */
   readonly alias: string;
   readonly itemId: string;
-  readonly kind: "transition" | "reply";
+  readonly kind: "transition" | "reply" | "offer" | "draft";
   readonly body: Record<string, unknown>;
   /** Sent as Idempotency-Key, the same on every try. */
   readonly key: string;

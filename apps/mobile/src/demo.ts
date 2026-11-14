@@ -152,6 +152,16 @@ function views() {
       2000,
     ),
     view(
+      "sofia",
+      "message",
+      "open",
+      { text: "Can I come in on Saturday morning without booking?" },
+      "Sofia Marques",
+      "mcp_public",
+      1500,
+      [{ event: "answer", label: "Reply" }],
+    ),
+    view(
       "o1043",
       "order",
       "paid",
@@ -283,6 +293,46 @@ function why(id: string) {
   };
 }
 
+/** The shop's public list of services, with their prices: what the price chips are made from. */
+function services() {
+  const service = (id: string, name: string, price: Record<string, unknown> | null, durationMin = 45) => ({
+    id,
+    name,
+    description: null,
+    durationMin,
+    bufferBeforeMin: 0,
+    bufferAfterMin: 0,
+    capacity: 1,
+    granularityMin: 15,
+    price,
+    active: 1,
+    sort: 0,
+  });
+  return {
+    items: [
+      service("cut", "Cut & finish", { model: "fixed", value: 4800, currency: "EUR" }),
+      service("colour", "Colour correction", { model: "from", value: 9000, currency: "EUR" }, 150),
+      service("beard", "Beard trim", { model: "fixed", value: 1800, currency: "EUR" }, 20),
+      service("bridal", "Bridal hair", { model: "quote" }, 120),
+    ],
+    next_cursor: null,
+  };
+}
+
+/** What the owner's AI would have offered Daniel, outside the owner's limits: a draft for the owner. */
+function draftFor(id: string) {
+  if (id !== "daniel") return null;
+  return {
+    id: "dr_daniel",
+    event: "quote",
+    terms: { totalPrice: eur(7500) },
+    breaches: ["below_floor"],
+    by: { kind: "owner_ai", id: "client_assistant", name: "Studio assistant" },
+    created_at: ago(30),
+    stale: false,
+  };
+}
+
 function slots() {
   const out: { startTime: string }[] = [];
   const lists = [
@@ -399,6 +449,16 @@ export async function demoDeps(q: URLSearchParams): Promise<Deps> {
         emails: { held_digest: true, weekly_summary: true, ...JSON.parse(String(init?.body ?? "{}")) },
       });
     if (path === "/v1/availability") return json(slots());
+    if (path === "/v1/services") return json(services());
+    if (path === "/v1/business")
+      return json({
+        name: "Atelier Lumen",
+        domain: "atelierlumen.example",
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        currency: "EUR",
+        languages: ["en", "pt"],
+        item_types: ["booking", "order", "quote_request", "message"],
+      });
     if (path === "/v1/owner/items") {
       if (url.searchParams.get("screen") === "held") return json({ items: screened.held, next_cursor: null });
       if (url.searchParams.get("state") === "spam") return json({ items: screened.aside, next_cursor: null });
@@ -411,7 +471,9 @@ export async function demoDeps(q: URLSearchParams): Promise<Deps> {
       const s = [...screened.held, ...screened.aside].find((x) => x.item.id === m[1]);
       if (s)
         return json({ ...s, spam: { ...s.spam, ...why(s.item.id) }, events: [], thread: [], mail: [], draft: null });
-      return v ? json({ ...v, events: [], thread: [], mail: [], draft: null }) : json({ detail: "Not found" }, 404);
+      return v
+        ? json({ ...v, events: [], thread: [], mail: [], draft: draftFor(v.item.id) })
+        : json({ detail: "Not found" }, 404);
     }
     return json({ ok: true });
   };
@@ -419,13 +481,15 @@ export async function demoDeps(q: URLSearchParams): Promise<Deps> {
   const initial: Route | undefined =
     screen === "item" || screen === "propose" || screen === "confirm"
       ? { name: "item", id: q.get("id") ?? "maya", action: screen === "item" ? undefined : screen }
-      : screen === "today" || screen === "settings" || screen === "inboxes" || screen === "connect"
-        ? { name: screen }
-        : screen === "signin"
-          ? { name: "connect" }
-          : screen === "held" || screen === "spam"
-            ? { name: "screened", which: screen }
-            : undefined;
+      : screen === "price"
+        ? { name: "item", id: q.get("id") ?? "daniel", action: "price" }
+        : screen === "today" || screen === "settings" || screen === "inboxes" || screen === "connect"
+          ? { name: screen }
+          : screen === "signin"
+            ? { name: "connect" }
+            : screen === "held" || screen === "spam"
+              ? { name: "screened", which: screen }
+              : undefined;
   return {
     native,
     fetch: fetchImpl,

@@ -56,6 +56,7 @@ relay keeps the push token (encrypted) until the phone is removed or nothing rea
 | Biometrics | `BiometricPrompt` answers yes or no; the app never sees a fingerprint or a face. |
 | Messages (customers' requests, names, emails, phone numbers) | The app **receives** them from the inbox to show them, and keeps them on the phone encrypted (`src/lib/offline.ts`). It sends none of them anywhere. |
 | In-app search history | Search filters on the phone (`screens/Inbox.tsx`); the words never leave it. |
+| Quick replies the owner saves | Kept on the phone encrypted, per inbox (`src/lib/replies.ts`), and gone with the inbox when it is removed from the phone. One goes only as the reply the owner taps, to the owner's own inbox, as any reply does. |
 | Notification contents | Encrypted by the inbox to the phone's key (RFC 8291); the relay and Google carry ciphertext only (`docs/protocol/push-relay.md`). Under Google's rules, end-to-end encrypted data is not collected. |
 | Location, contacts, calendar, files, audio, health, financial info, web browsing, installed apps | Nothing in the app reads them, and the manifest asks for no permission that could. |
 | App info and performance (crash logs, diagnostics) | No crash reporter or analytics SDK (`app/build.gradle`: Capacitor, AndroidX, Firebase Messaging only). |
@@ -65,6 +66,11 @@ relay keeps the push token (encrypted) until the phone is removed or nothing rea
 at most twice a day (`src/lib/update.ts`): an ordinary request carrying nothing but what any request
 carries. The copy on Google Play is built without it (`src/channel.play.ts`, `technical.md`), so it is
 not in the form.
+
+**Prices for the one-tap answers.** On a request for a price, the app reads the inbox's own public list
+of services and the business's languages (`GET /v1/services`, `GET /v1/business`; `facts()` in
+`src/lib/client.ts`): ordinary requests to the owner's own inbox, with no token and nothing about the
+person, the reads any assistant makes. It adds no row to the form.
 
 **Try the demo.** It reads the demo shop's made-up examples from `demo.surfingdog.ai` (`DemoClient` in
 `src/lib/client.ts`): ordinary requests, with no token, no key and nothing about the person. Nothing

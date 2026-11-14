@@ -1211,3 +1211,77 @@ fieldset.group legend {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+/* ---- one-tap answers (ADR-028 Amendment 5) ---- */
+/* Above the reply: the owner's quick replies on a message, the public prices on a request for one. */
+.quick {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  overflow-x: auto;
+  padding: 2px 0;
+  scrollbar-width: none;
+}
+.quick::-webkit-scrollbar {
+  display: none;
+}
+.quick-chip {
+  flex: none;
+  max-width: 80%;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--line-2);
+  border-radius: 9999px;
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.quick-chip.price {
+  border-color: color-mix(in srgb, var(--tangerine) 35%, transparent);
+  color: var(--tangerine);
+}
+.quick-chip:disabled {
+  opacity: 0.5;
+}
+/* A draft your AI or a rule made outside your limits: sent only by you. */
+.drafted {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card-soft);
+}
+.drafted p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.drafted-head {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-3);
+}
+.save-ask {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.save-ask-text {
+  flex: 1;
+}
+.rows .quick-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

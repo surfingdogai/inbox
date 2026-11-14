@@ -70,12 +70,19 @@ describe("try the demo", { timeout: 30_000 }, () => {
     const from = new Date(Date.now() + 86_400_000).toISOString();
     const to = new Date(Date.now() + 7 * 86_400_000).toISOString();
     expect((await client.slots(serviceId ?? "", from, to)).service.id).toBe(serviceId);
+    // Its prices and languages, which the chips are made from, from the same public door.
+    const facts = await client.facts();
+    expect(facts.services.length).toBeGreaterThan(0);
+    expect(facts.languages.length).toBeGreaterThan(0);
 
     // Every call went to the demo, to its read-only doors or the public one, and carried no token.
     expect(calls.length).toBeGreaterThan(0);
     for (const c of calls) {
       expect(
-        c.url.startsWith(`${DEMO_ORIGIN}/demo/phone/`) || c.url.startsWith(`${DEMO_ORIGIN}/v1/availability?`),
+        c.url.startsWith(`${DEMO_ORIGIN}/demo/phone/`) ||
+          c.url.startsWith(`${DEMO_ORIGIN}/v1/availability?`) ||
+          c.url.startsWith(`${DEMO_ORIGIN}/v1/services?`) ||
+          c.url === `${DEMO_ORIGIN}/v1/business`,
       ).toBe(true);
       expect(Object.keys(c.headers).map((h) => h.toLowerCase())).not.toContain("authorization");
     }
@@ -95,6 +102,9 @@ describe("try the demo", { timeout: 30_000 }, () => {
     };
     await refused(client.transition("x", { event: "confirm" }, "k1"));
     await refused(client.reply("x", "Hello", "k2"));
+    await refused(client.offer("x", { input: { totalPrice: { value: 100, currency: "EUR" } } }, "k5"));
+    await refused(client.sendDraft("x", "d1", "k6"));
+    await refused(client.dropDraft("x", "d1"));
     await refused(client.spamAct("x", "let-in", "k3"));
     await refused(client.setNotify(DEFAULT_PREFS));
     await refused(client.registerPush({ token: "t", p256dh: "p", auth: "a" }));
@@ -124,6 +134,9 @@ describe("try the demo", { timeout: 30_000 }, () => {
     );
     expect(demoPath("GET", "/v1/owner/items/01ABC")).toBe("/demo/phone/items/01ABC");
     expect(demoPath("GET", "/v1/availability?service_id=s")).toBe("/v1/availability?service_id=s");
+    expect(demoPath("GET", "/v1/services?limit=100")).toBe("/v1/services?limit=100");
+    expect(demoPath("GET", "/v1/business")).toBe("/v1/business");
+    expect(demoPath("POST", "/v1/owner/items/01ABC/offers")).toBeNull();
     expect(demoPath("GET", "/v1/phone/phones")).toBeNull();
     expect(demoPath("GET", "/v1/owner/items/01ABC/payments")).toBeNull();
     expect(demoPath("POST", "/v1/owner/items/01ABC/transitions")).toBeNull();

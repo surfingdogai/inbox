@@ -148,7 +148,8 @@ Put your own `google-services.json` in `apps/mobile/android/app/` for notificati
 
 To try the screens in a browser with a made-up business: `pnpm --filter @surfingdog/mobile dev`, then
 open `http://localhost:5174/?demo` (add `&screen=item`, `today`, `settings`, `inboxes`, `connect`, `held`, `spam`,
-`propose` or `confirm`, and `&offline` for the offline banner). That made-up business never ships in the
+`propose`, `confirm` or `price` (the price sheet), `&id=sofia` for a message with its quick replies, and `&offline`
+for the offline banner). That made-up business never ships in the
 app; "Try the demo" in the app reads the demo shop instead.
 
 A debug build (`assembleDebug`, for development) may connect to an inbox on your own computer over plain
@@ -159,6 +160,8 @@ debug build is debuggable: never use it as your everyday app.
 
 - `src/lib/session.ts`: pairing, the sign-in link, tokens and the device key's proofs.
 - `src/lib/offline.ts`: the encrypted cache and the outbox of what was done offline.
+- `src/lib/chips.ts` and `src/lib/replies.ts`: the one-tap answers, prices from the inbox's public list
+  and the owner's quick replies, kept on the phone (ADR-028 Amendment 5).
 - `src/lib/native.ts` and `android/app/src/main/java/ai/surfingdog/inbox/`: the Keystore, the
   fingerprint or face, and push (decrypted in `PushService`, shown by `Notifier`).
 - `docs/protocol/push-relay.md`: how an inbox reaches the phone through the relay.

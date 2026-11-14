@@ -1,9 +1,11 @@
 import { createContext, useContext } from "react";
 import type { ItemDetail, ItemView } from "../../inbox/client/src/lib/types";
 import type { Account } from "./lib/account";
+import type { PublicFacts } from "./lib/chips";
 import type { InboxClient, PhoneMe, PhoneSpam } from "./lib/client";
 import type { Native } from "./lib/native";
 import type { QueuedAction } from "./lib/offline";
+import type { QuickReplies } from "./lib/replies";
 import type { InboxEntry, Sessions } from "./lib/session";
 import type { UpdateState } from "./lib/update";
 
@@ -59,7 +61,14 @@ export interface App {
   countAll(): Promise<void>;
   loadItem(id: string): Promise<ItemDetail | null>;
   /** Does it now if the inbox can be reached, else keeps it to send when it can. */
-  act(itemId: string, kind: "transition" | "reply", body: Record<string, unknown>, label: string): Promise<void>;
+  act(itemId: string, kind: QueuedAction["kind"], body: Record<string, unknown>, label: string): Promise<void>;
+  /** The owner's quick replies for the inbox in front, kept on this phone; null in the demo. */
+  readonly replies: QuickReplies | null;
+  /**
+   * The public prices and languages of the inbox in front, for the chips: read from its public door,
+   * and kept on the phone so the chips are there offline too. Null when neither can be had.
+   */
+  facts(): Promise<PublicFacts | null>;
   connected(entry: InboxEntry): Promise<void>;
   removeActive(): Promise<void>;
   toast(text: string): void;
