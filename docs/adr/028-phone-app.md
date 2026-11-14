@@ -170,9 +170,12 @@ with no computer and no QR code.
 What it protects, and what it does not. A code read by someone else is no use without the phone that
 asked (its verifier). But a phisher who starts the sign-in holds that verifier, so a code read out to
 them opens a first phone at once; the owner is told after, by email. Once the owner has a phone that can
-say yes, a new phone needs that yes, or a wait while the owner is told. And the same mailbox's code
-still signs in to the owner app on the web, whose QR code a computer confirms with no phone's yes:
-whether that path should wait for the phone too is left open.
+say yes, a new phone that signs in with the host's code needs that yes, or a wait while the owner is
+told. Two ways around it stay open. An emailed sign-in link (`POST /v1/phone/link`, which a hosted inbox
+answers too) connects a phone at once until `emailedLinksWait` is on, so a phisher who gets the owner to
+forward that email skips the yes. And the same mailbox's code still signs in to the owner app on the
+web, whose QR code a computer confirms with no phone's yes. Whether those paths wait for the phone too
+is left open.
 
 - **Sign-in through the host's control plane.** "Sign in with email" asks the host first: Surfing Dog's
   own sign-in for the inboxes it hosts (`apps/mobile/src/lib/account.ts`). The host sends a code only to
@@ -185,6 +188,13 @@ whether that path should wait for the phone too is left open.
   pinned to the app on Android, and on an iPhone, where any app may claim a scheme, by showing the code
   to type until the app has a universal link. The app reads the name in Settings → About phone. An
   inbox on the owner's own server is chosen on the email screen itself, with nothing sent to the host (§3).
+- **A phone's name, as the owner is shown it.** Whoever holds a phone types its name, so it is shown
+  only when it reads like a phone's (`quotablePhoneName`, `packages/core/src/phones/names.ts`; the host's
+  code email follows the same rule): Latin letters, digits, spaces, hyphens and apostrophes, at most 24
+  characters, no run of more than four digits and six in all (letters that stand in for digits count),
+  and no word of us, of a way to reach someone or of an authority, however it is spelled. Anything else
+  is shown as its kind ("an Android phone"), in the inbox's emails, on the stop page, on the confirm
+  sheet and in Settings → Phone. The name is kept as the phone sent it.
 - **The host's limits**, each read and spent in one step under a lock on the address that a request
   never waits for: three codes an hour to an address; five sends for one sign-in, a minute apart; five
   tries a code and ten a sign-in, each try compared with its newest three codes; JSON only, never a
@@ -198,14 +208,16 @@ whether that path should wait for the phone too is left open.
   redeems it there exactly as an emailed link is redeemed (`POST /v1/phone/link/redeem`). An inbox nobody
   has signed in to yet makes the owner the host names its owner then, as a first handoff does. A closed,
   closing or paused inbox gives no link.
-- **A phone confirms a phone.** When the owner already has a phone that can say yes (confirmed, and
-  signed in within its refresh token's two months: one unused since, or long reinstalled, makes nobody
-  wait), a new phone that came by the host's link waits for that phone's yes, as a QR code waits for the
-  computer's: the same two digits on both screens, worked out from the link and the new phone's key.
-  An emailed link waits the same way only once `emailedLinksWait` is on: the app released before this
-  (1.0.0) keeps a phone that waits as connected, and is stuck. The app that waits on an emailed link is
-  this release's; the inbox turns emailed links' wait on once the update check and Play have moved owners
-  onto it, and not before. The owner's
+- **A phone confirms a phone.** When the owner already has a phone that can say yes (confirmed, signed
+  in within its refresh token's two months, and with an app that can: one that came by the host's link,
+  which only that app uses, or one whose app has looked for new phones, `answers_at`), a new phone that
+  came by the host's link waits for that phone's yes, as a QR code waits for the computer's: the same two
+  digits on both screens, worked out from the link and the new phone's key. A phone unused for two
+  months, long reinstalled, or still on the app released before (1.0.x, which has no sheet to say yes
+  on) makes nobody wait. An emailed link waits the same way only once `emailedLinksWait` is on: the app
+  released before keeps a phone that waits as connected, and is stuck. The app that waits on an emailed
+  link is 1.1.0 (versionCode 10100), the next release; the inbox turns emailed links' wait on once the
+  update check and Play have moved owners onto it, and not before. The owner's
   phones are told by a notification that names nobody ("A new phone wants to connect"), and the app asks
   on a sheet, after the fingerprint or face, never from the notification. Confirm is signed by the
   confirming phone's device key (`proofStatement("confirm", …)`), which signs only shortly after an
@@ -225,15 +237,21 @@ whether that path should wait for the phone too is left open.
   them, so they secure their email. The host is answered `phone_paused` meanwhile; a computer can still
   connect a phone.
 - **The app.** The confirm sheet asks for any inbox on the phone, naming it when there are several: the
-  app asks every inbox when it opens, comes back, or every half minute in front, and a notification
-  about an inbox opens that inbox. It is a dialog that takes the focus, and a tap beside it answers
-  nothing; "Later" asks again when the app next opens.
-- **Kept.** Migration 0037 adds `via`, `confirm_by`, `wait_until`, `stop_hash` and `stopped_at` to
-  `phone_devices`. The owner's email for a phone connected says how: the computer, a link, a code, the
+  app asks every inbox when it opens, comes back, or every half minute while it is in front (never in
+  the background), and a notification about an inbox opens that inbox. Those looks never ask for the
+  fingerprint or face, so an owner who leaves the app open is never prompted for nothing: an inbox
+  whose token cannot be renewed without an unlock is looked at again after the next one. Only a
+  notification about a new phone, once opened, may ask. The app never asks for an unlock in the
+  background, and gives up on one that does not answer within a minute. The sheet is a dialog that takes
+  the focus, and a tap beside it answers nothing; "Later" asks again when the app next comes to the
+  front, or when that notification is opened.
+- **Kept.** Migration 0037 adds `via`, `confirm_by`, `wait_until`, `stop_hash`, `stopped_at` and
+  `answers_at` to `phone_devices`. The owner's email for a phone connected says how: the computer, a link, a code, the
   other phone, or the wait. What a phone may do once in is unchanged (`PHONE_OPERATIONS`).
 - **Deploy order.** The inbox and the host's runtime first, then the host's control plane (its
-  `phone_paused` and `not_owner` answers need the runtime's), then this app. Emailed links' wait stays off
-  until this app is the oldest in use (above).
+  `phone_paused` and `not_owner` answers need the runtime's), then this app as 1.1.0 (versionCode 10100).
+  Emailed links' wait stays off until 1.1.0 is the oldest in use; then `minSupported` 10100 is published
+  in `apps/site/public/phone/latest.json`, so the download page's copy asks older ones to update.
 
 ## Amendment 5 (14 Nov 2026): answering fast
 
@@ -252,9 +270,11 @@ stays as it was (`PHONE_OPERATIONS`, unchanged; a test holds it).
   offer the item's state takes, as the inbox builds it with every check it makes
   (`POST /v1/owner/items/{id}/offers`): for a request for a price, a quote the customer, or their
   assistant, can accept.
-- **Drafted offers.** A draft the owner's AI, a rule or another system made outside the owner's limits
-  shows on the item with every term the customer would read (its time, lines and total, and the people,
-  delivery, fees, stages, tax and until when it holds), "Send as it is" (`…/offers/draft/send`), and Drop
+- **Drafted offers.** A draft the owner's AI, a rule or another system made outside the owner's limits,
+  or one a person must look at first (a stay's quote from the rates), shows on the item with every term
+  the customer would read (its time, each line with its amount and choices, the total, a stay's lines
+  and what is paid when, and the people, delivery, fees, stages, tax and until when it holds), why it
+  was not sent ("Not sent yet" when no limit kept it), "Send as it is" (`…/offers/draft/send`), and Drop
   it. A draft with its own words to the customer opens them in full first: no person wrote them.
 - **Quick replies.** On a message, the owner's saved replies, in their own words: after a reply typed on
   a message, the app asks "Save as a quick reply?", only for words that hold nothing of that customer
@@ -273,9 +293,10 @@ stays as it was (`PHONE_OPERATIONS`, unchanged; a test holds it).
   answers.
 - **Answer times** (`packages/core/src/answers`). For each day, on the business's own date: the requests
   customers and their assistants sent through the inbox's own doors, how many were answered and who
-  answered first (a person, a rule, anything else), and of those that came in opening hours and not
-  while every phone that would have told the owner was in its quiet hours, how many were first answered
-  within 5, 15 and 60 minutes, with the median. The first answer is a reply or a transition that answers
+  answered first (a person, a rule, anything else; the owner's AI on the owner's MCP door is anything
+  else, whatever key it holds), and of those that came in opening hours and not while every phone that
+  would have told the owner was in its quiet hours, how many were first answered within 5, 15 and 60
+  minutes, with the median. The first answer is a reply or a transition that answers
   (a price, Accept, Propose, Decline, a question back); a note, Spam or closing without a word is none,
   nor a rule's reply that leaves the request for a person (a rule answers only by a transition).
   Test items (the host's own probes among them), what the spam filter held, put aside or is screening,
