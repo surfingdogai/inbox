@@ -61,7 +61,7 @@ describe("a stay's draft from the rates", () => {
     const tz = "Africa/Nairobi";
     const details = draftDetails(draft.terms, tz, draft.created_at);
     // The quote is worked out again as it goes, so it holds a day from then, as the card says.
-    expect(details).toContain("They can accept it for a day once it is sent");
+    expect(details).toContain("They can accept it for up to a day once it is sent");
     clock.now += 3 * 3_600_000;
     // What goes when it is sent: the quote the guest gets.
     const sent = await k.caps.sendOfferDraft(owner, { item_id: id });

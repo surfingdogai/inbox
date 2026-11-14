@@ -307,7 +307,8 @@ stays as it was (`PHONE_OPERATIONS`, unchanged; a test holds it).
   holds changes; a stay's whole quote but its source. A stay's quote is worked out again as it goes, so
   it goes only as the card showed it, every term but until when it holds, else `draft_stale` (the rates,
   a payment platform or a date moved since); and it holds as long from when it goes as the draft did
-  from when it was made, which the card says ("for a day once it is sent"), or until the same time
+  from when it was made, or less where the stay's arrival comes first, which the card says ("for up
+  to a day once it is sent"), or until the same time
   where the stay's arrival cut it short. Where a card holds a stay, "nothing is charged now" is said
   only when nothing is paid now. A draft with its own words to the customer opens them in full first: no
   person wrote them.

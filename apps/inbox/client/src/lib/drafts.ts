@@ -173,7 +173,8 @@ function holdWords(hours: number): string {
 
 /**
  * Until when the customer can accept it. A stay's quote is worked out again as it goes, so it holds as
- * long from then as the draft did from when it was made (`madeAt`): "for a day once it is sent". One the
+ * long from then as the draft did from when it was made (`madeAt`), or less where the stay's arrival comes
+ * first: "for up to a day once it is sent". One the
  * stay's arrival cut short (not a whole number of hours) holds until that same time, and any other offer
  * goes with the date it was drafted with.
  */
@@ -182,7 +183,7 @@ function holdLine(until: string, stay: boolean, madeAt: string | undefined, tz: 
   const hours = Math.round(held / 3_600_000);
   // The quote keeps whole seconds, so it is up to a second short of the hours it was made with.
   if (stay && hours >= 1 && Math.abs(held - hours * 3_600_000) < 1_000)
-    return `They can accept it for ${holdWords(hours)} once it is sent`;
+    return `They can accept it for up to ${holdWords(hours)} once it is sent`;
   return `They can accept it until ${formatDateTime(until, tz)}`;
 }
 

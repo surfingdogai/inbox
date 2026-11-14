@@ -55,9 +55,11 @@ describe("a draft's card", () => {
   it("says how long a stay's quote holds from when it is sent, as it is worked out again then", () => {
     // Made a day before it lapses (the quote keeps whole seconds): a day from when it goes.
     const made = "2026-11-19T18:00:00.400Z";
-    expect(draftDetails(stay, TZ, made)).toContain("They can accept it for a day once it is sent");
+    expect(draftDetails(stay, TZ, made)).toContain("They can accept it for up to a day once it is sent");
     const two = { ...stay, validThrough: "2026-11-19T20:00:00Z" } as DraftView["terms"];
-    expect(draftDetails(two, TZ, "2026-11-19T18:00:00Z")).toContain("They can accept it for 2 hours once it is sent");
+    expect(draftDetails(two, TZ, "2026-11-19T18:00:00Z")).toContain(
+      "They can accept it for up to 2 hours once it is sent",
+    );
     // Cut short by the stay's arrival: until that same time, whenever it goes.
     const cut = { ...stay, validThrough: "2026-11-20T13:59:00Z" } as DraftView["terms"];
     expect(draftDetails(cut, TZ, made)).toContain(
