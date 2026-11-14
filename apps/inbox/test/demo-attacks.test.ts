@@ -165,8 +165,10 @@ describe("the demo, attacked", { timeout: 30_000 }, () => {
       .select({ id: schema.services.id })
       .from(schema.services)
       .where(eq(schema.services.name, "Full service"));
+    // The next Saturday but tomorrow: the demo's own confirmed booking for tomorrow at ten (the one the
+    // screenshots open) holds a stand, so on a Friday tomorrow's ten would have five free, not six.
     let start = 0;
-    for (let d = 1; d <= 8 && !start; d++) {
+    for (let d = 2; d <= 8 && !start; d++) {
       const t = localTime(Date.now(), "Europe/Lisbon", d, 10, 0);
       if (new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Lisbon", weekday: "short" }).format(t) === "Sat")
         start = t;
