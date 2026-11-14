@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { phoneKind, quotablePhoneName, shownPhoneName } from "../../../../packages/core/src/phones/names";
 import { DEFAULT_PREFS, type NotifyPrefs } from "../../../../packages/core/src/phones/prefs";
 import { useApp } from "../context";
 import type { PhoneAsk, PhoneRow } from "../lib/client";
@@ -339,7 +340,7 @@ export function Settings() {
               {phones.phones.map((p) => (
                 <div key={p.id}>
                   <span>
-                    {p.name}{" "}
+                    {shownPhoneName(p.name, p.platform)}{" "}
                     <span className="sub">
                       ·{" "}
                       {p.id === phones.this
@@ -355,7 +356,7 @@ export function Settings() {
                     </button>
                   ) : confirmRemove === p.id ? (
                     <button type="button" className="btn link" onClick={() => void remove(p)}>
-                      Remove {p.name}?
+                      Remove {shownPhoneName(p.name, p.platform)}?
                     </button>
                   ) : (
                     <button type="button" className="btn quiet sm" onClick={() => setConfirmRemove(p.id)}>
@@ -431,7 +432,7 @@ export function Settings() {
 }
 
 /** A day and a time, as a sentence says it ("Sat 15 Nov, 14:02"). */
-function dayAndTime(at: number): string {
+export function dayAndTime(at: number): string {
   try {
     return new Intl.DateTimeFormat(undefined, {
       weekday: "short",
@@ -448,10 +449,12 @@ function dayAndTime(at: number): string {
 /**
  * The confirm sheet (ADR-028 Amendment 4): a new phone asked to connect to one of the inboxes on this
  * phone (named when there are several) and waits for this phone's yes. Its name is its own say, so it
- * is quoted. Confirm asks for the fingerprint or face first, and is signed by this phone's key; "Not
- * mine" removes the new phone. A phone waiting out its day ("I don't have my other phone") can only be
- * stopped from here: its owner sees no digits to compare, so there is nothing to confirm. A security
- * question, so a tap beside it never answers it: "Later" says it asks again when the app next opens.
+ * is quoted, and only when it reads like a phone's (`quotablePhoneName`): else the sheet says the kind
+ * of phone. Confirm asks for the fingerprint or face first, and is signed by this phone's key; "Not
+ * mine" removes the new phone, has new phones wait a day and emails the owner, and says so. A phone
+ * waiting out its day ("I don't have my other phone") can only be stopped from here: its owner sees no
+ * digits to compare, so there is nothing to confirm. A security question, so a tap beside it never
+ * answers it: "Later" says it asks again when the app next opens, and so it does (`onDone("later")`).
  */
 export function PhoneAskSheet({
   entry,
@@ -463,12 +466,16 @@ export function PhoneAskSheet({
   ask: PhoneAsk;
   /** More than one inbox is on this phone: the sheet names the one asked about. */
   many: boolean;
-  onDone: () => void;
+  /** Answered (Confirm, Not mine, Stop it), or put off until the app next comes to the front. */
+  onDone: (how: "answered" | "later") => void;
 }) {
   const app = useApp();
   const [busy, setBusy] = useState(false);
   const business = entry.name || "your inbox";
   const waiting = ask.wait_until ? Date.parse(ask.wait_until) : null;
+  const own = quotablePhoneName(ask.phone.name);
+  const kind = phoneKind(ask.phone.platform);
+  const named = own && own !== kind ? own : null;
   const client = app.clientFor(entry);
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
@@ -490,8 +497,8 @@ export function PhoneAskSheet({
         if (!ok) return;
       }
       await client.confirmPhone(ask.id);
-      app.toast(`"${ask.phone.name}" can open ${business} now.`);
-      onDone();
+      app.toast(`${named ? `"${named}"` : `The ${kind}`} can open ${business} now.`);
+      onDone("answered");
     } catch (e) {
       app.toast(e instanceof Error ? e.message : "Not confirmed.");
     } finally {
@@ -503,8 +510,8 @@ export function PhoneAskSheet({
     setBusy(true);
     try {
       await client.refusePhone(ask.id);
-      app.toast("Stopped. That phone can't open your inbox.");
-      onDone();
+      app.toast("Stopped. That phone can't open your inbox, and new phones wait a day.");
+      onDone("answered");
     } catch (e) {
       app.toast(e instanceof Error ? e.message : "Not stopped. Try again.");
     } finally {
@@ -523,7 +530,14 @@ export function PhoneAskSheet({
           {many ? `: ${business}` : ""}
         </h2>
         <p className="sub" style={{ margin: 0 }}>
-          A phone that calls itself <b>"{ask.phone.name}"</b> asked to connect to {business}.{" "}
+          {named ? (
+            <>
+              A phone that calls itself <b>"{named}"</b>
+            </>
+          ) : (
+            `An ${kind}`
+          )}{" "}
+          asked to connect to {business}.{" "}
           {waiting
             ? `It said you don't have this phone with you, so it is let in on ${dayAndTime(waiting)}, unless you stop it.`
             : "Confirm only if you are connecting it now, and it shows these two digits:"}
@@ -534,9 +548,12 @@ export function PhoneAskSheet({
             <button type="button" className="btn primary" disabled={busy} onClick={() => void refuse()}>
               Not you? Stop it
             </button>
-            <button type="button" className="btn quiet" onClick={onDone}>
+            <button type="button" className="btn quiet" onClick={() => onDone("answered")}>
               It's mine, let it wait
             </button>
+            <p className="fine" style={{ margin: 0 }}>
+              Stopping it has new phones wait a day, and we email you.
+            </p>
           </>
         ) : (
           <>
@@ -546,11 +563,11 @@ export function PhoneAskSheet({
             <button type="button" className="btn" disabled={busy} onClick={() => void refuse()}>
               Not mine
             </button>
-            <button type="button" className="btn quiet" disabled={busy} onClick={onDone}>
+            <button type="button" className="btn quiet" disabled={busy} onClick={() => onDone("later")}>
               Later
             </button>
             <p className="fine" style={{ margin: 0 }}>
-              Later: it asks again when you next open the app.
+              Not mine: new phones then wait a day, and we email you. Later: it asks again when you next open the app.
             </p>
           </>
         )}
@@ -575,12 +592,12 @@ export function Waiting({ entry }: { entry: InboxEntry }) {
           you. Until then it opens nothing.
         </p>
         <p className="fine">
-          No need to wait if you can use a computer: remove your old phone in Settings → Phone there, and sign in on
-          this one again.
+          No need to wait: stop waiting here, remove your old phone in Settings → Phone on the web (any browser), then
+          sign in on this one again.
         </p>
       </div>
       <div className="end">
-        <button type="button" className="btn" onClick={() => void app.refresh()}>
+        <button type="button" className="btn" onClick={() => void app.checkAgain()}>
           Check again
         </button>
         {confirmRemove ? (

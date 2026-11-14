@@ -36,7 +36,10 @@ export interface PhoneSpam {
 
 export interface PhoneRow {
   readonly id: string;
+  /** Its own name, when it reads like a phone's; else its kind. Shown through `shownPhoneName` all the same. */
   readonly name: string;
+  /** `android` or `ios`; an inbox of an older version may leave it out. */
+  readonly platform?: string;
   readonly created_at: string;
   readonly last_seen_at: string | null;
   readonly push: string;
@@ -94,18 +97,19 @@ export class InboxClient {
    * One call. An inbox that answers it has moved (`movedTo`) is followed once, and the call made again
    * at its new address. When the inbox there says this phone was removed, it is signed out, as the old
    * address could have said itself; when the new address cannot be reached or is not that inbox, the
-   * old address's answer stands.
+   * old address's answer stands. A quiet call (one the app makes on its own) never asks for the
+   * fingerprint or face (`Sessions.token`), and leaves a move for the next call the owner makes.
    */
   protected async call<T>(
     method: string,
     path: string,
-    opts: { body?: unknown; idempotencyKey?: string; auth?: boolean } = {},
+    opts: { body?: unknown; idempotencyKey?: string; auth?: boolean; quiet?: boolean } = {},
   ): Promise<T> {
     try {
       return await this.callAt<T>(method, path, opts);
     } catch (error) {
       const to = movedTo(error);
-      if (!to || to === this.at.origin) throw error;
+      if (!to || to === this.at.origin || opts.quiet) throw error;
       try {
         this.at = await this.sessions.follow(this.at, to);
       } catch (refused) {
@@ -119,11 +123,12 @@ export class InboxClient {
   private async callAt<T>(
     method: string,
     path: string,
-    opts: { body?: unknown; idempotencyKey?: string; auth?: boolean } = {},
+    opts: { body?: unknown; idempotencyKey?: string; auth?: boolean; quiet?: boolean } = {},
   ): Promise<T> {
     const send = async (fresh: boolean): Promise<Response> => {
       const headers: Record<string, string> = { accept: "application/json" };
-      if (opts.auth !== false) headers.authorization = `Bearer ${await this.sessions.token(this.entry, fresh)}`;
+      if (opts.auth !== false)
+        headers.authorization = `Bearer ${await this.sessions.token(this.entry, fresh, opts.quiet === true)}`;
       if (opts.body !== undefined) headers["content-type"] = "application/json";
       if (opts.idempotencyKey) headers["idempotency-key"] = opts.idempotencyKey;
       try {
@@ -269,9 +274,13 @@ export class InboxClient {
     return this.call("DELETE", `/v1/phone/phones/${encodeURIComponent(id)}`);
   }
 
-  /** New phones that wait for this one's yes. */
-  async phoneAsks(): Promise<readonly PhoneAsk[]> {
-    return (await this.call<{ pairings: PhoneAsk[] }>("GET", "/v1/phone/pairings")).pairings;
+  /**
+   * New phones that wait for this one's yes. Quiet, unless the owner asked to see them (a notification
+   * about one, opened): the app looks on its own every half minute, and that never asks for an unlock.
+   */
+  async phoneAsks(opts: { quiet?: boolean } = { quiet: true }): Promise<readonly PhoneAsk[]> {
+    return (await this.call<{ pairings: PhoneAsk[] }>("GET", "/v1/phone/pairings", { quiet: opts.quiet !== false }))
+      .pairings;
   }
 
   /** Confirm, after the fingerprint or face: signed with this phone's key, which signs only after an unlock. */

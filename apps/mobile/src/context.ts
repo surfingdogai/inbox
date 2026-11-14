@@ -59,6 +59,8 @@ export interface App {
   back(): void;
   choose(entry: InboxEntry): void;
   refresh(): Promise<void>;
+  /** "Check again" on a phone waiting out its day: a refresh that says so when it still waits. */
+  checkAgain(): Promise<void>;
   /** What needs the owner in every inbox: from each one's cache at once, then from the inbox when online. */
   countAll(): Promise<void>;
   loadItem(id: string): Promise<ItemDetail | null>;

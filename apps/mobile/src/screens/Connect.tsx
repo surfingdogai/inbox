@@ -11,6 +11,8 @@ import { ChevronLeft, Corners } from "./icons";
 const ASK_EVERY_MS = 2_000;
 const WAIT_MS = 5 * 60_000;
 const PHONE_WAIT_MS = 15 * 60_000;
+/** A refusal this close to the end of the wait is the inbox's own minutes running out, not a no. */
+const RAN_OUT_MS = 30_000;
 
 /**
  * Connect your inbox (the approved Connect screen, phone first): sign in with email, with no computer
@@ -106,10 +108,15 @@ export function Connect({
         await app.sessions.abandon(pending);
         setPending(null);
         setByEmail(false);
+        // Refused well before its minutes ran out: the other phone said no (or the email's "Stop it"),
+        // and new phones then wait a day. Refused at the end of them, it only ran out of time.
+        const saidNo = state === "refused" && Date.now() < until - RAN_OUT_MS;
         setError(
-          onPhone
-            ? "Not connected. Sign in again, and confirm on your other phone."
-            : "Not connected. On your computer, show a new code and scan it again.",
+          !onPhone
+            ? "Not connected. On your computer, show a new code and scan it again."
+            : saidNo
+              ? "Your other phone said no. New phones can't connect for a day."
+              : "Not connected. Sign in again, and confirm on your other phone.",
         );
         return;
       }
@@ -207,7 +214,7 @@ export function Connect({
         {!noOtherPhone && (
           <p className="fine">
             Reinstalled the app, or changed phone? The phone you used before may be this one. Wait instead, or remove
-            the old phone in Settings → Phone on a computer and sign in again.
+            the old phone in Settings → Phone on the web (any browser), then sign in here again.
           </p>
         )}
         {error && (
@@ -449,6 +456,22 @@ function notNow(state: string): string {
   return "Can't connect a phone now";
 }
 
+/** A refusal that asking again in the next minutes would not change: paused, closed, not the owner's, lapsed. */
+export function standing(e: unknown): boolean {
+  const code = (e as { code?: unknown } | null)?.code;
+  return ["phone_paused", "not_owner", "closed", "not_open", "not_found", "grant", "no_screen_lock"].includes(
+    String(code),
+  );
+}
+
+/** Why an inbox the service lists takes no new phone, in a sentence. */
+export function whyNot(state: string): string {
+  if (state === "suspended") return "This inbox is paused, so it can't connect a phone now.";
+  if (state === "closing") return "This inbox is closing, so it connects no new phone.";
+  if (state === "setup") return "This inbox is still being set up. Connect a phone once it's ready.";
+  return "This inbox can't connect a phone now.";
+}
+
 /** Codes an address gets in an hour (the service's rule): past it, asking again sends nothing. */
 const MAX_CODES_AN_HOUR = 3;
 
@@ -483,6 +506,8 @@ function SignIn({
   const [granted, setGranted] = useState<Granted | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Whether asking again could open it: not after a refusal that stands (paused, closed, not the owner's). */
+  const [final, setFinal] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
   const connect = useCallback(
@@ -511,6 +536,7 @@ function SignIn({
         }
       } catch (e) {
         setError(e instanceof Error ? e.message : "That did not work. Try again.");
+        setFinal(standing(e));
         // The code was taken: what is left to do is choose the inbox again, or sign in again.
         if (g) {
           setGranted(g);
@@ -603,28 +629,53 @@ function SignIn({
   if (step === "choose" && granted) {
     const here = new Set(app.inboxes.map((e) => e.origin));
     const [only] = granted.inboxes;
-    // One inbox that cannot connect: why, with nothing to choose.
-    if (granted.inboxes.length === 1 && only)
+    const openable = granted.inboxes.filter((i) => i.can_connect && !here.has(i.origin));
+    // The code was taken, so the inbox can be asked again with the same sign-in, for its ten minutes.
+    const open = (i: GrantedInbox) => {
+      setBusy(true);
+      setError(null);
+      void connect(granted, i)
+        .catch((e) => {
+          setError(e instanceof Error ? e.message : "That did not work.");
+          setFinal(standing(e));
+        })
+        .finally(() => setBusy(false));
+    };
+    // One inbox: why it did not open, and Try again when it still can.
+    if (granted.inboxes.length === 1 && only) {
+      const can = only.can_connect && !here.has(only.origin);
+      const again = can && !final;
       return (
         <div className="connect screen">
           {header}
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <h1>{only.name}</h1>
-            <p>
-              {here.has(only.origin)
-                ? "This inbox is on this phone already."
-                : `${notNow(only.state)}: this inbox can't connect a phone now. Try again later.`}
-            </p>
+            {!can && <p>{here.has(only.origin) ? "This inbox is on this phone already." : whyNot(only.state)}</p>}
           </div>
           {problem}
+          {again && (
+            <div className="end">
+              <button type="button" className="btn primary" disabled={busy} onClick={() => open(only)}>
+                {busy ? "Connecting…" : "Try again"}
+              </button>
+            </div>
+          )}
         </div>
       );
+    }
+    const allHere = granted.inboxes.length > 0 && granted.inboxes.every((i) => here.has(i.origin));
     return (
       <div className="connect screen">
         {header}
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <h1>Which inbox?</h1>
-          <p>Choose the inbox to open on this phone. To add another, sign in again.</p>
+          <p>
+            {openable.length > 0
+              ? "Choose the inbox to open on this phone. To add another, sign in again."
+              : allHere
+                ? "Your inboxes are on this phone already."
+                : "None of these can open on this phone now: each says why."}
+          </p>
         </div>
         <div className="group">
           <div className="rows">
@@ -644,13 +695,7 @@ function SignIn({
                       className="btn link"
                       aria-label={`Open ${i.name}`}
                       disabled={busy || !i.can_connect}
-                      onClick={() => {
-                        setBusy(true);
-                        setError(null);
-                        void connect(granted, i)
-                          .catch((e) => setError(e instanceof Error ? e.message : "That did not work."))
-                          .finally(() => setBusy(false));
-                      }}
+                      onClick={() => open(i)}
                     >
                       Open
                     </button>

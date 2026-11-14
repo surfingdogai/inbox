@@ -30,7 +30,7 @@ import { Item } from "./screens/Item";
 import { Lock } from "./screens/Lock";
 import { OfflineBanner } from "./screens/Offline";
 import { Screened } from "./screens/Screened";
-import { PhoneAskSheet, Settings, Waiting } from "./screens/Settings";
+import { dayAndTime, PhoneAskSheet, Settings, Waiting } from "./screens/Settings";
 import { Today } from "./screens/Today";
 
 export interface Deps {
@@ -67,7 +67,10 @@ const ACTIVE = "active";
 export const RELOCK_MS = 300_000;
 /** An Accept right after the app was unlocked asks nothing more. */
 const JUST_UNLOCKED_MS = 30_000;
-/** While the app is in front, how often it asks every inbox whether a new phone waits for its yes. */
+/**
+ * While the app is in front, how often it asks every inbox whether a new phone waits for its yes. In the
+ * background it never asks, and these looks never ask for the fingerprint or face (`phoneAsks`).
+ */
 const ASK_EVERY_MS = 30_000;
 
 function memoryKv(): KV {
@@ -114,9 +117,15 @@ export function App({ deps }: { deps: Deps }) {
    * shows the first, naming its inbox, over any screen.
    */
   const [asks, setAsks] = useState<readonly { entry: InboxEntry; ask: PhoneAsk }[]>([]);
-  /** Asks answered or put off on this phone since the app opened: the sheet does not come back for them. */
+  /**
+   * Asks answered on this phone, and asks put off ("Later") until the app next comes to the front or a
+   * notification about one is opened: the sheet does not come back for them before.
+   */
   const answered = useRef(new Set<string>());
-  const shownAsk = asks.find((a) => !answered.current.has(a.ask.id));
+  const putOff = useRef(new Set<string>());
+  const shownAsk = asks.find((a) => !answered.current.has(a.ask.id) && !putOff.current.has(a.ask.id));
+  /** Whether the app is in front: the half-minute look for asks runs only then. */
+  const [front, setFront] = useState(true);
   /** A phone that redeemed an emailed link and waits for the owner's other phone: Connect shows it. */
   const [waitingPhone, setWaitingPhone] = useState<PendingPhone | null>(null);
   /** A code the sign-in email's button handed to the app: the Connect screen takes it. */
@@ -260,6 +269,8 @@ export function App({ deps }: { deps: Deps }) {
   );
 
   // ---- the active inbox: its items, kept encrypted for offline ----
+  /** "Check again", pressed on a phone waiting out its day: the look says so when it still waits. */
+  const checking = useRef(false);
   const refresh = useCallback(async () => {
     if (!client || !box || !active) return;
     // A phone waiting out its day opens nothing: it only asks whether it was let in, or stopped.
@@ -275,7 +286,7 @@ export function App({ deps }: { deps: Deps }) {
         toast(`Connecting this phone to ${active.name} was stopped.`);
         const list = await wipe(active, "forget");
         if (list.length === 0) setStack([{ name: "connect" }]);
-      }
+      } else if (checking.current) toast(`Still waiting. It connects on ${dayAndTime(active.waitingUntil)}.`);
       return;
     }
     setLoading(true);
@@ -302,7 +313,7 @@ export function App({ deps }: { deps: Deps }) {
         .then(setSpam)
         .catch(() => setSpam(null));
       // A new phone that asked to connect waits for this one's yes: the sheet asks, on any screen.
-      if (!demo) void askAll.current();
+      if (!demo) void askAll.current(false);
     } catch (error) {
       if (error instanceof InboxError && error.code === "signed_out") {
         toast(`This phone was removed from ${active.name}. Connect it again from Settings → Phone.`);
@@ -324,6 +335,14 @@ export function App({ deps }: { deps: Deps }) {
       setLoading(false);
     }
   }, [client, box, active, demo, toast, native, wipe, sessions, deps.fetch]);
+  const checkAgain = useCallback(async () => {
+    checking.current = true;
+    try {
+      await refresh();
+    } finally {
+      checking.current = false;
+    }
+  }, [refresh]);
 
   useEffect(() => {
     if (!ready || locked || insecure) return;
@@ -494,14 +513,16 @@ export function App({ deps }: { deps: Deps }) {
         return;
       }
       // A notification about the inbox, not an item ("A new phone wants to connect"): that inbox in
-      // front, where the sheet asks.
+      // front, where the sheet asks, even one put off before. The owner opened it, so this look may ask
+      // for the fingerprint or face.
       const opened = readOpenLink(url, deps.allowLocal);
       if (opened) {
         const entry = inboxes.find((e) => e.origin === opened);
         if (entry) {
+          putOff.current.clear();
           setActive(entry);
           setStack([{ name: "inbox" }]);
-          void askAll.current();
+          void askAll.current(true);
         }
         return;
       }
@@ -560,10 +581,15 @@ export function App({ deps }: { deps: Deps }) {
       void openLink(e.url);
     });
     const state = CapApp.addListener("appStateChange", async ({ isActive }) => {
+      // In the background nothing asks for the fingerprint or face, and nothing looks for asks.
+      sessions.setFront(isActive);
+      setFront(isActive);
       if (!isActive) {
         hiddenAt.current = Date.now();
         return;
       }
+      // Back in front: what was put off is asked again ("Later: it asks again when you next open the app").
+      putOff.current.clear();
       const away = hiddenAt.current ? Date.now() - hiddenAt.current : 0;
       hiddenAt.current = null;
       if (locked) return;
@@ -571,7 +597,7 @@ export function App({ deps }: { deps: Deps }) {
         setLocked(true);
       else {
         void flush().then(refresh);
-        void askAll.current();
+        void askAll.current(false);
         checkUpdate.current();
       }
     });
@@ -579,7 +605,7 @@ export function App({ deps }: { deps: Deps }) {
       void sub.then((s) => s.remove());
       void state.then((s) => s.remove());
     };
-  }, [locked, openLink, native, inboxes.length, flush, refresh]);
+  }, [locked, openLink, native, sessions, inboxes.length, flush, refresh]);
 
   // Android's back button and back gesture: an open sheet closes, then an item goes back to the list,
   // then another tab goes back to the inbox, and from the inbox the app goes to the background.
@@ -616,32 +642,43 @@ export function App({ deps }: { deps: Deps }) {
   }, [ready, locked, insecure, openLink]);
 
   // New phones that ask for this one's yes, in every inbox on the phone: when the app opens or comes
-  // back, after a refresh, and every half minute while it is in front.
-  const askAll = useRef<() => Promise<void>>(async () => undefined);
-  askAll.current = async () => {
+  // back, after a refresh, every half minute while it is in front, and when a notification about one is
+  // opened. Only that last look may ask for the fingerprint or face (`loud`): the others are quiet, and
+  // an inbox whose token cannot be renewed without an unlock is looked at again after the next one.
+  const askAll = useRef<(loud: boolean) => Promise<void>>(async () => undefined);
+  askAll.current = async (loud: boolean) => {
     if (demo || locked || insecure) return;
     const open = inboxes.filter((e) => !e.waitingUntil);
     const found = await Promise.all(
       open.map(async (entry) => {
         try {
-          const list = await new InboxClient(entry, sessions, deps.fetch).phoneAsks();
-          return list.map((ask) => ({ entry, ask }));
+          return { entry, asks: await new InboxClient(entry, sessions, deps.fetch).phoneAsks({ quiet: !loud }) };
         } catch {
-          return [];
+          // Not reached, or not unlocked lately: what it asked before stays until it answers again.
+          return { entry, asks: null };
         }
       }),
     );
-    // The inbox in front first.
-    setAsks(
-      found.flat().sort((a, b) => Number(b.entry.alias === active?.alias) - Number(a.entry.alias === active?.alias)),
+    setAsks((before) =>
+      found
+        .flatMap(({ entry, asks: list }) =>
+          list ? list.map((ask) => ({ entry, ask })) : before.filter((a) => a.entry.alias === entry.alias),
+        )
+        // The inbox in front first.
+        .sort((a, b) => Number(b.entry.alias === active?.alias) - Number(a.entry.alias === active?.alias)),
     );
   };
   useEffect(() => {
     if (!ready || locked || insecure || demo || inboxes.length === 0) return;
-    void askAll.current();
-    const t = setInterval(() => void askAll.current(), ASK_EVERY_MS);
-    return () => clearInterval(t);
+    void askAll.current(false);
   }, [ready, locked, insecure, demo, inboxes.length]);
+  useEffect(() => {
+    if (!ready || locked || insecure || demo || inboxes.length === 0 || !front) return;
+    const t = setInterval(() => {
+      if (typeof document === "undefined" || document.visibilityState !== "hidden") void askAll.current(false);
+    }, ASK_EVERY_MS);
+    return () => clearInterval(t);
+  }, [ready, locked, insecure, demo, inboxes.length, front]);
 
   // Every inbox's push registration stays current: the push token changes now and then.
   const registerPush = useRef<() => void>(() => undefined);
@@ -707,6 +744,7 @@ export function App({ deps }: { deps: Deps }) {
       setStack([{ name: "inbox" }]);
     },
     refresh,
+    checkAgain,
     countAll,
     loadItem,
     act,
@@ -787,8 +825,13 @@ export function App({ deps }: { deps: Deps }) {
             entry={shownAsk.entry}
             ask={shownAsk.ask}
             many={inboxes.length > 1}
-            onDone={() => {
-              // Answered, or "Later": not asked again until the app next opens.
+            onDone={(how) => {
+              // Answered: gone. "Later": not asked again until the app next comes to the front.
+              if (how === "later") {
+                putOff.current.add(shownAsk.ask.id);
+                setAsks((a) => [...a]);
+                return;
+              }
               answered.current.add(shownAsk.ask.id);
               setAsks((a) => a.filter((x) => x.ask.id !== shownAsk.ask.id));
             }}

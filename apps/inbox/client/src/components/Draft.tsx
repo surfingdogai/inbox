@@ -1,6 +1,6 @@
 import { FilePenLine } from "lucide-react";
 import { problemOf } from "../lib/api";
-import { breachWords, type DraftView, draftDetails, termsLine } from "../lib/drafts";
+import { type DraftView, draftDetails, notSentWords, termsLine } from "../lib/drafts";
 import { byWord } from "../lib/format";
 import { useDraft } from "../lib/queries";
 import { Toast } from "./Feedback";
@@ -32,8 +32,8 @@ export function DraftCard({
         <FilePenLine className="icon-xs" aria-hidden="true" /> A draft waits for you
       </div>
       <p>
-        {byWord(draft.by, draft.by.kind)} would offer: <b>{termsLine(draft.terms, tz) || "an offer"}</b>. Not sent: it
-        is {breachWords(draft.breaches)}.
+        {byWord(draft.by, draft.by.kind)} would offer: <b>{termsLine(draft.terms, tz) || "an offer"}</b>.{" "}
+        {notSentWords(draft.breaches)}
       </p>
       {/* Everything else the customer would read, and its own words to them in full: "as it is" means all of it. */}
       {draftDetails(draft.terms, tz).length > 0 && (

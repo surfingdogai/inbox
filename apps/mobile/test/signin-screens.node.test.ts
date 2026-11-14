@@ -5,7 +5,7 @@ import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { type App, AppContext } from "../src/context";
 import type { PhoneAsk } from "../src/lib/client";
-import { Connect } from "../src/screens/Connect";
+import { Connect, standing, whyNot } from "../src/screens/Connect";
 import { PhoneAskSheet, Waiting } from "../src/screens/Settings";
 
 /**
@@ -79,6 +79,36 @@ describe("signing in with email, on the phone", () => {
   });
 });
 
+describe("an inbox that did not open on the phone", () => {
+  const source = readFileSync(path.resolve(import.meta.dirname, "../src/screens/Connect.tsx"), "utf8");
+  const choose = source.slice(
+    source.indexOf('if (step === "choose" && granted)'),
+    source.indexOf('if (step === "code"'),
+  );
+
+  it("offers Try again with the same sign-in when asking again could open it, and says the error once", () => {
+    expect(choose).toMatch(/again &&[\s\S]*onClick=\{\(\) => open\(only\)\}[\s\S]*"Try again"/);
+    // The reason is said only when the inbox itself takes no phone: never beside the error.
+    expect(choose).toContain("{!can && <p>");
+    expect(source).not.toContain("Try again later");
+    expect(standing({ code: "network" })).toBe(false);
+    expect(standing({ code: "unreachable" })).toBe(false);
+    for (const code of ["phone_paused", "not_owner", "closed", "grant"]) expect(standing({ code })).toBe(true);
+  });
+
+  it("says why an inbox takes no phone, and what nothing to choose means", () => {
+    expect(whyNot("closing")).toBe("This inbox is closing, so it connects no new phone.");
+    expect(whyNot("suspended")).toBe("This inbox is paused, so it can't connect a phone now.");
+    expect(choose).toContain("Your inboxes are on this phone already.");
+    expect(choose).toContain("None of these can open on this phone now: each says why.");
+  });
+
+  it("tells a no from the other phone from a wait that ran out", () => {
+    expect(source).toContain('"Your other phone said no. New phones can\'t connect for a day."');
+    expect(source).toMatch(/const saidNo = state === "refused" && Date\.now\(\) < until - RAN_OUT_MS;/);
+  });
+});
+
 describe("a new phone asking this one", () => {
   it("shows its name as its own say, and the two digits to compare, with Confirm and Not mine", () => {
     const html = draw(
@@ -94,6 +124,21 @@ describe("a new phone asking this one", () => {
     expect(html).toContain('aria-labelledby="phone-ask-h"');
     expect(html).toContain("it asks again when you next open the app");
     expect(html).not.toMatch(/class="scrim"[^>]*onClick/);
+  });
+
+  it("says the kind of phone, never a name that is not a phone's, and what Not mine does", () => {
+    const bait = ask(null);
+    const html = draw(
+      createElement(PhoneAskSheet, {
+        entry: ACTIVE,
+        ask: { ...bait, phone: { ...bait.phone, name: "Not you? Call 0800 555 0100", platform: "android" } },
+        many: false,
+        onDone: () => undefined,
+      }),
+    );
+    expect(html).toContain("An Android phone asked to connect to Oficina Maré.");
+    expect(html).not.toContain("0800");
+    expect(html).toContain("Not mine: new phones then wait a day, and we email you.");
   });
 
   it("names the inbox it asks about when the phone has several", () => {
@@ -135,6 +180,18 @@ describe("a new phone asking this one", () => {
     );
     expect(html).toContain("Connecting on");
     expect(html).toContain("Until then it opens nothing.");
+    // A phone-only owner's way not to wait, in order, with no computer needed.
+    expect(html).toContain(
+      "No need to wait: stop waiting here, remove your old phone in Settings → Phone on the web (any browser), then sign in on this one again.",
+    );
+    expect(html).not.toContain("on a computer");
+    // Check again says it is still waiting, when it is.
+    const source = readFileSync(path.resolve(import.meta.dirname, "../src/screens/Settings.tsx"), "utf8");
+    expect(source).toContain("app.checkAgain()");
+    const shell = readFileSync(path.resolve(import.meta.dirname, "../src/App.tsx"), "utf8");
+    expect(shell).toMatch(
+      /if \(checking\.current\) toast\(`Still waiting\. It connects on \$\{dayAndTime\(active\.waitingUntil\)\}\.`\)/,
+    );
   });
 });
 
@@ -149,7 +206,9 @@ describe("the app opened by the code email's button", () => {
   it("puts in front the inbox a notification about it names, where the sheet asks", () => {
     const source = readFileSync(path.resolve(import.meta.dirname, "../src/App.tsx"), "utf8");
     const open = source.slice(source.indexOf("const openLink = useCallback"));
-    expect(open).toMatch(/readOpenLink\(url, deps\.allowLocal\)[\s\S]*setActive\(entry\)[\s\S]*askAll\.current\(\)/);
+    expect(open).toMatch(
+      /readOpenLink\(url, deps\.allowLocal\)[\s\S]*setActive\(entry\)[\s\S]*askAll\.current\(true\)/,
+    );
     // An emailed link that waits for the owner's other phone goes to Connect's two digits.
     expect(open).toMatch(/sessions\.redeem\(phone\)[\s\S]*setWaitingPhone\(r\.pending\)/);
   });

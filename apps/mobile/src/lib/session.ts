@@ -99,6 +99,13 @@ export class InboxError extends Error {
 
 export type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
 
+/**
+ * How long the fingerprint or face may take before what needed it gives up. A prompt that could not
+ * show (the app went to the background as it was asked for) never answers: this settles it, so no
+ * refresh waits on it for good.
+ */
+export const UNLOCK_WAIT_MS = 60_000;
+
 const LIST_KEY = "inboxes";
 const tokenKey = (alias: string) => `tokens.${alias}`;
 const verifierKey = (origin: string) => `link.${origin}`;
@@ -137,16 +144,27 @@ export function movedTo(error: unknown): string | null {
 
 export class Sessions {
   private readonly access = new Map<string, Tokens>();
-  private readonly refreshing = new Map<string, Promise<Tokens>>();
+  /** A refresh under way for an inbox, and whether it was a quiet one (it gives up rather than ask). */
+  private readonly refreshing = new Map<string, { readonly work: Promise<Tokens>; readonly quiet: boolean }>();
   private readonly following = new Map<string, Promise<InboxEntry>>();
   private unlocking: Promise<boolean> | null = null;
+  private front = true;
   private readonly moveListeners = new Set<(entry: InboxEntry, from: string) => void>();
 
   constructor(
     private readonly native: Native,
     private readonly fetchImpl: Fetch = (input, init) => fetch(input, init),
     private readonly clock: () => number = () => Date.now(),
+    private readonly unlockWaitMs: number = UNLOCK_WAIT_MS,
   ) {}
+
+  /**
+   * Whether the app is in front. In the background the fingerprint or face is never asked for: no
+   * prompt can show there, and one asked for then may never answer.
+   */
+  setFront(front: boolean): void {
+    this.front = front;
+  }
 
   async list(): Promise<InboxEntry[]> {
     try {
@@ -187,8 +205,15 @@ export class Sessions {
   /**
    * A signed statement, as the inbox checks it: what for, which inbox, a hash of the secret, when. The
    * device key signs only shortly after an unlock: past that, the owner is asked once, and it signs.
+   * A quiet one never asks: it gives up (`locked`) until the owner next unlocks.
    */
-  private async proof(alias: string, purpose: "pair" | "link" | "refresh" | "confirm", origin: string, secret: string) {
+  private async proof(
+    alias: string,
+    purpose: "pair" | "link" | "refresh" | "confirm",
+    origin: string,
+    secret: string,
+    quiet = false,
+  ) {
     const statement = async () => {
       const at = this.clock();
       return { at, text: proofStatement(purpose, origin, await sha256b64u(secret), at) };
@@ -205,7 +230,7 @@ export class Sessions {
         );
       if (!(error instanceof NativeError && error.code === "auth_required")) throw error;
     }
-    const ok = await this.unlock();
+    const ok = !quiet && (await this.unlock());
     if (!ok) throw new InboxError("Unlock to open your inbox.", 423, "locked");
     s = await statement();
     return { at: s.at, proof: await this.native.sign(alias, s.text) };
@@ -214,16 +239,23 @@ export class Sessions {
   /**
    * The fingerprint or face, asked once for every inbox that needs it at that moment: an operator's
    * inboxes refreshing together (Your inboxes, what waited from offline) share one prompt, and an
-   * unlock lets every device key on the phone sign for a while.
+   * unlock lets every device key on the phone sign for a while. Never in the background, and never
+   * waited on for longer than `unlockWaitMs`: a prompt that cannot show is no reason to wait for good.
    */
   private unlock(): Promise<boolean> {
-    this.unlocking ??= this.native
-      .authenticate("Confirm it's you", "To keep your inbox open")
-      .catch(() => false)
-      .finally(() => {
-        this.unlocking = null;
-      });
-    return this.unlocking;
+    if (!this.front) return Promise.resolve(false);
+    if (this.unlocking) return this.unlocking;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const gaveUp = new Promise<boolean>((resolve) => {
+      timer = setTimeout(() => resolve(false), this.unlockWaitMs);
+    });
+    const asked = this.native.authenticate("Confirm it's you", "To keep your inbox open").catch(() => false);
+    const unlocking: Promise<boolean> = Promise.race([asked, gaveUp]).finally(() => {
+      clearTimeout(timer);
+      if (this.unlocking === unlocking) this.unlocking = null;
+    });
+    this.unlocking = unlocking;
+    return unlocking;
   }
 
   private static newAlias(): string {
@@ -539,22 +571,34 @@ export class Sessions {
 
   /**
    * An access token for an inbox: the one in memory while it lasts, else a new one for the refresh
-   * token, signed for. Two calls at once share one refresh.
+   * token, signed for. Two calls at once share one refresh. A quiet call (a look the app takes on its
+   * own, every half minute) never asks for the fingerprint or face: when the key will not sign without
+   * it, it gives up (`locked`), and a call the owner made, waiting on it, tries again and may ask.
    */
-  async token(entry: InboxEntry, force = false): Promise<string> {
+  async token(entry: InboxEntry, force = false, quiet = false): Promise<string> {
     const have = this.access.get(entry.alias);
     if (have && !force && have.accessUntil > this.clock()) return have.access;
-    const running = this.refreshing.get(entry.alias);
-    if (running) return (await running).access;
-    const work = this.refresh(entry).finally(() => this.refreshing.delete(entry.alias));
-    this.refreshing.set(entry.alias, work);
-    return (await work).access;
+    for (let running = this.refreshing.get(entry.alias); running; running = this.refreshing.get(entry.alias)) {
+      try {
+        return (await running.work).access;
+      } catch (error) {
+        if (quiet || !running.quiet || !(error instanceof InboxError && error.code === "locked")) throw error;
+      }
+    }
+    const record: { readonly work: Promise<Tokens>; readonly quiet: boolean } = {
+      quiet,
+      work: this.refresh(entry, quiet).finally(() => {
+        if (this.refreshing.get(entry.alias) === record) this.refreshing.delete(entry.alias);
+      }),
+    };
+    this.refreshing.set(entry.alias, record);
+    return (await record.work).access;
   }
 
-  private async refresh(entry: InboxEntry): Promise<Tokens> {
+  private async refresh(entry: InboxEntry, quiet: boolean): Promise<Tokens> {
     const refresh = this.access.get(entry.alias)?.refresh ?? (await this.native.secureGet(tokenKey(entry.alias)));
     if (!refresh) throw new InboxError("This phone is signed out of this inbox.", 401, "signed_out");
-    const { at, proof } = await this.proof(entry.alias, "refresh", entry.origin, refresh);
+    const { at, proof } = await this.proof(entry.alias, "refresh", entry.origin, refresh, quiet);
     const res = await this.post(`${entry.origin}/v1/phone/token`, { refresh_token: refresh, at, proof });
     if (!res.ok) {
       const p = await problem(res);

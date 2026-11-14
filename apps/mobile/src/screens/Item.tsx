@@ -2,7 +2,7 @@ import { App as CapApp } from "@capacitor/app";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Linked } from "../../../inbox/client/src/components/Linked";
 import { majorText, parseMoney } from "../../../inbox/client/src/lib/actions";
-import { breachWords, type DraftView, draftDetails, termsLine } from "../../../inbox/client/src/lib/drafts";
+import { type DraftView, draftDetails, notSentWords, termsLine } from "../../../inbox/client/src/lib/drafts";
 import {
   byWord,
   capitalise,
@@ -854,7 +854,7 @@ function DraftCard(p: {
       <div className="drafted-head">A draft waits for you</div>
       <p>
         {capitalise(byWord(d.by, d.by.kind))} would offer <b>{termsLine(d.terms, p.tz) || "an offer"}</b>.
-        {d.breaches.length ? ` Not sent: it is ${breachWords(d.breaches)}.` : " Not sent yet."}
+        {` ${notSentWords(d.breaches)}`}
       </p>
       {details.length > 0 && (
         <ul className="drafted-terms">

@@ -26,12 +26,87 @@ export function breachWords(breaches: readonly string[]): string {
   return breaches.map((b) => BREACH_WORDS[b] ?? b.replaceAll("_", " ")).join("; ");
 }
 
-/** What the customer would be offered, in one line: the time, the lines, the total. */
+/**
+ * Why a draft was not sent: the limits it is outside, or, for one a person must look at first whatever
+ * it says (a stay's quote from the rates, ADR-037 §4.1), only that it waits.
+ */
+export function notSentWords(breaches: readonly string[]): string {
+  return breaches.length ? `Not sent: it is ${breachWords(breaches)}.` : "Not sent yet.";
+}
+
+/** A stay's line, as its quote holds it (stays/price.ts): its words, its amount, and who collects it. */
+interface StayLine {
+  readonly label: string;
+  readonly amount: number;
+  readonly collected?: string;
+}
+
+/** An offer's line: what, how many, its price each, and a menu item's choices. */
+interface ItemLine {
+  readonly name?: string;
+  readonly quantity?: number;
+  readonly price?: { readonly value: number; readonly currency: string };
+  readonly options?: readonly { readonly name?: string; readonly choiceId?: string; readonly portion?: string }[];
+}
+
+/** A stay's payment schedule, as its quote holds it: now, by a date, or at the property. */
+interface ScheduleEntry {
+  readonly type: string;
+  readonly amount: { readonly value: number; readonly currency: string };
+  readonly dueAt?: string;
+}
+
+const isStayLine = (l: unknown): l is StayLine =>
+  typeof l === "object" &&
+  l !== null &&
+  typeof (l as StayLine).label === "string" &&
+  typeof (l as StayLine).amount === "number";
+
+function scheduleOf(t: DraftView["terms"]): ScheduleEntry[] {
+  const raw = (t as { schedule?: unknown }).schedule;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (e): e is ScheduleEntry =>
+      typeof e === "object" &&
+      e !== null &&
+      typeof (e as ScheduleEntry).type === "string" &&
+      typeof (e as ScheduleEntry).amount?.value === "number" &&
+      typeof (e as ScheduleEntry).amount?.currency === "string",
+  );
+}
+
+/**
+ * One line as the customer reads it, with its amount: "2 × Bread — €4.00", "1 × Cake (Chocolate) —
+ * €10.00" (as the customer's own summary words it, `orderLinesText`), "Double room, 3 nights —
+ * €360.00", "City tax — €4.00, paid at the property".
+ */
+function lineWords(l: unknown, currency: string | undefined): string {
+  if (isStayLine(l)) {
+    const amount = currency ? ` — ${formatMoney({ value: l.amount, currency })}` : "";
+    const there = l.collected === "at_property" && !/propert/i.test(l.label) ? ", paid at the property" : "";
+    return `${l.label.trim()}${amount}${there}`;
+  }
+  const o = (l ?? {}) as ItemLine;
+  const quantity = o.quantity ?? 1;
+  const chosen = (o.options ?? [])
+    .map((c) => `${c.portion === "left" || c.portion === "right" ? "½ " : ""}${c.name ?? c.choiceId ?? ""}`.trim())
+    .filter(Boolean)
+    .join(", ");
+  const amount = o.price ? ` — ${formatMoney({ value: o.price.value * quantity, currency: o.price.currency })}` : "";
+  return `${quantity} × ${(o.name ?? "").trim()}${chosen ? ` (${chosen})` : ""}${amount}`;
+}
+
+/**
+ * What the customer would be offered, in one line: the time, each line with its amount, the total. A
+ * draft the owner can send in one tap says every price the customer would read.
+ */
 export function termsLine(t: DraftView["terms"], tz: string | undefined): string {
   const parts: string[] = [];
   if (t.startTime) parts.push(formatWhen(t.startTime, t.endTime, tz));
-  if (t.lines?.length) parts.push(t.lines.map((l) => `${l.quantity ?? 1} × ${l.name ?? ""}`.trim()).join(", "));
-  if (t.totalPrice) parts.push(formatMoney(t.totalPrice));
+  const lines = (t.lines ?? []) as readonly unknown[];
+  const currency = t.totalPrice?.currency ?? scheduleOf(t)[0]?.amount.currency;
+  if (lines.length) parts.push(lines.map((l) => lineWords(l, currency)).join("; "));
+  if (t.totalPrice) parts.push(`${formatMoney(t.totalPrice)}${lines.length ? " in all" : ""}`);
   return parts.join(" · ");
 }
 
@@ -84,6 +159,24 @@ export function draftDetails(t: DraftView["terms"], tz: string | undefined): str
     out.push(`Before tax, plus ${t.tax.lines.map((l) => `${l.name} ${formatMoney(l.amount)}`).join(" + ")}`);
   if (t.tip) out.push(`Tip ${formatMoney(t.tip)}`);
   if (t.deposit) out.push(`Deposit ${formatMoney(t.deposit)}`);
+  // A stay's schedule: what is paid when, as the guest's page and email say it.
+  const schedule = scheduleOf(t);
+  if (schedule.length)
+    out.push(
+      `Paid ${schedule
+        .map((e) => {
+          const when =
+            e.type === "immediate"
+              ? "now"
+              : e.type === "at_property"
+                ? "at the property"
+                : e.dueAt
+                  ? `by ${formatDateTime(e.dueAt, tz)}`
+                  : "later";
+          return `${formatMoney(e.amount)} ${when}`;
+        })
+        .join(", ")}`,
+    );
   if (t.validThrough) out.push(`They can accept it until ${formatDateTime(t.validThrough, tz)}`);
   return out;
 }
