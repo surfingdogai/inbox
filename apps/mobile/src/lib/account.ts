@@ -8,7 +8,7 @@ import type { Fetch } from "./session";
  * this phone with a code Surfing Dog emails them, from any mail provider, with no computer and no QR
  * code. This is the hosted service's small app API, by native HTTP, with no cookies:
  *
- *   POST /v1/app/signin {email, challenge, device}          → 202 {id, to, resend_in}, alike for every address
+ *   POST /v1/app/signin {email, challenge, device: {platform}} → 202 {id, to, resend_in}, alike for every address
  *   POST /v1/app/signin/{id}/resend                          → 202
  *   POST /v1/app/signin/{id}/confirm {code, verifier}        → {grant, expires_in, inboxes}
  *   POST /v1/app/inboxes/{id}/link {grant, challenge, device_key} → {inbox, link: {secret, expires_at}}
@@ -151,7 +151,8 @@ export class Account {
     const res = await this.post("/v1/app/signin", {
       email: email.trim(),
       challenge: await pkceS256(verifier),
-      device: { name: await this.native.deviceName(), platform: this.native.platform === "ios" ? "ios" : "android" },
+      // The kind of phone only: the code email says which kind asked, never a name whoever holds it typed.
+      device: { platform: this.native.platform === "ios" ? "ios" : "android" },
     });
     if (res.status !== 202) throw await problem(res);
     const a = (await res.json()) as { id?: string; to?: string; resend_in?: number };

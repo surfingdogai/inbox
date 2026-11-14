@@ -143,9 +143,12 @@ describe("signing in with an email code", () => {
     const { connected } = await signIn(one);
     if (!("entry" in connected)) throw new Error("waited for a phone it does not have");
     expect(connected.entry).toMatchObject({ origin: ORIGIN, name: "Oficina Maré" });
-    // The start carried the challenge and the phone's name, and no verifier: only the confirm did.
+    // The start carried the challenge and the kind of phone, never its name, and no verifier: only the
+    // confirm did. The code email says which kind of phone asked, and nothing a phone calls itself.
     const start = seen.find((s) => s.path === "/v1/app/signin");
-    expect(start?.body).toMatchObject({ email: OWNER, device: { name: "Pixel 8", platform: "android" } });
+    expect(start?.body).toMatchObject({ email: OWNER, device: { platform: "android" } });
+    expect(start?.body.device).toEqual({ platform: "android" });
+    expect(JSON.stringify(start?.body)).not.toContain("Pixel");
     expect(JSON.stringify(start?.body)).not.toContain("verifier");
     const confirm = seen.find((s) => s.path.endsWith("/confirm"));
     expect(await sha256b64u(String(confirm?.body.verifier))).toBe(start?.body.challenge);

@@ -1,8 +1,9 @@
-import { readPhoneLink } from "@surfingdog/core";
+import { phoneKind, readPhoneLink } from "@surfingdog/core";
 import { describe, expect, it } from "vitest";
 import {
   ago,
   openInAppLink,
+  phoneKindOf,
   phoneLine,
   pushUnavailable,
   pushWord,
@@ -73,6 +74,19 @@ describe("the words", () => {
     expect(
       phoneLine({ created_at: "2026-10-18T09:00:00Z", last_seen_at: "2026-10-20T09:00:00Z", push: "on" }, now),
     ).toBe("Connected 2 days ago · opened 1 h ago · Notifications on");
+  });
+
+  it("says a phone's kind beside its own name, and its kind once when that is all it is called", () => {
+    const now = Date.parse("2026-10-20T10:00:00Z");
+    const at = { created_at: "2026-10-20T09:59:40Z", last_seen_at: null, push: "off" } as const;
+    expect(phoneLine({ ...at, name: "Galaxy A15 de Ana", platform: "android" }, now)).toBe(
+      "Android phone · Connected just now · No notifications yet",
+    );
+    expect(phoneLine({ ...at, name: "iPhone", platform: "ios" }, now)).toBe(
+      "Connected just now · No notifications yet",
+    );
+    // The server's words for a kind, held together with these.
+    for (const platform of ["android", "ios", undefined]) expect(phoneKindOf(platform)).toBe(phoneKind(platform));
   });
 
   it("hands the code to the app itself on an Android phone, and to no other app", () => {

@@ -210,10 +210,11 @@ describe("Settings → Phone", () => {
     await settle(() => mail.sent.length > sentBefore);
     const email = mail.sent.at(-1);
     expect(email?.subject).toContain("A phone was connected");
-    // It leads with what to do when it was not the owner, and quotes the phone's own name for itself.
+    // It leads with what to do when it was not the owner, and says the kind of phone, never its own name.
     expect(email?.text?.startsWith("Not you? Remove it now")).toBe(true);
     expect(email?.text).toContain(`${ORIGIN}/settings/phone`);
-    expect(email?.text).toContain('"Pixel 8"');
+    expect(email?.text).toContain("Phone: an Android phone\n");
+    expect(email?.text).not.toContain("Pixel");
     const list = (await (await ownerReq(app, cookie, "GET", "/v1/owner/phones")).json()) as {
       phones: { name: string; push: string }[];
       push: { available: boolean };
@@ -615,7 +616,8 @@ describe("signing in through the host, and a phone that confirms a phone (Amendm
     expect(yes.status).toBe(200);
     expect((await phoneReq(h.app, second.access_token, "GET", "/v1/owner/items")).status).toBe(200);
     await settle(() => h.mail.sent.some((m) => (m.text ?? "").includes("on your other phone")));
-    expect(h.mail.sent.at(-1)?.text).toContain('How: you confirmed it on your other phone, "Pixel 8".');
+    expect(h.mail.sent.at(-1)?.text).toContain("How: you confirmed it on your other phone, an Android phone.");
+    expect(h.mail.sent.at(-1)?.text).not.toContain("Pixel");
   });
 
   it("lets a phone wait a day when the owner doesn't have the other one, stopped by a link in the email", async () => {
@@ -642,13 +644,14 @@ describe("signing in through the host, and a phone that confirms a phone (Amendm
     expect(email?.text).toMatch(/It will be let in on \w+day \d{1,2} \w+ at \d{2}:\d{2} \(UTC\), unless you stop it\./);
     // It leads with the way to stop it: this inbox's own page, whatever the asking phone sent as its host.
     expect(email?.text?.startsWith("Not you? Stop it now:\nhttps://inbox.test/auth/phone/stop?token=")).toBe(true);
-    expect(email?.text).toContain('Phone: "Moto G" (as the phone names itself)');
+    expect(email?.text).toContain("Phone: an Android phone\n");
+    expect(email?.text).not.toContain("Moto");
     const stop = /https:\/\/inbox\.test(\/auth\/phone\/stop\?token=[A-Za-z0-9_-]+)/.exec(email?.text ?? "")?.[1] ?? "";
     const token = new URL(`${ORIGIN}${stop}`).searchParams.get("token") ?? "";
     // Opening the link (as a mail scanner does) stops nothing.
     const page = await h.app.request(`${ORIGIN}${stop}`);
     expect(page.status).toBe(200);
-    expect(await page.text()).toContain("Stop &quot;Moto G&quot;?");
+    expect(await page.text()).toContain("Stop this Android phone?");
     expect((await phoneReq(h.app, third.access_token, "GET", "/v1/phone/me")).status).toBe(200);
     // A post from anywhere but its page is refused.
     const crossSite = await h.app.request(`${ORIGIN}/auth/phone/stop`, {
@@ -697,7 +700,7 @@ describe("signing in through the host, and a phone that confirms a phone (Amendm
       headers: { "content-type": "application/x-www-form-urlencoded", origin: ORIGIN },
       body: `token=${token}`,
     });
-    expect(await stopped.text()).toContain("This Android phone can&#39;t open your inbox.");
+    expect(await stopped.text()).toContain("The Android phone can&#39;t open your inbox.");
     await settle(() => h.mail.sent.some((m) => m.subject.startsWith("A new phone was stopped")));
     const told = h.mail.sent.find((m) => m.subject.startsWith("A new phone was stopped"));
     expect(told?.text).toContain("You stopped an Android phone from connecting to");
@@ -706,6 +709,66 @@ describe("signing in through the host, and a phone that confirms a phone (Amendm
       expect(m.html ?? "").not.toContain("sd-stop.example");
     }
     expect(page).not.toContain("sd-stop.example");
+  });
+
+  it("says the kind of phone alone in every email and on the stop page, whatever a phone calls itself", async () => {
+    // Names that read like a phone's to any rule, a stranger's and the owner's own alike.
+    for (const name of ["Reset at getback dot io", "Surfin Dog Suport", "Galaxy A15 de Ana"]) {
+      const h = await hosted();
+      const pages: string[] = [];
+      const firstPhone = await makePhone();
+      const first = await signInOnPhone(h, firstPhone, name);
+      // A second phone, confirmed on the first: both "A phone was connected" emails.
+      const second = await signInOnPhone(h, await makePhone(), name);
+      const asks = (await (await phoneReq(h.app, first.access_token, "GET", "/v1/phone/pairings")).json()) as {
+        pairings: { phone: { name: string; platform: string } }[];
+      };
+      // The owner's own screen, signed in, still names it, beside its kind (the sheet).
+      expect(asks.pairings[0]?.phone).toMatchObject({ name, platform: "android" });
+      const at = h.at();
+      const yes = await phoneReq(h.app, first.access_token, "POST", `/v1/phone/pairings/${second.device_id}/confirm`, {
+        at,
+        proof: await firstPhone.sign(proofStatement("confirm", ORIGIN, await sha256b64u(second.device_id), at)),
+      });
+      expect(yes.status).toBe(200);
+      // A third waits a day, and is stopped from the email's page: the wait email, the page, its result, the stop email.
+      const third = await signInOnPhone(h, await makePhone(), name);
+      expect((await phoneReq(h.app, third.access_token, "POST", "/v1/phone/wait", {})).status).toBe(200);
+      await settle(() => h.mail.sent.some((m) => m.subject.startsWith("A new phone connects")));
+      const wait = h.mail.sent.find((m) => m.subject.startsWith("A new phone connects"));
+      const stop = /https:\/\/inbox\.test(\/auth\/phone\/stop\?token=[A-Za-z0-9_-]+)/.exec(wait?.text ?? "")?.[1] ?? "";
+      pages.push(await (await h.app.request(`${ORIGIN}${stop}`)).text());
+      const token = new URL(`${ORIGIN}${stop}`).searchParams.get("token") ?? "";
+      const stopped = await h.app.request(`${ORIGIN}/auth/phone/stop`, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded", origin: ORIGIN },
+        body: `token=${token}`,
+      });
+      pages.push(await stopped.text());
+      // A day on, a fourth is turned down on the first phone ("Not mine"): another stop email.
+      h.later(25 * 3_600_000);
+      const fourth = await signInOnPhone(h, await makePhone(), name);
+      expect(
+        (await phoneReq(h.app, first.access_token, "POST", `/v1/phone/pairings/${fourth.device_id}/refuse`, {})).status,
+      ).toBe(200);
+      await settle(
+        () =>
+          h.mail.sent.filter((m) => m.subject.startsWith("A phone was connected")).length >= 2 &&
+          h.mail.sent.filter((m) => m.subject.startsWith("A new phone was stopped")).length >= 2,
+      );
+      const subjects = h.mail.sent.map((m) => m.subject);
+      expect(subjects.filter((x) => x.startsWith("A phone was connected"))).toHaveLength(2);
+      expect(subjects.filter((x) => x.startsWith("A new phone was stopped"))).toHaveLength(2);
+      const said = [...h.mail.sent.map((m) => `${m.subject}\n${m.text ?? ""}\n${m.html ?? ""}`), ...pages].join("\n");
+      expect(said).toContain("Phone: an Android phone\n");
+      expect(said).toContain("How: you confirmed it on your other phone, an Android phone.");
+      expect(said).toContain("You stopped an Android phone from connecting to");
+      expect(said).toContain("Stop this Android phone?");
+      expect(said).toContain("The Android phone can&#39;t open your inbox.");
+      // No part of the name, in any of them.
+      for (const part of name.split(" ").filter((w) => w.length >= 3))
+        expect(said, `${name}: ${part}`).not.toMatch(new RegExp(`\\b${part}\\b`, "i"));
+    }
   });
 
   it("lets a waiting phone in once its day is over and nothing stopped it, and says so", async () => {

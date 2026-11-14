@@ -84,14 +84,29 @@ export function ago(iso: string, now: number = Date.now()): string {
   return new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "numeric" }).format(new Date(t));
 }
 
-/** A phone's line in the list: "Connected just now · No notifications yet"; opened only when it says more. */
+/** The kind of phone, as the owner reads it: "Android phone", "iPhone" (as the server says it, `phoneKind`). */
+export function phoneKindOf(platform: string | null | undefined): string {
+  return platform === "ios" ? "iPhone" : "Android phone";
+}
+
+/**
+ * A phone's line in the list: "Android phone · Connected just now · No notifications yet". Its kind
+ * leads when its name is its own (the server shows a name only when it reads like a phone's, else the
+ * kind, which is not said twice); opened only when it says more.
+ */
 export function phoneLine(
-  p: Pick<PhoneView, "created_at" | "last_seen_at" | "push">,
+  p: Pick<PhoneView, "created_at" | "last_seen_at" | "push"> & Partial<Pick<PhoneView, "name" | "platform">>,
   now: number = Date.now(),
 ): string {
+  const kind = phoneKindOf(p.platform);
   const connected = ago(p.created_at, now);
   const opened = p.last_seen_at ? ago(p.last_seen_at, now) : "";
-  return [`Connected ${connected}`, opened && opened !== connected ? `opened ${opened}` : null, pushWord(p)]
+  return [
+    p.name !== undefined && p.name !== kind ? kind : null,
+    `Connected ${connected}`,
+    opened && opened !== connected ? `opened ${opened}` : null,
+    pushWord(p),
+  ]
     .filter(Boolean)
     .join(" · ");
 }

@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { nameReading, phoneCalled, phoneLine, quotablePhoneName, shownPhoneName } from "../src/phones/names";
+import { aPhoneOfKind, nameReading, ownPhoneName, quotablePhoneName, shownPhoneName } from "../src/phones/names";
 
 /**
- * A phone's name for itself, shown to the owner only when it reads like a phone's (ADR-028 Amendment 4).
- * Whoever holds a phone types its name: a stranger's must never put a number to ring, a link, or words
- * that speak for us into the owner's security emails, the stop page or the confirm sheet. These cases
- * are the control plane's for its code email too (apps/hosted phoneName), and give the same answers.
+ * A phone's name for itself (ADR-028 Amendment 4). Whoever holds a phone types its name: no email and no
+ * page an email opens ever quotes it, only the kind of phone. The owner's own screens show it beside the
+ * kind, and only when it reads like a phone's: never a number to ring, a link, or words that speak for
+ * us or for an authority.
  */
 const SHOWN: Readonly<Record<string, string>> = {
   "Galaxy A15": "Galaxy A15",
@@ -99,16 +99,22 @@ describe("a phone's name, as the owner is shown it", () => {
     expect(nameReading("S1GN1N")).toBe(nameReading("signin"));
   });
 
-  it("is its kind when it is not one to show, in the sheet's and the emails' words alike", () => {
+  it("is its kind when it is not one to show, and on the owner's screens beside its kind when it is", () => {
     const bad = { name: "Not you? Stop it here: https://sd-stop.example/k", platform: "android" };
     expect(shownPhoneName(bad.name, bad.platform)).toBe("Android phone");
     expect(shownPhoneName(bad.name, "ios")).toBe("iPhone");
-    expect(phoneCalled(bad)).toBe("an Android phone");
-    expect(phoneLine(bad)).toBe("an Android phone");
-    // Shown once already (its kind), it is not quoted as its own say.
-    expect(phoneLine({ name: "Android phone", platform: "android" })).toBe("an Android phone");
-    const good = { name: "Pixel 8", platform: "android" };
-    expect(phoneCalled(good)).toBe('a phone that calls itself "Pixel 8"');
-    expect(phoneLine(good)).toBe('"Pixel 8" (as the phone names itself), an Android phone');
+    expect(ownPhoneName(bad.name, bad.platform)).toBeNull();
+    // Shown once already (its kind), it is not its own say.
+    expect(ownPhoneName("Android phone", "android")).toBeNull();
+    expect(ownPhoneName("Galaxy A15 de Ana", "android")).toBe("Galaxy A15 de Ana");
+  });
+
+  it("is only ever its kind in an email, whatever it calls itself, even a name that passes the rule", () => {
+    // Read as a phone's by the rule, and still never in an email: the rule is for the owner's own screens.
+    for (const name of ["Reset at getback dot io", "Surfin Dog Suport", "Galaxy A15 de Ana"])
+      expect(quotablePhoneName(name), name).toBe(name);
+    expect(aPhoneOfKind("android")).toBe("an Android phone");
+    expect(aPhoneOfKind("ios")).toBe("an iPhone");
+    expect(aPhoneOfKind(undefined)).toBe("an Android phone");
   });
 });

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { phoneKind, quotablePhoneName, shownPhoneName } from "../../../../packages/core/src/phones/names";
+import { ownPhoneName, phoneKind, shownPhoneName } from "../../../../packages/core/src/phones/names";
 import { DEFAULT_PREFS, type NotifyPrefs } from "../../../../packages/core/src/phones/prefs";
 import { useApp } from "../context";
 import type { PhoneAsk, PhoneRow } from "../lib/client";
@@ -339,17 +339,7 @@ export function Settings() {
             <div className="rows">
               {phones.phones.map((p) => (
                 <div key={p.id}>
-                  <span>
-                    {shownPhoneName(p.name, p.platform)}{" "}
-                    <span className="sub">
-                      ·{" "}
-                      {p.id === phones.this
-                        ? "this phone"
-                        : p.last_seen_at
-                          ? `opened ${agoSentence(p.last_seen_at)}`
-                          : "not opened yet"}
-                    </span>
-                  </span>
+                  <PhoneTitle phone={p} here={p.id === phones.this} />
                   {p.id === phones.this && pushOn ? (
                     <button type="button" className="btn link" onClick={() => void test()}>
                       Send a test
@@ -431,6 +421,24 @@ export function Settings() {
   );
 }
 
+/**
+ * A phone in Settings → Phones: its own name beside its kind ("Galaxy A15 · Android phone"), only when
+ * it reads like a phone's, else its kind alone; then this phone, or when it was last opened.
+ */
+export function PhoneTitle({ phone, here }: { phone: PhoneRow; here: boolean }) {
+  const kind = phoneKind(phone.platform);
+  const own = ownPhoneName(phone.name, phone.platform);
+  return (
+    <span>
+      {own ?? kind}{" "}
+      <span className="sub">
+        · {own ? `${kind} · ` : ""}
+        {here ? "this phone" : phone.last_seen_at ? `opened ${agoSentence(phone.last_seen_at)}` : "not opened yet"}
+      </span>
+    </span>
+  );
+}
+
 /** A day and a time, as a sentence says it ("Sat 15 Nov, 14:02"). */
 export function dayAndTime(at: number): string {
   try {
@@ -448,9 +456,9 @@ export function dayAndTime(at: number): string {
 
 /**
  * The confirm sheet (ADR-028 Amendment 4): a new phone asked to connect to one of the inboxes on this
- * phone (named when there are several) and waits for this phone's yes. Its name is its own say, so it
- * is quoted, and only when it reads like a phone's (`quotablePhoneName`): else the sheet says the kind
- * of phone. Confirm asks for the fingerprint or face first, and is signed by this phone's key; "Not
+ * phone (named when there are several) and waits for this phone's yes. It says the kind of phone, and
+ * beside it the phone's name, quoted as its own say, only when it reads like a phone's (`ownPhoneName`).
+ * Confirm asks for the fingerprint or face first, and is signed by this phone's key; "Not
  * mine" removes the new phone, has new phones wait a day and emails the owner, and says so. A phone
  * waiting out its day ("I don't have my other phone") can only be stopped from here: its owner sees no
  * digits to compare, so there is nothing to confirm. A security question, so a tap beside it never
@@ -473,9 +481,8 @@ export function PhoneAskSheet({
   const [busy, setBusy] = useState(false);
   const business = entry.name || "your inbox";
   const waiting = ask.wait_until ? Date.parse(ask.wait_until) : null;
-  const own = quotablePhoneName(ask.phone.name);
   const kind = phoneKind(ask.phone.platform);
-  const named = own && own !== kind ? own : null;
+  const named = ownPhoneName(ask.phone.name, ask.phone.platform);
   const client = app.clientFor(entry);
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
@@ -532,7 +539,7 @@ export function PhoneAskSheet({
         <p className="sub" style={{ margin: 0 }}>
           {named ? (
             <>
-              A phone that calls itself <b>"{named}"</b>
+              An {kind} that calls itself <b>"{named}"</b>
             </>
           ) : (
             `An ${kind}`

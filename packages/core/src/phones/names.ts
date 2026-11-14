@@ -1,10 +1,10 @@
 /**
  * A phone's name for itself, as the inbox may show it to the owner (ADR-028 Amendment 4). Whoever holds
  * a phone types its name, so a stranger's phone could call itself "Not you? Stop it here: …" or "Call
- * 0800 …", and the inbox would print that in the owner's own security emails, on the stop page and on
- * the confirm sheet. A name is shown only when it reads like a phone's ("Pixel 8", "Galaxy S24", "Ana's
- * iPhone"); anything else is shown as the kind of phone it is. The rule is the control plane's for its
- * code email (phoneName there), case for case, so both say a phone the same way.
+ * 0800 …", or something that passes any rule ("Reset at getback dot io"). So no email, and no page an
+ * email's link opens, ever quotes it: they say the kind of phone only (`aPhoneOfKind`). The owner's own
+ * screens, signed in (the confirm sheet, Settings → Phone, an item's history), show it beside the kind,
+ * and only when it reads like a phone's ("Pixel 8", "Galaxy S24", "Ana's iPhone").
  *
  * No imports, so the phone app applies it too, to what an inbox of an older version sends.
  */
@@ -175,24 +175,24 @@ export function phoneKind(platform: string | null | undefined): string {
   return platform === "ios" ? "iPhone" : "Android phone";
 }
 
-/** A phone's name as the owner is shown it: its own, when it may be shown, else its kind. */
+/** A phone's name as the owner is shown it on their own screens: its own, when it may be shown, else its kind. */
 export function shownPhoneName(name: unknown, platform: string | null | undefined): string {
   return quotablePhoneName(name) ?? phoneKind(platform);
 }
 
 /**
- * A phone in a sentence: `a phone that calls itself "Pixel 8"`, or `an Android phone` when its name is
- * not one to show, or is only its kind.
+ * A phone's own name, for the owner's screens to show beside its kind ("Galaxy A15 · Android phone"):
+ * null when it is not one to show, or is only its kind. Never in an email.
  */
-export function phoneCalled(phone: { readonly name: string; readonly platform: string }): string {
-  const own = quotablePhoneName(phone.name);
-  const kind = phoneKind(phone.platform);
-  return own && own !== kind ? `a phone that calls itself "${own}"` : `an ${kind}`;
+export function ownPhoneName(name: unknown, platform: string | null | undefined): string | null {
+  const own = quotablePhoneName(name);
+  return own && own !== phoneKind(platform) ? own : null;
 }
 
-/** A phone as an email's "Phone:" line says it: `"Pixel 8" (as the phone names itself), an Android phone`. */
-export function phoneLine(phone: { readonly name: string; readonly platform: string }): string {
-  const own = quotablePhoneName(phone.name);
-  const kind = phoneKind(phone.platform);
-  return own && own !== kind ? `"${own}" (as the phone names itself), an ${kind}` : `an ${kind}`;
+/**
+ * A phone as an email, or a page an email's link opens, says it: its kind alone, "an Android phone",
+ * "an iPhone". Never its own name, which whoever holds it typed.
+ */
+export function aPhoneOfKind(platform: string | null | undefined): string {
+  return `an ${phoneKind(platform)}`;
 }

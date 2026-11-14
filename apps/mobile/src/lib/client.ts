@@ -36,7 +36,7 @@ export interface PhoneSpam {
 
 export interface PhoneRow {
   readonly id: string;
-  /** Its own name, when it reads like a phone's; else its kind. Shown through `shownPhoneName` all the same. */
+  /** Its own name, when it reads like a phone's; else its kind. Shown beside its kind (`ownPhoneName`) all the same. */
   readonly name: string;
   /** `android` or `ios`; an inbox of an older version may leave it out. */
   readonly platform?: string;

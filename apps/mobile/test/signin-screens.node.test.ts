@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { type App, AppContext } from "../src/context";
 import type { PhoneAsk } from "../src/lib/client";
 import { Connect, standing, whyNot } from "../src/screens/Connect";
-import { PhoneAskSheet, Waiting } from "../src/screens/Settings";
+import { PhoneAskSheet, PhoneTitle, Waiting } from "../src/screens/Settings";
 
 /**
  * The screens of signing in with an email code and of a phone that confirms a phone (ADR-028
@@ -115,7 +115,9 @@ describe("a new phone asking this one", () => {
       createElement(PhoneAskSheet, { entry: ACTIVE, ask: ask(null), many: false, onDone: () => undefined }),
     );
     expect(html).toContain("A new phone wants to connect");
-    expect(html).toContain("A phone that calls itself <b>&quot;Galaxy A15&quot;</b> asked to connect to Oficina Maré.");
+    expect(html).toContain(
+      "An Android phone that calls itself <b>&quot;Galaxy A15&quot;</b> asked to connect to Oficina Maré.",
+    );
     expect(html).toContain(">47<");
     expect(html).toContain(">Confirm<");
     expect(html).toContain(">Not mine<");
@@ -139,6 +141,23 @@ describe("a new phone asking this one", () => {
     expect(html).toContain("An Android phone asked to connect to Oficina Maré.");
     expect(html).not.toContain("0800");
     expect(html).toContain("Not mine: new phones then wait a day, and we email you.");
+  });
+
+  it("keeps a name that reads like a phone's beside its kind, on the sheet and in Settings → Phones", () => {
+    const own = ask(null);
+    const phone = { ...own.phone, name: "Galaxy A15 de Ana", platform: "android" };
+    const sheet = draw(
+      createElement(PhoneAskSheet, { entry: ACTIVE, ask: { ...own, phone }, many: false, onDone: () => undefined }),
+    );
+    expect(sheet).toContain("An Android phone that calls itself <b>&quot;Galaxy A15 de Ana&quot;</b>");
+    const row = draw(createElement(PhoneTitle, { phone, here: false }));
+    expect(row).toContain('Galaxy A15 de Ana <span class="sub">· Android phone · not opened yet</span>');
+    // A name that is not a phone's: its kind alone, said once.
+    const bait = draw(
+      createElement(PhoneTitle, { phone: { ...phone, name: "Not you? Call 0800 555 0100" }, here: true }),
+    );
+    expect(bait).toContain('Android phone <span class="sub">· this phone</span>');
+    expect(bait).not.toContain("0800");
   });
 
   it("names the inbox it asks about when the phone has several", () => {

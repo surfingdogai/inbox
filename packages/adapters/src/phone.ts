@@ -2,13 +2,11 @@ import {
   ANDROID_APP_URL,
   APP_ID,
   APP_SCHEME,
+  aPhoneOfKind,
   type Capabilities,
   type PhoneCapabilities,
   pairingUri,
-  phoneCalled,
   phoneKind,
-  phoneLine,
-  quotablePhoneName,
   readSettings,
   signInLinkUri,
   WriteError,
@@ -69,23 +67,13 @@ function roughly(c: Context): string | null {
 /** How a phone came in, as the owner's email says it. */
 type ConnectedHow =
   | { readonly way: "computer" | "link" | "host" | "waited" }
-  | { readonly way: "phone"; readonly by: { readonly name: string; readonly platform: string } };
+  | { readonly way: "phone"; readonly by: { readonly platform: string } };
 
 const HOW: Readonly<Record<Exclude<ConnectedHow["way"], "phone">, string>> = {
   computer: "How: you confirmed it on your computer, in Settings → Phone.",
   link: "How: a sign-in link sent to this address.",
   host: "How: a sign-in code sent to this address.",
   waited: "How: it waited, as you were told by email, and nobody stopped it.",
-};
-
-/**
- * A phone as a page's heading names it: its own name quoted, when it reads like a phone's, else "this
- * Android phone". A name is whoever holds the phone's say, so it is never shown unless it is one
- * (`quotablePhoneName`): a stranger's could say "Not you? Call …" in the owner's own words here.
- */
-const thisPhone = (phone: { name: string; platform: string }, article: "this" | "an" = "this") => {
-  const own = quotablePhoneName(phone.name);
-  return own && own !== phoneKind(phone.platform) ? `"${own}"` : `${article} ${phoneKind(phone.platform)}`;
 };
 
 async function ownerAddress(deps: PhoneDoorDeps, userId: string): Promise<string | null> {
@@ -97,8 +85,6 @@ async function ownerAddress(deps: PhoneDoorDeps, userId: string): Promise<string
   const to = rows[0]?.[0];
   return typeof to === "string" ? to : null;
 }
-
-const capitalised = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 const utc = (at: number) => new Date(at).toUTCString().replace(" GMT", " UTC");
 
@@ -141,13 +127,13 @@ export function ownerTime(at: number, tz: string): string {
 
 /**
  * Tells the owner by email that a phone was connected, so one they did not connect is noticed and
- * removed at once. The phone's name is the phone's own say: quoted, never taken as fact, and only when
- * it reads like a phone's (`phoneLine`), else the kind of phone.
+ * removed at once. The phone is said by its kind alone: whoever holds it chose its name, and an email
+ * never quotes it (`aPhoneOfKind`).
  */
 async function tellOwnerOfPhone(
   deps: PhoneDoorDeps,
   userId: string,
-  phone: { name: string; platform: string },
+  phone: { platform: string },
   origin: string,
   how: ConnectedHow & { from: string | null; at: number },
 ): Promise<void> {
@@ -161,10 +147,12 @@ async function tellOwnerOfPhone(
       "",
       `A phone was connected to ${business || "your inbox"}. It can now open your inbox and answer it.`,
       "",
-      `Phone: ${phoneLine(phone)}`,
+      `Phone: ${aPhoneOfKind(phone.platform)}`,
       `When: ${ownerTime(how.at, await businessZone(deps))}`,
       ...(how.from ? [`From: roughly ${how.from}`] : []),
-      how.way === "phone" ? `How: you confirmed it on your other phone, ${thisPhone(how.by, "an")}.` : HOW[how.way],
+      how.way === "phone"
+        ? `How: you confirmed it on your other phone, ${aPhoneOfKind(how.by.platform)}.`
+        : HOW[how.way],
     ];
     await sendOwnerMail(deps, {
       to,
@@ -186,7 +174,7 @@ async function tellOwnerOfPhone(
 async function tellOwnerOfWait(
   deps: PhoneDoorDeps,
   userId: string,
-  phone: { name: string; platform: string },
+  phone: { platform: string },
   origin: string,
   wait: { stopToken: string; until: number; hours: number; at: number; from: string | null },
 ): Promise<void> {
@@ -204,7 +192,7 @@ async function tellOwnerOfWait(
         "",
         `A phone asked to connect to ${business}, and said you don't have your other phone with you. It will be let in on ${ownerTime(wait.until, tz)}, unless you stop it. Your other phones were asked too.`,
         "",
-        `Phone: ${phoneLine(phone)}`,
+        `Phone: ${aPhoneOfKind(phone.platform)}`,
         `Asked: ${ownerTime(wait.at, tz)}`,
         ...(wait.from ? [`From: roughly ${wait.from}`] : []),
       ].join("\n")}\n`,
@@ -223,7 +211,7 @@ async function tellOwnerOfWait(
 async function tellOwnerOfStop(
   deps: PhoneDoorDeps,
   userId: string,
-  phone: { name: string; platform: string },
+  phone: { platform: string },
   origin: string,
   at: number,
 ): Promise<void> {
@@ -235,7 +223,7 @@ async function tellOwnerOfStop(
       to,
       subject: `A new phone was stopped from opening ${business}`,
       text: `${[
-        `You stopped ${phoneCalled(phone)} from connecting to ${business}, on ${ownerTime(at, await businessZone(deps))}.`,
+        `You stopped ${aPhoneOfKind(phone.platform)} from connecting to ${business}, on ${ownerTime(at, await businessZone(deps))}.`,
         "",
         "It had used a sign-in code or link sent to this address. If you didn't ask for one, someone else may be able to read your email: change your email's password now, and sign out of it everywhere else.",
         "",
@@ -530,7 +518,7 @@ export function phoneStopRoutes(deps: PhoneDoorDeps): Hono<CallerEnv> {
     const business = (await deps.businessName()) || "your inbox";
     return authPage(c, 200, {
       title: "Stop the new phone",
-      heading: `Stop ${thisPhone(row)}?`,
+      heading: `Stop this ${phoneKind(row.platform)}?`,
       lines: [
         `This phone asked to connect to ${business}. It will be let in on ${ownerTime(row.waitUntil, await businessZone(deps))}, unless you stop it.`,
         "If you didn't ask to connect it, stop it now.",
@@ -562,7 +550,7 @@ export function phoneStopRoutes(deps: PhoneDoorDeps): Hono<CallerEnv> {
       title: "Stopped",
       heading: "Stopped",
       lines: [
-        `${r.phone ? capitalised(thisPhone(r.phone)) : "The phone"} can't open your inbox.`,
+        `The ${r.phone ? phoneKind(r.phone.platform) : "phone"} can't open your inbox.`,
         "It used a sign-in code or link sent to your email. If you didn't ask for one, change your email's password now.",
       ],
     });
