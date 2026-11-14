@@ -207,15 +207,18 @@ is left open.
   never a browser's request from another site; and a day's pause after wrong codes, counted by network
   (ten from one network pause that network, thirty from all pause every network), apart from the web's
   own. A network the owner completed a phone sign-in from in the last thirty days is known: it skips the
-  address's ceilings and the pause of every network, and keeps its own counts and its own pause, so
-  limits a stranger runs up never hold up the owner's own phone. Only its keyed hash is kept, for thirty
-  days from that sign-in. When the address's ceilings or the pause of every network stop a code from a
-  network that is not known, the owner is told, once a day, by email and an alert: someone asked for
-  many codes to sign in on a phone; nothing to do if it was not them, and no code was used; a phone on a
-  network they signed in from before is not held up; and they can still connect a phone on the web,
-  from any browser: sign in, then Settings → Phone. Every sign-in is answered alike, for any address,
-  before anything is looked up. The address's six and twenty, the ten and thirty wrong codes and the
-  thirty days are proposals. Codes go two days on.
+  address's ceilings and the pause of every network, and keeps its own counts and its own pause; and its
+  codes are the owner's own mail, as the web's sign-in codes are (up to twenty a day), not the share of
+  the day's mail that phone codes to other networks come from (a tenth), which a stranger can spend. So
+  limits a stranger runs up elsewhere never hold up the owner's own phone; one on the same network, as
+  in an office or a café, shares its counts and its pause. Only its keyed hash is kept, for thirty days
+  from the last such sign-in. When the address's ceilings or the pause of every network stop a code
+  from a network that is not known, the owner is told, once a day, by email and an alert: someone asked
+  for many codes to sign in on a phone; nothing to do if it was not them (the codes go to them, and
+  nobody signs in without one); a phone on a network they signed in from before is not held up; and
+  they can still connect a phone on the web, from any browser: sign in, then Settings → Phone. Every
+  sign-in is answered alike, for any address, before anything is looked up. The address's six and twenty,
+  the ten and thirty wrong codes, the tenth and the thirty days are proposals. Codes go two days on.
 - **A link for the phone, redeemed at the inbox.** A confirmed code gives a grant that opens, once and
   for ten minutes, a link to one of that address's inboxes. The host's runtime makes it at the inbox's
   canonical origin only, with a fresh challenge and the device key the phone made for that inbox, and
@@ -256,7 +259,9 @@ is left open.
   them, so they secure their email. The host is answered `phone_paused` meanwhile; Settings → Phone on
   the web, from any browser, can still connect a phone. Wherever the owner is told to remove an old
   phone (the stop email, the app's waiting screens, the host's answers and emails), it says so in those
-  words, and at phone width Settings → Phone puts each phone's Send a test and Remove under its lines.
+  words; the stop email and the app's waiting screens open the page itself (`<inbox>/settings/phone`,
+  which signs a signed-out owner in and comes back to it), and at phone width Settings → Phone puts each
+  phone's Send a test and Remove under its lines.
 - **The app.** The confirm sheet asks for any inbox on the phone, naming it when there are several: the
   app asks every inbox when it opens, comes back, or every half minute while it is in front (never in
   the background), and a notification about an inbox opens that inbox. Those looks never ask for the
@@ -299,8 +304,13 @@ stays as it was (`PHONE_OPERATIONS`, unchanged; a test holds it).
   when no limit kept it), "Send as it is" (`…/offers/draft/send`), and Drop it. The card is worded from
   what the draft keeps, which is what is sent: an order's lines with each choice by the name the customer
   reads ("Large (36 cm), ½ Piña"), kept in a draft's terms only, so no fingerprint a customer or a link
-  holds changes; a stay's whole quote but its source. A draft with its own words to the customer opens
-  them in full first: no person wrote them.
+  holds changes; a stay's whole quote but its source. A stay's quote is worked out again as it goes, so
+  it goes only as the card showed it, every term but until when it holds, else `draft_stale` (the rates,
+  a payment platform or a date moved since); and it holds as long from when it goes as the draft did
+  from when it was made, which the card says ("for a day once it is sent"), or until the same time
+  where the stay's arrival cut it short. Where a card holds a stay, "nothing is charged now" is said
+  only when nothing is paid now. A draft with its own words to the customer opens them in full first: no
+  person wrote them.
 - **Quick replies.** On a message, the owner's saved replies, in their own words: after a reply typed on
   a message, the app asks "Save as a quick reply?", only for words that hold nothing of that customer
   (their name, address or phone, nor a number from their request) and short enough to show whole (120
