@@ -99,12 +99,17 @@ function initialStates(): string {
   return `CASE i.type ${when.join(" ")} END`;
 }
 
-/** The first answer found, as `<at> <actor kind> <written_by>` (packed: a subquery gives one value). */
+/**
+ * The first answer found, as `<at> <actor kind> <written_by> <channel>` (packed: a subquery gives one
+ * value). The door it came through tells the owner's AI from the owner: anything through the owner's
+ * MCP door is the owner's AI, whatever key it holds (`causedByPerson`).
+ */
 const FIRST_EVENT = `(SELECT e.created_at || ' ' || e.actor_kind || ' ' || COALESCE(json_extract(e.meta, '$.written_by'), '')
+      || ' ' || COALESCE(json_extract(e.meta, '$.channel'), '')
     FROM item_events e
    WHERE e.item_id = i.id AND e.seq > 1 AND e.actor_kind IN (${words(BUSINESS)}) AND e.event IN (${words(ANSWER_EVENTS)})
    ORDER BY e.seq LIMIT 1)`;
-const FIRST_REPLY = `(SELECT t.created_at || ' ' || t.actor_kind || ' ' || COALESCE(t.written_by, '')
+const FIRST_REPLY = `(SELECT t.created_at || ' ' || t.actor_kind || ' ' || COALESCE(t.written_by, '') || ' ' || COALESCE(t.channel, '')
     FROM thread_entries t
    WHERE t.item_id = i.id AND t.direction = 'out' AND t.actor_kind IN (${words(REPLIERS)})
    ORDER BY t.created_at LIMIT 1)`;
@@ -129,14 +134,15 @@ interface Answer {
 
 function answerOf(packed: unknown): Answer | null {
   if (typeof packed !== "string" || !packed) return null;
-  const [at, kind = "", writtenBy = ""] = packed.split(" ");
+  const [at, kind = "", writtenBy = "", channel = ""] = packed.split(" ");
   const t = Number(at);
   if (!Number.isFinite(t)) return null;
-  // A rule is a rule, whatever it wrote; then who said they wrote it; then who sent it.
+  // A rule is a rule, whatever it wrote; then the owner's AI, by what it said or the door it came
+  // through (the owner's MCP door, even with an owner's key); then who said they wrote it; then who sent it.
   const who: Who =
     kind === "rule"
       ? "rule"
-      : writtenBy === "automation"
+      : writtenBy === "automation" || channel === "mcp_owner"
         ? "other"
         : writtenBy === "person" || kind === "owner" || kind === "staff"
           ? "person"

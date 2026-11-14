@@ -20,6 +20,7 @@ import {
   sha256b64u,
   verifyProof,
 } from "./crypto";
+import { shownPhoneName } from "./names";
 import { encodePayload, testPayload } from "./payload";
 import { DEFAULT_PREFS, type NotifyPrefs, notifyPrefsSchema, readPrefs } from "./prefs";
 import type { PushRelay, RelayRegistration } from "./relay";
@@ -160,10 +161,14 @@ function iso(ms: number | null): string | null {
   return ms === null ? null : new Date(ms).toISOString();
 }
 
+/**
+ * A phone as the owner is shown it. Its name is its own say: shown only when it reads like a phone's,
+ * else its kind (`shownPhoneName`), wherever the owner reads it, the confirm sheet and the emails too.
+ */
 function viewOf(row: DeviceRow): PhoneView {
   return {
     id: row.id,
-    name: row.name,
+    name: shownPhoneName(row.name, row.platform),
     platform: row.platform,
     created_at: new Date(row.createdAt).toISOString(),
     last_seen_at: iso(row.lastSeenAt),
@@ -172,7 +177,10 @@ function viewOf(row: DeviceRow): PhoneView {
   };
 }
 
-/** A phone's name as it sends it, on one line and short: "Pixel 8", "Galaxy S24". */
+/**
+ * A phone's name as it sends it, on one line and short: "Pixel 8", "Galaxy S24". Kept as sent; the owner
+ * is shown it only when it reads like a phone's (`viewOf`).
+ */
 export function cleanPhoneName(value: unknown): string {
   const s = typeof value === "string" ? value.replace(/[\p{C}\s]+/gu, " ").trim() : "";
   return (s || "Phone").slice(0, 60);
@@ -192,7 +200,7 @@ const bad = (message: string, path?: string) =>
 export async function resolvePhoneAccess(db: Db, token: string, now: number): Promise<PhonePrincipal | null> {
   if (!token.startsWith(PHONE_ACCESS_PREFIX)) return null;
   const { rows } = await db.client.query({
-    sql: `SELECT d.id, d.user_id, d.name, d.last_seen_at, d.confirmed_at, d.created_at, d.via, d.confirm_by
+    sql: `SELECT d.id, d.user_id, d.name, d.last_seen_at, d.confirmed_at, d.created_at, d.via, d.confirm_by, d.platform
             FROM phone_tokens t JOIN phone_devices d ON d.id = t.device_id
            WHERE t.token_hash = ? AND t.kind = 'access' AND t.revoked_at IS NULL AND t.expires_at > ?
              AND d.revoked_at IS NULL`,
@@ -201,7 +209,7 @@ export async function resolvePhoneAccess(db: Db, token: string, now: number): Pr
   });
   const r = rows[0];
   if (!r) return null;
-  const [deviceId, userId, name, lastSeen, confirmedAt, createdAt, via, confirmBy] = r as [
+  const [deviceId, userId, name, lastSeen, confirmedAt, createdAt, via, confirmBy, platform] = r as [
     string,
     string,
     string,
@@ -210,6 +218,7 @@ export async function resolvePhoneAccess(db: Db, token: string, now: number): Pr
     number,
     string | null,
     number | null,
+    string | null,
   ];
   // A phone nobody confirmed is gone once its minutes (or its day's wait) are up.
   if (confirmedAt === null && now > waitsUntil(createdAt, confirmBy)) return null;
@@ -223,7 +232,8 @@ export async function resolvePhoneAccess(db: Db, token: string, now: number): Pr
   return {
     deviceId,
     userId,
-    name,
+    // What the item's history names it by, read by the owner as the sheet's words are.
+    name: shownPhoneName(name, platform),
     confirmed: confirmedAt !== null,
     waitsOn: confirmedAt !== null ? null : waitsOnOf(via),
   };
@@ -570,7 +580,7 @@ export class PhoneCapabilities {
         details: { reason: "not_owner" },
       });
     if (await this.linksPaused(userId, now))
-      throw new WriteError("not_allowed", "A new phone was stopped today, so new phones wait until tomorrow.", {
+      throw new WriteError("not_allowed", "A new phone was stopped, so new phones can't connect for a day after it.", {
         details: { reason: "phone_paused" },
       });
     const secret = `${PAIRING_PREFIX}${randomToken(32)}`;
@@ -674,15 +684,22 @@ export class PhoneCapabilities {
   }
 
   /**
-   * The owner's phones that can say yes to a new one: confirmed, and with a refresh token still good
-   * (signed in within its two months). A phone not used since, or whose app was removed long ago,
-   * can never answer, so it makes no new phone wait.
+   * The owner's phones that can say yes to a new one: confirmed, with a refresh token still good
+   * (signed in within its two months), and with an app that can. A phone not used since, or whose app
+   * was removed long ago, can never answer, so it makes no new phone wait; nor does one whose app was
+   * released before Amendment 4 (1.0.x), which has no sheet to say yes on. One that came by the host's
+   * link can (only the app that says yes signs in that way); one that came by a QR code or an emailed
+   * link can once its app looked for new phones (`answersAt`, `phoneAsks`).
    */
   private async answeringPhones(userId: string, now: number): Promise<DeviceRow[]> {
-    const rows = await this.db.orm
-      .select()
-      .from(phoneDevices)
-      .where(and(eq(phoneDevices.userId, userId), isNull(phoneDevices.revokedAt), isNotNull(phoneDevices.confirmedAt)));
+    const rows = (
+      await this.db.orm
+        .select()
+        .from(phoneDevices)
+        .where(
+          and(eq(phoneDevices.userId, userId), isNull(phoneDevices.revokedAt), isNotNull(phoneDevices.confirmedAt)),
+        )
+    ).filter((r) => r.via === "host" || r.answersAt !== null);
     if (rows.length === 0) return [];
     const { rows: live } = await this.db.client.query({
       sql: `SELECT DISTINCT device_id FROM phone_tokens WHERE kind = 'refresh' AND revoked_at IS NULL AND expires_at > ?
@@ -730,9 +747,18 @@ export class PhoneCapabilities {
     return me;
   }
 
-  /** The new phones that wait for a yes from one of this person's phones: what its confirm sheet shows. */
+  /**
+   * The new phones that wait for a yes from one of this person's phones: what its confirm sheet shows.
+   * A phone whose app asks can say yes: from now on new phones wait for it (`answeringPhones`).
+   */
   async phoneAsks(deviceId: string, now: number): Promise<PhoneAsk[]> {
     const me = await this.answering(deviceId);
+    if (me.answersAt === null)
+      await this.db.client.query({
+        sql: "UPDATE phone_devices SET answers_at = ? WHERE id = ? AND answers_at IS NULL",
+        params: [now, deviceId],
+        method: "run",
+      });
     const rows = await this.db.orm
       .select()
       .from(phoneDevices)

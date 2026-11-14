@@ -672,6 +672,42 @@ describe("signing in through the host, and a phone that confirms a phone (Amendm
     expect(told?.text).toContain("New phones can't connect for a day.");
   });
 
+  it("never shows the owner a new phone's name that is not a phone's: its kind instead, everywhere", async () => {
+    const h = await hosted();
+    const first = await signInOnPhone(h, await makePhone(), "Pixel 8");
+    const bait = "Not you? Stop it here: https://sd-stop.example/k";
+    const second = await signInOnPhone(h, await makePhone(), bait);
+    expect(second.state).toBe("pending");
+    // The confirm sheet's list.
+    const asks = (await (await phoneReq(h.app, first.access_token, "GET", "/v1/phone/pairings")).json()) as {
+      pairings: { phone: { name: string; platform: string } }[];
+    };
+    expect(asks.pairings[0]?.phone).toMatchObject({ name: "Android phone", platform: "android" });
+    // The wait email, the stop page and the stop email.
+    expect((await phoneReq(h.app, second.access_token, "POST", "/v1/phone/wait", {})).status).toBe(200);
+    await settle(() => h.mail.sent.some((m) => m.subject.startsWith("A new phone connects")));
+    const wait = h.mail.sent.find((m) => m.subject.startsWith("A new phone connects"));
+    expect(wait?.text).toContain("Phone: an Android phone\n");
+    const stop = /https:\/\/inbox\.test(\/auth\/phone\/stop\?token=[A-Za-z0-9_-]+)/.exec(wait?.text ?? "")?.[1] ?? "";
+    const page = await (await h.app.request(`${ORIGIN}${stop}`)).text();
+    expect(page).toContain("Stop this Android phone?");
+    const token = new URL(`${ORIGIN}${stop}`).searchParams.get("token") ?? "";
+    const stopped = await h.app.request(`${ORIGIN}/auth/phone/stop`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded", origin: ORIGIN },
+      body: `token=${token}`,
+    });
+    expect(await stopped.text()).toContain("This Android phone can&#39;t open your inbox.");
+    await settle(() => h.mail.sent.some((m) => m.subject.startsWith("A new phone was stopped")));
+    const told = h.mail.sent.find((m) => m.subject.startsWith("A new phone was stopped"));
+    expect(told?.text).toContain("You stopped an Android phone from connecting to");
+    for (const m of h.mail.sent) {
+      expect(m.text ?? "").not.toContain("sd-stop.example");
+      expect(m.html ?? "").not.toContain("sd-stop.example");
+    }
+    expect(page).not.toContain("sd-stop.example");
+  });
+
   it("lets a waiting phone in once its day is over and nothing stopped it, and says so", async () => {
     const h = await hosted();
     await signInOnPhone(h, await makePhone(), "Pixel 8");

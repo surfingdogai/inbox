@@ -755,6 +755,19 @@ describe("a phone confirms a phone (Amendment 4)", () => {
     expect(b).toMatchObject({ state: "connected", via: "host" });
   });
 
+  it("asks a phone paired by a code or an emailed link only once its app has looked for new phones", async () => {
+    const { phones, userId } = await setup();
+    // The owner's only phone was paired from the computer and may run the app released before
+    // Amendment 4, which has no sheet to say yes on: a new phone is not kept waiting for it.
+    const paired = await pairWith(phones, await makePhone(), (await phones.createPairing(userId, T0)).secret);
+    const second = (await hostLinked(phones, await makePhone(), T0 + 1000)).redeemed;
+    expect(second).toMatchObject({ state: "connected" });
+    await phones.removePhone(second.device_id, T0 + 1500);
+    // Once its app looked for new phones (it can say yes), the next new phone waits for it.
+    expect(await phones.phoneAsks(paired.device_id, T0 + 2000)).toEqual([]);
+    expect((await hostLinked(phones, await makePhone(), T0 + 3000)).redeemed).toMatchObject({ state: "pending" });
+  });
+
   it("pauses new links for a day after a new phone was stopped", async () => {
     const { phones } = await setup();
     const first = await makePhone();

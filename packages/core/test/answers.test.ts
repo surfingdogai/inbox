@@ -180,6 +180,24 @@ describe("answer times", () => {
     expect(day).toMatchObject({ requests: 3, answered: 3, by_person: 1, by_rule: 1, by_other: 1 });
   });
 
+  it("counts the owner's AI on the owner's MCP door as the AI, even with a full owner key", async () => {
+    const { db, caps } = await setup();
+    // How the owner's MCP door makes the caller for a full owner API key: an owner, at that door.
+    const viaMcp: Caller = {
+      actor: { kind: "owner", id: "user_1", channel: "mcp_owner" },
+      principal: { via: "api_key", id: "key_1", name: "Desktop assistant", scopes: ["*"], userId: "user_1" },
+      tier: "verified_principal",
+      sandbox: false,
+      now: () => T + MIN / 2,
+    } as Caller;
+    const byReply = await message(caps, "m1", T);
+    await caps.reply(viaMcp, { item_id: byReply, body: "Yes, most brands.", internal: false });
+    const byAnswer = await message(caps, "m2", T);
+    await caps.transitionItem(viaMcp, { item_id: byAnswer, event: "answer", input: { note: "Yes, most brands." } });
+    const [day] = await oneDay(db, "2026-11");
+    expect(day).toMatchObject({ requests: 2, answered: 2, by_person: 0, by_other: 2 });
+  });
+
   it("counts no rule's reply that leaves the request for a person: the person's answer is the first", async () => {
     const { db, caps } = await setup();
     // The preset every kind of business has: a returning customer asks to change a booking, and the rule

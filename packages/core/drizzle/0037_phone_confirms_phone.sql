@@ -1,4 +1,4 @@
--- A phone confirms a phone (ADR-028 Amendment 4). Five columns on `phone_devices`, empty on every
+-- A phone confirms a phone (ADR-028 Amendment 4). Six columns on `phone_devices`, empty on every
 -- phone there is now; nothing else changes.
 --
 -- `via`: how the phone came. 'qr', a code from Settings → Phone, which the owner confirms on the
@@ -9,7 +9,9 @@
 -- `wait_until`: "I don't have my other phone": the phone is let in at this time unless one of the
 -- owner's phones, or the owner's email, stopped it before. `stop_hash` is the hash of the token in
 -- that email's "Not you? Stop it" link. `stopped_at`: when such a phone was stopped ("Not mine", or
--- "Stop it"); for a day after, no new sign-in link is made for its owner.
+-- "Stop it"); for a day after, no new sign-in link is made for its owner. `answers_at`: when the
+-- phone's app first looked for new phones to say yes to; a phone that came by a QR code or an emailed
+-- link may run an app that cannot, and is asked for a yes only from then.
 ALTER TABLE `phone_devices` ADD `via` text;
 --> statement-breakpoint
 ALTER TABLE `phone_devices` ADD `confirm_by` integer;
@@ -19,3 +21,5 @@ ALTER TABLE `phone_devices` ADD `wait_until` integer;
 ALTER TABLE `phone_devices` ADD `stop_hash` text;
 --> statement-breakpoint
 ALTER TABLE `phone_devices` ADD `stopped_at` integer;
+--> statement-breakpoint
+ALTER TABLE `phone_devices` ADD `answers_at` integer;

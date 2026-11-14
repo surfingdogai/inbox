@@ -1534,6 +1534,12 @@ export const phoneDevices = sqliteTable(
     stopHash: text("stop_hash"),
     /** When a new phone was stopped ("Not mine", "Stop it"): new links wait a day after it. */
     stoppedAt: integer("stopped_at"),
+    /**
+     * When its app first looked for new phones to say yes to (`GET /v1/phone/pairings`). A phone that
+     * came by a QR code or an emailed link may run the app released before Amendment 4, which cannot
+     * say yes: it counts as one that can only from then. One that came by the host's link always can.
+     */
+    answersAt: integer("answers_at"),
   },
   (t) => [
     uniqueIndex("phone_devices_key").on(t.keyThumbprint).where(sql`${t.revokedAt} IS NULL`),
