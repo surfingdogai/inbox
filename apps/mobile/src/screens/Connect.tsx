@@ -6,6 +6,7 @@ import { lockWords } from "../lib/native";
 import { type Scanner, startScanner } from "../lib/scan";
 import { findInbox, type PendingPhone } from "../lib/session";
 import { ChevronLeft, Corners } from "./icons";
+import { phonesOnTheWeb } from "./Settings";
 
 /** How often the phone asks whether its yes came, and for how long: the computer's, or the other phone's. */
 const ASK_EVERY_MS = 2_000;
@@ -257,7 +258,11 @@ export function Connect({
         {!noOtherPhone && (
           <p className="fine">
             Reinstalled the app, or changed phone? The phone you used before may be this one. Wait instead, or remove
-            the old phone in Settings → Phone on the web, from any browser, then sign in here again.
+            the old phone in{" "}
+            <a href={phonesOnTheWeb(pending.origin)} rel="noopener">
+              Settings → Phone on the web
+            </a>
+            , from any browser, then sign in here again.
           </p>
         )}
         {error && (

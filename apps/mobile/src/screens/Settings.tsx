@@ -584,6 +584,14 @@ export function PhoneAskSheet({
 }
 
 /**
+ * Settings → Phone on the web, at the inbox's own address: where an owner removes an old phone, from any
+ * browser, this phone's too. Signed out, the inbox signs them in and comes back to it.
+ */
+export function phonesOnTheWeb(origin: string): string {
+  return `${origin}/settings/phone`;
+}
+
+/**
  * This phone waits out its day for an inbox ("I don't have my other phone"): it opens nothing until
  * then, and the owner's other phones and email can stop it meanwhile.
  */
@@ -599,8 +607,11 @@ export function Waiting({ entry }: { entry: InboxEntry }) {
           you. Until then it opens nothing.
         </p>
         <p className="fine">
-          No need to wait: stop waiting here, remove your old phone in Settings → Phone on the web, from any browser,
-          then sign in on this one again.
+          No need to wait: stop waiting here, remove your old phone in{" "}
+          <a href={phonesOnTheWeb(entry.origin)} rel="noopener">
+            Settings → Phone on the web
+          </a>
+          , from any browser, then sign in on this one again.
         </p>
       </div>
       <div className="end">

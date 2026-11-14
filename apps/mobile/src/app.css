@@ -842,6 +842,10 @@ label.stacked > span {
   color: var(--ink-3);
   line-height: 1.5;
 }
+/* The page the fine print names, one tap away. */
+.fine a {
+  color: var(--link);
+}
 .error {
   color: #b3261e;
   font-size: 13px;

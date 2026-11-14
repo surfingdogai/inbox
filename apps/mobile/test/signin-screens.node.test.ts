@@ -199,16 +199,23 @@ describe("a new phone asking this one", () => {
     );
     expect(html).toContain("Connecting on");
     expect(html).toContain("Until then it opens nothing.");
-    // A phone-only owner's way not to wait, in order, with no computer needed.
-    expect(html).toContain(
+    // A phone-only owner's way not to wait, in order, with no computer needed: the page one tap away, in
+    // the phone's browser, at the inbox's own address.
+    expect(html.replace(/<[^>]+>/g, "")).toContain(
       "No need to wait: stop waiting here, remove your old phone in Settings → Phone on the web, from any browser, then sign in on this one again.",
     );
+    expect(html).toContain(
+      '<a href="https://inbox.oficinamare.pt/settings/phone" rel="noopener">Settings → Phone on the web</a>',
+    );
     expect(html).not.toContain("on a computer");
-    // The same words wherever the app tells an owner to remove an old phone: the Connect screen's too.
+    // The same words wherever the app tells an owner to remove an old phone, the same page one tap away:
+    // the Connect screen's too.
     const connect = readFileSync(path.resolve(import.meta.dirname, "../src/screens/Connect.tsx"), "utf8");
     expect(connect.replace(/\s+/g, " ")).toContain(
-      "remove the old phone in Settings → Phone on the web, from any browser, then sign in here again.",
+      'remove the old phone in{" "} <a href={phonesOnTheWeb(pending.origin)} rel="noopener"> Settings → Phone on the web </a> , from any browser, then sign in here again.',
     );
+    const css = readFileSync(path.resolve(import.meta.dirname, "../src/app.css"), "utf8");
+    expect(css).toMatch(/\.fine a \{\s*color: var\(--link\);/);
     for (const source of [
       connect,
       readFileSync(path.resolve(import.meta.dirname, "../src/screens/Settings.tsx"), "utf8"),
