@@ -182,25 +182,40 @@ is left open.
   an address that owns an inbox there, and answers every address the same, at once; the code and its
   email are made after the answer. The phone starts with a PKCE challenge, and only the phone that asked
   holds its verifier: confirming the code takes the verifier, so a code read by someone else, or the
-  email's button opened by another app, is no use. The email names the phone that asked, quoted, when its
-  name looks like a phone's (else its kind: "An Android phone"), says never to share the code and that we
-  never ask for it, and keeps the code out of the subject; its button only opens the app: by an intent
-  pinned to the app on Android, and on an iPhone, where any app may claim a scheme, by showing the code
-  to type until the app has a universal link. The app reads the name in Settings → About phone. An
-  inbox on the owner's own server is chosen on the email screen itself, with nothing sent to the host (§3).
-- **A phone's name, as the owner is shown it.** Whoever holds a phone types its name, so it is shown
-  only when it reads like a phone's (`quotablePhoneName`, `packages/core/src/phones/names.ts`; the host's
-  code email follows the same rule): Latin letters, digits, spaces, hyphens and apostrophes, at most 24
-  characters, no run of more than four digits and six in all (letters that stand in for digits count),
-  and no word of us, of a way to reach someone or of an authority, however it is spelled. Anything else
-  is shown as its kind ("an Android phone"), in the inbox's emails, on the stop page, on the confirm
-  sheet and in Settings → Phone. The name is kept as the phone sent it.
+  email's button opened by another app, is no use. The email says which kind of phone asked ("An
+  Android phone", "An iPhone", "A phone"), never its name, which the app no longer sends the host (its
+  platform only); it says never to share the code and that we never ask for it, and keeps the code out
+  of the subject; its button only opens the app: by an intent pinned to the app on Android, and on an
+  iPhone, where any app may claim a scheme, by showing the code to type until the app has a universal
+  link. An inbox on the owner's own server is chosen on the email screen itself, with nothing sent to the
+  host (§3).
+- **A phone's name, as the owner is shown it.** Whoever holds a phone types its name, and a name can
+  pass any rule and still speak to the owner ("Reset at getback dot io"). So no email, and no page an
+  email's link opens, ever says it: the inbox's emails (a phone connected, a phone that waits, a phone
+  stopped), the stop page and its result say the kind of phone only ("an Android phone"), as the host's
+  code email does; this replaces §2's quoted name. The owner's own screens, signed in, still show the
+  name: beside the kind on the confirm sheet and in Settings → Phone, on the web and in the app, and in
+  an item's history; and only when it reads like a phone's (`ownPhoneName`,
+  `packages/core/src/phones/names.ts`): Latin letters, digits, spaces, hyphens and apostrophes, at most
+  24 characters, no run of more than four digits and six in all (letters that stand in for digits
+  count), and no word of us, of a way to reach someone or of an authority, however it is spelled;
+  anything else is shown as its kind. The name is kept as the phone sent it.
 - **The host's limits**, each read and spent in one step under a lock on the address that a request
-  never waits for: three codes an hour to an address; five sends for one sign-in, a minute apart; five
-  tries a code and ten a sign-in, each try compared with its newest three codes; JSON only, never a
-  browser's request from another site; and a day's pause after wrong codes, counted by the network each
-  sign-in began on (ten from one network pause it, thirty from all pause every network and tell the
-  owner), apart from the web's own. Codes go two days on.
+  never waits for. Codes to an address: three an hour and ten a day from one network (the one its
+  sign-in began on), six an hour and twenty a day from all of them; five sends for one sign-in, a minute
+  apart; five tries a code and ten a sign-in, each try compared with its newest three codes; JSON only,
+  never a browser's request from another site; and a day's pause after wrong codes, counted by network
+  (ten from one network pause that network, thirty from all pause every network), apart from the web's
+  own. A network the owner completed a phone sign-in from in the last thirty days is known: it skips the
+  address's ceilings and the pause of every network, and keeps its own counts and its own pause, so
+  limits a stranger runs up never hold up the owner's own phone. Only its keyed hash is kept, for thirty
+  days from that sign-in. When the address's ceilings or the pause of every network stop a code from a
+  network that is not known, the owner is told, once a day, by email and an alert: someone asked for
+  many codes to sign in on a phone; nothing to do if it was not them, and no code was used; a phone on a
+  network they signed in from before is not held up; and they can still connect a phone on the web,
+  from any browser: sign in, then Settings → Phone. Every sign-in is answered alike, for any address,
+  before anything is looked up. The address's six and twenty, the ten and thirty wrong codes and the
+  thirty days are proposals. Codes go two days on.
 - **A link for the phone, redeemed at the inbox.** A confirmed code gives a grant that opens, once and
   for ten minutes, a link to one of that address's inboxes. The host's runtime makes it at the inbox's
   canonical origin only, with a fresh challenge and the device key the phone made for that inbox, and
@@ -223,6 +238,10 @@ is left open.
   confirming phone's device key (`proofStatement("confirm", …)`), which signs only shortly after an
   unlock; "Not mine" removes the new phone. Until the yes, the new phone may ask whether it came
   (`GET /v1/phone/me`), give up, or wait a day, and nothing else; it waits fifteen minutes at most.
+  It asks every two seconds, only while the app is in front, and never for the fingerprint or face:
+  once its first token (ten minutes) cannot be renewed without one, it stops and shows "Check now",
+  whose press may ask once; a wait that runs out, or Cancel, asks nothing. A phone waiting out its day
+  looks the same way, and its "Check again" may ask once.
   New calls: `GET /v1/phone/pairings`, `POST /v1/phone/pairings/{id}/confirm`, `…/refuse`.
 - **The owner without their other phone.** "I don't have my other phone" (`POST /v1/phone/wait`) lets the
   new phone in a day later, or three days later when none of the owner's phones would hear of it at once
@@ -234,8 +253,10 @@ is left open.
   for any phone connected. One not back within a week goes.
 - **A phone stopped.** "Not mine", or the email's "Stop it", removes the new phone, makes no new link
   (the host's or an emailed one) for a day, and tells the owner that someone used a code or link sent to
-  them, so they secure their email. The host is answered `phone_paused` meanwhile; a computer can still
-  connect a phone.
+  them, so they secure their email. The host is answered `phone_paused` meanwhile; Settings → Phone on
+  the web, from any browser, can still connect a phone. Wherever the owner is told to remove an old
+  phone (the stop email, the app's waiting screens, the host's answers and emails), it says so in those
+  words, and at phone width Settings → Phone puts each phone's Send a test and Remove under its lines.
 - **The app.** The confirm sheet asks for any inbox on the phone, naming it when there are several: the
   app asks every inbox when it opens, comes back, or every half minute while it is in front (never in
   the background), and a notification about an inbox opens that inbox. Those looks never ask for the
@@ -272,10 +293,14 @@ stays as it was (`PHONE_OPERATIONS`, unchanged; a test holds it).
   assistant, can accept.
 - **Drafted offers.** A draft the owner's AI, a rule or another system made outside the owner's limits,
   or one a person must look at first (a stay's quote from the rates), shows on the item with every term
-  the customer would read (its time, each line with its amount and choices, the total, a stay's lines
-  and what is paid when, and the people, delivery, fees, stages, tax and until when it holds), why it
-  was not sent ("Not sent yet" when no limit kept it), "Send as it is" (`…/offers/draft/send`), and Drop
-  it. A draft with its own words to the customer opens them in full first: no person wrote them.
+  the customer would read (its time, each line with its amount and choices, the total, a stay's lines,
+  its rate plan, what it includes, what is paid when, its cancellation and whether a card holds it, and
+  the people, delivery, fees, stages, tax and until when it holds), why it was not sent ("Not sent yet"
+  when no limit kept it), "Send as it is" (`…/offers/draft/send`), and Drop it. The card is worded from
+  what the draft keeps, which is what is sent: an order's lines with each choice by the name the customer
+  reads ("Large (36 cm), ½ Piña"), kept in a draft's terms only, so no fingerprint a customer or a link
+  holds changes; a stay's whole quote but its source. A draft with its own words to the customer opens
+  them in full first: no person wrote them.
 - **Quick replies.** On a message, the owner's saved replies, in their own words: after a reply typed on
   a message, the app asks "Save as a quick reply?", only for words that hold nothing of that customer
   (their name, address or phone, nor a number from their request) and short enough to show whole (120
