@@ -633,9 +633,13 @@ describe("signing in through the host, and a phone that confirms a phone (Amendm
       body: "{}",
     });
     expect(waited.status).toBe(200);
-    await settle(() => h.mail.sent.some((m) => m.subject.includes("in 24 hours")));
-    const email = h.mail.sent.find((m) => m.subject.includes("in 24 hours"));
-    expect(email?.subject).toBe("A new phone connects to your inbox in 24 hours");
+    // No phone of the owner's hears of it at once (notifications off here): it waits three days.
+    expect(await waited.json()).toMatchObject({ wait_hours: 72 });
+    await settle(() => h.mail.sent.some((m) => m.subject.includes("in 3 days")));
+    const email = h.mail.sent.find((m) => m.subject.includes("in 3 days"));
+    expect(email?.subject).toBe("A new phone connects to your inbox in 3 days");
+    // In the business's own time, as its notifications are (this one has none set: UTC), never with seconds.
+    expect(email?.text).toMatch(/It will be let in on \w+day \d{1,2} \w+ at \d{2}:\d{2} \(UTC\), unless you stop it\./);
     // It leads with the way to stop it: this inbox's own page, whatever the asking phone sent as its host.
     expect(email?.text?.startsWith("Not you? Stop it now:\nhttps://inbox.test/auth/phone/stop?token=")).toBe(true);
     expect(email?.text).toContain('Phone: "Moto G" (as the phone names itself)');
@@ -661,6 +665,11 @@ describe("signing in through the host, and a phone that confirms a phone (Amendm
     expect(stopped.status).toBe(200);
     expect((await phoneReq(h.app, third.access_token, "GET", "/v1/phone/me")).status).toBe(401);
     expect((await h.app.request(`${ORIGIN}${stop}`)).status).toBe(410);
+    // The owner is told that someone used a code sent to them, and new phones wait a day.
+    await settle(() => h.mail.sent.some((m) => m.subject.startsWith("A new phone was stopped")));
+    const told = h.mail.sent.find((m) => m.subject.startsWith("A new phone was stopped"));
+    expect(told?.text).toContain("someone else may be able to read your email");
+    expect(told?.text).toContain("New phones can't connect for a day.");
   });
 
   it("lets a waiting phone in once its day is over and nothing stopped it, and says so", async () => {
@@ -674,8 +683,9 @@ describe("signing in through the host, and a phone that confirms a phone (Amendm
       phone: { confirmed: boolean; wait_until: string };
     };
     expect(early.phone.confirmed).toBe(false);
-    // A day on, its access token long gone: refreshed with its key, then let in.
-    h.later(24 * 3_600_000);
+    // Three days on (no phone of the owner's would hear of it), its access token long gone:
+    // refreshed with its key, then let in.
+    h.later(72 * 3_600_000);
     const at = h.at();
     const refreshed = await phoneReq(h.app, null, "POST", "/v1/phone/token", {
       refresh_token: fourth.refresh_token,
@@ -688,7 +698,7 @@ describe("signing in through the host, and a phone that confirms a phone (Amendm
       phone: { confirmed: boolean };
     };
     expect(me.phone.confirmed).toBe(true);
-    await settle(() => h.mail.sent.some((m) => (m.text ?? "").includes("it waited 24 hours")));
-    expect(h.mail.sent.at(-1)?.text).toContain("How: it waited 24 hours, and nobody stopped it.");
+    await settle(() => h.mail.sent.some((m) => (m.text ?? "").includes("How: it waited")));
+    expect(h.mail.sent.at(-1)?.text).toContain("How: it waited, as you were told by email, and nobody stopped it.");
   });
 });

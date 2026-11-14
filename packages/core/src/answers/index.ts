@@ -18,7 +18,9 @@ import { ownerOnlySql } from "../write/flags";
  *   what came before `since` (the door opening).
  * - **Its first answer** is the first thing the business sent the customer about it: a reply, or a
  *   transition that answers (`ANSWER_EVENTS`: a price, Accept, Propose, Decline, a question back). A
- *   note is no answer, nor is Spam, nor closing it without a word.
+ *   note is no answer, nor is Spam, nor closing it without a word. A rule answers only by such a
+ *   transition: its reply alone ("We may know you already…", which leaves the request for a person)
+ *   is no answer.
  * - **In hours**: it came while the business was open (its weekly hours and closed days; with no hours
  *   saved, all the time) and not while every phone that would have told the owner held it for its
  *   quiet hours. The hours and the phones are read as they are now.
@@ -73,6 +75,8 @@ export const ANSWER_EVENTS = [
 export const ANSWER_MINUTES = [5, 15, 60] as const;
 
 const BUSINESS = ["owner", "staff", "owner_ai", "integration", "rule"] as const;
+/** Who answers by a reply alone: anyone at the business but a rule, whose replies leave the request open. */
+const REPLIERS = BUSINESS.filter((k) => k !== "rule");
 const CUSTOMERS = ["customer_agent", "customer_human"] as const;
 /** The spam filter's verdicts that reach the owner as any request does (ADR-041). */
 const DELIVERED = ["delivered", "warned"] as const;
@@ -102,7 +106,7 @@ const FIRST_EVENT = `(SELECT e.created_at || ' ' || e.actor_kind || ' ' || COALE
    ORDER BY e.seq LIMIT 1)`;
 const FIRST_REPLY = `(SELECT t.created_at || ' ' || t.actor_kind || ' ' || COALESCE(t.written_by, '')
     FROM thread_entries t
-   WHERE t.item_id = i.id AND t.direction = 'out' AND t.actor_kind IN (${words(BUSINESS)})
+   WHERE t.item_id = i.id AND t.direction = 'out' AND t.actor_kind IN (${words(REPLIERS)})
    ORDER BY t.created_at LIMIT 1)`;
 
 const REQUESTS = `SELECT i.type, i.created_at, ${FIRST_EVENT}, ${FIRST_REPLY}

@@ -5,6 +5,7 @@ import { randomToken, ulid } from "../ids";
 import { ensureJob } from "../jobs/schedule";
 import { business, phoneDevices, phonePairings } from "../schema/tables";
 import type { SecretBox } from "../secrets/box";
+import { readSettings } from "../settings/schema";
 import { WriteError } from "../write/errors";
 import {
   b64uDecode,
@@ -37,11 +38,18 @@ import type { PushRelay, RelayRegistration } from "./relay";
  * Until then its tokens open `GET /v1/phone/me` and nothing else, and five minutes without an answer
  * remove it. A phone connected by an emailed link needs no confirming: the mailbox was the proof.
  *
- * Unless the owner has a confirmed phone already (ADR-028 Amendment 4). Then a new phone that came by
- * a link, emailed or made by the inbox's host after its own email code, waits for that phone's yes:
- * the same two digits on both screens, and Confirm or "Not mine" on the phone the owner has. An owner
- * who has lost that phone says so, and the new one waits a day while every phone and the email are
- * told, each with a way to stop it. A code someone was tricked into reading out opens nothing alone.
+ * Unless the owner has a phone already that can say yes (ADR-028 Amendment 4): confirmed, and signed in
+ * within its refresh token's two months. Then a new phone that came by a link the inbox's host made
+ * after its own email code waits for that phone's yes: the same two digits on both screens, and
+ * Confirm or "Not mine" on the phone the owner has. An owner who has lost that phone says so, and the
+ * new one waits a day (three, when none of the owner's phones would hear of it) while every phone and
+ * the email are told, each with a way to stop it. A phone stopped so pauses new links for a day, and
+ * the owner is told that someone used a code sent to them. Emailed links wait the same way only once
+ * `emailedLinksWait` is on: the phone app released before Amendment 4 cannot wait.
+ *
+ * What this does not do: a code read out to a phisher, who began the sign-in and so holds its
+ * verifier, opens a first phone at once (the owner is told after, by email). And the same mailbox's
+ * code signs in to the owner app on the web, whose QR code a computer confirms with no phone's yes.
  *
  * A phone acts as the owner in person, through the owner's API only, and only for what the phone
  * app does: the inbox, its items and their answers. Everything else (settings, keys, money floors,
@@ -66,6 +74,12 @@ export const HOST_LINK_TTL_MS = 10 * 60_000;
 export const PHONE_CONFIRM_TTL_MS = 15 * 60_000;
 /** "I don't have my other phone": the new phone is let in a day later, unless it was stopped. */
 export const WAIT_MS = 24 * 3_600_000;
+/** The same, when none of the owner's phones would hear of it (notifications off, or not seen in a month). */
+export const WAIT_LONG_MS = 72 * 3_600_000;
+/** A phone heard from this recently, with notifications on, is told of a new phone at once. */
+export const HEARD_FROM_MS = 30 * 86_400_000;
+/** After a new phone was stopped ("Not mine", or the email's "Stop it"), no new link is made for this long. */
+export const STOPPED_PAUSE_MS = 24 * 3_600_000;
 /** After that day, it has this long to come back and be let in; then it goes. */
 export const WAIT_GRACE_MS = 7 * 86_400_000;
 /** The job that asks the owner's other phones about a new one (ADR-028 Amendment 4). */
@@ -225,9 +239,25 @@ function waitsOnOf(via: string | null): "computer" | "phone" {
   return via === "link" || via === "host" ? "phone" : "computer";
 }
 
+/**
+ * How long "I don't have my other phone" waits: a day when one of the owner's phones would hear of it
+ * at once (notifications on, and heard from in the last month), else three, for the owner to open the
+ * app on one of them, where the sheet asks.
+ */
+function waitMs(answering: readonly DeviceRow[], now: number): number {
+  const heard = answering.some((d) => d.pushState === "on" && (d.lastSeenAt ?? d.createdAt) > now - HEARD_FROM_MS);
+  return heard ? WAIT_MS : WAIT_LONG_MS;
+}
+
 export class PhoneCapabilities {
   private relay: PushRelay | null = null;
   private hosted = false;
+  /**
+   * Whether a phone that came by an emailed link waits for the owner's other phone too, as one that
+   * came by the host's link does. Off until the phone app that can wait is the oldest in use: the app
+   * released before Amendment 4 (1.0.0) keeps a waiting phone as connected, and is stuck with it.
+   */
+  emailedLinksWait = false;
 
   constructor(
     private readonly db: Db,
@@ -493,6 +523,8 @@ export class PhoneCapabilities {
     });
     const userId = rows[0]?.[0];
     if (typeof userId !== "string") return null;
+    // The day after a new phone was stopped, nothing is sent: the same answer, as for anyone.
+    if (await this.linksPaused(userId, now)) return null;
     const sent = await this.db.client.query({
       sql: "SELECT COUNT(*) FROM phone_pairings WHERE user_id = ? AND kind = 'link' AND created_at > ?",
       params: [userId, now - 3_600_000],
@@ -537,6 +569,10 @@ export class PhoneCapabilities {
       throw new WriteError("not_allowed", "That address does not sign in to this inbox.", {
         details: { reason: "not_owner" },
       });
+    if (await this.linksPaused(userId, now))
+      throw new WriteError("not_allowed", "A new phone was stopped today, so new phones wait until tomorrow.", {
+        details: { reason: "phone_paused" },
+      });
     const secret = `${PAIRING_PREFIX}${randomToken(32)}`;
     await this.db.orm.insert(phonePairings).values({
       id: ulid(now),
@@ -580,15 +616,18 @@ export class PhoneCapabilities {
 
   /**
    * The phone that asked for the link redeems it, with its verifier and a proof from the same key. The
-   * owner's mailbox was the proof, unless the owner has a confirmed phone already: then the new phone
-   * waits for that phone's yes, showing the same two digits (`state: "pending"`), and the owner's
-   * other phones are asked.
+   * owner's mailbox was the proof, unless the owner has a phone already that can say yes and the link
+   * is the host's (or `emailedLinksWait` is on): then the new phone waits for that phone's yes, showing
+   * the same two digits (`state: "pending"`), and the owner's other phones are asked. `wait_hours` is
+   * how long "I don't have my other phone" would then make it wait.
    */
   async redeemLink(
     input: Readonly<Record<string, unknown>>,
     origin: string,
     now: number,
-  ): Promise<PhoneTokens & { state: "connected" | "pending"; match?: string; via: "link" | "host" }> {
+  ): Promise<
+    PhoneTokens & { state: "connected" | "pending"; match?: string; via: "link" | "host"; wait_hours?: number }
+  > {
     const secret = typeof input.secret === "string" ? input.secret : "";
     const verifier = typeof input.verifier === "string" ? input.verifier : "";
     if (!secret.startsWith(PAIRING_PREFIX)) throw bad("That is not a sign-in link from this inbox.", "secret");
@@ -616,7 +655,9 @@ export class PhoneCapabilities {
     }
     const via = row.kind === "host" ? "host" : "link";
     await this.db.client.batch(this.dropUnconfirmed(now));
-    if ((await this.confirmedPhones(row.userId)).length === 0) {
+    const asks = via === "host" || this.emailedLinksWait;
+    const answering = asks ? await this.answeringPhones(row.userId, now) : [];
+    if (answering.length === 0) {
       // The owner's mailbox was the proof, and there is no other phone to ask: nothing to confirm.
       const tokens = await this.makePhone(row.id, row.userId, key, input, now, { match: null, via });
       return { ...tokens, state: "connected", via };
@@ -629,22 +670,45 @@ export class PhoneCapabilities {
       confirmBy: now + PHONE_CONFIRM_TTL_MS,
     });
     await this.ask(tokens.device_id, "ask", now);
-    return { ...tokens, state: "pending", match, via };
+    return { ...tokens, state: "pending", match, via, wait_hours: waitMs(answering, now) / 3_600_000 };
   }
 
-  /** The owner's confirmed phones, the ones that may say yes to a new one. */
-  private async confirmedPhones(userId: string): Promise<DeviceRow[]> {
-    return this.db.orm
+  /**
+   * The owner's phones that can say yes to a new one: confirmed, and with a refresh token still good
+   * (signed in within its two months). A phone not used since, or whose app was removed long ago,
+   * can never answer, so it makes no new phone wait.
+   */
+  private async answeringPhones(userId: string, now: number): Promise<DeviceRow[]> {
+    const rows = await this.db.orm
       .select()
       .from(phoneDevices)
       .where(and(eq(phoneDevices.userId, userId), isNull(phoneDevices.revokedAt), isNotNull(phoneDevices.confirmedAt)));
+    if (rows.length === 0) return [];
+    const { rows: live } = await this.db.client.query({
+      sql: `SELECT DISTINCT device_id FROM phone_tokens WHERE kind = 'refresh' AND revoked_at IS NULL AND expires_at > ?
+              AND device_id IN (${rows.map(() => "?").join(", ")})`,
+      params: [now, ...rows.map((r) => r.id)],
+      method: "all",
+    });
+    const ok = new Set(live.map((r) => String(r[0])));
+    return rows.filter((r) => ok.has(r.id));
+  }
+
+  /** Whether new links wait: a new phone of this person was stopped ("Not mine", "Stop it") in the last day. */
+  private async linksPaused(userId: string, now: number): Promise<boolean> {
+    const { rows } = await this.db.client.query({
+      sql: "SELECT 1 FROM phone_devices WHERE user_id = ? AND stopped_at IS NOT NULL AND stopped_at > ? LIMIT 1",
+      params: [userId, now - STOPPED_PAUSE_MS],
+      method: "all",
+    });
+    return rows.length > 0;
   }
 
   /** Asks the owner's other phones about a waiting one, by a notification each (`PHONE_ASK_KIND`). */
-  private async ask(deviceId: string, why: "ask" | "wait", now: number): Promise<void> {
+  private async ask(deviceId: string, why: "ask" | "wait", now: number, hours?: number): Promise<void> {
     await ensureJob(this.db, PHONE_ASK_KIND, `${PHONE_ASK_KIND}:${deviceId}:${why}`, {
       now,
-      payload: { deviceId, wait: why === "wait" },
+      payload: { deviceId, wait: why === "wait", ...(hours ? { hours } : {}) },
     }).catch(() => undefined);
   }
 
@@ -722,22 +786,39 @@ export class PhoneCapabilities {
     return { phone: viewOf(phone), by: viewOf(me) };
   }
 
-  /** "Not mine", on one of the owner's phones: the new phone is removed before it could open anything. */
-  async refuseByPhone(deviceId: string, id: string, now: number): Promise<{ removed: boolean }> {
+  /**
+   * "Not mine", on one of the owner's phones: the new phone is removed before it could open anything,
+   * and no new link is made for a day (`linksPaused`). The caller tells the owner that someone used a
+   * code or a link sent to them.
+   */
+  async refuseByPhone(deviceId: string, id: string, now: number): Promise<{ removed: boolean; phone?: PhoneView }> {
     const me = await this.answering(deviceId);
     const row = await this.waiting(id, now);
     if (!row || row.userId !== me.userId) return { removed: false };
-    await this.removePhone(row.id, now);
-    return { removed: true };
+    await this.stop(row.id, now);
+    return { removed: true, phone: viewOf(row) };
+  }
+
+  /** A new phone stopped: removed, and marked so that new links wait a day. */
+  private async stop(id: string, now: number): Promise<void> {
+    await this.removePhone(id, now);
+    await this.db.client.query({
+      sql: "UPDATE phone_devices SET stopped_at = ? WHERE id = ?",
+      params: [now, id],
+      method: "run",
+    });
   }
 
   /**
-   * "I don't have my other phone", on the new phone: it is let in a day from now, unless one of the
-   * owner's phones or the owner's email stops it before. Every phone is asked again, and the caller
-   * emails the owner the token of the email's "Not you? Stop it" link.
+   * "I don't have my other phone", on the new phone: it is let in a day from now (three, when none of
+   * the owner's phones would hear of it), unless one of the owner's phones or the owner's email stops
+   * it before. Every phone is asked again, and the caller emails the owner the token of the email's
+   * "Not you? Stop it" link.
    */
-  async startWait(deviceId: string, now: number): Promise<{ waitUntil: number; stopToken: string }> {
-    const waitUntil = now + WAIT_MS;
+  async startWait(deviceId: string, now: number): Promise<{ waitUntil: number; stopToken: string; hours: number }> {
+    const me = await this.device(deviceId);
+    const wait = waitMs(await this.answeringPhones(me.userId, now), now);
+    const waitUntil = now + wait;
     const stopToken = randomToken(32);
     const r = await this.db.client.query({
       sql: `UPDATE phone_devices SET wait_until = ?, confirm_by = ?, stop_hash = ?
@@ -750,8 +831,8 @@ export class PhoneCapabilities {
       throw new WriteError("wrong_state", "This phone is not waiting for another phone's yes.", {
         details: { reason: "not_waiting" },
       });
-    await this.ask(deviceId, "wait", now);
-    return { waitUntil, stopToken };
+    await this.ask(deviceId, "wait", now, wait / 3_600_000);
+    return { waitUntil, stopToken, hours: wait / 3_600_000 };
   }
 
   /** The phone a "Not you? Stop it" link is about, while it still waits for its day; null otherwise. */
@@ -765,12 +846,12 @@ export class PhoneCapabilities {
     return (await this.waiting(row.id, now)) ? row : null;
   }
 
-  /** "Not you? Stop it", from the owner's email: the waiting phone is removed. */
-  async stopWait(token: string, now: number): Promise<{ removed: boolean; phone?: PhoneView }> {
+  /** "Not you? Stop it", from the owner's email: the waiting phone is removed, and new links wait a day. */
+  async stopWait(token: string, now: number): Promise<{ removed: boolean; phone?: PhoneView; userId?: string }> {
     const row = await this.stoppable(token, now);
     if (!row) return { removed: false };
-    await this.removePhone(row.id, now);
-    return { removed: true, phone: viewOf(row) };
+    await this.stop(row.id, now);
+    return { removed: true, phone: viewOf(row), userId: row.userId };
   }
 
   /**
@@ -1020,10 +1101,13 @@ export class PhoneCapabilities {
     };
     notify: NotifyPrefs;
     business: { name: string; timezone: string };
+    /** How long a price the phone sends can be accepted, when it gives no date (the inbox's setting). */
+    offer_valid_hours: number;
     push_available: boolean;
   }> {
     const row = await this.device(deviceId);
     const [b] = await this.db.orm.select({ name: business.name, timezone: business.timezone }).from(business);
+    const settings = await readSettings(this.db).catch(() => null);
     const waits = row.confirmedAt === null;
     return {
       phone: {
@@ -1034,6 +1118,7 @@ export class PhoneCapabilities {
       },
       notify: readPrefs(row.notify),
       business: { name: b?.name ?? "", timezone: b?.timezone ?? "UTC" },
+      offer_valid_hours: settings?.negotiation.offerValidHours ?? 48,
       push_available: this.pushAvailability().available,
     };
   }

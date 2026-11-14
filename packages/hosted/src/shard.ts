@@ -907,7 +907,8 @@ export class Shard {
    * code proved the address: a link pairing with the phone's challenge and device key, and no email
    * from here. Only at the inbox's canonical origin, where the phone redeems it with its verifier and
    * the same key, as an emailed link is redeemed; never for an inbox that is closing, closed or
-   * suspended. The owner's user is made when only the policy names them, as a first handoff does.
+   * suspended, nor the day after a new phone was stopped (`phone_paused`). The owner's user is made
+   * when only the policy names them, as a first handoff does.
    */
   private async phoneLink(id: string, body: unknown): Promise<AdminAnswer> {
     const b = (body ?? {}) as { email?: unknown; origin?: unknown; challenge?: unknown; device_key?: unknown };
@@ -941,6 +942,7 @@ export class Shard {
       } catch (error) {
         if (!(error instanceof WriteError)) throw error;
         if (error.details?.reason === "not_owner") return problem(409, "not_owner", error.message);
+        if (error.details?.reason === "phone_paused") return problem(409, "phone_paused", error.message);
         return problem(422, "invalid_input", error.message, { fields: error.fields ?? [] });
       }
     });

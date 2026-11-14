@@ -4,8 +4,10 @@ import { type AnswerDay, answerDays } from "../src/answers/index";
 import { Capabilities } from "../src/capabilities/service";
 import { createDb, type Db } from "../src/db";
 import { ulid } from "../src/ids";
+import { runRulesForEvent } from "../src/rules/engine";
+import { OFFER_A_CODE } from "../src/rules/presets/common";
 import { MIGRATIONS } from "../src/schema/migrations.generated";
-import { business, services } from "../src/schema/tables";
+import { business, rules, services } from "../src/schema/tables";
 import type { Caller } from "../src/write/index";
 import { confirming, makeClient, openWeekdays, resetTables } from "./harness";
 
@@ -176,6 +178,50 @@ describe("answer times", () => {
     await caps.reply(owner(T + 5 * MIN), { item_id: byOwner, body: "Yes.", internal: false });
     const [day] = await oneDay(db, "2026-11");
     expect(day).toMatchObject({ requests: 3, answered: 3, by_person: 1, by_rule: 1, by_other: 1 });
+  });
+
+  it("counts no rule's reply that leaves the request for a person: the person's answer is the first", async () => {
+    const { db, caps } = await setup();
+    // The preset every kind of business has: a returning customer asks to change a booking, and the rule
+    // replies with the offer of a code, leaving the request for a person (its keyword test only: this
+    // inbox has no customer from before).
+    const def = OFFER_A_CODE.definition as { if: { all: { fn?: string }[] } };
+    const kw = def.if.all.find((c) => c.fn === "text_has_keywords");
+    await db.orm.insert(rules).values({
+      id: ulid(),
+      name: OFFER_A_CODE.name,
+      priority: 60,
+      enabled: 1,
+      definition: { ...OFFER_A_CODE.definition, if: kw } as typeof OFFER_A_CODE.definition,
+      createdAt: T,
+      updatedAt: T,
+    });
+    const id = await message(caps, "c1", T, "Can I change my booking to Friday?");
+    const { rows: first } = await db.client.query({
+      sql: "SELECT id FROM item_events WHERE item_id = ? AND seq = 1",
+      params: [id],
+      method: "all",
+    });
+    await runRulesForEvent(db, { itemId: id, eventId: String(first[0]?.[0]), trigger: "item.created", now: T + 2000 });
+    const { rows: thread } = await db.client.query({
+      sql: "SELECT actor_kind FROM thread_entries WHERE item_id = ? AND direction = 'out'",
+      params: [id],
+      method: "all",
+    });
+    expect(thread).toEqual([["rule"]]);
+    expect((await oneDay(db, "2026-11"))[0]).toMatchObject({ requests: 1, answered: 0, by_rule: 0, within_5: 0 });
+    // The owner answers twenty minutes later: that is the first answer.
+    await caps.reply(owner(T + 20 * MIN), { item_id: id, body: "Yes, Friday at ten works.", internal: false });
+    expect((await oneDay(db, "2026-11"))[0]).toMatchObject({
+      requests: 1,
+      answered: 1,
+      by_person: 1,
+      by_rule: 0,
+      within_5: 0,
+      within_15: 0,
+      within_60: 1,
+      median_s: 1200,
+    });
   });
 
   it("leaves out spam, held items, tests, the business's own, and what came before the door opened", async () => {

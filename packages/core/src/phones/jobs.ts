@@ -252,11 +252,12 @@ export function phonePushOneHandler(phones: PhoneCapabilities): JobHandler {
  */
 export function phoneAskHandler(phones: PhoneCapabilities): JobHandler {
   return async (job, { db, now }) => {
-    const p = job.payload as { deviceId?: string; wait?: boolean };
+    const p = job.payload as { deviceId?: string; wait?: boolean; hours?: number };
     const waiting = typeof p.deviceId === "string" ? await phones.waiting(p.deviceId, now) : null;
     if (!waiting) return { note: "no longer waiting" };
     const { name } = await timezoneOf(db);
-    const payload = encodePayload(phoneAskPayload(now, name, p.wait === true));
+    const hours = typeof p.hours === "number" && p.hours > 0 ? p.hours : 24;
+    const payload = encodePayload(phoneAskPayload(now, name, p.wait === true, hours));
     let asked = 0;
     let failed: unknown = null;
     for (const device of await phones.listeners()) {
@@ -265,7 +266,7 @@ export function phoneAskHandler(phones: PhoneCapabilities): JobHandler {
         const r = await phones.deliver(
           device.id,
           payload,
-          { urgency: "high", ttlS: p.wait === true ? 86_400 : 900, key: `${job.id}:${device.id}` },
+          { urgency: "high", ttlS: p.wait === true ? hours * 3_600 : 900, key: `${job.id}:${device.id}` },
           now,
         );
         if (r.sent) asked++;

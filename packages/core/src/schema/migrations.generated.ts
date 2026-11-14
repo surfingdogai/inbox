@@ -597,10 +597,11 @@ export const MIGRATIONS: readonly Migration[] = [
     version: 38,
     name: "0037_phone_confirms_phone",
     statements: [
-      "-- A phone confirms a phone (ADR-028 Amendment 4). Four columns on `phone_devices`, empty on every\n-- phone there is now; nothing else changes.\n--\n-- `via`: how the phone came. 'qr', a code from Settings → Phone, which the owner confirms on the\n-- computer; 'link', a sign-in link emailed to the owner; 'host', a link the inbox's host made after\n-- its own email code to the owner. A phone that came by a link while its owner already has a\n-- confirmed phone waits for that phone's yes, with the same two digits on both screens.\n-- `confirm_by`: until when such a phone may wait for that yes; past it, it is removed.\n-- `wait_until`: \"I don't have my other phone\": the phone is let in at this time unless one of the\n-- owner's phones, or the owner's email, stopped it before. `stop_hash` is the hash of the token in\n-- that email's \"Not you? Stop it\" link.\nALTER TABLE `phone_devices` ADD `via` text;",
+      "-- A phone confirms a phone (ADR-028 Amendment 4). Five columns on `phone_devices`, empty on every\n-- phone there is now; nothing else changes.\n--\n-- `via`: how the phone came. 'qr', a code from Settings → Phone, which the owner confirms on the\n-- computer; 'link', a sign-in link emailed to the owner; 'host', a link the inbox's host made after\n-- its own email code to the owner. A phone that came by the host's link while its owner already has\n-- a phone that can say yes waits for that phone's yes, with the same two digits on both screens.\n-- `confirm_by`: until when such a phone may wait for that yes; past it, it is removed.\n-- `wait_until`: \"I don't have my other phone\": the phone is let in at this time unless one of the\n-- owner's phones, or the owner's email, stopped it before. `stop_hash` is the hash of the token in\n-- that email's \"Not you? Stop it\" link. `stopped_at`: when such a phone was stopped (\"Not mine\", or\n-- \"Stop it\"); for a day after, no new sign-in link is made for its owner.\nALTER TABLE `phone_devices` ADD `via` text;",
       "ALTER TABLE `phone_devices` ADD `confirm_by` integer;",
       "ALTER TABLE `phone_devices` ADD `wait_until` integer;",
       "ALTER TABLE `phone_devices` ADD `stop_hash` text;",
+      "ALTER TABLE `phone_devices` ADD `stopped_at` integer;",
     ],
   },
 ];

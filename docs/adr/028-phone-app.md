@@ -165,16 +165,32 @@ Proposed. The Android app goes on Google Play beside the download page (`apps/mo
 ## Amendment 4 (14 Nov 2026): signing in from the phone, and a phone that confirms a phone
 
 Proposed. An owner whose inbox is hosted connects a phone with an email code, at any mail provider,
-with no computer and no QR code. A code someone was tricked into reading out opens nothing alone.
+with no computer and no QR code.
+
+What it protects, and what it does not. A code read by someone else is no use without the phone that
+asked (its verifier). But a phisher who starts the sign-in holds that verifier, so a code read out to
+them opens a first phone at once; the owner is told after, by email. Once the owner has a phone that can
+say yes, a new phone needs that yes, or a wait while the owner is told. And the same mailbox's code
+still signs in to the owner app on the web, whose QR code a computer confirms with no phone's yes:
+whether that path should wait for the phone too is left open.
 
 - **Sign-in through the host's control plane.** "Sign in with email" asks the host first: Surfing Dog's
   own sign-in for the inboxes it hosts (`apps/mobile/src/lib/account.ts`). The host sends a code only to
   an address that owns an inbox there, and answers every address the same, at once; the code and its
   email are made after the answer. The phone starts with a PKCE challenge, and only the phone that asked
   holds its verifier: confirming the code takes the verifier, so a code read by someone else, or the
-  email's button opened by another app, is no use. The email names the phone that asked, in the phone's
-  own words, and says never to share the code; its button only opens the app (`ai.surfingdog.inbox://code`).
-  An inbox on the owner's own server is reached after, by the sign-in link it sends itself (§3).
+  email's button opened by another app, is no use. The email names the phone that asked, quoted, when its
+  name looks like a phone's (else its kind: "An Android phone"), says never to share the code and that we
+  never ask for it, and keeps the code out of the subject; its button only opens the app: by an intent
+  pinned to the app on Android, and on an iPhone, where any app may claim a scheme, by showing the code
+  to type until the app has a universal link. The app reads the name in Settings → About phone. An
+  inbox on the owner's own server is chosen on the email screen itself, with nothing sent to the host (§3).
+- **The host's limits**, each read and spent in one step under a lock on the address that a request
+  never waits for: three codes an hour to an address; five sends for one sign-in, a minute apart; five
+  tries a code and ten a sign-in, each try compared with its newest three codes; JSON only, never a
+  browser's request from another site; and a day's pause after wrong codes, counted by the network each
+  sign-in began on (ten from one network pause it, thirty from all pause every network and tell the
+  owner), apart from the web's own. Codes go two days on.
 - **A link for the phone, redeemed at the inbox.** A confirmed code gives a grant that opens, once and
   for ten minutes, a link to one of that address's inboxes. The host's runtime makes it at the inbox's
   canonical origin only, with a fresh challenge and the device key the phone made for that inbox, and
@@ -182,9 +198,14 @@ with no computer and no QR code. A code someone was tricked into reading out ope
   redeems it there exactly as an emailed link is redeemed (`POST /v1/phone/link/redeem`). An inbox nobody
   has signed in to yet makes the owner the host names its owner then, as a first handoff does. A closed,
   closing or paused inbox gives no link.
-- **A phone confirms a phone.** When the owner already has a confirmed phone, a new phone that came by a
-  link, the host's or an emailed one, waits for that phone's yes, as a QR code waits for the computer's:
-  the same two digits on both screens, worked out from the link and the new phone's key. The owner's
+- **A phone confirms a phone.** When the owner already has a phone that can say yes (confirmed, and
+  signed in within its refresh token's two months: one unused since, or long reinstalled, makes nobody
+  wait), a new phone that came by the host's link waits for that phone's yes, as a QR code waits for the
+  computer's: the same two digits on both screens, worked out from the link and the new phone's key.
+  An emailed link waits the same way only once `emailedLinksWait` is on: the app released before this
+  (1.0.0) keeps a phone that waits as connected, and is stuck. The app that waits on an emailed link is
+  this release's; the inbox turns emailed links' wait on once the update check and Play have moved owners
+  onto it, and not before. The owner's
   phones are told by a notification that names nobody ("A new phone wants to connect"), and the app asks
   on a sheet, after the fingerprint or face, never from the notification. Confirm is signed by the
   confirming phone's device key (`proofStatement("confirm", …)`), which signs only shortly after an
@@ -192,13 +213,27 @@ with no computer and no QR code. A code someone was tricked into reading out ope
   (`GET /v1/phone/me`), give up, or wait a day, and nothing else; it waits fifteen minutes at most.
   New calls: `GET /v1/phone/pairings`, `POST /v1/phone/pairings/{id}/confirm`, `…/refuse`.
 - **The owner without their other phone.** "I don't have my other phone" (`POST /v1/phone/wait`) lets the
-  new phone in a day later. Meanwhile every phone of the owner is told and can stop it, and the owner's
+  new phone in a day later, or three days later when none of the owner's phones would hear of it at once
+  (notifications off, or not heard from in a month): the owner then has time to open the app on one,
+  where the sheet asks. Meanwhile every phone of the owner is told and can stop it, and the owner's
   email leads with "Not you? Stop it": a page of the inbox (`/auth/phone/stop`) whose button, never the
-  link alone, removes the waiting phone. Back after its day, the new phone is let in only if nothing
-  stopped it, and the owner is emailed as for any phone connected. One not back within a week goes.
-- **Kept.** Migration 0037 adds `via`, `confirm_by`, `wait_until` and `stop_hash` to `phone_devices`. The
-  owner's email for a phone connected says how: the computer, a link, a code, the other phone, or the
-  day's wait. What a phone may do once in is unchanged (`PHONE_OPERATIONS`).
+  link alone, removes the waiting phone. Its times are the business's own, as its notifications are.
+  Back after its wait, the new phone is let in only if nothing stopped it, and the owner is emailed as
+  for any phone connected. One not back within a week goes.
+- **A phone stopped.** "Not mine", or the email's "Stop it", removes the new phone, makes no new link
+  (the host's or an emailed one) for a day, and tells the owner that someone used a code or link sent to
+  them, so they secure their email. The host is answered `phone_paused` meanwhile; a computer can still
+  connect a phone.
+- **The app.** The confirm sheet asks for any inbox on the phone, naming it when there are several: the
+  app asks every inbox when it opens, comes back, or every half minute in front, and a notification
+  about an inbox opens that inbox. It is a dialog that takes the focus, and a tap beside it answers
+  nothing; "Later" asks again when the app next opens.
+- **Kept.** Migration 0037 adds `via`, `confirm_by`, `wait_until`, `stop_hash` and `stopped_at` to
+  `phone_devices`. The owner's email for a phone connected says how: the computer, a link, a code, the
+  other phone, or the wait. What a phone may do once in is unchanged (`PHONE_OPERATIONS`).
+- **Deploy order.** The inbox and the host's runtime first, then the host's control plane (its
+  `phone_paused` and `not_owner` answers need the runtime's), then this app. Emailed links' wait stays off
+  until this app is the oldest in use (above).
 
 ## Amendment 5 (14 Nov 2026): answering fast
 
@@ -211,20 +246,27 @@ stays as it was (`PHONE_OPERATIONS`, unchanged; a test holds it).
   the request names, when it names one, else one of the same name, else one whose whole name is within
   the request's or the other way round ("€35 · Lunch for one", "From €12 a person · Tasting menu"). A
   service priced on request has none. `apps/mobile/src/lib/chips.ts`.
-- **The price sheet.** A chip opens it with the amount filled in (times the people, for a price per
-  person); "Send a price" opens it empty. Its Send makes the offer the item's state takes, as the inbox
-  builds it with every check it makes (`POST /v1/owner/items/{id}/offers`): for a request for a price, a
-  quote the customer, or their assistant, can accept.
+- **The price sheet.** A chip opens it with the amount filled in (times the people, or the number asked
+  for); "Send a price" opens it empty. A "from" price says it is the least the list asks. The sheet says
+  until when the price holds (the inbox's `offerValidHours`, from `GET /v1/phone/me`). Its Send makes the
+  offer the item's state takes, as the inbox builds it with every check it makes
+  (`POST /v1/owner/items/{id}/offers`): for a request for a price, a quote the customer, or their
+  assistant, can accept.
 - **Drafted offers.** A draft the owner's AI, a rule or another system made outside the owner's limits
-  shows on the item with Send, which sends it as it is (`…/offers/draft/send`), and Drop it.
+  shows on the item with every term the customer would read (its time, lines and total, and the people,
+  delivery, fees, stages, tax and until when it holds), "Send as it is" (`…/offers/draft/send`), and Drop
+  it. A draft with its own words to the customer opens them in full first: no person wrote them.
 - **Quick replies.** On a message, the owner's saved replies, in their own words: after a reply typed on
-  a message, the app asks "Save as a quick reply?", and Settings → Answers lists and removes them. They
+  a message, the app asks "Save as a quick reply?", only for words that hold nothing of that customer
+  (their name, address or phone, nor a number from their request) and short enough to show whole (120
+  characters); Settings → Answers lists and removes them. A chip and its Undo show every word. They
   are kept on the phone only, sealed in the offline box per inbox (`apps/mobile/src/lib/replies.ts`), and
   go with the inbox when it is removed from the phone; they move into the inbox later, to follow the
   owner from phone to phone. Two default chips, "Yes, we can." and "Sorry, not that day.", appear only
   in a language we write for customers (English or Portuguese), and only when the business's own
-  languages (`GET /v1/business`) include it. The public prices and languages are kept on the phone too,
-  so the chips are there offline.
+  languages (`GET /v1/business`) include it: in the customer's language when the business speaks it (the
+  item's party carries its `locale`), both when it speaks both and theirs is unknown. The public prices
+  and languages are kept on the phone too, so the chips are there offline.
 - **Undo.** A chip, the price sheet's Send and a draft's Send wait the six seconds the spam presses wait
   (`src/lib/undo.ts`) before anything leaves the phone; Undo drops them. Then they go through the outbox
   with the idempotency key they were given, so an answer pressed offline goes once, when the inbox
@@ -234,7 +276,8 @@ stays as it was (`PHONE_OPERATIONS`, unchanged; a test holds it).
   answered first (a person, a rule, anything else), and of those that came in opening hours and not
   while every phone that would have told the owner was in its quiet hours, how many were first answered
   within 5, 15 and 60 minutes, with the median. The first answer is a reply or a transition that answers
-  (a price, Accept, Propose, Decline, a question back); a note, Spam or closing without a word is none.
+  (a price, Accept, Propose, Decline, a question back); a note, Spam or closing without a word is none,
+  nor a rule's reply that leaves the request for a person (a rule answers only by a transition).
   Test items (the host's own probes among them), what the spam filter held, put aside or is screening,
   Spam, notices, account mail and the business's own entries are never counted. Counts only: a day and
   numbers, never a word, a name or an address. A hosted inbox reports them with its monthly usage

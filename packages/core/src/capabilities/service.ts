@@ -3036,6 +3036,7 @@ export class Capabilities {
         kind: p.kind,
         ...(contact.email ? { email: contact.email } : {}),
         ...(contact.phone ? { phone: contact.phone } : {}),
+        ...(p.locale ? { locale: p.locale } : {}),
         verified: verifiedIds.has(p.id),
       });
     }

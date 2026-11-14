@@ -233,14 +233,14 @@ export function testPayload(now: number, business: string): PushPayload {
  * and no one: the new phone's name is its own say, shown quoted on the app's sheet. Opening it opens
  * the app, where the owner confirms after the fingerprint or face, or says it is not theirs; nothing is
  * done from the notification. `wait`: the owner said they don't have their other phone, so the new
- * one is let in in a day unless it is stopped.
+ * one is let in in `hours` (a day, or three) unless it is stopped.
  */
-export function phoneAskPayload(now: number, business: string, wait: boolean): PushPayload {
+export function phoneAskPayload(now: number, business: string, wait: boolean, hours = 24): PushPayload {
   return {
     v: 1,
     t: "phone",
     kind: "phone",
-    title: wait ? "A new phone connects in 24 hours" : "A new phone wants to connect",
+    title: wait ? `A new phone connects in ${waitWords(hours)}` : "A new phone wants to connect",
     body: oneLine(
       wait
         ? `To ${business || "your inbox"}, unless you stop it. Open the app to see it.`
@@ -249,6 +249,11 @@ export function phoneAskPayload(now: number, business: string, wait: boolean): P
     ),
     at: now,
   };
+}
+
+/** A wait in words: "24 hours", "3 days". */
+export function waitWords(hours: number): string {
+  return hours > 24 && hours % 24 === 0 ? `${hours / 24} days` : `${hours} hours`;
 }
 
 /** Bytes to encrypt: the JSON, trimmed of the optional words first when it would not fit. */

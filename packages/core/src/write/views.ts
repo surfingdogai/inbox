@@ -72,6 +72,8 @@ export interface PartyView {
   readonly kind: string;
   readonly email?: string | undefined;
   readonly phone?: string | undefined;
+  /** The language they asked in, when it is known: what the inbox answers them in (`customerLang`). */
+  readonly locale?: string | undefined;
   readonly verified: boolean;
 }
 

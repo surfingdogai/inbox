@@ -8,6 +8,7 @@ import {
   readSettings,
   signInLinkUri,
   WriteError,
+  waitWords,
 } from "@surfingdog/core";
 import { type Context, Hono } from "hono";
 import { authPage } from "./auth-page";
@@ -70,7 +71,7 @@ const HOW: Readonly<Record<Exclude<ConnectedHow["way"], "phone">, string>> = {
   computer: "How: you confirmed it on your computer, in Settings → Phone.",
   link: "How: a sign-in link sent to this address.",
   host: "How: a sign-in code sent to this address.",
-  waited: "How: it waited 24 hours, and nobody stopped it.",
+  waited: "How: it waited, as you were told by email, and nobody stopped it.",
 };
 
 /** A phone's name as an email quotes it: its own say, never taken as fact. */
@@ -87,6 +88,43 @@ async function ownerAddress(deps: PhoneDoorDeps, userId: string): Promise<string
 }
 
 const utc = (at: number) => new Date(at).toUTCString().replace(" GMT", " UTC");
+
+/** The business's time zone, which its notifications use too; UTC when it has none. */
+async function businessZone(deps: PhoneDoorDeps): Promise<string> {
+  try {
+    const { rows } = await deps.db.client.query({ sql: "SELECT timezone FROM business LIMIT 1", method: "all" });
+    const tz = rows[0]?.[0];
+    return typeof tz === "string" && tz ? tz : "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
+/**
+ * A time as the owner reads it, in the business's time zone: "Sunday 15 November at 14:32 (Lisbon
+ * time)". UTC, with its name, when the zone cannot be read.
+ */
+export function ownerTime(at: number, tz: string): string {
+  try {
+    const d = new Date(at);
+    const day = new Intl.DateTimeFormat("en-GB", {
+      timeZone: tz,
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    }).format(d);
+    const time = new Intl.DateTimeFormat("en-GB", {
+      timeZone: tz,
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).format(d);
+    const place = /^(Etc\/)?(UTC|GMT)$/.test(tz) ? "UTC" : `${(tz.split("/").pop() ?? tz).replace(/_/g, " ")} time`;
+    return `${day.replace(",", "")} at ${time} (${place})`;
+  } catch {
+    return utc(at);
+  }
+}
 
 /**
  * Tells the owner by email that a phone was connected, so one they did not connect is noticed and
@@ -111,7 +149,7 @@ async function tellOwnerOfPhone(
       `A phone was connected to ${business || "your inbox"}. It can now open your inbox and answer it.`,
       "",
       `Phone: ${quoted(phone.name)} (as the phone names itself), an ${device}`,
-      `When: ${utc(how.at)}`,
+      `When: ${ownerTime(how.at, await businessZone(deps))}`,
       ...(how.from ? [`From: roughly ${how.from}`] : []),
       how.way === "phone" ? `How: you confirmed it on your other phone, ${quoted(how.by)}.` : HOW[how.way],
     ];
@@ -127,39 +165,75 @@ async function tellOwnerOfPhone(
 }
 
 /**
- * Tells the owner by email that a new phone will be let in a day from now, because whoever holds it
- * said they don't have the owner's other phone (ADR-028 Amendment 4). It leads with the way to stop
- * it: a page of this inbox whose button removes that phone, which only this email's link opens.
+ * Tells the owner by email that a new phone will be let in a day from now (three, when none of their
+ * phones would hear of it), because whoever holds it said they don't have the owner's other phone
+ * (ADR-028 Amendment 4). It leads with the way to stop it: a page of this inbox whose button removes
+ * that phone, which only this email's link opens.
  */
 async function tellOwnerOfWait(
   deps: PhoneDoorDeps,
   userId: string,
   phone: { name: string; platform: string },
   origin: string,
-  wait: { stopToken: string; until: number; at: number; from: string | null },
+  wait: { stopToken: string; until: number; hours: number; at: number; from: string | null },
 ): Promise<void> {
   try {
     const to = await ownerAddress(deps, userId);
     if (!to) return;
     const business = (await deps.businessName()) || "your inbox";
     const device = phone.platform === "ios" ? "iPhone" : "Android phone";
+    const tz = await businessZone(deps);
     await sendOwnerMail(deps, {
       to,
-      subject: `A new phone connects to ${business} in 24 hours`,
+      subject: `A new phone connects to ${business} in ${waitWords(wait.hours)}`,
       text: `${[
         "Not you? Stop it now:",
         `${origin}/auth/phone/stop?token=${wait.stopToken}`,
         "",
-        `A phone asked to connect to ${business}, and said you don't have your other phone with you. It will be let in on ${utc(wait.until)}, unless you stop it. Your other phones were asked too.`,
+        `A phone asked to connect to ${business}, and said you don't have your other phone with you. It will be let in on ${ownerTime(wait.until, tz)}, unless you stop it. Your other phones were asked too.`,
         "",
         `Phone: ${quoted(phone.name)} (as the phone names itself), an ${device}`,
-        `Asked: ${utc(wait.at)}`,
+        `Asked: ${ownerTime(wait.at, tz)}`,
         ...(wait.from ? [`From: roughly ${wait.from}`] : []),
       ].join("\n")}\n`,
       what: "new phone waiting email",
     });
   } catch {
     // Every phone the owner has is asked as well, and lists it until it is let in or stopped.
+  }
+}
+
+/**
+ * Tells the owner that a new phone was stopped ("Not mine" on one of their phones, or the email's
+ * "Stop it"): it had used a sign-in code or link sent to their address, so someone may be reading
+ * their email. New phones wait a day (`linksPaused`); a computer can still connect one.
+ */
+async function tellOwnerOfStop(
+  deps: PhoneDoorDeps,
+  userId: string,
+  phone: { name: string; platform: string },
+  origin: string,
+  at: number,
+): Promise<void> {
+  try {
+    const to = await ownerAddress(deps, userId);
+    if (!to) return;
+    const business = (await deps.businessName()) || "your inbox";
+    await sendOwnerMail(deps, {
+      to,
+      subject: `A new phone was stopped from opening ${business}`,
+      text: `${[
+        `You stopped a phone that calls itself ${quoted(phone.name)} from connecting to ${business}, on ${ownerTime(at, await businessZone(deps))}.`,
+        "",
+        "It had used a sign-in code or link sent to this address. If you didn't ask for one, someone else may be able to read your email: change your email's password now, and sign out of it everywhere else.",
+        "",
+        "New phones can't connect for a day. To connect one before, use Settings → Phone on a computer:",
+        `${origin}/settings/phone`,
+      ].join("\n")}\n`,
+      what: "phone stopped email",
+    });
+  } catch {
+    // The phone was stopped whether or not this arrives.
   }
 }
 
@@ -210,7 +284,7 @@ export function phoneRoutes(deps: PhoneDoorDeps): Hono<CallerEnv> {
   app.post("/link/redeem", async (c) => {
     const now = clock();
     const redeemed = await phones.redeemLink(await body(c), origin(c), now);
-    const { state, match, via, ...tokens } = redeemed;
+    const { state, match, via, wait_hours, ...tokens } = redeemed;
     const me = await phones.me(tokens.device_id);
     if (state === "connected") {
       const userId = await phones.ownerOf(tokens.device_id);
@@ -223,6 +297,7 @@ export function phoneRoutes(deps: PhoneDoorDeps): Hono<CallerEnv> {
         ...tokens,
         state,
         ...(match !== undefined ? { match } : {}),
+        ...(wait_hours !== undefined ? { wait_hours } : {}),
         inbox: { origin: origin(c), name: me.business.name },
       },
       201,
@@ -281,9 +356,15 @@ export function phoneRoutes(deps: PhoneDoorDeps): Hono<CallerEnv> {
     const from = roughly(c);
     const at = await linkOrigin(deps, c.req.raw);
     later(c, () =>
-      tellOwnerOfWait(deps, userId, me.phone, at, { stopToken: wait.stopToken, until: wait.waitUntil, at: now, from }),
+      tellOwnerOfWait(deps, userId, me.phone, at, {
+        stopToken: wait.stopToken,
+        until: wait.waitUntil,
+        hours: wait.hours,
+        at: now,
+        from,
+      }),
     );
-    return c.json({ wait_until: new Date(wait.waitUntil).toISOString() }, 200, noStore);
+    return c.json({ wait_until: new Date(wait.waitUntil).toISOString(), wait_hours: wait.hours }, 200, noStore);
   });
 
   // The new phones that wait for this one's yes (Amendment 4): what the app's confirm sheet shows.
@@ -315,11 +396,20 @@ export function phoneRoutes(deps: PhoneDoorDeps): Hono<CallerEnv> {
     return c.json({ state: "paired", phone: done.phone }, 200, noStore);
   });
 
-  // "Not mine": the new phone is removed before it could open anything.
+  // "Not mine": the new phone is removed before it could open anything, new phones wait a day, and the
+  // owner is told that someone used a code or a link sent to them.
   app.post("/pairings/:id/refuse", async (c) => {
     const id = device(c);
     if (typeof id !== "string") return id;
-    return c.json(await phones.refuseByPhone(id, String(c.req.param("id")), clock()), 200, noStore);
+    const now = clock();
+    const r = await phones.refuseByPhone(id, String(c.req.param("id")), now);
+    if (r.removed && r.phone) {
+      const phone = r.phone;
+      const userId = await phones.ownerOf(id);
+      const at = await linkOrigin(deps, c.req.raw);
+      later(c, () => tellOwnerOfStop(deps, userId, phone, at, now));
+    }
+    return c.json({ removed: r.removed }, 200, noStore);
   });
 
   app.put("/notify", async (c) => {
@@ -432,7 +522,7 @@ export function phoneStopRoutes(deps: PhoneDoorDeps): Hono<CallerEnv> {
       title: "Stop the new phone",
       heading: `Stop ${quoted(row.name)}?`,
       lines: [
-        `This phone asked to connect to ${business}. It will be let in on ${utc(row.waitUntil)}, unless you stop it.`,
+        `This phone asked to connect to ${business}. It will be let in on ${ownerTime(row.waitUntil, await businessZone(deps))}, unless you stop it.`,
         "If you didn't ask to connect it, stop it now.",
       ],
       form: { action: "/auth/phone/stop", fields: { token }, button: "Stop it" },
@@ -449,12 +539,22 @@ export function phoneStopRoutes(deps: PhoneDoorDeps): Hono<CallerEnv> {
             lines: ["This request came from another site, so nothing was done."],
           })
         : forbidden(c, "Stop it from this inbox's own page.");
-    const r = await phones.stopWait(fields.token ?? "", clock());
+    const now = clock();
+    const r = await phones.stopWait(fields.token ?? "", now);
     if (!r.removed) return gone(c);
+    if (r.phone && r.userId) {
+      const phone = r.phone;
+      const userId = r.userId;
+      const at = await linkOrigin(deps, c.req.raw);
+      later(c, () => tellOwnerOfStop(deps, userId, phone, at, now));
+    }
     return authPage(c, 200, {
       title: "Stopped",
       heading: "Stopped",
-      lines: [`${quoted(r.phone?.name ?? "The phone")} can't open your inbox.`, "Nothing else changed."],
+      lines: [
+        `${quoted(r.phone?.name ?? "The phone")} can't open your inbox.`,
+        "It used a sign-in code or link sent to your email. If you didn't ask for one, change your email's password now.",
+      ],
     });
   });
 

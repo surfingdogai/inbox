@@ -1532,6 +1532,8 @@ export const phoneDevices = sqliteTable(
     waitUntil: integer("wait_until"),
     /** The hash of the token in the email's "Not you? Stop it" link, while it waits. */
     stopHash: text("stop_hash"),
+    /** When a new phone was stopped ("Not mine", "Stop it"): new links wait a day after it. */
+    stoppedAt: integer("stopped_at"),
   },
   (t) => [
     uniqueIndex("phone_devices_key").on(t.keyThumbprint).where(sql`${t.revokedAt} IS NULL`),
