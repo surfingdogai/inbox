@@ -34,7 +34,7 @@ describe("upgrading to open again", () => {
   it("lists each item opened again with what is open, a notice brought back too, and leaves what is closed", async () => {
     const client = await makeClient();
     const before = MIGRATIONS.filter((m) => m.name < "0036_open_again");
-    expect(before).toHaveLength(MIGRATIONS.length - 1);
+    expect(before).toHaveLength(MIGRATIONS.findIndex((m) => m.name === "0036_open_again"));
     expect(await runMigrations(client, before)).toBe(before.length);
     const db = createDb(client);
     const inbox = createInbox({

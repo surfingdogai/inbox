@@ -44,6 +44,8 @@ export interface ApiKeyInfo {
   readonly via: "api_key" | "session" | "oauth" | "device";
   /** A phone paired by QR code that the owner has not confirmed yet: it may ask who it is, nothing else. */
   readonly pending?: boolean;
+  /** While it is pending: who says yes, the computer (a QR code) or the owner's other phone (a link). */
+  readonly waitsOn?: "computer" | "phone";
 }
 
 export async function hashKey(key: string): Promise<string> {
@@ -138,7 +140,7 @@ export async function callerFromRequest(
         userId: phone.userId,
         partyId: null,
         via: "device",
-        ...(phone.confirmed ? {} : { pending: true }),
+        ...(phone.confirmed ? {} : { pending: true, waitsOn: phone.waitsOn ?? "computer" }),
       };
   }
   if (!key && bearer && !bearer.startsWith(PHONE_ACCESS_PREFIX)) {

@@ -161,3 +161,41 @@ Proposed. The Android app goes on Google Play beside the download page (`apps/mo
   lock. The demo instance answers `/demo/phone/*` for anyone with the examples it is set up with every
   night and nothing anyone sent since; the app sends no write there and keeps nothing of it. It is how
   Play's reviewer, and anyone curious, sees the app before having an inbox.
+
+## Amendment 4 (14 Nov 2026): signing in from the phone, and a phone that confirms a phone
+
+Proposed. An owner whose inbox is hosted connects a phone with an email code, at any mail provider,
+with no computer and no QR code. A code someone was tricked into reading out opens nothing alone.
+
+- **Sign-in through the host's control plane.** "Sign in with email" asks the host first: Surfing Dog's
+  own sign-in for the inboxes it hosts (`apps/mobile/src/lib/account.ts`). The host sends a code only to
+  an address that owns an inbox there, and answers every address the same, at once; the code and its
+  email are made after the answer. The phone starts with a PKCE challenge, and only the phone that asked
+  holds its verifier: confirming the code takes the verifier, so a code read by someone else, or the
+  email's button opened by another app, is no use. The email names the phone that asked, in the phone's
+  own words, and says never to share the code; its button only opens the app (`ai.surfingdog.inbox://code`).
+  An inbox on the owner's own server is reached after, by the sign-in link it sends itself (§3).
+- **A link for the phone, redeemed at the inbox.** A confirmed code gives a grant that opens, once and
+  for ten minutes, a link to one of that address's inboxes. The host's runtime makes it at the inbox's
+  canonical origin only, with a fresh challenge and the device key the phone made for that inbox, and
+  sends no email (`phones.hostLink`, the admin call `POST /admin/v1/tenants/{id}/phone-link`). The phone
+  redeems it there exactly as an emailed link is redeemed (`POST /v1/phone/link/redeem`). An inbox nobody
+  has signed in to yet makes the owner the host names its owner then, as a first handoff does. A closed,
+  closing or paused inbox gives no link.
+- **A phone confirms a phone.** When the owner already has a confirmed phone, a new phone that came by a
+  link, the host's or an emailed one, waits for that phone's yes, as a QR code waits for the computer's:
+  the same two digits on both screens, worked out from the link and the new phone's key. The owner's
+  phones are told by a notification that names nobody ("A new phone wants to connect"), and the app asks
+  on a sheet, after the fingerprint or face, never from the notification. Confirm is signed by the
+  confirming phone's device key (`proofStatement("confirm", …)`), which signs only shortly after an
+  unlock; "Not mine" removes the new phone. Until the yes, the new phone may ask whether it came
+  (`GET /v1/phone/me`), give up, or wait a day, and nothing else; it waits fifteen minutes at most.
+  New calls: `GET /v1/phone/pairings`, `POST /v1/phone/pairings/{id}/confirm`, `…/refuse`.
+- **The owner without their other phone.** "I don't have my other phone" (`POST /v1/phone/wait`) lets the
+  new phone in a day later. Meanwhile every phone of the owner is told and can stop it, and the owner's
+  email leads with "Not you? Stop it": a page of the inbox (`/auth/phone/stop`) whose button, never the
+  link alone, removes the waiting phone. Back after its day, the new phone is let in only if nothing
+  stopped it, and the owner is emailed as for any phone connected. One not back within a week goes.
+- **Kept.** Migration 0037 adds `via`, `confirm_by`, `wait_until` and `stop_hash` to `phone_devices`. The
+  owner's email for a phone connected says how: the computer, a link, a code, the other phone, or the
+  day's wait. What a phone may do once in is unchanged (`PHONE_OPERATIONS`).

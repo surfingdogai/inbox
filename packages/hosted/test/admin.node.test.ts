@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { ulid } from "@surfingdog/core";
+import { b64uEncode, pkceS256, proofStatement, sha256b64u, ulid } from "@surfingdog/core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { ControlPlane } from "../src/control-plane";
 import { CachedResolver } from "../src/resolver";
@@ -294,6 +294,82 @@ describe("the admin API (C8.1)", () => {
     const page = await rt.http(t.slugHost, "GET", `/auth/handoff?token=${token}`);
     expect(page.status).toBe(200);
     expect(page.headers["set-cookie"]).toBeUndefined();
+  });
+
+  it("links the owner's phone at the canonical origin, making the owner's user, never for a paused inbox", async () => {
+    const t = await rt.createTenant();
+    // The phone that asked: its device key, and the verifier only it holds.
+    const device = (await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
+      "sign",
+      "verify",
+    ])) as CryptoKeyPair;
+    const pub = await crypto.subtle.exportKey("jwk", device.publicKey);
+    const key = { kty: "EC", crv: "P-256", x: pub.x, y: pub.y };
+    const verifier = b64uEncode(crypto.getRandomValues(new Uint8Array(32)));
+    const challenge = await pkceS256(verifier);
+    const ask = (body: Record<string, unknown>) => rt.admin("POST", `/admin/v1/tenants/${t.tenantId}/phone-link`, body);
+    const slug = `https://${t.slugHost}`;
+    // Only at the canonical origin, and only for the owner.
+    const wrong = await ask({ email: OWNER, origin: `https://${t.ownHost}`, challenge, device_key: key });
+    expect(wrong.status).toBe(409);
+    expect((wrong.body as { code: string }).code).toBe("origin_not_canonical");
+    const stranger = await ask({ email: "someone@else.example", origin: slug, challenge, device_key: key });
+    expect(stranger.status).toBe(409);
+    expect((stranger.body as { code: string }).code).toBe("not_owner");
+    expect((await ask({ email: OWNER, origin: slug, challenge: "short", device_key: key })).status).toBe(422);
+    // Nobody has signed in to this inbox yet: the owner the policy names is made its owner now.
+    const made = await ask({ email: OWNER, origin: slug, challenge, device_key: key });
+    expect(made.status).toBe(200);
+    const link = made.body as { secret: string; expires_at: string };
+    expect(link.secret).toMatch(/^sdi_pp_[A-Za-z0-9_-]{43}$/);
+    expect(Date.parse(link.expires_at) - Date.now()).toBeLessThanOrEqual(10 * 60_000);
+    // The phone redeems it there, as an emailed link: with its verifier and the same key, and nothing else.
+    const redeem = async (k: CryptoKey, jwk: unknown, v: string) => {
+      const at = Date.now();
+      const proof = b64uEncode(
+        new Uint8Array(
+          await crypto.subtle.sign(
+            { name: "ECDSA", hash: "SHA-256" },
+            k,
+            new TextEncoder().encode(proofStatement("link", slug, await sha256b64u(link.secret), at)),
+          ),
+        ),
+      );
+      return rt.http(t.slugHost, "POST", "/v1/phone/link/redeem", {
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ secret: link.secret, verifier: v, device_key: jwk, at, proof, name: "Galaxy A15" }),
+      });
+    };
+    expect((await redeem(device.privateKey, key, b64uEncode(crypto.getRandomValues(new Uint8Array(32))))).status).toBe(
+      403,
+    );
+    const other = (await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
+      "sign",
+      "verify",
+    ])) as CryptoKeyPair;
+    const otherPub = await crypto.subtle.exportKey("jwk", other.publicKey);
+    expect(
+      (await redeem(other.privateKey, { kty: "EC", crv: "P-256", x: otherPub.x, y: otherPub.y }, verifier)).status,
+    ).toBe(403);
+    const redeemed = await redeem(device.privateKey, key, verifier);
+    expect(redeemed.status).toBe(201);
+    const tokens = redeemed.json as { access_token: string; state: string };
+    // No computer, no other phone: connected.
+    expect(tokens.state).toBe("connected");
+    const me = await rt.http(t.slugHost, "GET", "/v1/phone/me", {
+      headers: { authorization: `Bearer ${tokens.access_token}` },
+    });
+    expect((me.json as { phone: { confirmed: boolean } }).phone.confirmed).toBe(true);
+    const file = new DatabaseSync(rt.shardOf(t).dbPath(t.tenantId));
+    expect(file.prepare("SELECT email, role FROM users").all()).toEqual([{ email: OWNER, role: "owner" }]);
+    file.close();
+    // A paused inbox, or one closing, takes no new phone.
+    await rt.setState(t, "suspended", { prevState: "dns_pending" });
+    const paused = await ask({ email: OWNER, origin: slug, challenge, device_key: key });
+    expect(paused.status).toBe(409);
+    expect((paused.body as { code: string }).code).toBe("not_open");
+    await rt.setState(t, "closing", { prevState: "dns_pending" });
+    expect((await ask({ email: OWNER, origin: slug, challenge, device_key: key })).status).toBe(409);
   });
 
   it("counts a month's usage: requests, agent requests, confirmed items, mail and the file's size; test items, spam and the owner's own never", async () => {

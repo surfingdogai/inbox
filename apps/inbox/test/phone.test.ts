@@ -490,3 +490,205 @@ describe("notifications", () => {
     expect(plain).toMatchObject({ kind: "booking", title: "New booking request" });
   });
 });
+
+describe("signing in through the host, and a phone that confirms a phone (Amendment 4)", () => {
+  /** An inbox whose clock the test moves: a day's wait passes in a line. */
+  async function hosted() {
+    let clock = Date.now();
+    const db = await freshDb();
+    const mail = logMailOut();
+    const relay = relayFetch();
+    const inbox = createInbox({
+      db,
+      mailOut: mail,
+      ownerEmails: [OWNER],
+      secretKey: KEY,
+      fetchImpl: relay.fetchImpl,
+      pushRelay: RELAY,
+      baseUrl: ORIGIN,
+      now: () => clock,
+    });
+    return {
+      db,
+      mail,
+      relay,
+      inbox,
+      app: inbox.app,
+      later: (ms: number) => {
+        clock += ms;
+      },
+      at: () => clock,
+    };
+  }
+
+  /** What the inbox's host does after its own email code: a link for the owner, with the phone's challenge and key. */
+  async function signInOnPhone(h: Awaited<ReturnType<typeof hosted>>, phone: Phone, name: string) {
+    const verifier = b64uEncode(crypto.getRandomValues(new Uint8Array(32)));
+    const link = await h.inbox.caps.phones.hostLink(
+      { email: OWNER, owner: OWNER, challenge: await pkceS256(verifier), device_key: phone.key },
+      h.at(),
+    );
+    const at = h.at();
+    const res = await phoneReq(h.app, null, "POST", "/v1/phone/link/redeem", {
+      secret: link.secret,
+      verifier,
+      device_key: phone.key,
+      at,
+      proof: await phone.sign(proofStatement("link", ORIGIN, await sha256b64u(link.secret), at)),
+      name,
+      platform: "android",
+    });
+    expect(res.status).toBe(201);
+    return (await res.json()) as {
+      access_token: string;
+      refresh_token: string;
+      device_id: string;
+      state: string;
+      match?: string;
+    };
+  }
+
+  it("connects the first phone with no computer, and tells the owner how", async () => {
+    const h = await hosted();
+    const first = await signInOnPhone(h, await makePhone(), "Pixel 8");
+    expect(first.state).toBe("connected");
+    expect(first.match).toBeUndefined();
+    const me = (await (await phoneReq(h.app, first.access_token, "GET", "/v1/phone/me")).json()) as {
+      phone: { confirmed: boolean };
+    };
+    expect(me.phone.confirmed).toBe(true);
+    expect((await phoneReq(h.app, first.access_token, "GET", "/v1/owner/items")).status).toBe(200);
+    await settle(() => h.mail.sent.some((m) => m.subject.startsWith("A phone was connected")));
+    const email = h.mail.sent.find((m) => m.subject.startsWith("A phone was connected"));
+    expect(email?.text?.startsWith("Not you? Remove it now")).toBe(true);
+    expect(email?.text).toContain("How: a sign-in code sent to this address.");
+  });
+
+  it("holds a second phone to its confirm until the first says yes with the same two digits", async () => {
+    const h = await hosted();
+    const firstPhone = await makePhone();
+    const first = await signInOnPhone(h, firstPhone, "Pixel 8");
+    await phoneReq(h.app, first.access_token, "PUT", "/v1/phone/push", { token: "fcm-1", ...firstPhone.pushKeys });
+    const second = await signInOnPhone(h, await makePhone(), "Galaxy A15");
+    expect(second.state).toBe("pending");
+    expect(second.match).toMatch(/^\d{2}$/);
+    // Waiting: it may ask whether it came, give up, or wait a day, and nothing else.
+    const items = await phoneReq(h.app, second.access_token, "GET", "/v1/owner/items");
+    expect(items.status).toBe(403);
+    expect(((await items.json()) as { detail: string }).detail).toBe("Confirm this phone on your other phone first.");
+    for (const [method, path] of [
+      ["GET", "/v1/phone/pairings"],
+      ["GET", "/v1/phone/phones"],
+      ["PUT", "/v1/phone/push"],
+    ] as const)
+      expect((await phoneReq(h.app, second.access_token, method, path, method === "PUT" ? {} : undefined)).status).toBe(
+        403,
+      );
+    const waiting = (await (await phoneReq(h.app, second.access_token, "GET", "/v1/phone/me")).json()) as {
+      phone: { confirmed: boolean; waits_on: string };
+    };
+    expect(waiting.phone).toMatchObject({ confirmed: false, waits_on: "phone" });
+    // The first phone is told, and sees the same two digits.
+    for (const dt of [0, 1000]) await h.inbox.runner.runDue(h.db, { now: h.at() + dt });
+    expect(h.relay.calls.some((c) => c.path.endsWith("/messages"))).toBe(true);
+    const asks = (await (await phoneReq(h.app, first.access_token, "GET", "/v1/phone/pairings")).json()) as {
+      pairings: { id: string; match: string; phone: { name: string } }[];
+    };
+    expect(asks.pairings).toMatchObject([{ id: second.device_id, match: second.match, phone: { name: "Galaxy A15" } }]);
+    // A yes without the first phone's key signing it changes nothing.
+    const unsigned = await phoneReq(
+      h.app,
+      first.access_token,
+      "POST",
+      `/v1/phone/pairings/${second.device_id}/confirm`,
+      {
+        at: h.at(),
+        proof: "x",
+      },
+    );
+    expect(unsigned.status).toBe(403);
+    const at = h.at();
+    const yes = await phoneReq(h.app, first.access_token, "POST", `/v1/phone/pairings/${second.device_id}/confirm`, {
+      at,
+      proof: await firstPhone.sign(proofStatement("confirm", ORIGIN, await sha256b64u(second.device_id), at)),
+    });
+    expect(yes.status).toBe(200);
+    expect((await phoneReq(h.app, second.access_token, "GET", "/v1/owner/items")).status).toBe(200);
+    await settle(() => h.mail.sent.some((m) => (m.text ?? "").includes("on your other phone")));
+    expect(h.mail.sent.at(-1)?.text).toContain('How: you confirmed it on your other phone, "Pixel 8".');
+  });
+
+  it("lets a phone wait a day when the owner doesn't have the other one, stopped by a link in the email", async () => {
+    const h = await hosted();
+    await signInOnPhone(h, await makePhone(), "Pixel 8");
+    const third = await signInOnPhone(h, await makePhone(), "Moto G");
+    // Asked through another name for this server: the link in the email is still this inbox's own.
+    const waited = await h.app.request("https://evil.example/v1/phone/wait", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${third.access_token}`,
+        "cf-connecting-ip": clientIp(),
+        "content-type": "application/json",
+      },
+      body: "{}",
+    });
+    expect(waited.status).toBe(200);
+    await settle(() => h.mail.sent.some((m) => m.subject.includes("in 24 hours")));
+    const email = h.mail.sent.find((m) => m.subject.includes("in 24 hours"));
+    expect(email?.subject).toBe("A new phone connects to your inbox in 24 hours");
+    // It leads with the way to stop it: this inbox's own page, whatever the asking phone sent as its host.
+    expect(email?.text?.startsWith("Not you? Stop it now:\nhttps://inbox.test/auth/phone/stop?token=")).toBe(true);
+    expect(email?.text).toContain('Phone: "Moto G" (as the phone names itself)');
+    const stop = /https:\/\/inbox\.test(\/auth\/phone\/stop\?token=[A-Za-z0-9_-]+)/.exec(email?.text ?? "")?.[1] ?? "";
+    const token = new URL(`${ORIGIN}${stop}`).searchParams.get("token") ?? "";
+    // Opening the link (as a mail scanner does) stops nothing.
+    const page = await h.app.request(`${ORIGIN}${stop}`);
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain("Stop &quot;Moto G&quot;?");
+    expect((await phoneReq(h.app, third.access_token, "GET", "/v1/phone/me")).status).toBe(200);
+    // A post from anywhere but its page is refused.
+    const crossSite = await h.app.request(`${ORIGIN}/auth/phone/stop`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded", origin: "https://evil.example" },
+      body: `token=${token}`,
+    });
+    expect(crossSite.status).toBe(403);
+    const stopped = await h.app.request(`${ORIGIN}/auth/phone/stop`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded", origin: ORIGIN },
+      body: `token=${token}`,
+    });
+    expect(stopped.status).toBe(200);
+    expect((await phoneReq(h.app, third.access_token, "GET", "/v1/phone/me")).status).toBe(401);
+    expect((await h.app.request(`${ORIGIN}${stop}`)).status).toBe(410);
+  });
+
+  it("lets a waiting phone in once its day is over and nothing stopped it, and says so", async () => {
+    const h = await hosted();
+    await signInOnPhone(h, await makePhone(), "Pixel 8");
+    const fourthPhone = await makePhone();
+    const fourth = await signInOnPhone(h, fourthPhone, "Moto G");
+    expect((await phoneReq(h.app, fourth.access_token, "POST", "/v1/phone/wait", {})).status).toBe(200);
+    h.later(3_600_000);
+    const early = (await (await phoneReq(h.app, fourth.access_token, "GET", "/v1/phone/me")).json()) as {
+      phone: { confirmed: boolean; wait_until: string };
+    };
+    expect(early.phone.confirmed).toBe(false);
+    // A day on, its access token long gone: refreshed with its key, then let in.
+    h.later(24 * 3_600_000);
+    const at = h.at();
+    const refreshed = await phoneReq(h.app, null, "POST", "/v1/phone/token", {
+      refresh_token: fourth.refresh_token,
+      at,
+      proof: await fourthPhone.sign(proofStatement("refresh", ORIGIN, await sha256b64u(fourth.refresh_token), at)),
+    });
+    expect(refreshed.status).toBe(200);
+    const tokens = (await refreshed.json()) as { access_token: string };
+    const me = (await (await phoneReq(h.app, tokens.access_token, "GET", "/v1/phone/me")).json()) as {
+      phone: { confirmed: boolean };
+    };
+    expect(me.phone.confirmed).toBe(true);
+    await settle(() => h.mail.sent.some((m) => (m.text ?? "").includes("it waited 24 hours")));
+    expect(h.mail.sent.at(-1)?.text).toContain("How: it waited 24 hours, and nobody stopped it.");
+  });
+});

@@ -205,9 +205,15 @@ export function cleanDeviceKey(value: unknown): JsonWebKey | null {
 /**
  * The statement a phone signs to prove it holds its device key: what for, which inbox, a hash of
  * the secret or token it presents (never the secret itself), and when, one per line. Bound to the
- * inbox's origin so a proof made for one inbox is no use at another.
+ * inbox's origin so a proof made for one inbox is no use at another. `confirm` is one of the owner's
+ * phones saying yes to a new one (the hash of the new phone's id), which only an unlocked phone signs.
  */
-export function proofStatement(purpose: "pair" | "link" | "refresh", origin: string, hash: string, at: number): string {
+export function proofStatement(
+  purpose: "pair" | "link" | "refresh" | "confirm",
+  origin: string,
+  hash: string,
+  at: number,
+): string {
   return `surfingdog-inbox-phone/1\n${purpose}\n${origin}\n${hash}\n${at}`;
 }
 

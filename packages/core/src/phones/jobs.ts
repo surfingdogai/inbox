@@ -9,7 +9,7 @@ import { business, items, products, services } from "../schema/tables";
 import { gateOf, holdsBack } from "../spam/screen";
 import { isOwnerOnly, withheldText } from "../write/flags";
 import { rowToItem } from "../write/views";
-import { buildPushPayload, encodePayload, HELD_SOON_EVENT } from "./payload";
+import { buildPushPayload, encodePayload, HELD_SOON_EVENT, phoneAskPayload } from "./payload";
 import type { PhoneCapabilities } from "./phones";
 import { deliverAt, pushKindOf, readPrefs } from "./prefs";
 
@@ -241,5 +241,39 @@ export function phonePushOneHandler(phones: PhoneCapabilities): JobHandler {
       now,
     );
     return { note: r.note };
+  };
+}
+
+/**
+ * Asks the owner's other phones about a new one (ADR-028 Amendment 4): one notification each, at once
+ * and whatever their quiet hours, since it may be someone else's phone. Only while the new phone still
+ * waits: one confirmed or stopped meanwhile asks nobody. A relay that cannot be reached is tried again
+ * later; the relay delivers each phone's notification once, whatever the tries.
+ */
+export function phoneAskHandler(phones: PhoneCapabilities): JobHandler {
+  return async (job, { db, now }) => {
+    const p = job.payload as { deviceId?: string; wait?: boolean };
+    const waiting = typeof p.deviceId === "string" ? await phones.waiting(p.deviceId, now) : null;
+    if (!waiting) return { note: "no longer waiting" };
+    const { name } = await timezoneOf(db);
+    const payload = encodePayload(phoneAskPayload(now, name, p.wait === true));
+    let asked = 0;
+    let failed: unknown = null;
+    for (const device of await phones.listeners()) {
+      if (device.userId !== waiting.userId || device.id === waiting.id) continue;
+      try {
+        const r = await phones.deliver(
+          device.id,
+          payload,
+          { urgency: "high", ttlS: p.wait === true ? 86_400 : 900, key: `${job.id}:${device.id}` },
+          now,
+        );
+        if (r.sent) asked++;
+      } catch (error) {
+        failed = error;
+      }
+    }
+    if (failed) throw failed;
+    return { note: `${asked} phone${asked === 1 ? "" : "s"} asked` };
   };
 }

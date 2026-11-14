@@ -1524,6 +1524,14 @@ export const phoneDevices = sqliteTable(
     createdAt: createdAt(),
     lastSeenAt: integer("last_seen_at"),
     revokedAt: integer("revoked_at"),
+    /** How it came (0037): 'qr', 'link' (an emailed link) or 'host' (a link from the inbox's host); null before. */
+    via: text("via"),
+    /** Until when a phone that came by a link may wait for the owner's other phone's yes. */
+    confirmBy: integer("confirm_by"),
+    /** "I don't have my other phone": let in at this time, unless a phone or the owner's email stopped it. */
+    waitUntil: integer("wait_until"),
+    /** The hash of the token in the email's "Not you? Stop it" link, while it waits. */
+    stopHash: text("stop_hash"),
   },
   (t) => [
     uniqueIndex("phone_devices_key").on(t.keyThumbprint).where(sql`${t.revokedAt} IS NULL`),

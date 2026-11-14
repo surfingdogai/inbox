@@ -669,6 +669,7 @@ export class Shard {
     if (action === "probe" && method === "POST") return await this.probe(id, body);
     if (action === "sandbox/archive" && method === "POST") return await this.archive(id, body);
     if (action === "handoff" && method === "POST") return await this.handoff(id, body);
+    if (action === "phone-link" && method === "POST") return await this.phoneLink(id, body);
     if (action === "usage" && method === "GET") return await this.usage(id, url.searchParams.get("month"));
     if (action === "networks/join" && method === "POST") return await this.joinNetworks(id);
     if (action === "jwks" && method === "GET")
@@ -897,6 +898,50 @@ export class Shard {
       const now = this.now();
       const made = await createHandoff(entry.db, { email, origin, now });
       return { status: 200, body: { url: made.url, expires_at: new Date(now + HANDOFF_TTL_MS).toISOString() } };
+    });
+  }
+
+  /**
+   * A phone's sign-in for the owner (ADR-028 Amendment 4), made after the control plane's own email
+   * code proved the address: a link pairing with the phone's challenge and device key, and no email
+   * from here. Only at the inbox's canonical origin, where the phone redeems it with its verifier and
+   * the same key, as an emailed link is redeemed; never for an inbox that is closing, closed or
+   * suspended. The owner's user is made when only the policy names them, as a first handoff does.
+   */
+  private async phoneLink(id: string, body: unknown): Promise<AdminAnswer> {
+    const b = (body ?? {}) as { email?: unknown; origin?: unknown; challenge?: unknown; device_key?: unknown };
+    if (typeof b.email !== "string" || typeof b.origin !== "string") {
+      return problem(
+        422,
+        "invalid_input",
+        "Send the owner's email, the origin, the phone's challenge and its device key.",
+      );
+    }
+    let origin: string;
+    try {
+      origin = new URL(b.origin).origin;
+    } catch {
+      return problem(422, "invalid_input", "origin is not a URL.");
+    }
+    return await this.withEntry(id, async (entry) => {
+      const p = entry.policy;
+      if (origin !== p.address) {
+        return problem(409, "origin_not_canonical", `This inbox is at ${p.address}.`, { address: p.address });
+      }
+      if (p.read_only || p.state === "suspended" || p.state === "closing" || p.state === "closed") {
+        return problem(409, "not_open", "This inbox takes no new phone now.");
+      }
+      try {
+        const made = await entry.inbox.caps.phones.hostLink(
+          { email: b.email, owner: p.owner_email, challenge: b.challenge, device_key: b.device_key },
+          this.now(),
+        );
+        return { status: 200, body: { secret: made.secret, expires_at: new Date(made.expiresAt).toISOString() } };
+      } catch (error) {
+        if (!(error instanceof WriteError)) throw error;
+        if (error.details?.reason === "not_owner") return problem(409, "not_owner", error.message);
+        return problem(422, "invalid_input", error.message, { fields: error.fields ?? [] });
+      }
     });
   }
 

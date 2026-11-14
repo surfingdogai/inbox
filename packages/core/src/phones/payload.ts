@@ -17,10 +17,11 @@ import type { PushKind } from "./prefs";
  */
 export interface PushPayload {
   readonly v: 1;
-  readonly t: "item" | "test";
-  /** The item to open; absent for a test. */
+  /** About an item, a test, or a new phone that wants to connect (opened in the app, never acted on). */
+  readonly t: "item" | "test" | "phone";
+  /** The item to open; absent for a test and a phone. */
   readonly item?: string;
-  readonly kind: PushKind | "test";
+  readonly kind: PushKind | "test" | "phone";
   readonly title: string;
   readonly body: string;
   /** The customer's name: only with details on. */
@@ -223,6 +224,29 @@ export function testPayload(now: number, business: string): PushPayload {
     kind: "test",
     title: "Notifications work",
     body: oneLine(`${business || "Your inbox"} can reach this phone.`, 120),
+    at: now,
+  };
+}
+
+/**
+ * "A new phone wants to connect" (ADR-028 Amendment 4), to the owner's other phones. It names no phone
+ * and no one: the new phone's name is its own say, shown quoted on the app's sheet. Opening it opens
+ * the app, where the owner confirms after the fingerprint or face, or says it is not theirs; nothing is
+ * done from the notification. `wait`: the owner said they don't have their other phone, so the new
+ * one is let in in a day unless it is stopped.
+ */
+export function phoneAskPayload(now: number, business: string, wait: boolean): PushPayload {
+  return {
+    v: 1,
+    t: "phone",
+    kind: "phone",
+    title: wait ? "A new phone connects in 24 hours" : "A new phone wants to connect",
+    body: oneLine(
+      wait
+        ? `To ${business || "your inbox"}, unless you stop it. Open the app to see it.`
+        : `To ${business || "your inbox"}. Open the app to confirm it, or to say it isn't yours.`,
+      120,
+    ),
     at: now,
   };
 }

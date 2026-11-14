@@ -9,9 +9,11 @@ import {
   b64uEncode,
   CONFIRM_TTL_MS,
   decryptPush,
+  HOST_LINK_TTL_MS,
   jwkThumbprint,
   PAIRING_TTL_MS,
   PHONE_ACCESS_TTL_MS,
+  PHONE_CONFIRM_TTL_MS,
   type PushPayload,
   type PushRelay,
   pairingMatch,
@@ -20,6 +22,8 @@ import {
   REFRESH_GRACE_MS,
   sha256b64u,
   signProof,
+  WAIT_GRACE_MS,
+  WAIT_MS,
 } from "../src/phones/index";
 import { buildPushPayload } from "../src/phones/payload";
 import { deliverAt, notifyPrefsSchema, pushKindOf } from "../src/phones/prefs";
@@ -458,6 +462,288 @@ describe("the sign-in link (no camera)", () => {
       await phones.startLink({ email: "owner@example.com", challenge, device_key: phone.key }, T0 + 2),
     ).not.toBeNull();
     expect(await phones.startLink({ email: "owner@example.com", challenge, device_key: phone.key }, T0 + 3)).toBeNull();
+  });
+});
+
+/** A host's link for the owner, as the runtime makes it after the host's own email code, redeemed by the phone. */
+async function hostLinked(
+  phones: Capabilities["phones"],
+  phone: Phone,
+  now: number,
+  opts: { email?: string; owner?: string; name?: string } = {},
+) {
+  const verifier = b64uEncode(crypto.getRandomValues(new Uint8Array(32)));
+  const link = await phones.hostLink(
+    {
+      email: opts.email ?? "owner@example.com",
+      owner: opts.owner ?? "owner@example.com",
+      challenge: await pkceS256(verifier),
+      device_key: phone.key,
+    },
+    now,
+  );
+  const at = now + 1000;
+  const redeemed = await phones.redeemLink(
+    {
+      secret: link.secret,
+      verifier,
+      device_key: phone.key,
+      at,
+      proof: await phone.sign(proofStatement("link", ORIGIN, await sha256b64u(link.secret), at)),
+      name: opts.name ?? "Galaxy A15",
+      platform: "android",
+    },
+    ORIGIN,
+    at,
+  );
+  return { link, redeemed, verifier };
+}
+
+/** One of the owner's phones says yes to a new one, signed with its own key. */
+async function confirmFrom(phones: Capabilities["phones"], by: Phone, byId: string, id: string, at: number) {
+  return phones.confirmByPhone(
+    byId,
+    id,
+    { at, proof: await by.sign(proofStatement("confirm", ORIGIN, await sha256b64u(id), at)) },
+    ORIGIN,
+    at,
+  );
+}
+
+describe("a phone confirms a phone (Amendment 4)", () => {
+  it("makes a host's link for the owner only, making their user when only the host names them", async () => {
+    const { db, phones } = await setup();
+    const phone = await makePhone();
+    const challenge = await pkceS256(b64uEncode(crypto.getRandomValues(new Uint8Array(32))));
+    // Someone else: nothing, whatever the host says.
+    await expect(
+      phones.hostLink(
+        { email: "someone@else.example", owner: "owner@example.com", challenge, device_key: phone.key },
+        T0,
+      ),
+    ).rejects.toMatchObject({ code: "not_allowed", details: { reason: "not_owner" } });
+    const made = await phones.hostLink(
+      { email: "OWNER@example.com", owner: "owner@example.com", challenge, device_key: phone.key },
+      T0,
+    );
+    expect(made.secret).toMatch(/^sdi_pp_/);
+    expect(made.expiresAt).toBe(T0 + HOST_LINK_TTL_MS);
+    // Kept as a link is, the secret as its hash only, and no email sent from here.
+    const dumped = await dump(db);
+    expect(dumped).not.toContain(made.secret);
+    expect(dumped).not.toContain("notify");
+
+    // A fresh inbox nobody signed in to: the owner the host names is made the owner now, once.
+    const fresh = await setup();
+    await resetTables(fresh.db.client);
+    const first = await fresh.phones.hostLink(
+      { email: "new@owner.example", owner: "new@owner.example", challenge, device_key: phone.key },
+      T0,
+    );
+    const again = await fresh.phones.hostLink(
+      { email: "new@owner.example", owner: "new@owner.example", challenge, device_key: phone.key },
+      T0 + 1,
+    );
+    expect(again.userId).toBe(first.userId);
+    expect(await fresh.db.orm.select({ email: users.email, role: users.role }).from(users)).toEqual([
+      { email: "new@owner.example", role: "owner" },
+    ]);
+    // Once somebody is there, the host's word makes nobody else an owner.
+    await expect(
+      fresh.phones.hostLink(
+        { email: "other@owner.example", owner: "other@owner.example", challenge, device_key: phone.key },
+        T0 + 2,
+      ),
+    ).rejects.toMatchObject({ details: { reason: "not_owner" } });
+    // A colleague's address is not an owner's.
+    await fresh.db.orm
+      .insert(users)
+      .values({ id: ulid(T0), email: "staff@owner.example", role: "staff", createdAt: T0 });
+    await expect(
+      fresh.phones.hostLink(
+        { email: "staff@owner.example", owner: "new@owner.example", challenge, device_key: phone.key },
+        T0 + 3,
+      ),
+    ).rejects.toMatchObject({ details: { reason: "not_owner" } });
+  });
+
+  it("connects the first phone at once, with the verifier and the same key only", async () => {
+    const { phones } = await setup();
+    const phone = await makePhone();
+    const verifier = b64uEncode(crypto.getRandomValues(new Uint8Array(32)));
+    const link = await phones.hostLink(
+      {
+        email: "owner@example.com",
+        owner: "owner@example.com",
+        challenge: await pkceS256(verifier),
+        device_key: phone.key,
+      },
+      T0,
+    );
+    const redeem = async (p: Phone, v: string) =>
+      phones.redeemLink(
+        {
+          secret: link.secret,
+          verifier: v,
+          device_key: p.key,
+          at: T0 + 1000,
+          proof: await p.sign(proofStatement("link", ORIGIN, await sha256b64u(link.secret), T0 + 1000)),
+        },
+        ORIGIN,
+        T0 + 1000,
+      );
+    await expect(redeem(await makePhone(), verifier)).rejects.toMatchObject({ details: { reason: "other_phone" } });
+    await expect(redeem(phone, b64uEncode(crypto.getRandomValues(new Uint8Array(32))))).rejects.toMatchObject({
+      details: { reason: "other_phone" },
+    });
+    const tokens = await redeem(phone, verifier);
+    // No other phone to ask: the owner's mailbox, through the host's code, was the proof.
+    expect(tokens).toMatchObject({ state: "connected", via: "host" });
+    expect(await phones.resolveAccess(tokens.access_token, T0 + 2000)).toMatchObject({
+      confirmed: true,
+      waitsOn: null,
+    });
+    await expect(redeem(phone, verifier)).rejects.toMatchObject({ code: "code_expired" });
+  });
+
+  it("gives a second phone nothing until a confirmed one accepts its two digits", async () => {
+    const { phones, relay } = await setup();
+    const first = await makePhone();
+    const a = (await hostLinked(phones, first, T0)).redeemed;
+    await phones.registerPush(a.device_id, { token: "fcm-a", ...first.pushKeys }, ORIGIN, T0);
+    const second = await makePhone();
+    const { link, redeemed: b } = await hostLinked(phones, second, T0 + 60_000, { name: "Galaxy A15" });
+    // It waits, showing the digits worked out from the link and its own key.
+    const match = await pairingMatch(link.secret, await jwkThumbprint(second.key as JsonWebKey));
+    expect(b).toMatchObject({ state: "pending", match });
+    expect(await phones.resolveAccess(b.access_token, T0 + 62_000)).toMatchObject({
+      confirmed: false,
+      waitsOn: "phone",
+    });
+    expect(await phones.listPhones()).toHaveLength(1);
+    // While it waits for a phone's yes it may refresh, to ask whether it came.
+    const fresh = await refreshWith(phones, second, b.refresh_token, T0 + 63_000);
+    expect(await phones.resolveAccess(fresh.access_token, T0 + 63_000)).toMatchObject({ confirmed: false });
+    // The confirmed phone is asked: a notification naming neither the new phone nor anyone.
+    const runner = createRunner({ mailOut: logMailOut(), phones });
+    await runner.runDue((current as Db) ?? undefined, { now: T0 + 64_000 });
+    const asked = relay.sent.at(-1);
+    expect(asked?.urgency).toBe("high");
+    if (!asked) return;
+    const payload = JSON.parse(new TextDecoder().decode(await decryptPush(asked.payload, first.push))) as PushPayload;
+    expect(payload).toMatchObject({ t: "phone", kind: "phone", title: "A new phone wants to connect" });
+    expect(JSON.stringify(payload)).not.toContain("Galaxy");
+    // It sees the same two digits, and only for its own person's phones.
+    expect(await phones.phoneAsks(a.device_id, T0 + 65_000)).toMatchObject([
+      { id: b.device_id, match, wait_until: null, phone: { name: "Galaxy A15" } },
+    ]);
+    // A yes is signed by the confirming phone's key, for that phone: a copy of its token is not enough.
+    await expect(
+      phones.confirmByPhone(a.device_id, b.device_id, { at: T0 + 66_000, proof: "x" }, ORIGIN, T0 + 66_000),
+    ).rejects.toMatchObject({ details: { reason: "bad_proof" } });
+    await expect(confirmFrom(phones, second, a.device_id, b.device_id, T0 + 66_000)).rejects.toMatchObject({
+      details: { reason: "bad_proof" },
+    });
+    const done = await confirmFrom(phones, first, a.device_id, b.device_id, T0 + 67_000);
+    expect(done.phone.name).toBe("Galaxy A15");
+    expect(await phones.resolveAccess(fresh.access_token, T0 + 68_000)).toMatchObject({ confirmed: true });
+    expect(await phones.phoneAsks(a.device_id, T0 + 68_000)).toEqual([]);
+  });
+
+  it("removes a second phone on Not mine, and one nobody answered within its minutes", async () => {
+    const { phones } = await setup();
+    const first = await makePhone();
+    const a = (await hostLinked(phones, first, T0)).redeemed;
+    const b = (await hostLinked(phones, await makePhone(), T0 + 1000)).redeemed;
+    expect(await phones.refuseByPhone(a.device_id, b.device_id, T0 + 2000)).toEqual({ removed: true });
+    expect(await phones.resolveAccess(b.access_token, T0 + 2001)).toBeNull();
+    await expect(confirmFrom(phones, first, a.device_id, b.device_id, T0 + 3000)).rejects.toMatchObject({
+      code: "code_expired",
+    });
+    const c = (await hostLinked(phones, await makePhone(), T0 + 10_000)).redeemed;
+    const late = T0 + 11_000 + PHONE_CONFIRM_TTL_MS + 1;
+    expect(await phones.resolveAccess(c.access_token, late)).toBeNull();
+    await expect(confirmFrom(phones, first, a.device_id, c.device_id, late)).rejects.toMatchObject({
+      code: "code_expired",
+    });
+  });
+
+  it("lets a phone in after a day when the owner has no other phone, unless a phone or the email stops it", async () => {
+    const { phones } = await setup();
+    const first = await makePhone();
+    const a = (await hostLinked(phones, first, T0)).redeemed;
+    // Waits a day: told to every phone, and only the phone that waits can ask for it.
+    const b = (await hostLinked(phones, await makePhone(), T0 + 1000)).redeemed;
+    await expect(phones.startWait(a.device_id, T0 + 2000)).rejects.toMatchObject({ code: "wrong_state" });
+    const wait = await phones.startWait(b.device_id, T0 + 2000);
+    expect(wait.waitUntil).toBe(T0 + 2000 + WAIT_MS);
+    expect(await phones.phoneAsks(a.device_id, T0 + 3000)).toMatchObject([
+      { id: b.device_id, wait_until: new Date(T0 + 2000 + WAIT_MS).toISOString() },
+    ]);
+    // Not before its day is over, and then once.
+    expect(await phones.settleWait(b.device_id, T0 + WAIT_MS)).toBe(false);
+    expect(await phones.resolveAccess(b.access_token, T0 + 3000)).toMatchObject({ confirmed: false });
+    expect(await phones.settleWait(b.device_id, T0 + 2000 + WAIT_MS)).toBe(true);
+    expect(await phones.settleWait(b.device_id, T0 + 2001 + WAIT_MS)).toBe(false);
+    expect((await phones.listPhones()).map((p) => p.id).sort()).toEqual([a.device_id, b.device_id].sort());
+
+    // Stopped by the email's link: removed, and the link works once.
+    const c = (await hostLinked(phones, await makePhone(), T0 + 10_000)).redeemed;
+    const cw = await phones.startWait(c.device_id, T0 + 11_000);
+    expect((await phones.stoppable(cw.stopToken, T0 + 12_000))?.id).toBe(c.device_id);
+    expect(await phones.stopWait(cw.stopToken, T0 + 12_000)).toMatchObject({ removed: true });
+    expect(await phones.stopWait(cw.stopToken, T0 + 12_001)).toEqual({ removed: false });
+    expect(await phones.settleWait(c.device_id, T0 + 11_000 + WAIT_MS)).toBe(false);
+    expect(await phones.resolveAccess(c.access_token, T0 + 13_000)).toBeNull();
+
+    // Stopped from a phone: the same.
+    const d = (await hostLinked(phones, await makePhone(), T0 + 20_000)).redeemed;
+    await phones.startWait(d.device_id, T0 + 21_000);
+    expect(await phones.refuseByPhone(a.device_id, d.device_id, T0 + 22_000)).toEqual({ removed: true });
+    expect(await phones.settleWait(d.device_id, T0 + 21_000 + WAIT_MS)).toBe(false);
+
+    // Never back for it: gone a week after its day.
+    const e = (await hostLinked(phones, await makePhone(), T0 + 30_000)).redeemed;
+    await phones.startWait(e.device_id, T0 + 31_000);
+    const gone = T0 + 31_000 + WAIT_MS + WAIT_GRACE_MS + 1;
+    expect((await phones.waiting(e.device_id, T0 + 31_000 + WAIT_MS))?.id).toBe(e.device_id);
+    expect(await phones.waiting(e.device_id, gone)).toBeNull();
+    expect(await phones.settleWait(e.device_id, gone)).toBe(false);
+  });
+
+  it("asks a phone of the same person only, and an emailed link waits for a yes too", async () => {
+    const { db, phones, userId } = await setup();
+    const other = ulid(T0 + 5);
+    await db.orm.insert(users).values({ id: other, email: "colleague@example.com", role: "owner", createdAt: T0 });
+    const mine = (await hostLinked(phones, await makePhone(), T0)).redeemed;
+    const theirs = (await hostLinked(phones, await makePhone(), T0 + 100, { email: "colleague@example.com" })).redeemed;
+    // A colleague's first phone has no other phone of theirs to ask: it is in at once.
+    expect(theirs).toMatchObject({ state: "connected" });
+    // The owner's second phone, by an emailed link: it waits for the owner's first phone.
+    const phone = await makePhone();
+    const verifier = b64uEncode(crypto.getRandomValues(new Uint8Array(32)));
+    const link = await phones.startLink(
+      { email: "owner@example.com", challenge: await pkceS256(verifier), device_key: phone.key },
+      T0 + 1000,
+    );
+    if (!link) throw new Error("no link");
+    const at = T0 + 2000;
+    const second = await phones.redeemLink(
+      {
+        secret: link.secret,
+        verifier,
+        device_key: phone.key,
+        at,
+        proof: await phone.sign(proofStatement("link", ORIGIN, await sha256b64u(link.secret), at)),
+      },
+      ORIGIN,
+      at,
+    );
+    expect(second).toMatchObject({ state: "pending", via: "link" });
+    expect(await phones.phoneAsks(theirs.device_id, T0 + 3000)).toEqual([]);
+    expect(await phones.refuseByPhone(theirs.device_id, second.device_id, T0 + 3000)).toEqual({ removed: false });
+    expect((await phones.phoneAsks(mine.device_id, T0 + 3000)).map((x) => x.id)).toEqual([second.device_id]);
+    expect(userId).toBeTruthy();
   });
 });
 

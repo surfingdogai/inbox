@@ -5,11 +5,12 @@ import { BACKFILL_BATCH, backfillPartyContacts, PARTY_CONTACTS_BACKFILL_KIND } f
 import {
   PHONE_PUSH_KIND,
   PHONE_PUSH_ONE_KIND,
+  phoneAskHandler,
   phonePushFanoutHandler,
   phonePushOneHandler,
   withPhonePush,
 } from "../phones/jobs";
-import type { PhoneCapabilities } from "../phones/phones";
+import { PHONE_ASK_KIND, type PhoneCapabilities } from "../phones/phones";
 import type { ReceiptCapabilities } from "../receipts/capabilities";
 import { runRulesForEvent } from "../rules/engine";
 import type { SecretBox } from "../secrets/box";
@@ -180,7 +181,9 @@ export function createRunner(deps: {
     runner
       .register(PHONE_PUSH_KIND, phonePushFanoutHandler(deps.phones))
       // One phone's notifications one after another; a slow relay delays only push.
-      .register(PHONE_PUSH_ONE_KIND, phonePushOneHandler(deps.phones), { lane: () => "push" });
+      .register(PHONE_PUSH_ONE_KIND, phonePushOneHandler(deps.phones), { lane: () => "push" })
+      // A new phone wants to connect: the owner's other phones are asked (ADR-028 Amendment 4).
+      .register(PHONE_ASK_KIND, phoneAskHandler(deps.phones), { lane: () => "push" });
   }
   return runner;
 }

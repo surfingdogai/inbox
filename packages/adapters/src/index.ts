@@ -38,7 +38,7 @@ import { createOwnerMcpHandler, createPublicMcpHandler } from "./mcp";
 import { authorizationServerMetadata, type ClientMetadata, oauthRoutes, protectedResourceMetadata } from "./oauth";
 import { publicOrigin, sameOrigin } from "./origin";
 import { type OwnerEmailChange, ownerEmailRoutes } from "./owner-email";
-import { ownerPhoneRoutes, phonePage, phoneRoutes } from "./phone";
+import { ownerPhoneRoutes, phonePage, phoneRoutes, phoneStopRoutes } from "./phone";
 import { forbidden, problemResponse, replayedSignature, tooManyRequests, unauthorized } from "./problem";
 import { type CallerEnv, ownerRest, publicRest } from "./rest";
 import { safeFetchJson } from "./safe-fetch";
@@ -331,13 +331,25 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
       const path = c.req.path;
       if (!path.startsWith("/v1/owner/") && path !== "/v1/phone" && !path.startsWith("/v1/phone/"))
         return forbidden(c, "A phone answers its inbox through the owner's API.");
-      // Until the owner confirms it on the computer, it may only ask whether they have.
-      if (caller.auth.pending && !(c.req.method === "GET" && path === "/v1/phone/me"))
+      // Until the owner confirms it, it may only ask whether they have, and give up (remove itself).
+      // One waiting for the owner's other phone may also say the owner doesn't have it with them, and
+      // wait a day instead (ADR-028 Amendment 4).
+      const onPhone = caller.auth.waitsOn === "phone";
+      if (
+        caller.auth.pending &&
+        !(c.req.method === "GET" && path === "/v1/phone/me") &&
+        !(c.req.method === "DELETE" && path === "/v1/phone") &&
+        !(onPhone && c.req.method === "POST" && path === "/v1/phone/wait")
+      )
         return problemResponse(
           c,
-          new WriteError("not_allowed", "Confirm this phone on your computer first, in Settings → Phone.", {
-            details: { reason: "phone_unconfirmed" },
-          }),
+          new WriteError(
+            "not_allowed",
+            onPhone
+              ? "Confirm this phone on your other phone first."
+              : "Confirm this phone on your computer first, in Settings → Phone.",
+            { details: { reason: "phone_unconfirmed" } },
+          ),
         );
     }
     // An integration key has a soft bucket of its own, on every call, so a loop between this inbox
@@ -651,6 +663,8 @@ export function mountDoors(app: Hono<CallerEnv>, deps: DoorDeps): void {
   app.route("/v1/owner", ownerPhoneRoutes(phoneDeps));
   // The phone's own door: pairing, the sign-in link, tokens, and what it hears about (ADR-028).
   app.route("/v1/phone", phoneRoutes(phoneDeps));
+  // "Not you? Stop it": the link in the email a new phone's day of waiting sends (Amendment 4).
+  app.route("/auth/phone", phoneStopRoutes(phoneDeps));
   // A website's own forms, brought in by its key (ADR-041 §4.2).
   app.route("/v1/forms", formsSubmitRoutes({ caps: deps.caps, now: deps.now }));
   app.route("/v1", publicRest(deps.caps, { baseUrl: deps.baseUrl }));

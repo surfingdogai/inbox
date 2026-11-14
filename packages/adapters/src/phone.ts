@@ -10,20 +10,22 @@ import {
   WriteError,
 } from "@surfingdog/core";
 import { type Context, Hono } from "hono";
-import { publicOrigin } from "./origin";
-import { problemResponse, unauthorized } from "./problem";
+import { authPage } from "./auth-page";
+import { publicOrigin, sameOrigin } from "./origin";
+import { forbidden, problemResponse, unauthorized } from "./problem";
 import type { CallerEnv } from "./rest";
-import { type OwnerMailDeps, sendOwnerMail } from "./session";
+import { linkOrigin, type OwnerMailDeps, postedFields, sendOwnerMail } from "./session";
 import { ownerInPerson } from "./step-up";
 
 /**
  * The phone app's doors (ADR-028).
  *
  * `/v1/phone/*` is the phone's own: pairing with a QR code's secret, the emailed sign-in link and its
- * redemption, token refresh (each signed by the phone's device key), and, with a phone's access
- * token, what it hears about and how push reaches it. `/v1/owner/phones*` is the owner app's
- * Settings → Phone, for the owner signed in on a computer only: a QR code, the phones, a test, and
- * removing one. The phone uses the owner's door for the inbox itself, held to `PHONE_OPERATIONS`.
+ * redemption (a host's link too), token refresh (each signed by the phone's device key), and, with a
+ * phone's access token, what it hears about and how push reaches it, and the new phones it is asked
+ * about (Amendment 4). `/v1/owner/phones*` is the owner app's Settings → Phone, for the owner signed
+ * in on a computer only: a QR code, the phones, a test, and removing one. The phone uses the owner's
+ * door for the inbox itself, held to `PHONE_OPERATIONS`.
  */
 export interface PhoneDoorDeps extends OwnerMailDeps {
   readonly caps: Capabilities;
@@ -59,6 +61,33 @@ function roughly(c: Context): string | null {
   }
 }
 
+/** How a phone came in, as the owner's email says it. */
+type ConnectedHow =
+  | { readonly way: "computer" | "link" | "host" | "waited" }
+  | { readonly way: "phone"; readonly by: string };
+
+const HOW: Readonly<Record<Exclude<ConnectedHow["way"], "phone">, string>> = {
+  computer: "How: you confirmed it on your computer, in Settings → Phone.",
+  link: "How: a sign-in link sent to this address.",
+  host: "How: a sign-in code sent to this address.",
+  waited: "How: it waited 24 hours, and nobody stopped it.",
+};
+
+/** A phone's name as an email quotes it: its own say, never taken as fact. */
+const quoted = (name: string) => `"${name.replace(/"/g, "'")}"`;
+
+async function ownerAddress(deps: PhoneDoorDeps, userId: string): Promise<string | null> {
+  const { rows } = await deps.db.client.query({
+    sql: "SELECT email FROM users WHERE id = ?",
+    params: [userId],
+    method: "all",
+  });
+  const to = rows[0]?.[0];
+  return typeof to === "string" ? to : null;
+}
+
+const utc = (at: number) => new Date(at).toUTCString().replace(" GMT", " UTC");
+
 /**
  * Tells the owner by email that a phone was connected, so one they did not connect is noticed and
  * removed at once. The phone's name is the phone's own say, so it is quoted, never taken as fact.
@@ -68,18 +97,12 @@ async function tellOwnerOfPhone(
   userId: string,
   phone: { name: string; platform: string },
   origin: string,
-  how: { confirmed: boolean; from: string | null; at: number },
+  how: ConnectedHow & { from: string | null; at: number },
 ): Promise<void> {
   try {
-    const { rows } = await deps.db.client.query({
-      sql: "SELECT email FROM users WHERE id = ?",
-      params: [userId],
-      method: "all",
-    });
-    const to = rows[0]?.[0];
-    if (typeof to !== "string") return;
+    const to = await ownerAddress(deps, userId);
+    if (!to) return;
     const business = await deps.businessName();
-    const when = new Date(how.at).toUTCString().replace(" GMT", " UTC");
     const device = phone.platform === "ios" ? "iPhone" : "Android phone";
     const lines = [
       `Not you? Remove it now in Settings → Phone:`,
@@ -87,12 +110,10 @@ async function tellOwnerOfPhone(
       "",
       `A phone was connected to ${business || "your inbox"}. It can now open your inbox and answer it.`,
       "",
-      `Phone: "${phone.name.replace(/"/g, "'")}" (as the phone names itself), an ${device}`,
-      `When: ${when}`,
+      `Phone: ${quoted(phone.name)} (as the phone names itself), an ${device}`,
+      `When: ${utc(how.at)}`,
       ...(how.from ? [`From: roughly ${how.from}`] : []),
-      how.confirmed
-        ? "How: you confirmed it on your computer, in Settings → Phone."
-        : "How: a sign-in link sent to this address.",
+      how.way === "phone" ? `How: you confirmed it on your other phone, ${quoted(how.by)}.` : HOW[how.way],
     ];
     await sendOwnerMail(deps, {
       to,
@@ -102,6 +123,43 @@ async function tellOwnerOfPhone(
     });
   } catch {
     // The owner sees every phone in Settings → Phone whether or not this arrives.
+  }
+}
+
+/**
+ * Tells the owner by email that a new phone will be let in a day from now, because whoever holds it
+ * said they don't have the owner's other phone (ADR-028 Amendment 4). It leads with the way to stop
+ * it: a page of this inbox whose button removes that phone, which only this email's link opens.
+ */
+async function tellOwnerOfWait(
+  deps: PhoneDoorDeps,
+  userId: string,
+  phone: { name: string; platform: string },
+  origin: string,
+  wait: { stopToken: string; until: number; at: number; from: string | null },
+): Promise<void> {
+  try {
+    const to = await ownerAddress(deps, userId);
+    if (!to) return;
+    const business = (await deps.businessName()) || "your inbox";
+    const device = phone.platform === "ios" ? "iPhone" : "Android phone";
+    await sendOwnerMail(deps, {
+      to,
+      subject: `A new phone connects to ${business} in 24 hours`,
+      text: `${[
+        "Not you? Stop it now:",
+        `${origin}/auth/phone/stop?token=${wait.stopToken}`,
+        "",
+        `A phone asked to connect to ${business}, and said you don't have your other phone with you. It will be let in on ${utc(wait.until)}, unless you stop it. Your other phones were asked too.`,
+        "",
+        `Phone: ${quoted(phone.name)} (as the phone names itself), an ${device}`,
+        `Asked: ${utc(wait.at)}`,
+        ...(wait.from ? [`From: roughly ${wait.from}`] : []),
+      ].join("\n")}\n`,
+      what: "new phone waiting email",
+    });
+  } catch {
+    // Every phone the owner has is asked as well, and lists it until it is let in or stopped.
   }
 }
 
@@ -146,16 +204,27 @@ export function phoneRoutes(deps: PhoneDoorDeps): Hono<CallerEnv> {
     );
   });
 
-  // The emailed link, redeemed by the phone that asked: the mailbox was the proof, nothing to confirm.
+  // The emailed link (or a host's), redeemed by the phone that asked: the mailbox was the proof, unless
+  // the owner has a confirmed phone already. Then the new one waits for that phone's yes, with the
+  // same two digits on both (`state: "pending"`), and is told nothing more until it comes.
   app.post("/link/redeem", async (c) => {
     const now = clock();
-    const tokens = await phones.redeemLink(await body(c), origin(c), now);
+    const redeemed = await phones.redeemLink(await body(c), origin(c), now);
+    const { state, match, via, ...tokens } = redeemed;
     const me = await phones.me(tokens.device_id);
-    const userId = await phones.ownerOf(tokens.device_id);
-    const from = roughly(c);
-    later(c, () => tellOwnerOfPhone(deps, userId, me.phone, origin(c), { confirmed: false, from, at: now }));
+    if (state === "connected") {
+      const userId = await phones.ownerOf(tokens.device_id);
+      const from = roughly(c);
+      const at = await linkOrigin(deps, c.req.raw);
+      later(c, () => tellOwnerOfPhone(deps, userId, me.phone, at, { way: via, from, at: now }));
+    }
     return c.json(
-      { ...tokens, state: "connected", inbox: { origin: origin(c), name: me.business.name } },
+      {
+        ...tokens,
+        state,
+        ...(match !== undefined ? { match } : {}),
+        inbox: { origin: origin(c), name: me.business.name },
+      },
       201,
       noStore,
     );
@@ -182,10 +251,75 @@ export function phoneRoutes(deps: PhoneDoorDeps): Hono<CallerEnv> {
     return p.id;
   };
 
+  // Who this phone is, and whether it was let in yet. A phone back after its day's wait is let in
+  // here, when nothing stopped it, and the owner is told as for any phone connected.
   app.get("/me", async (c) => {
     const id = device(c);
     if (typeof id !== "string") return id;
-    return c.json({ ...(await phones.me(id)), origin: origin(c) }, 200, noStore);
+    const now = clock();
+    let me = await phones.me(id);
+    const due = me.phone.wait_until !== undefined && Date.parse(me.phone.wait_until) <= now;
+    if (!me.phone.confirmed && due && (await phones.settleWait(id, now))) {
+      me = await phones.me(id);
+      const phone = me.phone;
+      const userId = await phones.ownerOf(id);
+      const at = await linkOrigin(deps, c.req.raw);
+      later(c, () => tellOwnerOfPhone(deps, userId, phone, at, { way: "waited", from: null, at: now }));
+    }
+    return c.json({ ...me, origin: origin(c) }, 200, noStore);
+  });
+
+  // "I don't have my other phone", on a new phone that waits for one: it waits a day instead, while
+  // every phone the owner has and the owner's email are told, each with a way to stop it.
+  app.post("/wait", async (c) => {
+    const id = device(c);
+    if (typeof id !== "string") return id;
+    const now = clock();
+    const wait = await phones.startWait(id, now);
+    const me = await phones.me(id);
+    const userId = await phones.ownerOf(id);
+    const from = roughly(c);
+    const at = await linkOrigin(deps, c.req.raw);
+    later(c, () =>
+      tellOwnerOfWait(deps, userId, me.phone, at, { stopToken: wait.stopToken, until: wait.waitUntil, at: now, from }),
+    );
+    return c.json({ wait_until: new Date(wait.waitUntil).toISOString() }, 200, noStore);
+  });
+
+  // The new phones that wait for this one's yes (Amendment 4): what the app's confirm sheet shows.
+  app.get("/pairings", async (c) => {
+    const id = device(c);
+    if (typeof id !== "string") return id;
+    return c.json({ pairings: await phones.phoneAsks(id, clock()) }, 200, noStore);
+  });
+
+  // Confirm, on the sheet, after the fingerprint or face: signed with this phone's key, which signs
+  // only shortly after an unlock. The new phone, showing the same two digits, may now open the inbox.
+  app.post("/pairings/:id/confirm", async (c) => {
+    const id = device(c);
+    if (typeof id !== "string") return id;
+    const now = clock();
+    const input = await body(c);
+    const done = await phones.confirmByPhone(
+      id,
+      String(c.req.param("id")),
+      { at: input.at, proof: input.proof },
+      origin(c),
+      now,
+    );
+    const userId = await phones.ownerOf(id);
+    const at = await linkOrigin(deps, c.req.raw);
+    later(c, () =>
+      tellOwnerOfPhone(deps, userId, done.phone, at, { way: "phone", by: done.by.name, from: null, at: now }),
+    );
+    return c.json({ state: "paired", phone: done.phone }, 200, noStore);
+  });
+
+  // "Not mine": the new phone is removed before it could open anything.
+  app.post("/pairings/:id/refuse", async (c) => {
+    const id = device(c);
+    if (typeof id !== "string") return id;
+    return c.json(await phones.refuseByPhone(id, String(c.req.param("id")), clock()), 200, noStore);
   });
 
   app.put("/notify", async (c) => {
@@ -270,6 +404,63 @@ export function phoneRoutes(deps: PhoneDoorDeps): Hono<CallerEnv> {
   return app;
 }
 
+/**
+ * "Not you? Stop it", the link in the email a new phone's day of waiting sends (Amendment 4):
+ * `GET /auth/phone/stop` shows what it stops and changes nothing (a mail scanner opens every link);
+ * the page's button, a POST from this inbox's own page, removes the waiting phone.
+ */
+export function phoneStopRoutes(deps: PhoneDoorDeps): Hono<CallerEnv> {
+  const app = new Hono<CallerEnv>();
+  const phones = deps.caps.phones;
+  const clock = () => (deps.now ? deps.now() : Date.now());
+  const gone = (c: Context) =>
+    authPage(c, 410, {
+      title: "Link expired",
+      heading: "This link no longer works",
+      lines: [
+        "The phone was let in already, was stopped, or stopped waiting.",
+        "To see and remove the phones on your inbox, open Settings → Phone.",
+      ],
+    });
+
+  app.get("/stop", async (c) => {
+    const token = c.req.query("token") ?? "";
+    const row = await phones.stoppable(token, clock());
+    if (!row?.waitUntil) return gone(c);
+    const business = (await deps.businessName()) || "your inbox";
+    return authPage(c, 200, {
+      title: "Stop the new phone",
+      heading: `Stop ${quoted(row.name)}?`,
+      lines: [
+        `This phone asked to connect to ${business}. It will be let in on ${utc(row.waitUntil)}, unless you stop it.`,
+        "If you didn't ask to connect it, stop it now.",
+      ],
+      form: { action: "/auth/phone/stop", fields: { token }, button: "Stop it" },
+    });
+  });
+
+  app.post("/stop", async (c) => {
+    const { fields, form } = await postedFields(c);
+    if (!sameOrigin(c.req.raw, deps.baseUrl))
+      return form
+        ? authPage(c, 403, {
+            title: "Stop the new phone",
+            heading: "Stop it from the page your link opened",
+            lines: ["This request came from another site, so nothing was done."],
+          })
+        : forbidden(c, "Stop it from this inbox's own page.");
+    const r = await phones.stopWait(fields.token ?? "", clock());
+    if (!r.removed) return gone(c);
+    return authPage(c, 200, {
+      title: "Stopped",
+      heading: "Stopped",
+      lines: [`${quoted(r.phone?.name ?? "The phone")} can't open your inbox.`, "Nothing else changed."],
+    });
+  });
+
+  return app;
+}
+
 /** Settings → Phone in the owner app: the owner signed in, in person, in this browser. */
 export function ownerPhoneRoutes(deps: PhoneDoorDeps): Hono<CallerEnv> {
   const app = new Hono<CallerEnv>();
@@ -314,7 +505,7 @@ export function ownerPhoneRoutes(deps: PhoneDoorDeps): Hono<CallerEnv> {
     const now = clock();
     const phone = await phones.confirmPairing(owner.id, String(c.req.param("id")), now);
     const at = publicOrigin(c.req.raw, deps.baseUrl);
-    later(c, () => tellOwnerOfPhone(deps, owner.id, phone, at, { confirmed: true, from: null, at: now }));
+    later(c, () => tellOwnerOfPhone(deps, owner.id, phone, at, { way: "computer", from: null, at: now }));
     return c.json({ state: "paired", phone }, 200, noStore);
   });
 

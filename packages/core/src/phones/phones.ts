@@ -1,7 +1,8 @@
-import { and, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { hashApiKey } from "../access/keys";
 import type { Db } from "../db";
 import { randomToken, ulid } from "../ids";
+import { ensureJob } from "../jobs/schedule";
 import { business, phoneDevices, phonePairings } from "../schema/tables";
 import type { SecretBox } from "../secrets/box";
 import { WriteError } from "../write/errors";
@@ -36,6 +37,12 @@ import type { PushRelay, RelayRegistration } from "./relay";
  * Until then its tokens open `GET /v1/phone/me` and nothing else, and five minutes without an answer
  * remove it. A phone connected by an emailed link needs no confirming: the mailbox was the proof.
  *
+ * Unless the owner has a confirmed phone already (ADR-028 Amendment 4). Then a new phone that came by
+ * a link, emailed or made by the inbox's host after its own email code, waits for that phone's yes:
+ * the same two digits on both screens, and Confirm or "Not mine" on the phone the owner has. An owner
+ * who has lost that phone says so, and the new one waits a day while every phone and the email are
+ * told, each with a way to stop it. A code someone was tricked into reading out opens nothing alone.
+ *
  * A phone acts as the owner in person, through the owner's API only, and only for what the phone
  * app does: the inbox, its items and their answers. Everything else (settings, keys, money floors,
  * downloads) stays the owner app's on a computer, whatever the phone's tokens say.
@@ -53,6 +60,16 @@ export const PHONE_REFRESH_TTL_MS = 60 * 86_400_000;
 export const REFRESH_GRACE_MS = 60_000;
 /** A phone paired by QR code waits this long for the owner's Confirm on the computer, then goes. */
 export const CONFIRM_TTL_MS = 5 * 60_000;
+/** A link the inbox's host makes after its own email code: the phone redeems it at once. */
+export const HOST_LINK_TTL_MS = 10 * 60_000;
+/** A phone that came by a link waits this long for the owner's other phone to say yes, then goes. */
+export const PHONE_CONFIRM_TTL_MS = 15 * 60_000;
+/** "I don't have my other phone": the new phone is let in a day later, unless it was stopped. */
+export const WAIT_MS = 24 * 3_600_000;
+/** After that day, it has this long to come back and be let in; then it goes. */
+export const WAIT_GRACE_MS = 7 * 86_400_000;
+/** The job that asks the owner's other phones about a new one (ADR-028 Amendment 4). */
+export const PHONE_ASK_KIND = "phone_ask";
 /** Phones one inbox may have at once. */
 export const MAX_PHONES = 20;
 /** Wrong verifiers a sign-in link takes before it stops working. */
@@ -90,6 +107,24 @@ export interface PhonePrincipal {
   readonly name: string;
   /** False while a phone paired by QR code waits for the owner's Confirm: it may only ask who it is. */
   readonly confirmed: boolean;
+  /**
+   * Where the yes comes from while it waits: the computer (a QR code) or the owner's other phone (a
+   * phone that came by a link while its owner had a confirmed phone). Null once confirmed.
+   */
+  readonly waitsOn: "computer" | "phone" | null;
+}
+
+/** How a phone came: a QR code, an emailed link, or a link from the inbox's host. */
+export type PhoneVia = "qr" | "link" | "host";
+
+/** A new phone waiting for the yes of one the owner has (`GET /v1/phone/pairings`). */
+export interface PhoneAsk {
+  readonly id: string;
+  readonly phone: PhoneView;
+  /** The two digits the new phone shows. */
+  readonly match: string;
+  /** "I don't have my other phone": when it is let in unless stopped; null while it waits for a yes. */
+  readonly wait_until: string | null;
 }
 
 /** What became of a QR code, as Settings → Phone polls it. */
@@ -143,7 +178,7 @@ const bad = (message: string, path?: string) =>
 export async function resolvePhoneAccess(db: Db, token: string, now: number): Promise<PhonePrincipal | null> {
   if (!token.startsWith(PHONE_ACCESS_PREFIX)) return null;
   const { rows } = await db.client.query({
-    sql: `SELECT d.id, d.user_id, d.name, d.last_seen_at, d.confirmed_at, d.created_at
+    sql: `SELECT d.id, d.user_id, d.name, d.last_seen_at, d.confirmed_at, d.created_at, d.via, d.confirm_by
             FROM phone_tokens t JOIN phone_devices d ON d.id = t.device_id
            WHERE t.token_hash = ? AND t.kind = 'access' AND t.revoked_at IS NULL AND t.expires_at > ?
              AND d.revoked_at IS NULL`,
@@ -152,16 +187,18 @@ export async function resolvePhoneAccess(db: Db, token: string, now: number): Pr
   });
   const r = rows[0];
   if (!r) return null;
-  const [deviceId, userId, name, lastSeen, confirmedAt, createdAt] = r as [
+  const [deviceId, userId, name, lastSeen, confirmedAt, createdAt, via, confirmBy] = r as [
     string,
     string,
     string,
     number | null,
     number | null,
     number,
+    string | null,
+    number | null,
   ];
-  // A phone the owner never confirmed is gone once its minutes are up.
-  if (confirmedAt === null && now - createdAt > CONFIRM_TTL_MS) return null;
+  // A phone nobody confirmed is gone once its minutes (or its day's wait) are up.
+  if (confirmedAt === null && now > waitsUntil(createdAt, confirmBy)) return null;
   if (lastSeen === null || now - lastSeen >= TOUCH_EVERY_MS) {
     await db.client.query({
       sql: "UPDATE phone_devices SET last_seen_at = ? WHERE id = ?",
@@ -169,7 +206,23 @@ export async function resolvePhoneAccess(db: Db, token: string, now: number): Pr
       method: "run",
     });
   }
-  return { deviceId, userId, name, confirmed: confirmedAt !== null };
+  return {
+    deviceId,
+    userId,
+    name,
+    confirmed: confirmedAt !== null,
+    waitsOn: confirmedAt !== null ? null : waitsOnOf(via),
+  };
+}
+
+/** Until when a phone nobody confirmed may still be confirmed: its own deadline, else a QR code's minutes. */
+function waitsUntil(createdAt: number, confirmBy: number | null): number {
+  return confirmBy ?? createdAt + CONFIRM_TTL_MS;
+}
+
+/** Who says yes to a phone that waits: the computer for a QR code, the owner's other phone for a link. */
+function waitsOnOf(via: string | null): "computer" | "phone" {
+  return via === "link" || via === "host" ? "phone" : "computer";
 }
 
 export class PhoneCapabilities {
@@ -291,19 +344,22 @@ export class PhoneCapabilities {
     return row;
   }
 
-  /** Phones paired by QR code that nobody confirmed in time: removed, with their tokens. */
+  /**
+   * Phones nobody confirmed in time, removed with their tokens: a QR code's after its minutes, one that
+   * came by a link after its own deadline (the other phone's minutes, or the day's wait and a week).
+   */
   private dropUnconfirmed(now: number): { sql: string; params: (string | number | null)[]; method: "run" }[] {
-    const cutoff = now - CONFIRM_TTL_MS;
+    const late = "confirmed_at IS NULL AND revoked_at IS NULL AND COALESCE(confirm_by, created_at + ?) < ?";
     return [
       {
         sql: `UPDATE phone_tokens SET revoked_at = ? WHERE revoked_at IS NULL AND device_id IN
-                (SELECT id FROM phone_devices WHERE confirmed_at IS NULL AND revoked_at IS NULL AND created_at < ?)`,
-        params: [now, cutoff],
+                (SELECT id FROM phone_devices WHERE ${late})`,
+        params: [now, CONFIRM_TTL_MS, now],
         method: "run",
       },
       {
-        sql: "UPDATE phone_devices SET revoked_at = ? WHERE confirmed_at IS NULL AND revoked_at IS NULL AND created_at < ?",
-        params: [now, cutoff],
+        sql: `UPDATE phone_devices SET revoked_at = ? WHERE ${late}`,
+        params: [now, CONFIRM_TTL_MS, now],
         method: "run",
       },
     ];
@@ -411,7 +467,7 @@ export class PhoneCapabilities {
     await this.db.client.batch(this.dropUnconfirmed(now));
     const match = await pairingMatch(secret, await jwkThumbprint(key));
     // Waits for the owner's Confirm on the computer, where the same two digits show.
-    const tokens = await this.makePhone(row.id, row.userId, key, input, now, { match });
+    const tokens = await this.makePhone(row.id, row.userId, key, input, now, { match, via: "qr" });
     return { ...tokens, state: "pending", match };
   }
 
@@ -457,8 +513,82 @@ export class PhoneCapabilities {
     return { secret, email, userId };
   }
 
-  /** The phone that asked for the link redeems it, with its verifier and a proof from the same key. */
-  async redeemLink(input: Readonly<Record<string, unknown>>, origin: string, now: number): Promise<PhoneTokens> {
+  /**
+   * A link the inbox's host makes for its owner, right after the host's own email code proved the
+   * address (ADR-028 Amendment 4): kept as an emailed link is, with no email sent from here, and
+   * redeemed the same way, by the phone that holds the verifier and the device key. The owner's user
+   * is made when the host names the address as the owner and nobody has signed in yet, as a first
+   * handoff does; any other address that is not an owner here gets nothing.
+   */
+  async hostLink(
+    input: { email: unknown; owner: unknown; challenge: unknown; device_key: unknown },
+    now: number,
+  ): Promise<{ secret: string; expiresAt: number; userId: string }> {
+    const email = typeof input.email === "string" ? input.email.trim().toLowerCase() : "";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254)
+      throw bad("email must be the owner's address", "email");
+    const challenge = typeof input.challenge === "string" ? input.challenge : "";
+    if (!/^[A-Za-z0-9_-]{43}$/.test(challenge)) throw bad("challenge must be a PKCE S256 challenge", "challenge");
+    const key = cleanDeviceKey(input.device_key);
+    if (!key) throw bad("device_key must be a public P-256 JWK", "device_key");
+    const owner = typeof input.owner === "string" ? input.owner.trim().toLowerCase() : "";
+    const userId = await this.ownerUser(email, owner, now);
+    if (!userId)
+      throw new WriteError("not_allowed", "That address does not sign in to this inbox.", {
+        details: { reason: "not_owner" },
+      });
+    const secret = `${PAIRING_PREFIX}${randomToken(32)}`;
+    await this.db.orm.insert(phonePairings).values({
+      id: ulid(now),
+      secretHash: await hashApiKey(secret),
+      kind: "host",
+      userId,
+      codeChallenge: challenge,
+      deviceKey: await jwkThumbprint(key),
+      expiresAt: now + HOST_LINK_TTL_MS,
+      createdAt: now,
+    });
+    return { secret, expiresAt: now + HOST_LINK_TTL_MS, userId };
+  }
+
+  /**
+   * The owner a host's link is for: the owner here with that address, or, on an inbox nobody has signed
+   * in to yet, the address the host names as its owner, made the owner now. Null for anyone else.
+   */
+  private async ownerUser(email: string, owner: string, now: number): Promise<string | null> {
+    const find = async () =>
+      (
+        await this.db.client.query({
+          sql: "SELECT id, role FROM users WHERE lower(email) = ? LIMIT 1",
+          params: [email],
+          method: "all",
+        })
+      ).rows[0];
+    const found = await find();
+    if (found) return found[1] === "owner" ? String(found[0]) : null;
+    if (!owner || email !== owner) return null;
+    const { rows: anyone } = await this.db.client.query({ sql: "SELECT 1 FROM users LIMIT 1", method: "all" });
+    if (anyone.length > 0) return null;
+    await this.db.client.query({
+      sql: "INSERT INTO users (id, email, role, created_at) VALUES (?, ?, 'owner', ?) ON CONFLICT (email) DO NOTHING",
+      params: [ulid(now), email, now],
+      method: "run",
+    });
+    const made = await find();
+    return made && made[1] === "owner" ? String(made[0]) : null;
+  }
+
+  /**
+   * The phone that asked for the link redeems it, with its verifier and a proof from the same key. The
+   * owner's mailbox was the proof, unless the owner has a confirmed phone already: then the new phone
+   * waits for that phone's yes, showing the same two digits (`state: "pending"`), and the owner's
+   * other phones are asked.
+   */
+  async redeemLink(
+    input: Readonly<Record<string, unknown>>,
+    origin: string,
+    now: number,
+  ): Promise<PhoneTokens & { state: "connected" | "pending"; match?: string; via: "link" | "host" }> {
     const secret = typeof input.secret === "string" ? input.secret : "";
     const verifier = typeof input.verifier === "string" ? input.verifier : "";
     if (!secret.startsWith(PAIRING_PREFIX)) throw bad("That is not a sign-in link from this inbox.", "secret");
@@ -467,12 +597,14 @@ export class PhoneCapabilities {
     const [row] = await this.db.orm
       .select()
       .from(phonePairings)
-      .where(and(eq(phonePairings.secretHash, await hashApiKey(secret)), eq(phonePairings.kind, "link")));
+      .where(
+        and(eq(phonePairings.secretHash, await hashApiKey(secret)), inArray(phonePairings.kind, ["link", "host"])),
+      );
     const expired = () =>
       new WriteError("code_expired", "That link has expired or was used already. Ask for a new one on the phone.");
     if (!row || row.usedAt !== null || row.expiresAt <= now || row.attempts >= MAX_LINK_ATTEMPTS) throw expired();
-    const sameKey = row.deviceKey === (await jwkThumbprint(key));
-    if (!sameKey || (await pkceS256(verifier)) !== row.codeChallenge) {
+    const thumb = await jwkThumbprint(key);
+    if (row.deviceKey !== thumb || (await pkceS256(verifier)) !== row.codeChallenge) {
       await this.db.client.query({
         sql: "UPDATE phone_pairings SET attempts = attempts + 1 WHERE id = ?",
         params: [row.id],
@@ -482,8 +614,178 @@ export class PhoneCapabilities {
         details: { reason: "other_phone" },
       });
     }
-    // The owner's mailbox was the proof: nothing to confirm.
-    return this.makePhone(row.id, row.userId, key, input, now, { match: null });
+    const via = row.kind === "host" ? "host" : "link";
+    await this.db.client.batch(this.dropUnconfirmed(now));
+    if ((await this.confirmedPhones(row.userId)).length === 0) {
+      // The owner's mailbox was the proof, and there is no other phone to ask: nothing to confirm.
+      const tokens = await this.makePhone(row.id, row.userId, key, input, now, { match: null, via });
+      return { ...tokens, state: "connected", via };
+    }
+    // A phone the owner has says yes first: the same two digits on both screens.
+    const match = await pairingMatch(secret, thumb);
+    const tokens = await this.makePhone(row.id, row.userId, key, input, now, {
+      match,
+      via,
+      confirmBy: now + PHONE_CONFIRM_TTL_MS,
+    });
+    await this.ask(tokens.device_id, "ask", now);
+    return { ...tokens, state: "pending", match, via };
+  }
+
+  /** The owner's confirmed phones, the ones that may say yes to a new one. */
+  private async confirmedPhones(userId: string): Promise<DeviceRow[]> {
+    return this.db.orm
+      .select()
+      .from(phoneDevices)
+      .where(and(eq(phoneDevices.userId, userId), isNull(phoneDevices.revokedAt), isNotNull(phoneDevices.confirmedAt)));
+  }
+
+  /** Asks the owner's other phones about a waiting one, by a notification each (`PHONE_ASK_KIND`). */
+  private async ask(deviceId: string, why: "ask" | "wait", now: number): Promise<void> {
+    await ensureJob(this.db, PHONE_ASK_KIND, `${PHONE_ASK_KIND}:${deviceId}:${why}`, {
+      now,
+      payload: { deviceId, wait: why === "wait" },
+    }).catch(() => undefined);
+  }
+
+  /**
+   * A new phone the owner may be asked about: still waiting for a yes (or for its day to pass), and
+   * whose owner it is. Null once it was let in, stopped, or ran out of time.
+   */
+  async waiting(deviceId: string, now: number): Promise<DeviceRow | null> {
+    const [row] = await this.db.orm.select().from(phoneDevices).where(eq(phoneDevices.id, deviceId));
+    if (!row || row.revokedAt !== null || row.confirmedAt !== null || waitsOnOf(row.via) !== "phone") return null;
+    return now > waitsUntil(row.createdAt, row.confirmBy) ? null : row;
+  }
+
+  /** One of the owner's phones that may answer for a new one: confirmed itself, never one that waits. */
+  private async answering(deviceId: string): Promise<DeviceRow> {
+    const me = await this.device(deviceId);
+    if (me.confirmedAt === null)
+      throw new WriteError("not_allowed", "Confirm this phone first.", { details: { reason: "phone_unconfirmed" } });
+    return me;
+  }
+
+  /** The new phones that wait for a yes from one of this person's phones: what its confirm sheet shows. */
+  async phoneAsks(deviceId: string, now: number): Promise<PhoneAsk[]> {
+    const me = await this.answering(deviceId);
+    const rows = await this.db.orm
+      .select()
+      .from(phoneDevices)
+      .where(
+        and(
+          eq(phoneDevices.userId, me.userId),
+          isNull(phoneDevices.revokedAt),
+          isNull(phoneDevices.confirmedAt),
+          inArray(phoneDevices.via, ["link", "host"]),
+        ),
+      )
+      .orderBy(phoneDevices.createdAt);
+    return rows
+      .filter((r) => r.id !== deviceId && now <= waitsUntil(r.createdAt, r.confirmBy))
+      .map((r) => ({ id: r.id, phone: viewOf(r), match: r.pairMatch ?? "", wait_until: iso(r.waitUntil) }));
+  }
+
+  /**
+   * Confirm, on one of the owner's phones: the new phone that shows the same two digits may now open
+   * the inbox. Signed with the confirming phone's device key, which signs only shortly after the owner
+   * unlocked it: a yes is a person's, after their fingerprint or face, never a notification's.
+   */
+  async confirmByPhone(
+    deviceId: string,
+    id: string,
+    input: { at?: unknown; proof?: unknown },
+    origin: string,
+    now: number,
+  ): Promise<{ phone: PhoneView; by: PhoneView }> {
+    const me = await this.answering(deviceId);
+    await this.checkProof(
+      { ...input, device_key: JSON.parse(me.keyJwk) },
+      "confirm",
+      origin,
+      await sha256b64u(id),
+      now,
+    );
+    const r = await this.db.client.query({
+      sql: `UPDATE phone_devices SET confirmed_at = ?, confirm_by = NULL, stop_hash = NULL
+             WHERE id = ? AND user_id = ? AND confirmed_at IS NULL AND revoked_at IS NULL AND via IN ('link', 'host')
+               AND COALESCE(confirm_by, 0) >= ?`,
+      params: [now, id, me.userId, now],
+      method: "run",
+    });
+    if (r.changes !== 1)
+      throw new WriteError("code_expired", "That phone waited too long, or was removed. Ask it to sign in again.", {
+        details: { reason: "not_waiting" },
+      });
+    const [phone] = await this.db.orm.select().from(phoneDevices).where(eq(phoneDevices.id, id));
+    if (!phone) throw new WriteError("not_found", "No such phone here.");
+    return { phone: viewOf(phone), by: viewOf(me) };
+  }
+
+  /** "Not mine", on one of the owner's phones: the new phone is removed before it could open anything. */
+  async refuseByPhone(deviceId: string, id: string, now: number): Promise<{ removed: boolean }> {
+    const me = await this.answering(deviceId);
+    const row = await this.waiting(id, now);
+    if (!row || row.userId !== me.userId) return { removed: false };
+    await this.removePhone(row.id, now);
+    return { removed: true };
+  }
+
+  /**
+   * "I don't have my other phone", on the new phone: it is let in a day from now, unless one of the
+   * owner's phones or the owner's email stops it before. Every phone is asked again, and the caller
+   * emails the owner the token of the email's "Not you? Stop it" link.
+   */
+  async startWait(deviceId: string, now: number): Promise<{ waitUntil: number; stopToken: string }> {
+    const waitUntil = now + WAIT_MS;
+    const stopToken = randomToken(32);
+    const r = await this.db.client.query({
+      sql: `UPDATE phone_devices SET wait_until = ?, confirm_by = ?, stop_hash = ?
+             WHERE id = ? AND confirmed_at IS NULL AND revoked_at IS NULL AND via IN ('link', 'host')
+               AND wait_until IS NULL AND COALESCE(confirm_by, 0) >= ?`,
+      params: [waitUntil, waitUntil + WAIT_GRACE_MS, await hashApiKey(stopToken), deviceId, now],
+      method: "run",
+    });
+    if (r.changes !== 1)
+      throw new WriteError("wrong_state", "This phone is not waiting for another phone's yes.", {
+        details: { reason: "not_waiting" },
+      });
+    await this.ask(deviceId, "wait", now);
+    return { waitUntil, stopToken };
+  }
+
+  /** The phone a "Not you? Stop it" link is about, while it still waits for its day; null otherwise. */
+  async stoppable(token: string, now: number): Promise<DeviceRow | null> {
+    if (!/^[A-Za-z0-9_-]{43}$/.test(token)) return null;
+    const [row] = await this.db.orm
+      .select()
+      .from(phoneDevices)
+      .where(eq(phoneDevices.stopHash, await hashApiKey(token)));
+    if (!row?.waitUntil) return null;
+    return (await this.waiting(row.id, now)) ? row : null;
+  }
+
+  /** "Not you? Stop it", from the owner's email: the waiting phone is removed. */
+  async stopWait(token: string, now: number): Promise<{ removed: boolean; phone?: PhoneView }> {
+    const row = await this.stoppable(token, now);
+    if (!row) return { removed: false };
+    await this.removePhone(row.id, now);
+    return { removed: true, phone: viewOf(row) };
+  }
+
+  /**
+   * The new phone, back after its day: let in, when nothing stopped it (a stopped phone is removed, so
+   * it never gets here). True when it was let in just now.
+   */
+  async settleWait(deviceId: string, now: number): Promise<boolean> {
+    const r = await this.db.client.query({
+      sql: `UPDATE phone_devices SET confirmed_at = ?, confirm_by = NULL, stop_hash = NULL
+             WHERE id = ? AND confirmed_at IS NULL AND revoked_at IS NULL AND via IN ('link', 'host')
+               AND wait_until IS NOT NULL AND wait_until <= ? AND COALESCE(confirm_by, 0) >= ?`,
+      params: [now, deviceId, now, now],
+      method: "run",
+    });
+    return r.changes === 1;
   }
 
   /**
@@ -509,7 +811,7 @@ export class PhoneCapabilities {
     if (!token.startsWith(PHONE_REFRESH_PREFIX)) throw invalid();
     const hash = await hashApiKey(token);
     const { rows } = await this.db.client.query({
-      sql: `SELECT t.device_id, t.expires_at, d.key_jwk, d.confirmed_at
+      sql: `SELECT t.device_id, t.expires_at, d.key_jwk, d.confirmed_at, d.via, d.confirm_by, d.created_at
               FROM phone_tokens t JOIN phone_devices d ON d.id = t.device_id
              WHERE t.token_hash = ? AND t.kind = 'refresh' AND d.revoked_at IS NULL`,
       params: [hash],
@@ -517,9 +819,19 @@ export class PhoneCapabilities {
     });
     const r = rows[0];
     if (!r) throw invalid();
-    const [deviceId, expiresAt, keyJwk, confirmedAt] = r as [string, number, string, number | null];
-    // A phone still waiting for the owner's Confirm has nothing to refresh for.
-    if (expiresAt <= now || confirmedAt === null) throw invalid();
+    const [deviceId, expiresAt, keyJwk, confirmedAt, via, confirmBy, createdAt] = r as [
+      string,
+      number,
+      string,
+      number | null,
+      string | null,
+      number | null,
+      number,
+    ];
+    // A phone still waiting for the owner's Confirm on the computer has nothing to refresh for. One
+    // waiting for another phone's yes, or for its day to pass, may still ask whether it came.
+    const waits = confirmedAt === null && waitsOnOf(via) === "phone" && now <= waitsUntil(createdAt, confirmBy);
+    if (expiresAt <= now || (confirmedAt === null && !waits)) throw invalid();
     // Without the device key's signature nothing changes, whatever the token: a copy of it is no use.
     await this.checkProof(
       { ...input, device_key: JSON.parse(keyJwk) },
@@ -573,7 +885,7 @@ export class PhoneCapabilities {
 
   private async checkProof(
     input: { device_key?: unknown; proof?: unknown; at?: unknown },
-    purpose: "pair" | "link" | "refresh",
+    purpose: "pair" | "link" | "refresh" | "confirm",
     origin: string,
     hash: string,
     now: number,
@@ -593,7 +905,8 @@ export class PhoneCapabilities {
 
   /**
    * Spends a pairing and makes the phone and its first tokens, in one write, or nothing. A phone with a
-   * `match` (paired by QR code) waits for the owner's Confirm; one without (an emailed link) does not.
+   * `match` waits for a yes: the owner's Confirm on the computer (a QR code), or on the owner's other
+   * phone until `confirmBy` (a link); one without (a link, and no other phone) does not.
    */
   private async makePhone(
     pairingId: string,
@@ -601,7 +914,7 @@ export class PhoneCapabilities {
     key: JsonWebKey,
     input: { name?: unknown; platform?: unknown },
     now: number,
-    opts: { match: string | null },
+    opts: { match: string | null; via: PhoneVia; confirmBy?: number },
   ): Promise<PhoneTokens> {
     const thumb = await jwkThumbprint(key);
     const [taken] = await this.db.orm
@@ -620,8 +933,8 @@ export class PhoneCapabilities {
         method: "run",
       },
       {
-        sql: `INSERT INTO phone_devices (id, user_id, name, platform, key_jwk, key_thumbprint, notify, push_state, pair_match, confirmed_at, created_at, last_seen_at)
-              SELECT ?, ?, ?, ?, ?, ?, ?, 'off', ?, ?, ?, ? WHERE ${claimed}`,
+        sql: `INSERT INTO phone_devices (id, user_id, name, platform, key_jwk, key_thumbprint, notify, push_state, pair_match, confirmed_at, created_at, last_seen_at, via, confirm_by)
+              SELECT ?, ?, ?, ?, ?, ?, ?, 'off', ?, ?, ?, ?, ?, ? WHERE ${claimed}`,
         params: [
           deviceId,
           userId,
@@ -634,6 +947,8 @@ export class PhoneCapabilities {
           opts.match === null ? now : null,
           now,
           now,
+          opts.via,
+          opts.match === null ? null : (opts.confirmBy ?? null),
           pairingId,
           deviceId,
         ],
@@ -696,15 +1011,27 @@ export class PhoneCapabilities {
   // ---- the phone, signed in: who it is, what it hears about, push ----
 
   async me(deviceId: string): Promise<{
-    phone: PhoneView & { confirmed: boolean };
+    phone: PhoneView & {
+      confirmed: boolean;
+      /** While it waits: who says yes, the computer or the owner's other phone. */
+      waits_on?: "computer" | "phone";
+      /** "I don't have my other phone": when it is let in, unless stopped. */
+      wait_until?: string;
+    };
     notify: NotifyPrefs;
     business: { name: string; timezone: string };
     push_available: boolean;
   }> {
     const row = await this.device(deviceId);
     const [b] = await this.db.orm.select({ name: business.name, timezone: business.timezone }).from(business);
+    const waits = row.confirmedAt === null;
     return {
-      phone: { ...viewOf(row), confirmed: row.confirmedAt !== null },
+      phone: {
+        ...viewOf(row),
+        confirmed: !waits,
+        ...(waits ? { waits_on: waitsOnOf(row.via) } : {}),
+        ...(waits && row.waitUntil !== null ? { wait_until: new Date(row.waitUntil).toISOString() } : {}),
+      },
       notify: readPrefs(row.notify),
       business: { name: b?.name ?? "", timezone: b?.timezone ?? "UTC" },
       push_available: this.pushAvailability().available,
