@@ -486,6 +486,88 @@ describe("an assistant's new request without its client", () => {
     expect(none.details).toMatchObject({ invalid: ["name", "phone"] });
   });
 
+  it("is held to the kinds the business takes and to its prices where every create of a person goes, whatever a door checked", async () => {
+    const s = await setup();
+    const contact = { name: "Rita Silva", email: "rita@example.com" };
+    // As a door would reach it when its own lookup found a retry whose key is pruned before the create: the
+    // order of the incident, a free-text line at a price and in a currency the sender chose.
+    const bogus = await refused(
+      s.caps.people.create(
+        agent(),
+        {
+          type: "order",
+          payload: {
+            orderedItem: [{ name: "audit-fixturex", quantity: 1, price: { value: 1, currency: "AUD" } }],
+            totalPrice: { value: 1, currency: "AUD" },
+          },
+          contact,
+        },
+        {},
+      ),
+    );
+    expect(bogus.details).toEqual({ reason: "product_missing" });
+    const foreign = await refused(
+      s.caps.people.create(
+        agent(),
+        {
+          type: "order",
+          payload: {
+            orderedItem: [{ productId: s.chain, quantity: 1, price: EUR(1850) }],
+            totalPrice: { value: 1850, currency: "AUD" },
+          },
+          contact,
+        },
+        {},
+      ),
+    );
+    expect(foreign.details).toMatchObject({ reason: "currency_not_ours", currency: "EUR" });
+    const total = await refused(
+      s.caps.people.create(
+        agent(),
+        { type: "booking", payload: { ...booking(s), totalPrice: { value: 1, currency: "AUD" } }, contact },
+        {},
+      ),
+    );
+    expect(total.details).toMatchObject({ reason: "currency_not_ours" });
+    // A kind the business does not take: no stay here, and no request for a price once switched off.
+    const stay = await refused(
+      s.caps.people.create(
+        agent(),
+        {
+          type: "stay",
+          payload: { propertyId: "p", checkIn: "2026-12-04", checkOut: "2026-12-06", rooms: [] },
+          contact,
+        },
+        {},
+      ),
+    );
+    expect(stay.details).toMatchObject({ reason: "stay_not_offered" });
+    await s.caps.updateSettings(owner, { doc: { doors: { quoteRequest: false } } });
+    const quote = await refused(
+      s.caps.people.create(
+        agent(),
+        {
+          type: "quote_request",
+          payload: { itemOffered: { name: "Wheel rebuild" }, description: "Rear wheel" },
+          contact,
+        },
+        {},
+      ),
+    );
+    expect(quote.details).toMatchObject({ reason: "quote_request_not_offered" });
+    expect(await s.traces()).toMatchObject({ items: 0, parties: 0 });
+    // The business writing down what it knows is not held to them.
+    const own = await s.caps.people.create(
+      owner,
+      {
+        type: "order",
+        payload: { orderedItem: [{ name: "Fitting", quantity: 1, price: EUR(1000) }], totalPrice: EUR(1000) },
+      },
+      {},
+    );
+    expect(own.view.item.type).toBe("order");
+  });
+
   it("is refused when a network says it carried it: the header grants nothing", async () => {
     const s = await setup();
     const e = await refused(

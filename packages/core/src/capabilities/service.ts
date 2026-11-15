@@ -1363,7 +1363,11 @@ export class Capabilities {
     const table = replay
       ? null
       : await this.food.planTable(c, input.payload, input.contact?.locale ?? caller.locale ?? "en");
-    if (table?.kind === "quote") return this.tableQuote(c, input, table.words, opts);
+    if (table?.kind === "quote") {
+      // It becomes a request for a price: one the business takes here (ADR-048).
+      await this.refuseNotOffered(c, "quote_request");
+      return this.tableQuote(c, input, table.words, opts);
+    }
     // A customer books a time the business offers (ADR-044 §2): any other is refused here, naming the
     // nearest free ones, before a summary is shown or anything lands on the owner. A retry is the same
     // request as before, and is answered as it was.

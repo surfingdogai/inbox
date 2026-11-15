@@ -58,8 +58,9 @@ The founder's, 15 November 2026:
   for a service priced from, or with no price, while the business takes no price of the customer's own: it would
   otherwise be stored as the booking's). A different total for a fixed-price service is still only noted. Each
   comes before the confirm step, before files are kept and before any network is asked, and writes nothing. Checked
-  early in each create (`requireClient`, `refuseNotOffered`, `checkOrderLines`) and again where every create of a
-  person goes (`IdentityCapabilities.create`).
+  early in each create (`requireClient`, `refuseNotOffered`, `checkOrderLines`, `checkBookingPrice`), and all of
+  them again where every create of a person goes (`IdentityCapabilities.create`), after its own replay lookup: a
+  door whose early lookup found a retry whose key has since been pruned writes nothing they would refuse.
 - **Schemas.** `contact` and its `name` are listed as required in the JSON Schema (the MCP tool list,
   `/openapi.json`), with each detail's format and length, and read as sent: nothing about the contact is refused by
   a schema, so every door answers in the client rule's words; no `anyOf`, which some clients cannot take. The MCP
