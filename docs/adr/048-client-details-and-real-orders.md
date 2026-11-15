@@ -53,7 +53,10 @@ The founder's, 15 November 2026:
 - **Refusals.** `422 invalid_input`, `details.reason` `client_details`, with `details.missing` (`name`,
   `email_or_phone`), `details.invalid` (`name`, `email`, `phone`) and `fields`; `403 not_allowed`,
   `details.reason` `<kind>_not_offered`, with `details.item_types`; for orders `422 product_missing`,
-  `unknown_product`, `not_on_sale`, `not_priced`, `currency_not_ours`, `price_not_ours`, `total_not_ours`. Each
+  `unknown_product`, `not_on_sale`, `not_priced`, `currency_not_ours`, `price_not_ours`, `total_not_ours`; for
+  bookings `422 currency_not_ours` (a total in another currency than the service's) and `price_not_ours` (a total
+  for a service priced from, or with no price, while the business takes no price of the customer's own: it would
+  otherwise be stored as the booking's). A different total for a fixed-price service is still only noted. Each
   comes before the confirm step, before files are kept and before any network is asked, and writes nothing. Checked
   early in each create (`requireClient`, `refuseNotOffered`, `checkOrderLines`) and again where every create of a
   person goes (`IdentityCapabilities.create`).

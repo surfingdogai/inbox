@@ -16,7 +16,7 @@ import { floorsFor } from "../negotiation/catalogue";
 import { type Reward, rewardFor, rewardPrice, type Standing } from "../negotiation/rewards";
 import { business, products, services } from "../schema/tables";
 import { readSettings } from "../settings/schema";
-import { moneyText } from "../util/money";
+import { moneyText, servicePriceText } from "../util/money";
 import { type FieldProblem, fromZod, WriteError } from "./errors";
 
 /** A customer's create, priced: the payload to store, and whether any of its price is not the business's. */
@@ -426,6 +426,60 @@ async function priceOrder(
     },
     unpriced,
   };
+}
+
+/**
+ * An assistant's booking as the business takes it (ADR-048): a total it sends is the business's to give. One in
+ * another currency than ours (the service's price's, else the business's) is refused, naming ours. One for a
+ * service we do not sell at a fixed price (priced from, or with no price) is a price the assistant made up, refused
+ * unless the business takes a price of the customer's own (`negotiation.priceCounters`, ADR-018 Q1), when it is
+ * their offer, as before. A different total for a fixed-price service is only noted for the business, never the
+ * price (`priceBooking`).
+ */
+export async function checkBookingPrice(
+  db: Db,
+  payload: {
+    readonly reservationFor: { readonly serviceId: string };
+    readonly totalPrice?: Money | undefined;
+    readonly partySize?: number | undefined;
+  },
+  o: { readonly counters: boolean },
+): Promise<void> {
+  const stated = payload.totalPrice;
+  if (!stated) return;
+  const [row] = await db.orm
+    .select({ name: services.name, price: services.price })
+    .from(services)
+    .where(eq(services.id, payload.reservationFor.serviceId));
+  const service = await servicePricing(db, payload.reservationFor.serviceId, payload.partySize);
+  const ours = await businessCurrency(db);
+  const currency = (service?.list?.currency ?? ours).toUpperCase();
+  if (stated.currency.toUpperCase() !== currency) {
+    throw new WriteError(
+      "invalid_input",
+      `Our prices are in ${currency}: send totalPrice in ${currency}, or leave it out and we price the booking. Nothing was written.`,
+      {
+        fields: [
+          {
+            path: "payload.totalPrice.currency",
+            problem: "invalid",
+            message: `must be ${currency}, the currency of our prices`,
+          },
+        ],
+        details: { reason: "currency_not_ours", currency },
+      },
+    );
+  }
+  if (service?.list || o.counters || !row) return;
+  const price = servicePriceText(row.price, ours);
+  throw new WriteError(
+    "invalid_input",
+    `We price ${row.name} ${price ? `${price}, so its total is ours to give` : "ourselves"}: leave totalPrice out, and we tell your person the price. Nothing was written.`,
+    {
+      fields: [{ path: "payload.totalPrice", problem: "invalid", message: "leave it out: we price this service" }],
+      details: { reason: "price_not_ours" },
+    },
+  );
 }
 
 /** The catalogue names of `names`, as a sentence lists them: "Bread", "Bread and Wine", "Bread, Wine and Oil". */

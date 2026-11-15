@@ -153,21 +153,23 @@ describe("the business sets its prices", () => {
 
   it("confirms a €30 service at €30 under the €50 preset, whatever the assistant said", async () => {
     const { db, svc, caps, drain } = await setup("appointments");
-    const r = await caps.createBooking(agent, {
-      payload: {
-        reservationFor: { serviceId: svc.small, name: "Puncture repair" },
-        ...tuesday(9),
-        totalPrice: { value: 100, currency: "usd" },
-      },
+    const ask = (totalPrice: { value: number; currency: string }) =>
+      caps.createBooking(agent, {
+        payload: { reservationFor: { serviceId: svc.small, name: "Puncture repair" }, ...tuesday(9), totalPrice },
+      });
+    // A total in a currency that is not ours is refused, naming ours (ADR-048): nothing is written.
+    await expect(ask({ value: 100, currency: "usd" })).rejects.toMatchObject({
+      code: "invalid_input",
+      details: { reason: "currency_not_ours", currency: "EUR" },
+      fields: [{ path: "payload.totalPrice.currency", problem: "invalid" }],
     });
+    expect(await db.orm.select({ id: items.id }).from(items)).toEqual([]);
+    const r = await ask(EUR(100));
     await drain();
     const booked = await row(db, r.view.item.id);
     expect(booked.state).toBe("confirmed");
-    // A fixed price with no currency is in the business's currency.
-    expect(booked.item.payload).toMatchObject({
-      totalPrice: EUR(3_000),
-      customerStatedPrice: { value: 100, currency: "USD" },
-    });
+    // A fixed price with no currency is in the business's currency; the assistant's figure is only noted.
+    expect(booked.item.payload).toMatchObject({ totalPrice: EUR(3_000), customerStatedPrice: EUR(100) });
   });
 
   it("orders a €150 product at €150 when the assistant says €1, and asks a person when the real total is large", async () => {
@@ -327,7 +329,22 @@ describe("the business sets its prices", () => {
     expect((mixed.view.item.payload as { orderedItem: object[] }).orderedItem[1]).not.toHaveProperty(
       "customerStatedPrice",
     );
-    // A service priced `from`, or with no price, is the business's to price with the customer.
+    // A service priced `from`, or with no price, is the business's to price with the customer: an assistant's own
+    // total for it is refused (ADR-048), and in any currency but ours always is…
+    for (const [serviceId, said] of [
+      [svc.from, "We price Wheel truing from €20.00, so its total is ours to give"],
+      [svc.bare, "We price Chat ourselves"],
+    ] as const) {
+      const asked = { reservationFor: { serviceId, name: "Something" }, ...tuesday(9) };
+      const e = await caps.createBooking(agent, { payload: { ...asked, totalPrice: EUR(100) } }).catch((x) => x);
+      expect(e).toMatchObject({ code: "invalid_input", details: { reason: "price_not_ours" } });
+      expect(e.message).toContain(said);
+      await expect(
+        caps.createBooking(agent, { payload: { ...asked, totalPrice: { value: 1, currency: "AUD" } } }),
+      ).rejects.toMatchObject({ details: { reason: "currency_not_ours", currency: "EUR" } });
+    }
+    // …unless the business takes a price of the customer's own: then it is their offer, for a person to price.
+    await caps.updateSettings(owner, counters);
     for (const serviceId of [svc.from, svc.bare]) {
       const b = await caps.createBooking(agent, {
         payload: { reservationFor: { serviceId, name: "Something" }, ...tuesday(9), totalPrice: EUR(100) },
@@ -335,6 +352,7 @@ describe("the business sets its prices", () => {
       expect(b.view.item.payload).toMatchObject({ totalPrice: EUR(100) });
       expect(b.view.item.payload).not.toHaveProperty("customerStatedPrice");
     }
+    await caps.updateSettings(owner, { doc: { negotiation: { priceCounters: false } } });
     // The stated price is the inbox's to write: one sent in by a customer is not kept.
     const sent = await createItem(db, agent, {
       type: "order",
@@ -446,7 +464,9 @@ describe("the business sets its prices", () => {
     expect((await row(shop.db, own.view.item.id)).state).toBe("awaiting_payment");
 
     const { db, svc, caps, drain } = await setup("appointments");
-    // A service priced `from` with the customer's price in it waits; with no price, it is confirmed as before.
+    // A service priced `from` with the customer's price in it (their offer, where the business takes one: ADR-048)
+    // waits; with no price, it is confirmed as before.
+    await caps.updateSettings(owner, counters);
     const priced = await caps.createBooking(agent, {
       payload: { reservationFor: { serviceId: svc.from, name: "Wheel truing" }, ...tuesday(9), totalPrice: EUR(1) },
     });

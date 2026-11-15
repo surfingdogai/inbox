@@ -168,7 +168,7 @@ import {
 import { type OnceOptions, type OnceResult, once } from "../write/idempotency";
 import { heldReplyStatements, namesOtherMoney } from "../write/limits";
 import { isAutomation } from "../write/offers";
-import { checkOrderLines } from "../write/pricing";
+import { checkBookingPrice, checkOrderLines } from "../write/pricing";
 import { withdrawalOf } from "../write/returns";
 import { appendThreadEntry } from "../write/thread";
 import {
@@ -1367,6 +1367,12 @@ export class Capabilities {
     // A customer books a time the business offers (ADR-044 §2): any other is refused here, naming the
     // nearest free ones, before a summary is shown or anything lands on the owner. A retry is the same
     // request as before, and is answered as it was.
+    // An assistant's total is ours to give, in our currency (ADR-048): refused before a summary is shown.
+    if (!replay && clientRequired(c)) {
+      await checkBookingPrice(this.db, input.payload, {
+        counters: (await readSettings(this.db)).negotiation.priceCounters,
+      });
+    }
     if (!replay && isCustomer(c)) {
       await refuseTimeNotOffered(this.db, {
         serviceId: input.payload.reservationFor.serviceId,

@@ -615,7 +615,7 @@ export function createPublicMcpHandler({ caps, version }: McpDeps): McpHttpHandl
         "create_booking",
         {
           title: "Request a booking",
-          description: `Request a service at a time. Check availability first. ${CLIENT_WORDS} endTime and reservationFor.name may be left out: they follow from the service (its length, its name). A fixed-price service costs the business's price from list_services; a different totalPrice you send is only noted for the business. A priced booking binds your person only once they confirmed it: without terms_sha nothing is sent, and you get the summary to show them (confirm.summary, confirm.terms_sha); call again with that terms_sha on their clear yes. Returns the item and, if you have no account, an access_token.`,
+          description: `Request a service at a time. Check availability first. ${CLIENT_WORDS} endTime and reservationFor.name may be left out: they follow from the service (its length, its name). Leave totalPrice out: the business prices the booking. A fixed-price service costs the business's price from list_services, and a different total you send is only noted for the business; one for a service priced from, or with no price, is refused unless get_business_profile says price_negotiable; one in another currency always is. A priced booking binds your person only once they confirmed it: without terms_sha nothing is sent, and you get the summary to show them (confirm.summary, confirm.terms_sha); call again with that terms_sha on their clear yes. Returns the item and, if you have no account, an access_token.`,
           inputSchema: createBookingInput,
           annotations: writes,
         },

@@ -115,7 +115,9 @@ describe("the owner's AI and the customer's price", () => {
     const ours = await s.book(s.svc.fixed);
     await s.caps.transitionItem(ai, { item_id: ours.view.item.id, event: "confirm" });
     expect(await stateOf(s.db, ours.view.item.id)).toBe("confirmed");
-    // Money no: a service priced "from", with the customer's figure in it.
+    // Money no: a service priced "from", with the customer's figure in it (their offer, where the business takes
+    // one: an assistant's own price is refused where it does not, ADR-048).
+    await s.caps.updateSettings(person, { doc: { negotiation: { priceCounters: true } } });
     const theirs = await s.book(s.svc.from, { totalPrice: EUR(100) });
     for (const caller of [ai, mcp]) {
       const e = await refusal(s.caps.transitionItem(caller, { item_id: theirs.view.item.id, event: "confirm" }));
